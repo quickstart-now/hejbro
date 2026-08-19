@@ -12,12 +12,14 @@ import type {
 } from "./table-snapshot";
 import { asTableSnapshot, tableIdentity } from "./table-snapshot";
 
-const deriveIndexName = (
+/** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
+export const deriveIndexName = (
 	tableName: string,
 	columns: ReadonlyArray<string>,
 ): string => `${tableName}_${columns.join("_")}_idx`;
 
-const deriveForeignKeyName = (
+/** Derives a foreign key's default name from its owning table and local columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
+export const deriveForeignKeyName = (
 	tableName: string,
 	columns: ReadonlyArray<string>,
 ): string => `${tableName}_${columns.join("_")}_fk`;
