@@ -1,0 +1,193 @@
+import type { ViewDeclaration } from "../dsl/define-view";
+import { assertNever, throwHejbroError } from "../error";
+import type { ProjectionNode } from "../expr/ast";
+import { renderSelect } from "../expr/render-sql";
+import { sameJson } from "../kind/diff-helpers";
+import type { ObjectKind } from "../kind/object-kind";
+import type { JsonValue } from "../snapshot/stable-json";
+import { qualifyName } from "../sql/identifier";
+import { statement } from "../sql/statement";
+
+/** A view's serialized snapshot node — `selectSql` is pre-rendered (D24 precedent), `columns` drives the recreate-vs-replace decision (D27). */
+export type ViewSnapshot = {
+	readonly schema: string;
+	readonly name: string;
+	readonly columns: ReadonlyArray<string>;
+	readonly selectSql: string;
+	readonly securityInvoker: boolean;
+};
+
+// Internal invariant: this shape is exactly what viewKind.serialize below produces.
+const asViewSnapshot = (snapshot: JsonValue): ViewSnapshot =>
+	snapshot as ViewSnapshot;
+
+const viewIdentity = (schema: string, name: string): string =>
+	`${schema}.${name}`;
+
+const VIEW_CHANGED_NOTE = "view changed";
+const VIEW_RECREATE_NOTE = "view columns changed; recreating";
+
+/** Derives a view's ordered column-name list from its query's projection (`constantOne` is unreachable via `select()`, hence `defineView`). */
+const projectionColumns = (
+	projection: ProjectionNode,
+): ReadonlyArray<string> => {
+	switch (projection.projectionKind) {
+		case "allColumns":
+			return projection.columnNames;
+		case "columns":
+			return projection.columns.map((column) => column.alias);
+		case "constantOne":
+			return throwHejbroError(
+				"invalid-view-projection",
+				"a view's query resolved to a constantOne projection — this is only produced by exists()/notExists(), which defineView() never accepts.",
+			);
+		default:
+			return assertNever(projection);
+	}
+};
+
+const isPrefixOf = (
+	previousColumns: ReadonlyArray<string>,
+	nextColumns: ReadonlyArray<string>,
+): boolean =>
+	previousColumns.every((name, index) => nextColumns[index] === name);
+
+const dropViewSql = (snapshot: ViewSnapshot): string =>
+	`drop view if exists ${qualifyName(snapshot.schema, snapshot.name)};`;
+
+const securityInvokerClause = (securityInvoker: boolean): string => {
+	if (securityInvoker) {
+		return " with (security_invoker = true)";
+	}
+	return "";
+};
+
+const createOrReplaceSql = (snapshot: ViewSnapshot): string =>
+	`create or replace view ${qualifyName(snapshot.schema, snapshot.name)}${securityInvokerClause(snapshot.securityInvoker)} as ${snapshot.selectSql};`;
+
+/**
+ * The built-in object kind for Postgres views. Identity is
+ * `"<schema>.<name>"`. `diff` applies the prefix rule (D27): when the
+ * previous column list is a prefix of the next, Postgres can extend the
+ * view with `create or replace view`; any other column-list change (a
+ * removal, reorder, or rename) can't, so it recreates via a single
+ * `alter` change whose `emit` returns `drop view if exists` followed by
+ * `create or replace view`, in that order (D23/#55 — never a separate
+ * drop + create pair).
+ */
+export const viewKind: ObjectKind<ViewDeclaration> = {
+	kind: "view",
+	dependsOn: ["schema", "table"],
+	owns: (declaration): declaration is ViewDeclaration =>
+		declaration.declarationKind === "view",
+	serialize: (declaration) => {
+		const snapshot: ViewSnapshot = {
+			schema: declaration.schema.schemaName,
+			name: declaration.viewName,
+			columns: projectionColumns(declaration.query.projection),
+			selectSql: renderSelect(declaration.query),
+			securityInvoker: declaration.securityInvoker,
+		};
+		return snapshot;
+	},
+	identify: (snapshot) => {
+		const viewSnapshot = asViewSnapshot(snapshot);
+		return viewIdentity(viewSnapshot.schema, viewSnapshot.name);
+	},
+	diff: (previous, next, identity) => {
+		if (previous === null && next !== null) {
+			return [
+				{
+					kind: "view",
+					operation: "create",
+					identity,
+					previous: null,
+					next,
+					notes: [],
+				},
+			];
+		}
+		if (previous !== null && next === null) {
+			return [
+				{
+					kind: "view",
+					operation: "drop",
+					identity,
+					previous,
+					next: null,
+					notes: [],
+				},
+			];
+		}
+		if (previous === null || next === null) {
+			return [];
+		}
+		if (sameJson(previous, next)) {
+			return [];
+		}
+		const previousSnapshot = asViewSnapshot(previous);
+		const nextSnapshot = asViewSnapshot(next);
+		if (isPrefixOf(previousSnapshot.columns, nextSnapshot.columns)) {
+			return [
+				{
+					kind: "view",
+					operation: "alter",
+					identity,
+					previous,
+					next,
+					notes: [VIEW_CHANGED_NOTE],
+				},
+			];
+		}
+		return [
+			{
+				kind: "view",
+				operation: "alter",
+				identity,
+				previous,
+				next,
+				notes: [VIEW_RECREATE_NOTE],
+			},
+		];
+	},
+	emit: (change) => {
+		switch (change.operation) {
+			case "create": {
+				if (change.next === null) {
+					return throwHejbroError(
+						"invalid-kind-change",
+						"view create change is missing its next snapshot.",
+					);
+				}
+				return [statement(createOrReplaceSql(asViewSnapshot(change.next)))];
+			}
+			case "alter": {
+				if (change.next === null) {
+					return throwHejbroError(
+						"invalid-kind-change",
+						"view alter change is missing its next snapshot.",
+					);
+				}
+				const nextSnapshot = asViewSnapshot(change.next);
+				if (change.notes.includes(VIEW_RECREATE_NOTE)) {
+					return [
+						statement(dropViewSql(nextSnapshot)),
+						statement(createOrReplaceSql(nextSnapshot)),
+					];
+				}
+				return [statement(createOrReplaceSql(nextSnapshot))];
+			}
+			case "drop": {
+				if (change.previous === null) {
+					return throwHejbroError(
+						"invalid-kind-change",
+						"view drop change is missing its previous snapshot.",
+					);
+				}
+				return [statement(dropViewSql(asViewSnapshot(change.previous)))];
+			}
+			default:
+				return assertNever(change.operation);
+		}
+	},
+};
