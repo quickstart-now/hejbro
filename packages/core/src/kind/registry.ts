@@ -1,6 +1,7 @@
 import { hejbroError } from "../error";
 import { enumKind } from "../kinds/enum-kind";
 import { functionKind } from "../kinds/function-kind";
+import { rlsKind } from "../kinds/rls-kind";
 import { schemaKind } from "../kinds/schema-kind";
 import { tableKind } from "../kinds/table-kind";
 import { triggerKind } from "../kinds/trigger-kind";
@@ -67,7 +68,7 @@ export const createKindRegistry = (): KindRegistry => {
 
 /**
  * Creates a {@link KindRegistry} pre-registered with hejbro's built-in
- * object kinds: schema, enum, table, function, and trigger.
+ * object kinds: schema, enum, table, function, trigger, and rls.
  */
 export const createDefaultRegistry = (): KindRegistry => {
 	const registry = createKindRegistry();
@@ -76,5 +77,6 @@ export const createDefaultRegistry = (): KindRegistry => {
 	registry.register(tableKind);
 	registry.register(functionKind);
 	registry.register(triggerKind);
+	registry.register(rlsKind);
 	return registry;
 };
