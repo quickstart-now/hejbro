@@ -106,6 +106,9 @@ describe("generateMigration", () => {
 			expect(result.errors).toEqual([
 				expect.objectContaining({ code: "ambiguous-column-rename" }),
 			]);
+			expect(result.ambiguities).toEqual([
+				expect.objectContaining({ kind: "column" }),
+			]);
 			expect(result.sql).toBe("");
 			expect(result.hasChanges).toBe(false);
 		});

@@ -64,7 +64,10 @@ review).
 - `HEJBRO_SNAPSHOT_VERSION` stays `2` unless the Task 3 audit finds
   violations — any format change is a **stop-and-report-to-main** gate.
 - Before claiming any PR done: `pnpm check`, `pnpm check-types`,
-  `pnpm test` all pass with output shown.
+  `pnpm test` all pass with output shown — **from a clean state**
+  (`rm -rf packages/*/dist` first, or CI green confirmed): stale local
+  `dist/` artifacts can mask missing turbo build-dependency wiring
+  (learned on PR B, 2026-08-20).
 
 ## Issues to create (after owner approves this plan; via `issue.sh`, no orphans)
 
