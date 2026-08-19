@@ -98,31 +98,23 @@ describe("triggerKind", () => {
 		expect(triggerKind.diff(previous, next, identity)).toEqual([]);
 	});
 
-	it("diffs any field change as a drop+create pair with a trigger-changed note", () => {
+	it("diffs any field change as a single alter with a trigger-changed note", () => {
 		const previous = triggerKind.serialize(makeTrigger("before"));
 		const next = triggerKind.serialize(makeTrigger("after"));
 		const identity = "ddland.comments.comments_single_depth";
 		expect(triggerKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "trigger",
-				operation: "drop",
+				operation: "alter",
 				identity,
 				previous,
-				next: null,
-				notes: ["trigger changed; recreating"],
-			},
-			{
-				kind: "trigger",
-				operation: "create",
-				identity,
-				previous: null,
 				next,
 				notes: ["trigger changed; recreating"],
 			},
 		]);
 	});
 
-	it("emits drop-if-exists + create for a create change", () => {
+	it("emits drop-if-exists + create, in that order, for a create change", () => {
 		const next = triggerKind.serialize(makeTrigger("before"));
 		const statements = triggerKind.emit({
 			kind: "trigger",
@@ -135,6 +127,23 @@ describe("triggerKind", () => {
 		expect(statements).toHaveLength(2);
 		expect(statements[0]?.sql).toContain("drop trigger if exists");
 		expect(statements[1]?.sql).toContain("create trigger");
+	});
+
+	it("emits drop-if-exists + create, in that order, for an alter change", () => {
+		const previous = triggerKind.serialize(makeTrigger("before"));
+		const next = triggerKind.serialize(makeTrigger("after"));
+		const statements = triggerKind.emit({
+			kind: "trigger",
+			operation: "alter",
+			identity: "ddland.comments.comments_single_depth",
+			previous,
+			next,
+			notes: ["trigger changed; recreating"],
+		});
+		expect(statements).toHaveLength(2);
+		expect(statements[0]?.sql).toContain("drop trigger if exists");
+		expect(statements[1]?.sql).toContain("create trigger");
+		expect(statements[1]?.sql).toContain("after");
 	});
 
 	it("emits only drop-if-exists for a drop change", () => {

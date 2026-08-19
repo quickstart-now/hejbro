@@ -1,6 +1,6 @@
 import type { EnumDeclaration } from "../dsl/pg-enum";
 import { assertNever, throwHejbroError } from "../error";
-import type { KindChange, ObjectKind } from "../kind/object-kind";
+import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import { quoteStringLiteral } from "../sql/literal";
@@ -53,8 +53,12 @@ const addValueStatements = (
  * The built-in object kind for Postgres enum types. Identity is
  * `"<schema>.<name>"`. Value lists are append-only: appended values emit
  * one `alter type … add value …` statement per value, in order. Removing
- * or reordering values emits a drop+create pair instead, since Postgres
- * cannot remove or reorder enum values in place.
+ * or reordering values emits a single `alter` change instead (**not** a
+ * separate drop + create pair — the diff engine's global create/
+ * alter-before-drop ordering would otherwise hoist a same-identity create
+ * ahead of its own drop, recreating the type with the stale values; see
+ * #55), whose `emit` renders `drop type` followed by `create type` in that
+ * order, since Postgres cannot remove or reorder enum values in place.
  */
 export const enumKind: ObjectKind<EnumDeclaration> = {
 	kind: "enum",
@@ -114,25 +118,16 @@ export const enumKind: ObjectKind<EnumDeclaration> = {
 			];
 		}
 
-		const recreateChanges: ReadonlyArray<KindChange> = [
+		return [
 			{
 				kind: "enum",
-				operation: "drop",
+				operation: "alter",
 				identity,
 				previous,
-				next: null,
-				notes: [REMOVED_VALUES_NOTE],
-			},
-			{
-				kind: "enum",
-				operation: "create",
-				identity,
-				previous: null,
 				next,
 				notes: [REMOVED_VALUES_NOTE],
 			},
 		];
-		return recreateChanges;
 	},
 	emit: (change) => {
 		switch (change.operation) {
@@ -161,10 +156,18 @@ export const enumKind: ObjectKind<EnumDeclaration> = {
 						"enum alter change is missing its previous or next snapshot.",
 					);
 				}
-				const previousValues = asEnumSnapshot(change.previous).values;
+				const previousSnapshot = asEnumSnapshot(change.previous);
 				const nextSnapshot = asEnumSnapshot(change.next);
-				const addedValues = nextSnapshot.values.slice(previousValues.length);
-				return addValueStatements(nextSnapshot, addedValues);
+				if (isAppendOnly(previousSnapshot.values, nextSnapshot.values)) {
+					const addedValues = nextSnapshot.values.slice(
+						previousSnapshot.values.length,
+					);
+					return addValueStatements(nextSnapshot, addedValues);
+				}
+				return [
+					statement(dropTypeSql(previousSnapshot)),
+					statement(createTypeSql(nextSnapshot)),
+				];
 			}
 			default:
 				return assertNever(change.operation);

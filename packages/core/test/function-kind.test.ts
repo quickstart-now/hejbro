@@ -112,24 +112,16 @@ describe("functionKind", () => {
 		]);
 	});
 
-	it("diffs an arg-type change as a drop+create pair with a signature-changed note", () => {
+	it("diffs an arg-type change as a single alter with a signature-changed note", () => {
 		const previous = functionKind.serialize(makeDeclaration("noop=%", uuid));
 		const next = functionKind.serialize(makeDeclaration("noop=%", text));
 		const changes = functionKind.diff(previous, next, "ddland.publish_post");
 		expect(changes).toEqual([
 			{
 				kind: "function",
-				operation: "drop",
+				operation: "alter",
 				identity: "ddland.publish_post",
 				previous,
-				next: null,
-				notes: ["signature changed; recreating"],
-			},
-			{
-				kind: "function",
-				operation: "create",
-				identity: "ddland.publish_post",
-				previous: null,
 				next,
 				notes: ["signature changed; recreating"],
 			},
@@ -158,6 +150,23 @@ describe("functionKind", () => {
 			notes: ["body changed"],
 		});
 		expect(alterSql[0]?.sql).toBe((next as { bodySql: string }).bodySql);
+	});
+
+	it("emits drop-then-create for a signature-changed alter, in that order", () => {
+		const previous = functionKind.serialize(makeDeclaration("noop=%", uuid));
+		const next = functionKind.serialize(makeDeclaration("noop=%", text));
+		const statements = functionKind.emit({
+			kind: "function",
+			operation: "alter",
+			identity: "ddland.publish_post",
+			previous,
+			next,
+			notes: ["signature changed; recreating"],
+		});
+		expect(statements).toEqual([
+			{ sql: 'drop function "ddland"."publish_post"(uuid);', stage: "main" },
+			{ sql: (next as { bodySql: string }).bodySql, stage: "main" },
+		]);
 	});
 
 	it("emits a drop function statement with the argument type list", () => {

@@ -74,6 +74,20 @@ describe("renderBanner", () => {
 			'-- hejbro migration\n-- + table app.posts [new]\n-- ~ table app.posts [column "slug" added]\n-- - view app.old [dropped]',
 		);
 	});
+
+	it("renders a same-identity recreate (single alter change) with its recreating note", () => {
+		const recreateChange: KindChange = {
+			kind: "trigger",
+			operation: "alter",
+			identity: "app.comments.guard",
+			previous: {},
+			next: {},
+			notes: ["trigger changed; recreating"],
+		};
+		expect(renderBanner([recreateChange])).toBe(
+			"-- hejbro migration\n-- ~ trigger app.comments.guard [trigger changed; recreating]",
+		);
+	});
 });
 
 describe("deriveSlug", () => {
