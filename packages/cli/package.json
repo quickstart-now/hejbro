@@ -1,0 +1,14 @@
+{
+	"name": "hejbro",
+	"version": "0.0.0",
+	"description": "TypeScript-native Postgres schema & RPC management. Declare everything in TypeScript, generate deterministic migration SQL.",
+	"license": "MIT",
+	"type": "module",
+	"main": "src/index.ts",
+	"scripts": {
+		"check-types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@hejbro/core": "workspace:*"
+	}
+}

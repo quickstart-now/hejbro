@@ -1,0 +1,14 @@
+{
+	"name": "@hejbro/supabase",
+	"version": "0.0.0",
+	"description": "Supabase provider preset for hejbro: auth expression helpers, storage buckets, role/grant presets, reserved-schema protection.",
+	"license": "MIT",
+	"type": "module",
+	"main": "src/index.ts",
+	"scripts": {
+		"check-types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@hejbro/core": "workspace:*"
+	}
+}

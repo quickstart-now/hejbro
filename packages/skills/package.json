@@ -1,0 +1,6 @@
+{
+	"name": "@hejbro/skills",
+	"version": "0.0.0",
+	"description": "Agent skills for hejbro: teaches coding agents (Claude Code and others) the DSL, its pitfalls, and the generate workflow.",
+	"license": "MIT"
+}

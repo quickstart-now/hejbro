@@ -1,0 +1,24 @@
+{
+	"name": "hejbro-monorepo",
+	"private": true,
+	"scripts": {
+		"build": "turbo run build",
+		"check-types": "turbo run check-types",
+		"test": "turbo run test",
+		"format": "biome format --write .",
+		"check": "biome check .",
+		"prepare": "husky"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.14",
+		"@commitlint/cli": "^21.0.1",
+		"@commitlint/config-conventional": "^21.0.1",
+		"husky": "^9.1.7",
+		"turbo": "^2.9.8",
+		"typescript": "^5.9.2"
+	},
+	"packageManager": "pnpm@10.19.0",
+	"engines": {
+		"node": ">=20"
+	}
+}
