@@ -50,6 +50,9 @@ importers:
       jiti:
         specifier: ^2.7.0
         version: 2.7.0
+      tinyglobby:
+        specifier: ^0.2.17
+        version: 0.2.17
       zod:
         specifier: ^4.4.3
         version: 4.4.3
