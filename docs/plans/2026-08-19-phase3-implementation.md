@@ -476,7 +476,7 @@ end;
 $function$;
 ```
 
-Rules: header lines unindented; `security definer` line inserted between `returns` and `language` only when definer; `declare` section omitted entirely when no locals; each statement single-line at its nesting depth (base depth 1 tab, `if` bodies +1); `elsif`/`else` lines at the `if`'s depth; args in the signature as `${argName} ${renderTypeNode(type)}` comma-joined (unquoted names, A3); raise via `quoteStringLiteral(message)` then comma-joined rendered args. Guard: if the assembled body text contains `$function$`, throw `body-contains-dollar-tag` (`"the function body's rendered SQL contains the literal $function$, which collides with the dollar-quote tag — remove or rephrase that string."`). Trigger text:
+Rules: header lines unindented; `security definer` line inserted between `returns` and `language` only when definer; `declare` section omitted entirely when no locals; each statement single-line at its nesting depth (base depth 1 tab, `if` bodies +1); `elsif`/`else` lines at the `if`'s depth; args in the signature as `${argName} ${renderTypeNode(type)}` comma-joined (unquoted names, A3); raise via `quoteStringLiteral(message)` then comma-joined rendered args. Guard: if the assembled body text contains `$function$`, throw `body-contains-dollar-tag` (`` `the function body's rendered SQL for ${identity} contains the literal $function$, which collides with the dollar-quote tag — remove or rephrase that string.` `` — identity in the message body per A8, amended at Task 4 review). Trigger text:
 
 ```sql
 drop trigger if exists "comments_single_depth" on "ddland"."comments";
