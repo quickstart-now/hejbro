@@ -1,53 +1,15 @@
-import type {
-	ForeignKeyAction,
-	IndexDeclaration,
-	TableDeclaration,
-} from "../dsl/table";
-import { throwHejbroError } from "../error";
+import type { IndexDeclaration, TableDeclaration } from "../dsl/table";
 import type { KeyedDiff } from "../kind/diff-helpers";
 import { diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
-import type { JsonValue } from "../snapshot/stable-json";
-import type { ColumnDefault, ColumnState } from "../types/column-builder";
-import type { TypeNode } from "../types/type-node";
-
-type ColumnSnapshot = {
-	readonly name: string;
-	readonly typeNode: TypeNode;
-	readonly notNull: boolean;
-	readonly primaryKey: boolean;
-	readonly unique: boolean;
-	readonly default: ColumnDefault | null;
-};
-
-type IndexSnapshot = {
-	readonly name: string;
-	readonly columns: ReadonlyArray<string>;
-	readonly unique: boolean;
-};
-
-type ForeignKeySnapshot = {
-	readonly name: string;
-	readonly columns: ReadonlyArray<string>;
-	readonly referencesTable: string;
-	readonly referencesColumns: ReadonlyArray<string>;
-	readonly onDelete: ForeignKeyAction | null;
-};
-
-type TableSnapshot = {
-	readonly schema: string;
-	readonly name: string;
-	readonly columns: ReadonlyArray<ColumnSnapshot>;
-	readonly indexes: ReadonlyArray<IndexSnapshot>;
-	readonly foreignKeys: ReadonlyArray<ForeignKeySnapshot>;
-};
-
-// Internal invariant: this shape is exactly what tableKind.serialize below produces.
-const asTableSnapshot = (snapshot: JsonValue): TableSnapshot =>
-	snapshot as TableSnapshot;
-
-const tableIdentity = (schemaName: string, tableName: string): string =>
-	`${schemaName}.${tableName}`;
+import type { ColumnState } from "../types/column-builder";
+import { emitTableSql } from "./table-kind-emit";
+import type {
+	ColumnSnapshot,
+	ForeignKeySnapshot,
+	IndexSnapshot,
+} from "./table-snapshot";
+import { asTableSnapshot, tableIdentity } from "./table-snapshot";
 
 const deriveIndexName = (
 	tableName: string,
@@ -227,9 +189,5 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			{ kind: "table", operation: "alter", identity, previous, next, notes },
 		];
 	},
-	emit: () =>
-		throwHejbroError(
-			"not-implemented",
-			"table kind sql emission lands in Task 11 (table-kind-emit.ts) — this Task 10 placeholder always throws.",
-		),
+	emit: (change) => emitTableSql(change),
 };

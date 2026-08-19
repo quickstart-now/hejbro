@@ -1,0 +1,364 @@
+import { describe, expect, it } from "vitest";
+import { schema } from "../src/dsl/schema";
+import { table } from "../src/dsl/table";
+import type { KindChange } from "../src/kind/object-kind";
+import { tableKind } from "../src/kinds/table-kind";
+import { integer, text, uuid } from "../src/types/column-builder-factories";
+
+const app = schema("app");
+
+const expectSingleChange = (changes: ReadonlyArray<KindChange>): KindChange => {
+	if (changes.length !== 1) {
+		throw new Error(`expected exactly one change, got ${changes.length}`);
+	}
+	const [change] = changes;
+	if (change === undefined) {
+		throw new Error("expected a change");
+	}
+	return change;
+};
+
+describe("tableKind.emit — create", () => {
+	it("emits a create table statement with columns, a primary key constraint, indexes, and a deferred foreign key", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const comments = table(
+			app,
+			"comments",
+			{
+				id: uuid().primaryKey().defaultRandom(),
+				postId: uuid().notNull(),
+			},
+			(helpers) => ({
+				indexes: [
+					{
+						columns: [helpers.column("postId")],
+						unique: false,
+						indexName: null,
+					},
+				],
+				foreignKeys: [
+					{
+						columns: [helpers.column("postId")],
+						references: { table: posts, columns: ["id"] },
+						onDelete: "cascade",
+					},
+				],
+			}),
+		);
+
+		const next = tableKind.serialize(comments);
+		const change = expectSingleChange(
+			tableKind.diff(null, next, "app.comments"),
+		);
+		const sqlStatements = tableKind.emit(change);
+
+		expect(sqlStatements).toEqual([
+			{
+				sql:
+					'create table "app"."comments" (\n' +
+					'\t"id" uuid not null default gen_random_uuid(),\n' +
+					'\t"post_id" uuid not null,\n' +
+					'\tprimary key ("id")\n' +
+					");",
+				stage: "main",
+			},
+			{
+				sql: 'create index "comments_post_id_idx" on "app"."comments" ("post_id");',
+				stage: "main",
+			},
+			{
+				sql: 'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."posts" ("id") on delete cascade;',
+				stage: "deferred",
+			},
+		]);
+	});
+
+	it("emits a create table statement with a unique index and no on-delete clause when unset", () => {
+		const users = table(
+			app,
+			"users",
+			{ email: text().notNull().unique() },
+			(helpers) => ({
+				indexes: [
+					{ columns: [helpers.column("email")], unique: true, indexName: null },
+				],
+			}),
+		);
+		const next = tableKind.serialize(users);
+		const change = expectSingleChange(tableKind.diff(null, next, "app.users"));
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'create table "app"."users" (\n\t"email" text not null unique\n);',
+				stage: "main",
+			},
+			{
+				sql: 'create unique index "users_email_idx" on "app"."users" ("email");',
+				stage: "main",
+			},
+		]);
+	});
+});
+
+describe("tableKind.emit — drop", () => {
+	it("emits an exact drop table statement", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const previous = tableKind.serialize(posts);
+		const change = expectSingleChange(
+			tableKind.diff(previous, null, "app.posts"),
+		);
+		expect(tableKind.emit(change)).toEqual([
+			{ sql: 'drop table "app"."posts";', stage: "main" },
+		]);
+	});
+});
+
+describe("tableKind.emit — alter", () => {
+	it("emits add column", () => {
+		const before = table(app, "posts", { id: uuid().primaryKey() });
+		const after = table(app, "posts", {
+			id: uuid().primaryKey(),
+			slug: text().notNull(),
+		});
+		const previous = tableKind.serialize(before);
+		const next = tableKind.serialize(after);
+		const change = expectSingleChange(
+			tableKind.diff(previous, next, "app.posts"),
+		);
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'alter table "app"."posts" add column "slug" text not null;',
+				stage: "main",
+			},
+		]);
+	});
+
+	it("emits drop column", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			slug: text(),
+		});
+		const after = table(app, "posts", { id: uuid().primaryKey() });
+		const previous = tableKind.serialize(before);
+		const next = tableKind.serialize(after);
+		const change = expectSingleChange(
+			tableKind.diff(previous, next, "app.posts"),
+		);
+		expect(tableKind.emit(change)).toEqual([
+			{ sql: 'alter table "app"."posts" drop column "slug";', stage: "main" },
+		]);
+	});
+
+	it("emits alter column type", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			views: integer(),
+		});
+		const after = table(app, "posts", {
+			id: uuid().primaryKey(),
+			views: text(),
+		});
+		const previous = tableKind.serialize(before);
+		const next = tableKind.serialize(after);
+		const change = expectSingleChange(
+			tableKind.diff(previous, next, "app.posts"),
+		);
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'alter table "app"."posts" alter column "views" type text;',
+				stage: "main",
+			},
+		]);
+	});
+
+	it("emits set not null and drop not null", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text(),
+		});
+		const setNotNullAfter = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+		});
+		const setNotNullChange = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(before),
+				tableKind.serialize(setNotNullAfter),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(setNotNullChange)).toEqual([
+			{
+				sql: 'alter table "app"."posts" alter column "title" set not null;',
+				stage: "main",
+			},
+		]);
+
+		const dropNotNullChange = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(setNotNullAfter),
+				tableKind.serialize(before),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(dropNotNullChange)).toEqual([
+			{
+				sql: 'alter table "app"."posts" alter column "title" drop not null;',
+				stage: "main",
+			},
+		]);
+	});
+
+	it("emits set default and drop default", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text(),
+		});
+		const withDefault = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text().default("untitled"),
+		});
+		const setDefaultChange = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(before),
+				tableKind.serialize(withDefault),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(setDefaultChange)).toEqual([
+			{
+				sql: `alter table "app"."posts" alter column "title" set default 'untitled';`,
+				stage: "main",
+			},
+		]);
+
+		const dropDefaultChange = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(withDefault),
+				tableKind.serialize(before),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(dropDefaultChange)).toEqual([
+			{
+				sql: 'alter table "app"."posts" alter column "title" drop default;',
+				stage: "main",
+			},
+		]);
+	});
+
+	it("emits index add and drop", () => {
+		const before = table(app, "posts", { slug: text() });
+		const after = table(app, "posts", { slug: text() }, (helpers) => ({
+			indexes: [
+				{ columns: [helpers.column("slug")], unique: false, indexName: null },
+			],
+		}));
+		const addChange = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(before),
+				tableKind.serialize(after),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(addChange)).toEqual([
+			{
+				sql: 'create index "posts_slug_idx" on "app"."posts" ("slug");',
+				stage: "main",
+			},
+		]);
+
+		const dropChange = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(after),
+				tableKind.serialize(before),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(dropChange)).toEqual([
+			{ sql: 'drop index "app"."posts_slug_idx";', stage: "main" },
+		]);
+	});
+
+	it("emits foreign key add as deferred and drop before add when both change in the same alter", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const authors = table(app, "authors", { id: uuid().primaryKey() });
+		const before = table(app, "comments", { postId: uuid() }, (helpers) => ({
+			foreignKeys: [
+				{
+					columns: [helpers.column("postId")],
+					references: { table: posts, columns: ["id"] },
+					onDelete: null,
+				},
+			],
+		}));
+		const after = table(app, "comments", { postId: uuid() }, (helpers) => ({
+			foreignKeys: [
+				{
+					columns: [helpers.column("postId")],
+					references: { table: authors, columns: ["id"] },
+					onDelete: null,
+				},
+			],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(before),
+				tableKind.serialize(after),
+				"app.comments",
+			),
+		);
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'alter table "app"."comments" drop constraint "comments_post_id_fk";',
+				stage: "main",
+			},
+			{
+				sql: 'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."authors" ("id");',
+				stage: "deferred",
+			},
+		]);
+	});
+});
+
+describe("tableKind.emit — unsupported column alters", () => {
+	it("throws when only the unique flag changes", () => {
+		const before = table(app, "posts", { slug: text() });
+		const after = table(app, "posts", { slug: text().unique() });
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(before),
+				tableKind.serialize(after),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).toThrowError(/unique/i);
+	});
+
+	it("throws when the unique flag changes alongside the column type", () => {
+		const before = table(app, "posts", { slug: integer() });
+		const after = table(app, "posts", { slug: text().unique() });
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(before),
+				tableKind.serialize(after),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).toThrowError(/unique/i);
+	});
+
+	it("throws when the primary key flag is unset (which also drops materialized not-null)", () => {
+		const before = table(app, "posts", { id: uuid().primaryKey() });
+		const after = table(app, "posts", { id: uuid() });
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(before),
+				tableKind.serialize(after),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).toThrowError(/primary key/i);
+	});
+});

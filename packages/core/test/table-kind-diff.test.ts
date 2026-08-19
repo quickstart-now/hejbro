@@ -241,20 +241,6 @@ describe("tableKind.diff", () => {
 	});
 });
 
-describe("tableKind.emit (Task 10 placeholder)", () => {
-	it("throws not-implemented until Task 11 wires sql emission", () => {
-		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const next = tableKind.serialize(posts);
-		const [change] = tableKind.diff(null, next, "app.posts");
-		if (change === undefined) {
-			throw new Error("expected a change");
-		}
-		expect(() => tableKind.emit(change)).toThrowError(
-			/not.implemented|task 11/i,
-		);
-	});
-});
-
 describe("createDefaultRegistry", () => {
 	it("registers the table kind", () => {
 		expect(createDefaultRegistry().get("table").kind).toBe("table");
