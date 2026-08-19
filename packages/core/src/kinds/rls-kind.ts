@@ -46,7 +46,7 @@ const forceNote = (force: boolean): string => {
 
 const forceStatementSql = (snapshot: RlsSnapshot): string => {
 	const tableRef = qualifyName(snapshot.schema, snapshot.table);
-	if (snapshot.force) {
+	if (rlsForce(snapshot)) {
 		return `alter table ${tableRef} force row level security;`;
 	}
 	return `alter table ${tableRef} no force row level security;`;
@@ -134,7 +134,7 @@ export const rlsKind: ObjectKind<RlsDeclaration> = {
 					);
 				}
 				const nextSnapshot = asRlsSnapshot(change.next);
-				if (nextSnapshot.force) {
+				if (rlsForce(nextSnapshot)) {
 					return [
 						statement(enableStatementSql(nextSnapshot)),
 						statement(forceStatementSql(nextSnapshot)),
