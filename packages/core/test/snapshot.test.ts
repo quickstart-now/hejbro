@@ -87,4 +87,11 @@ describe("renderSnapshot / parseSnapshot", () => {
 		const raw = JSON.stringify({ hejbroSnapshot: 2, dialect: "postgres" });
 		expect(() => parseSnapshot(raw)).toThrowError(/objects/i);
 	});
+
+	it("rejects malformed JSON (e.g. an unresolved git conflict marker) as invalid-snapshot, not a raw SyntaxError", () => {
+		const raw = "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> branch\n";
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({ code: "invalid-snapshot" }),
+		);
+	});
 });
