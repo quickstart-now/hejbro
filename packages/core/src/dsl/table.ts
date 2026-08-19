@@ -1,5 +1,11 @@
 import { throwHejbroError } from "../error";
-import type { ColumnBuilder, ColumnState } from "../types/column-builder";
+import type { ColumnRef } from "../expr/ast";
+import { columnRef } from "../expr/ast";
+import type {
+	BuilderFamily,
+	ColumnBuilder,
+	ColumnState,
+} from "../types/column-builder";
 import type { SchemaDeclaration } from "./schema";
 
 /** The referential actions Postgres supports for `on delete`. */
@@ -43,17 +49,44 @@ export type TableDeclaration = {
 	readonly foreignKeys: ReadonlyArray<ForeignKeyDeclaration>;
 };
 
-/** Typed helpers passed into a table's `extras` callback. */
-export type TableExtrasHelpers<TColumns extends Record<string, ColumnBuilder>> =
-	{
-		/** resolves a TS column key to its snake_cased SQL column name */
-		readonly column: (columnKey: keyof TColumns & string) => string;
+/** Hides a {@link Table}'s declaration metadata behind a unique symbol, keeping the object's own enumerable keys limited to its columns (D15). */
+export const tableMeta: unique symbol = Symbol("hejbro:table-meta");
+
+/** Maps a table's column builders to the typed {@link ColumnRef}s exposed at the top level of the built {@link Table}. */
+export type TableColumns<TColumns extends Record<string, ColumnBuilder>> = {
+	readonly [K in keyof TColumns]: ColumnRef<BuilderFamily<TColumns[K]>>;
+};
+
+/** A drizzle-style table object (D15): columns as top-level typed refs, declaration metadata hidden behind {@link tableMeta}. */
+export type Table<
+	TColumns extends Record<string, ColumnBuilder> = Record<
+		string,
+		ColumnBuilder
+	>,
+> = TableColumns<TColumns> & { readonly [tableMeta]: TableDeclaration };
+
+/** Reads a {@link Table}'s hidden declaration metadata. */
+export const getTableMeta = (tableObject: Table): TableDeclaration =>
+	tableObject[tableMeta];
+
+/** Guards that `value` is a {@link Table} built by {@link table}. */
+export const isTable = (value: unknown): value is Table =>
+	typeof value === "object" && value !== null && tableMeta in value;
+
+/** A local foreign key column list plus the table+columns it references, as passed to a table's `extras` callback. */
+export type ForeignKeyInput = {
+	readonly columns: ReadonlyArray<ColumnRef>;
+	readonly references: {
+		readonly table: Table;
+		readonly columns: ReadonlyArray<ColumnRef>;
 	};
+	readonly onDelete?: ForeignKeyAction;
+};
 
 /** The optional indexes/foreign keys a table's `extras` callback may return. */
 export type TableExtras = {
 	readonly indexes?: ReadonlyArray<IndexDeclaration>;
-	readonly foreignKeys?: ReadonlyArray<ForeignKeyDeclaration>;
+	readonly foreignKeys?: ReadonlyArray<ForeignKeyInput>;
 };
 
 /** Converts a camelCase TypeScript identifier to a snake_case SQL name (`publishedAt` → `published_at`). */
@@ -94,26 +127,29 @@ const buildColumnEntries = <TColumns extends Record<string, ColumnBuilder>>(
 	return columnEntries;
 };
 
-const buildExtrasHelpers = <TColumns extends Record<string, ColumnBuilder>>(
+/**
+ * Builds the `TableColumns<TColumns>` refs object exposed at the top level
+ * of a `Table`. `columnEntries` is derived generically from `TColumns` via
+ * `buildColumnEntries`, so TypeScript can't trace the per-key literal
+ * family back through it — this cast is the one place that mapped type
+ * meets the runtime object (Task 7 design note).
+ */
+const buildColumnRefs = <TColumns extends Record<string, ColumnBuilder>>(
+	owner: SchemaDeclaration,
 	tableName: string,
 	columnEntries: ReadonlyArray<ColumnEntry>,
-): TableExtrasHelpers<TColumns> => {
-	const columnNameByKey = new Map(
-		columnEntries.map((entry) => [entry.columnKey, entry.columnName] as const),
-	);
-	return {
-		column: (columnKey) => {
-			const columnName = columnNameByKey.get(columnKey);
-			if (columnName === undefined) {
-				return throwHejbroError(
-					"unknown-column-ref",
-					`table "${tableName}" has no column "${columnKey}" — check the column key you passed to the extras helper.`,
-				);
-			}
-			return columnName;
-		},
-	};
-};
+): TableColumns<TColumns> =>
+	Object.fromEntries(
+		columnEntries.map((entry) => [
+			entry.columnKey,
+			columnRef(
+				owner.schemaName,
+				tableName,
+				entry.columnName,
+				entry.columnState.typeNode,
+			),
+		]),
+	) as TableColumns<TColumns>;
 
 const validateColumnRefs = (
 	tableName: string,
@@ -142,30 +178,66 @@ const validateColumnRefs = (
 	}
 };
 
+const findForeignColumnRef = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	refs: ReadonlyArray<ColumnRef>,
+): ColumnRef | undefined =>
+	refs.find(
+		(ref) =>
+			ref.exprNode.schemaName !== owner.schemaName ||
+			ref.exprNode.tableName !== tableName,
+	);
+
+const resolveForeignKey = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	input: ForeignKeyInput,
+): ForeignKeyDeclaration => {
+	const foreignRef = findForeignColumnRef(owner, tableName, input.columns);
+	if (foreignRef !== undefined) {
+		return throwHejbroError(
+			"foreign-column-ref",
+			`table "${tableName}" received a column of "${foreignRef.exprNode.schemaName}.${foreignRef.exprNode.tableName}" — indexes and local fk columns must use this table's own columns.`,
+		);
+	}
+	return {
+		columns: input.columns.map((column) => column.sqlName),
+		references: {
+			table: getTableMeta(input.references.table),
+			columns: input.references.columns.map((column) => column.sqlName),
+		},
+		onDelete: input.onDelete ?? null,
+	};
+};
+
 /**
  * Declares a table under `owner`. Column keys are camelCase in TypeScript
- * and snake_cased in the generated SQL. `extras` receives typed helpers to
- * reference this table's own (snake_cased) columns when declaring indexes
- * or foreign keys.
+ * and snake_cased in the generated SQL. `extras` receives this table's own
+ * columns as typed `ColumnRef`s to build indexes (`index().on(t.column)`)
+ * and foreign keys.
  */
 export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	owner: SchemaDeclaration,
 	tableName: string,
 	columns: TColumns,
-	extras?: (helpers: TableExtrasHelpers<TColumns>) => TableExtras,
-): TableDeclaration => {
+	extras?: (t: TableColumns<TColumns>) => TableExtras,
+): Table<TColumns> => {
 	const columnEntries = buildColumnEntries(tableName, columns);
-	const helpers = buildExtrasHelpers<TColumns>(tableName, columnEntries);
-	const resolvedExtras = extras?.(helpers) ?? {};
+	const refsObject = buildColumnRefs<TColumns>(owner, tableName, columnEntries);
+
+	const resolvedExtras = extras?.(refsObject) ?? {};
 	const indexes = resolvedExtras.indexes ?? [];
-	const foreignKeys = resolvedExtras.foreignKeys ?? [];
+	const foreignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
+		resolveForeignKey(owner, tableName, input),
+	);
 
 	const knownColumnNames = new Set(
 		columnEntries.map((entry) => entry.columnName),
 	);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 
-	return {
+	const declaration: TableDeclaration = {
 		declarationKind: "table",
 		schema: owner,
 		tableName,
@@ -176,4 +248,6 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		indexes,
 		foreignKeys,
 	};
+
+	return Object.assign(refsObject, { [tableMeta]: declaration });
 };

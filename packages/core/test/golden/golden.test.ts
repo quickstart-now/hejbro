@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { HejbroDeclaration, Snapshot } from "../../src/index";
+import type { HejbroInput, Snapshot } from "../../src/index";
 import {
 	emptySnapshot,
 	generateMigration,
@@ -19,7 +19,7 @@ import {
 // path (join(...)), so TypeScript can't statically resolve their exports —
 // this describes the one shape every case's steps.ts must satisfy.
 type StepsModule = {
-	readonly steps: ReadonlyArray<ReadonlyArray<HejbroDeclaration>>;
+	readonly steps: ReadonlyArray<ReadonlyArray<HejbroInput>>;
 };
 
 const stepLabel = (index: number): string => {
@@ -54,7 +54,7 @@ describe("golden cases", () => {
 			const outcome = steps.reduce(
 				(
 					state: { readonly snapshot: Snapshot },
-					declarations: ReadonlyArray<HejbroDeclaration>,
+					declarations: ReadonlyArray<HejbroInput>,
 					stepIndex: number,
 				) => {
 					const generated = generateMigration({

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { index } from "../src/dsl/index-builder";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { schema } from "../src/dsl/schema";
-import { table, toSnakeCase } from "../src/dsl/table";
+import { getTableMeta, table, toSnakeCase } from "../src/dsl/table";
 import {
 	integer,
 	text,
@@ -51,9 +52,10 @@ describe("table() — dd.land-style posts", () => {
 			publishedAt: timestamptz(),
 		});
 
-		expect(posts.declarationKind).toBe("table");
-		expect(posts.tableName).toBe("posts");
-		expect(posts.columns.map((entry) => entry.columnName)).toEqual([
+		const meta = getTableMeta(posts);
+		expect(meta.declarationKind).toBe("table");
+		expect(meta.tableName).toBe("posts");
+		expect(meta.columns.map((entry) => entry.columnName)).toEqual([
 			"id",
 			"title",
 			"status",
@@ -72,38 +74,28 @@ describe("table() — dd.land-style posts", () => {
 				id: uuid().primaryKey().defaultRandom(),
 				postId: uuid().notNull(),
 			},
-			(helpers) => ({
+			(t) => ({
 				foreignKeys: [
 					{
-						columns: [helpers.column("postId")],
-						references: { table: posts, columns: ["id"] },
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
 						onDelete: "cascade",
 					},
 				],
 			}),
 		);
 
-		expect(comments.foreignKeys).toHaveLength(1);
-		expect(comments.foreignKeys[0]?.references.table).toBe(posts);
-		expect(comments.foreignKeys[0]?.columns).toEqual(["post_id"]);
+		const meta = getTableMeta(comments);
+		expect(meta.foreignKeys).toHaveLength(1);
+		expect(meta.foreignKeys[0]?.references.table).toBe(getTableMeta(posts));
+		expect(meta.foreignKeys[0]?.columns).toEqual(["post_id"]);
 	});
 
-	it("declares indexes via typed column helpers", () => {
-		const posts = table(
-			app,
-			"posts",
-			{ publishedAt: timestamptz() },
-			(helpers) => ({
-				indexes: [
-					{
-						columns: [helpers.column("publishedAt")],
-						unique: false,
-						indexName: null,
-					},
-				],
-			}),
-		);
-		expect(posts.indexes).toEqual([
+	it("declares indexes via index().on(...) with typed column refs", () => {
+		const posts = table(app, "posts", { publishedAt: timestamptz() }, (t) => ({
+			indexes: [index().on(t.publishedAt)],
+		}));
+		expect(getTableMeta(posts).indexes).toEqual([
 			{ columns: ["published_at"], unique: false, indexName: null },
 		]);
 	});
@@ -116,19 +108,18 @@ describe("table() — dd.land-style posts", () => {
 		).toThrowError(/posts/);
 	});
 
-	it("throws naming the table when a foreign key references an unknown local column", () => {
+	it("throws naming the table when a foreign key column belongs to another table", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		expect(() =>
 			table(app, "comments", { id: uuid().primaryKey() }, () => ({
 				foreignKeys: [
 					{
-						columns: ["nonexistent"],
-						references: { table: posts, columns: ["id"] },
-						onDelete: null,
+						columns: [posts.id],
+						references: { table: posts, columns: [posts.id] },
 					},
 				],
 			})),
-		).toThrowError(/comments/);
+		).toThrowError(/foreign-column-ref|own columns/);
 	});
 
 	it("throws naming the table when two columns collide after snake_casing", () => {
@@ -145,7 +136,7 @@ describe("table() — auxiliary types", () => {
 	it("accepts integer columns for coverage of a second simple type", () => {
 		const app = schema("app");
 		const counters = table(app, "counters", { value: integer().notNull() });
-		expect(counters.columns[0]?.columnState.typeNode).toEqual({
+		expect(getTableMeta(counters).columns[0]?.columnState.typeNode).toEqual({
 			typeName: "integer",
 		});
 	});

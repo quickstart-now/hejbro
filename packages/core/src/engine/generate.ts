@@ -1,3 +1,5 @@
+import type { Table } from "../dsl/table";
+import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { createDefaultRegistry } from "../kind/registry";
@@ -6,8 +8,18 @@ import { buildSnapshot } from "../snapshot/snapshot";
 import { renderBanner } from "../sql/migration-file";
 import { diffSnapshots } from "./diff-engine";
 
+/** Anything `generateMigration` accepts as a declaration: a plain declaration, or a `table()`-built `Table` object (unwrapped via `getTableMeta` at the entry point). */
+export type HejbroInput = HejbroDeclaration | Table;
+
+const resolveDeclaration = (input: HejbroInput): HejbroDeclaration => {
+	if (isTable(input)) {
+		return getTableMeta(input);
+	}
+	return input;
+};
+
 type GenerateMigrationOptions = {
-	readonly declarations: ReadonlyArray<HejbroDeclaration>;
+	readonly declarations: ReadonlyArray<HejbroInput>;
 	readonly previousSnapshot: Snapshot;
 	readonly registry?: KindRegistry;
 };
@@ -29,7 +41,8 @@ export const generateMigration = (
 	options: GenerateMigrationOptions,
 ): GenerateMigrationResult => {
 	const registry = options.registry ?? createDefaultRegistry();
-	const snapshot = buildSnapshot(options.declarations, registry);
+	const normalized = options.declarations.map(resolveDeclaration);
+	const snapshot = buildSnapshot(normalized, registry);
 	const changes = diffSnapshots(options.previousSnapshot, snapshot, registry);
 
 	if (changes.length === 0) {

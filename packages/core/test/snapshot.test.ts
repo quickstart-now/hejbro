@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { schema } from "../src/dsl/schema";
-import { table } from "../src/dsl/table";
+import { getTableMeta, table } from "../src/dsl/table";
 import { createDefaultRegistry } from "../src/kind/registry";
 import {
 	buildSnapshot,
@@ -27,7 +27,7 @@ describe("emptySnapshot", () => {
 describe("buildSnapshot", () => {
 	it("routes declarations to their owning kind and keys objects by kind:identity", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const snapshot = buildSnapshot([app, posts], registry);
+		const snapshot = buildSnapshot([app, getTableMeta(posts)], registry);
 		expect(Object.keys(snapshot.objects)).toEqual([
 			"schema:app",
 			"table:app.posts",
@@ -37,7 +37,10 @@ describe("buildSnapshot", () => {
 	it("produces flat, byte-sorted keys regardless of declaration order", () => {
 		const zebra = table(app, "zebra", { id: uuid().primaryKey() });
 		const alpha = table(app, "alpha", { id: uuid().primaryKey() });
-		const snapshot = buildSnapshot([zebra, alpha, app], registry);
+		const snapshot = buildSnapshot(
+			[getTableMeta(zebra), getTableMeta(alpha), app],
+			registry,
+		);
 		expect(Object.keys(snapshot.objects)).toEqual([
 			"schema:app",
 			"table:app.alpha",
@@ -57,16 +60,16 @@ describe("buildSnapshot", () => {
 	it("throws naming both declaration indexes when two declarations produce the same identity", () => {
 		const first = table(app, "posts", { id: uuid().primaryKey() });
 		const second = table(app, "posts", { id: uuid().primaryKey() });
-		expect(() => buildSnapshot([first, second], registry)).toThrowError(
-			/index 0.*index 1/i,
-		);
+		expect(() =>
+			buildSnapshot([getTableMeta(first), getTableMeta(second)], registry),
+		).toThrowError(/index 0.*index 1/i);
 	});
 });
 
 describe("renderSnapshot / parseSnapshot", () => {
 	it("round-trips through render and parse", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const snapshot = buildSnapshot([app, posts], registry);
+		const snapshot = buildSnapshot([app, getTableMeta(posts)], registry);
 		const rendered = renderSnapshot(snapshot);
 		expect(parseSnapshot(rendered)).toEqual(snapshot);
 	});

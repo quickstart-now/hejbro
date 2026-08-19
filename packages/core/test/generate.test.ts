@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { schema } from "../src/dsl/schema";
-import { table } from "../src/dsl/table";
+import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
@@ -18,7 +18,12 @@ const comments = table(app, "comments", {
 	id: uuid().primaryKey().defaultRandom(),
 	body: text().notNull(),
 });
-const declarations = [app, postStatus, posts, comments];
+const declarations = [
+	app,
+	postStatus,
+	getTableMeta(posts),
+	getTableMeta(comments),
+];
 
 describe("generateMigration", () => {
 	it("generates the full sql text from an empty snapshot over a two-table + enum declaration set", () => {
