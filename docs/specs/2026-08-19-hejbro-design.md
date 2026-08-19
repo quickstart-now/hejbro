@@ -15,8 +15,10 @@ migration SQL from the diff.
 Name: Swedish *hej* ("hello") + *bro* ("bridge") — "hello, bridge": a bridge
 between TypeScript and Postgres. Fits the genre's naming convention (Kysely is
 Finnish for "query"). npm names `hejbro` and PyPI `hejbro` were verified free
-on 2026-08-19; the `@hejbro` npm scope must be claimed at first publish
-(owner action).
+on 2026-08-19; the `@hejbro` npm scope (public org) is already owned by the
+project owner (confirmed 2026-08-19). The GitHub org (`quickstart-now`) and
+the npm scope intentionally differ: the scope follows the product brand, the
+org follows the operating entity. Publishing remains owner-gated.
 
 ## 2. Motivation
 
@@ -257,7 +259,7 @@ declarations ↔ snapshot ↔ migrations agree.
   (no `any`, no `let`/`var`, no `for`/`while` loops in our own source, no
   ternary, etc.).
 - Publishing to npm requires explicit owner approval; the `@hejbro` scope is
-  not yet claimed.
+  already owned by the project owner.
 
 ## 11. Positioning notes (for README/marketing, when the time comes)
 
