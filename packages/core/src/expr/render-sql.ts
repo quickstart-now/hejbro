@@ -107,6 +107,7 @@ export const collectColumnRefs = (
 		case "literal":
 		case "rawSql":
 		case "exists":
+		case "plpgsqlRef":
 			return [];
 		case "columnRef":
 			return [node];
@@ -400,6 +401,66 @@ export const renderSelect = (
 	return clauses.join(" ");
 };
 
+const intoClause = (
+	intoVariables: ReadonlyArray<string>,
+	strict: boolean,
+): string => {
+	if (intoVariables.length === 0) {
+		return throwHejbroError(
+			"empty-into-list",
+			"renderSelectInto() received no target variables — pass at least one local name.",
+		);
+	}
+	const keyword = strict ? "into strict" : "into";
+	return `${keyword} ${intoVariables.join(", ")}`;
+};
+
+/**
+ * Renders a {@link SelectNode} as a plpgsql `select … into [strict] …`
+ * statement — same clause order and scope validation as {@link renderSelect},
+ * with the `into` clause inserted directly after the projection (spec §5.3,
+ * decision A2).
+ */
+export const renderSelectInto = (
+	query: SelectNode,
+	intoVariables: ReadonlyArray<string>,
+	options: { readonly strict: boolean },
+	outerScope?: ReadonlyArray<TableRefNode>,
+): string => {
+	const scope = [
+		query.from,
+		...query.joins.map((join) => join.table),
+		...(outerScope ?? []),
+	];
+
+	const mentionedRefs = [
+		...collectProjectionRefs(query.projection),
+		...query.joins.flatMap((join) => collectColumnRefs(join.on)),
+		...collectWhereRefs(query.where),
+		...query.orderBy.flatMap((term) => collectColumnRefs(term.expr)),
+	];
+	assertInScope(scope, mentionedRefs, "select from", query.from);
+
+	const joinsSql = query.joins
+		.map(
+			(join) =>
+				`inner join ${renderTableRef(join.table)} on ${renderExpr(join.on, scope)}`,
+		)
+		.join(" ");
+
+	const clauses = [
+		`select ${renderProjection(query.projection, scope)}`,
+		intoClause(intoVariables, options.strict),
+		`from ${renderTableRef(query.from)}`,
+		joinsSql,
+		whereClause(query.where, scope),
+		orderByClause(query.orderBy, scope),
+		limitClause(query.limit),
+	].filter((clause) => clause !== "");
+
+	return clauses.join(" ");
+};
+
 /** Renders an {@link InsertNode}. `outerScope` follows the same scope rule as {@link renderSelect} (`[table, …outerScope]`). */
 export const renderInsert = (
 	node: InsertNode,
@@ -515,6 +576,8 @@ export const renderExpr = (
 			return renderLiteral(node);
 		case "columnRef":
 			return `${qualifyName(node.schemaName, node.tableName)}.${quoteIdentifier(node.columnName)}`;
+		case "plpgsqlRef":
+			return node.path.join(".");
 		case "comparison":
 			return `${renderOperand(node.left, outerScope)} ${node.operator} ${renderOperand(node.right, outerScope)}`;
 		case "logical": {
