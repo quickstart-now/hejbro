@@ -23,6 +23,46 @@ export { diffSnapshots } from "./engine/diff-engine";
 export { generateMigration } from "./engine/generate";
 export type { HejbroError } from "./error";
 export { assertNever, hejbroError, throwHejbroError } from "./error";
+export type {
+	BetweenNode,
+	ColumnRef,
+	ColumnRefNode,
+	ComparisonNode,
+	ComparisonOperator,
+	DeleteNode,
+	ExistsNode,
+	Expr,
+	ExprNode,
+	FunctionCallNode,
+	InListNode,
+	InsertNode,
+	JoinNode,
+	LiteralNode,
+	LogicalNode,
+	NotNode,
+	NullTestNode,
+	OnConflictNode,
+	OrderByTerm,
+	ProjectionNode,
+	QueryNode,
+	RawSqlNode,
+	ReturningNode,
+	SelectNode,
+	SqlTemplateChunk,
+	SqlTemplateNode,
+	TableRefNode,
+	UpdateNode,
+} from "./expr/ast";
+export {
+	columnRef,
+	comparisonOperators,
+	expr,
+	isExpr,
+} from "./expr/ast";
+export { liftLiteral, liftOperand, renderLiteral } from "./expr/literal";
+export { renderExpr } from "./expr/render-sql";
+export type { LiftableFor, SqlTypeFamily } from "./expr/type-family";
+export { familyOfTypeNode, sqlTypeFamilies } from "./expr/type-family";
 export type { KeyedDiff } from "./kind/diff-helpers";
 export { diffByKey, sameJson } from "./kind/diff-helpers";
 export type {
