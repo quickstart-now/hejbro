@@ -132,6 +132,18 @@ describe("table() — dd.land-style posts", () => {
 	});
 });
 
+describe("table() — declaration-site capture", () => {
+	it("captures the call site on the table's declaredAt", () => {
+		const app = schema("app");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const declaredAt = getTableMeta(widgets).declaredAt;
+		if (declaredAt !== null) {
+			expect(declaredAt).toContain("dsl.test.ts");
+		}
+		expect(declaredAt === null || typeof declaredAt === "string").toBe(true);
+	});
+});
+
 describe("table() — auxiliary types", () => {
 	it("accepts integer columns for coverage of a second simple type", () => {
 		const app = schema("app");

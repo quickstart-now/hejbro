@@ -1,4 +1,8 @@
-import type { IndexDeclaration, TableDeclaration } from "../dsl/table";
+import type {
+	ForeignKeyAction,
+	IndexDeclaration,
+	TableDeclaration,
+} from "../dsl/table";
 import { renderExpr } from "../expr/render-sql";
 import type { KeyedDiff } from "../kind/diff-helpers";
 import { diffByKey } from "../kind/diff-helpers";
@@ -12,12 +16,14 @@ import type {
 } from "./table-snapshot";
 import { asTableSnapshot, tableIdentity } from "./table-snapshot";
 
-const deriveIndexName = (
+/** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
+export const deriveIndexName = (
 	tableName: string,
 	columns: ReadonlyArray<string>,
 ): string => `${tableName}_${columns.join("_")}_idx`;
 
-const deriveForeignKeyName = (
+/** Derives a foreign key's default name from its owning table and local columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
+export const deriveForeignKeyName = (
 	tableName: string,
 	columns: ReadonlyArray<string>,
 ): string => `${tableName}_${columns.join("_")}_fk`;
@@ -48,16 +54,70 @@ const renderColumnDefaultExpr = (columnState: ColumnState): string | null => {
 	return renderExpr(columnState.defaultValue);
 };
 
+/** `{ notNull: true }` when the column is not-null, else `{}` — the compact-snapshot building block (Task 3 audit / D33): a `false`-default field is never recorded. */
+const notNullField = (value: boolean): Pick<ColumnSnapshot, "notNull"> => {
+	if (!value) {
+		return {};
+	}
+	return { notNull: true };
+};
+
+/** @see notNullField */
+const primaryKeyField = (
+	value: boolean,
+): Pick<ColumnSnapshot, "primaryKey"> => {
+	if (!value) {
+		return {};
+	}
+	return { primaryKey: true };
+};
+
+/** @see notNullField */
+const columnUniqueField = (value: boolean): Pick<ColumnSnapshot, "unique"> => {
+	if (!value) {
+		return {};
+	}
+	return { unique: true };
+};
+
+/** `{ default: <sql> }` when the column has a default, else `{}` (compact snapshot). */
+const defaultField = (
+	value: string | null,
+): Pick<ColumnSnapshot, "default"> => {
+	if (value === null) {
+		return {};
+	}
+	return { default: value };
+};
+
+/** @see notNullField */
+const indexUniqueField = (value: boolean): Pick<IndexSnapshot, "unique"> => {
+	if (!value) {
+		return {};
+	}
+	return { unique: true };
+};
+
+/** `{ onDelete: <action> }` when set, else `{}` (compact snapshot — `null` means "unspecified"). */
+const onDeleteField = (
+	value: ForeignKeyAction | null,
+): Pick<ForeignKeySnapshot, "onDelete"> => {
+	if (value === null) {
+		return {};
+	}
+	return { onDelete: value };
+};
+
 const serializeColumns = (
 	declaration: TableDeclaration,
 ): ReadonlyArray<ColumnSnapshot> =>
 	declaration.columns.map((entry) => ({
 		name: entry.columnName,
 		typeNode: entry.columnState.typeNode,
-		notNull: materializeNotNull(entry.columnState),
-		primaryKey: entry.columnState.primaryKey,
-		unique: entry.columnState.unique,
-		default: renderColumnDefaultExpr(entry.columnState),
+		...notNullField(materializeNotNull(entry.columnState)),
+		...primaryKeyField(entry.columnState.primaryKey),
+		...columnUniqueField(entry.columnState.unique),
+		...defaultField(renderColumnDefaultExpr(entry.columnState)),
 	}));
 
 const serializeIndexes = (
@@ -66,7 +126,7 @@ const serializeIndexes = (
 	declaration.indexes.map((index) => ({
 		name: resolveIndexName(declaration.tableName, index),
 		columns: index.columns,
-		unique: index.unique,
+		...indexUniqueField(index.unique),
 	}));
 
 const serializeForeignKeys = (
@@ -80,7 +140,7 @@ const serializeForeignKeys = (
 			foreignKey.references.table.tableName,
 		),
 		referencesColumns: foreignKey.references.columns,
-		onDelete: foreignKey.onDelete,
+		...onDeleteField(foreignKey.onDelete),
 	}));
 
 const isEmptyKeyedDiff = <TValue>(diff: KeyedDiff<TValue>): boolean =>

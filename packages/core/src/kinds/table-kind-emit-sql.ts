@@ -8,6 +8,14 @@ import type {
 	IndexSnapshot,
 	TableSnapshot,
 } from "./table-snapshot";
+import {
+	columnDefault,
+	columnNotNull,
+	columnPrimaryKey,
+	columnUnique,
+	foreignKeyOnDelete,
+	indexUnique,
+} from "./table-snapshot";
 
 /** Splits a `"schema.table"` identity string into its parts. */
 export const splitTableIdentity = (
@@ -27,21 +35,22 @@ export const splitTableIdentity = (
 };
 
 const notNullClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
-	if (column.notNull) {
+	if (columnNotNull(column)) {
 		return ["not null"];
 	}
 	return [];
 };
 
 const defaultClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
-	if (column.default === null) {
+	const value = columnDefault(column);
+	if (value === null) {
 		return [];
 	}
-	return [`default ${column.default}`];
+	return [`default ${value}`];
 };
 
 const uniqueClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
-	if (!column.unique) {
+	if (!columnUnique(column)) {
 		return [];
 	}
 	return ["unique"];
@@ -61,7 +70,7 @@ const primaryKeyConstraint = (
 	columns: ReadonlyArray<ColumnSnapshot>,
 ): ReadonlyArray<string> => {
 	const primaryKeyColumns = columns
-		.filter((column) => column.primaryKey)
+		.filter((column) => columnPrimaryKey(column))
 		.map((column) => quoteIdentifier(column.name));
 	if (primaryKeyColumns.length === 0) {
 		return [];
@@ -79,7 +88,7 @@ export const createTableSql = (snapshot: TableSnapshot): string => {
 };
 
 const uniqueIndexKeyword = (index: IndexSnapshot): string => {
-	if (index.unique) {
+	if (indexUnique(index)) {
 		return "unique ";
 	}
 	return "";
@@ -118,7 +127,7 @@ export const addForeignKeyConstraintSql = (
 	return `alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(foreignKey.name)} foreign key (${localColumns}) references ${qualifyName(
 		referenced.schema,
 		referenced.table,
-	)} (${referencedColumns})${foreignKeyActionClause(foreignKey.onDelete)};`;
+	)} (${referencedColumns})${foreignKeyActionClause(foreignKeyOnDelete(foreignKey))};`;
 };
 
 /** Renders `alter table … drop constraint …;`. */

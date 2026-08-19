@@ -14,7 +14,13 @@ import {
 	renderColumnDefinition,
 } from "./table-kind-emit-sql";
 import type { ColumnSnapshot, TableSnapshot } from "./table-snapshot";
-import { asTableSnapshot } from "./table-snapshot";
+import {
+	asTableSnapshot,
+	columnDefault,
+	columnNotNull,
+	columnPrimaryKey,
+	columnUnique,
+} from "./table-snapshot";
 
 const emitCreate = (next: TableSnapshot): ReadonlyArray<SqlStatement> => [
 	statement(createTableSql(next)),
@@ -107,10 +113,16 @@ const alterColumnStatements = (
 	},
 ): ReadonlyArray<SqlStatement> => {
 	const typeChanged = !sameJson(entry.previous.typeNode, entry.next.typeNode);
-	const notNullChanged = entry.previous.notNull !== entry.next.notNull;
-	const defaultChanged = !sameJson(entry.previous.default, entry.next.default);
-	const uniqueChanged = entry.previous.unique !== entry.next.unique;
-	const primaryKeyChanged = entry.previous.primaryKey !== entry.next.primaryKey;
+	const notNullChanged =
+		columnNotNull(entry.previous) !== columnNotNull(entry.next);
+	const defaultChanged = !sameJson(
+		columnDefault(entry.previous),
+		columnDefault(entry.next),
+	);
+	const uniqueChanged =
+		columnUnique(entry.previous) !== columnUnique(entry.next);
+	const primaryKeyChanged =
+		columnPrimaryKey(entry.previous) !== columnPrimaryKey(entry.next);
 
 	if (primaryKeyChanged) {
 		return throwHejbroError(
@@ -138,14 +150,14 @@ const alterColumnStatements = (
 			tableName,
 			entry.key,
 			notNullChanged,
-			entry.next.notNull,
+			columnNotNull(entry.next),
 		),
 		...defaultAlterStatements(
 			schema,
 			tableName,
 			entry.key,
 			defaultChanged,
-			entry.next.default,
+			columnDefault(entry.next),
 		),
 	];
 };

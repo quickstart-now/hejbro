@@ -77,15 +77,59 @@ const bannerLabel = (change: KindChange): string => {
 const renderBannerLine = (change: KindChange): string =>
 	`-- ${bannerMarker(change.operation)} ${change.kind} ${change.identity} ${bannerLabel(change)}`;
 
+/** The banner's tamper-evident hash-chain lines (decision D33, Phase 5): the normalized-snapshot sha256 before and after this migration, opaque `"sha256:<hex>"` strings computed by the CLI (core never hashes). */
+export type BannerHashes = {
+	readonly parent: string;
+	readonly current: string;
+};
+
+const PARENT_SNAPSHOT_PREFIX = "-- parent-snapshot: ";
+const SNAPSHOT_PREFIX = "-- snapshot: ";
+
 /**
  * Renders a one-line-per-change summary banner: `+` for creates, `~` for
- * alters (with notes bracketed), `-` for drops.
+ * alters (with notes bracketed), `-` for drops. When `hashes` is given,
+ * appends the two banner hash-chain lines (D33) `hejbro verify` reads back
+ * via {@link parseBannerHashes}.
  */
-export const renderBanner = (changes: ReadonlyArray<KindChange>): string =>
-	[
+export const renderBanner = (
+	changes: ReadonlyArray<KindChange>,
+	hashes?: BannerHashes,
+): string => {
+	const lines = [
 		"-- hejbro migration",
 		...changes.map((change) => renderBannerLine(change)),
+	];
+	if (hashes === undefined) {
+		return lines.join("\n");
+	}
+	return [
+		...lines,
+		`${PARENT_SNAPSHOT_PREFIX}${hashes.parent}`,
+		`${SNAPSHOT_PREFIX}${hashes.current}`,
 	].join("\n");
+};
+
+/**
+ * Parses a migration file's `parent-snapshot:`/`snapshot:` banner lines
+ * (pure text parsing — the sha256 hashing itself is CLI-owned). Returns
+ * `null` when either line is missing, e.g. a pre-Phase-5 migration file
+ * with no hash chain.
+ */
+export const parseBannerHashes = (fileContent: string): BannerHashes | null => {
+	const lines = fileContent.split("\n");
+	const parentLine = lines.find((line) =>
+		line.startsWith(PARENT_SNAPSHOT_PREFIX),
+	);
+	const currentLine = lines.find((line) => line.startsWith(SNAPSHOT_PREFIX));
+	if (parentLine === undefined || currentLine === undefined) {
+		return null;
+	}
+	return {
+		parent: parentLine.slice(PARENT_SNAPSHOT_PREFIX.length),
+		current: currentLine.slice(SNAPSHOT_PREFIX.length),
+	};
+};
 
 const changeVerb = (operation: ChangeOperation): string => {
 	switch (operation) {

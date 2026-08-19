@@ -14,28 +14,20 @@
 					"primaryKey": true,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "status",
 					"notNull": true,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "text"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "published_at",
-					"notNull": false,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "timestamptz"
-					},
-					"unique": false
+					}
 				}
 			],
 			"foreignKeys": [],

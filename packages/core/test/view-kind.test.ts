@@ -19,7 +19,7 @@ const posts = table(ddland, "posts", {
 const registry = createDefaultRegistry();
 
 describe("viewKind.serialize", () => {
-	it("derives columns from an allColumns projection", () => {
+	it("derives columns from an allColumns projection (securityInvoker omitted at its false default — compact snapshot)", () => {
 		const view = defineView(
 			ddland,
 			"published_posts",
@@ -30,7 +30,7 @@ describe("viewKind.serialize", () => {
 			name: string;
 			columns: ReadonlyArray<string>;
 			selectSql: string;
-			securityInvoker: boolean;
+			securityInvoker?: true;
 		};
 		expect(snapshot).toEqual({
 			schema: "ddland",
@@ -38,7 +38,6 @@ describe("viewKind.serialize", () => {
 			columns: ["id", "status", "published_at"],
 			selectSql:
 				'select "id", "status", "published_at" from "ddland"."posts" where "ddland"."posts"."published_at" is not null',
-			securityInvoker: false,
 		});
 	});
 

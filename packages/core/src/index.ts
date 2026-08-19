@@ -61,6 +61,14 @@ export {
 export { diffSnapshots } from "./engine/diff-engine";
 export type { HejbroInput } from "./engine/generate";
 export { generateMigration } from "./engine/generate";
+export type {
+	ColumnRenameSpec,
+	ConfirmDropSpec,
+	RenamePlan,
+	RenameSpec,
+	TableRenameSpec,
+} from "./engine/rename-plan";
+export { planRenames } from "./engine/rename-plan";
 export type { HejbroError } from "./error";
 export { assertNever, hejbroError, throwHejbroError } from "./error";
 export type {
@@ -229,11 +237,15 @@ export type { JsonValue } from "./snapshot/stable-json";
 export { stableJson } from "./snapshot/stable-json";
 export { qualifyName, quoteIdentifier } from "./sql/identifier";
 export { quoteStringLiteral } from "./sql/literal";
-export type { MigrationPrefixStrategy } from "./sql/migration-file";
+export type {
+	BannerHashes,
+	MigrationPrefixStrategy,
+} from "./sql/migration-file";
 export {
 	deriveSlug,
 	migrationFileName,
 	migrationPrefixStrategies,
+	parseBannerHashes,
 	renderBanner,
 } from "./sql/migration-file";
 export type { SqlStage, SqlStatement } from "./sql/statement";

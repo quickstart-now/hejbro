@@ -1,6 +1,8 @@
+import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { ColumnRef } from "../expr/ast";
 import { columnRef } from "../expr/ast";
+import { assertSqlName } from "../sql/identifier-rules";
 import type {
 	BuilderFamily,
 	ColumnBuilder,
@@ -50,6 +52,7 @@ export type TableDeclaration = {
 	readonly indexes: ReadonlyArray<IndexDeclaration>;
 	readonly foreignKeys: ReadonlyArray<ForeignKeyDeclaration>;
 	readonly rls: RlsDeclaration | null;
+	readonly declaredAt: string | null;
 };
 
 /** Hides a {@link Table}'s declaration metadata behind a unique symbol, keeping the object's own enumerable keys limited to its columns (D15). */
@@ -110,7 +113,7 @@ const buildColumnEntries = <TColumns extends Record<string, ColumnBuilder>>(
 	const columnEntries = Object.entries(columns).map(
 		([columnKey, columnBuilder]) => ({
 			columnKey,
-			columnName: toSnakeCase(columnKey),
+			columnName: assertSqlName(toSnakeCase(columnKey), "column", null),
 			columnState: columnBuilder.columnState,
 		}),
 	);
@@ -239,6 +242,8 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	columns: TColumns,
 	extras?: (t: TableColumns<TColumns>) => TableExtras,
 ): Table<TColumns> => {
+	const declaredAt = captureDeclarationSite();
+	assertSqlName(tableName, "table", null);
 	const columnEntries = buildColumnEntries(tableName, columns);
 	const refsObject = buildColumnRefs<TColumns>(owner, tableName, columnEntries);
 
@@ -266,6 +271,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		indexes,
 		foreignKeys,
 		rls,
+		declaredAt,
 	};
 
 	return Object.assign(refsObject, { [tableMeta]: declaration });

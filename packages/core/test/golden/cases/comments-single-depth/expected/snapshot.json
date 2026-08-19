@@ -24,38 +24,27 @@
 					"primaryKey": true,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "post_id",
 					"notNull": true,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "parent_id",
-					"notNull": false,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "body",
 					"notNull": true,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "text"
-					},
-					"unique": false
+					}
 				}
 			],
 			"foreignKeys": [],
@@ -72,28 +61,21 @@
 					"primaryKey": true,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "slug",
 					"notNull": true,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "text"
 					},
 					"unique": true
 				},
 				{
-					"default": null,
 					"name": "published_at",
-					"notNull": false,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "timestamptz"
-					},
-					"unique": false
+					}
 				}
 			],
 			"foreignKeys": [],
