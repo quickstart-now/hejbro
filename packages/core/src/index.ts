@@ -85,6 +85,8 @@ export {
 	or,
 } from "./expr/operators";
 export { renderExpr } from "./expr/render-sql";
+export type { SqlInterpolation } from "./expr/sql-template";
+export { sql } from "./expr/sql-template";
 export type {
 	FamilyOfTypeNode,
 	LiftableFor,
