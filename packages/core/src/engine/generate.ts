@@ -28,7 +28,11 @@ const resolveDeclarations = (
 	input: HejbroInput,
 ): ReadonlyArray<HejbroDeclaration> => {
 	if (isTable(input)) {
-		return [getTableMeta(input)];
+		const meta = getTableMeta(input);
+		if (meta.rls === null) {
+			return [meta];
+		}
+		return [meta, meta.rls, ...meta.rls.policies];
 	}
 	if (isTriggerDeclaration(input)) {
 		return [input.functionDeclaration, input];

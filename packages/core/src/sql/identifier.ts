@@ -27,3 +27,15 @@ export const quoteIdentifier = (name: string): string => {
  */
 export const qualifyName = (schema: string, name: string): string =>
 	`${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
+
+/**
+ * Renders a role name for a `TO`/`GRANT`/`REVOKE` clause: the `public`
+ * pseudo-role must stay a bare, unquoted keyword — every other role is
+ * quoted like any other identifier.
+ */
+export const renderRoleName = (role: string): string => {
+	if (role === "public") {
+		return "public";
+	}
+	return quoteIdentifier(role);
+};

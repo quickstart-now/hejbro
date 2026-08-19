@@ -1,0 +1,341 @@
+import { captureDeclarationSite } from "../declaration-site";
+import { throwHejbroError } from "../error";
+import type { Expr, ExprNode } from "../expr/ast";
+import { collectColumnRefs } from "../expr/render-sql";
+
+/** The Postgres commands a policy can be scoped to. */
+export const policyCommands = [
+	"select",
+	"insert",
+	"update",
+	"delete",
+	"all",
+] as const;
+
+/** @see policyCommands */
+export type PolicyCommand = (typeof policyCommands)[number];
+
+/**
+ * A finished, not-yet-table-bound policy (chain output). The clause data
+ * fields are named `usingExpr`/`withCheckExpr` — not `using`/`withCheck` —
+ * so they can never collide with the chain methods of the same name that
+ * `PolicyBothStage` attaches to a just-built `PolicyInput` (an update/all
+ * policy that ends its chain after only one clause call must keep the
+ * *other* clause `null`, not have it silently overwritten by a function).
+ */
+export type PolicyInput = {
+	readonly policyInputKind: "policy";
+	readonly policyName: string;
+	readonly permissive: boolean;
+	readonly command: PolicyCommand;
+	readonly roles: ReadonlyArray<string>;
+	readonly usingExpr: ExprNode | null;
+	readonly withCheckExpr: ExprNode | null;
+	readonly declaredAt: string | null;
+};
+
+/** `rls.enabled(...)` output, not yet bound to a table. */
+export type RlsInput = {
+	readonly rlsInputKind: "rls";
+	readonly force: boolean;
+	readonly policies: Readonly<Record<string, PolicyInput>>;
+	readonly declaredAt: string | null;
+};
+
+type PolicyUsingStage = {
+	using(condition: Expr<"boolean">): PolicyInput;
+};
+
+type PolicyCheckStage = {
+	withCheck(condition: Expr<"boolean">): PolicyInput;
+};
+
+type PolicyBothStage = {
+	using(condition: Expr<"boolean">): PolicyInput & PolicyCheckStage;
+	withCheck(condition: Expr<"boolean">): PolicyInput & PolicyUsingStage;
+};
+
+type PolicyRolesStage<TStage> = {
+	to(...roles: ReadonlyArray<string>): TStage;
+};
+
+type PolicyPending = {
+	as(kind: "permissive" | "restrictive"): PolicyPending;
+	for(command: "select" | "delete"): PolicyRolesStage<PolicyUsingStage>;
+	for(command: "insert"): PolicyRolesStage<PolicyCheckStage>;
+	for(command: "update" | "all"): PolicyRolesStage<PolicyBothStage>;
+};
+
+type PendingState = {
+	readonly policyName: string;
+	readonly permissive: boolean;
+	readonly declaredAt: string | null;
+};
+
+type ForState = PendingState & {
+	readonly command: PolicyCommand;
+};
+
+type RolesState = ForState & {
+	readonly roles: ReadonlyArray<string>;
+};
+
+const finishPolicy = (
+	state: RolesState,
+	usingExpr: ExprNode | null,
+	withCheckExpr: ExprNode | null,
+): PolicyInput => ({
+	policyInputKind: "policy",
+	policyName: state.policyName,
+	permissive: state.permissive,
+	command: state.command,
+	roles: state.roles,
+	usingExpr,
+	withCheckExpr,
+	declaredAt: state.declaredAt,
+});
+
+const buildUsingStage = (state: RolesState): PolicyUsingStage => ({
+	using: (condition) => finishPolicy(state, condition.exprNode, null),
+});
+
+const buildCheckStage = (state: RolesState): PolicyCheckStage => ({
+	withCheck: (condition) => finishPolicy(state, null, condition.exprNode),
+});
+
+const buildBothStage = (
+	state: RolesState,
+	using: ExprNode | null,
+	withCheck: ExprNode | null,
+): PolicyBothStage => ({
+	using: (condition) => {
+		const nextUsing = condition.exprNode;
+		const built = finishPolicy(state, nextUsing, withCheck);
+		return Object.assign(built, {
+			withCheck: (checkCondition: Expr<"boolean">) =>
+				finishPolicy(state, nextUsing, checkCondition.exprNode),
+		});
+	},
+	withCheck: (condition) => {
+		const nextWithCheck = condition.exprNode;
+		const built = finishPolicy(state, using, nextWithCheck);
+		return Object.assign(built, {
+			using: (usingCondition: Expr<"boolean">) =>
+				finishPolicy(state, usingCondition.exprNode, nextWithCheck),
+		});
+	},
+});
+
+const buildRolesStage = <TStage>(
+	state: ForState,
+	buildStage: (rolesState: RolesState) => TStage,
+): PolicyRolesStage<TStage> => ({
+	to: (...roles) => {
+		if (roles.length === 0) {
+			return throwHejbroError(
+				"rls-policy-missing-roles",
+				`policy "${state.policyName}" calls .to() with no roles — Postgres requires at least one role after TO; pass .to("anon") or the specific roles this policy applies to.`,
+				state.declaredAt,
+			);
+		}
+		return buildStage({ ...state, roles });
+	},
+});
+
+/**
+ * `PolicyPending["for"]` is declared with three overload signatures so
+ * illegal clause combinations don't type-check (D26); this single runtime
+ * implementation branches on `command` and returns the matching stage,
+ * which TypeScript can't trace back through an overloaded object property
+ * — the one generic/runtime boundary crossing in this file (mirrors
+ * `dsl/table.ts`'s `buildColumnRefs` cast).
+ */
+const buildFor = (state: PendingState): PolicyPending["for"] =>
+	((command: PolicyCommand) => {
+		const forState: ForState = { ...state, command };
+		if (command === "select" || command === "delete") {
+			return buildRolesStage(forState, buildUsingStage);
+		}
+		if (command === "insert") {
+			return buildRolesStage(forState, buildCheckStage);
+		}
+		return buildRolesStage(forState, (rolesState) =>
+			buildBothStage(rolesState, null, null),
+		);
+	}) as PolicyPending["for"];
+
+const buildPending = (state: PendingState): PolicyPending => ({
+	as: (kind) => buildPending({ ...state, permissive: kind === "permissive" }),
+	for: buildFor(state),
+});
+
+/** Builder chain and table-attachment entry points for row-level security (D26). */
+export const rls: {
+	enabled(
+		policies: Readonly<Record<string, PolicyInput>>,
+		options?: { readonly force?: boolean },
+	): RlsInput;
+	policy(policyName: string): PolicyPending;
+} = {
+	enabled: (policies, options) => ({
+		rlsInputKind: "rls",
+		force: options?.force ?? false,
+		policies,
+		declaredAt: captureDeclarationSite(),
+	}),
+	policy: (policyName) =>
+		buildPending({
+			policyName,
+			permissive: true,
+			declaredAt: captureDeclarationSite(),
+		}),
+};
+
+/** A `PolicyInput` bound to the table that declared it. */
+export type PolicyDeclaration = {
+	readonly declarationKind: "policy";
+	readonly schemaName: string;
+	readonly tableName: string;
+	readonly policyName: string;
+	readonly permissive: boolean;
+	readonly command: PolicyCommand;
+	readonly roles: ReadonlyArray<string>;
+	readonly using: ExprNode | null;
+	readonly withCheck: ExprNode | null;
+	readonly declaredAt: string | null;
+};
+
+/** An `RlsInput` bound to the table that declared it. */
+export type RlsDeclaration = {
+	readonly declarationKind: "rls";
+	readonly schemaName: string;
+	readonly tableName: string;
+	readonly force: boolean;
+	readonly policies: ReadonlyArray<PolicyDeclaration>;
+	readonly declaredAt: string | null;
+};
+
+const clauseNotAllowed = (
+	policy: PolicyInput,
+	clause: "using" | "with check",
+	otherClause: "using" | "with check",
+): never =>
+	throwHejbroError(
+		"rls-policy-clause-not-allowed",
+		`policy "${policy.policyName}" is FOR ${policy.command} and cannot take ${clause} — Postgres rejects it; use ${otherClause} instead.`,
+		policy.declaredAt,
+	);
+
+/** Defensive runtime guard for clause/command combinations the type-state chain (D26) already prevents. */
+const assertClauseAllowed = (policy: PolicyInput): void => {
+	if (
+		(policy.command === "select" || policy.command === "delete") &&
+		policy.withCheckExpr !== null
+	) {
+		clauseNotAllowed(policy, "with check", "using");
+	}
+	if (policy.command === "insert" && policy.usingExpr !== null) {
+		clauseNotAllowed(policy, "using", "with check");
+	}
+};
+
+const exprColumnRefs = (
+	expr: ExprNode | null,
+): ReadonlyArray<ReturnType<typeof collectColumnRefs>[number]> => {
+	if (expr === null) {
+		return [];
+	}
+	return collectColumnRefs(expr);
+};
+
+const assertOwnColumnsOnly = (
+	schemaName: string,
+	tableName: string,
+	policy: PolicyInput,
+): void => {
+	const refs = [
+		...exprColumnRefs(policy.usingExpr),
+		...exprColumnRefs(policy.withCheckExpr),
+	];
+	const foreignRef = refs.find(
+		(ref) => ref.schemaName !== schemaName || ref.tableName !== tableName,
+	);
+	if (foreignRef !== undefined) {
+		throwHejbroError(
+			"rls-policy-foreign-column",
+			`policy "${policy.policyName}" on "${schemaName}.${tableName}" references column "${foreignRef.schemaName}.${foreignRef.tableName}.${foreignRef.columnName}" — a policy expression may only reference its own table's columns directly; reach other tables through exists().`,
+			policy.declaredAt,
+		);
+	}
+};
+
+const bindPolicy = (
+	schemaName: string,
+	tableName: string,
+	policy: PolicyInput,
+): PolicyDeclaration => {
+	assertClauseAllowed(policy);
+	assertOwnColumnsOnly(schemaName, tableName, policy);
+	return {
+		declarationKind: "policy",
+		schemaName,
+		tableName,
+		policyName: policy.policyName,
+		permissive: policy.permissive,
+		command: policy.command,
+		roles: policy.roles,
+		using: policy.usingExpr,
+		withCheck: policy.withCheckExpr,
+		declaredAt: policy.declaredAt,
+	};
+};
+
+const findDuplicatePolicyName = (
+	entries: ReadonlyArray<readonly [string, PolicyInput]>,
+): PolicyInput | undefined => {
+	const names = entries.map(([, policy]) => policy.policyName);
+	const duplicateName = names.find(
+		(name, index) => names.indexOf(name) !== index,
+	);
+	return entries.find(([, policy]) => policy.policyName === duplicateName)?.[1];
+};
+
+const assertNoDuplicatePolicyNames = (
+	tableName: string,
+	entries: ReadonlyArray<readonly [string, PolicyInput]>,
+): void => {
+	const duplicate = findDuplicatePolicyName(entries);
+	if (duplicate !== undefined) {
+		throwHejbroError(
+			"duplicate-policy-name",
+			`table "${tableName}" declares two policies named "${duplicate.policyName}" — Postgres requires unique policy names per table; rename one (the TS object key is just a label, the string passed to rls.policy() is the SQL name).`,
+			duplicate.declaredAt,
+		);
+	}
+};
+
+/**
+ * Binds an `RlsInput` to its owning table: stamps `schemaName`/`tableName`
+ * onto every policy and validates the whole set (duplicate SQL policy
+ * names, clause/command combinations, and own-table-only column
+ * references).
+ */
+export const bindRls = (
+	schemaName: string,
+	tableName: string,
+	input: RlsInput,
+): RlsDeclaration => {
+	const entries = Object.entries(input.policies);
+	assertNoDuplicatePolicyNames(tableName, entries);
+	const policies = entries.map(([, policy]) =>
+		bindPolicy(schemaName, tableName, policy),
+	);
+	return {
+		declarationKind: "rls",
+		schemaName,
+		tableName,
+		force: input.force,
+		policies,
+		declaredAt: input.declaredAt,
+	};
+};
