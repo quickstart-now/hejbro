@@ -556,8 +556,11 @@ git commit -m "feat(core): policy object kind with single-change recreate emissi
 
 **Files:**
 - Modify: `packages/core/src/index.ts` (export `rls`, `PolicyInput`,
-  `RlsInput`, `PolicyDeclaration`, `RlsDeclaration`, `PolicyCommand`;
-  follow the file's existing grouped-export style)
+  `RlsInput`, `PolicyDeclaration`, `RlsDeclaration`, `PolicyCommand`,
+  plus the kind objects and their snapshot types — `rlsKind`,
+  `RlsSnapshot`, `policyKind`, `PolicySnapshot` — matching the existing
+  kind-export convention (every other built-in kind and its snapshot
+  type is exported); follow the file's existing grouped-export style)
 - Create: `packages/core/test/golden/cases/rls-policies/{declarations.ts,steps.ts}`
 
 Golden case shape (harness runs every directory automatically):
@@ -699,7 +702,8 @@ Behavior (identity `` `${schema}.${name}` ``):
 
 **Files:**
 - Modify: `packages/core/src/index.ts` (export `defineView`,
-  `ViewDeclaration`)
+  `ViewDeclaration`, plus `viewKind` and `ViewSnapshot` matching the
+  existing kind-export convention)
 - Create: `packages/core/test/golden/cases/view-lifecycle/{declarations.ts,steps.ts}`
 
 Steps: (0) schema + `posts` table + `published_posts` view
@@ -850,7 +854,9 @@ if (isGrantSetDeclaration(input)) {
 
 **Files:**
 - Modify: `packages/core/src/index.ts` (export `grant`, `GrantDeclaration`,
-  `GrantSetDeclaration`, `TablePrivilege`)
+  `GrantSetDeclaration`, `TablePrivilege`, plus `grantKind` and
+  `GrantSnapshot` matching the existing kind-export convention — every
+  built-in kind and its snapshot type is exported)
 - Create: `packages/core/test/golden/cases/grants-delta/{declarations.ts,steps.ts}`
 
 Steps: (0) schema + usage for anon/service_role + all-tables select for
