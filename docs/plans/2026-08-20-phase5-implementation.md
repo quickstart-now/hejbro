@@ -80,6 +80,7 @@ review).
 | 5 | test: npm-pack install-path smoke (U9) | Phase 7 or 8 — **one** phase fixed at creation time (no-orphan rule requires a single parent) |
 | 6 | refactor: retrofit `Next:` marker onto Phase 1–4 error messages (⑤) | Phase 7 (#8) |
 | 7 | feat(core): extend `assertSqlName` to explicit (user-pinned) index names — declaration-time validation consistency (PR-A review observation) | Phase 7 (#8) |
+| 8 | feat(cli): support `--flag=value` equals-joined token form in rawArgs parsing and rerun assembly (silently ignored in v1; PR-C review observation) | Phase 7 (#8) |
 
 Plus one implementation sub-issue of #6 per PR below.
 
