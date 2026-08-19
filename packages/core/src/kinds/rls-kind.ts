@@ -6,11 +6,28 @@ import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import { statement } from "../sql/statement";
 
-/** A table's row-level-security enable/force state — policies are separate `policy` declarations, not serialized here (D25). */
+/**
+ * A table's row-level-security enable/force state — policies are separate
+ * `policy` declarations, not serialized here (D25). **Compact** (Task 3
+ * audit / D33): `force` is present only when `true` (declared default
+ * `false`) — read via {@link rlsForce}.
+ */
 export type RlsSnapshot = {
 	readonly schema: string;
 	readonly table: string;
-	readonly force: boolean;
+	readonly force?: true;
+};
+
+/** `snapshot.force`, defaulting to `false` when absent (compact snapshot). */
+export const rlsForce = (snapshot: RlsSnapshot): boolean =>
+	snapshot.force === true;
+
+/** `{ force: true }` when forced, else `{}` (compact snapshot). */
+const forceField = (value: boolean): Pick<RlsSnapshot, "force"> => {
+	if (!value) {
+		return {};
+	}
+	return { force: true };
 };
 
 // Internal invariant: this shape is exactly what rlsKind.serialize below produces.
@@ -56,7 +73,7 @@ export const rlsKind: ObjectKind<RlsDeclaration> = {
 		const snapshot: RlsSnapshot = {
 			schema: declaration.schemaName,
 			table: declaration.tableName,
-			force: declaration.force,
+			...forceField(declaration.force),
 		};
 		return snapshot;
 	},
@@ -103,7 +120,7 @@ export const rlsKind: ObjectKind<RlsDeclaration> = {
 				identity,
 				previous,
 				next,
-				notes: [forceNote(nextSnapshot.force)],
+				notes: [forceNote(rlsForce(nextSnapshot))],
 			},
 		];
 	},

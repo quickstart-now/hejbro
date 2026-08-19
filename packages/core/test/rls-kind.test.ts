@@ -22,12 +22,11 @@ const bareRls = () => buildPosts(false);
 const forcedRls = () => buildPosts(true);
 
 describe("rlsKind", () => {
-	it("serializes to schema/table/force, without policies", () => {
+	it("serializes to schema/table, without policies (force omitted at its false default — compact snapshot)", () => {
 		const declaration = bareRls();
 		expect(rlsKind.serialize(declaration)).toEqual({
 			schema: "ddland",
 			table: "posts",
-			force: false,
 		});
 	});
 

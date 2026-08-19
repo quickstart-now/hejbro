@@ -45,51 +45,42 @@
 		"policy:ddland.comments.comments_read_visible": {
 			"command": "select",
 			"name": "comments_read_visible",
-			"permissive": true,
 			"roles": [
 				"anon"
 			],
 			"schema": "ddland",
 			"table": "comments",
-			"using": "(\"ddland\".\"comments\".\"deleted_at\" is null) and exists (select 1 from \"ddland\".\"posts\" where (\"ddland\".\"posts\".\"id\" = \"ddland\".\"comments\".\"post_id\") and (\"ddland\".\"posts\".\"status\" = 'published') and (\"ddland\".\"posts\".\"published_at\" <= now()))",
-			"withCheck": null
+			"using": "(\"ddland\".\"comments\".\"deleted_at\" is null) and exists (select 1 from \"ddland\".\"posts\" where (\"ddland\".\"posts\".\"id\" = \"ddland\".\"comments\".\"post_id\") and (\"ddland\".\"posts\".\"status\" = 'published') and (\"ddland\".\"posts\".\"published_at\" <= now()))"
 		},
 		"policy:ddland.post_translations.post_translations_read_published": {
 			"command": "select",
 			"name": "post_translations_read_published",
-			"permissive": true,
 			"roles": [
 				"anon"
 			],
 			"schema": "ddland",
 			"table": "post_translations",
-			"using": "exists (select 1 from \"ddland\".\"posts\" where (\"ddland\".\"posts\".\"id\" = \"ddland\".\"post_translations\".\"post_id\") and (\"ddland\".\"posts\".\"status\" = 'published') and (\"ddland\".\"posts\".\"published_at\" <= now()))",
-			"withCheck": null
+			"using": "exists (select 1 from \"ddland\".\"posts\" where (\"ddland\".\"posts\".\"id\" = \"ddland\".\"post_translations\".\"post_id\") and (\"ddland\".\"posts\".\"status\" = 'published') and (\"ddland\".\"posts\".\"published_at\" <= now()))"
 		},
 		"policy:ddland.posts.posts_read_published": {
 			"command": "select",
 			"name": "posts_read_published",
-			"permissive": true,
 			"roles": [
 				"anon"
 			],
 			"schema": "ddland",
 			"table": "posts",
-			"using": "\"ddland\".\"posts\".\"status\" = 'published'",
-			"withCheck": null
+			"using": "\"ddland\".\"posts\".\"status\" = 'published'"
 		},
 		"rls:ddland.comments": {
-			"force": false,
 			"schema": "ddland",
 			"table": "comments"
 		},
 		"rls:ddland.post_translations": {
-			"force": false,
 			"schema": "ddland",
 			"table": "post_translations"
 		},
 		"rls:ddland.posts": {
-			"force": false,
 			"schema": "ddland",
 			"table": "posts"
 		},
@@ -105,28 +96,20 @@
 					"primaryKey": true,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "post_id",
 					"notNull": true,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "deleted_at",
-					"notNull": false,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "timestamptz"
-					},
-					"unique": false
+					}
 				}
 			],
 			"foreignKeys": [],
@@ -143,28 +126,21 @@
 					"primaryKey": true,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "post_id",
 					"notNull": true,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "locale",
 					"notNull": true,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "text"
-					},
-					"unique": false
+					}
 				}
 			],
 			"foreignKeys": [],
@@ -181,28 +157,20 @@
 					"primaryKey": true,
 					"typeNode": {
 						"typeName": "uuid"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "status",
 					"notNull": true,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "text"
-					},
-					"unique": false
+					}
 				},
 				{
-					"default": null,
 					"name": "published_at",
-					"notNull": false,
-					"primaryKey": false,
 					"typeNode": {
 						"typeName": "timestamptz"
-					},
-					"unique": false
+					}
 				}
 			],
 			"foreignKeys": [],

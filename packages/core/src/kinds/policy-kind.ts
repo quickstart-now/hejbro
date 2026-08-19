@@ -12,17 +12,37 @@ import {
 } from "../sql/identifier";
 import { statement } from "../sql/statement";
 
-/** A policy's fully-rendered snapshot node — expressions are pre-rendered SQL text (D16 precedent, same as a column's default). */
+/**
+ * A policy's fully-rendered snapshot node — expressions are pre-rendered
+ * SQL text (D16 precedent, same as a column's default). **Compact** (Task
+ * 3 audit / D33): `permissive` is present only when `false` (declared
+ * default `true` — a restrictive policy); `using`/`withCheck` are present
+ * only when set (default `null`, meaning the command doesn't take that
+ * clause) — read via {@link policyPermissive}/{@link policyUsing}/
+ * {@link policyWithCheck}.
+ */
 export type PolicySnapshot = {
 	readonly schema: string;
 	readonly table: string;
 	readonly name: string;
-	readonly permissive: boolean;
+	readonly permissive?: false;
 	readonly command: PolicyCommand;
 	readonly roles: ReadonlyArray<string>;
-	readonly using: string | null;
-	readonly withCheck: string | null;
+	readonly using?: string;
+	readonly withCheck?: string;
 };
+
+/** `snapshot.permissive`, defaulting to `true` when absent (compact snapshot). */
+export const policyPermissive = (snapshot: PolicySnapshot): boolean =>
+	snapshot.permissive !== false;
+
+/** `snapshot.using`, defaulting to `null` when absent (compact snapshot). */
+export const policyUsing = (snapshot: PolicySnapshot): string | null =>
+	snapshot.using ?? null;
+
+/** `snapshot.withCheck`, defaulting to `null` when absent (compact snapshot). */
+export const policyWithCheck = (snapshot: PolicySnapshot): string | null =>
+	snapshot.withCheck ?? null;
 
 // Internal invariant: this shape is exactly what policyKind.serialize below produces.
 const asPolicySnapshot = (snapshot: JsonValue): PolicySnapshot =>
@@ -70,7 +90,35 @@ const withCheckClause = (withCheck: string | null): string => {
 const createPolicySql = (snapshot: PolicySnapshot): string => {
 	const tableRef = qualifyName(snapshot.schema, snapshot.table);
 	const rolesSql = snapshot.roles.map(renderRoleName).join(", ");
-	return `create policy ${quoteIdentifier(snapshot.name)} on ${tableRef}${kindClause(snapshot.permissive)} for ${snapshot.command} to ${rolesSql}${usingClause(snapshot.using)}${withCheckClause(snapshot.withCheck)};`;
+	return `create policy ${quoteIdentifier(snapshot.name)} on ${tableRef}${kindClause(policyPermissive(snapshot))} for ${snapshot.command} to ${rolesSql}${usingClause(policyUsing(snapshot))}${withCheckClause(policyWithCheck(snapshot))};`;
+};
+
+/** `{ permissive: false }` when restrictive, else `{}` (compact snapshot — default `true`). */
+const permissiveField = (
+	value: boolean,
+): Pick<PolicySnapshot, "permissive"> => {
+	if (value) {
+		return {};
+	}
+	return { permissive: false };
+};
+
+/** `{ using: <sql> }` when set, else `{}` (compact snapshot). */
+const usingField = (value: string | null): Pick<PolicySnapshot, "using"> => {
+	if (value === null) {
+		return {};
+	}
+	return { using: value };
+};
+
+/** `{ withCheck: <sql> }` when set, else `{}` (compact snapshot). */
+const withCheckField = (
+	value: string | null,
+): Pick<PolicySnapshot, "withCheck"> => {
+	if (value === null) {
+		return {};
+	}
+	return { withCheck: value };
 };
 
 /**
@@ -95,11 +143,11 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 			schema: declaration.schemaName,
 			table: declaration.tableName,
 			name: declaration.policyName,
-			permissive: declaration.permissive,
 			command: declaration.command,
 			roles: declaration.roles,
-			using: renderClauseExpr(declaration.using, outerScope),
-			withCheck: renderClauseExpr(declaration.withCheck, outerScope),
+			...permissiveField(declaration.permissive),
+			...usingField(renderClauseExpr(declaration.using, outerScope)),
+			...withCheckField(renderClauseExpr(declaration.withCheck, outerScope)),
 		};
 		return snapshot;
 	},

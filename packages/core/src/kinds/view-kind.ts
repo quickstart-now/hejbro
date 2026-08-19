@@ -8,13 +8,32 @@ import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import { statement } from "../sql/statement";
 
-/** A view's serialized snapshot node — `selectSql` is pre-rendered (D24 precedent), `columns` drives the recreate-vs-replace decision (D27). */
+/**
+ * A view's serialized snapshot node — `selectSql` is pre-rendered (D24
+ * precedent), `columns` drives the recreate-vs-replace decision (D27).
+ * **Compact** (Task 3 audit / D33): `securityInvoker` is present only when
+ * `true` (declared default `false`) — read via {@link viewSecurityInvoker}.
+ */
 export type ViewSnapshot = {
 	readonly schema: string;
 	readonly name: string;
 	readonly columns: ReadonlyArray<string>;
 	readonly selectSql: string;
-	readonly securityInvoker: boolean;
+	readonly securityInvoker?: true;
+};
+
+/** `snapshot.securityInvoker`, defaulting to `false` when absent (compact snapshot). */
+export const viewSecurityInvoker = (snapshot: ViewSnapshot): boolean =>
+	snapshot.securityInvoker === true;
+
+/** `{ securityInvoker: true }` when set, else `{}` (compact snapshot). */
+const securityInvokerField = (
+	value: boolean,
+): Pick<ViewSnapshot, "securityInvoker"> => {
+	if (!value) {
+		return {};
+	}
+	return { securityInvoker: true };
 };
 
 // Internal invariant: this shape is exactly what viewKind.serialize below produces.
@@ -63,7 +82,7 @@ const securityInvokerClause = (securityInvoker: boolean): string => {
 };
 
 const createOrReplaceSql = (snapshot: ViewSnapshot): string =>
-	`create or replace view ${qualifyName(snapshot.schema, snapshot.name)}${securityInvokerClause(snapshot.securityInvoker)} as ${snapshot.selectSql};`;
+	`create or replace view ${qualifyName(snapshot.schema, snapshot.name)}${securityInvokerClause(viewSecurityInvoker(snapshot))} as ${snapshot.selectSql};`;
 
 /**
  * The built-in object kind for Postgres views. Identity is
@@ -89,7 +108,7 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 			name: declaration.viewName,
 			columns: projectionColumns(declaration.query.projection),
 			selectSql: renderSelect(declaration.query),
-			securityInvoker: declaration.securityInvoker,
+			...securityInvokerField(declaration.securityInvoker),
 		};
 		return snapshot;
 	},

@@ -8,6 +8,7 @@ import {
 	index,
 	isTable,
 	planRenames,
+	renderSnapshot,
 	schema,
 	table,
 	text,
@@ -364,6 +365,46 @@ describe("planRenames", () => {
 		expect(plan.errors).toEqual([
 			expect.objectContaining({ code: "ambiguous-column-rename" }),
 		]);
+	});
+
+	it("preserves the compact snapshot format through a rewrite (D33) — no declaration-default keys reappear", () => {
+		// posts.id has no notNull/primaryKey/unique/default set — its rewritten
+		// node must stay exactly as compact as a freshly serialized one, and
+		// the untouched sibling table's node must be byte-identical (object
+		// spread, not reconstruction, is what rename-plan.ts must do).
+		const previous = snap(
+			app,
+			table(app, "posts", { id: text(), slug: text() }),
+			table(app, "users", { id: text() }),
+		);
+		const next = snap(
+			app,
+			table(app, "posts", { id: text(), handle: text() }),
+			table(app, "users", { id: text() }),
+		);
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "slug",
+					newName: "handle",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		const rendered = renderSnapshot(plan.rewrittenPrevious);
+		expect(rendered).not.toContain('"notNull"');
+		expect(rendered).not.toContain('"primaryKey"');
+		expect(rendered).not.toContain('"unique"');
+		expect(rendered).not.toContain('"default"');
+		// byte-identical to a freshly built snapshot of the post-rename state
+		expect(rendered).toBe(renderSnapshot(next));
 	});
 
 	it("unknown-confirm-drop-target for a column this run does not drop", () => {

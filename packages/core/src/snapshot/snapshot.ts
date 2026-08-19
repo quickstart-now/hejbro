@@ -10,7 +10,15 @@ import { stableJson } from "./stable-json";
  * `2` when `ColumnSnapshot.default` changed shape from a structured
  * `ColumnDefault` object to a rendered SQL expression string (D16,
  * Phase 2 Task 10) — pre-publication, so `parseSnapshot`'s version check
- * is the entire migration story (no compatibility shim).
+ * is the entire migration story (no compatibility shim). Stays `2` for the
+ * Phase 5 compact-format change (D33, Task 3 audit): declaration-default
+ * fields (`ColumnSnapshot.notNull`/`primaryKey`/`unique`/`default`,
+ * `IndexSnapshot.unique`, `ForeignKeySnapshot.onDelete`, `RlsSnapshot.force`,
+ * `PolicySnapshot.permissive`/`using`/`withCheck`, `ViewSnapshot.
+ * securityInvoker`) are now omitted rather than recorded at their default —
+ * v1 hasn't shipped and there are zero real snapshot consumers yet, so this
+ * is pre-publication cleanup, not a compatibility break. Once hejbro ships,
+ * any further format change bumps the version.
  */
 export const HEJBRO_SNAPSHOT_VERSION = 2;
 
