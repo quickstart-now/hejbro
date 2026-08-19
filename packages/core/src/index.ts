@@ -129,6 +129,20 @@ export { enumKind } from "./kinds/enum-kind";
 export { schemaKind } from "./kinds/schema-kind";
 export { tableKind } from "./kinds/table-kind";
 export type {
+	DeleteFilterable,
+	DeleteFinal,
+	DeleteReturnable,
+	InsertConflictable,
+	InsertFinal,
+	InsertReturnable,
+	MutationRow,
+	MutationValue,
+	UpdateFilterable,
+	UpdateFinal,
+	UpdateReturnable,
+} from "./query/mutate";
+export { deleteFrom, insert, update } from "./query/mutate";
+export type {
 	OrderTermInput,
 	SelectFiltered,
 	SelectJoinable,
