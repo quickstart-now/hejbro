@@ -6,6 +6,7 @@ import type {
 	ExprNode,
 	InsertNode,
 	OnConflictNode,
+	OrderByTerm,
 	ProjectionNode,
 	QueryNode,
 	ReturningNode,
@@ -159,6 +160,45 @@ const findForeignColumnRef = (
 	refs: ReadonlyArray<ColumnRefNode>,
 ): ColumnRefNode | undefined => refs.find((ref) => !isInScope(scope, ref));
 
+const collectWhereRefs = (
+	where: ExprNode | null,
+): ReadonlyArray<ColumnRefNode> => {
+	if (where === null) {
+		return [];
+	}
+	return collectColumnRefs(where);
+};
+
+const whereClause = (
+	where: ExprNode | null,
+	scope: ReadonlyArray<TableRefNode>,
+): string => {
+	if (where === null) {
+		return "";
+	}
+	return `where ${renderExpr(where, scope)}`;
+};
+
+const orderByClause = (
+	orderBy: ReadonlyArray<OrderByTerm>,
+	scope: ReadonlyArray<TableRefNode>,
+): string => {
+	if (orderBy.length === 0) {
+		return "";
+	}
+	const terms = orderBy
+		.map((term) => `${renderExpr(term.expr, scope)} ${term.direction}`)
+		.join(", ");
+	return `order by ${terms}`;
+};
+
+const limitClause = (limit: number | null): string => {
+	if (limit === null) {
+		return "";
+	}
+	return `limit ${limit}`;
+};
+
 const collectProjectionRefs = (
 	projection: ProjectionNode,
 ): ReadonlyArray<ColumnRefNode> => {
@@ -270,7 +310,7 @@ export const renderSelect = (
 	const mentionedRefs = [
 		...collectProjectionRefs(query.projection),
 		...query.joins.flatMap((join) => collectColumnRefs(join.on)),
-		...(query.where === null ? [] : collectColumnRefs(query.where)),
+		...collectWhereRefs(query.where),
 		...query.orderBy.flatMap((term) => collectColumnRefs(term.expr)),
 	];
 	const badRef = findForeignColumnRef(scope, mentionedRefs);
@@ -287,23 +327,14 @@ export const renderSelect = (
 				`inner join ${renderTableRef(join.table)} on ${renderExpr(join.on, scope)}`,
 		)
 		.join(" ");
-	const whereSql =
-		query.where === null ? "" : `where ${renderExpr(query.where, scope)}`;
-	const orderBySql =
-		query.orderBy.length === 0
-			? ""
-			: `order by ${query.orderBy
-					.map((term) => `${renderExpr(term.expr, scope)} ${term.direction}`)
-					.join(", ")}`;
-	const limitSql = query.limit === null ? "" : `limit ${query.limit}`;
 
 	const clauses = [
 		`select ${renderProjection(query.projection, scope)}`,
 		`from ${renderTableRef(query.from)}`,
 		joinsSql,
-		whereSql,
-		orderBySql,
-		limitSql,
+		whereClause(query.where, scope),
+		orderByClause(query.orderBy, scope),
+		limitClause(query.limit),
 	].filter((clause) => clause !== "");
 
 	return clauses.join(" ");
@@ -346,7 +377,7 @@ export const renderUpdate = (
 
 	const clauses = [
 		`update ${renderTableRef(node.table)} set ${setSql}`,
-		node.where === null ? "" : `where ${renderExpr(node.where, scope)}`,
+		whereClause(node.where, scope),
 		renderReturning(node.returning, scope),
 	].filter((clause) => clause !== "");
 
@@ -362,7 +393,7 @@ export const renderDelete = (
 
 	const clauses = [
 		`delete from ${renderTableRef(node.table)}`,
-		node.where === null ? "" : `where ${renderExpr(node.where, scope)}`,
+		whereClause(node.where, scope),
 		renderReturning(node.returning, scope),
 	].filter((clause) => clause !== "");
 

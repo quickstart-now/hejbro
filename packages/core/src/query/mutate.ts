@@ -131,6 +131,25 @@ const collectColumnKeys = (
 	return allKeys.filter((key, index) => allKeys.indexOf(key) === index);
 };
 
+const normalizeRows = (
+	rowsInput: unknown,
+): ReadonlyArray<Record<string, unknown>> => {
+	if (Array.isArray(rowsInput)) {
+		return rowsInput.map(asRecord);
+	}
+	return [asRecord(rowsInput)];
+};
+
+const valueAtKey = (
+	row: Record<string, unknown>,
+	key: string | undefined,
+): unknown => {
+	if (key === undefined) {
+		return undefined;
+	}
+	return row[key];
+};
+
 const resolveInsertRows = (
 	target: Table,
 	tableRef: TableRefNode,
@@ -139,9 +158,7 @@ const resolveInsertRows = (
 	readonly columnNames: ReadonlyArray<string>;
 	readonly rows: ReadonlyArray<ReadonlyArray<ExprNode>>;
 } => {
-	const rows: ReadonlyArray<Record<string, unknown>> = Array.isArray(rowsInput)
-		? rowsInput.map(asRecord)
-		: [asRecord(rowsInput)];
+	const rows = normalizeRows(rowsInput);
 
 	const keys = collectColumnKeys(rows);
 	if (keys.length === 0) {
@@ -156,8 +173,7 @@ const resolveInsertRows = (
 
 	const resolvedRows = rows.map((row) =>
 		columns.map((column, index) => {
-			const key = keys[index];
-			const value = key === undefined ? undefined : row[key];
+			const value = valueAtKey(row, keys[index]);
 			if (value === undefined) {
 				return defaultValueNode;
 			}
