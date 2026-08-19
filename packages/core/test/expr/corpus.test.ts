@@ -23,6 +23,7 @@ import {
 	ne,
 	not,
 	notBetween,
+	notExists,
 	notIlike,
 	notInArray,
 	notLike,
@@ -81,6 +82,14 @@ const reactionCommentPostPublishedGuard = exists(
 		.where(
 			and(eq(comments.id, reactions.commentId), eq(posts.status, "published")),
 		),
+).exprNode;
+
+// Same correlated guard, negated (`notExists`) — exercises the "not
+// exists (…)" rendering branch, which no other corpus entry reaches.
+const correlatedPostNotPublishedGuard = notExists(
+	select(posts).where(
+		and(eq(posts.id, comments.postId), isNotNull(posts.publishedAt)),
+	),
 ).exprNode;
 
 type CorpusEntry = { readonly label: string; readonly sql: string };
@@ -204,6 +213,11 @@ const corpus: ReadonlyArray<CorpusEntry> = [
 		label:
 			"with check: insert comment only if its post is published (same guard, write position)",
 		sql: renderExpr(correlatedPostPublishedGuard, [commentsTableRef]),
+	},
+	{
+		label:
+			"using: correlated notExists with outer scope (comments policy, negated)",
+		sql: renderExpr(correlatedPostNotPublishedGuard, [commentsTableRef]),
 	},
 
 	// --- spec §5.2 function-body queries ---
