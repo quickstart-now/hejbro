@@ -67,6 +67,9 @@ pnpm build           # turbo build
 - Issues: English only, with an issue type (Task/Bug/Feature), a fitting
   label, and assigned to `hello-pooh`. Agents state their origin in the
   first line of the body.
+- **Issue-first**: file (or claim) a GitHub issue before starting any work
+  item. Work belonging to a roadmap phase is filed as a sub-issue of that
+  phase's issue. PRs reference their issue (`Closes #N`).
 
 ## Hard gates (owner approval required)
 
