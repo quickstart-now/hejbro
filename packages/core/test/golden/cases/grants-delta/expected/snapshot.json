@@ -1,0 +1,40 @@
+{
+	"dialect": "postgres",
+	"hejbroSnapshot": 2,
+	"objects": {
+		"grant:ddland.allTablesPrivileges.anon": {
+			"grantKind": "allTablesPrivileges",
+			"privileges": [
+				"select",
+				"insert"
+			],
+			"role": "anon",
+			"schema": "ddland"
+		},
+		"grant:ddland.allTablesPrivileges.service_role": {
+			"grantKind": "allTablesPrivileges",
+			"privileges": [
+				"select",
+				"insert",
+				"update"
+			],
+			"role": "service_role",
+			"schema": "ddland"
+		},
+		"grant:ddland.schemaUsage.anon": {
+			"grantKind": "schemaUsage",
+			"privileges": [],
+			"role": "anon",
+			"schema": "ddland"
+		},
+		"grant:ddland.schemaUsage.service_role": {
+			"grantKind": "schemaUsage",
+			"privileges": [],
+			"role": "service_role",
+			"schema": "ddland"
+		},
+		"schema:ddland": {
+			"schemaName": "ddland"
+		}
+	}
+}
