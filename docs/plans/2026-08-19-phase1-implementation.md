@@ -143,13 +143,14 @@ Add a pnpm catalog to `pnpm-workspace.yaml` (single place for versions):
 
 ```yaml
 catalog:
-	tsdown: ^0.15.0
-	typescript: ^5.9.2
-	vitest: ^3.2.0
+	tsdown: ^0.22.14
+	typescript: ^5.9.3
+	vitest: ^4.1.11
 ```
 
-(Executor: use the latest stable versions at implementation time; the
-catalog entry is the single source.)
+(Confirmed values as of 2026-08-19, following the Node ≥ 22 floor raise —
+D13 amended. tsdown requires Node ≥ 22.18.0; the catalog entry is the
+single source.)
 
 `packages/core/tsconfig.json`:
 
@@ -188,10 +189,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm check-types
@@ -904,3 +905,29 @@ git add -A && git commit -m "test(core): add golden-file harness with ddland acc
   CLI/file I/O (Phase 5).
 - Type consistency pass done: `ColumnState`/`ColumnBuilder` (7→8→10),
   `KindChange` (4→9–13), `Snapshot` (12→13→14) names match across tasks.
+
+---
+
+## Post-Implementation Addendum (2026-08-19)
+
+This plan was executed on branch `feat/phase1-core` (17 commits, 130
+tests) with 16 planner-approved deviations, all reviewed per bundle.
+**The implementation is canonical: where this document and the shipped
+code disagree, the code wins.** Known defects in the plan text — do NOT
+follow these literally in future sessions:
+
+- **Task 1 tsconfig**: `"rootDir": "src"` contradicts including `test/`;
+  the shipped tsconfig drops `rootDir` (and also includes
+  `tsdown.config.ts`).
+- **Task 4 `KindRegistry`**: the `ObjectKind<never>` storage type does
+  not type-check (method-parameter variance); the shipped registry
+  stores kinds behind an `owns()`-erasure type with zero casts.
+- **Task 14 harness example**: contained a ternary expression, which the
+  repo's TypeScript rules forbid.
+- **Node floor**: raised to 22 mid-cycle (D13 amendment, owner-approved;
+  Node 20 reached EOL 2026-04); repo toolchain requires ≥ 22.18.0
+  (tsdown 0.22 floor). Version pins in Task 1 predate this.
+- **Scope trims**, each with an explicit compile-time error guard and a
+  follow-up issue: pk/unique alter emission; self-referencing FK DSL
+  (blocked the dd.land self-FK in the golden case; must be solved
+  before Phase 3).
