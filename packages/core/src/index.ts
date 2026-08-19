@@ -6,6 +6,17 @@
 // source path, alphabetically, via Biome's import/export organizer); see
 // each symbol's own JSDoc at its definition for what it does.
 
+export type {
+	ArgRefs,
+	FunctionDeclaration,
+	FunctionReturns,
+} from "./dsl/define-function";
+export { defineFunction } from "./dsl/define-function";
+export type {
+	TriggerDeclaration,
+	TriggerEventInput,
+} from "./dsl/define-trigger";
+export { defineTrigger } from "./dsl/define-trigger";
 export type { IndexBuilder } from "./dsl/index-builder";
 export { index } from "./dsl/index-builder";
 export type { EnumDeclaration } from "./dsl/pg-enum";
@@ -130,6 +141,15 @@ export { createDefaultRegistry, createKindRegistry } from "./kind/registry";
 export { enumKind } from "./kinds/enum-kind";
 export { schemaKind } from "./kinds/schema-kind";
 export { tableKind } from "./kinds/table-kind";
+export type {
+	BodyContext,
+	IfChain,
+	RaiseArg,
+	ReturnableQuery,
+	RowColumns,
+	RowProjection,
+	TriggerRow,
+} from "./plpgsql/body-context";
 export type {
 	DeleteFilterable,
 	DeleteFinal,
