@@ -7,3 +7,6 @@ dist/
 .env
 .env.*
 !.env.example
+.agents/
+.claude/agents/
+CLAUDE.local.md
