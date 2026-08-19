@@ -1,8 +1,6 @@
 import type { ForeignKeyAction } from "../dsl/table";
-import { assertNever, throwHejbroError } from "../error";
+import { throwHejbroError } from "../error";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
-import { quoteStringLiteral } from "../sql/literal";
-import type { ColumnDefault } from "../types/column-builder";
 import { renderTypeNode } from "../types/type-node";
 import type {
 	ColumnSnapshot,
@@ -28,35 +26,6 @@ export const splitTableIdentity = (
 	};
 };
 
-const renderLiteralValue = (value: string | number | boolean): string => {
-	if (typeof value === "string") {
-		return quoteStringLiteral(value);
-	}
-	if (typeof value === "boolean") {
-		if (value) {
-			return "true";
-		}
-		return "false";
-	}
-	return String(value);
-};
-
-/** Renders a {@link ColumnDefault} as the SQL expression that follows `default`. */
-export const renderColumnDefault = (columnDefault: ColumnDefault): string => {
-	switch (columnDefault.defaultKind) {
-		case "literal":
-			return renderLiteralValue(columnDefault.value);
-		case "raw":
-			return columnDefault.sql;
-		case "random-uuid":
-			return "gen_random_uuid()";
-		case "now":
-			return "now()";
-		default:
-			return assertNever(columnDefault);
-	}
-};
-
 const notNullClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
 	if (column.notNull) {
 		return ["not null"];
@@ -68,7 +37,7 @@ const defaultClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
 	if (column.default === null) {
 		return [];
 	}
-	return [`default ${renderColumnDefault(column.default)}`];
+	return [`default ${column.default}`];
 };
 
 const uniqueClause = (column: ColumnSnapshot): ReadonlyArray<string> => {

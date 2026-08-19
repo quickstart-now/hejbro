@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 1,
+	"hejbroSnapshot": 2,
 	"objects": {
 		"enum:ddland.post_status": {
 			"name": "post_status",
@@ -16,9 +16,7 @@
 		"table:ddland.comments": {
 			"columns": [
 				{
-					"default": {
-						"defaultKind": "random-uuid"
-					},
+					"default": "gen_random_uuid()",
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -68,9 +66,7 @@
 		"table:ddland.posts": {
 			"columns": [
 				{
-					"default": {
-						"defaultKind": "random-uuid"
-					},
+					"default": "gen_random_uuid()",
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,

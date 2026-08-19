@@ -5,12 +5,18 @@ import { compareKeys } from "../sort";
 import type { JsonValue } from "./stable-json";
 import { stableJson } from "./stable-json";
 
-/** Snapshot format version emitted by this build of hejbro core. */
-export const HEJBRO_SNAPSHOT_VERSION = 1;
+/**
+ * Snapshot format version emitted by this build of hejbro core. Bumped to
+ * `2` when `ColumnSnapshot.default` changed shape from a structured
+ * `ColumnDefault` object to a rendered SQL expression string (D16,
+ * Phase 2 Task 10) — pre-publication, so `parseSnapshot`'s version check
+ * is the entire migration story (no compatibility shim).
+ */
+export const HEJBRO_SNAPSHOT_VERSION = 2;
 
 /** A deterministic, flat representation of every declared database object. */
 export type Snapshot = {
-	readonly hejbroSnapshot: 1;
+	readonly hejbroSnapshot: 2;
 	readonly dialect: "postgres";
 	/** keyed by `${kind}:${identity}` */
 	readonly objects: { readonly [kindAndIdentity: string]: JsonValue };

@@ -1,16 +1,15 @@
 import type { ForeignKeyAction } from "../dsl/table";
 import type { JsonValue } from "../snapshot/stable-json";
-import type { ColumnDefault } from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
 
-/** A single column as materialized in a table snapshot (`primaryKey` implies `notNull`). */
+/** A single column as materialized in a table snapshot (`primaryKey` implies `notNull`). `default` is the rendered SQL expression text (D16), e.g. `"gen_random_uuid()"` or `"'hello'"`. */
 export type ColumnSnapshot = {
 	readonly name: string;
 	readonly typeNode: TypeNode;
 	readonly notNull: boolean;
 	readonly primaryKey: boolean;
 	readonly unique: boolean;
-	readonly default: ColumnDefault | null;
+	readonly default: string | null;
 };
 
 /** A single index as materialized in a table snapshot, with its name resolved. */

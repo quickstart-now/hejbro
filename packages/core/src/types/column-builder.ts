@@ -1,19 +1,10 @@
 import { throwHejbroError } from "../error";
-import type { SqlTypeFamily } from "../expr/type-family";
+import type { Expr, ExprNode } from "../expr/ast";
+import { isExpr } from "../expr/ast";
+import { liftLiteral } from "../expr/literal";
+import type { LiftableFor, SqlTypeFamily } from "../expr/type-family";
+import { familyOfTypeNode } from "../expr/type-family";
 import type { TypeNode } from "./type-node";
-
-/** A column's default value, as one of the shapes hejbro supports until Phase 2's expression AST lands. */
-export type ColumnDefault =
-	| {
-			readonly defaultKind: "literal";
-			readonly value: string | number | boolean;
-	  }
-	// escape hatch until Phase 2 expressions
-	| { readonly defaultKind: "raw"; readonly sql: string }
-	// gen_random_uuid()
-	| { readonly defaultKind: "random-uuid" }
-	// now()
-	| { readonly defaultKind: "now" };
 
 /** The immutable state carried by a {@link ColumnBuilder}. */
 export type ColumnState = {
@@ -21,7 +12,7 @@ export type ColumnState = {
 	readonly notNull: boolean;
 	readonly primaryKey: boolean;
 	readonly unique: boolean;
-	readonly defaultValue: ColumnDefault | null;
+	readonly defaultValue: ExprNode | null;
 };
 
 /**
@@ -36,7 +27,10 @@ export type ColumnBuilder<TFamily extends SqlTypeFamily = SqlTypeFamily> = {
 	/** implies `notNull` when the column is materialized at serialization (Task 10), not here */
 	primaryKey(): ColumnBuilder<TFamily>;
 	unique(): ColumnBuilder<TFamily>;
-	default(value: string | number | boolean): ColumnBuilder<TFamily>;
+	/** a raw scalar (auto-lifted to a literal), or an expression built with operators/`sql` (D16) */
+	default(
+		value: LiftableFor<TFamily> | Expr<TFamily> | Expr<"unknown">,
+	): ColumnBuilder<TFamily>;
 	/** uuid columns only — throws an actionable error otherwise */
 	defaultRandom(): ColumnBuilder<TFamily>;
 	/** date/time-family columns only — throws an actionable error otherwise */
@@ -59,6 +53,17 @@ const timeLikeTypeNames = [
 const isTimeLikeTypeNode = (typeNode: TypeNode): boolean =>
 	timeLikeTypeNames.some((name) => name === typeNode.typeName);
 
+/** Resolves a `.default(value)` argument to the {@link ExprNode} stored on `columnState` — an existing expression's node, or a freshly-lifted literal for a raw scalar. */
+const resolveDefaultExprNode = (
+	value: unknown,
+	typeNode: TypeNode,
+): ExprNode => {
+	if (isExpr(value)) {
+		return value.exprNode;
+	}
+	return liftLiteral(value, familyOfTypeNode(typeNode));
+};
+
 /**
  * Builds a {@link ColumnBuilder} bound to `columnState`. Every chained
  * method calls this factory again with a shallow-updated state, so builders
@@ -78,7 +83,7 @@ export const createColumnBuilder = <
 	default: (value) =>
 		createColumnBuilder<TFamily>({
 			...columnState,
-			defaultValue: { defaultKind: "literal", value },
+			defaultValue: resolveDefaultExprNode(value, columnState.typeNode),
 		}),
 	defaultRandom: () => {
 		if (columnState.typeNode.typeName !== "uuid") {
@@ -89,7 +94,12 @@ export const createColumnBuilder = <
 		}
 		return createColumnBuilder<TFamily>({
 			...columnState,
-			defaultValue: { defaultKind: "random-uuid" },
+			defaultValue: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "gen_random_uuid",
+				args: [],
+			},
 		});
 	},
 	defaultNow: () => {
@@ -101,7 +111,12 @@ export const createColumnBuilder = <
 		}
 		return createColumnBuilder<TFamily>({
 			...columnState,
-			defaultValue: { defaultKind: "now" },
+			defaultValue: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "now",
+				args: [],
+			},
 		});
 	},
 	array: () =>

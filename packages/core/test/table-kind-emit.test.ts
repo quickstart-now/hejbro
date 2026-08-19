@@ -248,6 +248,45 @@ describe("tableKind.emit — alter", () => {
 		]);
 	});
 
+	it("doubles a quote in a string default through the full serialize → snapshot → emit path", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text(),
+		});
+		const withQuotedDefault = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text().default("it's"),
+		});
+
+		const snapshot = tableKind.serialize(getTableMeta(withQuotedDefault));
+		const snapshotColumns = (
+			snapshot as {
+				readonly columns: ReadonlyArray<{ readonly default: unknown }>;
+			}
+		).columns;
+		expect(snapshotColumns[1]?.default).toBe("'it''s'");
+
+		const setDefaultChange = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				snapshot,
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(setDefaultChange)).toEqual([
+			{
+				sql: `alter table "app"."posts" alter column "title" set default 'it''s';`,
+				stage: "main",
+			},
+		]);
+
+		const createChange = expectSingleChange(
+			tableKind.diff(null, snapshot, "app.posts"),
+		);
+		const [createStatement] = tableKind.emit(createChange);
+		expect(createStatement?.sql).toContain(`default 'it''s'`);
+	});
+
 	it("emits index add and drop", () => {
 		const before = table(app, "posts", { slug: text() });
 		const after = table(app, "posts", { slug: text() }, (t) => ({

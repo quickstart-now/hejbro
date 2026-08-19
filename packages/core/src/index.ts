@@ -175,7 +175,6 @@ export { deferredStatement, statement } from "./sql/statement";
 export type {
 	BuilderFamily,
 	ColumnBuilder,
-	ColumnDefault,
 	ColumnState,
 } from "./types/column-builder";
 export { createColumnBuilder } from "./types/column-builder";
