@@ -20,6 +20,12 @@ export type {
 export { defineTrigger } from "./dsl/define-trigger";
 export type { ViewDeclaration } from "./dsl/define-view";
 export { defineView } from "./dsl/define-view";
+export type {
+	GrantDeclaration,
+	GrantSetDeclaration,
+	TablePrivilege,
+} from "./dsl/grant";
+export { grant } from "./dsl/grant";
 export type { IndexBuilder } from "./dsl/index-builder";
 export { index } from "./dsl/index-builder";
 export type { EnumDeclaration } from "./dsl/pg-enum";
@@ -155,6 +161,8 @@ export type {
 	FunctionSnapshot,
 } from "./kinds/function-kind";
 export { functionKind } from "./kinds/function-kind";
+export type { GrantSnapshot } from "./kinds/grant-kind";
+export { grantKind } from "./kinds/grant-kind";
 export type { PolicySnapshot } from "./kinds/policy-kind";
 export { policyKind } from "./kinds/policy-kind";
 export type { RlsSnapshot } from "./kinds/rls-kind";

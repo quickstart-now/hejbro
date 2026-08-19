@@ -1,4 +1,5 @@
 import type { TriggerDeclaration } from "../dsl/define-trigger";
+import type { GrantSetDeclaration } from "../dsl/grant";
 import type { Table } from "../dsl/table";
 import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
@@ -17,12 +18,18 @@ const isTriggerDeclaration = (
 ): declaration is TriggerDeclaration =>
 	declaration.declarationKind === "trigger";
 
+const isGrantSetDeclaration = (
+	declaration: HejbroDeclaration,
+): declaration is GrantSetDeclaration =>
+	declaration.declarationKind === "grant-set";
+
 /**
  * Resolves one `HejbroInput` into the declaration(s) it contributes to the
  * snapshot. A `defineTrigger` declaration expands into its own function
  * declaration plus itself — `[functionDeclaration, triggerDeclaration]` —
  * so the function it creates lands in the snapshot without a separate
- * `defineFunction` call.
+ * `defineFunction` call. A `grant(...).to(...)` `grant-set` expands into
+ * its per-role `GrantDeclaration`s (D28 fan-out).
  */
 const resolveDeclarations = (
 	input: HejbroInput,
@@ -36,6 +43,9 @@ const resolveDeclarations = (
 	}
 	if (isTriggerDeclaration(input)) {
 		return [input.functionDeclaration, input];
+	}
+	if (isGrantSetDeclaration(input)) {
+		return input.grants;
 	}
 	return [input];
 };
