@@ -1,3 +1,4 @@
+import type { TriggerDeclaration } from "../dsl/define-trigger";
 import type { Table } from "../dsl/table";
 import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
@@ -11,11 +12,28 @@ import { diffSnapshots } from "./diff-engine";
 /** Anything `generateMigration` accepts as a declaration: a plain declaration, or a `table()`-built `Table` object (unwrapped via `getTableMeta` at the entry point). */
 export type HejbroInput = HejbroDeclaration | Table;
 
-const resolveDeclaration = (input: HejbroInput): HejbroDeclaration => {
+const isTriggerDeclaration = (
+	declaration: HejbroDeclaration,
+): declaration is TriggerDeclaration =>
+	declaration.declarationKind === "trigger";
+
+/**
+ * Resolves one `HejbroInput` into the declaration(s) it contributes to the
+ * snapshot. A `defineTrigger` declaration expands into its own function
+ * declaration plus itself — `[functionDeclaration, triggerDeclaration]` —
+ * so the function it creates lands in the snapshot without a separate
+ * `defineFunction` call.
+ */
+const resolveDeclarations = (
+	input: HejbroInput,
+): ReadonlyArray<HejbroDeclaration> => {
 	if (isTable(input)) {
-		return getTableMeta(input);
+		return [getTableMeta(input)];
 	}
-	return input;
+	if (isTriggerDeclaration(input)) {
+		return [input.functionDeclaration, input];
+	}
+	return [input];
 };
 
 type GenerateMigrationOptions = {
@@ -41,7 +59,7 @@ export const generateMigration = (
 	options: GenerateMigrationOptions,
 ): GenerateMigrationResult => {
 	const registry = options.registry ?? createDefaultRegistry();
-	const normalized = options.declarations.map(resolveDeclaration);
+	const normalized = options.declarations.flatMap(resolveDeclarations);
 	const snapshot = buildSnapshot(normalized, registry);
 	const changes = diffSnapshots(options.previousSnapshot, snapshot, registry);
 

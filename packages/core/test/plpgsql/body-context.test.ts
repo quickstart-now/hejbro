@@ -136,6 +136,40 @@ describe("body-context recording", () => {
 		expect(ifStmt.elseStatements).toHaveLength(1);
 	});
 
+	it("calling .else() twice throws invalid-if-chain", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				const chain = ctx.if(isNull(row.parentId), () => {
+					ctx.raise("branch one");
+				});
+				chain.else(() => {
+					ctx.raise("branch two");
+				});
+				chain.else(() => {
+					ctx.raise("branch three");
+				});
+				ctx.return(row);
+			}),
+		).toThrowError(/\.else\(\) more than once/);
+	});
+
+	it("calling .elseIf() after .else() throws invalid-if-chain", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				const chain = ctx.if(isNull(row.parentId), () => {
+					ctx.raise("branch one");
+				});
+				chain.else(() => {
+					ctx.raise("branch two");
+				});
+				chain.elseIf(isNotNull(row.postId), () => {
+					ctx.raise("branch three");
+				});
+				ctx.return(row);
+			}),
+		).toThrowError(/\.elseIf\(\) after \.else\(\)/);
+	});
+
 	it("raise placeholder/arg mismatch throws raise-arg-count-mismatch (%% is literal)", () => {
 		expect(() =>
 			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {

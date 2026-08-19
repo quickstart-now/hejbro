@@ -214,6 +214,13 @@ export const createRecordingContext = (
 		statement: IfStatementDraft,
 	): IfChain => ({
 		elseIf: (condition, branch) => {
+			if (statement.elseStatements !== null) {
+				throwHejbroError(
+					"invalid-if-chain",
+					`ctx.if() chain in ${identity} called .elseIf() after .else() — reorder every .elseIf() before the single .else(), or drop the extra branch.`,
+					declaredAt,
+				);
+			}
 			frames.push([]);
 			branch();
 			const branchStatements = popFrame();
@@ -224,6 +231,13 @@ export const createRecordingContext = (
 			return makeIfChain(branches, statement);
 		},
 		else: (branch) => {
+			if (statement.elseStatements !== null) {
+				throwHejbroError(
+					"invalid-if-chain",
+					`ctx.if() chain in ${identity} called .else() more than once — an if/elseIf chain can have at most one .else(); remove the duplicate call.`,
+					declaredAt,
+				);
+			}
 			frames.push([]);
 			branch();
 			statement.elseStatements = popFrame();
