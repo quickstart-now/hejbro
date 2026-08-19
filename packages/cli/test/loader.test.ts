@@ -1,12 +1,9 @@
 import { join } from "node:path";
-import type { HejbroInput } from "@hejbro/core";
+import type { HejbroDeclaration } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { loadConfig, loadDeclarations } from "../src/loader";
 
-const schemaNameOf = (declaration: HejbroInput): string | null => {
-	if (typeof declaration !== "object" || declaration === null) {
-		return null;
-	}
+const schemaNameOf = (declaration: HejbroDeclaration): string | null => {
 	if (
 		"schemaName" in declaration &&
 		typeof declaration.schemaName === "string"
@@ -63,18 +60,15 @@ describe("loadDeclarations", () => {
 			declarationKind: "schema",
 			schemaName: "app",
 		});
-		// Checked structurally, not via isTable()/getTableMeta() imported
-		// here: jiti loads fixtures through Node's native import(), while
-		// vitest transforms this test file (and src/loader.ts) through its
-		// own SSR module graph, so a "@hejbro/core" imported in *this* file
-		// isn't guaranteed to be the same module instance jiti's fixture
-		// resolved — `Table`'s hidden metadata symbol wouldn't match across
-		// that boundary even though loader.ts's own (cross-instance-safe)
-		// detection already proved this is a table (see loader.ts's
-		// `hasTableMetaSymbol`).
+		// `loadDeclarations` already unwraps a `Table` export to its plain
+		// `TableDeclaration` (loader.ts's `normalizeExportedValue`) — no
+		// cross-module-instance symbol concern here, since this is now a
+		// plain data object compared structurally, not via isTable()/
+		// getTableMeta() imported in *this* file.
 		expect(tableInput).toMatchObject({
-			id: { sqlName: "id" },
-			title: { sqlName: "title" },
+			declarationKind: "table",
+			tableName: "posts",
+			columns: [{ columnName: "id" }, { columnName: "title" }],
 		});
 	});
 
