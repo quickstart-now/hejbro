@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import type { HejbroDeclaration } from "@hejbro/core";
-import { getTableMeta, isTable, throwHejbroError } from "@hejbro/core";
+import type { HejbroInput } from "@hejbro/core";
+import { isTable, throwHejbroError } from "@hejbro/core";
 import { createJiti } from "jiti";
 import { glob } from "tinyglobby";
 import type { HejbroConfig } from "./config";
@@ -49,61 +49,38 @@ export const loadConfig = async (
 
 /**
  * `Table`'s hidden metadata lives behind a per-module-instance `Symbol()`
- * (D15, `dsl/table.ts`'s `tableMeta`). `isTable()`/`getTableMeta()` compare
- * against *this* `@hejbro/core` instance's symbol — correct for the normal
- * case (one deduped `@hejbro/core` across the loader and every jiti-loaded
- * file). Reading the meta by matching the symbol's `description` instead
- * is a cross-instance-safe fallback for the rare case a declaration file
- * resolves a *different* `@hejbro/core` copy (e.g. a nested duplicate
- * install, or a test runner's own module graph running jiti-loaded code
- * and this file through two different loaders) — `isTable`/`getTableMeta`
- * alone would silently drop the table.
- *
- * Unwrapping to the plain `HejbroDeclaration` *here* (rather than
- * returning the `Table` wrapper) means every downstream consumer — this
- * package's `generateMigration` call included — only ever sees plain
- * declarations, so the same cross-instance mismatch can't resurface later
- * in the pipeline.
+ * (D15, `dsl/table.ts`'s `tableMeta`). `isTable()` compares against *this*
+ * `@hejbro/core` instance's symbol — correct for the normal case (one
+ * deduped `@hejbro/core` across the loader and every jiti-loaded file).
+ * Matching by the symbol's `description` instead is a cross-instance-safe
+ * fallback for the rare case a declaration file resolves a *different*
+ * `@hejbro/core` copy (e.g. a nested duplicate install, or a test runner's
+ * own module graph running jiti-loaded code and this file through two
+ * different loaders) — `isTable` alone would silently drop the table.
  */
-const tableMetaByDescription = (value: object): HejbroDeclaration | null => {
-	const symbol = Object.getOwnPropertySymbols(value).find(
-		(candidate) => candidate.description === "hejbro:table-meta",
+const hasTableMetaSymbol = (value: object): boolean =>
+	Object.getOwnPropertySymbols(value).some(
+		(symbol) => symbol.description === "hejbro:table-meta",
 	);
-	if (symbol === undefined) {
-		return null;
-	}
-	const meta = (value as Record<symbol, unknown>)[symbol];
-	if (typeof meta !== "object" || meta === null) {
-		return null;
-	}
-	return meta as HejbroDeclaration;
-};
 
-const normalizeExportedValue = (value: unknown): HejbroDeclaration | null => {
+const isHejbroInput = (value: unknown): value is HejbroInput => {
 	if (typeof value !== "object" || value === null) {
-		return null;
+		return false;
 	}
-	if (isTable(value)) {
-		return getTableMeta(value);
+	if (isTable(value) || hasTableMetaSymbol(value)) {
+		return true;
 	}
-	const crossInstanceTableMeta = tableMetaByDescription(value);
-	if (crossInstanceTableMeta !== null) {
-		return crossInstanceTableMeta;
-	}
-	if (
+	return (
 		typeof (value as { declarationKind?: unknown }).declarationKind === "string"
-	) {
-		return value as HejbroDeclaration;
-	}
-	return null;
+	);
 };
 
 const collectDeclarations = (
 	moduleNamespace: object,
-): ReadonlyArray<HejbroDeclaration> =>
-	Object.values(moduleNamespace)
-		.map((value) => normalizeExportedValue(value))
-		.filter((value): value is HejbroDeclaration => value !== null);
+): ReadonlyArray<HejbroInput> =>
+	Object.values(moduleNamespace).filter((value): value is HejbroInput =>
+		isHejbroInput(value),
+	);
 
 /**
  * The onboarding example a terminal renderer attaches as a separate block
@@ -138,14 +115,12 @@ const entryPatternPhrase = (entry: ReadonlyArray<string>): string => {
  * (deterministic — matches sorted by path, independent of directory
  * listing order), jiti-imports every matched file, and collects every
  * exported value that is a hejbro declaration (`isTable`/`declarationKind`
- * narrowing), **already unwrapped** to plain `HejbroDeclaration`s (a
- * `Table` export's hidden meta is extracted here, cross-instance-safe) —
- * non-declaration exports are silently ignored.
+ * narrowing) — non-declaration exports are silently ignored.
  */
 export const loadDeclarations = async (
 	configPath: string,
 	config: HejbroConfig,
-): Promise<ReadonlyArray<HejbroDeclaration>> => {
+): Promise<ReadonlyArray<HejbroInput>> => {
 	const entryDir = dirname(configPath);
 	const matches = await glob([...config.entry], {
 		cwd: entryDir,
