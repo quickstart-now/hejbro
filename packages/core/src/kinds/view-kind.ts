@@ -73,7 +73,10 @@ const createOrReplaceSql = (snapshot: ViewSnapshot): string =>
  * removal, reorder, or rename) can't, so it recreates via a single
  * `alter` change whose `emit` returns `drop view if exists` followed by
  * `create or replace view`, in that order (D23/#55 — never a separate
- * drop + create pair).
+ * drop + create pair). `emit` recomputes the prefix rule itself from
+ * `previous`/`next`'s `columns` — notes are display-only banner text
+ * (spec's `ObjectKind` contract), never a control channel that a wording
+ * change to the banner could silently break.
  */
 export const viewKind: ObjectKind<ViewDeclaration> = {
 	kind: "view",
@@ -168,14 +171,21 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 						"view alter change is missing its next snapshot.",
 					);
 				}
-				const nextSnapshot = asViewSnapshot(change.next);
-				if (change.notes.includes(VIEW_RECREATE_NOTE)) {
-					return [
-						statement(dropViewSql(nextSnapshot)),
-						statement(createOrReplaceSql(nextSnapshot)),
-					];
+				if (change.previous === null) {
+					return throwHejbroError(
+						"invalid-kind-change",
+						"view alter change is missing its previous snapshot.",
+					);
 				}
-				return [statement(createOrReplaceSql(nextSnapshot))];
+				const previousSnapshot = asViewSnapshot(change.previous);
+				const nextSnapshot = asViewSnapshot(change.next);
+				if (isPrefixOf(previousSnapshot.columns, nextSnapshot.columns)) {
+					return [statement(createOrReplaceSql(nextSnapshot))];
+				}
+				return [
+					statement(dropViewSql(nextSnapshot)),
+					statement(createOrReplaceSql(nextSnapshot)),
+				];
 			}
 			case "drop": {
 				if (change.previous === null) {

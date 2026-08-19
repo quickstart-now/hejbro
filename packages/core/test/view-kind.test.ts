@@ -310,6 +310,59 @@ describe("viewKind.emit", () => {
 		]);
 	});
 
+	// Regression (review of PR #71): notes are display-only banner text, not
+	// a control channel — emit must recompute the prefix rule itself from
+	// previous/next's columns, not branch on `change.notes`. These two cases
+	// pair a snapshot-derived outcome with a note that says the opposite.
+	it("recreates even with empty notes, since the prefix rule is recomputed from the snapshots", () => {
+		const previous = viewKind.serialize(
+			defineView(
+				ddland,
+				"post_titles",
+				select({ id: posts.id, status: posts.status }, posts),
+			),
+		);
+		const next = viewKind.serialize(
+			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+		);
+		const statements = viewKind.emit({
+			kind: "view",
+			operation: "alter",
+			identity: "ddland.post_titles",
+			previous,
+			next,
+			notes: [],
+		});
+		expect(statements.map((s) => s.sql)).toEqual([
+			'drop view if exists "ddland"."post_titles";',
+			'create or replace view "ddland"."post_titles" as select "ddland"."posts"."id" as "id" from "ddland"."posts";',
+		]);
+	});
+
+	it("stays a single create or replace even with a stale recreate note, when the snapshots are actually a prefix", () => {
+		const previous = viewKind.serialize(
+			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+		);
+		const next = viewKind.serialize(
+			defineView(
+				ddland,
+				"post_titles",
+				select({ id: posts.id, status: posts.status }, posts),
+			),
+		);
+		const statements = viewKind.emit({
+			kind: "view",
+			operation: "alter",
+			identity: "ddland.post_titles",
+			previous,
+			next,
+			notes: ["view columns changed; recreating"],
+		});
+		expect(statements.map((s) => s.sql)).toEqual([
+			'create or replace view "ddland"."post_titles" as select "ddland"."posts"."id" as "id", "ddland"."posts"."status" as "status" from "ddland"."posts";',
+		]);
+	});
+
 	it("emits only drop for a drop change", () => {
 		const previous = viewKind.serialize(
 			defineView(ddland, "published_posts", select(posts)),
