@@ -1,5 +1,5 @@
-import type { HejbroDeclaration } from "../../../../src/index";
-import { table, text, timestamptz, uuid } from "../../../../src/index";
+import type { HejbroInput } from "../../../../src/index";
+import { index, table, text, timestamptz, uuid } from "../../../../src/index";
 import { ddland, postStatus } from "./declarations";
 
 // Step 1: initial — posts (with a published_at index) + comments (no FK to posts yet).
@@ -12,14 +12,8 @@ const initialPosts = table(
 		publishedAt: timestamptz(),
 		status: postStatus.column().notNull(),
 	},
-	(helpers) => ({
-		indexes: [
-			{
-				columns: [helpers.column("publishedAt")],
-				unique: false,
-				indexName: null,
-			},
-		],
+	(t) => ({
+		indexes: [index().on(t.publishedAt)],
 	}),
 );
 
@@ -29,7 +23,7 @@ const initialComments = table(ddland, "comments", {
 	body: text().notNull(),
 });
 
-const initial: ReadonlyArray<HejbroDeclaration> = [
+const initial: ReadonlyArray<HejbroInput> = [
 	ddland,
 	postStatus,
 	initialPosts,
@@ -47,18 +41,12 @@ const postsWithSlug = table(
 		status: postStatus.column().notNull(),
 		slug: text().notNull().unique(),
 	},
-	(helpers) => ({
-		indexes: [
-			{
-				columns: [helpers.column("publishedAt")],
-				unique: false,
-				indexName: null,
-			},
-		],
+	(t) => ({
+		indexes: [index().on(t.publishedAt)],
 	}),
 );
 
-const addSlugColumn: ReadonlyArray<HejbroDeclaration> = [
+const addSlugColumn: ReadonlyArray<HejbroInput> = [
 	ddland,
 	postStatus,
 	postsWithSlug,
@@ -82,25 +70,28 @@ const commentsWithFk = table(
 		postId: uuid().notNull(),
 		body: text().notNull(),
 	},
-	(helpers) => ({
+	(t) => ({
 		foreignKeys: [
 			{
-				columns: [helpers.column("postId")],
-				references: { table: postsWithoutIndex, columns: ["id"] },
+				columns: [t.postId],
+				references: {
+					table: postsWithoutIndex,
+					columns: [postsWithoutIndex.id],
+				},
 				onDelete: "cascade",
 			},
 		],
 	}),
 );
 
-const dropIndexAddFk: ReadonlyArray<HejbroDeclaration> = [
+const dropIndexAddFk: ReadonlyArray<HejbroInput> = [
 	ddland,
 	postStatus,
 	postsWithoutIndex,
 	commentsWithFk,
 ];
 
-export const steps: ReadonlyArray<ReadonlyArray<HejbroDeclaration>> = [
+export const steps: ReadonlyArray<ReadonlyArray<HejbroInput>> = [
 	initial,
 	addSlugColumn,
 	dropIndexAddFk,

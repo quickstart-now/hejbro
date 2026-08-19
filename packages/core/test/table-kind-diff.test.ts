@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { schema } from "../src/dsl/schema";
-import { table } from "../src/dsl/table";
+import { getTableMeta, table } from "../src/dsl/table";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
 import {
@@ -15,7 +15,9 @@ const app = schema("app");
 describe("tableKind.owns", () => {
 	it("owns table declarations only", () => {
 		expect(
-			tableKind.owns(table(app, "posts", { id: uuid().primaryKey() })),
+			tableKind.owns(
+				getTableMeta(table(app, "posts", { id: uuid().primaryKey() })),
+			),
 		).toBe(true);
 		expect(tableKind.owns({ declarationKind: "schema" })).toBe(false);
 	});
@@ -24,7 +26,7 @@ describe("tableKind.owns", () => {
 describe("tableKind.serialize", () => {
 	it("materializes notNull from primaryKey", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const snapshot = tableKind.serialize(posts) as {
+		const snapshot = tableKind.serialize(getTableMeta(posts)) as {
 			readonly columns: ReadonlyArray<{
 				readonly name: string;
 				readonly notNull: boolean;
@@ -35,19 +37,19 @@ describe("tableKind.serialize", () => {
 
 	it("derives deterministic index and foreign key names", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const comments = table(app, "comments", { postId: uuid() }, (helpers) => ({
+		const comments = table(app, "comments", { postId: uuid() }, (t) => ({
 			indexes: [
-				{ columns: [helpers.column("postId")], unique: false, indexName: null },
+				{ columns: [t.postId.sqlName], unique: false, indexName: null },
 			],
 			foreignKeys: [
 				{
-					columns: [helpers.column("postId")],
-					references: { table: posts, columns: ["id"] },
+					columns: [t.postId],
+					references: { table: posts, columns: [posts.id] },
 					onDelete: "cascade",
 				},
 			],
 		}));
-		const snapshot = tableKind.serialize(comments) as {
+		const snapshot = tableKind.serialize(getTableMeta(comments)) as {
 			readonly indexes: ReadonlyArray<{ readonly name: string }>;
 			readonly foreignKeys: ReadonlyArray<{
 				readonly name: string;
@@ -63,14 +65,16 @@ describe("tableKind.serialize", () => {
 describe("tableKind.identify", () => {
 	it("identifies as schema.tableName", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		expect(tableKind.identify(tableKind.serialize(posts))).toBe("app.posts");
+		expect(tableKind.identify(tableKind.serialize(getTableMeta(posts)))).toBe(
+			"app.posts",
+		);
 	});
 });
 
 describe("tableKind.diff", () => {
 	it("diffs none -> some as a create", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const next = tableKind.serialize(posts);
+		const next = tableKind.serialize(getTableMeta(posts));
 		expect(tableKind.diff(null, next, "app.posts")).toEqual([
 			{
 				kind: "table",
@@ -85,7 +89,7 @@ describe("tableKind.diff", () => {
 
 	it("diffs some -> none as a drop", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const previous = tableKind.serialize(posts);
+		const previous = tableKind.serialize(getTableMeta(posts));
 		expect(tableKind.diff(previous, null, "app.posts")).toEqual([
 			{
 				kind: "table",
@@ -103,7 +107,7 @@ describe("tableKind.diff", () => {
 			id: uuid().primaryKey(),
 			title: text(),
 		});
-		const snapshot = tableKind.serialize(posts);
+		const snapshot = tableKind.serialize(getTableMeta(posts));
 		expect(tableKind.diff(snapshot, snapshot, "app.posts")).toEqual([]);
 	});
 
@@ -116,8 +120,8 @@ describe("tableKind.diff", () => {
 			title: text(),
 			id: uuid().primaryKey(),
 		});
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		expect(tableKind.diff(previous, next, "app.posts")).toEqual([]);
 	});
 
@@ -127,8 +131,8 @@ describe("tableKind.diff", () => {
 			id: uuid().primaryKey(),
 			slug: text(),
 		});
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		expect(tableKind.diff(previous, next, "app.posts")).toEqual([
 			{
 				kind: "table",
@@ -147,8 +151,8 @@ describe("tableKind.diff", () => {
 			slug: text(),
 		});
 		const after = table(app, "posts", { id: uuid().primaryKey() });
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		expect(tableKind.diff(previous, next, "app.posts")).toEqual([
 			{
 				kind: "table",
@@ -170,8 +174,8 @@ describe("tableKind.diff", () => {
 			id: uuid().primaryKey(),
 			views: text(),
 		});
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		expect(tableKind.diff(previous, next, "app.posts")).toEqual([
 			{
 				kind: "table",
@@ -186,22 +190,17 @@ describe("tableKind.diff", () => {
 
 	it("notes an added index", () => {
 		const before = table(app, "posts", { publishedAt: timestamptz() });
-		const after = table(
-			app,
-			"posts",
-			{ publishedAt: timestamptz() },
-			(helpers) => ({
-				indexes: [
-					{
-						columns: [helpers.column("publishedAt")],
-						unique: false,
-						indexName: null,
-					},
-				],
-			}),
-		);
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const after = table(app, "posts", { publishedAt: timestamptz() }, (t) => ({
+			indexes: [
+				{
+					columns: [t.publishedAt.sqlName],
+					unique: false,
+					indexName: null,
+				},
+			],
+		}));
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		expect(tableKind.diff(previous, next, "app.posts")).toEqual([
 			{
 				kind: "table",
@@ -217,17 +216,17 @@ describe("tableKind.diff", () => {
 	it("notes an added foreign key", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		const before = table(app, "comments", { postId: uuid() });
-		const after = table(app, "comments", { postId: uuid() }, (helpers) => ({
+		const after = table(app, "comments", { postId: uuid() }, (t) => ({
 			foreignKeys: [
 				{
-					columns: [helpers.column("postId")],
-					references: { table: posts, columns: ["id"] },
+					columns: [t.postId],
+					references: { table: posts, columns: [posts.id] },
 					onDelete: "cascade",
 				},
 			],
 		}));
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		expect(tableKind.diff(previous, next, "app.comments")).toEqual([
 			{
 				kind: "table",

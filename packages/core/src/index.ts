@@ -6,6 +6,8 @@
 // source path, alphabetically, via Biome's import/export organizer); see
 // each symbol's own JSDoc at its definition for what it does.
 
+export type { IndexBuilder } from "./dsl/index-builder";
+export { index } from "./dsl/index-builder";
 export type { EnumDeclaration } from "./dsl/pg-enum";
 export { pgEnum } from "./dsl/pg-enum";
 export type { SchemaDeclaration } from "./dsl/schema";
@@ -13,13 +15,23 @@ export { schema } from "./dsl/schema";
 export type {
 	ForeignKeyAction,
 	ForeignKeyDeclaration,
+	ForeignKeyInput,
 	IndexDeclaration,
+	Table,
+	TableColumns,
 	TableDeclaration,
 	TableExtras,
-	TableExtrasHelpers,
 } from "./dsl/table";
-export { foreignKeyActions, table, toSnakeCase } from "./dsl/table";
+export {
+	foreignKeyActions,
+	getTableMeta,
+	isTable,
+	table,
+	tableMeta,
+	toSnakeCase,
+} from "./dsl/table";
 export { diffSnapshots } from "./engine/diff-engine";
+export type { HejbroInput } from "./engine/generate";
 export { generateMigration } from "./engine/generate";
 export type { HejbroError } from "./error";
 export { assertNever, hejbroError, throwHejbroError } from "./error";

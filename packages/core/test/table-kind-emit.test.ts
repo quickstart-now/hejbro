@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { schema } from "../src/dsl/schema";
-import { table } from "../src/dsl/table";
+import { getTableMeta, table } from "../src/dsl/table";
 import type { KindChange } from "../src/kind/object-kind";
 import { tableKind } from "../src/kinds/table-kind";
 import { integer, text, uuid } from "../src/types/column-builder-factories";
@@ -30,25 +30,25 @@ describe("tableKind.emit — create", () => {
 				id: uuid().primaryKey().defaultRandom(),
 				postId: uuid().notNull(),
 			},
-			(helpers) => ({
+			(t) => ({
 				indexes: [
 					{
-						columns: [helpers.column("postId")],
+						columns: [t.postId.sqlName],
 						unique: false,
 						indexName: null,
 					},
 				],
 				foreignKeys: [
 					{
-						columns: [helpers.column("postId")],
-						references: { table: posts, columns: ["id"] },
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
 						onDelete: "cascade",
 					},
 				],
 			}),
 		);
 
-		const next = tableKind.serialize(comments);
+		const next = tableKind.serialize(getTableMeta(comments));
 		const change = expectSingleChange(
 			tableKind.diff(null, next, "app.comments"),
 		);
@@ -80,13 +80,13 @@ describe("tableKind.emit — create", () => {
 			app,
 			"users",
 			{ email: text().notNull().unique() },
-			(helpers) => ({
+			(t) => ({
 				indexes: [
-					{ columns: [helpers.column("email")], unique: true, indexName: null },
+					{ columns: [t.email.sqlName], unique: true, indexName: null },
 				],
 			}),
 		);
-		const next = tableKind.serialize(users);
+		const next = tableKind.serialize(getTableMeta(users));
 		const change = expectSingleChange(tableKind.diff(null, next, "app.users"));
 		expect(tableKind.emit(change)).toEqual([
 			{
@@ -104,7 +104,7 @@ describe("tableKind.emit — create", () => {
 describe("tableKind.emit — drop", () => {
 	it("emits an exact drop table statement", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const previous = tableKind.serialize(posts);
+		const previous = tableKind.serialize(getTableMeta(posts));
 		const change = expectSingleChange(
 			tableKind.diff(previous, null, "app.posts"),
 		);
@@ -121,8 +121,8 @@ describe("tableKind.emit — alter", () => {
 			id: uuid().primaryKey(),
 			slug: text().notNull(),
 		});
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		const change = expectSingleChange(
 			tableKind.diff(previous, next, "app.posts"),
 		);
@@ -140,8 +140,8 @@ describe("tableKind.emit — alter", () => {
 			slug: text(),
 		});
 		const after = table(app, "posts", { id: uuid().primaryKey() });
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		const change = expectSingleChange(
 			tableKind.diff(previous, next, "app.posts"),
 		);
@@ -159,8 +159,8 @@ describe("tableKind.emit — alter", () => {
 			id: uuid().primaryKey(),
 			views: text(),
 		});
-		const previous = tableKind.serialize(before);
-		const next = tableKind.serialize(after);
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
 		const change = expectSingleChange(
 			tableKind.diff(previous, next, "app.posts"),
 		);
@@ -183,8 +183,8 @@ describe("tableKind.emit — alter", () => {
 		});
 		const setNotNullChange = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(before),
-				tableKind.serialize(setNotNullAfter),
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(setNotNullAfter)),
 				"app.posts",
 			),
 		);
@@ -197,8 +197,8 @@ describe("tableKind.emit — alter", () => {
 
 		const dropNotNullChange = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(setNotNullAfter),
-				tableKind.serialize(before),
+				tableKind.serialize(getTableMeta(setNotNullAfter)),
+				tableKind.serialize(getTableMeta(before)),
 				"app.posts",
 			),
 		);
@@ -221,8 +221,8 @@ describe("tableKind.emit — alter", () => {
 		});
 		const setDefaultChange = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(before),
-				tableKind.serialize(withDefault),
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(withDefault)),
 				"app.posts",
 			),
 		);
@@ -235,8 +235,8 @@ describe("tableKind.emit — alter", () => {
 
 		const dropDefaultChange = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(withDefault),
-				tableKind.serialize(before),
+				tableKind.serialize(getTableMeta(withDefault)),
+				tableKind.serialize(getTableMeta(before)),
 				"app.posts",
 			),
 		);
@@ -250,15 +250,13 @@ describe("tableKind.emit — alter", () => {
 
 	it("emits index add and drop", () => {
 		const before = table(app, "posts", { slug: text() });
-		const after = table(app, "posts", { slug: text() }, (helpers) => ({
-			indexes: [
-				{ columns: [helpers.column("slug")], unique: false, indexName: null },
-			],
+		const after = table(app, "posts", { slug: text() }, (t) => ({
+			indexes: [{ columns: [t.slug.sqlName], unique: false, indexName: null }],
 		}));
 		const addChange = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(before),
-				tableKind.serialize(after),
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
 				"app.posts",
 			),
 		);
@@ -271,8 +269,8 @@ describe("tableKind.emit — alter", () => {
 
 		const dropChange = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(after),
-				tableKind.serialize(before),
+				tableKind.serialize(getTableMeta(after)),
+				tableKind.serialize(getTableMeta(before)),
 				"app.posts",
 			),
 		);
@@ -284,28 +282,26 @@ describe("tableKind.emit — alter", () => {
 	it("emits foreign key add as deferred and drop before add when both change in the same alter", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		const authors = table(app, "authors", { id: uuid().primaryKey() });
-		const before = table(app, "comments", { postId: uuid() }, (helpers) => ({
+		const before = table(app, "comments", { postId: uuid() }, (t) => ({
 			foreignKeys: [
 				{
-					columns: [helpers.column("postId")],
-					references: { table: posts, columns: ["id"] },
-					onDelete: null,
+					columns: [t.postId],
+					references: { table: posts, columns: [posts.id] },
 				},
 			],
 		}));
-		const after = table(app, "comments", { postId: uuid() }, (helpers) => ({
+		const after = table(app, "comments", { postId: uuid() }, (t) => ({
 			foreignKeys: [
 				{
-					columns: [helpers.column("postId")],
-					references: { table: authors, columns: ["id"] },
-					onDelete: null,
+					columns: [t.postId],
+					references: { table: authors, columns: [authors.id] },
 				},
 			],
 		}));
 		const change = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(before),
-				tableKind.serialize(after),
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
 				"app.comments",
 			),
 		);
@@ -328,8 +324,8 @@ describe("tableKind.emit — unsupported column alters", () => {
 		const after = table(app, "posts", { slug: text().unique() });
 		const change = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(before),
-				tableKind.serialize(after),
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
 				"app.posts",
 			),
 		);
@@ -341,8 +337,8 @@ describe("tableKind.emit — unsupported column alters", () => {
 		const after = table(app, "posts", { slug: text().unique() });
 		const change = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(before),
-				tableKind.serialize(after),
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
 				"app.posts",
 			),
 		);
@@ -354,8 +350,8 @@ describe("tableKind.emit — unsupported column alters", () => {
 		const after = table(app, "posts", { id: uuid() });
 		const change = expectSingleChange(
 			tableKind.diff(
-				tableKind.serialize(before),
-				tableKind.serialize(after),
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
 				"app.posts",
 			),
 		);
