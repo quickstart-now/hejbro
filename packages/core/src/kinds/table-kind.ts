@@ -1,4 +1,5 @@
 import type { IndexDeclaration, TableDeclaration } from "../dsl/table";
+import { renderExpr } from "../expr/render-sql";
 import type { KeyedDiff } from "../kind/diff-helpers";
 import { diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
@@ -39,6 +40,14 @@ const resolveIndexName = (
 	return deriveIndexName(tableName, index.columns);
 };
 
+/** Renders a column's default expression to SQL text (D16) — `null` when the column has no default. */
+const renderColumnDefaultExpr = (columnState: ColumnState): string | null => {
+	if (columnState.defaultValue === null) {
+		return null;
+	}
+	return renderExpr(columnState.defaultValue);
+};
+
 const serializeColumns = (
 	declaration: TableDeclaration,
 ): ReadonlyArray<ColumnSnapshot> =>
@@ -48,7 +57,7 @@ const serializeColumns = (
 		notNull: materializeNotNull(entry.columnState),
 		primaryKey: entry.columnState.primaryKey,
 		unique: entry.columnState.unique,
-		default: entry.columnState.defaultValue,
+		default: renderColumnDefaultExpr(entry.columnState),
 	}));
 
 const serializeIndexes = (

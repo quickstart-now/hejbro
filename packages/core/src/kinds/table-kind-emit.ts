@@ -4,7 +4,6 @@ import type { KindChange } from "../kind/object-kind";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
 import { deferredStatement, statement } from "../sql/statement";
-import type { ColumnDefault } from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
 import { renderTypeNode } from "../types/type-node";
 import {
@@ -12,7 +11,6 @@ import {
 	createIndexSql,
 	createTableSql,
 	dropForeignKeyConstraintSql,
-	renderColumnDefault,
 	renderColumnDefinition,
 } from "./table-kind-emit-sql";
 import type { ColumnSnapshot, TableSnapshot } from "./table-snapshot";
@@ -80,7 +78,7 @@ const defaultAlterStatements = (
 	tableName: string,
 	key: string,
 	changed: boolean,
-	nextDefault: ColumnDefault | null,
+	nextDefault: string | null,
 ): ReadonlyArray<SqlStatement> => {
 	if (!changed) {
 		return [];
@@ -94,7 +92,7 @@ const defaultAlterStatements = (
 	}
 	return [
 		statement(
-			`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} set default ${renderColumnDefault(nextDefault)};`,
+			`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} set default ${nextDefault};`,
 		),
 	];
 };

@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { sql } from "../src/expr/sql-template";
 import type { ColumnBuilder } from "../src/index";
 import {
 	bigserial,
@@ -42,10 +43,13 @@ describe("uuid().primaryKey()", () => {
 });
 
 describe("defaultRandom", () => {
-	it("sets a random-uuid default on a uuid column", () => {
+	it("sets a gen_random_uuid() function call default on a uuid column", () => {
 		const built = uuid().defaultRandom();
 		expect(built.columnState.defaultValue).toEqual({
-			defaultKind: "random-uuid",
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "gen_random_uuid",
+			args: [],
 		});
 	});
 
@@ -55,9 +59,14 @@ describe("defaultRandom", () => {
 });
 
 describe("defaultNow", () => {
-	it("sets a now default on a timestamp-family column", () => {
+	it("sets a now() function call default on a timestamp-family column", () => {
 		const built = timestamptz().defaultNow();
-		expect(built.columnState.defaultValue).toEqual({ defaultKind: "now" });
+		expect(built.columnState.defaultValue).toEqual({
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "now",
+			args: [],
+		});
 	});
 
 	it("throws an actionable error on a non-date/time column", () => {
@@ -66,11 +75,27 @@ describe("defaultNow", () => {
 });
 
 describe("default", () => {
-	it("sets a literal default value", () => {
+	it("sets a numeric literal default value", () => {
 		const built = integer().default(42);
 		expect(built.columnState.defaultValue).toEqual({
-			defaultKind: "literal",
-			value: 42,
+			nodeKind: "literal",
+			literal: { literalKind: "number", value: 42 },
+		});
+	});
+
+	it("sets a string literal default value", () => {
+		const built = text().default("hi");
+		expect(built.columnState.defaultValue).toEqual({
+			nodeKind: "literal",
+			literal: { literalKind: "string", value: "hi" },
+		});
+	});
+
+	it("accepts an expression built via the sql tagged template", () => {
+		const built = timestamptz().default(sql`now() + interval '1 day'`);
+		expect(built.columnState.defaultValue).toEqual({
+			nodeKind: "sqlTemplate",
+			chunks: [{ chunkKind: "text", text: "now() + interval '1 day'" }],
 		});
 	});
 });

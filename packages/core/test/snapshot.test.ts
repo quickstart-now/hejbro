@@ -15,9 +15,9 @@ const app = schema("app");
 const registry = createDefaultRegistry();
 
 describe("emptySnapshot", () => {
-	it("has version 1, postgres dialect, and no objects", () => {
+	it("has version 2, postgres dialect, and no objects", () => {
 		expect(emptySnapshot).toEqual({
-			hejbroSnapshot: 1,
+			hejbroSnapshot: 2,
 			dialect: "postgres",
 			objects: {},
 		});
@@ -84,7 +84,7 @@ describe("renderSnapshot / parseSnapshot", () => {
 	});
 
 	it("rejects a snapshot with a missing objects map", () => {
-		const raw = JSON.stringify({ hejbroSnapshot: 1, dialect: "postgres" });
+		const raw = JSON.stringify({ hejbroSnapshot: 2, dialect: "postgres" });
 		expect(() => parseSnapshot(raw)).toThrowError(/objects/i);
 	});
 });
