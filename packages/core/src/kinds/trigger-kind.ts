@@ -2,29 +2,28 @@ import type { TriggerDeclaration } from "../dsl/define-trigger";
 import { assertNever, throwHejbroError } from "../error";
 import { sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
+import type {
+	TriggerEventShape,
+	TriggerSnapshotShape,
+} from "../plpgsql/render-body";
 import { renderTriggerSql } from "../plpgsql/render-body";
 import type { JsonValue } from "../snapshot/stable-json";
 import { statement } from "../sql/statement";
 
-/** One event entry in a {@link TriggerSnapshot} — mirrors `TriggerDeclaration["events"][number]`. */
-export type TriggerEventSnapshot =
-	| { readonly event: "insert" }
-	| { readonly event: "delete" }
-	| {
-			readonly event: "update";
-			readonly columns: ReadonlyArray<string> | null;
-	  };
+/**
+ * One event entry in a {@link TriggerSnapshot} — an alias of
+ * {@link TriggerEventShape} (render-body.ts owns the one canonical shape;
+ * this re-export keeps the kind-facing name).
+ */
+export type TriggerEventSnapshot = TriggerEventShape;
 
-/** A trigger's serialized snapshot node. */
-export type TriggerSnapshot = {
-	readonly schema: string;
-	readonly table: string;
-	readonly name: string;
-	readonly timing: "before" | "after";
-	readonly events: ReadonlyArray<TriggerEventSnapshot>;
-	readonly forEach: "row" | "statement";
-	readonly functionName: string;
-};
+/**
+ * A trigger's serialized snapshot node — an alias of
+ * {@link TriggerSnapshotShape} (render-body.ts owns the one canonical
+ * shape; this re-export keeps the kind-facing name). `render-body.ts` stays
+ * kind-agnostic: it depends on the shape, never the other way around.
+ */
+export type TriggerSnapshot = TriggerSnapshotShape;
 
 // Internal invariant: this shape is exactly what triggerKind.serialize below produces.
 const asTriggerSnapshot = (snapshot: JsonValue): TriggerSnapshot =>

@@ -3,7 +3,10 @@ import { assertNever, throwHejbroError } from "../error";
 import { sameJson } from "../kind/diff-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
 import { fnv1aHex } from "../plpgsql/body-hash";
-import { renderFunctionSql } from "../plpgsql/render-body";
+import {
+	renderFunctionReturnsClause,
+	renderFunctionSql,
+} from "../plpgsql/render-body";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import { statement } from "../sql/statement";
@@ -33,21 +36,6 @@ const asFunctionSnapshot = (snapshot: JsonValue): FunctionSnapshot =>
 
 const functionIdentity = (schema: string, name: string): string =>
 	`${schema}.${name}`;
-
-const renderReturnsClause = (
-	returns: FunctionDeclaration["returns"],
-): string => {
-	switch (returns.returnsKind) {
-		case "trigger":
-			return "trigger";
-		case "setofTable":
-			return `setof ${qualifyName(returns.schemaName, returns.tableName)}`;
-		case "scalar":
-			return renderTypeNode(returns.typeNode);
-		default:
-			return assertNever(returns);
-	}
-};
 
 /** The signature portion of a {@link FunctionSnapshot} — everything except `bodyHash`/`bodySql`, compared for the `create or replace` vs drop+create decision (spec §6.4). */
 const signatureOf = (snapshot: FunctionSnapshot): JsonValue => ({
@@ -86,7 +74,7 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 				name: arg.argName,
 				type: renderTypeNode(arg.typeNode),
 			})),
-			returns: renderReturnsClause(declaration.returns),
+			returns: renderFunctionReturnsClause(declaration.returns),
 			security: declaration.security,
 			language: "plpgsql",
 			bodyHash: fnv1aHex(bodySql),

@@ -24,25 +24,28 @@ type IfStatement = Extract<BodyStatement, { readonly stmtKind: "if" }>;
 const renderIfLines = (
 	statement: IfStatement,
 	depth: number,
+	identity: string,
+	declaredAt: string | null,
 ): ReadonlyArray<string> => {
 	const [firstBranch, ...restBranches] = statement.branches;
 	if (firstBranch === undefined) {
 		return throwHejbroError(
 			"empty-if-statement",
-			"a recorded if statement has no branches — this indicates an internal hejbro bug.",
+			`a recorded if statement in ${identity} has no branches — this indicates an internal hejbro bug.`,
+			declaredAt,
 		);
 	}
 
 	const ifLines = [
 		`${indent(depth)}if ${renderExpr(firstBranch.condition)} then`,
 		...firstBranch.statements.flatMap((inner) =>
-			renderStatementLines(inner, depth + 1),
+			renderStatementLines(inner, depth + 1, identity, declaredAt),
 		),
 	];
 	const elsifLines = restBranches.flatMap((branch) => [
 		`${indent(depth)}elsif ${renderExpr(branch.condition)} then`,
 		...branch.statements.flatMap((inner) =>
-			renderStatementLines(inner, depth + 1),
+			renderStatementLines(inner, depth + 1, identity, declaredAt),
 		),
 	]);
 	const elseLines =
@@ -51,7 +54,7 @@ const renderIfLines = (
 			: [
 					`${indent(depth)}else`,
 					...statement.elseStatements.flatMap((inner) =>
-						renderStatementLines(inner, depth + 1),
+						renderStatementLines(inner, depth + 1, identity, declaredAt),
 					),
 				];
 
@@ -61,6 +64,8 @@ const renderIfLines = (
 const renderStatementLines = (
 	statement: BodyStatement,
 	depth: number,
+	identity: string,
+	declaredAt: string | null,
 ): ReadonlyArray<string> => {
 	switch (statement.stmtKind) {
 		case "selectInto":
@@ -76,13 +81,14 @@ const renderStatementLines = (
 		case "returnQuery":
 			return [`${indent(depth)}return query ${renderQuery(statement.query)};`];
 		case "if":
-			return renderIfLines(statement, depth);
+			return renderIfLines(statement, depth, identity, declaredAt);
 		default:
 			return assertNever(statement);
 	}
 };
 
-const renderFunctionReturnsClause = (
+/** Renders a {@link FunctionDeclaration}'s `returns` clause text — `"trigger"`, `` `setof "schema"."table"` ``, or the scalar type. Shared by {@link renderFunctionSql} and `functionKind.serialize`'s snapshot `returns` field, so the two never drift apart. */
+export const renderFunctionReturnsClause = (
 	returns: FunctionDeclaration["returns"],
 ): string => {
 	switch (returns.returnsKind) {
@@ -105,6 +111,7 @@ const renderFunctionReturnsClause = (
  * contains the literal `$function$` dollar-quote tag.
  */
 export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
+	const identity = `${declaration.schemaName}.${declaration.functionName}`;
 	const argsSql = declaration.args
 		.map((arg) => `${arg.argName} ${renderTypeNode(arg.typeNode)}`)
 		.join(", ");
@@ -123,7 +130,7 @@ export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
 					),
 				];
 	const bodyLines = declaration.body.statements.flatMap((stmt) =>
-		renderStatementLines(stmt, 1),
+		renderStatementLines(stmt, 1, identity, declaration.declaredAt),
 	);
 
 	const innerLines = [...declareLines, "begin", ...bodyLines, "end;"];
@@ -131,7 +138,8 @@ export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
 	if (innerText.includes("$function$")) {
 		throwHejbroError(
 			"body-contains-dollar-tag",
-			"the function body's rendered SQL contains the literal $function$, which collides with the dollar-quote tag — remove or rephrase that string.",
+			`the function body's rendered SQL for ${identity} contains the literal $function$, which collides with the dollar-quote tag — remove or rephrase that string.`,
+			declaration.declaredAt,
 		);
 	}
 
