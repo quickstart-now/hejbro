@@ -3,6 +3,7 @@ import {
 	deleteFrom,
 	eq,
 	insert,
+	isNotNull,
 	now,
 	renderQuery,
 	schema,
@@ -18,6 +19,10 @@ const posts = table(ddland, "posts", {
 	id: uuid().primaryKey(),
 	slug: text().notNull(),
 	publishedAt: timestamptz(),
+});
+const comments = table(ddland, "comments", {
+	id: uuid().primaryKey(),
+	postId: uuid().notNull(),
 });
 
 describe("mutation builders", () => {
@@ -56,6 +61,14 @@ describe("mutation builders", () => {
 	it("rejects unknown column keys with an actionable error", () => {
 		expect(() => insert(posts).values({ nope: "x" } as never)).toThrowError(
 			/unknown-column|unknown column key/,
+		);
+	});
+	it("rejects column refs from tables outside the mutation's scope", () => {
+		const query = update(posts)
+			.set({ slug: "hello" })
+			.where(isNotNull(comments.postId));
+		expect(() => renderQuery(query.updateQuery)).toThrowError(
+			/foreign-column-ref|join that table/,
 		);
 	});
 });

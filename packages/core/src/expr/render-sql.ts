@@ -160,6 +160,72 @@ const findForeignColumnRef = (
 	refs: ReadonlyArray<ColumnRefNode>,
 ): ColumnRefNode | undefined => refs.find((ref) => !isInScope(scope, ref));
 
+/**
+ * Throws `foreign-column-ref` if any of `refs` falls outside `scope` —
+ * shared by every query renderer (`select`, `insert`, `update`, `delete`)
+ * so a mutation's `where`/`set`/`values`/`returning` expressions are
+ * validated exactly like a select's (Phase 3 function bodies rely on this
+ * for all four statement kinds, not just `select`).
+ */
+const assertInScope = (
+	scope: ReadonlyArray<TableRefNode>,
+	refs: ReadonlyArray<ColumnRefNode>,
+	verb: string,
+	subject: TableRefNode,
+): void => {
+	const badRef = findForeignColumnRef(scope, refs);
+	if (badRef !== undefined) {
+		throwHejbroError(
+			"foreign-column-ref",
+			`${verb} "${subject.schemaName}.${subject.tableName}" references column "${badRef.schemaName}.${badRef.tableName}.${badRef.columnName}" — join that table, or reference it from an enclosing query via exists().`,
+		);
+	}
+};
+
+const collectReturningRefs = (
+	returning: ReturningNode | null,
+): ReadonlyArray<ColumnRefNode> => {
+	if (returning === null) {
+		return [];
+	}
+	switch (returning.returningKind) {
+		case "allColumns":
+			return [];
+		case "columns":
+			return returning.columns.flatMap((entry) =>
+				collectColumnRefs(entry.expr),
+			);
+		default:
+			return assertNever(returning);
+	}
+};
+
+const collectOnConflictRefs = (
+	onConflict: OnConflictNode | null,
+): ReadonlyArray<ColumnRefNode> => {
+	if (onConflict === null) {
+		return [];
+	}
+	switch (onConflict.action.actionKind) {
+		case "nothing":
+			return [];
+		case "update":
+			return onConflict.action.set.flatMap((entry) =>
+				collectColumnRefs(entry.value),
+			);
+		default:
+			return assertNever(onConflict.action);
+	}
+};
+
+const collectSetRefs = (set: UpdateNode["set"]): ReadonlyArray<ColumnRefNode> =>
+	set.flatMap((entry) => collectColumnRefs(entry.value));
+
+const collectRowsRefs = (
+	rows: ReadonlyArray<ReadonlyArray<ExprNode>>,
+): ReadonlyArray<ColumnRefNode> =>
+	rows.flatMap((row) => row.flatMap(collectColumnRefs));
+
 const collectWhereRefs = (
 	where: ExprNode | null,
 ): ReadonlyArray<ColumnRefNode> => {
@@ -313,13 +379,7 @@ export const renderSelect = (
 		...collectWhereRefs(query.where),
 		...query.orderBy.flatMap((term) => collectColumnRefs(term.expr)),
 	];
-	const badRef = findForeignColumnRef(scope, mentionedRefs);
-	if (badRef !== undefined) {
-		return throwHejbroError(
-			"foreign-column-ref",
-			`select from "${query.from.schemaName}.${query.from.tableName}" references column "${badRef.schemaName}.${badRef.tableName}.${badRef.columnName}" — join that table, or reference it from an enclosing query via exists().`,
-		);
-	}
+	assertInScope(scope, mentionedRefs, "select from", query.from);
 
 	const joinsSql = query.joins
 		.map(
@@ -346,6 +406,13 @@ export const renderInsert = (
 	outerScope?: ReadonlyArray<TableRefNode>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
+	const mentionedRefs = [
+		...collectRowsRefs(node.rows),
+		...collectOnConflictRefs(node.onConflict),
+		...collectReturningRefs(node.returning),
+	];
+	assertInScope(scope, mentionedRefs, "insert into", node.table);
+
 	const columnsSql = node.columnNames.map(quoteIdentifier).join(", ");
 	const rowsSql = node.rows
 		.map(
@@ -368,6 +435,13 @@ export const renderUpdate = (
 	outerScope?: ReadonlyArray<TableRefNode>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
+	const mentionedRefs = [
+		...collectSetRefs(node.set),
+		...collectWhereRefs(node.where),
+		...collectReturningRefs(node.returning),
+	];
+	assertInScope(scope, mentionedRefs, "update", node.table);
+
 	const setSql = node.set
 		.map(
 			(entry) =>
@@ -390,6 +464,11 @@ export const renderDelete = (
 	outerScope?: ReadonlyArray<TableRefNode>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
+	const mentionedRefs = [
+		...collectWhereRefs(node.where),
+		...collectReturningRefs(node.returning),
+	];
+	assertInScope(scope, mentionedRefs, "delete from", node.table);
 
 	const clauses = [
 		`delete from ${renderTableRef(node.table)}`,
