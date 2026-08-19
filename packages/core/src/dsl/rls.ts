@@ -15,15 +15,22 @@ export const policyCommands = [
 /** @see policyCommands */
 export type PolicyCommand = (typeof policyCommands)[number];
 
-/** A finished, not-yet-table-bound policy (chain output). */
+/**
+ * A finished, not-yet-table-bound policy (chain output). The clause data
+ * fields are named `usingExpr`/`withCheckExpr` — not `using`/`withCheck` —
+ * so they can never collide with the chain methods of the same name that
+ * `PolicyBothStage` attaches to a just-built `PolicyInput` (an update/all
+ * policy that ends its chain after only one clause call must keep the
+ * *other* clause `null`, not have it silently overwritten by a function).
+ */
 export type PolicyInput = {
 	readonly policyInputKind: "policy";
 	readonly policyName: string;
 	readonly permissive: boolean;
 	readonly command: PolicyCommand;
 	readonly roles: ReadonlyArray<string>;
-	readonly using: ExprNode | null;
-	readonly withCheck: ExprNode | null;
+	readonly usingExpr: ExprNode | null;
+	readonly withCheckExpr: ExprNode | null;
 	readonly declaredAt: string | null;
 };
 
@@ -75,16 +82,16 @@ type RolesState = ForState & {
 
 const finishPolicy = (
 	state: RolesState,
-	using: ExprNode | null,
-	withCheck: ExprNode | null,
+	usingExpr: ExprNode | null,
+	withCheckExpr: ExprNode | null,
 ): PolicyInput => ({
 	policyInputKind: "policy",
 	policyName: state.policyName,
 	permissive: state.permissive,
 	command: state.command,
 	roles: state.roles,
-	using,
-	withCheck,
+	usingExpr,
+	withCheckExpr,
 	declaredAt: state.declaredAt,
 });
 
@@ -223,13 +230,22 @@ const clauseNotAllowed = (
 const assertClauseAllowed = (policy: PolicyInput): void => {
 	if (
 		(policy.command === "select" || policy.command === "delete") &&
-		policy.withCheck !== null
+		policy.withCheckExpr !== null
 	) {
 		clauseNotAllowed(policy, "with check", "using");
 	}
-	if (policy.command === "insert" && policy.using !== null) {
+	if (policy.command === "insert" && policy.usingExpr !== null) {
 		clauseNotAllowed(policy, "using", "with check");
 	}
+};
+
+const exprColumnRefs = (
+	expr: ExprNode | null,
+): ReadonlyArray<ReturnType<typeof collectColumnRefs>[number]> => {
+	if (expr === null) {
+		return [];
+	}
+	return collectColumnRefs(expr);
 };
 
 const assertOwnColumnsOnly = (
@@ -238,8 +254,8 @@ const assertOwnColumnsOnly = (
 	policy: PolicyInput,
 ): void => {
 	const refs = [
-		...(policy.using === null ? [] : collectColumnRefs(policy.using)),
-		...(policy.withCheck === null ? [] : collectColumnRefs(policy.withCheck)),
+		...exprColumnRefs(policy.usingExpr),
+		...exprColumnRefs(policy.withCheckExpr),
 	];
 	const foreignRef = refs.find(
 		(ref) => ref.schemaName !== schemaName || ref.tableName !== tableName,
@@ -268,8 +284,8 @@ const bindPolicy = (
 		permissive: policy.permissive,
 		command: policy.command,
 		roles: policy.roles,
-		using: policy.using,
-		withCheck: policy.withCheck,
+		using: policy.usingExpr,
+		withCheck: policy.withCheckExpr,
 		declaredAt: policy.declaredAt,
 	};
 };
@@ -302,15 +318,11 @@ const assertNoDuplicatePolicyNames = (
  * Binds an `RlsInput` to its owning table: stamps `schemaName`/`tableName`
  * onto every policy and validates the whole set (duplicate SQL policy
  * names, clause/command combinations, and own-table-only column
- * references). `knownColumnNames` is accepted for parity with the table's
- * other binders (indexes, foreign keys); policy expressions are always
- * built from this table's own typed `ColumnRef`s, so there is nothing
- * further to check against it today.
+ * references).
  */
 export const bindRls = (
 	schemaName: string,
 	tableName: string,
-	_knownColumnNames: ReadonlySet<string>,
 	input: RlsInput,
 ): RlsDeclaration => {
 	const entries = Object.entries(input.policies);

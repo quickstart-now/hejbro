@@ -219,13 +219,12 @@ const resolveForeignKey = (
 const resolveRls = (
 	owner: SchemaDeclaration,
 	tableName: string,
-	knownColumnNames: ReadonlySet<string>,
 	rlsInput: RlsInput | undefined,
 ): RlsDeclaration | null => {
 	if (rlsInput === undefined) {
 		return null;
 	}
-	return bindRls(owner.schemaName, tableName, knownColumnNames, rlsInput);
+	return bindRls(owner.schemaName, tableName, rlsInput);
 };
 
 /**
@@ -254,12 +253,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 
-	const rls = resolveRls(
-		owner,
-		tableName,
-		knownColumnNames,
-		resolvedExtras.rls,
-	);
+	const rls = resolveRls(owner, tableName, resolvedExtras.rls);
 
 	const declaration: TableDeclaration = {
 		declarationKind: "table",

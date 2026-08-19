@@ -28,8 +28,8 @@ describe("rls.policy chain", () => {
 		expect(built.permissive).toBe(true);
 		expect(built.command).toBe("select");
 		expect(built.roles).toEqual(["anon"]);
-		expect(built.using).not.toBeNull();
-		expect(built.withCheck).toBeNull();
+		expect(built.usingExpr).not.toBeNull();
+		expect(built.withCheckExpr).toBeNull();
 	});
 
 	it("builds a restrictive insert policy with withCheck", () => {
@@ -41,8 +41,8 @@ describe("rls.policy chain", () => {
 			.withCheck(eq(posts.status, "draft"));
 		expect(built.permissive).toBe(false);
 		expect(built.command).toBe("insert");
-		expect(built.using).toBeNull();
-		expect(built.withCheck).not.toBeNull();
+		expect(built.usingExpr).toBeNull();
+		expect(built.withCheckExpr).not.toBeNull();
 	});
 
 	it("builds an update policy with both clauses in either order", () => {
@@ -52,8 +52,45 @@ describe("rls.policy chain", () => {
 			.to("authenticated")
 			.using(eq(posts.status, "draft"))
 			.withCheck(eq(posts.status, "draft"));
-		expect(one.using).not.toBeNull();
-		expect(one.withCheck).not.toBeNull();
+		expect(one.usingExpr).not.toBeNull();
+		expect(one.withCheckExpr).not.toBeNull();
+	});
+
+	// Regression for a bug caught in review: `PolicyBothStage`'s stage
+	// methods used to be `Object.assign`-ed onto the built `PolicyInput`
+	// under the *same* names as its clause data fields (`using`/`withCheck`),
+	// so ending an update/all chain after only one clause silently replaced
+	// the other clause's `null` with a function. The data fields are now
+	// `usingExpr`/`withCheckExpr` so they can never collide with the chain
+	// method names.
+	describe("update/all chains ended after a single clause (D26 regression)", () => {
+		it.each([{ command: "update" as const }, { command: "all" as const }])(
+			"$command: ending on .using() leaves withCheckExpr null, not a function",
+			({ command }) => {
+				const built = rls
+					.policy("only_using")
+					.for(command)
+					.to("authenticated")
+					.using(eq(posts.status, "draft"));
+				expect(built.usingExpr).not.toBeNull();
+				expect(built.withCheckExpr).toBeNull();
+				expect(typeof built.withCheckExpr).not.toBe("function");
+			},
+		);
+
+		it.each([{ command: "update" as const }, { command: "all" as const }])(
+			"$command: ending on .withCheck() leaves usingExpr null, not a function",
+			({ command }) => {
+				const built = rls
+					.policy("only_check")
+					.for(command)
+					.to("authenticated")
+					.withCheck(eq(posts.status, "draft"));
+				expect(built.withCheckExpr).not.toBeNull();
+				expect(built.usingExpr).toBeNull();
+				expect(typeof built.usingExpr).not.toBe("function");
+			},
+		);
 	});
 
 	it("rejects .to() with no roles", () => {

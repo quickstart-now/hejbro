@@ -7,7 +7,7 @@ import { eq } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { policyKind } from "../src/kinds/policy-kind";
 import { exists, select } from "../src/query/select";
-import { buildSnapshot } from "../src/snapshot/snapshot";
+import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
 
 const ddland = schema("ddland");
@@ -310,4 +310,86 @@ describe("policy recreate ordering through generateMigration", () => {
 		expect(createIndex).toBeGreaterThan(dropIndex);
 		expect(result.sql.match(/drop policy if exists/g)).toHaveLength(1);
 	});
+});
+
+// Regression (review of PR #70): PolicyBothStage's chain methods used to be
+// Object.assign-ed onto the built PolicyInput under the same names as its
+// clause data fields, so ending an update/all chain after only one clause
+// silently replaced the other clause's null with a function — which
+// renderExpr then crashed on ("unexpected value: undefined") once the
+// policy reached generateMigration. Full pipeline coverage for both
+// commands and both single-clause terminations.
+describe("update/all policy chain termination through generateMigration (D26 regression)", () => {
+	const buildSingleClausePolicy = (
+		command: "update" | "all",
+		clause: "using" | "withCheck",
+	) =>
+		table(
+			ddland,
+			"posts",
+			{
+				id: uuid().primaryKey().defaultRandom(),
+				status: text().notNull(),
+			},
+			(t) => {
+				const pending = rls
+					.policy("posts_write_own")
+					.for(command)
+					.to("authenticated");
+				if (clause === "using") {
+					return {
+						rls: rls.enabled({
+							write: pending.using(eq(t.status, "draft")),
+						}),
+					};
+				}
+				return {
+					rls: rls.enabled({
+						write: pending.withCheck(eq(t.status, "draft")),
+					}),
+				};
+			},
+		);
+
+	it.each([
+		{ command: "update" as const, clause: "using" as const },
+		{ command: "update" as const, clause: "withCheck" as const },
+		{ command: "all" as const, clause: "using" as const },
+		{ command: "all" as const, clause: "withCheck" as const },
+	])(
+		"$command policy ending on .$clause() binds a null opposite clause and emits only that clause's SQL",
+		({ command, clause }) => {
+			const posts = buildSingleClausePolicy(command, clause);
+			const meta = getTableMeta(posts);
+			if (meta.rls === null) {
+				throw new Error("expected rls declaration");
+			}
+			const [policy] = meta.rls.policies;
+			if (policy === undefined) {
+				throw new Error("expected one policy");
+			}
+
+			if (clause === "using") {
+				expect(policy.using).not.toBeNull();
+				expect(policy.withCheck).toBeNull();
+			} else {
+				expect(policy.withCheck).not.toBeNull();
+				expect(policy.using).toBeNull();
+			}
+
+			const result = generateMigration({
+				declarations: [posts],
+				previousSnapshot: emptySnapshot,
+				registry,
+			});
+
+			if (clause === "using") {
+				expect(result.sql).toContain("using (");
+				expect(result.sql).not.toContain("with check (");
+			} else {
+				expect(result.sql).toContain("with check (");
+				expect(result.sql).not.toContain("using (");
+			}
+		},
+	);
 });
