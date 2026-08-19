@@ -10,22 +10,31 @@ export type HejbroError = {
 
 /**
  * Builds a {@link HejbroError} carrying a machine-readable `code` and a
- * human-readable `message`. `declaredAt` is left `null` here; callers that
- * track declaration source locations attach it themselves.
+ * human-readable `message`. `declaredAt` defaults to `null`; callers that
+ * track a declaration's source location (spec §7 decision A8) pass it
+ * through.
  */
-export const hejbroError = (code: string, message: string): HejbroError => ({
+export const hejbroError = (
+	code: string,
+	message: string,
+	declaredAt: string | null = null,
+): HejbroError => ({
 	code,
 	message,
-	declaredAt: null,
+	declaredAt,
 });
 
 /**
- * Throws a {@link HejbroError} built from `code` and `message`. Provided so
- * call sites can throw in an expression position without an intermediate
- * variable.
+ * Throws a {@link HejbroError} built from `code`, `message`, and an optional
+ * `declaredAt`. Provided so call sites can throw in an expression position
+ * without an intermediate variable.
  */
-export const throwHejbroError = (code: string, message: string): never => {
-	throw hejbroError(code, message);
+export const throwHejbroError = (
+	code: string,
+	message: string,
+	declaredAt: string | null = null,
+): never => {
+	throw hejbroError(code, message, declaredAt);
 };
 
 /**

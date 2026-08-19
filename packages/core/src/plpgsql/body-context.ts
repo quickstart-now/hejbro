@@ -6,6 +6,7 @@ import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
 import type { DeleteFinal, InsertFinal, UpdateFinal } from "../query/mutate";
 import type { SelectLimited } from "../query/select";
+import { stableJson } from "../snapshot/stable-json";
 import type { BuilderFamily } from "../types/column-builder";
 import type {
 	BodyStatement,
@@ -125,6 +126,7 @@ export const createRecordingContext = (
 			return throwHejbroError(
 				"unreachable",
 				`${identity}: plpgsql body recording has an empty frame stack.`,
+				declaredAt,
 			);
 		}
 		return frame;
@@ -136,6 +138,7 @@ export const createRecordingContext = (
 			return throwHejbroError(
 				"unreachable",
 				`${identity}: plpgsql body recording popped an empty frame stack.`,
+				declaredAt,
 			);
 		}
 		return frame;
@@ -151,6 +154,7 @@ export const createRecordingContext = (
 			throwHejbroError(
 				"duplicate-local-name",
 				`local name "${name}" is already declared in ${identity} — pick a different row name or variable.`,
+				declaredAt,
 			);
 		}
 		declaredNames.add(name);
@@ -164,6 +168,7 @@ export const createRecordingContext = (
 				return throwHejbroError(
 					"row-projection-not-column",
 					`ctx.row()/ctx.rowOrNull() projection key "${key}" in ${identity} isn't a plain column reference — pass table columns (e.g. table.column), not computed expressions.`,
+					declaredAt,
 				);
 			}
 			return { key, columnRef: value };
@@ -253,6 +258,7 @@ export const createRecordingContext = (
 			throwHejbroError(
 				"raise-arg-count-mismatch",
 				`ctx.raise() message in ${identity} has ${placeholderCount} "%" placeholder(s) but received ${args.length} argument(s) — counts must match ("%%" renders as a literal percent sign).`,
+				declaredAt,
 			);
 		}
 		pushStatement({
@@ -289,6 +295,7 @@ export const createRecordingContext = (
 		throwHejbroError(
 			"unsupported-return-value",
 			`ctx.return() in ${identity} received a value that isn't a trigger row (new/old) or a query with .returning() — pass one of those.`,
+			declaredAt,
 		);
 	};
 
@@ -306,4 +313,39 @@ export const createRecordingContext = (
 	});
 
 	return { ctx, finish };
+};
+
+/** The exact guard message (designer-approved copy) for a `nondeterministic-body` error. */
+const nondeterministicBodyMessage = (identity: string): string =>
+	`function "${identity}" produced two different recorded ASTs when its body ran twice at build time — the body must be pure and deterministic (no real if/for/while, Date.now(), Math.random(), or reads of mutable outer state). Replace real branching with ctx.if(), and non-deterministic values with the DSL's own now()/genRandomUuid() helpers.`;
+
+/**
+ * Runs `run` against two fresh recording contexts and compares the two
+ * recorded {@link FunctionBody} trees structurally (`stableJson`) — the
+ * determinism guard `defineFunction`/`defineTrigger` wrap their body
+ * callback in (spec §6.2 decision A4). Throws `nondeterministic-body` on
+ * mismatch; otherwise returns the (identical) recorded body.
+ */
+export const recordBodyWithGuard = (
+	identity: string,
+	declaredAt: string | null,
+	run: (ctx: BodyContext) => void,
+): FunctionBody => {
+	const first = createRecordingContext(identity, declaredAt);
+	run(first.ctx);
+	const firstBody = first.finish();
+
+	const second = createRecordingContext(identity, declaredAt);
+	run(second.ctx);
+	const secondBody = second.finish();
+
+	if (stableJson(firstBody) !== stableJson(secondBody)) {
+		throwHejbroError(
+			"nondeterministic-body",
+			nondeterministicBodyMessage(identity),
+			declaredAt,
+		);
+	}
+
+	return firstBody;
 };

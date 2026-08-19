@@ -1,11 +1,9 @@
+import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { ColumnRef } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import type { BodyContext, TriggerRow } from "../plpgsql/body-context";
-import {
-	createRecordingContext,
-	triggerRowMeta,
-} from "../plpgsql/body-context";
+import { recordBodyWithGuard, triggerRowMeta } from "../plpgsql/body-context";
 import type { FunctionDeclaration } from "./define-function";
 import type { Table } from "./table";
 import { getTableMeta, toSnakeCase } from "./table";
@@ -77,6 +75,7 @@ const resolveEvent = (
 	triggerName: string,
 	schemaName: string,
 	tableName: string,
+	declaredAt: string | null,
 ): TriggerDeclaration["events"][number] => {
 	if (event === "insert") {
 		return { event: "insert" };
@@ -93,6 +92,7 @@ const resolveEvent = (
 			return throwHejbroError(
 				"unknown-trigger-column",
 				`trigger "${triggerName}" on "${schemaName}.${tableName}" lists unknown column "${columnKey}" in its update-of event list — check the column name against the table declaration.`,
+				declaredAt,
 			);
 		}
 		return columnName;
@@ -102,9 +102,10 @@ const resolveEvent = (
 
 /**
  * Declares a Postgres trigger and, in the same call, the function it
- * executes (`config.functionName ?? `${config.name}_fn``). `body` records
- * the function's plpgsql once here — Task 3 adds the double-run
- * determinism guard around this same call.
+ * executes (`config.functionName ?? `${config.name}_fn``). `body` runs
+ * **twice** with fresh recording contexts — the two recorded trees must be
+ * structurally identical, or this throws `nondeterministic-body` (spec §6.2
+ * decision A4).
  */
 export const defineTrigger = <TTable extends Table>(
 	target: TTable,
@@ -128,21 +129,29 @@ export const defineTrigger = <TTable extends Table>(
 	const tableName = meta.tableName;
 	const functionName = config.functionName ?? `${config.name}_fn`;
 	const identity = `${schemaName}.${tableName}.${config.name}`;
-	const declaredAt: string | null = null;
+	const declaredAt = captureDeclarationSite();
 
 	const knownColumnNames = new Set(
 		meta.columns.map((column) => column.columnName),
 	);
 	const events = config.events.map((event) =>
-		resolveEvent(event, knownColumnNames, config.name, schemaName, tableName),
+		resolveEvent(
+			event,
+			knownColumnNames,
+			config.name,
+			schemaName,
+			tableName,
+			declaredAt,
+		),
 	);
 
-	const { ctx, finish } = createRecordingContext(identity, declaredAt);
 	const rows = {
 		new: buildTriggerRow(target, "new"),
 		old: buildTriggerRow(target, "old"),
 	};
-	body(ctx, rows);
+	const functionBody = recordBodyWithGuard(identity, declaredAt, (ctx) =>
+		body(ctx, rows),
+	);
 
 	const functionDeclaration: FunctionDeclaration = {
 		declarationKind: "function",
@@ -151,7 +160,7 @@ export const defineTrigger = <TTable extends Table>(
 		args: [],
 		returns: { returnsKind: "trigger" },
 		security: "invoker",
-		body: finish(),
+		body: functionBody,
 		declaredAt,
 	};
 
