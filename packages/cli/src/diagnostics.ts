@@ -3,10 +3,16 @@ import type { HejbroError } from "@hejbro/core";
 /**
  * One rendered terminal diagnostic block (decision ③): `error[<code>]:
  * <identity>`, an indented `body`, zero or more indented `→ ` suggestion
- * blocks, and an optional `at <location>` tail. `at` is a fully-formed
- * string supplied by the caller (e.g. `"src/schema.ts (export \"posts\")"`
- * or a raw `declaredAt` location) — this module never parses or reformats
- * it, only prefixes `at `.
+ * blocks, and an optional `at <location>` tail — every section
+ * (header+body, each suggestion, the `at` line) separated by a blank line
+ * (owner-approved mockup, Task 11). `body`/suggestion `lines` are
+ * pre-formed lines the caller supplies already wrapped/hanging-indented as
+ * needed (e.g. a `⚠ ...` callout's continuation line) — this module never
+ * word-wraps; it only indents. An empty string in `lines` renders as a
+ * true blank line (no trailing indent), for grouping multiple instructions
+ * within one suggestion. `at` is a fully-formed string supplied by the
+ * caller (e.g. `"src/schema.ts (export \"posts\")"` or a raw `declaredAt`
+ * location) — only ever prefixed with `at `, never parsed or reformatted.
  */
 export type Diagnostic = {
 	readonly code: string;
@@ -20,16 +26,24 @@ export type Diagnostic = {
 };
 
 const BODY_INDENT = "  ";
-const SUGGESTION_INDENT = "    ";
+const SUGGESTION_INDENT = "      ";
+
+const renderSuggestionLine = (line: string): string => {
+	if (line === "") {
+		return "";
+	}
+	return `${SUGGESTION_INDENT}${line}`;
+};
 
 const renderSuggestion = (
 	suggestion: Diagnostic["suggestions"][number],
-): ReadonlyArray<string> => [
-	`${BODY_INDENT}→ ${suggestion.label}`,
-	...suggestion.lines.map((line) => `${SUGGESTION_INDENT}${line}`),
-];
+): string =>
+	[
+		`${BODY_INDENT}→ ${suggestion.label}`,
+		...suggestion.lines.map((line) => renderSuggestionLine(line)),
+	].join("\n");
 
-const renderAtLine = (at: string | null): ReadonlyArray<string> => {
+const renderAtSection = (at: string | null): ReadonlyArray<string> => {
 	if (at === null) {
 		return [];
 	}
@@ -37,15 +51,27 @@ const renderAtLine = (at: string | null): ReadonlyArray<string> => {
 };
 
 const renderDiagnostic = (diagnostic: Diagnostic): string => {
-	const lines = [
+	const headerSection = [
 		`error[${diagnostic.code}]: ${diagnostic.identity}`,
 		...diagnostic.body.map((line) => `${BODY_INDENT}${line}`),
-		...diagnostic.suggestions.flatMap((suggestion) =>
-			renderSuggestion(suggestion),
-		),
-		...renderAtLine(diagnostic.at),
-	];
-	return lines.join("\n");
+	].join("\n");
+	const suggestionSections = diagnostic.suggestions.map((suggestion) =>
+		renderSuggestion(suggestion),
+	);
+	return [
+		headerSection,
+		...suggestionSections,
+		...renderAtSection(diagnostic.at),
+	].join("\n\n");
+};
+
+const renderSummarySection = (
+	summary: string | null,
+): ReadonlyArray<string> => {
+	if (summary === null) {
+		return [];
+	}
+	return [summary];
 };
 
 /**
@@ -54,19 +80,12 @@ const renderDiagnostic = (diagnostic: Diagnostic): string => {
  * text — callers decide whether/how to color it (TTY + `NO_COLOR`) and
  * where to write it (stderr, per spec).
  */
-const renderSummaryLine = (summary: string | null): ReadonlyArray<string> => {
-	if (summary === null) {
-		return [];
-	}
-	return [summary];
-};
-
 export const renderDiagnostics = (
 	diagnostics: ReadonlyArray<Diagnostic>,
 	summary: string | null,
 ): string => {
 	const blocks = diagnostics.map((diagnostic) => renderDiagnostic(diagnostic));
-	return [...blocks, ...renderSummaryLine(summary)].join("\n\n");
+	return [...blocks, ...renderSummarySection(summary)].join("\n\n");
 };
 
 /**
