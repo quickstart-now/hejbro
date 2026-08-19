@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
 	existsSync,
 	mkdirSync,
@@ -27,6 +26,7 @@ import type { HejbroConfig } from "../config";
 import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { parseConfirmDropFlag, parseRenameFlag } from "../flags";
+import { sha256Hex } from "../hash";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
 
@@ -105,9 +105,6 @@ const parseGenerateArgv = (
 	renameValues: collectFlagValues(rawArgs, "--rename"),
 	confirmDropValues: collectFlagValues(rawArgs, "--confirm-drop"),
 });
-
-const sha256Hex = (text: string): string =>
-	createHash("sha256").update(text).digest("hex");
 
 const countSqlFiles = (migrationsDirPath: string): number => {
 	if (!existsSync(migrationsDirPath)) {
