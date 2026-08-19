@@ -358,15 +358,16 @@ const renderReturning = (
 };
 
 /**
- * Renders a {@link SelectNode} as deterministic SQL text. `outerScope`
- * names tables inherited from an enclosing query (correlated subqueries —
- * see the module-level scope rule). Every `columnRef` mentioned in the
- * projection/joins/where/orderBy must belong to a table in
- * `[from, …joins, …outerScope]`, or rendering throws `foreign-column-ref`.
+ * Assembles a {@link SelectNode}'s clause text: scope construction, scope
+ * validation, and clause joining — shared by {@link renderSelect} and
+ * {@link renderSelectInto}, which differ only in the optional clause
+ * inserted directly after the projection (the plpgsql `into [strict] …`
+ * clause, for the latter).
  */
-export const renderSelect = (
+const renderSelectClauses = (
 	query: SelectNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope: ReadonlyArray<TableRefNode> | undefined,
+	clauseAfterProjection?: string,
 ): string => {
 	const scope = [
 		query.from,
@@ -391,6 +392,7 @@ export const renderSelect = (
 
 	const clauses = [
 		`select ${renderProjection(query.projection, scope)}`,
+		clauseAfterProjection ?? "",
 		`from ${renderTableRef(query.from)}`,
 		joinsSql,
 		whereClause(query.where, scope),
@@ -399,6 +401,25 @@ export const renderSelect = (
 	].filter((clause) => clause !== "");
 
 	return clauses.join(" ");
+};
+
+/**
+ * Renders a {@link SelectNode} as deterministic SQL text. `outerScope`
+ * names tables inherited from an enclosing query (correlated subqueries —
+ * see the module-level scope rule). Every `columnRef` mentioned in the
+ * projection/joins/where/orderBy must belong to a table in
+ * `[from, …joins, …outerScope]`, or rendering throws `foreign-column-ref`.
+ */
+export const renderSelect = (
+	query: SelectNode,
+	outerScope?: ReadonlyArray<TableRefNode>,
+): string => renderSelectClauses(query, outerScope);
+
+const intoKeyword = (strict: boolean): string => {
+	if (strict) {
+		return "into strict";
+	}
+	return "into";
 };
 
 const intoClause = (
@@ -411,8 +432,7 @@ const intoClause = (
 			"renderSelectInto() received no target variables — pass at least one local name.",
 		);
 	}
-	const keyword = strict ? "into strict" : "into";
-	return `${keyword} ${intoVariables.join(", ")}`;
+	return `${intoKeyword(strict)} ${intoVariables.join(", ")}`;
 };
 
 /**
@@ -426,40 +446,12 @@ export const renderSelectInto = (
 	intoVariables: ReadonlyArray<string>,
 	options: { readonly strict: boolean },
 	outerScope?: ReadonlyArray<TableRefNode>,
-): string => {
-	const scope = [
-		query.from,
-		...query.joins.map((join) => join.table),
-		...(outerScope ?? []),
-	];
-
-	const mentionedRefs = [
-		...collectProjectionRefs(query.projection),
-		...query.joins.flatMap((join) => collectColumnRefs(join.on)),
-		...collectWhereRefs(query.where),
-		...query.orderBy.flatMap((term) => collectColumnRefs(term.expr)),
-	];
-	assertInScope(scope, mentionedRefs, "select from", query.from);
-
-	const joinsSql = query.joins
-		.map(
-			(join) =>
-				`inner join ${renderTableRef(join.table)} on ${renderExpr(join.on, scope)}`,
-		)
-		.join(" ");
-
-	const clauses = [
-		`select ${renderProjection(query.projection, scope)}`,
+): string =>
+	renderSelectClauses(
+		query,
+		outerScope,
 		intoClause(intoVariables, options.strict),
-		`from ${renderTableRef(query.from)}`,
-		joinsSql,
-		whereClause(query.where, scope),
-		orderByClause(query.orderBy, scope),
-		limitClause(query.limit),
-	].filter((clause) => clause !== "");
-
-	return clauses.join(" ");
-};
+	);
 
 /** Renders an {@link InsertNode}. `outerScope` follows the same scope rule as {@link renderSelect} (`[table, …outerScope]`). */
 export const renderInsert = (
