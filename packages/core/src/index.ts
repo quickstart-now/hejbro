@@ -60,8 +60,36 @@ export {
 	isExpr,
 } from "./expr/ast";
 export { liftLiteral, liftOperand, renderLiteral } from "./expr/literal";
+export {
+	and,
+	between,
+	coalesce,
+	eq,
+	genRandomUuid,
+	gt,
+	gte,
+	ilike,
+	inArray,
+	isNotNull,
+	isNull,
+	like,
+	lt,
+	lte,
+	ne,
+	not,
+	notBetween,
+	notIlike,
+	notInArray,
+	notLike,
+	now,
+	or,
+} from "./expr/operators";
 export { renderExpr } from "./expr/render-sql";
-export type { LiftableFor, SqlTypeFamily } from "./expr/type-family";
+export type {
+	FamilyOfTypeNode,
+	LiftableFor,
+	SqlTypeFamily,
+} from "./expr/type-family";
 export { familyOfTypeNode, sqlTypeFamilies } from "./expr/type-family";
 export type { KeyedDiff } from "./kind/diff-helpers";
 export { diffByKey, sameJson } from "./kind/diff-helpers";
