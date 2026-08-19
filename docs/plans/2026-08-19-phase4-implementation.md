@@ -83,15 +83,23 @@ git commit -m "docs(spec): record phase 4 brainstorm decisions d25-d28"
 ```ts
 export type PolicyCommand = "select" | "insert" | "update" | "delete" | "all";
 
-/** A finished, not-yet-table-bound policy (chain output). */
+/**
+ * A finished, not-yet-table-bound policy (chain output). Clause data
+ * fields are named `usingExpr`/`withCheckExpr` — not `using`/`withCheck`
+ * — so they can never collide with the `PolicyBothStage` chain methods of
+ * the same name that get `Object.assign`-ed onto a just-built object
+ * (PR #70 review: the original `using`/`withCheck` names collided with
+ * those methods, so ending an update/all chain after one clause silently
+ * overwrote the other clause's `null` with a function).
+ */
 export type PolicyInput = {
 	readonly policyInputKind: "policy";
 	readonly policyName: string;
 	readonly permissive: boolean;
 	readonly command: PolicyCommand;
 	readonly roles: ReadonlyArray<string>;
-	readonly using: ExprNode | null;
-	readonly withCheck: ExprNode | null;
+	readonly usingExpr: ExprNode | null;
+	readonly withCheckExpr: ExprNode | null;
 	readonly declaredAt: string | null;
 };
 
@@ -311,7 +319,6 @@ export type RlsDeclaration = {
 export const bindRls = (
 	schemaName: string,
 	tableName: string,
-	knownColumnNames: ReadonlySet<string>,
 	input: RlsInput,
 ): RlsDeclaration;
 ```
@@ -319,8 +326,11 @@ export const bindRls = (
 - `TableExtras` gains `readonly rls?: RlsInput;`; `TableDeclaration` gains
   `readonly rls: RlsDeclaration | null;` (`table()` passes
   `resolvedExtras.rls === undefined ? null : bindRls(owner.schemaName,
-  tableName, knownColumnNames, resolvedExtras.rls)` — use an `if` helper,
-  not a ternary). **`tableKind.serialize` must not change** — the snapshot
+  tableName, resolvedExtras.rls)` — use an `if` helper, not a ternary; no
+  `knownColumnNames` parameter — policy expressions are always built from
+  this table's own typed `ColumnRef`s, so there is nothing to check
+  against a column-name set). **`tableKind.serialize` must not change** —
+  the snapshot
   shape stays identical (D25); add a test asserting a table with RLS
   serializes byte-identically to the same table without.
 - `resolveDeclarations` (generate.ts) table branch becomes:
