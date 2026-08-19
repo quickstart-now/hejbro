@@ -38,7 +38,7 @@ export const loadConfig = async (
 	if (!existsSync(configPath)) {
 		return throwHejbroError(
 			"config-not-found",
-			`no hejbro config found at ${configPath}. Next: run \`hejbro init\` to scaffold one, or pass --config <path> to point at an existing one.`,
+			"no hejbro.config.ts was found. Next: run `hejbro init` to scaffold hejbro.config.ts, a migrations directory, and an empty snapshot file, then add a declaration file and rerun `hejbro generate`.",
 		);
 	}
 	const jiti = createJiti(configPath);
@@ -82,7 +82,12 @@ const collectDeclarations = (
 		isHejbroInput(value),
 	);
 
-const ONBOARDING_EXAMPLE = `import { schema, table, uuid, text } from "hejbro";
+/**
+ * The onboarding example a terminal renderer attaches as a separate block
+ * below the `entry-not-found` flat message (Task 13/14 — the flat message
+ * itself never embeds this, per the owner-approved text).
+ */
+export const ONBOARDING_EXAMPLE = `import { schema, table, uuid, text } from "hejbro";
 
 export const app = schema("app");
 
@@ -91,6 +96,19 @@ export const posts = table(app, "posts", {
 	title: text().notNull(),
 });
 `;
+
+/**
+ * `"entry pattern \"a\""` for one pattern, `"entry patterns \"a\", \"b\""`
+ * for more — the count-based singular/plural convention the owner already
+ * approved for batch summary lines (decision ③), applied here too.
+ */
+const entryPatternPhrase = (entry: ReadonlyArray<string>): string => {
+	const quoted = entry.map((pattern) => `"${pattern}"`).join(", ");
+	if (entry.length === 1) {
+		return `entry pattern ${quoted}`;
+	}
+	return `entry patterns ${quoted}`;
+};
 
 /**
  * Glob-expands `config.entry` relative to the config file's directory
@@ -112,7 +130,7 @@ export const loadDeclarations = async (
 	if (sortedMatches.length === 0) {
 		return throwHejbroError(
 			"entry-not-found",
-			`no files matched entry ${JSON.stringify(config.entry)} in ${entryDir}. Next: create a declaration file matching one of those patterns, e.g.:\n\n${ONBOARDING_EXAMPLE}`,
+			`hejbro.config.ts's ${entryPatternPhrase(config.entry)} matched 0 files. Next: if this is a new project, create a declaration file (see the example below) and rerun \`hejbro generate\`; if you already have declarations, check the "entry" pattern in hejbro.config.ts for a typo.`,
 		);
 	}
 	const jiti = createJiti(configPath);
