@@ -59,6 +59,8 @@ and ask.
 | D10 | Name: **hejbro** | plts, pgform, declpg (all verified free) | Owner's choice |
 | D11 | "AI native" means the **development process**: this OSS is built by AI agents (Claude Code), openly. Agent skills for *users* of hejbro ship as a feature (`@hejbro/skills`) | AI-native as product identity | Owner's clarification |
 | D12 | **Applying migrations is out of scope for v1.** hejbro generates SQL files; the user's existing pipeline (supabase CLI, GitHub integration, etc.) applies them | Built-in apply/push | Keeps core pure and deterministic; avoids owning credentials |
+| D13 | Build tooling: **tsdown, ESM-only output**, Node ≥ 20 (decided 2026-08-19, Phase 1 brainstorm) | tsup; plain tsc; dual ESM+CJS | tsdown is tsup's endorsed successor; ESM-only avoids the dual-package hazard for a new dev tool |
+| D14 | Migration filenames default to **Supabase-style timestamps**: `YYYYMMDDHHMMSS_<slug>.sql`, with a configurable prefix strategy (`timestamp` \| `index` \| `unix`) (decided 2026-08-19) | drizzle-style index prefix (`0001_`) as default | The owner hit real ordering mismatches between drizzle's default and the supabase CLI (`drizzle-kit generate --prefix supabase` exists for this reason); Supabase-first means Supabase-compatible by default |
 
 ## 4. Architecture
 
@@ -207,8 +209,12 @@ load declarations → execute builders (collect trees) → validate
    | RLS policies | `drop policy` + `create policy` (alter policy can't take expression changes in many cases; recreate is simpler) |
    | Grants | diff against previous snapshot → only the `grant`/`revoke` delta |
 
-6. **Emit** — one migration file `migrations/<timestamp>_<name>.sql` with a
-   **structured change summary as a banner comment**:
+6. **Emit** — one migration file per generate run, named
+   `YYYYMMDDHHMMSS_<slug>.sql` by default (Supabase-compatible ordering; see
+   D14 — prefix strategy configurable in `hejbro.config.ts`, slug from
+   `--name` or auto-derived from the first change). The clock is injected by
+   the CLI so core stays pure. The file carries a **structured change
+   summary as a banner comment**:
 
    ```sql
    -- hejbro migration
