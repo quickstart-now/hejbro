@@ -3,6 +3,7 @@ import type { KindChange } from "../src/kind/object-kind";
 import {
 	deriveSlug,
 	migrationFileName,
+	parseBannerHashes,
 	renderBanner,
 } from "../src/sql/migration-file";
 
@@ -87,6 +88,38 @@ describe("renderBanner", () => {
 		expect(renderBanner([recreateChange])).toBe(
 			"-- hejbro migration\n-- ~ trigger app.comments.guard [trigger changed; recreating]",
 		);
+	});
+
+	it("appends parent-snapshot/snapshot hash lines when hashes are given (Phase 5)", () => {
+		expect(
+			renderBanner([createChange], {
+				parent: "sha256:aaaa",
+				current: "sha256:bbbb",
+			}),
+		).toBe(
+			"-- hejbro migration\n-- + table app.posts [new]\n-- parent-snapshot: sha256:aaaa\n-- snapshot: sha256:bbbb",
+		);
+	});
+
+	it("omits the hash lines when no hashes are given", () => {
+		expect(renderBanner([createChange])).not.toContain("parent-snapshot");
+	});
+});
+
+describe("parseBannerHashes", () => {
+	it("round-trips a banner rendered with hashes", () => {
+		const sql = renderBanner([createChange], {
+			parent: "sha256:aaaa",
+			current: "sha256:bbbb",
+		});
+		expect(parseBannerHashes(sql)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:bbbb",
+		});
+	});
+
+	it("returns null for a hash-less banner", () => {
+		expect(parseBannerHashes(renderBanner([createChange]))).toBeNull();
 	});
 });
 

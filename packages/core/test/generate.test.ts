@@ -85,5 +85,56 @@ describe("generateMigration", () => {
 		expect(result.hasChanges).toBe(false);
 		expect(result.sql).toBe("");
 		expect(result.changes).toEqual([]);
+		expect(result.errors).toEqual([]);
+	});
+
+	describe("rename flags (Phase 5)", () => {
+		const renameApp = schema("app");
+		const previousPosts = table(renameApp, "posts", { slug: text() });
+		const nextPosts = table(renameApp, "posts", { handle: text() });
+		const previousSnapshot = buildSnapshot(
+			[renameApp, getTableMeta(previousPosts)],
+			createDefaultRegistry(),
+		);
+
+		it("returns errors and empty sql for an ambiguous drop+add pair", () => {
+			const result = generateMigration({
+				declarations: [renameApp, getTableMeta(nextPosts)],
+				previousSnapshot,
+			});
+
+			expect(result.errors).toEqual([
+				expect.objectContaining({ code: "ambiguous-column-rename" }),
+			]);
+			expect(result.sql).toBe("");
+			expect(result.hasChanges).toBe(false);
+		});
+
+		it("resolves the pair with a matching --rename spec into a RENAME-led migration", () => {
+			const result = generateMigration({
+				declarations: [renameApp, getTableMeta(nextPosts)],
+				previousSnapshot,
+				renames: [
+					{
+						target: "column",
+						schemaName: "app",
+						tableName: "posts",
+						oldName: "slug",
+						newName: "handle",
+					},
+				],
+			});
+
+			expect(result.errors).toEqual([]);
+			expect(result.hasChanges).toBe(true);
+			expect(result.sql.startsWith("-- hejbro migration\n")).toBe(true);
+			expect(result.sql).toContain(
+				'-- ~ table app.posts [column "slug" renamed to "handle"]',
+			);
+			const [, firstStatement] = result.sql.split("\n\n");
+			expect(firstStatement).toBe(
+				'alter table "app"."posts" rename column "slug" to "handle";',
+			);
+		});
 	});
 });

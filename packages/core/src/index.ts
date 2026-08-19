@@ -237,11 +237,15 @@ export type { JsonValue } from "./snapshot/stable-json";
 export { stableJson } from "./snapshot/stable-json";
 export { qualifyName, quoteIdentifier } from "./sql/identifier";
 export { quoteStringLiteral } from "./sql/literal";
-export type { MigrationPrefixStrategy } from "./sql/migration-file";
+export type {
+	BannerHashes,
+	MigrationPrefixStrategy,
+} from "./sql/migration-file";
 export {
 	deriveSlug,
 	migrationFileName,
 	migrationPrefixStrategies,
+	parseBannerHashes,
 	renderBanner,
 } from "./sql/migration-file";
 export type { SqlStage, SqlStatement } from "./sql/statement";
