@@ -45,12 +45,13 @@ export type ArgRefs<TArgs extends Record<string, ColumnBuilder>> = {
 };
 
 const resolveFunctionReturns = (
+	identity: string,
 	returns: Table | TypeNode | undefined,
 ): FunctionDeclaration["returns"] => {
 	if (returns === undefined) {
 		return throwHejbroError(
 			"missing-function-returns",
-			`defineFunction() requires a "returns" config — pass a table (for "returns setof …") or a TypeNode (for a scalar return).`,
+			`defineFunction() "${identity}" requires a "returns" config — pass a table (for "returns setof …") or a TypeNode (for a scalar return).`,
 		);
 	}
 	if (isTable(returns)) {
@@ -121,7 +122,7 @@ export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
 	const identity = `${schemaName}.${functionName}`;
 	const declaredAt: string | null = null;
 	const security = config.security ?? "invoker";
-	const returns = resolveFunctionReturns(config.returns);
+	const returns = resolveFunctionReturns(identity, config.returns);
 	const { declarations: argDeclarations, refs } = resolveArgs(
 		identity,
 		declaredAt,

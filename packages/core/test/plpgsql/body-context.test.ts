@@ -213,7 +213,7 @@ describe("body-context recording", () => {
 					ctx.return(row);
 				},
 			),
-		).toThrowError(/isn't a column of table/);
+		).toThrowError(/lists unknown column/);
 	});
 
 	it("defineFunction args become ArgRefs with plpgsqlRef paths and snake_cased names", () => {

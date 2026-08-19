@@ -35,7 +35,7 @@ export type RowColumns<TProjection extends RowProjection> =
 				}
 			: never;
 
-/** The chain returned by `ctx.if()` — `elseIf`/`else` are fixed for this phase (decision A11). */
+/** The chain returned by `ctx.if()` — `elseIf`/`else` are fixed for this phase (decision A10). */
 export type IfChain = {
 	readonly elseIf: (condition: Expr<"boolean">, branch: () => void) => IfChain;
 	readonly else: (branch: () => void) => void;

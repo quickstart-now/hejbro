@@ -74,6 +74,8 @@ const buildTriggerRow = <TTable extends Table>(
 const resolveEvent = (
 	event: TriggerEventInput,
 	knownColumnNames: ReadonlySet<string>,
+	triggerName: string,
+	schemaName: string,
 	tableName: string,
 ): TriggerDeclaration["events"][number] => {
 	if (event === "insert") {
@@ -90,7 +92,7 @@ const resolveEvent = (
 		if (!knownColumnNames.has(columnName)) {
 			return throwHejbroError(
 				"unknown-trigger-column",
-				`defineTrigger() "update of" column "${columnKey}" isn't a column of table "${tableName}" — check the column name.`,
+				`trigger "${triggerName}" on "${schemaName}.${tableName}" lists unknown column "${columnKey}" in its update-of event list — check the column name against the table declaration.`,
 			);
 		}
 		return columnName;
@@ -132,7 +134,7 @@ export const defineTrigger = <TTable extends Table>(
 		meta.columns.map((column) => column.columnName),
 	);
 	const events = config.events.map((event) =>
-		resolveEvent(event, knownColumnNames, tableName),
+		resolveEvent(event, knownColumnNames, config.name, schemaName, tableName),
 	);
 
 	const { ctx, finish } = createRecordingContext(identity, declaredAt);
