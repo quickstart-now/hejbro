@@ -4,8 +4,15 @@ import type { ExprNode, LiteralNode } from "./ast";
 import { isExpr } from "./ast";
 import type { SqlTypeFamily } from "./type-family";
 
+const describeAmbiguousKind = (value: object): string => {
+	if (Array.isArray(value)) {
+		return "array";
+	}
+	return "object";
+};
+
 const rejectAmbiguousLiteral = (value: object): never => {
-	const kind = Array.isArray(value) ? "array" : "object";
+	const kind = describeAmbiguousKind(value);
 	return throwHejbroError(
 		"ambiguous-literal",
 		`got a plain ${kind} — hejbro cannot infer whether this is a Postgres array or jsonb; wrap it explicitly (e.g. sql\`…\`) or pass a scalar.`,

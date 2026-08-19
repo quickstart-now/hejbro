@@ -1,6 +1,6 @@
 import { assertNever, throwHejbroError } from "../error";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
-import type { ExprNode, TableRefNode } from "./ast";
+import type { ExprNode, SqlTemplateChunk, TableRefNode } from "./ast";
 import { renderLiteral } from "./literal";
 
 /** Composite node kinds that must be parenthesized when used as an operand. */
@@ -12,6 +12,51 @@ const compositeNodeKinds = new Set([
 	"inList",
 	"between",
 ]);
+
+const nullTestKeyword = (negated: boolean): string => {
+	if (negated) {
+		return "is not null";
+	}
+	return "is null";
+};
+
+const inListKeyword = (negated: boolean): string => {
+	if (negated) {
+		return "not in";
+	}
+	return "in";
+};
+
+const betweenKeyword = (negated: boolean): string => {
+	if (negated) {
+		return "not between";
+	}
+	return "between";
+};
+
+const qualifiedFunctionName = (
+	schemaName: string | null,
+	functionName: string,
+): string => {
+	if (schemaName === null) {
+		return functionName;
+	}
+	return `${schemaName}.${functionName}`;
+};
+
+const renderSqlTemplateChunk = (
+	chunk: SqlTemplateChunk,
+	outerScope: ReadonlyArray<TableRefNode> | undefined,
+): string => {
+	switch (chunk.chunkKind) {
+		case "text":
+			return chunk.text;
+		case "expr":
+			return renderExpr(chunk.expr, outerScope);
+		default:
+			return assertNever(chunk);
+	}
+};
 
 const renderOperand = (
 	node: ExprNode,
@@ -54,7 +99,7 @@ export const renderExpr = (
 		case "not":
 			return `not ${renderOperand(node.operand, outerScope)}`;
 		case "nullTest": {
-			const suffix = node.negated ? "is not null" : "is null";
+			const suffix = nullTestKeyword(node.negated);
 			return `${renderOperand(node.operand, outerScope)} ${suffix}`;
 		}
 		case "inList": {
@@ -64,21 +109,18 @@ export const renderExpr = (
 					"inArray() received an empty array — an empty in-list is always false in SQL; drop the condition or supply values.",
 				);
 			}
-			const keyword = node.negated ? "not in" : "in";
+			const keyword = inListKeyword(node.negated);
 			const values = node.values
 				.map((value) => renderExpr(value, outerScope))
 				.join(", ");
 			return `${renderOperand(node.operand, outerScope)} ${keyword} (${values})`;
 		}
 		case "between": {
-			const keyword = node.negated ? "not between" : "between";
+			const keyword = betweenKeyword(node.negated);
 			return `${renderOperand(node.operand, outerScope)} ${keyword} ${renderOperand(node.lowerBound, outerScope)} and ${renderOperand(node.upperBound, outerScope)}`;
 		}
 		case "functionCall": {
-			const name =
-				node.schemaName === null
-					? node.functionName
-					: `${node.schemaName}.${node.functionName}`;
+			const name = qualifiedFunctionName(node.schemaName, node.functionName);
 			const args = node.args
 				.map((arg) => renderExpr(arg, outerScope))
 				.join(", ");
@@ -86,12 +128,7 @@ export const renderExpr = (
 		}
 		case "sqlTemplate":
 			return node.chunks
-				.map((chunk) => {
-					if (chunk.chunkKind === "text") {
-						return chunk.text;
-					}
-					return renderExpr(chunk.expr, outerScope);
-				})
+				.map((chunk) => renderSqlTemplateChunk(chunk, outerScope))
 				.join("");
 		case "rawSql":
 			return node.sql;
