@@ -102,7 +102,7 @@ Corresponding tests live under `packages/core/test/expr/`,
   - `isExpr(value: unknown): value is Expr` (guard: non-null object with an `exprNode` property)
   - every node type listed in Step 3 below
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // packages/core/test/expr/type-family.test.ts
@@ -152,12 +152,12 @@ describe("columnRef", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- expr/type-family`
 Expected: FAIL — module `expr/type-family` does not exist.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `type-family.ts`:
 
@@ -458,12 +458,12 @@ export const isExpr = (value: unknown): value is Expr =>
 	typeof value === "object" && value !== null && "exprNode" in value;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @hejbro/core test -- expr/type-family`
 Expected: PASS.
 
-- [ ] **Step 5: Export from index.ts, run gates, commit**
+- [x] **Step 5: Export from index.ts, run gates, commit**
 
 Add to `packages/core/src/index.ts` (Biome will sort): types
 `SqlTypeFamily`, `LiftableFor`, `Expr`, `ColumnRef`, `ExprNode`,
@@ -500,7 +500,7 @@ git add packages/core && git commit -m "feat(core): expression ast node types an
     `value.exprNode` when `isExpr(value)`, otherwise `liftLiteral`.
   - `renderLiteral(node: LiteralNode): string`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // packages/core/test/expr/literal.test.ts
@@ -550,12 +550,12 @@ check `packages/core/test/column-builder.test.ts` and mirror it (e.g.
 `expect(fn).toThrowError(expect.objectContaining({ code: "ambiguous-literal" }))`
 or try/catch on the thrown object).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- expr/literal`
 Expected: FAIL — `liftLiteral` not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Rules (each branch is real code, no placeholders):
 - `string` → `{ literalKind: "string", value }`
@@ -579,12 +579,12 @@ string → `quoteStringLiteral(value)`; number → `String(value)`; boolean →
 `liftOperand`: if `isExpr(value)` return `value.exprNode`; otherwise return
 `liftLiteral(value, family)`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @hejbro/core test -- expr/literal`
 Expected: PASS.
 
-- [ ] **Step 5: Export, run gates, commit**
+- [x] **Step 5: Export, run gates, commit**
 
 ```bash
 pnpm check && pnpm check-types && pnpm --filter @hejbro/core test
@@ -623,7 +623,7 @@ as an operand of another node. Implement via a private
 `renderOperand(node)` that parenthesizes exactly those composite kinds.
 Golden files stay stable and precedence bugs are impossible.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // packages/core/test/expr/render-sql.test.ts
@@ -738,12 +738,12 @@ describe("renderExpr", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- expr/render-sql`
 Expected: FAIL — `renderExpr` not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Exhaustive `switch (node.nodeKind)` with `assertNever` default:
 - `literal` → `renderLiteral(node.literal)`
@@ -766,12 +766,12 @@ Exhaustive `switch (node.nodeKind)` with `assertNever` default:
 - `rawSql` → `node.sql` verbatim (D18: only `sql.raw` builds this)
 - `exists` → temporary `not-implemented-yet` error (replaced in Task 8)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @hejbro/core test -- expr/render-sql`
 Expected: PASS.
 
-- [ ] **Step 5: Export, run gates, commit**
+- [x] **Step 5: Export, run gates, commit**
 
 ```bash
 pnpm check && pnpm check-types && pnpm --filter @hejbro/core test
@@ -833,7 +833,7 @@ to null) — add a runtime guard too: if the lifted right operand is `null`,
 throw code `null-comparison`, message:
 `"eq()/ne() with null always yields SQL null, never true — use isNull()/isNotNull() instead."`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // packages/core/test/expr/operators.test.ts
@@ -895,12 +895,12 @@ describe("operators", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- expr/operators`
 Expected: FAIL — operators not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Every comparison shares one private factory:
 
@@ -930,13 +930,13 @@ export const ne = comparison("<>");
 function names `"now"` / `"gen_random_uuid"`. `coalesce` lifts `rest`
 against `first.family` and keeps `first.family` as the result family.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @hejbro/core test -- expr/operators`
 Expected: PASS (including the `@ts-expect-error` lines — if those stop
 erroring, `check-types` fails, which is the point).
 
-- [ ] **Step 5: Export, run gates, commit**
+- [x] **Step 5: Export, run gates, commit**
 
 ```bash
 pnpm check && pnpm check-types && pnpm --filter @hejbro/core test
@@ -966,7 +966,7 @@ type SqlTag = {
 export const sql: SqlTag;
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // packages/core/test/expr/sql-template.test.ts
@@ -994,12 +994,12 @@ describe("sql tagged template", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- expr/sql-template`
 Expected: FAIL — `sql` not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Zip `strings` and `values` into `SqlTemplateChunk[]`: each string part is a
 `text` chunk; each value becomes an `expr` chunk — `value.exprNode` when
@@ -1009,12 +1009,12 @@ Zip `strings` and `values` into `SqlTemplateChunk[]`: each string part is a
 Implement the tag as a `const sqlTag = (…) => …` plus
 `export const sql: SqlTag = Object.assign(sqlTag, { raw: … })`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @hejbro/core test -- expr/sql-template`
 Expected: PASS.
 
-- [ ] **Step 5: Export, run gates, commit**
+- [x] **Step 5: Export, run gates, commit**
 
 ```bash
 pnpm check && pnpm check-types && pnpm --filter @hejbro/core test
@@ -1049,7 +1049,7 @@ git add packages/core && git commit -m "feat(core): sql tagged template with quo
   This task is type-plumbing only; `createColumnBuilder` gains a
   `<TFamily>` parameter whose runtime body is unchanged.
 
-- [ ] **Step 1: Write the failing type-level test**
+- [x] **Step 1: Write the failing type-level test**
 
 Append to `packages/core/test/column-builder.test.ts`:
 
@@ -1066,13 +1066,13 @@ it("factories carry their postgres type family", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- column-builder` and
 `pnpm check-types`
 Expected: FAIL — `ColumnBuilder` takes no type argument.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `createColumnBuilder<TFamily extends SqlTypeFamily>(columnState): ColumnBuilder<TFamily>`
 — body identical, except `array()` returns
@@ -1084,12 +1084,12 @@ generic (`createColumnBuilder<"uuid">…`). `pg-enum.ts` `column()` returns
 `Record<string, ColumnBuilder>`) keep working because the parameter
 defaults to the full union.
 
-- [ ] **Step 4: Run tests + typecheck**
+- [x] **Step 4: Run tests + typecheck**
 
 Run: `pnpm check-types && pnpm --filter @hejbro/core test`
 Expected: PASS across the whole suite (pure type change).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm check && git add packages/core && git commit -m "refactor(core): carry postgres type family through column builders"
@@ -1173,7 +1173,7 @@ export const table: <TColumns extends Record<string, ColumnBuilder>>(
   else the input. Add `HejbroInput` to `kind/object-kind.ts` or
   `engine/generate.ts` (implementer's choice; export it).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // packages/core/test/table-surface.test.ts
@@ -1248,13 +1248,13 @@ describe("table() surface (D15)", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- table-surface`
 Expected: FAIL — `getTableMeta`/`index`/`isTable` not exported; `table()`
 returns the old shape.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `table()`: build `columnEntries` as today; build the refs object with
 `Object.fromEntries(columnEntries.map((entry) => [entry.columnKey, columnRef(owner.schemaName, tableName, entry.columnName, entry.columnState.typeNode)]))`;
@@ -1286,13 +1286,13 @@ harness's `StepsModule` type in `golden.test.ts` follows). The emitted
 SQL and snapshot goldens must NOT change in this task — only declaration
 syntax migrates.
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `pnpm check-types && pnpm --filter @hejbro/core test`
 Expected: PASS, golden files byte-identical (`git diff --stat` shows no
 `expected/` changes).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm check && git add packages/core && git commit -m "feat(core)!: drizzle-style table objects with symbol-hidden metadata"
@@ -1378,7 +1378,7 @@ Design notes locked here:
   `` `select from "${schema}.${table}" references column "${refSchema}.${refTable}.${column}" — join that table, or reference it from an enclosing query via exists().` ``
 - Rendered clause order: `select … from … [inner join … on …]* [where …] [order by …] [limit …]`, single spaces, no trailing semicolon (statement-level callers add it).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // packages/core/test/query/select.test.ts
@@ -1465,12 +1465,12 @@ describe("select builder", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- query/select`
 Expected: FAIL — `select` not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Builder: one private `makeStages(query: SelectNode)` returning the full
 stage object; each chainer builds a new `SelectNode` and re-invokes
@@ -1483,12 +1483,12 @@ as `createColumnBuilder`). `select()` resolves its projection: `isTable`
 `` `exists (${renderSelect(node.query)})` `` (+ `not `). Note: table-ref
 rendering shares a helper `renderTableRef(node) = qualifyName(schemaName, tableName)`.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `pnpm check-types && pnpm --filter @hejbro/core test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm check && git add packages/core && git commit -m "feat(core): type-state select builder with exists and join rendering"
@@ -1587,7 +1587,7 @@ Design notes locked here:
   - `update "s"."t" set "a" = 1, "b" = 'x' where … returning "id", "a", "b"`
   - `delete from "s"."t" where … returning …`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // packages/core/test/query/mutate.test.ts
@@ -1654,12 +1654,12 @@ describe("mutation builders", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- query/mutate`
 Expected: FAIL — builders not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `mutate.ts` resolves TS keys → snake names through `getTableMeta` (build a
 `Map` from a private helper shared with `select.ts` if natural — otherwise
@@ -1671,12 +1671,12 @@ constructed internally (acceptable: internal constant, not user input —
 add a code comment saying so). Renderers in `render-sql.ts` +
 `renderQuery` dispatching on `queryKind` with `assertNever`.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `pnpm check-types && pnpm --filter @hejbro/core test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm check && git add packages/core && git commit -m "feat(core): insert, update, delete builders with on conflict and returning"
@@ -1729,7 +1729,7 @@ default(value: LiftableFor<TFamily> | Expr<TFamily> | Expr<"unknown">): ColumnBu
   hard error in `parseSnapshot` (snapshot.ts:145-149) is the entire
   migration story — pre-publication, no compatibility shim (D16).
 
-- [ ] **Step 1: Update the failing tests first**
+- [x] **Step 1: Update the failing tests first**
 
 In `column-builder.test.ts`: assert `uuid().defaultRandom()` yields
 `columnState.defaultValue` equal to
@@ -1741,12 +1741,12 @@ In `column-builder.test.ts`: assert `uuid().defaultRandom()` yields
 In `table-kind-emit.test.ts`/`snapshot.test.ts`: defaults now appear as
 rendered strings.
 
-- [ ] **Step 2: Run to verify failures**
+- [x] **Step 2: Run to verify failures**
 
 Run: `pnpm --filter @hejbro/core test`
 Expected: FAIL across default-related assertions.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `.default(value)`: if `isExpr(value)` store `value.exprNode`; else store
 `{ nodeKind: "literal", literal: liftLiteral(value, familyOfTypeNode(columnState.typeNode)) }`.
@@ -1755,7 +1755,7 @@ Expected: FAIL across default-related assertions.
 (`renderColumnDefault`, `renderLiteralValue`, the `ColumnDefault` type and
 its import sites). Bump the snapshot version constant and its JSDoc.
 
-- [ ] **Step 4: Regenerate golden fixtures and verify**
+- [x] **Step 4: Regenerate golden fixtures and verify**
 
 ```bash
 UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test
@@ -1768,7 +1768,7 @@ string (`"default": "gen_random_uuid()"`) and the snapshot `version` field
 1 → 2. Emitted `.sql` goldens are byte-identical (the rendered SQL for
 `gen_random_uuid()`/`now()` is unchanged).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm check && git add packages/core && git commit -m "feat(core)!: expression-based column defaults and snapshot v2"
@@ -1804,7 +1804,7 @@ and `update(posts).set({ publishedAt: now() }).where(…).returning()`);
 insert with multi-row + `on conflict do nothing` and `do update set`;
 `deleteFrom` with returning; `orderBy` + `limit`.
 
-- [ ] **Step 1: Write the harness (failing: no expected file)**
+- [x] **Step 1: Write the harness (failing: no expected file)**
 
 ```ts
 // packages/core/test/expr/corpus.test.ts
@@ -1845,12 +1845,12 @@ describe("expression corpus golden", () => {
 (Reuses the existing golden harness's `UPDATE_GOLDEN=1` convention —
 golden.test.ts:36-47.)
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @hejbro/core test -- expr/corpus`
 Expected: FAIL — missing `corpus.expected.txt`.
 
-- [ ] **Step 3: Generate, review, commit the corpus**
+- [x] **Step 3: Generate, review, commit the corpus**
 
 ```bash
 UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- expr/corpus
@@ -1860,12 +1860,12 @@ UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- expr/corpus
 surface: check every quoted literal, every identifier, the injection
 entries. Then:
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `pnpm --filter @hejbro/core test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm check && git add packages/core/test/expr && git commit -m "test(core): golden expression corpus for phase 2 acceptance"
@@ -1880,10 +1880,10 @@ pnpm check && git add packages/core/test/expr && git commit -m "test(core): gold
   summary, matching the Phase 1 entry's format)
 - Modify: this plan (check off completed tasks)
 
-- [ ] **Step 1: Update the roadmap** — Phase 2 heading gets `✅` and a
+- [x] **Step 1: Update the roadmap** — Phase 2 heading gets `✅` and a
   short "Landed: …" paragraph naming the expression AST, builders, table
   surface change (D15), snapshot v2 (D16), and the corpus location.
-- [ ] **Step 2: Run all gates and capture output**
+- [x] **Step 2: Run all gates and capture output**
 
 ```bash
 pnpm check && pnpm check-types && pnpm test && pnpm build
@@ -1891,13 +1891,13 @@ pnpm check && pnpm check-types && pnpm test && pnpm build
 
 Expected: all green, including `@hejbro/core` build via tsdown.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs && git commit -m "docs: mark phase 2 landed in roadmap"
 ```
 
-- [ ] **Step 4: Prepare the PR** — push the branch to `upstream`, verify
+- [x] **Step 4: Prepare the PR** — push the branch to `upstream`, verify
   with `git ls-remote --heads upstream <branch>`, open the PR against
   `dev` with the squash-commit list and `Closes` reference to the Phase 2
   work-item sub-issue (planner files these; see below), body first line:
