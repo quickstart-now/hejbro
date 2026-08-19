@@ -96,7 +96,16 @@ export {
 	now,
 	or,
 } from "./expr/operators";
-export { renderExpr } from "./expr/render-sql";
+export {
+	collectColumnRefs,
+	renderDelete,
+	renderExpr,
+	renderInsert,
+	renderQuery,
+	renderSelect,
+	renderTableRef,
+	renderUpdate,
+} from "./expr/render-sql";
 export type { SqlInterpolation } from "./expr/sql-template";
 export { sql } from "./expr/sql-template";
 export type {
@@ -119,6 +128,29 @@ export { createDefaultRegistry, createKindRegistry } from "./kind/registry";
 export { enumKind } from "./kinds/enum-kind";
 export { schemaKind } from "./kinds/schema-kind";
 export { tableKind } from "./kinds/table-kind";
+export type {
+	DeleteFilterable,
+	DeleteFinal,
+	DeleteReturnable,
+	InsertConflictable,
+	InsertFinal,
+	InsertReturnable,
+	MutationRow,
+	MutationValue,
+	UpdateFilterable,
+	UpdateFinal,
+	UpdateReturnable,
+} from "./query/mutate";
+export { deleteFrom, insert, update } from "./query/mutate";
+export type {
+	OrderTermInput,
+	SelectFiltered,
+	SelectJoinable,
+	SelectLimited,
+	SelectOrdered,
+	SelectProjection,
+} from "./query/select";
+export { exists, notExists, select } from "./query/select";
 export type { Snapshot } from "./snapshot/snapshot";
 export {
 	buildSnapshot,
