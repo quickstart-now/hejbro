@@ -9,7 +9,7 @@ export type EnumDeclaration = {
 	readonly enumName: string;
 	readonly values: ReadonlyArray<string>;
 	/** use as a column type: `status: appStatus.column().notNull()` */
-	column(): ColumnBuilder;
+	column(): ColumnBuilder<"text">;
 };
 
 /** Declares a Postgres enum type, owned by `owner`, with the given `values`. */
@@ -23,7 +23,7 @@ export const pgEnum = (
 	enumName,
 	values,
 	column: () =>
-		createColumnBuilder({
+		createColumnBuilder<"text">({
 			typeNode: { typeName: "enum", enumSchema: owner.schemaName, enumName },
 			notNull: false,
 			primaryKey: false,

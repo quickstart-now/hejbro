@@ -32,6 +32,59 @@ export type LiftableFor<TFamily extends SqlTypeFamily> = TFamily extends
 				? Date | string
 				: never;
 
+/**
+ * Type-level mirror of {@link familyOfTypeNode}: narrows a literal
+ * {@link TypeNode} shape (e.g. `{ typeName: "uuid" }`) to its
+ * {@link SqlTypeFamily} at compile time, so `columnRef()` call sites built
+ * from a literal type node get a precisely-typed `ColumnRef<TFamily>`
+ * instead of the full `SqlTypeFamily` union. Distributes over `TNode` when
+ * called with the wider `TypeNode` union (e.g. a `ColumnState.typeNode`
+ * field), matching `familyOfTypeNode`'s runtime behavior exactly.
+ */
+export type FamilyOfTypeNode<TNode extends TypeNode> = TNode extends {
+	readonly typeName: "uuid";
+}
+	? "uuid"
+	: TNode extends { readonly typeName: "text" | "varchar" | "char" | "enum" }
+		? "text"
+		: TNode extends {
+					readonly typeName:
+						| "smallint"
+						| "integer"
+						| "bigint"
+						| "real"
+						| "double precision"
+						| "numeric"
+						| "serial"
+						| "smallserial"
+						| "bigserial";
+				}
+			? "numeric"
+			: TNode extends { readonly typeName: "boolean" }
+				? "boolean"
+				: TNode extends {
+							readonly typeName:
+								| "date"
+								| "time"
+								| "timetz"
+								| "timestamp"
+								| "timestamptz";
+						}
+					? "datetime"
+					: TNode extends { readonly typeName: "interval" }
+						? "interval"
+						: TNode extends { readonly typeName: "json" | "jsonb" }
+							? "json"
+							: TNode extends { readonly typeName: "bytea" }
+								? "bytea"
+								: TNode extends {
+											readonly typeName: "inet" | "cidr" | "macaddr";
+										}
+									? "net"
+									: TNode extends { readonly typeName: "array" }
+										? "array"
+										: "unknown";
+
 /** Maps a structural {@link TypeNode} to its coarse {@link SqlTypeFamily}. */
 export const familyOfTypeNode = (node: TypeNode): SqlTypeFamily => {
 	switch (node.typeName) {

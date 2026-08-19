@@ -1,5 +1,5 @@
 import type { TypeNode } from "../types/type-node";
-import type { SqlTypeFamily } from "./type-family";
+import type { FamilyOfTypeNode, SqlTypeFamily } from "./type-family";
 import { familyOfTypeNode } from "./type-family";
 
 /** A literal value captured at build time, already narrowed to a renderable shape. */
@@ -228,13 +228,13 @@ export const expr = <TFamily extends SqlTypeFamily>(
 	exprNode: ExprNode,
 ): Expr<TFamily> => ({ family, exprNode });
 
-export const columnRef = (
+export const columnRef = <TNode extends TypeNode>(
 	schemaName: string,
 	tableName: string,
 	columnName: string,
-	typeNode: TypeNode,
-): ColumnRef => ({
-	family: familyOfTypeNode(typeNode),
+	typeNode: TNode,
+): ColumnRef<FamilyOfTypeNode<TNode>> => ({
+	family: familyOfTypeNode(typeNode) as FamilyOfTypeNode<TNode>,
 	exprNode: { nodeKind: "columnRef", schemaName, tableName, columnName },
 	typeNode,
 	sqlName: columnName,
