@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { initCommand } from "./commands/init";
 
 /**
  * The root `hejbro` command. Subcommands are registered as each lands:
@@ -19,5 +20,7 @@ export const main = defineCommand({
 		description:
 			"Declare your Postgres schema in TypeScript and generate deterministic migration SQL. Run `hejbro <command> --help` for the --rename/--confirm-drop flags.",
 	},
-	subCommands: {},
+	subCommands: {
+		init: initCommand,
+	},
 });
