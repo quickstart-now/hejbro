@@ -92,6 +92,46 @@ describe("planRenames", () => {
 		]);
 	});
 
+	it("partial resolution: resolving one pair of a multi-pair ambiguity leaves only the residual pair exposed", () => {
+		const previous = snap(
+			app,
+			table(app, "posts", { slug: text(), seoTitle: text() }),
+		);
+		const next = snap(
+			app,
+			table(app, "posts", { handle: text(), metaTitle: text() }),
+		);
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "slug",
+					newName: "handle",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts" rename column "slug" to "handle";`,
+		]);
+		expect(plan.ambiguities).toEqual([
+			{
+				kind: "column",
+				schemaName: "app",
+				tableName: "posts",
+				identity: "app.posts",
+				dropped: ["seo_title"],
+				added: ["meta_title"],
+				declaredAt: null,
+			},
+		]);
+	});
+
 	it("a --rename spec resolves the pair into a RENAME statement", () => {
 		const previous = snap(app, table(app, "posts", { slug: text() }));
 		const next = snap(app, table(app, "posts", { handle: text() }));
