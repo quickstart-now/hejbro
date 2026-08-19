@@ -29,8 +29,8 @@ const VERIFY_DESCRIPTION =
 const snapshotStaleMessage = (snapshotPath: string): string =>
 	`the checked-in snapshot at "${snapshotPath}" does not match your declarations — either the declarations changed without a new migration, or the snapshot file was hand-edited. Next: run \`hejbro generate\` and commit the result (or, if the snapshot is correct and the declarations are wrong, restore the declarations you meant).`;
 
-const chainTipMismatchMessage = (snapshotPath: string): string =>
-	`the migration chain's tip hash doesn't match the current snapshot at "${snapshotPath}" — the last migration's "snapshot:" hash and the on-disk snapshot's own hash disagree, which usually means the snapshot was edited after the last \`hejbro generate\` (or a migration file was hand-edited). Next: run \`hejbro generate\` to catch up (if the declarations changed), or restore both the migrations directory and the snapshot from version control (if a file was corrupted or hand-edited).`;
+const CHAIN_TIP_MISMATCH_MESSAGE =
+	"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.";
 
 const divergedMigrationsMessage = (
 	fileNames: ReadonlyArray<string>,
@@ -156,7 +156,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 			if (chainReport.tip !== expectedTip) {
 				return throwHejbroError(
 					"chain-tip-mismatch",
-					chainTipMismatchMessage(config.snapshotPath),
+					CHAIN_TIP_MISMATCH_MESSAGE,
 				);
 			}
 		}
