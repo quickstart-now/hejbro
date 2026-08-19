@@ -1,0 +1,169 @@
+import type { ColumnRenameAmbiguity, TableRenameAmbiguity } from "@hejbro/core";
+import { describe, expect, it } from "vitest";
+import { renderDiagnostics } from "../src/diagnostics";
+import { buildAmbiguityDiagnostic } from "../src/rename-diagnostics";
+
+// Reproduces diagnostics.test.ts's owner-approved terminal mockups
+// (singlePairMockup/multiPairMockup/tableRenameMockup) byte-for-byte from
+// buildAmbiguityDiagnostic's *generic* construction (wordWrap, per-item
+// suggestion building) fed the same underlying data those mockups were
+// hand-authored from — the strongest evidence the wrap width (70) and
+// template wording are right, and that they generalize correctly to real
+// (differently-named) ambiguities.
+
+const AT = 'examples/dd-land/schema.ts (export "posts")';
+
+describe("buildAmbiguityDiagnostic — column, single pair", () => {
+	const ambiguity: ColumnRenameAmbiguity = {
+		kind: "column",
+		schemaName: "ddland",
+		tableName: "posts",
+		identity: "ddland.posts",
+		dropped: ["slug"],
+		added: ["handle"],
+		declaredAt: AT,
+	};
+
+	it("matches the owner-approved single-pair mockup exactly", () => {
+		const diagnostic = buildAmbiguityDiagnostic(ambiguity, [], AT);
+		const rendered = renderDiagnostics([diagnostic], null);
+		expect(rendered).toBe(
+			[
+				"error[ambiguous-column-rename]: ddland.posts",
+				'  column "slug" was dropped and column "handle" was added in the same',
+				"  generate run — hejbro exited without writing SQL for this table; it",
+				"  won't guess between two possible next steps.",
+				"",
+				"  → if this is a rename, rerun:",
+				"      hejbro generate --rename ddland.posts.slug=handle",
+				"",
+				"  → if these are unrelated changes, rerun:",
+				"      hejbro generate --confirm-drop ddland.posts.slug",
+				"",
+				'  at examples/dd-land/schema.ts (export "posts")',
+			].join("\n"),
+		);
+	});
+
+	it("preserves existing argv when assembling the rerun suggestions", () => {
+		const diagnostic = buildAmbiguityDiagnostic(
+			ambiguity,
+			["--config", "db/hejbro.config.ts"],
+			null,
+		);
+		expect(diagnostic.suggestions[0]?.lines).toEqual([
+			"hejbro generate \\",
+			"  --config db/hejbro.config.ts \\",
+			"  --rename ddland.posts.slug=handle",
+		]);
+	});
+});
+
+describe("buildAmbiguityDiagnostic — column, multiple pairs", () => {
+	const ambiguity: ColumnRenameAmbiguity = {
+		kind: "column",
+		schemaName: "ddland",
+		tableName: "posts",
+		identity: "ddland.posts",
+		dropped: ["slug", "seo_title"],
+		added: ["handle", "meta_title"],
+		declaredAt: AT,
+	};
+
+	it("matches the owner-approved multi-pair mockup's body, labels, and blank-line grouping", () => {
+		const diagnostic = buildAmbiguityDiagnostic(ambiguity, [], AT);
+		expect(diagnostic.body).toEqual([
+			'2 columns were dropped ("slug", "seo_title") and 2 columns were added',
+			'("handle", "meta_title") in the same generate run — hejbro exited',
+			"without writing SQL for this table; it won't guess which pairs (if",
+			"any) are renames.",
+		]);
+		expect(diagnostic.suggestions[0]).toEqual({
+			label: "every dropped column needs one of:",
+			lines: [
+				"--rename ddland.posts.slug=<new column, e.g. handle or meta_title>",
+				"--confirm-drop ddland.posts.slug",
+				"",
+				"--rename ddland.posts.seo_title=<new column, e.g. handle or meta_title>",
+				"--confirm-drop ddland.posts.seo_title",
+			],
+		});
+		expect(diagnostic.suggestions[1]?.label).toBe(
+			"example rerun once you've decided (edit the <...> placeholders):",
+		);
+		// assembleRerunCommand sorts new flags by target identity
+		// (byte order) independent of the pairing/listing order above —
+		// "seo_title" < "slug" — see rerun.test.ts.
+		expect(diagnostic.suggestions[1]?.lines).toEqual([
+			"hejbro generate \\",
+			"  --rename ddland.posts.seo_title=meta_title \\",
+			"  --rename ddland.posts.slug=handle",
+		]);
+	});
+});
+
+describe("buildAmbiguityDiagnostic — table, 1:1", () => {
+	const ambiguity: TableRenameAmbiguity = {
+		kind: "table",
+		schemaName: "ddland",
+		droppedTables: ["posts"],
+		createdTables: ["blog_posts"],
+		declaredAt: 'examples/dd-land/schema.ts (export "blogPosts")',
+	};
+
+	it("matches the owner-approved table-rename mockup exactly, including the ⚠ callout hanging indent", () => {
+		const diagnostic = buildAmbiguityDiagnostic(
+			ambiguity,
+			[],
+			'examples/dd-land/schema.ts (export "blogPosts")',
+		);
+		const rendered = renderDiagnostics([diagnostic], null);
+		expect(rendered).toBe(
+			[
+				"error[ambiguous-table-rename]: ddland",
+				'  table "posts" was dropped, table "blog_posts" was created.',
+				"  ⚠ a table rename recreates every column, index, foreign key, RLS",
+				"    policy, and trigger on it — hejbro will not guess.",
+				"",
+				"  → if this is a rename, rerun:",
+				"      hejbro generate --rename ddland.posts=blog_posts",
+				"",
+				"  → if these are unrelated tables, rerun:",
+				"      hejbro generate --confirm-drop ddland.posts",
+				"",
+				'  at examples/dd-land/schema.ts (export "blogPosts")',
+			].join("\n"),
+		);
+	});
+});
+
+describe("buildAmbiguityDiagnostic — table, N:M (reasonable extension, no owner mockup)", () => {
+	const ambiguity: TableRenameAmbiguity = {
+		kind: "table",
+		schemaName: "app",
+		droppedTables: ["comments", "reactions"],
+		createdTables: ["reviews", "likes"],
+		declaredAt: null,
+	};
+
+	it("mirrors the column multi-pair pattern: counted-clause body + per-table option lines + example rerun", () => {
+		const diagnostic = buildAmbiguityDiagnostic(ambiguity, [], null);
+		expect(diagnostic.body[0]).toBe(
+			'2 tables were dropped ("comments", "reactions") and 2 tables were',
+		);
+		expect(diagnostic.body.at(-2)).toBe(
+			"⚠ a table rename recreates every column, index, foreign key, RLS",
+		);
+		expect(diagnostic.suggestions[0]?.label).toBe(
+			"every dropped table needs one of:",
+		);
+		expect(diagnostic.suggestions[0]?.lines).toContain(
+			"--rename app.comments=<new table, e.g. reviews or likes>",
+		);
+		expect(diagnostic.suggestions[1]?.lines).toEqual([
+			"hejbro generate \\",
+			"  --rename app.comments=reviews \\",
+			"  --rename app.reactions=likes",
+		]);
+	});
+});

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import type {
 	ConfirmDropSpec,
 	HejbroError,
+	RenameAmbiguity,
 	RenameSpec,
 	Snapshot,
 } from "@hejbro/core";
@@ -27,6 +28,7 @@ import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { parseConfirmDropFlag, parseRenameFlag } from "../flags";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
+import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
 
 /**
  * `hejbro generate --help`'s owner-approved short-form description (④,
@@ -258,13 +260,67 @@ const withOnboardingExample = (
 	return `${rendered}\n\n${ONBOARDING_EXAMPLE}`;
 };
 
+const AMBIGUOUS_CODES = new Set([
+	"ambiguous-column-rename",
+	"ambiguous-table-rename",
+]);
+
+/**
+ * `ambiguities` is 1:1 with the `ambiguous-*` subset of `errors`, in the
+ * same order (core's contract, `RenamePlan.ambiguities`/
+ * `GenerateMigrationResult.ambiguities`) — zips them back together by
+ * position rather than by re-deriving which error is which.
+ */
+const ambiguityByErrorIndex = (
+	errors: ReadonlyArray<HejbroError>,
+	ambiguities: ReadonlyArray<RenameAmbiguity>,
+): ReadonlyMap<number, RenameAmbiguity> => {
+	const ambiguousErrorIndices = errors
+		.map((error, index) => ({ code: error.code, index }))
+		.filter(({ code }) => AMBIGUOUS_CODES.has(code))
+		.map(({ index }) => index);
+	return new Map(
+		ambiguousErrorIndices.map((errorIndex, position) => [
+			errorIndex,
+			ambiguities[position] as RenameAmbiguity,
+		]),
+	);
+};
+
+const buildDiagnostics = (
+	errors: ReadonlyArray<HejbroError>,
+	ambiguities: ReadonlyArray<RenameAmbiguity>,
+	argv: ReadonlyArray<string>,
+	fallbackIdentity: string,
+	cwd: string,
+): ReadonlyArray<Diagnostic> => {
+	const byIndex = ambiguityByErrorIndex(errors, ambiguities);
+	return errors.map((error, index) => {
+		const ambiguity = byIndex.get(index);
+		if (ambiguity === undefined) {
+			return toDiagnostic(error, fallbackIdentity, cwd);
+		}
+		return buildAmbiguityDiagnostic(
+			ambiguity,
+			argv,
+			relativizeDeclaredAt(ambiguity.declaredAt, cwd),
+		);
+	});
+};
+
 const errorResult = (
 	errors: ReadonlyArray<HejbroError>,
+	ambiguities: ReadonlyArray<RenameAmbiguity>,
+	argv: ReadonlyArray<string>,
 	fallbackIdentity: string,
 	cwd: string,
 ): GenerateResult => {
-	const diagnostics = errors.map((error) =>
-		toDiagnostic(error, fallbackIdentity, cwd),
+	const diagnostics = buildDiagnostics(
+		errors,
+		ambiguities,
+		argv,
+		fallbackIdentity,
+		cwd,
 	);
 	const rendered = renderDiagnostics(diagnostics, batchSummary(errors));
 	return {
@@ -320,7 +376,13 @@ export const runGenerate = async (
 			confirmedDrops,
 		});
 		if (firstPass.errors.length > 0) {
-			return errorResult(firstPass.errors, fallbackIdentity, cwd);
+			return errorResult(
+				firstPass.errors,
+				firstPass.ambiguities,
+				rawArgs,
+				fallbackIdentity,
+				cwd,
+			);
 		}
 		if (!firstPass.hasChanges) {
 			return {
@@ -369,7 +431,13 @@ export const runGenerate = async (
 			stderr: null,
 		};
 	} catch (error) {
-		return errorResult([asHejbroError(error)], fallbackIdentity, cwd);
+		return errorResult(
+			[asHejbroError(error)],
+			[],
+			rawArgs,
+			fallbackIdentity,
+			cwd,
+		);
 	}
 };
 

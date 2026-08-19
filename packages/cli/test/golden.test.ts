@@ -295,6 +295,15 @@ describe("golden error corpus (Task 14, owner-approved ⑥ texts)", () => {
 		expectNoAbsolutePath(result.stderr);
 	});
 
+	// The three ambiguous-*-rename cases below render the rich terminal
+	// diagnostic (Task 11 mockups, decision ⑥ — option B, planner/owner
+	// 2026-08-20): core exposes structured residual dropped/added data
+	// (RenameAmbiguity) and the CLI builds the suggestion blocks from it
+	// (rename-diagnostics.ts), not core's flat HejbroError.message — see
+	// rename-diagnostics.test.ts for the byte-exact mockup reproduction.
+	// core's flat messages (rename-plan.test.ts) remain the source of truth
+	// for §7/log consumers, just not for this terminal rendering.
+
 	it("ambiguous-column-rename (single pair)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeFixtureFile(cwd, "src/app.schema.ts", BASE_SCHEMA);
@@ -304,7 +313,18 @@ describe("golden error corpus (Task 14, owner-approved ⑥ texts)", () => {
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain(
-			'table "app.posts" has an ambiguous column change: column "slug" was dropped and column "handle" was added in the same generate run, and hejbro cannot tell whether this is a rename. Next: rerun with `--rename app.posts.slug=handle` (if this is a rename) or `--confirm-drop app.posts.slug` (if these are unrelated changes).',
+			"error[ambiguous-column-rename]: app.posts",
+		);
+		expect(result.stderr).toContain(
+			'column "slug" was dropped and column "handle" was added in the same',
+		);
+		expect(result.stderr).toContain("→ if this is a rename, rerun:");
+		expect(result.stderr).toContain(
+			"hejbro generate --rename app.posts.slug=handle",
+		);
+		expect(result.stderr).toContain("→ if these are unrelated changes, rerun:");
+		expect(result.stderr).toContain(
+			"hejbro generate --confirm-drop app.posts.slug",
 		);
 		// declaredAt (core's captureDeclarationSite) is always absolute or a
 		// file:// URL — the CLI must relativize it against cwd before
@@ -321,10 +341,21 @@ describe("golden error corpus (Task 14, owner-approved ⑥ texts)", () => {
 
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[ambiguous-column-rename]");
 		expect(result.stderr).toContain(
-			"Next: resolve each dropped column with --rename or --confirm-drop and rerun — see the flags to add below.",
+			"error[ambiguous-column-rename]: app.posts",
 		);
+		expect(result.stderr).toContain(
+			'2 columns were dropped ("seo_title", "slug") and 2 columns were added',
+		);
+		expect(result.stderr).toContain("→ every dropped column needs one of:");
+		expect(result.stderr).toContain(
+			"--rename app.posts.slug=<new column, e.g. handle or meta_title>",
+		);
+		expect(result.stderr).toContain("--confirm-drop app.posts.slug");
+		expect(result.stderr).toContain(
+			"→ example rerun once you've decided (edit the <...> placeholders):",
+		);
+		expect(result.stderr).toContain("hejbro generate \\");
 		expectNoAbsolutePath(result.stderr);
 	});
 
@@ -336,8 +367,20 @@ describe("golden error corpus (Task 14, owner-approved ⑥ texts)", () => {
 
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[ambiguous-table-rename]: app");
 		expect(result.stderr).toContain(
-			'schema "app" has an ambiguous table change: table "comments" was dropped and table "reviews" was created in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. Next: rerun with `--rename app.comments=reviews` (if this is a rename) or `--confirm-drop app.comments` (if these are unrelated tables).',
+			'table "comments" was dropped, table "reviews" was created.',
+		);
+		expect(result.stderr).toContain(
+			"⚠ a table rename recreates every column, index, foreign key, RLS",
+		);
+		expect(result.stderr).toContain("→ if this is a rename, rerun:");
+		expect(result.stderr).toContain(
+			"hejbro generate --rename app.comments=reviews",
+		);
+		expect(result.stderr).toContain("→ if these are unrelated tables, rerun:");
+		expect(result.stderr).toContain(
+			"hejbro generate --confirm-drop app.comments",
 		);
 		expectNoAbsolutePath(result.stderr);
 	});
