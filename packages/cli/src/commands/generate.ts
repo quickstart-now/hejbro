@@ -26,7 +26,7 @@ import type { HejbroConfig } from "../config";
 import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { parseConfirmDropFlag, parseRenameFlag } from "../flags";
-import { loadConfig, loadDeclarations } from "../loader";
+import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
 
 /**
  * `hejbro generate --help`'s owner-approved short-form description (④,
@@ -162,11 +162,51 @@ const identityFromMessage = (message: string, fallback: string): string => {
 	return match[1] ?? fallback;
 };
 
+const FILE_URL_PREFIX = "file://";
+
+/**
+ * `declaredAt` (core's `captureDeclarationSite`) is always an absolute
+ * path or `file://` URL — V8 stack traces have no notion of "relative to
+ * what." Stripping `cwd` here (never in core, which has no cwd concept)
+ * keeps the CLI's own "no absolute paths in output" rule (Task 14) — a
+ * location outside `cwd` (e.g. a linked package) falls back to the
+ * `file://`-stripped absolute path rather than a nonsensical `../../…`.
+ */
+const stripFileUrlPrefix = (location: string): string => {
+	if (location.startsWith(FILE_URL_PREFIX)) {
+		return location.slice(FILE_URL_PREFIX.length);
+	}
+	return location;
+};
+
+const relativizeLocation = (location: string, cwd: string): string => {
+	const withoutFileUrl = stripFileUrlPrefix(location);
+	const cwdPrefix = `${cwd}/`;
+	if (withoutFileUrl.startsWith(cwdPrefix)) {
+		return withoutFileUrl.slice(cwdPrefix.length);
+	}
+	return withoutFileUrl;
+};
+
+const relativizeDeclaredAt = (
+	declaredAt: string | null,
+	cwd: string,
+): string | null => {
+	if (declaredAt === null) {
+		return null;
+	}
+	return relativizeLocation(declaredAt, cwd);
+};
+
 const toDiagnostic = (
 	error: HejbroError,
 	fallbackIdentity: string,
+	cwd: string,
 ): Diagnostic =>
-	fromHejbroError(error, identityFromMessage(error.message, fallbackIdentity));
+	fromHejbroError(
+		{ ...error, declaredAt: relativizeDeclaredAt(error.declaredAt, cwd) },
+		identityFromMessage(error.message, fallbackIdentity),
+	);
 
 const pluralize = (count: number, noun: string): string => {
 	if (count === 1) {
@@ -204,17 +244,33 @@ export type GenerateResult = {
 	readonly stderr: string | null;
 };
 
+/** Appends the onboarding example (Task 13/14) below the diagnostics when the batch includes `entry-not-found` — the flat message itself never embeds it (owner-approved text), so it's a separate trailing block. */
+const withOnboardingExample = (
+	rendered: string,
+	errors: ReadonlyArray<HejbroError>,
+): string => {
+	const hasEntryNotFound = errors.some(
+		(error) => error.code === "entry-not-found",
+	);
+	if (!hasEntryNotFound) {
+		return rendered;
+	}
+	return `${rendered}\n\n${ONBOARDING_EXAMPLE}`;
+};
+
 const errorResult = (
 	errors: ReadonlyArray<HejbroError>,
 	fallbackIdentity: string,
+	cwd: string,
 ): GenerateResult => {
 	const diagnostics = errors.map((error) =>
-		toDiagnostic(error, fallbackIdentity),
+		toDiagnostic(error, fallbackIdentity, cwd),
 	);
+	const rendered = renderDiagnostics(diagnostics, batchSummary(errors));
 	return {
 		exitCode: 1,
 		stdout: [],
-		stderr: renderDiagnostics(diagnostics, batchSummary(errors)),
+		stderr: withOnboardingExample(rendered, errors),
 	};
 };
 
@@ -264,7 +320,7 @@ export const runGenerate = async (
 			confirmedDrops,
 		});
 		if (firstPass.errors.length > 0) {
-			return errorResult(firstPass.errors, fallbackIdentity);
+			return errorResult(firstPass.errors, fallbackIdentity, cwd);
 		}
 		if (!firstPass.hasChanges) {
 			return {
@@ -313,7 +369,7 @@ export const runGenerate = async (
 			stderr: null,
 		};
 	} catch (error) {
-		return errorResult([asHejbroError(error)], fallbackIdentity);
+		return errorResult([asHejbroError(error)], fallbackIdentity, cwd);
 	}
 };
 
