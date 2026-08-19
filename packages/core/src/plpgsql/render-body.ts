@@ -115,13 +115,7 @@ export const renderFunctionReturnsClause = (
 	}
 };
 
-/**
- * Renders a {@link FunctionDeclaration} as a full, deterministic
- * `create or replace function …;` statement (spec §5.2/§6.4; exact text
- * format is normative — see the Phase 3 implementation plan). Throws
- * `body-contains-dollar-tag` if the rendered `declare`/`begin`/`end` body
- * contains the literal `$function$` dollar-quote tag.
- */
+/** Renders one `declare` line: `<name> <typeNode>;` for a scalar row local, `<name> record;` for a `ctx.forEach()` loop variable. */
 const renderDeclarationLine = (local: PlpgsqlVarDeclaration): string => {
 	switch (local.declKind) {
 		case "scalar":
@@ -133,6 +127,13 @@ const renderDeclarationLine = (local: PlpgsqlVarDeclaration): string => {
 	}
 };
 
+/**
+ * Renders a {@link FunctionDeclaration} as a full, deterministic
+ * `create or replace function …;` statement (spec §5.2/§6.4; exact text
+ * format is normative — see the Phase 3 implementation plan). Throws
+ * `body-contains-dollar-tag` if the rendered `declare`/`begin`/`end` body
+ * contains the literal `$function$` dollar-quote tag.
+ */
 export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
 	const identity = `${declaration.schemaName}.${declaration.functionName}`;
 	const argsSql = declaration.args
