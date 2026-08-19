@@ -62,10 +62,13 @@ export { diffSnapshots } from "./engine/diff-engine";
 export type { HejbroInput } from "./engine/generate";
 export { generateMigration } from "./engine/generate";
 export type {
+	ColumnRenameAmbiguity,
 	ColumnRenameSpec,
 	ConfirmDropSpec,
+	RenameAmbiguity,
 	RenamePlan,
 	RenameSpec,
+	TableRenameAmbiguity,
 	TableRenameSpec,
 } from "./engine/rename-plan";
 export { planRenames } from "./engine/rename-plan";

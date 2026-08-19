@@ -43,6 +43,17 @@ describe("planRenames", () => {
 					'table "app.posts" has an ambiguous column change: column "slug" was dropped and column "handle" was added in the same generate run, and hejbro cannot tell whether this is a rename. Next: rerun with `--rename app.posts.slug=handle` (if this is a rename) or `--confirm-drop app.posts.slug` (if these are unrelated changes).',
 			}),
 		]);
+		expect(plan.ambiguities).toEqual([
+			{
+				kind: "column",
+				schemaName: "app",
+				tableName: "posts",
+				identity: "app.posts",
+				dropped: ["slug"],
+				added: ["handle"],
+				declaredAt: null,
+			},
+		]);
 	});
 
 	it("flags a multi-pair ambiguous column change with the owner-approved multi-item message", () => {
@@ -67,6 +78,17 @@ describe("planRenames", () => {
 				message:
 					'table "app.posts" has an ambiguous column change: 2 columns were dropped ("seo_title", "slug") and 2 columns were added ("handle", "meta_title") in the same generate run, and hejbro cannot infer which pairs (if any) are renames. Next: resolve each dropped column with --rename or --confirm-drop and rerun — see the flags to add below.',
 			}),
+		]);
+		expect(plan.ambiguities).toEqual([
+			{
+				kind: "column",
+				schemaName: "app",
+				tableName: "posts",
+				identity: "app.posts",
+				dropped: ["seo_title", "slug"],
+				added: ["handle", "meta_title"],
+				declaredAt: null,
+			},
 		]);
 	});
 
@@ -136,6 +158,8 @@ describe("planRenames", () => {
 			declaredAtByIdentity: noDeclSites,
 		});
 		expect(plan.errors).toHaveLength(2);
+		expect(plan.ambiguities).toHaveLength(2);
+		expect(plan.ambiguities.map((a) => a.kind)).toEqual(["column", "column"]);
 	});
 
 	it("table drop+create in one schema is ambiguous; --rename rewrites identity", () => {
@@ -154,6 +178,15 @@ describe("planRenames", () => {
 				message:
 					'schema "app" has an ambiguous table change: table "posts" was dropped and table "blog_posts" was created in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. Next: rerun with `--rename app.posts=blog_posts` (if this is a rename) or `--confirm-drop app.posts` (if these are unrelated tables).',
 			}),
+		]);
+		expect(ambiguous.ambiguities).toEqual([
+			{
+				kind: "table",
+				schemaName: "app",
+				droppedTables: ["posts"],
+				createdTables: ["blog_posts"],
+				declaredAt: null,
+			},
 		]);
 		const renamed = planRenames({
 			previous,

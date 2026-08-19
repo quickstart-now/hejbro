@@ -12,7 +12,11 @@ import { buildSnapshot } from "../snapshot/snapshot";
 import type { BannerHashes } from "../sql/migration-file";
 import { renderBanner } from "../sql/migration-file";
 import { diffSnapshots } from "./diff-engine";
-import type { ConfirmDropSpec, RenameSpec } from "./rename-plan";
+import type {
+	ConfirmDropSpec,
+	RenameAmbiguity,
+	RenameSpec,
+} from "./rename-plan";
 import { planRenames } from "./rename-plan";
 
 /** Anything `generateMigration` accepts as a declaration: a plain declaration, or a `table()`-built `Table` object (unwrapped via `getTableMeta` at the entry point). */
@@ -74,6 +78,8 @@ type GenerateMigrationResult = {
 	readonly hasChanges: boolean;
 	/** rename/confirm-drop diagnostics (decision D32); non-empty ⇒ `sql === ""`, `hasChanges === false`, nothing writable. */
 	readonly errors: ReadonlyArray<HejbroError>;
+	/** the `ambiguous-*` subset of `errors`, structured (1:1, same order) — see {@link RenameAmbiguity}. */
+	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
 };
 
 /**
@@ -141,6 +147,7 @@ export const generateMigration = (
 			sql: "",
 			hasChanges: false,
 			errors: plan.errors,
+			ambiguities: plan.ambiguities,
 		};
 	}
 
@@ -148,7 +155,14 @@ export const generateMigration = (
 	const hasChanges = changes.length > 0 || plan.renameStatements.length > 0;
 
 	if (!hasChanges) {
-		return { snapshot, changes, sql: "", hasChanges: false, errors: [] };
+		return {
+			snapshot,
+			changes,
+			sql: "",
+			hasChanges: false,
+			errors: [],
+			ambiguities: [],
+		};
 	}
 
 	const statements = changes.flatMap((change) =>
@@ -168,5 +182,12 @@ export const generateMigration = (
 		...deferredStatements.map((sqlStatement) => sqlStatement.sql),
 	].join("\n\n");
 
-	return { snapshot, changes, sql, hasChanges: true, errors: [] };
+	return {
+		snapshot,
+		changes,
+		sql,
+		hasChanges: true,
+		errors: [],
+		ambiguities: [],
+	};
 };

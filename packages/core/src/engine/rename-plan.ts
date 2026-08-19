@@ -55,6 +55,39 @@ export type ConfirmDropSpec =
 			readonly tableName: string;
 	  };
 
+/**
+ * A residual same-table (`kind: "column"`) or same-schema (`kind: "table"`)
+ * drop+add pair rule A couldn't resolve — the structured counterpart of an
+ * `errors` entry with code `ambiguous-column-rename`/`ambiguous-table
+ * -rename` (1:1, same order). `dropped`/`added` are the *residual* sets
+ * (after valid `--rename`/`--confirm-drop` specs already consumed their
+ * share) — a caller building a rerun suggestion from these, rather than
+ * recomputing from the raw snapshot diff, is what keeps the suggested
+ * flags scoped to what's still ambiguous as flags are added run over run.
+ */
+export type ColumnRenameAmbiguity = {
+	readonly kind: "column";
+	readonly schemaName: string;
+	readonly tableName: string;
+	/** `schema.table` */
+	readonly identity: string;
+	readonly dropped: ReadonlyArray<string>;
+	readonly added: ReadonlyArray<string>;
+	readonly declaredAt: string | null;
+};
+
+/** @see ColumnRenameAmbiguity — the schema-level table-drop+create counterpart. */
+export type TableRenameAmbiguity = {
+	readonly kind: "table";
+	readonly schemaName: string;
+	readonly droppedTables: ReadonlyArray<string>;
+	readonly createdTables: ReadonlyArray<string>;
+	readonly declaredAt: string | null;
+};
+
+/** @see ColumnRenameAmbiguity, TableRenameAmbiguity */
+export type RenameAmbiguity = ColumnRenameAmbiguity | TableRenameAmbiguity;
+
 /** The result of resolving a set of `--rename`/`--confirm-drop` flags against a previous→next snapshot pair (decision D32/rule A). */
 export type RenamePlan = {
 	/** previous snapshot with confirmed renames applied (old→new names) */
@@ -65,6 +98,8 @@ export type RenamePlan = {
 	readonly renameChanges: ReadonlyArray<KindChange>;
 	/** batch-collected diagnostics; non-empty ⇒ caller must not emit SQL */
 	readonly errors: ReadonlyArray<HejbroError>;
+	/** the `ambiguous-*` subset of `errors`, structured (1:1, same order) — a diagnostic renderer builds rerun-command suggestions from this instead of reparsing flat text. */
+	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
 };
 
 const TABLE_PREFIX = "table:";
@@ -1121,6 +1156,25 @@ const ambiguousTableRenameMessage = (
 	return `schema "${schemaName}" has an ambiguous table change: ${droppedClause} and ${createdClause} in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. Next: resolve each dropped table with --rename or --confirm-drop and rerun — see the flags to add below.`;
 };
 
+type AmbiguityResult = {
+	readonly error: HejbroError;
+	readonly ambiguity: RenameAmbiguity;
+};
+
+/** Splits a `schema.table` identity on its first `.` — safe since schema/table names never contain `.` (decision ⑧'s `^[a-z][a-z0-9_]*$`). */
+const splitTableIdentity = (
+	identity: string,
+): { readonly schemaName: string; readonly tableName: string } => {
+	const dotIndex = identity.indexOf(".");
+	if (dotIndex === -1) {
+		return { schemaName: identity, tableName: "" };
+	}
+	return {
+		schemaName: identity.slice(0, dotIndex),
+		tableName: identity.slice(dotIndex + 1),
+	};
+};
+
 const residualColumnAmbiguities = (
 	tableColumnSets: TableColumnSets,
 	consumed: ReadonlyMap<
@@ -1131,7 +1185,7 @@ const residualColumnAmbiguities = (
 		}
 	>,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
-): ReadonlyArray<HejbroError> =>
+): ReadonlyArray<AmbiguityResult> =>
 	Array.from(tableColumnSets.entries())
 		.sort((a, b) => compareKeys(a[0], b[0]))
 		.flatMap(([identity, sets]) => {
@@ -1147,12 +1201,24 @@ const residualColumnAmbiguities = (
 			const declaredAt = declaredAtByIdentity.get(identity) ?? null;
 			const droppedNames = Array.from(residualDropped).sort(compareKeys);
 			const addedNames = Array.from(residualAdded).sort(compareKeys);
+			const { schemaName, tableName } = splitTableIdentity(identity);
 			return [
-				hejbroError(
-					"ambiguous-column-rename",
-					ambiguousColumnRenameMessage(identity, droppedNames, addedNames),
-					declaredAt,
-				),
+				{
+					error: hejbroError(
+						"ambiguous-column-rename",
+						ambiguousColumnRenameMessage(identity, droppedNames, addedNames),
+						declaredAt,
+					),
+					ambiguity: {
+						kind: "column",
+						schemaName,
+						tableName,
+						identity,
+						dropped: droppedNames,
+						added: addedNames,
+						declaredAt,
+					},
+				},
 			];
 		});
 
@@ -1166,7 +1232,7 @@ const residualTableAmbiguities = (
 		}
 	>,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
-): ReadonlyArray<HejbroError> =>
+): ReadonlyArray<AmbiguityResult> =>
 	Array.from(schemaTableSets.entries())
 		.sort((a, b) => compareKeys(a[0], b[0]))
 		.flatMap(([schemaName, sets]) => {
@@ -1186,11 +1252,20 @@ const residualTableAmbiguities = (
 					tableIdentity(schemaName, addedNames[0] ?? ""),
 				) ?? null;
 			return [
-				hejbroError(
-					"ambiguous-table-rename",
-					ambiguousTableRenameMessage(schemaName, droppedNames, addedNames),
-					declaredAt,
-				),
+				{
+					error: hejbroError(
+						"ambiguous-table-rename",
+						ambiguousTableRenameMessage(schemaName, droppedNames, addedNames),
+						declaredAt,
+					),
+					ambiguity: {
+						kind: "table",
+						schemaName,
+						droppedTables: droppedNames,
+						createdTables: addedNames,
+						declaredAt,
+					},
+				},
 			];
 		});
 
@@ -1244,23 +1319,27 @@ export const planRenames = (options: {
 		dropResult.validDrops,
 	);
 
-	const columnAmbiguities = residualColumnAmbiguities(
+	const columnAmbiguityResults = residualColumnAmbiguities(
 		tableColumnSets,
 		consumedColumns,
 		options.declaredAtByIdentity,
 	);
-	const tableAmbiguities = residualTableAmbiguities(
+	const tableAmbiguityResults = residualTableAmbiguities(
 		schemaTableSets,
 		consumedTables,
 		options.declaredAtByIdentity,
 	);
+	const ambiguityResults = [
+		...tableAmbiguityResults,
+		...columnAmbiguityResults,
+	];
 
 	const errors = [
 		...renameResult.errors,
 		...dropResult.errors,
-		...tableAmbiguities,
-		...columnAmbiguities,
+		...ambiguityResults.map((result) => result.error),
 	];
+	const ambiguities = ambiguityResults.map((result) => result.ambiguity);
 
 	const rewrittenPrevious: Snapshot = {
 		...options.previous,
@@ -1274,5 +1353,6 @@ export const planRenames = (options: {
 			compareKeys(a.identity, b.identity),
 		),
 		errors,
+		ambiguities,
 	};
 };
