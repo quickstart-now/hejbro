@@ -291,34 +291,44 @@ const groupClaims = (
 		return acc;
 	}, new Map<string, ReadonlyArray<Claim>>());
 
-/** Human-readable description of what a claim targets — never the raw internal `groupKey` (m3 fix). */
-const describeClaim = (claim: Claim): string => {
+/** The qualified identifier string a claim targets (`schema.table.column` or `schema.table`) — the owner-approved messages address the identifier directly, not "old"/"new" prose (⑥ verbatim). */
+const claimIdentifier = (claim: Claim): string => {
 	if (claim.targetKind === "column") {
-		const identity = tableIdentity(claim.schemaName, claim.tableName ?? "");
-		if (claim.direction === "old") {
-			return `old column name "${claim.name}" on "${identity}"`;
-		}
-		return `new column name "${claim.name}" on "${identity}"`;
+		return `${tableIdentity(claim.schemaName, claim.tableName ?? "")}.${claim.name}`;
 	}
-	if (claim.direction === "old") {
-		return `old table name "${claim.name}" in schema "${claim.schemaName}"`;
-	}
-	return `new table name "${claim.name}" in schema "${claim.schemaName}"`;
+	return tableIdentity(claim.schemaName, claim.name);
 };
 
-const describeFirstClaim = (claims: ReadonlyArray<Claim>): string => {
+const claimUnitLabel = (claim: Claim): "column" | "table" => claim.targetKind;
+
+const firstClaimOf = (claims: ReadonlyArray<Claim>): Claim | null => {
 	const [first] = claims;
 	if (first === undefined) {
-		return "an identifier";
+		return null;
 	}
-	return describeClaim(first);
+	return first;
 };
 
-const duplicateCountPhrase = (count: number): string => {
-	if (count === 2) {
-		return "two --rename flags both target";
+const duplicateIdentifierOf = (claim: Claim | null): string => {
+	if (claim === null) {
+		return "";
 	}
-	return `${count} --rename flags all target`;
+	return claimIdentifier(claim);
+};
+
+const duplicateUnitLabelOf = (claim: Claim | null): "column" | "table" => {
+	if (claim === null) {
+		return "column";
+	}
+	return claimUnitLabel(claim);
+};
+
+/** "two --rename flags" for the common (owner-approved verbatim) case, "<N> --rename flags" otherwise. */
+const duplicateFlagCountPhrase = (count: number): string => {
+	if (count === 2) {
+		return "two --rename flags";
+	}
+	return `${count} --rename flags`;
 };
 
 const findDuplicateRenameSpecs = (
@@ -337,11 +347,13 @@ const findDuplicateRenameSpecs = (
 		duplicateGroups.flatMap(([, claims]) => claims.map((c) => c.specIndex)),
 	);
 	const errors = duplicateGroups.map(([, claims]) => {
+		const first = firstClaimOf(claims);
 		const count = new Set(claims.map((c) => c.specIndex)).size;
-		const target = describeFirstClaim(claims);
+		const identifier = duplicateIdentifierOf(first);
+		const unit = duplicateUnitLabelOf(first);
 		return hejbroError(
 			"duplicate-rename-target",
-			`${duplicateCountPhrase(count)} the same ${target} — each old or new name may appear in at most one --rename flag per generate run. Next: keep a single --rename flag per identifier and rerun.`,
+			`${duplicateFlagCountPhrase(count)} both reference "${identifier}" (as an old or new name) — a dropped ${unit} can be claimed by at most one rename, and an added ${unit} can be the target of at most one rename. Next: remove or fix the duplicate --rename flag.`,
 		);
 	});
 	return { duplicatedIndices, errors };
@@ -366,7 +378,7 @@ const validateRenameSpecTarget = (
 			null;
 		return hejbroError(
 			"unknown-rename-target",
-			`--rename ${spec.schemaName}.${spec.oldName}=${spec.newName} does not match a dropped table "${spec.oldName}" and a newly-added table "${spec.newName}" in schema "${spec.schemaName}" for this generate run. Next: check the table names, or drop the --rename flag if nothing changed here.`,
+			`--rename "${spec.schemaName}.${spec.oldName}=${spec.newName}" doesn't match this run: schema "${spec.schemaName}" has no dropped table named "${spec.oldName}" (or no added table named "${spec.newName}"). Next: check both names for typos — --rename's left side must be a table this run drops, the right side a table this run adds.`,
 			declaredAt,
 		);
 	}
@@ -381,7 +393,7 @@ const validateRenameSpecTarget = (
 	const declaredAt = declaredAtByIdentity.get(identity) ?? null;
 	return hejbroError(
 		"unknown-rename-target",
-		`--rename ${spec.schemaName}.${spec.tableName}.${spec.oldName}=${spec.newName} does not match a dropped column "${spec.oldName}" and a newly-added column "${spec.newName}" on "${identity}" for this generate run. Next: check the column names, or drop the --rename flag if nothing changed here.`,
+		`--rename "${identity}.${spec.oldName}=${spec.newName}" doesn't match this run: table "${identity}" has no dropped column named "${spec.oldName}" (or no added column named "${spec.newName}"). Next: check both names for typos — --rename's left side must be a column this run drops, the right side a column this run adds.`,
 		declaredAt,
 	);
 };
@@ -433,9 +445,10 @@ const validateConfirmDropTarget = (
 		if (sets?.dropped.has(spec.tableName) ?? false) {
 			return null;
 		}
+		const identity = tableIdentity(spec.schemaName, spec.tableName);
 		return hejbroError(
 			"unknown-confirm-drop-target",
-			`--confirm-drop ${spec.schemaName}.${spec.tableName} does not match a dropped table in this generate run. Next: check the table name, or drop the --confirm-drop flag if nothing changed here.`,
+			`--confirm-drop "${identity}" doesn't match this run: schema "${spec.schemaName}" has no dropped table named "${spec.tableName}". Next: check the name for typos — --confirm-drop's target must be a column (or table) this run actually drops.`,
 		);
 	}
 	const identity = tableIdentity(spec.schemaName, spec.tableName);
@@ -445,7 +458,7 @@ const validateConfirmDropTarget = (
 	}
 	return hejbroError(
 		"unknown-confirm-drop-target",
-		`--confirm-drop ${spec.schemaName}.${spec.tableName}.${spec.columnName} does not match a dropped column on "${identity}" in this generate run. Next: check the column name, or drop the --confirm-drop flag if nothing changed here.`,
+		`--confirm-drop "${identity}.${spec.columnName}" doesn't match this run: table "${identity}" has no dropped column named "${spec.columnName}". Next: check the name for typos — --confirm-drop's target must be a column (or table) this run actually drops.`,
 	);
 };
 
@@ -1057,6 +1070,57 @@ const consumedTableNamesBySchema = (
 	}, new Map<string, { dropped: Set<string>; added: Set<string> }>());
 };
 
+/** `1 column was dropped ("x")` / `2 columns were dropped ("x", "y")` — the owner-approved count-based singular/plural convention. */
+const countedClause = (
+	noun: "column" | "table",
+	verb: "dropped" | "added" | "created",
+	names: ReadonlyArray<string>,
+): string => {
+	const quoted = names.map((name) => `"${name}"`).join(", ");
+	if (names.length === 1) {
+		return `1 ${noun} was ${verb} (${quoted})`;
+	}
+	return `${names.length} ${noun}s were ${verb} (${quoted})`;
+};
+
+/**
+ * The exact-1:1 case uses the owner-approved verbatim text (naming the two
+ * columns directly, with the concrete rerun commands inline); anything
+ * else (2+ on either side) falls back to a generic count-based message —
+ * the CLI's terminal renderer (Task 13) itemizes every dropped column's
+ * `--rename`/`--confirm-drop` options separately.
+ */
+const ambiguousColumnRenameMessage = (
+	identity: string,
+	dropped: ReadonlyArray<string>,
+	added: ReadonlyArray<string>,
+): string => {
+	if (dropped.length === 1 && added.length === 1) {
+		const oldName = dropped[0] ?? "";
+		const newName = added[0] ?? "";
+		return `table "${identity}" has an ambiguous column change: column "${oldName}" was dropped and column "${newName}" was added in the same generate run, and hejbro cannot tell whether this is a rename. Next: rerun with \`--rename ${identity}.${oldName}=${newName}\` (if this is a rename) or \`--confirm-drop ${identity}.${oldName}\` (if these are unrelated changes).`;
+	}
+	const droppedClause = countedClause("column", "dropped", dropped);
+	const addedClause = countedClause("column", "added", added);
+	return `table "${identity}" has an ambiguous column change: ${droppedClause} and ${addedClause} in the same generate run, and hejbro cannot infer which pairs (if any) are renames. Next: resolve each dropped column with --rename or --confirm-drop and rerun — see the flags to add below.`;
+};
+
+/** @see ambiguousColumnRenameMessage — the table/schema-level counterpart. */
+const ambiguousTableRenameMessage = (
+	schemaName: string,
+	dropped: ReadonlyArray<string>,
+	added: ReadonlyArray<string>,
+): string => {
+	if (dropped.length === 1 && added.length === 1) {
+		const oldName = dropped[0] ?? "";
+		const newName = added[0] ?? "";
+		return `schema "${schemaName}" has an ambiguous table change: table "${oldName}" was dropped and table "${newName}" was created in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. Next: rerun with \`--rename ${schemaName}.${oldName}=${newName}\` (if this is a rename) or \`--confirm-drop ${schemaName}.${oldName}\` (if these are unrelated tables).`;
+	}
+	const droppedClause = countedClause("table", "dropped", dropped);
+	const createdClause = countedClause("table", "created", added);
+	return `schema "${schemaName}" has an ambiguous table change: ${droppedClause} and ${createdClause} in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. Next: resolve each dropped table with --rename or --confirm-drop and rerun — see the flags to add below.`;
+};
+
 const residualColumnAmbiguities = (
 	tableColumnSets: TableColumnSets,
 	consumed: ReadonlyMap<
@@ -1081,10 +1145,12 @@ const residualColumnAmbiguities = (
 				return [];
 			}
 			const declaredAt = declaredAtByIdentity.get(identity) ?? null;
+			const droppedNames = Array.from(residualDropped).sort(compareKeys);
+			const addedNames = Array.from(residualAdded).sort(compareKeys);
 			return [
 				hejbroError(
 					"ambiguous-column-rename",
-					`table "${identity}" both drops (${Array.from(residualDropped).sort(compareKeys).join(", ")}) and adds (${Array.from(residualAdded).sort(compareKeys).join(", ")}) columns in this generate run — hejbro can't tell whether this is a rename or an unrelated drop+add. Next: resolve each pair with --rename ${identity}.<old>=<new>, or silence it with --confirm-drop ${identity}.<old> and use two generate runs to add the new column (expand–contract).`,
+					ambiguousColumnRenameMessage(identity, droppedNames, addedNames),
 					declaredAt,
 				),
 			];
@@ -1113,6 +1179,7 @@ const residualTableAmbiguities = (
 			if (residualDropped.size === 0 || residualAdded.size === 0) {
 				return [];
 			}
+			const droppedNames = Array.from(residualDropped).sort(compareKeys);
 			const addedNames = Array.from(residualAdded).sort(compareKeys);
 			const declaredAt =
 				declaredAtByIdentity.get(
@@ -1121,7 +1188,7 @@ const residualTableAmbiguities = (
 			return [
 				hejbroError(
 					"ambiguous-table-rename",
-					`schema "${schemaName}" both drops (${Array.from(residualDropped).sort(compareKeys).join(", ")}) and adds (${addedNames.join(", ")}) tables in this generate run — hejbro can't tell whether this is a rename or an unrelated drop+add. Next: resolve each pair with --rename ${schemaName}.<old>=<new>, or silence it with --confirm-drop ${schemaName}.<old> and use two generate runs to add the new table (expand–contract).`,
+					ambiguousTableRenameMessage(schemaName, droppedNames, addedNames),
 					declaredAt,
 				),
 			];

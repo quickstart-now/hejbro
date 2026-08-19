@@ -26,7 +26,7 @@ const snap = (...decls: ReadonlyArray<HejbroInput>) =>
 const noDeclSites = new Map<string, string | null>();
 
 describe("planRenames", () => {
-	it("flags a same-table drop+add pair as ambiguous (rule A)", () => {
+	it("flags a same-table drop+add pair as ambiguous (rule A) with the owner-approved message verbatim", () => {
 		const previous = snap(app, table(app, "posts", { slug: text() }));
 		const next = snap(app, table(app, "posts", { handle: text() }));
 		const plan = planRenames({
@@ -37,7 +37,36 @@ describe("planRenames", () => {
 			declaredAtByIdentity: noDeclSites,
 		});
 		expect(plan.errors).toEqual([
-			expect.objectContaining({ code: "ambiguous-column-rename" }),
+			expect.objectContaining({
+				code: "ambiguous-column-rename",
+				message:
+					'table "app.posts" has an ambiguous column change: column "slug" was dropped and column "handle" was added in the same generate run, and hejbro cannot tell whether this is a rename. Next: rerun with `--rename app.posts.slug=handle` (if this is a rename) or `--confirm-drop app.posts.slug` (if these are unrelated changes).',
+			}),
+		]);
+	});
+
+	it("flags a multi-pair ambiguous column change with the owner-approved multi-item message", () => {
+		const previous = snap(
+			app,
+			table(app, "posts", { slug: text(), seoTitle: text() }),
+		);
+		const next = snap(
+			app,
+			table(app, "posts", { handle: text(), metaTitle: text() }),
+		);
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([
+			expect.objectContaining({
+				code: "ambiguous-column-rename",
+				message:
+					'table "app.posts" has an ambiguous column change: 2 columns were dropped ("seo_title", "slug") and 2 columns were added ("handle", "meta_title") in the same generate run, and hejbro cannot infer which pairs (if any) are renames. Next: resolve each dropped column with --rename or --confirm-drop and rerun — see the flags to add below.',
+			}),
 		]);
 	});
 
@@ -120,7 +149,11 @@ describe("planRenames", () => {
 			declaredAtByIdentity: noDeclSites,
 		});
 		expect(ambiguous.errors).toEqual([
-			expect.objectContaining({ code: "ambiguous-table-rename" }),
+			expect.objectContaining({
+				code: "ambiguous-table-rename",
+				message:
+					'schema "app" has an ambiguous table change: table "posts" was dropped and table "blog_posts" was created in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. Next: rerun with `--rename app.posts=blog_posts` (if this is a rename) or `--confirm-drop app.posts` (if these are unrelated tables).',
+			}),
 		]);
 		const renamed = planRenames({
 			previous,
@@ -241,7 +274,11 @@ describe("planRenames", () => {
 			declaredAtByIdentity: noDeclSites,
 		});
 		expect(plan.errors).toEqual([
-			expect.objectContaining({ code: "unknown-rename-target" }),
+			expect.objectContaining({
+				code: "unknown-rename-target",
+				message:
+					'--rename "app.posts.slug=handle" doesn\'t match this run: table "app.posts" has no dropped column named "slug" (or no added column named "handle"). Next: check both names for typos — --rename\'s left side must be a column this run drops, the right side a column this run adds.',
+			}),
 		]);
 	});
 
@@ -309,7 +346,7 @@ describe("planRenames", () => {
 		expect(plan.errors).toHaveLength(1);
 		const [error] = plan.errors;
 		expect(error?.code).toBe("duplicate-rename-target");
-		expect(error?.message).toContain('new column name "handle"');
+		expect(error?.message).toContain('"app.posts.handle"');
 		expect(error?.message).not.toContain(".new.");
 	});
 
@@ -425,7 +462,11 @@ describe("planRenames", () => {
 			declaredAtByIdentity: noDeclSites,
 		});
 		expect(plan.errors).toEqual([
-			expect.objectContaining({ code: "unknown-confirm-drop-target" }),
+			expect.objectContaining({
+				code: "unknown-confirm-drop-target",
+				message:
+					'--confirm-drop "app.posts.title" doesn\'t match this run: table "app.posts" has no dropped column named "title". Next: check the name for typos — --confirm-drop\'s target must be a column (or table) this run actually drops.',
+			}),
 		]);
 	});
 });
