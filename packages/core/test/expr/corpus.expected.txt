@@ -1,0 +1,42 @@
+eq => "ddland"."posts"."status" = 'published'
+ne => "ddland"."posts"."status" <> 'draft'
+gt => "ddland"."posts"."views" > 10
+gte => "ddland"."posts"."views" >= 10
+lt => "ddland"."posts"."views" < 10
+lte => "ddland"."posts"."views" <= 10
+like => "ddland"."posts"."slug" like 'post-%'
+ilike => "ddland"."posts"."slug" ilike 'POST-%'
+notLike => "ddland"."posts"."slug" not like 'draft-%'
+notIlike => "ddland"."posts"."slug" not ilike 'DRAFT-%'
+isNull => "ddland"."posts"."published_at" is null
+isNotNull => "ddland"."posts"."published_at" is not null
+and => ("ddland"."posts"."status" = 'published') and ("ddland"."posts"."published_at" is not null)
+or => ("ddland"."posts"."status" = 'published') or ("ddland"."posts"."status" = 'draft')
+not => not ("ddland"."posts"."status" = 'draft')
+inArray => "ddland"."posts"."status" in ('draft', 'published')
+notInArray => "ddland"."posts"."status" not in ('archived', 'deleted')
+between => "ddland"."posts"."views" between 10 and 100
+notBetween => "ddland"."posts"."views" not between 10 and 100
+now => now()
+genRandomUuid => gen_random_uuid()
+coalesce => coalesce("ddland"."posts"."status", 'unknown')
+literal embedded quote => "ddland"."posts"."slug" = 'it''s'
+literal injection string (comparison) => "ddland"."posts"."slug" = '''; drop table users; --'
+literal injection string (sql template) => name = 'x''; drop table posts; --'
+literal negative number => "ddland"."posts"."views" > -5
+literal fractional number => "ddland"."posts"."views" >= 3.14
+literal Date => "ddland"."posts"."published_at" = '2026-08-19T00:00:00.000Z'::timestamptz
+sql template splices expr and literal => char_length("ddland"."posts"."slug") > 3
+sql.raw verbatim => 1 = 1
+using: and/or grouping => (("ddland"."posts"."status" = 'published') and ("ddland"."posts"."published_at" is not null)) or ("ddland"."posts"."status" = 'draft')
+using: exists + inner join (reaction's comment's post published) => exists (select 1 from "ddland"."comments" inner join "ddland"."posts" on "ddland"."comments"."post_id" = "ddland"."posts"."id" where ("ddland"."comments"."id" = "ddland"."reactions"."comment_id") and ("ddland"."posts"."status" = 'published'))
+using: correlated exists with outer scope (comments policy) => exists (select 1 from "ddland"."posts" where ("ddland"."posts"."id" = "ddland"."comments"."post_id") and ("ddland"."posts"."published_at" is not null))
+with check: insert comment only if its post is published (same guard, write position) => exists (select 1 from "ddland"."posts" where ("ddland"."posts"."id" = "ddland"."comments"."post_id") and ("ddland"."posts"."published_at" is not null))
+using: correlated notExists with outer scope (comments policy, negated) => not exists (select 1 from "ddland"."posts" where ("ddland"."posts"."id" = "ddland"."comments"."post_id") and ("ddland"."posts"."published_at" is not null))
+function body: select where => select "id", "status", "slug", "views", "published_at" from "ddland"."posts" where "ddland"."posts"."slug" = 'hello'
+function body: update set/where/returning => update "ddland"."posts" set "published_at" = now() where "ddland"."posts"."slug" = 'hello' returning "id", "status", "slug", "views", "published_at"
+insert multi-row with default fill => insert into "ddland"."posts" ("slug", "status", "views", "published_at") values ('a', 'draft', 0, default), ('b', 'draft', 0, now())
+insert on conflict do nothing => insert into "ddland"."posts" ("slug", "status", "views") values ('hello', 'draft', 0) on conflict ("slug") do nothing
+insert on conflict do update => insert into "ddland"."posts" ("slug", "status", "views") values ('hello', 'draft', 0) on conflict ("slug") do update set "views" = 0, "status" = 'draft'
+deleteFrom with returning => delete from "ddland"."posts" where "ddland"."posts"."slug" = 'old' returning "id", "status", "slug", "views", "published_at"
+select orderBy + limit => select "id", "status", "slug", "views", "published_at" from "ddland"."posts" order by "ddland"."posts"."published_at" desc limit 10
