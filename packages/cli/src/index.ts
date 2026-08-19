@@ -8,3 +8,5 @@
 // surface, never curated by hand, so it can't drift from core's real
 // exports (Task 14's entry-not-found golden checks this).
 export * from "@hejbro/core";
+export type { HejbroConfig } from "./config";
+export { defineConfig } from "./config";
