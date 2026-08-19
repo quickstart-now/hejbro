@@ -139,66 +139,187 @@ const computeSchemaTableSets = (
 	);
 };
 
+/**
+ * Every valid table-rename candidate (schema-level dropped/added check
+ * only — duplicates aren't resolved yet), `oldIdentity → newIdentity`. Used
+ * only to *pair* tables for column-set computation below; applying the
+ * rename still goes through the full `partitionRenameSpecs` validation.
+ */
+const tableRenamePairings = (
+	renames: ReadonlyArray<RenameSpec>,
+	schemaTableSets: SchemaTableSets,
+): ReadonlyMap<string, string> => {
+	const candidates = renames.filter(
+		(spec): spec is TableRenameSpec => spec.target === "table",
+	);
+	const valid = candidates.filter((spec) => {
+		const sets = schemaTableSets.get(spec.schemaName);
+		return (
+			(sets?.dropped.has(spec.oldName) ?? false) &&
+			(sets?.added.has(spec.newName) ?? false)
+		);
+	});
+	return new Map(
+		valid.map((spec) => [
+			tableIdentity(spec.schemaName, spec.oldName),
+			tableIdentity(spec.schemaName, spec.newName),
+		]),
+	);
+};
+
+/**
+ * Per-table dropped/added column-name sets, keyed by the table's *previous*
+ * identity — for tables unchanged by name (same identity in both
+ * snapshots) and for tables paired by a valid `--rename` table spec (M1
+ * fix: without this pairing, a table-rename+column-change combo would miss
+ * rule A's ambiguity check entirely, and any accompanying column spec would
+ * be rejected as `unknown-rename-target` since its table never appeared to
+ * have changed columns).
+ */
 const computeTableColumnSets = (
 	previousTables: ReadonlyMap<string, TableSnapshot>,
 	nextTables: ReadonlyMap<string, TableSnapshot>,
-): TableColumnSets =>
-	new Map(
-		Array.from(previousTables.keys())
-			.filter((identity) => nextTables.has(identity))
-			.map((identity) => {
-				const previousTable = previousTables.get(identity);
-				const nextTable = nextTables.get(identity);
-				if (previousTable === undefined || nextTable === undefined) {
-					return [
-						identity,
-						{ dropped: new Set<string>(), added: new Set<string>() },
-					] as const;
-				}
-				const previousNames = new Set(previousTable.columns.map((c) => c.name));
-				const nextNames = new Set(nextTable.columns.map((c) => c.name));
-				return [
-					identity,
-					{
-						dropped: setDifference(previousNames, nextNames),
-						added: setDifference(nextNames, previousNames),
-					},
-				] as const;
-			}),
+	renamedPairings: ReadonlyMap<string, string>,
+): TableColumnSets => {
+	const columnSetEntry = (
+		oldIdentity: string,
+		nextIdentity: string,
+	): readonly [string, NameSets] | null => {
+		const previousTable = previousTables.get(oldIdentity);
+		const nextTable = nextTables.get(nextIdentity);
+		if (previousTable === undefined || nextTable === undefined) {
+			return null;
+		}
+		const previousNames = new Set(previousTable.columns.map((c) => c.name));
+		const nextNames = new Set(nextTable.columns.map((c) => c.name));
+		return [
+			oldIdentity,
+			{
+				dropped: setDifference(previousNames, nextNames),
+				added: setDifference(nextNames, previousNames),
+			},
+		];
+	};
+
+	const unchangedEntries = Array.from(previousTables.keys())
+		.filter((identity) => nextTables.has(identity))
+		.map((identity) => columnSetEntry(identity, identity));
+	const renamedEntries = Array.from(renamedPairings.entries()).map(
+		([oldIdentity, newIdentity]) => columnSetEntry(oldIdentity, newIdentity),
 	);
+
+	return new Map(
+		[...unchangedEntries, ...renamedEntries].filter(
+			(entry): entry is readonly [string, NameSets] => entry !== null,
+		),
+	);
+};
 
 // --- Step 2: validation -----------------------------------------------
 
-type Claim = { readonly key: string; readonly specIndex: number };
-
-const columnClaimBase = (schemaName: string, tableName: string): string =>
-	`column:${tableIdentity(schemaName, tableName)}`;
+/**
+ * One spec's claim on an old or new name — grouped by `groupKey` (which
+ * encodes target kind, scope, direction, and name) to find two specs that
+ * claim the same identifier. Carries enough to render a human-readable
+ * message (never a raw internal key — m3 fix).
+ */
+type Claim = {
+	readonly groupKey: string;
+	readonly targetKind: "column" | "table";
+	readonly schemaName: string;
+	readonly tableName: string | null;
+	readonly direction: "old" | "new";
+	readonly name: string;
+	readonly specIndex: number;
+};
 
 const specClaims = (
 	spec: RenameSpec,
 	specIndex: number,
 ): ReadonlyArray<Claim> => {
 	if (spec.target === "column") {
-		const base = columnClaimBase(spec.schemaName, spec.tableName);
+		const scope = tableIdentity(spec.schemaName, spec.tableName);
 		return [
-			{ key: `${base}.${spec.oldName}`, specIndex },
-			{ key: `${base}.new.${spec.newName}`, specIndex },
+			{
+				groupKey: `column-old:${scope}:${spec.oldName}`,
+				targetKind: "column",
+				schemaName: spec.schemaName,
+				tableName: spec.tableName,
+				direction: "old",
+				name: spec.oldName,
+				specIndex,
+			},
+			{
+				groupKey: `column-new:${scope}:${spec.newName}`,
+				targetKind: "column",
+				schemaName: spec.schemaName,
+				tableName: spec.tableName,
+				direction: "new",
+				name: spec.newName,
+				specIndex,
+			},
 		];
 	}
 	return [
-		{ key: `table:${spec.schemaName}.${spec.oldName}`, specIndex },
-		{ key: `table:${spec.schemaName}.new.${spec.newName}`, specIndex },
+		{
+			groupKey: `table-old:${spec.schemaName}:${spec.oldName}`,
+			targetKind: "table",
+			schemaName: spec.schemaName,
+			tableName: null,
+			direction: "old",
+			name: spec.oldName,
+			specIndex,
+		},
+		{
+			groupKey: `table-new:${spec.schemaName}:${spec.newName}`,
+			targetKind: "table",
+			schemaName: spec.schemaName,
+			tableName: null,
+			direction: "new",
+			name: spec.newName,
+			specIndex,
+		},
 	];
 };
 
-const groupClaimsByKey = (
+const groupClaims = (
 	claims: ReadonlyArray<Claim>,
-): ReadonlyMap<string, ReadonlyArray<number>> =>
+): ReadonlyMap<string, ReadonlyArray<Claim>> =>
 	claims.reduce((acc, claim) => {
-		const existing = acc.get(claim.key) ?? [];
-		acc.set(claim.key, [...existing, claim.specIndex]);
+		const existing = acc.get(claim.groupKey) ?? [];
+		acc.set(claim.groupKey, [...existing, claim]);
 		return acc;
-	}, new Map<string, ReadonlyArray<number>>());
+	}, new Map<string, ReadonlyArray<Claim>>());
+
+/** Human-readable description of what a claim targets — never the raw internal `groupKey` (m3 fix). */
+const describeClaim = (claim: Claim): string => {
+	if (claim.targetKind === "column") {
+		const identity = tableIdentity(claim.schemaName, claim.tableName ?? "");
+		if (claim.direction === "old") {
+			return `old column name "${claim.name}" on "${identity}"`;
+		}
+		return `new column name "${claim.name}" on "${identity}"`;
+	}
+	if (claim.direction === "old") {
+		return `old table name "${claim.name}" in schema "${claim.schemaName}"`;
+	}
+	return `new table name "${claim.name}" in schema "${claim.schemaName}"`;
+};
+
+const describeFirstClaim = (claims: ReadonlyArray<Claim>): string => {
+	const [first] = claims;
+	if (first === undefined) {
+		return "an identifier";
+	}
+	return describeClaim(first);
+};
+
+const duplicateCountPhrase = (count: number): string => {
+	if (count === 2) {
+		return "two --rename flags both target";
+	}
+	return `${count} --rename flags all target`;
+};
 
 const findDuplicateRenameSpecs = (
 	renames: ReadonlyArray<RenameSpec>,
@@ -206,21 +327,23 @@ const findDuplicateRenameSpecs = (
 	readonly duplicatedIndices: ReadonlySet<number>;
 	readonly errors: ReadonlyArray<HejbroError>;
 } => {
-	const byKey = groupClaimsByKey(
+	const grouped = groupClaims(
 		renames.flatMap((spec, index) => specClaims(spec, index)),
 	);
-	const duplicateGroups = Array.from(byKey.entries())
-		.filter(([, indices]) => new Set(indices).size > 1)
+	const duplicateGroups = Array.from(grouped.entries())
+		.filter(([, claims]) => new Set(claims.map((c) => c.specIndex)).size > 1)
 		.sort((a, b) => compareKeys(a[0], b[0]));
 	const duplicatedIndices = new Set(
-		duplicateGroups.flatMap(([, indices]) => indices),
+		duplicateGroups.flatMap(([, claims]) => claims.map((c) => c.specIndex)),
 	);
-	const errors = duplicateGroups.map(([key]) =>
-		hejbroError(
+	const errors = duplicateGroups.map(([, claims]) => {
+		const count = new Set(claims.map((c) => c.specIndex)).size;
+		const target = describeFirstClaim(claims);
+		return hejbroError(
 			"duplicate-rename-target",
-			`multiple --rename flags target the same identifier ("${key.split(":").slice(1).join(":")}") — each old or new name may appear in at most one --rename flag per generate run. Next: keep a single --rename flag per identifier and rerun.`,
-		),
-	);
+			`${duplicateCountPhrase(count)} the same ${target} — each old or new name may appear in at most one --rename flag per generate run. Next: keep a single --rename flag per identifier and rerun.`,
+		);
+	});
 	return { duplicatedIndices, errors };
 };
 
@@ -471,12 +594,15 @@ const rewriteForeignKeyTargets = (
 ): ObjectsRecord =>
 	entriesWithPrefix(objects, TABLE_PREFIX).reduce((acc, [key, node]) => {
 		const tableSnapshot = asTableSnapshot(node);
+		const hasMatch = tableSnapshot.foreignKeys.some(
+			(foreignKey) => foreignKey.referencesTable === oldIdentity,
+		);
+		if (!hasMatch) {
+			return acc;
+		}
 		const rewrittenForeignKeys = tableSnapshot.foreignKeys.map((foreignKey) =>
 			retargetForeignKey(foreignKey, oldIdentity, newIdentity),
 		);
-		if (rewrittenForeignKeys === tableSnapshot.foreignKeys) {
-			return acc;
-		}
 		return setKey(acc, key, {
 			...tableSnapshot,
 			foreignKeys: rewrittenForeignKeys,
@@ -512,6 +638,14 @@ const rewriteForeignKeyReferenceColumn = (
 ): ObjectsRecord =>
 	entriesWithPrefix(objects, TABLE_PREFIX).reduce((acc, [key, node]) => {
 		const tableSnapshot = asTableSnapshot(node);
+		const hasMatch = tableSnapshot.foreignKeys.some(
+			(foreignKey) =>
+				foreignKey.referencesTable === identity &&
+				foreignKey.referencesColumns.includes(oldColumnName),
+		);
+		if (!hasMatch) {
+			return acc;
+		}
 		const rewrittenForeignKeys = tableSnapshot.foreignKeys.map((foreignKey) =>
 			retargetForeignKeyReferenceColumn(
 				foreignKey,
@@ -520,9 +654,6 @@ const rewriteForeignKeyReferenceColumn = (
 				newColumnName,
 			),
 		);
-		if (rewrittenForeignKeys === tableSnapshot.foreignKeys) {
-			return acc;
-		}
 		return setKey(acc, key, {
 			...tableSnapshot,
 			foreignKeys: rewrittenForeignKeys,
@@ -793,6 +924,14 @@ const applyColumnRename = (
 	};
 };
 
+/** A rename spec's target identity, for deterministic (compareKeys) ordering — independent of argv input order. */
+const renameSpecTargetIdentity = (spec: RenameSpec): string => {
+	if (spec.target === "table") {
+		return `${tableIdentity(spec.schemaName, spec.oldName)}`;
+	}
+	return `${tableIdentity(spec.schemaName, spec.tableName)}.${spec.oldName}`;
+};
+
 const applyRenameSpecs = (
 	objects: ObjectsRecord,
 	validSpecs: ReadonlyArray<RenameSpec>,
@@ -801,12 +940,14 @@ const applyRenameSpecs = (
 	readonly statements: ReadonlyArray<string>;
 	readonly changes: ReadonlyArray<KindChange>;
 } => {
-	const tableRenames = validSpecs.filter(
-		(spec): spec is TableRenameSpec => spec.target === "table",
-	);
-	const columnRenames = validSpecs.filter(
-		(spec): spec is ColumnRenameSpec => spec.target === "column",
-	);
+	const byTargetIdentity = (a: RenameSpec, b: RenameSpec): number =>
+		compareKeys(renameSpecTargetIdentity(a), renameSpecTargetIdentity(b));
+	const tableRenames = validSpecs
+		.filter((spec): spec is TableRenameSpec => spec.target === "table")
+		.sort(byTargetIdentity);
+	const columnRenames = validSpecs
+		.filter((spec): spec is ColumnRenameSpec => spec.target === "column")
+		.sort(byTargetIdentity);
 
 	const initial: RewriteState = {
 		objects,
@@ -1003,7 +1144,12 @@ export const planRenames = (options: {
 	const previousTables = tableEntries(options.previous.objects);
 	const nextTables = tableEntries(options.next.objects);
 	const schemaTableSets = computeSchemaTableSets(previousTables, nextTables);
-	const tableColumnSets = computeTableColumnSets(previousTables, nextTables);
+	const renamedPairings = tableRenamePairings(options.renames, schemaTableSets);
+	const tableColumnSets = computeTableColumnSets(
+		previousTables,
+		nextTables,
+		renamedPairings,
+	);
 
 	const renameResult = partitionRenameSpecs(
 		options.renames,

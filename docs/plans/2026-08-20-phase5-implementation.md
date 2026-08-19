@@ -284,7 +284,7 @@ export type RenamePlan = {
 	readonly rewrittenPrevious: Snapshot;
 	/** `alter table … rename …` statements, identity-ordered, emitted first */
 	readonly renameStatements: ReadonlyArray<string>;
-	/** synthetic banner-only changes, e.g. `~ table app.posts [column slug renamed to handle]` */
+	/** synthetic banner-only changes, e.g. `~ table app.posts [column "slug" renamed to "handle"]` (quoted names — the existing diff-note convention) */
 	readonly renameChanges: ReadonlyArray<KindChange>;
 	/** batch-collected diagnostics; non-empty ⇒ caller must not emit SQL */
 	readonly errors: ReadonlyArray<HejbroError>;
@@ -529,7 +529,7 @@ tests in the CLI pin the final rendering).
 - [ ] **Step 1: Failing tests** — (a) `generateMigration` with an ambiguous
   pair returns `errors` non-empty and empty `sql`; (b) with a matching
   `renames` spec the result `sql` starts with the banner, the banner line
-  reads `~ table app.posts [column slug renamed to handle]`, and the first
+  reads `~ table app.posts [column "slug" renamed to "handle"]`, and the first
   statement after the banner is the RENAME; (c) `renderBanner` with hashes
   appends exactly the two lines above; (d) `parseBannerHashes` round-trips
   (c) and returns `null` on a hash-less banner.

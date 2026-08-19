@@ -274,6 +274,98 @@ describe("planRenames", () => {
 		]);
 	});
 
+	it("duplicate-rename-target for two specs claiming the same new name (human-readable message)", () => {
+		const previous = snap(
+			app,
+			table(app, "posts", { slug: text(), title: text() }),
+		);
+		const next = snap(
+			app,
+			table(app, "posts", { slug: text(), title: text() }),
+		);
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "slug",
+					newName: "handle",
+				},
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "title",
+					newName: "handle",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toHaveLength(1);
+		const [error] = plan.errors;
+		expect(error?.code).toBe("duplicate-rename-target");
+		expect(error?.message).toContain('new column name "handle"');
+		expect(error?.message).not.toContain(".new.");
+	});
+
+	it("M1: a table rename + a column rename on the same table combine into one migration", () => {
+		const previous = snap(app, table(app, "posts", { slug: text() }));
+		const next = snap(app, table(app, "blog_posts", { handle: text() }));
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "blog_posts",
+				},
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "slug",
+					newName: "handle",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts" rename to "blog_posts";`,
+			`alter table "app"."blog_posts" rename column "slug" to "handle";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("M1: a table-rename-only flag still surfaces the table's own column ambiguity", () => {
+		const previous = snap(app, table(app, "posts", { slug: text() }));
+		const next = snap(app, table(app, "blog_posts", { handle: text() }));
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "blog_posts",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([
+			expect.objectContaining({ code: "ambiguous-column-rename" }),
+		]);
+	});
+
 	it("unknown-confirm-drop-target for a column this run does not drop", () => {
 		const previous = snap(app, table(app, "posts", { title: text() }));
 		const next = snap(app, table(app, "posts", { title: text() }));
