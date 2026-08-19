@@ -1,4 +1,6 @@
 import { hejbroError } from "../error";
+import { enumKind } from "../kinds/enum-kind";
+import { schemaKind } from "../kinds/schema-kind";
 import type { HejbroDeclaration, ObjectKind } from "./object-kind";
 
 /**
@@ -62,7 +64,11 @@ export const createKindRegistry = (): KindRegistry => {
 
 /**
  * Creates a {@link KindRegistry} pre-registered with hejbro's built-in
- * object kinds. Empty for now — kinds are added as later tasks land
- * (schema/enum in Task 9, table in Tasks 10–11).
+ * object kinds (schema, enum; table lands in Tasks 10–11).
  */
-export const createDefaultRegistry = (): KindRegistry => createKindRegistry();
+export const createDefaultRegistry = (): KindRegistry => {
+	const registry = createKindRegistry();
+	registry.register(schemaKind);
+	registry.register(enumKind);
+	return registry;
+};

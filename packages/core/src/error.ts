@@ -27,3 +27,14 @@ export const hejbroError = (code: string, message: string): HejbroError => ({
 export const throwHejbroError = (code: string, message: string): never => {
 	throw hejbroError(code, message);
 };
+
+/**
+ * Exhaustiveness helper: call in a `default` branch after every known case
+ * of a union has been handled explicitly. If reached, `value`'s type is
+ * `never` — TypeScript flags any missing case at compile time.
+ */
+export const assertNever = (value: never): never =>
+	throwHejbroError(
+		"unreachable",
+		`unexpected value: ${JSON.stringify(value)}.`,
+	);
