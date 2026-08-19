@@ -55,6 +55,8 @@ pnpm build           # turbo build
 
 ## Git workflow
 
+- **Work in a git worktree**, never in the main checkout — keep the main
+  checkout on `dev`.
 - Base branch `dev`. Feature branches cut from `dev`, PR back to `dev`,
   **squash merge**. PR body lists the commits to be squashed.
 - Releases: `dev` → `main` PR, **merge commit** (never squash/rebase).
@@ -62,6 +64,9 @@ pnpm build           # turbo build
   `<type>(<scope>): <subject>` — lower-case subject, ≤72 chars.
 - Push feature branches to `upstream` (`quickstart-now/hejbro`, the org
   repo), then verify: `git ls-remote --heads upstream <branch>`.
+- Issues: English only, with an issue type (Task/Bug/Feature), a fitting
+  label, and assigned to `hello-pooh`. Agents state their origin in the
+  first line of the body.
 
 ## Hard gates (owner approval required)
 
