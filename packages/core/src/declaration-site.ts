@@ -14,9 +14,18 @@ const extractLocation = (line: string): string | null => {
 	return match[1] ?? match[2] ?? null;
 };
 
-/** `true` when `location` isn't inside hejbro's own core source or a dependency. */
+/**
+ * `true` when `location` isn't inside hejbro's own core source, its built
+ * output, or a dependency. Checking `packages/core/src` alone only works
+ * against an unbundled (test/vitest) run — a real, built CLI calls into
+ * core's bundled `packages/core/dist/index.js`, whose own frame would
+ * otherwise be mistaken for the caller's site (found via a golden-test
+ * run of the built CLI, Task 14).
+ */
 const isOutsideCore = (location: string): boolean =>
-	!location.includes("packages/core/src") && !location.includes("node_modules");
+	!location.includes("packages/core/src") &&
+	!location.includes("packages/core/dist") &&
+	!location.includes("node_modules");
 
 /**
  * Best-effort capture of the source location that called into
