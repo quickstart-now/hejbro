@@ -1,6 +1,7 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { Expr, ExprNode } from "../expr/ast";
+import { collectColumnRefs } from "../expr/render-sql";
 
 /** The Postgres commands a policy can be scoped to. */
 export const policyCommands = [
@@ -181,4 +182,148 @@ export const rls: {
 			permissive: true,
 			declaredAt: captureDeclarationSite(),
 		}),
+};
+
+/** A `PolicyInput` bound to the table that declared it. */
+export type PolicyDeclaration = {
+	readonly declarationKind: "policy";
+	readonly schemaName: string;
+	readonly tableName: string;
+	readonly policyName: string;
+	readonly permissive: boolean;
+	readonly command: PolicyCommand;
+	readonly roles: ReadonlyArray<string>;
+	readonly using: ExprNode | null;
+	readonly withCheck: ExprNode | null;
+	readonly declaredAt: string | null;
+};
+
+/** An `RlsInput` bound to the table that declared it. */
+export type RlsDeclaration = {
+	readonly declarationKind: "rls";
+	readonly schemaName: string;
+	readonly tableName: string;
+	readonly force: boolean;
+	readonly policies: ReadonlyArray<PolicyDeclaration>;
+	readonly declaredAt: string | null;
+};
+
+const clauseNotAllowed = (
+	policy: PolicyInput,
+	clause: "using" | "with check",
+	otherClause: "using" | "with check",
+): never =>
+	throwHejbroError(
+		"rls-policy-clause-not-allowed",
+		`policy "${policy.policyName}" is FOR ${policy.command} and cannot take ${clause} — Postgres rejects it; use ${otherClause} instead.`,
+		policy.declaredAt,
+	);
+
+/** Defensive runtime guard for clause/command combinations the type-state chain (D26) already prevents. */
+const assertClauseAllowed = (policy: PolicyInput): void => {
+	if (
+		(policy.command === "select" || policy.command === "delete") &&
+		policy.withCheck !== null
+	) {
+		clauseNotAllowed(policy, "with check", "using");
+	}
+	if (policy.command === "insert" && policy.using !== null) {
+		clauseNotAllowed(policy, "using", "with check");
+	}
+};
+
+const assertOwnColumnsOnly = (
+	schemaName: string,
+	tableName: string,
+	policy: PolicyInput,
+): void => {
+	const refs = [
+		...(policy.using === null ? [] : collectColumnRefs(policy.using)),
+		...(policy.withCheck === null ? [] : collectColumnRefs(policy.withCheck)),
+	];
+	const foreignRef = refs.find(
+		(ref) => ref.schemaName !== schemaName || ref.tableName !== tableName,
+	);
+	if (foreignRef !== undefined) {
+		throwHejbroError(
+			"rls-policy-foreign-column",
+			`policy "${policy.policyName}" on "${schemaName}.${tableName}" references column "${foreignRef.schemaName}.${foreignRef.tableName}.${foreignRef.columnName}" — a policy expression may only reference its own table's columns directly; reach other tables through exists().`,
+			policy.declaredAt,
+		);
+	}
+};
+
+const bindPolicy = (
+	schemaName: string,
+	tableName: string,
+	policy: PolicyInput,
+): PolicyDeclaration => {
+	assertClauseAllowed(policy);
+	assertOwnColumnsOnly(schemaName, tableName, policy);
+	return {
+		declarationKind: "policy",
+		schemaName,
+		tableName,
+		policyName: policy.policyName,
+		permissive: policy.permissive,
+		command: policy.command,
+		roles: policy.roles,
+		using: policy.using,
+		withCheck: policy.withCheck,
+		declaredAt: policy.declaredAt,
+	};
+};
+
+const findDuplicatePolicyName = (
+	entries: ReadonlyArray<readonly [string, PolicyInput]>,
+): PolicyInput | undefined => {
+	const names = entries.map(([, policy]) => policy.policyName);
+	const duplicateName = names.find(
+		(name, index) => names.indexOf(name) !== index,
+	);
+	return entries.find(([, policy]) => policy.policyName === duplicateName)?.[1];
+};
+
+const assertNoDuplicatePolicyNames = (
+	tableName: string,
+	entries: ReadonlyArray<readonly [string, PolicyInput]>,
+): void => {
+	const duplicate = findDuplicatePolicyName(entries);
+	if (duplicate !== undefined) {
+		throwHejbroError(
+			"duplicate-policy-name",
+			`table "${tableName}" declares two policies named "${duplicate.policyName}" — Postgres requires unique policy names per table; rename one (the TS object key is just a label, the string passed to rls.policy() is the SQL name).`,
+			duplicate.declaredAt,
+		);
+	}
+};
+
+/**
+ * Binds an `RlsInput` to its owning table: stamps `schemaName`/`tableName`
+ * onto every policy and validates the whole set (duplicate SQL policy
+ * names, clause/command combinations, and own-table-only column
+ * references). `knownColumnNames` is accepted for parity with the table's
+ * other binders (indexes, foreign keys); policy expressions are always
+ * built from this table's own typed `ColumnRef`s, so there is nothing
+ * further to check against it today.
+ */
+export const bindRls = (
+	schemaName: string,
+	tableName: string,
+	_knownColumnNames: ReadonlySet<string>,
+	input: RlsInput,
+): RlsDeclaration => {
+	const entries = Object.entries(input.policies);
+	assertNoDuplicatePolicyNames(tableName, entries);
+	const policies = entries.map(([, policy]) =>
+		bindPolicy(schemaName, tableName, policy),
+	);
+	return {
+		declarationKind: "rls",
+		schemaName,
+		tableName,
+		force: input.force,
+		policies,
+		declaredAt: input.declaredAt,
+	};
 };

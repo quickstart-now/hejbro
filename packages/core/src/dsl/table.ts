@@ -6,6 +6,8 @@ import type {
 	ColumnBuilder,
 	ColumnState,
 } from "../types/column-builder";
+import type { RlsDeclaration, RlsInput } from "./rls";
+import { bindRls } from "./rls";
 import type { SchemaDeclaration } from "./schema";
 
 /** The referential actions Postgres supports for `on delete`. */
@@ -47,6 +49,7 @@ export type TableDeclaration = {
 	}>;
 	readonly indexes: ReadonlyArray<IndexDeclaration>;
 	readonly foreignKeys: ReadonlyArray<ForeignKeyDeclaration>;
+	readonly rls: RlsDeclaration | null;
 };
 
 /** Hides a {@link Table}'s declaration metadata behind a unique symbol, keeping the object's own enumerable keys limited to its columns (D15). */
@@ -87,6 +90,7 @@ export type ForeignKeyInput = {
 export type TableExtras = {
 	readonly indexes?: ReadonlyArray<IndexDeclaration>;
 	readonly foreignKeys?: ReadonlyArray<ForeignKeyInput>;
+	readonly rls?: RlsInput;
 };
 
 /** Converts a camelCase TypeScript identifier to a snake_case SQL name (`publishedAt` → `published_at`). */
@@ -211,11 +215,24 @@ const resolveForeignKey = (
 	};
 };
 
+/** Binds `extras.rls` to its owning table (D25), or `null` when a table declares none — an `if` helper so `table()` never needs a ternary. */
+const resolveRls = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	knownColumnNames: ReadonlySet<string>,
+	rlsInput: RlsInput | undefined,
+): RlsDeclaration | null => {
+	if (rlsInput === undefined) {
+		return null;
+	}
+	return bindRls(owner.schemaName, tableName, knownColumnNames, rlsInput);
+};
+
 /**
  * Declares a table under `owner`. Column keys are camelCase in TypeScript
  * and snake_cased in the generated SQL. `extras` receives this table's own
- * columns as typed `ColumnRef`s to build indexes (`index().on(t.column)`)
- * and foreign keys.
+ * columns as typed `ColumnRef`s to build indexes (`index().on(t.column)`),
+ * foreign keys, and row-level security (`rls.enabled({...})`).
  */
 export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	owner: SchemaDeclaration,
@@ -237,6 +254,13 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 
+	const rls = resolveRls(
+		owner,
+		tableName,
+		knownColumnNames,
+		resolvedExtras.rls,
+	);
+
 	const declaration: TableDeclaration = {
 		declarationKind: "table",
 		schema: owner,
@@ -247,6 +271,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		})),
 		indexes,
 		foreignKeys,
+		rls,
 	};
 
 	return Object.assign(refsObject, { [tableMeta]: declaration });
