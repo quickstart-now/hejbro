@@ -569,6 +569,30 @@ export const commentsSingleDepth = defineTrigger(comments, {
 
 ---
 
+### Task 6: ctx.forEach loop construct (#50 — approved to land in-phase, 2026-08-19)
+
+Sub-issue: "feat(core): ctx.forEach loop construct" (#50). Branch `feat/phase3-foreach` off fresh `upstream/dev` (post-#57).
+
+**Files:**
+- Modify: `packages/core/src/plpgsql/body-ast.ts`, `packages/core/src/plpgsql/body-context.ts`, `packages/core/src/plpgsql/render-body.ts`, `packages/core/src/index.ts` (only if new public types appear)
+- Test: extend `packages/core/test/plpgsql/body-context.test.ts`, `packages/core/test/plpgsql/render-body.test.ts`, `packages/core/test/plpgsql/guard.test.ts`
+
+**Design (planner brainstorm, small scope):**
+- Unlike `ctx.row`'s scalar-per-column strategy (A2 — motivated by the unassigned-record trap on zero rows), a `for … in <query> loop` variable is a true plpgsql `record` assigned on every iteration, so **the loop variable is one record local**: declared `<name> record;`, fields accessed `<name>.<snake_column>`.
+- Surface: `ctx.forEach<TProjection extends RowProjection>(query: SelectLimited<TProjection>, body: (row: RowColumns<TProjection>) => void, name?: string): void` — same projection constraints as `ctx.row` (`row-projection-not-column` applies), name validated by `assertValidLocalName` + `duplicate-local-name`, deterministic fallback counter `loop_1`, `loop_2`, … (separate counter from `row_N`).
+- Row proxy fields record `plpgsqlRef` with `path: [loopName, snakeColumnName]` (two segments — record field access, not scalar locals).
+- New statement node: `{ readonly stmtKind: "forEach"; readonly loopName: string; readonly query: SelectNode; readonly statements: ReadonlyArray<BodyStatement> }` — recorded via the existing frame stack (push, run body, pop), same as `if` branches.
+- Emit: `for <loopName> in <renderSelect(query)> loop` at current depth, body statements at depth+1, `end loop;` — loop variable added to the `declare` block as `<loopName> record;`.
+- Determinism guard needs no change (double-run covers loop bodies — they record once per run, not per iteration).
+
+- [ ] **Step 1: Failing tests** — recording: forEach records the node with a record declaration, nested statements land inside, `loop_N` naming, duplicate/reserved name errors, derived-projection error; render: full-text `for r in select … loop` / indented body / `end loop;` plus `r record;` in declare; guard: a forEach body that records differently across runs throws `nondeterministic-body`.
+- [ ] **Step 2: Run, verify failure.**
+- [ ] **Step 3: Implement** (body-ast node + context method + emitter case + declare-block extension).
+- [ ] **Step 4: Full gate** — `pnpm check && pnpm check-types --force && pnpm test --force`.
+- [ ] **Step 5: Commit** — `feat(core): ctx.forEach loop construct` (adjust casing for commitlint: `feat(core): ctx-foreach loop construct` if `subject-case` rejects the camelCase).
+
+---
+
 ## Self-review notes (planner, pre-approval)
 
 - Spec coverage: §5.2 surface (args/returns/security/body) → Tasks 2/4; `grants` key deferred to Phase 4 (grants kind lands there — flagged in plan header). §5.3 → Task 2. §6.2 guard → Task 3. §6.4 hash+signature → Task 4 (A11 pending). §6.5 function/trigger diff strategies → Task 4. §7 error pairs + declaration site → Tasks 2/3. Roadmap acceptance → Task 5.

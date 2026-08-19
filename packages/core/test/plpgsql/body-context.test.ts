@@ -45,8 +45,16 @@ describe("body-context recording", () => {
 			},
 		);
 		expect(declaration.functionDeclaration.body.declarations).toEqual([
-			{ name: "parent_post_id", typeNode: { typeName: "uuid" } },
-			{ name: "parent_parent_id", typeNode: { typeName: "uuid" } },
+			{
+				declKind: "scalar",
+				name: "parent_post_id",
+				typeNode: { typeName: "uuid" },
+			},
+			{
+				declKind: "scalar",
+				name: "parent_parent_id",
+				typeNode: { typeName: "uuid" },
+			},
 		]);
 		const [selectInto, ifStmt, returnStmt] =
 			declaration.functionDeclaration.body.statements;
@@ -266,5 +274,120 @@ describe("body-context recording", () => {
 		expect(declaration.args).toEqual([
 			{ argName: "post_id", typeNode: { typeName: "uuid" } },
 		]);
+	});
+
+	it("forEach records a record declaration and nested statements inside a forEach node", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				ctx.forEach(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.parentId, row.id),
+					),
+					(child) => {
+						ctx.raise("child post=%", child.postId);
+					},
+					"child",
+				);
+				ctx.return(row);
+			},
+		);
+		expect(declaration.functionDeclaration.body.declarations).toEqual([
+			{ declKind: "record", name: "child" },
+		]);
+		const [forEachStmt, returnStmt] =
+			declaration.functionDeclaration.body.statements;
+		if (forEachStmt?.stmtKind !== "forEach") {
+			throw new Error("expected a forEach statement");
+		}
+		expect(forEachStmt.loopName).toBe("child");
+		expect(forEachStmt.statements).toHaveLength(1);
+		expect(forEachStmt.statements[0]).toMatchObject({ stmtKind: "raise" });
+		expect(returnStmt).toEqual({ stmtKind: "returnRef", refName: "new" });
+	});
+
+	it("auto-names unnamed loops deterministically (loop_1, loop_2)", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+				);
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+				);
+				ctx.return(row);
+			},
+		);
+		const [first, second] = declaration.functionDeclaration.body.statements;
+		expect(first).toMatchObject({ stmtKind: "forEach", loopName: "loop_1" });
+		expect(second).toMatchObject({ stmtKind: "forEach", loopName: "loop_2" });
+	});
+
+	it("loop row fields record plpgsqlRef with a two-segment path", () => {
+		defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+			ctx.forEach(
+				select({ postId: comments.postId }, comments).where(
+					eq(comments.parentId, row.id),
+				),
+				(child) => {
+					expect(child.postId.exprNode).toEqual({
+						nodeKind: "plpgsqlRef",
+						path: ["loop_1", "post_id"],
+					});
+				},
+				undefined,
+			);
+			ctx.return(row);
+		});
+	});
+
+	it("duplicate loop name throws duplicate-local-name", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"dup",
+				);
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"dup",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/already declared/);
+	});
+
+	it("reserved loop name throws reserved-local-name", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {},
+					"when",
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/reserved word/);
+	});
+
+	it("forEach over a derived-expression projection throws row-projection-not-column", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				const badProjection = select(
+					{ hasParent: isNotNull(comments.parentId) },
+					comments,
+				).where(eq(comments.id, row.id));
+				// @ts-expect-error — isNotNull(...) isn't a ColumnRef; this exercises the runtime-only guard
+				ctx.forEach(badProjection, () => {});
+				ctx.return(row);
+			}),
+		).toThrowError(/isn't a plain column reference/);
 	});
 });

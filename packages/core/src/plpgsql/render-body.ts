@@ -1,11 +1,16 @@
 import type { FunctionDeclaration } from "../dsl/define-function";
 import { assertNever, throwHejbroError } from "../error";
 import type { ExprNode } from "../expr/ast";
-import { renderExpr, renderQuery, renderSelectInto } from "../expr/render-sql";
+import {
+	renderExpr,
+	renderQuery,
+	renderSelect,
+	renderSelectInto,
+} from "../expr/render-sql";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import { quoteStringLiteral } from "../sql/literal";
 import { renderTypeNode } from "../types/type-node";
-import type { BodyStatement } from "./body-ast";
+import type { BodyStatement, PlpgsqlVarDeclaration } from "./body-ast";
 
 const indent = (depth: number): string => "\t".repeat(depth);
 
@@ -82,6 +87,13 @@ const renderStatementLines = (
 			return [`${indent(depth)}return query ${renderQuery(statement.query)};`];
 		case "if":
 			return renderIfLines(statement, depth, identity, declaredAt);
+		case "forEach": {
+			const headerLine = `${indent(depth)}for ${statement.loopName} in ${renderSelect(statement.query)} loop`;
+			const bodyLines = statement.statements.flatMap((inner) =>
+				renderStatementLines(inner, depth + 1, identity, declaredAt),
+			);
+			return [headerLine, ...bodyLines, `${indent(depth)}end loop;`];
+		}
 		default:
 			return assertNever(statement);
 	}
@@ -100,6 +112,18 @@ export const renderFunctionReturnsClause = (
 			return renderTypeNode(returns.typeNode);
 		default:
 			return assertNever(returns);
+	}
+};
+
+/** Renders one `declare` line: `<name> <typeNode>;` for a scalar row local, `<name> record;` for a `ctx.forEach()` loop variable. */
+const renderDeclarationLine = (local: PlpgsqlVarDeclaration): string => {
+	switch (local.declKind) {
+		case "scalar":
+			return `${indent(1)}${local.name} ${renderTypeNode(local.typeNode)};`;
+		case "record":
+			return `${indent(1)}${local.name} record;`;
+		default:
+			return assertNever(local);
 	}
 };
 
@@ -124,10 +148,7 @@ export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
 			? []
 			: [
 					"declare",
-					...declaration.body.declarations.map(
-						(local) =>
-							`${indent(1)}${local.name} ${renderTypeNode(local.typeNode)};`,
-					),
+					...declaration.body.declarations.map(renderDeclarationLine),
 				];
 	const bodyLines = declaration.body.statements.flatMap((stmt) =>
 		renderStatementLines(stmt, 1, identity, declaration.declaredAt),
