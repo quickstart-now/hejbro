@@ -18,6 +18,8 @@ export type {
 	TriggerEventInput,
 } from "./dsl/define-trigger";
 export { defineTrigger } from "./dsl/define-trigger";
+export type { ViewDeclaration } from "./dsl/define-view";
+export { defineView } from "./dsl/define-view";
 export type { IndexBuilder } from "./dsl/index-builder";
 export { index } from "./dsl/index-builder";
 export type { EnumDeclaration } from "./dsl/pg-enum";

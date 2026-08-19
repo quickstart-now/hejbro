@@ -1,0 +1,47 @@
+{
+	"dialect": "postgres",
+	"hejbroSnapshot": 2,
+	"objects": {
+		"schema:ddland": {
+			"schemaName": "ddland"
+		},
+		"table:ddland.posts": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					},
+					"unique": false
+				},
+				{
+					"default": null,
+					"name": "status",
+					"notNull": true,
+					"primaryKey": false,
+					"typeNode": {
+						"typeName": "text"
+					},
+					"unique": false
+				},
+				{
+					"default": null,
+					"name": "published_at",
+					"notNull": false,
+					"primaryKey": false,
+					"typeNode": {
+						"typeName": "timestamptz"
+					},
+					"unique": false
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"schema": "ddland"
+		}
+	}
+}
