@@ -88,4 +88,14 @@ describe("parseConfirmDropFlag", () => {
 			expect.objectContaining({ code: "invalid-rename-flag" }),
 		);
 	});
+
+	it("throws invalid-rename-flag with the owner-approved text (planner msg 00997dc7) for a malformed value", () => {
+		expect(() => parseConfirmDropFlag("ddland.posts.slug.extra")).toThrowError(
+			expect.objectContaining({
+				code: "invalid-rename-flag",
+				message:
+					'--confirm-drop value "ddland.posts.slug.extra" isn\'t in the expected "<schema>.<table>.<column>" (column) or "<schema>.<table>" (table) form. Next: check for extra "." characters.',
+			}),
+		);
+	});
 });

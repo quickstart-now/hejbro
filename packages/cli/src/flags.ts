@@ -4,14 +4,9 @@ import { throwHejbroError } from "@hejbro/core";
 const invalidRenameFlagMessage = (value: string): string =>
 	`--rename value "${value}" isn't in the expected "<schema>.<table>.<old>=<new>" (column) or "<schema>.<old>=<new>" (table) form. Next: check for extra "." characters, and make sure the value contains exactly one "=".`;
 
-/**
- * Draft — the plan doesn't give an owner-approved verbatim for
- * `--confirm-drop`'s own format error (only `--rename`'s was given); this
- * mirrors its phrasing for `--confirm-drop`'s own (`=`-less) grammar.
- * Flag for owner confirmation alongside Task 14's golden pinning.
- */
+/** Owner-approved text (planner msg 00997dc7, 2026-08-20) — --rename's approved wording, substituting --confirm-drop's own (=-less) grammar. */
 const invalidConfirmDropFlagMessage = (value: string): string =>
-	`--confirm-drop value "${value}" isn't in the expected "<schema>.<table>.<column>" (column) or "<schema>.<table>" (table) form. Next: check for extra or missing "." characters (no "=" belongs in a --confirm-drop value).`;
+	`--confirm-drop value "${value}" isn't in the expected "<schema>.<table>.<column>" (column) or "<schema>.<table>" (table) form. Next: check for extra "." characters.`;
 
 /**
  * Parses a `--rename` flag value: `<schema>.<table>.<old>=<new>` (3

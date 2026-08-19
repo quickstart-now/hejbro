@@ -241,6 +241,19 @@ describe("golden error corpus (Task 14, owner-approved ⑥ texts)", () => {
 		expectNoAbsolutePath(result.stderr);
 	});
 
+	it("invalid-rename-flag: malformed --confirm-drop value (owner-approved, planner msg 00997dc7)", async () => {
+		const result = await runCli(cwd, [
+			"generate",
+			"--confirm-drop",
+			"ddland.posts.slug.extra",
+		]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'--confirm-drop value "ddland.posts.slug.extra" isn\'t in the expected "<schema>.<table>.<column>" (column) or "<schema>.<table>" (table) form. Next: check for extra "." characters.',
+		);
+		expectNoAbsolutePath(result.stderr);
+	});
+
 	it("unknown-rename-target: --rename references a name this run doesn't drop/add", async () => {
 		await runCli(cwd, ["init"]);
 		await writeFixtureFile(cwd, "src/app.schema.ts", BASE_SCHEMA);
