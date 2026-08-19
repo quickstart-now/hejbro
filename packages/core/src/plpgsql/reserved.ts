@@ -101,19 +101,18 @@ export const reservedPlpgsqlNames: ReadonlySet<string> = new Set([
 
 /**
  * Throws `reserved-local-name` if `name` collides with a plpgsql/SQL
- * reserved word. `declaredAt` is accepted now (unused) so the call sites
- * are ready for Task 3's determinism guard, which wires `declaredAt` into
- * `throwHejbroError` once `error.ts` grows the optional third parameter.
+ * reserved word.
  */
 export const assertValidLocalName = (
 	name: string,
 	identity: string,
-	_declaredAt: string | null,
+	declaredAt: string | null,
 ): void => {
 	if (reservedPlpgsqlNames.has(name)) {
 		throwHejbroError(
 			"reserved-local-name",
 			`local name "${name}" in ${identity} collides with a plpgsql/SQL reserved word — rename it (reserved words cannot be used unquoted in a function body).`,
+			declaredAt,
 		);
 	}
 };

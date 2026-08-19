@@ -6,6 +6,7 @@
 // source path, alphabetically, via Biome's import/export organizer); see
 // each symbol's own JSDoc at its definition for what it does.
 
+export { captureDeclarationSite } from "./declaration-site";
 export type {
 	ArgRefs,
 	FunctionDeclaration,

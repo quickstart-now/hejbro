@@ -1,10 +1,11 @@
+import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { Expr } from "../expr/ast";
 import { expr } from "../expr/ast";
 import { familyOfTypeNode } from "../expr/type-family";
 import type { FunctionBody } from "../plpgsql/body-ast";
 import type { BodyContext } from "../plpgsql/body-context";
-import { createRecordingContext } from "../plpgsql/body-context";
+import { recordBodyWithGuard } from "../plpgsql/body-context";
 import { assertValidLocalName } from "../plpgsql/reserved";
 import type { BuilderFamily, ColumnBuilder } from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
@@ -46,12 +47,14 @@ export type ArgRefs<TArgs extends Record<string, ColumnBuilder>> = {
 
 const resolveFunctionReturns = (
 	identity: string,
+	declaredAt: string | null,
 	returns: Table | TypeNode | undefined,
 ): FunctionDeclaration["returns"] => {
 	if (returns === undefined) {
 		return throwHejbroError(
 			"missing-function-returns",
 			`defineFunction() "${identity}" requires a "returns" config — pass a table (for "returns setof …") or a TypeNode (for a scalar return).`,
+			declaredAt,
 		);
 	}
 	if (isTable(returns)) {
@@ -106,8 +109,9 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 
 /**
  * Declares a Postgres function: `config.args` becomes its typed parameter
- * list, `body` records its plpgsql (run once here — Task 3 adds the
- * double-run determinism guard around this same call).
+ * list, `body` records its plpgsql. `body` runs **twice** with fresh
+ * recording contexts — the two recorded trees must be structurally
+ * identical, or this throws `nondeterministic-body` (spec §6.2 decision A4).
  */
 export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
 	schemaName: string,
@@ -120,17 +124,18 @@ export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
 	body: (ctx: BodyContext, args: ArgRefs<TArgs>) => void,
 ): FunctionDeclaration => {
 	const identity = `${schemaName}.${functionName}`;
-	const declaredAt: string | null = null;
+	const declaredAt = captureDeclarationSite();
 	const security = config.security ?? "invoker";
-	const returns = resolveFunctionReturns(identity, config.returns);
+	const returns = resolveFunctionReturns(identity, declaredAt, config.returns);
 	const { declarations: argDeclarations, refs } = resolveArgs(
 		identity,
 		declaredAt,
 		config.args,
 	);
 
-	const { ctx, finish } = createRecordingContext(identity, declaredAt);
-	body(ctx, refs);
+	const functionBody = recordBodyWithGuard(identity, declaredAt, (ctx) =>
+		body(ctx, refs),
+	);
 
 	return {
 		declarationKind: "function",
@@ -139,7 +144,7 @@ export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
 		args: argDeclarations,
 		returns,
 		security,
-		body: finish(),
+		body: functionBody,
 		declaredAt,
 	};
 };
