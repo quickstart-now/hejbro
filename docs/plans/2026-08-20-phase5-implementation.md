@@ -76,6 +76,7 @@ review).
 | 4 | docs: expand–contract two-run generate guide (may merge into #2 — decide at issue creation) | Phase 7 (#8) |
 | 5 | test: npm-pack install-path smoke (U9) | Phase 7 or 8 — **one** phase fixed at creation time (no-orphan rule requires a single parent) |
 | 6 | refactor: retrofit `Next:` marker onto Phase 1–4 error messages (⑤) | Phase 7 (#8) |
+| 7 | feat(core): extend `assertSqlName` to explicit (user-pinned) index names — declaration-time validation consistency (PR-A review observation) | Phase 7 (#8) |
 
 Plus one implementation sub-issue of #6 per PR below.
 
