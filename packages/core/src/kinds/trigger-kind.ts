@@ -38,8 +38,11 @@ const TRIGGER_CHANGED_NOTE = "trigger changed; recreating";
  * The built-in object kind for Postgres triggers. Identity is
  * `"<schema>.<table>.<name>"`. Postgres has no `alter trigger` for
  * event/timing/function changes, so `diff` treats any field difference as
- * a drop+create pair; `emit` on create always returns both the
- * `drop trigger if exists` and `create trigger` statements (idempotent
+ * a single `alter` change (**not** a separate drop + create pair — the
+ * diff engine's global create/alter-before-drop ordering would otherwise
+ * hoist a same-identity create ahead of its own drop, dropping the trigger
+ * it just created; see #55) whose `emit` returns the `drop trigger if
+ * exists` and `create trigger` statements in that order (idempotent
  * recreate, spec §6.5) — including on a true first-time create.
  */
 export const triggerKind: ObjectKind<TriggerDeclaration> = {
@@ -101,17 +104,9 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 		return [
 			{
 				kind: "trigger",
-				operation: "drop",
+				operation: "alter",
 				identity,
 				previous,
-				next: null,
-				notes: [TRIGGER_CHANGED_NOTE],
-			},
-			{
-				kind: "trigger",
-				operation: "create",
-				identity,
-				previous: null,
 				next,
 				notes: [TRIGGER_CHANGED_NOTE],
 			},
@@ -119,11 +114,12 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 	},
 	emit: (change) => {
 		switch (change.operation) {
-			case "create": {
+			case "create":
+			case "alter": {
 				if (change.next === null) {
 					return throwHejbroError(
 						"invalid-kind-change",
-						"trigger create change is missing its next snapshot.",
+						"trigger create/alter change is missing its next snapshot.",
 					);
 				}
 				const [dropSql, createSql] = renderTriggerSql(
@@ -141,11 +137,6 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 				const [dropSql] = renderTriggerSql(asTriggerSnapshot(change.previous));
 				return [statement(dropSql)];
 			}
-			case "alter":
-				return throwHejbroError(
-					"invalid-kind-change",
-					"trigger kind never produces an alter change — this indicates an internal hejbro bug.",
-				);
 			default:
 				return assertNever(change.operation);
 		}

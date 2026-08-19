@@ -52,13 +52,21 @@ const argTypeList = (args: ReadonlyArray<FunctionArgSnapshot>): string =>
 
 const SIGNATURE_CHANGED_NOTE = "signature changed; recreating";
 
+const dropFunctionStatementSql = (snapshot: FunctionSnapshot): string =>
+	`drop function ${qualifyName(snapshot.schema, snapshot.name)}(${argTypeList(snapshot.args)});`;
+
 /**
  * The built-in object kind for Postgres functions. Identity is
  * `"<schema>.<name>"`. `diff` compares the signature (args/returns/
  * security/language) structurally: an identical signature with a changed
  * `bodyHash` emits a single `alter` (`create or replace`); any signature
- * difference emits a drop+create pair, since Postgres can't `create or
- * replace` across an argument or return-type change.
+ * difference **also** emits a single `alter` (**not** a separate drop +
+ * create pair — the diff engine's global create/alter-before-drop
+ * ordering would otherwise hoist a same-identity create ahead of its own
+ * drop, deleting the function it just created; see #55), whose `emit`
+ * renders `drop function <old signature>` followed by
+ * `create or replace function <new body>` in that order, since Postgres
+ * can't `create or replace` across an argument or return-type change.
  */
 export const functionKind: ObjectKind<FunctionDeclaration> = {
 	kind: "function",
@@ -140,17 +148,9 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 		return [
 			{
 				kind: "function",
-				operation: "drop",
+				operation: "alter",
 				identity,
 				previous,
-				next: null,
-				notes: [SIGNATURE_CHANGED_NOTE],
-			},
-			{
-				kind: "function",
-				operation: "create",
-				identity,
-				previous: null,
 				next,
 				notes: [SIGNATURE_CHANGED_NOTE],
 			},
@@ -174,10 +174,9 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 						"function drop change is missing its previous snapshot.",
 					);
 				}
-				const previousSnapshot = asFunctionSnapshot(change.previous);
 				return [
 					statement(
-						`drop function ${qualifyName(previousSnapshot.schema, previousSnapshot.name)}(${argTypeList(previousSnapshot.args)});`,
+						dropFunctionStatementSql(asFunctionSnapshot(change.previous)),
 					),
 				];
 			}
@@ -188,7 +187,22 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 						"function alter change is missing its next snapshot.",
 					);
 				}
-				return [statement(asFunctionSnapshot(change.next).bodySql)];
+				const nextSnapshot = asFunctionSnapshot(change.next);
+				if (change.previous === null) {
+					return [statement(nextSnapshot.bodySql)];
+				}
+				const previousSnapshot = asFunctionSnapshot(change.previous);
+				const signatureSame = sameJson(
+					signatureOf(previousSnapshot),
+					signatureOf(nextSnapshot),
+				);
+				if (signatureSame) {
+					return [statement(nextSnapshot.bodySql)];
+				}
+				return [
+					statement(dropFunctionStatementSql(previousSnapshot)),
+					statement(nextSnapshot.bodySql),
+				];
 			}
 			default:
 				return assertNever(change.operation);

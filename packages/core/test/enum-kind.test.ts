@@ -97,34 +97,26 @@ describe("enumKind", () => {
 		]);
 	});
 
-	it("diffs a removed value as a drop+create pair with a note", () => {
+	it("diffs a removed value as a single alter with a note", () => {
 		const previous = enumKind.serialize(
 			pgEnum(app, "post_status", ["draft", "published"]),
 		);
 		const next = enumKind.serialize(pgEnum(app, "post_status", ["draft"]));
 		const changes = expectChanges(
 			enumKind.diff(previous, next, "app.post_status"),
-			2,
+			1,
 		);
 		expect(changes[0]).toEqual({
 			kind: "enum",
-			operation: "drop",
+			operation: "alter",
 			identity: "app.post_status",
 			previous,
-			next: null,
-			notes: ["enum values removed; recreating type"],
-		});
-		expect(changes[1]).toEqual({
-			kind: "enum",
-			operation: "create",
-			identity: "app.post_status",
-			previous: null,
 			next,
 			notes: ["enum values removed; recreating type"],
 		});
 	});
 
-	it("diffs a reordered value list as a drop+create pair with a note", () => {
+	it("diffs a reordered value list as a single alter", () => {
 		const previous = enumKind.serialize(
 			pgEnum(app, "post_status", ["draft", "published"]),
 		);
@@ -133,10 +125,27 @@ describe("enumKind", () => {
 		);
 		const changes = expectChanges(
 			enumKind.diff(previous, next, "app.post_status"),
-			2,
+			1,
 		);
-		expect(changes[0]?.operation).toBe("drop");
-		expect(changes[1]?.operation).toBe("create");
+		expect(changes[0]?.operation).toBe("alter");
+	});
+
+	it("emits drop-then-create, in that order, for a value-removal alter", () => {
+		const previous = enumKind.serialize(
+			pgEnum(app, "post_status", ["draft", "published"]),
+		);
+		const next = enumKind.serialize(pgEnum(app, "post_status", ["draft"]));
+		const [change] = enumKind.diff(previous, next, "app.post_status");
+		if (change === undefined) {
+			throw new Error("expected a change");
+		}
+		expect(enumKind.emit(change)).toEqual([
+			{ sql: 'drop type "app"."post_status";', stage: "main" },
+			{
+				sql: `create type "app"."post_status" as enum ('draft');`,
+				stage: "main",
+			},
+		]);
 	});
 
 	it("emits exact create sql", () => {
