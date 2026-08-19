@@ -1,0 +1,102 @@
+{
+	"dialect": "postgres",
+	"hejbroSnapshot": 2,
+	"objects": {
+		"policy:ddland.posts.posts_read_published": {
+			"command": "select",
+			"name": "posts_read_published",
+			"permissive": true,
+			"roles": [
+				"anon"
+			],
+			"schema": "ddland",
+			"table": "posts",
+			"using": "\"ddland\".\"posts\".\"published_at\" is not null",
+			"withCheck": null
+		},
+		"rls:ddland.posts": {
+			"force": true,
+			"schema": "ddland",
+			"table": "posts"
+		},
+		"schema:ddland": {
+			"schemaName": "ddland"
+		},
+		"table:ddland.comments": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					},
+					"unique": false
+				},
+				{
+					"default": null,
+					"name": "post_id",
+					"notNull": true,
+					"primaryKey": false,
+					"typeNode": {
+						"typeName": "uuid"
+					},
+					"unique": false
+				},
+				{
+					"default": null,
+					"name": "deleted_at",
+					"notNull": false,
+					"primaryKey": false,
+					"typeNode": {
+						"typeName": "timestamptz"
+					},
+					"unique": false
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "comments",
+			"schema": "ddland"
+		},
+		"table:ddland.posts": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					},
+					"unique": false
+				},
+				{
+					"default": null,
+					"name": "status",
+					"notNull": true,
+					"primaryKey": false,
+					"typeNode": {
+						"typeName": "text"
+					},
+					"unique": false
+				},
+				{
+					"default": null,
+					"name": "published_at",
+					"notNull": false,
+					"primaryKey": false,
+					"typeNode": {
+						"typeName": "timestamptz"
+					},
+					"unique": false
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"schema": "ddland"
+		}
+	}
+}

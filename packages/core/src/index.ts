@@ -22,6 +22,14 @@ export type { IndexBuilder } from "./dsl/index-builder";
 export { index } from "./dsl/index-builder";
 export type { EnumDeclaration } from "./dsl/pg-enum";
 export { pgEnum } from "./dsl/pg-enum";
+export type {
+	PolicyCommand,
+	PolicyDeclaration,
+	PolicyInput,
+	RlsDeclaration,
+	RlsInput,
+} from "./dsl/rls";
+export { rls } from "./dsl/rls";
 export type { SchemaDeclaration } from "./dsl/schema";
 export { schema } from "./dsl/schema";
 export type {
