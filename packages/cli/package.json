@@ -4,11 +4,37 @@
 	"description": "TypeScript-native Postgres schema & RPC management. Declare everything in TypeScript, generate deterministic migration SQL.",
 	"license": "MIT",
 	"type": "module",
-	"main": "src/index.ts",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/quickstart-now/hejbro",
+		"directory": "packages/cli"
+	},
+	"bin": {
+		"hejbro": "./dist/cli.js"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
 	"scripts": {
-		"check-types": "tsc --noEmit"
+		"build": "tsdown",
+		"check-types": "tsc --noEmit",
+		"test": "vitest run"
 	},
 	"dependencies": {
-		"@hejbro/core": "workspace:*"
+		"@hejbro/core": "workspace:*",
+		"citty": "^0.2.2",
+		"jiti": "^2.7.0",
+		"tinyglobby": "^0.2.17",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"tsdown": "catalog:",
+		"vitest": "catalog:"
 	}
 }
