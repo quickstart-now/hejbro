@@ -103,6 +103,48 @@ describe("renderFunctionSql", () => {
 		expect(sql).toMatch(/\treturn query update .*returning .*;/);
 	});
 
+	it("renders a forEach loop with an indented body and a record declaration", () => {
+		const trigger = defineTrigger(
+			comments,
+			{
+				name: "loop_demo",
+				timing: "before",
+				events: ["insert"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.forEach(
+					select({ postId: comments.postId }, comments).where(
+						eq(comments.parentId, row.id),
+					),
+					(child) => {
+						ctx.raise("child post=%", child.postId);
+					},
+					"child",
+				);
+				ctx.return(row);
+			},
+		);
+
+		expect(renderFunctionSql(trigger.functionDeclaration)).toBe(
+			[
+				'create or replace function "ddland"."loop_demo_fn"()',
+				"returns trigger",
+				"language plpgsql",
+				"as $function$",
+				"declare",
+				"\tchild record;",
+				"begin",
+				'\tfor child in select "ddland"."comments"."post_id" as "post_id" from "ddland"."comments" where "ddland"."comments"."parent_id" = new.id loop',
+				"\t\traise exception 'child post=%', child.post_id;",
+				"\tend loop;",
+				"\treturn new;",
+				"end;",
+				"$function$;",
+			].join("\n"),
+		);
+	});
+
 	it("guards against a body whose rendered SQL contains the dollar-quote tag", () => {
 		const trigger = defineTrigger(
 			comments,

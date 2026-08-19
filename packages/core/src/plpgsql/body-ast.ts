@@ -1,11 +1,19 @@
 import type { ExprNode, QueryNode, SelectNode } from "../expr/ast";
 import type { TypeNode } from "../types/type-node";
 
-/** One `declare` entry in a recorded plpgsql function body. */
-export type PlpgsqlVarDeclaration = {
-	readonly name: string;
-	readonly typeNode: TypeNode;
-};
+/**
+ * One `declare` entry in a recorded plpgsql function body: a `ctx.row()`/
+ * `ctx.rowOrNull()` scalar local (`<name> <typeNode>;`), or a `ctx.forEach()`
+ * loop variable (`<name> record;` — a true plpgsql `record`, assigned fresh
+ * on every iteration, unlike the scalar-per-column row locals).
+ */
+export type PlpgsqlVarDeclaration =
+	| {
+			readonly declKind: "scalar";
+			readonly name: string;
+			readonly typeNode: TypeNode;
+	  }
+	| { readonly declKind: "record"; readonly name: string };
 
 /** One `if`/`elsif` branch: its condition plus the statements it guards. */
 export type IfBranch = {
@@ -37,7 +45,13 @@ export type BodyStatement =
 			readonly args: ReadonlyArray<ExprNode>;
 	  }
 	| { readonly stmtKind: "returnRef"; readonly refName: string }
-	| { readonly stmtKind: "returnQuery"; readonly query: QueryNode };
+	| { readonly stmtKind: "returnQuery"; readonly query: QueryNode }
+	| {
+			readonly stmtKind: "forEach";
+			readonly loopName: string;
+			readonly query: SelectNode;
+			readonly statements: ReadonlyArray<BodyStatement>;
+	  };
 
 /** A recorded function/trigger body: its locals plus its statements, in order. */
 export type FunctionBody = {

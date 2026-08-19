@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { defineTrigger, schema, table, uuid } from "../../src/index";
+import {
+	defineTrigger,
+	eq,
+	schema,
+	select,
+	table,
+	uuid,
+} from "../../src/index";
 
 const ddland = schema("ddland");
 const comments = table(ddland, "comments", {
@@ -33,6 +40,24 @@ describe("double-execution determinism guard", () => {
 				if (flips.length === 1) {
 					ctx.raise("only on the first run");
 				}
+				ctx.return(row);
+			}),
+		).toThrowError(/produced two different recorded ASTs/);
+	});
+
+	it("throws nondeterministic-body when a forEach body varies across runs", () => {
+		const flips: Array<number> = [];
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.forEach(
+					select(comments).where(eq(comments.parentId, row.id)),
+					() => {
+						flips.push(1);
+						if (flips.length === 1) {
+							ctx.raise("only on the first run");
+						}
+					},
+				);
 				ctx.return(row);
 			}),
 		).toThrowError(/produced two different recorded ASTs/);

@@ -74,6 +74,11 @@ export type BodyContext = {
 	readonly if: (condition: Expr<"boolean">, thenBranch: () => void) => IfChain;
 	readonly raise: (message: string, ...args: ReadonlyArray<RaiseArg>) => void;
 	readonly return: (value: TriggerRow<Table> | ReturnableQuery) => void;
+	readonly forEach: <TProjection extends RowProjection>(
+		query: SelectLimited<TProjection>,
+		body: (row: RowColumns<TProjection>) => void,
+		name?: string,
+	) => void;
 };
 
 /**
@@ -119,6 +124,7 @@ export const createRecordingContext = (
 	const declaredNames = new Set<string>();
 	const frames: Array<Array<BodyStatement>> = [[]];
 	const rowCounter = { current: 0 };
+	const loopCounter = { current: 0 };
 
 	const currentFrame = (): Array<BodyStatement> => {
 		const frame = frames.at(-1);
@@ -188,6 +194,7 @@ export const createRecordingContext = (
 				const varName = `${rowName}_${toSnakeCase(entry.key)}`;
 				registerLocalName(varName);
 				declarations.push({
+					declKind: "scalar",
 					name: varName,
 					typeNode: entry.columnRef.typeNode,
 				});
@@ -313,12 +320,46 @@ export const createRecordingContext = (
 		);
 	};
 
+	const recordForEach = <TProjection extends RowProjection>(
+		query: SelectLimited<TProjection>,
+		body: (row: RowColumns<TProjection>) => void,
+		name?: string,
+	): void => {
+		loopCounter.current += 1;
+		const loopName = name ?? `loop_${loopCounter.current}`;
+		registerLocalName(loopName);
+		declarations.push({ declKind: "record", name: loopName });
+
+		const entries = resolveRowEntries(query.projectionInput);
+		const rowProxy = Object.fromEntries(
+			entries.map((entry) => [
+				entry.key,
+				expr(entry.columnRef.family, {
+					nodeKind: "plpgsqlRef",
+					path: [loopName, toSnakeCase(entry.key)],
+				}),
+			]),
+		) as RowColumns<TProjection>;
+
+		frames.push([]);
+		body(rowProxy);
+		const bodyStatements = popFrame();
+
+		pushStatement({
+			stmtKind: "forEach",
+			loopName,
+			query: query.selectQuery,
+			statements: bodyStatements,
+		});
+	};
+
 	const ctx: BodyContext = {
 		row: recordRow(true),
 		rowOrNull: recordRow(false),
 		if: recordIf,
 		raise: recordRaise,
 		return: recordReturn,
+		forEach: recordForEach,
 	};
 
 	const finish = (): FunctionBody => ({
