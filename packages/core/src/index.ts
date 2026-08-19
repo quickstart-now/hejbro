@@ -55,6 +55,7 @@ export type {
 	NullTestNode,
 	OnConflictNode,
 	OrderByTerm,
+	PlpgsqlRefNode,
 	ProjectionNode,
 	QueryNode,
 	RawSqlNode,
@@ -103,6 +104,7 @@ export {
 	renderInsert,
 	renderQuery,
 	renderSelect,
+	renderSelectInto,
 	renderTableRef,
 	renderUpdate,
 } from "./expr/render-sql";

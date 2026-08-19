@@ -20,6 +20,17 @@ export type ColumnRefNode = {
 	readonly columnName: string;
 };
 
+/**
+ * A plpgsql-local reference — NEW/OLD row fields, function args, and
+ * declared locals — rendered dot-joined and unquoted (dual quoting policy,
+ * spec §5.3 / decision A3). Invisible to `collectColumnRefs` scope
+ * validation: it never names a declared table.
+ */
+export type PlpgsqlRefNode = {
+	readonly nodeKind: "plpgsqlRef";
+	readonly path: ReadonlyArray<string>;
+};
+
 export const comparisonOperators = [
 	"=",
 	"<>",
@@ -99,6 +110,7 @@ export type ExistsNode = {
 export type ExprNode =
 	| LiteralNode
 	| ColumnRefNode
+	| PlpgsqlRefNode
 	| ComparisonNode
 	| LogicalNode
 	| NotNode

@@ -17,16 +17,28 @@ export type OrderTermInput =
 	| Expr
 	| { readonly by: Expr; readonly direction: "asc" | "desc" };
 
-export type SelectLimited = { readonly selectQuery: SelectNode };
-export type SelectOrdered = SelectLimited & {
-	limit(count: number): SelectLimited;
+export type SelectLimited<
+	TProjection extends SelectProjection = SelectProjection,
+> = {
+	readonly selectQuery: SelectNode;
+	readonly fromTable: Table;
+	readonly projectionInput: TProjection;
 };
-export type SelectFiltered = SelectOrdered & {
-	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectOrdered;
+export type SelectOrdered<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectLimited<TProjection> & {
+	limit(count: number): SelectLimited<TProjection>;
 };
-export type SelectJoinable = SelectFiltered & {
-	innerJoin(joined: Table, on: Expr<"boolean">): SelectJoinable;
-	where(condition: Expr<"boolean">): SelectFiltered;
+export type SelectFiltered<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectOrdered<TProjection> & {
+	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectOrdered<TProjection>;
+};
+export type SelectJoinable<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectFiltered<TProjection> & {
+	innerJoin(joined: Table, on: Expr<"boolean">): SelectJoinable<TProjection>;
+	where(condition: Expr<"boolean">): SelectFiltered<TProjection>;
 };
 
 const tableRefOf = (target: Table): TableRefNode => {
@@ -41,19 +53,38 @@ const resolveOrderTerm = (term: OrderTermInput): OrderByTerm => {
 	return { expr: term.by.exprNode, direction: term.direction };
 };
 
-const makeStages = (query: SelectNode): SelectJoinable => ({
+const makeStages = <TProjection extends SelectProjection>(
+	query: SelectNode,
+	fromTable: Table,
+	projectionInput: TProjection,
+): SelectJoinable<TProjection> => ({
 	selectQuery: query,
+	fromTable,
+	projectionInput,
 	innerJoin: (joined, on) =>
-		makeStages({
-			...query,
-			joins: [
-				...query.joins,
-				{ joinKind: "inner", table: tableRefOf(joined), on: on.exprNode },
-			],
-		}),
-	where: (condition) => makeStages({ ...query, where: condition.exprNode }),
+		makeStages(
+			{
+				...query,
+				joins: [
+					...query.joins,
+					{ joinKind: "inner", table: tableRefOf(joined), on: on.exprNode },
+				],
+			},
+			fromTable,
+			projectionInput,
+		),
+	where: (condition) =>
+		makeStages(
+			{ ...query, where: condition.exprNode },
+			fromTable,
+			projectionInput,
+		),
 	orderBy: (...terms) =>
-		makeStages({ ...query, orderBy: terms.map(resolveOrderTerm) }),
+		makeStages(
+			{ ...query, orderBy: terms.map(resolveOrderTerm) },
+			fromTable,
+			projectionInput,
+		),
 	limit: (count) => {
 		if (!Number.isInteger(count) || count < 0) {
 			return throwHejbroError(
@@ -61,7 +92,7 @@ const makeStages = (query: SelectNode): SelectJoinable => ({
 				`limit(${count}) must be a non-negative integer.`,
 			);
 		}
-		return makeStages({ ...query, limit: count });
+		return makeStages({ ...query, limit: count }, fromTable, projectionInput);
 	},
 });
 
@@ -108,20 +139,24 @@ const resolveProjection = (
  * `select({ alias: expr, … }, table)` projects an object of expressions —
  * `table` is required in that form since it can't be inferred.
  */
-export const select = (
-	projection: SelectProjection,
+export const select = <TProjection extends SelectProjection>(
+	projection: TProjection,
 	from?: Table,
-): SelectJoinable => {
+): SelectJoinable<TProjection> => {
 	const { projectionNode, fromTable } = resolveProjection(projection, from);
-	return makeStages({
-		queryKind: "select",
-		projection: projectionNode,
-		from: tableRefOf(fromTable),
-		joins: [],
-		where: null,
-		orderBy: [],
-		limit: null,
-	});
+	return makeStages(
+		{
+			queryKind: "select",
+			projection: projectionNode,
+			from: tableRefOf(fromTable),
+			joins: [],
+			where: null,
+			orderBy: [],
+			limit: null,
+		},
+		fromTable,
+		projection,
+	);
 };
 
 const buildExists =
