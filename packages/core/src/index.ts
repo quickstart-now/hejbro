@@ -140,8 +140,24 @@ export { changeOperations } from "./kind/object-kind";
 export type { KindRegistry, RegisteredObjectKind } from "./kind/registry";
 export { createDefaultRegistry, createKindRegistry } from "./kind/registry";
 export { enumKind } from "./kinds/enum-kind";
+export type {
+	FunctionArgSnapshot,
+	FunctionSnapshot,
+} from "./kinds/function-kind";
+export { functionKind } from "./kinds/function-kind";
 export { schemaKind } from "./kinds/schema-kind";
 export { tableKind } from "./kinds/table-kind";
+export type {
+	TriggerEventSnapshot,
+	TriggerSnapshot,
+} from "./kinds/trigger-kind";
+export { triggerKind } from "./kinds/trigger-kind";
+export type {
+	BodyStatement,
+	FunctionBody,
+	IfBranch,
+	PlpgsqlVarDeclaration,
+} from "./plpgsql/body-ast";
 export type {
 	BodyContext,
 	IfChain,
@@ -151,6 +167,9 @@ export type {
 	RowProjection,
 	TriggerRow,
 } from "./plpgsql/body-context";
+export { fnv1aHex } from "./plpgsql/body-hash";
+export type { TriggerSnapshotShape } from "./plpgsql/render-body";
+export { renderFunctionSql, renderTriggerSql } from "./plpgsql/render-body";
 export type {
 	DeleteFilterable,
 	DeleteFinal,
