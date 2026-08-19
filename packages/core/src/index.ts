@@ -1,9 +1,101 @@
 // @hejbro/core — declaration model, builder DSL, compiler, snapshot & diff engine.
 // This package is pure: it never touches the filesystem or a database.
 // See /docs/specs/2026-08-19-hejbro-design.md before implementing anything here.
+//
+// Everything below is re-exported from its defining module (grouped here by
+// source path, alphabetically, via Biome's import/export organizer); see
+// each symbol's own JSDoc at its definition for what it does.
 
-// The full public API surface is re-exported here in Task 13; for now this
-// re-exports just the snapshot version constant (defined in
-// snapshot/snapshot.ts, its natural home, to avoid a circular import
-// between this barrel and the modules it re-exports).
-export { HEJBRO_SNAPSHOT_VERSION } from "./snapshot/snapshot";
+export type { EnumDeclaration } from "./dsl/pg-enum";
+export { pgEnum } from "./dsl/pg-enum";
+export type { SchemaDeclaration } from "./dsl/schema";
+export { schema } from "./dsl/schema";
+export type {
+	ForeignKeyAction,
+	ForeignKeyDeclaration,
+	IndexDeclaration,
+	TableDeclaration,
+	TableExtras,
+	TableExtrasHelpers,
+} from "./dsl/table";
+export { foreignKeyActions, table, toSnakeCase } from "./dsl/table";
+export { diffSnapshots } from "./engine/diff-engine";
+export { generateMigration } from "./engine/generate";
+export type { HejbroError } from "./error";
+export { assertNever, hejbroError, throwHejbroError } from "./error";
+export type { KeyedDiff } from "./kind/diff-helpers";
+export { diffByKey, sameJson } from "./kind/diff-helpers";
+export type {
+	ChangeOperation,
+	HejbroDeclaration,
+	KindChange,
+	ObjectKind,
+} from "./kind/object-kind";
+export { changeOperations } from "./kind/object-kind";
+export type { KindRegistry, RegisteredObjectKind } from "./kind/registry";
+export { createDefaultRegistry, createKindRegistry } from "./kind/registry";
+export { enumKind } from "./kinds/enum-kind";
+export { schemaKind } from "./kinds/schema-kind";
+export { tableKind } from "./kinds/table-kind";
+export type { Snapshot } from "./snapshot/snapshot";
+export {
+	buildSnapshot,
+	emptySnapshot,
+	HEJBRO_SNAPSHOT_VERSION,
+	parseSnapshot,
+	renderSnapshot,
+} from "./snapshot/snapshot";
+export type { JsonValue } from "./snapshot/stable-json";
+export { stableJson } from "./snapshot/stable-json";
+export { qualifyName, quoteIdentifier } from "./sql/identifier";
+export { quoteStringLiteral } from "./sql/literal";
+export type { MigrationPrefixStrategy } from "./sql/migration-file";
+export {
+	deriveSlug,
+	migrationFileName,
+	migrationPrefixStrategies,
+	renderBanner,
+} from "./sql/migration-file";
+export type { SqlStage, SqlStatement } from "./sql/statement";
+export { deferredStatement, statement } from "./sql/statement";
+export type {
+	ColumnBuilder,
+	ColumnDefault,
+	ColumnState,
+} from "./types/column-builder";
+export { createColumnBuilder } from "./types/column-builder";
+export type {
+	CharConfig,
+	NumericConfig,
+	VarcharConfig,
+} from "./types/column-builder-factories";
+export {
+	bigint,
+	bigserial,
+	boolean,
+	bytea,
+	char,
+	cidr,
+	date,
+	doublePrecision,
+	inet,
+	integer,
+	interval,
+	json,
+	jsonb,
+	macaddr,
+	numeric,
+	real,
+	serial,
+	smallint,
+	smallserial,
+	text,
+	time,
+	timestamp,
+	timestamptz,
+	timetz,
+	uuid,
+	varchar,
+} from "./types/column-builder-factories";
+export type { SimpleTypeName, TypeNode } from "./types/type-node";
+export { renderTypeNode, simpleTypeNames } from "./types/type-node";
