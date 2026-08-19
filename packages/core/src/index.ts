@@ -129,6 +129,7 @@ export {
 export type { SqlStage, SqlStatement } from "./sql/statement";
 export { deferredStatement, statement } from "./sql/statement";
 export type {
+	BuilderFamily,
 	ColumnBuilder,
 	ColumnDefault,
 	ColumnState,

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { ColumnBuilder } from "../src/index";
 import {
 	bigserial,
 	char,
@@ -124,6 +125,15 @@ describe("parameterized factories", () => {
 			precision: 10,
 			scale: 2,
 		});
+	});
+});
+
+describe("column builder type families", () => {
+	it("factories carry their postgres type family", () => {
+		expectTypeOf(uuid()).toEqualTypeOf<ColumnBuilder<"uuid">>();
+		expectTypeOf(text().notNull()).toEqualTypeOf<ColumnBuilder<"text">>();
+		expectTypeOf(timestamptz()).toEqualTypeOf<ColumnBuilder<"datetime">>();
+		expectTypeOf(uuid().array()).toEqualTypeOf<ColumnBuilder<"array">>();
 	});
 });
 

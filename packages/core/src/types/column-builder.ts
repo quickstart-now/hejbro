@@ -1,4 +1,5 @@
 import { throwHejbroError } from "../error";
+import type { SqlTypeFamily } from "../expr/type-family";
 import type { TypeNode } from "./type-node";
 
 /** A column's default value, as one of the shapes hejbro supports until Phase 2's expression AST lands. */
@@ -25,21 +26,27 @@ export type ColumnState = {
 
 /**
  * An immutable, chainable column declaration. Every modifier returns a new
- * `ColumnBuilder` — the original is never mutated.
+ * `ColumnBuilder` — the original is never mutated. `TFamily` carries the
+ * column's coarse Postgres type family (D17) so `table()` can expose typed
+ * `ColumnRef`s without a second declaration.
  */
-export type ColumnBuilder = {
+export type ColumnBuilder<TFamily extends SqlTypeFamily = SqlTypeFamily> = {
 	readonly columnState: ColumnState;
-	notNull(): ColumnBuilder;
+	notNull(): ColumnBuilder<TFamily>;
 	/** implies `notNull` when the column is materialized at serialization (Task 10), not here */
-	primaryKey(): ColumnBuilder;
-	unique(): ColumnBuilder;
-	default(value: string | number | boolean): ColumnBuilder;
+	primaryKey(): ColumnBuilder<TFamily>;
+	unique(): ColumnBuilder<TFamily>;
+	default(value: string | number | boolean): ColumnBuilder<TFamily>;
 	/** uuid columns only — throws an actionable error otherwise */
-	defaultRandom(): ColumnBuilder;
+	defaultRandom(): ColumnBuilder<TFamily>;
 	/** date/time-family columns only — throws an actionable error otherwise */
-	defaultNow(): ColumnBuilder;
-	array(): ColumnBuilder;
+	defaultNow(): ColumnBuilder<TFamily>;
+	array(): ColumnBuilder<"array">;
 };
+
+/** Extracts the {@link SqlTypeFamily} a {@link ColumnBuilder} carries. */
+export type BuilderFamily<TBuilder> =
+	TBuilder extends ColumnBuilder<infer TFamily> ? TFamily : never;
 
 const timeLikeTypeNames = [
 	"date",
@@ -57,15 +64,19 @@ const isTimeLikeTypeNode = (typeNode: TypeNode): boolean =>
  * method calls this factory again with a shallow-updated state, so builders
  * are effectively immutable value objects.
  */
-export const createColumnBuilder = (
+export const createColumnBuilder = <
+	TFamily extends SqlTypeFamily = SqlTypeFamily,
+>(
 	columnState: ColumnState,
-): ColumnBuilder => ({
+): ColumnBuilder<TFamily> => ({
 	columnState,
-	notNull: () => createColumnBuilder({ ...columnState, notNull: true }),
-	primaryKey: () => createColumnBuilder({ ...columnState, primaryKey: true }),
-	unique: () => createColumnBuilder({ ...columnState, unique: true }),
+	notNull: () =>
+		createColumnBuilder<TFamily>({ ...columnState, notNull: true }),
+	primaryKey: () =>
+		createColumnBuilder<TFamily>({ ...columnState, primaryKey: true }),
+	unique: () => createColumnBuilder<TFamily>({ ...columnState, unique: true }),
 	default: (value) =>
-		createColumnBuilder({
+		createColumnBuilder<TFamily>({
 			...columnState,
 			defaultValue: { defaultKind: "literal", value },
 		}),
@@ -76,7 +87,7 @@ export const createColumnBuilder = (
 				`defaultRandom() only applies to uuid columns, but this column is "${columnState.typeNode.typeName}" — use .default(...) or drop defaultRandom() here.`,
 			);
 		}
-		return createColumnBuilder({
+		return createColumnBuilder<TFamily>({
 			...columnState,
 			defaultValue: { defaultKind: "random-uuid" },
 		});
@@ -88,13 +99,13 @@ export const createColumnBuilder = (
 				`defaultNow() only applies to date/time columns, but this column is "${columnState.typeNode.typeName}" — use .default(...) instead.`,
 			);
 		}
-		return createColumnBuilder({
+		return createColumnBuilder<TFamily>({
 			...columnState,
 			defaultValue: { defaultKind: "now" },
 		});
 	},
 	array: () =>
-		createColumnBuilder({
+		createColumnBuilder<"array">({
 			...columnState,
 			typeNode: { typeName: "array", element: columnState.typeNode },
 		}),
