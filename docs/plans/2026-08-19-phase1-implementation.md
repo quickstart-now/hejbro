@@ -143,13 +143,14 @@ Add a pnpm catalog to `pnpm-workspace.yaml` (single place for versions):
 
 ```yaml
 catalog:
-	tsdown: ^0.15.0
-	typescript: ^5.9.2
-	vitest: ^3.2.0
+	tsdown: ^0.22.14
+	typescript: ^5.9.3
+	vitest: ^4.1.11
 ```
 
-(Executor: use the latest stable versions at implementation time; the
-catalog entry is the single source.)
+(Confirmed values as of 2026-08-19, following the Node ≥ 22 floor raise —
+D13 amended. tsdown requires Node ≥ 22.18.0; the catalog entry is the
+single source.)
 
 `packages/core/tsconfig.json`:
 
@@ -188,10 +189,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm check-types
