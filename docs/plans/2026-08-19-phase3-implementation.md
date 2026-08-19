@@ -33,7 +33,7 @@
 | A8 | Errors always carry the object identity; `declaredAt` is filled best-effort by parsing `new Error().stack` at the `defineFunction`/`defineTrigger` call site (identity-only when parsing fails). |
 | A9 | Loops (`ctx.forEach`) are **out of this plan**; tracked as a separate late-phase sub-issue. |
 | A10 | `ctx.raise` = message string literal + variadic args, always `raise exception`, `%` placeholder count validated against arg count (`%%` is a literal). `ctx.return` accepts only a trigger row (`new`/`old`) or a `.returning()`-final query. `ctx.if` returns an `IfChain` (`elseIf`/`else`) fixed now. |
-| A11 | **(escalated to owner, pending)** Function snapshot node additionally stores the rendered `bodySql` next to `bodyHash`, because `ObjectKind.emit` renders from snapshot nodes only (Phase 1 contract) and cannot reach the declaration. Hash remains the change-detection key per §6.4. Tasks 1–3 do not depend on this; Task 4 blocks on the answer. |
+| A11 | **(owner-approved 2026-08-19)** Function snapshot node additionally stores the rendered `bodySql` next to `bodyHash`, because `ObjectKind.emit` renders from snapshot nodes only (Phase 1 contract, `kind/object-kind.ts:47`) and cannot reach the declaration. Hash remains the change-detection key per §6.4. Task 5 updates the §6.4 wording and adds the decision-log entry (rationale: emit must reproduce from the snapshot alone; drizzle-kit stores full SQL in snapshots as precedent). |
 
 **Planner scope rulings (not owner-level):** the Phase-2 core extensions (plpgsqlRef node, select stage metadata, `renderSelectInto`) land inside Task 1, not as a separate pre-phase PR. `defineFunction`'s `grants` config key from §5.2 is **deferred to Phase 4** (grants kind doesn't exist yet). Body statements render single-line per statement (consistent with Phase 2 renderers), one tab of indentation inside `begin`/`end` and `declare`; `if` bodies indent one extra tab. Fixed dollar-quote tag `$function$` with a `body-contains-dollar-tag` compile error if the rendered body contains it. No validation that a body ends in `return` (Postgres reports it at runtime; revisit with real-PG CI in Phase 7).
 
@@ -434,7 +434,7 @@ it("attaches identity and best-effort declaredAt to the error", () => {
 
 ### Task 4: plpgsql emitter and function/trigger object kinds
 
-Sub-issue: "feat(core): plpgsql emitter and function/trigger object kinds". Branch `feat/phase3-emitter-kinds`. **Blocks on A11 owner answer** (bodySql in snapshot — plan below assumes YES; if NO, stop and report to planner).
+Sub-issue: "feat(core): plpgsql emitter and function/trigger object kinds" (#48). Branch `feat/phase3-emitter-kinds`. A11 approved: function snapshot stores `bodySql` alongside `bodyHash`.
 
 **Files:**
 - Create: `packages/core/src/plpgsql/render-body.ts`, `packages/core/src/plpgsql/body-hash.ts`, `packages/core/src/kinds/function-kind.ts`, `packages/core/src/kinds/trigger-kind.ts`
