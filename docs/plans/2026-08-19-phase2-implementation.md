@@ -603,10 +603,17 @@ git add packages/core && git commit -m "feat(core): literal lifting with injecti
 **Interfaces:**
 - Consumes: all node types from `./ast`; `renderLiteral` from `./literal`;
   `quoteIdentifier`, `qualifyName` from `../sql/identifier`.
-- Produces: `renderExpr(node: ExprNode): string`. (Query rendering is added
-  to this same file in Tasks 8–9; leave the `exists` case throwing
+- Produces:
+  `renderExpr(node: ExprNode, outerScope?: ReadonlyArray<TableRefNode>): string`.
+  `outerScope` names the tables whose columns the expression may reference
+  beyond its own subqueries — Task 8 threads it into `exists` rendering so
+  **correlated subqueries** work (an RLS `using` on `comments` renders with
+  `outerScope = [comments]`, letting
+  `exists (select 1 from posts where posts.id = comments.post_id)` pass
+  scope validation). In this task the parameter is accepted and ignored by
+  every case except `exists`; leave the `exists` case throwing
   `throwHejbroError("not-implemented-yet", "exists rendering lands with the select builder (Task 8).")`
-  for now — Task 8 replaces it.)
+  for now — Task 8 replaces it.
 
 **Parenthesization rule (deterministic over clever):** leaf nodes
 (`literal`, `columnRef`, `functionCall`, `rawSql`, `sqlTemplate`, `exists`)
@@ -1332,7 +1339,12 @@ export const select: (projection: SelectProjection, from?: Table) => SelectJoina
 export const exists: (query: SelectLimited) => Expr<"boolean">;
 export const notExists: (query: SelectLimited) => Expr<"boolean">;
 
-export const renderSelect: (query: SelectNode) => string; // from render-sql.ts
+// from render-sql.ts — outerScope: tables inherited from the enclosing
+// query or statement context (correlated subqueries; see scope rule below)
+export const renderSelect: (
+	query: SelectNode,
+	outerScope?: ReadonlyArray<TableRefNode>,
+) => string;
 ```
 
 Design notes locked here:
@@ -1350,14 +1362,20 @@ Design notes locked here:
   `` `limit(${count}) must be a non-negative integer.` ``
 - `orderBy` accepts a bare `Expr` (direction defaults to `"asc"`) or the
   `{ by, direction }` object form.
-- Render-time validation: every `columnRef` inside `where`/`on`/projection
-  must belong to `from` or a joined table — walk the AST (a small
-  `collectColumnRefs(node): ReadonlyArray<ColumnRefNode>` helper in
-  `render-sql.ts`). **Scope rule: `collectColumnRefs` does NOT descend into
-  `exists` nodes** — a subquery references its own from/join tables
-  legitimately and validates its own scope when it renders. On a violation,
-  throw code `foreign-column-ref`, message:
-  `` `select from "${schema}.${table}" references column "${refSchema}.${refTable}.${column}" — join that table first or move the condition into a subquery.` ``
+- **Scope rule (correlated subqueries are first-class — real RLS depends on
+  them):** each `renderSelect` call computes
+  `scope = [from, …joins, …outerScope]`. Every `columnRef` inside
+  `where`/`on`/projection must belong to a table in `scope` — walk the AST
+  (a small `collectColumnRefs(node): ReadonlyArray<ColumnRefNode>` helper
+  in `render-sql.ts` that does NOT descend into `exists` nodes). When
+  rendering an `exists` node, pass the current `scope` down as the
+  subquery's `outerScope` — so
+  `exists (select 1 from posts where posts.id = comments.post_id)` inside a
+  select from `comments` validates: the subquery's scope is
+  `[posts, comments]`. Phase 4 will render standalone RLS expressions with
+  `renderExpr(node, [policyTable])` the same way. On a violation, throw
+  code `foreign-column-ref`, message:
+  `` `select from "${schema}.${table}" references column "${refSchema}.${refTable}.${column}" — join that table, or reference it from an enclosing query via exists().` ``
 - Rendered clause order: `select … from … [inner join … on …]* [where …] [order by …] [limit …]`, single spaces, no trailing semicolon (statement-level callers add it).
 
 - [ ] **Step 1: Write the failing test**
@@ -1366,9 +1384,11 @@ Design notes locked here:
 // packages/core/test/query/select.test.ts
 import { describe, expect, it } from "vitest";
 import {
+	and,
 	eq,
 	exists,
 	isNotNull,
+	renderExpr,
 	renderSelect,
 	schema,
 	select,
@@ -1414,7 +1434,29 @@ describe("select builder", () => {
 			'exists (select 1 from "ddland"."comments" inner join "ddland"."posts" on',
 		);
 	});
-	it("rejects column refs from unjoined tables at render time", () => {
+	it("renders a correlated subquery referencing the outer table", () => {
+		// the canonical rls form: comment is visible iff its post is published
+		const guard = exists(
+			select(posts).where(
+				and(eq(posts.id, comments.postId), isNotNull(posts.publishedAt)),
+			),
+		);
+		expect(renderSelect(select(comments).where(guard).selectQuery)).toBe(
+			'select "id", "post_id" from "ddland"."comments" where exists (select 1 from "ddland"."posts" where ("ddland"."posts"."id" = "ddland"."comments"."post_id") and ("ddland"."posts"."published_at" is not null))',
+		);
+	});
+	it("renders a standalone correlated expression given an outer scope", () => {
+		// how phase 4 renders an rls using-expression for a policy on comments
+		const guard = exists(
+			select(posts).where(eq(posts.id, comments.postId)),
+		);
+		expect(
+			renderExpr(guard.exprNode, [
+				{ schemaName: "ddland", tableName: "comments" },
+			]),
+		).toContain('= "ddland"."comments"."post_id"');
+	});
+	it("rejects column refs from tables in no enclosing scope", () => {
 		const query = select(posts).where(isNotNull(comments.postId));
 		expect(() => renderSelect(query.selectQuery)).toThrowError(
 			/foreign-column-ref|join that table/,
@@ -1514,7 +1556,13 @@ export type DeleteFilterable = DeleteReturnable & {
 export type DeleteReturnable = DeleteFinal & { returning(): DeleteFinal };
 export type DeleteFinal = { readonly deleteQuery: DeleteNode };
 
-export const renderQuery: (node: QueryNode) => string;
+// outerScope threads through exactly like renderSelect's (Task 8 scope
+// rule): a mutation's where-scope is [target table, …outerScope], and
+// exists subqueries inherit it — Phase 3 function bodies rely on this.
+export const renderQuery: (
+	node: QueryNode,
+	outerScope?: ReadonlyArray<TableRefNode>,
+) => string;
 ```
 
 Design notes locked here:
@@ -1569,10 +1617,10 @@ describe("mutation builders", () => {
 	it("renders the spec §5.2 update shape", () => {
 		const query = update(posts)
 			.set({ publishedAt: now() })
-			.where(eq(posts.id, posts.id))
+			.where(eq(posts.slug, "hello"))
 			.returning();
 		expect(renderQuery(query.updateQuery)).toBe(
-			'update "ddland"."posts" set "published_at" = now() where "ddland"."posts"."id" = "ddland"."posts"."id" returning "id", "slug", "published_at"',
+			"update \"ddland\".\"posts\" set \"published_at\" = now() where \"ddland\".\"posts\".\"slug\" = 'hello' returning \"id\", \"slug\", \"published_at\"",
 		);
 	});
 	it("renders insert with on conflict do nothing", () => {
@@ -1743,10 +1791,14 @@ operator from Task 4 at least once; literal edge cases (embedded quotes,
 the injection strings from Tasks 2/5, negative and fractional numbers,
 Date); `sql` template + `sql.raw`; the dd.land RLS shapes — (a)
 `using`-style: `eq(status, "published")`-family with and/or grouping, (b)
-`exists` + inner join ("comment's post is published", mirroring
-`reactions`/`comments` policies), (c) **`with check`-shaped** expressions
-(D19): the same guards applied to write-position reasoning, e.g.
-`and(eq(comments.postId, comments.postId), exists(select(posts).where(isNotNull(posts.publishedAt))))`;
+`exists` + inner join ("reaction's comment's post is published", mirroring
+the `reactions` policy), (c) **correlated** `exists` rendered standalone
+with an outer scope, exactly how Phase 4 will render a policy on
+`comments`:
+`renderExpr(exists(select(posts).where(and(eq(posts.id, comments.postId), isNotNull(posts.publishedAt)))).exprNode, [commentsTableRef])`,
+(d) **`with check`-shaped** expressions (D19): the same correlated guard in
+write-position reasoning ("you may only insert a comment whose post is
+published") — same AST, labeled as with-check in the corpus;
 the spec §5.2 function-body queries (`select(posts).where(eq(posts.id, …))`
 and `update(posts).set({ publishedAt: now() }).where(…).returning()`);
 insert with multi-row + `on conflict do nothing` and `do update set`;
@@ -1881,3 +1933,12 @@ lists its squash commits and `Closes #<sub-issue>`.
 4. Error messages: code + why + what-to-do (spec §7).
 5. Golden diffs reviewed line-by-line, especially Task 10's fixture change
    and Task 11's corpus.
+6. Correlated-subquery scope: `exists` must inherit the enclosing scope
+   (Task 8 scope rule); any test that "fixes" a `foreign-column-ref` by
+   comparing a column to itself is masking a scope bug — reject it.
+
+**Test-only convention (agreed 2026-08-19):** `as never` / `as unknown as T`
+casts are permitted in test files ONLY, and ONLY to force a runtime
+negative-case past the compiler (e.g. Task 9's unknown-column-key test).
+They stay banned in `src/`. Reviewer applies this line, not the general
+typescript-rules `as` restriction, to such test lines.
