@@ -3,16 +3,7 @@ import type { KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
-
-const compareKeys = (a: string, b: string): number => {
-	if (a < b) {
-		return -1;
-	}
-	if (a > b) {
-		return 1;
-	}
-	return 0;
-};
+import { compareKeys } from "../sort";
 
 const splitObjectKey = (
 	key: string,

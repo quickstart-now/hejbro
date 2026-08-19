@@ -1,6 +1,7 @@
 import { throwHejbroError } from "../error";
 import type { HejbroDeclaration } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
+import { compareKeys } from "../sort";
 import type { JsonValue } from "./stable-json";
 import { stableJson } from "./stable-json";
 
@@ -20,16 +21,6 @@ export const emptySnapshot: Snapshot = {
 	hejbroSnapshot: HEJBRO_SNAPSHOT_VERSION,
 	dialect: "postgres",
 	objects: {},
-};
-
-const compareKeys = (a: string, b: string): number => {
-	if (a < b) {
-		return -1;
-	}
-	if (a > b) {
-		return 1;
-	}
-	return 0;
 };
 
 type BuiltEntry = {

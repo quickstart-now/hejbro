@@ -1,5 +1,6 @@
 import type { JsonValue } from "../snapshot/stable-json";
 import { stableJson } from "../snapshot/stable-json";
+import { compareKeys } from "../sort";
 
 /** The result of diffing two keyed collections of the same value type. */
 export type KeyedDiff<TValue> = {
@@ -21,16 +22,6 @@ export type KeyedDiff<TValue> = {
 /** True when `a` and `b` are structurally equal JSON values (compared as stably serialized bytes). */
 export const sameJson = (a: JsonValue, b: JsonValue): boolean =>
 	stableJson(a) === stableJson(b);
-
-const compareKeys = (a: string, b: string): number => {
-	if (a < b) {
-		return -1;
-	}
-	if (a > b) {
-		return 1;
-	}
-	return 0;
-};
 
 /**
  * Diffs two keyed collections into additions, removals, and changes.

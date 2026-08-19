@@ -1,3 +1,5 @@
+import { compareKeys } from "../sort";
+
 /** A JSON value restricted to the shapes hejbro ever serializes. */
 export type JsonValue =
 	| string
@@ -11,17 +13,6 @@ const isJsonObject = (
 	value: JsonValue,
 ): value is { readonly [key: string]: JsonValue } =>
 	value !== null && typeof value === "object" && !Array.isArray(value);
-
-/** Byte-order key comparator — never `localeCompare`, which is locale-dependent and thus non-deterministic across machines. */
-const compareKeys = (a: string, b: string): number => {
-	if (a < b) {
-		return -1;
-	}
-	if (a > b) {
-		return 1;
-	}
-	return 0;
-};
 
 const sortValue = (value: JsonValue): JsonValue => {
 	if (Array.isArray(value)) {
