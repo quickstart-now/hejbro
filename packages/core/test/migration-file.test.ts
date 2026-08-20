@@ -76,6 +76,36 @@ describe("renderBanner", () => {
 		);
 	});
 
+	it("renders a drop's notes in its banner label, alongside the dropped marker, when present", () => {
+		const dropWithNotes: KindChange = {
+			kind: "supabase-storage-bucket",
+			operation: "drop",
+			identity: "avatars",
+			previous: {},
+			next: null,
+			notes: [
+				'bucket "avatars" removed from declarations — remove it manually in Supabase when ready.',
+			],
+		};
+		expect(renderBanner([dropWithNotes])).toBe(
+			'-- hejbro migration\n-- - supabase-storage-bucket avatars [dropped: bucket "avatars" removed from declarations — remove it manually in Supabase when ready.]',
+		);
+	});
+
+	it("joins multiple drop notes the same way alter does (comma-separated)", () => {
+		const dropWithNotes: KindChange = {
+			kind: "table",
+			operation: "drop",
+			identity: "app.posts",
+			previous: {},
+			next: null,
+			notes: ["note one", "note two"],
+		};
+		expect(renderBanner([dropWithNotes])).toBe(
+			"-- hejbro migration\n-- - table app.posts [dropped: note one, note two]",
+		);
+	});
+
 	it("renders a same-identity recreate (single alter change) with its recreating note", () => {
 		const recreateChange: KindChange = {
 			kind: "trigger",

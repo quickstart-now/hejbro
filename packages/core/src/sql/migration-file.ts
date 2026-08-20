@@ -61,12 +61,20 @@ const bannerMarker = (operation: ChangeOperation): string => {
 	}
 };
 
+/** `[dropped]`, or `[dropped: <notes>]` when `notes` is non-empty (D42 — e.g. the storage bucket kind's manual-deletion guidance) — joined exactly like the `alter` label, via `notes.join(", ")`. */
+const dropLabel = (notes: ReadonlyArray<string>): string => {
+	if (notes.length === 0) {
+		return "[dropped]";
+	}
+	return `[dropped: ${notes.join(", ")}]`;
+};
+
 const bannerLabel = (change: KindChange): string => {
 	switch (change.operation) {
 		case "create":
 			return "[new]";
 		case "drop":
-			return "[dropped]";
+			return dropLabel(change.notes);
 		case "alter":
 			return `[${change.notes.join(", ")}]`;
 		default:
