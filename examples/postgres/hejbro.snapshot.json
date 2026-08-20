@@ -1,0 +1,539 @@
+{
+	"dialect": "postgres",
+	"hejbroSnapshot": 3,
+	"objects": {
+		"function:app.comments_enforce_single_depth": {
+			"args": [],
+			"bodyHash": "64e69873",
+			"bodySql": "create or replace function \"app\".\"comments_enforce_single_depth\"()\nreturns trigger\nlanguage plpgsql\nas $function$\ndeclare\n\tparent_parent_id uuid;\nbegin\n\tif new.parent_id is null then\n\t\treturn new;\n\tend if;\n\tselect \"app\".\"comments\".\"parent_id\" as \"parent_id\" into parent_parent_id from \"app\".\"comments\" where \"app\".\"comments\".\"id\" = new.parent_id;\n\tif parent_parent_id is not null then\n\t\traise exception 'the parent comment already has a parent — replies may only nest one level deep (parent_id=%)', new.parent_id;\n\tend if;\n\treturn new;\nend;\n$function$;",
+			"language": "plpgsql",
+			"name": "comments_enforce_single_depth",
+			"returns": "trigger",
+			"schema": "app",
+			"security": "invoker"
+		},
+		"grant:app.allTablesPrivileges.app_reader": {
+			"grantKind": "allTablesPrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "app_reader",
+			"schema": "app"
+		},
+		"grant:app.allTablesPrivileges.app_writer": {
+			"grantKind": "allTablesPrivileges",
+			"privileges": [
+				"select",
+				"insert",
+				"update",
+				"delete"
+			],
+			"role": "app_writer",
+			"schema": "app"
+		},
+		"grant:app.schemaUsage.app_reader": {
+			"grantKind": "schemaUsage",
+			"privileges": [],
+			"role": "app_reader",
+			"schema": "app"
+		},
+		"grant:app.schemaUsage.app_writer": {
+			"grantKind": "schemaUsage",
+			"privileges": [],
+			"role": "app_writer",
+			"schema": "app"
+		},
+		"policy:app.comments.comments_read_all": {
+			"command": "select",
+			"name": "comments_read_all",
+			"roles": [
+				"app_reader"
+			],
+			"schema": "app",
+			"table": "comments",
+			"using": "\"app\".\"comments\".\"id\" is not null"
+		},
+		"policy:app.comments.comments_write_all": {
+			"command": "all",
+			"name": "comments_write_all",
+			"roles": [
+				"app_writer"
+			],
+			"schema": "app",
+			"table": "comments",
+			"using": "\"app\".\"comments\".\"id\" is not null",
+			"withCheck": "\"app\".\"comments\".\"id\" is not null"
+		},
+		"policy:app.members.members_read_all": {
+			"command": "select",
+			"name": "members_read_all",
+			"roles": [
+				"app_reader"
+			],
+			"schema": "app",
+			"table": "members",
+			"using": "\"app\".\"members\".\"id\" is not null"
+		},
+		"policy:app.members.members_write_all": {
+			"command": "all",
+			"name": "members_write_all",
+			"roles": [
+				"app_writer"
+			],
+			"schema": "app",
+			"table": "members",
+			"using": "\"app\".\"members\".\"id\" is not null",
+			"withCheck": "\"app\".\"members\".\"id\" is not null"
+		},
+		"policy:app.projects.projects_read_all": {
+			"command": "select",
+			"name": "projects_read_all",
+			"roles": [
+				"app_reader"
+			],
+			"schema": "app",
+			"table": "projects",
+			"using": "\"app\".\"projects\".\"id\" is not null"
+		},
+		"policy:app.projects.projects_write_all": {
+			"command": "all",
+			"name": "projects_write_all",
+			"roles": [
+				"app_writer"
+			],
+			"schema": "app",
+			"table": "projects",
+			"using": "\"app\".\"projects\".\"id\" is not null",
+			"withCheck": "\"app\".\"projects\".\"id\" is not null"
+		},
+		"policy:app.task_schedules.task_schedules_read_all": {
+			"command": "select",
+			"name": "task_schedules_read_all",
+			"roles": [
+				"app_reader"
+			],
+			"schema": "app",
+			"table": "task_schedules",
+			"using": "\"app\".\"task_schedules\".\"task_id\" is not null"
+		},
+		"policy:app.task_schedules.task_schedules_write_all": {
+			"command": "all",
+			"name": "task_schedules_write_all",
+			"roles": [
+				"app_writer"
+			],
+			"schema": "app",
+			"table": "task_schedules",
+			"using": "\"app\".\"task_schedules\".\"task_id\" is not null",
+			"withCheck": "\"app\".\"task_schedules\".\"task_id\" is not null"
+		},
+		"policy:app.tasks.tasks_read_all": {
+			"command": "select",
+			"name": "tasks_read_all",
+			"roles": [
+				"app_reader"
+			],
+			"schema": "app",
+			"table": "tasks",
+			"using": "\"app\".\"tasks\".\"id\" is not null"
+		},
+		"policy:app.tasks.tasks_write_all": {
+			"command": "all",
+			"name": "tasks_write_all",
+			"roles": [
+				"app_writer"
+			],
+			"schema": "app",
+			"table": "tasks",
+			"using": "\"app\".\"tasks\".\"id\" is not null",
+			"withCheck": "\"app\".\"tasks\".\"id\" is not null"
+		},
+		"rls:app.comments": {
+			"schema": "app",
+			"table": "comments"
+		},
+		"rls:app.members": {
+			"schema": "app",
+			"table": "members"
+		},
+		"rls:app.projects": {
+			"schema": "app",
+			"table": "projects"
+		},
+		"rls:app.task_schedules": {
+			"schema": "app",
+			"table": "task_schedules"
+		},
+		"rls:app.tasks": {
+			"schema": "app",
+			"table": "tasks"
+		},
+		"schema:app": {
+			"schemaName": "app"
+		},
+		"table:app.comments": {
+			"checks": [
+				{
+					"expression": "length(btrim(\"app\".\"comments\".\"body\")) > 0",
+					"name": "comments_body_not_blank"
+				}
+			],
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "task_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "parent_id",
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "body",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"task_id"
+					],
+					"name": "comments_task_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.tasks"
+				},
+				{
+					"columns": [
+						"parent_id"
+					],
+					"name": "comments_parent_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.comments"
+				}
+			],
+			"indexes": [],
+			"name": "comments",
+			"schema": "app"
+		},
+		"table:app.members": {
+			"checks": [
+				{
+					"expression": "\"app\".\"members\".\"role\" in ('owner', 'admin', 'member')",
+					"name": "members_role_valid"
+				}
+			],
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "email",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					},
+					"unique": true
+				},
+				{
+					"name": "display_name",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"default": "'member'",
+					"name": "role",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "members",
+			"schema": "app"
+		},
+		"table:app.projects": {
+			"checks": [
+				{
+					"expression": "\"app\".\"projects\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'",
+					"name": "projects_slug_format"
+				}
+			],
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "slug",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					},
+					"unique": true
+				},
+				{
+					"name": "name",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "owner_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "archived_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"owner_id"
+					],
+					"name": "projects_owner_id_fk",
+					"onDelete": "restrict",
+					"onUpdate": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.members"
+				}
+			],
+			"indexes": [],
+			"name": "projects",
+			"schema": "app"
+		},
+		"table:app.task_schedules": {
+			"checks": [
+				{
+					"expression": "\"app\".\"task_schedules\".\"reminder_at\" < \"app\".\"task_schedules\".\"due_at\"",
+					"name": "task_schedules_reminder_before_due"
+				}
+			],
+			"columns": [
+				{
+					"name": "task_id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "due_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				},
+				{
+					"name": "reminder_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"task_id"
+					],
+					"name": "task_schedules_task_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.tasks"
+				}
+			],
+			"indexes": [
+				{
+					"columns": [
+						{
+							"desc": true,
+							"name": "due_at"
+						}
+					],
+					"name": "task_schedules_due_at_idx"
+				}
+			],
+			"name": "task_schedules",
+			"schema": "app"
+		},
+		"table:app.tasks": {
+			"checks": [
+				{
+					"expression": "char_length(\"app\".\"tasks\".\"title\") between 1 and 200",
+					"name": "tasks_title_length"
+				},
+				{
+					"expression": "\"app\".\"tasks\".\"status\" in ('todo', 'in_progress', 'done')",
+					"name": "tasks_status_valid"
+				},
+				{
+					"expression": "\"app\".\"tasks\".\"priority\" between 1 and 5",
+					"name": "tasks_priority_range"
+				},
+				{
+					"expression": "\"app\".\"tasks\".\"estimate_hours\" >= 0",
+					"name": "tasks_estimate_hours_non_negative"
+				}
+			],
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "project_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "title",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"default": "'todo'",
+					"name": "status",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"default": "3",
+					"name": "priority",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "smallint"
+					}
+				},
+				{
+					"name": "estimate_hours",
+					"typeNode": {
+						"precision": null,
+						"scale": null,
+						"typeName": "numeric"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"project_id"
+					],
+					"name": "tasks_project_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.projects"
+				}
+			],
+			"indexes": [
+				{
+					"columns": [
+						{
+							"name": "project_id"
+						},
+						{
+							"name": "title"
+						}
+					],
+					"name": "tasks_project_id_title_idx",
+					"unique": true,
+					"where": "\"app\".\"tasks\".\"status\" <> 'done'"
+				}
+			],
+			"name": "tasks",
+			"schema": "app"
+		},
+		"trigger:app.comments.comments_single_depth": {
+			"events": [
+				{
+					"event": "insert"
+				},
+				{
+					"columns": [
+						"parent_id"
+					],
+					"event": "update"
+				}
+			],
+			"forEach": "row",
+			"functionName": "comments_enforce_single_depth",
+			"name": "comments_single_depth",
+			"schema": "app",
+			"table": "comments",
+			"timing": "before"
+		},
+		"view:app.open_tasks": {
+			"columns": [
+				"id",
+				"project_id",
+				"title",
+				"status",
+				"priority",
+				"estimate_hours"
+			],
+			"name": "open_tasks",
+			"schema": "app",
+			"securityInvoker": true,
+			"selectSql": "select \"id\", \"project_id\", \"title\", \"status\", \"priority\", \"estimate_hours\" from \"app\".\"tasks\" where \"app\".\"tasks\".\"status\" <> 'done'"
+		}
+	}
+}
