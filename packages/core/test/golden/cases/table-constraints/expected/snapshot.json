@@ -1,0 +1,111 @@
+{
+	"dialect": "postgres",
+	"hejbroSnapshot": 2,
+	"objects": {
+		"schema:app": {
+			"schemaName": "app"
+		},
+		"table:app.comments": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "post_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "parent_id",
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "body",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"parent_id"
+					],
+					"name": "comments_parent_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.comments"
+				},
+				{
+					"columns": [
+						"post_id"
+					],
+					"name": "comments_post_id_fk",
+					"onDelete": "cascade",
+					"onUpdate": "restrict",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.posts"
+				}
+			],
+			"indexes": [],
+			"name": "comments",
+			"schema": "app"
+		},
+		"table:app.posts": {
+			"checks": [
+				{
+					"expression": "\"app\".\"posts\".\"status\" in ('draft', 'published', 'archived')",
+					"name": "posts_status_check"
+				},
+				{
+					"expression": "\"app\".\"posts\".\"slug\" ~ '^[a-z0-9-]+$'",
+					"name": "posts_slug_format_check"
+				}
+			],
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "status",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "slug",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"schema": "app"
+		}
+	}
+}
