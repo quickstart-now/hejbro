@@ -46,6 +46,23 @@ export default defineConfig({
 });
 `;
 
+const BUCKET_SCHEMA = `import { storageBucket } from "@hejbro/supabase";
+
+export const avatars = storageBucket("avatars");
+`;
+
+const CONFIG_WITH_SUPABASE_PRESET_SOURCE = `import { defineConfig } from "hejbro";
+import { supabasePreset } from "@hejbro/supabase";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [supabasePreset],
+});
+`;
+
 const PARENT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
 
@@ -338,5 +355,33 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		expect(result.stderr).toContain(
 			"verify: 1 of 4 checks failed — fix the errors above and rerun `hejbro verify`.",
 		);
+	});
+
+	it("passes with a storageBucket declaration when the supabase preset is registered (D55)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeFixtureFile(
+			cwd,
+			"hejbro.config.ts",
+			CONFIG_WITH_SUPABASE_PRESET_SOURCE,
+		);
+		await writeFixtureFile(cwd, "src/app.schema.ts", BUCKET_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+	});
+
+	it("fails a storageBucket declaration when no preset registers its kind", async () => {
+		await runCli(cwd, ["init"]);
+		await writeFixtureFile(cwd, "src/app.schema.ts", BUCKET_SCHEMA);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		// buildSnapshot rejects the declaration before diffSnapshots ever
+		// looks up its kind by name, so the observed code is
+		// unowned-declaration (buildSnapshot's own "no owner" check),
+		// not unknown-kind (registry.get's "no such kind" check, which
+		// only fires once a kind name is looked up during diffing).
+		expect(result.stderr).toContain("error[unowned-declaration]");
 	});
 });

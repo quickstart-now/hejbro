@@ -1,4 +1,4 @@
-import type { MigrationPrefixStrategy } from "@hejbro/core";
+import type { MigrationPrefixStrategy, Preset } from "@hejbro/core";
 import { migrationPrefixStrategies, throwHejbroError } from "@hejbro/core";
 import type { ZodIssue } from "zod";
 import { z } from "zod";
@@ -9,20 +9,66 @@ export type HejbroConfig = {
 	readonly migrationsDir: string;
 	readonly snapshotPath: string;
 	readonly prefixStrategy: MigrationPrefixStrategy;
+	/** Provider presets to register — their kinds and validators (D55). Defaults to `[]`. */
+	readonly presets: ReadonlyArray<Preset>;
 };
 
 /** Identity helper so `hejbro.config.ts` reads as a declaration, not a cast. */
 export const defineConfig = (config: HejbroConfig): HejbroConfig => config;
+
+const isFunctionValue = (value: unknown): boolean =>
+	typeof value === "function";
+
+/** Shape-checks an unknown `presets[i].kinds[j]` entry against `ObjectKind`'s public methods — not a deep validation of each method's behavior, just "looks like a kind". */
+const isObjectKindLike = (value: unknown): boolean => {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+	const candidate = value as Record<string, unknown>;
+	return (
+		typeof candidate.kind === "string" &&
+		isFunctionValue(candidate.owns) &&
+		isFunctionValue(candidate.serialize) &&
+		isFunctionValue(candidate.identify) &&
+		isFunctionValue(candidate.diff) &&
+		isFunctionValue(candidate.emit)
+	);
+};
+
+/** Shape-checks an unknown `presets[i]` entry against {@link Preset} (`name` string, `kinds` array of kind-like objects, `validators` array of functions). */
+export const isPreset = (value: unknown): value is Preset => {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+	const candidate = value as Record<string, unknown>;
+	if (typeof candidate.name !== "string") {
+		return false;
+	}
+	if (
+		!Array.isArray(candidate.kinds) ||
+		!candidate.kinds.every(isObjectKindLike)
+	) {
+		return false;
+	}
+	if (
+		!Array.isArray(candidate.validators) ||
+		!candidate.validators.every(isFunctionValue)
+	) {
+		return false;
+	}
+	return true;
+};
 
 const configSchema = z.object({
 	entry: z.array(z.string()),
 	migrationsDir: z.string(),
 	snapshotPath: z.string(),
 	prefixStrategy: z.enum(migrationPrefixStrategies),
+	presets: z.array(z.unknown()).default([]),
 });
 
 const HEJBRO_CONFIG_SHAPE_HINT =
-	'{ entry: string[], migrationsDir: string, snapshotPath: string, prefixStrategy: "timestamp" | "index" | "unix" }';
+	'{ entry: string[], migrationsDir: string, snapshotPath: string, prefixStrategy: "timestamp" | "index" | "unix", presets?: Preset[] }';
 
 const issueFieldName = (issue: ZodIssue): string => {
 	if (issue.path.length === 0) {
@@ -46,22 +92,49 @@ const describeIssue = (issue: ZodIssue, configPath: string): string => {
 	return `config field "${field}" in ${configPath} is missing or the wrong shape. Next: match hejbro.config.ts's export to ${HEJBRO_CONFIG_SHAPE_HINT}.`;
 };
 
+/** The index of the first `presets[i]` entry that doesn't look like a `Preset`, or `null` when every entry does. */
+const findInvalidPresetIndex = (
+	presets: ReadonlyArray<unknown>,
+): number | null => {
+	const index = presets.findIndex((preset) => !isPreset(preset));
+	if (index === -1) {
+		return null;
+	}
+	return index;
+};
+
 /**
  * Validates an unknown loaded value (the default export of a
  * `hejbro.config.ts`) against {@link HejbroConfig}. zod issues are
  * re-wrapped into a `HejbroError` code `"invalid-config"` — zod's own
- * message text never reaches the user (owner condition, U3).
+ * message text never reaches the user (owner condition, U3). `presets`
+ * entries are shape-checked separately (zod only confirms "an array"; the
+ * per-entry `Preset` shape check runs after, so its error names the exact
+ * index).
  */
 export const parseConfig = (
 	value: unknown,
 	configPath: string,
 ): HejbroConfig => {
 	const result = configSchema.safeParse(value);
-	if (result.success) {
-		return result.data;
+	if (!result.success) {
+		const message = result.error.issues
+			.map((issue) => describeIssue(issue, configPath))
+			.join(" ");
+		return throwHejbroError("invalid-config", message);
 	}
-	const message = result.error.issues
-		.map((issue) => describeIssue(issue, configPath))
-		.join(" ");
-	return throwHejbroError("invalid-config", message);
+	const invalidPresetIndex = findInvalidPresetIndex(result.data.presets);
+	if (invalidPresetIndex !== null) {
+		return throwHejbroError(
+			"invalid-config",
+			`config field "presets[${invalidPresetIndex}]" in ${configPath} is not a preset object. Next: pass preset objects exported by a preset package (e.g. supabasePreset from @hejbro/supabase).`,
+		);
+	}
+	// findInvalidPresetIndex already confirmed every entry passes isPreset;
+	// filter (rather than an `as` cast) lets the type predicate narrow the
+	// array for us.
+	return {
+		...result.data,
+		presets: result.data.presets.filter(isPreset),
+	};
 };

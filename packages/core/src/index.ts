@@ -74,6 +74,8 @@ export { checkChain } from "./engine/chain";
 export { diffSnapshots } from "./engine/diff-engine";
 export type { HejbroInput } from "./engine/generate";
 export { generateMigration } from "./engine/generate";
+export type { Preset } from "./engine/preset";
+export { presetValidators, registerPresets } from "./engine/preset";
 export type {
 	ColumnRenameAmbiguity,
 	ColumnRenameSpec,

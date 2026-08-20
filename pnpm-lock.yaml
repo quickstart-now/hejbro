@@ -96,6 +96,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@hejbro/supabase':
+        specifier: workspace:*
+        version: link:../supabase
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(typescript@5.9.3)(unrun@0.2.39)
