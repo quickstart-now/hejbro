@@ -1,8 +1,10 @@
 import type {
 	ForeignKeyAction,
 	IndexDeclaration,
+	IndexNulls,
 	TableDeclaration,
 } from "../dsl/table";
+import type { ExprNode } from "../expr/ast";
 import { renderExpr } from "../expr/render-sql";
 import type { KeyedDiff } from "../kind/diff-helpers";
 import { diffByKey } from "../kind/diff-helpers";
@@ -13,6 +15,7 @@ import type {
 	CheckSnapshot,
 	ColumnSnapshot,
 	ForeignKeySnapshot,
+	IndexColumnSnapshot,
 	IndexSnapshot,
 	TableSnapshot,
 } from "./table-snapshot";
@@ -45,7 +48,10 @@ const resolveIndexName = (
 	if (index.indexName !== null) {
 		return index.indexName;
 	}
-	return deriveIndexName(tableName, index.columns);
+	return deriveIndexName(
+		tableName,
+		index.columns.map((column) => column.name),
+	);
 };
 
 /** Renders a column's default expression to SQL text (D16) — `null` when the column has no default. */
@@ -100,6 +106,34 @@ const indexUniqueField = (value: boolean): Pick<IndexSnapshot, "unique"> => {
 	return { unique: true };
 };
 
+/** `{ desc: true }` when the column sorts descending, else `{}` (compact snapshot). */
+const indexColumnDescField = (
+	value: boolean,
+): Pick<IndexColumnSnapshot, "desc"> => {
+	if (!value) {
+		return {};
+	}
+	return { desc: true };
+};
+
+/** `{ nulls: <placement> }` when set, else `{}` (compact snapshot). */
+const indexColumnNullsField = (
+	value: IndexNulls | null,
+): Pick<IndexColumnSnapshot, "nulls"> => {
+	if (value === null) {
+		return {};
+	}
+	return { nulls: value };
+};
+
+/** `{ where: <sql> }` when the index has a partial predicate, else `{}` (compact snapshot). */
+const whereField = (value: string | null): Pick<IndexSnapshot, "where"> => {
+	if (value === null) {
+		return {};
+	}
+	return { where: value };
+};
+
 /** `{ onDelete: <action> }` when set, else `{}` (compact snapshot — `null` means "unspecified"). */
 const onDeleteField = (
 	value: ForeignKeyAction | null,
@@ -132,13 +166,30 @@ const serializeColumns = (
 		...defaultField(renderColumnDefaultExpr(entry.columnState)),
 	}));
 
+const serializeIndexColumn = (
+	column: IndexDeclaration["columns"][number],
+): IndexColumnSnapshot => ({
+	name: column.name,
+	...indexColumnDescField(column.desc),
+	...indexColumnNullsField(column.nulls),
+});
+
+/** Renders a partial index's predicate to SQL text — `null` when the index has none (V1: fully-qualified columns, same as `renderExpr` everywhere else). */
+const renderPredicate = (predicate: ExprNode | null): string | null => {
+	if (predicate === null) {
+		return null;
+	}
+	return renderExpr(predicate);
+};
+
 const serializeIndexes = (
 	declaration: TableDeclaration,
 ): ReadonlyArray<IndexSnapshot> =>
 	declaration.indexes.map((index) => ({
 		name: resolveIndexName(declaration.tableName, index),
-		columns: index.columns,
+		columns: index.columns.map(serializeIndexColumn),
 		...indexUniqueField(index.unique),
+		...whereField(renderPredicate(index.predicate)),
 	}));
 
 const serializeForeignKeys = (

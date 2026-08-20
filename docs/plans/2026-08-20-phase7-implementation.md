@@ -38,7 +38,7 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 | # | Artifact | Produced in | Gate |
 |---|----------|-------------|------|
 | O1 | Example domain for both showcases: a **team workspace** — `app` schema with `members`, `projects`, `tasks`, `comments` (self-FK on `comments.parent_id`), `attachments` (supabase only). Generic; no project or product name anywhere. | Task 14 / Task 24 | Owner confirms the domain (or names another generic one) before Task 14 starts |
-| O2 | New error-code wording (§7 grammar: why + `Next:`): `duplicate-index-name`, `duplicate-foreign-key-name`, `foreign-key-table-mismatch`, `foreign-key-mixed-reference-tables`, `check-foreign-column-ref`, `check-subquery`, `index-predicate-foreign-column-ref`, `index-predicate-subquery`, `check-name-missing`, `not-null-without-default` (#27) | Tasks 3–8, 10, 33 | **Approved 2026-08-20** (owner, 11 messages as drafted by the team — pinned in goldens; any later change needs re-approval) |
+| O2 | New error-code wording (§7 grammar: why + `Next:`): `duplicate-index-name`, `duplicate-foreign-key-name`, `foreign-key-table-mismatch`, `foreign-key-mixed-reference-tables`, `check-foreign-column-ref`, `check-subquery`, `index-predicate-foreign-column-ref`, `index-predicate-subquery`, `check-name-missing`, `not-null-without-default` (#27) | Tasks 3–8, 10, 33 | **Approved 2026-08-20** (owner, 11 messages as drafted by the team — pinned in goldens; any later change needs re-approval) + `unsupported-snapshot-version` older/newer split (approved 2026-08-20) |
 | O3 | CLI warning rendering golden (`warning[<code>]: …` on stderr after a successful generate, D55) | Task 22 | Owner approves the golden text at PR C review |
 | O4 | README body (D56 order, no comparison table) | Task 30 | Owner approves the rendered README at PR F review |
 | O5 | `docs/guide/` titles + section outlines: `getting-started.md`, `renames.md`, `ci.md` | Task 31 | Owner approves outlines before the pages are written |
@@ -49,7 +49,7 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 | # | Decision |
 |---|----------|
 | D46 | Table-kind completeness (CHECK, partial indexes, index ordering, FK `on update`, self-FK #22) is Phase 7's leading work group; roadmap headline unchanged. |
-| D47 | Stays in #8: #104, #105, #106, #22, #102, #96, #27, #83, #84, #85. Moved to #9: #23, #24, #25, #26, #87, #88, #89, #97. Docs = markdown under `docs/`, no Pages site. #88 rides along only if free. |
+| D47 | Stays in #8: #104, #105, #106, #22, #102, #96, #27, #83, #84, #85 (+ #88, which rode along in PR A2). Moved to #9: #23, #24, #25, #26, #87, #89, #97. Docs = markdown under `docs/`, no Pages site. |
 | D48 | Round-trip = two-path dump comparison (chain-applied DB vs fresh single migration DB, container `pg_dump --schema-only --no-owner`, SET headers stripped, diff empty) + a row query for the storage bucket. Each example has a designed 4-step chain: baseline → add column + CHECK → change FK actions → move a column across tables (`--confirm-drop` path). |
 | D49 | The round-trip runs **locally via Docker** (`pnpm roundtrip`), not in CI. `postgres:17-alpine`; seed only for the supabase example; Docker CLI only (psql/pg_dump inside the container); `ci.yml` unchanged; `pnpm test` stays DB-free; script output attached to the PR. |
 | D50 | CHECK: `checks: [check(name, expr)]`; name required (`assertSqlName`); expression = any boolean `Expr` (helpers or `sql` template); snapshot `checks?: [{ name, expression }]` (rendered SQL, omitted when empty); change = drop + add; emit order FK drop → CHECK drop → index drop → column drop → column add/alter → index add → CHECK add → FK add (deferred); own-table refs only, no `exists`. |
@@ -878,7 +878,7 @@ export type IndexDeclarationBuilder = IndexDeclaration & { where(predicate: Expr
 ```
 - Error codes: `index-predicate-subquery`, `index-predicate-foreign-column-ref`, `index-name-required-with-where` is **not** introduced (D51 keeps naming optional; Task 8's duplicate error is the safety net).
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 describe("index builder — ordering and partial predicates", () => {
@@ -913,9 +913,9 @@ describe("index builder — ordering and partial predicates", () => {
 });
 ```
 
-- [ ] **Step 2: Run** → FAIL.
+- [x] **Step 2: Run** → FAIL.
 
-- [ ] **Step 3: Implement** `dsl/index-builder.ts`
+- [x] **Step 3: Implement** `dsl/index-builder.ts`
 
 ```ts
 import type { ColumnRef, Expr, ExprNode } from "../expr/ast";
@@ -973,14 +973,22 @@ const createIndexBuilder = (indexName: string | null, unique: boolean): IndexBui
 	},
 });
 
+/** Resolves an optional index name: `undefined` stays `null` (derive later), else validated per D36. */
+const resolveIndexName = (indexName: string | undefined): string | null => {
+	if (indexName === undefined) {
+		return null;
+	}
+	return assertSqlName(indexName, "index", null);
+};
+
 /** Starts an index declaration, optionally named (validated per D36) — chain `.unique()`, finish with `.on(...columns)`, optionally `.where(predicate)`. */
 export const index = (indexName?: string): IndexBuilder =>
-	createIndexBuilder(indexName === undefined ? null : assertSqlName(indexName, "index", null), false);
+	createIndexBuilder(resolveIndexName(indexName), false);
 ```
-`dsl/table.ts`: `IndexDeclaration` as above with `predicate: ExprNode | null`; `IndexNulls` type lives here; `validateColumnRefs` maps `index.columns.map((c) => c.name)`; add `validateIndexPredicates(owner, tableName, indexes)` mirroring Task 5's check validation with codes `index-predicate-subquery` / `index-predicate-foreign-column-ref` (messages: `index "<name>" on table "<t>" … Next: …`). Task 8's derivation uses `ix.columns.map((c) => c.name)`. Update **every** existing test that builds an `IndexDeclaration` literal to the object shape `columns: [{ name, desc: false, nulls: null }]` — seven sites in three files: `table-kind-emit.test.ts` (lines 35-38, 85, 293), `table-kind-diff.test.ts` (41-42, 195-198), `dsl.test.ts` (99 — an expected value, 106 — an input). `grep -rn "indexName:" packages/core/test packages/supabase/test examples` must come back clean of string-array `columns` before this task's commit.
+`dsl/table.ts`: `IndexDeclaration` as above with `predicate: ExprNode | null`; `IndexNulls` type lives here; `validateColumnRefs` maps `index.columns.map((c) => c.name)`; add `validateIndexPredicates(owner, tableName, indexes)` mirroring Task 5's check validation with codes `index-predicate-subquery` / `index-predicate-foreign-column-ref` (messages: `index "<name>" on table "<t>" … Next: …`). Task 8's derivation uses `ix.columns.map((c) => c.name)`. Update **every** existing test that builds an `IndexDeclaration` literal to the object shape `columns: [{ name, desc: false, nulls: null }]` — seven sites in three files: `table-kind-emit.test.ts` (lines 35-38, 85, 293), `table-kind-diff.test.ts` (41-42, 195-198), `dsl.test.ts` (99 — an expected value, 106 — an input). `grep -rn "indexName:" packages/core/test packages/supabase/test examples` must come back clean of string-array `columns` before this task's commit. `table()` must copy only the four `IndexDeclaration` fields out of what `.on()` returns (`resolveIndex`, mirroring `resolveForeignKey`) — otherwise the builder's `where` method leaks into the stored declaration.
 
-- [ ] **Step 4: Run** core tests → PASS (serialization still writes strings until Task 11 — `serializeIndexes` temporarily maps `c.name`; Task 11 replaces it).
-- [ ] **Step 5: Commit** — `git commit -m "feat(core): ordered index columns and partial index predicates in the dsl"`
+- [x] **Step 4: Run** core tests → PASS (serialization still writes strings until Task 11 — `serializeIndexes` temporarily maps `c.name`; Task 11 replaces it).
+- [x] **Step 5: Commit** — `git commit -m "feat(core): ordered index columns and partial index predicates in the dsl"`
 
 ## Task 11: Snapshot v3 — index columns as objects, `where`, version bump (D51)
 
@@ -1000,11 +1008,11 @@ export const indexColumnDesc = (c: IndexColumnSnapshot): boolean; export const i
 export const HEJBRO_SNAPSHOT_VERSION = 3;
 ```
 
-- [ ] **Step 1: Failing tests** — `snapshot.test.ts`: `renderSnapshot(emptySnapshot)` contains `"hejbroSnapshot": 3`; `parseSnapshot` of a version-2 text throws `unsupported-snapshot-version`. `table-kind-diff.test.ts`: serializing the index from Task 10 yields `{ name: "posts_recent_idx", columns: [{ name: "created_at" }, { name: "published_at", desc: true, nulls: "first" }] }` and the partial unique index yields `{ …, unique: true, where: '"app"."posts"."published_at" is not null' }`. `rename-plan.test.ts`: renaming a column inside an ordered index keeps `desc`/`nulls` on the renamed entry.
+- [x] **Step 1: Failing tests** — `snapshot.test.ts`: `renderSnapshot(emptySnapshot)` contains `"hejbroSnapshot": 3`; `parseSnapshot` of a version-2 text throws `unsupported-snapshot-version`. `table-kind-diff.test.ts`: serializing the index from Task 10 yields `{ name: "posts_recent_idx", columns: [{ name: "created_at" }, { name: "published_at", desc: true, nulls: "first" }] }` and the partial unique index yields `{ …, unique: true, where: '"app"."posts"."published_at" is not null' }`. `rename-plan.test.ts`: renaming a column inside an ordered index keeps `desc`/`nulls` on the renamed entry.
 
-- [ ] **Step 2: Run** → FAIL.
+- [x] **Step 2: Run** → FAIL.
 
-- [ ] **Step 3: Implement** — snapshot types + accessors (compact: `desc` only when true, `nulls` only when set, `where` only when present); `serializeIndexes`:
+- [x] **Step 3: Implement** — snapshot types + accessors (compact: `desc` only when true, `nulls` only when set, `where` only when present); `serializeIndexes`:
 ```ts
 const serializeIndexColumn = (c: IndexDeclaration["columns"][number]): IndexColumnSnapshot => ({
 	name: c.name,
@@ -1015,7 +1023,7 @@ const serializeIndexColumn = (c: IndexDeclaration["columns"][number]): IndexColu
 ```
 (`renderPredicate` = `renderExpr(node)` or the bare mode per V1; `null` → `{}`.) Bump `HEJBRO_SNAPSHOT_VERSION` to `3` and extend its doc comment: "Bumped to 3 in Phase 7 (D51): `IndexSnapshot.columns` entries became objects (`{ name, desc?, nulls? }`) and indexes gained `where`; tables gained the additive `checks` field at the same time. Pre-publication, no shim." In `rename-plan.ts` `rewriteIndexesForRename` (`:733-771`), both `deriveIndexName(...)` calls (old name at `:746`, new name at `:756`) and the `resolveRenamedColumns` call now take `entry.columns.map((c) => c.name)`; zip the renamed names back onto the objects: `entry.columns.map((c, i) => ({ ...c, name: newNames[i] ?? c.name }))` so `desc`/`nulls` survive the rename.
 
-- [ ] **Step 4: Run** core tests → the golden suite and CLI fixtures now fail (expected); **do not** regenerate yet. Commit the source change alone: `git commit -m "feat(core)!: snapshot v3 — index column objects and where"` (the `!` marks the format break; body: "BREAKING: snapshot files from version 2 are rejected; regenerate with hejbro generate from an empty snapshot (pre-publication, D51)").
+- [x] **Step 4: Run** core tests → the golden suite and CLI fixtures now fail (expected); **do not** regenerate yet. Commit the source change alone: `git commit -m "feat(core)!: snapshot v3 — index column objects and where"` (the `!` marks the format break; body: "BREAKING: snapshot files from version 2 are rejected; regenerate with hejbro generate from an empty snapshot (pre-publication, D51)").
 
 ## Task 12: Index emit with ordering/`where`; changed indexes → drop + create (D51 bug fix)
 
@@ -1024,7 +1032,7 @@ const serializeIndexColumn = (c: IndexDeclaration["columns"][number]): IndexColu
 - Modify: `packages/core/src/kinds/table-kind-emit.ts` (`emitAlter` index section)
 - Test: `packages/core/test/table-kind-emit.test.ts`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 it("renders ordered columns and a where predicate", () => {
@@ -1043,7 +1051,7 @@ it("recreates an index whose definition changed under the same name (was silentl
 });
 ```
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 ```ts
 const indexColumnSql = (c: IndexColumnSnapshot): string =>
@@ -1061,7 +1069,7 @@ export const createIndexSql = (schema, tableName, index) =>
 ```
 `emitAlter`: `indexesToDrop = [...indexDiff.removed.map((e) => e.key), ...indexDiff.changed.map((e) => e.key)]`, `indexesToAdd = [...indexDiff.added.map((e) => e.value), ...indexDiff.changed.map((e) => e.next)]`; use them in the existing drop/add slots.
 
-- [ ] **Step 3: Run** → PASS (unit). **Step 4: Commit** — `git commit -m "fix(core): recreate changed indexes and render ordering and where"`
+- [x] **Step 3: Run** → PASS (unit). **Step 4: Commit** — `git commit -m "fix(core): recreate changed indexes and render ordering and where"`
 
 ## Task 13: Regenerate goldens, snapshots, fixtures for v3 (single regeneration task)
 
@@ -1069,10 +1077,11 @@ export const createIndexSql = (schema, tableName, index) =>
 - Regenerate: `packages/core/test/golden/cases/*/expected/snapshot.json` (+ any `.sql` whose index lines changed)
 - Modify: `packages/cli/test/init.test.ts` (`"hejbroSnapshot": 2` → `3`), any CLI golden under `packages/cli/test/fixtures/**` or inline snapshot text mentioning version 2
 - Verify: `examples/dd-land`, `examples/cli-smoke`, `examples/preset-smoke` tests (in-process; no committed snapshots yet)
+- Create: `packages/core/test/golden/cases/table-indexes/…` (added at review — pins the v3 index shape and the changed-index recreate path)
 
-- [ ] **Step 1:** `UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- golden`; `git diff --stat packages/core/test/golden` — **every** `snapshot.json` changes on its version line and on index `columns` entries only; no `.sql` may change except index `create` lines. Read the diff; anything else = stop and report.
-- [ ] **Step 2:** `grep -rn '"hejbroSnapshot": 2' packages examples` → fix each remaining literal to `3` (CLI `init` writes `emptySnapshot` through core, so only hard-coded test texts change).
-- [ ] **Step 3:** Clean-state gates. **Step 4: Commit** — `git commit -m "test: regenerate goldens and fixtures for snapshot v3"`; open PR A2 (`Closes #105`) with the gate output and a one-paragraph note that #88 landed inside Task 10 (close #88 with the PR only if the owner agrees; otherwise leave it in Phase 8 and say so).
+- [x] **Step 1:** `UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- golden`; `git diff --stat packages/core/test/golden` — **every** `snapshot.json` changes on its version line and on index `columns` entries only; no `.sql` may change except index `create` lines. Read the diff; anything else = stop and report.
+- [x] **Step 2:** `grep -rn '"hejbroSnapshot": 2' packages examples` → fix each remaining literal to `3` (CLI `init` writes `emptySnapshot` through core, so only hard-coded test texts change).
+- [x] **Step 3:** Clean-state gates. **Step 4: Commit** — `git commit -m "test: regenerate goldens and fixtures for snapshot v3"`; open PR A2 (`Closes #105`) with the gate output and a one-paragraph note that #88 landed inside Task 10 (close #88 with the PR only if the owner agrees; otherwise leave it in Phase 8 and say so).
 
 ## Task 14: `examples/postgres` — package scaffold + step-1 declarations (O1 domain)
 

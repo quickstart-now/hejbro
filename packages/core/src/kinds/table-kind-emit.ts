@@ -207,6 +207,14 @@ const emitAlter = (
 		...checkDiff.added.map((entry) => entry.value),
 		...checkDiff.changed.map((entry) => entry.next),
 	];
+	const indexesToDrop = [
+		...indexDiff.removed.map((entry) => entry.key),
+		...indexDiff.changed.map((entry) => entry.key),
+	];
+	const indexesToAdd = [
+		...indexDiff.added.map((entry) => entry.value),
+		...indexDiff.changed.map((entry) => entry.next),
+	];
 
 	return [
 		...foreignKeysToDrop.map((name) =>
@@ -215,8 +223,8 @@ const emitAlter = (
 		...checksToDrop.map((name) =>
 			statement(dropConstraintSql(next.schema, next.name, name)),
 		),
-		...indexDiff.removed.map((entry) =>
-			statement(`drop index ${qualifyName(next.schema, entry.key)};`),
+		...indexesToDrop.map((name) =>
+			statement(`drop index ${qualifyName(next.schema, name)};`),
 		),
 		...columnDiff.removed.map((entry) =>
 			statement(
@@ -231,8 +239,8 @@ const emitAlter = (
 		...columnDiff.changed.flatMap((entry) =>
 			alterColumnStatements(next.schema, next.name, entry),
 		),
-		...indexDiff.added.map((entry) =>
-			statement(createIndexSql(next.schema, next.name, entry.value)),
+		...indexesToAdd.map((index) =>
+			statement(createIndexSql(next.schema, next.name, index)),
 		),
 		...checksToAdd.map((check) =>
 			statement(addCheckConstraintSql(next.schema, next.name, check)),

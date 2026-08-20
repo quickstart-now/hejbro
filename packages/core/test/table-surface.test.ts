@@ -42,7 +42,9 @@ describe("table() surface (D15)", () => {
 			{ id: uuid().primaryKey(), publishedAt: timestamptz() },
 			(t) => ({ indexes: [index().on(t.publishedAt)] }),
 		);
-		expect(getTableMeta(posts).indexes[0]?.columns).toEqual(["published_at"]);
+		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
+			{ name: "published_at", desc: false, nulls: null },
+		]);
 		const comments = table(
 			ddland,
 			"comments",

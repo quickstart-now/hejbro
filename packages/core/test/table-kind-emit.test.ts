@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { check } from "../src/dsl/check";
+import { desc, index } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { inArray, isNotNull } from "../src/expr/operators";
 import type { KindChange } from "../src/kind/object-kind";
 import { tableKind } from "../src/kinds/table-kind";
-import { integer, text, uuid } from "../src/types/column-builder-factories";
+import {
+	integer,
+	text,
+	timestamptz,
+	uuid,
+} from "../src/types/column-builder-factories";
 
 const app = schema("app");
 
@@ -35,9 +41,10 @@ describe("tableKind.emit — create", () => {
 			(t) => ({
 				indexes: [
 					{
-						columns: [t.postId.sqlName],
+						columns: [{ name: t.postId.sqlName, desc: false, nulls: null }],
 						unique: false,
 						indexName: null,
+						predicate: null,
 					},
 				],
 				foreignKeys: [
@@ -84,7 +91,12 @@ describe("tableKind.emit — create", () => {
 			{ email: text().notNull().unique() },
 			(t) => ({
 				indexes: [
-					{ columns: [t.email.sqlName], unique: true, indexName: null },
+					{
+						columns: [{ name: t.email.sqlName, desc: false, nulls: null }],
+						unique: true,
+						indexName: null,
+						predicate: null,
+					},
 				],
 			}),
 		);
@@ -292,7 +304,14 @@ describe("tableKind.emit — alter", () => {
 	it("emits index add and drop", () => {
 		const before = table(app, "posts", { slug: text() });
 		const after = table(app, "posts", { slug: text() }, (t) => ({
-			indexes: [{ columns: [t.slug.sqlName], unique: false, indexName: null }],
+			indexes: [
+				{
+					columns: [{ name: t.slug.sqlName, desc: false, nulls: null }],
+					unique: false,
+					indexName: null,
+					predicate: null,
+				},
+			],
 		}));
 		const addChange = expectSingleChange(
 			tableKind.diff(
@@ -477,6 +496,62 @@ describe("tableKind.emit — checks", () => {
 			'alter table "app"."posts" drop column "legacy";',
 			'alter table "app"."posts" add column "status" text;',
 			'alter table "app"."posts" add constraint "posts_status_check" check ("app"."posts"."status" is not null);',
+		]);
+	});
+});
+
+describe("tableKind.emit — index ordering and where (D51)", () => {
+	it("renders ordered columns and a where predicate", () => {
+		const posts = table(
+			app,
+			"posts",
+			{ createdAt: timestamptz(), publishedAt: timestamptz(), slug: text() },
+			(t) => ({
+				indexes: [
+					index("posts_recent_idx").on(
+						t.createdAt,
+						desc(t.publishedAt, { nulls: "first" }),
+					),
+					index("posts_slug_published_uidx")
+						.unique()
+						.on(t.slug)
+						.where(isNotNull(t.publishedAt)),
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(posts)),
+				"app.posts",
+			),
+		);
+		const sql = tableKind.emit(change).map((statement) => statement.sql);
+		expect(sql).toContain(
+			'create index "posts_recent_idx" on "app"."posts" ("created_at", "published_at" desc nulls first);',
+		);
+		expect(sql).toContain(
+			'create unique index "posts_slug_published_uidx" on "app"."posts" ("slug") where "app"."posts"."published_at" is not null;',
+		);
+	});
+
+	it("recreates an index whose definition changed under the same name (was silently skipped)", () => {
+		const before = table(app, "posts", { a: text(), b: text() }, (t) => ({
+			indexes: [index("posts_ab_idx").on(t.a)],
+		}));
+		const after = table(app, "posts", { a: text(), b: text() }, (t) => ({
+			indexes: [index("posts_ab_idx").unique().on(t.a, t.b)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'drop index "app"."posts_ab_idx";',
+			'create unique index "posts_ab_idx" on "app"."posts" ("a", "b");',
 		]);
 	});
 });

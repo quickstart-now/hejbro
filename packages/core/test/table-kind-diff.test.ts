@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { check } from "../src/dsl/check";
+import { desc, index } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import type { ColumnRef, Expr } from "../src/expr/ast";
-import { inArray } from "../src/expr/operators";
+import { inArray, isNotNull } from "../src/expr/operators";
 import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
@@ -55,7 +56,12 @@ describe("tableKind.serialize", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		const comments = table(app, "comments", { postId: uuid() }, (t) => ({
 			indexes: [
-				{ columns: [t.postId.sqlName], unique: false, indexName: null },
+				{
+					columns: [{ name: t.postId.sqlName, desc: false, nulls: null }],
+					unique: false,
+					indexName: null,
+					predicate: null,
+				},
 			],
 			foreignKeys: [
 				{
@@ -209,9 +215,10 @@ describe("tableKind.diff", () => {
 		const after = table(app, "posts", { publishedAt: timestamptz() }, (t) => ({
 			indexes: [
 				{
-					columns: [t.publishedAt.sqlName],
+					columns: [{ name: t.publishedAt.sqlName, desc: false, nulls: null }],
 					unique: false,
 					indexName: null,
+					predicate: null,
 				},
 			],
 		}));
@@ -321,6 +328,55 @@ describe("tableKind.diff — checks", () => {
 		);
 		expect(change.operation).toBe("alter");
 		expect(change.notes).toEqual(['check "posts_status_check" changed']);
+	});
+});
+
+describe("tableKind.serialize — index columns and where (v3, D51)", () => {
+	it("serializes column order/desc/nulls compactly", () => {
+		const posts = table(
+			app,
+			"posts",
+			{ createdAt: timestamptz(), publishedAt: timestamptz() },
+			(t) => ({
+				indexes: [
+					index("posts_recent_idx").on(
+						t.createdAt,
+						desc(t.publishedAt, { nulls: "first" }),
+					),
+				],
+			}),
+		);
+		const snapshot = asTableSnapshot(tableKind.serialize(getTableMeta(posts)));
+		expect(snapshot.indexes[0]).toEqual({
+			name: "posts_recent_idx",
+			columns: [
+				{ name: "created_at" },
+				{ name: "published_at", desc: true, nulls: "first" },
+			],
+		});
+	});
+
+	it("serializes a partial unique index's where predicate as rendered sql", () => {
+		const posts = table(
+			app,
+			"posts",
+			{ slug: text(), publishedAt: timestamptz() },
+			(t) => ({
+				indexes: [
+					index("posts_slug_published_uidx")
+						.unique()
+						.on(t.slug)
+						.where(isNotNull(t.publishedAt)),
+				],
+			}),
+		);
+		const snapshot = asTableSnapshot(tableKind.serialize(getTableMeta(posts)));
+		expect(snapshot.indexes[0]).toEqual({
+			name: "posts_slug_published_uidx",
+			columns: [{ name: "slug" }],
+			unique: true,
+			where: '"app"."posts"."published_at" is not null',
+		});
 	});
 });
 

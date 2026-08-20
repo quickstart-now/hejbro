@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 2,
+	"hejbroSnapshot": 3,
 	"objects": {
 		"function:ddland.comments_enforce_single_depth": {
 			"args": [],

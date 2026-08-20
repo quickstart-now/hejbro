@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 2,
+	"hejbroSnapshot": 3,
 	"objects": {
 		"schema:ddland": {
 			"schemaName": "ddland"
