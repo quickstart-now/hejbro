@@ -8,7 +8,9 @@ import {
 	writeFixtureFile,
 } from "./support/cli-runner";
 
-// Task 17: `hejbro verify`'s four checks. Drives the built CLI
+// Task 17: `hejbro verify`'s four checks, including golden pins for the
+// owner-approved (⑥) snapshot-stale/chain-tip-mismatch texts and the
+// diverged-migrations/broken-chain Next: lines. Drives the built CLI
 // (support/cli-runner.ts) for the same reason generate-command.test.ts
 // and golden.test.ts do — real jiti-loaded table() fixtures need the
 // real, built resolution path, not an in-process vitest one.
@@ -118,7 +120,7 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		expect(result.stderr).toContain("error[invalid-snapshot]");
 	});
 
-	it("check 2 (declarations ↔ snapshot): exits 1 with snapshot-stale when declarations changed without regenerating", async () => {
+	it("check 2 (declarations ↔ snapshot): exits 1 with the owner-approved snapshot-stale text when declarations changed without regenerating", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(BASE_SCHEMA);
 		await runCli(cwd, ["generate"]);
@@ -126,8 +128,9 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[snapshot-stale]");
-		expect(result.stderr).toContain("hejbro.snapshot.json");
+		expect(result.stderr).toContain(
+			'the checked-in snapshot at "hejbro.snapshot.json" does not match your declarations — either the declarations changed without a new migration, or the snapshot file was hand-edited. Next: run `hejbro generate` and commit the result (or, if the snapshot is correct and the declarations are wrong, restore the declarations you meant).',
+		);
 	});
 
 	it("check 3 (chain linearity): exits 1 with diverged-migrations when two files share a parent", async () => {
@@ -150,6 +153,9 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("error[diverged-migrations]");
+		expect(result.stderr).toContain(
+			"all branch from the same prior snapshot state — this usually happens when two branches each ran `hejbro generate` before merging. Next: keep whichever migration merged first (usually the one with the earlier timestamp/index prefix); delete the other, then rerun `hejbro generate` so it's recreated against the now-current chain.",
+		);
 		expect(result.stderr).toContain(fileName as string);
 		expect(result.stderr).toContain("99999999999999_fork.sql");
 	});
@@ -173,8 +179,9 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[broken-chain]");
-		expect(result.stderr).toContain(secondFileName as string);
+		expect(result.stderr).toContain(
+			`the migration chain is broken at "${secondFileName}" — its parent-snapshot hash doesn't match any earlier migration's snapshot hash. Next: check whether a migration file was deleted, renamed, or hand-edited. Restore it from version control, or if this is intentional, delete every migration after it (they're now orphaned) and rerun \`hejbro generate\`.`,
+		);
 	});
 
 	it("check 4 (tip == current): exits 1 with chain-tip-mismatch when a migration's own snapshot hash is corrupted", async () => {
@@ -194,6 +201,8 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("error[chain-tip-mismatch]");
+		expect(result.stderr).toContain(
+			"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.",
+		);
 	});
 });

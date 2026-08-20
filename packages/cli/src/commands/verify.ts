@@ -19,12 +19,11 @@ const VERIFY_DESCRIPTION =
 	"Check that the checked-in snapshot matches your declarations and that the migration history's hash chain is intact.";
 
 /**
- * Owner-approved wording pending — Task 17's `snapshot-stale` and
- * `chain-tip-mismatch` are new texts (no prior golden), and the
- * `diverged-migrations`/`broken-chain` `Next:` lines below are verify's
- * own framing of `checkChain`'s codes (also new). Drafted per decision
- * ③'s grammar and relayed to planner for owner review (PR body flags
- * this) — do not treat as final until confirmed.
+ * Owner-approved verbatim (⑥) — Task 17's `snapshot-stale` and
+ * `chain-tip-mismatch` texts, and the `diverged-migrations`/
+ * `broken-chain` `Next:` lines below (verify's own framing of
+ * `checkChain`'s codes), all new for this phase. See
+ * `test/verify.test.ts` for the golden pins.
  */
 const snapshotStaleMessage = (snapshotPath: string): string =>
 	`the checked-in snapshot at "${snapshotPath}" does not match your declarations — either the declarations changed without a new migration, or the snapshot file was hand-edited. Next: run \`hejbro generate\` and commit the result (or, if the snapshot is correct and the declarations are wrong, restore the declarations you meant).`;
