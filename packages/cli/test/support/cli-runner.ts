@@ -1,4 +1,6 @@
+import type { ExecException } from "node:child_process";
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,7 +16,32 @@ import { join } from "node:path";
 // test-only code.
 const CLI_PACKAGE_ROOT = join(import.meta.dirname, "..", "..");
 export const CLI_PATH = join(CLI_PACKAGE_ROOT, "dist", "cli.js");
+const CLI_INDEX_PATH = join(CLI_PACKAGE_ROOT, "dist", "index.js");
 const SUPABASE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "supabase");
+
+/**
+ * Asserts the built CLI artifacts exist before any test spawns them (#102):
+ * turbo should always build `hejbro` before running its tests, but a
+ * flaky/incomplete build would otherwise surface as a confusing "no such
+ * file" spawn error deep inside `execFile`. Call from a `beforeAll` in
+ * every test file that spawns the built CLI.
+ */
+export const assertBuiltCli = (): void => {
+	const missing = [CLI_PATH, CLI_INDEX_PATH].filter((p) => !existsSync(p));
+	if (missing.length > 0) {
+		throw new Error(
+			`built CLI artifacts missing: ${missing.join(", ")} — run pnpm build (turbo should have built hejbro before its tests; if you see this under turbo, capture the turbo log for #102)`,
+		);
+	}
+};
+
+/** `ExecException.code` is `string | number | undefined` (unlike `NodeJS.ErrnoException.code`, which is `string | undefined`) — typed to match what `execFile`'s callback actually hands us. */
+const exitCodeFrom = (error: ExecException): number => {
+	if (typeof error.code === "number") {
+		return error.code;
+	}
+	return 1;
+};
 
 export type CliRun = {
 	readonly exitCode: number;
@@ -52,7 +79,11 @@ export const runCli = (
 					resolve({ exitCode: 0, stdout, stderr });
 					return;
 				}
-				const exitCode = typeof error.code === "number" ? error.code : 1;
+				const exitCode = exitCodeFrom(error);
+				// Keep the full child stderr in the report even when the test's
+				// own assertions don't inspect it — a flaky failure otherwise
+				// leaves no trace of what the spawned CLI actually printed (#102).
+				console.error(`[cli-runner] exit ${exitCode}\n${stderr}`);
 				resolve({ exitCode, stdout, stderr });
 			},
 		);

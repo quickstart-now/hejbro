@@ -1,12 +1,15 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+	assertBuiltCli,
 	createCliFixtureDir,
 	removeCliFixtureDir,
 	runCli,
 	writeFixtureFile,
 } from "./support/cli-runner";
+
+beforeAll(assertBuiltCli);
 
 // Task 17: `hejbro verify`'s four checks, including golden pins for the
 // owner-approved (⑥) snapshot-stale/chain-tip-mismatch texts and the

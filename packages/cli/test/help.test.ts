@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+	assertBuiltCli,
 	CLI_PATH,
 	createCliFixtureDir,
 	removeCliFixtureDir,
 } from "./support/cli-runner";
+
+beforeAll(assertBuiltCli);
 
 // Task 15: pins `hejbro --help` and `hejbro generate --help` to the
 // owner-approved short-form texts (④ — decision ③'s grammar covers errors,

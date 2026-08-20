@@ -1,10 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+	assertBuiltCli,
 	createCliFixtureDir,
 	removeCliFixtureDir,
 	runCli,
 	writeFixtureFile,
 } from "./support/cli-runner";
+
+beforeAll(assertBuiltCli);
 
 // Task 14: the owner-approved (⑥) error-corpus texts, verbatim, as actually
 // produced by the real, wired-up `hejbro generate` — every case here drives
