@@ -193,5 +193,14 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(result.stderr).toBe(
 			'warning[demo-warning]: app.posts\n  table "app"."posts" is exposed. Next: declare rls(...).\n',
 		);
+
+		// O3 §3: the summary line sits immediately after `wrote <file>`, not
+		// merely somewhere in stdout — pin the exact position.
+		const stdoutLines = result.stdout.split("\n");
+		const wroteLineIndex = stdoutLines.findIndex((line) =>
+			line.startsWith("wrote "),
+		);
+		expect(wroteLineIndex).toBeGreaterThanOrEqual(0);
+		expect(stdoutLines[wroteLineIndex + 1]).toBe("1 warning(s) — see below");
 	});
 });
