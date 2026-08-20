@@ -146,8 +146,8 @@ const serializeForeignKeys = (
 		name: deriveForeignKeyName(declaration.tableName, foreignKey.columns),
 		columns: foreignKey.columns,
 		referencesTable: tableIdentity(
-			foreignKey.references.table.schema.schemaName,
-			foreignKey.references.table.tableName,
+			foreignKey.references.schemaName,
+			foreignKey.references.tableName,
 		),
 		referencesColumns: foreignKey.references.columns,
 		...onDeleteField(foreignKey.onDelete),

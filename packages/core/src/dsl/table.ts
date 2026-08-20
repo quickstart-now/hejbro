@@ -31,13 +31,17 @@ export type IndexDeclaration = {
 	readonly indexName: string | null;
 };
 
+/** The table a foreign key references, resolved to its identity parts (D52) — derived from the referenced columns' own refs, not carried as a live `TableDeclaration`. */
+export type ForeignKeyReferenceTarget = {
+	readonly schemaName: string;
+	readonly tableName: string;
+	readonly columns: ReadonlyArray<string>;
+};
+
 /** A declared foreign key from local (already snake_cased) columns to another table's columns. */
 export type ForeignKeyDeclaration = {
 	readonly columns: ReadonlyArray<string>;
-	readonly references: {
-		readonly table: TableDeclaration;
-		readonly columns: ReadonlyArray<string>;
-	};
+	readonly references: ForeignKeyReferenceTarget;
 	readonly onDelete: ForeignKeyAction | null;
 	readonly onUpdate: ForeignKeyAction | null;
 };
@@ -87,7 +91,8 @@ export const isTable = (value: unknown): value is Table =>
 export type ForeignKeyInput = {
 	readonly columns: ReadonlyArray<ColumnRef>;
 	readonly references: {
-		readonly table: Table;
+		/** Optional since D52 — derived from `columns` when omitted, cross-checked when given. */
+		readonly table?: Table;
 		readonly columns: ReadonlyArray<ColumnRef>;
 	};
 	readonly onDelete?: ForeignKeyAction;
@@ -204,6 +209,51 @@ const findForeignColumnRef = (
 			ref.exprNode.tableName !== tableName,
 	);
 
+/** Resolves a foreign key's `references` to its identity parts (D52): the referenced table is derived from the referenced columns' own `exprNode`s, and cross-checked against an explicit `table` when one is given. */
+const resolveReferenceTarget = (
+	tableName: string,
+	references: ForeignKeyInput["references"],
+): ForeignKeyReferenceTarget => {
+	const [first, ...rest] = references.columns;
+	if (first === undefined) {
+		return throwHejbroError(
+			"foreign-key-empty-references",
+			`table "${tableName}" declares a foreign key whose references.columns is empty. Next: list at least one referenced column, e.g. references: { columns: [posts.id] }.`,
+		);
+	}
+	const derived = {
+		schemaName: first.exprNode.schemaName,
+		tableName: first.exprNode.tableName,
+	};
+	const stray = rest.find(
+		(ref) =>
+			ref.exprNode.schemaName !== derived.schemaName ||
+			ref.exprNode.tableName !== derived.tableName,
+	);
+	if (stray !== undefined) {
+		return throwHejbroError(
+			"foreign-key-mixed-reference-tables",
+			`table "${tableName}" declares a foreign key referencing columns of both "${derived.schemaName}"."${derived.tableName}" and "${stray.exprNode.schemaName}"."${stray.exprNode.tableName}" — a foreign key targets exactly one table. Next: split it into one foreign key per referenced table.`,
+		);
+	}
+	if (references.table !== undefined) {
+		const meta = getTableMeta(references.table);
+		if (
+			meta.schema.schemaName !== derived.schemaName ||
+			meta.tableName !== derived.tableName
+		) {
+			return throwHejbroError(
+				"foreign-key-table-mismatch",
+				`table "${tableName}" declares a foreign key that references columns of "${derived.schemaName}"."${derived.tableName}" but names table "${meta.schema.schemaName}"."${meta.tableName}". Next: drop the table field (it is derived from the columns) or point both at the same table.`,
+			);
+		}
+	}
+	return {
+		...derived,
+		columns: references.columns.map((column) => column.sqlName),
+	};
+};
+
 const resolveForeignKey = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -218,10 +268,7 @@ const resolveForeignKey = (
 	}
 	return {
 		columns: input.columns.map((column) => column.sqlName),
-		references: {
-			table: getTableMeta(input.references.table),
-			columns: input.references.columns.map((column) => column.sqlName),
-		},
+		references: resolveReferenceTarget(tableName, input.references),
 		onDelete: input.onDelete ?? null,
 		onUpdate: input.onUpdate ?? null,
 	};

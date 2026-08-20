@@ -58,11 +58,70 @@ describe("table() surface (D15)", () => {
 		);
 		const fk = getTableMeta(comments).foreignKeys[0];
 		expect(fk?.columns).toEqual(["post_id"]);
-		expect(fk?.references.table.tableName).toBe("posts");
+		expect(fk?.references.tableName).toBe("posts");
 	});
 	it("keeps rejecting duplicate snake_cased column names", () => {
 		expect(() =>
 			table(ddland, "posts", { postId: uuid(), post_id: uuid() }),
 		).toThrowError(/duplicate-column|duplicate column/);
+	});
+});
+
+const app = schema("app");
+
+describe("table() — self-referencing foreign keys (D52)", () => {
+	it("derives the referenced table from the callback's own column refs", () => {
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey().defaultRandom(), parentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.parentId],
+						references: { columns: [t.id] },
+						onDelete: "cascade",
+					},
+				],
+			}),
+		);
+		const [fk] = getTableMeta(comments).foreignKeys;
+		expect(fk?.references).toEqual({
+			schemaName: "app",
+			tableName: "comments",
+			columns: ["id"],
+		});
+	});
+
+	it("still accepts an explicit table and cross-checks it", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const other = table(app, "other", { id: uuid().primaryKey() });
+		expect(() =>
+			table(app, "comments", { postId: uuid() }, (t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: other, columns: [posts.id] },
+					},
+				],
+			})),
+		).toThrowError(
+			/foreign-key-table-mismatch|references columns of "app"."posts" but names table "app"."other"/,
+		);
+	});
+
+	it("rejects referenced columns from two different tables", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const users = table(app, "users", { id: uuid().primaryKey() });
+		expect(() =>
+			table(app, "comments", { a: uuid(), b: uuid() }, (t) => ({
+				foreignKeys: [
+					{
+						columns: [t.a, t.b],
+						references: { columns: [posts.id, users.id] },
+					},
+				],
+			})),
+		).toThrow(/foreign-key-mixed-reference-tables|referencing columns of both/);
 	});
 });

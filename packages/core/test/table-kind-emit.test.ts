@@ -387,6 +387,36 @@ describe("tableKind.emit — foreign key actions", () => {
 			'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."posts" ("id") on delete set null on update cascade;',
 		);
 	});
+
+	it("emits a self-referencing foreign key as a deferred statement (D52)", () => {
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey().defaultRandom(), parentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.parentId],
+						references: { columns: [t.id] },
+						onDelete: "cascade",
+					},
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(comments)),
+				"app.comments",
+			),
+		);
+		const foreignKeyStatement = tableKind
+			.emit(change)
+			.find((statement) => statement.stage === "deferred");
+		expect(foreignKeyStatement?.sql).toBe(
+			'alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;',
+		);
+	});
 });
 
 describe("tableKind.emit — unsupported column alters", () => {
