@@ -1350,7 +1350,7 @@ export const supabasePreset: Preset = {
       table "app"."posts" is exposed. Next: declare rls(...).
     ```
     (O3 — exact wording to be approved; identity = first `"schema"."table"` pair found in the message, else the config identity.)
-  - `verify.test.ts`: a fixture declaring a `storageBucket` with `presets: [supabasePreset]` verifies with exit 0 (previously `unknown-kind`); without the preset it exits 1 with `unknown-kind`.
+  - `verify.test.ts`: a fixture declaring a `storageBucket` with `presets: [supabasePreset]` verifies with exit 0; without the preset it exits 1 with `unowned-declaration` (`buildSnapshot` rejects a declaration no registered kind owns before any registry lookup — not `unknown-kind`, which only fires once `diffSnapshots` looks up a kind name already present in a snapshot). The fixture needs `test/support/cli-runner.ts`'s `createCliFixtureDir()` to also symlink `node_modules/@hejbro/supabase`, and `packages/cli/package.json` to add `@hejbro/supabase: workspace:*` as a devDependency (not a runtime one).
 - [x] **Step 2: Implement** — `buildRegistry(config)` helper in a new `packages/cli/src/presets.ts`: `const registry = createDefaultRegistry(); registerPresets(registry, config.presets); return registry;`. `runGenerate`: pass `registry` and `validators: presetValidators(config.presets)` to both passes; after writing the migration, if `finalPass.warnings.length > 0` set `stderr` to `renderDiagnostics(warnings.map(fromWarning), null)` while keeping `exitCode: 0`. `runVerify`: pass `registry`. `init`: scaffold `presets: []` in the config template (and update its golden).
 - [x] **Step 3:** PASS; commit `feat(cli): presets config field, preset registry, warning rendering`.
 

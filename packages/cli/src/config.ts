@@ -130,9 +130,11 @@ export const parseConfig = (
 			`config field "presets[${invalidPresetIndex}]" in ${configPath} is not a preset object. Next: pass preset objects exported by a preset package (e.g. supabasePreset from @hejbro/supabase).`,
 		);
 	}
-	// Validated above: every entry passed isPreset.
+	// findInvalidPresetIndex already confirmed every entry passes isPreset;
+	// filter (rather than an `as` cast) lets the type predicate narrow the
+	// array for us.
 	return {
 		...result.data,
-		presets: result.data.presets as ReadonlyArray<Preset>,
+		presets: result.data.presets.filter(isPreset),
 	};
 };
