@@ -49,13 +49,14 @@ export type IndexSnapshot = {
 export const indexUnique = (index: IndexSnapshot): boolean =>
 	index.unique === true;
 
-/** A single foreign key as materialized in a table snapshot, with its name derived and its target table resolved to an identity string. **Compact**: `onDelete` is present only when set (default `null`, meaning "unspecified") — read via {@link foreignKeyOnDelete}. */
+/** A single foreign key as materialized in a table snapshot, with its name derived and its target table resolved to an identity string. **Compact**: `onDelete`/`onUpdate` are present only when set (default `null`, meaning "unspecified") — read via {@link foreignKeyOnDelete}/{@link foreignKeyOnUpdate}. */
 export type ForeignKeySnapshot = {
 	readonly name: string;
 	readonly columns: ReadonlyArray<string>;
 	readonly referencesTable: string;
 	readonly referencesColumns: ReadonlyArray<string>;
 	readonly onDelete?: ForeignKeyAction;
+	readonly onUpdate?: ForeignKeyAction;
 };
 
 /** `foreignKey.onDelete`, defaulting to `null` when absent (compact snapshot). */
@@ -63,14 +64,31 @@ export const foreignKeyOnDelete = (
 	foreignKey: ForeignKeySnapshot,
 ): ForeignKeyAction | null => foreignKey.onDelete ?? null;
 
-/** The full snapshot node `tableKind.serialize` produces for one table. */
+/** `foreignKey.onUpdate`, defaulting to `null` when absent (compact snapshot). */
+export const foreignKeyOnUpdate = (
+	foreignKey: ForeignKeySnapshot,
+): ForeignKeyAction | null => foreignKey.onUpdate ?? null;
+
+/** A single CHECK constraint as materialized in a table snapshot: its name and the rendered SQL of its expression (D50). */
+export type CheckSnapshot = {
+	readonly name: string;
+	readonly expression: string;
+};
+
+/** The full snapshot node `tableKind.serialize` produces for one table. **Compact**: `checks` is present only when the table declares at least one (default `[]`) — read via {@link tableChecks}. */
 export type TableSnapshot = {
 	readonly schema: string;
 	readonly name: string;
 	readonly columns: ReadonlyArray<ColumnSnapshot>;
 	readonly indexes: ReadonlyArray<IndexSnapshot>;
 	readonly foreignKeys: ReadonlyArray<ForeignKeySnapshot>;
+	readonly checks?: ReadonlyArray<CheckSnapshot>;
 };
+
+/** `snapshot.checks`, defaulting to `[]` when absent (compact snapshot, D33). */
+export const tableChecks = (
+	snapshot: TableSnapshot,
+): ReadonlyArray<CheckSnapshot> => snapshot.checks ?? [];
 
 // Internal invariant: this shape is exactly what tableKind.serialize (table-kind.ts) produces.
 /** Narrows a raw snapshot `JsonValue` to {@link TableSnapshot}. */

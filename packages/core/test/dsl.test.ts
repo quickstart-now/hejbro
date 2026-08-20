@@ -87,7 +87,11 @@ describe("table() — dd.land-style posts", () => {
 
 		const meta = getTableMeta(comments);
 		expect(meta.foreignKeys).toHaveLength(1);
-		expect(meta.foreignKeys[0]?.references.table).toBe(getTableMeta(posts));
+		expect(meta.foreignKeys[0]?.references).toEqual({
+			schemaName: "app",
+			tableName: "posts",
+			columns: ["id"],
+		});
 		expect(meta.foreignKeys[0]?.columns).toEqual(["post_id"]);
 	});
 

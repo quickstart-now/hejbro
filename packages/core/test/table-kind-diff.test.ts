@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { check } from "../src/dsl/check";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import type { ColumnRef, Expr } from "../src/expr/ast";
+import { inArray } from "../src/expr/operators";
+import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
+import { asTableSnapshot } from "../src/kinds/table-snapshot";
 import {
 	integer,
 	text,
@@ -11,6 +16,17 @@ import {
 } from "../src/types/column-builder-factories";
 
 const app = schema("app");
+
+const expectSingleChange = (changes: ReadonlyArray<KindChange>): KindChange => {
+	if (changes.length !== 1) {
+		throw new Error(`expected exactly one change, got ${changes.length}`);
+	}
+	const [change] = changes;
+	if (change === undefined) {
+		throw new Error("expected a change");
+	}
+	return change;
+};
 
 describe("tableKind.owns", () => {
 	it("owns table declarations only", () => {
@@ -237,6 +253,74 @@ describe("tableKind.diff", () => {
 				notes: ['foreign key "comments_post_id_fk" added'],
 			},
 		]);
+	});
+
+	it("reports a foreign key on-update change as a single alter", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const withOnUpdate = (onUpdate: "cascade" | "restrict") =>
+			table(app, "comments", { postId: uuid() }, (t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+						onUpdate,
+					},
+				],
+			}));
+		const previous = tableKind.serialize(getTableMeta(withOnUpdate("cascade")));
+		const next = tableKind.serialize(getTableMeta(withOnUpdate("restrict")));
+		const change = expectSingleChange(
+			tableKind.diff(previous, next, "app.comments"),
+		);
+		expect(change.notes).toEqual(['foreign key "comments_post_id_fk" changed']);
+		expect(tableKind.emit(change).map((statement) => statement.sql)).toEqual([
+			'alter table "app"."comments" drop constraint "comments_post_id_fk";',
+			'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."posts" ("id") on update restrict;',
+		]);
+	});
+});
+
+describe("tableKind.diff — checks", () => {
+	const withCheck = (
+		expression: (t: { readonly status: ColumnRef<"text"> }) => Expr<"boolean">,
+		name = "posts_status_check",
+	) =>
+		table(app, "posts", { status: text().notNull() }, (t) => ({
+			checks: [check(name, expression(t))],
+		}));
+
+	it("serializes checks as rendered SQL and omits the field when empty", () => {
+		const plain = tableKind.serialize(
+			getTableMeta(table(app, "posts", { id: uuid() })),
+		);
+		expect(asTableSnapshot(plain).checks).toBeUndefined();
+		const snap = asTableSnapshot(
+			tableKind.serialize(
+				getTableMeta(
+					withCheck((t) => inArray(t.status, ["draft", "published"])),
+				),
+			),
+		);
+		expect(snap.checks).toEqual([
+			{
+				name: "posts_status_check",
+				expression: `"app"."posts"."status" in ('draft', 'published')`,
+			},
+		]);
+	});
+
+	it("reports an expression change as a single alter with a note", () => {
+		const before = tableKind.serialize(
+			getTableMeta(withCheck((t) => inArray(t.status, ["draft"]))),
+		);
+		const after = tableKind.serialize(
+			getTableMeta(withCheck((t) => inArray(t.status, ["draft", "published"]))),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(before, after, "app.posts"),
+		);
+		expect(change.operation).toBe("alter");
+		expect(change.notes).toEqual(['check "posts_status_check" changed']);
 	});
 });
 

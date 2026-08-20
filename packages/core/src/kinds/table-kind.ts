@@ -10,11 +10,13 @@ import type { ObjectKind } from "../kind/object-kind";
 import type { ColumnState } from "../types/column-builder";
 import { emitTableSql } from "./table-kind-emit";
 import type {
+	CheckSnapshot,
 	ColumnSnapshot,
 	ForeignKeySnapshot,
 	IndexSnapshot,
+	TableSnapshot,
 } from "./table-snapshot";
-import { asTableSnapshot, tableIdentity } from "./table-snapshot";
+import { asTableSnapshot, tableChecks, tableIdentity } from "./table-snapshot";
 
 /** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
 export const deriveIndexName = (
@@ -108,6 +110,16 @@ const onDeleteField = (
 	return { onDelete: value };
 };
 
+/** `{ onUpdate: <action> }` when set, else `{}` (compact snapshot — `null` means "unspecified"). */
+const onUpdateField = (
+	value: ForeignKeyAction | null,
+): Pick<ForeignKeySnapshot, "onUpdate"> => {
+	if (value === null) {
+		return {};
+	}
+	return { onUpdate: value };
+};
+
 const serializeColumns = (
 	declaration: TableDeclaration,
 ): ReadonlyArray<ColumnSnapshot> =>
@@ -136,12 +148,31 @@ const serializeForeignKeys = (
 		name: deriveForeignKeyName(declaration.tableName, foreignKey.columns),
 		columns: foreignKey.columns,
 		referencesTable: tableIdentity(
-			foreignKey.references.table.schema.schemaName,
-			foreignKey.references.table.tableName,
+			foreignKey.references.schemaName,
+			foreignKey.references.tableName,
 		),
 		referencesColumns: foreignKey.references.columns,
 		...onDeleteField(foreignKey.onDelete),
+		...onUpdateField(foreignKey.onUpdate),
 	}));
+
+const serializeChecks = (
+	declaration: TableDeclaration,
+): ReadonlyArray<CheckSnapshot> =>
+	declaration.checks.map((check) => ({
+		name: check.checkName,
+		expression: renderExpr(check.expression),
+	}));
+
+/** `{ checks }` when the table declares any, else `{}` — absent means "none" (compact snapshot). */
+const checksField = (
+	checks: ReadonlyArray<CheckSnapshot>,
+): Pick<TableSnapshot, "checks"> => {
+	if (checks.length === 0) {
+		return {};
+	}
+	return { checks };
+};
 
 const isEmptyKeyedDiff = <TValue>(diff: KeyedDiff<TValue>): boolean =>
 	diff.added.length === 0 &&
@@ -175,6 +206,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		columns: serializeColumns(declaration),
 		indexes: serializeIndexes(declaration),
 		foreignKeys: serializeForeignKeys(declaration),
+		...checksField(serializeChecks(declaration)),
 	}),
 	identify: (snapshot) => {
 		const tableSnapshot = asTableSnapshot(snapshot);
@@ -239,11 +271,22 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 				value: foreignKey,
 			})),
 		);
+		const checkDiff = diffByKey(
+			tableChecks(previousSnapshot).map((check) => ({
+				key: check.name,
+				value: check,
+			})),
+			tableChecks(nextSnapshot).map((check) => ({
+				key: check.name,
+				value: check,
+			})),
+		);
 
 		if (
 			isEmptyKeyedDiff(columnDiff) &&
 			isEmptyKeyedDiff(indexDiff) &&
-			isEmptyKeyedDiff(foreignKeyDiff)
+			isEmptyKeyedDiff(foreignKeyDiff) &&
+			isEmptyKeyedDiff(checkDiff)
 		) {
 			return [];
 		}
@@ -252,6 +295,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			...buildNotes("column", columnDiff),
 			...buildNotes("index", indexDiff),
 			...buildNotes("foreign key", foreignKeyDiff),
+			...buildNotes("check", checkDiff),
 		];
 
 		return [

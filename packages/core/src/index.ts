@@ -7,6 +7,8 @@
 // each symbol's own JSDoc at its definition for what it does.
 
 export { captureDeclarationSite } from "./declaration-site";
+export type { CheckDeclaration } from "./dsl/check";
+export { check } from "./dsl/check";
 export type {
 	ArgRefs,
 	FunctionDeclaration,
@@ -47,6 +49,7 @@ export type {
 	ForeignKeyAction,
 	ForeignKeyDeclaration,
 	ForeignKeyInput,
+	ForeignKeyReferenceTarget,
 	IndexDeclaration,
 	Table,
 	TableColumns,

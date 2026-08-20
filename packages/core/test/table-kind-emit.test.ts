@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { check } from "../src/dsl/check";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import { inArray, isNotNull } from "../src/expr/operators";
 import type { KindChange } from "../src/kind/object-kind";
 import { tableKind } from "../src/kinds/table-kind";
 import { integer, text, uuid } from "../src/types/column-builder-factories";
@@ -353,6 +355,128 @@ describe("tableKind.emit — alter", () => {
 				sql: 'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."authors" ("id");',
 				stage: "deferred",
 			},
+		]);
+	});
+});
+
+describe("tableKind.emit — foreign key actions", () => {
+	it("renders on delete and on update, including set default", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey(), postId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+						onDelete: "set null",
+						onUpdate: "cascade",
+					},
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(comments)),
+				"app.comments",
+			),
+		);
+		const sql = tableKind.emit(change).map((statement) => statement.sql);
+		expect(sql).toContain(
+			'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."posts" ("id") on delete set null on update cascade;',
+		);
+	});
+
+	it("emits a self-referencing foreign key as a deferred statement (D52)", () => {
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey().defaultRandom(), parentId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.parentId],
+						references: { columns: [t.id] },
+						onDelete: "cascade",
+					},
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(comments)),
+				"app.comments",
+			),
+		);
+		const foreignKeyStatement = tableKind
+			.emit(change)
+			.find((statement) => statement.stage === "deferred");
+		expect(foreignKeyStatement?.sql).toBe(
+			'alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;',
+		);
+	});
+});
+
+describe("tableKind.emit — checks", () => {
+	it("inlines named checks in create table after the primary key", () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text().notNull() },
+			(t) => ({
+				checks: [
+					check(
+						"posts_status_check",
+						inArray(t.status, ["draft", "published"]),
+					),
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(posts)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change)[0]?.sql).toBe(
+			'create table "app"."posts" (\n\t"id" uuid not null,\n\t"status" text not null,\n\tprimary key ("id"),\n\tconstraint "posts_status_check" check ("app"."posts"."status" in (\'draft\', \'published\'))\n);',
+		);
+	});
+
+	it("drops checks before column drops and adds them after column adds", () => {
+		const before = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), legacy: text() },
+			(t) => ({
+				checks: [check("posts_legacy_check", isNotNull(t.legacy))],
+			}),
+		);
+		const after = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text() },
+			(t) => ({
+				checks: [check("posts_status_check", isNotNull(t.status))],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'alter table "app"."posts" drop constraint "posts_legacy_check";',
+			'alter table "app"."posts" drop column "legacy";',
+			'alter table "app"."posts" add column "status" text;',
+			'alter table "app"."posts" add constraint "posts_status_check" check ("app"."posts"."status" is not null);',
 		]);
 	});
 });

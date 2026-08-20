@@ -3,6 +3,7 @@ import { throwHejbroError } from "../error";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import { renderTypeNode } from "../types/type-node";
 import type {
+	CheckSnapshot,
 	ColumnSnapshot,
 	ForeignKeySnapshot,
 	IndexSnapshot,
@@ -14,7 +15,9 @@ import {
 	columnPrimaryKey,
 	columnUnique,
 	foreignKeyOnDelete,
+	foreignKeyOnUpdate,
 	indexUnique,
+	tableChecks,
 } from "./table-snapshot";
 
 /** Splits a `"schema.table"` identity string into its parts. */
@@ -78,11 +81,18 @@ const primaryKeyConstraint = (
 	return [`primary key (${primaryKeyColumns.join(", ")})`];
 };
 
-/** Renders `create table … (…);` for a table snapshot, columns in declaration order, then table-level constraints. */
+const checkConstraintLines = (snapshot: TableSnapshot): ReadonlyArray<string> =>
+	tableChecks(snapshot).map(
+		(check) =>
+			`constraint ${quoteIdentifier(check.name)} check (${check.expression})`,
+	);
+
+/** Renders `create table … (…);` for a table snapshot, columns in declaration order, then table-level constraints (primary key, then CHECKs, D50). */
 export const createTableSql = (snapshot: TableSnapshot): string => {
 	const bodyLines = [
 		...snapshot.columns.map((column) => renderColumnDefinition(column)),
 		...primaryKeyConstraint(snapshot.columns),
+		...checkConstraintLines(snapshot),
 	];
 	return `create table ${qualifyName(snapshot.schema, snapshot.name)} (\n\t${bodyLines.join(",\n\t")}\n);`;
 };
@@ -104,14 +114,17 @@ export const createIndexSql = (
 		.map((column) => quoteIdentifier(column))
 		.join(", ")});`;
 
-const foreignKeyActionClause = (onDelete: ForeignKeyAction | null): string => {
-	if (onDelete === null) {
+const foreignKeyActionClause = (
+	keyword: "delete" | "update",
+	action: ForeignKeyAction | null,
+): string => {
+	if (action === null) {
 		return "";
 	}
-	return ` on delete ${onDelete}`;
+	return ` on ${keyword} ${action}`;
 };
 
-/** Renders `alter table … add constraint … foreign key (…) references … (…) [on delete …];`. */
+/** Renders `alter table … add constraint … foreign key (…) references … (…) [on delete …] [on update …];`. */
 export const addForeignKeyConstraintSql = (
 	schema: string,
 	tableName: string,
@@ -127,13 +140,21 @@ export const addForeignKeyConstraintSql = (
 	return `alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(foreignKey.name)} foreign key (${localColumns}) references ${qualifyName(
 		referenced.schema,
 		referenced.table,
-	)} (${referencedColumns})${foreignKeyActionClause(foreignKeyOnDelete(foreignKey))};`;
+	)} (${referencedColumns})${foreignKeyActionClause("delete", foreignKeyOnDelete(foreignKey))}${foreignKeyActionClause("update", foreignKeyOnUpdate(foreignKey))};`;
 };
 
-/** Renders `alter table … drop constraint …;`. */
-export const dropForeignKeyConstraintSql = (
+/** Renders `alter table … add constraint "name" check (…);`. */
+export const addCheckConstraintSql = (
 	schema: string,
 	tableName: string,
-	foreignKeyName: string,
+	check: CheckSnapshot,
 ): string =>
-	`alter table ${qualifyName(schema, tableName)} drop constraint ${quoteIdentifier(foreignKeyName)};`;
+	`alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(check.name)} check (${check.expression});`;
+
+/** Renders `alter table … drop constraint …;` — shared by foreign keys and checks (the constraint namespace is one per table in Postgres). */
+export const dropConstraintSql = (
+	schema: string,
+	tableName: string,
+	constraintName: string,
+): string =>
+	`alter table ${qualifyName(schema, tableName)} drop constraint ${quoteIdentifier(constraintName)};`;

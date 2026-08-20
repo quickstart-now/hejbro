@@ -2,21 +2,26 @@ import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { ColumnRef } from "../expr/ast";
 import { columnRef } from "../expr/ast";
+import { collectColumnRefs } from "../expr/render-sql";
+import { someExprNode } from "../expr/walk";
+import { deriveForeignKeyName, deriveIndexName } from "../kinds/table-kind";
 import { assertSqlName } from "../sql/identifier-rules";
 import type {
 	BuilderFamily,
 	ColumnBuilder,
 	ColumnState,
 } from "../types/column-builder";
+import type { CheckDeclaration } from "./check";
 import type { RlsDeclaration, RlsInput } from "./rls";
 import { bindRls } from "./rls";
 import type { SchemaDeclaration } from "./schema";
 
-/** The referential actions Postgres supports for `on delete`. */
+/** The referential actions Postgres supports for `on delete` and `on update`. */
 export const foreignKeyActions = [
 	"cascade",
 	"restrict",
 	"set null",
+	"set default",
 	"no action",
 ] as const;
 
@@ -30,14 +35,19 @@ export type IndexDeclaration = {
 	readonly indexName: string | null;
 };
 
+/** The table a foreign key references, resolved to its identity parts (D52) — derived from the referenced columns' own refs, not carried as a live `TableDeclaration`. */
+export type ForeignKeyReferenceTarget = {
+	readonly schemaName: string;
+	readonly tableName: string;
+	readonly columns: ReadonlyArray<string>;
+};
+
 /** A declared foreign key from local (already snake_cased) columns to another table's columns. */
 export type ForeignKeyDeclaration = {
 	readonly columns: ReadonlyArray<string>;
-	readonly references: {
-		readonly table: TableDeclaration;
-		readonly columns: ReadonlyArray<string>;
-	};
+	readonly references: ForeignKeyReferenceTarget;
 	readonly onDelete: ForeignKeyAction | null;
+	readonly onUpdate: ForeignKeyAction | null;
 };
 
 /** A declared table: its columns (in declaration order), indexes, and foreign keys. */
@@ -51,6 +61,7 @@ export type TableDeclaration = {
 	}>;
 	readonly indexes: ReadonlyArray<IndexDeclaration>;
 	readonly foreignKeys: ReadonlyArray<ForeignKeyDeclaration>;
+	readonly checks: ReadonlyArray<CheckDeclaration>;
 	readonly rls: RlsDeclaration | null;
 	/** `true` for an {@link existingTable} reference (D41) — reference-only, never passed to `generateMigration`, never diffed, never emitted. `table()` always sets `false`. */
 	readonly existing: boolean;
@@ -85,16 +96,19 @@ export const isTable = (value: unknown): value is Table =>
 export type ForeignKeyInput = {
 	readonly columns: ReadonlyArray<ColumnRef>;
 	readonly references: {
-		readonly table: Table;
+		/** Optional since D52 — derived from `columns` when omitted, cross-checked when given. */
+		readonly table?: Table;
 		readonly columns: ReadonlyArray<ColumnRef>;
 	};
 	readonly onDelete?: ForeignKeyAction;
+	readonly onUpdate?: ForeignKeyAction;
 };
 
-/** The optional indexes/foreign keys a table's `extras` callback may return. */
+/** The optional indexes/foreign keys/checks a table's `extras` callback may return. */
 export type TableExtras = {
 	readonly indexes?: ReadonlyArray<IndexDeclaration>;
 	readonly foreignKeys?: ReadonlyArray<ForeignKeyInput>;
+	readonly checks?: ReadonlyArray<CheckDeclaration>;
 	readonly rls?: RlsInput;
 };
 
@@ -190,6 +204,83 @@ const validateColumnRefs = (
 	}
 };
 
+const firstDuplicate = (names: ReadonlyArray<string>): string | undefined =>
+	names.find((name, index, allNames) => allNames.indexOf(name) !== index);
+
+/** Rejects two indexes or two foreign keys that would resolve to the same derived or explicit name (D51) — Postgres constraint/index names are unique per table. */
+const validateDuplicateNames = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+	foreignKeys: ReadonlyArray<ForeignKeyDeclaration>,
+): void => {
+	const indexNames = indexes.map(
+		(index) => index.indexName ?? deriveIndexName(tableName, index.columns),
+	);
+	const duplicateIndex = firstDuplicate(indexNames);
+	if (duplicateIndex !== undefined) {
+		throwHejbroError(
+			"duplicate-index-name",
+			`table "${tableName}" declares two indexes named "${duplicateIndex}" (unnamed indexes default to "<table>_<columns>_idx"). Next: give one of them an explicit name — index("...").`,
+		);
+	}
+
+	const foreignKeyNames = foreignKeys.map((foreignKey) =>
+		deriveForeignKeyName(tableName, foreignKey.columns),
+	);
+	const duplicateForeignKey = firstDuplicate(foreignKeyNames);
+	if (duplicateForeignKey !== undefined) {
+		throwHejbroError(
+			"duplicate-foreign-key-name",
+			`table "${tableName}" declares two foreign keys on the same local columns (both would be named "${duplicateForeignKey}") — a column set can only reference one table. Next: merge them into one foreign key, or remove one.`,
+		);
+	}
+};
+
+/** Rejects duplicate CHECK names, subqueries, and cross-table column refs, in that order (D50). */
+const validateChecks = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
+	const duplicate = checks
+		.map((entry) => entry.checkName)
+		.find((name, index, allNames) => allNames.indexOf(name) !== index);
+	if (duplicate !== undefined) {
+		throwHejbroError(
+			"duplicate-check-name",
+			`table "${tableName}" declares two check constraints named "${duplicate}" — Postgres requires unique constraint names per table. Next: rename one of them.`,
+		);
+	}
+
+	const subquery = checks.find((entry) =>
+		someExprNode(entry.expression, (node) => node.nodeKind === "exists"),
+	);
+	if (subquery !== undefined) {
+		throwHejbroError(
+			"check-subquery",
+			`check "${subquery.checkName}" on table "${tableName}" contains a subquery — Postgres forbids subqueries in CHECK constraints. Next: express the rule over this row's own columns, or enforce it with a trigger (defineTrigger).`,
+		);
+	}
+
+	const foreign = checks
+		.flatMap((entry) =>
+			collectColumnRefs(entry.expression).map((ref) => ({
+				check: entry,
+				ref,
+			})),
+		)
+		.find(
+			({ ref }) =>
+				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
+		);
+	if (foreign !== undefined) {
+		throwHejbroError(
+			"check-foreign-column-ref",
+			`check "${foreign.check.checkName}" on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a CHECK can only see the row being written. Next: use this table's own columns (the callback's \`t\`), or enforce cross-table rules with a trigger (defineTrigger).`,
+		);
+	}
+};
+
 const findForeignColumnRef = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -200,6 +291,51 @@ const findForeignColumnRef = (
 			ref.exprNode.schemaName !== owner.schemaName ||
 			ref.exprNode.tableName !== tableName,
 	);
+
+/** Resolves a foreign key's `references` to its identity parts (D52): the referenced table is derived from the referenced columns' own `exprNode`s, and cross-checked against an explicit `table` when one is given. */
+const resolveReferenceTarget = (
+	tableName: string,
+	references: ForeignKeyInput["references"],
+): ForeignKeyReferenceTarget => {
+	const [first, ...rest] = references.columns;
+	if (first === undefined) {
+		return throwHejbroError(
+			"foreign-key-empty-references",
+			`table "${tableName}" declares a foreign key with no referenced columns (references.columns is empty). Next: list at least one referenced column, e.g. references: { columns: [posts.id] }.`,
+		);
+	}
+	const derived = {
+		schemaName: first.exprNode.schemaName,
+		tableName: first.exprNode.tableName,
+	};
+	const stray = rest.find(
+		(ref) =>
+			ref.exprNode.schemaName !== derived.schemaName ||
+			ref.exprNode.tableName !== derived.tableName,
+	);
+	if (stray !== undefined) {
+		return throwHejbroError(
+			"foreign-key-mixed-reference-tables",
+			`table "${tableName}" declares a foreign key referencing columns of both "${derived.schemaName}"."${derived.tableName}" and "${stray.exprNode.schemaName}"."${stray.exprNode.tableName}" — a foreign key can only target one table. Next: split it into one foreign key per referenced table.`,
+		);
+	}
+	if (references.table !== undefined) {
+		const meta = getTableMeta(references.table);
+		if (
+			meta.schema.schemaName !== derived.schemaName ||
+			meta.tableName !== derived.tableName
+		) {
+			return throwHejbroError(
+				"foreign-key-table-mismatch",
+				`table "${tableName}" declares a foreign key whose references.columns point at "${derived.schemaName}"."${derived.tableName}" but references.table names "${meta.schema.schemaName}"."${meta.tableName}". Next: drop references.table (it's inferred from the columns) or point both at the same table.`,
+			);
+		}
+	}
+	return {
+		...derived,
+		columns: references.columns.map((column) => column.sqlName),
+	};
+};
 
 const resolveForeignKey = (
 	owner: SchemaDeclaration,
@@ -215,11 +351,9 @@ const resolveForeignKey = (
 	}
 	return {
 		columns: input.columns.map((column) => column.sqlName),
-		references: {
-			table: getTableMeta(input.references.table),
-			columns: input.references.columns.map((column) => column.sqlName),
-		},
+		references: resolveReferenceTarget(tableName, input.references),
 		onDelete: input.onDelete ?? null,
+		onUpdate: input.onUpdate ?? null,
 	};
 };
 
@@ -257,11 +391,14 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const foreignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
 		resolveForeignKey(owner, tableName, input),
 	);
+	const checks = resolvedExtras.checks ?? [];
 
 	const knownColumnNames = new Set(
 		columnEntries.map((entry) => entry.columnName),
 	);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
+	validateDuplicateNames(tableName, indexes, foreignKeys);
+	validateChecks(owner, tableName, checks);
 
 	const rls = resolveRls(owner, tableName, resolvedExtras.rls);
 
@@ -275,6 +412,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		})),
 		indexes,
 		foreignKeys,
+		checks,
 		rls,
 		existing: false,
 		declaredAt,
