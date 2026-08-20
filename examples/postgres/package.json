@@ -1,0 +1,19 @@
+{
+	"name": "example-postgres",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Showcase: a generic team-workspace schema on plain Postgres — tables, CHECK constraints, partial and ordered indexes, a self-referencing FK, RLS, a trigger, grants, a view — with a four-step migration history and a local Docker round-trip.",
+	"type": "module",
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"test": "vitest run",
+		"roundtrip": "sh ../../scripts/roundtrip.sh ."
+	},
+	"dependencies": {
+		"hejbro": "workspace:*"
+	},
+	"devDependencies": {
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}
