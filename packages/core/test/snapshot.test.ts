@@ -87,14 +87,42 @@ describe("renderSnapshot / parseSnapshot", () => {
 		expect(() => parseSnapshot(raw)).toThrowError(/newer hejbro|upgrade/i);
 	});
 
-	it("rejects a v2 snapshot as unsupported-snapshot-version (D51 format break)", () => {
+	it("rejects a v2 snapshot as unsupported-snapshot-version with the older-version wording (D51 format break)", () => {
 		const raw = JSON.stringify({
 			hejbroSnapshot: 2,
 			dialect: "postgres",
 			objects: {},
 		});
 		expect(() => parseSnapshot(raw)).toThrowError(
-			expect.objectContaining({ code: "unsupported-snapshot-version" }),
+			expect.objectContaining({
+				code: "unsupported-snapshot-version",
+				message: expect.stringContaining("is older than this build supports"),
+			}),
+		);
+	});
+
+	it("rejects a snapshot from a newer build with the newer-version wording", () => {
+		const raw = JSON.stringify({
+			hejbroSnapshot: 99,
+			dialect: "postgres",
+			objects: {},
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({
+				code: "unsupported-snapshot-version",
+				message: expect.stringContaining("is newer than this build supports"),
+			}),
+		);
+	});
+
+	it("rejects a non-numeric snapshot version as invalid-snapshot, not a version mismatch", () => {
+		const raw = JSON.stringify({
+			hejbroSnapshot: "2",
+			dialect: "postgres",
+			objects: {},
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({ code: "invalid-snapshot" }),
 		);
 	});
 
