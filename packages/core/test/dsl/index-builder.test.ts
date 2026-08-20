@@ -67,6 +67,17 @@ describe("index builder — ordering and partial predicates", () => {
 		);
 	});
 
+	it("rejects a predicate referencing another table's column", () => {
+		const other = table(app, "other", { n: text() });
+		expect(() =>
+			table(app, "posts", { id: uuid() }, (t) => ({
+				indexes: [index("bad").on(t.id).where(eq(other.n, "x"))],
+			})),
+		).toThrow(
+			/index-predicate-foreign-column-ref|can only see this table's own columns/,
+		);
+	});
+
 	it("validates explicit index names (#88 ride-along)", () => {
 		expect(() => index("Bad Name")).toThrow(
 			/invalid-sql-name|not a valid hejbro SQL identifier/,

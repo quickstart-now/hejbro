@@ -973,11 +973,19 @@ const createIndexBuilder = (indexName: string | null, unique: boolean): IndexBui
 	},
 });
 
+/** Resolves an optional index name: `undefined` stays `null` (derive later), else validated per D36. */
+const resolveIndexName = (indexName: string | undefined): string | null => {
+	if (indexName === undefined) {
+		return null;
+	}
+	return assertSqlName(indexName, "index", null);
+};
+
 /** Starts an index declaration, optionally named (validated per D36) — chain `.unique()`, finish with `.on(...columns)`, optionally `.where(predicate)`. */
 export const index = (indexName?: string): IndexBuilder =>
-	createIndexBuilder(indexName === undefined ? null : assertSqlName(indexName, "index", null), false);
+	createIndexBuilder(resolveIndexName(indexName), false);
 ```
-`dsl/table.ts`: `IndexDeclaration` as above with `predicate: ExprNode | null`; `IndexNulls` type lives here; `validateColumnRefs` maps `index.columns.map((c) => c.name)`; add `validateIndexPredicates(owner, tableName, indexes)` mirroring Task 5's check validation with codes `index-predicate-subquery` / `index-predicate-foreign-column-ref` (messages: `index "<name>" on table "<t>" … Next: …`). Task 8's derivation uses `ix.columns.map((c) => c.name)`. Update **every** existing test that builds an `IndexDeclaration` literal to the object shape `columns: [{ name, desc: false, nulls: null }]` — seven sites in three files: `table-kind-emit.test.ts` (lines 35-38, 85, 293), `table-kind-diff.test.ts` (41-42, 195-198), `dsl.test.ts` (99 — an expected value, 106 — an input). `grep -rn "indexName:" packages/core/test packages/supabase/test examples` must come back clean of string-array `columns` before this task's commit.
+`dsl/table.ts`: `IndexDeclaration` as above with `predicate: ExprNode | null`; `IndexNulls` type lives here; `validateColumnRefs` maps `index.columns.map((c) => c.name)`; add `validateIndexPredicates(owner, tableName, indexes)` mirroring Task 5's check validation with codes `index-predicate-subquery` / `index-predicate-foreign-column-ref` (messages: `index "<name>" on table "<t>" … Next: …`). Task 8's derivation uses `ix.columns.map((c) => c.name)`. Update **every** existing test that builds an `IndexDeclaration` literal to the object shape `columns: [{ name, desc: false, nulls: null }]` — seven sites in three files: `table-kind-emit.test.ts` (lines 35-38, 85, 293), `table-kind-diff.test.ts` (41-42, 195-198), `dsl.test.ts` (99 — an expected value, 106 — an input). `grep -rn "indexName:" packages/core/test packages/supabase/test examples` must come back clean of string-array `columns` before this task's commit. `table()` must copy only the four `IndexDeclaration` fields out of what `.on()` returns (`resolveIndex`, mirroring `resolveForeignKey`) — otherwise the builder's `where` method leaks into the stored declaration.
 
 - [ ] **Step 4: Run** core tests → PASS (serialization still writes strings until Task 11 — `serializeIndexes` temporarily maps `c.name`; Task 11 replaces it).
 - [ ] **Step 5: Commit** — `git commit -m "feat(core): ordered index columns and partial index predicates in the dsl"`

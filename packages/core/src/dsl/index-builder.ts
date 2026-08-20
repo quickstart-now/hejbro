@@ -74,9 +74,14 @@ const createIndexBuilder = (
 	},
 });
 
+/** Resolves an optional index name: `undefined` stays `null` (derive later), else validated per D36. */
+const resolveIndexName = (indexName: string | undefined): string | null => {
+	if (indexName === undefined) {
+		return null;
+	}
+	return assertSqlName(indexName, "index", null);
+};
+
 /** Starts an index declaration, optionally named (validated per D36) — chain `.unique()`, finish with `.on(...columns)`, optionally `.where(predicate)`. */
 export const index = (indexName?: string): IndexBuilder =>
-	createIndexBuilder(
-		indexName === undefined ? null : assertSqlName(indexName, "index", null),
-		false,
-	);
+	createIndexBuilder(resolveIndexName(indexName), false);
