@@ -18,7 +18,7 @@ emitted. The preset then contributes only through public surface: role
 constants (branded `Role`), typed expression helpers, three validators,
 one custom `ObjectKind` (`supabase-storage-bucket`, the first row-data
 kind), and the prebuilt `authUsers` existing-table reference. Acceptance is a
-reduced `examples/dd-land` plus a toy `examples/preset-smoke` preset.
+reduced `examples/supabase` plus a toy `examples/preset-smoke` preset.
 
 **Tech Stack:** TypeScript strict, vitest, Biome, pnpm + turbo, tsdown.
 `@hejbro/supabase` runtime deps: `@hejbro/core` only. Core: zero new
@@ -40,7 +40,7 @@ phase), §7, D5, D24–D28, and new rows D37–D45. Roadmap:
 | D41 | `existingTable(schemaName, tableName, columns)` core primitive; passing one to `generateMigration` is a hard error (`existing-table-declared`); preset exports prebuilt `authUsers`. |
 | D42 | Storage bucket = first row-data kind: `create`/`alter` emit `insert … on conflict (id) do update set …`; `drop` emits **no SQL**, only a banner note (manual deletion). |
 | D43 | Branded `Role` type now: core exports `Role` + `roleName()`; `grant().to()`/`rls.policy().to()` widen to `string \| Role` (non-breaking); preset constants are `Role`. |
-| D44 | Acceptance = reduced `examples/dd-land` (every preset feature once) + `examples/preset-smoke` (one custom kind + one expr helper); full dd.land port stays Phase 7. |
+| D44 | Acceptance = reduced `examples/supabase` (every preset feature once) + `examples/preset-smoke` (one custom kind + one expr helper); a fuller port of the original production schema stays Phase 7. |
 | D45 | `authUid()` renders the plain `auth.uid()` call — no automatic `(select auth.uid())` wrapping (illegal in column `default`/`check`); cached variant = Phase 7 follow-up; preset README carries the performance guidance. |
 
 ### Resolved at plan review (owner, 2026-08-20)
@@ -90,7 +90,7 @@ phase), §7, D5, D24–D28, and new rows D37–D45. Roadmap:
 | B — core: `existingTable` + branded `Role` | #92 | 5–8 | `phase6-core-existing-refs` | pure core |
 | C — preset: roles, auth helpers, `authUsers`, three validators | #93 (also closes #66) | 9–13 | `phase6-preset-foundation` | packages/supabase |
 | D — preset: storage bucket kind | #94 | 14–16 | `phase6-storage-bucket` | packages/supabase |
-| E — acceptance: `preset-smoke` + `dd-land` + roadmap close-out | #95 | 17–19 | `phase6-acceptance` | examples/, docs |
+| E — acceptance: `preset-smoke` + `supabase` example + roadmap close-out | #95 | 17–19 | `phase6-acceptance` | examples/, docs |
 
 ---
 
@@ -651,15 +651,15 @@ helper, `generateMigration`, golden-assert the SQL.
   Step 3: green; Step 4: commit** —
   `test(examples): preset-smoke proves the extension interface is generic`
 
-## Task 18: `examples/dd-land` — reduced acceptance example (D44)
+## Task 18: `examples/supabase` — reduced acceptance example (D44)
 
 **Files:**
-- Create: `examples/dd-land/package.json`, `examples/dd-land/src/dd-land.schema.ts`, `examples/dd-land/test/dd-land.test.ts`
+- Create: `examples/supabase/package.json`, `examples/supabase/src/app.schema.ts`, `examples/supabase/test/preset.test.ts`
 
-Schema (every preset feature once, mirroring spec §5 style): `ddland`
+Schema (every preset feature once, mirroring spec §5 style): `app`
 schema; `profiles` table with `userId` FK → `authUsers.id`; RLS policy
 `using(eq(t.userId, authUid()))` `.to(authenticatedRole)`; an `avatars`
-storage bucket; `grant("ddland").tables("select").to(anonRole)`; a
+storage bucket; `grant("app").tables("select").to(anonRole)`; a
 deliberately RLS-less `drafts` table + the grant so
 `exposedTableValidator` warns (pinned in the golden), and a
 `defineView` over `profiles` without `securityInvoker` so #66 warns
@@ -671,7 +671,7 @@ reserved-schema misuse (`schema("auth")`) errors in a negative case.
 - [ ] **Step 1: Failing test with the golden expectations sketched;
   Step 2: write the schema; Step 3: green (this is the phase's acceptance
   bar — every D37–D45 behavior observable here); Step 4: commit** —
-  `test(examples): dd-land reduced example exercises the supabase preset`
+  `test(examples): reduced example exercises the supabase preset`
 
 ## Task 19: Roadmap close-out + issue batch
 
@@ -683,8 +683,8 @@ reserved-schema misuse (`schema("auth")`) errors in a negative case.
   process it, per the no-orphan rule): CLI preset wiring + warning
   rendering (**filed: #96**, Phase 7 — ⑨ deferred by owner, 2026-08-20; the D30 "no preset
   fields" decision is untouched this phase and reopens there); `authUid()`
-  initPlan-cached variant (**filed: #97**, Phase 7 — D45); full dd.land port grows the
-  example (Phase 7, already tracked — verify).
+  initPlan-cached variant (**filed: #97**, Phase 7 — D45); a fuller port of the
+  original production schema grows the example (Phase 7, already tracked — verify).
 - [ ] **Step 2: Roadmap update; full gate from clean state; commit** —
   `docs(plans): phase 6 close-out` — open PR E.
 

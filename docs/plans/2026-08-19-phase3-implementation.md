@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `defineFunction`/`defineTrigger` record a typed body AST at build time (executed twice, hard error on divergence) and compile it to deterministic plpgsql, closing with a golden-file port of the dd.land `comments-single-depth` trigger.
+**Goal:** `defineFunction`/`defineTrigger` record a typed body AST at build time (executed twice, hard error on divergence) and compile it to deterministic plpgsql, closing with a golden-file port of the original production schema's `comments-single-depth` trigger.
 
 **Architecture:** A new `plpgsqlRef` expression node lets bodies reference NEW/OLD fields, function args, and locals without touching the Phase 2 `columnRef` invariants. A recording `BodyContext` (`ctx.if`/`ctx.row`/`ctx.rowOrNull`/`ctx.raise`/`ctx.return`) builds a JSON-safe `FunctionBody` tree; the body callback runs twice and the two trees must be `stableJson`-identical. Two new `ObjectKind`s (`function`, `trigger`) plug into the existing registry/diff/emit pipeline; functions diff on structured signature + body hash (`create or replace` vs drop+create), triggers always recreate.
 
@@ -128,8 +128,8 @@ import { describe, expect, it } from "vitest";
 import { renderSelectInto, schema, select, table, uuid } from "../../src/index";
 import { eq, expr } from "../../src/index";
 
-const ddland = schema("ddland");
-const comments = table(ddland, "comments", {
+const app = schema("app");
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 	parentId: uuid(),
@@ -151,7 +151,7 @@ describe("renderSelectInto", () => {
 				strict: false,
 			}),
 		).toBe(
-			'select "ddland"."comments"."post_id" as "post_id", "ddland"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "ddland"."comments" where "ddland"."comments"."id" = new.parent_id',
+			'select "app"."comments"."post_id" as "post_id", "app"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "app"."comments" where "app"."comments"."id" = new.parent_id',
 		);
 	});
 	it("renders strict", () => {
@@ -317,7 +317,7 @@ export const defineTrigger = <TTable extends Table>(
 
 (For this task, `defineFunction`/`defineTrigger` run the body **once**; Task 3 adds the second run + comparison inside the same call.)
 
-- [ ] **Step 1: Failing tests** — `test/plpgsql/body-context.test.ts` covering, with the `ddland.comments` table from Task 1's test:
+- [ ] **Step 1: Failing tests** — `test/plpgsql/body-context.test.ts` covering, with the `app.comments` table from Task 1's test:
 
 ```ts
 // abridged — write all of these as real cases:
@@ -456,7 +456,7 @@ Sub-issue: "feat(core): plpgsql emitter and function/trigger object kinds" (#48)
 **plpgsql text format (deterministic, tab-indented, exact):**
 
 ```sql
-create or replace function "ddland"."comments_single_depth_fn"()
+create or replace function "app"."comments_single_depth_fn"()
 returns trigger
 language plpgsql
 as $function$
@@ -467,7 +467,7 @@ begin
 	if new.parent_id is null then
 		return new;
 	end if;
-	select "ddland"."comments"."post_id" as "post_id", "ddland"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "ddland"."comments" where "ddland"."comments"."id" = new.parent_id;
+	select "app"."comments"."post_id" as "post_id", "app"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "app"."comments" where "app"."comments"."id" = new.parent_id;
 	if parent_post_id is null then
 		raise exception '부모 댓글을 찾을 수 없다 (parent_id=%)', new.parent_id;
 	end if;
@@ -479,15 +479,15 @@ $function$;
 Rules: header lines unindented; `security definer` line inserted between `returns` and `language` only when definer; `declare` section omitted entirely when no locals; each statement single-line at its nesting depth (base depth 1 tab, `if` bodies +1); `elsif`/`else` lines at the `if`'s depth; args in the signature as `${argName} ${renderTypeNode(type)}` comma-joined (unquoted names, A3); raise via `quoteStringLiteral(message)` then comma-joined rendered args. Guard: if the assembled body text contains `$function$`, throw `body-contains-dollar-tag` (`` `the function body's rendered SQL for ${identity} contains the literal $function$, which collides with the dollar-quote tag — remove or rephrase that string.` `` — identity in the message body per A8, amended at Task 4 review). Trigger text:
 
 ```sql
-drop trigger if exists "comments_single_depth" on "ddland"."comments";
+drop trigger if exists "comments_single_depth" on "app"."comments";
 create trigger "comments_single_depth"
-	before insert or update of "parent_id", "post_id" on "ddland"."comments"
-	for each row execute function "ddland"."comments_single_depth_fn"();
+	before insert or update of "parent_id", "post_id" on "app"."comments"
+	for each row execute function "app"."comments_single_depth_fn"();
 ```
 
 Events render in **declaration order**, ` or `-joined; `update` with columns renders `update of ${quoted, comma-joined}`; timing/forEach lower-case as declared.
 
-- [ ] **Step 1: Failing render tests** (`render-body.test.ts`): full-text assertions for (a) the exact function SQL above built from a real `defineTrigger` declaration, (b) a definer + args function via `defineFunction("ddland", "publish_post", { args: { postId: uuid() }, returns: posts, security: "definer" }, …)` asserting the `create or replace function "ddland"."publish_post"(post_id uuid)` / `returns setof "ddland"."posts"` / `security definer` lines and a `return query update … returning …;` statement, (c) the trigger pair above, (d) `body-contains-dollar-tag`.
+- [ ] **Step 1: Failing render tests** (`render-body.test.ts`): full-text assertions for (a) the exact function SQL above built from a real `defineTrigger` declaration, (b) a definer + args function via `defineFunction("app", "publish_post", { args: { postId: uuid() }, returns: posts, security: "definer" }, …)` asserting the `create or replace function "app"."publish_post"(post_id uuid)` / `returns setof "app"."posts"` / `security definer` lines and a `return query update … returning …;` statement, (c) the trigger pair above, (d) `body-contains-dollar-tag`.
 - [ ] **Step 2: Run, verify failure.**
 - [ ] **Step 3: Implement `render-body.ts` + `body-hash.ts`** until render tests pass.
 - [ ] **Step 4: Failing kind tests** (`function-kind.test.ts`, `trigger-kind.test.ts`): serialize shape; identify; diff matrix — create, drop, no-change, body-only change (`alter` + note `body changed`), arg-type change (drop+create + note), trigger field change (drop+create); emit per operation; `createDefaultRegistry` registers both; `generateMigration` end-to-end with a trigger input expands the function first (assert SQL ordering: create function before create trigger — the diff engine's `dependsOn` topological order provides this).
@@ -515,13 +515,13 @@ import {
 	defineTrigger, select, eq, ne, isNull, isNotNull,
 } from "../../../../src/index";
 
-export const ddland = schema("ddland");
-export const posts = table(ddland, "posts", {
+export const app = schema("app");
+export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	slug: text().notNull().unique(),
 	publishedAt: timestamptz(),
 });
-export const comments = table(ddland, "comments", {
+export const comments = table(app, "comments", {
 	id: uuid().primaryKey().defaultRandom(),
 	postId: uuid().notNull(),
 	parentId: uuid(),
@@ -561,8 +561,8 @@ export const commentsSingleDepth = defineTrigger(comments, {
 
 (Note: the FK from `comments.postId`/`parentId` is omitted here to keep the case focused; the raise messages stay Korean byte-for-byte — they are user data, not GitHub-facing text.)
 
-- [ ] **Step 2: Write `steps.ts`** — step 0: `[ddland, posts, comments, commentsSingleDepth]` (from empty); step 1: same but the trigger body's first raise message changed (define a second trigger declaration inline) — proves body-only change emits `create or replace function` **without** touching the trigger; step 2: same as step 1 with `events: ["insert"]` — proves a trigger-def change emits drop+create of the trigger only.
-- [ ] **Step 3: Record goldens** — `UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- golden`, then **manually review** `expected/from-empty.sql` against the hand-written original (`quickstart-labs/infra/dd-land-supabase/supabase/migrations/20260815110756_smiling_whizzer.sql` lines 203–241) for semantic equivalence: same guard conditions, same raise messages/args, same trigger timing/events/granularity, `into` targets carry the same nullability behavior (non-strict). Document the intentional textual differences (no FROM alias; fully-qualified columns; single-line statements) in the PR body.
+- [ ] **Step 2: Write `steps.ts`** — step 0: `[app, posts, comments, commentsSingleDepth]` (from empty); step 1: same but the trigger body's first raise message changed (define a second trigger declaration inline) — proves body-only change emits `create or replace function` **without** touching the trigger; step 2: same as step 1 with `events: ["insert"]` — proves a trigger-def change emits drop+create of the trigger only.
+- [ ] **Step 3: Record goldens** — `UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- golden`, then **manually review** `expected/from-empty.sql` against the hand-written original (the original project's migrations, `20260815110756_smiling_whizzer.sql` lines 203–241) for semantic equivalence: same guard conditions, same raise messages/args, same trigger timing/events/granularity, `into` targets carry the same nullability behavior (non-strict). Document the intentional textual differences (no FROM alias; fully-qualified columns; single-line statements) in the PR body.
 - [ ] **Step 4: Full gate + determinism check** — `pnpm check && pnpm check-types && pnpm test` (the golden harness's determinism describe block already re-runs the first step twice).
 - [ ] **Step 5: Update roadmap + spec decision log** — roadmap Phase 3 section rewritten in the "Landed:" style of Phases 1–2, including brainstorm-resolution summary (A1–A11); append D20+ entries for: plpgsqlRef node + dual quoting (A1/A3), scalar-locals row reads (A2), structural double-run guard (A4), signature-identity replace rule (A5), bodySql-in-snapshot (A11, as answered). Mark `ctx.forEach` sub-issue as the remaining open item or explicitly carried over.
 - [ ] **Step 6: Commit** — `test(core): comments-single-depth golden acceptance case and phase 3 close-out`

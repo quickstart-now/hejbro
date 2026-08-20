@@ -135,14 +135,14 @@ describe("familyOfTypeNode", () => {
 
 describe("columnRef", () => {
 	it("builds a ref carrying family, node, and sql name", () => {
-		const ref = columnRef("ddland", "posts", "published_at", {
+		const ref = columnRef("app", "posts", "published_at", {
 			typeName: "timestamptz",
 		});
 		expect(ref.family).toBe("datetime");
 		expect(ref.sqlName).toBe("published_at");
 		expect(ref.exprNode).toEqual({
 			nodeKind: "columnRef",
-			schemaName: "ddland",
+			schemaName: "app",
 			tableName: "posts",
 			columnName: "published_at",
 		});
@@ -633,13 +633,13 @@ import { renderExpr } from "../../src/index";
 
 const publishedAt: ExprNode = {
 	nodeKind: "columnRef",
-	schemaName: "ddland",
+	schemaName: "app",
 	tableName: "posts",
 	columnName: "published_at",
 };
 const status: ExprNode = {
 	nodeKind: "columnRef",
-	schemaName: "ddland",
+	schemaName: "app",
 	tableName: "posts",
 	columnName: "status",
 };
@@ -650,7 +650,7 @@ const lit = (value: string): ExprNode => ({
 
 describe("renderExpr", () => {
 	it("renders column refs schema-qualified and quoted", () => {
-		expect(renderExpr(publishedAt)).toBe('"ddland"."posts"."published_at"');
+		expect(renderExpr(publishedAt)).toBe('"app"."posts"."published_at"');
 	});
 	it("renders comparisons", () => {
 		expect(
@@ -660,7 +660,7 @@ describe("renderExpr", () => {
 				left: status,
 				right: lit("published"),
 			}),
-		).toBe('"ddland"."posts"."status" = \'published\'');
+		).toBe('"app"."posts"."status" = \'published\'');
 	});
 	it("parenthesizes nested logical operands deterministically", () => {
 		const isPublished: ExprNode = {
@@ -688,13 +688,13 @@ describe("renderExpr", () => {
 				],
 			}),
 		).toBe(
-			"((\"ddland\".\"posts\".\"status\" = 'published') and (\"ddland\".\"posts\".\"published_at\" is null)) or (\"ddland\".\"posts\".\"status\" = 'published')",
+			"((\"app\".\"posts\".\"status\" = 'published') and (\"app\".\"posts\".\"published_at\" is null)) or (\"app\".\"posts\".\"status\" = 'published')",
 		);
 	});
 	it("renders null tests, in lists, between, not", () => {
 		expect(
 			renderExpr({ nodeKind: "nullTest", negated: true, operand: publishedAt }),
-		).toBe('"ddland"."posts"."published_at" is not null');
+		).toBe('"app"."posts"."published_at" is not null');
 		expect(
 			renderExpr({
 				nodeKind: "inList",
@@ -702,7 +702,7 @@ describe("renderExpr", () => {
 				operand: status,
 				values: [lit("a"), lit("b")],
 			}),
-		).toBe("\"ddland\".\"posts\".\"status\" in ('a', 'b')");
+		).toBe("\"app\".\"posts\".\"status\" in ('a', 'b')");
 	});
 	it("renders function calls, schema-qualified when set", () => {
 		expect(
@@ -732,7 +732,7 @@ describe("renderExpr", () => {
 					{ chunkKind: "text", text: ") > 3" },
 				],
 			}),
-		).toBe('char_length("ddland"."posts"."status") > 3');
+		).toBe('char_length("app"."posts"."status") > 3');
 		expect(renderExpr({ nodeKind: "rawSql", sql: "1 = 1" })).toBe("1 = 1");
 	});
 });
@@ -854,16 +854,16 @@ import {
 	renderExpr,
 } from "../../src/index";
 
-const status = columnRef("ddland", "posts", "status", { typeName: "text" });
-const publishedAt = columnRef("ddland", "posts", "published_at", {
+const status = columnRef("app", "posts", "status", { typeName: "text" });
+const publishedAt = columnRef("app", "posts", "published_at", {
 	typeName: "timestamptz",
 });
-const postId = columnRef("ddland", "posts", "id", { typeName: "uuid" });
+const postId = columnRef("app", "posts", "id", { typeName: "uuid" });
 
 describe("operators", () => {
 	it("builds comparisons with auto-lifted literals", () => {
 		expect(renderExpr(eq(status, "published").exprNode)).toBe(
-			"\"ddland\".\"posts\".\"status\" = 'published'",
+			"\"app\".\"posts\".\"status\" = 'published'",
 		);
 	});
 	it("composes boolean expressions", () => {
@@ -876,15 +876,15 @@ describe("operators", () => {
 	});
 	it("builds inArray / between / like / now", () => {
 		expect(renderExpr(inArray(status, ["a", "b"]).exprNode)).toBe(
-			"\"ddland\".\"posts\".\"status\" in ('a', 'b')",
+			"\"app\".\"posts\".\"status\" in ('a', 'b')",
 		);
 		expect(renderExpr(like(status, "post-%").exprNode)).toBe(
-			"\"ddland\".\"posts\".\"status\" like 'post-%'",
+			"\"app\".\"posts\".\"status\" like 'post-%'",
 		);
 		expect(renderExpr(now().exprNode)).toBe("now()");
 		expect(
 			renderExpr(between(publishedAt, now(), now()).exprNode),
-		).toBe("\"ddland\".\"posts\".\"published_at\" between now() and now()");
+		).toBe("\"app\".\"posts\".\"published_at\" between now() and now()");
 	});
 	it("rejects family mismatches at the type level", () => {
 		// @ts-expect-error uuid column compared against a number
@@ -973,13 +973,13 @@ export const sql: SqlTag;
 import { describe, expect, it } from "vitest";
 import { columnRef, renderExpr, sql } from "../../src/index";
 
-const slug = columnRef("ddland", "posts", "slug", { typeName: "text" });
+const slug = columnRef("app", "posts", "slug", { typeName: "text" });
 
 describe("sql tagged template", () => {
 	it("splices expressions and quotes plain values — never raw", () => {
 		const guard = sql`char_length(${slug}) > ${3}`;
 		expect(renderExpr(guard.exprNode)).toBe(
-			'char_length("ddland"."posts"."slug") > 3',
+			'char_length("app"."posts"."slug") > 3',
 		);
 	});
 	it("treats interpolated strings as quoted literals (injection corpus)", () => {
@@ -1106,7 +1106,7 @@ pnpm check && git add packages/core && git commit -m "refactor(core): carry post
 - Modify: `packages/core/src/kind/object-kind.ts` (input union)
 - Modify: `packages/core/src/index.ts`
 - Test: `packages/core/test/dsl.test.ts` (rewrite affected cases),
-  `packages/core/test/golden/cases/ddland-posts/declarations.ts` and
+  `packages/core/test/golden/cases/app-posts/declarations.ts` and
   `steps.ts` (migrate to the new surface),
   new `packages/core/test/table-surface.test.ts`
 
@@ -1189,11 +1189,11 @@ import {
 	uuid,
 } from "../src/index";
 
-const ddland = schema("ddland");
+const app = schema("app");
 
 describe("table() surface (D15)", () => {
 	it("exposes columns as top-level ColumnRef properties", () => {
-		const posts = table(ddland, "posts", {
+		const posts = table(app, "posts", {
 			id: uuid().primaryKey(),
 			publishedAt: timestamptz(),
 		});
@@ -1201,13 +1201,13 @@ describe("table() surface (D15)", () => {
 		expect(posts.publishedAt.sqlName).toBe("published_at");
 		expect(posts.publishedAt.exprNode).toEqual({
 			nodeKind: "columnRef",
-			schemaName: "ddland",
+			schemaName: "app",
 			tableName: "posts",
 			columnName: "published_at",
 		});
 	});
 	it("hides declaration metadata behind the symbol", () => {
-		const posts = table(ddland, "posts", { id: uuid() });
+		const posts = table(app, "posts", { id: uuid() });
 		expect(isTable(posts)).toBe(true);
 		const meta = getTableMeta(posts);
 		expect(meta.tableName).toBe("posts");
@@ -1216,14 +1216,14 @@ describe("table() surface (D15)", () => {
 	});
 	it("passes column refs to extras and resolves index()/fk inputs", () => {
 		const posts = table(
-			ddland,
+			app,
 			"posts",
 			{ id: uuid().primaryKey(), publishedAt: timestamptz() },
 			(t) => ({ indexes: [index().on(t.publishedAt)] }),
 		);
 		expect(getTableMeta(posts).indexes[0]?.columns).toEqual(["published_at"]);
 		const comments = table(
-			ddland,
+			app,
 			"comments",
 			{ id: uuid().primaryKey(), postId: uuid().notNull() },
 			(t) => ({
@@ -1242,7 +1242,7 @@ describe("table() surface (D15)", () => {
 	});
 	it("keeps rejecting duplicate snake_cased column names", () => {
 		expect(() =>
-			table(ddland, "posts", { postId: uuid(), post_id: uuid() }),
+			table(app, "posts", { postId: uuid(), post_id: uuid() }),
 		).toThrowError(/duplicate-column|duplicate column/);
 	});
 });
@@ -1279,7 +1279,7 @@ returns `{ columns: columns.map((column) => column.sqlName), unique, indexName }
 Type-only casualty check: `TableDeclaration`'s type stays exported;
 `TableExtrasHelpers` export is removed from `index.ts`. Update
 `test/dsl.test.ts` cases that used `t.column("…")` or raw index objects,
-and migrate `test/golden/cases/ddland-posts/declarations.ts` + `steps.ts`
+and migrate `test/golden/cases/app-posts/declarations.ts` + `steps.ts`
 to the new surface (`index().on(…)`, `ForeignKeyInput` with refs; steps
 export type becomes `ReadonlyArray<ReadonlyArray<HejbroInput>>`; the golden
 harness's `StepsModule` type in `golden.test.ts` follows). The emitted
@@ -1352,7 +1352,7 @@ Design notes locked here:
   snake_cased column names (NOT `*` — deterministic under later
   `add column`).
 - `exists(…)` **replaces the query's projection with `constantOne`**
-  (`select 1` idiom, matching every dd.land RLS policy) regardless of what
+  (`select 1` idiom, matching every original production RLS policy) regardless of what
   was selected, and renders `exists (…)` / `not exists (…)`.
 - Object projection requires the explicit `from` table; omitting it throws
   code `missing-from-table`, message:
@@ -1398,13 +1398,13 @@ import {
 	uuid,
 } from "../../src/index";
 
-const ddland = schema("ddland");
-const posts = table(ddland, "posts", {
+const app = schema("app");
+const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	status: text().notNull(),
 	publishedAt: timestamptz(),
 });
-const comments = table(ddland, "comments", {
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 });
@@ -1412,7 +1412,7 @@ const comments = table(ddland, "comments", {
 describe("select builder", () => {
 	it("renders a whole-table select with explicit columns", () => {
 		expect(renderSelect(select(posts).selectQuery)).toBe(
-			'select "id", "status", "published_at" from "ddland"."posts"',
+			'select "id", "status", "published_at" from "app"."posts"',
 		);
 	});
 	it("renders where / order by / limit in type-state order", () => {
@@ -1421,17 +1421,17 @@ describe("select builder", () => {
 			.orderBy({ by: posts.publishedAt, direction: "desc" })
 			.limit(10);
 		expect(renderSelect(query.selectQuery)).toBe(
-			'select "id", "status", "published_at" from "ddland"."posts" where "ddland"."posts"."status" = \'published\' order by "ddland"."posts"."published_at" desc limit 10',
+			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'published\' order by "app"."posts"."published_at" desc limit 10',
 		);
 	});
-	it("renders the dd.land rls shape: exists + inner join", () => {
+	it("renders the app schema's rls shape: exists + inner join", () => {
 		const guard = exists(
 			select(comments)
 				.innerJoin(posts, eq(comments.postId, posts.id))
 				.where(isNotNull(posts.publishedAt)),
 		);
 		expect(renderSelect(select(comments).where(guard).selectQuery)).toContain(
-			'exists (select 1 from "ddland"."comments" inner join "ddland"."posts" on',
+			'exists (select 1 from "app"."comments" inner join "app"."posts" on',
 		);
 	});
 	it("renders a correlated subquery referencing the outer table", () => {
@@ -1442,7 +1442,7 @@ describe("select builder", () => {
 			),
 		);
 		expect(renderSelect(select(comments).where(guard).selectQuery)).toBe(
-			'select "id", "post_id" from "ddland"."comments" where exists (select 1 from "ddland"."posts" where ("ddland"."posts"."id" = "ddland"."comments"."post_id") and ("ddland"."posts"."published_at" is not null))',
+			'select "id", "post_id" from "app"."comments" where exists (select 1 from "app"."posts" where ("app"."posts"."id" = "app"."comments"."post_id") and ("app"."posts"."published_at" is not null))',
 		);
 	});
 	it("renders a standalone correlated expression given an outer scope", () => {
@@ -1452,9 +1452,9 @@ describe("select builder", () => {
 		);
 		expect(
 			renderExpr(guard.exprNode, [
-				{ schemaName: "ddland", tableName: "comments" },
+				{ schemaName: "app", tableName: "comments" },
 			]),
-		).toContain('= "ddland"."comments"."post_id"');
+		).toContain('= "app"."comments"."post_id"');
 	});
 	it("rejects column refs from tables in no enclosing scope", () => {
 		const query = select(posts).where(isNotNull(comments.postId));
@@ -1606,8 +1606,8 @@ import {
 	uuid,
 } from "../../src/index";
 
-const ddland = schema("ddland");
-const posts = table(ddland, "posts", {
+const app = schema("app");
+const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	slug: text().notNull(),
 	publishedAt: timestamptz(),
@@ -1620,7 +1620,7 @@ describe("mutation builders", () => {
 			.where(eq(posts.slug, "hello"))
 			.returning();
 		expect(renderQuery(query.updateQuery)).toBe(
-			"update \"ddland\".\"posts\" set \"published_at\" = now() where \"ddland\".\"posts\".\"slug\" = 'hello' returning \"id\", \"slug\", \"published_at\"",
+			"update \"app\".\"posts\" set \"published_at\" = now() where \"app\".\"posts\".\"slug\" = 'hello' returning \"id\", \"slug\", \"published_at\"",
 		);
 	});
 	it("renders insert with on conflict do nothing", () => {
@@ -1628,7 +1628,7 @@ describe("mutation builders", () => {
 			.values({ slug: "hello" })
 			.onConflictDoNothing(posts.slug);
 		expect(renderQuery(query.insertQuery)).toBe(
-			'insert into "ddland"."posts" ("slug") values (\'hello\') on conflict ("slug") do nothing',
+			'insert into "app"."posts" ("slug") values (\'hello\') on conflict ("slug") do nothing',
 		);
 	});
 	it("fills missing multi-row keys with sql default", () => {
@@ -1637,13 +1637,13 @@ describe("mutation builders", () => {
 			{ slug: "b" },
 		]);
 		expect(renderQuery(query.insertQuery)).toBe(
-			"insert into \"ddland\".\"posts\" (\"slug\", \"published_at\") values ('a', now()), ('b', default)",
+			"insert into \"app\".\"posts\" (\"slug\", \"published_at\") values ('a', now()), ('b', default)",
 		);
 	});
 	it("renders delete with where and returning", () => {
 		const query = deleteFrom(posts).where(eq(posts.slug, "old")).returning();
 		expect(renderQuery(query.deleteQuery)).toBe(
-			"delete from \"ddland\".\"posts\" where \"ddland\".\"posts\".\"slug\" = 'old' returning \"id\", \"slug\", \"published_at\"",
+			"delete from \"app\".\"posts\" where \"app\".\"posts\".\"slug\" = 'old' returning \"id\", \"slug\", \"published_at\"",
 		);
 	});
 	it("rejects unknown column keys with an actionable error", () => {
@@ -1705,7 +1705,7 @@ pnpm check && git add packages/core && git commit -m "feat(core): insert, update
 - Test: `packages/core/test/column-builder.test.ts`,
   `packages/core/test/table-kind-emit.test.ts`,
   `packages/core/test/snapshot.test.ts`, golden fixtures under
-  `packages/core/test/golden/cases/ddland-posts/expected/`
+  `packages/core/test/golden/cases/app-posts/expected/`
 
 **Interfaces:**
 - Consumes: `Expr`, `isExpr`, `ExprNode` from `../expr/ast`; `liftLiteral`
@@ -1789,7 +1789,7 @@ pnpm check && git add packages/core && git commit -m "feat(core)!: expression-ba
 **Corpus contents (one labeled entry per line: `label => sql`):** every
 operator from Task 4 at least once; literal edge cases (embedded quotes,
 the injection strings from Tasks 2/5, negative and fractional numbers,
-Date); `sql` template + `sql.raw`; the dd.land RLS shapes — (a)
+Date); `sql` template + `sql.raw`; the app schema's RLS shapes — (a)
 `using`-style: `eq(status, "published")`-family with and/or grouping, (b)
 `exists` + inner join ("reaction's comment's post is published", mirroring
 the `reactions` policy), (c) **correlated** `exists` rendered standalone
@@ -1811,7 +1811,7 @@ insert with multi-row + `on conflict do nothing` and `do update set`;
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-// …import the whole DSL surface, declare the ddland posts/comments tables
+// …import the whole DSL surface, declare the app posts/comments tables
 // exactly as in query tests, then:
 
 type CorpusEntry = { readonly label: string; readonly sql: string };

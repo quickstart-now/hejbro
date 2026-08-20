@@ -586,7 +586,7 @@ export const table: (
   don't exist, index refs that don't exist → `HejbroError` naming the
   table and the fix.
 
-- [ ] **Step 1: Write failing tests** — the dd.land-style `posts` table
+- [ ] **Step 1: Write failing tests** — the app-style `posts` table
   declares; column order preserved; snake_casing applied; FK to another
   table records target identity; bad index column ref throws with table
   name in message.
@@ -791,14 +791,14 @@ export const generateMigration: (options: {
 
 ---
 
-### Task 14: Golden-file harness + dd.land acceptance + determinism
+### Task 14: Golden-file harness + app schema acceptance + determinism
 
 **Files:**
 - Create: `packages/core/test/golden/golden.test.ts`
-- Create: `packages/core/test/golden/cases/ddland-posts/declarations.ts`
-- Create: `packages/core/test/golden/cases/ddland-posts/steps.ts`
+- Create: `packages/core/test/golden/cases/app-posts/declarations.ts`
+- Create: `packages/core/test/golden/cases/app-posts/steps.ts`
 - Expected outputs (generated then reviewed by hand):
-  `cases/ddland-posts/expected/{snapshot.json,from-empty.sql,step-1.sql,…}`
+  `cases/app-posts/expected/{snapshot.json,from-empty.sql,step-1.sql,…}`
 
 **Interfaces:**
 - Consumes: the full public API via `../src/index` only (dogfoods the
@@ -851,7 +851,7 @@ describe("golden cases", () => {
 
 describe("determinism", () => {
 	it("two runs produce byte-identical snapshot and sql", async () => {
-		const { steps } = await import(join(casesDirectory, "ddland-posts", "steps.ts"));
+		const { steps } = await import(join(casesDirectory, "app-posts", "steps.ts"));
 		const runOnce = () => generateMigration({ declarations: steps[0], previousSnapshot: emptySnapshot });
 		expect(renderSnapshot(runOnce().snapshot)).toBe(renderSnapshot(runOnce().snapshot));
 		expect(runOnce().sql).toBe(runOnce().sql);
@@ -859,7 +859,7 @@ describe("determinism", () => {
 });
 ```
 
-`declarations.ts` ports the dd.land posts family (posts + comments with a
+`declarations.ts` ports the original production schema's posts family (posts + comments with a
 self-FK for parent, post_status enum, published_at index — mirrors the
 spec §5.1 example); `steps.ts` exports `steps: [initial, addSlugColumn,
 dropIndexAddFk]` — three evolution stages built from the DSL.
@@ -874,7 +874,7 @@ dropIndexAddFk]` — three evolution stages built from the DSL.
 
 ```bash
 pnpm check && pnpm check-types && pnpm test && pnpm build
-git add -A && git commit -m "test(core): add golden-file harness with ddland acceptance case"
+git add -A && git commit -m "test(core): add golden-file harness with app acceptance case"
 ```
 
 ---
@@ -929,5 +929,5 @@ follow these literally in future sessions:
   (tsdown 0.22 floor). Version pins in Task 1 predate this.
 - **Scope trims**, each with an explicit compile-time error guard and a
   follow-up issue: pk/unique alter emission; self-referencing FK DSL
-  (blocked the dd.land self-FK in the golden case; must be solved
+  (blocked the app schema's self-FK in the golden case; must be solved
   before Phase 3).

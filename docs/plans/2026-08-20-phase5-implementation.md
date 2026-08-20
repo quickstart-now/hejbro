@@ -730,7 +730,7 @@ banner).
 - [ ] **Step 1: Failing tests** — flag parsing (column/table/invalid forms);
   rerun assembly (the owner-approved example: preserves
   `--config db/hejbro.config.ts --name fix_blog` and the prior
-  `--rename ddland.comments.body=content`); end-to-end tmp-dir run:
+  `--rename app.comments.body=content`); end-to-end tmp-dir run:
   init → write a schema fixture → generate produces a migration whose
   banner contains both hash lines and whose snapshot updates; ambiguous
   fixture exits 1 with the exact golden stderr (Task 14).

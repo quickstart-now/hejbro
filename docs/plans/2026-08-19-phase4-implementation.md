@@ -4,7 +4,7 @@
 
 **Goal:** Land the `rls`/`policy`, `view`, and `grant` object kinds with their
 declaration DSL (`rls.enabled`/`rls.policy`, `defineView`, `grant`), so the
-full dd.land `sql/grants.ts` corpus and its legacy RLS policies are
+full original project's `sql/grants.ts` corpus and its legacy RLS policies are
 expressible declaratively and diff into deterministic migration SQL.
 
 **Architecture:** Three new DSL surfaces feed four new object kinds through
@@ -175,8 +175,8 @@ import { schema } from "../../src/dsl/schema";
 import { table } from "../../src/dsl/table";
 import { text, timestamptz, uuid } from "../../src/types/column-builder-factories";
 
-const ddland = schema("ddland");
-const posts = table(ddland, "posts", {
+const app = schema("app");
+const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	status: text().notNull(),
 	publishedAt: timestamptz(),
@@ -366,7 +366,7 @@ if (isTable(input)) {
 - [ ] **Step 1: Write the failing test** — cover: a table with
   `extras.rls` carries a bound `RlsDeclaration` (schema/table stamped onto
   every policy); `resolveDeclarations` expansion via `generateMigration`
-  snapshot keys (`rls:ddland.posts`, `policy:ddland.posts.<name>` present
+  snapshot keys (`rls:app.posts`, `policy:app.posts.<name>` present
   after Task 5 — for now assert `getTableMeta(posts).rls` shape); the three
   error codes above; and the serialize-unchanged guarantee:
 
@@ -512,18 +512,18 @@ Behavior (identity `` `${schema}.${table}.${name}` ``):
 
 ```ts
 const created = policyKind.emit({
-	kind: "policy", operation: "create", identity: "ddland.posts.posts_read_published",
+	kind: "policy", operation: "create", identity: "app.posts.posts_read_published",
 	previous: null,
 	next: {
-		schema: "ddland", table: "posts", name: "posts_read_published",
+		schema: "app", table: "posts", name: "posts_read_published",
 		permissive: true, command: "select", roles: ["anon"],
-		using: `"ddland"."posts"."published_at" is not null`, withCheck: null,
+		using: `"app"."posts"."published_at" is not null`, withCheck: null,
 	},
 	notes: [],
 });
 expect(created.map((s) => s.sql)).toEqual([
-	`drop policy if exists "posts_read_published" on "ddland"."posts";`,
-	`create policy "posts_read_published" on "ddland"."posts" for select to "anon" using ("ddland"."posts"."published_at" is not null);`,
+	`drop policy if exists "posts_read_published" on "app"."posts";`,
+	`create policy "posts_read_published" on "app"."posts" for select to "anon" using ("app"."posts"."published_at" is not null);`,
 ]);
 ```
 
@@ -564,7 +564,7 @@ git commit -m "feat(core): policy object kind with single-change recreate emissi
 - Create: `packages/core/test/golden/cases/rls-policies/{declarations.ts,steps.ts}`
 
 Golden case shape (harness runs every directory automatically):
-- `declarations.ts`: schema `ddland`; table `posts` (id uuid pk
+- `declarations.ts`: schema `app`; table `posts` (id uuid pk
   defaultRandom, status text notNull, publishedAt timestamptz); table
   `comments` (id uuid pk defaultRandom, postId uuid notNull, deletedAt
   timestamptz) — with an rls extras block on each. Policies: `posts` —
@@ -636,7 +636,7 @@ export const defineView = (
 already validated itself.
 
 - [ ] **Step 1: Failing test** — spec §5.4 example verbatim
-  (`defineView(ddland, "published_posts",
+  (`defineView(app, "published_posts",
   select(posts).where(isNotNull(posts.publishedAt)))`): assert
   `declarationKind`, `viewName`, `query.queryKind === "select"`,
   `securityInvoker === false`; and `{ securityInvoker: true }` passthrough.
@@ -777,8 +777,8 @@ Rules:
   `buildSnapshot`'s existing `duplicate-identity` error — no bespoke check
   (D28); add a test proving that.
 
-- [ ] **Step 1: Failing test** — the four dd.land corpus forms (spec §5.4
-  `grant(ddland).usage.to("authenticated", "anon")` verbatim among them):
+- [ ] **Step 1: Failing test** — the four original-project corpus forms (spec §5.4
+  `grant(app).usage.to("authenticated", "anon")` verbatim among them):
   assert fan-out count, grantKind, normalized privileges, role per
   declaration; both error codes; privilege normalization
   (`tables("delete", "select", "select")` → `["select", "delete"]`).
@@ -818,7 +818,7 @@ if (isGrantSetDeclaration(input)) {
 ```
 
 - Identity: `` `${schema}.${grantKind}.${role}` `` (e.g.
-  `ddland.allTablesPrivileges.service_role`).
+  `app.allTablesPrivileges.service_role`).
 - `diff`: create / drop as usual; both present and privileges differ →
   single `alter` with notes listing the delta in canonical privilege
   order, `+` for added, `-` for removed (e.g. `["+insert", "-delete"]`).
@@ -841,7 +841,7 @@ if (isGrantSetDeclaration(input)) {
   delta notes exact / create / drop; emit exact SQL for all nine paths
   above (three grantKinds × create/alter/drop, skipping the impossible
   schemaUsage alter); `grant-set` expansion through `generateMigration`
-  (snapshot keys `grant:ddland.schemaUsage.anon` etc.); duplicate identity
+  (snapshot keys `grant:app.schemaUsage.anon` etc.); duplicate identity
   through `buildSnapshot` errors `duplicate-identity`; registration.
 - [ ] **Step 2: Run to verify it fails.**
 - [ ] **Step 3: Implement.**
@@ -874,22 +874,22 @@ privileges select for anon; (1) anon gains insert on all tables (alter →
 
 ---
 
-## Task 13: Acceptance golden `ddland-security` + close-out (PR-D)
+## Task 13: Acceptance golden `app-security` + close-out (PR-D)
 
 **Files:**
-- Create: `packages/core/test/golden/cases/ddland-security/{declarations.ts,steps.ts}`
+- Create: `packages/core/test/golden/cases/app-security/{declarations.ts,steps.ts}`
 - Modify: `docs/plans/2026-08-19-roadmap.md` (Phase 4 section → landed
   prose, following the Phase 3 section's format)
 
 `declarations.ts` header comment must cite the sources (Phase 3 precedent —
 `comments-single-depth/declarations.ts:29-36`):
 - Grants: 1:1 port of
-  `quickstart-labs/infra/dd-land-supabase/sql/grants.ts` (quote the six
+  the original project's `sql/grants.ts` (quote the six
   statements in the comment). Note the one intentional divergence: hejbro
   emits one statement per role where the original groups
   `to anon, service_role` — semantically equivalent.
-- RLS: ported from the **legacy** dd.land migrations (current production
-  dd.land is grants-only — brainstorm note A6):
+- RLS: ported from the **legacy** original-project migrations (the original
+  production schema is grants-only — brainstorm note A6):
   `legacy/migrations/20260812090000_create_reading_schema.sql:74-106`
   (`posts_read_published`, `post_translations_read_published`) and
   `legacy/migrations/20260813020000_create_comments_and_reactions.sql:121-152`
@@ -914,7 +914,7 @@ grant/revoke delta in a single migration — check the banner lists both);
 - [ ] **Step 3: Full gates** (`pnpm check && pnpm check-types &&
   pnpm test`) with output shown.
 - [ ] **Step 4: Commit, push `phase4-acceptance`, verify, open PR**
-  `test(core): ddland-security golden acceptance case and phase 4
+  `test(core): app-security golden acceptance case and phase 4
   close-out` (body: commits + `Closes #65`).
 - [ ] **Step 5: After the squash merge of each PR** (A–D):
   `issue.sh close <62|63|64|65> --comment "Merged in PR #M."`; after PR-D,
@@ -923,8 +923,8 @@ grant/revoke delta in a single migration — check the banner lists both);
 ## Out of scope (do not build)
 
 - Function-level `grant execute` (spec §5.2's `grants:` option on
-  `defineFunction`) — not in the Phase 4 roadmap scope; the dd.land corpus
-  has no function grants.
+  `defineFunction`) — not in the Phase 4 roadmap scope; the original-project
+  corpus has no function grants.
 - `alter policy` emission — recreate-only by design (spec §6.5).
 - Typed roles, `auth.uid()`/`auth.jwt()` helpers, RLS-related warnings —
   Phase 6 preset work (#66).
