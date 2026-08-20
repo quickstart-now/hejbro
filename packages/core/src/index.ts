@@ -194,8 +194,6 @@ export type { RlsSnapshot } from "./kinds/rls-kind";
 export { rlsKind } from "./kinds/rls-kind";
 export { schemaKind } from "./kinds/schema-kind";
 export { tableKind } from "./kinds/table-kind";
-export type { CheckSnapshot } from "./kinds/table-snapshot";
-export { foreignKeyOnUpdate, tableChecks } from "./kinds/table-snapshot";
 export type {
 	TriggerEventSnapshot,
 	TriggerSnapshot,
