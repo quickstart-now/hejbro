@@ -90,8 +90,14 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 
 ### Resolved at plan review
 
-- V1: _pending — Task 2 writes the outcome here before PR A1's first
-  production commit._
+- V1: _probe pending — the planner's and implementer's environments had no
+  running Docker daemon during Tasks 3–8._ **Interim ruling (main,
+  2026-08-20):** Tasks 6–7 proceed assuming V1 = accepted (3-part refs
+  rendered by the existing `renderExpr`). The probe (Task 2) is a **hard
+  gate before PR A1 is pushed**: its outcome is written here first; if it
+  is rejected, one commit adds the bare-column render mode (Task 5 step
+  3b) and corrects the Task 6/7 expectations before Task 9's goldens are
+  generated.
 
 ## Global Constraints
 
