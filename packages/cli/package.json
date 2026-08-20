@@ -34,6 +34,7 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
+		"@hejbro/supabase": "workspace:*",
 		"tsdown": "catalog:",
 		"vitest": "catalog:"
 	}

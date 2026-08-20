@@ -19,6 +19,7 @@ import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { parseConfirmDropFlag, parseRenameFlag } from "../flags";
 import { sha256Hex } from "../hash";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
+import { buildRegistry, configValidators } from "../presets";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
 
@@ -322,12 +323,16 @@ export const runGenerate = async (
 		const { config, configPath } = await loadConfig(cwd, parsedArgv.configFlag);
 		const declarations = await loadDeclarations(configPath, config);
 		const previousSnapshot = parseSnapshot(readSnapshotFileText(cwd, config));
+		const registry = buildRegistry(config);
+		const validators = configValidators(config);
 
 		const firstPass = generateMigration({
 			declarations,
 			previousSnapshot,
 			renames,
 			confirmedDrops,
+			registry,
+			validators,
 		});
 		if (firstPass.errors.length > 0) {
 			return errorResult(
@@ -354,6 +359,8 @@ export const runGenerate = async (
 			renames,
 			confirmedDrops,
 			bannerHashes: { parent: parentHash, current: currentHash },
+			registry,
+			validators,
 		});
 
 		const migrationsDirPath = join(cwd, config.migrationsDir);

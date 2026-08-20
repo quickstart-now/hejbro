@@ -28,6 +28,7 @@ describe("loadConfig", () => {
 			migrationsDir: "migrations",
 			snapshotPath: "hejbro.snapshot.json",
 			prefixStrategy: "timestamp",
+			presets: [],
 		});
 	});
 
@@ -102,6 +103,7 @@ describe("loadDeclarations", () => {
 				migrationsDir: "migrations",
 				snapshotPath: "hejbro.snapshot.json",
 				prefixStrategy: "timestamp",
+				presets: [],
 			});
 			throw new Error("expected loadDeclarations to throw");
 		} catch (error) {

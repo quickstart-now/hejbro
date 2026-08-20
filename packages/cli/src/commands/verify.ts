@@ -5,6 +5,7 @@ import type {
 	ChainReport,
 	HejbroError,
 	HejbroInput,
+	KindRegistry,
 } from "@hejbro/core";
 import {
 	checkChain,
@@ -21,6 +22,7 @@ import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { sha256Hex } from "../hash";
 import { loadConfig, loadDeclarations } from "../loader";
+import { buildRegistry } from "../presets";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
 
 const VERIFY_DESCRIPTION =
@@ -168,10 +170,12 @@ const runCheck2 = (
 	declarations: ReadonlyArray<HejbroInput>,
 	diskText: string,
 	snapshotPath: string,
+	registry: KindRegistry,
 ): CheckOutcome => {
 	const currentSnapshot = generateMigration({
 		declarations,
 		previousSnapshot: emptySnapshot,
+		registry,
 	}).snapshot;
 	if (renderSnapshot(currentSnapshot) === diskText) {
 		return { ok: true };
@@ -224,11 +228,12 @@ const runCheck2IfEligible = (
 	check1DiskText: string | null,
 	declarations: ReadonlyArray<HejbroInput>,
 	snapshotPath: string,
+	registry: KindRegistry,
 ): CheckOutcome | null => {
 	if (check1DiskText === null) {
 		return null;
 	}
-	return runCheck2(declarations, check1DiskText, snapshotPath);
+	return runCheck2(declarations, check1DiskText, snapshotPath, registry);
 };
 
 /** `null` when check 1 or check 3 failed (check 4 needs both); otherwise runs check 4. */
@@ -273,6 +278,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 	try {
 		const { config, configPath } = await loadConfig(cwd, undefined);
 		const declarations = await loadDeclarations(configPath, config);
+		const registry = buildRegistry(config);
 
 		const check1 = runCheck1(cwd, config);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
@@ -283,6 +289,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 			check1.diskText,
 			declarations,
 			config.snapshotPath,
+			registry,
 		);
 		const check4 = runCheck4IfEligible(check1.diskText, check3);
 

@@ -36,6 +36,7 @@ describe("runInit", () => {
 		expect(content).toContain('migrationsDir: "migrations"');
 		expect(content).toContain('snapshotPath: "hejbro.snapshot.json"');
 		expect(content).toContain('prefixStrategy: "timestamp"');
+		expect(content).toContain("presets: []");
 	});
 
 	it("writes the empty snapshot via renderSnapshot(emptySnapshot)", async () => {
