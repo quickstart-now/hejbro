@@ -12,7 +12,6 @@ import {
 	index,
 	isNotNull,
 	isNull,
-	lt,
 	ne,
 	numeric,
 	rls,
@@ -32,8 +31,7 @@ import {
  * once: CHECK constraints (typed and `sql`-templated), a partial ordered
  * index, a partial unique index, a self-referencing FK, RLS with two
  * roles, a before-trigger, a view, and schema-level grants. Four steps
- * (`step-1` … `step-4`) evolve it; this is step 4 — moves `due_at` off
- * `tasks` and onto a new one-to-one `task_schedules` table.
+ * (`step-1` … `step-4`) evolve it; this is step 2 — adds `tasks.estimate_hours`.
  */
 export const app = schema("app");
 
@@ -85,11 +83,11 @@ export const projects = table(
 	},
 	(t) => ({
 		foreignKeys: [
+			// Step 1/2: default referential actions (no explicit onDelete/onUpdate) —
+			// step 3 tightens this to `on delete restrict on update cascade`.
 			{
 				columns: [t.ownerId],
 				references: { table: members, columns: [members.id] },
-				onDelete: "restrict",
-				onUpdate: "cascade",
 			},
 		],
 		checks: [
@@ -123,6 +121,7 @@ export const tasks = table(
 		title: text().notNull(),
 		status: text().notNull().default("todo"),
 		priority: smallint().notNull().default(3),
+		dueAt: timestamptz(),
 		estimateHours: numeric(),
 	},
 	(t) => ({
@@ -133,9 +132,10 @@ export const tasks = table(
 				onDelete: "cascade",
 			},
 		],
-		// Step 4: the partial index over `due_at` is dropped along with the
-		// column itself — `task_schedules` below gets its own ordered index.
 		indexes: [
+			// Step 1/2: plain `desc` (Postgres default nulls placement) — step 3
+			// makes the nulls placement explicit (`nulls last`).
+			index().on(t.projectId, desc(t.dueAt)).where(ne(t.status, "done")),
 			index().unique().on(t.projectId, t.title).where(ne(t.status, "done")),
 		],
 		checks: [
@@ -162,43 +162,6 @@ export const tasks = table(
 				.to(appWriterRole)
 				.using(isNotNull(t.id))
 				.withCheck(isNotNull(t.id)),
-		}),
-	}),
-);
-
-/** One-to-one with `tasks` (D52-adjacent: the FK column doubles as the primary key) — carries the scheduling fields `due_at` used to hold directly on `tasks`. */
-export const taskSchedules = table(
-	app,
-	"task_schedules",
-	{
-		taskId: uuid().primaryKey(),
-		dueAt: timestamptz(),
-		reminderAt: timestamptz(),
-	},
-	(t) => ({
-		foreignKeys: [
-			{
-				columns: [t.taskId],
-				references: { table: tasks, columns: [tasks.id] },
-				onDelete: "cascade",
-			},
-		],
-		indexes: [index().on(desc(t.dueAt))],
-		checks: [
-			check("task_schedules_reminder_before_due", lt(t.reminderAt, t.dueAt)),
-		],
-		rls: rls.enabled({
-			readAll: rls
-				.policy("task_schedules_read_all")
-				.for("select")
-				.to(appReaderRole)
-				.using(isNotNull(t.taskId)),
-			writeAll: rls
-				.policy("task_schedules_write_all")
-				.for("all")
-				.to(appWriterRole)
-				.using(isNotNull(t.taskId))
-				.withCheck(isNotNull(t.taskId)),
 		}),
 	}),
 );
@@ -301,7 +264,6 @@ export const declarations: ReadonlyArray<HejbroInput> = [
 	members,
 	projects,
 	tasks,
-	taskSchedules,
 	comments,
 	commentsSingleDepth,
 	openTasks,
