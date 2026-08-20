@@ -1,5 +1,10 @@
-import { createKindRegistry } from "@hejbro/core";
+import {
+	createKindRegistry,
+	emptySnapshot,
+	generateMigration,
+} from "@hejbro/core";
 import { describe, expect, it } from "vitest";
+import { registerSupabaseKinds } from "../src/index";
 import { storageBucket } from "../src/storage/bucket";
 import { storageBucketKind } from "../src/storage/bucket-kind";
 
@@ -89,5 +94,170 @@ describe("storageBucketKind registration", () => {
 		const registry = createKindRegistry();
 		expect(() => registry.register(storageBucketKind)).not.toThrow();
 		expect(registry.get("supabase-storage-bucket")).toBe(storageBucketKind);
+	});
+
+	it("registerSupabaseKinds registers storageBucketKind", () => {
+		const registry = createKindRegistry();
+		registerSupabaseKinds(registry);
+		expect(registry.get("supabase-storage-bucket")).toBe(storageBucketKind);
+	});
+});
+
+describe("storageBucketKind.emit", () => {
+	it("emits an upsert for a full-option bucket create", () => {
+		const next = storageBucketKind.serialize(
+			storageBucket("avatars", {
+				public: true,
+				fileSizeLimit: 5242880,
+				allowedMimeTypes: ["image/png", "image/jpeg"],
+			}),
+		);
+		const statements = storageBucketKind.emit({
+			kind: "supabase-storage-bucket",
+			operation: "create",
+			identity: "avatars",
+			previous: null,
+			next,
+			notes: [],
+		});
+		expect(statements).toEqual([
+			{
+				sql: [
+					`insert into storage.buckets ("id", "name", "public", "file_size_limit", "allowed_mime_types")`,
+					`values ('avatars', 'avatars', true, 5242880, array['image/png', 'image/jpeg']::text[])`,
+					`on conflict ("id") do update set`,
+					`  "public" = excluded."public",`,
+					`  "file_size_limit" = excluded."file_size_limit",`,
+					`  "allowed_mime_types" = excluded."allowed_mime_types";`,
+				].join("\n"),
+				stage: "main",
+			},
+		]);
+	});
+
+	it("emits an upsert with nulls/false for a minimal bucket create", () => {
+		const next = storageBucketKind.serialize(storageBucket("notes"));
+		const statements = storageBucketKind.emit({
+			kind: "supabase-storage-bucket",
+			operation: "create",
+			identity: "notes",
+			previous: null,
+			next,
+			notes: [],
+		});
+		expect(statements).toEqual([
+			{
+				sql: [
+					`insert into storage.buckets ("id", "name", "public", "file_size_limit", "allowed_mime_types")`,
+					`values ('notes', 'notes', false, null, null)`,
+					`on conflict ("id") do update set`,
+					`  "public" = excluded."public",`,
+					`  "file_size_limit" = excluded."file_size_limit",`,
+					`  "allowed_mime_types" = excluded."allowed_mime_types";`,
+				].join("\n"),
+				stage: "main",
+			},
+		]);
+	});
+
+	it("alter emits the same upsert shape (rendered from next alone, D24-style)", () => {
+		const next = storageBucketKind.serialize(
+			storageBucket("avatars", { public: true }),
+		);
+		const statements = storageBucketKind.emit({
+			kind: "supabase-storage-bucket",
+			operation: "alter",
+			identity: "avatars",
+			previous: storageBucketKind.serialize(storageBucket("avatars")),
+			next,
+			notes: [],
+		});
+		expect(statements).toHaveLength(1);
+		expect(statements[0]?.sql).toContain(
+			"values ('avatars', 'avatars', true, null, null)",
+		);
+	});
+
+	it("drop emits no SQL", () => {
+		const previous = storageBucketKind.serialize(storageBucket("avatars"));
+		const statements = storageBucketKind.emit({
+			kind: "supabase-storage-bucket",
+			operation: "drop",
+			identity: "avatars",
+			previous,
+			next: null,
+			notes: [
+				'bucket "avatars" removed from declarations — buckets hold user files, so hejbro emits no delete; remove it manually in Supabase when ready.',
+			],
+		});
+		expect(statements).toEqual([]);
+	});
+});
+
+describe("storageBucketKind end-to-end via generateMigration", () => {
+	it("creates a bucket through the full pipeline with a registered registry", () => {
+		const registry = createKindRegistry();
+		registry.register(storageBucketKind);
+		const bucket = storageBucket("avatars", {
+			public: true,
+			fileSizeLimit: 5242880,
+			allowedMimeTypes: ["image/png", "image/jpeg"],
+		});
+		const result = generateMigration({
+			declarations: [bucket],
+			previousSnapshot: emptySnapshot,
+			registry,
+		});
+		expect(result.hasChanges).toBe(true);
+		expect(result.sql).toContain(
+			"values ('avatars', 'avatars', true, 5242880, array['image/png', 'image/jpeg']::text[])",
+		);
+		expect(result.snapshot.objects["supabase-storage-bucket:avatars"]).toEqual({
+			name: "avatars",
+			public: true,
+			fileSizeLimit: 5242880,
+			allowedMimeTypes: ["image/png", "image/jpeg"],
+		});
+	});
+
+	it("drop end-to-end: no SQL, note captured on the KindChange", () => {
+		const registry = createKindRegistry();
+		registry.register(storageBucketKind);
+		const bucket = storageBucket("avatars");
+		const previousSnapshot = generateMigration({
+			declarations: [bucket],
+			previousSnapshot: emptySnapshot,
+			registry,
+		}).snapshot;
+		const result = generateMigration({
+			declarations: [],
+			previousSnapshot,
+			registry,
+		});
+		expect(result.hasChanges).toBe(true);
+		expect(result.sql).not.toMatch(/insert into storage\.buckets/);
+		expect(result.changes).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "drop",
+				identity: "avatars",
+				previous: { name: "avatars" },
+				next: null,
+				notes: [
+					'bucket "avatars" removed from declarations — buckets hold user files, so hejbro emits no delete; remove it manually in Supabase when ready.',
+				],
+			},
+		]);
+		// Pin: core's banner renderer (sql/migration-file.ts) only joins
+		// `notes` into the label for "alter" changes — "drop" always
+		// renders the fixed "[dropped]" label regardless of `notes`
+		// content. The manual-deletion guidance above is captured
+		// correctly on the KindChange but is NOT yet visible in the
+		// rendered migration banner text; surfacing it there needs a core
+		// change (out of this preset-only PR's scope — flagged for
+		// planner/owner).
+		expect(result.sql).toBe(
+			"-- hejbro migration\n-- - supabase-storage-bucket avatars [dropped]",
+		);
 	});
 });
