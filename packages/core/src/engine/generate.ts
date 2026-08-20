@@ -12,6 +12,7 @@ import type { Snapshot } from "../snapshot/snapshot";
 import { buildSnapshot } from "../snapshot/snapshot";
 import type { BannerHashes } from "../sql/migration-file";
 import { renderBanner } from "../sql/migration-file";
+import { notNullWithoutDefaultWarnings } from "./core-validators";
 import { diffSnapshots } from "./diff-engine";
 import type {
 	ConfirmDropSpec,
@@ -178,6 +179,7 @@ export const generateMigration = (
 
 	const changes = diffSnapshots(plan.rewrittenPrevious, snapshot, registry);
 	const hasChanges = changes.length > 0 || plan.renameStatements.length > 0;
+	const allWarnings = [...warnings, ...notNullWithoutDefaultWarnings(changes)];
 
 	if (!hasChanges) {
 		return {
@@ -187,7 +189,7 @@ export const generateMigration = (
 			hasChanges: false,
 			errors: [],
 			ambiguities: [],
-			warnings,
+			warnings: allWarnings,
 		};
 	}
 
@@ -215,6 +217,6 @@ export const generateMigration = (
 		hasChanges: true,
 		errors: [],
 		ambiguities: [],
-		warnings,
+		warnings: allWarnings,
 	};
 };
