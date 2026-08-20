@@ -248,16 +248,12 @@ describe("storageBucketKind end-to-end via generateMigration", () => {
 				],
 			},
 		]);
-		// Pin: core's banner renderer (sql/migration-file.ts) only joins
-		// `notes` into the label for "alter" changes — "drop" always
-		// renders the fixed "[dropped]" label regardless of `notes`
-		// content. The manual-deletion guidance above is captured
-		// correctly on the KindChange but is NOT yet visible in the
-		// rendered migration banner text; surfacing it there needs a core
-		// change (out of this preset-only PR's scope — flagged for
-		// planner/owner).
+		// Pin: core's banner renderer (sql/migration-file.ts) now joins a
+		// drop's `notes` into its label too (`[dropped: <notes>]`), the
+		// same `notes.join(", ")` mechanism the "alter" label already
+		// used — resolved gap, flagged during this PR's implementation.
 		expect(result.sql).toBe(
-			"-- hejbro migration\n-- - supabase-storage-bucket avatars [dropped]",
+			'-- hejbro migration\n-- - supabase-storage-bucket avatars [dropped: bucket "avatars" removed from declarations — buckets hold user files, so hejbro emits no delete; remove it manually in Supabase when ready.]',
 		);
 	});
 });
