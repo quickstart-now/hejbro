@@ -1,18 +1,10 @@
-import { createHash } from "node:crypto";
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
 	ConfirmDropSpec,
 	HejbroError,
 	RenameAmbiguity,
 	RenameSpec,
-	Snapshot,
 } from "@hejbro/core";
 import {
 	deriveSlug,
@@ -20,15 +12,15 @@ import {
 	migrationFileName,
 	parseSnapshot,
 	renderSnapshot,
-	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
-import type { HejbroConfig } from "../config";
 import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { parseConfirmDropFlag, parseRenameFlag } from "../flags";
+import { sha256Hex } from "../hash";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
+import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
 
 /**
  * `hejbro generate --help`'s owner-approved short-form description (④,
@@ -105,44 +97,6 @@ const parseGenerateArgv = (
 	renameValues: collectFlagValues(rawArgs, "--rename"),
 	confirmDropValues: collectFlagValues(rawArgs, "--confirm-drop"),
 });
-
-const sha256Hex = (text: string): string =>
-	createHash("sha256").update(text).digest("hex");
-
-const countSqlFiles = (migrationsDirPath: string): number => {
-	if (!existsSync(migrationsDirPath)) {
-		return 0;
-	}
-	return readdirSync(migrationsDirPath).filter((name) => name.endsWith(".sql"))
-		.length;
-};
-
-/**
- * Reads and parses the previous snapshot, or throws `snapshot-not-found`
- * (never initialized) / `snapshot-lost` (migrations exist but the
- * checked-in snapshot is missing — recover from git, never regenerate)
- * depending on whether the migrations directory already has `.sql` files
- * (owner-approved texts, decision ⑥). Paths in the message stay exactly as
- * given in `hejbro.config.ts` (not resolved to absolute paths).
- */
-const readPreviousSnapshot = (cwd: string, config: HejbroConfig): Snapshot => {
-	const snapshotFsPath = join(cwd, config.snapshotPath);
-	if (existsSync(snapshotFsPath)) {
-		return parseSnapshot(readFileSync(snapshotFsPath, "utf8"));
-	}
-	const migrationsDirPath = join(cwd, config.migrationsDir);
-	const priorMigrationCount = countSqlFiles(migrationsDirPath);
-	if (priorMigrationCount === 0) {
-		return throwHejbroError(
-			"snapshot-not-found",
-			`no snapshot file was found at "${config.snapshotPath}", and the migrations directory has no prior migrations either — this looks like a project that hasn't been initialized yet. Next: run \`hejbro init\` to scaffold an empty snapshot (and the migrations directory, if missing), then rerun \`hejbro generate\`.`,
-		);
-	}
-	return throwHejbroError(
-		"snapshot-lost",
-		`no snapshot file was found at "${config.snapshotPath}", but ${priorMigrationCount} prior migration(s) already exist in "${config.migrationsDir}" — the snapshot is a derived, checked-in file (declarations are the source of truth), so this looks lost rather than never created. Next: recover it from version control (git log -- ${config.snapshotPath}; git restore ${config.snapshotPath}); do not just rerun \`hejbro generate\` to "fix" this — with no previous snapshot, hejbro treats every declared object as brand new and emits a migration that recreates everything, which is destructive against a database that's already been migrated.`,
-	);
-};
 
 const FIRST_QUOTED_SUBSTRING = /"([^"]+)"/;
 
@@ -367,7 +321,7 @@ export const runGenerate = async (
 
 		const { config, configPath } = await loadConfig(cwd, parsedArgv.configFlag);
 		const declarations = await loadDeclarations(configPath, config);
-		const previousSnapshot = readPreviousSnapshot(cwd, config);
+		const previousSnapshot = parseSnapshot(readSnapshotFileText(cwd, config));
 
 		const firstPass = generateMigration({
 			declarations,
@@ -403,7 +357,7 @@ export const runGenerate = async (
 		});
 
 		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const previousCount = countSqlFiles(migrationsDirPath);
+		const previousCount = listMigrationFiles(migrationsDirPath).length;
 		const slug = parsedArgv.name ?? deriveSlug(finalPass.changes);
 		const fileName = migrationFileName({
 			strategy: config.prefixStrategy,

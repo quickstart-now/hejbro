@@ -1,10 +1,11 @@
 import { defineCommand } from "citty";
 import { generateCommand } from "./commands/generate";
 import { initCommand } from "./commands/init";
+import { verifyCommand } from "./commands/verify";
 
 /**
  * The root `hejbro` command. Subcommands: `init` (Task 12), `generate`
- * (Task 13), `verify` (Task 17, PR D, not yet registered).
+ * (Task 13), `verify` (Task 17).
  *
  * `meta.description` is the owner-approved golden text for `hejbro --help`
  * (Task 15, relayed verbatim) — it must end "…for the --rename/--confirm-
@@ -23,5 +24,6 @@ export const main = defineCommand({
 	subCommands: {
 		init: initCommand,
 		generate: generateCommand,
+		verify: verifyCommand,
 	},
 });

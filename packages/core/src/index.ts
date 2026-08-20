@@ -58,6 +58,8 @@ export {
 	tableMeta,
 	toSnakeCase,
 } from "./dsl/table";
+export type { ChainEntry, ChainReport } from "./engine/chain";
+export { checkChain } from "./engine/chain";
 export { diffSnapshots } from "./engine/diff-engine";
 export type { HejbroInput } from "./engine/generate";
 export { generateMigration } from "./engine/generate";
