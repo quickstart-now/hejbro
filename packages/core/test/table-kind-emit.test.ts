@@ -357,6 +357,38 @@ describe("tableKind.emit — alter", () => {
 	});
 });
 
+describe("tableKind.emit — foreign key actions", () => {
+	it("renders on delete and on update, including set default", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey(), postId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+						onDelete: "set null",
+						onUpdate: "cascade",
+					},
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(comments)),
+				"app.comments",
+			),
+		);
+		const sql = tableKind.emit(change).map((statement) => statement.sql);
+		expect(sql).toContain(
+			'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."posts" ("id") on delete set null on update cascade;',
+		);
+	});
+});
+
 describe("tableKind.emit — unsupported column alters", () => {
 	it("throws when only the unique flag changes", () => {
 		const before = table(app, "posts", { slug: text() });

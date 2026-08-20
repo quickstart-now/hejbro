@@ -108,6 +108,16 @@ const onDeleteField = (
 	return { onDelete: value };
 };
 
+/** `{ onUpdate: <action> }` when set, else `{}` (compact snapshot — `null` means "unspecified"). */
+const onUpdateField = (
+	value: ForeignKeyAction | null,
+): Pick<ForeignKeySnapshot, "onUpdate"> => {
+	if (value === null) {
+		return {};
+	}
+	return { onUpdate: value };
+};
+
 const serializeColumns = (
 	declaration: TableDeclaration,
 ): ReadonlyArray<ColumnSnapshot> =>
@@ -141,6 +151,7 @@ const serializeForeignKeys = (
 		),
 		referencesColumns: foreignKey.references.columns,
 		...onDeleteField(foreignKey.onDelete),
+		...onUpdateField(foreignKey.onUpdate),
 	}));
 
 const isEmptyKeyedDiff = <TValue>(diff: KeyedDiff<TValue>): boolean =>

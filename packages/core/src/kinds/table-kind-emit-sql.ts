@@ -14,6 +14,7 @@ import {
 	columnPrimaryKey,
 	columnUnique,
 	foreignKeyOnDelete,
+	foreignKeyOnUpdate,
 	indexUnique,
 } from "./table-snapshot";
 
@@ -104,11 +105,14 @@ export const createIndexSql = (
 		.map((column) => quoteIdentifier(column))
 		.join(", ")});`;
 
-const foreignKeyActionClause = (onDelete: ForeignKeyAction | null): string => {
-	if (onDelete === null) {
+const foreignKeyActionClause = (
+	keyword: "delete" | "update",
+	action: ForeignKeyAction | null,
+): string => {
+	if (action === null) {
 		return "";
 	}
-	return ` on delete ${onDelete}`;
+	return ` on ${keyword} ${action}`;
 };
 
 /** Renders `alter table … add constraint … foreign key (…) references … (…) [on delete …];`. */
@@ -127,7 +131,7 @@ export const addForeignKeyConstraintSql = (
 	return `alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(foreignKey.name)} foreign key (${localColumns}) references ${qualifyName(
 		referenced.schema,
 		referenced.table,
-	)} (${referencedColumns})${foreignKeyActionClause(foreignKeyOnDelete(foreignKey))};`;
+	)} (${referencedColumns})${foreignKeyActionClause("delete", foreignKeyOnDelete(foreignKey))}${foreignKeyActionClause("update", foreignKeyOnUpdate(foreignKey))};`;
 };
 
 /** Renders `alter table … drop constraint …;`. */

@@ -49,19 +49,25 @@ export type IndexSnapshot = {
 export const indexUnique = (index: IndexSnapshot): boolean =>
 	index.unique === true;
 
-/** A single foreign key as materialized in a table snapshot, with its name derived and its target table resolved to an identity string. **Compact**: `onDelete` is present only when set (default `null`, meaning "unspecified") — read via {@link foreignKeyOnDelete}. */
+/** A single foreign key as materialized in a table snapshot, with its name derived and its target table resolved to an identity string. **Compact**: `onDelete`/`onUpdate` are present only when set (default `null`, meaning "unspecified") — read via {@link foreignKeyOnDelete}/{@link foreignKeyOnUpdate}. */
 export type ForeignKeySnapshot = {
 	readonly name: string;
 	readonly columns: ReadonlyArray<string>;
 	readonly referencesTable: string;
 	readonly referencesColumns: ReadonlyArray<string>;
 	readonly onDelete?: ForeignKeyAction;
+	readonly onUpdate?: ForeignKeyAction;
 };
 
 /** `foreignKey.onDelete`, defaulting to `null` when absent (compact snapshot). */
 export const foreignKeyOnDelete = (
 	foreignKey: ForeignKeySnapshot,
 ): ForeignKeyAction | null => foreignKey.onDelete ?? null;
+
+/** `foreignKey.onUpdate`, defaulting to `null` when absent (compact snapshot). */
+export const foreignKeyOnUpdate = (
+	foreignKey: ForeignKeySnapshot,
+): ForeignKeyAction | null => foreignKey.onUpdate ?? null;
 
 /** The full snapshot node `tableKind.serialize` produces for one table. */
 export type TableSnapshot = {

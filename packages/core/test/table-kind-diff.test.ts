@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
 import {
@@ -11,6 +12,17 @@ import {
 } from "../src/types/column-builder-factories";
 
 const app = schema("app");
+
+const expectSingleChange = (changes: ReadonlyArray<KindChange>): KindChange => {
+	if (changes.length !== 1) {
+		throw new Error(`expected exactly one change, got ${changes.length}`);
+	}
+	const [change] = changes;
+	if (change === undefined) {
+		throw new Error("expected a change");
+	}
+	return change;
+};
 
 describe("tableKind.owns", () => {
 	it("owns table declarations only", () => {
@@ -236,6 +248,30 @@ describe("tableKind.diff", () => {
 				next,
 				notes: ['foreign key "comments_post_id_fk" added'],
 			},
+		]);
+	});
+
+	it("reports a foreign key on-update change as a single alter", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const withOnUpdate = (onUpdate: "cascade" | "restrict") =>
+			table(app, "comments", { postId: uuid() }, (t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+						onUpdate,
+					},
+				],
+			}));
+		const previous = tableKind.serialize(getTableMeta(withOnUpdate("cascade")));
+		const next = tableKind.serialize(getTableMeta(withOnUpdate("restrict")));
+		const change = expectSingleChange(
+			tableKind.diff(previous, next, "app.comments"),
+		);
+		expect(change.notes).toEqual(['foreign key "comments_post_id_fk" changed']);
+		expect(tableKind.emit(change).map((statement) => statement.sql)).toEqual([
+			'alter table "app"."comments" drop constraint "comments_post_id_fk";',
+			'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."posts" ("id") on update restrict;',
 		]);
 	});
 });

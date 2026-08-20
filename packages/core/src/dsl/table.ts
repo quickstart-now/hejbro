@@ -12,11 +12,12 @@ import type { RlsDeclaration, RlsInput } from "./rls";
 import { bindRls } from "./rls";
 import type { SchemaDeclaration } from "./schema";
 
-/** The referential actions Postgres supports for `on delete`. */
+/** The referential actions Postgres supports for `on delete` and `on update`. */
 export const foreignKeyActions = [
 	"cascade",
 	"restrict",
 	"set null",
+	"set default",
 	"no action",
 ] as const;
 
@@ -38,6 +39,7 @@ export type ForeignKeyDeclaration = {
 		readonly columns: ReadonlyArray<string>;
 	};
 	readonly onDelete: ForeignKeyAction | null;
+	readonly onUpdate: ForeignKeyAction | null;
 };
 
 /** A declared table: its columns (in declaration order), indexes, and foreign keys. */
@@ -89,6 +91,7 @@ export type ForeignKeyInput = {
 		readonly columns: ReadonlyArray<ColumnRef>;
 	};
 	readonly onDelete?: ForeignKeyAction;
+	readonly onUpdate?: ForeignKeyAction;
 };
 
 /** The optional indexes/foreign keys a table's `extras` callback may return. */
@@ -220,6 +223,7 @@ const resolveForeignKey = (
 			columns: input.references.columns.map((column) => column.sqlName),
 		},
 		onDelete: input.onDelete ?? null,
+		onUpdate: input.onUpdate ?? null,
 	};
 };
 
