@@ -81,7 +81,6 @@ review).
 | 6 | refactor: retrofit `Next:` marker onto Phase 1–4 error messages (⑤) | Phase 7 (#8) |
 | 7 | feat(core): extend `assertSqlName` to explicit (user-pinned) index names — declaration-time validation consistency (PR-A review observation) | Phase 7 (#8) |
 | 8 | feat(cli): support `--flag=value` equals-joined token form in rawArgs parsing and rerun assembly (silently ignored in v1; PR-C review observation) | Phase 7 (#8) |
-| 9 | feat(cli): `hejbro verify` reports independent check groups ({1→2} and {3}) together in one run, with skipped-check marking (needs an owner-approved batch summary text; PR-D review) | Phase 7 (#8) |
 
 Plus one implementation sub-issue of #6 per PR below.
 
@@ -807,13 +806,14 @@ hashed file.
 - Create: `packages/cli/src/commands/verify.ts`
 - Test: `packages/cli/test/verify.test.ts`
 
-The four checks (U6), run sequentially with dependency-ordered
-short-circuit (check 2 needs 1; check 4 needs 1 and 3 — the only truly
-independent split is {1→2} vs {3}), first failure reported, exit 1.
-[Amended 2026-08-20 after PR-D review: original "all reported in one
-pass" would require a new owner-approved batch summary text for verify
-(⑥ cost) for marginal gain; merged reporting of the independent pair is
-a Phase 7 improvement candidate — see issues table row 9.]
+The four checks (U6), dependency-aware batch reporting [amended
+2026-08-20 after PR-D review]: checks 1 (snapshot parses) and 3 (chain
+linearity) always run; check 2 (declarations ↔ snapshot) runs only when
+1 passed; check 4 (tip ↔ snapshot) runs only when 1 and 3 passed. All
+failures are collected and rendered as one multi-diagnostic batch
+(reusing the PR-B renderer); skipped checks are marked with a fixed
+`skipped:` line; loader errors (config/entry) remain a single-diagnostic
+early exit (pre-condition of all four checks). Exit 1 on any failure.
 1. **snapshot parses** — read + `parseSnapshot`; JSON parse failure (e.g.
    git conflict markers) surfaces the existing `invalid-snapshot` error in
    diagnostic dress.
