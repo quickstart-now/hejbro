@@ -4,11 +4,31 @@
 	"description": "Supabase provider preset for hejbro: auth expression helpers, storage buckets, role/grant presets, reserved-schema protection.",
 	"license": "MIT",
 	"type": "module",
-	"main": "src/index.ts",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/quickstart-now/hejbro",
+		"directory": "packages/supabase"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
 	"scripts": {
-		"check-types": "tsc --noEmit"
+		"build": "tsdown",
+		"check-types": "tsc --noEmit",
+		"test": "vitest run"
 	},
 	"dependencies": {
 		"@hejbro/core": "workspace:*"
+	},
+	"devDependencies": {
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	}
 }
