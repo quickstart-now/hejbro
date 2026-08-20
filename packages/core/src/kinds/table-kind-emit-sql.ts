@@ -6,6 +6,7 @@ import type {
 	CheckSnapshot,
 	ColumnSnapshot,
 	ForeignKeySnapshot,
+	IndexColumnSnapshot,
 	IndexSnapshot,
 	TableSnapshot,
 } from "./table-snapshot";
@@ -16,7 +17,10 @@ import {
 	columnUnique,
 	foreignKeyOnDelete,
 	foreignKeyOnUpdate,
+	indexColumnDesc,
+	indexColumnNulls,
 	indexUnique,
+	indexWhere,
 	tableChecks,
 } from "./table-snapshot";
 
@@ -104,15 +108,47 @@ const uniqueIndexKeyword = (index: IndexSnapshot): string => {
 	return "";
 };
 
-/** Renders `create [unique] index "name" on "schema"."table" (…);`. Task 11 note: ordering (`desc`/`nulls`) and a partial index's `where` are not yet rendered here — that lands in Task 12; for now this only keeps the v3 snapshot shape compiling. */
+const descKeyword = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
+	if (indexColumnDesc(column)) {
+		return ["desc"];
+	}
+	return [];
+};
+
+const nullsClause = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
+	const nulls = indexColumnNulls(column);
+	if (nulls === null) {
+		return [];
+	}
+	return [`nulls ${nulls}`];
+};
+
+/** Renders one index column's clause: name, then `desc` when descending, then `nulls first|last` when set (D51). */
+const indexColumnSql = (column: IndexColumnSnapshot): string =>
+	[
+		quoteIdentifier(column.name),
+		...descKeyword(column),
+		...nullsClause(column),
+	].join(" ");
+
+/** Renders ` where <predicate>` for a partial index, or `""` when the index has none (D51). */
+const whereClause = (index: IndexSnapshot): string => {
+	const predicate = indexWhere(index);
+	if (predicate === null) {
+		return "";
+	}
+	return ` where ${predicate}`;
+};
+
+/** Renders `create [unique] index "name" on "schema"."table" (…) [where …];`, columns in declared order with their sort direction and nulls placement (D51). */
 export const createIndexSql = (
 	schema: string,
 	tableName: string,
 	index: IndexSnapshot,
 ): string =>
 	`create ${uniqueIndexKeyword(index)}index ${quoteIdentifier(index.name)} on ${qualifyName(schema, tableName)} (${index.columns
-		.map((column) => quoteIdentifier(column.name))
-		.join(", ")});`;
+		.map(indexColumnSql)
+		.join(", ")})${whereClause(index)};`;
 
 const foreignKeyActionClause = (
 	keyword: "delete" | "update",
