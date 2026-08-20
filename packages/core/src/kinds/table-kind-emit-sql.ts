@@ -3,6 +3,7 @@ import { throwHejbroError } from "../error";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import { renderTypeNode } from "../types/type-node";
 import type {
+	CheckSnapshot,
 	ColumnSnapshot,
 	ForeignKeySnapshot,
 	IndexSnapshot,
@@ -16,6 +17,7 @@ import {
 	foreignKeyOnDelete,
 	foreignKeyOnUpdate,
 	indexUnique,
+	tableChecks,
 } from "./table-snapshot";
 
 /** Splits a `"schema.table"` identity string into its parts. */
@@ -79,11 +81,18 @@ const primaryKeyConstraint = (
 	return [`primary key (${primaryKeyColumns.join(", ")})`];
 };
 
-/** Renders `create table … (…);` for a table snapshot, columns in declaration order, then table-level constraints. */
+const checkConstraintLines = (snapshot: TableSnapshot): ReadonlyArray<string> =>
+	tableChecks(snapshot).map(
+		(check) =>
+			`constraint ${quoteIdentifier(check.name)} check (${check.expression})`,
+	);
+
+/** Renders `create table … (…);` for a table snapshot, columns in declaration order, then table-level constraints (primary key, then CHECKs, D50). */
 export const createTableSql = (snapshot: TableSnapshot): string => {
 	const bodyLines = [
 		...snapshot.columns.map((column) => renderColumnDefinition(column)),
 		...primaryKeyConstraint(snapshot.columns),
+		...checkConstraintLines(snapshot),
 	];
 	return `create table ${qualifyName(snapshot.schema, snapshot.name)} (\n\t${bodyLines.join(",\n\t")}\n);`;
 };
@@ -134,10 +143,21 @@ export const addForeignKeyConstraintSql = (
 	)} (${referencedColumns})${foreignKeyActionClause("delete", foreignKeyOnDelete(foreignKey))}${foreignKeyActionClause("update", foreignKeyOnUpdate(foreignKey))};`;
 };
 
-/** Renders `alter table … drop constraint …;`. */
-export const dropForeignKeyConstraintSql = (
+/** Renders `alter table … add constraint "name" check (…);`. */
+export const addCheckConstraintSql = (
 	schema: string,
 	tableName: string,
-	foreignKeyName: string,
+	check: CheckSnapshot,
 ): string =>
-	`alter table ${qualifyName(schema, tableName)} drop constraint ${quoteIdentifier(foreignKeyName)};`;
+	`alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(check.name)} check (${check.expression});`;
+
+/** Renders `alter table … drop constraint …;` — shared by foreign keys and checks (the constraint namespace is one per table in Postgres). */
+export const dropConstraintSql = (
+	schema: string,
+	tableName: string,
+	constraintName: string,
+): string =>
+	`alter table ${qualifyName(schema, tableName)} drop constraint ${quoteIdentifier(constraintName)};`;
+
+/** @deprecated alias of {@link dropConstraintSql} kept so existing foreign-key call sites don't need to change. */
+export const dropForeignKeyConstraintSql = dropConstraintSql;

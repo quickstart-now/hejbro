@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { check } from "../src/dsl/check";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import { inArray, isNotNull } from "../src/expr/operators";
 import type { KindChange } from "../src/kind/object-kind";
 import { tableKind } from "../src/kinds/table-kind";
 import { integer, text, uuid } from "../src/types/column-builder-factories";
@@ -416,6 +418,66 @@ describe("tableKind.emit — foreign key actions", () => {
 		expect(foreignKeyStatement?.sql).toBe(
 			'alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;',
 		);
+	});
+});
+
+describe("tableKind.emit — checks", () => {
+	it("inlines named checks in create table after the primary key", () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text().notNull() },
+			(t) => ({
+				checks: [
+					check(
+						"posts_status_check",
+						inArray(t.status, ["draft", "published"]),
+					),
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(posts)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change)[0]?.sql).toBe(
+			'create table "app"."posts" (\n\t"id" uuid not null,\n\t"status" text not null,\n\tprimary key ("id"),\n\tconstraint "posts_status_check" check ("app"."posts"."status" in (\'draft\', \'published\'))\n);',
+		);
+	});
+
+	it("drops checks before column drops and adds them after column adds", () => {
+		const before = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), legacy: text() },
+			(t) => ({
+				checks: [check("posts_legacy_check", isNotNull(t.legacy))],
+			}),
+		);
+		const after = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text() },
+			(t) => ({
+				checks: [check("posts_status_check", isNotNull(t.status))],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'alter table "app"."posts" drop constraint "posts_legacy_check";',
+			'alter table "app"."posts" drop column "legacy";',
+			'alter table "app"."posts" add column "status" text;',
+			'alter table "app"."posts" add constraint "posts_status_check" check ("app"."posts"."status" is not null);',
+		]);
 	});
 });
 

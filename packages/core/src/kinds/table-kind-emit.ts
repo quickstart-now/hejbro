@@ -7,10 +7,11 @@ import { deferredStatement, statement } from "../sql/statement";
 import type { TypeNode } from "../types/type-node";
 import { renderTypeNode } from "../types/type-node";
 import {
+	addCheckConstraintSql,
 	addForeignKeyConstraintSql,
 	createIndexSql,
 	createTableSql,
-	dropForeignKeyConstraintSql,
+	dropConstraintSql,
 	renderColumnDefinition,
 } from "./table-kind-emit-sql";
 import type { ColumnSnapshot, TableSnapshot } from "./table-snapshot";
@@ -20,6 +21,7 @@ import {
 	columnNotNull,
 	columnPrimaryKey,
 	columnUnique,
+	tableChecks,
 } from "./table-snapshot";
 
 const emitCreate = (next: TableSnapshot): ReadonlyArray<SqlStatement> => [
@@ -184,6 +186,10 @@ const emitAlter = (
 			value: foreignKey,
 		})),
 	);
+	const checkDiff = diffByKey(
+		tableChecks(previous).map((check) => ({ key: check.name, value: check })),
+		tableChecks(next).map((check) => ({ key: check.name, value: check })),
+	);
 
 	const foreignKeysToDrop = [
 		...foreignKeyDiff.removed.map((entry) => entry.key),
@@ -193,10 +199,21 @@ const emitAlter = (
 		...foreignKeyDiff.added.map((entry) => entry.value),
 		...foreignKeyDiff.changed.map((entry) => entry.next),
 	];
+	const checksToDrop = [
+		...checkDiff.removed.map((entry) => entry.key),
+		...checkDiff.changed.map((entry) => entry.key),
+	];
+	const checksToAdd = [
+		...checkDiff.added.map((entry) => entry.value),
+		...checkDiff.changed.map((entry) => entry.next),
+	];
 
 	return [
 		...foreignKeysToDrop.map((name) =>
-			statement(dropForeignKeyConstraintSql(next.schema, next.name, name)),
+			statement(dropConstraintSql(next.schema, next.name, name)),
+		),
+		...checksToDrop.map((name) =>
+			statement(dropConstraintSql(next.schema, next.name, name)),
 		),
 		...indexDiff.removed.map((entry) =>
 			statement(`drop index ${qualifyName(next.schema, entry.key)};`),
@@ -216,6 +233,9 @@ const emitAlter = (
 		),
 		...indexDiff.added.map((entry) =>
 			statement(createIndexSql(next.schema, next.name, entry.value)),
+		),
+		...checksToAdd.map((check) =>
+			statement(addCheckConstraintSql(next.schema, next.name, check)),
 		),
 		...foreignKeysToAdd.map((foreignKey) =>
 			deferredStatement(
