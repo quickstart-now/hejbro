@@ -3,6 +3,7 @@ import type { GrantSetDeclaration } from "../dsl/grant";
 import type { Table, TableDeclaration } from "../dsl/table";
 import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroError } from "../error";
+import { hejbroError } from "../error";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { createDefaultRegistry } from "../kind/registry";
@@ -18,6 +19,8 @@ import type {
 	RenameSpec,
 } from "./rename-plan";
 import { planRenames } from "./rename-plan";
+import type { Diagnostic, Validator } from "./validate";
+import { runValidators } from "./validate";
 
 /** Anything `generateMigration` accepts as a declaration: a plain declaration, or a `table()`-built `Table` object (unwrapped via `getTableMeta` at the entry point). */
 export type HejbroInput = HejbroDeclaration | Table;
@@ -69,6 +72,8 @@ type GenerateMigrationOptions = {
 	readonly confirmedDrops?: ReadonlyArray<ConfirmDropSpec>;
 	/** the banner's tamper-evident hash-chain lines (D33) — opaque `"sha256:<hex>"` strings the CLI computes; core never hashes. */
 	readonly bannerHashes?: BannerHashes;
+	/** preset-supplied pure checks run over the built snapshot + normalized declarations (D37); error severity joins `errors` and short-circuits like rename errors. */
+	readonly validators?: ReadonlyArray<Validator>;
 };
 
 type GenerateMigrationResult = {
@@ -76,10 +81,12 @@ type GenerateMigrationResult = {
 	readonly changes: ReadonlyArray<KindChange>;
 	readonly sql: string;
 	readonly hasChanges: boolean;
-	/** rename/confirm-drop diagnostics (decision D32); non-empty ⇒ `sql === ""`, `hasChanges === false`, nothing writable. */
+	/** rename/confirm-drop diagnostics (decision D32) plus error-severity validator diagnostics (D37); non-empty ⇒ `sql === ""`, `hasChanges === false`, nothing writable. */
 	readonly errors: ReadonlyArray<HejbroError>;
 	/** the `ambiguous-*` subset of `errors`, structured (1:1, same order) — see {@link RenameAmbiguity}. */
 	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
+	/** warning-severity validator diagnostics (D37); empty when `validators` is omitted. */
+	readonly warnings: ReadonlyArray<Diagnostic>;
 };
 
 /**
@@ -132,6 +139,16 @@ export const generateMigration = (
 	const normalized = options.declarations.flatMap(resolveDeclarations);
 	const snapshot = buildSnapshot(normalized, registry);
 
+	const validatorDiagnostics = runValidators(
+		options.validators ?? [],
+		snapshot,
+		normalized,
+	);
+	const warnings = validatorDiagnostics.filter((d) => d.severity === "warning");
+	const validatorErrors = validatorDiagnostics
+		.filter((d) => d.severity === "error")
+		.map((d) => hejbroError(d.code, d.message, d.declaredAt));
+
 	const plan = planRenames({
 		previous: options.previousSnapshot,
 		next: snapshot,
@@ -140,14 +157,15 @@ export const generateMigration = (
 		declaredAtByIdentity: buildDeclaredAtByIdentity(options.declarations),
 	});
 
-	if (plan.errors.length > 0) {
+	if (plan.errors.length > 0 || validatorErrors.length > 0) {
 		return {
 			snapshot,
 			changes: [],
 			sql: "",
 			hasChanges: false,
-			errors: plan.errors,
+			errors: [...plan.errors, ...validatorErrors],
 			ambiguities: plan.ambiguities,
+			warnings,
 		};
 	}
 
@@ -162,6 +180,7 @@ export const generateMigration = (
 			hasChanges: false,
 			errors: [],
 			ambiguities: [],
+			warnings,
 		};
 	}
 
@@ -189,5 +208,6 @@ export const generateMigration = (
 		hasChanges: true,
 		errors: [],
 		ambiguities: [],
+		warnings,
 	};
 };
