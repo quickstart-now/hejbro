@@ -35,9 +35,10 @@ describe("tableKind.emit — create", () => {
 			(t) => ({
 				indexes: [
 					{
-						columns: [t.postId.sqlName],
+						columns: [{ name: t.postId.sqlName, desc: false, nulls: null }],
 						unique: false,
 						indexName: null,
+						predicate: null,
 					},
 				],
 				foreignKeys: [
@@ -84,7 +85,12 @@ describe("tableKind.emit — create", () => {
 			{ email: text().notNull().unique() },
 			(t) => ({
 				indexes: [
-					{ columns: [t.email.sqlName], unique: true, indexName: null },
+					{
+						columns: [{ name: t.email.sqlName, desc: false, nulls: null }],
+						unique: true,
+						indexName: null,
+						predicate: null,
+					},
 				],
 			}),
 		);
@@ -292,7 +298,14 @@ describe("tableKind.emit — alter", () => {
 	it("emits index add and drop", () => {
 		const before = table(app, "posts", { slug: text() });
 		const after = table(app, "posts", { slug: text() }, (t) => ({
-			indexes: [{ columns: [t.slug.sqlName], unique: false, indexName: null }],
+			indexes: [
+				{
+					columns: [{ name: t.slug.sqlName, desc: false, nulls: null }],
+					unique: false,
+					indexName: null,
+					predicate: null,
+				},
+			],
 		}));
 		const addChange = expectSingleChange(
 			tableKind.diff(

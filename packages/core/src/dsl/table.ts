@@ -1,6 +1,6 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
-import type { ColumnRef } from "../expr/ast";
+import type { ColumnRef, ExprNode } from "../expr/ast";
 import { columnRef } from "../expr/ast";
 import { collectColumnRefs } from "../expr/render-sql";
 import { someExprNode } from "../expr/walk";
@@ -28,11 +28,19 @@ export const foreignKeyActions = [
 /** @see foreignKeyActions */
 export type ForeignKeyAction = (typeof foreignKeyActions)[number];
 
-/** A declared index on one or more (already snake_cased) column names. */
+/** Where an ordered index column places SQL nulls relative to its sort order. */
+export type IndexNulls = "first" | "last";
+
+/** A declared index on one or more (already snake_cased) columns, each with its sort direction and nulls placement, plus an optional partial-index predicate (D51). */
 export type IndexDeclaration = {
-	readonly columns: ReadonlyArray<string>;
+	readonly columns: ReadonlyArray<{
+		readonly name: string;
+		readonly desc: boolean;
+		readonly nulls: IndexNulls | null;
+	}>;
 	readonly unique: boolean;
 	readonly indexName: string | null;
+	readonly predicate: ExprNode | null;
 };
 
 /** The table a foreign key references, resolved to its identity parts (D52) — derived from the referenced columns' own refs, not carried as a live `TableDeclaration`. */
@@ -184,7 +192,7 @@ const validateColumnRefs = (
 	foreignKeys: ReadonlyArray<ForeignKeyDeclaration>,
 ): void => {
 	const badIndexColumn = indexes
-		.flatMap((index) => index.columns)
+		.flatMap((index) => index.columns.map((column) => column.name))
 		.find((columnName) => !knownColumnNames.has(columnName));
 	if (badIndexColumn !== undefined) {
 		throwHejbroError(
@@ -214,7 +222,12 @@ const validateDuplicateNames = (
 	foreignKeys: ReadonlyArray<ForeignKeyDeclaration>,
 ): void => {
 	const indexNames = indexes.map(
-		(index) => index.indexName ?? deriveIndexName(tableName, index.columns),
+		(index) =>
+			index.indexName ??
+			deriveIndexName(
+				tableName,
+				index.columns.map((column) => column.name),
+			),
 	);
 	const duplicateIndex = firstDuplicate(indexNames);
 	if (duplicateIndex !== undefined) {
@@ -281,6 +294,65 @@ const validateChecks = (
 	}
 };
 
+type IndexPredicateEntry = {
+	readonly name: string;
+	readonly predicate: ExprNode;
+};
+
+/** Rejects a partial index `.where(...)` predicate that contains a subquery or references another table's column, mirroring {@link validateChecks} (D50/D51). */
+const validateIndexPredicates = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const withPredicate: ReadonlyArray<IndexPredicateEntry> = indexes.flatMap(
+		(index) => {
+			if (index.predicate === null) {
+				return [];
+			}
+			return [
+				{
+					name:
+						index.indexName ??
+						deriveIndexName(
+							tableName,
+							index.columns.map((column) => column.name),
+						),
+					predicate: index.predicate,
+				},
+			];
+		},
+	);
+
+	const subquery = withPredicate.find((entry) =>
+		someExprNode(entry.predicate, (node) => node.nodeKind === "exists"),
+	);
+	if (subquery !== undefined) {
+		throwHejbroError(
+			"index-predicate-subquery",
+			`index "${subquery.name}"'s where predicate on table "${tableName}" contains a subquery — Postgres forbids subqueries in a partial index's WHERE clause. Next: express the predicate over this table's own columns, or drop the predicate and filter elsewhere.`,
+		);
+	}
+
+	const foreign = withPredicate
+		.flatMap((entry) =>
+			collectColumnRefs(entry.predicate).map((ref) => ({
+				name: entry.name,
+				ref,
+			})),
+		)
+		.find(
+			({ ref }) =>
+				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
+		);
+	if (foreign !== undefined) {
+		throwHejbroError(
+			"index-predicate-foreign-column-ref",
+			`index "${foreign.name}"'s where predicate on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a partial index predicate can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
+		);
+	}
+};
+
 const findForeignColumnRef = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -337,6 +409,14 @@ const resolveReferenceTarget = (
 	};
 };
 
+/** Narrows an `index()` builder result to exactly `IndexDeclaration`'s own fields — `.on(...)` returns the declaration plus a non-declaration `where(...)` chaining method (D51), which must not leak into the stored declaration. */
+const resolveIndex = (input: IndexDeclaration): IndexDeclaration => ({
+	columns: input.columns,
+	unique: input.unique,
+	indexName: input.indexName,
+	predicate: input.predicate,
+});
+
 const resolveForeignKey = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -387,7 +467,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const refsObject = buildColumnRefs<TColumns>(owner, tableName, columnEntries);
 
 	const resolvedExtras = extras?.(refsObject) ?? {};
-	const indexes = resolvedExtras.indexes ?? [];
+	const indexes = (resolvedExtras.indexes ?? []).map(resolveIndex);
 	const foreignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
 		resolveForeignKey(owner, tableName, input),
 	);
@@ -399,6 +479,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 	validateDuplicateNames(tableName, indexes, foreignKeys);
 	validateChecks(owner, tableName, checks);
+	validateIndexPredicates(owner, tableName, indexes);
 
 	const rls = resolveRls(owner, tableName, resolvedExtras.rls);
 

@@ -29,8 +29,12 @@ export type {
 	TablePrivilege,
 } from "./dsl/grant";
 export { grant } from "./dsl/grant";
-export type { IndexBuilder } from "./dsl/index-builder";
-export { index } from "./dsl/index-builder";
+export type {
+	IndexBuilder,
+	IndexColumn,
+	IndexColumnInput,
+} from "./dsl/index-builder";
+export { asc, desc, index } from "./dsl/index-builder";
 export type { EnumDeclaration } from "./dsl/pg-enum";
 export { pgEnum } from "./dsl/pg-enum";
 export type {
@@ -51,6 +55,7 @@ export type {
 	ForeignKeyInput,
 	ForeignKeyReferenceTarget,
 	IndexDeclaration,
+	IndexNulls,
 	Table,
 	TableColumns,
 	TableDeclaration,

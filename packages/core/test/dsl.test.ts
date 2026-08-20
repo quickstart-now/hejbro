@@ -100,14 +100,26 @@ describe("table() — dd.land-style posts", () => {
 			indexes: [index().on(t.publishedAt)],
 		}));
 		expect(getTableMeta(posts).indexes).toEqual([
-			{ columns: ["published_at"], unique: false, indexName: null },
+			{
+				columns: [{ name: "published_at", desc: false, nulls: null }],
+				unique: false,
+				indexName: null,
+				predicate: null,
+			},
 		]);
 	});
 
 	it("throws naming the table when an index references an unknown column", () => {
 		expect(() =>
 			table(app, "posts", { id: uuid().primaryKey() }, () => ({
-				indexes: [{ columns: ["nonexistent"], unique: false, indexName: null }],
+				indexes: [
+					{
+						columns: [{ name: "nonexistent", desc: false, nulls: null }],
+						unique: false,
+						indexName: null,
+						predicate: null,
+					},
+				],
 			})),
 		).toThrowError(/posts/);
 	});

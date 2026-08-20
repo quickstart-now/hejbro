@@ -45,7 +45,10 @@ const resolveIndexName = (
 	if (index.indexName !== null) {
 		return index.indexName;
 	}
-	return deriveIndexName(tableName, index.columns);
+	return deriveIndexName(
+		tableName,
+		index.columns.map((column) => column.name),
+	);
 };
 
 /** Renders a column's default expression to SQL text (D16) — `null` when the column has no default. */
@@ -137,7 +140,8 @@ const serializeIndexes = (
 ): ReadonlyArray<IndexSnapshot> =>
 	declaration.indexes.map((index) => ({
 		name: resolveIndexName(declaration.tableName, index),
-		columns: index.columns,
+		// Task 11 replaces this with the full { name, desc?, nulls? } column objects and `where` (snapshot v3); until then the compact snapshot keeps string column names.
+		columns: index.columns.map((column) => column.name),
 		...indexUniqueField(index.unique),
 	}));
 

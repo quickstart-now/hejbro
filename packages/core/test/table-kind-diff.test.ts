@@ -55,7 +55,12 @@ describe("tableKind.serialize", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		const comments = table(app, "comments", { postId: uuid() }, (t) => ({
 			indexes: [
-				{ columns: [t.postId.sqlName], unique: false, indexName: null },
+				{
+					columns: [{ name: t.postId.sqlName, desc: false, nulls: null }],
+					unique: false,
+					indexName: null,
+					predicate: null,
+				},
 			],
 			foreignKeys: [
 				{
@@ -209,9 +214,10 @@ describe("tableKind.diff", () => {
 		const after = table(app, "posts", { publishedAt: timestamptz() }, (t) => ({
 			indexes: [
 				{
-					columns: [t.publishedAt.sqlName],
+					columns: [{ name: t.publishedAt.sqlName, desc: false, nulls: null }],
 					unique: false,
 					indexName: null,
+					predicate: null,
 				},
 			],
 		}));
