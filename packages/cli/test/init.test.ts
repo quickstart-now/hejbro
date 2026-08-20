@@ -41,7 +41,7 @@ describe("runInit", () => {
 	it("writes the empty snapshot via renderSnapshot(emptySnapshot)", async () => {
 		runInit(cwd);
 		const content = await readFile(snapshotPath(), "utf8");
-		expect(content).toContain('"hejbroSnapshot": 2');
+		expect(content).toContain('"hejbroSnapshot": 3');
 		expect(content).toContain('"objects": {}');
 	});
 
