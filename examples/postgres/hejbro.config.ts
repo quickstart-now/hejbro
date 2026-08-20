@@ -9,4 +9,5 @@ export default defineConfig({
 	migrationsDir: "migrations",
 	snapshotPath: "hejbro.snapshot.json",
 	prefixStrategy: "index",
+	presets: [],
 });
