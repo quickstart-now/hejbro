@@ -41,7 +41,10 @@ export const loadConfig = async (
 			"no hejbro.config.ts was found. Next: run `hejbro init` to scaffold hejbro.config.ts, a migrations directory, and an empty snapshot file, then add a declaration file and rerun `hejbro generate`.",
 		);
 	}
-	const jiti = createJiti(configPath);
+	// fsCache disabled: the CLI loads a handful of files per run, so the
+	// on-disk transpile cache buys nothing and is shared across parallel
+	// test workers/spawned CLI children — a suspect in the #102 e2e flake.
+	const jiti = createJiti(configPath, { fsCache: false });
 	const loaded = await jiti.import(configPath, { default: true });
 	const config = parseConfig(loaded, configPath);
 	return { config, configPath };
@@ -133,7 +136,10 @@ export const loadDeclarations = async (
 			`hejbro.config.ts's ${entryPatternPhrase(config.entry)} matched 0 files. Next: if this is a new project, create a declaration file (see the example below) and rerun \`hejbro generate\`; if you already have declarations, check the "entry" pattern in hejbro.config.ts for a typo.`,
 		);
 	}
-	const jiti = createJiti(configPath);
+	// fsCache disabled: the CLI loads a handful of files per run, so the
+	// on-disk transpile cache buys nothing and is shared across parallel
+	// test workers/spawned CLI children — a suspect in the #102 e2e flake.
+	const jiti = createJiti(configPath, { fsCache: false });
 	const modules = await Promise.all(
 		sortedMatches.map((filePath) => jiti.import(filePath)),
 	);
