@@ -1356,8 +1356,8 @@ export const supabasePreset: Preset = {
 
 ## Task 23: PR C close-out
 
-- [ ] **Step 1:** `packages/supabase/README.md`: replace the "register kinds manually" snippet with `presets: [supabasePreset]` and keep `registerSupabaseKinds` as "programmatic use". `packages/cli` README/`--help` untouched (no new flags).
-- [ ] **Step 2:** Clean-state gates; open PR C (`Closes #96`) with the warning golden quoted in the body for O3 approval.
+- [x] **Step 1:** `packages/supabase/README.md`: replace the "register kinds manually" snippet with `presets: [supabasePreset]` and keep `registerSupabaseKinds` as "programmatic use". `packages/cli` README/`--help` untouched (no new flags).
+- [x] **Step 2:** Clean-state gates; open PR C (`Closes #96`) with the warning golden quoted in the body for O3 approval.
 
 ## Task 24: `examples/supabase` — rename + genericize + config + chain
 
