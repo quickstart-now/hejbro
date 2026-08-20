@@ -1,12 +1,12 @@
 -- hejbro migration
 -- + table app.task_schedules [new]
--- ~ table app.tasks [column "due_at" dropped, index "tasks_project_id_due_at_idx" dropped]
+-- ~ table app.tasks [column "closed_at" added, column "due_at" dropped, index "tasks_project_id_due_at_idx" dropped]
 -- + rls app.task_schedules [new]
 -- + policy app.task_schedules.task_schedules_read_all [new]
 -- + policy app.task_schedules.task_schedules_write_all [new]
 -- ~ view app.open_tasks [view columns changed; recreating]
--- parent-snapshot: sha256:f2d8f020ded21720b779851eb0281ac4dff662fa1c9397f6bed646722bacb4b3
--- snapshot: sha256:b8ea4644e15f3ce1315ddba5eb261613372ffdce0d92b39db8ff8be282a7f0be
+-- parent-snapshot: sha256:0af52fecb9c200d5be0732625bf6a3b121e7bec8b3a187be530362d1a3321d74
+-- snapshot: sha256:4192124a953ed70aae4df095269fd54282c9b8e7941f3d0c3789ee851ce5abae
 
 create table "app"."task_schedules" (
 	"task_id" uuid not null,
@@ -22,6 +22,8 @@ drop index "app"."tasks_project_id_due_at_idx";
 
 alter table "app"."tasks" drop column "due_at";
 
+alter table "app"."tasks" add column "closed_at" timestamp with time zone;
+
 alter table "app"."task_schedules" enable row level security;
 
 drop policy if exists "task_schedules_read_all" on "app"."task_schedules";
@@ -34,6 +36,6 @@ create policy "task_schedules_write_all" on "app"."task_schedules" for all to "a
 
 drop view if exists "app"."open_tasks";
 
-create or replace view "app"."open_tasks" with (security_invoker = true) as select "id", "project_id", "title", "status", "priority", "estimate_hours" from "app"."tasks" where "app"."tasks"."status" <> 'done';
+create or replace view "app"."open_tasks" with (security_invoker = true) as select "id", "project_id", "title", "status", "priority", "estimate_hours", "closed_at" from "app"."tasks" where "app"."tasks"."status" <> 'done';
 
 alter table "app"."task_schedules" add constraint "task_schedules_task_id_fk" foreign key ("task_id") references "app"."tasks" ("id") on delete cascade;

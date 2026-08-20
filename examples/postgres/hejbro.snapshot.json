@@ -93,7 +93,7 @@
 			],
 			"schema": "app",
 			"table": "projects",
-			"using": "\"app\".\"projects\".\"id\" is not null"
+			"using": "\"app\".\"projects\".\"archived_at\" is null"
 		},
 		"policy:app.projects.projects_write_all": {
 			"command": "all",
@@ -135,7 +135,7 @@
 			],
 			"schema": "app",
 			"table": "tasks",
-			"using": "\"app\".\"tasks\".\"id\" is not null"
+			"using": "exists (select 1 from \"app\".\"projects\" where (\"app\".\"projects\".\"id\" = \"app\".\"tasks\".\"project_id\") and (\"app\".\"projects\".\"archived_at\" is null))"
 		},
 		"policy:app.tasks.tasks_write_all": {
 			"command": "all",
@@ -469,6 +469,12 @@
 						"scale": null,
 						"typeName": "numeric"
 					}
+				},
+				{
+					"name": "closed_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
 				}
 			],
 			"foreignKeys": [
@@ -528,12 +534,13 @@
 				"title",
 				"status",
 				"priority",
-				"estimate_hours"
+				"estimate_hours",
+				"closed_at"
 			],
 			"name": "open_tasks",
 			"schema": "app",
 			"securityInvoker": true,
-			"selectSql": "select \"id\", \"project_id\", \"title\", \"status\", \"priority\", \"estimate_hours\" from \"app\".\"tasks\" where \"app\".\"tasks\".\"status\" <> 'done'"
+			"selectSql": "select \"id\", \"project_id\", \"title\", \"status\", \"priority\", \"estimate_hours\", \"closed_at\" from \"app\".\"tasks\" where \"app\".\"tasks\".\"status\" <> 'done'"
 		}
 	}
 }

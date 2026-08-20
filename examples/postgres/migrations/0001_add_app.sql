@@ -24,7 +24,7 @@
 -- + grant app.schemaUsage.app_reader [new]
 -- + grant app.schemaUsage.app_writer [new]
 -- parent-snapshot: sha256:f86ae7ebc6d8bd93524149ab39f929814ff7413a6e5e1cfdb1d21367bf9bd295
--- snapshot: sha256:a70248dab215cffa2c4d6b0206d3a467acf59e5f25ff9487185beb9ee4198b53
+-- snapshot: sha256:8a650453f1f49f57ca4cd24a14f022f36a3425c0f4f1e69b91a0461114579371
 
 create schema "app";
 
@@ -123,7 +123,7 @@ create policy "members_write_all" on "app"."members" for all to "app_writer" usi
 
 drop policy if exists "projects_read_all" on "app"."projects";
 
-create policy "projects_read_all" on "app"."projects" for select to "app_reader" using ("app"."projects"."id" is not null);
+create policy "projects_read_all" on "app"."projects" for select to "app_reader" using ("app"."projects"."archived_at" is null);
 
 drop policy if exists "projects_write_all" on "app"."projects";
 
@@ -131,7 +131,7 @@ create policy "projects_write_all" on "app"."projects" for all to "app_writer" u
 
 drop policy if exists "tasks_read_all" on "app"."tasks";
 
-create policy "tasks_read_all" on "app"."tasks" for select to "app_reader" using ("app"."tasks"."id" is not null);
+create policy "tasks_read_all" on "app"."tasks" for select to "app_reader" using (exists (select 1 from "app"."projects" where ("app"."projects"."id" = "app"."tasks"."project_id") and ("app"."projects"."archived_at" is null)));
 
 drop policy if exists "tasks_write_all" on "app"."tasks";
 
