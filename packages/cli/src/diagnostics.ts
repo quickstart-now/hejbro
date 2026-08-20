@@ -1,4 +1,4 @@
-import type { HejbroError } from "@hejbro/core";
+import type { Diagnostic as CoreDiagnostic, HejbroError } from "@hejbro/core";
 
 /**
  * One rendered terminal diagnostic block (decision ③): `error[<code>]:
@@ -23,6 +23,8 @@ export type Diagnostic = {
 		readonly lines: ReadonlyArray<string>;
 	}>;
 	readonly at: string | null;
+	/** Header prefix (`error[...]`/`warning[...]`) — absent means `"error"` (every pre-O3 caller). */
+	readonly severity?: "error" | "warning";
 };
 
 const BODY_INDENT = "  ";
@@ -50,9 +52,16 @@ const renderAtSection = (at: string | null): ReadonlyArray<string> => {
 	return [`${BODY_INDENT}at ${at}`];
 };
 
+const severityLabel = (diagnostic: Diagnostic): "error" | "warning" => {
+	if (diagnostic.severity === "warning") {
+		return "warning";
+	}
+	return "error";
+};
+
 const renderDiagnostic = (diagnostic: Diagnostic): string => {
 	const headerSection = [
-		`error[${diagnostic.code}]: ${diagnostic.identity}`,
+		`${severityLabel(diagnostic)}[${diagnostic.code}]: ${diagnostic.identity}`,
 		...diagnostic.body.map((line) => `${BODY_INDENT}${line}`),
 	].join("\n");
 	const suggestionSections = diagnostic.suggestions.map((suggestion) =>
@@ -103,4 +112,21 @@ export const fromHejbroError = (
 	body: [error.message],
 	suggestions: [],
 	at: error.declaredAt,
+});
+
+/**
+ * Wraps a preset validator's warning-severity {@link CoreDiagnostic} into
+ * a `Diagnostic` with `severity: "warning"` (O3, D55) — otherwise mirrors
+ * {@link fromHejbroError}: no suggestions, `identity` caller-supplied.
+ */
+export const fromWarning = (
+	diagnostic: CoreDiagnostic,
+	identity: string,
+): Diagnostic => ({
+	code: diagnostic.code,
+	identity,
+	body: [diagnostic.message],
+	suggestions: [],
+	at: diagnostic.declaredAt,
+	severity: "warning",
 });

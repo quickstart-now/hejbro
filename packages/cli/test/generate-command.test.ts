@@ -43,6 +43,32 @@ export const posts = table(app, "posts", {
 });
 `;
 
+const CONFIG_WITH_WARNING_PRESET_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [
+		{
+			name: "warn",
+			kinds: [],
+			validators: [
+				() => [
+					{
+						severity: "warning",
+						code: "demo-warning",
+						message: 'table "app"."posts" is exposed. Next: declare rls(...).',
+						declaredAt: null,
+					},
+				],
+			],
+		},
+	],
+});
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -149,5 +175,23 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("error[snapshot-not-found]");
 		expect(result.stderr).toContain("hejbro.snapshot.json");
+	});
+
+	it("renders a preset validator's warning to stderr and keeps exit 0 (O3)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeFixtureFile(
+			cwd,
+			"hejbro.config.ts",
+			CONFIG_WITH_WARNING_PRESET_SOURCE,
+		);
+		await writeSchema(SCHEMA_SOURCE);
+
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(await sqlFileNames()).toHaveLength(1);
+		expect(result.stdout).toContain("1 warning(s) — see below");
+		expect(result.stderr).toBe(
+			'warning[demo-warning]: app.posts\n  table "app"."posts" is exposed. Next: declare rls(...).\n',
+		);
 	});
 });

@@ -39,7 +39,7 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 |---|----------|-------------|------|
 | O1 | Example domain for both showcases: a **team workspace** — `app` schema with `members`, `projects`, `tasks`, `comments` (self-FK on `comments.parent_id`), `attachments` (supabase only). Generic; no project or product name anywhere. | Task 14 / Task 24 | Owner confirms the domain (or names another generic one) before Task 14 starts |
 | O2 | New error-code wording (§7 grammar: why + `Next:`): `duplicate-index-name`, `duplicate-foreign-key-name`, `foreign-key-table-mismatch`, `foreign-key-mixed-reference-tables`, `check-foreign-column-ref`, `check-subquery`, `index-predicate-foreign-column-ref`, `index-predicate-subquery`, `check-name-missing`, `not-null-without-default` (#27) | Tasks 3–8, 10, 33 | **Approved 2026-08-20** (owner, 11 messages as drafted by the team — pinned in goldens; any later change needs re-approval) + `unsupported-snapshot-version` older/newer split (approved 2026-08-20) |
-| O3 | CLI warning rendering golden (`warning[<code>]: …` on stderr after a successful generate, D55) | Task 22 | Owner approves the golden text at PR C review |
+| O3 | CLI warning rendering golden (`warning[<code>]: …` on stderr after a successful generate, D55) | Task 22 | **Approved 2026-08-20** |
 | O4 | README body (D56 order, no comparison table) | Task 30 | Owner approves the rendered README at PR F review |
 | O5 | `docs/guide/` titles + section outlines: `getting-started.md`, `renames.md`, `ci.md` | Task 31 | Owner approves outlines before the pages are written |
 | O6 | `SKILL.md` frontmatter `description` (trigger sentence) and the four reference titles | Task 27 | Owner approves at PR E review |
@@ -1342,7 +1342,7 @@ export const supabasePreset: Preset = {
 - `HejbroConfig.presets: ReadonlyArray<Preset>` (default `[]`); zod: `presets: z.array(z.object({ name: z.string(), kinds: z.array(z.unknown()), validators: z.array(z.unknown()) })).default([])` — shape only (D55); the `z.unknown()` arrays are then narrowed by a type predicate `isPreset` that checks each kind has string `kind` and function `serialize`/`diff`/`emit`/`identify`/`owns`, each validator is a function; failure → `invalid-config` with "config field \"presets[i]\" … Next: pass preset objects exported by a preset package (e.g. `supabasePreset` from @hejbro/supabase)."
 - `diagnostics.Diagnostic.severity?: "error" | "warning"` — **optional**, so every existing constructor (`fromHejbroError`, the rename-ambiguity builder, verify's diagnostics) stays unchanged; `renderDiagnostic` replaces the hard-coded `error[` (`diagnostics.ts:53-57`) with `${diagnostic.severity ?? "error"}[${diagnostic.code}]: ${diagnostic.identity}`. New `fromWarning(diagnostic: CoreDiagnostic, identity: string): Diagnostic` sets `severity: "warning"`.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
   - `config.test.ts`: config without `presets` parses with `presets: []`; `presets: [{ name: "x", kinds: [], validators: [] }]` parses; `presets: [42]` → `invalid-config` mentioning `presets[0]`.
   - `generate-command.test.ts`: fixture config `presets: [{ name: "warn", kinds: [], validators: [() => [{ severity: "warning", code: "demo-warning", message: "table \"app\".\"posts\" is exposed. Next: declare rls(...).", declaredAt: null }]] }]` → exit 0, migration written, stderr equals the golden:
     ```
@@ -1351,8 +1351,8 @@ export const supabasePreset: Preset = {
     ```
     (O3 — exact wording to be approved; identity = first `"schema"."table"` pair found in the message, else the config identity.)
   - `verify.test.ts`: a fixture declaring a `storageBucket` with `presets: [supabasePreset]` verifies with exit 0 (previously `unknown-kind`); without the preset it exits 1 with `unknown-kind`.
-- [ ] **Step 2: Implement** — `buildRegistry(config)` helper in a new `packages/cli/src/presets.ts`: `const registry = createDefaultRegistry(); registerPresets(registry, config.presets); return registry;`. `runGenerate`: pass `registry` and `validators: presetValidators(config.presets)` to both passes; after writing the migration, if `finalPass.warnings.length > 0` set `stderr` to `renderDiagnostics(warnings.map(fromWarning), null)` while keeping `exitCode: 0`. `runVerify`: pass `registry`. `init`: scaffold `presets: []` in the config template (and update its golden).
-- [ ] **Step 3:** PASS; commit `feat(cli): presets config field, preset registry, warning rendering`.
+- [x] **Step 2: Implement** — `buildRegistry(config)` helper in a new `packages/cli/src/presets.ts`: `const registry = createDefaultRegistry(); registerPresets(registry, config.presets); return registry;`. `runGenerate`: pass `registry` and `validators: presetValidators(config.presets)` to both passes; after writing the migration, if `finalPass.warnings.length > 0` set `stderr` to `renderDiagnostics(warnings.map(fromWarning), null)` while keeping `exitCode: 0`. `runVerify`: pass `registry`. `init`: scaffold `presets: []` in the config template (and update its golden).
+- [x] **Step 3:** PASS; commit `feat(cli): presets config field, preset registry, warning rendering`.
 
 ## Task 23: PR C close-out
 

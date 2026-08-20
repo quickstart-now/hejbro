@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
 	ConfirmDropSpec,
+	Diagnostic as CoreDiagnostic,
 	HejbroError,
 	RenameAmbiguity,
 	RenameSpec,
@@ -15,9 +16,14 @@ import {
 } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { Diagnostic } from "../diagnostics";
-import { fromHejbroError, renderDiagnostics } from "../diagnostics";
+import {
+	fromHejbroError,
+	fromWarning,
+	renderDiagnostics,
+} from "../diagnostics";
 import { parseConfirmDropFlag, parseRenameFlag } from "../flags";
 import { sha256Hex } from "../hash";
+import { identityFromMessage } from "../identity";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
 import { buildRegistry, configValidators } from "../presets";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
@@ -98,26 +104,6 @@ const parseGenerateArgv = (
 	renameValues: collectFlagValues(rawArgs, "--rename"),
 	confirmDropValues: collectFlagValues(rawArgs, "--confirm-drop"),
 });
-
-const FIRST_QUOTED_SUBSTRING = /"([^"]+)"/;
-
-/**
- * Interim identity-extraction heuristic: every owner-approved flat message
- * (Task 13/14) leads with the object it's about inside the first `"..."` —
- * a table/schema identity, or a flag value when the message is about a
- * flag. Pending planner/owner confirmation on whether ambiguous-*-rename
- * diagnostics should carry richer structured suggestions (flagged
- * upstream) — this keeps `error[<code>]: <identity>` headers meaningful
- * without requiring core to expose extra structured fields on
- * `HejbroError`, and is cheap to replace once that's decided.
- */
-const identityFromMessage = (message: string, fallback: string): string => {
-	const match = FIRST_QUOTED_SUBSTRING.exec(message);
-	if (match === null) {
-		return fallback;
-	}
-	return match[1] ?? fallback;
-};
 
 const FILE_URL_PREFIX = "file://";
 
@@ -297,6 +283,35 @@ const asHejbroError = (error: unknown): HejbroError => {
 	throw error;
 };
 
+/** `["${N} warning(s) — see below"]` when there are warnings, else `[]` — inserted into stdout right after the `wrote <file>` line (O3), so a stdout-only consumer still learns warnings exist. */
+const warningSummaryLines = (
+	warnings: ReadonlyArray<CoreDiagnostic>,
+): ReadonlyArray<string> => {
+	if (warnings.length === 0) {
+		return [];
+	}
+	return [`${warnings.length} warning(s) — see below`];
+};
+
+/** Renders every preset validator warning to the stderr block generate prints alongside its success stdout (O3, D55) — `null` when there are none. Exit code stays 0: warnings never block generation. */
+const warningStderr = (
+	warnings: ReadonlyArray<CoreDiagnostic>,
+	fallbackIdentity: string,
+): string | null => {
+	if (warnings.length === 0) {
+		return null;
+	}
+	return renderDiagnostics(
+		warnings.map((warning) =>
+			fromWarning(
+				warning,
+				identityFromMessage(warning.message, fallbackIdentity),
+			),
+		),
+		null,
+	);
+};
+
 /**
  * `hejbro generate`'s full flow (Task 13): parse flags → load config +
  * declarations → read the previous snapshot → run `generateMigration`
@@ -387,9 +402,10 @@ export const runGenerate = async (
 				"hejbro generate",
 				`loaded ${declarations.length} declarations`,
 				`wrote ${migrationRelativePath}`,
+				...warningSummaryLines(finalPass.warnings),
 				banner ?? "",
 			],
-			stderr: null,
+			stderr: warningStderr(finalPass.warnings, fallbackIdentity),
 		};
 	} catch (error) {
 		return errorResult(
