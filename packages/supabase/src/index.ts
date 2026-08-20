@@ -5,7 +5,13 @@
 // fix the interface instead. Neon and Nile presets will follow the same path.
 // See /docs/specs/2026-08-19-hejbro-design.md before implementing anything here.
 
-import type { KindRegistry, Validator } from "@hejbro/core";
+import type {
+	HejbroDeclaration,
+	KindRegistry,
+	ObjectKind,
+	Preset,
+	Validator,
+} from "@hejbro/core";
 import { storageBucketKind } from "./storage/bucket-kind";
 import { exposedTableValidator } from "./validators/exposed-tables";
 import { reservedSchemaValidator } from "./validators/reserved-schemas";
@@ -34,6 +40,13 @@ export const supabaseValidators: ReadonlyArray<Validator> = [
 	exposedTableValidator,
 	viewSecurityInvokerValidator,
 ];
+
+/** The Supabase preset as a config-listable data object (D55): `presets: [supabasePreset]` in `hejbro.config.ts`. The cast to the erased `ObjectKind<HejbroDeclaration>` is sanctioned (a registry is heterogeneous across kinds), like `roleName()`'s `as Role` in core. */
+export const supabasePreset: Preset = {
+	name: "supabase",
+	kinds: [storageBucketKind as ObjectKind<HejbroDeclaration>],
+	validators: supabaseValidators,
+};
 
 /** Registers every Supabase preset object kind (currently `storageBucketKind`) into `registry`. */
 export const registerSupabaseKinds = (registry: KindRegistry): void => {
