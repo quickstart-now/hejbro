@@ -71,7 +71,6 @@ export {
 } from "./dsl/table";
 export type { ChainEntry, ChainReport } from "./engine/chain";
 export { checkChain } from "./engine/chain";
-export { notNullWithoutDefaultWarnings } from "./engine/core-validators";
 export { diffSnapshots } from "./engine/diff-engine";
 export type { HejbroInput } from "./engine/generate";
 export { generateMigration } from "./engine/generate";

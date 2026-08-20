@@ -23,35 +23,31 @@ import { diagnostic } from "./validate";
 export const notNullWithoutDefaultWarnings = (
 	changes: ReadonlyArray<KindChange>,
 ): ReadonlyArray<Diagnostic> =>
-	changes
-		.filter(
-			(change) =>
-				change.kind === "table" &&
-				change.operation === "alter" &&
-				change.previous !== null &&
-				change.next !== null,
-		)
-		.flatMap((change) => {
-			const previous = asTableSnapshot(
-				change.previous as NonNullable<KindChange["previous"]>,
-			);
-			const next = asTableSnapshot(
-				change.next as NonNullable<KindChange["next"]>,
-			);
-			const previousColumnNames = new Set(
-				previous.columns.map((column) => column.name),
-			);
-			const addedWithoutDefault = next.columns.filter(
-				(column) =>
-					!previousColumnNames.has(column.name) &&
-					columnNotNull(column) &&
-					columnDefault(column) === null,
-			);
-			return addedWithoutDefault.map((column) =>
-				diagnostic(
-					"warning",
-					"not-null-without-default",
-					`column "${next.schema}"."${next.name}"."${column.name}" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.`,
-				),
-			);
-		});
+	changes.flatMap((change) => {
+		if (
+			change.kind !== "table" ||
+			change.operation !== "alter" ||
+			change.previous === null ||
+			change.next === null
+		) {
+			return [];
+		}
+		const previous = asTableSnapshot(change.previous);
+		const next = asTableSnapshot(change.next);
+		const previousColumnNames = new Set(
+			previous.columns.map((column) => column.name),
+		);
+		const addedWithoutDefault = next.columns.filter(
+			(column) =>
+				!previousColumnNames.has(column.name) &&
+				columnNotNull(column) &&
+				columnDefault(column) === null,
+		);
+		return addedWithoutDefault.map((column) =>
+			diagnostic(
+				"warning",
+				"not-null-without-default",
+				`column "${next.schema}"."${next.name}"."${column.name}" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.`,
+			),
+		);
+	});
