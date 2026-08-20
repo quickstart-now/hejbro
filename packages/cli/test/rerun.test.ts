@@ -3,9 +3,9 @@ import { assembleRerunCommand } from "../src/rerun";
 
 describe("assembleRerunCommand", () => {
 	it("renders a single new flag on one line when there are no other args", () => {
-		expect(
-			assembleRerunCommand([], ["--rename ddland.posts.slug=handle"]),
-		).toBe("hejbro generate --rename ddland.posts.slug=handle");
+		expect(assembleRerunCommand([], ["--rename app.posts.slug=handle"])).toBe(
+			"hejbro generate --rename app.posts.slug=handle",
+		);
 	});
 
 	it("preserves non-rename args in original order, then original rename flags in original order, before new flags", () => {
@@ -15,18 +15,18 @@ describe("assembleRerunCommand", () => {
 			"--name",
 			"fix_blog",
 			"--rename",
-			"ddland.comments.body=content",
+			"app.comments.body=content",
 		];
 		const rendered = assembleRerunCommand(argv, [
-			"--rename ddland.posts.slug=handle",
+			"--rename app.posts.slug=handle",
 		]);
 		expect(rendered).toBe(
 			[
 				"hejbro generate \\",
 				"  --config db/hejbro.config.ts \\",
 				"  --name fix_blog \\",
-				"  --rename ddland.comments.body=content \\",
-				"  --rename ddland.posts.slug=handle",
+				"  --rename app.comments.body=content \\",
+				"  --rename app.posts.slug=handle",
 			].join("\n"),
 		);
 	});
@@ -35,8 +35,8 @@ describe("assembleRerunCommand", () => {
 		const rendered = assembleRerunCommand(
 			[],
 			[
-				"--rename ddland.posts.slug=handle",
-				"--rename ddland.posts.seo_title=meta_title",
+				"--rename app.posts.slug=handle",
+				"--rename app.posts.seo_title=meta_title",
 			],
 		);
 		// "seo_title" < "slug" byte-wise, so it sorts first regardless of the
@@ -44,8 +44,8 @@ describe("assembleRerunCommand", () => {
 		expect(rendered).toBe(
 			[
 				"hejbro generate \\",
-				"  --rename ddland.posts.seo_title=meta_title \\",
-				"  --rename ddland.posts.slug=handle",
+				"  --rename app.posts.seo_title=meta_title \\",
+				"  --rename app.posts.slug=handle",
 			].join("\n"),
 		);
 	});
@@ -54,17 +54,17 @@ describe("assembleRerunCommand", () => {
 		const rendered = assembleRerunCommand(
 			[],
 			[
-				"--confirm-drop ddland.posts.slug",
-				"--rename ddland.posts.seo_title=meta_title",
+				"--confirm-drop app.posts.slug",
+				"--rename app.posts.seo_title=meta_title",
 			],
 		);
-		// identity for --rename is the left-of-"=" side ("ddland.posts.seo_title"),
-		// which sorts before the confirm-drop's whole value ("ddland.posts.slug").
+		// identity for --rename is the left-of-"=" side ("app.posts.seo_title"),
+		// which sorts before the confirm-drop's whole value ("app.posts.slug").
 		expect(rendered).toBe(
 			[
 				"hejbro generate \\",
-				"  --rename ddland.posts.seo_title=meta_title \\",
-				"  --confirm-drop ddland.posts.slug",
+				"  --rename app.posts.seo_title=meta_title \\",
+				"  --confirm-drop app.posts.slug",
 			].join("\n"),
 		);
 	});

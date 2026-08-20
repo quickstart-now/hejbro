@@ -16,13 +16,13 @@ import {
 	uuid,
 } from "../../src/index";
 
-const ddland = schema("ddland");
-const comments = table(ddland, "comments", {
+const app = schema("app");
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 	parentId: uuid(),
 });
-const posts = table(ddland, "posts", {
+const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	publishedAt: timestamptz(),
 });
@@ -57,7 +57,7 @@ describe("renderFunctionSql", () => {
 
 		expect(renderFunctionSql(trigger.functionDeclaration)).toBe(
 			[
-				'create or replace function "ddland"."comments_single_depth_fn"()',
+				'create or replace function "app"."comments_single_depth_fn"()',
 				"returns trigger",
 				"language plpgsql",
 				"as $function$",
@@ -68,7 +68,7 @@ describe("renderFunctionSql", () => {
 				"\tif new.parent_id is null then",
 				"\t\treturn new;",
 				"\tend if;",
-				'\tselect "ddland"."comments"."post_id" as "post_id", "ddland"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "ddland"."comments" where "ddland"."comments"."id" = new.parent_id;',
+				'\tselect "app"."comments"."post_id" as "post_id", "app"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "app"."comments" where "app"."comments"."id" = new.parent_id;',
 				"\tif parent_post_id is null then",
 				"\t\traise exception '부모 댓글을 찾을 수 없다 (parent_id=%)', new.parent_id;",
 				"\tend if;",
@@ -81,7 +81,7 @@ describe("renderFunctionSql", () => {
 
 	it("renders a definer function with args and a return-query statement", () => {
 		const declaration = defineFunction(
-			"ddland",
+			"app",
 			"publish_post",
 			{ args: { postId: uuid() }, returns: posts, security: "definer" },
 			(ctx, { postId }) => {
@@ -96,9 +96,9 @@ describe("renderFunctionSql", () => {
 
 		const sql = renderFunctionSql(declaration);
 		expect(sql).toContain(
-			'create or replace function "ddland"."publish_post"(post_id uuid)',
+			'create or replace function "app"."publish_post"(post_id uuid)',
 		);
-		expect(sql).toContain('returns setof "ddland"."posts"');
+		expect(sql).toContain('returns setof "app"."posts"');
 		expect(sql).toContain("security definer");
 		expect(sql).toMatch(/\treturn query update .*returning .*;/);
 	});
@@ -128,14 +128,14 @@ describe("renderFunctionSql", () => {
 
 		expect(renderFunctionSql(trigger.functionDeclaration)).toBe(
 			[
-				'create or replace function "ddland"."loop_demo_fn"()',
+				'create or replace function "app"."loop_demo_fn"()',
 				"returns trigger",
 				"language plpgsql",
 				"as $function$",
 				"declare",
 				"\tchild record;",
 				"begin",
-				'\tfor child in select "ddland"."comments"."post_id" as "post_id" from "ddland"."comments" where "ddland"."comments"."parent_id" = new.id loop',
+				'\tfor child in select "app"."comments"."post_id" as "post_id" from "app"."comments" where "app"."comments"."parent_id" = new.id loop',
 				"\t\traise exception 'child post=%', child.post_id;",
 				"\tend loop;",
 				"\treturn new;",
@@ -169,7 +169,7 @@ describe("renderFunctionSql", () => {
 describe("renderTriggerSql", () => {
 	it("renders the drop-if-exists + create pair", () => {
 		const snapshot: TriggerSnapshotShape = {
-			schema: "ddland",
+			schema: "app",
 			table: "comments",
 			name: "comments_single_depth",
 			timing: "before",
@@ -182,11 +182,11 @@ describe("renderTriggerSql", () => {
 		};
 
 		expect(renderTriggerSql(snapshot)).toEqual([
-			'drop trigger if exists "comments_single_depth" on "ddland"."comments";',
+			'drop trigger if exists "comments_single_depth" on "app"."comments";',
 			[
 				'create trigger "comments_single_depth"',
-				'\tbefore insert or update of "parent_id", "post_id" on "ddland"."comments"',
-				'\tfor each row execute function "ddland"."comments_single_depth_fn"();',
+				'\tbefore insert or update of "parent_id", "post_id" on "app"."comments"',
+				'\tfor each row execute function "app"."comments_single_depth_fn"();',
 			].join("\n"),
 		]);
 	});

@@ -8,8 +8,8 @@ import {
 	uuid,
 } from "../../src/index";
 
-const ddland = schema("ddland");
-const comments = table(ddland, "comments", {
+const app = schema("app");
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 	parentId: uuid(),
@@ -73,7 +73,7 @@ describe("double-execution determinism guard", () => {
 		} catch (error) {
 			expect(error).toMatchObject({ code: "nondeterministic-body" });
 			expect((error as { message: string }).message).toContain(
-				"ddland.comments.comments_single_depth",
+				"app.comments.comments_single_depth",
 			);
 			const declaredAt = (error as { declaredAt: string | null }).declaredAt;
 			if (declaredAt !== null) {

@@ -9,8 +9,8 @@ import {
 	uuid,
 } from "../../src/types/column-builder-factories";
 
-const ddland = schema("ddland");
-const posts = table(ddland, "posts", {
+const app = schema("app");
+const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	status: text().notNull(),
 	publishedAt: timestamptz(),

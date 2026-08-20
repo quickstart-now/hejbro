@@ -12,14 +12,14 @@ import {
 	uuid,
 } from "../../../../src/index";
 
-/** The dd.land example schema (spec §5.1), extended with the comments-single-depth trigger for the Phase 3 acceptance case. */
-export const ddland = schema("ddland");
-export const posts = table(ddland, "posts", {
+/** The original production schema (spec §5.1), extended with the comments-single-depth trigger for the Phase 3 acceptance case. */
+export const app = schema("app");
+export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	slug: text().notNull().unique(),
 	publishedAt: timestamptz(),
 });
-export const comments = table(ddland, "comments", {
+export const comments = table(app, "comments", {
 	id: uuid().primaryKey().defaultRandom(),
 	postId: uuid().notNull(),
 	parentId: uuid(),
@@ -27,8 +27,8 @@ export const comments = table(ddland, "comments", {
 });
 
 /**
- * A 1:1 port of dd.land's hand-written `comments_single_depth` trigger
- * (`quickstart-labs/infra/dd-land-supabase/supabase/migrations/20260815110756_smiling_whizzer.sql`
+ * A 1:1 port of the original hand-written `comments_single_depth` trigger
+ * (the original project's migrations, `20260815110756_smiling_whizzer.sql`
  * lines 203–241) — the phase 3 acceptance artifact. The FK from
  * `comments.postId`/`parentId` is omitted here to keep the case focused;
  * the raise messages stay Korean byte-for-byte — they are user data, not

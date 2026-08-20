@@ -12,12 +12,12 @@ import {
 	uuid,
 } from "../../src/types/column-builder-factories";
 
-const ddland = schema("ddland");
+const app = schema("app");
 
 describe("binding rls to a table", () => {
 	it("stamps schema/table onto every policy of a bound RlsDeclaration", () => {
 		const posts = table(
-			ddland,
+			app,
 			"posts",
 			{
 				id: uuid().primaryKey().defaultRandom(),
@@ -37,13 +37,13 @@ describe("binding rls to a table", () => {
 
 		const meta = getTableMeta(posts);
 		expect(meta.rls).not.toBeNull();
-		expect(meta.rls?.schemaName).toBe("ddland");
+		expect(meta.rls?.schemaName).toBe("app");
 		expect(meta.rls?.tableName).toBe("posts");
 		expect(meta.rls?.force).toBe(false);
 		expect(meta.rls?.policies).toHaveLength(1);
 		expect(meta.rls?.policies[0]).toMatchObject({
 			declarationKind: "policy",
-			schemaName: "ddland",
+			schemaName: "app",
 			tableName: "posts",
 			policyName: "posts_read_published",
 			command: "select",
@@ -52,20 +52,20 @@ describe("binding rls to a table", () => {
 	});
 
 	it("a table without rls extras carries a null rls declaration", () => {
-		const posts = table(ddland, "posts_bare", {
+		const posts = table(app, "posts_bare", {
 			id: uuid().primaryKey().defaultRandom(),
 		});
 		expect(getTableMeta(posts).rls).toBeNull();
 	});
 
 	it("serializes byte-identically whether or not a table declares rls (D25)", () => {
-		const bare = table(ddland, "posts_compare", {
+		const bare = table(app, "posts_compare", {
 			id: uuid().primaryKey().defaultRandom(),
 			status: text().notNull(),
 			publishedAt: timestamptz(),
 		});
 		const secured = table(
-			ddland,
+			app,
 			"posts_compare",
 			{
 				id: uuid().primaryKey().defaultRandom(),
@@ -91,7 +91,7 @@ describe("binding rls to a table", () => {
 	it("rejects two policies sharing one SQL policy name", () => {
 		expect(() =>
 			table(
-				ddland,
+				app,
 				"posts_dup",
 				{
 					id: uuid().primaryKey().defaultRandom(),
@@ -116,14 +116,14 @@ describe("binding rls to a table", () => {
 	});
 
 	it("rejects a top-level reference to another table's column", () => {
-		const comments = table(ddland, "comments_fc", {
+		const comments = table(app, "comments_fc", {
 			id: uuid().primaryKey().defaultRandom(),
 			postId: uuid().notNull(),
 		});
 
 		expect(() =>
 			table(
-				ddland,
+				app,
 				"posts_fc",
 				{
 					id: uuid().primaryKey().defaultRandom(),
@@ -144,14 +144,14 @@ describe("binding rls to a table", () => {
 	});
 
 	it("allows a correlated exists() referencing another table", () => {
-		const comments = table(ddland, "comments_ok", {
+		const comments = table(app, "comments_ok", {
 			id: uuid().primaryKey().defaultRandom(),
 			postId: uuid().notNull(),
 		});
 
 		expect(() =>
 			table(
-				ddland,
+				app,
 				"posts_ok",
 				{
 					id: uuid().primaryKey().defaultRandom(),

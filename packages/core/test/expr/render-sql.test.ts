@@ -4,13 +4,13 @@ import { renderExpr } from "../../src/index";
 
 const publishedAt: ExprNode = {
 	nodeKind: "columnRef",
-	schemaName: "ddland",
+	schemaName: "app",
 	tableName: "posts",
 	columnName: "published_at",
 };
 const status: ExprNode = {
 	nodeKind: "columnRef",
-	schemaName: "ddland",
+	schemaName: "app",
 	tableName: "posts",
 	columnName: "status",
 };
@@ -21,7 +21,7 @@ const lit = (value: string): ExprNode => ({
 
 describe("renderExpr", () => {
 	it("renders column refs schema-qualified and quoted", () => {
-		expect(renderExpr(publishedAt)).toBe('"ddland"."posts"."published_at"');
+		expect(renderExpr(publishedAt)).toBe('"app"."posts"."published_at"');
 	});
 	it("renders comparisons", () => {
 		expect(
@@ -31,7 +31,7 @@ describe("renderExpr", () => {
 				left: status,
 				right: lit("published"),
 			}),
-		).toBe('"ddland"."posts"."status" = \'published\'');
+		).toBe('"app"."posts"."status" = \'published\'');
 	});
 	it("parenthesizes nested logical operands deterministically", () => {
 		const isPublished: ExprNode = {
@@ -59,13 +59,13 @@ describe("renderExpr", () => {
 				],
 			}),
 		).toBe(
-			'(("ddland"."posts"."status" = \'published\') and ("ddland"."posts"."published_at" is null)) or ("ddland"."posts"."status" = \'published\')',
+			'(("app"."posts"."status" = \'published\') and ("app"."posts"."published_at" is null)) or ("app"."posts"."status" = \'published\')',
 		);
 	});
 	it("renders null tests, in lists, between, not", () => {
 		expect(
 			renderExpr({ nodeKind: "nullTest", negated: true, operand: publishedAt }),
-		).toBe('"ddland"."posts"."published_at" is not null');
+		).toBe('"app"."posts"."published_at" is not null');
 		expect(
 			renderExpr({
 				nodeKind: "inList",
@@ -73,7 +73,7 @@ describe("renderExpr", () => {
 				operand: status,
 				values: [lit("a"), lit("b")],
 			}),
-		).toBe('"ddland"."posts"."status" in (\'a\', \'b\')');
+		).toBe('"app"."posts"."status" in (\'a\', \'b\')');
 	});
 	it("renders function calls, schema-qualified when set", () => {
 		expect(
@@ -103,7 +103,7 @@ describe("renderExpr", () => {
 					{ chunkKind: "text", text: ") > 3" },
 				],
 			}),
-		).toBe('char_length("ddland"."posts"."status") > 3');
+		).toBe('char_length("app"."posts"."status") > 3');
 		expect(renderExpr({ nodeKind: "rawSql", sql: "1 = 1" })).toBe("1 = 1");
 	});
 });

@@ -9,17 +9,17 @@ import {
 	uuid,
 } from "../../../../src/index";
 
-/** The dd.land example schema (spec §5.1), extended with a published-posts view (Phase 4 acceptance case, D27). */
-export const ddland = schema("ddland");
+/** The original production schema (spec §5.1), extended with a published-posts view (Phase 4 acceptance case, D27). */
+export const app = schema("app");
 
-export const posts = table(ddland, "posts", {
+export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	status: text().notNull(),
 	publishedAt: timestamptz(),
 });
 
 export const publishedPosts = defineView(
-	ddland,
+	app,
 	"published_posts",
 	select(posts).where(isNotNull(posts.publishedAt)),
 );

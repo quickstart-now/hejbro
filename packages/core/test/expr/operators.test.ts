@@ -15,16 +15,16 @@ import {
 	renderExpr,
 } from "../../src/index";
 
-const status = columnRef("ddland", "posts", "status", { typeName: "text" });
-const publishedAt = columnRef("ddland", "posts", "published_at", {
+const status = columnRef("app", "posts", "status", { typeName: "text" });
+const publishedAt = columnRef("app", "posts", "published_at", {
 	typeName: "timestamptz",
 });
-const postId = columnRef("ddland", "posts", "id", { typeName: "uuid" });
+const postId = columnRef("app", "posts", "id", { typeName: "uuid" });
 
 describe("operators", () => {
 	it("builds comparisons with auto-lifted literals", () => {
 		expect(renderExpr(eq(status, "published").exprNode)).toBe(
-			'"ddland"."posts"."status" = \'published\'',
+			'"app"."posts"."status" = \'published\'',
 		);
 	});
 	it("composes boolean expressions", () => {
@@ -37,14 +37,14 @@ describe("operators", () => {
 	});
 	it("builds inArray / between / like / now", () => {
 		expect(renderExpr(inArray(status, ["a", "b"]).exprNode)).toBe(
-			'"ddland"."posts"."status" in (\'a\', \'b\')',
+			'"app"."posts"."status" in (\'a\', \'b\')',
 		);
 		expect(renderExpr(like(status, "post-%").exprNode)).toBe(
-			'"ddland"."posts"."status" like \'post-%\'',
+			'"app"."posts"."status" like \'post-%\'',
 		);
 		expect(renderExpr(now().exprNode)).toBe("now()");
 		expect(renderExpr(between(publishedAt, now(), now()).exprNode)).toBe(
-			'"ddland"."posts"."published_at" between now() and now()',
+			'"app"."posts"."published_at" between now() and now()',
 		);
 	});
 	it("rejects family mismatches at the type level", () => {

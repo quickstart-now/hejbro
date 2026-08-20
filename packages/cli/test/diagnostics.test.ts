@@ -11,7 +11,7 @@ import { fromHejbroError, renderDiagnostics } from "../src/diagnostics";
 
 const singlePairMockup: Diagnostic = {
 	code: "ambiguous-column-rename",
-	identity: "ddland.posts",
+	identity: "app.posts",
 	body: [
 		'column "slug" was dropped and column "handle" was added in the same',
 		"generate run — hejbro exited without writing SQL for this table; it",
@@ -20,34 +20,34 @@ const singlePairMockup: Diagnostic = {
 	suggestions: [
 		{
 			label: "if this is a rename, rerun:",
-			lines: ["hejbro generate --rename ddland.posts.slug=handle"],
+			lines: ["hejbro generate --rename app.posts.slug=handle"],
 		},
 		{
 			label: "if these are unrelated changes, rerun:",
-			lines: ["hejbro generate --confirm-drop ddland.posts.slug"],
+			lines: ["hejbro generate --confirm-drop app.posts.slug"],
 		},
 	],
-	at: 'examples/dd-land/schema.ts (export "posts")',
+	at: 'examples/app/schema.ts (export "posts")',
 };
 
 const SINGLE_PAIR_RENDERED = [
-	"error[ambiguous-column-rename]: ddland.posts",
+	"error[ambiguous-column-rename]: app.posts",
 	'  column "slug" was dropped and column "handle" was added in the same',
 	"  generate run — hejbro exited without writing SQL for this table; it",
 	"  won't guess between two possible next steps.",
 	"",
 	"  → if this is a rename, rerun:",
-	"      hejbro generate --rename ddland.posts.slug=handle",
+	"      hejbro generate --rename app.posts.slug=handle",
 	"",
 	"  → if these are unrelated changes, rerun:",
-	"      hejbro generate --confirm-drop ddland.posts.slug",
+	"      hejbro generate --confirm-drop app.posts.slug",
 	"",
-	'  at examples/dd-land/schema.ts (export "posts")',
+	'  at examples/app/schema.ts (export "posts")',
 ].join("\n");
 
 const multiPairMockup: Diagnostic = {
 	code: "ambiguous-column-rename",
-	identity: "ddland.posts",
+	identity: "app.posts",
 	body: [
 		'2 columns were dropped ("slug", "seo_title") and 2 columns were added',
 		'("handle", "meta_title") in the same generate run — hejbro exited',
@@ -58,50 +58,50 @@ const multiPairMockup: Diagnostic = {
 		{
 			label: "every dropped column needs one of:",
 			lines: [
-				"--rename ddland.posts.slug=<new column, e.g. handle or meta_title>",
-				"--confirm-drop ddland.posts.slug",
+				"--rename app.posts.slug=<new column, e.g. handle or meta_title>",
+				"--confirm-drop app.posts.slug",
 				"",
-				"--rename ddland.posts.seo_title=<new column, e.g. handle or meta_title>",
-				"--confirm-drop ddland.posts.seo_title",
+				"--rename app.posts.seo_title=<new column, e.g. handle or meta_title>",
+				"--confirm-drop app.posts.seo_title",
 			],
 		},
 		{
 			label: "example rerun once you've decided (edit the <...> placeholders):",
 			lines: [
 				"hejbro generate \\",
-				"  --rename ddland.posts.slug=handle \\",
-				"  --rename ddland.posts.seo_title=meta_title",
+				"  --rename app.posts.slug=handle \\",
+				"  --rename app.posts.seo_title=meta_title",
 			],
 		},
 	],
-	at: 'examples/dd-land/schema.ts (export "posts")',
+	at: 'examples/app/schema.ts (export "posts")',
 };
 
 const MULTI_PAIR_RENDERED = [
-	"error[ambiguous-column-rename]: ddland.posts",
+	"error[ambiguous-column-rename]: app.posts",
 	'  2 columns were dropped ("slug", "seo_title") and 2 columns were added',
 	'  ("handle", "meta_title") in the same generate run — hejbro exited',
 	"  without writing SQL for this table; it won't guess which pairs (if",
 	"  any) are renames.",
 	"",
 	"  → every dropped column needs one of:",
-	"      --rename ddland.posts.slug=<new column, e.g. handle or meta_title>",
-	"      --confirm-drop ddland.posts.slug",
+	"      --rename app.posts.slug=<new column, e.g. handle or meta_title>",
+	"      --confirm-drop app.posts.slug",
 	"",
-	"      --rename ddland.posts.seo_title=<new column, e.g. handle or meta_title>",
-	"      --confirm-drop ddland.posts.seo_title",
+	"      --rename app.posts.seo_title=<new column, e.g. handle or meta_title>",
+	"      --confirm-drop app.posts.seo_title",
 	"",
 	"  → example rerun once you've decided (edit the <...> placeholders):",
 	"      hejbro generate \\",
-	"        --rename ddland.posts.slug=handle \\",
-	"        --rename ddland.posts.seo_title=meta_title",
+	"        --rename app.posts.slug=handle \\",
+	"        --rename app.posts.seo_title=meta_title",
 	"",
-	'  at examples/dd-land/schema.ts (export "posts")',
+	'  at examples/app/schema.ts (export "posts")',
 ].join("\n");
 
 const tableRenameMockup: Diagnostic = {
 	code: "ambiguous-table-rename",
-	identity: "ddland",
+	identity: "app",
 	body: [
 		'table "posts" was dropped, table "blog_posts" was created.',
 		"⚠ a table rename recreates every column, index, foreign key, RLS",
@@ -110,29 +110,29 @@ const tableRenameMockup: Diagnostic = {
 	suggestions: [
 		{
 			label: "if this is a rename, rerun:",
-			lines: ["hejbro generate --rename ddland.posts=blog_posts"],
+			lines: ["hejbro generate --rename app.posts=blog_posts"],
 		},
 		{
 			label: "if these are unrelated tables, rerun:",
-			lines: ["hejbro generate --confirm-drop ddland.posts"],
+			lines: ["hejbro generate --confirm-drop app.posts"],
 		},
 	],
-	at: 'examples/dd-land/schema.ts (export "blogPosts")',
+	at: 'examples/app/schema.ts (export "blogPosts")',
 };
 
 const TABLE_RENAME_RENDERED = [
-	"error[ambiguous-table-rename]: ddland",
+	"error[ambiguous-table-rename]: app",
 	'  table "posts" was dropped, table "blog_posts" was created.',
 	"  ⚠ a table rename recreates every column, index, foreign key, RLS",
 	"    policy, and trigger on it — hejbro will not guess.",
 	"",
 	"  → if this is a rename, rerun:",
-	"      hejbro generate --rename ddland.posts=blog_posts",
+	"      hejbro generate --rename app.posts=blog_posts",
 	"",
 	"  → if these are unrelated tables, rerun:",
-	"      hejbro generate --confirm-drop ddland.posts",
+	"      hejbro generate --confirm-drop app.posts",
 	"",
-	'  at examples/dd-land/schema.ts (export "blogPosts")',
+	'  at examples/app/schema.ts (export "blogPosts")',
 ].join("\n");
 
 describe("renderDiagnostics — owner-approved terminal mockups", () => {
