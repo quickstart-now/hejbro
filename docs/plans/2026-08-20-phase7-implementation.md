@@ -1521,7 +1521,7 @@ describe("hejbro skill links", () => {
 **Files:**
 - Modify: `packages/cli/test/support/cli-runner.ts`, `examples/cli-smoke/test/e2e.test.ts`, `packages/cli/src/loader.ts`
 
-- [ ] **Step 1 (instrument):** in `cli-runner.ts` add
+- [x] **Step 1 (instrument):** in `cli-runner.ts` add
 ```ts
 import { existsSync } from "node:fs";
 export const assertBuiltCli = (): void => {
@@ -1531,10 +1531,10 @@ export const assertBuiltCli = (): void => {
 	}
 };
 ```
-and call it from a `beforeAll` in every spawning test file (`generate-command`, `golden`, `help`, `cli-smoke`). In `runCli`, when `exitCode !== 0`, append `stderr` to the resolved object **and** log `[cli-runner] exit ${exitCode}\n${stderr}` so a flaky failure leaves the full child output in the vitest report.
-- [ ] **Step 2 (suspect #1):** `createJiti(configPath, { fsCache: false })` in both `loadConfig` and `loadDeclarations` (`loader.ts:44,136`) — the CLI loads a handful of files per run; the on-disk transpile cache buys nothing and is shared across parallel test workers. Add a comment citing #102.
-- [ ] **Step 3 (stress):** `for i in $(seq 1 30); do rm -rf packages/*/dist && npx turbo run test --force >/tmp/flake-$i.log 2>&1 || echo "run $i failed"; done` — record pass count in the PR body. If any run fails, the instrumented output identifies the layer; fix accordingly (next suspect: `fileParallelism: false` for the spawning files only).
-- [ ] **Step 4:** Commit `fix(cli): harden e2e harness and disable jiti fs cache`; open PR H (`Closes #102`).
+and call it from a `beforeAll` in every spawning test file (`generate-command`, `golden`, `help`, `verify`, `cli-smoke`). In `runCli`, when `exitCode !== 0`, append `stderr` to the resolved object **and** log `[cli-runner] exit ${exitCode}\n${stderr}` so a flaky failure leaves the full child output in the vitest report.
+- [x] **Step 2 (suspect #1):** `createJiti(configPath, { fsCache: false })` in both `loadConfig` and `loadDeclarations` (`loader.ts:44,136`) — the CLI loads a handful of files per run; the on-disk transpile cache buys nothing and is shared across parallel test workers. Add a comment citing #102.
+- [x] **Step 3 (stress):** `for i in $(seq 1 30); do rm -rf packages/*/dist && npx turbo run test --force >/tmp/flake-$i.log 2>&1 || echo "run $i failed"; done` — record pass count in the PR body. If any run fails, the instrumented output identifies the layer; fix accordingly (next suspect: `fileParallelism: false` for the spawning files only). **Result: 30/30 green in isolation; the one reproduction during this phase's investigation was shared-worktree interference (another agent's clean gate running `rm -rf packages/*/dist` in the same worktree mid-run), proven by the new instrumentation — not a hejbro bug.**
+- [x] **Step 4:** Commits (3, per the PR H kickoff brief, not the single commit originally sketched here): `test(cli): assert the built cli exists and keep child stderr`, `fix(cli): disable jiti fs cache`, `chore(examples): type-check cli-smoke`; open PR H (`Closes #102`).
 
 ---
 

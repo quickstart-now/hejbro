@@ -1,12 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+	assertBuiltCli,
 	createCliFixtureDir,
 	removeCliFixtureDir,
 	runCli,
 	writeFixtureFile,
 } from "./support/cli-runner";
+
+beforeAll(assertBuiltCli);
 
 // Task 13's own scoped coverage of the generate command's file-writing,
 // exit-code, and error behavior (built-CLI child_process approach — see

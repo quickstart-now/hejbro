@@ -1,4 +1,6 @@
+import type { ExecException } from "node:child_process";
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
 	cp,
 	mkdir,
@@ -11,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 // Task 18 acceptance: drives the *built* CLI (dist/cli.js, not any
 // in-process import) against a tmp copy of this example — the closest
@@ -22,6 +24,19 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const EXAMPLE_ROOT = join(import.meta.dirname, "..");
 const CLI_PACKAGE_ROOT = join(EXAMPLE_ROOT, "..", "..", "packages", "cli");
 const CLI_PATH = join(CLI_PACKAGE_ROOT, "dist", "cli.js");
+const CLI_INDEX_PATH = join(CLI_PACKAGE_ROOT, "dist", "index.js");
+
+/** Mirrors packages/cli/test/support/cli-runner.ts's `assertBuiltCli` (#102) — a confusing "no such file" spawn error otherwise hides an incomplete build. */
+const assertBuiltCli = (): void => {
+	const missing = [CLI_PATH, CLI_INDEX_PATH].filter((p) => !existsSync(p));
+	if (missing.length > 0) {
+		throw new Error(
+			`built CLI artifacts missing: ${missing.join(", ")} — run pnpm build (turbo should have built hejbro before its tests; if you see this under turbo, capture the turbo log for #102)`,
+		);
+	}
+};
+
+beforeAll(assertBuiltCli);
 
 type CliRun = {
 	readonly exitCode: number;
@@ -29,12 +44,20 @@ type CliRun = {
 	readonly stderr: string;
 };
 
-const exitCodeFrom = (error: NodeJS.ErrnoException): number => {
+// `ExecException.code` is `string | number | undefined` (unlike
+// `NodeJS.ErrnoException.code`, which is `string | undefined`) — typed to
+// match what `execFile`'s callback actually hands us, so this compiles
+// under `exactOptionalPropertyTypes` (same fix as examples/postgres).
+const exitCodeFrom = (error: ExecException): number => {
 	if (typeof error.code === "number") {
 		return error.code;
 	}
 	return 1;
 };
+
+/** True when `stderr` is one of hejbro's own diagnostic blocks (`error[<code>]: ...`, §7 grammar) — an *expected* non-zero exit this test asserted on, not a spawn/crash symptom worth logging (#102, mirrors packages/cli/test/support/cli-runner.ts). */
+const isHejbroDiagnostic = (stderr: string): boolean =>
+	stderr.trimStart().startsWith("error[");
 
 const runCli = (cwd: string, args: ReadonlyArray<string>): Promise<CliRun> =>
 	new Promise((resolve) => {
@@ -47,7 +70,16 @@ const runCli = (cwd: string, args: ReadonlyArray<string>): Promise<CliRun> =>
 					resolve({ exitCode: 0, stdout, stderr });
 					return;
 				}
-				resolve({ exitCode: exitCodeFrom(error), stdout, stderr });
+				const exitCode = exitCodeFrom(error);
+				// Keep the full child stderr in the report even when the test's
+				// own assertions don't inspect it — a flaky failure otherwise
+				// leaves no trace of what the spawned CLI actually printed (#102).
+				// Skip the log for hejbro's own diagnostics: those are expected
+				// non-zero exits this test asserted on.
+				if (!isHejbroDiagnostic(stderr)) {
+					console.error(`[cli-runner] exit ${exitCode}\n${stderr}`);
+				}
+				resolve({ exitCode, stdout, stderr });
 			},
 		);
 	});
