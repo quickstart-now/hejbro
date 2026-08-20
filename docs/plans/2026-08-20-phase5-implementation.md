@@ -69,18 +69,19 @@ review).
   `dist/` artifacts can mask missing turbo build-dependency wiring
   (learned on PR B, 2026-08-20).
 
-## Issues to create (after owner approves this plan; via `issue.sh`, no orphans)
+## Issues to create — created (PR E, Task 19)
 
-| # | Title | Parent phase |
-|---|-------|--------------|
-| 1 | docs: onboarding example schema page (GitHub Pages) | Phase 7 (#8) |
-| 2 | docs: full rename-branch rules page (`--rename`/`--confirm-drop`/expand–contract walkthrough; revisit help pointer once live) | Phase 7 (#8) |
-| 3 | docs: `hejbro verify` CI workflow example | Phase 7 (#8) |
-| 4 | docs: expand–contract two-run generate guide (may merge into #2 — decide at issue creation) | Phase 7 (#8) |
-| 5 | test: npm-pack install-path smoke (U9) | Phase 7 or 8 — **one** phase fixed at creation time (no-orphan rule requires a single parent) |
-| 6 | refactor: retrofit `Next:` marker onto Phase 1–4 error messages (⑤) | Phase 7 (#8) |
-| 7 | feat(core): extend `assertSqlName` to explicit (user-pinned) index names — declaration-time validation consistency (PR-A review observation) | Phase 7 (#8) |
-| 8 | feat(cli): support `--flag=value` equals-joined token form in rawArgs parsing and rerun assembly (silently ignored in v1; PR-C review observation) | Phase 7 (#8) |
+| # | Title | Parent phase | Issue |
+|---|-------|--------------|-------|
+| 1 | docs: onboarding example schema page (GitHub Pages) | Phase 7 (#8) | #83 |
+| 2 | docs: rename rules page (`--rename`/`--confirm-drop` and the expand–contract walkthrough; revisit help pointer once live) — merged row 4 into this one (same doc page) | Phase 7 (#8) | #84 |
+| 3 | docs: `hejbro verify` CI workflow example | Phase 7 (#8) | #85 |
+| ~~4~~ | ~~docs: expand–contract two-run generate guide~~ — merged into row 2/#84 | — | — |
+| 5 | test: npm-pack install-path smoke (U9) | Phase 8 (#9) — release-readiness/publish-verification, not real-Postgres/examples/skills | #86 |
+| 6 | refactor: retrofit `Next:` marker onto Phase 1–4 error messages (⑤) | Phase 7 (#8) | #87 |
+| 7 | feat(core): extend `assertSqlName` to explicit (user-pinned) index names — declaration-time validation consistency (PR-A review observation) | Phase 7 (#8) | #88 |
+| 8 | feat(cli): support `--flag=value` equals-joined token form in rawArgs parsing and rerun assembly (silently ignored in v1; PR-C review observation) | Phase 7 (#8) | #89 |
+| ~~9~~ | ~~feat(cli): `hejbro verify` reports independent check groups together~~ — implemented in PR D (#82), never orphaned | — | — |
 
 Plus one implementation sub-issue of #6 per PR below.
 
