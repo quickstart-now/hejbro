@@ -251,4 +251,92 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.",
 		);
 	});
+
+	// Dependency-aware batch reporting (reviewer-redesigned, PR D round 2):
+	// checks 1 and 3 always run; 2 needs 1; 4 needs 1 and 3. Draft skip/
+	// summary text — owner sign-off pending.
+
+	it("batch: check 3 alone failing skips only check 4 (check 2 still runs and passes)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const [fileName] = await migrationFileNames();
+		const original = await readFile(
+			join(cwd, "migrations", fileName as string),
+			"utf8",
+		);
+		const forked = replaceLinePrefixedWith(
+			original,
+			SNAPSHOT_PREFIX,
+			`sha256:${"f".repeat(64)}`,
+		);
+		await writeFixtureFile(cwd, "migrations/99999999999999_fork.sql", forked);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[diverged-migrations]");
+		expect(result.stderr).not.toContain("error[snapshot-stale]");
+		expect(result.stderr).not.toContain("error[chain-tip-mismatch]");
+		expect(result.stderr).toContain(
+			"skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)",
+		);
+		expect(result.stderr).not.toContain(
+			"skipped: declarations ↔ snapshot (needs a parseable snapshot file)",
+		);
+		expect(result.stderr).toContain(
+			"verify: 1 of 4 checks failed, 1 skipped — fix the errors above and rerun `hejbro verify`.",
+		);
+	});
+
+	it("batch: checks 1 and 3 failing together produce 2 diagnostic blocks and skip checks 2 and 4", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const [fileName] = await migrationFileNames();
+		const original = await readFile(
+			join(cwd, "migrations", fileName as string),
+			"utf8",
+		);
+		const forked = replaceLinePrefixedWith(
+			original,
+			SNAPSHOT_PREFIX,
+			`sha256:${"f".repeat(64)}`,
+		);
+		await writeFixtureFile(cwd, "migrations/99999999999999_fork.sql", forked);
+		await writeFile(
+			join(cwd, "hejbro.snapshot.json"),
+			"<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> branch\n",
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[invalid-snapshot]");
+		expect(result.stderr).toContain("error[diverged-migrations]");
+		expect(result.stderr).toContain(
+			"skipped: declarations ↔ snapshot (needs a parseable snapshot file)",
+		);
+		expect(result.stderr).toContain(
+			"skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)",
+		);
+		expect(result.stderr).toContain(
+			"verify: 2 of 4 checks failed, 2 skipped — fix the errors above and rerun `hejbro verify`.",
+		);
+	});
+
+	it("batch: a single failure (no skips) uses the no-skip summary form", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeSchema(CHANGED_SCHEMA);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[snapshot-stale]");
+		expect(result.stderr).not.toContain("skipped:");
+		expect(result.stderr).toContain(
+			"verify: 1 of 4 checks failed — fix the errors above and rerun `hejbro verify`.",
+		);
+	});
 });
