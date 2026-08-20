@@ -59,11 +59,9 @@ const chainErrorMessage = (
 };
 
 /**
- * Draft — owner sign-off pending (relayed to planner). The dependency
- * -aware skip/summary lines below are new text (decision ⑥) for the
- * "not all 4 checks reported at once" reviewer-approved redesign
- * (checks 1 and 3 always run; 2 needs 1; 4 needs 1 and 3). Do not treat
- * as final until confirmed; keep in sync with `test/verify.test.ts`.
+ * Owner-approved verbatim (⑥) — the skip/summary lines for the
+ * dependency-aware batch redesign (checks 1 and 3 always run; 2 needs
+ * 1; 4 needs 1 and 3). See `test/verify.test.ts` for the golden pins.
  */
 const SKIPPED_CHECK_2_LINE =
 	"skipped: declarations ↔ snapshot (needs a parseable snapshot file)";

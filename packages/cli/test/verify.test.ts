@@ -253,8 +253,8 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 	});
 
 	// Dependency-aware batch reporting (reviewer-redesigned, PR D round 2):
-	// checks 1 and 3 always run; 2 needs 1; 4 needs 1 and 3. Draft skip/
-	// summary text — owner sign-off pending.
+	// checks 1 and 3 always run; 2 needs 1; 4 needs 1 and 3. skip/summary
+	// text is owner-approved verbatim (⑥), pinned below.
 
 	it("batch: check 3 alone failing skips only check 4 (check 2 still runs and passes)", async () => {
 		await runCli(cwd, ["init"]);
