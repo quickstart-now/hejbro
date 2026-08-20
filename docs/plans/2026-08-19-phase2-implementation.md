@@ -1,5 +1,7 @@
 # Phase 2 — Expression & Query Builder Foundation: Implementation Plan
 
+> Historical record. Names and paths below were updated in Phase 7 (PRs D and #118) when the example directory was renamed; the events themselves are unchanged.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use

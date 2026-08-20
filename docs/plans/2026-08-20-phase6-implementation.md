@@ -1,5 +1,7 @@
 # Phase 6 — Supabase preset (`@hejbro/supabase`): Implementation Plan
 
+> Historical record. Names and paths below were updated in Phase 7 (PRs D and #118) when the example directory was renamed; the events themselves are unchanged.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship `@hejbro/supabase` — role presets, `authUid()`/`authJwt()`
@@ -671,7 +673,7 @@ reserved-schema misuse (`schema("auth")`) errors in a negative case.
 - [ ] **Step 1: Failing test with the golden expectations sketched;
   Step 2: write the schema; Step 3: green (this is the phase's acceptance
   bar — every D37–D45 behavior observable here); Step 4: commit** —
-  `test(examples): reduced example exercises the supabase preset`
+  the Phase 6 acceptance commit (`917a788`)
 
 ## Task 19: Roadmap close-out + issue batch
 

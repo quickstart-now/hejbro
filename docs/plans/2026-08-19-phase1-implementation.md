@@ -1,5 +1,7 @@
 # Phase 1 Implementation Plan — Core Object Model + Snapshot + Diff
 
+> Historical record. Names and paths below were updated in Phase 7 (PRs D and #118) when the example directory was renamed; the events themselves are unchanged.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -870,11 +872,11 @@ dropIndexAddFk]` — three evolution stages built from the DSL.
   then **manually read every generated .sql/.json and verify it is SQL we
   would ship** (this review is the point of golden files).
 - [ ] **Step 4: Run to verify pass** — plain `pnpm --filter @hejbro/core test`.
-- [ ] **Step 5: Full gate + commit**
+- [ ] **Step 5: Full gate + commit** — the golden-file harness commit (`39b01c0`)
 
 ```bash
 pnpm check && pnpm check-types && pnpm test && pnpm build
-git add -A && git commit -m "test(core): add golden-file harness with app acceptance case"
+git add -A && git commit
 ```
 
 ---

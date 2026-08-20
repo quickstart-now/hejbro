@@ -1,5 +1,7 @@
 # Phase 4 — RLS, Views, and Grants Kinds: Implementation Plan
 
+> Historical record. Names and paths below were updated in Phase 7 (PRs D and #118) when the example directory was renamed; the events themselves are unchanged.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land the `rls`/`policy`, `view`, and `grant` object kinds with their
@@ -913,9 +915,9 @@ grant/revoke delta in a single migration — check the banner lists both);
   acceptance-source note, and the #66 Phase 6 follow-up.
 - [ ] **Step 3: Full gates** (`pnpm check && pnpm check-types &&
   pnpm test`) with output shown.
-- [ ] **Step 4: Commit, push `phase4-acceptance`, verify, open PR**
-  `test(core): app-security golden acceptance case and phase 4
-  close-out` (body: commits + `Closes #65`).
+- [ ] **Step 4: Commit, push `phase4-acceptance`, verify, open PR** —
+  the acceptance + close-out commit (`1d1c55e`, squash-merged as
+  `a9e8780`) (body: commits + `Closes #65`).
 - [ ] **Step 5: After the squash merge of each PR** (A–D):
   `issue.sh close <62|63|64|65> --comment "Merged in PR #M."`; after PR-D,
   run `issue.sh check` over #62–#65 and close phase issue #5 the same way.
