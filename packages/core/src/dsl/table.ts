@@ -52,6 +52,8 @@ export type TableDeclaration = {
 	readonly indexes: ReadonlyArray<IndexDeclaration>;
 	readonly foreignKeys: ReadonlyArray<ForeignKeyDeclaration>;
 	readonly rls: RlsDeclaration | null;
+	/** `true` for an {@link existingTable} reference (D41) — reference-only, never passed to `generateMigration`, never diffed, never emitted. `table()` always sets `false`. */
+	readonly existing: boolean;
 	readonly declaredAt: string | null;
 };
 
@@ -106,7 +108,10 @@ type ColumnEntry = {
 	readonly columnState: ColumnState;
 };
 
-const buildColumnEntries = <TColumns extends Record<string, ColumnBuilder>>(
+/** Snake-cases and validates a table's column builders into {@link ColumnEntry}s (shared by {@link table} and `existingTable`). */
+export const buildColumnEntries = <
+	TColumns extends Record<string, ColumnBuilder>,
+>(
 	tableName: string,
 	columns: TColumns,
 ): ReadonlyArray<ColumnEntry> => {
@@ -141,7 +146,7 @@ const buildColumnEntries = <TColumns extends Record<string, ColumnBuilder>>(
  * family back through it — this cast is the one place that mapped type
  * meets the runtime object (Task 7 design note).
  */
-const buildColumnRefs = <TColumns extends Record<string, ColumnBuilder>>(
+export const buildColumnRefs = <TColumns extends Record<string, ColumnBuilder>>(
 	owner: SchemaDeclaration,
 	tableName: string,
 	columnEntries: ReadonlyArray<ColumnEntry>,
@@ -271,6 +276,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		indexes,
 		foreignKeys,
 		rls,
+		existing: false,
 		declaredAt,
 	};
 

@@ -20,6 +20,7 @@ export type {
 export { defineTrigger } from "./dsl/define-trigger";
 export type { ViewDeclaration } from "./dsl/define-view";
 export { defineView } from "./dsl/define-view";
+export { existingTable } from "./dsl/existing-table";
 export type {
 	GrantDeclaration,
 	GrantSetDeclaration,

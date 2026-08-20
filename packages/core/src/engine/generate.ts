@@ -3,7 +3,7 @@ import type { GrantSetDeclaration } from "../dsl/grant";
 import type { Table, TableDeclaration } from "../dsl/table";
 import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroError } from "../error";
-import { hejbroError } from "../error";
+import { hejbroError, throwHejbroError } from "../error";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { createDefaultRegistry } from "../kind/registry";
@@ -48,6 +48,13 @@ const resolveDeclarations = (
 ): ReadonlyArray<HejbroDeclaration> => {
 	if (isTable(input)) {
 		const meta = getTableMeta(input);
+		if (meta.existing) {
+			return throwHejbroError(
+				"existing-table-declared",
+				`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration; remove it from the declarations list. Managed tables are declared with table().`,
+				meta.declaredAt,
+			);
+		}
 		if (meta.rls === null) {
 			return [meta];
 		}
