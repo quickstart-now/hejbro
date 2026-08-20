@@ -447,7 +447,7 @@ referencesTable: tableIdentity(
 - Test: `packages/core/test/dsl/check.test.ts` (new)
 
 **Interfaces:**
-- Produces: `check(name: string, expression: Expr<"boolean">): CheckDeclaration`; `CheckDeclaration = { readonly checkName: string; readonly expression: ExprNode }`; `TableExtras.checks?: ReadonlyArray<CheckDeclaration>`; `TableDeclaration.checks: ReadonlyArray<CheckDeclaration>`; `someExprNode(node, predicate): boolean` in `expr/walk.ts`.
+- Produces: `check(name: string, expression: Expr<"boolean"> | Expr<"unknown">): CheckDeclaration` — the union follows `operators.ts`'s `Operand<TFamily>` pattern: the `sql` template always yields `Expr<"unknown">`, so a `"boolean"`-only parameter would reject the template form D50 explicitly allows (implementation finding, Task 5); `CheckDeclaration = { readonly checkName: string; readonly expression: ExprNode }`; `TableExtras.checks?: ReadonlyArray<CheckDeclaration>`; `TableDeclaration.checks: ReadonlyArray<CheckDeclaration>`; `someExprNode(node, predicate): boolean` in `expr/walk.ts`.
 - Error codes: `check-foreign-column-ref`, `check-subquery`, `duplicate-check-name` (name validation itself reuses `invalid-sql-name` via `assertSqlName(name, "check", null)`).
 
 - [ ] **Step 1: Failing tests** (`test/dsl/check.test.ts`)
@@ -498,7 +498,7 @@ describe("check()", () => {
 	});
 
 	it("rejects an invalid name and duplicate names", () => {
-		expect(() => check("Bad Name", gt(sql`1`, 0))).toThrow(/invalid-sql-name/);
+		expect(() => check("Bad Name", gt(sql`1`, sql`0`))).toThrow(/invalid-sql-name/);
 		expect(() =>
 			table(app, "posts", { n: text() }, (t) => ({
 				checks: [check("dup", gt(t.n, "a")), check("dup", gt(t.n, "b"))],
@@ -570,7 +570,7 @@ export type CheckDeclaration = {
 };
 
 /** Declares a named CHECK constraint for a table's `extras.checks` — the name is required and validated like every other SQL name (D36). */
-export const check = (name: string, expression: Expr<"boolean">): CheckDeclaration => ({
+export const check = (name: string, expression: Expr<"boolean"> | Expr<"unknown">): CheckDeclaration => ({
 	declarationKind: "check",
 	checkName: assertSqlName(name, "check", null),
 	expression: expression.exprNode,
@@ -861,7 +861,7 @@ export type IndexDeclaration = {
 	readonly where: ExprNode | null;
 };
 export type IndexBuilder = { unique(): IndexBuilder; on(...columns: ReadonlyArray<IndexColumnInput>): IndexDeclarationBuilder };
-export type IndexDeclarationBuilder = IndexDeclaration & { where(predicate: Expr<"boolean">): IndexDeclaration };
+export type IndexDeclarationBuilder = IndexDeclaration & { where(predicate: Expr<"boolean"> | Expr<"unknown">): IndexDeclaration };  // same union as check()
 ```
 - Error codes: `index-predicate-subquery`, `index-predicate-foreign-column-ref`, `index-name-required-with-where` is **not** introduced (D51 keeps naming optional; Task 8's duplicate error is the safety net).
 
