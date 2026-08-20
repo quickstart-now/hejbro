@@ -149,7 +149,7 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 - Already committed: `docs/specs/2026-08-19-hejbro-design.md` (D46–D56), `docs/plans/2026-08-19-roadmap.md` (Phase 7/8) — commit `d705a7f`
 - Create: `docs/plans/2026-08-20-phase7-implementation.md` (this file)
 
-- [ ] **Step 1: Commit the plan**
+- [x] **Step 1: Commit the plan**
 
 ```bash
 git add docs/plans/2026-08-20-phase7-implementation.md
@@ -207,7 +207,7 @@ git commit -m "docs(plans): record v1 probe outcome for phase 7"
 **Interfaces:**
 - Produces: `ForeignKeyInput.onUpdate?: ForeignKeyAction`; `ForeignKeyDeclaration.onUpdate: ForeignKeyAction | null`; `ForeignKeySnapshot.onUpdate?: ForeignKeyAction`; `foreignKeyOnUpdate(fk): ForeignKeyAction | null`; `foreignKeyActions` now includes `"set default"`.
 
-- [ ] **Step 1: Write the failing emit test** (append to `table-kind-emit.test.ts`)
+- [x] **Step 1: Write the failing emit test** (append to `table-kind-emit.test.ts`)
 
 ```ts
 describe("tableKind.emit — foreign key actions", () => {
@@ -239,9 +239,9 @@ describe("tableKind.emit — foreign key actions", () => {
 });
 ```
 
-- [ ] **Step 2: Run it** — `pnpm --filter @hejbro/core test -- table-kind-emit` → FAIL (type error: `onUpdate` not in `ForeignKeyInput`).
+- [x] **Step 2: Run it** — `pnpm --filter @hejbro/core test -- table-kind-emit` → FAIL (type error: `onUpdate` not in `ForeignKeyInput`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `dsl/table.ts`:
 ```ts
@@ -305,11 +305,11 @@ const foreignKeyActionClause = (
 //   ...)${foreignKeyActionClause("delete", foreignKeyOnDelete(foreignKey))}${foreignKeyActionClause("update", foreignKeyOnUpdate(foreignKey))};
 ```
 
-- [ ] **Step 4: Add a diff test** in `table-kind-diff.test.ts`: same FK with `onUpdate: "cascade"` vs `onUpdate: "restrict"` → one `alter` change whose notes contain `foreign key "comments_post_id_fk" changed`; emitted SQL = `drop constraint` then `add constraint … on update restrict`. `table-kind-diff.test.ts` has no `expectSingleChange` helper today (it compares full arrays with `toEqual`) — copy the local helper from `table-kind-emit.test.ts:10-16` into this file here; Tasks 6 and 11 reuse it. Helpers are per-file in this test suite, never shared.
+- [x] **Step 4: Add a diff test** in `table-kind-diff.test.ts`: same FK with `onUpdate: "cascade"` vs `onUpdate: "restrict"` → one `alter` change whose notes contain `foreign key "comments_post_id_fk" changed`; emitted SQL = `drop constraint` then `add constraint … on update restrict`. `table-kind-diff.test.ts` has no `expectSingleChange` helper today (it compares full arrays with `toEqual`) — copy the local helper from `table-kind-emit.test.ts:10-16` into this file here; Tasks 6 and 11 reuse it. Helpers are per-file in this test suite, never shared.
 
-- [ ] **Step 5: Run** `pnpm --filter @hejbro/core test` → PASS. Confirm golden snapshots unchanged (`git status` shows no `expected/` diffs).
+- [x] **Step 5: Run** `pnpm --filter @hejbro/core test` → PASS. Confirm golden snapshots unchanged (`git status` shows no `expected/` diffs).
 
-- [ ] **Step 6: Commit** — `git commit -m "feat(core): foreign key on update action and set default"`
+- [x] **Step 6: Commit** — `git commit -m "feat(core): foreign key on update action and set default"`
 
 ## Task 4: Self-FK via the callback's own refs (D52, #22)
 
@@ -322,7 +322,7 @@ const foreignKeyActionClause = (
 - Produces: `ForeignKeyInput.references: { table?: Table; columns: ReadonlyArray<ColumnRef> }`; `ForeignKeyDeclaration.references: { schemaName: string; tableName: string; columns: ReadonlyArray<string> }` (the `TableDeclaration` reference is replaced by the identity parts — `serializeForeignKeys` is the only consumer).
 - Error codes: `foreign-key-mixed-reference-tables`, `foreign-key-table-mismatch`, `foreign-key-empty-references`.
 
-- [ ] **Step 1: Failing tests** (`table-surface.test.ts`)
+- [x] **Step 1: Failing tests** (`table-surface.test.ts`)
 
 ```ts
 describe("table() — self-referencing foreign keys (D52)", () => {
@@ -363,9 +363,9 @@ describe("table() — self-referencing foreign keys (D52)", () => {
 });
 ```
 
-- [ ] **Step 2: Run** → FAIL (type errors / thrown messages missing).
+- [x] **Step 2: Run** → FAIL (type errors / thrown messages missing).
 
-- [ ] **Step 3: Implement** in `dsl/table.ts`
+- [x] **Step 3: Implement** in `dsl/table.ts`
 
 ```ts
 export type ForeignKeyReferenceTarget = {
@@ -436,12 +436,12 @@ referencesTable: tableIdentity(
 ),
 ```
 
-- [ ] **Step 4: Emit test** — the self-FK from Step 1 emits
+- [x] **Step 4: Emit test** — the self-FK from Step 1 emits
   `alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;` as a **deferred** statement.
 
-- [ ] **Step 5: Run all core tests** → PASS; `pnpm check-types` across the repo (the `examples/dd-land` and `packages/supabase` callers still pass `table:` — non-breaking).
+- [x] **Step 5: Run all core tests** → PASS; `pnpm check-types` across the repo (the `examples/dd-land` and `packages/supabase` callers still pass `table:` — non-breaking).
 
-- [ ] **Step 6: Commit** — `git commit -m "feat(core): self-referencing foreign keys via the table's own refs"`
+- [x] **Step 6: Commit** — `git commit -m "feat(core): self-referencing foreign keys via the table's own refs"`
 
 ## Task 5: `check(name, expr)` DSL + declaration-time validation (D50, #104)
 
@@ -456,7 +456,7 @@ referencesTable: tableIdentity(
 - Produces: `check(name: string, expression: Expr<"boolean"> | Expr<"unknown">): CheckDeclaration` — the union follows `operators.ts`'s `Operand<TFamily>` pattern: the `sql` template always yields `Expr<"unknown">`, so a `"boolean"`-only parameter would reject the template form D50 explicitly allows (implementation finding, Task 5); `CheckDeclaration = { readonly checkName: string; readonly expression: ExprNode }`; `TableExtras.checks?: ReadonlyArray<CheckDeclaration>`; `TableDeclaration.checks: ReadonlyArray<CheckDeclaration>`; `someExprNode(node, predicate): boolean` in `expr/walk.ts`.
 - Error codes: `check-foreign-column-ref`, `check-subquery`, `duplicate-check-name` (name validation itself reuses `invalid-sql-name` via `assertSqlName(name, "check", null)`).
 
-- [ ] **Step 1: Failing tests** (`test/dsl/check.test.ts`)
+- [x] **Step 1: Failing tests** (`test/dsl/check.test.ts`)
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -514,9 +514,9 @@ describe("check()", () => {
 });
 ```
 
-- [ ] **Step 2: Run** → FAIL (module not found).
+- [x] **Step 2: Run** → FAIL (module not found).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `expr/walk.ts`:
 ```ts
@@ -622,9 +622,9 @@ const validateChecks = (
 
 - [ ] **Step 3b (only if V1 = rejected): bare-column render mode.** Add to `expr/render-sql.ts`: `export type RenderColumnStyle = "qualified" | "bare";` and an optional third parameter `style: RenderColumnStyle = "qualified"` to `renderExpr`, threaded through every recursive call; the `columnRef` case returns `quoteIdentifier(node.columnName)` when `style === "bare"`. Tasks 6 and 10 then pass `"bare"` for check expressions and index predicates. Add one test in `test/expr/render-sql.test.ts` asserting both styles.
 
-- [ ] **Step 4: Export** `check` and `CheckDeclaration` from `src/index.ts`; run tests → PASS.
+- [x] **Step 4: Export** `check` and `CheckDeclaration` from `src/index.ts`; run tests → PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(core): check(name, expr) table declaration with validation"`
+- [x] **Step 5: Commit** — `git commit -m "feat(core): check(name, expr) table declaration with validation"`
 
 ## Task 6: CHECK snapshot + diff (D50)
 
@@ -636,7 +636,7 @@ const validateChecks = (
 **Interfaces:**
 - Produces: `CheckSnapshot = { readonly name: string; readonly expression: string }`; `TableSnapshot.checks?: ReadonlyArray<CheckSnapshot>`; `tableChecks(snapshot): ReadonlyArray<CheckSnapshot>` (absent ⇒ `[]`).
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 describe("tableKind.diff — checks", () => {
@@ -664,9 +664,9 @@ describe("tableKind.diff — checks", () => {
 ```
 (If V1 = rejected, the expected expression string is `"status" in ('draft', 'published')`.)
 
-- [ ] **Step 2: Run** → FAIL.
+- [x] **Step 2: Run** → FAIL.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `table-snapshot.ts`:
 ```ts
@@ -695,9 +695,9 @@ const checksField = (checks: ReadonlyArray<CheckSnapshot>): Pick<TableSnapshot, 
 ```
 where `keyed = (checks) => checks.map((c) => ({ key: c.name, value: c }))`.
 
-- [ ] **Step 4: Run** → PASS; confirm `UPDATE_GOLDEN` not needed (no golden declares checks yet; existing snapshots byte-identical).
+- [x] **Step 4: Run** → PASS; confirm `UPDATE_GOLDEN` not needed (no golden declares checks yet; existing snapshots byte-identical).
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(core): serialize and diff check constraints"`
+- [x] **Step 5: Commit** — `git commit -m "feat(core): serialize and diff check constraints"`
 
 ## Task 7: CHECK emit — inline on create, ordered drop/add on alter (D50)
 
@@ -706,7 +706,7 @@ where `keyed = (checks) => checks.map((c) => ({ key: c.name, value: c }))`.
 - Modify: `packages/core/src/kinds/table-kind-emit.ts:165-226` (`emitAlter` order)
 - Test: `packages/core/test/table-kind-emit.test.ts`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 describe("tableKind.emit — checks", () => {
@@ -740,9 +740,9 @@ describe("tableKind.emit — checks", () => {
 });
 ```
 
-- [ ] **Step 2: Run** → FAIL.
+- [x] **Step 2: Run** → FAIL.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `table-kind-emit-sql.ts`:
 ```ts
@@ -775,7 +775,7 @@ return [
 ];
 ```
 
-- [ ] **Step 4: Run** → PASS. **Step 5: Commit** — `git commit -m "feat(core): emit check constraints on create and alter"`
+- [x] **Step 4: Run** → PASS. **Step 5: Commit** — `git commit -m "feat(core): emit check constraints on create and alter"`
 
 ## Task 8: Duplicate index / foreign-key name hard errors (D51)
 
@@ -783,7 +783,7 @@ return [
 - Modify: `packages/core/src/dsl/table.ts` (`validateColumnRefs` neighborhood)
 - Test: `packages/core/test/table-surface.test.ts`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 it("rejects two indexes resolving to the same name", () => {
@@ -807,7 +807,7 @@ it("rejects two foreign keys on the same local columns", () => {
 });
 ```
 
-- [ ] **Step 2: Implement** in `table()` after extras are resolved (names resolved with `deriveIndexName`/`deriveForeignKeyName` imported from `../kinds/table-kind` — if that import creates a cycle, move both `derive*Name` functions into a new `packages/core/src/sql/derived-names.ts` and re-export them from `table-kind.ts`):
+- [x] **Step 2: Implement** in `table()` after extras are resolved (names resolved with `deriveIndexName`/`deriveForeignKeyName` imported from `../kinds/table-kind` — if that import creates a cycle, move both `derive*Name` functions into a new `packages/core/src/sql/derived-names.ts` and re-export them from `table-kind.ts`):
 
 ```ts
 const firstDuplicate = (names: ReadonlyArray<string>): string | undefined =>
@@ -831,18 +831,18 @@ if (duplicateFk !== undefined) {
 ```
 (Task 10 changes `IndexDeclaration.columns` to objects; the name derivation then maps `ix.columns.map((c) => c.name)` — keep that in mind, it is adjusted in Task 10.)
 
-- [ ] **Step 3: Run** → PASS. **Step 4: Commit** — `git commit -m "feat(core): duplicate index and foreign key name errors"`
+- [x] **Step 3: Run** → PASS. **Step 4: Commit** — `git commit -m "feat(core): duplicate index and foreign key name errors"`
 
 ## Task 9: Golden case `table-constraints` + exports + PR A1
 
 **Files:**
 - Create: `packages/core/test/golden/cases/table-constraints/{declarations.ts,steps.ts}` + `expected/` via `UPDATE_GOLDEN=1`
-- Modify: `packages/core/src/index.ts` (ensure `check`, `CheckDeclaration`, `ForeignKeyReferenceTarget`, `foreignKeyOnUpdate`, `tableChecks`, `CheckSnapshot` exported)
+- Modify: `packages/core/src/index.ts` — `check`, `CheckDeclaration`, `ForeignKeyReferenceTarget` exported; snapshot helpers (`CheckSnapshot`, `foreignKeyOnUpdate`, `tableChecks`) stay internal — decided at PR A1 review
 
-- [ ] **Step 1: Write the case** — `declarations.ts` declares `app.posts` (status CHECK, slug regex CHECK via `sql`), `app.comments` (self-FK `parentId → id` cascade, FK to posts `on update cascade on delete set null`, body-length CHECK). `steps.ts` exports three steps: `[from-empty]`, `step-1` changes the status CHECK list and the FK actions, `step-2` drops the comments body CHECK.
-- [ ] **Step 2:** `UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- golden` then **read every generated `expected/*.sql` line by line** and confirm the D50 ordering; commit the goldens only after review.
-- [ ] **Step 3:** Clean-state gates: `rm -rf packages/*/dist && pnpm check && pnpm check-types && pnpm test`.
-- [ ] **Step 4: Commit** — `git commit -m "test(core): table-constraints golden case"`; open PR A1 from `phase7-plan` → `dev` with body: `Closes #106, #22, #104. Part of #8.` + commit list + gate output.
+- [x] **Step 1: Write the case** — `declarations.ts` declares `app.posts` (status CHECK, slug regex CHECK via `sql`), `app.comments` (self-FK `parentId → id` cascade, FK to posts `on update cascade on delete set null`, body-length CHECK). `steps.ts` exports three steps: `[from-empty]`, `step-1` changes the status CHECK list and the FK actions, `step-2` drops the comments body CHECK.
+- [x] **Step 2:** `UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- golden` then **read every generated `expected/*.sql` line by line** and confirm the D50 ordering; commit the goldens only after review.
+- [x] **Step 3:** Clean-state gates: `rm -rf packages/*/dist && pnpm check && pnpm check-types && pnpm test`.
+- [x] **Step 4: Commit** — `git commit -m "test(core): table-constraints golden case"`; open PR A1 from `phase7-plan` → `dev` with body: `Closes #106, #22, #104. Part of #8.` + commit list + gate output.
 
 ## Task 10: `asc`/`desc` wrappers, `.on(...).where(expr)`, builder changes (D51, #105)
 
