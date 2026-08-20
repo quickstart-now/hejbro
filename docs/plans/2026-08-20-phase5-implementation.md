@@ -807,13 +807,20 @@ hashed file.
 - Test: `packages/cli/test/verify.test.ts`
 
 The four checks (U6), dependency-aware batch reporting [amended
-2026-08-20 after PR-D review]: checks 1 (snapshot parses) and 3 (chain
-linearity) always run; check 2 (declarations ↔ snapshot) runs only when
-1 passed; check 4 (tip ↔ snapshot) runs only when 1 and 3 passed. All
-failures are collected and rendered as one multi-diagnostic batch
-(reusing the PR-B renderer); skipped checks are marked with a fixed
-`skipped:` line; loader errors (config/entry) remain a single-diagnostic
-early exit (pre-condition of all four checks). Exit 1 on any failure.
+2026-08-20 after PR-D review — supersedes the same day's earlier
+"sequential short-circuit, keep as-is" amendment: that call assumed
+batch reporting needed new renderer infrastructure plus a new
+owner-approved batch-summary text, which didn't hold up under
+reviewer's follow-up evaluation — multi-block rendering already
+existed from PR B, the actual diff was ~60–80 lines, and only two
+short lines of new text were needed, so the cost/benefit flipped]:
+checks 1 (snapshot parses) and 3 (chain linearity) always run; check 2
+(declarations ↔ snapshot) runs only when 1 passed; check 4 (tip ↔
+snapshot) runs only when 1 and 3 passed. All failures are collected and
+rendered as one multi-diagnostic batch (reusing the PR-B renderer);
+skipped checks are marked with a fixed `skipped:` line; loader errors
+(config/entry) remain a single-diagnostic early exit (pre-condition of
+all four checks). Exit 1 on any failure.
 1. **snapshot parses** — read + `parseSnapshot`; JSON parse failure (e.g.
    git conflict markers) surfaces the existing `invalid-snapshot` error in
    diagnostic dress.
