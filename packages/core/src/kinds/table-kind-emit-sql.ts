@@ -158,6 +158,3 @@ export const dropConstraintSql = (
 	constraintName: string,
 ): string =>
 	`alter table ${qualifyName(schema, tableName)} drop constraint ${quoteIdentifier(constraintName)};`;
-
-/** @deprecated alias of {@link dropConstraintSql} kept so existing foreign-key call sites don't need to change. */
-export const dropForeignKeyConstraintSql = dropConstraintSql;
