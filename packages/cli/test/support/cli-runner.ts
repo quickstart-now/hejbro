@@ -72,12 +72,13 @@ export const removeCliFixtureDir = (cwd: string): Promise<void> =>
 export const runCli = (
 	cwd: string,
 	args: ReadonlyArray<string>,
+	options?: { readonly env?: NodeJS.ProcessEnv },
 ): Promise<CliRun> =>
 	new Promise((resolve) => {
 		execFile(
 			process.execPath,
 			[CLI_PATH, ...args],
-			{ cwd },
+			{ cwd, env: options?.env ?? process.env },
 			(error, stdout, stderr) => {
 				if (error === null) {
 					resolve({ exitCode: 0, stdout, stderr });
