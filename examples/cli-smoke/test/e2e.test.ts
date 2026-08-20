@@ -55,6 +55,10 @@ const exitCodeFrom = (error: ExecException): number => {
 	return 1;
 };
 
+/** True when `stderr` is one of hejbro's own diagnostic blocks (`error[<code>]: ...`, §7 grammar) — an *expected* non-zero exit this test asserted on, not a spawn/crash symptom worth logging (#102, mirrors packages/cli/test/support/cli-runner.ts). */
+const isHejbroDiagnostic = (stderr: string): boolean =>
+	stderr.trimStart().startsWith("error[");
+
 const runCli = (cwd: string, args: ReadonlyArray<string>): Promise<CliRun> =>
 	new Promise((resolve) => {
 		execFile(
@@ -70,7 +74,11 @@ const runCli = (cwd: string, args: ReadonlyArray<string>): Promise<CliRun> =>
 				// Keep the full child stderr in the report even when the test's
 				// own assertions don't inspect it — a flaky failure otherwise
 				// leaves no trace of what the spawned CLI actually printed (#102).
-				console.error(`[cli-runner] exit ${exitCode}\n${stderr}`);
+				// Skip the log for hejbro's own diagnostics: those are expected
+				// non-zero exits this test asserted on.
+				if (!isHejbroDiagnostic(stderr)) {
+					console.error(`[cli-runner] exit ${exitCode}\n${stderr}`);
+				}
 				resolve({ exitCode, stdout, stderr });
 			},
 		);
