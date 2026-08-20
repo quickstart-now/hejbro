@@ -90,14 +90,21 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 
 ### Resolved at plan review
 
-- V1: _probe pending — the planner's and implementer's environments had no
-  running Docker daemon during Tasks 3–8._ **Interim ruling (main,
-  2026-08-20):** Tasks 6–7 proceed assuming V1 = accepted (3-part refs
-  rendered by the existing `renderExpr`). The probe (Task 2) is a **hard
-  gate before PR A1 is pushed**: its outcome is written here first; if it
-  is rejected, one commit adds the bare-column render mode (Task 5 step
-  3b) and corrects the Task 6/7 expectations before Task 9's goldens are
-  generated.
+- V1: **Accepted.** No Docker daemon was available in either the planner's
+  or the implementer's environment, so the probe ran via PGlite (PostgreSQL
+  18.3 WASM, `@electric-sql/pglite` 0.5.5 — see scratchpad
+  `v1-probe/probe.mjs`) instead of the Task 2 Docker script. 6/6 statements
+  succeeded: an `alter table … add constraint … check (…)` with a 3-part
+  ref, a mixed 3-part CHECK expression, a partial index `where` with a
+  3-part ref, a unique+ordered partial index (`desc nulls first` + `where`)
+  with 3-part refs, an inline `create table … constraint … check (…)`, and
+  a 2-part control — all accepted; `pg_get_constraintdef`/`pg_indexes`
+  deparse them with bare column names, so the two-path dump comparison
+  (D48) is unaffected. 3-part column-reference resolution is parser-level
+  behavior shared across Postgres versions, and the `postgres:17` Docker
+  round-trip in PR B re-confirms it on the target major. Tasks 5 and 10
+  render predicates with the existing `renderExpr` (3-part refs); **Step
+  3b (bare-column render mode) is not needed.**
 
 ## Global Constraints
 
@@ -161,7 +168,7 @@ git commit -m "docs(plans): phase 7 implementation plan"
 **Files:**
 - Modify: `docs/plans/2026-08-20-phase7-implementation.md` ("Resolved at plan review")
 
-- [ ] **Step 1: Run the probe** (Docker Desktop must be running; nothing is written to the repo)
+- [x] **Step 1: Run the probe** (Docker Desktop must be running; nothing is written to the repo) — run via PGlite instead, no Docker daemon was available — see `v1-probe/probe.mjs`
 
 ```bash
 C=hejbro-probe
@@ -179,7 +186,7 @@ docker exec $C pg_dump -U postgres --schema-only --no-owner --schema=app | grep 
 docker stop $C
 ```
 
-- [ ] **Step 2: Record the outcome** under "Resolved at plan review":
+- [x] **Step 2: Record the outcome** under "Resolved at plan review":
   - All four statements succeed → **V1 = accepted**; Tasks 5 and 10 render
     predicates with the existing `renderExpr` (3-part refs). Note the
     `pg_dump` deparse (bare column names) — irrelevant to the two-path
@@ -188,7 +195,7 @@ docker stop $C
     = rejected**; Task 5 step 3b adds the bare-column render mode and
     Task 10 uses it too.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/plans/2026-08-20-phase7-implementation.md
@@ -620,7 +627,7 @@ const validateChecks = (
 ```
 (`collectColumnRefs` is already exported from `expr/render-sql.ts`.)
 
-- [ ] **Step 3b (only if V1 = rejected): bare-column render mode.** Add to `expr/render-sql.ts`: `export type RenderColumnStyle = "qualified" | "bare";` and an optional third parameter `style: RenderColumnStyle = "qualified"` to `renderExpr`, threaded through every recursive call; the `columnRef` case returns `quoteIdentifier(node.columnName)` when `style === "bare"`. Tasks 6 and 10 then pass `"bare"` for check expressions and index predicates. Add one test in `test/expr/render-sql.test.ts` asserting both styles.
+- [x] **Step 3b (only if V1 = rejected): bare-column render mode. Not needed (V1 accepted).** Add to `expr/render-sql.ts`: `export type RenderColumnStyle = "qualified" | "bare";` and an optional third parameter `style: RenderColumnStyle = "qualified"` to `renderExpr`, threaded through every recursive call; the `columnRef` case returns `quoteIdentifier(node.columnName)` when `style === "bare"`. Tasks 6 and 10 then pass `"bare"` for check expressions and index predicates. Add one test in `test/expr/render-sql.test.ts` asserting both styles.
 
 - [x] **Step 4: Export** `check` and `CheckDeclaration` from `src/index.ts`; run tests → PASS.
 
