@@ -1,36 +1,36 @@
 -- hejbro migration
--- + schema ddland [new]
--- + table ddland.comments [new]
--- + table ddland.posts [new]
--- + rls ddland.comments [new]
--- + rls ddland.posts [new]
--- + policy ddland.comments.comments_read_visible [new]
--- + policy ddland.posts.posts_read_published [new]
+-- + schema app [new]
+-- + table app.comments [new]
+-- + table app.posts [new]
+-- + rls app.comments [new]
+-- + rls app.posts [new]
+-- + policy app.comments.comments_read_visible [new]
+-- + policy app.posts.posts_read_published [new]
 
-create schema "ddland";
+create schema "app";
 
-create table "ddland"."comments" (
+create table "app"."comments" (
 	"id" uuid not null default gen_random_uuid(),
 	"post_id" uuid not null,
 	"deleted_at" timestamp with time zone,
 	primary key ("id")
 );
 
-create table "ddland"."posts" (
+create table "app"."posts" (
 	"id" uuid not null default gen_random_uuid(),
 	"status" text not null,
 	"published_at" timestamp with time zone,
 	primary key ("id")
 );
 
-alter table "ddland"."comments" enable row level security;
+alter table "app"."comments" enable row level security;
 
-alter table "ddland"."posts" enable row level security;
+alter table "app"."posts" enable row level security;
 
-drop policy if exists "comments_read_visible" on "ddland"."comments";
+drop policy if exists "comments_read_visible" on "app"."comments";
 
-create policy "comments_read_visible" on "ddland"."comments" for select to "anon" using (("ddland"."comments"."deleted_at" is null) and exists (select 1 from "ddland"."posts" where ("ddland"."posts"."id" = "ddland"."comments"."post_id") and ("ddland"."posts"."status" = 'published')));
+create policy "comments_read_visible" on "app"."comments" for select to "anon" using (("app"."comments"."deleted_at" is null) and exists (select 1 from "app"."posts" where ("app"."posts"."id" = "app"."comments"."post_id") and ("app"."posts"."status" = 'published')));
 
-drop policy if exists "posts_read_published" on "ddland"."posts";
+drop policy if exists "posts_read_published" on "app"."posts";
 
-create policy "posts_read_published" on "ddland"."posts" for select to "anon" using (("ddland"."posts"."status" = 'published') and ("ddland"."posts"."published_at" is not null));
+create policy "posts_read_published" on "app"."posts" for select to "anon" using (("app"."posts"."status" = 'published') and ("app"."posts"."published_at" is not null));

@@ -2,20 +2,13 @@
 	"dialect": "postgres",
 	"hejbroSnapshot": 3,
 	"objects": {
-		"policy:app.posts.posts_read_published": {
-			"command": "select",
-			"name": "posts_read_published",
-			"roles": [
-				"anon"
-			],
+		"enum:app.post_status": {
+			"name": "post_status",
 			"schema": "app",
-			"table": "posts",
-			"using": "\"app\".\"posts\".\"published_at\" is not null"
-		},
-		"rls:app.posts": {
-			"force": true,
-			"schema": "app",
-			"table": "posts"
+			"values": [
+				"draft",
+				"published"
+			]
 		},
 		"schema:app": {
 			"schemaName": "app"
@@ -39,13 +32,26 @@
 					}
 				},
 				{
-					"name": "deleted_at",
+					"name": "body",
+					"notNull": true,
 					"typeNode": {
-						"typeName": "timestamptz"
+						"typeName": "text"
 					}
 				}
 			],
-			"foreignKeys": [],
+			"foreignKeys": [
+				{
+					"columns": [
+						"post_id"
+					],
+					"name": "comments_post_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.posts"
+				}
+			],
 			"indexes": [],
 			"name": "comments",
 			"schema": "app"
@@ -62,17 +68,27 @@
 					}
 				},
 				{
-					"name": "status",
-					"notNull": true,
-					"typeNode": {
-						"typeName": "text"
-					}
-				},
-				{
 					"name": "published_at",
 					"typeNode": {
 						"typeName": "timestamptz"
 					}
+				},
+				{
+					"name": "status",
+					"notNull": true,
+					"typeNode": {
+						"enumName": "post_status",
+						"enumSchema": "app",
+						"typeName": "enum"
+					}
+				},
+				{
+					"name": "slug",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					},
+					"unique": true
 				}
 			],
 			"foreignKeys": [],

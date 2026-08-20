@@ -1,19 +1,19 @@
 -- hejbro migration
--- + schema ddland [new]
--- + grant ddland.allTablesPrivileges.anon [new]
--- + grant ddland.allTablesPrivileges.service_role [new]
--- + grant ddland.defaultTablePrivileges.anon [new]
--- + grant ddland.schemaUsage.anon [new]
--- + grant ddland.schemaUsage.service_role [new]
+-- + schema app [new]
+-- + grant app.allTablesPrivileges.anon [new]
+-- + grant app.allTablesPrivileges.service_role [new]
+-- + grant app.defaultTablePrivileges.anon [new]
+-- + grant app.schemaUsage.anon [new]
+-- + grant app.schemaUsage.service_role [new]
 
-create schema "ddland";
+create schema "app";
 
-grant select on all tables in schema "ddland" to "anon";
+grant select on all tables in schema "app" to "anon";
 
-grant select, insert, update, delete on all tables in schema "ddland" to "service_role";
+grant select, insert, update, delete on all tables in schema "app" to "service_role";
 
-alter default privileges in schema "ddland" grant select on tables to "anon";
+alter default privileges in schema "app" grant select on tables to "anon";
 
-grant usage on schema "ddland" to "anon";
+grant usage on schema "app" to "anon";
 
-grant usage on schema "ddland" to "service_role";
+grant usage on schema "app" to "service_role";

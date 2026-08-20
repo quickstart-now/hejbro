@@ -16,19 +16,20 @@ import {
 } from "../../../../src/index";
 
 /**
- * The Phase 4 acceptance case (#65): the dd.land grants corpus plus a
- * representative slice of its legacy RLS policies, all in one migration.
+ * The Phase 4 acceptance case (#65): the original production schema's
+ * grants corpus plus a representative slice of its legacy RLS policies,
+ * all in one migration.
  *
- * **Grants — 1:1 port of `quickstart-labs/infra/dd-land-supabase/sql/grants.ts`**
+ * **Grants — 1:1 port of the original project's `grants.ts`**
  * (read directly for this port), which is `anon`/`service_role`'s entire
- * privilege surface for the `ddland` schema:
+ * privilege surface for the `app` schema:
  *
  * ```sql
- * grant usage on schema ddland to anon, service_role;
- * grant select on all tables in schema ddland to anon;
- * grant select, insert, update, delete on all tables in schema ddland to service_role;
- * alter default privileges in schema ddland grant select on tables to anon;
- * alter default privileges in schema ddland
+ * grant usage on schema app to anon, service_role;
+ * grant select on all tables in schema app to anon;
+ * grant select, insert, update, delete on all tables in schema app to service_role;
+ * alter default privileges in schema app grant select on tables to anon;
+ * alter default privileges in schema app
  *   grant select, insert, update, delete on tables to service_role;
  * ```
  *
@@ -38,9 +39,9 @@ import {
  * statements below instead of one grouped statement. Semantically
  * equivalent; Postgres doesn't distinguish the two forms.
  *
- * **RLS — ported from the legacy dd.land migrations** (A6: current
- * production dd.land is grants-only — see the Phase 4 brainstorm notes —
- * so this is the only real RLS source available for the port; both files
+ * **RLS — ported from the original project's legacy migrations** (A6: the
+ * original production schema was grants-only — see the Phase 4 brainstorm
+ * notes — so this is the only real RLS source available for the port; both files
  * read directly for this port):
  * - `posts_read_published` and `post_translations_read_published` —
  *   `legacy/migrations/20260812090000_create_reading_schema.sql:86-97`.
@@ -58,10 +59,10 @@ import {
  * core operators only — the original's `auth.jwt()->>'scope'` check is
  * Supabase-preset territory (Phase 6, #66), not available in core yet.
  */
-export const ddland = schema("ddland");
+export const app = schema("app");
 
 export const posts = table(
-	ddland,
+	app,
 	"posts",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -85,7 +86,7 @@ export const posts = table(
 );
 
 export const postTranslations = table(
-	ddland,
+	app,
 	"post_translations",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -114,7 +115,7 @@ export const postTranslations = table(
 );
 
 export const comments = table(
-	ddland,
+	app,
 	"comments",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -145,18 +146,18 @@ export const comments = table(
 	}),
 );
 
-export const usageGrants = grant(ddland).usage.to("anon", "service_role");
+export const usageGrants = grant(app).usage.to("anon", "service_role");
 
-export const anonSelectGrant = grant(ddland).tables("select").to("anon");
+export const anonSelectGrant = grant(app).tables("select").to("anon");
 
-export const serviceRoleFullGrant = grant(ddland)
+export const serviceRoleFullGrant = grant(app)
 	.tables("select", "insert", "update", "delete")
 	.to("service_role");
 
-export const anonDefaultSelectGrant = grant(ddland)
+export const anonDefaultSelectGrant = grant(app)
 	.defaultPrivileges.tables("select")
 	.to("anon");
 
-export const serviceRoleDefaultGrant = grant(ddland)
+export const serviceRoleDefaultGrant = grant(app)
 	.defaultPrivileges.tables("select", "insert", "update", "delete")
 	.to("service_role");

@@ -1,4 +1,4 @@
 -- hejbro migration
--- - view ddland.published_posts [dropped]
+-- - view app.published_posts [dropped]
 
-drop view if exists "ddland"."published_posts";
+drop view if exists "app"."published_posts";

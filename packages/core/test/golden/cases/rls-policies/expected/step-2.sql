@@ -1,7 +1,7 @@
 -- hejbro migration
--- - policy ddland.comments.comments_read_visible [dropped]
--- - rls ddland.comments [dropped]
+-- - policy app.comments.comments_read_visible [dropped]
+-- - rls app.comments [dropped]
 
-drop policy if exists "comments_read_visible" on "ddland"."comments";
+drop policy if exists "comments_read_visible" on "app"."comments";
 
-alter table "ddland"."comments" disable row level security;
+alter table "app"."comments" disable row level security;

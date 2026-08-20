@@ -1,0 +1,182 @@
+{
+	"dialect": "postgres",
+	"hejbroSnapshot": 3,
+	"objects": {
+		"grant:app.allTablesPrivileges.anon": {
+			"grantKind": "allTablesPrivileges",
+			"privileges": [
+				"select",
+				"insert"
+			],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.allTablesPrivileges.service_role": {
+			"grantKind": "allTablesPrivileges",
+			"privileges": [
+				"select",
+				"insert",
+				"update",
+				"delete"
+			],
+			"role": "service_role",
+			"schema": "app"
+		},
+		"grant:app.defaultTablePrivileges.anon": {
+			"grantKind": "defaultTablePrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.schemaUsage.anon": {
+			"grantKind": "schemaUsage",
+			"privileges": [],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.schemaUsage.service_role": {
+			"grantKind": "schemaUsage",
+			"privileges": [],
+			"role": "service_role",
+			"schema": "app"
+		},
+		"policy:app.comments.comments_read_visible": {
+			"command": "select",
+			"name": "comments_read_visible",
+			"roles": [
+				"anon"
+			],
+			"schema": "app",
+			"table": "comments",
+			"using": "(\"app\".\"comments\".\"deleted_at\" is null) and exists (select 1 from \"app\".\"posts\" where (\"app\".\"posts\".\"id\" = \"app\".\"comments\".\"post_id\") and (\"app\".\"posts\".\"status\" = 'published') and (\"app\".\"posts\".\"published_at\" <= now()))"
+		},
+		"policy:app.post_translations.post_translations_read_published": {
+			"command": "select",
+			"name": "post_translations_read_published",
+			"roles": [
+				"anon"
+			],
+			"schema": "app",
+			"table": "post_translations",
+			"using": "exists (select 1 from \"app\".\"posts\" where (\"app\".\"posts\".\"id\" = \"app\".\"post_translations\".\"post_id\") and (\"app\".\"posts\".\"status\" = 'published') and (\"app\".\"posts\".\"published_at\" <= now()))"
+		},
+		"policy:app.posts.posts_read_published": {
+			"command": "select",
+			"name": "posts_read_published",
+			"roles": [
+				"anon"
+			],
+			"schema": "app",
+			"table": "posts",
+			"using": "\"app\".\"posts\".\"status\" = 'published'"
+		},
+		"rls:app.comments": {
+			"schema": "app",
+			"table": "comments"
+		},
+		"rls:app.post_translations": {
+			"schema": "app",
+			"table": "post_translations"
+		},
+		"rls:app.posts": {
+			"schema": "app",
+			"table": "posts"
+		},
+		"schema:app": {
+			"schemaName": "app"
+		},
+		"table:app.comments": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "post_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "deleted_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "comments",
+			"schema": "app"
+		},
+		"table:app.post_translations": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "post_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "locale",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "post_translations",
+			"schema": "app"
+		},
+		"table:app.posts": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "status",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "published_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"schema": "app"
+		}
+	}
+}
