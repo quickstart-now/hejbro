@@ -43,6 +43,17 @@ export const posts = table(app, "posts", {
 });
 `;
 
+const SCHEMA_WITH_NOT_NULL_COLUMN_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	status: text().notNull(),
+});
+`;
+
 const CONFIG_WITH_WARNING_PRESET_SOURCE = `import { defineConfig } from "hejbro";
 
 export default defineConfig({
@@ -202,5 +213,20 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		);
 		expect(wroteLineIndex).toBeGreaterThanOrEqual(0);
 		expect(stdoutLines[wroteLineIndex + 1]).toBe("1 warning(s) — see below");
+	});
+
+	it("warns (not-null-without-default) when a migration adds a not-null column with no default, with no presets configured (#27)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+		await writeSchema(SCHEMA_WITH_NOT_NULL_COLUMN_SOURCE);
+
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(await sqlFileNames()).toHaveLength(2);
+		expect(result.stdout).toContain("1 warning(s) — see below");
+		expect(result.stderr).toBe(
+			'warning[not-null-without-default]: app.posts\n  column "app"."posts"."status" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.\n',
+		);
 	});
 });
