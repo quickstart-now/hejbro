@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { diagnostic } from "../src/engine/validate";
-import { emptySnapshot, generateMigration, schema } from "../src/index";
+import type { Diagnostic, DiagnosticSeverity, Validator } from "../src/index";
+import {
+	diagnostic,
+	emptySnapshot,
+	generateMigration,
+	runValidators,
+	schema,
+} from "../src/index";
 
 describe("generateMigration validators", () => {
 	const app = schema("app");
@@ -60,5 +66,14 @@ describe("generateMigration validators", () => {
 			previousSnapshot: emptySnapshot,
 		});
 		expect(result.warnings).toEqual([]);
+	});
+});
+
+describe("validation surface exports", () => {
+	it("exposes diagnostic, runValidators, and the Diagnostic/Validator types", () => {
+		const severity: DiagnosticSeverity = "warning";
+		const d: Diagnostic = diagnostic(severity, "code", "message");
+		const validator: Validator = () => [d];
+		expect(runValidators([validator], emptySnapshot, [])).toEqual([d]);
 	});
 });

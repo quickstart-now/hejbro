@@ -74,6 +74,12 @@ export type {
 	TableRenameSpec,
 } from "./engine/rename-plan";
 export { planRenames } from "./engine/rename-plan";
+export type {
+	Diagnostic,
+	DiagnosticSeverity,
+	Validator,
+} from "./engine/validate";
+export { diagnostic, runValidators } from "./engine/validate";
 export type { HejbroError } from "./error";
 export { assertNever, hejbroError, throwHejbroError } from "./error";
 export type {
