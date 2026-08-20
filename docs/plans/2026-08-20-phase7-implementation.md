@@ -1306,9 +1306,9 @@ export const presetValidators = (presets: ReadonlyArray<Preset>): ReadonlyArray<
 ```
 (`ObjectKind<HejbroDeclaration>` is the erased form — presets cast their typed kind once when building the object; document that cast as sanctioned, like `roleName()`'s.)
 
-- [ ] **Step 1: Failing test** — a toy preset with one custom kind (reuse `examples/preset-smoke`'s `smoke-schema-note` shape inline) and one validator; `registerPresets` makes `registry.get("smoke-schema-note")` succeed; `presetValidators` returns the validator; registering the same preset twice throws `duplicate-kind`.
-- [ ] **Step 2: Implement** (pure, ~20 lines). Export `Preset`, `registerPresets`, `presetValidators`.
-- [ ] **Step 3:** PASS; commit `feat(core): preset data object and registerPresets`.
+- [x] **Step 1: Failing test** — a toy preset with one custom kind (reuse `examples/preset-smoke`'s `smoke-schema-note` shape inline) and one validator; `registerPresets` makes `registry.get("smoke-schema-note")` succeed; `presetValidators` returns the validator; registering the same preset twice throws `duplicate-kind`.
+- [x] **Step 2: Implement** (pure, ~20 lines). Export `Preset`, `registerPresets`, `presetValidators`.
+- [x] **Step 3:** PASS; commit `feat(core): preset data object and registerPresets`.
 
 ## Task 21: `supabasePreset`
 
@@ -1316,8 +1316,8 @@ export const presetValidators = (presets: ReadonlyArray<Preset>): ReadonlyArray<
 - Modify: `packages/supabase/src/index.ts`
 - Test: `packages/supabase/test/preset.test.ts`
 
-- [ ] **Step 1: Failing test** — `supabasePreset.name === "supabase"`, `kinds.map((k) => k.kind)` equals `["supabase-storage-bucket"]`, `validators` deep-equals `supabaseValidators`.
-- [ ] **Step 2: Implement**
+- [x] **Step 1: Failing test** — `supabasePreset.name === "supabase"`, `kinds.map((k) => k.kind)` equals `["supabase-storage-bucket"]`, `validators` deep-equals `supabaseValidators`.
+- [x] **Step 2: Implement**
 ```ts
 import type { Preset } from "@hejbro/core";
 /** The Supabase preset as a config-listable data object (D55): `presets: [supabasePreset]` in hejbro.config.ts. */
@@ -1327,7 +1327,7 @@ export const supabasePreset: Preset = {
 	validators: supabaseValidators,
 };
 ```
-- [ ] **Step 3:** PASS; commit `feat(supabase): supabasePreset`.
+- [x] **Step 3:** PASS; commit `feat(supabase): supabasePreset`.
 
 ## Task 22: CLI — config `presets`, registry from presets, warnings on stderr (D55, #96)
 

@@ -12,8 +12,9 @@ See `/docs/specs/2026-08-19-hejbro-design.md` and
 ## Using the preset (`hejbro.config.ts`, D55)
 
 List `supabasePreset` in `hejbro.config.ts`'s `presets` — `hejbro generate`
-and `hejbro verify` both register the storage bucket kind and run every
-Supabase validator automatically:
+and `hejbro verify` both register the storage bucket kind; `hejbro
+generate` additionally runs every Supabase validator and renders warnings
+to stderr:
 
 ```ts
 import { defineConfig } from "hejbro";
