@@ -20,6 +20,7 @@ export type {
 export { defineTrigger } from "./dsl/define-trigger";
 export type { ViewDeclaration } from "./dsl/define-view";
 export { defineView } from "./dsl/define-view";
+export { existingTable } from "./dsl/existing-table";
 export type {
 	GrantDeclaration,
 	GrantSetDeclaration,
@@ -38,6 +39,8 @@ export type {
 	RlsInput,
 } from "./dsl/rls";
 export { rls } from "./dsl/rls";
+export type { Role } from "./dsl/role";
+export { roleName } from "./dsl/role";
 export type { SchemaDeclaration } from "./dsl/schema";
 export { schema } from "./dsl/schema";
 export type {

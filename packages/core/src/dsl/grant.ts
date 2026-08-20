@@ -1,5 +1,6 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
+import type { Role } from "./role";
 import type { SchemaDeclaration } from "./schema";
 
 /** The table-level privileges hejbro can grant/revoke, in their canonical (deterministic) order. */
@@ -36,7 +37,7 @@ export type GrantSetDeclaration = {
 };
 
 type GrantRolesStage = {
-	to(...roles: ReadonlyArray<string>): GrantSetDeclaration;
+	to(...roles: ReadonlyArray<string | Role>): GrantSetDeclaration;
 };
 
 type SchemaGrantBuilder = {
