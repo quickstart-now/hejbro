@@ -2,6 +2,8 @@ import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { ColumnRef } from "../expr/ast";
 import { columnRef } from "../expr/ast";
+import { collectColumnRefs } from "../expr/render-sql";
+import { someExprNode } from "../expr/walk";
 import { deriveForeignKeyName, deriveIndexName } from "../kinds/table-kind";
 import { assertSqlName } from "../sql/identifier-rules";
 import type {
@@ -9,6 +11,7 @@ import type {
 	ColumnBuilder,
 	ColumnState,
 } from "../types/column-builder";
+import type { CheckDeclaration } from "./check";
 import type { RlsDeclaration, RlsInput } from "./rls";
 import { bindRls } from "./rls";
 import type { SchemaDeclaration } from "./schema";
@@ -58,6 +61,7 @@ export type TableDeclaration = {
 	}>;
 	readonly indexes: ReadonlyArray<IndexDeclaration>;
 	readonly foreignKeys: ReadonlyArray<ForeignKeyDeclaration>;
+	readonly checks: ReadonlyArray<CheckDeclaration>;
 	readonly rls: RlsDeclaration | null;
 	/** `true` for an {@link existingTable} reference (D41) — reference-only, never passed to `generateMigration`, never diffed, never emitted. `table()` always sets `false`. */
 	readonly existing: boolean;
@@ -100,10 +104,11 @@ export type ForeignKeyInput = {
 	readonly onUpdate?: ForeignKeyAction;
 };
 
-/** The optional indexes/foreign keys a table's `extras` callback may return. */
+/** The optional indexes/foreign keys/checks a table's `extras` callback may return. */
 export type TableExtras = {
 	readonly indexes?: ReadonlyArray<IndexDeclaration>;
 	readonly foreignKeys?: ReadonlyArray<ForeignKeyInput>;
+	readonly checks?: ReadonlyArray<CheckDeclaration>;
 	readonly rls?: RlsInput;
 };
 
@@ -231,6 +236,51 @@ const validateDuplicateNames = (
 	}
 };
 
+/** Rejects duplicate CHECK names, subqueries, and cross-table column refs, in that order (D50). */
+const validateChecks = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
+	const duplicate = checks
+		.map((entry) => entry.checkName)
+		.find((name, index, allNames) => allNames.indexOf(name) !== index);
+	if (duplicate !== undefined) {
+		throwHejbroError(
+			"duplicate-check-name",
+			`table "${tableName}" declares two check constraints named "${duplicate}" — Postgres requires unique constraint names per table. Next: rename one of them.`,
+		);
+	}
+
+	const subquery = checks.find((entry) =>
+		someExprNode(entry.expression, (node) => node.nodeKind === "exists"),
+	);
+	if (subquery !== undefined) {
+		throwHejbroError(
+			"check-subquery",
+			`check "${subquery.checkName}" on table "${tableName}" contains a subquery — Postgres forbids subqueries in CHECK constraints. Next: express the rule over this row's own columns, or enforce it with a trigger (defineTrigger).`,
+		);
+	}
+
+	const foreign = checks
+		.flatMap((entry) =>
+			collectColumnRefs(entry.expression).map((ref) => ({
+				check: entry,
+				ref,
+			})),
+		)
+		.find(
+			({ ref }) =>
+				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
+		);
+	if (foreign !== undefined) {
+		throwHejbroError(
+			"check-foreign-column-ref",
+			`check "${foreign.check.checkName}" on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a CHECK can only see the row being written. Next: use this table's own columns (the callback's \`t\`), or enforce cross-table rules with a trigger (defineTrigger).`,
+		);
+	}
+};
+
 const findForeignColumnRef = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -341,12 +391,14 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const foreignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
 		resolveForeignKey(owner, tableName, input),
 	);
+	const checks = resolvedExtras.checks ?? [];
 
 	const knownColumnNames = new Set(
 		columnEntries.map((entry) => entry.columnName),
 	);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 	validateDuplicateNames(tableName, indexes, foreignKeys);
+	validateChecks(owner, tableName, checks);
 
 	const rls = resolveRls(owner, tableName, resolvedExtras.rls);
 
@@ -360,6 +412,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		})),
 		indexes,
 		foreignKeys,
+		checks,
 		rls,
 		existing: false,
 		declaredAt,

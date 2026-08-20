@@ -36,6 +36,7 @@ export const existingTable = <TColumns extends Record<string, ColumnBuilder>>(
 		})),
 		indexes: [],
 		foreignKeys: [],
+		checks: [],
 		rls: null,
 		existing: true,
 		declaredAt,
