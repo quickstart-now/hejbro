@@ -2,6 +2,7 @@ import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { Expr, ExprNode } from "../expr/ast";
 import { collectColumnRefs } from "../expr/render-sql";
+import type { Role } from "./role";
 
 /** The Postgres commands a policy can be scoped to. */
 export const policyCommands = [
@@ -56,7 +57,7 @@ type PolicyBothStage = {
 };
 
 type PolicyRolesStage<TStage> = {
-	to(...roles: ReadonlyArray<string>): TStage;
+	to(...roles: ReadonlyArray<string | Role>): TStage;
 };
 
 type PolicyPending = {

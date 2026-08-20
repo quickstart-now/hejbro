@@ -38,6 +38,8 @@ export type {
 	RlsInput,
 } from "./dsl/rls";
 export { rls } from "./dsl/rls";
+export type { Role } from "./dsl/role";
+export { roleName } from "./dsl/role";
 export type { SchemaDeclaration } from "./dsl/schema";
 export { schema } from "./dsl/schema";
 export type {
