@@ -1,4 +1,4 @@
-import type { ForeignKeyAction } from "../dsl/table";
+import type { ForeignKeyAction, IndexNulls } from "../dsl/table";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { TypeNode } from "../types/type-node";
 
@@ -38,16 +38,37 @@ export const columnUnique = (column: ColumnSnapshot): boolean =>
 export const columnDefault = (column: ColumnSnapshot): string | null =>
 	column.default ?? null;
 
-/** A single index as materialized in a table snapshot, with its name resolved. **Compact**: `unique` is present only when `true` (default `false`) — read via {@link indexUnique}. */
+/** One column of an index as materialized in a table snapshot: its name, sort direction, and nulls placement (D51). **Compact**: `desc` is present only when `true` (default `false`), `nulls` only when set (default `null`) — read via {@link indexColumnDesc}/{@link indexColumnNulls}. */
+export type IndexColumnSnapshot = {
+	readonly name: string;
+	readonly desc?: true;
+	readonly nulls?: IndexNulls;
+};
+
+/** `column.desc`, defaulting to `false` when absent (compact snapshot). */
+export const indexColumnDesc = (column: IndexColumnSnapshot): boolean =>
+	column.desc === true;
+
+/** `column.nulls`, defaulting to `null` when absent (compact snapshot). */
+export const indexColumnNulls = (
+	column: IndexColumnSnapshot,
+): IndexNulls | null => column.nulls ?? null;
+
+/** A single index as materialized in a table snapshot, with its name resolved. **Compact**: `unique` is present only when `true` (default `false`) — read via {@link indexUnique}; `where` (the rendered SQL of a partial index's predicate) is present only when the index has one — read via {@link indexWhere}. */
 export type IndexSnapshot = {
 	readonly name: string;
-	readonly columns: ReadonlyArray<string>;
+	readonly columns: ReadonlyArray<IndexColumnSnapshot>;
 	readonly unique?: true;
+	readonly where?: string;
 };
 
 /** `index.unique`, defaulting to `false` when absent (compact snapshot). */
 export const indexUnique = (index: IndexSnapshot): boolean =>
 	index.unique === true;
+
+/** `index.where`, defaulting to `null` when absent (compact snapshot). */
+export const indexWhere = (index: IndexSnapshot): string | null =>
+	index.where ?? null;
 
 /** A single foreign key as materialized in a table snapshot, with its name derived and its target table resolved to an identity string. **Compact**: `onDelete`/`onUpdate` are present only when set (default `null`, meaning "unspecified") — read via {@link foreignKeyOnDelete}/{@link foreignKeyOnUpdate}. */
 export type ForeignKeySnapshot = {

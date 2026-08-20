@@ -743,17 +743,22 @@ const rewriteIndexesForRename = (
 } => {
 	const sorted = [...indexes].sort((a, b) => compareKeys(a.name, b.name));
 	const rewritten = sorted.map((entry) => {
-		const oldDerivedName = deriveIndexName(oldTableName, entry.columns);
-		const newColumns = resolveRenamedColumns(
-			entry.columns,
+		const columnNames = entry.columns.map((column) => column.name);
+		const oldDerivedName = deriveIndexName(oldTableName, columnNames);
+		const newColumnNames = resolveRenamedColumns(
+			columnNames,
 			oldColumnName,
 			newColumnName,
 		);
+		const newColumns = entry.columns.map((column, columnIndex) => ({
+			...column,
+			name: newColumnNames[columnIndex] ?? column.name,
+		}));
 		const wasDerived = entry.name === oldDerivedName;
 		if (!wasDerived) {
 			return { entry: { ...entry, columns: newColumns }, statement: null };
 		}
-		const newDerivedName = deriveIndexName(newTableName, newColumns);
+		const newDerivedName = deriveIndexName(newTableName, newColumnNames);
 		if (newDerivedName === entry.name) {
 			return { entry: { ...entry, columns: newColumns }, statement: null };
 		}

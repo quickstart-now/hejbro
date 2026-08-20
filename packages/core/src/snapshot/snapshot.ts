@@ -18,13 +18,16 @@ import { stableJson } from "./stable-json";
  * securityInvoker`) are now omitted rather than recorded at their default —
  * v1 hasn't shipped and there are zero real snapshot consumers yet, so this
  * is pre-publication cleanup, not a compatibility break. Once hejbro ships,
- * any further format change bumps the version.
+ * any further format change bumps the version. Bumped to `3` in Phase 7
+ * (D51): `IndexSnapshot.columns` entries became objects (`{ name, desc?,
+ * nulls? }`) and indexes gained `where`; tables gained the additive
+ * `checks` field at the same time. Pre-publication, no shim.
  */
-export const HEJBRO_SNAPSHOT_VERSION = 2;
+export const HEJBRO_SNAPSHOT_VERSION = 3;
 
 /** A deterministic, flat representation of every declared database object. */
 export type Snapshot = {
-	readonly hejbroSnapshot: 2;
+	readonly hejbroSnapshot: 3;
 	readonly dialect: "postgres";
 	/** keyed by `${kind}:${identity}` */
 	readonly objects: { readonly [kindAndIdentity: string]: JsonValue };

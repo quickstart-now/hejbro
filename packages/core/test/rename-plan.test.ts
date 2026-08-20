@@ -3,6 +3,7 @@ import type { HejbroDeclaration, HejbroInput } from "../src";
 import {
 	buildSnapshot,
 	createDefaultRegistry,
+	desc,
 	diffSnapshots,
 	getTableMeta,
 	index,
@@ -324,6 +325,55 @@ describe("planRenames", () => {
 		expect(plan.renameStatements).toEqual([
 			`alter table "app"."posts" rename column "slug" to "handle";`,
 			`alter index "app"."posts_slug_idx" rename to "posts_handle_idx";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("keeps desc/nulls on the renamed entry of an ordered index (D51)", () => {
+		const previous = snap(
+			app,
+			table(app, "posts", { slug: text(), publishedAt: text() }, (t) => ({
+				indexes: [index().on(t.slug, desc(t.publishedAt, { nulls: "first" }))],
+			})),
+		);
+		const next = snap(
+			app,
+			table(app, "posts", { handle: text(), publishedAt: text() }, (t) => ({
+				indexes: [
+					index().on(t.handle, desc(t.publishedAt, { nulls: "first" })),
+				],
+			})),
+		);
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "slug",
+					newName: "handle",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		const rewrittenTable = plan.rewrittenPrevious.objects[
+			"table:app.posts"
+		] as {
+			readonly indexes: ReadonlyArray<{
+				readonly columns: ReadonlyArray<{
+					readonly name: string;
+					readonly desc?: true;
+					readonly nulls?: string;
+				}>;
+			}>;
+		};
+		expect(rewrittenTable.indexes[0]?.columns).toEqual([
+			{ name: "handle" },
+			{ name: "published_at", desc: true, nulls: "first" },
 		]);
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});

@@ -104,14 +104,14 @@ const uniqueIndexKeyword = (index: IndexSnapshot): string => {
 	return "";
 };
 
-/** Renders `create [unique] index "name" on "schema"."table" (…);`. */
+/** Renders `create [unique] index "name" on "schema"."table" (…);`. Task 11 note: ordering (`desc`/`nulls`) and a partial index's `where` are not yet rendered here — that lands in Task 12; for now this only keeps the v3 snapshot shape compiling. */
 export const createIndexSql = (
 	schema: string,
 	tableName: string,
 	index: IndexSnapshot,
 ): string =>
 	`create ${uniqueIndexKeyword(index)}index ${quoteIdentifier(index.name)} on ${qualifyName(schema, tableName)} (${index.columns
-		.map((column) => quoteIdentifier(column))
+		.map((column) => quoteIdentifier(column.name))
 		.join(", ")});`;
 
 const foreignKeyActionClause = (
