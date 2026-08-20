@@ -69,14 +69,26 @@ export const foreignKeyOnUpdate = (
 	foreignKey: ForeignKeySnapshot,
 ): ForeignKeyAction | null => foreignKey.onUpdate ?? null;
 
-/** The full snapshot node `tableKind.serialize` produces for one table. */
+/** A single CHECK constraint as materialized in a table snapshot: its name and the rendered SQL of its expression (D50). */
+export type CheckSnapshot = {
+	readonly name: string;
+	readonly expression: string;
+};
+
+/** The full snapshot node `tableKind.serialize` produces for one table. **Compact**: `checks` is present only when the table declares at least one (default `[]`) — read via {@link tableChecks}. */
 export type TableSnapshot = {
 	readonly schema: string;
 	readonly name: string;
 	readonly columns: ReadonlyArray<ColumnSnapshot>;
 	readonly indexes: ReadonlyArray<IndexSnapshot>;
 	readonly foreignKeys: ReadonlyArray<ForeignKeySnapshot>;
+	readonly checks?: ReadonlyArray<CheckSnapshot>;
 };
+
+/** `snapshot.checks`, defaulting to `[]` when absent (compact snapshot, D33). */
+export const tableChecks = (
+	snapshot: TableSnapshot,
+): ReadonlyArray<CheckSnapshot> => snapshot.checks ?? [];
 
 // Internal invariant: this shape is exactly what tableKind.serialize (table-kind.ts) produces.
 /** Narrows a raw snapshot `JsonValue` to {@link TableSnapshot}. */

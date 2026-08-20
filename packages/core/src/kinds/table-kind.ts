@@ -10,11 +10,13 @@ import type { ObjectKind } from "../kind/object-kind";
 import type { ColumnState } from "../types/column-builder";
 import { emitTableSql } from "./table-kind-emit";
 import type {
+	CheckSnapshot,
 	ColumnSnapshot,
 	ForeignKeySnapshot,
 	IndexSnapshot,
+	TableSnapshot,
 } from "./table-snapshot";
-import { asTableSnapshot, tableIdentity } from "./table-snapshot";
+import { asTableSnapshot, tableChecks, tableIdentity } from "./table-snapshot";
 
 /** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
 export const deriveIndexName = (
@@ -154,6 +156,24 @@ const serializeForeignKeys = (
 		...onUpdateField(foreignKey.onUpdate),
 	}));
 
+const serializeChecks = (
+	declaration: TableDeclaration,
+): ReadonlyArray<CheckSnapshot> =>
+	declaration.checks.map((check) => ({
+		name: check.checkName,
+		expression: renderExpr(check.expression),
+	}));
+
+/** `{ checks }` when the table declares any, else `{}` — absent means "none" (compact snapshot). */
+const checksField = (
+	checks: ReadonlyArray<CheckSnapshot>,
+): Pick<TableSnapshot, "checks"> => {
+	if (checks.length === 0) {
+		return {};
+	}
+	return { checks };
+};
+
 const isEmptyKeyedDiff = <TValue>(diff: KeyedDiff<TValue>): boolean =>
 	diff.added.length === 0 &&
 	diff.removed.length === 0 &&
@@ -186,6 +206,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		columns: serializeColumns(declaration),
 		indexes: serializeIndexes(declaration),
 		foreignKeys: serializeForeignKeys(declaration),
+		...checksField(serializeChecks(declaration)),
 	}),
 	identify: (snapshot) => {
 		const tableSnapshot = asTableSnapshot(snapshot);
@@ -250,11 +271,22 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 				value: foreignKey,
 			})),
 		);
+		const checkDiff = diffByKey(
+			tableChecks(previousSnapshot).map((check) => ({
+				key: check.name,
+				value: check,
+			})),
+			tableChecks(nextSnapshot).map((check) => ({
+				key: check.name,
+				value: check,
+			})),
+		);
 
 		if (
 			isEmptyKeyedDiff(columnDiff) &&
 			isEmptyKeyedDiff(indexDiff) &&
-			isEmptyKeyedDiff(foreignKeyDiff)
+			isEmptyKeyedDiff(foreignKeyDiff) &&
+			isEmptyKeyedDiff(checkDiff)
 		) {
 			return [];
 		}
@@ -263,6 +295,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			...buildNotes("column", columnDiff),
 			...buildNotes("index", indexDiff),
 			...buildNotes("foreign key", foreignKeyDiff),
+			...buildNotes("check", checkDiff),
 		];
 
 		return [
