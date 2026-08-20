@@ -115,7 +115,7 @@ const foreignKeyActionClause = (
 	return ` on ${keyword} ${action}`;
 };
 
-/** Renders `alter table … add constraint … foreign key (…) references … (…) [on delete …];`. */
+/** Renders `alter table … add constraint … foreign key (…) references … (…) [on delete …] [on update …];`. */
 export const addForeignKeyConstraintSql = (
 	schema: string,
 	tableName: string,

@@ -5,6 +5,7 @@ import {
 	isTable,
 	schema,
 	table,
+	text,
 	timestamptz,
 	uuid,
 } from "../src/index";
@@ -123,5 +124,42 @@ describe("table() — self-referencing foreign keys (D52)", () => {
 				],
 			})),
 		).toThrow(/foreign-key-mixed-reference-tables|referencing columns of both/);
+	});
+
+	it("rejects a foreign key with no referenced columns", () => {
+		expect(() =>
+			table(app, "comments", { postId: uuid() }, (t) => ({
+				foreignKeys: [{ columns: [t.postId], references: { columns: [] } }],
+			})),
+		).toThrow(
+			/foreign-key-empty-references|no referenced columns \(references\.columns is empty\)/,
+		);
+	});
+});
+
+describe("table() — duplicate index and foreign key name errors (D51)", () => {
+	it("rejects two indexes resolving to the same name", () => {
+		expect(() =>
+			table(app, "posts", { a: text(), b: text() }, (t) => ({
+				indexes: [index("posts_a_idx").on(t.a), index().on(t.a)],
+			})),
+		).toThrow(
+			/duplicate-index-name|unnamed indexes default to "<table>_<columns>_idx"/,
+		);
+	});
+
+	it("rejects two foreign keys on the same local columns", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const users = table(app, "users", { id: uuid().primaryKey() });
+		expect(() =>
+			table(app, "comments", { ownerId: uuid() }, (t) => ({
+				foreignKeys: [
+					{ columns: [t.ownerId], references: { columns: [posts.id] } },
+					{ columns: [t.ownerId], references: { columns: [users.id] } },
+				],
+			})),
+		).toThrow(
+			/duplicate-foreign-key-name|a column set can only reference one table/,
+		);
 	});
 });

@@ -2,6 +2,7 @@ import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { ColumnRef } from "../expr/ast";
 import { columnRef } from "../expr/ast";
+import { deriveForeignKeyName, deriveIndexName } from "../kinds/table-kind";
 import { assertSqlName } from "../sql/identifier-rules";
 import type {
 	BuilderFamily,
@@ -198,6 +199,38 @@ const validateColumnRefs = (
 	}
 };
 
+const firstDuplicate = (names: ReadonlyArray<string>): string | undefined =>
+	names.find((name, index, allNames) => allNames.indexOf(name) !== index);
+
+/** Rejects two indexes or two foreign keys that would resolve to the same derived or explicit name (D51) — Postgres constraint/index names are unique per table. */
+const validateDuplicateNames = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+	foreignKeys: ReadonlyArray<ForeignKeyDeclaration>,
+): void => {
+	const indexNames = indexes.map(
+		(index) => index.indexName ?? deriveIndexName(tableName, index.columns),
+	);
+	const duplicateIndex = firstDuplicate(indexNames);
+	if (duplicateIndex !== undefined) {
+		throwHejbroError(
+			"duplicate-index-name",
+			`table "${tableName}" declares two indexes named "${duplicateIndex}" (unnamed indexes default to "<table>_<columns>_idx"). Next: give one of them an explicit name — index("...").`,
+		);
+	}
+
+	const foreignKeyNames = foreignKeys.map((foreignKey) =>
+		deriveForeignKeyName(tableName, foreignKey.columns),
+	);
+	const duplicateForeignKey = firstDuplicate(foreignKeyNames);
+	if (duplicateForeignKey !== undefined) {
+		throwHejbroError(
+			"duplicate-foreign-key-name",
+			`table "${tableName}" declares two foreign keys on the same local columns (both would be named "${duplicateForeignKey}") — a column set can only reference one table. Next: merge them into one foreign key, or remove one.`,
+		);
+	}
+};
+
 const findForeignColumnRef = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -313,6 +346,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		columnEntries.map((entry) => entry.columnName),
 	);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
+	validateDuplicateNames(tableName, indexes, foreignKeys);
 
 	const rls = resolveRls(owner, tableName, resolvedExtras.rls);
 
