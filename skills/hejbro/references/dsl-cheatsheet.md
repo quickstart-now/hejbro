@@ -36,7 +36,7 @@ status/slug CHECKs in `examples/postgres/src/app.schema.ts`.
 optionally partial via `.where(expr)`. An unnamed index derives its name
 from the table and columns. See `packages/core/src/dsl/index-builder.ts`
 and the partial ordered index in
-`examples/postgres/src/steps/step-4.schema.ts`.
+`examples/postgres/src/steps/step-3.schema.ts`.
 
 ## Foreign keys
 

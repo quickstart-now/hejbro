@@ -44,8 +44,8 @@ Two owner-approved warnings render on stderr the same way any other
   RLS-protected table without `{ securityInvoker: true }`, so it runs
   with its owner's rights and bypasses row-level security.
 
-Declaring a table/schema named `auth`, `storage`, or `realtime` is a hard
-error, not a warning — those schemas are Supabase-managed.
+`auth`, `storage`, and `realtime` are Supabase-managed — declaring one of
+those schemas, or any object inside one, is a hard error, not a warning.
 
 ## Local round-trip
 
