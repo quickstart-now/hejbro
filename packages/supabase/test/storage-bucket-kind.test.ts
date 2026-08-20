@@ -192,6 +192,23 @@ describe("storageBucketKind.emit", () => {
 		});
 		expect(statements).toEqual([]);
 	});
+
+	it("escapes embedded single quotes in allowedMimeTypes (quoteStringLiteral doubling)", () => {
+		const next = storageBucketKind.serialize(
+			storageBucket("avatars", { allowedMimeTypes: ["it's/bad", "image/png"] }),
+		);
+		const statements = storageBucketKind.emit({
+			kind: "supabase-storage-bucket",
+			operation: "create",
+			identity: "avatars",
+			previous: null,
+			next,
+			notes: [],
+		});
+		expect(statements[0]?.sql).toContain(
+			"array['it''s/bad', 'image/png']::text[]",
+		);
+	});
 });
 
 describe("storageBucketKind end-to-end via generateMigration", () => {

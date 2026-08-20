@@ -20,6 +20,33 @@ const assertValidBucketName = (
 	return name;
 };
 
+const fileSizeLimitRuleMessage = (value: number): string =>
+	`storage bucket fileSizeLimit ${value} is invalid — it must be a positive integer number of bytes. NaN and Infinity cannot be stored in the underlying SQL column, and a fractional value would fail at apply time (the column is a bigint). Pass a positive whole number of bytes, e.g. 5242880 for 5 MiB.`;
+
+const assertValidFileSizeLimit = (
+	value: number,
+	declaredAt: string | null,
+): number => {
+	if (!Number.isSafeInteger(value) || value <= 0) {
+		return throwHejbroError(
+			"invalid-bucket-file-size-limit",
+			fileSizeLimitRuleMessage(value),
+			declaredAt,
+		);
+	}
+	return value;
+};
+
+const resolveFileSizeLimit = (
+	value: number | undefined,
+	declaredAt: string | null,
+): number | null => {
+	if (value === undefined) {
+		return null;
+	}
+	return assertValidFileSizeLimit(value, declaredAt);
+};
+
 /** Options a storage bucket declaration may pass; all optional (D42 defaults: private, no size limit, no mime allowlist). */
 export type StorageBucketOptions = {
 	readonly public?: boolean;
@@ -58,7 +85,7 @@ export const storageBucket = (
 		declarationKind: "supabase-storage-bucket",
 		bucketName: assertValidBucketName(bucketName, declaredAt),
 		isPublic: options?.public ?? false,
-		fileSizeLimit: options?.fileSizeLimit ?? null,
+		fileSizeLimit: resolveFileSizeLimit(options?.fileSizeLimit, declaredAt),
 		allowedMimeTypes: options?.allowedMimeTypes ?? null,
 		declaredAt,
 	};

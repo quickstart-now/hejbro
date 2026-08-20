@@ -52,3 +52,49 @@ describe("storageBucket()", () => {
 		expect(() => storageBucket("a".repeat(100))).not.toThrow();
 	});
 });
+
+describe("storageBucket() fileSizeLimit guard", () => {
+	it("accepts a positive safe integer", () => {
+		expect(() =>
+			storageBucket("avatars", { fileSizeLimit: 5242880 }),
+		).not.toThrow();
+	});
+
+	it("accepts 1 (the smallest positive integer)", () => {
+		expect(() => storageBucket("avatars", { fileSizeLimit: 1 })).not.toThrow();
+	});
+
+	it("rejects NaN", () => {
+		expect(() =>
+			storageBucket("avatars", { fileSizeLimit: Number.NaN }),
+		).toThrowError(
+			expect.objectContaining({ code: "invalid-bucket-file-size-limit" }),
+		);
+	});
+
+	it("rejects Infinity", () => {
+		expect(() =>
+			storageBucket("avatars", { fileSizeLimit: Number.POSITIVE_INFINITY }),
+		).toThrowError(
+			expect.objectContaining({ code: "invalid-bucket-file-size-limit" }),
+		);
+	});
+
+	it("rejects a non-integer (fractional) value", () => {
+		expect(() => storageBucket("avatars", { fileSizeLimit: 1.5 })).toThrowError(
+			expect.objectContaining({ code: "invalid-bucket-file-size-limit" }),
+		);
+	});
+
+	it("rejects zero", () => {
+		expect(() => storageBucket("avatars", { fileSizeLimit: 0 })).toThrowError(
+			expect.objectContaining({ code: "invalid-bucket-file-size-limit" }),
+		);
+	});
+
+	it("rejects a negative value", () => {
+		expect(() => storageBucket("avatars", { fileSizeLimit: -1 })).toThrowError(
+			expect.objectContaining({ code: "invalid-bucket-file-size-limit" }),
+		);
+	});
+});
