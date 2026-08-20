@@ -1,11 +1,13 @@
 import type { HejbroInput } from "hejbro";
 import {
+	and,
 	between,
 	check,
 	defineTrigger,
 	defineView,
 	desc,
 	eq,
+	exists,
 	grant,
 	inArray,
 	index,
@@ -55,11 +57,13 @@ export const members = table(
 			),
 		],
 		rls: rls.enabled({
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
 			readAll: rls
 				.policy("members_read_all")
 				.for("select")
 				.to(appReaderRole)
 				.using(isNotNull(t.id)),
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
 			writeAll: rls
 				.policy("members_write_all")
 				.for("all")
@@ -96,11 +100,13 @@ export const projects = table(
 			),
 		],
 		rls: rls.enabled({
+			// Archived projects are hidden from readers — a real (not merely permissive) predicate.
 			readAll: rls
 				.policy("projects_read_all")
 				.for("select")
 				.to(appReaderRole)
-				.using(isNotNull(t.id)),
+				.using(isNull(t.archivedAt)),
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
 			writeAll: rls
 				.policy("projects_write_all")
 				.for("all")
@@ -148,11 +154,19 @@ export const tasks = table(
 			check("tasks_priority_range", between(t.priority, 1, 5)),
 		],
 		rls: rls.enabled({
+			// Tasks belonging to an archived project are hidden from readers — a real (not merely permissive) predicate, reached with exists() (D26).
 			readAll: rls
 				.policy("tasks_read_all")
 				.for("select")
 				.to(appReaderRole)
-				.using(isNotNull(t.id)),
+				.using(
+					exists(
+						select(projects).where(
+							and(eq(projects.id, t.projectId), isNull(projects.archivedAt)),
+						),
+					),
+				),
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
 			writeAll: rls
 				.policy("tasks_write_all")
 				.for("all")
@@ -191,11 +205,13 @@ export const comments = table(
 			check("comments_body_not_blank", sql`length(btrim(${t.body})) > 0`),
 		],
 		rls: rls.enabled({
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
 			readAll: rls
 				.policy("comments_read_all")
 				.for("select")
 				.to(appReaderRole)
 				.using(isNotNull(t.id)),
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
 			writeAll: rls
 				.policy("comments_write_all")
 				.for("all")
@@ -208,8 +224,9 @@ export const comments = table(
 
 /**
  * Enforces reply nesting stays one level deep: a comment whose parent
- * already has a parent is rejected. Mirrors the shape of the dd.land
- * `comments_single_depth` trigger (`ctx.rowOrNull` + `ctx.if` + `ctx.raise`).
+ * already has a parent is rejected. Mirrors the single-depth reply rule
+ * pinned by the golden case `comments-single-depth` (`ctx.rowOrNull` +
+ * `ctx.if` + `ctx.raise`).
  */
 export const commentsSingleDepth = defineTrigger(
 	comments,

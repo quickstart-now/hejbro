@@ -1109,7 +1109,7 @@ export const createIndexSql = (schema, tableName, index) =>
 	"devDependencies": { "typescript": "catalog:", "vitest": "catalog:" }
 }
 ```
-`turbo.json` = copy of `examples/cli-smoke/turbo.json` plus `check-types: { dependsOn: ["^build"] }`. `tsconfig.json` = copy of `examples/dd-land/tsconfig.json`. `hejbro.config.ts` = copy of `examples/cli-smoke/hejbro.config.ts` with `prefixStrategy: "index"` (stable file names `0001_…sql`).
+`turbo.json` = copy of `examples/cli-smoke/turbo.json` plus `check-types: { dependsOn: ["^build"] }`. `tsconfig.json` = copy of `examples/dd-land/tsconfig.json`. `hejbro.config.ts` = copy of `examples/cli-smoke/hejbro.config.ts` with `prefixStrategy: "index"` and `entry: ["src/app.schema.ts"]` — a single file, not `cli-smoke`'s recursive `src/**/*.schema.ts` (stable file names `0001_…sql`). The single-file form is load-bearing, not cosmetic: `src/steps/*.schema.ts` (Task 15) each declare their own `schema("app")`, so a recursive glob sweeps them all into one `generate` run and fails with `duplicate-identity: schema:app` (found during Task 16 — the step files are for `test/chain.test.ts` to import directly, never a declaration source for the CLI).
 - [ ] **Step 2:** Write `src/steps/step-1.schema.ts` with the domain above **minus** the three later changes (no `tasks.estimate_hours`, `projects.owner_id` FK with default actions only, `tasks.due_at` living on `tasks`), importing only from `"hejbro"`. Copy it to `src/app.schema.ts`.
 - [ ] **Step 3:** `pnpm install` (workspace link) → `pnpm --filter example-postgres check-types` passes. Commit: `git commit -m "feat(examples): postgres showcase scaffold and step 1 declarations"`.
 
@@ -1364,7 +1364,7 @@ export const supabasePreset: Preset = {
 **Files:**
 - Move: `examples/dd-land/` → `examples/supabase/` (`git mv`), package name `example-supabase`
 - Modify: `src/app.schema.ts` (renamed from the old schema file; schema `app`; entities: `profiles(id, user_id → authUsers, display_name)`, `attachments(id, profile_id → profiles, storage_path, size_bytes CHECK > 0)`, a deliberately RLS-less `drafts` table (keeps the D40 warning), bucket `attachments` (public false, size limit, mime list), grants to `anonRole`/`authenticatedRole`, view `profiles_public` without `securityInvoker` (keeps the #66 warning))
-- Create: `hejbro.config.ts` with `presets: [supabasePreset]`, `src/steps/step-1..4.schema.ts`, `migrations/0001..0004`, `hejbro.snapshot.json`, `roundtrip.rows.sql`
+- Create: `hejbro.config.ts` with `presets: [supabasePreset]` and `entry: ["src/app.schema.ts"]` (single file, not a recursive glob — see Task 14's note: `src/steps/*.schema.ts` each declare their own `schema("app")` and must never be swept into a `generate` run), `src/steps/step-1..4.schema.ts`, `migrations/0001..0004`, `hejbro.snapshot.json`, `roundtrip.rows.sql`
 - Modify: `test/` → `chain.test.ts` + `cli.test.ts` (same shape as Task 17; the CLI test additionally asserts the two warnings on stderr with exit 0), keep the two negative tests (reserved schema hard error, bucket-drop banner note) in `preset.test.ts`
 
 - [ ] **Step 1:** `git mv`, rename identifiers, rewrite the file header comment (no project name; "Showcase: the Supabase preset on a generic schema"). Design the four steps: 1 baseline; 2 add `attachments.content_type` + CHECK on allowed values; 3 `attachments.profile_id` FK → `on delete cascade on update cascade`; 4 move `storage_path` into a new `attachment_blobs(attachment_id pk → attachments, storage_path, checksum)` (`--confirm-drop app.attachments.storage_path`).
