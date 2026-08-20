@@ -36,6 +36,16 @@ export const posts = table(app, "posts", {
 });
 `;
 
+const CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+});
+`;
+
 const PARENT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
 
@@ -103,6 +113,42 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("error[entry-not-found]");
+	});
+
+	it("M1 regression: exits 1 with a proper config-not-found diagnostic (not a raw object dump) when there's no hejbro.config.ts at all", async () => {
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			"no hejbro.config.ts was found. Next: run `hejbro init` to scaffold hejbro.config.ts, a migrations directory, and an empty snapshot file, then add a declaration file and rerun `hejbro generate`.",
+		);
+		expect(result.stderr).not.toContain("[object Object]");
+	});
+
+	it("M2 regression: exits 1 with generate's own snapshot-not-found text when the snapshot file was never created", async () => {
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeSchema(BASE_SCHEMA);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'no snapshot file was found at "hejbro.snapshot.json", and the migrations directory has no prior migrations either — this looks like a project that hasn\'t been initialized yet. Next: run `hejbro init` to scaffold an empty snapshot (and the migrations directory, if missing), then rerun `hejbro generate`.',
+		);
+	});
+
+	it("M2 regression: exits 1 with generate's own snapshot-lost text when migrations exist but the snapshot file is missing", async () => {
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeSchema(BASE_SCHEMA);
+		await writeFixtureFile(
+			cwd,
+			"migrations/20260101000000_add_posts.sql",
+			"-- hejbro migration\n",
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'no snapshot file was found at "hejbro.snapshot.json", but 1 prior migration(s) already exist in "migrations" — the snapshot is a derived, checked-in file (declarations are the source of truth), so this looks lost rather than never created.',
+		);
 	});
 
 	it("check 1 (parses): exits 1 with invalid-snapshot on a corrupted snapshot file", async () => {

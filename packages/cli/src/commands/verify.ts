@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ChainEntry, ChainReport, HejbroError } from "@hejbro/core";
 import {
@@ -14,6 +14,7 @@ import { defineCommand } from "citty";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { sha256Hex } from "../hash";
 import { loadConfig, loadDeclarations } from "../loader";
+import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
 
 const VERIFY_DESCRIPTION =
 	"Check that the checked-in snapshot matches your declarations and that the migration history's hash chain is intact.";
@@ -57,10 +58,32 @@ export type VerifyResult = {
 	readonly stderr: string | null;
 };
 
-const errorResult = (error: HejbroError, identity: string): VerifyResult => ({
+const FIRST_QUOTED_SUBSTRING = /"([^"]+)"/;
+
+/** Same identity-extraction heuristic as generate.ts's toDiagnostic (see rename-diagnostics/generate.ts for the fuller rationale): every verify message leads with the path/filename it's about inside the first `"..."`. */
+const identityFromMessage = (message: string, fallback: string): string => {
+	const match = FIRST_QUOTED_SUBSTRING.exec(message);
+	if (match === null) {
+		return fallback;
+	}
+	return match[1] ?? fallback;
+};
+
+const errorResult = (
+	error: HejbroError,
+	fallbackIdentity: string,
+): VerifyResult => ({
 	exitCode: 1,
 	stdout: [],
-	stderr: renderDiagnostics([fromHejbroError(error, identity)], null),
+	stderr: renderDiagnostics(
+		[
+			fromHejbroError(
+				error,
+				identityFromMessage(error.message, fallbackIdentity),
+			),
+		],
+		null,
+	),
 });
 
 const asHejbroError = (error: unknown): HejbroError => {
@@ -73,15 +96,6 @@ const asHejbroError = (error: unknown): HejbroError => {
 		return error as HejbroError;
 	}
 	throw error;
-};
-
-const sqlFileNames = (migrationsDirPath: string): ReadonlyArray<string> => {
-	if (!existsSync(migrationsDirPath)) {
-		return [];
-	}
-	return readdirSync(migrationsDirPath)
-		.filter((name) => name.endsWith(".sql"))
-		.sort();
 };
 
 /** Every migration file's hash-chain lines, in directory-sorted order — files with no hash lines at all (pre-Phase-5 history) are silently skipped, matching checkChain's "caller filters the unhashed prefix" contract. */
@@ -104,10 +118,13 @@ const normalizedSnapshotHash = (diskText: string): string =>
 /**
  * `hejbro verify`'s four checks (U6), all against `cwd`, reported as soon
  * as the first one fails (they're sequentially dependent — a later check
- * only makes sense once the earlier ones hold):
- * 1. the snapshot file parses (`parseSnapshot` — JSON corruption, e.g.
- *    unresolved git conflict markers, surfaces core's own
- *    `invalid-snapshot`).
+ * only makes sense once the earlier ones hold, see the plan's amended
+ * Task 17 note):
+ * 1. the snapshot file exists and parses — a missing file reuses
+ *    `generate`'s own `snapshot-not-found`/`snapshot-lost` branch
+ *    (`readSnapshotFileText`, shared to avoid drift), a malformed one
+ *    surfaces core's `invalid-snapshot` (JSON corruption, e.g.
+ *    unresolved git conflict markers).
  * 2. rebuilt-from-declarations snapshot text equals the on-disk text,
  *    byte for byte (`snapshot-stale` otherwise).
  * 3. every migration's hash-chain lines form one linked list
@@ -118,16 +135,10 @@ const normalizedSnapshotHash = (diskText: string): string =>
  *    migrations yet (nothing to compare against).
  */
 export const runVerify = async (cwd: string): Promise<VerifyResult> => {
-	const { config, configPath } = await loadConfig(cwd, undefined);
-	const snapshotFsPath = join(cwd, config.snapshotPath);
+	const fallbackIdentity = "hejbro.config.ts";
 	try {
-		if (!existsSync(snapshotFsPath)) {
-			return throwHejbroError(
-				"invalid-snapshot",
-				`no snapshot file was found at "${config.snapshotPath}". Next: run \`hejbro init\` (or \`hejbro generate\`) first.`,
-			);
-		}
-		const diskText = readFileSync(snapshotFsPath, "utf8");
+		const { config, configPath } = await loadConfig(cwd, undefined);
+		const diskText = readSnapshotFileText(cwd, config);
 		parseSnapshot(diskText);
 
 		const declarations = await loadDeclarations(configPath, config);
@@ -143,7 +154,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 		}
 
 		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const fileNames = sqlFileNames(migrationsDirPath);
+		const fileNames = listMigrationFiles(migrationsDirPath);
 		const chainEntries = readChainEntries(migrationsDirPath, fileNames);
 		const chainReport = checkChain(chainEntries);
 		if (!chainReport.ok) {
@@ -169,7 +180,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 			stderr: null,
 		};
 	} catch (error) {
-		return errorResult(asHejbroError(error), config.snapshotPath);
+		return errorResult(asHejbroError(error), fallbackIdentity);
 	}
 };
 
