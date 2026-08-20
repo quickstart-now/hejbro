@@ -18,7 +18,9 @@ export type ViewDeclaration = {
  * stage (they all structurally satisfy `SelectLimited`) — its already-
  * validated query node is copied in as-is. `securityInvoker` defaults to
  * `false`; the "view over an RLS-enabled table without security_invoker"
- * warning is Supabase-preset territory (Phase 6, #66), not core's job.
+ * warning is Supabase-preset territory, not core's job — discharged by
+ * `@hejbro/supabase`'s `viewSecurityInvokerValidator` (Phase 6, #66, D39),
+ * run via `generateMigration({ validators: supabaseValidators })`.
  */
 export const defineView = (
 	owner: SchemaDeclaration,
