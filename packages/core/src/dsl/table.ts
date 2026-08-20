@@ -218,7 +218,7 @@ const resolveReferenceTarget = (
 	if (first === undefined) {
 		return throwHejbroError(
 			"foreign-key-empty-references",
-			`table "${tableName}" declares a foreign key whose references.columns is empty. Next: list at least one referenced column, e.g. references: { columns: [posts.id] }.`,
+			`table "${tableName}" declares a foreign key with no referenced columns (references.columns is empty). Next: list at least one referenced column, e.g. references: { columns: [posts.id] }.`,
 		);
 	}
 	const derived = {
@@ -233,7 +233,7 @@ const resolveReferenceTarget = (
 	if (stray !== undefined) {
 		return throwHejbroError(
 			"foreign-key-mixed-reference-tables",
-			`table "${tableName}" declares a foreign key referencing columns of both "${derived.schemaName}"."${derived.tableName}" and "${stray.exprNode.schemaName}"."${stray.exprNode.tableName}" — a foreign key targets exactly one table. Next: split it into one foreign key per referenced table.`,
+			`table "${tableName}" declares a foreign key referencing columns of both "${derived.schemaName}"."${derived.tableName}" and "${stray.exprNode.schemaName}"."${stray.exprNode.tableName}" — a foreign key can only target one table. Next: split it into one foreign key per referenced table.`,
 		);
 	}
 	if (references.table !== undefined) {
@@ -244,7 +244,7 @@ const resolveReferenceTarget = (
 		) {
 			return throwHejbroError(
 				"foreign-key-table-mismatch",
-				`table "${tableName}" declares a foreign key that references columns of "${derived.schemaName}"."${derived.tableName}" but names table "${meta.schema.schemaName}"."${meta.tableName}". Next: drop the table field (it is derived from the columns) or point both at the same table.`,
+				`table "${tableName}" declares a foreign key whose references.columns point at "${derived.schemaName}"."${derived.tableName}" but references.table names "${meta.schema.schemaName}"."${meta.tableName}". Next: drop references.table (it's inferred from the columns) or point both at the same table.`,
 			);
 		}
 	}

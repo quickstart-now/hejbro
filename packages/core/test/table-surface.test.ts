@@ -106,7 +106,7 @@ describe("table() — self-referencing foreign keys (D52)", () => {
 				],
 			})),
 		).toThrowError(
-			/foreign-key-table-mismatch|references columns of "app"."posts" but names table "app"."other"/,
+			/foreign-key-table-mismatch|references\.columns point at "app"."posts" but references\.table names "app"."other"/,
 		);
 	});
 
