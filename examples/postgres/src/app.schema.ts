@@ -35,7 +35,9 @@ import {
  * index, a partial unique index, a self-referencing FK, RLS with two
  * roles, a before-trigger, a view, and schema-level grants. Four steps
  * (`step-1` … `step-4`) evolve it; this is step 4 — moves `due_at` off
- * `tasks` and onto a new one-to-one `task_schedules` table.
+ * `tasks` and onto a new one-to-one `task_schedules` table, and adds
+ * `tasks.closed_at` in the same step so the migration also exercises the
+ * `--confirm-drop` path (D32 rule A needs a same-table drop + add pair).
  */
 export const app = schema("app");
 
@@ -60,13 +62,13 @@ export const members = table(
 			),
 		],
 		rls: rls.enabled({
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
 			readAll: rls
 				.policy("members_read_all")
 				.for("select")
 				.to(appReaderRole)
 				.using(isNotNull(t.id)),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
 			writeAll: rls
 				.policy("members_write_all")
 				.for("all")
@@ -109,7 +111,7 @@ export const projects = table(
 				.for("select")
 				.to(appReaderRole)
 				.using(isNull(t.archivedAt)),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
 			writeAll: rls
 				.policy("projects_write_all")
 				.for("all")
@@ -130,6 +132,8 @@ export const tasks = table(
 		status: text().notNull().default("todo"),
 		priority: smallint().notNull().default(3),
 		estimateHours: numeric(),
+		// unrelated to due_at's move — added in the same step so the chain exercises the --confirm-drop path (D32 rule A needs a same-table drop + add pair).
+		closedAt: timestamptz(),
 	},
 	(t) => ({
 		foreignKeys: [
@@ -169,7 +173,7 @@ export const tasks = table(
 						),
 					),
 				),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
 			writeAll: rls
 				.policy("tasks_write_all")
 				.for("all")
@@ -202,13 +206,13 @@ export const taskSchedules = table(
 			check("task_schedules_reminder_before_due", lt(t.reminderAt, t.dueAt)),
 		],
 		rls: rls.enabled({
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
 			readAll: rls
 				.policy("task_schedules_read_all")
 				.for("select")
 				.to(appReaderRole)
 				.using(isNotNull(t.taskId)),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
 			writeAll: rls
 				.policy("task_schedules_write_all")
 				.for("all")
@@ -247,13 +251,13 @@ export const comments = table(
 			check("comments_body_not_blank", sql`length(btrim(${t.body})) > 0`),
 		],
 		rls: rls.enabled({
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
 			readAll: rls
 				.policy("comments_read_all")
 				.for("select")
 				.to(appReaderRole)
 				.using(isNotNull(t.id)),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet).
+			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
 			writeAll: rls
 				.policy("comments_write_all")
 				.for("all")
