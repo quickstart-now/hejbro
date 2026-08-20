@@ -49,7 +49,7 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 | # | Decision |
 |---|----------|
 | D46 | Table-kind completeness (CHECK, partial indexes, index ordering, FK `on update`, self-FK #22) is Phase 7's leading work group; roadmap headline unchanged. |
-| D47 | Stays in #8: #104, #105, #106, #22, #102, #96, #27, #83, #84, #85. Moved to #9: #23, #24, #25, #26, #87, #88, #89, #97. Docs = markdown under `docs/`, no Pages site. #88 rides along only if free. |
+| D47 | Stays in #8: #104, #105, #106, #22, #102, #96, #27, #83, #84, #85 (+ #88, which rode along in PR A2). Moved to #9: #23, #24, #25, #26, #87, #89, #97. Docs = markdown under `docs/`, no Pages site. |
 | D48 | Round-trip = two-path dump comparison (chain-applied DB vs fresh single migration DB, container `pg_dump --schema-only --no-owner`, SET headers stripped, diff empty) + a row query for the storage bucket. Each example has a designed 4-step chain: baseline → add column + CHECK → change FK actions → move a column across tables (`--confirm-drop` path). |
 | D49 | The round-trip runs **locally via Docker** (`pnpm roundtrip`), not in CI. `postgres:17-alpine`; seed only for the supabase example; Docker CLI only (psql/pg_dump inside the container); `ci.yml` unchanged; `pnpm test` stays DB-free; script output attached to the PR. |
 | D50 | CHECK: `checks: [check(name, expr)]`; name required (`assertSqlName`); expression = any boolean `Expr` (helpers or `sql` template); snapshot `checks?: [{ name, expression }]` (rendered SQL, omitted when empty); change = drop + add; emit order FK drop → CHECK drop → index drop → column drop → column add/alter → index add → CHECK add → FK add (deferred); own-table refs only, no `exists`. |
