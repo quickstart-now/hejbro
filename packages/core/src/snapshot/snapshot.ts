@@ -26,13 +26,19 @@ import { stableJson } from "./stable-json";
  * (the D57 self/reference naming sweep reached the snapshot's own format
  * marker) — `parseSnapshot` still recognizes the old key so an old-format
  * file gets the normal "older" message instead of silently misparsing.
- * Pre-publication, no shim beyond that one detection branch.
+ * Bumped to `5` in Phase 8 (D68): opens the format for #110(b) (structured
+ * expression nodes) and #24(iii) (primary key/unique constraint names
+ * recorded in the snapshot), which land in this wave's later PRs
+ * (`phase8-expr-nodes`, `phase8-constraint-names`) — this PR only moves
+ * the version marker itself so those PRs' shape changes don't each need
+ * their own bump. Pre-publication, no shim beyond the one detection
+ * branch above.
  */
-export const HEJBRO_SNAPSHOT_VERSION = 4;
+export const HEJBRO_SNAPSHOT_VERSION = 5;
 
 /** A deterministic, flat representation of every declared database object. */
 export type Snapshot = {
-	readonly formatVersion: 4;
+	readonly formatVersion: 5;
 	readonly dialect: "postgres";
 	/** keyed by `${kind}:${identity}` */
 	readonly objects: { readonly [kindAndIdentity: string]: JsonValue };

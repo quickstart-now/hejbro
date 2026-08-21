@@ -15,16 +15,16 @@ const app = schema("app");
 const registry = createDefaultRegistry();
 
 describe("emptySnapshot", () => {
-	it("has version 4, postgres dialect, and no objects", () => {
+	it("has version 5, postgres dialect, and no objects", () => {
 		expect(emptySnapshot).toEqual({
-			formatVersion: 4,
+			formatVersion: 5,
 			dialect: "postgres",
 			objects: {},
 		});
 	});
 
-	it("renders with the v4 version marker (D57)", () => {
-		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 4`);
+	it("renders with the v5 version marker (D68)", () => {
+		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 5`);
 	});
 });
 
@@ -101,6 +101,22 @@ describe("renderSnapshot / parseSnapshot", () => {
 		);
 	});
 
+	it("rejects a v4 snapshot (the immediately prior format) as older, not misparsed as current (D68)", () => {
+		const raw = JSON.stringify({
+			formatVersion: 4,
+			dialect: "postgres",
+			objects: {},
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({
+				code: "unsupported-snapshot-version",
+				message: expect.stringContaining(
+					"snapshot version 4 is older than this build supports",
+				),
+			}),
+		);
+	});
+
 	it("rejects a snapshot from a newer build with the newer-version wording", () => {
 		const raw = JSON.stringify({
 			formatVersion: 99,
@@ -127,7 +143,7 @@ describe("renderSnapshot / parseSnapshot", () => {
 	});
 
 	it("rejects a snapshot with a missing objects map", () => {
-		const raw = JSON.stringify({ formatVersion: 4, dialect: "postgres" });
+		const raw = JSON.stringify({ formatVersion: 5, dialect: "postgres" });
 		expect(() => parseSnapshot(raw)).toThrowError(/objects/i);
 	});
 
