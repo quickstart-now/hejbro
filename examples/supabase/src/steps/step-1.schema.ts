@@ -1,7 +1,7 @@
 import {
 	anonRole,
 	authenticatedRole,
-	authUid,
+	authUidCached,
 	authUsers,
 	storageBucket,
 } from "@hejbro/supabase";
@@ -25,7 +25,7 @@ import {
 
 /**
  * Showcase: the Supabase preset (D55) on a generic schema — every preset
- * feature exercised once: an `authUsers` FK, an `authUid()` RLS policy, a
+ * feature exercised once: an `authUsers` FK, an `authUidCached()` RLS policy, a
  * storage bucket, role-preset grants, a deliberately RLS-less table (the
  * exposed-table-without-rls warning, D40), and a view without
  * `securityInvoker` over an RLS-protected table (#66, D39). Four steps
@@ -53,7 +53,7 @@ export const profiles = table(
 				.policy("profiles_read_own")
 				.for("select")
 				.to(authenticatedRole)
-				.using(eq(t.userId, authUid())),
+				.using(eq(t.userId, authUidCached())),
 		}),
 	}),
 );
@@ -83,7 +83,10 @@ export const attachments = table(
 				.using(
 					exists(
 						select(profiles).where(
-							and(eq(profiles.id, t.profileId), eq(profiles.userId, authUid())),
+							and(
+								eq(profiles.id, t.profileId),
+								eq(profiles.userId, authUidCached()),
+							),
 						),
 					),
 				),

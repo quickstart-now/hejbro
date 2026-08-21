@@ -14,7 +14,7 @@
 -- + grant app.default-table-privileges.authenticated [new]
 -- + supabase-storage-bucket attachments [new]
 -- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:3dabed158261d69efe5ab403674f11fbb74d52ae81ebb59c58fd85704d7d2eb9
+-- snapshot: sha256:9c07b8c8091ec5194389e2a3df11b3e96dc22382b1d4a01d4f661aa5d558daeb
 
 create schema "app";
 
@@ -46,11 +46,11 @@ alter table "app"."profiles" enable row level security;
 
 drop policy if exists "attachments_read_own" on "app"."attachments";
 
-create policy "attachments_read_own" on "app"."attachments" for select to "authenticated" using (exists (select 1 from "app"."profiles" where ("app"."profiles"."id" = "app"."attachments"."profile_id") and ("app"."profiles"."user_id" = auth.uid())));
+create policy "attachments_read_own" on "app"."attachments" for select to "authenticated" using (exists (select 1 from "app"."profiles" where ("app"."profiles"."id" = "app"."attachments"."profile_id") and ("app"."profiles"."user_id" = (select auth.uid()))));
 
 drop policy if exists "profiles_read_own" on "app"."profiles";
 
-create policy "profiles_read_own" on "app"."profiles" for select to "authenticated" using ("app"."profiles"."user_id" = auth.uid());
+create policy "profiles_read_own" on "app"."profiles" for select to "authenticated" using ("app"."profiles"."user_id" = (select auth.uid()));
 
 create or replace view "app"."profiles_public" as select "id", "user_id", "display_name" from "app"."profiles";
 
