@@ -3,9 +3,11 @@
 The Supabase provider preset for hejbro, built entirely on `@hejbro/core`'s
 public extension interface (spec §4.1): role constants (`anonRole`,
 `authenticatedRole`, `serviceRole`), the `authUid()`/`authJwt()` expression
-helpers, the prebuilt `authUsers` existing-table reference, the storage
-bucket object kind, and three validators (reserved-schema protection,
-exposed-table-without-RLS, and view-over-RLS-without-`security_invoker`).
+helpers and their initPlan-cached forms `authUidCached()`/`authJwtCached()`
+(#97), the prebuilt `authUsers` existing-table reference, the storage
+bucket object kind, and four validators (reserved-schema protection,
+exposed-table-without-RLS, view-over-RLS-without-`security_invoker`, and
+uncached-`auth.*()`-call-in-a-policy).
 See `/docs/specs/2026-08-19-hejbro-design.md` and
 `/docs/plans/2026-08-19-roadmap.md` (Phase 6/7) for the full design.
 
@@ -57,14 +59,20 @@ const result = generateMigration({
 });
 ```
 
-**RLS performance note (D45):** `authUid()` renders the plain
-`auth.uid()` call — safe everywhere, including column `default`/`check`
-expressions, where a wrapped subquery is illegal. In a `using`/`with check`
-clause evaluated per row, Postgres does **not** cache a bare
-`auth.uid()` call across rows; wrapping it as `(select auth.uid())`
-turns it into an initPlan Postgres evaluates once per statement instead —
-the standard Supabase RLS performance guidance. hejbro does not do this
-wrapping automatically (see the D45 rationale in the spec's decision log);
-a cached variant is tracked as a Phase 7 follow-up (issue #97). Until then,
-wrap the call yourself with `sql` where the performance matters:
-`` sql`(select auth.uid())` ``.
+**RLS performance note (D45/#97):** two forms, two places.
+
+- **In an RLS `using`/`with check` clause, use `authUidCached()`/
+  `authJwtCached()`.** Postgres does **not** cache a bare `auth.uid()`/
+  `auth.jwt()` call across rows there — it's re-evaluated once per row.
+  The cached forms render `(select auth.uid())`/`(select auth.jwt())`,
+  which Postgres caches as an initPlan evaluated once per statement
+  instead — the standard Supabase RLS performance guidance.
+- **In a column `default`/`check` expression, use the plain `authUid()`/
+  `authJwt()`.** A scalar subquery is illegal there (`check-subquery`
+  hard-errors on this for `.check(...)`), so the cached forms don't work
+  in this position — the plain call is the correct, idiomatic one.
+
+The `rls-uncached-auth-call` validator (part of `supabaseValidators`)
+warns if a policy calls the plain form where the cached one belongs; it
+does not look at column `default`/`check` expressions at all, since the
+plain form is correct there.

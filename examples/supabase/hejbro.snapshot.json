@@ -110,10 +110,8 @@
 								"nodeKind": "comparison",
 								"operator": "=",
 								"right": {
-									"args": [],
-									"function": "uid",
-									"nodeKind": "function-call",
-									"schema": "auth"
+									"nodeKind": "raw-sql",
+									"sql": "(select auth.uid())"
 								}
 							}
 						],
@@ -174,10 +172,8 @@
 								"nodeKind": "comparison",
 								"operator": "=",
 								"right": {
-									"args": [],
-									"function": "uid",
-									"nodeKind": "function-call",
-									"schema": "auth"
+									"nodeKind": "raw-sql",
+									"sql": "(select auth.uid())"
 								}
 							}
 						],
@@ -204,10 +200,8 @@
 				"nodeKind": "comparison",
 				"operator": "=",
 				"right": {
-					"args": [],
-					"function": "uid",
-					"nodeKind": "function-call",
-					"schema": "auth"
+					"nodeKind": "raw-sql",
+					"sql": "(select auth.uid())"
 				}
 			}
 		},
