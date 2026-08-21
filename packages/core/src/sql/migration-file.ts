@@ -78,10 +78,14 @@ const dropLabel = (notes: ReadonlyArray<string>): string => {
  * This isn't a hypothetical gap: the storage bucket kind did reach it —
  * see `examples/supabase`'s `migrations/0002_alter_attachments.sql`
  * before #116, which committed a `-- ~ supabase-storage-bucket
- * attachments []` banner line. #116 also fixed the storage bucket kind
- * itself to always populate notes, but nothing in the type system stops
- * a future kind from reaching this same empty case, so the banner now
- * guards it independently of any one kind's diligence.
+ * attachments []` banner line. #116 also fixed the storage bucket kind's
+ * own notes derivation to read from the snapshot's own changed keys
+ * instead of a per-field list, so it always populates notes for any
+ * field, current or future, without relying on that kind's author
+ * remembering to update a list. Nothing in the type system enforces that
+ * discipline for every kind, though (a differently-written kind could
+ * still hand-list its fields and miss one), so the banner guards the
+ * empty case independently of any one kind's implementation choice.
  */
 const alterLabel = (notes: ReadonlyArray<string>): string => {
 	if (notes.length === 0) {
