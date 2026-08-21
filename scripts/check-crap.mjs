@@ -65,12 +65,32 @@
 // different coverage definition (this script uses per-function statement
 // coverage; the original may have used branch coverage or a blend).
 // Total violation count measured here is 17, against the issue's stated
-// 19 raw (18 after its one documented group-B exclusion) -- group A's own
-// 9 are all accounted for above; the remaining 8 found here are
-// lower-complexity, coverage-driven entries the issue doesn't enumerate
-// by name (it only describes group B in aggregate), so they can't be
-// cross-checked the same way. This gap is reported rather than papered
-// over: see the PR description for the full list of what was found.
+// 19 raw. Reconciled, not left open: 2 of the original 19 were nested
+// closures v8's `fnMap` counts as separate functions (the exact pattern
+// `createRecordingContext` above is made of) -- this script's unit of
+// measurement merges a nested closure into its enclosing named function
+// (see "Nesting is what actually decides..." below), which is the
+// correct granularity for a CRAP score attached to a function someone
+// would actually refactor, so those 2 were never missing violations, just
+// counted at a different granularity by whatever produced the original
+// 19. Group A's own 9 are all accounted for above; the remaining 8 found
+// here are lower-complexity, coverage-driven entries the issue doesn't
+// enumerate by name, so they can't be cross-checked the same way -- see
+// the PR description for the full list.
+//
+// Two of those 8 sit closer to the threshold than this script's own
+// coverage-percentage uncertainty (the 0-3-point gap noted above):
+// `enum-kind.ts`'s `emit` (CRAP 10.27, 1.9 points of coverage away from
+// dropping under 10) and `table-kind-emit.ts`'s `emitTableSql` (CRAP
+// 10.37, 1.8 points away) -- both margins smaller than the unexplained
+// discrepancy. Group A is categorically immune to this, by arithmetic
+// rather than by re-checking each one: CRAP's minimum possible value (at
+// 100% coverage) equals complexity itself, and every group-A complexity
+// is >= 11, so no coverage measurement error of any size can put a
+// group-A entry under threshold 10. These two group-B entries have no
+// such floor -- treat their presence on the list as provisional until the
+// coverage-definition question above is settled, not as settled fact the
+// way group A is.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -294,11 +314,28 @@ const owningUnitByLine = (units, line) => {
 // (e.g. top-level imports) is not attributed to any function. Coverage %
 // is covered-statements / total-statements owned by that unit -- 100% for
 // a unit that owns zero statements (nothing to be uncovered).
+//
+// `fileCoverage` is REQUIRED here, not optional: a caller that can't find
+// a scanned file's entry in coverage-final.json must treat that as fatal
+// (see the missing-coverage check in the results loop below) rather than
+// calling this with `undefined`. The two situations that used to look
+// identical -- "this unit truly has zero statements" and "this file's
+// coverage entry is missing entirely, so every unit here has zero
+// observations" -- both produced `stats.total === 0`, and the fallback
+// below silently reads that as 100% coverage either way. Reproduced
+// without touching turbo's cache at all: rewriting coverage-final.json's
+// path keys to a different (but otherwise byte-identical) absolute path
+// made all of @hejbro/core report 100% coverage, 0 warnings, exit 0 --
+// 17 real violations silently became 10, with @hejbro/supabase (whose
+// keys weren't touched) as the giveaway control. `cache: false` on
+// test:coverage only closes the one path that produces a *stale*
+// coverage-final.json (a cross-worktree cache hit); it does nothing for
+// a *missing* one (a renamed/moved file, a narrowed `coverage.include`, a
+// different reporter, or any other reason a scanned file's key isn't in
+// the report). Requiring `fileCoverage` here pushes that distinction back
+// to where it can be caught loudly.
 const computeCoverageByUnit = (units, fileCoverage) => {
 	const byUnit = new Map(units.map((unit) => [unit, { covered: 0, total: 0 }]));
-	if (!fileCoverage) {
-		return byUnit;
-	}
 	for (const [id, loc] of Object.entries(fileCoverage.statementMap)) {
 		const unit = owningUnitByLine(units, loc.start.line);
 		if (!unit) {
@@ -324,7 +361,7 @@ const toLineSpan = (sourceFile, unit) => {
 	return { startLine: start, endLine: end };
 };
 
-const analyzeFile = (filePath, coverage) => {
+const analyzeFile = (filePath, fileCoverage) => {
 	const text = readFileSync(filePath, "utf8");
 	const sourceFile = ts.createSourceFile(
 		filePath,
@@ -336,7 +373,6 @@ const analyzeFile = (filePath, coverage) => {
 		...unit,
 		span: toLineSpan(sourceFile, unit),
 	}));
-	const fileCoverage = coverage?.[filePath];
 	const coverageByUnit = computeCoverageByUnit(units, fileCoverage);
 	return units.map((unit) => {
 		const complexity = computeComplexity(unit);
@@ -362,6 +398,17 @@ const walkTsFiles = (dir) => {
 	return entries.filter((f) => !f.endsWith(".d.ts") && !f.endsWith(".test.ts"));
 };
 
+// Every scanned file MUST have its own entry in coverage-final.json.
+// `loadCoverage` above already fails loudly (exit 2) when the coverage
+// report is missing entirely; this is the same treatment for the
+// narrower case of one scanned file's key being missing from an
+// otherwise-present report -- a renamed/moved file, a narrowed
+// `coverage.include`, a cross-worktree cache hit predating `cache:
+// false`, or any other path mismatch. Collected across every package
+// before failing (rather than exiting on the first miss) so one run
+// reports the complete list, not just the first offender.
+const missingCoverage = [];
+
 const results = TARGET_PACKAGES.flatMap(({ name, srcDir, coverageJson }) => {
 	const coverage = loadCoverage(coverageJson);
 	if (!coverage) {
@@ -370,13 +417,31 @@ const results = TARGET_PACKAGES.flatMap(({ name, srcDir, coverageJson }) => {
 		);
 		process.exit(2);
 	}
-	return walkTsFiles(srcDir).flatMap((filePath) =>
-		analyzeFile(filePath, coverage).map((entry) => ({
+	return walkTsFiles(srcDir).flatMap((filePath) => {
+		const fileCoverage = coverage[filePath];
+		if (!fileCoverage) {
+			missingCoverage.push({ package: name, filePath });
+			return [];
+		}
+		return analyzeFile(filePath, fileCoverage).map((entry) => ({
 			...entry,
 			package: name,
-		})),
-	);
+		}));
+	});
 });
+
+if (missingCoverage.length > 0) {
+	console.error(
+		`error[check-crap]: ${missingCoverage.length} scanned file(s) have no matching entry in their package's coverage-final.json -- every function in them would otherwise silently report as 100% covered, which is exactly the failure this check exists to catch:`,
+	);
+	for (const { package: pkg, filePath } of missingCoverage) {
+		console.error(`  [${pkg}] ${relative(REPO_ROOT, filePath)}`);
+	}
+	console.error(
+		"  Next: confirm coverage.include in the package's vitest.config.ts still matches this file, that it hasn't been renamed/moved since the coverage report was generated, and re-run `pnpm test:coverage` for a fresh report.",
+	);
+	process.exit(3);
+}
 
 const violations = results
 	.filter((entry) => entry.crap > CRAP_THRESHOLD)
