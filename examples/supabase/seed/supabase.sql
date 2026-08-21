@@ -32,3 +32,17 @@ create unique index if not exists bname
 -- auth.users stub: only the column `authUsers` (D41) references as an FK target.
 create schema if not exists auth;
 create table if not exists auth.users (id uuid not null primary key);
+
+-- auth.uid() stub: the RLS policies built with authUid() call this at
+-- policy-creation time (it just needs to exist with the right signature —
+-- the round-trip only diffs schema, never queries through RLS as a real
+-- session). Modeled on supabase/auth migrations/20221208132122_backfill_email_last_sign_in_at.sql's auth.uid().
+create or replace function auth.uid() returns uuid
+	language sql stable
+	as $$
+	select
+		coalesce(
+			nullif(current_setting('request.jwt.claim.sub', true), ''),
+			(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+		)::uuid
+$$;
