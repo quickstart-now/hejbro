@@ -36,7 +36,20 @@ jobs:
       # "nothing to do," is the one place in this round's chain of
       # corrections where the risk this phase kept finding elsewhere
       # (a check that looks like it ran but didn't) doesn't apply.
+      #
+      # Guarded by `ref`, not `event_name`: on a push to `dev` itself, the
+      # runner's checkout *is* `dev` already, so this fetch is both
+      # refused (`fatal: refusing to fetch into branch 'refs/heads/dev'
+      # checked out at ...`, exit 128) and unnecessary (the local `dev`
+      # branch already exists). A push to `main` still needs it — no
+      # local `dev` exists there either — so gating on `event_name ==
+      # 'pull_request'` would skip it on a `main` push and break
+      # `changeset status` the same way. `ref != 'refs/heads/dev'` is the
+      # narrower condition that actually matches "a local `dev` branch is
+      # missing": true for a PR ref and for a push to `main`, false only
+      # for a push to `dev` (measured on all three — see the PR).
       - run: git fetch origin dev:dev
+        if: github.ref != 'refs/heads/dev'
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: "${{ matrix.node-version }}", cache: pnpm }
