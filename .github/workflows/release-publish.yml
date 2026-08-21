@@ -45,6 +45,27 @@ jobs:
       # actually picks pnpm for this workspace. Asserts on
       # @changesets/cli's own tool-detection call, not a guess at it.
       - run: pnpm check:pnpm-publish-tool
+      # #184: added so #155's claim that this gate "re-runs the full
+      # suite" is actually true, not because this check does anything
+      # here. By the time this job runs (a push to `main`, always after
+      # a "Version Packages" PR already bumped versions on `dev`), every
+      # published package's version is already past `0.0.0` -- exactly
+      # the state this script is designed to self-skip on
+      # (scripts/check-first-release-version.mjs:9-11,37,40:
+      # "the first release has already happened"). It will never fail,
+      # or even meaningfully run, from this job -- it's here purely so
+      # the gate's step list matches what #155 said it covers, not
+      # because it protects anything main didn't already have covered
+      # elsewhere (it runs for real in `ci.yml`, pre-bump, on `dev`).
+      - run: pnpm check:first-release-version
+      # #184: unlike the check above, this one is a real, unconditional
+      # addition of coverage -- ci.yml's `check:next-marker` (a
+      # source-invariant scan over throwHejbroError/hejbroError call
+      # sites, independent of branch/version state) was simply absent
+      # from this gate, so `main` could in principle diverge from `dev`
+      # on this invariant between a Version PR's merge and its own
+      # `ci.yml` run without the gate ever noticing.
+      - run: pnpm check:next-marker
 
   publish:
     needs: gate
