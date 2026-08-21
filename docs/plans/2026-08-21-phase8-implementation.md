@@ -92,7 +92,13 @@ Two artifact sets regenerate, and they cost very different amounts.
 `packages/core/test/golden/cases/` (the harness walks the directory, so new
 cases are picked up automatically). Golden SQL files contain **no** banner hash
 lines — the harness calls `generateMigration` without `bannerHashes` — so a
-format change costs nothing there.
+format change costs nothing there. Until `phase8-snapshot-v5` declared
+`UPDATE_GOLDEN` in `packages/core/turbo.json`'s `test` inputs, this root-level
+form silently did nothing — turbo does not forward undeclared env vars to
+task processes, so the run passed through unchanged regardless of cache
+state. Earlier phases used `pnpm --filter @hejbro/core test`, which bypasses
+turbo and therefore worked; this line's own root-level form was untested
+until now.
 
 **Examples — scripted by `phase8-regen-script`, manual before it.** The eight
 committed example migrations
@@ -150,10 +156,10 @@ when the map changes.
 | 2 | `phase8-packaging` | #86 pack-install smoke test **and the packaging it proves**: LICENSE in all three published packages, a README for `hejbro`, `homepage`/`bugs`/`keywords`, `prepack`; `engines` (D58) + Node 22 CI matrix; `@hejbro/skills` → `private: true` (D62); root `typescript` → `catalog:` | #86, #28 |
 | 3 | `phase8-changesets` | `.changeset/config.json` (`fixed` group of the three published packages, `access: "public"`, `baseBranch: "dev"`, `updateInternalDependencies: "patch"`), release scripts, the changeset rule in AGENTS.md | — |
 | 4 | `phase8-regen-script` | `scripts/regen-examples.sh` + `pnpm regen:examples` | — |
-| 5 | `phase8-release-workflows` | `release-version.yml` (on `dev`, version only) and `release-publish.yml` (on `main`, publish only), `NPM_CONFIG_PROVENANCE`, `id-token: write`, and the pre-publish gate (`check`/`check-types`/`test`/`build` + the #86 smoke) | — |
+| 5 | `phase8-release-workflows` | `release-version.yml` (on `dev`, version only) and `release-publish.yml` (on `main`, publish only), `NPM_CONFIG_PROVENANCE`, `id-token: write`, and the pre-publish gate (`check`/`check-types`/`test`/`build` + the #86 smoke). Deferred past the format wave; not yet scheduled (see the phase issue). | — |
 | 6 | `phase8-error-subclass` | `HejbroError` becomes an `Error` subclass; both duck-typing sites (`commands/generate.ts`, `commands/verify.ts`) switch to `instanceof` | #25 |
 | 7 | `phase8-loader-diagnostics` | Declaration/config load failures become diagnostics instead of a raw `TypeError` | #125 |
-| 8 | `phase8-chain-walk` | `verify` accepts a chain that returns to an earlier snapshot state | #129 |
+| 8 | `phase8-chain-walk` | `verify` accepts a chain that returns to an earlier snapshot state. Deferred past the format wave; not yet scheduled (see the phase issue). | #129 |
 | 9 | `phase8-flag-equals` | `--flag=value` token form | #89 |
 | 10 | `phase8-symbol-for` | `Symbol.for` for `tableMeta` and `triggerRowMeta` | #138 |
 | 11 | `phase8-next-marker` | `Next:` retrofit across the user-facing throw sites | #87 |

@@ -1,4 +1,4 @@
-import { throwHejbroError } from "../error";
+import { guardSnapshotRead, throwHejbroError } from "../error";
 import type { KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import type { Snapshot } from "../snapshot/snapshot";
@@ -129,13 +129,15 @@ export const diffSnapshots = (
 		new Set([...Object.keys(previous.objects), ...Object.keys(next.objects)]),
 	);
 
-	const rawChanges = allKeys.flatMap((key) => {
-		const { kind: kindName, identity } = splitObjectKey(key);
-		const kind = registry.get(kindName);
-		const previousNode = lookupNode(previous.objects, key);
-		const nextNode = lookupNode(next.objects, key);
-		return kind.diff(previousNode, nextNode, identity);
-	});
+	const rawChanges = allKeys.flatMap((key) =>
+		guardSnapshotRead(`reading snapshot entry "${key}"`, () => {
+			const { kind: kindName, identity } = splitObjectKey(key);
+			const kind = registry.get(kindName);
+			const previousNode = lookupNode(previous.objects, key);
+			const nextNode = lookupNode(next.objects, key);
+			return kind.diff(previousNode, nextNode, identity);
+		}),
+	);
 
 	const createOrAlterChanges = rawChanges
 		.filter((change) => change.operation !== "drop")

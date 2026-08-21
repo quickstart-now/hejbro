@@ -140,6 +140,35 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(await sqlFileNames()).toHaveLength(1);
 	});
 
+	// #26/#136 (identity fix, item 21 of phase8-snapshot-v5): a malformed
+	// on-disk snapshot node used to raw-crash inside planRenames; it's now
+	// a malformed-snapshot-node diagnostic. The identity line matters as
+	// much as the code — it must name the snapshot file, not
+	// hejbro.config.ts (identityFromMessage's fallback), since the
+	// problem is in the snapshot, not the config.
+	it("exits 1 with malformed-snapshot-node, naming the snapshot file (not hejbro.config.ts), for a corrupted table node", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		const snapshotPath = join(cwd, "hejbro.snapshot.json");
+		const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+		snapshot.objects["table:app.posts"] = { schema: "app", name: "posts" }; // missing columns/indexes/foreignKeys
+		await writeFixtureFile(
+			cwd,
+			"hejbro.snapshot.json",
+			JSON.stringify(snapshot),
+		);
+
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			"error[malformed-snapshot-node]: hejbro.snapshot.json",
+		);
+		expect(result.stderr).not.toContain("hejbro.config.ts");
+		expect(result.stderr).toContain("hejbro verify");
+	});
+
 	it("exits 1 with an ambiguous-column-rename diagnostic on a same-table drop+add", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(SCHEMA_SOURCE);

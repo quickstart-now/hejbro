@@ -26,13 +26,19 @@ import { stableJson } from "./stable-json";
  * (the D57 self/reference naming sweep reached the snapshot's own format
  * marker) — `parseSnapshot` still recognizes the old key so an old-format
  * file gets the normal "older" message instead of silently misparsing.
- * Pre-publication, no shim beyond that one detection branch.
+ * Bumped to `5` in Phase 8 (D68): opens the format for #110(b) (structured
+ * expression nodes) and #24(iii) (primary key/unique constraint names
+ * recorded in the snapshot), which land in this wave's later PRs
+ * (`phase8-expr-nodes`, `phase8-constraint-names`) — this PR only moves
+ * the version marker itself so those PRs' shape changes don't each need
+ * their own bump. Pre-publication, no shim beyond the one detection
+ * branch above.
  */
-export const HEJBRO_SNAPSHOT_VERSION = 4;
+export const HEJBRO_SNAPSHOT_VERSION = 5;
 
 /** A deterministic, flat representation of every declared database object. */
 export type Snapshot = {
-	readonly formatVersion: 4;
+	readonly formatVersion: 5;
 	readonly dialect: "postgres";
 	/** keyed by `${kind}:${identity}` */
 	readonly objects: { readonly [kindAndIdentity: string]: JsonValue };
@@ -145,6 +151,20 @@ export const buildSnapshot = (
 export const renderSnapshot = (snapshot: Snapshot): string =>
 	stableJson(snapshot);
 
+/** A short, human-readable name for why an `objects` entry isn't a valid
+ * snapshot node (#26) — every real node is a JSON object, so `null`, an
+ * array, or a JSON primitive all indicate a corrupted or hand-edited
+ * entry rather than one hejbro itself ever wrote. */
+const describeMalformedValue = (value: JsonValue): string => {
+	if (value === null) {
+		return "null";
+	}
+	if (Array.isArray(value)) {
+		return "an array";
+	}
+	return `a ${typeof value}`;
+};
+
 type ParsedSnapshotShape = {
 	readonly formatVersion?: unknown;
 	/** @deprecated pre-v4 key name for {@link formatVersion} (D57) — read only to give an old-format file the normal "older" message instead of misparsing it. */
@@ -171,9 +191,26 @@ const parseJson = (raw: string): unknown => {
 	}
 };
 
-/** `snapshot version <v> is older than this build supports …` — pre-publication, no format-migration path (D51 addendum, owner-approved 2026-08-20). */
+/**
+ * `snapshot version <v> is older than this build supports …` — pre-1.0, no
+ * format-migration path. Owner-approved verbatim (2026-08-21, #136,
+ * phase8-snapshot-v5), superseding the original D51 addendum text
+ * (owner-approved 2026-08-20).
+ *
+ * The previous text told the reader to delete the snapshot and regenerate,
+ * which does not work: with prior migrations present, `hejbro generate`
+ * refuses (`snapshot-lost`); routing around that via `hejbro init` first
+ * produces a chain `hejbro verify` then rejects (`chain-tip-mismatch` or
+ * `diverged-migrations`, depending on whether `generate` ran before
+ * `verify`) — and *that* diagnostic's own advice ("restore the snapshot
+ * from version control") leads straight back to this same older-version
+ * error, a closed loop with no exit. Both dead ends and the loop were
+ * confirmed by direct reproduction, not code-reading (see PR #136's
+ * body). The text below states plainly that there is no automatic path
+ * and that the snapshot/migrations pair can only be reset together.
+ */
 const olderVersionMessage = (version: number): string =>
-	`snapshot version ${version} is older than this build supports (expects ${HEJBRO_SNAPSHOT_VERSION}) — hejbro is pre-publication and has no format-migration path yet. Next: delete the snapshot file (snapshotPath in hejbro.config.ts, hejbro.snapshot.json by default) and run \`hejbro generate\` to regenerate it from your current declarations (\`hejbro init\` recreates an empty one if needed) — your committed migration files are untouched.`;
+	`snapshot version ${version} is older than this build supports (expects ${HEJBRO_SNAPSHOT_VERSION}) — hejbro is pre-1.0 and has no format-migration path yet. The snapshot and the migrations directory are a matched pair (their hashes chain together); regenerating one without the other breaks that chain. Next: if you have committed migrations, keep this snapshot as-is and pin hejbro to the version that wrote it (check your lockfile) until you're ready to reset. Deleting just this snapshot doesn't work: with prior migrations present, \`hejbro generate\` refuses to run (error[snapshot-lost]); working around that with \`hejbro init\` produces a chain \`hejbro verify\` then rejects (error[chain-tip-mismatch] or error[diverged-migrations], depending on whether you ran \`generate\` before \`verify\`). To deliberately adopt the new format, reset both together — delete the migrations directory and this snapshot, then run \`hejbro init\` and \`hejbro generate\` — and only do this if you can also recreate the database, since the regenerated chain starts from empty with no relationship to what's already applied.`;
 
 /** `snapshot version <v> is newer than this build supports …` — most commonly generated by a newer hejbro (D51 addendum, owner-approved 2026-08-20). */
 const newerVersionMessage = (version: number): string =>
@@ -245,9 +282,21 @@ export const parseSnapshot = (raw: string): Snapshot => {
 			`snapshot is missing a valid "objects" map. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
 	}
+	const objects = candidate.objects as Snapshot["objects"];
+	const malformedEntry = Object.entries(objects).find(
+		([, value]) =>
+			typeof value !== "object" || value === null || Array.isArray(value),
+	);
+	if (malformedEntry !== undefined) {
+		const [key, value] = malformedEntry;
+		return throwHejbroError(
+			"invalid-snapshot",
+			`snapshot entry "${key}" is ${describeMalformedValue(value)}, not an object. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
+		);
+	}
 	return {
 		formatVersion: HEJBRO_SNAPSHOT_VERSION,
 		dialect: "postgres",
-		objects: candidate.objects as Snapshot["objects"],
+		objects,
 	};
 };

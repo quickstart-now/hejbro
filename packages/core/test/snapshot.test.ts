@@ -15,16 +15,16 @@ const app = schema("app");
 const registry = createDefaultRegistry();
 
 describe("emptySnapshot", () => {
-	it("has version 4, postgres dialect, and no objects", () => {
+	it("has version 5, postgres dialect, and no objects", () => {
 		expect(emptySnapshot).toEqual({
-			formatVersion: 4,
+			formatVersion: 5,
 			dialect: "postgres",
 			objects: {},
 		});
 	});
 
-	it("renders with the v4 version marker (D57)", () => {
-		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 4`);
+	it("renders with the v5 version marker (D68)", () => {
+		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 5`);
 	});
 });
 
@@ -101,6 +101,22 @@ describe("renderSnapshot / parseSnapshot", () => {
 		);
 	});
 
+	it("rejects a v4 snapshot (the immediately prior format) as older, not misparsed as current (D68)", () => {
+		const raw = JSON.stringify({
+			formatVersion: 4,
+			dialect: "postgres",
+			objects: {},
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({
+				code: "unsupported-snapshot-version",
+				message: expect.stringContaining(
+					"snapshot version 4 is older than this build supports",
+				),
+			}),
+		);
+	});
+
 	it("rejects a snapshot from a newer build with the newer-version wording", () => {
 		const raw = JSON.stringify({
 			formatVersion: 99,
@@ -127,8 +143,34 @@ describe("renderSnapshot / parseSnapshot", () => {
 	});
 
 	it("rejects a snapshot with a missing objects map", () => {
-		const raw = JSON.stringify({ formatVersion: 4, dialect: "postgres" });
+		const raw = JSON.stringify({ formatVersion: 5, dialect: "postgres" });
 		expect(() => parseSnapshot(raw)).toThrowError(/objects/i);
+	});
+
+	// #26: a corrupted (but JSON-valid) entry used to reach kind.diff()/
+	// planRenames unguarded, where it either crashed with a raw exception
+	// or, in the more common case, was silently coerced by JS's forgiving
+	// property access into wrong-but-not-crashing behavior. Catching it
+	// here, at parse time, gives it the same treatment as every other
+	// invalid-snapshot case instead of relying on it happening to crash
+	// somewhere downstream.
+	it.each([
+		["null", null],
+		["an array", ["not", "an", "object"]],
+		["a string", "not an object"],
+		["a number", 42],
+	])("rejects a snapshot entry that is %s, not an object", (_label, value) => {
+		const raw = JSON.stringify({
+			formatVersion: 5,
+			dialect: "postgres",
+			objects: { "table:app.posts": value },
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({
+				code: "invalid-snapshot",
+				message: expect.stringContaining('"table:app.posts"'),
+			}),
+		);
 	});
 
 	it("rejects malformed JSON (e.g. an unresolved git conflict marker) as invalid-snapshot, not a raw SyntaxError", () => {

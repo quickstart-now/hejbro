@@ -67,3 +67,23 @@ describe("diffSnapshots — no-op", () => {
 		expect(diffSnapshots(snapshot, snapshot, registry)).toEqual([]);
 	});
 });
+
+describe("diffSnapshots — malformed snapshot node (#26)", () => {
+	it("wraps a raw crash from a malformed table node into malformed-snapshot-node, naming the entry", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const next = buildSnapshot([app, getTableMeta(posts)], registry);
+		const corruptedPrevious = {
+			...next,
+			objects: {
+				...next.objects,
+				"table:app.posts": { schema: "app", name: "posts" }, // missing columns/indexes/foreignKeys
+			},
+		};
+		expect(() => diffSnapshots(corruptedPrevious, next, registry)).toThrowError(
+			expect.objectContaining({
+				code: "malformed-snapshot-node",
+				message: expect.stringContaining('"table:app.posts"'),
+			}),
+		);
+	});
+});

@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 4,
+	"formatVersion": 5,
 	"objects": {
 		"schema:app": {
 			"name": "app"
