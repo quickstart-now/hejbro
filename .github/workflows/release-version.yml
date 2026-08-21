@@ -136,8 +136,25 @@ jobs:
       # gain those checks and the owner can never merge it with the
       # merge button. `workflow_dispatch` is the documented exception:
       # starting ci.yml this way still creates real check runs, attached
-      # to the branch's current head commit, which is what the ruleset's
-      # required-status-check evaluation actually looks at.
+      # to the branch's current head commit -- measured directly via the
+      # Checks API (`GET /repos/.../commits/<head-sha>/check-runs`), which
+      # showed both `verify (22)`/`verify (24)` as completed/success on
+      # the scratch PR's exact head SHA.
+      #
+      # What is NOT yet measured, and is the one open question this PR
+      # leaves for #179 itself: whether a check run created this way
+      # (via `workflow_dispatch`) populates the PR's `statusCheckRollup`
+      # (what `mergeStateStatus`/the merge button/`gh pr checks` actually
+      # read) the same way a `push`/`pull_request`-triggered run does.
+      # Reviewer measured a real split between the two: 4/4 sampled
+      # `workflow_dispatch` runs had check-runs but a NULL rollup, while
+      # 5/5 `push`/`pull_request` runs had a populated rollup (a
+      # deleted-branch control with zero check-runs also showed NULL,
+      # ruling out "branch gone" as the confound -- event type is the
+      # remaining variable). If the rollup stays NULL for
+      # `changeset-release/dev` too, this dispatch makes the check run
+      # exist without making it count toward the ruleset -- to be
+      # confirmed by observing #179 after this merges, not assumed here.
       #
       # `if:` guards against the one case `changesets/action/version`
       # itself distinguishes via its own `pr-number` output: when every
