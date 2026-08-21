@@ -226,6 +226,21 @@ const newerVersionMessage = (version: number): string =>
  * file (D57 renamed the key itself), so it gets the same "older" message,
  * carrying its own `hejbroSnapshot` value; (c) neither is a valid number —
  * `invalid-snapshot`, a malformed file.
+ *
+ * **Does not check that every `objects` entry's kind id is registered**
+ * (that is `unknown-kind`, thrown later by {@link KindRegistry.get} —
+ * `packages/core/src/kind/registry.ts` — the first time diffing actually
+ * needs that kind). Checking it here, so a stale build fails at parse
+ * time instead of mid-diff, was considered for #196/D73 and set aside:
+ * this function takes no {@link KindRegistry}, and every real call site
+ * builds its registry *after* parsing, not before — `packages/cli`'s
+ * `generate.ts` calls `parseSnapshot` at line 361 and `buildRegistry` at
+ * line 362; `verify.ts` calls `parseSnapshot` at lines 132/147, well
+ * before its own `buildRegistry` call at line 270. Moving the check here
+ * needs both a widened signature (an added parameter is non-breaking on
+ * its own) *and* reordering three call sites across two CLI files to
+ * build the registry first — a bigger, cross-package change than this
+ * function's own format/shape validation, and out of this PR's scope.
  */
 export const parseSnapshot = (raw: string): Snapshot => {
 	const parsed: unknown = parseJson(raw);

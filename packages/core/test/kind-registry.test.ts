@@ -33,6 +33,33 @@ describe("kind registry", () => {
 	});
 });
 
+/** `(fn's thrown error).message`, for asserting on message content without a nested try/catch per test. */
+const messageOf = (fn: () => unknown): string => {
+	try {
+		fn();
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
+	}
+	throw new Error("expected fn to throw");
+};
+
+describe("unknown-kind: core-vocabulary-shaped vs preset-shaped (D73, #196)", () => {
+	it("a bare kind name (core's own shape) points at upgrading hejbro, not a preset", () => {
+		const message = messageOf(() => createKindRegistry().get("sequence"));
+		expect(message).toMatch(/newer hejbro/i);
+		expect(message).toMatch(/next: upgrade hejbro/i);
+		expect(message).not.toMatch(/register the preset/i);
+	});
+
+	it("a namespace-prefixed kind name (a preset's own shape) points at registering a preset, not upgrading", () => {
+		const message = messageOf(() =>
+			createKindRegistry().get("supabase-storage-bucket"),
+		);
+		expect(message).toMatch(/register the preset/i);
+		expect(message).not.toMatch(/newer hejbro/i);
+	});
+});
+
 type BlockDeclaration = {
 	readonly declarationKind: "block";
 	readonly blockName: string;
