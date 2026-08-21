@@ -46,7 +46,7 @@ export const createKindRegistry = (): KindRegistry => {
 		if (kinds.has(kind.kind)) {
 			throw hejbroError(
 				"duplicate-kind",
-				`kind "${kind.kind}" is already registered — presets must register kinds under unique, prefixed names.`,
+				`kind "${kind.kind}" is already registered. Next: remove one of the presets that register a kind named "${kind.kind}" from your presets array in hejbro.config.ts, or if you're authoring a preset, prefix your kind names to avoid colliding with others.`,
 			);
 		}
 		kinds.set(kind.kind, kind);
@@ -57,7 +57,7 @@ export const createKindRegistry = (): KindRegistry => {
 		if (found === undefined) {
 			throw hejbroError(
 				"unknown-kind",
-				`no kind named "${kindName}" is registered — check the spelling, or register the preset that provides it.`,
+				`no kind named "${kindName}" is registered. Next: check the spelling, or register the preset that provides it in hejbro.config.ts's presets array.`,
 			);
 		}
 		return found;

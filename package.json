@@ -9,6 +9,7 @@
 		"check": "biome check .",
 		"smoke:pack-install": "bash scripts/pack-install-smoke.sh",
 		"check:first-release-version": "node scripts/check-first-release-version.mjs",
+		"check:next-marker": "node scripts/check-next-marker.mjs",
 		"regen:examples": "bash scripts/regen-examples.sh",
 		"changeset": "changeset",
 		"version-packages": "changeset version",

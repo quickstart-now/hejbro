@@ -64,3 +64,4 @@ jobs:
         if: matrix.node-version == 24
       - run: pnpm changeset status
       - run: pnpm check:first-release-version
+      - run: pnpm check:next-marker

@@ -62,7 +62,7 @@ const buildEntry = (
 	if (matchingKinds.length === 0) {
 		return throwHejbroError(
 			"unowned-declaration",
-			`declaration at index ${declarationIndex} (declarationKind "${declaration.declarationKind}") is not owned by any registered kind — register a kind whose owns() matches it.`,
+			`declaration at index ${declarationIndex} (declarationKind "${declaration.declarationKind}") is not owned by any registered kind. Next: register a preset that provides a kind for "${declaration.declarationKind}" declarations in hejbro.config.ts's presets array, or remove this declaration if it isn't needed.`,
 		);
 	}
 	if (matchingKinds.length > 1) {
@@ -70,7 +70,9 @@ const buildEntry = (
 			"ambiguous-declaration",
 			`declaration at index ${declarationIndex} (declarationKind "${declaration.declarationKind}") is owned by multiple kinds (${matchingKinds
 				.map((kind) => kind.kind)
-				.join(", ")}) — kinds must claim disjoint declaration sets.`,
+				.join(
+					", ",
+				)}). Next: check hejbro.config.ts's presets array for two presets that overlap, and remove one, or narrow one kind's owns() check if you're authoring it.`,
 		);
 	}
 	const [kind] = matchingKinds;
@@ -123,7 +125,7 @@ export const buildSnapshot = (
 	if (duplicate !== null) {
 		return throwHejbroError(
 			"duplicate-identity",
-			`declarations at index ${duplicate.first.declarationIndex} and index ${duplicate.second.declarationIndex} both produce the identity "${duplicate.first.key}" — rename one of them.`,
+			`declarations at index ${duplicate.first.declarationIndex} and index ${duplicate.second.declarationIndex} both produce the identity "${duplicate.first.key}". Next: rename one of them.`,
 		);
 	}
 
@@ -164,7 +166,7 @@ const parseJson = (raw: string): unknown => {
 	} catch {
 		return throwHejbroError(
 			"invalid-snapshot",
-			"snapshot is not valid JSON — check the file wasn't corrupted, hand-edited incorrectly, or left with an unresolved git merge-conflict marker.",
+			"snapshot is not valid JSON (check for corruption, an incomplete hand-edit, or an unresolved git merge-conflict marker). Next: restore the snapshot from version control if it was corrupted, or delete it and run `hejbro init` then `hejbro generate` to rebuild it from your current declarations.",
 		);
 	}
 };
@@ -193,7 +195,7 @@ export const parseSnapshot = (raw: string): Snapshot => {
 	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
 		return throwHejbroError(
 			"invalid-snapshot",
-			"snapshot is not a JSON object — check the file wasn't corrupted or hand-edited incorrectly.",
+			"snapshot is not a JSON object. Next: restore the snapshot from version control if it was corrupted, or delete it and run `hejbro init` then `hejbro generate` to rebuild it from your current declarations.",
 		);
 	}
 	const candidate = parsed as ParsedSnapshotShape;
@@ -206,14 +208,14 @@ export const parseSnapshot = (raw: string): Snapshot => {
 		}
 		return throwHejbroError(
 			"invalid-snapshot",
-			`snapshot version ${JSON.stringify(candidate.hejbroSnapshot)} is not a valid version number — check the file wasn't corrupted or hand-edited incorrectly.`,
+			`snapshot version ${JSON.stringify(candidate.hejbroSnapshot)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
 	}
 	if (candidate.formatVersion !== HEJBRO_SNAPSHOT_VERSION) {
 		if (typeof candidate.formatVersion !== "number") {
 			return throwHejbroError(
 				"invalid-snapshot",
-				`snapshot version ${JSON.stringify(candidate.formatVersion)} is not a valid version number — check the file wasn't corrupted or hand-edited incorrectly.`,
+				`snapshot version ${JSON.stringify(candidate.formatVersion)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 			);
 		}
 		if (candidate.formatVersion < HEJBRO_SNAPSHOT_VERSION) {
@@ -230,7 +232,7 @@ export const parseSnapshot = (raw: string): Snapshot => {
 	if (candidate.dialect !== "postgres") {
 		return throwHejbroError(
 			"invalid-snapshot",
-			`snapshot dialect ${JSON.stringify(candidate.dialect)} is not supported — only "postgres" is.`,
+			`snapshot dialect ${JSON.stringify(candidate.dialect)} is not supported — only "postgres" is. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
 	}
 	if (
@@ -240,7 +242,7 @@ export const parseSnapshot = (raw: string): Snapshot => {
 	) {
 		return throwHejbroError(
 			"invalid-snapshot",
-			`snapshot is missing a valid "objects" map — check the file wasn't hand-edited incorrectly.`,
+			`snapshot is missing a valid "objects" map. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
 	}
 	return {

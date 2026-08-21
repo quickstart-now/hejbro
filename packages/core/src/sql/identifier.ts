@@ -9,13 +9,13 @@ export const quoteIdentifier = (name: string): string => {
 	if (name.length === 0) {
 		return throwHejbroError(
 			"invalid-identifier",
-			"identifier is empty — give the object a name before declaring it.",
+			"identifier is empty. Next: give the object a name before declaring it.",
 		);
 	}
 	if (name.includes("\0")) {
 		return throwHejbroError(
 			"invalid-identifier",
-			`identifier "${name}" contains a NUL byte — remove it and use a plain name.`,
+			`identifier "${name}" contains a NUL byte. Next: remove it and use a plain name.`,
 		);
 	}
 	return `"${name.replaceAll('"', '""')}"`;

@@ -15,7 +15,7 @@ const rejectAmbiguousLiteral = (value: object): never => {
 	const kind = describeAmbiguousKind(value);
 	return throwHejbroError(
 		"ambiguous-literal",
-		`got a plain ${kind} — hejbro cannot infer whether this is a Postgres array or jsonb; wrap it explicitly (e.g. sql\`…\`) or pass a scalar.`,
+		`got a plain ${kind} — hejbro cannot infer whether this is a Postgres array or jsonb. Next: wrap it explicitly (e.g. sql\`…\`) or pass a scalar.`,
 	);
 };
 
@@ -35,7 +35,7 @@ export const liftLiteral = (
 		if (!Number.isFinite(value)) {
 			return throwHejbroError(
 				"invalid-literal",
-				`${value} is not a finite number — SQL numeric literals must be finite; compute the value before declaring it.`,
+				`${value} is not a finite number — SQL numeric literals must be finite. Next: compute the value before declaring it (check for a division by zero or an unresolved Infinity/NaN somewhere upstream).`,
 			);
 		}
 		return { nodeKind: "literal", literal: { literalKind: "number", value } };
@@ -50,7 +50,7 @@ export const liftLiteral = (
 		if (Number.isNaN(value.getTime())) {
 			return throwHejbroError(
 				"invalid-literal",
-				`invalid Date — SQL timestamp literals need a valid date; check how this value was constructed.`,
+				`invalid Date — SQL timestamp literals need a valid date. Next: pass a valid Date (e.g. new Date() or a value from a successful Date.parse()) — this usually comes from new Date(NaN) or parsing an unparseable date string.`,
 			);
 		}
 		return {
@@ -63,7 +63,7 @@ export const liftLiteral = (
 	}
 	return throwHejbroError(
 		"invalid-literal",
-		`got a ${typeof value} — hejbro cannot lift this into a SQL literal; pass a string, number, boolean, null, or Date.`,
+		`got a ${typeof value} — hejbro cannot lift this into a SQL literal. Next: pass a string, number, boolean, null, or Date.`,
 	);
 };
 

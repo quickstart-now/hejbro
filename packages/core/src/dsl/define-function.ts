@@ -53,7 +53,7 @@ const resolveFunctionReturns = (
 	if (returns === undefined) {
 		return throwHejbroError(
 			"missing-function-returns",
-			`defineFunction() "${identity}" requires a "returns" config — pass a table (for "returns setof …") or a TypeNode (for a scalar return).`,
+			`defineFunction() "${identity}" requires a "returns" config. Next: pass a table (for "returns setof …") or a TypeNode (for a scalar return).`,
 			declaredAt,
 		);
 	}

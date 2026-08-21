@@ -12,7 +12,7 @@ const splitObjectKey = (
 	if (colonIndex === -1) {
 		return throwHejbroError(
 			"invalid-snapshot-key",
-			`snapshot object key "${key}" is missing a "kind:identity" separator.`,
+			`snapshot object key "${key}" is missing a "kind:identity" separator. Next: restore the snapshot from version control, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it — a snapshot key should never need hand-editing.`,
 		);
 	}
 	return {
@@ -58,14 +58,14 @@ const topoSortKindNames = (registry: KindRegistry): ReadonlyArray<string> => {
 		if (state.visiting.has(kindName)) {
 			return throwHejbroError(
 				"cyclic-kind-dependency",
-				`kind "${kindName}" is part of a dependsOn cycle — check the dependsOn arrays of your registered kinds.`,
+				`kind "${kindName}" is part of a dependsOn cycle. Next: check hejbro.config.ts's presets array for two presets whose kinds depend on each other and remove one, or if you're authoring the kind, break the cycle in its dependsOn array.`,
 			);
 		}
 		const dependencies = dependsOnByKind.get(kindName);
 		if (dependencies === undefined) {
 			return throwHejbroError(
 				"unknown-kind-dependency",
-				`kind "${kindName}" is not registered, but another kind depends on it.`,
+				`kind "${kindName}" is not registered, but another kind depends on it. Next: register a preset that provides a kind named "${kindName}" in hejbro.config.ts's presets array, or if you're authoring the kind that depends on it, remove "${kindName}" from its dependsOn array.`,
 			);
 		}
 		const visitingState: ResolveState = {

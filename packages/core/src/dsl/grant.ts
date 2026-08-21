@@ -55,10 +55,10 @@ const normalizePrivileges = (
 	tablePrivileges.filter((privilege) => privileges.includes(privilege));
 
 const emptyPrivilegesMessage = (schemaName: string): string =>
-	`grant("${schemaName}").tables() lists no privileges — pass at least one of "select" | "insert" | "update" | "delete".`;
+	`grant("${schemaName}").tables() lists no privileges. Next: pass at least one of "select" | "insert" | "update" | "delete".`;
 
 const missingRolesMessage = (schemaName: string, chainLabel: string): string =>
-	`grant("${schemaName}").${chainLabel}.to() has no roles — Postgres requires at least one role after TO; pass .to("anon") or the intended role list.`;
+	`grant("${schemaName}").${chainLabel}.to() has no roles — Postgres requires at least one role after TO. Next: pass .to("anon") or the intended role list.`;
 
 const buildRolesStage = (
 	schemaName: string,

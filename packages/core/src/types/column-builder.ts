@@ -89,7 +89,7 @@ export const createColumnBuilder = <
 		if (columnState.typeNode.typeName !== "uuid") {
 			return throwHejbroError(
 				"invalid-column-default",
-				`defaultRandom() only applies to uuid columns, but this column is "${columnState.typeNode.typeName}" — use .default(...) or drop defaultRandom() here.`,
+				`defaultRandom() only applies to uuid columns, but this column is "${columnState.typeNode.typeName}". Next: use .default(...) or drop defaultRandom() here.`,
 			);
 		}
 		return createColumnBuilder<TFamily>({
@@ -106,7 +106,7 @@ export const createColumnBuilder = <
 		if (!isTimeLikeTypeNode(columnState.typeNode)) {
 			return throwHejbroError(
 				"invalid-column-default",
-				`defaultNow() only applies to date/time columns, but this column is "${columnState.typeNode.typeName}" — use .default(...) instead.`,
+				`defaultNow() only applies to date/time columns, but this column is "${columnState.typeNode.typeName}". Next: use .default(...) instead.`,
 			);
 		}
 		return createColumnBuilder<TFamily>({

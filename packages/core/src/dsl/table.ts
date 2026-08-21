@@ -172,7 +172,7 @@ export const buildColumnEntries = <
 	if (duplicateColumnName !== undefined) {
 		throwHejbroError(
 			"duplicate-column",
-			`table "${tableName}" has duplicate column name "${duplicateColumnName}" after snake_casing — rename one of the conflicting TypeScript properties.`,
+			`table "${tableName}" has duplicate column name "${duplicateColumnName}" after snake_casing. Next: rename one of the conflicting TypeScript properties.`,
 		);
 	}
 
@@ -215,7 +215,7 @@ const validateColumnRefs = (
 	if (badIndexColumn !== undefined) {
 		throwHejbroError(
 			"unknown-index-column",
-			`table "${tableName}" declares an index referencing unknown column "${badIndexColumn}" — check the column name.`,
+			`table "${tableName}" declares an index referencing unknown column "${badIndexColumn}". Next: use one of this table's own declared column names in the index() call — this is usually a typo in "${badIndexColumn}".`,
 		);
 	}
 
@@ -225,7 +225,7 @@ const validateColumnRefs = (
 	if (badForeignKeyColumn !== undefined) {
 		throwHejbroError(
 			"unknown-foreign-key-column",
-			`table "${tableName}" declares a foreign key referencing unknown column "${badForeignKeyColumn}" — check the column name.`,
+			`table "${tableName}" declares a foreign key referencing unknown column "${badForeignKeyColumn}". Next: use one of this table's own declared column names in the foreign key's columns array — this is usually a typo in "${badForeignKeyColumn}".`,
 		);
 	}
 };
@@ -444,7 +444,7 @@ const resolveForeignKey = (
 	if (foreignRef !== undefined) {
 		return throwHejbroError(
 			"foreign-column-ref",
-			`table "${tableName}" received a column of "${foreignRef.exprNode.schemaName}.${foreignRef.exprNode.tableName}" — indexes and local fk columns must use this table's own columns.`,
+			`table "${tableName}" received a column of "${foreignRef.exprNode.schemaName}.${foreignRef.exprNode.tableName}" — indexes and local fk columns must use this table's own columns. Next: pass one of "${tableName}"'s own columns instead — to reference "${foreignRef.exprNode.schemaName}.${foreignRef.exprNode.tableName}", use it as a references.table target on a foreign key, not as a local column.`,
 		);
 	}
 	return {

@@ -88,7 +88,7 @@ const resolveColumnRef = (
 	if (!isColumnRef(column)) {
 		return throwHejbroError(
 			"unknown-column",
-			`insert()/update() on "${tableRef.schemaName}.${tableRef.tableName}" received unknown column key "${key}" — check the table declaration.`,
+			`insert()/update() on "${tableRef.schemaName}.${tableRef.tableName}" received unknown column key "${key}". Next: use a column key declared on this table's table() call — this is usually a typo in "${key}", or a column that was never declared on this table.`,
 		);
 	}
 	return column;
@@ -109,7 +109,7 @@ const resolveSetEntries = (
 	if (keys.length === 0) {
 		return throwHejbroError(
 			"empty-set",
-			"set()/values() received no columns — declare at least one column to write.",
+			"set()/values() received no columns. Next: declare at least one column to write.",
 		);
 	}
 	return keys.map((key) => {
@@ -164,7 +164,7 @@ const resolveInsertRows = (
 	if (keys.length === 0) {
 		return throwHejbroError(
 			"empty-set",
-			"set()/values() received no columns — declare at least one column to write.",
+			"set()/values() received no columns. Next: declare at least one column to write.",
 		);
 	}
 

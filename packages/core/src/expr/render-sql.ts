@@ -178,7 +178,7 @@ const assertInScope = (
 	if (badRef !== undefined) {
 		throwHejbroError(
 			"foreign-column-ref",
-			`${verb} "${subject.schemaName}.${subject.tableName}" references column "${badRef.schemaName}.${badRef.tableName}.${badRef.columnName}" — join that table, or reference it from an enclosing query via exists().`,
+			`${verb} "${subject.schemaName}.${subject.tableName}" references column "${badRef.schemaName}.${badRef.tableName}.${badRef.columnName}". Next: join that table, or reference it from an enclosing query via exists().`,
 		);
 	}
 };
@@ -429,7 +429,7 @@ const intoClause = (
 	if (intoVariables.length === 0) {
 		return throwHejbroError(
 			"empty-into-list",
-			"renderSelectInto() received no target variables — pass at least one local name.",
+			"renderSelectInto() received no target variables. Next: pass at least one local name.",
 		);
 	}
 	return `${intoKeyword(strict)} ${intoVariables.join(", ")}`;
@@ -576,7 +576,7 @@ export const renderExpr = (
 			if (node.operands.length === 0) {
 				return throwHejbroError(
 					"empty-logical-expression",
-					"and()/or() need at least one operand — pass at least one boolean expression.",
+					"and()/or() need at least one operand. Next: pass at least one boolean expression.",
 				);
 			}
 			return node.operands
@@ -593,7 +593,7 @@ export const renderExpr = (
 			if (node.values.length === 0) {
 				return throwHejbroError(
 					"empty-in-list",
-					"inArray() received an empty array — an empty in-list is always false in SQL; drop the condition or supply values.",
+					"inArray() received an empty array — an empty in-list is always false in SQL. Next: drop the condition or supply values.",
 				);
 			}
 			const keyword = inListKeyword(node.negated);
