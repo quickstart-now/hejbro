@@ -58,28 +58,40 @@ const CORE_KINDS: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [
 
 /**
  * Every kind id core itself owns, as of *this build* — not "every kind id
- * core will ever own". Used only to rule out one `unknown-kind` cause: a
- * name in this set that isn't registered in the current {@link KindRegistry}
- * means this registry was built without one of core's own kinds (a
- * hand-rolled registry that skipped a `register()` call — see
- * {@link createKindRegistry}), never a missing preset or a newer hejbro,
- * since this build already knows the name. A name *not* in this set is not
- * thereby known to be preset-owned: it's equally consistent with "a core
- * kind added after this build shipped" (D73's motivating case, #193's
- * `sequence`) and "a preset that isn't registered" — this build cannot
- * tell those apart, so `unknownKindMessage` states both rather than
- * guessing from the name's shape (a hyphen/prefix heuristic was tried and
- * rejected: the one real preset kind, `supabase-storage-bucket`, is a
- * sample of one, nothing enforces the convention on a *user's own* preset,
- * and a wrong guess reproduces this exact issue's bug in a new shape) —
- * and that shape guess wouldn't just be *unreliable today*, it would be
- * *wrong by design* the moment core needs it: `.claude/rules/naming.md`
- * Rule 2 (D57) requires every snapshot identity token, kind ids included,
- * to be kebab-case, so a multi-word core kind id **must** itself carry a
- * hyphen (`materialized-view` is the standing example) — that isn't a
+ * core will ever own". Two uses, both below:
+ *
+ * **`unknown-kind`** (`unknownKindMessage`): rules out one cause for
+ * certain. A name in this set that isn't registered in the current
+ * {@link KindRegistry} means this registry was built without one of
+ * core's own kinds (a hand-rolled registry that skipped a `register()`
+ * call — see {@link createKindRegistry}), never a missing preset or a
+ * newer hejbro, since this build already knows the name. A name *not* in
+ * this set is not thereby known to be preset-owned: it's equally
+ * consistent with "a core kind added after this build shipped" (D73's
+ * motivating case, #193's `sequence`) and "a preset that isn't
+ * registered" — this build cannot tell those apart, so
+ * `unknownKindMessage` states both rather than guessing from the name's
+ * shape (a hyphen/prefix heuristic was tried and rejected: the one real
+ * preset kind, `supabase-storage-bucket`, is a sample of one, nothing
+ * enforces the convention on a *user's own* preset, and a wrong guess
+ * reproduces this exact issue's bug in a new shape) — and that shape
+ * guess wouldn't just be *unreliable today*, it would be *wrong by
+ * design* the moment core needs it: `.claude/rules/naming.md` Rule 2
+ * (D57) requires every snapshot identity token, kind ids included, to be
+ * kebab-case, so a multi-word core kind id **must** itself carry a hyphen
+ * (`materialized-view` is the standing example) — that isn't a
  * convention someone forgot to follow, it's the shape D57 mandates. The
  * first three reasons above are all "this could go wrong"; this one is
- * "this is guaranteed to go wrong, the day core has a two-word kind name".
+ * "this is guaranteed to go wrong, the day core has a two-word kind
+ * name".
+ *
+ * **`register()`'s namespace-prefix requirement** (#201, below): exempts
+ * every kind `createDefaultRegistry` itself registers from needing a
+ * prefix. A different, narrower use than `unknown-kind`'s — it only ever
+ * needs "is this one of core's own", not "is this name core-shaped",
+ * so it isn't exposed to the same shape-guessing problem. See
+ * {@link hasNamespacePrefix}'s own comment for what this exemption does
+ * and does not buy.
  */
 export const CORE_KIND_IDS: ReadonlySet<string> = new Set(
 	CORE_KINDS.map((kind) => kind.kind),
@@ -117,6 +129,41 @@ const unknownKindMessage = (kindName: string): string => {
 };
 
 /**
+ * Does `kindName` carry a namespace prefix (a hyphen)? `register()` (below)
+ * enforces this for every kind id outside {@link CORE_KIND_IDS}
+ * (`preset-kind-needs-prefix`, #201) — `register()`'s own `duplicate-kind`
+ * message already told preset authors to do this, but only a name
+ * *collision* ever surfaced it; this makes it visible every time, at the
+ * point a preset first registers its kind. `@hejbro/supabase`'s own kind,
+ * `supabase-storage-bucket`, already satisfies it.
+ *
+ * **What this buys, and what it deliberately does not**: predictable
+ * preset kind ids and an earlier, clearer registration-time error — never
+ * a sound core-vs-preset *classification* for `unknown-kind` (above).
+ * Enforcing this makes "has a prefix ⇒ preset" a real guarantee, but the
+ * reverse, "no prefix ⇒ core", can never be enforced the same way:
+ * `CORE_KIND_IDS`'s own comment explains why (D57 Rule 2 requires kind
+ * ids, as snapshot identity tokens, to be kebab-case, so a future
+ * multi-word *core* kind id — `materialized-view` is the standing
+ * example — would legitimately carry a hyphen too). A guarantee sound in
+ * only one direction cannot be inverted into a classifier for the other,
+ * which is exactly why `unknownKindMessage` above states both possible
+ * causes instead of picking one from this shape.
+ */
+const hasNamespacePrefix = (kindName: string): boolean =>
+	kindName.includes("-");
+
+/**
+ * `preset-kind-needs-prefix`: a non-core kind id with no namespace prefix.
+ * `register()`'s pre-existing `duplicate-kind` message already told
+ * preset authors to prefix their kind names to avoid colliding with core
+ * or another preset — this makes that guidance a registration-time error
+ * instead of something only visible after a collision already happened.
+ */
+const missingNamespacePrefixMessage = (kindName: string): string =>
+	`kind "${kindName}" has no namespace prefix — every preset-provided kind needs one, to avoid colliding with core's own vocabulary or another preset's (hejbro's built-in kinds are exempt from this check). Next: rename it to something like "<your-preset-name>-${kindName}".`;
+
+/**
  * Creates an empty {@link KindRegistry}. Mutation is confined to the `Map`
  * captured in this closure — no exported `let`.
  */
@@ -130,6 +177,12 @@ export const createKindRegistry = (): KindRegistry => {
 			throw hejbroError(
 				"duplicate-kind",
 				`kind "${kind.kind}" is already registered. Next: remove one of the presets that register a kind named "${kind.kind}" from your presets array in hejbro.config.ts, or if you're authoring a preset, prefix your kind names to avoid colliding with others.`,
+			);
+		}
+		if (!CORE_KIND_IDS.has(kind.kind) && !hasNamespacePrefix(kind.kind)) {
+			throw hejbroError(
+				"preset-kind-needs-prefix",
+				missingNamespacePrefixMessage(kind.kind),
 			);
 		}
 		kinds.set(kind.kind, kind);
