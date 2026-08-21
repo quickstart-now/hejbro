@@ -190,7 +190,8 @@ when the map changes.
 | 32 | `phase8-roadmap-sync` | The roadmap's Phase 8 section gains the coverage-gating work group and #157 — the two things the brainstorm did not know about | #154, #157 |
 | 33 | `phase8-cli-timeout` | `packages/cli` has no `testTimeout`, so its subprocess e2e chain runs against vitest's 5s default and flakes under runner contention — now a merge blocker, since `verify (22)`/`verify (24)` became required checks | #173 |
 | 34 | `phase8-plan-rules` | This file: the rules measured during the phase, the rows added after plan review, the track queues, D71 and D72 | — |
-| 35 | `phase8-unknown-kind-diagnostic` | `unknown-kind` names both remedies instead of one (an older build cannot tell a future core kind from an unregistered preset — neither name is in any list it holds), `register()` enforces a namespace prefix on the preset channel, **D73** | #196 |
+| 35 | `phase8-unknown-kind-diagnostic` | `unknown-kind` names both remedies instead of one (an older build cannot tell a future core kind from an unregistered preset — neither name is in any list it holds), plus the third cause it *can* name: a hand-built registry missing a core kind. **D73** | #196 |
+| 36 | `phase8-preset-kind-prefix` | `register()` rejects an unprefixed kind id on the preset channel (`createDefaultRegistry`'s own kinds exempt) — predictable preset ids, and the advice moves from the collision error to registration time. **Buys no classification soundness**: D57 Rule 2 mandates kebab-case for snapshot identity tokens, so "core ⇒ no hyphen" cannot be enforced to match | #201 |
 
 `phase8-pk-guard` lands **before** `phase8-constraint-names` in dependency
 terms but is listed after it for readability: the guard is a small, independent
@@ -681,12 +682,49 @@ The habit that makes this cheap: **declare the freeze by pasting the output of
 claim about the branch; a pasted one is a reading of it. The two differ exactly
 when it matters — after a push you had stopped counting as a push.
 
+And **the declaring sentence itself has to be the pasted value.** Four freeze
+reports quoted the full `git rev-parse HEAD` output as evidence and then wrote
+`**Frozen: 93841af**` underneath — and the abbreviated one is what got copied,
+because it is the sentence that says what the SHA *is*; the command output above
+it is only the reason to believe it. `gh pr merge --match-head-commit` takes
+40 characters and rejects 7 (`Could not coerce to GitObjectID`), so the merge
+failed on the fourth. Where the same value appears in two forms, the easier one
+gets used.
+
 **"I recorded it" is a claim, and it takes a commit SHA.** Three times in one
 day a correction existed in prose but not in the artifact: an issue whose
 non-goals contradicted its own amended decision, a PR body that still called a
 confirmed cause an inference, and this file's rules — reported as written while
 they sat uncommitted in a stale worktree whose base was 350 lines behind `dev`.
 Report the SHA, and prefer a pushed one.
+
+**"I assigned it" is the same kind of claim, and it takes a sent message.** A
+status report described a teammate as mid-investigation on a work item and noted
+that no findings had arrived yet. Neither half was true: the assignment had been
+composed and never sent, so the silence being read as slow progress was the
+silence of someone waiting for their next task. It surfaced only because that
+teammate was asked directly and answered that they had no such assignment.
+
+Two things follow. The first is the same discipline as the rule above it —
+before reporting an assignment, look at the message you sent, not at your memory
+of deciding to send it. The second is narrower and easier to miss: **silence
+about a task nobody was given is not a signal at all.** It is neither "in
+progress" nor "unresponsive", and reading it as either invents a fact about
+another person's work.
+
+**Before writing instructions about a branch, read its current head.** A "final
+instruction" for `phase8-unknown-kind-diagnostic` was written from the memory of
+an earlier report and arrived after the branch had already moved past it; the
+implementer followed it faithfully and the result deleted the one message that
+the newer design had gotten right. The tooling was available and got used later
+in the same session — the branch was read directly, and that reading is what
+caught the problem. It just was not read *before* the instruction went out.
+
+This is the same failure as the rules above about instruments, one level up: an
+instruction is aimed at a state, and the state has to be observed rather than
+recalled. It is also the case where asking beats guessing — the implementer
+noticed that two instructions conflicted and asked instead of choosing, which is
+why the cost was one message rather than a second round of rework.
 
 **`pnpm changeset status` does not answer "does this PR need a changeset".**
 Measured by reading the CLI's source: it only errors when
@@ -764,6 +802,18 @@ proves the work is finished. **Done is both at 0, with the per-file
 distribution reported** — a matching total with a wrong distribution means
 one chain step was skipped.
 
+The same trap catches labels, not just numbers. Describing #203's controls,
+one sentence called `examples/postgres` the *positive* control and then, in
+its own parenthesis, correctly said it must produce **no** warning — which
+makes it the negative one. The parenthesis was right and the label was
+wrong, in the same sentence, and a label is what a fast reader takes. Two
+controls prove different things and neither substitutes: the positive one
+(`examples/supabase` before the fix, which must warn) shows the check
+reaches its subject at all; the negative one (`examples/postgres`, which
+must not) shows it is reading grants rather than schema names. So write
+what must be true next to the label, the way the counts above carry their
+units.
+
 This one is worth separating from the measurement failures above it,
 because it is a different thing going wrong. Those were cases where a
 measurement was narrower than the claim it was used to support. This is a
@@ -777,6 +827,42 @@ starting the core change rather than after finishing it. Had the order been
 reversed, the six sites would have surfaced during the mechanical
 replacement pass, when the count is a thing to reconcile rather than a
 thing to question.
+
+**And a completion criterion has to be checkable from inside the
+repository.** #203's positive control was first written as "run the check
+against the tree of D69's red-first commit" — a real and well-chosen
+control, except that this project squash-merges and deletes branches, so
+that commit is on no branch afterwards and `git show` on its SHA fails.
+It survives at `refs/pull/<N>/head`, which is a fetch away and invisible to
+anyone who does not already know to look. A criterion that resolves only
+for a reader who knows that is not a criterion, it is a hint. The fix keeps
+both: the validator's own fixture is the control the criterion depends on,
+and the red commit stays as corroboration — cited with the fetch command
+that reaches it — because a fixture proves the check fires on a case *we
+built* and the commit proves it fires on one the examples *actually had*.
+
+**A prescription is an instrument too, and its range is the third one this
+phase got wrong.** The progression is worth naming, because the same
+mistake kept moving up a level: first a measurement narrower than its
+claim (`grep -c "? "` counting `??`), then a definition of done narrower
+than done (`isNotNull(t.id)` blind to `taskId`), then an instruction asking
+a mechanism to do something it cannot. `CORE_KIND_IDS` was prescribed —
+twice, by two people — as the way to tell a future core kind from an
+unregistered preset kind, when the set can distinguish neither: both names
+are absent from any list the running build can hold. The implementer
+implemented what the set *can* do (a name in the set but not registered
+means a hand-built registry missed it — a third cause nobody had thought
+of), solved the rest another way, and wrote the impossibility into the code
+as an argument.
+
+This one is the most dangerous of the three. A bad measurement yields a
+wrong answer and a bad completion criterion calls unfinished work done, but
+**a bad prescription gets implemented** — instructions arrive with
+authority attached, so questioning one costs more than questioning a
+number. It happened three times in this phase that an implementer pushed
+back on an instruction rather than following it, and all three times the
+instruction was wrong. What made that affordable was that the pushback came
+with a measurement, not an opinion.
 
 **When you report an absence, run a positive control in the same breath.**
 `[]`, `0 occurrences`, and `could not reproduce` are indistinguishable from
