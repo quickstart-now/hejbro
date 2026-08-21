@@ -68,6 +68,11 @@ describe("D57 naming convention: output tokens are kebab-case", () => {
 		expect(offenders).toEqual([]);
 	});
 
+	it("the snapshot's own format-version field is `formatVersion`, not `hejbroSnapshot`", () => {
+		expect(Object.hasOwn(emptySnapshot, "formatVersion")).toBe(true);
+		expect(Object.hasOwn(emptySnapshot, "hejbroSnapshot")).toBe(false);
+	});
+
 	it("a schema snapshot's self-naming field is `name`, not `schemaName`", () => {
 		const result = generateMigration({
 			declarations: [app],
