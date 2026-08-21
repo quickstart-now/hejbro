@@ -50,13 +50,18 @@ jobs:
     needs: gate
     if: github.repository == 'quickstart-now/hejbro'
     runs-on: ubuntu-latest
-    # Owner-configured protected Environment (2026-08-21): required
-    # reviewer hello-pooh, deployment branches restricted to `main`. This
-    # is what turns AGENTS.md's "who approves the release" hard gate from
-    # a convention into a mechanism -- `needs: gate` stops a red gate, but
-    # nothing before this line stops a green one from publishing
-    # unattended. With this in place, the job pauses here for a manual
-    # approval click every time, even when gate passes.
+    # `npm` below MUST match the name of the Environment the owner already
+    # created in repo settings (required reviewer hello-pooh, deployment
+    # branches restricted to `main`) -- NOT a label this file invents. If
+    # this string is ever changed to something that doesn't exist yet
+    # (typo, rename, "improving" it to `release`), GitHub does not error:
+    # it silently creates a brand-new Environment with no protection rules
+    # at all, and the job just runs straight through with no approval
+    # wait and no warning. A wrong name doesn't fail closed, it opens an
+    # unprotected door. This is what turns AGENTS.md's "who approves the
+    # release" hard gate from a convention into a mechanism -- `needs:
+    # gate` stops a red gate, but nothing before this line stops a green
+    # one from publishing unattended.
     environment: npm
     permissions:
       contents: write # changesets/action/publish pushes git tags + GitHub releases
