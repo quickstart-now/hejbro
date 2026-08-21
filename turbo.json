@@ -10,6 +10,24 @@
 		},
 		"test": {
 			"outputs": []
+		},
+		"test:coverage": {
+			"outputs": ["coverage/**"],
+			// Not cached: coverage-final.json (istanbul's per-function hit-map
+			// format) embeds each file's absolute path as its key. Turbo's
+			// cache is content-hash-addressed, not path-addressed, so on a
+			// machine with more than one worktree of this repo (this project's
+			// own convention -- CLAUDE.local.md), a cache hit can restore a
+			// coverage report keyed to a DIFFERENT worktree's absolute paths.
+			// scripts/check-crap.mjs then fails to match any file by path and
+			// silently reports every function at 100% coverage -- reproduced
+			// while developing this task: identical source across two
+			// worktrees produced a real, correct report in one and a false
+			// all-100% report in the other, purely from a cache hit. CI only
+			// ever has one worktree, so this is a local-development hazard,
+			// not a CI one, but it fails silently rather than loudly, so it
+			// isn't worth the cache.
+			"cache": false
 		}
 	}
 }
