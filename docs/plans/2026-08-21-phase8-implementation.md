@@ -217,7 +217,17 @@ own claim.
   produced a real failure — `changeset status` shells out to `git merge-base
   dev HEAD`, which needs a local branch literally named `dev` that a
   `pull_request` checkout never creates on its own. The requirement earned
-  its keep by finding this before release did.
+  its keep by finding this before release did. Prove `fixed` is the cause
+  of the three packages moving together, not a coincidence of all three
+  starting at `0.0.0`: take one package out of `fixed` and show it stops
+  moving *the same way*, not just that it stops moving — changesets patch-
+  bumps any dependent of a released package by default, `fixed` membership
+  or not, so "the removed package doesn't move at all" was never an
+  achievable outcome to demand. (The acceptance wording originally asked
+  for exactly that — "only that package stops moving" — and turned out to
+  be unachievable once measured; the fix was to change what the proof
+  showed, not to abandon it. See the `updateInternalDependencies` write-up
+  below for the same lesson applied to a different claim.)
 - **`phase8-regen-script`** — running the script reproduces the committed
   example migrations and snapshots **byte for byte** before any format change.
   That is the script's own test. Prove the script's range by mutation:
@@ -248,15 +258,26 @@ own claim.
   assertion's expectations passed only because `prepack` had already
   regenerated it). Disable or bypass the build step itself — e.g. temporarily
   remove the `prepack` script, or point the pack at a `dist` produced from an
-  older commit — and confirm the gate still stops the stale tarball. The
-  changeset-presence rule `AGENTS.md` states (`phase8-changesets`) is
-  currently enforced only **incidentally**, by `check:first-release-version`
-  going red when no changeset covers the published packages — and that guard
-  **self-invalidates at the first release**. From 0.1.0 on, nothing enforces
-  it. This PR adds the actual check (a changesets bot/action, or `changeset
-  status --since=origin/dev` failing when a published package changed
-  without a changeset), and proves it by mutation: a PR touching
-  `packages/core` with no `.changeset/*.md` must go red.
+  older commit — and confirm the gate still stops the stale tarball.
+
+  An earlier draft of this criterion claimed the `AGENTS.md`
+  changeset-presence rule was enforced only incidentally (by
+  `check:first-release-version`, which self-invalidates at the first
+  release) and asked this PR to add a real check. **That was wrong, checked
+  by running it rather than reading the CLI's docs**: `pnpm changeset
+  status` already enforces it, on its own, with no `--since` flag needed —
+  `baseBranch: "dev"` in `.changeset/config.json` (`phase8-changesets`) is
+  enough for it to diff against `dev` by default. Measured directly: a
+  commit that changes `packages/core` with no covering changeset makes
+  `changeset status` exit `1` with `"Some packages have been changed but no
+  changesets were found"`; the same commit with a changeset exits `0`;
+  `--since=dev` explicit changes nothing (control: a commit touching only
+  `examples/postgres/README.md`, a private package, exits `0` either way —
+  the check is correctly scoped to the published packages, not every file
+  change). `phase8-changesets` already wires `changeset status` into
+  `ci.yml`, so this enforcement is live from that PR onward, permanently
+  (not self-invalidating like the version guard) — nothing left for this
+  PR to add here.
 - **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
   reproducing #125's crash (a config importing a package that is not
   installed) first, then the diagnostic. Both `asHejbroError` sites are
