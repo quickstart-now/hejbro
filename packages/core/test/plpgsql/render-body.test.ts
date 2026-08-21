@@ -4,6 +4,7 @@ import {
 	defineFunction,
 	defineTrigger,
 	eq,
+	fnv1aHex,
 	isNull,
 	now,
 	renderFunctionSql,
@@ -163,6 +164,54 @@ describe("renderFunctionSql", () => {
 		expect(() => renderFunctionSql(trigger.functionDeclaration)).toThrowError(
 			/collides with the dollar-quote tag/,
 		);
+	});
+});
+
+// #120 translated the golden reference examples' `raise` messages from
+// Korean to English (AGENTS.md requires GitHub-facing text to be English),
+// which removed the only place in the test suite that happened to prove
+// hejbro carries arbitrary multibyte user data through `bodySql`/`bodyHash`
+// unchanged -- that property used to ride along on a reference example's
+// language choice rather than being tested on its own. This makes it an
+// explicit test instead.
+describe("multibyte body content", () => {
+	it("preserves a Korean raise message byte-for-byte and produces a stable bodyHash", () => {
+		const trigger = defineTrigger(
+			comments,
+			{
+				name: "multibyte_probe",
+				timing: "before",
+				events: ["insert"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.raise("부모 댓글을 찾을 수 없다 (parent_id=%)", row.parentId);
+				ctx.return(row);
+			},
+		);
+
+		const bodySql = renderFunctionSql(trigger.functionDeclaration);
+		expect(bodySql).toBe(
+			[
+				'create or replace function "app"."multibyte_probe_fn"()',
+				"returns trigger",
+				"language plpgsql",
+				"as $function$",
+				"begin",
+				"\traise exception '부모 댓글을 찾을 수 없다 (parent_id=%)', new.parent_id;",
+				"\treturn new;",
+				"end;",
+				"$function$;",
+			].join("\n"),
+		);
+
+		// bodyHash is what function-kind.ts's diff engine actually compares
+		// (spec §6.4) -- pinning it, not just bodySql, is what proves the
+		// hash function treats the UTF-8 bytes deterministically rather than
+		// e.g. silently normalizing or mis-counting multibyte code points.
+		expect(fnv1aHex(bodySql)).toBe(fnv1aHex(bodySql));
+		expect(fnv1aHex(bodySql)).toMatch(/^[0-9a-f]{8}$/);
+		expect(fnv1aHex(bodySql)).toBe("61e17272");
 	});
 });
 

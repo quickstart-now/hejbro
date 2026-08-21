@@ -32,11 +32,20 @@ export const comments = table(app, "comments", {
  * lines 203–241) — the phase 3 acceptance artifact. The FK from
  * `comments.postId`/`parentId` is omitted here to keep the case focused.
  *
- * The raise messages were Korean byte-for-byte until #120 (translated to
- * English per AGENTS.md's GitHub-facing-text rule). `steps.ts` deliberately
- * rephrases the "parent not found" message differently from the one here
- * (not just re-punctuated) — that wording difference is what makes step 1's
- * `bodyHash` actually change; see `steps.ts` for the full rationale.
+ * The raise messages were Korean byte-for-byte from phase 3 through #120,
+ * deliberately: they demonstrated hejbro carries arbitrary multibyte user
+ * data through `bodySql`/`bodyHash` unchanged. #120 revisited that
+ * rationale and translated them to English per AGENTS.md's
+ * GitHub-facing-text rule — a public reference example is GitHub-facing
+ * text, and that rule wins. The multibyte round-trip property didn't go
+ * unproven: it moved to an explicit test,
+ * `test/plpgsql/render-body.test.ts`'s "multibyte body content" describe
+ * block, instead of riding along on this example's language choice.
+ *
+ * `steps.ts` deliberately rephrases the "parent not found" message
+ * differently from the one here (not just re-punctuated) — that wording
+ * difference is what makes step 1's `bodyHash` actually change; see
+ * `steps.ts` for the full rationale.
  */
 export const commentsSingleDepth = defineTrigger(
 	comments,
