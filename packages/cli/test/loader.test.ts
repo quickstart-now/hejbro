@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { HejbroInput } from "@hejbro/core";
+import { isTable } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { loadConfig, loadDeclarations } from "../src/loader";
 
@@ -64,15 +65,18 @@ describe("loadDeclarations", () => {
 			declarationKind: "schema",
 			schemaName: "app",
 		});
-		// Checked structurally, not via isTable()/getTableMeta() imported
-		// here: jiti loads fixtures through Node's native import(), while
-		// vitest transforms this test file (and src/loader.ts) through its
-		// own SSR module graph, so a "@hejbro/core" imported in *this* file
-		// isn't guaranteed to be the same module instance jiti's fixture
-		// resolved — `Table`'s hidden metadata symbol wouldn't match across
-		// that boundary even though loader.ts's own (cross-instance-safe)
-		// detection already proved this is a table (see loader.ts's
-		// `hasTableMetaSymbol`).
+		// jiti loads fixtures through Node's native import(), while vitest
+		// transforms this test file (and src/loader.ts) through its own SSR
+		// module graph — a "@hejbro/core" imported in *this* file isn't
+		// guaranteed to be the same module instance jiti's fixture resolved.
+		// This is a real instance of the cross-instance-symbol case
+		// (phase8-symbol-for, #138), not a synthetic one: before `tableMeta`
+		// switched to `Symbol.for`, `isTable()` here was expected to
+		// disagree across that boundary (that's why this assertion used to
+		// check structurally instead). Asserted directly now to lock the
+		// fix in — if it ever regresses, this goes red for the same reason
+		// generate/verify's declaration collection would.
+		expect(isTable(tableInput)).toBe(true);
 		expect(tableInput).toMatchObject({
 			id: { sqlName: "id" },
 			title: { sqlName: "title" },

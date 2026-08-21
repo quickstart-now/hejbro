@@ -42,8 +42,28 @@ export type IfChain = {
 	readonly else: (branch: () => void) => void;
 };
 
-/** Hides a {@link TriggerRow}'s `new`/`old` identity behind a unique symbol (mirrors `dsl/table.ts`'s `tableMeta` pattern). */
-export const triggerRowMeta: unique symbol = Symbol("hejbro:trigger-row-meta");
+/**
+ * Hides a {@link TriggerRow}'s `new`/`old` identity behind a unique
+ * symbol (mirrors `dsl/table.ts`'s `tableMeta` pattern).
+ *
+ * `Symbol.for`, kept symmetrical with `tableMeta` — but this conversion
+ * is defensive, not a fix for a demonstrated live bug: no independently
+ * reproducible cross-instance path exists today (phase8-symbol-for,
+ * #138, checked directly). A `TriggerRow` is only ever obtainable through
+ * the `rows` argument `defineTrigger` itself hands to a trigger body, so
+ * a single `defineTrigger` call is always internally self-consistent;
+ * and if `target` (the table) came from a *different* instance,
+ * `defineTrigger` fails earlier and louder on the table's own
+ * (unguarded) `getTableMeta` lookup, before this symbol is ever
+ * consulted. `@hejbro/supabase` doesn't use triggers at all currently
+ * (checked). Converted anyway: it's the same public-surface,
+ * zero-cost-now/breaking-after-publish case as `tableMeta` (D61/D65),
+ * and a future consumer of this symbol shouldn't have to ask why only
+ * one of the two got the safer form.
+ */
+export const triggerRowMeta: unique symbol = Symbol.for(
+	"hejbro:trigger-row-meta",
+);
 
 /** The `new`/`old` row a `defineTrigger` body receives — every column as a plpgsql-local `Expr`. */
 export type TriggerRow<TTable extends Table> = {
