@@ -71,7 +71,7 @@ describe("storageBucketKind.diff", () => {
 		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([]);
 	});
 
-	it("diffs a config change as a single alter", () => {
+	it("diffs a config change as a single alter, with a field-level note", () => {
 		const previous = storageBucketKind.serialize(storageBucket("avatars"));
 		const next = storageBucketKind.serialize(
 			storageBucket("avatars", { public: true }),
@@ -83,7 +83,187 @@ describe("storageBucketKind.diff", () => {
 				identity: "avatars",
 				previous,
 				next,
-				notes: [],
+				notes: ["public changed"],
+			},
+		]);
+	});
+
+	it("notes a file size limit change", () => {
+		const previous = storageBucketKind.serialize(
+			storageBucket("avatars", { fileSizeLimit: 1048576 }),
+		);
+		const next = storageBucketKind.serialize(
+			storageBucket("avatars", { fileSizeLimit: 2097152 }),
+		);
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["file size limit changed"],
+			},
+		]);
+	});
+
+	it("notes an allowed mime types change", () => {
+		const previous = storageBucketKind.serialize(
+			storageBucket("avatars", { allowedMimeTypes: ["image/png"] }),
+		);
+		const next = storageBucketKind.serialize(
+			storageBucket("avatars", {
+				allowedMimeTypes: ["image/png", "image/jpeg"],
+			}),
+		);
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["allowed mime types changed"],
+			},
+		]);
+	});
+
+	it("notes allowedMimeTypes as changed when the same values are reordered (order-sensitive, matching the kind's existing sameJson-based diff)", () => {
+		const previous = storageBucketKind.serialize(
+			storageBucket("avatars", {
+				allowedMimeTypes: ["image/png", "image/jpeg"],
+			}),
+		);
+		const next = storageBucketKind.serialize(
+			storageBucket("avatars", {
+				allowedMimeTypes: ["image/jpeg", "image/png"],
+			}),
+		);
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["allowed mime types changed"],
+			},
+		]);
+	});
+
+	it("notes every changed field, in declaration order, when several change at once", () => {
+		const previous = storageBucketKind.serialize(storageBucket("avatars"));
+		const next = storageBucketKind.serialize(
+			storageBucket("avatars", {
+				public: true,
+				fileSizeLimit: 1048576,
+				allowedMimeTypes: ["image/png"],
+			}),
+		);
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: [
+					"public changed",
+					"file size limit changed",
+					"allowed mime types changed",
+				],
+			},
+		]);
+	});
+
+	it("never reaches an alter with empty notes, for a field name bucketAlterNotes doesn't know about (#116 regression)", () => {
+		// Mirrors the review probe that broke the first field-by-field
+		// version of bucketAlterNotes: two snapshots differing only in a
+		// field ("owner") that isn't part of StorageBucketSnapshot at all.
+		// notes is derived from the snapshots' own key sets, not a fixed
+		// list of known fields, so this stays non-empty no matter what key
+		// changes -- if notes derivation ever regresses back to a
+		// per-field enumeration, this is the first thing that goes red,
+		// before a fourth real field has to be added to notice.
+		const previous = { name: "avatars", owner: "team-a" };
+		const next = { name: "avatars", owner: "team-b" };
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["owner changed"],
+			},
+		]);
+	});
+
+	it("notes public as changed when the value is explicitly false in previous but the key is entirely absent from next (#116 regression)", () => {
+		// The prior publicChangedNote compared `(previous.public ?? false)
+		// === (next.public ?? false)` -- both sides coalesce to `false`
+		// here, so it produced no note. But the top-level alter decision
+		// (sameJson(previous, next), gating whether diff emits an alter at
+		// all) treats these as structurally different objects (one has a
+		// "public" key, the other doesn't), so it emits an alter anyway:
+		// an alter with an empty note for the very field that triggered
+		// it, #116's bug surviving for an existing field, not just an
+		// unenumerated future one. changedFieldNames uses the same
+		// sameJson basis as that top-level decision, closing this gap by
+		// construction rather than by coincidence.
+		const previous = { name: "avatars", public: false };
+		const next = { name: "avatars" };
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["public changed"],
+			},
+		]);
+	});
+
+	it("notes public as changed when the value is explicit null in previous and the key is absent from next (#116 regression: null vs absent)", () => {
+		// changedFieldNames used to default an absent key to `null`
+		// (`previous[key] ?? null`) -- the same shape of bug as the
+		// `?? false` case above, just with the sentinel moved. A snapshot
+		// loaded from disk can carry an explicit `null` (D33: a
+		// hand-edited or round-tripped snapshot must behave like a freshly
+		// serialized one; other snapshot fields already use `null` for
+		// "unset", e.g. SelectNode.where/limit), so `public: null` vs an
+		// absent `public` key are structurally different to the top-level
+		// sameJson(previous, next) decision but coalesced to equal by
+		// `?? null`. Fixed by comparing single-key-wrapped objects
+		// instead of defaulting to any sentinel value at all.
+		const previous = { name: "avatars", public: null };
+		const next = { name: "avatars" };
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["public changed"],
+			},
+		]);
+	});
+
+	it("notes public as changed when the key is absent from previous and explicit null in next (#116 regression: absent vs null)", () => {
+		// The mirror image of the above -- the field appearing (as an
+		// explicit null) rather than disappearing.
+		const previous = { name: "avatars" };
+		const next = { name: "avatars", public: null };
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["public changed"],
 			},
 		]);
 	});
@@ -235,6 +415,51 @@ describe("storageBucketKind end-to-end via generateMigration", () => {
 			fileSizeLimit: 5242880,
 			allowedMimeTypes: ["image/png", "image/jpeg"],
 		});
+	});
+
+	it("alter end-to-end: banner lists the changed fields, not an empty bracket", () => {
+		const registry = createKindRegistry();
+		registry.register(storageBucketKind);
+		const bucket = storageBucket("attachments", {
+			allowedMimeTypes: ["image/png"],
+		});
+		const previousSnapshot = generateMigration({
+			declarations: [bucket],
+			previousSnapshot: emptySnapshot,
+			registry,
+		}).snapshot;
+		const changed = storageBucket("attachments", {
+			public: true,
+			allowedMimeTypes: ["image/png", "image/jpeg"],
+		});
+		const result = generateMigration({
+			declarations: [changed],
+			previousSnapshot,
+			registry,
+		});
+		expect(result.hasChanges).toBe(true);
+		expect(result.changes).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "attachments",
+				previous: { name: "attachments", allowedMimeTypes: ["image/png"] },
+				next: {
+					name: "attachments",
+					public: true,
+					allowedMimeTypes: ["image/png", "image/jpeg"],
+				},
+				notes: ["public changed", "allowed mime types changed"],
+			},
+		]);
+		// Before this test's fix, this banner line rendered a bare `[]` --
+		// `notes: []` on every alter, regardless of what actually changed
+		// (#116). Reproduced directly against this same scenario: the
+		// pre-fix output was
+		// `-- ~ supabase-storage-bucket attachments []`.
+		expect(result.sql.split("\n")[1]).toBe(
+			"-- ~ supabase-storage-bucket attachments [public changed, allowed mime types changed]",
+		);
 	});
 
 	it("drop end-to-end: no SQL, note captured on the KindChange", () => {

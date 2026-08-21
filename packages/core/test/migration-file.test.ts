@@ -120,6 +120,20 @@ describe("renderBanner", () => {
 		);
 	});
 
+	it("omits the bracket entirely for an alter with no notes (#116 -- no kind should ever render a bare [])", () => {
+		const alterWithoutNotes: KindChange = {
+			kind: "supabase-storage-bucket",
+			operation: "alter",
+			identity: "attachments",
+			previous: {},
+			next: {},
+			notes: [],
+		};
+		expect(renderBanner([alterWithoutNotes])).toBe(
+			"-- hejbro migration\n-- ~ supabase-storage-bucket attachments",
+		);
+	});
+
 	it("appends parent-snapshot/snapshot hash lines when hashes are given (Phase 5)", () => {
 		expect(
 			renderBanner([createChange], {
