@@ -308,16 +308,18 @@ describe("generateMigration", () => {
 	// #193 review: a serial column's sequence is `owned by` its column, so
 	// Postgres already cascades the sequence away the moment the owning
 	// table *or* column is dropped (confirmed directly against a real
-	// Postgres for both). If sequenceKind still emitted its own
-	// `drop default`/`drop sequence` statements for that change, they'd run
-	// against a target the cascade already removed, and fail. This three-
-	// point matrix pins the fix (generate.ts's sequenceDropIsCascaded):
-	// table drop and column drop both suppress the sequence's own SQL
-	// (banner only), while a type transition that leaves the column alive
-	// (serial() -> integer(), already covered above) keeps emitting bare
-	// drop statements normally.
-	describe("#193: a sequence drop cascaded by Postgres emits no SQL of its own", () => {
-		it("dropping the whole table emits only `drop table`, no drop default/drop sequence", () => {
+	// Postgres for both). sequenceKind's own `drop default`/`drop sequence`
+	// statements go out on the `predrop` stage (see sequence-kind.ts),
+	// which always runs before every kind's `main`-stage statements
+	// (generate.ts) -- so they always run *before* the table's own
+	// `drop table`/`drop column`, structurally ahead of the cascade rather
+	// than racing it. This three-point matrix pins the resulting statement
+	// *order*: table drop and column drop both put the sequence's own
+	// statements first, while a type transition that leaves the column
+	// alive (serial() -> integer(), already covered above) keeps emitting
+	// the same bare drop statements, just via the same predrop-first order.
+	describe("#193: a sequence drop always clears before the cascade that could remove it", () => {
+		it("dropping the whole table: drop default + drop sequence (predrop) before drop table (main)", () => {
 			const seqApp = schema("app");
 			const before = table(seqApp, "posts", { id: serial().primaryKey() });
 			const previous = generateMigration({
@@ -333,12 +335,15 @@ describe("generateMigration", () => {
 				"drop table",
 				"drop sequence",
 			]);
-			expect(result.sql).toContain('drop table "app"."posts";');
-			expect(result.sql).not.toContain("drop default");
-			expect(result.sql).not.toContain("drop sequence");
+			const dropDefaultIndex = result.sql.indexOf("drop default");
+			const dropSequenceIndex = result.sql.indexOf("drop sequence");
+			const dropTableIndex = result.sql.indexOf("drop table");
+			expect(dropDefaultIndex).toBeGreaterThan(-1);
+			expect(dropSequenceIndex).toBeGreaterThan(dropDefaultIndex);
+			expect(dropTableIndex).toBeGreaterThan(dropSequenceIndex);
 		});
 
-		it("dropping just the serial column emits only `drop column`, no drop default/drop sequence", () => {
+		it("dropping just the serial column: drop default + drop sequence (predrop) before drop column (main)", () => {
 			const seqApp = schema("app");
 			const before = table(seqApp, "posts", {
 				id: serial().primaryKey(),
@@ -354,11 +359,12 @@ describe("generateMigration", () => {
 				previousSnapshot: previous,
 			});
 			expect(result.errors).toEqual([]);
-			expect(result.sql).toContain(
-				'alter table "app"."posts" drop column "id";',
-			);
-			expect(result.sql).not.toContain("drop default");
-			expect(result.sql).not.toContain("drop sequence");
+			const dropDefaultIndex = result.sql.indexOf("drop default");
+			const dropSequenceIndex = result.sql.indexOf("drop sequence");
+			const dropColumnIndex = result.sql.indexOf("drop column");
+			expect(dropDefaultIndex).toBeGreaterThan(-1);
+			expect(dropSequenceIndex).toBeGreaterThan(dropDefaultIndex);
+			expect(dropColumnIndex).toBeGreaterThan(dropSequenceIndex);
 		});
 
 		it("a type transition that keeps the column alive (serial -> integer) still emits bare drop statements", () => {

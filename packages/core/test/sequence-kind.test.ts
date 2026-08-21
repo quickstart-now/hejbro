@@ -140,15 +140,16 @@ describe("sequenceKind.emit", () => {
 	});
 
 	// #23/D66. This kind's own emit always produces bare statements — no
-	// `if exists` — because a genuine cascade (the owning table/column
-	// already gone via Postgres's own `owned by` link) is handled one
-	// layer up: `generate.ts`'s `sequenceDropIsCascaded` reads the *next*
-	// snapshot and skips calling `emit` entirely for a drop change whose
-	// owning table/column is already gone there (banner only, D42-style;
-	// see `generate.test.ts`'s "#193" describe block for that path). A
-	// drift between that check and reality should fail loudly, which is
-	// exactly what a bare (non-`if exists`) statement does.
-	it("drop: drop default, then drop sequence, both main stage, both bare (no if exists)", () => {
+	// `if exists` — and a drop's statements go out on `predrop`, not
+	// `main` (#193 review): `predrop` runs before every kind's `main`-stage
+	// statements (generate.ts), so this always clears before the owning
+	// table's own `drop table`/`drop column` could otherwise race it via
+	// Postgres's `owned by` cascade -- the same stage `policyKind`/
+	// `triggerKind` already use for their own drops, for the identical
+	// reason (#122). A drift between that structural guarantee and reality
+	// should fail loudly, which is exactly what a bare (non-`if exists`)
+	// statement does.
+	it("drop: drop default, then drop sequence, both predrop stage, both bare (no if exists)", () => {
 		const previous = sequenceKind.serialize(declaration());
 		const statements = sequenceKind.emit({
 			kind: "sequence",
@@ -161,11 +162,11 @@ describe("sequenceKind.emit", () => {
 		expect(statements).toEqual([
 			{
 				sql: 'alter table "app"."posts" alter column "id" drop default;',
-				stage: "main",
+				stage: "predrop",
 			},
 			{
 				sql: 'drop sequence "app"."posts_id_seq";',
-				stage: "main",
+				stage: "predrop",
 			},
 		]);
 	});

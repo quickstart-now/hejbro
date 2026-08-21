@@ -3,7 +3,11 @@ import { assertNever, throwHejbroError } from "../error";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
-import { deferredStatement, statement } from "../sql/statement";
+import {
+	deferredStatement,
+	predropStatement,
+	statement,
+} from "../sql/statement";
 
 /**
  * The sequence's own base-type clause (#23/D66) — `as integer`/
@@ -69,17 +73,19 @@ const createSequenceSql = (snapshot: SequenceSnapshot): string =>
 	`create sequence ${qualifyName(snapshot.schema, snapshot.name)}${baseTypeClause(snapshot.baseType)};`;
 
 /**
- * `drop sequence …;` — bare, not `if exists`. When this column's whole
- * `table` (or just this `column`) is also gone from the *next* snapshot in
- * the same diff, Postgres's own `owned by` link (see `ownedBySql` below)
- * already cascaded the sequence away the moment that drop ran — and
- * `generate.ts` never calls `emit` for this change in that case at all
- * (D42-style: banner only, no SQL — see `sequenceOwningColumnGone` there).
- * So by the time this bare statement runs, the owning column is
- * guaranteed to still exist: a drift between that guarantee and reality
- * (e.g. a hand-run migration against a database that doesn't match the
- * snapshot) should fail loudly, the same as every other statement this
- * kind emits — `if exists` would swallow that drift silently instead.
+ * `drop sequence …;` — bare, not `if exists`. A drop change's statements
+ * (this and `dropDefaultSql` below) go out on the `predrop` stage (see
+ * `emit` below), which runs before every `main`-stage statement across
+ * every kind (`generate.ts`) — including this column's own table's
+ * `drop table`/`drop column`. So this always runs *before* Postgres's own
+ * `owned by` cascade (see `ownedBySql` below) could possibly remove it:
+ * the owning table/column is structurally guaranteed to still exist here,
+ * the same guarantee `policyKind`/`triggerKind` already lean on for the
+ * identical reason (#122 — a dependent kind's drop must clear before the
+ * kind it depends on is altered). `if exists` would swallow a genuine
+ * drift (e.g. a hand-run migration against a database that's diverged
+ * from the snapshot) silently instead of failing loudly, which every
+ * other statement this kind emits already does.
  */
 const dropSequenceSql = (snapshot: SequenceSnapshot): string =>
 	`drop sequence ${qualifyName(snapshot.schema, snapshot.name)};`;
@@ -114,12 +120,11 @@ const setDefaultSql = (snapshot: SequenceSnapshot): string =>
 	`alter table ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} set default nextval('${snapshot.schema}.${snapshot.name}');`;
 
 /**
- * `alter table … alter column … drop default;` — bare, not
- * `if exists`/`if exists` on the column. Same reasoning as
- * `dropSequenceSql` above: `generate.ts` suppresses this statement
- * entirely (never calls `emit`) when the owning table/column is already
- * gone from the next snapshot, so this always runs against a table and
- * column that are still there.
+ * `alter table … alter column … drop default;` — bare, not `if exists`.
+ * Same reasoning as `dropSequenceSql` above: the `predrop` stage this
+ * statement runs on guarantees it always runs before the owning table's
+ * own `drop table`/`drop column` (a `main`-stage statement, a different
+ * kind), so the column is structurally guaranteed to still be there.
  */
 const dropDefaultSql = (snapshot: SequenceSnapshot): string =>
 	`alter table ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} drop default;`;
@@ -139,6 +144,20 @@ const alterBaseTypeSql = (snapshot: SequenceSnapshot): string =>
  * `setDefaultSql`), so there is no dependency cycle with `tableKind` to
  * resolve, and `tableKind` needs no matching `dependsOn: ["sequence"]`
  * either.
+ *
+ * A `drop` change's statements (`dropDefaultSql`/`dropSequenceSql`) go
+ * out on `predrop`, not `main` (#193 review) — the same stage
+ * `policyKind`/`triggerKind` already use for their own drops, and for the
+ * same reason (#122): `predrop` runs before every kind's `main`-stage
+ * statements, so this drop always clears before the owning table's own
+ * `drop table`/`drop column` could otherwise race it via Postgres's
+ * `owned by` cascade (see `ownedBySql`'s doc comment). Confirmed directly
+ * against a real Postgres: the reordered statements (drop default, drop
+ * sequence, *then* the table's own change) succeed identically to the
+ * original order for a change that doesn't touch the owning column at all
+ * (the `serial()` → `integer()` type transition) — reordering a
+ * statement is never itself a correctness risk here, only *not*
+ * reordering the cascade-prone ones was.
  */
 export const sequenceKind: ObjectKind<SequenceDeclaration> = {
 	kind: "sequence",
@@ -228,8 +247,8 @@ export const sequenceKind: ObjectKind<SequenceDeclaration> = {
 				}
 				const previousSnapshot = asSequenceSnapshot(change.previous);
 				return [
-					statement(dropDefaultSql(previousSnapshot)),
-					statement(dropSequenceSql(previousSnapshot)),
+					predropStatement(dropDefaultSql(previousSnapshot)),
+					predropStatement(dropSequenceSql(previousSnapshot)),
 				];
 			}
 			case "alter": {
