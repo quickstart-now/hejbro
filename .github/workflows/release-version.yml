@@ -24,10 +24,6 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
-  # #180: lets the `version` job's dispatch step (below) start ci.yml via
-  # `gh workflow run` -- see that step's comment for why this is
-  # necessary at all.
-  actions: write
 
 jobs:
   check-changesets:
@@ -108,7 +104,6 @@ jobs:
       # decomposed sub-action's is `script`; they differ even within the
       # same release, which is the trap this comment exists to name).
       - uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
-        id: version
         with:
           script: pnpm run version-packages
           # Hardcoded, not `${{ github.ref_name }}`: this workflow only
@@ -128,50 +123,46 @@ jobs:
           # branch>`, never `changeset-release/dev`) -- it was never
           # correct here, in the workflow this repository actually runs.
           pr-base-branch: dev
-      # #180: a PR opened/updated with GITHUB_TOKEN (the step above just
-      # did exactly that, for "Version Packages") never triggers a
-      # workflow through its normal push/pull_request events -- GitHub's
-      # own recursion guard, not a bug. `dev`'s ruleset requires
-      # `verify (22)`/`verify (24)`, so without this, that PR can never
-      # gain those checks and the owner can never merge it with the
-      # merge button. `workflow_dispatch` is the documented exception:
-      # starting ci.yml this way still creates real check runs, attached
-      # to the branch's current head commit -- measured directly via the
-      # Checks API (`GET /repos/.../commits/<head-sha>/check-runs`), which
-      # showed both `verify (22)`/`verify (24)` as completed/success on
-      # the scratch PR's exact head SHA.
+      # #180 added a step here (`gh workflow run ci.yml --ref
+      # changeset-release/dev`, right after this one) to unblock the
+      # "Version Packages" PR's required `verify (22)`/`verify (24)`
+      # checks. #189 removes it -- not because the dispatch failed to
+      # fire (it did: `workflow_dispatch` is a genuine, documented
+      # exception to the GITHUB_TOKEN-push recursion guard, and the
+      # triggered run completed successfully with both check runs
+      # attached to the right head SHA, exactly as #180 measured). It's
+      # removed because dispatching there never touched the actual
+      # blocker, confirmed by a same-commit control on #179's real head:
+      # that single commit carried 3 raw check-runs -- `verify (24)` and
+      # `verify (22)` (from this dispatch) plus a `.github/dependabot.yml`
+      # check (from Dependabot, unrelated to this workflow) -- but the
+      # commit's `statusCheckRollup` (what `mergeStateStatus`, the merge
+      # button, and `gh pr checks` all actually read) contained only the
+      # Dependabot-created one. Same commit, same moment, two sources:
+      # only the `push`/`pull_request`-triggered one reached the rollup.
+      # So this step was real CI cost (two extra jobs on every `dev`
+      # push) for zero effect on whether the PR could be merged.
       #
-      # What is NOT yet measured, and is the one open question this PR
-      # leaves for #179 itself: whether a check run created this way
-      # (via `workflow_dispatch`) populates the PR's `statusCheckRollup`
-      # (what `mergeStateStatus`/the merge button/`gh pr checks` actually
-      # read) the same way a `push`/`pull_request`-triggered run does.
-      # Reviewer measured a real split between the two: 4/4 sampled
-      # `workflow_dispatch` commits had check-runs present but a NULL
-      # rollup, while 5/5 `push`/`pull_request` commits had a populated
-      # rollup. Three of those five were on deleted branches and kept
-      # their rollup anyway, which rules out "the branch is gone" as the
-      # cause; a separate commit with zero check-runs also read NULL,
-      # confirming NULL means "nothing in the rollup" rather than an API
-      # artifact. Event type is the remaining variable. If the rollup
-      # stays NULL for `changeset-release/dev` too, this dispatch makes
-      # the check run exist without making it count toward the ruleset --
-      # to be confirmed by observing #179 after this merges, not assumed
-      # here.
+      # The actual blocker, and why it looked like "no pull_request run
+      # at all": a PR opened/updated with GITHUB_TOKEN (as
+      # changesets/action/version does) DOES get a `pull_request`-
+      # triggered `ci.yml` run -- #180's premise that GITHUB_TOKEN
+      # prevents that run from being created was wrong. What actually
+      # happens is narrower: the run is created but stalls in
+      # `action_required`, because this repo's Actions run-approval
+      # policy treats `github-actions[bot]` as a first-time external
+      # contributor whose runs need manual approval. Approving that run
+      # (not dispatching a separate one) is what populated #179's rollup
+      # and flipped it to CLEAN.
       #
-      # `if:` guards against the one case `changesets/action/version`
-      # itself distinguishes via its own `pr-number` output: when every
-      # pending changeset is empty, it logs "All changesets are empty;
-      # not creating PR" and never pushes anything -- dispatching then
-      # would target a branch this run didn't touch.
-      #
-      # Runs on every push to `dev` that reaches this step, so every
-      # later update of the Version PR re-dispatches and the checks
-      # track whatever the current head is -- see this repo's PR for
-      # #180 for the measured behavior when a dispatch races a second
-      # `dev` push in the same window.
-      - name: Dispatch ci.yml for the Version PR's required checks
-        if: steps.version.outputs.pr-number != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run ci.yml --ref changeset-release/dev
+      # UNRESOLVED, not fixed by this PR: approval is required again on
+      # each subsequent bot push, not just the first one -- measured
+      # directly (9 sampled `action_required` runs were 9 distinct head
+      # SHAs, 0 sampled bot-authored runs executed automatically, and a
+      # bot push 5 minutes after one manual approval produced a fresh
+      # `action_required` run rather than reusing the approval). Every
+      # future "Version Packages" PR update will need a manual approval
+      # click until the owner picks one of: keep approving manually,
+      # relax the first-time-contributor run-approval policy, or give
+      # this workflow a bot token/GitHub App identity that isn't treated
+      # as an external contributor. Not decided as of this comment.
