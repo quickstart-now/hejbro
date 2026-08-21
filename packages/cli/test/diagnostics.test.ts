@@ -1,3 +1,4 @@
+import { hejbroError } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Diagnostic } from "../src/diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../src/diagnostics";
@@ -194,11 +195,7 @@ describe("renderDiagnostics — owner-approved terminal mockups", () => {
 describe("fromHejbroError", () => {
 	it("carries code, message (as the body), declaredAt, and the given identity — no suggestions by default", () => {
 		const diagnostic = fromHejbroError(
-			{
-				code: "invalid-config",
-				message: 'config field "entry" is missing.',
-				declaredAt: null,
-			},
+			hejbroError("invalid-config", 'config field "entry" is missing.', null),
 			"/repo/hejbro.config.ts",
 		);
 		expect(diagnostic).toEqual({
@@ -212,11 +209,7 @@ describe("fromHejbroError", () => {
 
 	it("passes declaredAt through as the at field verbatim", () => {
 		const diagnostic = fromHejbroError(
-			{
-				code: "invalid-sql-name",
-				message: "bad name.",
-				declaredAt: "/repo/src/schema.ts:3:1",
-			},
+			hejbroError("invalid-sql-name", "bad name.", "/repo/src/schema.ts:3:1"),
 			"app",
 		);
 		expect(diagnostic.at).toBe("/repo/src/schema.ts:3:1");

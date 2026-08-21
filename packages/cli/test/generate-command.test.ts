@@ -191,6 +191,28 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(result.stderr).toContain("hejbro.snapshot.json");
 	});
 
+	// Regression guard for a defect introduced (and caught before shipping)
+	// while converting HejbroError to a class (phase8-error-subclass, #25):
+	// generate.ts's toDiagnostic used to rebuild the error via
+	// `{ ...error, declaredAt }`, which silently drops `message` once
+	// HejbroError is an Error subclass (Error.prototype.message is
+	// own-but-non-enumerable, so a plain object spread never copies it).
+	// Every non-ambiguity error diagnostic's body came out as the literal
+	// string "undefined". Deliberately independent of golden.test.ts's
+	// exact-text pins — asserts the invariant directly (a real message,
+	// never the string "undefined") rather than relying on a byte-exact
+	// match to also happen to catch it.
+	it('renders a real error body, never the literal string "undefined", for a non-ambiguity error', async () => {
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'entry pattern "src/**/*.schema.ts" matched 0 files',
+		);
+		expect(result.stderr).not.toContain("undefined");
+	});
+
 	it("renders a preset validator's warning to stderr and keeps exit 0 (O3)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeFixtureFile(

@@ -4,6 +4,7 @@ import {
 	diagnostic,
 	emptySnapshot,
 	generateMigration,
+	hejbroError,
 	runValidators,
 	schema,
 } from "../src/index";
@@ -38,7 +39,7 @@ describe("generateMigration validators", () => {
 			],
 		});
 		expect(result.errors).toEqual([
-			{ code: "test-error", message: "an error.", declaredAt: "app.ts:1" },
+			hejbroError("test-error", "an error.", "app.ts:1"),
 		]);
 		expect(result.sql).toBe("");
 		expect(result.hasChanges).toBe(false);
