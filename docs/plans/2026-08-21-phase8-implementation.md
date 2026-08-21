@@ -220,7 +220,12 @@ own claim.
   TypeScript union. Two things prove it: the codec round-trips both ways under
   test, and **`naming-conventions.test.ts` passes on v5 output with no
   carve-out added** — that test is what enforces this decision, so weakening it
-  would defeat the purpose.
+  would defeat the purpose. It cannot enforce it as written, though: it checks
+  a closed vocabulary (kind ids, prefix strategies, golden directory names, a
+  few known fields), so a `constantOne` or a stray `columnName` inside an
+  expression subtree would pass unnoticed. Extend it first with a case that
+  walks a v5 snapshot recursively and asserts every discriminator value and
+  every reference key, then make it green.
 - **`phase8-sequence-kind`** — the invalid `alter column … type serial` path is
   closed; a column rename and a table rename both keep the sequence in step;
   `serial()` → `integer()` emits the default drop and the sequence drop.
@@ -353,7 +358,11 @@ vocabulary asks for `schema`/`table`.
 
 **D70 settles it by applying D57 rather than amending it**: the serialized form
 is kebab-case with D57's reference vocabulary, the TypeScript union stays
-camelCase, and the mapping lives in the expression codec.
+camelCase, and the mapping lives in the expression codec. D70 is written as a
+rule over the whole serialized subtree rather than a list of nodes, because the
+subtree is wider than `ExprNode`: `exists(...)` pulls a `SelectNode` in with
+it, which is how `projectionKind: "constantOne"` reaches a snapshot — two of
+the three policies in `examples/supabase` already take that path.
 `packages/core/test/naming-conventions.test.ts` scans generated output rather
 than source — by design — so it is the enforcement mechanism, not an obstacle
 to work around.
