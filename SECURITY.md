@@ -26,7 +26,7 @@ Please include:
 
 ## What to expect
 
-- **Acknowledgement within 5 business days** of a report.
+- We aim to acknowledge reports promptly.
 - A plan for a fix, or a request for more information, following that
   acknowledgement. Timeline depends on severity and complexity, but you
   will hear back rather than the report going silent.
