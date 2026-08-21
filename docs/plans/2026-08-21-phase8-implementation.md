@@ -322,24 +322,6 @@ found here may change what the docs should say.
 
 ## One completion criterion applies to every PR
 
-**And one rule for writing them: name the mechanism, then check its
-range.** A completion criterion that points at a gate is only as good as
-what that gate actually looks at.
-
-This phase got it wrong twice in the same way. The image pin was first
-recorded in a comment — a comment is not a check, so it was upgraded to a
-digest comparison that fails. Then the expression-naming criterion pointed
-at `naming-conventions.test.ts` and forbade carve-outs — but that test
-inspects a closed list of tokens, so `constantOne` could have landed in a
-v5 snapshot and stayed green. Forbidding a carve-out was never the
-problem; there was nothing to carve out of.
-
-So when a criterion says "X enforces this", open X and confirm it sees the
-thing. If it does not, extending it is part of the PR — and the extension
-lands **first, failing**, so its reach is proven before the code that
-needs it.
-
-
 **Does this change make a currently-true document false?** If it does, fixing
 that text is part of the PR, not a follow-up.
 
@@ -360,6 +342,23 @@ rather than a reminder:
 The pattern is always the same: text that was true when written, made false by
 a later change, and left behind because nobody owned it. The PR that falsifies
 it owns it.
+
+**And one rule for writing them: name the mechanism, then check its
+range.** A completion criterion that points at a gate is only as good as
+what that gate actually looks at.
+
+This phase got it wrong twice in the same way. The image pin was first
+recorded in a comment — a comment is not a check, so it was upgraded to a
+digest comparison that fails. Then the expression-naming criterion pointed
+at `naming-conventions.test.ts` and forbade carve-outs — but that test
+inspects a closed list of tokens, so `constantOne` could have landed in a
+v5 snapshot and stayed green. Forbidding a carve-out was never the
+problem; there was nothing to carve out of.
+
+So when a criterion says "X enforces this", open X and confirm it sees the
+thing. If it does not, extending it is part of the PR — and the extension
+lands **first, failing**, so its reach is proven before the code that
+needs it.
 
 ## Settled: expression discriminators in the snapshot (D70)
 
