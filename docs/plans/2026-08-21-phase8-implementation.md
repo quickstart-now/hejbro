@@ -542,6 +542,16 @@ measures the CLI by spawning it — `phase8-loader-diagnostics`,
 `phase8-flag-equals`, and the format wave. See "a failed reproduction is
 not evidence of absence" below for what this looks like when missed.
 
+**A workflow that runs on more than one event must be measured on each of
+them.** The `git fetch origin dev:dev` step added in `phase8-changesets` was
+verified on `pull_request` — where it was genuinely needed and genuinely
+worked — and shipped without ever running on `push`, where the branch it
+fetches into is already checked out and git refuses with exit 128. Four
+merges landed on a red `dev` before anyone looked: the PR checks were green,
+and a PR check and a branch build are *different events*. Verifying a
+workflow on the event you happened to be debugging is not verifying the
+workflow.
+
 **How to check a gate's range: break it on purpose.** Reading a gate and
 judging whether it covers something is weaker than injecting the defect
 and watching it fail. `phase8-packaging`'s review did exactly that — seven
