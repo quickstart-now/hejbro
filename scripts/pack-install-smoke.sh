@@ -215,7 +215,9 @@ EOF
 # `ERR_MODULE_NOT_FOUND: Cannot find module
 # '.../node_modules/@hejbro/supabase/dist/nonexistent.js'` — i.e. the
 # failure this assertion catches is @hejbro/supabase's own entry point,
-# not an unrelated crash.
+# not an unrelated crash. This mutation (a broken preset package import)
+# doubles as a ready-made phase8-loader-diagnostics test case: today it
+# crashes, and that PR should turn it into a clean diagnostic instead.
 cat > "$SCRATCH_DIR/hejbro.config.ts" <<'EOF'
 import { defineConfig } from "hejbro";
 import { supabasePreset } from "@hejbro/supabase";
