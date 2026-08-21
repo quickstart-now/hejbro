@@ -138,6 +138,15 @@ added to the map but never wired into anything the fixture builds — and
 never added to the unreachable list — fails loudly instead of silently
 passing every other check.
 
+The reachable/unreachable node- and projection-kind lists themselves live
+in one place, `packages/core/test/expr/reachable-kinds.ts` — not
+duplicated in `naming-conventions.test.ts`. `retarget.test.ts`'s own
+reference-identity loop (a different property: "an unrelated rename
+returns the exact same object", not D70's kebab/vocabulary rules) iterates
+the same list, so a node kind added to one test's coverage is added to
+the other's automatically, rather than needing two separate edits that
+can drift apart.
+
 Machine enforcement of the TypeScript layer is a follow-up: Biome's
 `useNamingConvention` is not enabled yet because it currently reports 62
 warnings, most of them test fixtures whose snake_case deliberately mirrors

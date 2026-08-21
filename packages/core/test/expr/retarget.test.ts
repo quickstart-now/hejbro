@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { assertNever } from "../../src/error";
 import type { ExprNode } from "../../src/expr/ast";
 import type { RenameTarget } from "../../src/expr/retarget";
 import { retargetExprNode } from "../../src/expr/retarget";
+import { REACHABLE_NODE_KINDS } from "./reachable-kinds";
 
 const tableRenameTarget: RenameTarget = {
 	oldSchema: "app",
@@ -82,7 +84,7 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 		expect(retargetExprNode(node, tableRenameTarget)).toBe(node);
 	});
 
-	// #110 item 23/24, reviewer round 2: on a COLUMN rename
+	// #110 item 23/24, reviewer round 2/3: on a COLUMN rename
 	// (oldSchema===newSchema, oldTable===newTable), EVERY reference-bearing
 	// node kind that mentions the same table but is otherwise unaffected
 	// must come back as the exact SAME reference -- schema/table matching
@@ -91,73 +93,143 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 	// match branch there always means something changed; a column rename
 	// does not have that property).
 	//
-	// This was fixed twice, for two DIFFERENT node kinds, because the first
-	// test (a bare `columnRef` case) only exercised `retargetExprNode`'s own
-	// `columnRef` branch and never `retargetTableRef` -- a structurally
-	// different function, reached only through `exists()`'s `from`/`join`,
-	// with its own separate (and separately buggy) copy of the same
-	// comparison. Adding cases one at a time as gaps are found is exactly
-	// how the second bug was missed the first time; this table instead
-	// enumerates every reference-bearing node SHAPE once, in one place, so
-	// a future reference-bearing node kind has an obvious slot to add
-	// itself into rather than a new one-off `it` block.
-	const unrelatedColumnRenameCases: ReadonlyArray<readonly [string, ExprNode]> =
-		[
-			[
-				"columnRef (retargetExprNode's own columnRef branch)",
-				{
-					nodeKind: "columnRef",
-					schemaName: "app",
-					tableName: "posts",
-					columnName: "subtitle",
-				},
-			],
-			[
-				"exists()'s query.from (TableRefNode via retargetSelectNode -> retargetTableRef)",
-				{
+	// This was fixed twice, for two DIFFERENT node kinds, because the
+	// first test (a bare `columnRef` case) only exercised
+	// `retargetExprNode`'s own `columnRef` branch and never
+	// `retargetTableRef` -- a structurally different function, reached
+	// only through `exists()`'s `from`/`join`, with its own separate (and
+	// separately buggy) copy of the same comparison. Round 2's fix
+	// ("add one more case for the gap that was just found") was *itself*
+	// the same narrow-test pattern that caused the miss in the first
+	// place, one level up -- adding cases one at a time as gaps are found
+	// doesn't make the next gap visible.
+	//
+	// This is why the loop below iterates `REACHABLE_NODE_KINDS`
+	// (`reachable-kinds.ts`) rather than a hand-picked list living only in
+	// this file: it's the SAME array the D70 completeness test in
+	// `naming-conventions.test.ts` iterates (#110 item 72) -- a future
+	// `ExprNode` kind added to the codec's map lands in both tests'
+	// coverage automatically, or requires an explicit, reasoned exclusion
+	// visible in one shared place, not a silent gap in whichever test
+	// nobody happened to update.
+	//
+	// `buildUnrelatedCase` is an exhaustive switch over the full
+	// `ExprNode["nodeKind"]` union (compiler-enforced via `assertNever`),
+	// so a new node kind fails to compile here until it's given a case --
+	// every builder below constructs a minimal, valid node of that kind
+	// that does NOT reference `columnRenameTarget`'s column anywhere in
+	// its subtree (some wrap `unrelatedColumnRef`, a column on the same
+	// table but a different column, to also exercise composite nodes'
+	// own identity-preservation branches, not just their leaves).
+	// `exists` alone covers BOTH `retargetTableRef` call sites at once
+	// (`query.from` and `join.table`), matching the same table as the
+	// rename target on both, since that's precisely the shape that was
+	// broken.
+	const unrelatedColumnRef: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "posts",
+		columnName: "subtitle",
+	};
+	const unrelatedLiteral: ExprNode = {
+		nodeKind: "literal",
+		literal: { literalKind: "number", value: 1 },
+	};
+
+	const buildUnrelatedCase = (kind: ExprNode["nodeKind"]): ExprNode => {
+		switch (kind) {
+			case "literal":
+				return unrelatedLiteral;
+			case "columnRef":
+				return unrelatedColumnRef;
+			case "plpgsqlRef":
+				return { nodeKind: "plpgsqlRef", path: ["new", "x"] };
+			case "comparison":
+				return {
+					nodeKind: "comparison",
+					operator: "=",
+					left: unrelatedColumnRef,
+					right: unrelatedLiteral,
+				};
+			case "logical":
+				return {
+					nodeKind: "logical",
+					operator: "and",
+					operands: [unrelatedColumnRef, unrelatedLiteral],
+				};
+			case "not":
+				return { nodeKind: "not", operand: unrelatedColumnRef };
+			case "nullTest":
+				return {
+					nodeKind: "nullTest",
+					negated: false,
+					operand: unrelatedColumnRef,
+				};
+			case "inList":
+				return {
+					nodeKind: "inList",
+					negated: false,
+					operand: unrelatedColumnRef,
+					values: [unrelatedLiteral],
+				};
+			case "between":
+				return {
+					nodeKind: "between",
+					negated: false,
+					operand: unrelatedColumnRef,
+					lowerBound: unrelatedLiteral,
+					upperBound: unrelatedLiteral,
+				};
+			case "functionCall":
+				return {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "lower",
+					args: [unrelatedColumnRef],
+				};
+			case "sqlTemplate":
+				return {
+					nodeKind: "sqlTemplate",
+					chunks: [
+						{ chunkKind: "text", text: "(" },
+						{ chunkKind: "expr", expr: unrelatedColumnRef },
+						{ chunkKind: "text", text: ")" },
+					],
+				};
+			case "rawSql":
+				return { nodeKind: "rawSql", sql: "true" };
+			case "exists":
+				return {
 					nodeKind: "exists",
 					negated: false,
 					query: {
 						queryKind: "select",
 						projection: { projectionKind: "constantOne" },
 						from: { schemaName: "app", tableName: "posts" },
-						joins: [],
-						where: null,
-						orderBy: [],
-						limit: null,
-					},
-				},
-			],
-			[
-				"exists()'s join.table (TableRefNode via retargetSelectNode -> retargetJoin -> retargetTableRef, a different call site than query.from)",
-				{
-					nodeKind: "exists",
-					negated: false,
-					query: {
-						queryKind: "select",
-						projection: { projectionKind: "constantOne" },
-						from: { schemaName: "app", tableName: "comments" },
 						joins: [
 							{
 								joinKind: "inner",
 								table: { schemaName: "app", tableName: "posts" },
-								on: {
-									nodeKind: "literal",
-									literal: { literalKind: "boolean", value: true },
-								},
+								on: unrelatedLiteral,
 							},
 						],
 						where: null,
 						orderBy: [],
 						limit: null,
 					},
-				},
-			],
-		];
+				};
+			default:
+				return assertNever(kind);
+		}
+	};
 
-	it.each(unrelatedColumnRenameCases)(
+	it.each(
+		REACHABLE_NODE_KINDS.map(
+			(kind) => [kind, buildUnrelatedCase(kind)] as const,
+		),
+	)(
 		"returns the exact same reference on an unrelated column rename: %s",
-		(_label, node) => {
+		(_kind, node) => {
 			expect(retargetExprNode(node, columnRenameTarget)).toBe(node);
 		},
 	);

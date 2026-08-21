@@ -1,7 +1,6 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ExprNode, ProjectionNode } from "../src/expr/ast";
 import {
 	NODE_KIND_TO_SNAPSHOT,
 	PROJECTION_KIND_TO_SNAPSHOT,
@@ -37,6 +36,12 @@ import {
 	uuid,
 } from "../src/index";
 import type { JsonValue } from "../src/snapshot/stable-json";
+import {
+	REACHABLE_NODE_KINDS,
+	REACHABLE_PROJECTION_KINDS,
+	UNREACHABLE_NODE_KINDS,
+	UNREACHABLE_PROJECTION_KINDS,
+} from "./expr/reachable-kinds";
 
 // D57 (#128): output tokens hejbro authors itself must be kebab-case
 // (snapshot values, identity segments, kind ids, diagnostic codes, config
@@ -353,63 +358,28 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 		expect(kebabOffenders).toEqual([]);
 	});
 
-	// reviewer round 2 (🔴2b, refined by item 65): the walker above only
-	// ever sees whatever the fixture happens to construct -- it can prove
-	// "everything this fixture reached is spelled correctly", never
+	// reviewer round 2/3 (🔴2b, refined by items 65/72): the walker above
+	// only ever sees whatever the fixture happens to construct -- it can
+	// prove "everything this fixture reached is spelled correctly", never
 	// "everything the map claims to support was checked". Closing that
 	// needs the map's own key set compared against what got reached, with
 	// every gap accounted for explicitly. This must NOT decay into a
-	// silent allowlist (#87's rejected pattern, reused as `import type`
-	// only in spirit here -- there is no bare `Record<string, true>`
-	// below, every entry carries a reason and a category).
+	// silent allowlist (#87's rejected pattern) -- every entry in
+	// `UNREACHABLE_NODE_KINDS`/`UNREACHABLE_PROJECTION_KINDS` carries a
+	// reason and a category (constructional vs. current-code-dependent,
+	// the latter backed by an actual pinning test below, not just prose --
+	// see `expr/reachable-kinds.ts` for the full explanation).
 	//
-	// Two categories of reason, backed differently on purpose:
-	//  - "constructional": the DSL has no code path that can ever build
-	//    this shape, full stop -- a structural fact independent of any
-	//    other function's current implementation. Prose is enough because
-	//    nothing else could silently make it false.
-	//  - "current-code-dependent": the shape COULD be built, but is
-	//    unreachable only because some *other* function currently
-	//    discards/overrides it. That fact can silently stop being true
-	//    the next time that function is edited, which is exactly the
-	//    staleness failure mode this whole completeness check exists to
-	//    catch -- one level up. Every such entry is backed by an actual
-	//    pinning test (named in the `reason`), not just a comment, so that
-	//    changing the other function's behavior turns the pinning test red
-	//    first and forces the list below to be revisited.
-	const UNREACHABLE_NODE_KINDS: ReadonlyArray<{
-		readonly kind: ExprNode["nodeKind"];
-		readonly category: "constructional" | "current-code-dependent";
-		readonly reason: string;
-	}> = [
-		{
-			kind: "plpgsqlRef",
-			category: "constructional",
-			reason:
-				"the DSL has no way to construct a plpgsqlRef outside a plpgsql function body (defineTrigger/defineFunction's ctx.* helpers), and none of the four fields expression nodes are stored in today (column default, CHECK, partial-index where, policy using/withCheck) are plpgsql body statements",
-		},
-	];
-
-	const UNREACHABLE_PROJECTION_KINDS: ReadonlyArray<{
-		readonly kind: ProjectionNode["projectionKind"];
-		readonly category: "constructional" | "current-code-dependent";
-		readonly reason: string;
-	}> = [
-		{
-			kind: "allColumns",
-			category: "current-code-dependent",
-			reason:
-				"select(table) resolves to an allColumns projection, but exists()/notExists() (query/select.ts's buildExists) unconditionally overwrites the subquery's projection with constantOne regardless of what was selected -- pinned by the buildExists test below",
-		},
-		{
-			kind: "columns",
-			category: "current-code-dependent",
-			reason:
-				"select({ ... }, table) resolves to a columns projection, but buildExists overwrites it the exact same way as allColumns -- pinned by the same test below",
-		},
-	];
-
-	// Backs the two `current-code-dependent` entries above: if buildExists
+	// `REACHABLE_NODE_KINDS`/`REACHABLE_PROJECTION_KINDS` and the
+	// unreachable sets both come from `expr/reachable-kinds.ts` -- the
+	// SAME array `retarget.test.ts`'s reference-identity loop iterates
+	// (#110 item 72). Before that module existed, this file and
+	// `retarget.test.ts` each kept their own separately-maintained node-
+	// kind list, which is exactly the kind of duplication that let a real
+	// gap slip through one fix-a-case cycle already.
+	//
+	// Backs the two `current-code-dependent` entries in that module: if
+	// buildExists
 	// is ever changed to pass through the real projection instead of
 	// hardcoding constantOne, THIS test goes red first, forcing whoever
 	// makes that change to also revisit the unreachable-set above (which
@@ -446,33 +416,37 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			});
 		}
 
-		const declaredUnreachableNodeKindValues = new Set(
-			UNREACHABLE_NODE_KINDS.map((entry) => NODE_KIND_TO_SNAPSHOT[entry.kind]),
+		// expected sets come from `expr/reachable-kinds.ts` -- the same
+		// source `retarget.test.ts`'s loop iterates (item 72) -- not a
+		// second, separately-maintained list here.
+		const expectedReachableNodeKindValues = REACHABLE_NODE_KINDS.map(
+			(kind) => NODE_KIND_TO_SNAPSHOT[kind],
 		);
-		const expectedReachableNodeKindValues = Object.values(
-			NODE_KIND_TO_SNAPSHOT,
-		).filter((value) => !declaredUnreachableNodeKindValues.has(value));
 		expect([...seenNodeKinds].sort()).toEqual(
 			[...expectedReachableNodeKindValues].sort(),
 		);
 		// every declared-unreachable entry really is unreached by the
 		// fixture -- otherwise its reason is already stale.
+		const declaredUnreachableNodeKindValues = new Set(
+			UNREACHABLE_NODE_KINDS.map((entry) => NODE_KIND_TO_SNAPSHOT[entry.kind]),
+		);
 		expect(
 			[...seenNodeKinds].filter((value) =>
 				declaredUnreachableNodeKindValues.has(value),
 			),
 		).toEqual([]);
 
+		const expectedReachableProjectionKindValues =
+			REACHABLE_PROJECTION_KINDS.map(
+				(kind) => PROJECTION_KIND_TO_SNAPSHOT[kind],
+			);
+		expect([...seenProjectionKinds].sort()).toEqual(
+			[...expectedReachableProjectionKindValues].sort(),
+		);
 		const declaredUnreachableProjectionKindValues = new Set(
 			UNREACHABLE_PROJECTION_KINDS.map(
 				(entry) => PROJECTION_KIND_TO_SNAPSHOT[entry.kind],
 			),
-		);
-		const expectedReachableProjectionKindValues = Object.values(
-			PROJECTION_KIND_TO_SNAPSHOT,
-		).filter((value) => !declaredUnreachableProjectionKindValues.has(value));
-		expect([...seenProjectionKinds].sort()).toEqual(
-			[...expectedReachableProjectionKindValues].sort(),
 		);
 		expect(
 			[...seenProjectionKinds].filter((value) =>
