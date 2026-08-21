@@ -5,8 +5,10 @@
 -- + policy app.task_schedules.task_schedules_read_all [new]
 -- + policy app.task_schedules.task_schedules_write_all [new]
 -- ~ view app.open_tasks [view columns changed; recreating]
--- parent-snapshot: sha256:0af52fecb9c200d5be0732625bf6a3b121e7bec8b3a187be530362d1a3321d74
--- snapshot: sha256:4192124a953ed70aae4df095269fd54282c9b8e7941f3d0c3789ee851ce5abae
+-- parent-snapshot: sha256:3639c7ef81cec55dbbafd520dd2e33e9a41ee5e948a82afb29b4682541cbab62
+-- snapshot: sha256:d62c5533d360b164b2253c676645563998ab446a9cc439f3c23d379d8c2479b0
+
+drop view if exists "app"."open_tasks";
 
 create table "app"."task_schedules" (
 	"task_id" uuid not null,
@@ -33,8 +35,6 @@ create policy "task_schedules_read_all" on "app"."task_schedules" for select to 
 drop policy if exists "task_schedules_write_all" on "app"."task_schedules";
 
 create policy "task_schedules_write_all" on "app"."task_schedules" for all to "app_writer" using ("app"."task_schedules"."task_id" is not null) with check ("app"."task_schedules"."task_id" is not null);
-
-drop view if exists "app"."open_tasks";
 
 create or replace view "app"."open_tasks" with (security_invoker = true) as select "id", "project_id", "title", "status", "priority", "estimate_hours", "closed_at" from "app"."tasks" where "app"."tasks"."status" <> 'done';
 

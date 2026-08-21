@@ -31,6 +31,25 @@
 			"role": "app_writer",
 			"schema": "app"
 		},
+		"grant:app.defaultTablePrivileges.app_reader": {
+			"grantKind": "defaultTablePrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "app_reader",
+			"schema": "app"
+		},
+		"grant:app.defaultTablePrivileges.app_writer": {
+			"grantKind": "defaultTablePrivileges",
+			"privileges": [
+				"select",
+				"insert",
+				"update",
+				"delete"
+			],
+			"role": "app_writer",
+			"schema": "app"
+		},
 		"grant:app.schemaUsage.app_reader": {
 			"grantKind": "schemaUsage",
 			"privileges": [],

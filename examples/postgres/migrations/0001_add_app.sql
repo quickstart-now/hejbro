@@ -21,10 +21,12 @@
 -- + view app.open_tasks [new]
 -- + grant app.allTablesPrivileges.app_reader [new]
 -- + grant app.allTablesPrivileges.app_writer [new]
+-- + grant app.defaultTablePrivileges.app_reader [new]
+-- + grant app.defaultTablePrivileges.app_writer [new]
 -- + grant app.schemaUsage.app_reader [new]
 -- + grant app.schemaUsage.app_writer [new]
 -- parent-snapshot: sha256:f86ae7ebc6d8bd93524149ab39f929814ff7413a6e5e1cfdb1d21367bf9bd295
--- snapshot: sha256:8a650453f1f49f57ca4cd24a14f022f36a3425c0f4f1e69b91a0461114579371
+-- snapshot: sha256:454ce6cc18da277eeda66e75fc0095bbf23b843cb0aa34105e5c67fc1a281dad
 
 create schema "app";
 
@@ -142,6 +144,10 @@ create or replace view "app"."open_tasks" with (security_invoker = true) as sele
 grant select on all tables in schema "app" to "app_reader";
 
 grant select, insert, update, delete on all tables in schema "app" to "app_writer";
+
+alter default privileges in schema "app" grant select on tables to "app_reader";
+
+alter default privileges in schema "app" grant select, insert, update, delete on tables to "app_writer";
 
 grant usage on schema "app" to "app_reader";
 
