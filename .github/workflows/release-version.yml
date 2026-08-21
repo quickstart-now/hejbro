@@ -152,17 +152,34 @@ jobs:
       # `action_required`, because this repo's Actions run-approval
       # policy treats `github-actions[bot]` as a first-time external
       # contributor whose runs need manual approval. Approving that run
-      # (not dispatching a separate one) is what populated #179's rollup
-      # and flipped it to CLEAN.
+      # (not dispatching a separate one) is what populates the rollup and
+      # flips the PR to CLEAN -- so removing the dispatch step here loses
+      # nothing: the check run it used to create never reached the
+      # rollup anyway, and the approved `pull_request` run fills that
+      # role instead.
       #
-      # UNRESOLVED, not fixed by this PR: approval is required again on
-      # each subsequent bot push, not just the first one -- measured
-      # directly (9 sampled `action_required` runs were 9 distinct head
-      # SHAs, 0 sampled bot-authored runs executed automatically, and a
-      # bot push 5 minutes after one manual approval produced a fresh
-      # `action_required` run rather than reusing the approval). Every
-      # future "Version Packages" PR update will need a manual approval
-      # click until the owner picks one of: keep approving manually,
-      # relax the first-time-contributor run-approval policy, or give
-      # this workflow a bot token/GitHub App identity that isn't treated
-      # as an external contributor. Not decided as of this comment.
+      # Owner decision (2026-08-22, on #189): keep this as a manual step,
+      # not automated away. The release procedure is:
+      #   1. Right before releasing, open the "Version Packages" PR's
+      #      latest CI run and click "Approve and run".
+      #   2. The run completes, `statusCheckRollup` populates, the PR
+      #      goes BLOCKED -> CLEAN.
+      #   3. Squash-merge the Version PR into `dev`.
+      #   4. Open/merge the `dev` -> `main` PR (merge commit, per
+      #      AGENTS.md).
+      #   5. Approve the `npm` environment's deployment request --
+      #      that's the actual publish gate (#155/#165), unaffected by
+      #      any of this.
+      #
+      # One approval, not one per push: only the head commit that's
+      # about to be merged needs approving -- every earlier
+      # `action_required` run on an intermediate push can be left
+      # untouched; nothing fails, the PR just stays BLOCKED until someone
+      # approves its current head. A prior pass through this repo's
+      # history miscounted "N `action_required` runs observed" as "N
+      # approvals required" -- those are occurrences of the same
+      # recurring wait state on different heads, not a per-push
+      # obligation. Rejected alternatives (owner decision): relaxing the
+      # first-time-contributor run-approval policy, and giving this
+      # workflow a bot token/GitHub App identity -- neither changes
+      # credentials or settings; the manual approval click stays.
