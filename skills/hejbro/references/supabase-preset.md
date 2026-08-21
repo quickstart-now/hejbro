@@ -19,10 +19,22 @@ See `examples/supabase/hejbro.config.ts`.
 `anonRole`, `authenticatedRole`, `serviceRole` are branded `Role` values
 for `.to(...)` in `rls.policy(...)`/`grant(...)`. `authUsers` is an
 existing-table reference — an FK target only, never declared/diffed.
-`authUid()`/`authJwt()` are plain expression calls (no `initPlan`
-wrapping) for use inside RLS `using`/`withCheck`. See
-`examples/supabase/src/app.schema.ts` for `authUsers`/`authUid()` in an
-RLS policy.
+
+`authUid()`/`authJwt()` and their cached forms `authUidCached()`/
+`authJwtCached()` (#97) split by where they're used:
+
+- **Inside an RLS `using`/`withCheck` clause, use `authUidCached()`/
+  `authJwtCached()`.** They render `(select auth.uid())`/
+  `(select auth.jwt())` — Postgres caches that as an initPlan evaluated
+  once per statement, instead of re-evaluating a bare `auth.uid()` once
+  per row. The `rls-uncached-auth-call` validator warns if a policy uses
+  the plain form here instead.
+- **Inside a column `default`/`check` expression, use the plain
+  `authUid()`/`authJwt()`.** A scalar subquery is illegal there, so the
+  cached forms don't work in this position.
+
+See `examples/supabase/src/app.schema.ts` for `authUsers`/
+`authUidCached()` in an RLS policy.
 
 ## Storage buckets
 
@@ -34,7 +46,7 @@ manual-deletion step instead).
 
 ## Preset warnings
 
-Two owner-approved warnings render on stderr the same way any other
+These warnings render on stderr the same way any other
 `warning[<code>]: <identity>` does (see `generate-verify-workflow.md`):
 
 - `exposed-table-without-rls` — a table sits in a schema granted to
@@ -43,6 +55,11 @@ Two owner-approved warnings render on stderr the same way any other
 - `view-over-rls-without-security-invoker` — a view reads an
   RLS-protected table without `{ securityInvoker: true }`, so it runs
   with its owner's rights and bypasses row-level security.
+- `rls-uncached-auth-call` (#97) — a policy's `using`/`with check`
+  clause calls the plain `auth.uid()`/`auth.jwt()` instead of
+  `authUidCached()`/`authJwtCached()`, so Postgres re-evaluates it once
+  per row instead of once per statement. Not raised for a column
+  `default`/`check` expression — the plain form is correct there.
 
 `auth`, `storage`, and `realtime` are Supabase-managed — declaring one of
 those schemas, or any object inside one, is a hard error, not a warning.
