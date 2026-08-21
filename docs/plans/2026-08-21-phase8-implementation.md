@@ -294,9 +294,10 @@ own claim.
   already wired into CI and already enforces D59's rule, no `--since` flag
   needed, because `baseBranch: "dev"` in `.changeset/config.json`
   (`phase8-changesets`) is enough for it to diff against `dev` by default.
-  Measured across five cells (changeset present/absent × nothing changed /
-  a published package changed / a private-only package changed): the only
-  red cell is *changeset absent + a published package changed*
+  Measured across five cells: the changeset present or absent, against
+  nothing changed / a published package changed / a private-only package
+  changed. The only red cell is *changeset absent + a published package
+  changed*
   (`"Some packages have been changed but no changesets were found"`),
   identically with or without `--since=dev`. `phase8-changesets` already
   wires `changeset status` into `ci.yml`, so this enforcement is live from
@@ -514,6 +515,13 @@ default when its internal dependency releases, and this field changes
 nothing observable in this repo. A config key is a gate like any other — run
 it before describing what it does, and change the specific thing you're
 crediting before crediting it.
+
+The two are not the same rule. **"Vary what you credit" applies to a causal
+claim** — you saw an effect and named a cause. **"A green proves nothing"
+applies to a requirement or an observation** — you saw nothing and concluded
+there was nothing to see. This phase produced both: the
+`updateInternalDependencies` write-up above is the first, the "`changeset
+status` enforces nothing" premise below is the second.
 
 **A green proves nothing unless the defect was actually present.** The
 converse of "break it on purpose": before concluding a gate doesn't catch
