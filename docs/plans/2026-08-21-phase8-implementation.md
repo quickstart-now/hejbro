@@ -199,9 +199,9 @@ own claim.
   `changesets/action`'s `action.yml` (input names differ between versions; do
   not copy a draft blindly). The publish job must refuse to run if the
   pre-publish gate fails.
-- **`phase8-error-subclass` → 7** — a test reproducing #125's crash (a config
-  importing a package that is not installed) first, then the diagnostic. Both
-  `asHejbroError` sites are converted.
+- **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
+  reproducing #125's crash (a config importing a package that is not installed)
+  first, then the diagnostic. Both `asHejbroError` sites are converted.
 - **`phase8-chain-walk`** — a chain that rolls back and then forward again
   verifies clean; the two O2-approved message texts are unchanged.
 - **`phase8-next-marker`** — the count is roughly 75 user-facing throw sites;
