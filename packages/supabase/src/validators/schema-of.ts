@@ -60,10 +60,29 @@ export const isGrantDeclaration = (
 
 /**
  * Resolves the Postgres schema a normalized declaration targets, per
- * `declarationKind` (shared by the reserved-schema and exposed-table
- * validators). `null` for declaration kinds with no single owning schema
- * (none exist today — every built-in kind carries one — but this keeps
- * the function total instead of throwing on a future addition).
+ * `declarationKind` (this module's declaration narrowers are shared
+ * with the exposed-table validator, though `schemaOf` itself isn't --
+ * see its only caller below). `null` for declaration kinds with no
+ * single owning schema.
+ *
+ * This isn't a hypothetical fallback for some future kind -- it's live
+ * today. `HejbroDeclaration` is structurally open
+ * (`{ declarationKind: string }`, not a closed union), and the Supabase
+ * preset's own `StorageBucketDeclaration` (`declarationKind:
+ * "supabase-storage-bucket"`) doesn't match any of the checks below: a
+ * bucket has no owning schema (it's a row in Supabase's own
+ * `storage.buckets`, not scoped to an app schema). `reservedSchemaValidator`
+ * (this function's only caller) runs over every declaration passed to
+ * `generateMigration`, so this branch executes for real on every
+ * generation that includes a bucket -- `examples/supabase` does.
+ *
+ * The other two `declarationKind`s outside the checks below --
+ * `"check"` and `"grant-set"` -- never reach here as top-level
+ * declarations: `check()` only ever ends up nested in a table's
+ * `extras.checks`, and a `grant(...).to(...)` `grant-set` is expanded
+ * into individual `GrantDeclaration`s by `generate.ts`'s
+ * `resolveDeclarations` (D28 fan-out) before any validator sees it. The
+ * bucket kind is the one real path to this `return null`.
  */
 export const schemaOf = (declaration: HejbroDeclaration): string | null => {
 	if (isSchemaDeclaration(declaration)) {
