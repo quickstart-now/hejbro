@@ -151,6 +151,20 @@ export const buildSnapshot = (
 export const renderSnapshot = (snapshot: Snapshot): string =>
 	stableJson(snapshot);
 
+/** A short, human-readable name for why an `objects` entry isn't a valid
+ * snapshot node (#26) — every real node is a JSON object, so `null`, an
+ * array, or a JSON primitive all indicate a corrupted or hand-edited
+ * entry rather than one hejbro itself ever wrote. */
+const describeMalformedValue = (value: JsonValue): string => {
+	if (value === null) {
+		return "null";
+	}
+	if (Array.isArray(value)) {
+		return "an array";
+	}
+	return `a ${typeof value}`;
+};
+
 type ParsedSnapshotShape = {
 	readonly formatVersion?: unknown;
 	/** @deprecated pre-v4 key name for {@link formatVersion} (D57) — read only to give an old-format file the normal "older" message instead of misparsing it. */
@@ -251,9 +265,21 @@ export const parseSnapshot = (raw: string): Snapshot => {
 			`snapshot is missing a valid "objects" map. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
 	}
+	const objects = candidate.objects as Snapshot["objects"];
+	const malformedEntry = Object.entries(objects).find(
+		([, value]) =>
+			typeof value !== "object" || value === null || Array.isArray(value),
+	);
+	if (malformedEntry !== undefined) {
+		const [key, value] = malformedEntry;
+		return throwHejbroError(
+			"invalid-snapshot",
+			`snapshot entry "${key}" is ${describeMalformedValue(value)}, not an object. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
+		);
+	}
 	return {
 		formatVersion: HEJBRO_SNAPSHOT_VERSION,
 		dialect: "postgres",
-		objects: candidate.objects as Snapshot["objects"],
+		objects,
 	};
 };

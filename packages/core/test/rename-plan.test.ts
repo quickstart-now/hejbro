@@ -592,4 +592,37 @@ describe("planRenames", () => {
 			}),
 		]);
 	});
+
+	// #26: a malformed on-disk snapshot node reaching an unguarded internal
+	// field access used to crash with a raw TypeError ("Cannot read
+	// properties of undefined (reading 'map')" from computeTableColumnSets),
+	// not a diagnostic. planRenames now wraps its whole body in
+	// guardSnapshotRead, converting that crash into a malformed-snapshot-node
+	// HejbroError that points at `hejbro verify` to tell a corrupted
+	// snapshot apart from a hejbro bug (they're indistinguishable from here).
+	it("wraps a raw crash from a malformed table node into malformed-snapshot-node, not a raw TypeError", () => {
+		const previous = snap(app, table(app, "posts", { title: text() }));
+		const corruptedPrevious = {
+			...previous,
+			objects: {
+				...previous.objects,
+				"table:app.posts": { schema: "app", name: "posts" }, // missing columns/indexes/foreignKeys
+			},
+		};
+		const next = snap(app, table(app, "posts", { title: text() }));
+		expect(() =>
+			planRenames({
+				previous: corruptedPrevious,
+				next,
+				renames: [],
+				confirmedDrops: [],
+				declaredAtByIdentity: noDeclSites,
+			}),
+		).toThrowError(
+			expect.objectContaining({
+				code: "malformed-snapshot-node",
+				message: expect.stringContaining("hejbro verify"),
+			}),
+		);
+	});
 });

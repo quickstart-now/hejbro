@@ -147,6 +147,32 @@ describe("renderSnapshot / parseSnapshot", () => {
 		expect(() => parseSnapshot(raw)).toThrowError(/objects/i);
 	});
 
+	// #26: a corrupted (but JSON-valid) entry used to reach kind.diff()/
+	// planRenames unguarded, where it either crashed with a raw exception
+	// or, in the more common case, was silently coerced by JS's forgiving
+	// property access into wrong-but-not-crashing behavior. Catching it
+	// here, at parse time, gives it the same treatment as every other
+	// invalid-snapshot case instead of relying on it happening to crash
+	// somewhere downstream.
+	it.each([
+		["null", null],
+		["an array", ["not", "an", "object"]],
+		["a string", "not an object"],
+		["a number", 42],
+	])("rejects a snapshot entry that is %s, not an object", (_label, value) => {
+		const raw = JSON.stringify({
+			formatVersion: 5,
+			dialect: "postgres",
+			objects: { "table:app.posts": value },
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({
+				code: "invalid-snapshot",
+				message: expect.stringContaining('"table:app.posts"'),
+			}),
+		);
+	});
+
 	it("rejects malformed JSON (e.g. an unresolved git conflict marker) as invalid-snapshot, not a raw SyntaxError", () => {
 		const raw = "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> branch\n";
 		expect(() => parseSnapshot(raw)).toThrowError(

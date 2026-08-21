@@ -1,5 +1,5 @@
 import type { HejbroError } from "../error";
-import { hejbroError } from "../error";
+import { guardSnapshotRead, hejbroError } from "../error";
 import type { KindChange } from "../kind/object-kind";
 import type { PolicySnapshot } from "../kinds/policy-kind";
 import type { RlsSnapshot } from "../kinds/rls-kind";
@@ -1287,77 +1287,81 @@ export const planRenames = (options: {
 	readonly renames: ReadonlyArray<RenameSpec>;
 	readonly confirmedDrops: ReadonlyArray<ConfirmDropSpec>;
 	readonly declaredAtByIdentity: ReadonlyMap<string, string | null>;
-}): RenamePlan => {
-	const previousTables = tableEntries(options.previous.objects);
-	const nextTables = tableEntries(options.next.objects);
-	const schemaTableSets = computeSchemaTableSets(previousTables, nextTables);
-	const renamedPairings = tableRenamePairings(options.renames, schemaTableSets);
-	const tableColumnSets = computeTableColumnSets(
-		previousTables,
-		nextTables,
-		renamedPairings,
-	);
+}): RenamePlan =>
+	guardSnapshotRead("planning renames from the on-disk snapshot", () => {
+		const previousTables = tableEntries(options.previous.objects);
+		const nextTables = tableEntries(options.next.objects);
+		const schemaTableSets = computeSchemaTableSets(previousTables, nextTables);
+		const renamedPairings = tableRenamePairings(
+			options.renames,
+			schemaTableSets,
+		);
+		const tableColumnSets = computeTableColumnSets(
+			previousTables,
+			nextTables,
+			renamedPairings,
+		);
 
-	const renameResult = partitionRenameSpecs(
-		options.renames,
-		schemaTableSets,
-		tableColumnSets,
-		options.declaredAtByIdentity,
-	);
-	const dropResult = partitionConfirmDrops(
-		options.confirmedDrops,
-		schemaTableSets,
-		tableColumnSets,
-	);
+		const renameResult = partitionRenameSpecs(
+			options.renames,
+			schemaTableSets,
+			tableColumnSets,
+			options.declaredAtByIdentity,
+		);
+		const dropResult = partitionConfirmDrops(
+			options.confirmedDrops,
+			schemaTableSets,
+			tableColumnSets,
+		);
 
-	const applied = applyRenameSpecs(
-		options.previous.objects,
-		renameResult.validSpecs,
-	);
+		const applied = applyRenameSpecs(
+			options.previous.objects,
+			renameResult.validSpecs,
+		);
 
-	const consumedColumns = consumedColumnNamesByTable(
-		renameResult.validSpecs,
-		dropResult.validDrops,
-	);
-	const consumedTables = consumedTableNamesBySchema(
-		renameResult.validSpecs,
-		dropResult.validDrops,
-	);
+		const consumedColumns = consumedColumnNamesByTable(
+			renameResult.validSpecs,
+			dropResult.validDrops,
+		);
+		const consumedTables = consumedTableNamesBySchema(
+			renameResult.validSpecs,
+			dropResult.validDrops,
+		);
 
-	const columnAmbiguityResults = residualColumnAmbiguities(
-		tableColumnSets,
-		consumedColumns,
-		options.declaredAtByIdentity,
-	);
-	const tableAmbiguityResults = residualTableAmbiguities(
-		schemaTableSets,
-		consumedTables,
-		options.declaredAtByIdentity,
-	);
-	const ambiguityResults = [
-		...tableAmbiguityResults,
-		...columnAmbiguityResults,
-	];
+		const columnAmbiguityResults = residualColumnAmbiguities(
+			tableColumnSets,
+			consumedColumns,
+			options.declaredAtByIdentity,
+		);
+		const tableAmbiguityResults = residualTableAmbiguities(
+			schemaTableSets,
+			consumedTables,
+			options.declaredAtByIdentity,
+		);
+		const ambiguityResults = [
+			...tableAmbiguityResults,
+			...columnAmbiguityResults,
+		];
 
-	const errors = [
-		...renameResult.errors,
-		...dropResult.errors,
-		...ambiguityResults.map((result) => result.error),
-	];
-	const ambiguities = ambiguityResults.map((result) => result.ambiguity);
+		const errors = [
+			...renameResult.errors,
+			...dropResult.errors,
+			...ambiguityResults.map((result) => result.error),
+		];
+		const ambiguities = ambiguityResults.map((result) => result.ambiguity);
 
-	const rewrittenPrevious: Snapshot = {
-		...options.previous,
-		objects: applied.objects,
-	};
+		const rewrittenPrevious: Snapshot = {
+			...options.previous,
+			objects: applied.objects,
+		};
 
-	return {
-		rewrittenPrevious,
-		renameStatements: applied.statements,
-		renameChanges: [...applied.changes].sort((a, b) =>
-			compareKeys(a.identity, b.identity),
-		),
-		errors,
-		ambiguities,
-	};
-};
+		return {
+			rewrittenPrevious,
+			renameStatements: applied.statements,
+			renameChanges: [...applied.changes].sort((a, b) =>
+				compareKeys(a.identity, b.identity),
+			),
+			errors,
+			ambiguities,
+		};
+	});
