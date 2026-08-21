@@ -69,6 +69,24 @@ const dropLabel = (notes: ReadonlyArray<string>): string => {
 	return `[dropped: ${notes.join(", ")}]`;
 };
 
+/**
+ * `[<notes>]` when `notes` is non-empty, else `""` (#116) — unlike
+ * {@link dropLabel}, whose empty case still says something (`[dropped]`,
+ * since "dropped" is itself the note), an alter has no such fallback word:
+ * a kind whose alter notes are empty means the caller has nothing to
+ * report, so the bracket is omitted entirely rather than rendered empty.
+ * No built-in kind currently reaches this empty case — each guards its own
+ * alter notes — but nothing stopped a kind from doing so (the storage
+ * bucket kind did, until #116's other fix), so the banner itself now
+ * closes that gap too.
+ */
+const alterLabel = (notes: ReadonlyArray<string>): string => {
+	if (notes.length === 0) {
+		return "";
+	}
+	return `[${notes.join(", ")}]`;
+};
+
 const bannerLabel = (change: KindChange): string => {
 	switch (change.operation) {
 		case "create":
@@ -76,14 +94,20 @@ const bannerLabel = (change: KindChange): string => {
 		case "drop":
 			return dropLabel(change.notes);
 		case "alter":
-			return `[${change.notes.join(", ")}]`;
+			return alterLabel(change.notes);
 		default:
 			return assertNever(change.operation);
 	}
 };
 
-const renderBannerLine = (change: KindChange): string =>
-	`-- ${bannerMarker(change.operation)} ${change.kind} ${change.identity} ${bannerLabel(change)}`;
+const renderBannerLine = (change: KindChange): string => {
+	const head = `-- ${bannerMarker(change.operation)} ${change.kind} ${change.identity}`;
+	const label = bannerLabel(change);
+	if (label === "") {
+		return head;
+	}
+	return `${head} ${label}`;
+};
 
 /** The banner's tamper-evident hash-chain lines (decision D33, Phase 5): the normalized-snapshot sha256 before and after this migration, opaque `"sha256:<hex>"` strings computed by the CLI (core never hashes). */
 export type BannerHashes = {
