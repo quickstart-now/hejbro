@@ -408,13 +408,25 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 	// `constantOne`, but a view's own query (#157/D72) reaches both
 	// directly, so they moved to `REACHABLE_PROJECTION_KINDS` instead. This
 	// test's claim about `exists()` itself is still true and still worth
-	// pinning on its own terms -- it documents that `exists()`'s narrow
-	// behavior is deliberate, not an oversight, and if `buildExists` is
-	// ever changed to pass the real projection through, THIS test goes red
-	// first, independent of whatever the completeness assertion below
-	// says about the map as a whole (which by then would already be
-	// satisfied through views, so it would stay green -- the two tests
-	// check different claims, not the same one twice).
+	// pinning on its own terms.
+	//
+	// Measured, not assumed: if `buildExists` is changed to pass the real
+	// projection through, BOTH this test and the completeness assertion
+	// below go red -- not just this one. `constantOne` has exactly one
+	// producer left in this fixture's whole snapshot: the cross-table
+	// `exists()` policy below (`select(posts).innerJoin(...)` is itself an
+	// `allColumns` projection at declaration time; only `buildExists`'s own
+	// override turns it into `constantOne`). Remove that override and
+	// `constantOne` doesn't get *replaced* by something unexpected --
+	// it disappears from the reached set entirely, since nothing else in
+	// this fixture ever produces it. The completeness assertion catches
+	// that (its failure says `constant-one` is missing from what the
+	// fixture reached), but it can only point at "the map's expected
+	// set doesn't match what got reached" -- it has no way to say *why*.
+	// This test is the one that names the actual cause (`buildExists`
+	// stopped normalizing), which is what earns it a place independent of
+	// the completeness assertion -- not "only this test would fail," but
+	// "only this test says what broke."
 	it("exists()/notExists() always normalize their subquery's projection to constantOne", () => {
 		const widgets = table(app, "widgets", {
 			id: uuid().primaryKey(),
