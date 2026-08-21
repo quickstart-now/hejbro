@@ -10,7 +10,7 @@ import {
 	quoteIdentifier,
 	renderRoleName,
 } from "../sql/identifier";
-import { statement } from "../sql/statement";
+import { predropStatement, statement } from "../sql/statement";
 
 /**
  * A policy's fully-rendered snapshot node — expressions are pre-rendered
@@ -129,6 +129,13 @@ const withCheckField = (
  * `trigger-kind.ts`'s equivalent note and #55) whose `emit` returns the
  * `drop policy if exists` and `create policy` statements in that order
  * (idempotent recreate, spec §6.5), including on a true first-time create.
+ * The `alter`'s and a true `drop`'s drop halves go out on the `predrop`
+ * stage — a policy's `using`/`withCheck` expression can reference a column
+ * that a `main`-stage alter on that same table is about to drop (#122), so
+ * the policy must be gone before that alter runs. A true first-time
+ * create's `drop policy if exists` is just idempotent guard text (nothing
+ * can depend on a policy that doesn't exist yet), so it stays in `main`
+ * alongside its own `create policy`.
  */
 export const policyKind: ObjectKind<PolicyDeclaration> = {
 	kind: "policy",
@@ -203,17 +210,31 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 	},
 	emit: (change) => {
 		switch (change.operation) {
-			case "create":
+			case "create": {
+				if (change.next === null) {
+					return throwHejbroError(
+						"invalid-kind-change",
+						"policy create change is missing its next snapshot.",
+					);
+				}
+				// Idempotent guard text, not a real drop (#122/A′) — see the
+				// doc comment above.
+				const nextSnapshot = asPolicySnapshot(change.next);
+				return [
+					statement(dropPolicySql(nextSnapshot)),
+					statement(createPolicySql(nextSnapshot)),
+				];
+			}
 			case "alter": {
 				if (change.next === null) {
 					return throwHejbroError(
 						"invalid-kind-change",
-						"policy create/alter change is missing its next snapshot.",
+						"policy alter change is missing its next snapshot.",
 					);
 				}
 				const nextSnapshot = asPolicySnapshot(change.next);
 				return [
-					statement(dropPolicySql(nextSnapshot)),
+					predropStatement(dropPolicySql(nextSnapshot)),
 					statement(createPolicySql(nextSnapshot)),
 				];
 			}
@@ -224,7 +245,9 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 						"policy drop change is missing its previous snapshot.",
 					);
 				}
-				return [statement(dropPolicySql(asPolicySnapshot(change.previous)))];
+				return [
+					predropStatement(dropPolicySql(asPolicySnapshot(change.previous))),
+				];
 			}
 			default:
 				return assertNever(change.operation);

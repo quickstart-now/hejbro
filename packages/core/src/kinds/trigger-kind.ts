@@ -8,7 +8,7 @@ import type {
 } from "../plpgsql/render-body";
 import { renderTriggerSql } from "../plpgsql/render-body";
 import type { JsonValue } from "../snapshot/stable-json";
-import { statement } from "../sql/statement";
+import { predropStatement, statement } from "../sql/statement";
 
 /**
  * One event entry in a {@link TriggerSnapshot} — an alias of
@@ -43,7 +43,14 @@ const TRIGGER_CHANGED_NOTE = "trigger changed; recreating";
  * hoist a same-identity create ahead of its own drop, dropping the trigger
  * it just created; see #55) whose `emit` returns the `drop trigger if
  * exists` and `create trigger` statements in that order (idempotent
- * recreate, spec §6.5) — including on a true first-time create.
+ * recreate, spec §6.5) — including on a true first-time create. The drop
+ * half (recreate, and a true drop) goes out on the `predrop` stage — a
+ * trigger's `update of <column>` event list can name a column that a
+ * `main`-stage alter on that same table is about to drop (#122), so the
+ * trigger must be gone before that alter runs — a true first-time create's
+ * `drop trigger if exists` is just idempotent guard text (nothing can
+ * depend on a trigger that doesn't exist yet), so it stays in `main`
+ * alongside its own `create trigger`.
  */
 export const triggerKind: ObjectKind<TriggerDeclaration> = {
 	kind: "trigger",
@@ -114,18 +121,34 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 	},
 	emit: (change) => {
 		switch (change.operation) {
-			case "create":
+			case "create": {
+				if (change.next === null) {
+					return throwHejbroError(
+						"invalid-kind-change",
+						"trigger create change is missing its next snapshot.",
+					);
+				}
+				// A first-time create's `drop trigger if exists` is idempotent
+				// guard text, not a real drop — nothing can already depend on a
+				// trigger that doesn't exist yet, so it stays in `main` right
+				// next to its own `create trigger` (#122/A′; only `alter`'s and
+				// `drop`'s drop halves need `predrop`).
+				const [dropSql, createSql] = renderTriggerSql(
+					asTriggerSnapshot(change.next),
+				);
+				return [statement(dropSql), statement(createSql)];
+			}
 			case "alter": {
 				if (change.next === null) {
 					return throwHejbroError(
 						"invalid-kind-change",
-						"trigger create/alter change is missing its next snapshot.",
+						"trigger alter change is missing its next snapshot.",
 					);
 				}
 				const [dropSql, createSql] = renderTriggerSql(
 					asTriggerSnapshot(change.next),
 				);
-				return [statement(dropSql), statement(createSql)];
+				return [predropStatement(dropSql), statement(createSql)];
 			}
 			case "drop": {
 				if (change.previous === null) {
@@ -135,7 +158,7 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 					);
 				}
 				const [dropSql] = renderTriggerSql(asTriggerSnapshot(change.previous));
-				return [statement(dropSql)];
+				return [predropStatement(dropSql)];
 			}
 			default:
 				return assertNever(change.operation);

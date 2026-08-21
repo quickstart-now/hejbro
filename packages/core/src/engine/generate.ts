@@ -10,10 +10,12 @@ import { createDefaultRegistry } from "../kind/registry";
 import { tableIdentity } from "../kinds/table-snapshot";
 import type { Snapshot } from "../snapshot/snapshot";
 import { buildSnapshot } from "../snapshot/snapshot";
+import { compareKeys } from "../sort";
 import type { BannerHashes } from "../sql/migration-file";
 import { renderBanner } from "../sql/migration-file";
+import type { SqlStatement } from "../sql/statement";
 import { notNullWithoutDefaultWarnings } from "./core-validators";
-import { diffSnapshots } from "./diff-engine";
+import { diffSnapshots, rankKinds } from "./diff-engine";
 import type {
 	ConfirmDropSpec,
 	RenameAmbiguity,
@@ -137,8 +139,9 @@ const buildDeclaredAtByIdentity = (
  * resolve `renames`/`confirmedDrops` against `previousSnapshot` (rule A;
  * `errors` non-empty short-circuits with `sql: ""`), diff the rewritten
  * previous snapshot against the next, and emit SQL (banner + rename
- * statements + main statements + deferred statements, `"\n\n"`-joined).
- * `sql` is `""` and `hasChanges` is `false` when nothing changed.
+ * statements + predrop statements + main statements + deferred statements,
+ * `"\n\n"`-joined). `sql` is `""` and `hasChanges` is `false` when nothing
+ * changed.
  */
 export const generateMigration = (
 	options: GenerateMigrationOptions,
@@ -193,21 +196,47 @@ export const generateMigration = (
 		};
 	}
 
-	const statements = changes.flatMap((change) =>
-		registry.get(change.kind).emit(change),
+	const emittedStatements: ReadonlyArray<{
+		readonly change: KindChange;
+		readonly statement: SqlStatement;
+	}> = changes.flatMap((change) =>
+		registry
+			.get(change.kind)
+			.emit(change)
+			.map((statement) => ({ change, statement })),
 	);
-	const mainStatements = statements.filter(
-		(sqlStatement) => sqlStatement.stage === "main",
+
+	// `predrop` runs before every `main` statement, ordered by descending
+	// kind-dependency rank — the same reasoning `diffSnapshots` already
+	// applies to genuine `drop` changes (#122): a dependent kind's drop must
+	// clear before the kind it depends on is altered. Views cannot select
+	// from views in this DSL (select() takes a Table), so predrop needs no
+	// intra-kind dependency sort — only the descending kind order; the
+	// identity tiebreak below is for determinism, not dependency.
+	const rankOf = rankKinds(registry);
+	const predropStatements = emittedStatements
+		.filter((entry) => entry.statement.stage === "predrop")
+		.slice()
+		.sort((a, b) => {
+			const rankDelta = rankOf(b.change.kind) - rankOf(a.change.kind);
+			if (rankDelta !== 0) {
+				return rankDelta;
+			}
+			return compareKeys(a.change.identity, b.change.identity);
+		});
+	const mainStatements = emittedStatements.filter(
+		(entry) => entry.statement.stage === "main",
 	);
-	const deferredStatements = statements.filter(
-		(sqlStatement) => sqlStatement.stage === "deferred",
+	const deferredStatements = emittedStatements.filter(
+		(entry) => entry.statement.stage === "deferred",
 	);
 
 	const sql = [
 		renderBanner([...plan.renameChanges, ...changes], options.bannerHashes),
 		...plan.renameStatements,
-		...mainStatements.map((sqlStatement) => sqlStatement.sql),
-		...deferredStatements.map((sqlStatement) => sqlStatement.sql),
+		...predropStatements.map((entry) => entry.statement.sql),
+		...mainStatements.map((entry) => entry.statement.sql),
+		...deferredStatements.map((entry) => entry.statement.sql),
 	].join("\n\n");
 
 	return {
