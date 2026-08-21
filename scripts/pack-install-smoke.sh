@@ -3,9 +3,20 @@
 # (@hejbro/core, hejbro, @hejbro/supabase), installs the tarballs into a
 # scratch project with plain `npm install` (no workspace, no pnpm — the
 # closest simulation of a real consumer), and runs init/generate/verify
-# there. Workspace-linked tests never exercise the packed `package.json`,
-# so this is the only check that would catch `workspace:*` reaching a
-# consumer, a missing `bin`, or a broken `exports`.
+# there, with the Supabase preset registered so all three packages —
+# not just hejbro — actually get loaded (assertion 3). Workspace-linked
+# tests never exercise the packed `package.json`, so this is the only
+# check exercising what a real install actually produces.
+#
+# What this catches, precisely (measured during review, M4-M6): a
+# missing package-level file, a missing `bin`, and a broken `exports` in
+# any of the three packages (all three are loaded by assertion 3 once
+# the Supabase preset is registered) — plus a `workspace:` string left
+# in a `devDependencies` entry. A `workspace:` in
+# `dependencies`/`peer`/`optionalDependencies` is actually caught
+# earlier, by `npm install` itself refusing with `EUNSUPPORTEDPROTOCOL`
+# (see below) — assertion 2 is the narrower guard for the
+# `devDependencies` case npm's own install doesn't resolve for us.
 #
 # Packing uses `pnpm pack`, not `npm pack`: the release path is
 # `changeset publish` (D59/D63), which detects this is a pnpm workspace
@@ -35,6 +46,12 @@
 # defect this PR fixes. What IS red before this PR is assertion 1a: the
 # `hejbro` tarball packs no README.md (packages/core and
 # packages/supabase already carry one; packages/cli did not).
+#
+# CI: this script runs on one matrix leg in ci.yml, after `pnpm build` —
+# not just on release. Packaging can drift on any PR between here and
+# the actual release workflow; a regression guard nobody runs until
+# release time isn't a guard at release time, npm has already burned the
+# version number.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -101,7 +118,7 @@ assert_tarball_contains() {
   done
 }
 assert_tarball_contains "$CORE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
-assert_tarball_contains "$CLI_TGZ" package.json LICENSE README.md dist/cli.js dist/index.js
+assert_tarball_contains "$CLI_TGZ" package.json LICENSE README.md dist/cli.js dist/cli.d.ts dist/index.js
 assert_tarball_contains "$SUPABASE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 echo "   ok"
 
@@ -145,7 +162,7 @@ assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/hejbro/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/supabase/package.json"
 echo "   ok"
 
-echo "== assertion 3: the hejbro binary runs init/generate/verify against a real declaration"
+echo "== assertion 3: the hejbro binary runs init/generate/verify, with @hejbro/supabase's preset registered so all three packages actually load"
 BIN="$SCRATCH_DIR/node_modules/.bin/hejbro"
 [ -x "$BIN" ] || fail "no executable hejbro bin at $BIN"
 
@@ -163,6 +180,28 @@ EOF
 
 (cd "$SCRATCH_DIR" && "$BIN" init >/dev/null) || fail "hejbro init exited non-zero"
 [ -f "$SCRATCH_DIR/hejbro.config.ts" ] || fail "hejbro init did not create hejbro.config.ts"
+
+# Overwrite init's default config to register the Supabase preset. Without
+# this, @hejbro/supabase is installed but never imported by anything this
+# script runs — a broken `exports` or missing entry point there would pass
+# unnoticed (M6 in review: reviewer broke supabase's exports and every
+# assertion below still stayed green). Registering the preset forces
+# module resolution of @hejbro/supabase, exercises the D55 preset
+# registration path, and exercises hejbro's own `defineConfig` re-export,
+# all in one file.
+cat > "$SCRATCH_DIR/hejbro.config.ts" <<'EOF'
+import { defineConfig } from "hejbro";
+import { supabasePreset } from "@hejbro/supabase";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [supabasePreset],
+});
+EOF
+
 (cd "$SCRATCH_DIR" && "$BIN" generate >/dev/null) || fail "hejbro generate exited non-zero"
 GENERATED_COUNT="$(find "$SCRATCH_DIR/migrations" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')"
 [ "$GENERATED_COUNT" -eq 1 ] || fail "hejbro generate produced $GENERATED_COUNT migrations (expected 1)"

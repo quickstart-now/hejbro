@@ -20,3 +20,5 @@ jobs:
       - run: pnpm check-types
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm smoke:pack-install
+        if: matrix.node-version == 24
