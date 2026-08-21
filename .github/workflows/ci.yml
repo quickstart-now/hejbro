@@ -119,12 +119,18 @@ jobs:
       # authenticate", so `secrets.NPM_TOKEN` is simply empty on a fork
       # PR and this step is silently skipped there rather than turning
       # red for an external contributor.
+      # `npm whoami`'s only output is the authenticated npm username --
+      # harmless on its own, but this repository is public, so its stdout
+      # is redirected away rather than printed into a world-readable CI
+      # log on every run. Only the exit code is checked: a real 401 still
+      # fails the step loudly (npm writes its error to stderr, which is
+      # left alone), so suppressing stdout costs nothing here.
       - name: Verify NPM_TOKEN authenticates and has @hejbro scope access
         if: matrix.node-version == 24 && env.NPM_TOKEN_AVAILABLE == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm whoami --registry=https://registry.npmjs.org
+          npm whoami --registry=https://registry.npmjs.org > /dev/null
           npm access list packages @hejbro --registry=https://registry.npmjs.org
       - run: pnpm changeset status
       - run: pnpm check:first-release-version
