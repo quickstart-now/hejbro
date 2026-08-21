@@ -3,18 +3,29 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	buildSnapshot,
+	check,
 	createDefaultRegistry,
 	defineTrigger,
 	emptySnapshot,
+	eq,
+	exists,
 	generateMigration,
 	getTableMeta,
 	grant,
+	gt,
+	index,
+	integer,
+	isNotNull,
 	migrationPrefixStrategies,
+	rls,
 	roleName,
 	schema,
+	select,
 	table,
+	timestamptz,
 	uuid,
 } from "../src/index";
+import type { JsonValue } from "../src/snapshot/stable-json";
 
 // D57 (#128): output tokens hejbro authors itself must be kebab-case
 // (snapshot values, identity segments, kind ids, diagnostic codes, config
@@ -186,5 +197,125 @@ describe("D57 naming convention: output tokens are kebab-case", () => {
 			.map((warning) => warning.code)
 			.filter((code) => !KEBAB_CASE.test(code));
 		expect(offenders).toEqual([]);
+	});
+});
+
+// D70 (#110): every discriminator anywhere in a serialized expression
+// subtree is kebab-case (stated as a rule, not a node list, so it can't go
+// stale as nodes are added — nodeKind, projectionKind, joinKind, queryKind,
+// literalKind, chunkKind today); every field naming another schema/table/
+// function object uses D57's vocabulary. Deliberately generic — not a list
+// of known node shapes — so a brand-new node kind is checked automatically,
+// with no carve-out to add or forget.
+const FORBIDDEN_REFERENCE_KEYS = [
+	"schemaName",
+	"tableName",
+	"columnName",
+	"columnNames",
+	"functionName",
+];
+
+/**
+ * This relies on the convention that every discriminator field is named
+ * `*Kind` (true across `ast.ts` today: `nodeKind`, `projectionKind`,
+ * `joinKind`, `queryKind`, `literalKind`, `chunkKind`). A discriminator
+ * introduced under another name would not be checked here.
+ *
+ * SQL's own tokens (`ComparisonNode.operator`, `OrderByTerm.direction`)
+ * are excluded *by construction*, not by an exemption list: neither field
+ * name ends in `Kind`, so this walker never inspects them (D36).
+ */
+const walkJson = (
+	value: JsonValue,
+	visit: (key: string, value: JsonValue) => void,
+): void => {
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			walkJson(entry, visit);
+		}
+		return;
+	}
+	if (typeof value !== "object" || value === null) {
+		return;
+	}
+	for (const [key, entryValue] of Object.entries(value)) {
+		if (entryValue === undefined) {
+			continue;
+		}
+		visit(key, entryValue);
+		walkJson(entryValue, visit);
+	}
+};
+
+describe("D70 naming convention: expression subtree discriminators are kebab-case", () => {
+	it("every *Kind field's value is kebab-case, and no D57 camelCase reference key survives, across a snapshot exercising column default, CHECK, partial index, and a cross-table exists() policy", () => {
+		const authors = table(app, "authors", { id: uuid().primaryKey() });
+		const posts = table(
+			app,
+			"posts",
+			{
+				id: uuid().primaryKey(),
+				authorId: uuid().notNull(),
+				price: integer(),
+				publishedAt: timestamptz().defaultNow(),
+			},
+			(t) => ({
+				checks: [check("posts_price_check", gt(t.price, 0))],
+				indexes: [
+					index("posts_published_idx")
+						.on(t.publishedAt)
+						.where(isNotNull(t.publishedAt)),
+				],
+			}),
+		);
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey(), postId: uuid().notNull() },
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("comments_read_visible")
+						.for("select")
+						.to("anon")
+						.using(
+							exists(
+								select(posts)
+									.innerJoin(authors, eq(posts.authorId, authors.id))
+									.where(eq(posts.id, t.postId))
+									.orderBy({ by: posts.publishedAt, direction: "desc" })
+									.limit(1),
+							),
+						),
+				}),
+			}),
+		);
+
+		const result = generateMigration({
+			declarations: [app, authors, posts, comments],
+			previousSnapshot: emptySnapshot,
+			registry,
+		});
+
+		const kebabOffenders: Array<{
+			readonly key: string;
+			readonly value: string;
+		}> = [];
+		const forbiddenKeyOffenders: Array<string> = [];
+		for (const node of Object.values(result.snapshot.objects)) {
+			walkJson(node, (key, value) => {
+				if (FORBIDDEN_REFERENCE_KEYS.includes(key)) {
+					forbiddenKeyOffenders.push(key);
+					return;
+				}
+				if (key.endsWith("Kind") && typeof value === "string") {
+					if (!KEBAB_CASE.test(value)) {
+						kebabOffenders.push({ key, value });
+					}
+				}
+			});
+		}
+		expect(forbiddenKeyOffenders).toEqual([]);
+		expect(kebabOffenders).toEqual([]);
 	});
 });
