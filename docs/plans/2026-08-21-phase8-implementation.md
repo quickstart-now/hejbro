@@ -592,6 +592,29 @@ two readers the same way: turbo's override layout invites "read the root config
 and you know the graph", and `packages/*/turbo.json` is where `dependsOn`
 actually lives. **`turbo.json` means all four of them.**
 
+The same root cause has a second face, and it caught the same person twice: a
+mutation planted in one package's `src` is invisible to another package's
+tests until `pnpm build` runs, because those tests import the dependency's
+`dist`. Within a package it never bites — vitest transpiles the source
+directly — so the habit of "edit, run, read" survives right up to the moment
+it crosses a package boundary and silently measures the pre-mutation build.
+Both times the first reading was "the mutation didn't reproduce", which is the
+worst possible failure mode for a mutation test: it says the gate is broken
+when the gate is fine. **Rebuild between planting and measuring, or measure in
+the package you planted in.**
+
+**Ask "if it existed, where would it be?" before asking "does it exist?"** The
+first question produces candidates and gets loud when they are wrong; the
+second demands exhaustiveness and goes quiet when the search was too narrow.
+`phase8-preset-goldens` was filed on a false premise — "no layer pins preset
+banner text" — because the search was `grep` over `packages/core/test/golden`,
+which is where core's goldens live and where a preset's never would. Asking
+which layer *would plausibly* own that assertion points at
+`packages/supabase/test` immediately, and `drop`'s banner turned out to have
+been pinned there all along. The issue's scope shrank from "build a second
+golden harness" to "add one assertion and three comments" once the premise was
+measured instead of assumed.
+
 **Record the failed runs too — and don't copy the tool's explanation for
 them.** Writing down only the runs that went green is selection, not
 measurement; writing down a failure with the tool's own reason attached can be
