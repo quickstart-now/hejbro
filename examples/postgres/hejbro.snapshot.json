@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 3,
+	"formatVersion": 4,
 	"objects": {
 		"function:app.comments_enforce_single_depth": {
 			"args": [],

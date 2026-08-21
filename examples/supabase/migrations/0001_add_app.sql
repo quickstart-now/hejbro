@@ -13,8 +13,8 @@
 -- + grant app.default-table-privileges.anon [new]
 -- + grant app.default-table-privileges.authenticated [new]
 -- + supabase-storage-bucket attachments [new]
--- parent-snapshot: sha256:f86ae7ebc6d8bd93524149ab39f929814ff7413a6e5e1cfdb1d21367bf9bd295
--- snapshot: sha256:7a9c6ac6e5c7e442e6ccba9fcbb597d0711271a6da7abe799962c74ca2a2bf6b
+-- parent-snapshot: sha256:fc3443cd6b1e94bc9e2362c6b3403416ca2c987634df5bce5ccac728b4d6f66f
+-- snapshot: sha256:3e83f650958435f96dcb366650263ef686dc1c6e1d682e108351447c92ecf90c
 
 create schema "app";
 
