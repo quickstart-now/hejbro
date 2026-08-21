@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { HejbroDeclaration, ObjectKind } from "../src/kind/object-kind";
-import { createKindRegistry } from "../src/kind/registry";
+import {
+	CORE_KIND_IDS,
+	createDefaultRegistry,
+	createKindRegistry,
+} from "../src/kind/registry";
 
 const toyKind = {
 	kind: "toy",
@@ -30,6 +34,46 @@ describe("kind registry", () => {
 		expect(() => createKindRegistry().get("nope")).toThrowError(
 			/no kind named "nope"/i,
 		);
+	});
+});
+
+/** `(fn's thrown error).message`, for asserting on message content without a nested try/catch per test. */
+const messageOf = (fn: () => unknown): string => {
+	try {
+		fn();
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
+	}
+	throw new Error("expected fn to throw");
+};
+
+describe("unknown-kind: registration gap vs genuinely-unknown name (D73, #196)", () => {
+	it("a core kind id this registry never registered says the registry was built incomplete, not 'upgrade' or 'a preset'", () => {
+		// "table" is in CORE_KIND_IDS, but this bare createKindRegistry() never
+		// registered it -- the one case this build CAN be sure of: it knows
+		// the name, so the gap is this registry's own construction, not a
+		// version mismatch or a missing preset.
+		expect(CORE_KIND_IDS.has("table")).toBe(true);
+		const message = messageOf(() => createKindRegistry().get("table"));
+		expect(message).toMatch(/built without registering it/i);
+		expect(message).not.toMatch(/newer hejbro/i);
+		expect(message).not.toMatch(/preset/i);
+	});
+
+	it("a name outside CORE_KIND_IDS states both possible causes, never guesses one (a future core kind)", () => {
+		expect(CORE_KIND_IDS.has("sequence")).toBe(false);
+		const message = messageOf(() => createDefaultRegistry().get("sequence"));
+		expect(message).toMatch(/newer hejbro/i);
+		expect(message).toMatch(/preset/i);
+	});
+
+	it("a name outside CORE_KIND_IDS states both possible causes, never guesses one (a preset kind)", () => {
+		expect(CORE_KIND_IDS.has("supabase-storage-bucket")).toBe(false);
+		const message = messageOf(() =>
+			createDefaultRegistry().get("supabase-storage-bucket"),
+		);
+		expect(message).toMatch(/newer hejbro/i);
+		expect(message).toMatch(/preset/i);
 	});
 });
 

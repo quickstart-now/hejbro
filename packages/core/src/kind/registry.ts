@@ -34,6 +34,89 @@ export type KindRegistry = {
 };
 
 /**
+ * The kind objects `createDefaultRegistry` registers, held as one array so
+ * {@link CORE_KIND_IDS} is *derived* from the same source that registers
+ * them (D73, #196) rather than hand-maintained alongside it — a future core
+ * kind is added here once, and both the registry and the id set pick it up
+ * together. `packages/core/test/naming-conventions.test.ts` also asserts
+ * this array's ids equal `createDefaultRegistry().list()`'s, so drift
+ * between "what's in this array" and "what actually gets registered" (the
+ * only way the two could still separate, since both already read from it)
+ * fails loudly.
+ */
+const CORE_KINDS: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [
+	schemaKind,
+	enumKind,
+	tableKind,
+	functionKind,
+	triggerKind,
+	rlsKind,
+	policyKind,
+	viewKind,
+	grantKind,
+];
+
+/**
+ * Every kind id core itself owns, as of *this build* — not "every kind id
+ * core will ever own". Used only to rule out one `unknown-kind` cause: a
+ * name in this set that isn't registered in the current {@link KindRegistry}
+ * means this registry was built without one of core's own kinds (a
+ * hand-rolled registry that skipped a `register()` call — see
+ * {@link createKindRegistry}), never a missing preset or a newer hejbro,
+ * since this build already knows the name. A name *not* in this set is not
+ * thereby known to be preset-owned: it's equally consistent with "a core
+ * kind added after this build shipped" (D73's motivating case, #193's
+ * `sequence`) and "a preset that isn't registered" — this build cannot
+ * tell those apart, so `unknownKindMessage` states both rather than
+ * guessing from the name's shape (a hyphen/prefix heuristic was tried and
+ * rejected: the one real preset kind, `supabase-storage-bucket`, is a
+ * sample of one, nothing enforces the convention on a *user's own* preset,
+ * and a wrong guess reproduces this exact issue's bug in a new shape) —
+ * and that shape guess wouldn't just be *unreliable today*, it would be
+ * *wrong by design* the moment core needs it: `.claude/rules/naming.md`
+ * Rule 2 (D57) requires every snapshot identity token, kind ids included,
+ * to be kebab-case, so a multi-word core kind id **must** itself carry a
+ * hyphen (`materialized-view` is the standing example) — that isn't a
+ * convention someone forgot to follow, it's the shape D57 mandates. The
+ * first three reasons above are all "this could go wrong"; this one is
+ * "this is guaranteed to go wrong, the day core has a two-word kind name".
+ */
+export const CORE_KIND_IDS: ReadonlySet<string> = new Set(
+	CORE_KINDS.map((kind) => kind.kind),
+);
+
+/**
+ * `unknown-kind` for a name in {@link CORE_KIND_IDS} that this particular
+ * registry doesn't have registered — this build knows the kind, so neither
+ * "upgrade hejbro" nor "register a preset" applies; the registry itself was
+ * built incomplete.
+ */
+const missingCoreRegistrationMessage = (kindName: string): string =>
+	`no kind named "${kindName}" is registered, even though it's one of hejbro's own built-in kinds — this registry was built without registering it. Next: if you built this registry by hand with createKindRegistry(), register every core kind you need (or start from createDefaultRegistry() instead, which registers them all).`;
+
+/**
+ * `unknown-kind` for a name outside {@link CORE_KIND_IDS} — this build has
+ * never heard of it, for one of two reasons it cannot tell apart from the
+ * name alone: **(1)** the snapshot was written by a newer hejbro that added
+ * this kind after this build shipped (a core kind needs no `formatVersion`
+ * bump to be added, D68/D73, so `parseSnapshot` sees nothing wrong — the
+ * gap only surfaces here, once diffing actually needs the kind); or
+ * **(2)** a preset that provides it isn't registered. States both, in that
+ * order, rather than guessing (D73, #196 — see {@link CORE_KIND_IDS}'s own
+ * comment for why a name-shape guess was rejected).
+ */
+const ambiguousUnknownKindMessage = (kindName: string): string =>
+	`no kind named "${kindName}" is registered. This has two possible causes: (1) this snapshot was written by a newer hejbro that added "${kindName}" as one of its own kinds, and this build predates it; or (2) "${kindName}" is provided by a preset that isn't registered here. Next: check your hejbro version against whatever generated this snapshot and upgrade if it's older, and check hejbro.config.ts's presets array for a preset that provides "${kindName}" if one exists.`;
+
+/** Picks between {@link missingCoreRegistrationMessage} and {@link ambiguousUnknownKindMessage} by {@link CORE_KIND_IDS} membership (D73, #196). */
+const unknownKindMessage = (kindName: string): string => {
+	if (CORE_KIND_IDS.has(kindName)) {
+		return missingCoreRegistrationMessage(kindName);
+	}
+	return ambiguousUnknownKindMessage(kindName);
+};
+
+/**
  * Creates an empty {@link KindRegistry}. Mutation is confined to the `Map`
  * captured in this closure — no exported `let`.
  */
@@ -55,10 +138,7 @@ export const createKindRegistry = (): KindRegistry => {
 	const get = (kindName: string): RegisteredObjectKind => {
 		const found = kinds.get(kindName);
 		if (found === undefined) {
-			throw hejbroError(
-				"unknown-kind",
-				`no kind named "${kindName}" is registered. Next: check the spelling, or register the preset that provides it in hejbro.config.ts's presets array.`,
-			);
+			throw hejbroError("unknown-kind", unknownKindMessage(kindName));
 		}
 		return found;
 	};
@@ -76,14 +156,8 @@ export const createKindRegistry = (): KindRegistry => {
  */
 export const createDefaultRegistry = (): KindRegistry => {
 	const registry = createKindRegistry();
-	registry.register(schemaKind);
-	registry.register(enumKind);
-	registry.register(tableKind);
-	registry.register(functionKind);
-	registry.register(triggerKind);
-	registry.register(rlsKind);
-	registry.register(policyKind);
-	registry.register(viewKind);
-	registry.register(grantKind);
+	CORE_KINDS.forEach((kind) => {
+		registry.register(kind);
+	});
 	return registry;
 };
