@@ -13,6 +13,32 @@ export default defineConfig({
 			reporter: ["json", "text"],
 			include: ["src/**/*.ts"],
 		},
+		// Most of this package's own tests (generate-command.test.ts,
+		// golden.test.ts, verify.test.ts, flag-equals.test.ts) drive the
+		// built CLI via child_process through test/support/cli-runner.ts,
+		// same as examples/{cli-smoke,postgres,supabase}'s e2e tests --
+		// which already carry this exact `testTimeout: 30_000` (added in
+		// #90, well before #117). This package's own vitest.config.ts was
+		// the one config in that family that never got it, and it's what
+		// broke: a real CI run (dev@67b9670's first check) hit vitest's
+		// 5s default and failed test/verify.test.ts:106 on the node 22
+		// leg only (node 24 and this same PR's own re-run both passed) --
+		// a flake, not a regression, from CI-runner contention that
+		// pushes a spawned-subprocess test past 5s under load,
+		// intermittently. Measured locally (not guessed): three repeated
+		// full-suite runs on this machine put the slowest single test
+		// between ~1.7s and ~3.2s, varying by which test happened to be
+		// slowest each run (contention among parallel subprocess-spawning
+		// tests, not one consistently slow test) -- 30s matches the
+		// sibling configs and gives roughly 10x headroom over the worst
+		// observed here.
+		//
+		// Distinct from #117 (which hardened the e2e harness for a
+		// different root cause -- jiti's fs cache going stale across
+		// repeated CLI invocations within one test run -- and did not
+		// touch any vitest.config.ts's testTimeout): that fix didn't
+		// cover this gap because it wasn't the same failure mode.
+		testTimeout: 30_000,
 	},
 	// loader.test.ts's fixtures are loaded through jiti, which imports
 	// "@hejbro/core" via its own module resolution; without dedupe, Vite's
