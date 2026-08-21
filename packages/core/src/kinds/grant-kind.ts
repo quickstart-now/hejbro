@@ -117,8 +117,8 @@ const statementIfAny = (
 
 /**
  * The built-in object kind for grants (D28): `schema-usage`,
- * `all-tables-privileges`, and `default-table-privileges` (the dd.land subset
- * of `alter default privileges`). Identity is
+ * `all-tables-privileges`, and `default-table-privileges` (the original
+ * production schema's subset of `alter default privileges`). Identity is
  * `"<schema>.<grantKind>.<role>"`. `diff` is a privilege-set delta: a
  * changed privilege list emits a single `alter` whose `emit` re-derives
  * the added/removed privileges from `previous`/`next` (notes are

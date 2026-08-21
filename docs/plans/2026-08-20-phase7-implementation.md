@@ -37,12 +37,12 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 
 | # | Artifact | Produced in | Gate |
 |---|----------|-------------|------|
-| O1 | Example domain for both showcases: a **team workspace** — `app` schema with `members`, `projects`, `tasks`, `comments` (self-FK on `comments.parent_id`), `attachments` (supabase only). Generic; no project or product name anywhere. | Task 14 / Task 24 | Owner confirms the domain (or names another generic one) before Task 14 starts |
+| O1 | Example domain for both showcases: a **team workspace** — `app` schema with `members`, `projects`, `tasks`, `comments` (self-FK on `comments.parent_id`), `attachments` (supabase only). Generic; no project or product name anywhere. | Task 14 / Task 24 | **Approved 2026-08-20** (owner; in use since Task 14) |
 | O2 | New error-code wording (§7 grammar: why + `Next:`): `duplicate-index-name`, `duplicate-foreign-key-name`, `foreign-key-table-mismatch`, `foreign-key-mixed-reference-tables`, `check-foreign-column-ref`, `check-subquery`, `index-predicate-foreign-column-ref`, `index-predicate-subquery`, `check-name-missing`, `not-null-without-default` (#27) | Tasks 3–8, 10, 33 | **Approved 2026-08-20** (owner, 11 messages as drafted by the team — pinned in goldens; any later change needs re-approval) + `unsupported-snapshot-version` older/newer split (approved 2026-08-20) + `invalid-config` presets message (approved 2026-08-21) |
 | O3 | CLI warning rendering golden (`warning[<code>]: …` on stderr after a successful generate, D55) | Task 22 | **Approved 2026-08-20** |
-| O4 | README body (D56 order, no comparison table) | Task 30 | Owner approves the rendered README at PR F review |
-| O5 | `docs/guide/` titles + section outlines: `getting-started.md`, `renames.md`, `ci.md` | Task 31 | Owner approves outlines before the pages are written |
-| O6 | `SKILL.md` frontmatter `description` (trigger sentence) and the four reference titles | Task 27 | Owner approves at PR E review |
+| O4 | README body (D56 order, no comparison table) | Task 30 | **Approved 2026-08-21** (owner, at PR F review) |
+| O5 | `docs/guide/` titles + section outlines: `getting-started.md`, `renames.md`, `ci.md` | Task 31 | **Approved 2026-08-21** (owner, outlines) |
+| O6 | `SKILL.md` frontmatter `description` (trigger sentence) and the four reference titles | Task 27 | **Approved 2026-08-21** (owner) |
 
 ## Owner decisions (2026-08-20 brainstorm — do not revisit)
 
@@ -134,6 +134,10 @@ D32–D34, D36, D37, D44 → D53). Roadmap: `docs/plans/2026-08-19-roadmap.md`
 - Before claiming any PR done: `pnpm check`, `pnpm check-types`,
   `pnpm test` pass from a clean state (`rm -rf packages/*/dist` first),
   output shown; PRs B and D additionally attach `pnpm roundtrip` output.
+- Never run `rm -rf dist`, `pnpm build`, or `turbo run` in a worktree
+  another agent is actively using; review gates run in a detached `/tmp`
+  worktree (`git worktree add --detach /tmp/<name> <sha>`) — team rule
+  adopted 2026-08-21.
 
 ## PR map (each PR squash-merges to `dev`; body lists commits + `Closes`)
 
@@ -447,7 +451,7 @@ referencesTable: tableIdentity(
 - [x] **Step 4: Emit test** — the self-FK from Step 1 emits
   `alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;` as a **deferred** statement.
 
-- [x] **Step 5: Run all core tests** → PASS; `pnpm check-types` across the repo (the `examples/dd-land` and `packages/supabase` callers still pass `table:` — non-breaking).
+- [x] **Step 5: Run all core tests** → PASS; `pnpm check-types` across the repo (the reduced example, later renamed `examples/supabase`, and `packages/supabase` callers still pass `table:` — non-breaking).
 
 - [x] **Step 6: Commit** — `git commit -m "feat(core): self-referencing foreign keys via the table's own refs"`
 
@@ -1077,7 +1081,7 @@ export const createIndexSql = (schema, tableName, index) =>
 **Files:**
 - Regenerate: `packages/core/test/golden/cases/*/expected/snapshot.json` (+ any `.sql` whose index lines changed)
 - Modify: `packages/cli/test/init.test.ts` (`"hejbroSnapshot": 2` → `3`), any CLI golden under `packages/cli/test/fixtures/**` or inline snapshot text mentioning version 2
-- Verify: `examples/dd-land`, `examples/cli-smoke`, `examples/preset-smoke` tests (in-process; no committed snapshots yet)
+- Verify: the reduced example (later renamed `examples/supabase`), `examples/cli-smoke`, `examples/preset-smoke` tests (in-process; no committed snapshots yet)
 - Create: `packages/core/test/golden/cases/table-indexes/…` (added at review — pins the v3 index shape and the changed-index recreate path)
 
 - [x] **Step 1:** `UPDATE_GOLDEN=1 pnpm --filter @hejbro/core test -- golden`; `git diff --stat packages/core/test/golden` — **every** `snapshot.json` changes on its version line and on index `columns` entries only; no `.sql` may change except index `create` lines. Read the diff; anything else = stop and report.
@@ -1110,7 +1114,7 @@ export const createIndexSql = (schema, tableName, index) =>
 	"devDependencies": { "typescript": "catalog:", "vitest": "catalog:" }
 }
 ```
-`turbo.json` = copy of `examples/cli-smoke/turbo.json` plus `check-types: { dependsOn: ["^build"] }`. `tsconfig.json` = copy of `examples/dd-land/tsconfig.json`. `hejbro.config.ts` = copy of `examples/cli-smoke/hejbro.config.ts` with `prefixStrategy: "index"` and `entry: ["src/app.schema.ts"]` — a single file, not `cli-smoke`'s recursive `src/**/*.schema.ts` (stable file names `0001_…sql`). The single-file form is load-bearing, not cosmetic: `src/steps/*.schema.ts` (Task 15) each declare their own `schema("app")`, so a recursive glob sweeps them all into one `generate` run and fails with `duplicate-identity: schema:app` (found during Task 16 — the step files are for `test/chain.test.ts` to import directly, never a declaration source for the CLI).
+`turbo.json` = copy of `examples/cli-smoke/turbo.json` plus `check-types: { dependsOn: ["^build"] }`. `tsconfig.json` = copy of the reduced example's `tsconfig.json` (later renamed `examples/supabase/tsconfig.json`). `hejbro.config.ts` = copy of `examples/cli-smoke/hejbro.config.ts` with `prefixStrategy: "index"` and `entry: ["src/app.schema.ts"]` — a single file, not `cli-smoke`'s recursive `src/**/*.schema.ts` (stable file names `0001_…sql`). The single-file form is load-bearing, not cosmetic: `src/steps/*.schema.ts` (Task 15) each declare their own `schema("app")`, so a recursive glob sweeps them all into one `generate` run and fails with `duplicate-identity: schema:app` (found during Task 16 — the step files are for `test/chain.test.ts` to import directly, never a declaration source for the CLI).
 - [ ] **Step 2:** Write `src/steps/step-1.schema.ts` with the domain above **minus** the three later changes (no `tasks.estimate_hours`, `projects.owner_id` FK with default actions only, `tasks.due_at` living on `tasks`), importing only from `"hejbro"`. Copy it to `src/app.schema.ts`.
 - [ ] **Step 3:** `pnpm install` (workspace link) → `pnpm --filter example-postgres check-types` passes. Commit: `git commit -m "feat(examples): postgres showcase scaffold and step 1 declarations"`.
 
@@ -1365,7 +1369,7 @@ export const supabasePreset: Preset = {
 ## Task 24: `examples/supabase` — rename + genericize + config + chain
 
 **Files:**
-- Move: `examples/dd-land/` → `examples/supabase/` (`git mv`), package name `example-supabase`
+- Move: the reduced example's directory (project-specific-named at the time) → `examples/supabase/` (`git mv`), package name `example-supabase`
 - Modify: `src/app.schema.ts` (renamed from the old schema file; schema `app`; entities: `profiles(id, user_id → authUsers, display_name)`, `attachments(id, profile_id → profiles, storage_path, size_bytes CHECK > 0)`, a deliberately RLS-less `drafts` table (keeps the D40 warning), bucket `attachments` (public false, size limit, mime list), grants to `anonRole`/`authenticatedRole`, view `profiles_public` without `securityInvoker` (keeps the #66 warning))
 - Create: `hejbro.config.ts` with `presets: [supabasePreset]` and `entry: ["src/app.schema.ts"]` (single file, not a recursive glob — see Task 14's note: `src/steps/*.schema.ts` each declare their own `schema("app")` and must never be swept into a `generate` run), `src/steps/step-1..4.schema.ts`, `migrations/0001..0004`, `hejbro.snapshot.json`, `roundtrip.rows.sql`
 - Modify: `test/` → `chain.test.ts` + `cli.test.ts` (same shape as Task 17; the CLI test additionally asserts the two warnings on stderr with exit 0), keep the two negative tests (reserved schema hard error, bucket-drop banner note) in `preset.test.ts`
@@ -1428,7 +1432,7 @@ create table if not exists auth.users (id uuid not null primary key);
 
 ## Task 26: PR D close-out
 
-- [ ] **Step 1:** Update `examples/README.md`'s supabase row (drop "lands in PR D"); grep the repo for `dd-land` in package names/paths (`pnpm-lock.yaml` regenerates on install) — the naming sweep in prose files is Task 32, but **paths and package names** must be gone here.
+- [ ] **Step 1:** Update `examples/README.md`'s supabase row (drop "lands in PR D"); grep the repo for the reduced example's earlier project-specific name in package names/paths (`pnpm-lock.yaml` regenerates on install) — the naming sweep in prose files is Task 32, but **paths and package names** must be gone here.
 - [ ] **Step 2:** Clean-state gates; open PR D (`Closes #107`) with both round-trip outputs.
 
 ## Task 27: Skill source location (V2) + `SKILL.md` + references
@@ -1503,11 +1507,11 @@ describe("hejbro skill links", () => {
 ## Task 32: Naming sweep (D53/D56) + PR F
 
 **Files:**
-- Rename: `packages/core/test/golden/cases/ddland-posts` → `app-posts`, `ddland-security` → `app-security` (update their `declarations.ts` schema name to `app` and regenerate those two cases' `expected/`)
-- Modify: `packages/core/test/golden/cases/comments-single-depth/*` comments, `docs/plans/2026-08-19-roadmap.md` (Phase 1–6 history lines), `docs/specs/2026-08-19-hejbro-design.md` (D21, D28, D44 prose), `examples/README.md`, `packages/supabase/README.md`, any `*.test.ts` describe strings
+- Rename (F2, #118, mechanical half): the two golden case directories carrying the earlier project-specific name → `app-posts`, `app-security` (update their `declarations.ts` schema name to `app` and regenerate those two cases' `expected/`)
+- Modify (F, this task): `packages/core/test/golden/cases/comments-single-depth/*` comments, `docs/plans/2026-08-19-roadmap.md` (Phase 1–6 history lines), `docs/specs/2026-08-19-hejbro-design.md` (D21, D28, D44 prose), `examples/README.md`, `packages/supabase/README.md`, any `*.test.ts` describe strings
 
-- [ ] **Step 1:** `grep -rniE "dd\.land|dd-land|ddland" --exclude-dir=node_modules --exclude-dir=dist --exclude=pnpm-lock.yaml .` → rewrite each hit as neutral prose ("an earlier project-specific example", or simply the `app` schema). Decision-log rows keep their decision content but lose the name.
-- [ ] **Step 2:** The same grep returns zero hits (add this grep as a step in the PR body). `UPDATE_GOLDEN=1` for the two renamed cases only; clean-state gates.
+- [ ] **Step 1:** Grep the repo (case-insensitive, excluding `node_modules`/`dist`/`pnpm-lock.yaml`) for the earlier project's name in its three written forms → rewrite each hit as neutral prose ("an earlier project-specific example", or simply the `app` schema). Decision-log rows keep their decision content but lose the name.
+- [ ] **Step 2:** The same grep returns zero hits for this PR's scope (F2 owns the mechanical test/golden half separately, #118) (add this grep as a step in the PR body). Clean-state gates.
 - [ ] **Step 3:** Commit `docs: replace project-specific example naming with the generic examples`; open PR F (`Closes #109, #83, #84, #85`).
 
 ## Task 33: `not-null-without-default` warning (#27)
@@ -1550,5 +1554,5 @@ and call it from a `beforeAll` in every spawning test file (`generate-command`, 
 - **Known follow-up (filed as #110, Phase 8):** `rename-plan.ts` does not re-target rendered expression text (policy `using`/`withCheck`, CHECK `expression`, index `where`), so the generate after a `--rename` emits one valid-but-unnecessary drop + add for each affected object. Documented behavior in Phase 7; not a blocker.
 - **Ordering hazards:** Task 11 bumps the version; Task 13 is the only regeneration. Tasks 3–8 must leave every `expected/snapshot.json` untouched — run the golden suite after each and stop if it changes.
 - **Round-trip script assumptions:** the fresh-generate copy symlinks the example's own `node_modules/hejbro` (pnpm workspace link) so `import … from "hejbro"` resolves; `init` must tolerate an existing `hejbro.config.ts` (it does — see `commands/init.ts`); the `--schema=app` filter means objects outside `app` (roles, the seed) are not compared — intended.
-- **Verified at plan time (researcher R4, `phase7-plan-checks.md`):** all type/function names used in the tasks exist with the stated shapes; `kinds/table-kind.ts` → `dsl/table.ts` is a type-only import, so Task 8's `derive*Name` import into `dsl/table.ts` creates no runtime cycle; pg_dump's `\restrict`/`\unrestrict` markers exist from PG 17.6 (2025-08-14), which `postgres:17-alpine` carries; zod v4 accepts `z.array(z.unknown()).default([])` and its output assigns to `ReadonlyArray`. Remaining `dd-land`/`ddland` strings in this plan name paths that Tasks 24 and 32 delete — not new naming.
+- **Verified at plan time (researcher R4, `phase7-plan-checks.md`):** all type/function names used in the tasks exist with the stated shapes; `kinds/table-kind.ts` → `dsl/table.ts` is a type-only import, so Task 8's `derive*Name` import into `dsl/table.ts` creates no runtime cycle; pg_dump's `\restrict`/`\unrestrict` markers exist from PG 17.6 (2025-08-14), which `postgres:17-alpine` carries; zod v4 accepts `z.array(z.unknown()).default([])` and its output assigns to `ReadonlyArray`. Remaining project-specific-name strings in this plan name paths that Tasks 24 and 32 delete — not new naming.
 - **Verified at plan time (planner):** Task 17's `ConfirmDropSpec`/`ChainEntry`/`ChainReport` shapes, `hejbro`'s `export * from "@hejbro/core"`, `assertSqlName` returning the validated name, `isExpr`/`collectColumnRefs` exports, `hejbro init` idempotence (existing artifacts skipped), `packages/core/test/dsl/` existing. The worktree needs `pnpm install` before Task 14 (no `node_modules` yet — the round-trip script relies on the workspace symlink `examples/<x>/node_modules/hejbro`).
