@@ -1,0 +1,95 @@
+name: release-publish
+# `main` only receives `dev -> main` merge-commit PRs (AGENTS.md's release
+# flow; never squash/rebase). This workflow's only job is to publish
+# whatever `main` currently holds -- it must never version. Scoped to
+# `push` on `main` only: never `pull_request` (a fork PR would run this in
+# the fork's own Actions context, not ours, and would find no `NPM_TOKEN`
+# there either -- but `push` is the narrower, correct condition regardless)
+# and never `dev` (only a landed push to `main` is a release).
+on:
+  push:
+    branches: [main]
+
+# Exactly one publish at a time, full stop. Not cancel-in-progress: a
+# cancelled `npm publish` mid-flight still burns the version number (npm
+# never lets the same version publish twice, published or not) without a
+# clean run to show what happened -- an in-flight publish must finish or
+# fail on its own, and a second push queues behind it instead of racing it.
+concurrency:
+  group: release-publish-main
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    # Defence in depth, not a functional requirement -- see
+    # release-version.yml's identical comment.
+    if: github.repository == 'quickstart-now/hejbro'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm check-types
+      - run: pnpm test
+      - run: pnpm build
+      # #86's smoke (phase8-packaging): packs the three published packages,
+      # installs the tarballs with plain `npm install`, runs
+      # init/generate/verify against them.
+      - run: pnpm smoke:pack-install
+      # Closes the gap #86's smoke leaves open (see
+      # scripts/verify-pnpm-publish-tool.mjs): the smoke proves *a*
+      # pnpm-packed tarball installs cleanly, not that `changeset publish`
+      # actually picks pnpm for this workspace. Asserts on
+      # @changesets/cli's own tool-detection call, not a guess at it.
+      - run: pnpm check:pnpm-publish-tool
+
+  publish:
+    needs: gate
+    if: github.repository == 'quickstart-now/hejbro'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # changesets/action/publish pushes git tags + GitHub releases
+      id-token: write # required for npm provenance (NPM_CONFIG_PROVENANCE), independent of the auth method below
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { fetch-depth: 0 } # full history: this job pushes git tags
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+      - run: pnpm install --frozen-lockfile
+      # Org secret NPM_TOKEN's visibility is "private" -- GitHub's org-secret
+      # scoping term for "private repositories only" -- and this repository
+      # is public, so `secrets.NPM_TOKEN` resolves to an empty string here
+      # until the owner adds a repository-level secret (AGENTS.md's Owner
+      # actions). Failing fast on that, before ever invoking npm/pnpm with
+      # an empty token, is the whole point of this step: the alternative is
+      # `changeset version` having already run (irrelevant here, this
+      # workflow never versions) or the publish step failing deep inside
+      # npm's own auth error handling with a less specific message. Value is
+      # never printed -- only ever tested for absence.
+      - name: Verify NPM_TOKEN is configured
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "::error::NPM_TOKEN secret is not set on quickstart-now/hejbro. Next: the owner must add a repository-level NPM_TOKEN secret (an npm automation token, not a publish token -- a publish token prompts for 2FA and fails in CI; see AGENTS.md's Owner actions) before this workflow can publish."
+            exit 1
+          fi
+      # changesets/action/publish -- NOT the monolithic changesets/action:
+      # see release-version.yml's comment on why the decomposed sub-actions
+      # are used instead of the mode-auto-selecting monolithic one.
+      #
+      # Input name verified against this exact pinned commit's
+      # publish/action.yml (`script`, not `publish-script` -- same trap as
+      # noted in release-version.yml, the input name differs by which
+      # action you reference even within one release).
+      - uses: changesets/action/publish@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          script: pnpm release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
