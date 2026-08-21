@@ -1,6 +1,6 @@
 {
 	"name": "@hejbro/core",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"description": "hejbro core: declaration model, builder DSL, compiler, snapshot and diff engine. Pure — no filesystem, no database I/O.",
 	"license": "MIT",
 	"type": "module",
