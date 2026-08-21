@@ -167,15 +167,29 @@ BIN="$SCRATCH_DIR/node_modules/.bin/hejbro"
 [ -x "$BIN" ] || fail "no executable hejbro bin at $BIN"
 
 mkdir -p "$SCRATCH_DIR/src"
+# RLS is declared (not because the Supabase preset's exposed-table
+# validator would otherwise fire — it only warns when a schema carries an
+# explicit anon/authenticated grant, which this declaration doesn't have
+# — but because it's free coverage: it exercises hejbro's own `rls`/`eq`
+# re-exports on the same path assertion 3 already runs).
 cat > "$SCRATCH_DIR/src/app.schema.ts" <<'EOF'
-import { schema, table, text, uuid } from "hejbro";
+import { eq, rls, schema, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
-export const widgets = table(app, "widgets", {
-	id: uuid().primaryKey().defaultRandom(),
-	name: text().notNull(),
-});
+export const widgets = table(
+	app,
+	"widgets",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		name: text().notNull(),
+	},
+	(t) => ({
+		rls: rls.enabled({
+			read: rls.policy("widgets_read").for("select").to("anon").using(eq(t.id, t.id)),
+		}),
+	}),
+);
 EOF
 
 (cd "$SCRATCH_DIR" && "$BIN" init >/dev/null) || fail "hejbro init exited non-zero"
@@ -189,6 +203,19 @@ EOF
 # module resolution of @hejbro/supabase, exercises the D55 preset
 # registration path, and exercises hejbro's own `defineConfig` re-export,
 # all in one file.
+#
+# What a broken @hejbro/supabase entry actually produces here: `hejbro
+# generate` crashes with a secondary `TypeError` from the CLI's own
+# diagnostic formatting (`asHejbroError`'s duck-typing wrongly treats
+# Node's ERR_MODULE_NOT_FOUND as a HejbroError — #125/phase8-loader-
+# diagnostics, not this PR's job to fix), so the crash text alone doesn't
+# name the package. Confirmed independently, outside this script, that
+# the underlying error is exactly what's expected: `node -e
+# "import('@hejbro/supabase')"` against the same broken tarball reports
+# `ERR_MODULE_NOT_FOUND: Cannot find module
+# '.../node_modules/@hejbro/supabase/dist/nonexistent.js'` — i.e. the
+# failure this assertion catches is @hejbro/supabase's own entry point,
+# not an unrelated crash.
 cat > "$SCRATCH_DIR/hejbro.config.ts" <<'EOF'
 import { defineConfig } from "hejbro";
 import { supabasePreset } from "@hejbro/supabase";
