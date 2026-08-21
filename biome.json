@@ -38,6 +38,15 @@
 			"formatter": { "enabled": false },
 			"linter": { "enabled": false },
 			"assist": { "enabled": false }
+		},
+		{
+			"includes": [
+				"examples/*/hejbro.snapshot.json",
+				"examples/*/migrations/**"
+			],
+			"formatter": { "enabled": false },
+			"linter": { "enabled": false },
+			"assist": { "enabled": false }
 		}
 	]
 }
