@@ -255,8 +255,47 @@ own claim.
   example migrations and snapshots **byte for byte** before any format change.
   That is the script's own test. Prove the script's range by mutation:
   hand-edit a committed example migration and confirm regeneration overwrites
-  it back, and drop a step file and confirm the script notices rather than
-  silently regenerating fewer steps.
+  it back (valid despite being an artifact-level edit — the regeneration
+  script is the producer under test here, so healing *is* the correct
+  behavior, the mirror image of `phase8-packaging`'s `dist`/`prepack` trap),
+  and drop a step file and confirm the script notices rather than silently
+  regenerating fewer steps.
+
+  **This last part was originally written assuming the chain would
+  otherwise shrink silently — checked by neither the instruction that
+  asked for it nor its relay.** It doesn't: `pnpm test` already has two
+  gates that catch a deleted step (`chain.test.ts` imports each step file
+  statically, so a missing one is a module-resolution failure; `cli.test.ts`
+  asserts an exact migration count via `toHaveLength`). What the three
+  devices actually differ on is *when* and *how clearly*:
+
+  | Device | Surfaces | Says |
+  |---|---|---|
+  | the script's own shrink check | at regeneration time | names the likely cause ("a step file was likely deleted or renamed") |
+  | `chain.test.ts` | in `pnpm test` | a bare module-resolution failure — requires inference |
+  | `cli.test.ts` | in `pnpm test` | a length mismatch — catches growth too, but not *why* |
+
+  So the script-level check is still worth having — for precision and
+  timing, not because the phase would otherwise ship a silent gap.
+
+  **Two more mutations, both found in review, are part of the same
+  criterion:**
+  - **A guard's own baseline must come from something the guard cannot
+    itself change.** The first version of the shrink check counted the
+    working tree just before wiping it — so a failing run left a *shorter*
+    tree on disk, and rerunning the script (the ordinary response to a
+    failure) compared that shrunk state against itself and passed. Fixed
+    by reading the baseline from `git ls-files` (the index, untouched by
+    anything this script does) instead of the filesystem.
+  - **A step file existing is not the same as a step file doing anything.**
+    A new step whose declarations don't differ from the previous one makes
+    `generate` write nothing — step count and migration count silently
+    diverge, and neither the shrink check nor either existing test notices
+    (steps and migrations both stay ≥ what's committed). A second check,
+    `regenerated-migrations == step-files`, catches exactly this; it's
+    complementary to the shrink check, not redundant with it — a deletion
+    keeps that equation balanced while shrinking the total, and a no-op
+    step keeps the total from shrinking while unbalancing the equation.
 - **`phase8-release-workflows`** — the workflows are validated against
   `changesets/action`'s `action.yml` (input names differ between versions; do
   not copy a draft blindly). The publish job must refuse to run if the
@@ -354,11 +393,18 @@ own claim.
   `serial()` → `integer()` emits the default drop and the sequence drop.
 - **`phase8-constraint-names`** — pk/unique changes emit drop + add using names
   taken from the snapshot; #137's add and drop paths are covered by tests, and
-  the chain step added in this PR exercises them under real Postgres.
+  the chain step added in this PR exercises them under real Postgres. A new
+  chain step means `examples/postgres/test/chain.test.ts`'s static
+  `step-N.schema` imports and `test/cli.test.ts`'s migration-count
+  `toHaveLength` both need the new step added by hand — `phase8-regen-script`
+  regenerates the files, it doesn't touch either test.
 - **`phase8-pk-guard`** — a PK column added to an existing table is refused
   loudly rather than emitted without its constraint.
 - **`phase8-grant-sync`** — a table added under a schema-wide grant reaches the
   grant; `pnpm --filter example-postgres roundtrip` produces an empty diff.
+  Same reminder as `phase8-constraint-names`: the new step goes into both
+  examples' `chain.test.ts` imports and `cli.test.ts`'s expected count by
+  hand.
 - **`phase8-authuid-cached`** — the skill reference, the README paragraph and
   the three example policies all move to the cached form. **The README's D45
   paragraph currently tells users to wrap the call themselves "until then";
@@ -533,6 +579,37 @@ itself was left unchanged — the gate had nothing to catch, so its green
 proved nothing about its range. A negative result is more dangerous than a
 positive one here: a red gate is evidence something happened, but a green
 gate does not distinguish "didn't catch it" from "nothing to catch."
+
+**Don't conclude "nothing catches this" from one gate.** Twice in this phase
+a requirement was written on the premise that a defect would pass silently —
+a shrinking chain, a misread rename — and both times another gate already
+caught it (`chain.test.ts`'s static imports and its `confirmedDropsForStep`,
+`cli.test.ts`'s count). The claim *"this is silent"* is itself a measurement,
+not an observation.
+
+A third instance in the same review differed in one way that mattered: the
+premise (a known-ambiguity list to guard against a silently-misread rename)
+was questioned *before* the requirement was written, so it cost a question
+instead of an implementation round — the first two were discovered only
+after the code already existed, once someone went looking for what else
+might already cover them. **Order is the whole difference.** A premise
+checked before the requirement is written costs asking; a premise checked
+after costs building, reviewing, and unwinding.
+
+**A guard must read its baseline from something it cannot itself change.**
+`phase8-regen-script`'s shrink guard counted the committed migrations from
+the working tree, then exited after the script had already shrunk that
+tree — so a second run compared the reduced state against itself and
+passed. The first thing anyone does after a failing script is run it
+again. `git ls-files` reads the index, which the script never touches;
+that is what the baseline needed to be. This is a third, distinct failure
+from the two above — neither "check its range" (the guard's scope was
+correct: it looked at exactly the right count) nor "a green proves
+nothing" (the defect it existed to catch was genuinely present) explains
+it. The question this one asks is whether the thing a guard reads *can be
+changed by the guard itself* — a green here isn't wrong because the gate
+saw too little or because nothing was there to catch; it's wrong because
+what it read had already been rewritten by the time it read it.
 
 **Mutate the producer, not the artifact.** A `prepack` or regeneration step
 will silently heal an artifact-level mutation, and the gate passes for the

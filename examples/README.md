@@ -30,7 +30,24 @@ complete, self-contained declaration set. `src/app.schema.ts` is the live
 entry point the CLI actually reads (always equal to the latest step);
 `migrations/` and `hejbro.snapshot.json` are the committed output of
 regenerating that history step by step with the built CLI.
-`test/chain.test.ts` asserts two things: regenerating from the step
-declarations in order reproduces the committed migration files exactly
-(modulo the trailing newline the CLI adds when writing the file), and the
-committed migrations' banner hashes form an unbroken chain.
+`test/chain.test.ts` asserts two things, read-only and in-process: regenerating
+from the step declarations in order reproduces the committed migration files
+exactly (modulo the trailing newline the CLI adds when writing the file), and
+the committed migrations' banner hashes form an unbroken chain.
+
+**Regenerating on disk** — after a format change, or after adding a step —
+runs the same story through the *built* CLI instead, driving `init`/`generate`
+once per step and writing the real files:
+
+```bash
+pnpm build
+pnpm regen:examples
+```
+
+`scripts/regen-examples.sh` enumerates `src/steps/step-*.schema.ts` from the
+directory rather than assuming a count, so a new step (a chain grows in
+`phase8-constraint-names` and `phase8-grant-sync`) is picked up automatically.
+An ambiguous drop+add pair (e.g. step 4's column rename in both examples here)
+is resolved the same way a human would: by rerunning with the exact
+`--confirm-drop` command the CLI's own diagnostic suggests, never a
+hard-coded table/column name.
