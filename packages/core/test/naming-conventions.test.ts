@@ -36,6 +36,7 @@ import {
 	timestamptz,
 	uuid,
 } from "../src/index";
+import { CORE_KIND_IDS } from "../src/kind/registry";
 import type { JsonValue } from "../src/snapshot/stable-json";
 import {
 	REACHABLE_NODE_KINDS,
@@ -77,6 +78,20 @@ describe("D57 naming convention: output tokens are kebab-case", () => {
 		expect(kindIds.length).toBeGreaterThan(0);
 		const offenders = kindIds.filter((id) => !KEBAB_CASE.test(id));
 		expect(offenders).toEqual([]);
+	});
+
+	it("CORE_KIND_IDS (unknown-kind's D73 classifier) matches exactly what createDefaultRegistry() actually registers", () => {
+		// Guards the derivation registry.ts's own comment promises: CORE_KIND_IDS
+		// and createDefaultRegistry() both read from one shared array, so they
+		// can't drift apart by construction -- unless a future edit adds a
+		// registry.register(...) call to createDefaultRegistry() directly,
+		// bypassing that array. This pins the resulting *set* so that drift
+		// fails here instead of silently misclassifying unknown-kind (D73,
+		// #196): a kind CORE_KIND_IDS doesn't know about would get the
+		// "newer hejbro or missing preset" message instead of the correct
+		// "this registry is incomplete" one.
+		const registeredIds = new Set(registry.list().map((kind) => kind.kind));
+		expect(CORE_KIND_IDS).toEqual(registeredIds);
 	});
 
 	it("migration prefix strategy values are all kebab-case", () => {

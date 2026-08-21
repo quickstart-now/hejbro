@@ -34,56 +34,78 @@ export type KindRegistry = {
 };
 
 /**
- * A rough classification of an *unregistered* kind id, used only to choose
- * the right `unknown-kind` message (D73, #196). It cannot be a lookup
- * against a known-names list — the whole point is telling apart a name
- * this build has never heard of because it's newer than this build (a
- * future core kind) from one it's never heard of because nothing
- * registered it (a preset the user hasn't added). Neither name is in any
- * list this build can hold.
- *
- * The proxy: every core-owned kind id today is a single bare lowercase
- * word (`schema`, `table`, `trigger`, `rls`, `policy`, ...; `#193`'s
- * `sequence` keeps the pattern). Every preset-owned kind id carries a
- * namespace prefix joined by a hyphen (`supabase-storage-bucket`) —
- * `register()`'s own `duplicate-kind` message already tells preset authors
- * to do exactly that, to avoid colliding with another preset or with core.
- * A hyphen is therefore evidence the id was *meant* to be preset-owned;
- * its absence is evidence it belongs to core's own, still-growing
- * vocabulary. This can misclassify a hypothetical future multi-word core
- * kind id (none exists today, so there's nothing to test it against) or a
- * preset author who skips the prefix despite the guidance — a heuristic
- * over the *shape* of a name that was never registered, not a proof.
+ * The kind objects `createDefaultRegistry` registers, held as one array so
+ * {@link CORE_KIND_IDS} is *derived* from the same source that registers
+ * them (D73, #196) rather than hand-maintained alongside it — a future core
+ * kind is added here once, and both the registry and the id set pick it up
+ * together. `packages/core/test/naming-conventions.test.ts` also asserts
+ * this array's ids equal `createDefaultRegistry().list()`'s, so drift
+ * between "what's in this array" and "what actually gets registered" (the
+ * only way the two could still separate, since both already read from it)
+ * fails loudly.
  */
-const looksLikePresetShapedKindName = (kindName: string): boolean =>
-	kindName.includes("-");
+const CORE_KINDS: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [
+	schemaKind,
+	enumKind,
+	tableKind,
+	functionKind,
+	triggerKind,
+	rlsKind,
+	policyKind,
+	viewKind,
+	grantKind,
+];
 
 /**
- * `unknown-kind` for a kind id shaped like core's own vocabulary (no
- * namespace prefix) — most likely a kind this build predates, not a
- * missing preset. Mirrors {@link newerVersionMessage}'s
- * (`snapshot/snapshot.ts`) wording for the structurally identical
- * "this file is newer than this build" case, one level down: that one
- * fires when the snapshot's `formatVersion` itself is too new; this one
- * fires when an individual *kind id* inside an otherwise-current-version
- * snapshot is one this build has never registered (#193/#23: a new core
- * kind needs no `formatVersion` bump, D68, so `parseSnapshot` sees nothing
- * wrong — the mismatch only surfaces here, once diffing actually needs
- * the kind).
+ * Every kind id core itself owns, as of *this build* — not "every kind id
+ * core will ever own". Used only to rule out one `unknown-kind` cause: a
+ * name in this set that isn't registered in the current {@link KindRegistry}
+ * means this registry was built without one of core's own kinds (a
+ * hand-rolled registry that skipped a `register()` call — see
+ * {@link createKindRegistry}), never a missing preset or a newer hejbro,
+ * since this build already knows the name. A name *not* in this set is not
+ * thereby known to be preset-owned: it's equally consistent with "a core
+ * kind added after this build shipped" (D73's motivating case, #193's
+ * `sequence`) and "a preset that isn't registered" — this build cannot
+ * tell those apart, so `unknownKindMessage` states both rather than
+ * guessing from the name's shape (a hyphen/prefix heuristic was tried and
+ * rejected: the one real preset kind, `supabase-storage-bucket`, is a
+ * sample of one, nothing enforces the convention on a *user's own* preset,
+ * and a wrong guess reproduces this exact issue's bug in a new shape).
  */
-const unknownCoreShapedKindMessage = (kindName: string): string =>
-	`no kind named "${kindName}" is registered — its name has no preset namespace prefix, which is how every hejbro-owned kind is spelled ("table", "trigger", "rls", ...), so this snapshot was likely written by a newer hejbro than the one reading it, one that knows a kind this build doesn't. Next: upgrade hejbro to a version that supports "${kindName}" and try again.`;
+export const CORE_KIND_IDS: ReadonlySet<string> = new Set(
+	CORE_KINDS.map((kind) => kind.kind),
+);
 
-/** `unknown-kind` for a kind id shaped like a preset's (namespace-prefixed) — the original, still-correct advice for a preset the user hasn't registered. */
-const unknownPresetShapedKindMessage = (kindName: string): string =>
-	`no kind named "${kindName}" is registered. Next: check the spelling, or register the preset that provides it in hejbro.config.ts's presets array.`;
+/**
+ * `unknown-kind` for a name in {@link CORE_KIND_IDS} that this particular
+ * registry doesn't have registered — this build knows the kind, so neither
+ * "upgrade hejbro" nor "register a preset" applies; the registry itself was
+ * built incomplete.
+ */
+const missingCoreRegistrationMessage = (kindName: string): string =>
+	`no kind named "${kindName}" is registered, even though it's one of hejbro's own built-in kinds — this registry was built without registering it. Next: if you built this registry by hand with createKindRegistry(), register every core kind you need (or start from createDefaultRegistry() instead, which registers them all).`;
 
-/** Picks between {@link unknownCoreShapedKindMessage} and {@link unknownPresetShapedKindMessage} by {@link looksLikePresetShapedKindName} (D73, #196). */
+/**
+ * `unknown-kind` for a name outside {@link CORE_KIND_IDS} — this build has
+ * never heard of it, for one of two reasons it cannot tell apart from the
+ * name alone: **(1)** the snapshot was written by a newer hejbro that added
+ * this kind after this build shipped (a core kind needs no `formatVersion`
+ * bump to be added, D68/D73, so `parseSnapshot` sees nothing wrong — the
+ * gap only surfaces here, once diffing actually needs the kind); or
+ * **(2)** a preset that provides it isn't registered. States both, in that
+ * order, rather than guessing (D73, #196 — see {@link CORE_KIND_IDS}'s own
+ * comment for why a name-shape guess was rejected).
+ */
+const ambiguousUnknownKindMessage = (kindName: string): string =>
+	`no kind named "${kindName}" is registered. This has two possible causes: (1) this snapshot was written by a newer hejbro that added "${kindName}" as one of its own kinds, and this build predates it; or (2) "${kindName}" is provided by a preset that isn't registered here. Next: check your hejbro version against whatever generated this snapshot and upgrade if it's older, and check hejbro.config.ts's presets array for a preset that provides "${kindName}" if one exists.`;
+
+/** Picks between {@link missingCoreRegistrationMessage} and {@link ambiguousUnknownKindMessage} by {@link CORE_KIND_IDS} membership (D73, #196). */
 const unknownKindMessage = (kindName: string): string => {
-	if (looksLikePresetShapedKindName(kindName)) {
-		return unknownPresetShapedKindMessage(kindName);
+	if (CORE_KIND_IDS.has(kindName)) {
+		return missingCoreRegistrationMessage(kindName);
 	}
-	return unknownCoreShapedKindMessage(kindName);
+	return ambiguousUnknownKindMessage(kindName);
 };
 
 /**
@@ -126,14 +148,8 @@ export const createKindRegistry = (): KindRegistry => {
  */
 export const createDefaultRegistry = (): KindRegistry => {
 	const registry = createKindRegistry();
-	registry.register(schemaKind);
-	registry.register(enumKind);
-	registry.register(tableKind);
-	registry.register(functionKind);
-	registry.register(triggerKind);
-	registry.register(rlsKind);
-	registry.register(policyKind);
-	registry.register(viewKind);
-	registry.register(grantKind);
+	CORE_KINDS.forEach((kind) => {
+		registry.register(kind);
+	});
 	return registry;
 };
