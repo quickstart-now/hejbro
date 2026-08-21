@@ -198,6 +198,32 @@ describe("storageBucketKind.diff", () => {
 			},
 		]);
 	});
+
+	it("notes public as changed when the value is explicitly false in previous but the key is entirely absent from next (#116 regression)", () => {
+		// The prior publicChangedNote compared `(previous.public ?? false)
+		// === (next.public ?? false)` -- both sides coalesce to `false`
+		// here, so it produced no note. But the top-level alter decision
+		// (sameJson(previous, next), gating whether diff emits an alter at
+		// all) treats these as structurally different objects (one has a
+		// "public" key, the other doesn't), so it emits an alter anyway:
+		// an alter with an empty note for the very field that triggered
+		// it, #116's bug surviving for an existing field, not just an
+		// unenumerated future one. changedFieldNames uses the same
+		// sameJson basis as that top-level decision, closing this gap by
+		// construction rather than by coincidence.
+		const previous = { name: "avatars", public: false };
+		const next = { name: "avatars" };
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["public changed"],
+			},
+		]);
+	});
 });
 
 describe("storageBucketKind registration", () => {
