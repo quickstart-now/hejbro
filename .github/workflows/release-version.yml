@@ -147,14 +147,17 @@ jobs:
       # (what `mergeStateStatus`/the merge button/`gh pr checks` actually
       # read) the same way a `push`/`pull_request`-triggered run does.
       # Reviewer measured a real split between the two: 4/4 sampled
-      # `workflow_dispatch` runs had check-runs but a NULL rollup, while
-      # 5/5 `push`/`pull_request` runs had a populated rollup (a
-      # deleted-branch control with zero check-runs also showed NULL,
-      # ruling out "branch gone" as the confound -- event type is the
-      # remaining variable). If the rollup stays NULL for
-      # `changeset-release/dev` too, this dispatch makes the check run
-      # exist without making it count toward the ruleset -- to be
-      # confirmed by observing #179 after this merges, not assumed here.
+      # `workflow_dispatch` commits had check-runs present but a NULL
+      # rollup, while 5/5 `push`/`pull_request` commits had a populated
+      # rollup. Three of those five were on deleted branches and kept
+      # their rollup anyway, which rules out "the branch is gone" as the
+      # cause; a separate commit with zero check-runs also read NULL,
+      # confirming NULL means "nothing in the rollup" rather than an API
+      # artifact. Event type is the remaining variable. If the rollup
+      # stays NULL for `changeset-release/dev` too, this dispatch makes
+      # the check run exist without making it count toward the ruleset --
+      # to be confirmed by observing #179 after this merges, not assumed
+      # here.
       #
       # `if:` guards against the one case `changesets/action/version`
       # itself distinguishes via its own `pr-number` output: when every
