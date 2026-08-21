@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { rls } from "../../src/dsl/rls";
 import { schema } from "../../src/dsl/schema";
 import { table } from "../../src/dsl/table";
-import { eq, isNotNull } from "../../src/expr/operators";
+import { eq, isNotNull, literal } from "../../src/expr/operators";
+import { sql } from "../../src/expr/sql-template";
 import {
 	text,
 	timestamptz,
@@ -91,6 +92,32 @@ describe("rls.policy chain", () => {
 				expect(typeof built.usingExpr).not.toBe("function");
 			},
 		);
+	});
+
+	// D50/D51 adopted `Expr<"boolean"> | Expr<"unknown">` for check()/.where()
+	// so the sql template's Expr<"unknown"> result could be used directly;
+	// #113 applies the same union here, a third time, not a new design.
+	it("accepts an sql-template (Expr<unknown>) using/withCheck clause", () => {
+		const built = rls
+			.policy("posts_all_rows")
+			.for("all")
+			.to("authenticated")
+			.using(sql`true`)
+			.withCheck(sql`${posts.status} <> 'archived'`);
+		expect(built.usingExpr).not.toBeNull();
+		expect(built.withCheckExpr).not.toBeNull();
+	});
+
+	// #113: the boolean literal helper this issue adds -- reads as intent
+	// ("allow every row") rather than the isNotNull(t.id) workaround it
+	// replaces in examples/postgres.
+	it("accepts literal(true) as a using/withCheck clause", () => {
+		const built = rls
+			.policy("posts_allow_all")
+			.for("select")
+			.to("anon")
+			.using(literal(true));
+		expect(built.usingExpr).not.toBeNull();
 	});
 
 	it("rejects .to() with no roles", () => {

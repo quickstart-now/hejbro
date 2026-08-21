@@ -43,17 +43,26 @@ export type RlsInput = {
 	readonly declaredAt: string | null;
 };
 
+/**
+ * `Expr<"boolean"> | Expr<"unknown">` -- the same union `check()` (D50) and
+ * partial-index `.where()` (D51) adopted so the `sql` template's
+ * `Expr<"unknown">` result (which can't be narrowed to a family at compile
+ * time) is usable directly, without a cast. #113 applies it here a third
+ * time, not a new design.
+ */
+type PolicyCondition = Expr<"boolean"> | Expr<"unknown">;
+
 type PolicyUsingStage = {
-	using(condition: Expr<"boolean">): PolicyInput;
+	using(condition: PolicyCondition): PolicyInput;
 };
 
 type PolicyCheckStage = {
-	withCheck(condition: Expr<"boolean">): PolicyInput;
+	withCheck(condition: PolicyCondition): PolicyInput;
 };
 
 type PolicyBothStage = {
-	using(condition: Expr<"boolean">): PolicyInput & PolicyCheckStage;
-	withCheck(condition: Expr<"boolean">): PolicyInput & PolicyUsingStage;
+	using(condition: PolicyCondition): PolicyInput & PolicyCheckStage;
+	withCheck(condition: PolicyCondition): PolicyInput & PolicyUsingStage;
 };
 
 type PolicyRolesStage<TStage> = {
@@ -113,7 +122,7 @@ const buildBothStage = (
 		const nextUsing = condition.exprNode;
 		const built = finishPolicy(state, nextUsing, withCheck);
 		return Object.assign(built, {
-			withCheck: (checkCondition: Expr<"boolean">) =>
+			withCheck: (checkCondition: PolicyCondition) =>
 				finishPolicy(state, nextUsing, checkCondition.exprNode),
 		});
 	},
@@ -121,7 +130,7 @@ const buildBothStage = (
 		const nextWithCheck = condition.exprNode;
 		const built = finishPolicy(state, using, nextWithCheck);
 		return Object.assign(built, {
-			using: (usingCondition: Expr<"boolean">) =>
+			using: (usingCondition: PolicyCondition) =>
 				finishPolicy(state, usingCondition.exprNode, nextWithCheck),
 		});
 	},

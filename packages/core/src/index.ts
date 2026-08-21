@@ -150,6 +150,7 @@ export {
 	isNotNull,
 	isNull,
 	like,
+	literal,
 	lt,
 	lte,
 	ne,

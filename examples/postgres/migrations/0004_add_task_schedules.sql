@@ -5,8 +5,8 @@
 -- + policy app.task_schedules.task_schedules_read_all [new]
 -- + policy app.task_schedules.task_schedules_write_all [new]
 -- ~ view app.open_tasks [view columns changed; recreating]
--- parent-snapshot: sha256:0b002a4faccc3981be027a69686468deb1bfba69e8162669a6ff55830cba9060
--- snapshot: sha256:b7fc8a393fb9f491f992eeead463e6ac8a8ff0e4018473a728f9c9039f337528
+-- parent-snapshot: sha256:f4d42d6d62d92fc08cdac691f850c9b7141d6e36f2df66ec818583831d997ece
+-- snapshot: sha256:14853d141b3137ce52bdd8994b1cffc23ce028499f5a73020bdef2eacc5da69a
 
 drop view if exists "app"."open_tasks";
 
@@ -30,11 +30,11 @@ alter table "app"."task_schedules" enable row level security;
 
 drop policy if exists "task_schedules_read_all" on "app"."task_schedules";
 
-create policy "task_schedules_read_all" on "app"."task_schedules" for select to "app_reader" using ("app"."task_schedules"."task_id" is not null);
+create policy "task_schedules_read_all" on "app"."task_schedules" for select to "app_reader" using (true);
 
 drop policy if exists "task_schedules_write_all" on "app"."task_schedules";
 
-create policy "task_schedules_write_all" on "app"."task_schedules" for all to "app_writer" using ("app"."task_schedules"."task_id" is not null) with check ("app"."task_schedules"."task_id" is not null);
+create policy "task_schedules_write_all" on "app"."task_schedules" for all to "app_writer" using (true) with check (true);
 
 create or replace view "app"."open_tasks" with (security_invoker = true) as select "id", "project_id", "title", "status", "priority", "estimate_hours", "closed_at" from "app"."tasks" where "app"."tasks"."status" <> 'done';
 
