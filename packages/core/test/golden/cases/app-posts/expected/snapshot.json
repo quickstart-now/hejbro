@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 3,
+	"formatVersion": 4,
 	"objects": {
 		"enum:app.post_status": {
 			"name": "post_status",

@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 3,
+	"formatVersion": 4,
 	"objects": {
 		"policy:app.posts.posts_read_published": {
 			"command": "select",
