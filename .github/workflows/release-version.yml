@@ -11,7 +11,11 @@ name: release-version
 # a version PR there).
 on:
   push:
-    branches: [dev]
+    # SCRATCH TEST for #180 round 2 (do not merge as-is): scratch-180-base
+    # added temporarily to re-measure with the changeset-status skip fix
+    # included, without touching dev/changeset-release/dev again. Reverted
+    # to [dev] only before the real PR is opened.
+    branches: [dev, scratch-180-base]
 
 # Two concurrent runs racing to open/update the "Version Packages" PR branch
 # could interleave pushes to it. Queue instead of overlapping; don't cancel
@@ -111,6 +115,12 @@ jobs:
         id: version
         with:
           script: pnpm run version-packages
+          # SCRATCH TEST for #180 round 2 (do not merge as-is):
+          # parameterized to github.ref_name, never hardcoded "dev" --
+          # this is exactly the field that contaminated PR #179 the first
+          # time this was tested. Targets
+          # changeset-release/scratch-180-base only.
+          pr-base-branch: ${{ github.ref_name }}
       # #180: a PR opened/updated with GITHUB_TOKEN (the step above just
       # did exactly that, for "Version Packages") never triggers a
       # workflow through its normal push/pull_request events -- GitHub's
@@ -133,8 +143,12 @@ jobs:
       # track whatever the current head is -- see this repo's PR for
       # #180 for the measured behavior when a dispatch races a second
       # `dev` push in the same window.
+      # SCRATCH TEST for #180 round 2 (do not merge as-is): dispatch ref
+      # parameterized for the same reason as pr-base-branch above -- must
+      # resolve to changeset-release/scratch-180-base, never
+      # changeset-release/dev.
       - name: Dispatch ci.yml for the Version PR's required checks
         if: steps.version.outputs.pr-number != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run ci.yml --ref changeset-release/dev
+        run: gh workflow run ci.yml --ref changeset-release/${{ github.ref_name }}
