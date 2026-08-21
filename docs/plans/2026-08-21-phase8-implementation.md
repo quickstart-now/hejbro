@@ -183,25 +183,72 @@ own claim.
   stricter than D13's own text ("the repo's own toolchain requires ≥ 22.18.0")
   and would fail install on the new matrix job. Lower the root to `>=22.18.0`
   so the repo's declaration, D13 and the published `engines` all agree; do not
-  paper over it by disabling the engine check. Then the smoke test fails on the
-  current packaging and passes after it. It must pack each published package,
-  install the tarball into a scratch project, and run
-  `init`/`generate`/`verify` there. This is the only thing that catches
-  `workspace:*` reaching a consumer, a missing `bin`, or a broken `exports`.
+  paper over it by disabling the engine check. The smoke test packs each
+  published package with `pnpm pack` — the tool `changeset publish` actually
+  uses under the hood for this pnpm workspace (D59/D63) — installs the tarball
+  into a scratch project with plain `npm install`, and runs
+  `init`/`generate`/`verify` there. Measured against the unpacked repo: the
+  `workspace:*`-absence and bin/CLI assertions already pass on a
+  `pnpm`-packed tarball, so they land as regression guards, not as the red
+  this PR turns green — what's actually red beforehand is the `hejbro`
+  tarball packing no `README.md` (missing package-level file). `npm pack`
+  (as opposed to `pnpm pack`) does leave `workspace:*` unresolved and produces
+  a tarball `npm install` rejects with `EUNSUPPORTEDPROTOCOL` — reproduced
+  during this PR — but fixing that would mean dropping the `workspace:`
+  protocol or rewriting dependency strings in `prepack`, both against D59's
+  direction, so the smoke packs with `pnpm` (what release actually ships) and
+  keeps the `npm pack` failure as the documented reason its two regression
+  assertions matter. That leaves a gap this PR does not close: the smoke
+  proves a `pnpm`-packed tarball installs cleanly, not that the real release
+  workflow packs with `pnpm` — `changeset publish`'s pnpm workspace detection
+  is automatic, and if it silently stops applying (or a workflow edit swaps in
+  `npm publish`), the smoke stays green while the shipped tarball breaks.
+  `phase8-release-workflows` closes this gap; see its row below.
 - **`phase8-changesets`** — `changeset status` runs clean; a dry version run
   bumps the three packages together. Document in `CONTRIBUTING.md` that the
   **first release needs a `minor` changeset**, since an all-`patch` set would
   publish `0.0.1`.
 - **`phase8-regen-script`** — running the script reproduces the committed
   example migrations and snapshots **byte for byte** before any format change.
-  That is the script's own test.
+  That is the script's own test. Prove the script's range by mutation:
+  hand-edit a committed example migration and confirm regeneration overwrites
+  it back, and drop a step file and confirm the script notices rather than
+  silently regenerating fewer steps.
 - **`phase8-release-workflows`** — the workflows are validated against
   `changesets/action`'s `action.yml` (input names differ between versions; do
   not copy a draft blindly). The publish job must refuse to run if the
-  pre-publish gate fails.
+  pre-publish gate fails. It must also close the gap `phase8-packaging`'s
+  smoke left open: that smoke proves a `pnpm`-packed tarball installs
+  cleanly, not that the real release actually packs with `pnpm`. `changeset
+  publish`'s choice of `pnpm publish` for this workspace is automatic
+  detection (D59/D63), not a pinned setting — this PR needs to verify **which
+  tool actually packed**, e.g. `pnpm publish --dry-run` output, or that the
+  tarball manifest's internal dependency resolved to a semver version rather
+  than a `workspace:` string. Checking for the string alone is the weaker
+  form: measured during `phase8-packaging`'s review that npm already rejects a
+  `workspace:` string in `dependencies`/`peerDependencies`/
+  `optionalDependencies` at install time with `EUNSUPPORTEDPROTOCOL` — the
+  string check only adds value for `devDependencies`, where npm installs
+  without resolving. Prove the pre-publish gate by mutation: a tarball with a
+  `workspace:` string must stop the publish job, and so must a stale `dist` —
+  but mutate the **producer** for the second one, not the artifact.
+  `phase8-packaging`'s own `prepack: "pnpm build"` rebuilds `dist` on every
+  pack, so hand-editing a packed `dist` file proves nothing (reviewer found
+  exactly this while verifying that PR: deleting a required `.d.ts` from the
+  assertion's expectations passed only because `prepack` had already
+  regenerated it). Disable or bypass the build step itself — e.g. temporarily
+  remove the `prepack` script, or point the pack at a `dist` produced from an
+  older commit — and confirm the gate still stops the stale tarball.
 - **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
-  reproducing #125's crash (a config importing a package that is not installed)
-  first, then the diagnostic. Both `asHejbroError` sites are converted.
+  reproducing #125's crash (a config importing a package that is not
+  installed) first, then the diagnostic. Both `asHejbroError` sites are
+  converted. Also cover the shape `phase8-packaging`'s smoke produces: a
+  config importing an **installed** package whose `exports` entry does not
+  resolve — same duck-typing path, different failure shape (not-installed vs.
+  installed-but-unresolvable). Re-run that mutation (break
+  `@hejbro/supabase`'s `exports`, run `pnpm smoke:pack-install`) and confirm
+  the failure now **names the package** instead of crashing in
+  `toDiagnostic`.
 - **`phase8-chain-walk`** — a chain that rolls back and then forward again
   verifies clean; the two O2-approved message texts are unchanged.
 - **`phase8-next-marker`** — the count is roughly 75 user-facing throw sites;
@@ -225,7 +272,12 @@ own claim.
   few known fields), so a `constantOne` or a stray `columnName` inside an
   expression subtree would pass unnoticed. Extend it first with a case that
   walks a v5 snapshot recursively and asserts every discriminator value and
-  every reference key, then make it green.
+  every reference key, then make it green. Prove the extension by mutation:
+  a camelCase discriminator and a `columnName` reference key, each planted in
+  a v5 snapshot, must each turn it red — this is the device that got its own
+  range mis-stated earlier in this same plan (see "And one rule for writing
+  them" below), so the claim that it's been extended needs to be shown, not
+  just made.
 - **`phase8-sequence-kind`** — the invalid `alter column … type serial` path is
   closed; a column rename and a table rename both keep the sequence in step;
   `serial()` → `integer()` emits the default drop and the sequence drop.
@@ -241,11 +293,15 @@ own claim.
   paragraph currently tells users to wrap the call themselves "until then";
   that text becomes false and must be rewritten** — the same class of defect as
   #136.
-- **`phase8-supabase-image`** — see the section below.
+- **`phase8-supabase-image`** — see the section below. Prove the five failure
+  conditions by mutation where feasible — at minimum a deliberately wrong
+  `storage.buckets` stub column must fail the run.
 - **`phase8-docs-release`** — README's `## Status` no longer says "Nothing is
   published yet"; install instructions exist; `CONTRIBUTING.md` states plainly
   that merging the version PR publishes immediately and that npm burns a
-  version number even if it is unpublished.
+  version number even if it is unpublished. And **#142**: the three package
+  READMEs drop the roadmap/phase-status framing entirely (an npm page has no
+  use for a pointer to our roadmap file), not just a wording refresh.
 
 ## `phase8-supabase-image` — verifying the preset against a real image (D69)
 
@@ -360,6 +416,29 @@ thing. If it does not, extending it is part of the PR — and the extension
 lands **first, failing**, so its reach is proven before the code that
 needs it.
 
+**How to check a gate's range: break it on purpose.** Reading a gate and
+judging whether it covers something is weaker than injecting the defect
+and watching it fail. `phase8-packaging`'s review did exactly that — seven
+defects injected into the pack-install smoke: five caught, one missed
+(`@hejbro/supabase`'s `exports` was never loaded, so breaking it changed
+nothing), and one caught by a different mechanism than the script claimed
+(`npm install` rejects a `workspace:` string in `dependencies` before the
+assertion that supposedly guards it ever runs). Neither the gap nor the
+misattribution was visible from reading the script. So: a PR that builds
+or extends a verification device shows the same evidence — the defects it
+exists to catch, injected one at a time, each turning it red.
+
+**Mutate the producer, not the artifact.** A `prepack` or regeneration step
+will silently heal an artifact-level mutation, and the gate passes for the
+wrong reason. `phase8-packaging` hit this while verifying its own `.d.ts`
+assertion: deleting `dist/cli.d.ts` before packing didn't turn the assertion
+red, because `prepack: "pnpm build"` rebuilds `dist` — including the deleted
+file — as part of every `pnpm pack`. The assertion only actually fired once
+the *producer* was changed instead (tsdown's config set to `dts: false`, so
+no `.d.ts` is emitted at all). The mutation has to target whatever produces
+the artifact — the build step, the source it builds from, or the config that
+drives it — not the artifact itself once it exists.
+
 ## Settled: expression discriminators in the snapshot (D70)
 
 D57 exempts one thing explicitly: *"internal expression/statement AST
@@ -442,6 +521,13 @@ Deferred to 0.2.0 with a reason: **#130** (new commands; four design questions
 open; the manual rollback procedure in `docs/guide/renames.md` is complete once
 #129 lands), **#131** (internal tooling; the release path already builds from a
 clean install), **#132** (needs a per-path lint design first), **#139**
-(blocked until the packages exist).
+(blocked until the packages exist), **#141** (`design: core has no notion of
+which clause an expression sits in`, split off during #97's design pass —
+needs a brainstorm on whether a clause taxonomy belongs in core's extension
+interface).
+
+**#139** and **#141** are filed as sub-issues of **#9** only because no Phase 9
+issue exists yet — move them under Phase 9's issue once it's created, or a
+later reader won't find them there.
 
 Still unscheduled: the GitHub Pages site (D64).
