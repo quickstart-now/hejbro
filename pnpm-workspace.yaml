@@ -6,3 +6,4 @@ catalog:
   tsdown: 0.22.14
   typescript: ^5.9.3
   vitest: 4.1.11
+  "@vitest/coverage-v8": 4.1.11

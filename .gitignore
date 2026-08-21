@@ -1,6 +1,7 @@
 node_modules/
 .claude/settings.local.json
 dist/
+coverage/
 .turbo/
 *.log
 .DS_Store
