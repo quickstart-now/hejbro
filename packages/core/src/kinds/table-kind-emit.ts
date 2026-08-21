@@ -3,7 +3,11 @@ import { diffByKey, sameJson } from "../kind/diff-helpers";
 import type { KindChange } from "../kind/object-kind";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
-import { deferredStatement, statement } from "../sql/statement";
+import {
+	deferredStatement,
+	predropStatement,
+	statement,
+} from "../sql/statement";
 import type { TypeNode } from "../types/type-node";
 import { renderTypeNode } from "../types/type-node";
 import {
@@ -217,8 +221,17 @@ const emitAlter = (
 	];
 
 	return [
+		// A cross-table FK can reference a column another table alter in this
+		// same run is about to drop — both are `table` kind, same rank, so the
+		// referenced table can sort after the referencing one by identity
+		// alone. hejbro already sends FK *adds* out on `deferred` (last);
+		// sending FK *drops* out on `predrop` (first) is the mirror image —
+		// edges are cut first and wired last (#122/A′). CHECK constraints
+		// share `dropConstraintSql` but never cross a table boundary, so their
+		// drop stays in `main` — already-safe via this function's own
+		// statement order (drops before the column/table changes below).
 		...foreignKeysToDrop.map((name) =>
-			statement(dropConstraintSql(next.schema, next.name, name)),
+			predropStatement(dropConstraintSql(next.schema, next.name, name)),
 		),
 		...checksToDrop.map((name) =>
 			statement(dropConstraintSql(next.schema, next.name, name)),
@@ -256,7 +269,8 @@ const emitAlter = (
 /**
  * Emits SQL for a table {@link KindChange}: `create table` (+ indexes +
  * deferred FK constraints) for creates, `drop table` for drops, and
- * targeted `alter table` statements for survivors.
+ * targeted `alter table` statements for survivors — a dropped FK goes out
+ * on `predrop` (#122/A′), everything else in `main`.
  */
 export const emitTableSql = (
 	change: KindChange,

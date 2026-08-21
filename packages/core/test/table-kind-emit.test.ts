@@ -339,7 +339,7 @@ describe("tableKind.emit — alter", () => {
 		]);
 	});
 
-	it("emits foreign key add as deferred and drop before add when both change in the same alter", () => {
+	it("emits foreign key drop as predrop and add as deferred when both change in the same alter (#122/A′)", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		const authors = table(app, "authors", { id: uuid().primaryKey() });
 		const before = table(app, "comments", { postId: uuid() }, (t) => ({
@@ -368,7 +368,7 @@ describe("tableKind.emit — alter", () => {
 		expect(tableKind.emit(change)).toEqual([
 			{
 				sql: 'alter table "app"."comments" drop constraint "comments_post_id_fk";',
-				stage: "main",
+				stage: "predrop",
 			},
 			{
 				sql: 'alter table "app"."comments" add constraint "comments_post_id_fk" foreign key ("post_id") references "app"."authors" ("id");',

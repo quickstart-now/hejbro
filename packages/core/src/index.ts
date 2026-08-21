@@ -273,7 +273,11 @@ export {
 	renderBanner,
 } from "./sql/migration-file";
 export type { SqlStage, SqlStatement } from "./sql/statement";
-export { deferredStatement, statement } from "./sql/statement";
+export {
+	deferredStatement,
+	predropStatement,
+	statement,
+} from "./sql/statement";
 export type {
 	BuilderFamily,
 	ColumnBuilder,

@@ -86,6 +86,33 @@ const topoSortKindNames = (registry: KindRegistry): ReadonlyArray<string> => {
 };
 
 /**
+ * Builds a `kindName -> rank` lookup from `dependsOn` topological order
+ * (dependencies first, rank 0). Shared by `diffSnapshots` (create/alter
+ * ascending, drop descending) and `generateMigration`'s `predrop`-stage
+ * ordering (also descending, by the same reasoning as a `drop` change: a
+ * dependent kind's predrop statement must run before the kind it depends
+ * on is altered).
+ */
+export const rankKinds = (
+	registry: KindRegistry,
+): ((kindName: string) => number) => {
+	const kindOrder = topoSortKindNames(registry);
+	const kindRank = new Map(
+		kindOrder.map((kindName, index) => [kindName, index] as const),
+	);
+	return (kindName: string): number => {
+		const rank = kindRank.get(kindName);
+		if (rank === undefined) {
+			return throwHejbroError(
+				"unknown-kind-dependency",
+				`change references unregistered kind "${kindName}".`,
+			);
+		}
+		return rank;
+	};
+};
+
+/**
  * Diffs two snapshots into an ordered list of {@link KindChange}s.
  * Creates and alters are ordered by kind dependency order (topological
  * over `dependsOn`), sorted by identity (byte order) within a kind. Drops
@@ -96,21 +123,7 @@ export const diffSnapshots = (
 	next: Snapshot,
 	registry: KindRegistry,
 ): ReadonlyArray<KindChange> => {
-	const kindOrder = topoSortKindNames(registry);
-	const kindRank = new Map(
-		kindOrder.map((kindName, index) => [kindName, index] as const),
-	);
-
-	const rankOf = (kindName: string): number => {
-		const rank = kindRank.get(kindName);
-		if (rank === undefined) {
-			return throwHejbroError(
-				"unknown-kind-dependency",
-				`change references unregistered kind "${kindName}".`,
-			);
-		}
-		return rank;
-	};
+	const rankOf = rankKinds(registry);
 
 	const allKeys = Array.from(
 		new Set([...Object.keys(previous.objects), ...Object.keys(next.objects)]),

@@ -6,7 +6,7 @@ import { sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
-import { statement } from "../sql/statement";
+import { predropStatement, statement } from "../sql/statement";
 
 /**
  * A view's serialized snapshot node — `selectSql` is pre-rendered (D24
@@ -92,7 +92,11 @@ const createOrReplaceSql = (snapshot: ViewSnapshot): string =>
  * removal, reorder, or rename) can't, so it recreates via a single
  * `alter` change whose `emit` returns `drop view if exists` followed by
  * `create or replace view`, in that order (D23/#55 — never a separate
- * drop + create pair). `emit` recomputes the prefix rule itself from
+ * drop + create pair). The `drop view if exists` half (recreate, and a true
+ * drop) goes out on the `predrop` stage — a view can depend on a table
+ * column that a `main`-stage alter on that same table is about to drop
+ * (#122), so the view must be gone before that alter runs. `emit`
+ * recomputes the prefix rule itself from
  * `previous`/`next`'s `columns` — notes are display-only banner text
  * (spec's `ObjectKind` contract), never a control channel that a wording
  * change to the banner could silently break.
@@ -202,7 +206,7 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 					return [statement(createOrReplaceSql(nextSnapshot))];
 				}
 				return [
-					statement(dropViewSql(nextSnapshot)),
+					predropStatement(dropViewSql(nextSnapshot)),
 					statement(createOrReplaceSql(nextSnapshot)),
 				];
 			}
@@ -213,7 +217,7 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 						"view drop change is missing its previous snapshot.",
 					);
 				}
-				return [statement(dropViewSql(asViewSnapshot(change.previous)))];
+				return [predropStatement(dropViewSql(asViewSnapshot(change.previous)))];
 			}
 			default:
 				return assertNever(change.operation);
