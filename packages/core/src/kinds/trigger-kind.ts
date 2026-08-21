@@ -65,7 +65,7 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 			timing: declaration.timing,
 			events: declaration.events,
 			forEach: declaration.forEach,
-			functionName: declaration.functionName,
+			function: declaration.functionName,
 		};
 		return snapshot;
 	},

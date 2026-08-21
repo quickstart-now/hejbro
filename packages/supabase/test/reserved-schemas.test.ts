@@ -76,7 +76,7 @@ describe("reservedSchemaValidator", () => {
 		expect(result.errors).toEqual([]);
 	});
 
-	it("does not flag a schemaUsage grant to a non-reserved schema", () => {
+	it("does not flag a schema-usage grant to a non-reserved schema", () => {
 		const app = schema("app");
 		const grants = grant(app).usage.to("anon");
 		expect(

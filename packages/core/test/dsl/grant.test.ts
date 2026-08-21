@@ -11,8 +11,8 @@ describe("grant() — the app schema's grant corpus forms", () => {
 		expect(grants.map((g) => g.role)).toEqual(["authenticated", "anon"]);
 		expect(grants.map((g) => g.declarationKind)).toEqual(["grant", "grant"]);
 		expect(grants.map((g) => g.grantKind)).toEqual([
-			"schemaUsage",
-			"schemaUsage",
+			"schema-usage",
+			"schema-usage",
 		]);
 		expect(grants.map((g) => g.schemaName)).toEqual(["app", "app"]);
 		expect(grants.map((g) => g.privileges)).toEqual([[], []]);
@@ -22,7 +22,7 @@ describe("grant() — the app schema's grant corpus forms", () => {
 		const { grants } = grant(app).tables("select").to("anon");
 		expect(grants).toHaveLength(1);
 		expect(grants[0]).toMatchObject({
-			grantKind: "allTablesPrivileges",
+			grantKind: "all-tables-privileges",
 			schemaName: "app",
 			privileges: ["select"],
 			role: "anon",
@@ -35,7 +35,7 @@ describe("grant() — the app schema's grant corpus forms", () => {
 			.to("service_role");
 		expect(grants).toHaveLength(1);
 		expect(grants[0]).toMatchObject({
-			grantKind: "allTablesPrivileges",
+			grantKind: "all-tables-privileges",
 			privileges: ["select", "insert", "update", "delete"],
 			role: "service_role",
 		});
@@ -45,7 +45,7 @@ describe("grant() — the app schema's grant corpus forms", () => {
 		const { grants } = grant(app).defaultPrivileges.tables("select").to("anon");
 		expect(grants).toHaveLength(1);
 		expect(grants[0]).toMatchObject({
-			grantKind: "defaultTablePrivileges",
+			grantKind: "default-table-privileges",
 			privileges: ["select"],
 			role: "anon",
 		});

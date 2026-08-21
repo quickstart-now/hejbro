@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 3,
+	"formatVersion": 4,
 	"objects": {
 		"function:app.comments_enforce_single_depth": {
 			"args": [],
@@ -13,7 +13,7 @@
 			"security": "invoker"
 		},
 		"schema:app": {
-			"schemaName": "app"
+			"name": "app"
 		},
 		"table:app.comments": {
 			"columns": [
@@ -90,7 +90,7 @@
 				}
 			],
 			"forEach": "row",
-			"functionName": "comments_enforce_single_depth",
+			"function": "comments_enforce_single_depth",
 			"name": "comments_single_depth",
 			"schema": "app",
 			"table": "comments",

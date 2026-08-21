@@ -14,11 +14,11 @@ export const tablePrivileges = [
 /** @see tablePrivileges */
 export type TablePrivilege = (typeof tablePrivileges)[number];
 
-/** The three grant shapes the dd.land corpus needs (D28) — per-table and per-function grants are out of scope until a real declaration needs them. */
+/** The three grant shapes the original production schema needs (D28) — per-table and per-function grants are out of scope until a real declaration needs them. Values are kebab-case (D57): they appear verbatim in snapshot identities and migration banners. */
 export type GrantKind =
-	| "schemaUsage"
-	| "allTablesPrivileges"
-	| "defaultTablePrivileges";
+	| "schema-usage"
+	| "all-tables-privileges"
+	| "default-table-privileges";
 
 /** A declared grant for exactly one role. Identity is `(schemaName, grantKind, role)` (D28). */
 export type GrantDeclaration = {
@@ -121,11 +121,11 @@ export const grant = (owner: SchemaDeclaration): SchemaGrantBuilder => {
 	const schemaName = owner.schemaName;
 	const declaredAt = captureDeclarationSite();
 	return {
-		usage: buildRolesStage(schemaName, "schemaUsage", [], declaredAt, "usage"),
+		usage: buildRolesStage(schemaName, "schema-usage", [], declaredAt, "usage"),
 		tables: (...privileges) =>
 			buildTablesStage(
 				schemaName,
-				"allTablesPrivileges",
+				"all-tables-privileges",
 				privileges,
 				declaredAt,
 				"tables(...)",
@@ -134,7 +134,7 @@ export const grant = (owner: SchemaDeclaration): SchemaGrantBuilder => {
 			tables: (...privileges) =>
 				buildTablesStage(
 					schemaName,
-					"defaultTablePrivileges",
+					"default-table-privileges",
 					privileges,
 					declaredAt,
 					"defaultPrivileges.tables(...)",

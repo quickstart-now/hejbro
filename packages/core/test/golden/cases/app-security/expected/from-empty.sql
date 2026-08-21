@@ -10,12 +10,12 @@
 -- + policy app.post_translations.post_translations_read_published [new]
 -- + policy app.posts.posts_insert_draft_only [new]
 -- + policy app.posts.posts_read_published [new]
--- + grant app.allTablesPrivileges.anon [new]
--- + grant app.allTablesPrivileges.service_role [new]
--- + grant app.defaultTablePrivileges.anon [new]
--- + grant app.defaultTablePrivileges.service_role [new]
--- + grant app.schemaUsage.anon [new]
--- + grant app.schemaUsage.service_role [new]
+-- + grant app.all-tables-privileges.anon [new]
+-- + grant app.all-tables-privileges.service_role [new]
+-- + grant app.default-table-privileges.anon [new]
+-- + grant app.default-table-privileges.service_role [new]
+-- + grant app.schema-usage.anon [new]
+-- + grant app.schema-usage.service_role [new]
 
 create schema "app";
 

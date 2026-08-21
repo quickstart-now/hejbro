@@ -1,9 +1,9 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 3,
+	"formatVersion": 4,
 	"objects": {
 		"schema:app": {
-			"schemaName": "app"
+			"name": "app"
 		},
 		"table:app.posts": {
 			"columns": [

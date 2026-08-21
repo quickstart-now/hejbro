@@ -70,7 +70,7 @@ describe("exposedTableValidator", () => {
 		expect(result.warnings).toEqual([]);
 	});
 
-	it("does not warn for a schemaUsage-only grant (not allTables/defaultTables)", () => {
+	it("does not warn for a schema-usage-only grant (not allTables/defaultTables)", () => {
 		const app = schema("app");
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		const result = generateMigration({

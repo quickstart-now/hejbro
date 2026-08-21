@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 3,
+	"formatVersion": 4,
 	"objects": {
 		"enum:app.post_status": {
 			"name": "post_status",
@@ -11,7 +11,7 @@
 			]
 		},
 		"schema:app": {
-			"schemaName": "app"
+			"name": "app"
 		},
 		"table:app.comments": {
 			"columns": [

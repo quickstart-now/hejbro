@@ -8,13 +8,13 @@
 -- + policy app.attachments.attachments_read_own [new]
 -- + policy app.profiles.profiles_read_own [new]
 -- + view app.profiles_public [new]
--- + grant app.allTablesPrivileges.anon [new]
--- + grant app.allTablesPrivileges.authenticated [new]
--- + grant app.defaultTablePrivileges.anon [new]
--- + grant app.defaultTablePrivileges.authenticated [new]
+-- + grant app.all-tables-privileges.anon [new]
+-- + grant app.all-tables-privileges.authenticated [new]
+-- + grant app.default-table-privileges.anon [new]
+-- + grant app.default-table-privileges.authenticated [new]
 -- + supabase-storage-bucket attachments [new]
--- parent-snapshot: sha256:f86ae7ebc6d8bd93524149ab39f929814ff7413a6e5e1cfdb1d21367bf9bd295
--- snapshot: sha256:9bcb44dc93fa255414e6b11ec3c67e5525ae7f015ee5b5e55193fe2039efa81e
+-- parent-snapshot: sha256:fc3443cd6b1e94bc9e2362c6b3403416ca2c987634df5bce5ccac728b4d6f66f
+-- snapshot: sha256:3e83f650958435f96dcb366650263ef686dc1c6e1d682e108351447c92ecf90c
 
 create schema "app";
 

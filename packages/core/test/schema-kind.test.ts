@@ -20,9 +20,9 @@ describe("schemaKind", () => {
 		expect(schemaKind.owns({ declarationKind: "table" })).toBe(false);
 	});
 
-	it("serializes and identifies by schemaName", () => {
+	it("serializes and identifies by name", () => {
 		const snapshot = schemaKind.serialize(schema("app"));
-		expect(snapshot).toEqual({ schemaName: "app" });
+		expect(snapshot).toEqual({ name: "app" });
 		expect(schemaKind.identify(snapshot)).toBe("app");
 	});
 

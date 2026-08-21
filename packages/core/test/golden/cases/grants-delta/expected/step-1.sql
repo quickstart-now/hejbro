@@ -1,6 +1,6 @@
 -- hejbro migration
--- ~ grant app.allTablesPrivileges.anon [+insert]
--- ~ grant app.allTablesPrivileges.service_role [-delete]
+-- ~ grant app.all-tables-privileges.anon [+insert]
+-- ~ grant app.all-tables-privileges.service_role [-delete]
 
 grant insert on all tables in schema "app" to "anon";
 

@@ -193,7 +193,7 @@ export type TriggerSnapshotShape = {
 	readonly timing: "before" | "after";
 	readonly events: ReadonlyArray<TriggerEventShape>;
 	readonly forEach: "row" | "statement";
-	readonly functionName: string;
+	readonly function: string;
 };
 
 const renderTriggerEvent = (
@@ -219,7 +219,7 @@ export const renderTriggerSql = (
 	const createSql = [
 		`create trigger ${quoteIdentifier(t.name)}`,
 		`${indent(1)}${t.timing} ${eventsSql} on ${qualifyName(t.schema, t.table)}`,
-		`${indent(1)}for each ${t.forEach} execute function ${qualifyName(t.schema, t.functionName)}();`,
+		`${indent(1)}for each ${t.forEach} execute function ${qualifyName(t.schema, t.function)}();`,
 	].join("\n");
 	return [dropSql, createSql];
 };

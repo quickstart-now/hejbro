@@ -1,9 +1,9 @@
 {
 	"dialect": "postgres",
-	"hejbroSnapshot": 3,
+	"formatVersion": 4,
 	"objects": {
-		"grant:app.allTablesPrivileges.anon": {
-			"grantKind": "allTablesPrivileges",
+		"grant:app.all-tables-privileges.anon": {
+			"grantKind": "all-tables-privileges",
 			"privileges": [
 				"select",
 				"insert"
@@ -11,8 +11,8 @@
 			"role": "anon",
 			"schema": "app"
 		},
-		"grant:app.allTablesPrivileges.service_role": {
-			"grantKind": "allTablesPrivileges",
+		"grant:app.all-tables-privileges.service_role": {
+			"grantKind": "all-tables-privileges",
 			"privileges": [
 				"select",
 				"insert",
@@ -22,22 +22,22 @@
 			"role": "service_role",
 			"schema": "app"
 		},
-		"grant:app.defaultTablePrivileges.anon": {
-			"grantKind": "defaultTablePrivileges",
+		"grant:app.default-table-privileges.anon": {
+			"grantKind": "default-table-privileges",
 			"privileges": [
 				"select"
 			],
 			"role": "anon",
 			"schema": "app"
 		},
-		"grant:app.schemaUsage.anon": {
-			"grantKind": "schemaUsage",
+		"grant:app.schema-usage.anon": {
+			"grantKind": "schema-usage",
 			"privileges": [],
 			"role": "anon",
 			"schema": "app"
 		},
-		"grant:app.schemaUsage.service_role": {
-			"grantKind": "schemaUsage",
+		"grant:app.schema-usage.service_role": {
+			"grantKind": "schema-usage",
 			"privileges": [],
 			"role": "service_role",
 			"schema": "app"
@@ -85,7 +85,7 @@
 			"table": "posts"
 		},
 		"schema:app": {
-			"schemaName": "app"
+			"name": "app"
 		},
 		"table:app.comments": {
 			"columns": [

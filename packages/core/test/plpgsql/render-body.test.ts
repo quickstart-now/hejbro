@@ -178,7 +178,7 @@ describe("renderTriggerSql", () => {
 				{ event: "update", columns: ["parent_id", "post_id"] },
 			],
 			forEach: "row",
-			functionName: "comments_single_depth_fn",
+			function: "comments_single_depth_fn",
 		};
 
 		expect(renderTriggerSql(snapshot)).toEqual([

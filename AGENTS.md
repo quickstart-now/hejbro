@@ -52,6 +52,10 @@ pnpm build           # turbo build
 - TypeScript strict. Our own source: no `any`, no `let`/`var`, no
   `for`/`while`, no ternary. *Generated SQL output* and the *user-facing DSL
   design* are governed by the spec, not by these style rules.
+- **Naming follows the medium** (D57): snapshot self/reference fields are
+  `name`/`schema`/`table`/`function`; tokens that reach generated artifacts
+  are kebab-case; TypeScript-only unions stay camelCase. See
+  `.claude/rules/naming.md`.
 
 ## Git workflow
 
