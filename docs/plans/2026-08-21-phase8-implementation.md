@@ -2,7 +2,7 @@
 
 Brainstorm resolved 2026-08-21 (owner-approved): decision log entries
 **D58–D68**, plus an in-place amendment to **D33**. This plan turns those
-decisions into 23 PRs, plus D69, added at plan review.
+decisions into 23 PRs, plus D69 and D70, added at plan review.
 
 Issue: **#9**. Sub-issues filed from this phase's research: **#136**,
 **#137**, **#138**, **#139**.
@@ -47,6 +47,7 @@ options being breaking after publication).
 | D67 | #110 fixed with **(b)** — structured expression nodes; D33 amended |
 | D68 | **Snapshot `formatVersion` → 5**, carrying #110(b) and #24(iii) |
 | D69 | The Supabase preset is **verified against a real `supabase/postgres` image** before publishing — a second local-Docker script, not CI |
+| D70 | Expression nodes **serialize by D57's rules** — kebab-case discriminators and `schema`/`table` reference fields in the snapshot, camelCase in the TypeScript union |
 
 Constraints that came with them, and that a later PR must not quietly
 undo:
@@ -135,7 +136,7 @@ first in the format wave** (one bump) · **2 before any release** ·
 
 | # | PR | Scope | Issues |
 |---|---|---|---|
-| 1 | `phase8-plan` | This plan, the D58–D69 rows, the D33 amendment, the roadmap section, the AGENTS.md hard-gate change | Refs #9 |
+| 1 | `phase8-plan` | This plan, the D58–D70 rows, the D33 amendment, the roadmap section, the AGENTS.md hard-gate change | Refs #9 |
 | 2 | `phase8-packaging` | #86 pack-install smoke test **and the packaging it proves**: LICENSE in all three published packages, a README for `hejbro`, `homepage`/`bugs`/`keywords`, `prepack`; `engines` (D58) + Node 22 CI matrix; `@hejbro/skills` → `private: true` (D62); root `typescript` → `catalog:` | #86, #28 |
 | 3 | `phase8-changesets` | `.changeset/config.json` (`fixed` group of the three published packages, `access: "public"`, `baseBranch: "dev"`, `updateInternalDependencies: "patch"`), release scripts, the changeset rule in AGENTS.md | — |
 | 4 | `phase8-regen-script` | `scripts/regen-examples.sh` + `pnpm regen:examples` | — |
@@ -204,10 +205,14 @@ its own claim.
 - **PR 12** — the version-mismatch message is true after publication and
   no longer sends the user in a circle (delete the snapshot → `verify`
   says restore it from version control).
-- **PR 13** — **blocked until the naming question below is settled.** A
-  rename retargets a policy `using`, a CHECK expression and a partial
-  index predicate, with no drop/add pair left over, and the serialized
-  node vocabulary follows whatever D57 ends up requiring.
+- **PR 13** — a rename retargets a policy `using`, a CHECK expression and
+  a partial index predicate, with no drop/add pair left over. Expression
+  nodes serialize by D70: kebab-case discriminators and `schema`/`table`
+  reference fields in the snapshot, camelCase in the TypeScript union.
+  Two things prove it: the codec round-trips both ways under test, and
+  **`naming-conventions.test.ts` passes on v5 output with no carve-out
+  added** — that test is what enforces this decision, so weakening it
+  would defeat the purpose.
 - **PR 14** — the invalid `alter column … type serial` path is closed;
   a column rename and a table rename both keep the sequence in step;
   `serial()` → `integer()` emits the default drop and the sequence drop.
@@ -326,37 +331,26 @@ The pattern is always the same: text that was true when written, made
 false by a later change, and left behind because nobody owned it. The PR
 that falsifies it owns it.
 
-## Open: D67 puts expression AST discriminators into an artifact (D57)
+## Settled: expression discriminators in the snapshot (D70)
 
 D57 exempts one thing explicitly: *"internal expression/statement AST
 discriminators are out of scope entirely (**they never reach an
 artifact**)"*. D67 removes the condition that exemption rests on — once
-expressions are stored structurally, those discriminators are written into
-the snapshot, which is an artifact.
+expressions are stored structurally, those discriminators are written
+into the snapshot, which is an artifact.
 
-What that touches: seven of the thirteen `ExprNode` discriminators are
-camelCase (`columnRef`, `functionCall`, `inList`, `nullTest`,
-`plpgsqlRef`, `rawSql`, `sqlTemplate`), and `TableRefNode` carries
+Seven of the thirteen `ExprNode` discriminators are camelCase
+(`columnRef`, `functionCall`, `inList`, `nullTest`, `plpgsqlRef`,
+`rawSql`, `sqlTemplate`), and `TableRefNode` carries
 `schemaName`/`tableName` where D57's snapshot vocabulary asks for
-`schema`/`table`. `packages/core/test/naming-conventions.test.ts` scans
-generated output rather than source — by design — so it may start failing
-once these reach v5 snapshots.
+`schema`/`table`.
 
-Two ways out, and this is an owner decision either way because both touch
-the decision log:
-
-1. **Serialize them by D57's rules** — kebab-case discriminators
-   (`column-ref`, `raw-sql`, …) and `schema`/`table` reference fields,
-   while the TypeScript unions stay camelCase. This is exactly the split
-   D57 already describes ("only the serialized key changes, never
-   TypeScript declaration fields"), so it applies the existing principle
-   rather than bending it, and it keeps the naming test honest. Cost is a
-   serialization mapping in the expression codec.
-2. **Amend D57's exemption** to allow camelCase discriminators in
-   artifacts — cheaper now, but it re-opens the vocabulary D57 unified one
-   phase ago, and the naming test would need a carve-out.
-
-Recommendation is (1). Settle it before PR 13 starts; PR 12 is unaffected.
+**D70 settles it by applying D57 rather than amending it**: the
+serialized form is kebab-case with D57's reference vocabulary, the
+TypeScript union stays camelCase, and the mapping lives in the expression
+codec. `packages/core/test/naming-conventions.test.ts` scans generated
+output rather than source — by design — so it is the enforcement
+mechanism, not an obstacle to work around.
 
 ## Design input needed before PR 21
 
