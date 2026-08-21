@@ -6,11 +6,17 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # `secrets` cannot be referenced directly in a step's `if:` (GitHub
+    # Actions rejects it -- confirmed by actionlint, not assumed); the
+    # documented workaround is a job-level `env:` (where `secrets` IS
+    # allowed) that a step's `if:` can then read back via `env`.
+    env:
+      NPM_TOKEN_AVAILABLE: ${{ secrets.NPM_TOKEN != '' }}
     strategy:
       matrix:
         node-version: [22, 24]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 (SHA-pinned: see the note by the setup steps below)
         with: { fetch-depth: 0 }
       # `changeset status`'s baseBranch (dev) diffing shells out to `git
       # merge-base dev HEAD` — it needs a *local* branch literally named
@@ -51,9 +57,24 @@ jobs:
       # structurally, on this branch; see the PR).
       - run: git fetch origin dev:dev
         if: github.ref != 'refs/heads/dev'
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version: "${{ matrix.node-version }}", cache: pnpm }
+      # pnpm/action-setup and actions/setup-node below are pinned to full
+      # commit SHAs (not the `@v6`/`@v7` tags the rest of this job's history
+      # used) because this job now reads `secrets.NPM_TOKEN` (see the
+      # "Verify NPM_TOKEN" step below) -- once a secret is in scope, a
+      # movable tag ref is a supply-chain hole (#158/release-workflows'
+      # rule 31), even for a read-only check.
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "${{ matrix.node-version }}"
+          cache: pnpm
+          # Writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` to
+          # the project .npmrc. Inert unless NODE_AUTH_TOKEN is set for a
+          # given step (confirmed: an empty _authToken entry does not
+          # affect ordinary installs of public packages), so this is safe
+          # to apply across the whole matrix rather than only the leg that
+          # uses it below.
+          registry-url: "https://registry.npmjs.org"
       - run: node --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
@@ -62,6 +83,49 @@ jobs:
       - run: pnpm build
       - run: pnpm smoke:pack-install
         if: matrix.node-version == 24
+      # #158: verifies NODE_AUTH_TOKEN actually authenticates to the real
+      # npm registry, and that the authenticated identity has some access
+      # to the @hejbro scope -- *before* a "Version Packages" PR ever
+      # merges to `main`, which is otherwise the first place a scope
+      # permission problem would surface (release-publish.yml's `gate`
+      # job also runs there, but by then `changeset version` has already
+      # run and the release is one npm-registry-round-trip away from
+      # irreversible).
+      #
+      # `npm publish --dry-run` does NOT exercise this: tested directly
+      # (packages/cli, no auth configured at all) and it completes with
+      # exit 0 having made no registry authentication call whatsoever --
+      # dry-run skips the network auth step entirely, for both `npm
+      # publish` and `pnpm publish`. `npm whoami` and `npm access list
+      # packages` do perform a real, read-only, authenticated registry
+      # call instead (confirmed against the real registry: an invalid
+      # token gets a real `E401`, not a silent pass), so those are used
+      # here rather than dry-run.
+      #
+      # What this does NOT prove: `npm access list packages` lists
+      # packages the token can access, which is the closest non-
+      # destructive signal available for "would this token be allowed to
+      # publish a brand-new package in this scope" -- npm has no direct
+      # "check publish permission for a package that does not exist yet"
+      # call. An empty (but non-error) result here would still be
+      # ambiguous. Treat this as a real but partial check, not a
+      # guarantee equivalent to the actual publish succeeding.
+      #
+      # Skipped, not failed, when the secret isn't reachable: a fork PR's
+      # `pull_request` run has no access to repository secrets at all --
+      # not an `event_name` proxy (#148's lesson: the wrong condition
+      # broke a `main`-push case last time) -- the secret's own
+      # availability is the condition that actually matches "can this run
+      # authenticate", so `secrets.NPM_TOKEN` is simply empty on a fork
+      # PR and this step is silently skipped there rather than turning
+      # red for an external contributor.
+      - name: Verify NPM_TOKEN authenticates and has @hejbro scope access
+        if: matrix.node-version == 24 && env.NPM_TOKEN_AVAILABLE == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm whoami --registry=https://registry.npmjs.org
+          npm access list packages @hejbro --registry=https://registry.npmjs.org
       - run: pnpm changeset status
       - run: pnpm check:first-release-version
       - run: pnpm check:next-marker
