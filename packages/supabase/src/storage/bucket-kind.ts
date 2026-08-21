@@ -59,12 +59,37 @@ const humanizeFieldName = (key: string): string =>
  * `diff` already uses to decide there's a change at all). `name` is
  * excluded: it's the identity `diff` groups by, never itself an "alter".
  *
+ * Each key is compared by wrapping it in a single-key object --
+ * `{ [key]: previous[key] }` vs `{ [key]: next[key] }` -- rather than
+ * defaulting an absent key to a sentinel value (`?? null`, `?? false`,
+ * etc). A default like that is itself a normalization the top-level
+ * `sameJson(previous, next)` decision doesn't do, so it can quietly
+ * disagree with that decision for whatever value happens to collide with
+ * the chosen sentinel -- `?? false` did for `public: false` vs an absent
+ * key, and `?? null` doesn't fix that, it just moves the same problem to
+ * `public: null` vs absent (previous snapshots can carry explicit
+ * `null`s -- see e.g. `SelectNode.where`/`limit` -- and D33 means a
+ * hand-edited or round-tripped one must behave like a freshly serialized
+ * one). `JSON.stringify` (which `sameJson` is built on) drops
+ * `undefined`-valued object properties on its own, so wrapping in an
+ * object lets "key absent" and "key present with value `null`" fall out
+ * differently without this function normalizing anything itself.
+ *
  * Candidate order is `next`'s own key order (matching the compact
  * snapshot's declaration order, since `serialize` builds it as an object
  * literal) followed by any key present in `previous` but entirely absent
  * from `next` (a field unset back to its default) -- so notes read in a
  * stable, field-declaration-like order without hardcoding one.
  */
+// `sameJson` takes `JsonValue`, which has no `undefined` variant -- but
+// `stableJson` (which it's built on) uses `JSON.stringify`, and
+// `JSON.stringify` drops an object property whose value is `undefined` as
+// if the key were never there. So a single-key wrapper around a possibly-
+// absent value is safe at runtime even though the static type doesn't say
+// so; the cast documents that gap rather than hiding it.
+const wrapKey = (key: string, value: JsonValue | undefined): JsonValue =>
+	({ [key]: value }) as JsonValue;
+
 const changedFieldNames = (
 	previous: Record<string, JsonValue>,
 	next: Record<string, JsonValue>,
@@ -74,7 +99,7 @@ const changedFieldNames = (
 		(key) => key !== "name",
 	);
 	return orderedKeys.filter(
-		(key) => !sameJson(previous[key] ?? null, next[key] ?? null),
+		(key) => !sameJson(wrapKey(key, previous[key]), wrapKey(key, next[key])),
 	);
 };
 

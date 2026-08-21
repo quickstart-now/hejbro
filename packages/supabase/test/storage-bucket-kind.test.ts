@@ -224,6 +224,49 @@ describe("storageBucketKind.diff", () => {
 			},
 		]);
 	});
+
+	it("notes public as changed when the value is explicit null in previous and the key is absent from next (#116 regression: null vs absent)", () => {
+		// changedFieldNames used to default an absent key to `null`
+		// (`previous[key] ?? null`) -- the same shape of bug as the
+		// `?? false` case above, just with the sentinel moved. A snapshot
+		// loaded from disk can carry an explicit `null` (D33: a
+		// hand-edited or round-tripped snapshot must behave like a freshly
+		// serialized one; other snapshot fields already use `null` for
+		// "unset", e.g. SelectNode.where/limit), so `public: null` vs an
+		// absent `public` key are structurally different to the top-level
+		// sameJson(previous, next) decision but coalesced to equal by
+		// `?? null`. Fixed by comparing single-key-wrapped objects
+		// instead of defaulting to any sentinel value at all.
+		const previous = { name: "avatars", public: null };
+		const next = { name: "avatars" };
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["public changed"],
+			},
+		]);
+	});
+
+	it("notes public as changed when the key is absent from previous and explicit null in next (#116 regression: absent vs null)", () => {
+		// The mirror image of the above -- the field appearing (as an
+		// explicit null) rather than disappearing.
+		const previous = { name: "avatars" };
+		const next = { name: "avatars", public: null };
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["public changed"],
+			},
+		]);
+	});
 });
 
 describe("storageBucketKind registration", () => {
