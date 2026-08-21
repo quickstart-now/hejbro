@@ -218,6 +218,29 @@ its own claim.
   merging the version PR publishes immediately and that npm burns a
   version number even if it is unpublished.
 
+## One completion criterion applies to every PR
+
+**Does this change make a currently-true document false?** If it does,
+fixing that text is part of the PR, not a follow-up.
+
+This phase met the same defect class three times, which is why it is a
+rule rather than a reminder:
+
+- `snapshot.ts`'s version-mismatch message hard-codes "hejbro is
+  pre-publication" and tells the user to delete the snapshot — after
+  which `verify` tells them to restore it from version control (#136).
+- `table-kind-emit.ts` refuses two column alters "in Phase 1", exposing
+  an internal roadmap number to users. Those two strings disappear with
+  #24, but only because that work removes the throw sites.
+- `packages/supabase/README.md`'s D45 paragraph tells users to wrap
+  `auth.uid()` themselves "until then". PR 21 is *then*, and leaving the
+  paragraph in place would publish advice for a workaround that is no
+  longer needed.
+
+The pattern is always the same: text that was true when written, made
+false by a later change, and left behind because nobody owned it. The PR
+that falsifies it owns it.
+
 ## Design input needed before PR 21
 
 The cached `authUid()` variant is a public API surface decision: the
