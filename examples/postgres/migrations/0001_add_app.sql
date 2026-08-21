@@ -26,7 +26,7 @@
 -- + grant app.schema-usage.app_reader [new]
 -- + grant app.schema-usage.app_writer [new]
 -- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:7b21d7a1ac0f80b10a16811c92959757337cd3dce621d70b6ba3bdc176d2b33e
+-- snapshot: sha256:cc0779ad73b21b8b7216fb5e9b0f1381e0be266c0fae190fd2326afe0a032d22
 
 create schema "app";
 

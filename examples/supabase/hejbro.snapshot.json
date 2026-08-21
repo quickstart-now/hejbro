@@ -472,8 +472,26 @@
 				"display_name"
 			],
 			"name": "profiles_public",
-			"schema": "app",
-			"selectSql": "select \"id\", \"user_id\", \"display_name\" from \"app\".\"profiles\""
+			"query": {
+				"from": {
+					"schema": "app",
+					"table": "profiles"
+				},
+				"joins": [],
+				"limit": null,
+				"orderBy": [],
+				"projection": {
+					"columns": [
+						"id",
+						"user_id",
+						"display_name"
+					],
+					"projectionKind": "all-columns"
+				},
+				"queryKind": "select",
+				"where": null
+			},
+			"schema": "app"
 		}
 	}
 }
