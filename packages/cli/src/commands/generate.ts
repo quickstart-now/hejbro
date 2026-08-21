@@ -350,76 +350,92 @@ export const runGenerate = async (
 
 		const { config, configPath } = await loadConfig(cwd, parsedArgv.configFlag);
 		const declarations = await loadDeclarations(configPath, config);
-		const previousSnapshot = parseSnapshot(readSnapshotFileText(cwd, config));
-		const registry = buildRegistry(config);
-		const validators = configValidators(config);
 
-		const firstPass = generateMigration({
-			declarations,
-			previousSnapshot,
-			renames,
-			confirmedDrops,
-			registry,
-			validators,
-		});
-		if (firstPass.errors.length > 0) {
-			return errorResult(
-				firstPass.errors,
-				firstPass.ambiguities,
-				rawArgs,
-				fallbackIdentity,
-				cwd,
+		// Nested, not the outer catch: a `malformed-snapshot-node` error
+		// (#26) is about the on-disk snapshot, not `hejbro.config.ts` --
+		// once `config` has loaded, `config.snapshotPath` is the correct
+		// identity for it, and `config` is only in scope for a catch
+		// nested inside this same block (the outer catch also handles
+		// config-loading failures, before `config` exists at all).
+		try {
+			const previousSnapshot = parseSnapshot(readSnapshotFileText(cwd, config));
+			const registry = buildRegistry(config);
+			const validators = configValidators(config);
+
+			const firstPass = generateMigration({
+				declarations,
+				previousSnapshot,
+				renames,
+				confirmedDrops,
+				registry,
+				validators,
+			});
+			if (firstPass.errors.length > 0) {
+				return errorResult(
+					firstPass.errors,
+					firstPass.ambiguities,
+					rawArgs,
+					fallbackIdentity,
+					cwd,
+				);
+			}
+			if (!firstPass.hasChanges) {
+				return {
+					exitCode: 0,
+					stdout: ["no changes — snapshot already matches your declarations."],
+					stderr: null,
+				};
+			}
+
+			const parentHash = `sha256:${sha256Hex(renderSnapshot(previousSnapshot))}`;
+			const currentHash = `sha256:${sha256Hex(renderSnapshot(firstPass.snapshot))}`;
+			const finalPass = generateMigration({
+				declarations,
+				previousSnapshot,
+				renames,
+				confirmedDrops,
+				bannerHashes: { parent: parentHash, current: currentHash },
+				registry,
+				validators,
+			});
+
+			const migrationsDirPath = join(cwd, config.migrationsDir);
+			const previousCount = listMigrationFiles(migrationsDirPath).length;
+			const slug = parsedArgv.name ?? deriveSlug(finalPass.changes);
+			const fileName = migrationFileName({
+				strategy: config.prefixStrategy,
+				generatedAt: now(),
+				previousCount,
+				slug,
+			});
+			mkdirSync(migrationsDirPath, { recursive: true });
+			writeFileSync(join(migrationsDirPath, fileName), `${finalPass.sql}\n`);
+			writeFileSync(
+				join(cwd, config.snapshotPath),
+				renderSnapshot(finalPass.snapshot),
 			);
-		}
-		if (!firstPass.hasChanges) {
+
+			const migrationRelativePath = join(config.migrationsDir, fileName);
+			const [banner] = finalPass.sql.split("\n\n");
 			return {
 				exitCode: 0,
-				stdout: ["no changes — snapshot already matches your declarations."],
-				stderr: null,
+				stdout: [
+					"hejbro generate",
+					`loaded ${declarations.length} declarations`,
+					`wrote ${migrationRelativePath}`,
+					...warningSummaryLines(finalPass.warnings),
+					banner ?? "",
+				],
+				stderr: warningStderr(finalPass.warnings, fallbackIdentity),
 			};
+		} catch (error) {
+			const hejbroErr = asHejbroError(error);
+			const identity =
+				hejbroErr.code === "malformed-snapshot-node"
+					? config.snapshotPath
+					: fallbackIdentity;
+			return errorResult([hejbroErr], [], rawArgs, identity, cwd);
 		}
-
-		const parentHash = `sha256:${sha256Hex(renderSnapshot(previousSnapshot))}`;
-		const currentHash = `sha256:${sha256Hex(renderSnapshot(firstPass.snapshot))}`;
-		const finalPass = generateMigration({
-			declarations,
-			previousSnapshot,
-			renames,
-			confirmedDrops,
-			bannerHashes: { parent: parentHash, current: currentHash },
-			registry,
-			validators,
-		});
-
-		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const previousCount = listMigrationFiles(migrationsDirPath).length;
-		const slug = parsedArgv.name ?? deriveSlug(finalPass.changes);
-		const fileName = migrationFileName({
-			strategy: config.prefixStrategy,
-			generatedAt: now(),
-			previousCount,
-			slug,
-		});
-		mkdirSync(migrationsDirPath, { recursive: true });
-		writeFileSync(join(migrationsDirPath, fileName), `${finalPass.sql}\n`);
-		writeFileSync(
-			join(cwd, config.snapshotPath),
-			renderSnapshot(finalPass.snapshot),
-		);
-
-		const migrationRelativePath = join(config.migrationsDir, fileName);
-		const [banner] = finalPass.sql.split("\n\n");
-		return {
-			exitCode: 0,
-			stdout: [
-				"hejbro generate",
-				`loaded ${declarations.length} declarations`,
-				`wrote ${migrationRelativePath}`,
-				...warningSummaryLines(finalPass.warnings),
-				banner ?? "",
-			],
-			stderr: warningStderr(finalPass.warnings, fallbackIdentity),
-		};
 	} catch (error) {
 		return errorResult(
 			[asHejbroError(error)],
