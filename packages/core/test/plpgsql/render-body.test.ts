@@ -49,7 +49,7 @@ describe("renderFunctionSql", () => {
 					"parent",
 				);
 				ctx.if(isNull(parent.postId), () => {
-					ctx.raise("부모 댓글을 찾을 수 없다 (parent_id=%)", row.parentId);
+					ctx.raise("Parent comment not found (parent_id=%)", row.parentId);
 				});
 				ctx.return(row);
 			},
@@ -70,7 +70,7 @@ describe("renderFunctionSql", () => {
 				"\tend if;",
 				'\tselect "app"."comments"."post_id" as "post_id", "app"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "app"."comments" where "app"."comments"."id" = new.parent_id;',
 				"\tif parent_post_id is null then",
-				"\t\traise exception '부모 댓글을 찾을 수 없다 (parent_id=%)', new.parent_id;",
+				"\t\traise exception 'Parent comment not found (parent_id=%)', new.parent_id;",
 				"\tend if;",
 				"\treturn new;",
 				"end;",

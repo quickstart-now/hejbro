@@ -22,6 +22,15 @@ const fromEmpty: ReadonlyArray<HejbroInput> = [
 // everything else (timing/events/forEach/functionName) stays identical.
 // Proves a body-only change emits `create or replace function` without
 // touching the trigger.
+//
+// The "parent not found" message below is deliberately reworded from the
+// one in declarations.ts (not just re-punctuated) — a body-only-change
+// step is only a real test if the trigger body's plpgsql source, and thus
+// its `bodyHash`, actually differs from the previous step. If a future
+// edit makes the two messages read the same, this step silently stops
+// testing anything: `expected/step-1.sql` would lose its
+// `[body changed]` banner and `bodyHash` would stop moving between step 0
+// and step 1, while the test itself stays green.
 
 const commentsSingleDepthBodyChanged = defineTrigger(
 	comments,
@@ -44,14 +53,20 @@ const commentsSingleDepthBodyChanged = defineTrigger(
 			"parent",
 		);
 		ctx.if(isNull(parent.postId), () => {
-			ctx.raise("부모 댓글을 찾을 수 없습니다 (parent_id=%)", row.parentId);
+			ctx.raise(
+				"Could not find the parent comment (parent_id=%)",
+				row.parentId,
+			);
 		});
 		ctx.if(isNotNull(parent.parentId), () => {
-			ctx.raise("답글은 한 단계까지만 달 수 있다 (parent_id=%)", row.parentId);
+			ctx.raise(
+				"Replies can only be nested one level deep (parent_id=%)",
+				row.parentId,
+			);
 		});
 		ctx.if(ne(parent.postId, row.postId), () => {
 			ctx.raise(
-				"답글은 부모와 같은 글에 달아야 한다 (post_id=%, 부모의 post_id=%)",
+				"A reply must belong to the same post as its parent (post_id=%, parent's post_id=%)",
 				row.postId,
 				parent.postId,
 			);
@@ -93,14 +108,20 @@ const commentsSingleDepthEventsChanged = defineTrigger(
 			"parent",
 		);
 		ctx.if(isNull(parent.postId), () => {
-			ctx.raise("부모 댓글을 찾을 수 없습니다 (parent_id=%)", row.parentId);
+			ctx.raise(
+				"Could not find the parent comment (parent_id=%)",
+				row.parentId,
+			);
 		});
 		ctx.if(isNotNull(parent.parentId), () => {
-			ctx.raise("답글은 한 단계까지만 달 수 있다 (parent_id=%)", row.parentId);
+			ctx.raise(
+				"Replies can only be nested one level deep (parent_id=%)",
+				row.parentId,
+			);
 		});
 		ctx.if(ne(parent.postId, row.postId), () => {
 			ctx.raise(
-				"답글은 부모와 같은 글에 달아야 한다 (post_id=%, 부모의 post_id=%)",
+				"A reply must belong to the same post as its parent (post_id=%, parent's post_id=%)",
 				row.postId,
 				parent.postId,
 			);
