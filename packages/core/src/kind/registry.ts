@@ -5,6 +5,7 @@ import { grantKind } from "../kinds/grant-kind";
 import { policyKind } from "../kinds/policy-kind";
 import { rlsKind } from "../kinds/rls-kind";
 import { schemaKind } from "../kinds/schema-kind";
+import { sequenceKind } from "../kinds/sequence-kind";
 import { tableKind } from "../kinds/table-kind";
 import { triggerKind } from "../kinds/trigger-kind";
 import { viewKind } from "../kinds/view-kind";
@@ -47,6 +48,7 @@ export type KindRegistry = {
 const CORE_KINDS: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [
 	schemaKind,
 	enumKind,
+	sequenceKind,
 	tableKind,
 	functionKind,
 	triggerKind,
@@ -151,8 +153,8 @@ export const createKindRegistry = (): KindRegistry => {
 
 /**
  * Creates a {@link KindRegistry} pre-registered with hejbro's built-in
- * object kinds: schema, enum, table, function, trigger, rls, policy,
- * view, and grant.
+ * object kinds: schema, enum, sequence, table, function, trigger, rls,
+ * policy, view, and grant.
  */
 export const createDefaultRegistry = (): KindRegistry => {
 	const registry = createKindRegistry();

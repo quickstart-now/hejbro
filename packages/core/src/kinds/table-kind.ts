@@ -11,7 +11,8 @@ import { diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { ColumnState } from "../types/column-builder";
-import { isSerialTypeNode } from "../types/type-node";
+import type { TypeNode } from "../types/type-node";
+import { isSerialTypeNode, serialBaseType } from "../types/type-node";
 import { emitTableSql } from "./table-kind-emit";
 import type {
 	CheckSnapshot,
@@ -36,6 +37,19 @@ export const deriveForeignKeyName = (
 ): string => `${tableName}_${columns.join("_")}_fk`;
 
 /**
+ * Derives a `serial`-family column's backing sequence name from its owning
+ * table and column (#23/D66) — matches Postgres's own naming convention
+ * exactly (confirmed via `pg_dump`: `serial primary key` on `posts.id`
+ * produces `posts_id_seq`). Shared with `engine/rename-plan.ts`'s drift
+ * guard, the same way `deriveIndexName`/`deriveForeignKeyName` already
+ * are.
+ */
+export const deriveSequenceName = (
+	tableName: string,
+	columnName: string,
+): string => `${tableName}_${columnName}_seq`;
+
+/**
  * `primaryKey` implies `notNull` once a column is materialized into a
  * snapshot -- and so does a `serial`/`smallserial`/`bigserial` type (#23/
  * D66): confirmed against a real Postgres (`pg_dump` on a table declaring
@@ -55,6 +69,24 @@ const materializeNotNull = (columnState: ColumnState): boolean => {
 		return true;
 	}
 	return columnState.notNull;
+};
+
+/**
+ * A `serial`-family pseudo-type materializes into its real, storable base
+ * type (#23/D66) — the column's `nextval(...)` default and its backing
+ * sequence are tracked entirely by the synthesized `sequence` declaration
+ * (`engine/generate.ts`'s `resolveDeclarations`, `kinds/sequence-kind.ts`),
+ * never by this column's own `typeNode`/`default`. This is what keeps the
+ * invalid `alter column … type serial` path structurally unreachable from
+ * `table-kind-emit.ts`'s generic type-alter path — a `ColumnSnapshot`
+ * simply never contains the pseudo-type past this point, so there is
+ * nothing to guard against at emit time.
+ */
+const materializeTypeNode = (columnState: ColumnState): TypeNode => {
+	if (isSerialTypeNode(columnState.typeNode)) {
+		return serialBaseType(columnState.typeNode.typeName);
+	}
+	return columnState.typeNode;
 };
 
 const resolveIndexName = (
@@ -177,7 +209,7 @@ const serializeColumns = (
 ): ReadonlyArray<ColumnSnapshot> =>
 	declaration.columns.map((entry) => ({
 		name: entry.columnName,
-		typeNode: entry.columnState.typeNode,
+		typeNode: materializeTypeNode(entry.columnState),
 		...notNullField(materializeNotNull(entry.columnState)),
 		...primaryKeyField(entry.columnState.primaryKey),
 		...columnUniqueField(entry.columnState.unique),

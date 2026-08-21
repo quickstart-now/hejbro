@@ -205,6 +205,11 @@ export { policyKind } from "./kinds/policy-kind";
 export type { RlsSnapshot } from "./kinds/rls-kind";
 export { rlsKind } from "./kinds/rls-kind";
 export { schemaKind } from "./kinds/schema-kind";
+export type {
+	SequenceBaseType,
+	SequenceSnapshot,
+} from "./kinds/sequence-kind";
+export { sequenceKind } from "./kinds/sequence-kind";
 export { tableKind } from "./kinds/table-kind";
 export type {
 	TriggerEventSnapshot,
