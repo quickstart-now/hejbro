@@ -17,7 +17,7 @@ import { exposedTableValidator } from "./validators/exposed-tables";
 import { reservedSchemaValidator } from "./validators/reserved-schemas";
 import { viewSecurityInvokerValidator } from "./validators/view-security-invoker";
 
-export { authJwt, authUid } from "./auth";
+export { authJwt, authJwtCached, authUid, authUidCached } from "./auth";
 export { authUsers } from "./auth-tables";
 export { anonRole, authenticatedRole, serviceRole } from "./roles";
 export type {
