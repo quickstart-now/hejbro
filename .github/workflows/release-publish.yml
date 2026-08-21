@@ -50,13 +50,14 @@ jobs:
     needs: gate
     if: github.repository == 'quickstart-now/hejbro'
     runs-on: ubuntu-latest
-    # Placeholder for a protected Environment gate (owner decision pending,
-    # not yet made): adding `environment: release` here, plus a required
-    # reviewer on that Environment in repo settings, would pause this job
-    # for manual approval before it runs -- an additive change (this one
-    # line) that does not require re-touching anything else below. Left
-    # unset for now because that Environment doesn't exist yet.
-    # environment: release
+    # Owner-configured protected Environment (2026-08-21): required
+    # reviewer hello-pooh, deployment branches restricted to `main`. This
+    # is what turns AGENTS.md's "who approves the release" hard gate from
+    # a convention into a mechanism -- `needs: gate` stops a red gate, but
+    # nothing before this line stops a green one from publishing
+    # unattended. With this in place, the job pauses here for a manual
+    # approval click every time, even when gate passes.
+    environment: npm
     permissions:
       contents: write # changesets/action/publish pushes git tags + GitHub releases
       # Required for npm provenance (NPM_CONFIG_PROVENANCE) -- independent of
@@ -73,6 +74,16 @@ jobs:
       # publish call as an unsupported API -- confirming the OIDC handshake
       # itself, which real npmjs.org's registry does support, works end to
       # end.
+      #
+      # Verified vs. assumed, in one line: the OIDC-token-and-signing
+      # mechanism is verified end to end against a real Actions runner;
+      # that npmjs.org's registry (as opposed to the Verdaccio test rig
+      # above) accepts the resulting provenance-attached publish call is
+      # assumed, on the strength of it being documented, generally-available
+      # npm registry behavior (`npm publish --help` on this pinned Node/npm
+      # advertises `--provenance` as a stable flag, not experimental) -- not
+      # independently executed against npmjs.org by this PR, since doing so
+      # would mean a real, irreversible publish.
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
