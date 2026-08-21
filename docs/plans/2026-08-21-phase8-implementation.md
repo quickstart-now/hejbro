@@ -174,7 +174,7 @@ when the map changes.
 | 16 | `phase8-pk-guard` | Extend the `unsupported-column-alter` guard to the `added`/`removed` paths so the silent omission becomes a loud refusal | #137 |
 | 17 | `phase8-grant-sync` | Schema-wide grants follow tables added later, **plus** a chain step that adds a table under a schema-wide grant | #121 |
 | 18 | `phase8-golden-english` | Golden trigger messages translated to English | #120 |
-| 19 | `phase8-policy-predicates` | RLS predicate widening; the showcase drops its `isNotNull(pk)` workaround at all **56** sites (`git grep -c 'see #113' examples/` = 0) | #113 |
+| 19 | `phase8-policy-predicates` | RLS predicate widening; the showcase drops **56 workaround expressions inside 34 `see #113`-marked policy blocks** — done = both counts 0, per-file distribution reported | #113 |
 | 20 | `phase8-bucket-notes` | Field-level notes for bucket alters; empty note lists stop rendering `[]` | #116 |
 | 21 | `phase8-authuid-cached` | `authUid()`'s cached variant (reusing the existing `rawSql` node), a `warning[rls-uncached-auth-call]` validator, and the **12 call sites across 5 files** that teach the uncached form | #97 |
 | 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69) | — |
@@ -743,11 +743,25 @@ them. Passing it would have shipped a comment pointing at a closed issue,
 in the PR that closed it.
 
 What the six sites had in common was not the expression but the comment,
-and the comment is the marker of intent: `git grep -c 'see #113' examples/`
-= 0 catches all 56 regardless of how the column is spelled. **Prefer a
-criterion that matches why the code is there over one that matches how it
-happens to be written** — the "how" changes for reasons that have nothing
-to do with the work.
+and the comment is the marker of intent. **Prefer a criterion that matches
+why the code is there over one that matches how it happens to be written**
+— the "how" changes for reasons that have nothing to do with the work.
+
+**But say which unit you are counting.** The corrected criterion counts two
+different things, and the first two attempts at writing it down — the
+issue's and then this file's — both attached the wrong number to the wrong
+`grep`:
+
+```
+git grep -c 'see #113'   examples/   →  34   marked policy blocks
+git grep -c 'isNotNull(t.' examples/ →  56   workaround expressions
+```
+
+A block carries one comment and usually two expressions (`using` and
+`withCheck`), so neither count is a subset of the other and neither alone
+proves the work is finished. **Done is both at 0, with the per-file
+distribution reported** — a matching total with a wrong distribution means
+one chain step was skipped.
 
 This one is worth separating from the measurement failures above it,
 because it is a different thing going wrong. Those were cases where a
@@ -756,6 +770,12 @@ case where **the definition of "done" was narrower than done** — the work
 could satisfy the criterion completely and still be unfinished. A
 completion criterion is an instrument, and it needs its range checked
 before the work starts, not after.
+
+It was caught because the implementer checked the example scope *before*
+starting the core change rather than after finishing it. Had the order been
+reversed, the six sites would have surfaced during the mechanical
+replacement pass, when the count is a thing to reconcile rather than a
+thing to question.
 
 **Before measuring CLI behaviour, confirm `dist` is newer than the source
 you changed.** `test/golden.test.ts` and the other spawn-the-built-CLI
