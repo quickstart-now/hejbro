@@ -5,14 +5,21 @@ import {
 	createDefaultRegistry,
 	desc,
 	diffSnapshots,
+	emptySnapshot,
+	eq,
+	exists,
+	generateMigration,
 	getTableMeta,
 	index,
 	isTable,
 	planRenames,
 	renderSnapshot,
+	rls,
 	schema,
+	select,
 	table,
 	text,
+	uuid,
 	varchar,
 } from "../src";
 
@@ -624,5 +631,95 @@ describe("planRenames", () => {
 				message: expect.stringContaining("hejbro verify"),
 			}),
 		);
+	});
+});
+
+// #110 item 18: "measure first" -- proves the cross-table retargeting gap
+// exists TODAY, before any expression-node work lands, using the exact
+// pattern the DSL itself teaches (rls.ts:267's "reach other tables through
+// exists()" guidance). A table's policy can `exists()` into another table;
+// today expressions are pre-rendered strings at build time, so nothing
+// rewrites that text on a rename -- this pins the current (broken) shape
+// so the fix later in this PR has a before/after to point at.
+describe("planRenames — cross-table exists() retargeting (#110, currently broken)", () => {
+	it("renaming the exists()-referenced table leaves a comments-table policy's `using` text pointing at the old name", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const comments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey(), postId: uuid().notNull() },
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("comments_read_visible")
+						.for("select")
+						.to("anon")
+						.using(exists(select(posts).where(eq(posts.id, t.postId)))),
+				}),
+			}),
+		);
+		// resolveDeclarations (generateMigration's own) is what expands a
+		// table's rls/policies into the snapshot -- snap()/buildSnapshot
+		// alone does not, so this test builds both snapshots via
+		// generateMigration against an empty previous, matching how every
+		// other RLS-bearing fixture in this codebase constructs one
+		// (existing-table.test.ts, policy-kind.test.ts).
+		const previous = generateMigration({
+			declarations: [app, posts, comments],
+			previousSnapshot: emptySnapshot,
+			registry,
+		}).snapshot;
+
+		const renamedPosts = table(app, "articles", { id: uuid().primaryKey() });
+		const renamedComments = table(
+			app,
+			"comments",
+			{ id: uuid().primaryKey(), postId: uuid().notNull() },
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("comments_read_visible")
+						.for("select")
+						.to("anon")
+						.using(
+							exists(select(renamedPosts).where(eq(renamedPosts.id, t.postId))),
+						),
+				}),
+			}),
+		);
+		const next = generateMigration({
+			declarations: [app, renamedPosts, renamedComments],
+			previousSnapshot: emptySnapshot,
+			registry,
+		}).snapshot;
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+
+		const policyNode = plan.rewrittenPrevious.objects[
+			"policy:app.comments.comments_read_visible"
+		] as { readonly using: string };
+		expect(policyNode).toBeDefined();
+
+		// Current (broken) behavior: the policy's `using` text still says
+		// "posts", not "articles" -- rename-plan.ts never touches policy
+		// nodes. This assertion documents the gap; #110's fix (later in
+		// this PR) makes it say "articles" instead, and this test is
+		// updated alongside that fix (see PR body for before/after).
+		expect(policyNode.using).toContain('"posts"');
+		expect(policyNode.using).not.toContain('"articles"');
 	});
 });
