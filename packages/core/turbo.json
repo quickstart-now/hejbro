@@ -5,6 +5,9 @@
 		"test": {
 			"dependsOn": ["build"],
 			"env": ["UPDATE_GOLDEN"]
+		},
+		"test:coverage": {
+			"dependsOn": ["build"]
 		}
 	}
 }

@@ -5,6 +5,9 @@
 		"test": {
 			"dependsOn": ["build"]
 		},
+		"test:coverage": {
+			"dependsOn": ["build"]
+		},
 		"check-types": {
 			"dependsOn": ["^build"]
 		}
