@@ -8,6 +8,7 @@ import {
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
+import { storageBucket } from "../src/storage/bucket";
 import { reservedSchemaValidator } from "../src/validators/reserved-schemas";
 
 describe("reservedSchemaValidator", () => {
@@ -82,5 +83,16 @@ describe("reservedSchemaValidator", () => {
 		expect(
 			reservedSchemaValidator(emptySnapshot, [app, ...grants.grants]),
 		).toEqual([]);
+	});
+
+	it("does not flag a storage bucket declaration (no owning schema to check)", () => {
+		// Buckets are the one real path through schemaOf's fallback
+		// `return null` (see schema-of.ts's doc comment) -- this pins that
+		// reservedSchemaValidator actually exercises it, not just that
+		// schemaOf itself returns null in isolation. Every real
+		// generation that includes a bucket runs this exact path
+		// (examples/supabase does).
+		const avatars = storageBucket("avatars");
+		expect(reservedSchemaValidator(emptySnapshot, [avatars])).toEqual([]);
 	});
 });
