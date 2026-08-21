@@ -129,7 +129,7 @@ Postgres rather than by our reading of the docs.
 
 ## PR map
 
-Ordering constraints: **6 → 7** · **12 → 17** · **4 → 12–15** · **11
+Ordering constraints: **6 → 7** · **12 → 17** · **4 → 12–15** · **12
 first in the format wave** (one bump) · **2 before any release** ·
 **3 before every later PR's changeset**.
 
@@ -149,7 +149,7 @@ first in the format wave** (one bump) · **2 before any release** ·
 | 12 | `phase8-snapshot-v5` | `formatVersion` → 5, parser handling, **and** the version-mismatch message (#136); snapshot deep-validation (#26) | #136, #26 |
 | 13 | `phase8-expr-nodes` | Expressions stored as structured nodes; rename retargets them (D67) | #110 |
 | 14 | `phase8-sequence-kind` | `sequence` object kind, rename drift guard, type-change semantics | #23 |
-| 15 | `phase8-constraint-names` | Constraint names in the snapshot (#24(iii)), pk/unique alter emission, and #137's full fix replacing PR 16's guard | #24, #137 |
+| 15 | `phase8-constraint-names` | Constraint names in the snapshot (#24(iii)), pk/unique alter emission, #137's full fix replacing PR 16's guard, **and the chain step that exercises the PK add and drop paths** | #24, #137 |
 | 16 | `phase8-pk-guard` | Extend the `unsupported-column-alter` guard to the `added`/`removed` paths so the silent omission becomes a loud refusal | #137 |
 | 17 | `phase8-grant-sync` | Schema-wide grants follow tables added later, **plus** a chain step that adds a table under a schema-wide grant | #121 |
 | 18 | `phase8-golden-english` | Golden trigger messages translated to English | #120 |
@@ -168,7 +168,13 @@ the diagnostics wave, and PR 15 then replaces it with real SQL.
 Beyond the global gates (`check`, `check-types`, `test`), each PR proves
 its own claim.
 
-- **PR 2** — the smoke test fails on the current packaging and passes
+- **PR 2** — the Node 22 matrix entry has to actually run. The root
+  `package.json` declares `engines: { node: ">=24.0.0" }`, which is
+  stricter than D13's own text ("the repo's own toolchain requires
+  ≥ 22.18.0") and would fail install on the new matrix job. Lower the root
+  to `>=22.18.0` so the repo's declaration, D13 and the published
+  `engines` all agree; do not paper over it by disabling the engine check.
+  Then the smoke test fails on the current packaging and passes
   after it. It must pack each published package, install the tarball into
   a scratch project, and run `init`/`generate`/`verify` there. This is the
   only thing that catches `workspace:*` reaching a consumer, a missing
@@ -198,18 +204,20 @@ its own claim.
 - **PR 12** — the version-mismatch message is true after publication and
   no longer sends the user in a circle (delete the snapshot → `verify`
   says restore it from version control).
-- **PR 13** — a rename retargets a policy `using`, a CHECK expression and
-  a partial index predicate, with no drop/add pair left over.
+- **PR 13** — **blocked until the naming question below is settled.** A
+  rename retargets a policy `using`, a CHECK expression and a partial
+  index predicate, with no drop/add pair left over, and the serialized
+  node vocabulary follows whatever D57 ends up requiring.
 - **PR 14** — the invalid `alter column … type serial` path is closed;
   a column rename and a table rename both keep the sequence in step;
   `serial()` → `integer()` emits the default drop and the sequence drop.
 - **PR 15** — pk/unique changes emit drop + add using names taken from
   the snapshot; #137's add and drop paths are covered by tests, and the
-  chain step added in PR 16 or 17 exercises them under real Postgres.
+  chain step added in this PR exercises them under real Postgres.
 - **PR 16** — a PK column added to an existing table is refused loudly
   rather than emitted without its constraint.
 - **PR 17** — a table added under a schema-wide grant reaches the grant;
-  `pnpm roundtrip` produces an empty diff for `examples/postgres`.
+  `pnpm --filter example-postgres roundtrip` produces an empty diff.
 - **PR 21** — the skill reference, the README paragraph and the three
   example policies all move to the cached form. **The README's D45
   paragraph currently tells users to wrap the call themselves "until
@@ -305,6 +313,38 @@ The pattern is always the same: text that was true when written, made
 false by a later change, and left behind because nobody owned it. The PR
 that falsifies it owns it.
 
+## Open: D67 puts expression AST discriminators into an artifact (D57)
+
+D57 exempts one thing explicitly: *"internal expression/statement AST
+discriminators are out of scope entirely (**they never reach an
+artifact**)"*. D67 removes the condition that exemption rests on — once
+expressions are stored structurally, those discriminators are written into
+the snapshot, which is an artifact.
+
+What that touches: seven of the thirteen `ExprNode` discriminators are
+camelCase (`columnRef`, `functionCall`, `inList`, `nullTest`,
+`plpgsqlRef`, `rawSql`, `sqlTemplate`), and `TableRefNode` carries
+`schemaName`/`tableName` where D57's snapshot vocabulary asks for
+`schema`/`table`. `packages/core/test/naming-conventions.test.ts` scans
+generated output rather than source — by design — so it may start failing
+once these reach v5 snapshots.
+
+Two ways out, and this is an owner decision either way because both touch
+the decision log:
+
+1. **Serialize them by D57's rules** — kebab-case discriminators
+   (`column-ref`, `raw-sql`, …) and `schema`/`table` reference fields,
+   while the TypeScript unions stay camelCase. This is exactly the split
+   D57 already describes ("only the serialized key changes, never
+   TypeScript declaration fields"), so it applies the existing principle
+   rather than bending it, and it keeps the naming test honest. Cost is a
+   serialization mapping in the expression codec.
+2. **Amend D57's exemption** to allow camelCase discriminators in
+   artifacts — cheaper now, but it re-opens the vocabulary D57 unified one
+   phase ago, and the naming test would need a carve-out.
+
+Recommendation is (1). Settle it before PR 13 starts; PR 12 is unaffected.
+
 ## Design input needed before PR 21
 
 The cached `authUid()` variant is a public API surface decision: the
@@ -322,8 +362,8 @@ none of them blocks starting.
 
 | Claim | Settled by |
 |---|---|
-| `alter table … add primary key (cols)` is valid without a constraint name | PR 16/17 chain step (real Postgres) |
-| Dropping one column of a composite primary key drops the whole constraint | PR 17 chain step (real Postgres) |
+| `alter table … add primary key (cols)` is valid without a constraint name | PR 15 chain step (real Postgres) |
+| Dropping one column of a composite primary key drops the whole constraint | PR 15 chain step (real Postgres) |
 | `alter column … type serial` is rejected by Postgres | PR 14 |
 | A new `ExprNode` kind reaches `assertNever` in an older build | PR 13 |
 | #87's user-facing count (~75, ±5) and its zero golden impact | PR 11's first commit |
