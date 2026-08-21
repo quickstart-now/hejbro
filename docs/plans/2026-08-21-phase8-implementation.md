@@ -68,7 +68,9 @@ Constraints that came with them, and that a later PR must not quietly undo:
 ## Global constraints
 
 - Every PR carries exactly one `.changeset/*.md` once `phase8-changesets` has
-  landed (D59). PRs before that do not.
+  landed (D59) — including `phase8-changesets` itself, which carries a
+  `minor` changeset (introducing the release infrastructure is not a patch).
+  PRs before that do not.
 - Every PR body lists the commits to be squashed and references its issue. The
   phase issue stays open: use `Refs #9`, and `Closes #N` only for the specific
   issue a PR finishes.
@@ -203,7 +205,10 @@ own claim.
   workflow packs with `pnpm` — `changeset publish`'s pnpm workspace detection
   is automatic, and if it silently stops applying (or a workflow edit swaps in
   `npm publish`), the smoke stays green while the shipped tarball breaks.
-  `phase8-release-workflows` closes this gap; see its row below.
+  `phase8-release-workflows` closes this gap; see its row below. The CI leg
+  also proved the script portable — `mktemp -d`, `tar -tzf`, `grep -qxF` and
+  the here-string all behave on a Linux runner, which local macOS runs cannot
+  show.
 - **`phase8-changesets`** — `changeset status` runs clean; a dry version run
   bumps the three packages together. Document in `CONTRIBUTING.md` that the
   **first release needs a `minor` changeset**, since an all-`patch` set would
@@ -272,9 +277,14 @@ own claim.
   few known fields), so a `constantOne` or a stray `columnName` inside an
   expression subtree would pass unnoticed. Extend it first with a case that
   walks a v5 snapshot recursively and asserts every discriminator value and
-  every reference key, then make it green. Prove the extension by mutation:
-  a camelCase discriminator and a `columnName` reference key, each planted in
-  a v5 snapshot, must each turn it red — this is the device that got its own
+  every reference key, then make it green. Prove the extension by mutation,
+  **against the producer**: make the expression codec emit a camelCase
+  discriminator (and a `columnName` reference key), regenerate, and confirm
+  each turns the test red. Planting the token directly in a committed
+  snapshot proves nothing — `generate` rewrites the snapshot from the
+  declarations on every run, so a hand-planted token is healed before the
+  test ever sees it, the same trap as a hand-edited `dist` (see "Mutate the
+  producer, not the artifact" below). This is the device that got its own
   range mis-stated earlier in this same plan (see "And one rule for writing
   them" below), so the claim that it's been extended needs to be shown, not
   just made.
