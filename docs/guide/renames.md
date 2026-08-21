@@ -90,3 +90,14 @@ This avoids a single migration that both adds and drops in the same statement ba
 ## What renames do not re-target yet
 
 Rendered expression text — RLS policy `using`/`with check`, CHECK constraints, and partial-index predicates — keeps the old names inside the stored SQL string, so the generate after a rename emits one extra drop+add for those objects. The end state is correct; see issue #110.
+
+## Rolling back
+
+There is no `hejbro rollback` command — migrations are forward-only, the same way `git revert` adds a new commit instead of rewriting history:
+
+1. To undo a change, edit your declaration files back to the prior shape and run `hejbro generate` again — this produces a new, forward migration that happens to move the declared state backward, not a rewrite of an existing one.
+2. That new migration's `snapshot:` hash converges to the same value the chain had before the change being undone, so `hejbro verify` and the committed chain agree once it's applied.
+3. Never `git revert` (or hand-edit) a committed migration `.sql` file or `hejbro.snapshot.json` — the chain's `parent-snapshot`/`snapshot` lines are hashes over file contents, and rewriting history out of them breaks chain linearity (`hejbro verify`'s check 3). The only migrations safe to delete are ones that were generated but never applied anywhere.
+4. A rollback that drops a column emits without needing a `--rename` flag (it's a genuine drop, not a rename candidate), but it can lose data — Postgres drops the column's stored values along with it. If the rollback needs to preserve data, use [expand–contract](#when-you-dont-want-a-flag-at-all-expand-contract) instead of a straight drop.
+
+Known limitation: `hejbro verify`'s check 3 doesn't yet distinguish "the chain rolled forward back to a snapshot state it already passed through" from a genuinely diverged chain; see #129.
