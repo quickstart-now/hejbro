@@ -210,7 +210,10 @@ own claim.
   publish `0.0.1`.
 - **`phase8-regen-script`** — running the script reproduces the committed
   example migrations and snapshots **byte for byte** before any format change.
-  That is the script's own test.
+  That is the script's own test. Prove the script's range by mutation:
+  hand-edit a committed example migration and confirm regeneration overwrites
+  it back, and drop a step file and confirm the script notices rather than
+  silently regenerating fewer steps.
 - **`phase8-release-workflows`** — the workflows are validated against
   `changesets/action`'s `action.yml` (input names differ between versions; do
   not copy a draft blindly). The publish job must refuse to run if the
@@ -218,12 +221,16 @@ own claim.
   smoke left open: that smoke proves a `pnpm`-packed tarball installs
   cleanly, not that the real release actually packs with `pnpm`. `changeset
   publish`'s choice of `pnpm publish` for this workspace is automatic
-  detection (D59/D63), not a pinned setting — this PR needs a check, at
-  publish time, of which tool actually packed (e.g. inspecting the published
-  tarball's own `package.json` for a leftover `workspace:` string before it
-  reaches the registry), so a detection change or a future workflow edit that
-  swaps in `npm publish` fails loudly instead of silently shipping the
-  `EUNSUPPORTEDPROTOCOL` tarball `phase8-packaging` reproduced and rejected.
+  detection (D59/D63), not a pinned setting — this PR needs to verify **which
+  tool actually packed**, e.g. `pnpm publish --dry-run` output, or that the
+  tarball manifest's internal dependency resolved to a semver version rather
+  than a `workspace:` string. Checking for the string alone is the weaker
+  form: `phase8-packaging`'s own smoke measured that npm already rejects a
+  `workspace:` string in `dependencies`/`peerDependencies`/
+  `optionalDependencies` at install time with `EUNSUPPORTEDPROTOCOL` — the
+  string check only adds value for `devDependencies`, where npm installs
+  without resolving. Prove the pre-publish gate by mutation: a tarball with a
+  `workspace:` string and a stale `dist` must each stop the publish job.
 - **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
   reproducing #125's crash (a config importing a package that is not installed)
   first, then the diagnostic. Both `asHejbroError` sites are converted.
@@ -250,7 +257,12 @@ own claim.
   few known fields), so a `constantOne` or a stray `columnName` inside an
   expression subtree would pass unnoticed. Extend it first with a case that
   walks a v5 snapshot recursively and asserts every discriminator value and
-  every reference key, then make it green.
+  every reference key, then make it green. Prove the extension by mutation:
+  a camelCase discriminator and a `columnName` reference key, each planted in
+  a v5 snapshot, must each turn it red — this is the device that got its own
+  range mis-stated earlier in this same plan (see "And one rule for writing
+  them" below), so the claim that it's been extended needs to be shown, not
+  just made.
 - **`phase8-sequence-kind`** — the invalid `alter column … type serial` path is
   closed; a column rename and a table rename both keep the sequence in step;
   `serial()` → `integer()` emits the default drop and the sequence drop.
@@ -266,11 +278,15 @@ own claim.
   paragraph currently tells users to wrap the call themselves "until then";
   that text becomes false and must be rewritten** — the same class of defect as
   #136.
-- **`phase8-supabase-image`** — see the section below.
+- **`phase8-supabase-image`** — see the section below. Prove the five failure
+  conditions by mutation where feasible — at minimum a deliberately wrong
+  `storage.buckets` stub column must fail the run.
 - **`phase8-docs-release`** — README's `## Status` no longer says "Nothing is
   published yet"; install instructions exist; `CONTRIBUTING.md` states plainly
   that merging the version PR publishes immediately and that npm burns a
-  version number even if it is unpublished.
+  version number even if it is unpublished. And **#142**: the three package
+  READMEs drop the roadmap/phase-status framing entirely (an npm page has no
+  use for a pointer to our roadmap file), not just a wording refresh.
 
 ## `phase8-supabase-image` — verifying the preset against a real image (D69)
 
@@ -384,6 +400,18 @@ So when a criterion says "X enforces this", open X and confirm it sees the
 thing. If it does not, extending it is part of the PR — and the extension
 lands **first, failing**, so its reach is proven before the code that
 needs it.
+
+**How to check a gate's range: break it on purpose.** Reading a gate and
+judging whether it covers something is weaker than injecting the defect
+and watching it fail. `phase8-packaging`'s review did exactly that — seven
+defects injected into the pack-install smoke: five caught, one missed
+(`@hejbro/supabase`'s `exports` was never loaded, so breaking it changed
+nothing), and one caught by a different mechanism than the script claimed
+(`npm install` rejects a `workspace:` string in `dependencies` before the
+assertion that supposedly guards it ever runs). Neither the gap nor the
+misattribution was visible from reading the script. So: a PR that builds
+or extends a verification device shows the same evidence — the defects it
+exists to catch, injected one at a time, each turning it red.
 
 ## Settled: expression discriminators in the snapshot (D70)
 
