@@ -550,7 +550,12 @@ fetches into is already checked out and git refuses with exit 128. Four
 merges landed on a red `dev` before anyone looked: the PR checks were green,
 and a PR check and a branch build are *different events*. Verifying a
 workflow on the event you happened to be debugging is not verifying the
-workflow.
+workflow. The fix first proposed for it was scoped to the wrong axis —
+`event_name == 'pull_request'` instead of the condition that stood for
+(*is a local `dev` branch missing?*) — which would have moved the
+failure to the `main` push that triggers a release rather than removing
+it. A requirement can be wrong in a fourth way: right premise, real
+measurement, wrong proxy variable.
 
 **How to check a gate's range: break it on purpose.** Reading a gate and
 judging whether it covers something is weaker than injecting the defect
