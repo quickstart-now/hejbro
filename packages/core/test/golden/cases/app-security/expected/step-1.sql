@@ -1,6 +1,6 @@
 -- hejbro migration
 -- ~ policy app.posts.posts_read_published [policy changed; recreating]
--- ~ grant app.allTablesPrivileges.anon [+insert]
+-- ~ grant app.all-tables-privileges.anon [+insert]
 
 drop policy if exists "posts_read_published" on "app"."posts";
 

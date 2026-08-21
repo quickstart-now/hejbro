@@ -3,7 +3,7 @@
 	"hejbroSnapshot": 3,
 	"objects": {
 		"schema:app": {
-			"schemaName": "app"
+			"name": "app"
 		},
 		"table:app.comments": {
 			"columns": [

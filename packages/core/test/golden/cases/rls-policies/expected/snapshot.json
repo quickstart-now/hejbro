@@ -18,7 +18,7 @@
 			"table": "posts"
 		},
 		"schema:app": {
-			"schemaName": "app"
+			"name": "app"
 		},
 		"table:app.comments": {
 			"columns": [
