@@ -279,12 +279,14 @@ own claim.
   walks a v5 snapshot recursively and asserts every discriminator value and
   every reference key, then make it green. Prove the extension by mutation,
   **against the producer**: make the expression codec emit a camelCase
-  discriminator (and a `columnName` reference key), regenerate, and confirm
-  each turns the test red. Planting the token directly in a committed
-  snapshot proves nothing — `generate` rewrites the snapshot from the
-  declarations on every run, so a hand-planted token is healed before the
-  test ever sees it, the same trap as a hand-edited `dist` (see "Mutate the
-  producer, not the artifact" below). This is the device that got its own
+  discriminator (and a `columnName` reference key), then confirm each turns
+  the test red. Planting a token in a committed snapshot proves nothing —
+  `naming-conventions.test.ts` builds its snapshot in memory
+  (`buildSnapshot(...)`) and never reads the committed file, so the planted
+  token is not merely healed on the next `generate`, it is never looked at
+  in the first place — a stronger failure than the hand-edited-`dist` trap
+  (see "Mutate the producer, not the artifact" below), which at least gets
+  looked at before being overwritten. This is the device that got its own
   range mis-stated earlier in this same plan (see "And one rule for writing
   them" below), so the claim that it's been extended needs to be shown, not
   just made.
@@ -448,6 +450,15 @@ the *producer* was changed instead (tsdown's config set to `dts: false`, so
 no `.d.ts` is emitted at all). The mutation has to target whatever produces
 the artifact — the build step, the source it builds from, or the config that
 drives it — not the artifact itself once it exists.
+
+This rule came from the same review: deleting `dist/cli.d.ts` did not turn
+the smoke red, because `prepack` rebuilds `dist` during `pnpm pack`. The gate
+was fine; the mutation was healed before it could be seen. Two of the
+mutation scenarios written into this plan had the same flaw and were
+rewritten above (`phase8-release-workflows`'s stale-`dist` case and
+`phase8-expr-nodes`'s snapshot-planting case) — the standard was written
+before its own trap was known, which is worth keeping on record rather than
+quietly fixing.
 
 ## Settled: expression discriminators in the snapshot (D70)
 
