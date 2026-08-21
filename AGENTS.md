@@ -68,8 +68,13 @@ pnpm build           # turbo build
 
 ## Hard gates (owner approval required)
 
-- Publishing anything to npm. The `@hejbro` scope is already owned by the
-  project owner (confirmed 2026-08-19); publishing remains an owner action.
+- Publishing to npm. The `@hejbro` scope is owned by the project owner
+  (confirmed 2026-08-19). Since D63 the release itself runs in GitHub
+  Actions, so the gate is not "who runs the publish command" but **who
+  approves the release**: merging the "Version Packages" PR publishes
+  immediately and irreversibly (npm burns a version number even if it is
+  unpublished), and that merge is an owner action. Never merge it, and
+  never change the release workflows, without the owner.
 - Adding runtime dependencies to `@hejbro/core`.
 - Changing any decision in the spec's decision log.
 - Building anything listed under "Deferred" in the roadmap.
