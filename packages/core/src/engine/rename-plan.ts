@@ -1,8 +1,13 @@
 import type { HejbroError } from "../error";
 import { guardSnapshotRead, hejbroError } from "../error";
-import { decodeExprNode, encodeExprNode } from "../expr/codec";
+import {
+	decodeExprNode,
+	decodeSelectNode,
+	encodeExprNode,
+	encodeSelectNode,
+} from "../expr/codec";
 import type { RenameTarget } from "../expr/retarget";
-import { retargetExprNode } from "../expr/retarget";
+import { retargetExprNode, retargetSelectNode } from "../expr/retarget";
 import type { KindChange } from "../kind/object-kind";
 import type { PolicySnapshot } from "../kinds/policy-kind";
 import type { RlsSnapshot } from "../kinds/rls-kind";
@@ -14,6 +19,8 @@ import type {
 } from "../kinds/table-snapshot";
 import { asTableSnapshot, tableIdentity } from "../kinds/table-snapshot";
 import type { TriggerSnapshot } from "../kinds/trigger-kind";
+import type { ViewSnapshot } from "../kinds/view-kind";
+import { projectionColumns } from "../kinds/view-kind";
 import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
 import { compareKeys } from "../sort";
@@ -109,6 +116,7 @@ const TABLE_PREFIX = "table:";
 const RLS_PREFIX = "rls:";
 const POLICY_PREFIX = "policy:";
 const TRIGGER_PREFIX = "trigger:";
+const VIEW_PREFIX = "view:";
 
 type ObjectsRecord = Snapshot["objects"];
 
@@ -782,13 +790,43 @@ const retargetPolicyFields = (
 };
 
 /**
+ * @see retargetTableFields, retargetPolicyFields — the view counterpart.
+ * The view's `query` is a whole {@link SelectNode}, not an `ExprNode`
+ * wrapped one like `default`/`where`/`using`/`withCheck` are, so this
+ * decodes/retargets/encodes it directly rather than going through
+ * {@link retargetField} (#157/D72).
+ * Two fields, not one: `query` (the structured node itself) and
+ * `columns` (D27's denormalized column-name list, derived from the
+ * query's projection at `serialize` time) — a column rename that touches
+ * an `allColumns` projection's `columnNames` must recompute `columns`
+ * the same way `serialize` derived it the first time
+ * ({@link projectionColumns}), or it goes stale and the D27 prefix-rule
+ * diff compares an old name against a new one.
+ */
+const retargetViewFields = (
+	viewSnapshot: ViewSnapshot,
+	target: RenameTarget,
+): ViewSnapshot | null => {
+	const decoded = decodeSelectNode(viewSnapshot.query);
+	const retargeted = retargetSelectNode(decoded, target);
+	if (retargeted === decoded) {
+		return null;
+	}
+	return {
+		...viewSnapshot,
+		columns: projectionColumns(retargeted.projection),
+		query: encodeSelectNode(retargeted),
+	};
+};
+
+/**
  * Retargets every stored expression node (D67/D70) that mentions the
  * renamed table/column — column default, CHECK expression, partial index
- * `where`, and every table's policies' `using`/`withCheck` — across the
- * *whole* snapshot, not just the renamed table's own node. This is the
- * point of storing expressions structurally instead of as rendered text:
- * without it, a rename leaves stale identifiers behind wherever an
- * expression mentioned the old name.
+ * `where`, every table's policies' `using`/`withCheck`, and every view's
+ * `query` (#157/D72) — across the *whole* snapshot, not just the renamed
+ * table's own node. This is the point of storing expressions structurally
+ * instead of as rendered text: without it, a rename leaves stale
+ * identifiers behind wherever an expression mentioned the old name.
  *
  * Full-scan, mirroring {@link rewriteForeignKeyTargets}'s established
  * pattern (this codebase already accepts that cost for foreign keys) --
@@ -799,10 +837,16 @@ const retargetPolicyFields = (
  * other way by direct reproduction before this function existed (#110
  * item 18) -- renaming the exists()-referenced table left the other
  * table's policy pointing at the old name, with nothing else catching it.
+ * A view's `from`/`joins` reach another table *directly* (not just
+ * through `exists()`), so the same full-scan is needed there too, not
+ * just for whichever table the view happens to be declared "on" (a view
+ * has no such notion — its only table references are whatever its query
+ * selects from).
  *
  * Only entries with an actual match are rewritten (a `hasMatch`-style
  * short-circuit, same shape as {@link rewriteForeignKeyTargets}) — an
- * unaffected table or policy keeps its exact original object reference.
+ * unaffected table, policy, or view keeps its exact original object
+ * reference.
  */
 const rewriteExpressionReferences = (
 	objects: ObjectsRecord,
@@ -819,7 +863,18 @@ const rewriteExpressionReferences = (
 		objects,
 	);
 
-	return entriesWithPrefix(withRetargetedTables, POLICY_PREFIX).reduce(
+	const withRetargetedViews = entriesWithPrefix(
+		withRetargetedTables,
+		VIEW_PREFIX,
+	).reduce((acc, [key, node]) => {
+		const retargeted = retargetViewFields(node as ViewSnapshot, target);
+		if (retargeted === null) {
+			return acc;
+		}
+		return setKey(acc, key, retargeted);
+	}, withRetargetedTables);
+
+	return entriesWithPrefix(withRetargetedViews, POLICY_PREFIX).reduce(
 		(acc, [key, node]) => {
 			const retargeted = retargetPolicyFields(node as PolicySnapshot, target);
 			if (retargeted === null) {
@@ -827,7 +882,7 @@ const rewriteExpressionReferences = (
 			}
 			return setKey(acc, key, retargeted);
 		},
-		withRetargetedTables,
+		withRetargetedViews,
 	);
 };
 

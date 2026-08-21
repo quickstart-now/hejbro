@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { assertNever } from "../../src/error";
-import type { ExprNode } from "../../src/expr/ast";
+import type { ExprNode, SelectNode } from "../../src/expr/ast";
 import type { RenameTarget } from "../../src/expr/retarget";
-import { retargetExprNode } from "../../src/expr/retarget";
-import { REACHABLE_NODE_KINDS } from "./reachable-kinds";
+import { retargetExprNode, retargetSelectNode } from "../../src/expr/retarget";
+import { buildUnrelatedCase, REACHABLE_NODE_KINDS } from "./reachable-kinds";
 
 const tableRenameTarget: RenameTarget = {
 	oldSchema: "app",
@@ -113,116 +112,20 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 	// visible in one shared place, not a silent gap in whichever test
 	// nobody happened to update.
 	//
-	// `buildUnrelatedCase` is an exhaustive switch over the full
-	// `ExprNode["nodeKind"]` union (compiler-enforced via `assertNever`),
-	// so a new node kind fails to compile here until it's given a case --
-	// every builder below constructs a minimal, valid node of that kind
-	// that does NOT reference `columnRenameTarget`'s column anywhere in
-	// its subtree (some wrap `unrelatedColumnRef`, a column on the same
-	// table but a different column, to also exercise composite nodes'
-	// own identity-preservation branches, not just their leaves).
-	// `exists` alone covers BOTH `retargetTableRef` call sites at once
-	// (`query.from` and `join.table`), matching the same table as the
-	// rename target on both, since that's precisely the shape that was
-	// broken.
-	const unrelatedColumnRef: ExprNode = {
-		nodeKind: "columnRef",
-		schemaName: "app",
-		tableName: "posts",
-		columnName: "subtitle",
-	};
-	const unrelatedLiteral: ExprNode = {
-		nodeKind: "literal",
-		literal: { literalKind: "number", value: 1 },
-	};
-
-	const buildUnrelatedCase = (kind: ExprNode["nodeKind"]): ExprNode => {
-		switch (kind) {
-			case "literal":
-				return unrelatedLiteral;
-			case "columnRef":
-				return unrelatedColumnRef;
-			case "plpgsqlRef":
-				return { nodeKind: "plpgsqlRef", path: ["new", "x"] };
-			case "comparison":
-				return {
-					nodeKind: "comparison",
-					operator: "=",
-					left: unrelatedColumnRef,
-					right: unrelatedLiteral,
-				};
-			case "logical":
-				return {
-					nodeKind: "logical",
-					operator: "and",
-					operands: [unrelatedColumnRef, unrelatedLiteral],
-				};
-			case "not":
-				return { nodeKind: "not", operand: unrelatedColumnRef };
-			case "nullTest":
-				return {
-					nodeKind: "nullTest",
-					negated: false,
-					operand: unrelatedColumnRef,
-				};
-			case "inList":
-				return {
-					nodeKind: "inList",
-					negated: false,
-					operand: unrelatedColumnRef,
-					values: [unrelatedLiteral],
-				};
-			case "between":
-				return {
-					nodeKind: "between",
-					negated: false,
-					operand: unrelatedColumnRef,
-					lowerBound: unrelatedLiteral,
-					upperBound: unrelatedLiteral,
-				};
-			case "functionCall":
-				return {
-					nodeKind: "functionCall",
-					schemaName: null,
-					functionName: "lower",
-					args: [unrelatedColumnRef],
-				};
-			case "sqlTemplate":
-				return {
-					nodeKind: "sqlTemplate",
-					chunks: [
-						{ chunkKind: "text", text: "(" },
-						{ chunkKind: "expr", expr: unrelatedColumnRef },
-						{ chunkKind: "text", text: ")" },
-					],
-				};
-			case "rawSql":
-				return { nodeKind: "rawSql", sql: "true" };
-			case "exists":
-				return {
-					nodeKind: "exists",
-					negated: false,
-					query: {
-						queryKind: "select",
-						projection: { projectionKind: "constantOne" },
-						from: { schemaName: "app", tableName: "posts" },
-						joins: [
-							{
-								joinKind: "inner",
-								table: { schemaName: "app", tableName: "posts" },
-								on: unrelatedLiteral,
-							},
-						],
-						where: null,
-						orderBy: [],
-						limit: null,
-					},
-				};
-			default:
-				return assertNever(kind);
-		}
-	};
-
+	// `buildUnrelatedCase` (moved to `reachable-kinds.ts` in #157, item 96
+	// — the same shared source this loop and #157's own `retargetSelectNode`
+	// loop both use, so a new node kind can't be added to one without the
+	// other) is an exhaustive switch over the full `ExprNode["nodeKind"]`
+	// union (compiler-enforced via `assertNever`), so a new node kind
+	// fails to compile there until it's given a case -- every builder
+	// constructs a minimal, valid node of that kind that does NOT
+	// reference `columnRenameTarget`'s column anywhere in its subtree
+	// (some wrap `unrelatedColumnRef`, a column on the same table but a
+	// different column, to also exercise composite nodes' own
+	// identity-preservation branches, not just their leaves). `exists`
+	// alone covers BOTH `retargetTableRef` call sites at once (`query.from`
+	// and `join.table`), matching the same table as the rename target on
+	// both, since that's precisely the shape that was broken.
 	it.each(
 		REACHABLE_NODE_KINDS.map(
 			(kind) => [kind, buildUnrelatedCase(kind)] as const,
@@ -371,5 +274,59 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 			literal: { literalKind: "boolean", value: true },
 		};
 		expect(retargetExprNode(node, tableRenameTarget)).toBe(node);
+	});
+});
+
+// #157/D72, item 96: `retargetSelectNode` was previously reachable only
+// through `retargetExists` (nested inside an `ExprNode`); #157 exports it
+// so `rename-plan.ts` can retarget a view's own top-level query
+// (`retargetSelectField`/`retargetViewFields`) the same way. A newly
+// top-level-reachable function is new code with a new blind spot, even
+// though its own body is unchanged -- #110's `retargetTableRef` bug was
+// exactly this shape (a function reached through a different call site
+// than the one the original test covered), found three times before the
+// fix stopped being "add one more case". This loop applies the same
+// REACHABLE_NODE_KINDS-sourced, one-case-per-kind discipline to
+// `retargetSelectNode` itself, directly, rather than trusting that
+// `retargetExprNode`'s own loop (above) is enough by inference.
+describe("retargetSelectNode (#157 item 96: same identity-preservation discipline, at its own newly-top-level entry point)", () => {
+	const buildQuery = (whereClause: ExprNode | null): SelectNode => ({
+		queryKind: "select",
+		projection: { projectionKind: "allColumns", columnNames: ["id"] },
+		from: { schemaName: "app", tableName: "posts" },
+		joins: [],
+		where: whereClause,
+		orderBy: [],
+		limit: null,
+	});
+
+	it.each(REACHABLE_NODE_KINDS)(
+		"returns the exact same reference on an unrelated column rename when where is: %s",
+		(kind) => {
+			const query = buildQuery(buildUnrelatedCase(kind));
+			const retargeted = retargetSelectNode(query, columnRenameTarget);
+			expect(retargeted).toBe(query);
+			expect(retargeted.where).toBe(query.where);
+		},
+	);
+
+	it("retargets a view-shaped query's from/where when the rename actually matches", () => {
+		const query = buildQuery({
+			nodeKind: "columnRef",
+			schemaName: "app",
+			tableName: "posts",
+			columnName: "id",
+		});
+		const retargeted = retargetSelectNode(query, tableRenameTarget);
+		expect(retargeted).toEqual({
+			...query,
+			from: { schemaName: "app", tableName: "articles" },
+			where: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "articles",
+				columnName: "id",
+			},
+		});
 	});
 });

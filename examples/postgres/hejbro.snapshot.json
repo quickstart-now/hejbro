@@ -966,9 +966,47 @@
 				"closed_at"
 			],
 			"name": "open_tasks",
+			"query": {
+				"from": {
+					"schema": "app",
+					"table": "tasks"
+				},
+				"joins": [],
+				"limit": null,
+				"orderBy": [],
+				"projection": {
+					"columns": [
+						"id",
+						"project_id",
+						"title",
+						"status",
+						"priority",
+						"estimate_hours",
+						"closed_at"
+					],
+					"projectionKind": "all-columns"
+				},
+				"queryKind": "select",
+				"where": {
+					"left": {
+						"column": "status",
+						"nodeKind": "column-ref",
+						"schema": "app",
+						"table": "tasks"
+					},
+					"nodeKind": "comparison",
+					"operator": "<>",
+					"right": {
+						"literal": {
+							"literalKind": "string",
+							"value": "done"
+						},
+						"nodeKind": "literal"
+					}
+				}
+			},
 			"schema": "app",
-			"securityInvoker": true,
-			"selectSql": "select \"id\", \"project_id\", \"title\", \"status\", \"priority\", \"estimate_hours\", \"closed_at\" from \"app\".\"tasks\" where \"app\".\"tasks\".\"status\" <> 'done'"
+			"securityInvoker": true
 		}
 	}
 }

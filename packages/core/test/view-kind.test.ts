@@ -5,7 +5,8 @@ import { table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import { eq, isNotNull } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
-import { viewKind } from "../src/kinds/view-kind";
+import type { ViewSnapshot } from "../src/kinds/view-kind";
+import { viewKind, viewSelectSql } from "../src/kinds/view-kind";
 import { select } from "../src/query/select";
 import { emptySnapshot } from "../src/snapshot/snapshot";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
@@ -25,20 +26,17 @@ describe("viewKind.serialize", () => {
 			"published_posts",
 			select(posts).where(isNotNull(posts.publishedAt)),
 		);
-		const snapshot = viewKind.serialize(view) as {
-			schema: string;
-			name: string;
-			columns: ReadonlyArray<string>;
-			selectSql: string;
-			securityInvoker?: true;
-		};
-		expect(snapshot).toEqual({
-			schema: "app",
-			name: "published_posts",
-			columns: ["id", "status", "published_at"],
-			selectSql:
-				'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."published_at" is not null',
-		});
+		const snapshot = viewKind.serialize(view) as ViewSnapshot;
+		expect(snapshot.schema).toBe("app");
+		expect(snapshot.name).toBe("published_posts");
+		expect(snapshot.columns).toEqual(["id", "status", "published_at"]);
+		expect(snapshot.securityInvoker).toBeUndefined();
+		// `query` is now a structured node (D67/D70/D72), not pre-rendered
+		// SQL text — asserted through the accessor, same expected string
+		// as before this shape change.
+		expect(viewSelectSql(snapshot)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."published_at" is not null',
+		);
 	});
 
 	it("derives columns from an object projection, in alias order", () => {
