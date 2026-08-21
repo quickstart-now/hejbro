@@ -89,7 +89,7 @@ const makeStages = <TProjection extends SelectProjection>(
 		if (!Number.isInteger(count) || count < 0) {
 			return throwHejbroError(
 				"invalid-limit",
-				`limit(${count}) must be a non-negative integer.`,
+				`limit(${count}) must be a non-negative integer. Next: pass a non-negative integer, e.g. limit(10).`,
 			);
 		}
 		return makeStages({ ...query, limit: count }, fromTable, projectionInput);
@@ -118,7 +118,7 @@ const resolveProjection = (
 	if (from === undefined) {
 		return throwHejbroError(
 			"missing-from-table",
-			"select() with an object projection can't infer the from table — pass it as the second argument: select({ … }, posts).",
+			"select() with an object projection can't infer the from table. Next: pass it as the second argument: select({ … }, posts).",
 		);
 	}
 	return {

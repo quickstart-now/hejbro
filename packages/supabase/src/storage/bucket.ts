@@ -4,7 +4,7 @@ const bucketNamePattern = /^[a-z0-9][a-z0-9._-]*$/;
 const maxBucketNameLength = 100;
 
 const bucketNameRuleMessage = (name: string): string =>
-	`storage bucket name "${name}" is invalid — bucket names must match ^[a-z0-9][a-z0-9._-]*$ (lower-case letters, digits, dots, underscores, and dashes, starting with a letter or digit) and be at most ${maxBucketNameLength} characters. This is a Supabase/S3-compatible row value, not a SQL identifier, so hejbro's stricter table/column identifier rule does not apply here.`;
+	`storage bucket name "${name}" is invalid — bucket names must match ^[a-z0-9][a-z0-9._-]*$ (lower-case letters, digits, dots, underscores, and dashes, starting with a letter or digit) and be at most ${maxBucketNameLength} characters. This is a Supabase/S3-compatible row value, not a SQL identifier, so hejbro's stricter table/column identifier rule does not apply here. Next: rename the bucket to match that pattern, e.g. "user-avatars".`;
 
 const assertValidBucketName = (
 	name: string,
@@ -21,7 +21,7 @@ const assertValidBucketName = (
 };
 
 const fileSizeLimitRuleMessage = (value: number): string =>
-	`storage bucket fileSizeLimit ${value} is invalid — it must be a positive integer number of bytes. NaN and Infinity cannot be stored in the underlying SQL column, and a fractional value would fail at apply time (the column is a bigint). Pass a positive whole number of bytes, e.g. 5242880 for 5 MiB.`;
+	`storage bucket fileSizeLimit ${value} is invalid — it must be a positive integer number of bytes. NaN and Infinity cannot be stored in the underlying SQL column, and a fractional value would fail at apply time (the column is a bigint). Next: pass a positive whole number of bytes, e.g. 5242880 for 5 MiB.`;
 
 const assertValidFileSizeLimit = (
 	value: number,

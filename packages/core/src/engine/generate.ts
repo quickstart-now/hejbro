@@ -54,7 +54,7 @@ const resolveDeclarations = (
 		if (meta.existing) {
 			return throwHejbroError(
 				"existing-table-declared",
-				`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration; remove it from the declarations list. Managed tables are declared with table().`,
+				`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration. Next: remove it from the declarations list (managed tables are declared with table()).`,
 				meta.declaredAt,
 			);
 		}

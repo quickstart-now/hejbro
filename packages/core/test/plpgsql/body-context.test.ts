@@ -184,7 +184,7 @@ describe("body-context recording", () => {
 				ctx.raise("100%% done, parent=%", row.parentId, row.postId);
 				ctx.return(row);
 			}),
-		).toThrowError(/counts must match/);
+		).toThrowError(/placeholder\(s\) but received/);
 	});
 
 	it("duplicate row name throws duplicate-local-name", () => {

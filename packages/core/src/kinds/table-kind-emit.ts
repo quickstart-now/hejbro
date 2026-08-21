@@ -133,13 +133,13 @@ const alterColumnStatements = (
 	if (primaryKeyChanged) {
 		return throwHejbroError(
 			"unsupported-column-alter",
-			`column "${entry.key}" on table "${tableName}" changed its primary key status — hejbro does not support in-place primary key alters in Phase 1 (primary key changes are not expressible as a single alter column); recreate the table, or drop and re-add the column/constraint manually.`,
+			`column "${entry.key}" on table "${tableName}" changed its primary key status — hejbro does not support in-place primary key alters in Phase 1 (primary key changes are not expressible as a single alter column). Next: recreate the table, or drop and re-add the column/constraint manually.`,
 		);
 	}
 	if (uniqueChanged) {
 		return throwHejbroError(
 			"unsupported-column-alter",
-			`column "${entry.key}" on table "${tableName}" changed its unique flag — hejbro does not emit sql for that in Phase 1; add/drop the column, or add/drop a unique constraint manually.`,
+			`column "${entry.key}" on table "${tableName}" changed its unique flag — hejbro does not emit sql for that in Phase 1. Next: add/drop the column, or add/drop a unique constraint manually.`,
 		);
 	}
 

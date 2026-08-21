@@ -179,7 +179,7 @@ export const createRecordingContext = (
 		if (declaredNames.has(name)) {
 			throwHejbroError(
 				"duplicate-local-name",
-				`local name "${name}" is already declared in ${identity} — pick a different row name or variable.`,
+				`local name "${name}" is already declared in ${identity}. Next: pick a different row name or variable.`,
 				declaredAt,
 			);
 		}
@@ -193,7 +193,7 @@ export const createRecordingContext = (
 			if (!isColumnRefValue(value)) {
 				return throwHejbroError(
 					"row-projection-not-column",
-					`ctx.row()/ctx.rowOrNull() projection key "${key}" in ${identity} isn't a plain column reference — pass table columns (e.g. table.column), not computed expressions.`,
+					`ctx.row()/ctx.rowOrNull() projection key "${key}" in ${identity} isn't a plain column reference. Next: pass table columns (e.g. table.column), not computed expressions.`,
 					declaredAt,
 				);
 			}
@@ -244,7 +244,7 @@ export const createRecordingContext = (
 			if (statement.elseStatements !== null) {
 				throwHejbroError(
 					"invalid-if-chain",
-					`ctx.if() chain in ${identity} called .elseIf() after .else() — reorder every .elseIf() before the single .else(), or drop the extra branch.`,
+					`ctx.if() chain in ${identity} called .elseIf() after .else(). Next: reorder every .elseIf() before the single .else(), or drop the extra branch.`,
 					declaredAt,
 				);
 			}
@@ -261,7 +261,7 @@ export const createRecordingContext = (
 			if (statement.elseStatements !== null) {
 				throwHejbroError(
 					"invalid-if-chain",
-					`ctx.if() chain in ${identity} called .else() more than once — an if/elseIf chain can have at most one .else(); remove the duplicate call.`,
+					`ctx.if() chain in ${identity} called .else() more than once — an if/elseIf chain can have at most one .else(). Next: remove the duplicate call.`,
 					declaredAt,
 				);
 			}
@@ -298,7 +298,7 @@ export const createRecordingContext = (
 		if (placeholderCount !== args.length) {
 			throwHejbroError(
 				"raise-arg-count-mismatch",
-				`ctx.raise() message in ${identity} has ${placeholderCount} "%" placeholder(s) but received ${args.length} argument(s) — counts must match ("%%" renders as a literal percent sign).`,
+				`ctx.raise() message in ${identity} has ${placeholderCount} "%" placeholder(s) but received ${args.length} argument(s) ("%%" renders as a literal percent sign). Next: add the missing argument(s) to ctx.raise(), or remove the extra "%" placeholder(s) from the message.`,
 				declaredAt,
 			);
 		}
@@ -335,7 +335,7 @@ export const createRecordingContext = (
 		}
 		throwHejbroError(
 			"unsupported-return-value",
-			`ctx.return() in ${identity} received a value that isn't a trigger row (new/old) or a query with .returning() — pass one of those.`,
+			`ctx.return() in ${identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
 			declaredAt,
 		);
 	};
@@ -392,7 +392,7 @@ export const createRecordingContext = (
 
 /** The exact guard message (designer-approved copy) for a `nondeterministic-body` error. */
 const nondeterministicBodyMessage = (identity: string): string =>
-	`function "${identity}" produced two different recorded ASTs when its body ran twice at build time — the body must be pure and deterministic (no real if/for/while, Date.now(), Math.random(), or reads of mutable outer state). Replace real branching with ctx.if(), and non-deterministic values with the DSL's own now()/genRandomUuid() helpers.`;
+	`function "${identity}" produced two different recorded ASTs when its body ran twice at build time — the body must be pure and deterministic (no real if/for/while, Date.now(), Math.random(), or reads of mutable outer state). Next: replace real branching with ctx.if(), and non-deterministic values with the DSL's own now()/genRandomUuid() helpers.`;
 
 /**
  * Runs `run` against two fresh recording contexts and compares the two

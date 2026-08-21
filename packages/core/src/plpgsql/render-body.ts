@@ -159,7 +159,7 @@ export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
 	if (innerText.includes("$function$")) {
 		throwHejbroError(
 			"body-contains-dollar-tag",
-			`the function body's rendered SQL for ${identity} contains the literal $function$, which collides with the dollar-quote tag — remove or rephrase that string.`,
+			`the function body's rendered SQL for ${identity} contains the literal $function$, which collides with the dollar-quote tag. Next: remove or rephrase that string.`,
 			declaration.declaredAt,
 		);
 	}

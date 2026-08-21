@@ -135,7 +135,7 @@ const buildRolesStage = <TStage>(
 		if (roles.length === 0) {
 			return throwHejbroError(
 				"rls-policy-missing-roles",
-				`policy "${state.policyName}" calls .to() with no roles — Postgres requires at least one role after TO; pass .to("anon") or the specific roles this policy applies to.`,
+				`policy "${state.policyName}" calls .to() with no roles — Postgres requires at least one role after TO. Next: pass .to("anon") or the specific roles this policy applies to.`,
 				state.declaredAt,
 			);
 		}
@@ -223,7 +223,7 @@ const clauseNotAllowed = (
 ): never =>
 	throwHejbroError(
 		"rls-policy-clause-not-allowed",
-		`policy "${policy.policyName}" is FOR ${policy.command} and cannot take ${clause} — Postgres rejects it; use ${otherClause} instead.`,
+		`policy "${policy.policyName}" is FOR ${policy.command} and cannot take ${clause} — Postgres rejects it. Next: use ${otherClause} instead.`,
 		policy.declaredAt,
 	);
 
@@ -264,7 +264,7 @@ const assertOwnColumnsOnly = (
 	if (foreignRef !== undefined) {
 		throwHejbroError(
 			"rls-policy-foreign-column",
-			`policy "${policy.policyName}" on "${schemaName}.${tableName}" references column "${foreignRef.schemaName}.${foreignRef.tableName}.${foreignRef.columnName}" — a policy expression may only reference its own table's columns directly; reach other tables through exists().`,
+			`policy "${policy.policyName}" on "${schemaName}.${tableName}" references column "${foreignRef.schemaName}.${foreignRef.tableName}.${foreignRef.columnName}" — a policy expression may only reference its own table's columns directly. Next: reach other tables through exists().`,
 			policy.declaredAt,
 		);
 	}
@@ -309,7 +309,7 @@ const assertNoDuplicatePolicyNames = (
 	if (duplicate !== undefined) {
 		throwHejbroError(
 			"duplicate-policy-name",
-			`table "${tableName}" declares two policies named "${duplicate.policyName}" — Postgres requires unique policy names per table; rename one (the TS object key is just a label, the string passed to rls.policy() is the SQL name).`,
+			`table "${tableName}" declares two policies named "${duplicate.policyName}" — Postgres requires unique policy names per table. Next: rename one (the TS object key is just a label, the string passed to rls.policy() is the SQL name).`,
 			duplicate.declaredAt,
 		);
 	}

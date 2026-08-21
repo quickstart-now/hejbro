@@ -91,7 +91,7 @@ const resolveEvent = (
 		if (!knownColumnNames.has(columnName)) {
 			return throwHejbroError(
 				"unknown-trigger-column",
-				`trigger "${triggerName}" on "${schemaName}.${tableName}" lists unknown column "${columnKey}" in its update-of event list — check the column name against the table declaration.`,
+				`trigger "${triggerName}" on "${schemaName}.${tableName}" lists unknown column "${columnKey}" in its update-of event list. Next: use one of the columns declared on this table's table() call — this is usually a typo in "${columnKey}", or a column that was renamed since this trigger was written.`,
 				declaredAt,
 			);
 		}

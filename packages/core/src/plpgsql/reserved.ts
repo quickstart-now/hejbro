@@ -111,7 +111,7 @@ export const assertValidLocalName = (
 	if (reservedPlpgsqlNames.has(name)) {
 		throwHejbroError(
 			"reserved-local-name",
-			`local name "${name}" in ${identity} collides with a plpgsql/SQL reserved word — rename it (reserved words cannot be used unquoted in a function body).`,
+			`local name "${name}" in ${identity} collides with a plpgsql/SQL reserved word (reserved words cannot be used unquoted in a function body). Next: rename it.`,
 			declaredAt,
 		);
 	}

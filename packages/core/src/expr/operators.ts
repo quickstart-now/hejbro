@@ -19,7 +19,7 @@ const liftOperandOrRejectNull = (
 	if (lifted.nodeKind === "literal" && lifted.literal.literalKind === "null") {
 		return throwHejbroError(
 			"null-comparison",
-			"eq()/ne() with null always yields SQL null, never true — use isNull()/isNotNull() instead.",
+			"eq()/ne() with null always yields SQL null, never true. Next: use isNull()/isNotNull() instead.",
 		);
 	}
 	return lifted;
@@ -82,7 +82,7 @@ const logical =
 		if (conditions.length === 0) {
 			return throwHejbroError(
 				"empty-logical-expression",
-				"and()/or() need at least one operand — pass at least one boolean expression.",
+				"and()/or() need at least one operand. Next: pass at least one boolean expression.",
 			);
 		}
 		return expr("boolean", {
