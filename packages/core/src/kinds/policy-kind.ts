@@ -1,6 +1,7 @@
 import type { PolicyCommand, PolicyDeclaration } from "../dsl/rls";
 import { assertNever, throwHejbroError } from "../error";
 import type { ExprNode, TableRefNode } from "../expr/ast";
+import { decodeExprNode, encodeExprNode } from "../expr/codec";
 import { renderExpr } from "../expr/render-sql";
 import { sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
@@ -13,13 +14,20 @@ import {
 import { predropStatement, statement } from "../sql/statement";
 
 /**
- * A policy's fully-rendered snapshot node — expressions are pre-rendered
- * SQL text (D16 precedent, same as a column's default). **Compact** (Task
- * 3 audit / D33): `permissive` is present only when `false` (declared
- * default `true` — a restrictive policy); `using`/`withCheck` are present
- * only when set (default `null`, meaning the command doesn't take that
- * clause) — read via {@link policyPermissive}/{@link policyUsing}/
- * {@link policyWithCheck}.
+ * A policy's serialized snapshot node. **Compact** (Task 3 audit / D33):
+ * `permissive` is present only when `false` (declared default `true` — a
+ * restrictive policy); `using`/`withCheck` are present only when set
+ * (default `null`, meaning the command doesn't take that clause) — read
+ * via {@link policyPermissive}/{@link policyUsing}/{@link policyWithCheck}.
+ *
+ * `using`/`withCheck` are **structured expression nodes** (D67/D70),
+ * encoded by the expression codec (`expr/codec.ts`) — not pre-rendered
+ * SQL text (that was D16's original shape; D67 amended it so a rename
+ * can retarget the identifiers inside them exactly). The accessors decode
+ * and render back to SQL text on demand, using this policy's own
+ * `schema`/`table` as the `renderExpr` outer scope (an `exists()`
+ * subquery's correlation needs it) — so every caller is unaffected by
+ * this shape change.
  */
 export type PolicySnapshot = {
 	readonly schema: string;
@@ -28,21 +36,35 @@ export type PolicySnapshot = {
 	readonly permissive?: false;
 	readonly command: PolicyCommand;
 	readonly roles: ReadonlyArray<string>;
-	readonly using?: string;
-	readonly withCheck?: string;
+	readonly using?: JsonValue;
+	readonly withCheck?: JsonValue;
 };
 
 /** `snapshot.permissive`, defaulting to `true` when absent (compact snapshot). */
 export const policyPermissive = (snapshot: PolicySnapshot): boolean =>
 	snapshot.permissive !== false;
 
-/** `snapshot.using`, defaulting to `null` when absent (compact snapshot). */
-export const policyUsing = (snapshot: PolicySnapshot): string | null =>
-	snapshot.using ?? null;
+const outerScopeOf = (
+	snapshot: PolicySnapshot,
+): ReadonlyArray<TableRefNode> => [
+	{ schemaName: snapshot.schema, tableName: snapshot.table },
+];
 
-/** `snapshot.withCheck`, defaulting to `null` when absent (compact snapshot). */
-export const policyWithCheck = (snapshot: PolicySnapshot): string | null =>
-	snapshot.withCheck ?? null;
+/** `snapshot.using` decoded and rendered back to SQL text, defaulting to `null` when absent (compact snapshot). */
+export const policyUsing = (snapshot: PolicySnapshot): string | null => {
+	if (snapshot.using === undefined || snapshot.using === null) {
+		return null;
+	}
+	return renderExpr(decodeExprNode(snapshot.using), outerScopeOf(snapshot));
+};
+
+/** `snapshot.withCheck` decoded and rendered back to SQL text, defaulting to `null` when absent (compact snapshot). */
+export const policyWithCheck = (snapshot: PolicySnapshot): string | null => {
+	if (snapshot.withCheck === undefined || snapshot.withCheck === null) {
+		return null;
+	}
+	return renderExpr(decodeExprNode(snapshot.withCheck), outerScopeOf(snapshot));
+};
 
 // Internal invariant: this shape is exactly what policyKind.serialize below produces.
 const asPolicySnapshot = (snapshot: JsonValue): PolicySnapshot =>
@@ -53,14 +75,29 @@ const policyIdentity = (schema: string, table: string, name: string): string =>
 
 const POLICY_CHANGED_NOTE = "policy changed; recreating";
 
-const renderClauseExpr = (
+/**
+ * Encodes a `using`/`withCheck` clause into its snapshot form (D67/D70).
+ * Still calls `renderExpr` first, at declaration time, purely for its
+ * validating side effect — a correlated `exists()` subquery referencing a
+ * column outside `[query's own from/joins, ...outerScope]` throws
+ * `foreign-column-ref` from inside `renderSelect`'s scope check, and
+ * `assertOwnColumnsOnly` (dsl/rls.ts) only catches a *direct* out-of-table
+ * ref (it doesn't descend into `exists()`), so this is the only place
+ * that catches a bad ref buried inside a correlated subquery. Rendering
+ * to text and discarding it looks wasteful, but calling `encodeExprNode`
+ * alone would silently skip this validation until whenever `emit` next
+ * decodes and renders the node — which, for a policy that never changes
+ * again, could be never.
+ */
+const encodeClauseExpr = (
 	expr: ExprNode | null,
 	outerScope: ReadonlyArray<TableRefNode>,
-): string | null => {
+): JsonValue | null => {
 	if (expr === null) {
 		return null;
 	}
-	return renderExpr(expr, outerScope);
+	renderExpr(expr, outerScope);
+	return encodeExprNode(expr);
 };
 
 const dropPolicySql = (snapshot: PolicySnapshot): string =>
@@ -103,17 +140,17 @@ const permissiveField = (
 	return { permissive: false };
 };
 
-/** `{ using: <sql> }` when set, else `{}` (compact snapshot). */
-const usingField = (value: string | null): Pick<PolicySnapshot, "using"> => {
+/** `{ using: <node> }` when set, else `{}` (compact snapshot). */
+const usingField = (value: JsonValue | null): Pick<PolicySnapshot, "using"> => {
 	if (value === null) {
 		return {};
 	}
 	return { using: value };
 };
 
-/** `{ withCheck: <sql> }` when set, else `{}` (compact snapshot). */
+/** `{ withCheck: <node> }` when set, else `{}` (compact snapshot). */
 const withCheckField = (
-	value: string | null,
+	value: JsonValue | null,
 ): Pick<PolicySnapshot, "withCheck"> => {
 	if (value === null) {
 		return {};
@@ -153,8 +190,8 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 			command: declaration.command,
 			roles: declaration.roles,
 			...permissiveField(declaration.permissive),
-			...usingField(renderClauseExpr(declaration.using, outerScope)),
-			...withCheckField(renderClauseExpr(declaration.withCheck, outerScope)),
+			...usingField(encodeClauseExpr(declaration.using, outerScope)),
+			...withCheckField(encodeClauseExpr(declaration.withCheck, outerScope)),
 		};
 		return snapshot;
 	},

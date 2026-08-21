@@ -8,7 +8,11 @@ import { inArray, isNotNull } from "../src/expr/operators";
 import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
-import { asTableSnapshot } from "../src/kinds/table-snapshot";
+import {
+	asTableSnapshot,
+	checkExpression,
+	indexWhere,
+} from "../src/kinds/table-snapshot";
 import {
 	integer,
 	text,
@@ -308,11 +312,12 @@ describe("tableKind.diff — checks", () => {
 				),
 			),
 		);
-		expect(snap.checks).toEqual([
-			{
-				name: "posts_status_check",
-				expression: `"app"."posts"."status" in ('draft', 'published')`,
-			},
+		// expression is a structured node (D67/D70); assert the final SQL
+		// via checkExpression, the same accessor emit uses, rather than the
+		// node's internal shape.
+		expect(snap.checks?.map((c) => c.name)).toEqual(["posts_status_check"]);
+		expect(snap.checks?.map(checkExpression)).toEqual([
+			`"app"."posts"."status" in ('draft', 'published')`,
 		]);
 	});
 
@@ -371,12 +376,18 @@ describe("tableKind.serialize — index columns and where (v3, D51)", () => {
 			}),
 		);
 		const snapshot = asTableSnapshot(tableKind.serialize(getTableMeta(posts)));
-		expect(snapshot.indexes[0]).toEqual({
-			name: "posts_slug_published_uidx",
-			columns: [{ name: "slug" }],
-			unique: true,
-			where: '"app"."posts"."published_at" is not null',
-		});
+		const [firstIndex] = snapshot.indexes;
+		if (firstIndex === undefined) {
+			throw new Error("expected one index");
+		}
+		expect(firstIndex.name).toBe("posts_slug_published_uidx");
+		expect(firstIndex.columns).toEqual([{ name: "slug" }]);
+		expect(firstIndex.unique).toBe(true);
+		// where is a structured node (D67/D70); assert the final SQL via
+		// indexWhere, the same accessor emit uses.
+		expect(indexWhere(firstIndex)).toBe(
+			'"app"."posts"."published_at" is not null',
+		);
 	});
 });
 

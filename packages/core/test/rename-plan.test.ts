@@ -22,6 +22,8 @@ import {
 	uuid,
 	varchar,
 } from "../src";
+import type { PolicySnapshot } from "../src/kinds/policy-kind";
+import { policyUsing } from "../src/kinds/policy-kind";
 
 const app = schema("app");
 const registry = createDefaultRegistry();
@@ -709,17 +711,21 @@ describe("planRenames — cross-table exists() retargeting (#110, currently brok
 		});
 		expect(plan.errors).toEqual([]);
 
-		const policyNode = plan.rewrittenPrevious.objects[
-			"policy:app.comments.comments_read_visible"
-		] as { readonly using: string };
+		const policyNode =
+			plan.rewrittenPrevious.objects[
+				"policy:app.comments.comments_read_visible"
+			];
 		expect(policyNode).toBeDefined();
 
-		// Current (broken) behavior: the policy's `using` text still says
-		// "posts", not "articles" -- rename-plan.ts never touches policy
-		// nodes. This assertion documents the gap; #110's fix (later in
-		// this PR) makes it say "articles" instead, and this test is
-		// updated alongside that fix (see PR body for before/after).
-		expect(policyNode.using).toContain('"posts"');
-		expect(policyNode.using).not.toContain('"articles"');
+		// Current (broken) behavior: the policy's `using` -- now a
+		// structured node (D67/D70), decoded and rendered back to SQL
+		// text via the same accessor emit uses -- still says "posts",
+		// not "articles". rename-plan.ts never touches policy nodes yet.
+		// This assertion documents the gap; #110's fix (later in this
+		// PR) makes it say "articles" instead, and this test is updated
+		// alongside that fix (see PR body for before/after).
+		const usingSql = policyUsing(policyNode as PolicySnapshot);
+		expect(usingSql).toContain('"posts"');
+		expect(usingSql).not.toContain('"articles"');
 	});
 });

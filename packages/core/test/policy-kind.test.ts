@@ -3,12 +3,47 @@ import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
+import { encodeExprNode } from "../src/expr/codec";
 import { eq } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
-import { policyKind } from "../src/kinds/policy-kind";
+import { policyKind, policyUsing } from "../src/kinds/policy-kind";
 import { exists, select } from "../src/query/select";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
+
+// #110: using/withCheck are now structured expression nodes (D67/D70), not
+// pre-rendered SQL text -- these three helpers build the encoded node form
+// for tests below that hand-construct a PolicySnapshot directly (rather
+// than going through the DSL, which already produces this shape).
+const notNullExpr = (
+	schemaName: string,
+	tableName: string,
+	columnName: string,
+) =>
+	encodeExprNode({
+		nodeKind: "nullTest",
+		negated: true,
+		operand: { nodeKind: "columnRef", schemaName, tableName, columnName },
+	});
+
+const columnEqualsStringExpr = (
+	schemaName: string,
+	tableName: string,
+	columnName: string,
+	value: string,
+) =>
+	encodeExprNode({
+		nodeKind: "comparison",
+		operator: "=",
+		left: { nodeKind: "columnRef", schemaName, tableName, columnName },
+		right: { nodeKind: "literal", literal: { literalKind: "string", value } },
+	});
+
+const booleanLiteralExpr = (value: boolean) =>
+	encodeExprNode({
+		nodeKind: "literal",
+		literal: { literalKind: "boolean", value },
+	});
 
 const app = schema("app");
 const registry = createDefaultRegistry();
@@ -27,7 +62,7 @@ describe("policyKind.emit", () => {
 				permissive: true,
 				command: "select",
 				roles: ["anon"],
-				using: `"app"."posts"."published_at" is not null`,
+				using: notNullExpr("app", "posts", "published_at"),
 				withCheck: null,
 			},
 			notes: [],
@@ -52,7 +87,7 @@ describe("policyKind.emit", () => {
 				command: "insert",
 				roles: ["anon", "authenticated"],
 				using: null,
-				withCheck: `"app"."posts"."status" = 'draft'`,
+				withCheck: columnEqualsStringExpr("app", "posts", "status", "draft"),
 			},
 			notes: [],
 		});
@@ -75,7 +110,7 @@ describe("policyKind.emit", () => {
 				permissive: true,
 				command: "select",
 				roles: ["public"],
-				using: "true",
+				using: booleanLiteralExpr(true),
 				withCheck: null,
 			},
 			notes: [],
@@ -142,10 +177,11 @@ describe("policyKind.serialize", () => {
 		if (policy === undefined) {
 			throw new Error("expected one policy");
 		}
-		const snapshot = policyKind.serialize(policy) as {
-			using: string | null;
-		};
-		expect(snapshot.using).toBe(
+		const snapshot = policyKind.serialize(policy);
+		// using is a structured node (D67/D70); decode+render via the same
+		// accessor emit uses, so this keeps asserting final SQL text
+		// rather than the node's internal shape.
+		expect(policyUsing(snapshot as Parameters<typeof policyUsing>[0])).toBe(
 			`exists (select 1 from "app"."posts" where "app"."posts"."id" = "app"."comments"."post_id")`,
 		);
 	});

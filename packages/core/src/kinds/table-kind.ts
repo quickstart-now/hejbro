@@ -5,10 +5,11 @@ import type {
 	TableDeclaration,
 } from "../dsl/table";
 import type { ExprNode } from "../expr/ast";
-import { renderExpr } from "../expr/render-sql";
+import { encodeExprNode } from "../expr/codec";
 import type { KeyedDiff } from "../kind/diff-helpers";
 import { diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
+import type { JsonValue } from "../snapshot/stable-json";
 import type { ColumnState } from "../types/column-builder";
 import { emitTableSql } from "./table-kind-emit";
 import type {
@@ -54,12 +55,14 @@ const resolveIndexName = (
 	);
 };
 
-/** Renders a column's default expression to SQL text (D16) — `null` when the column has no default. */
-const renderColumnDefaultExpr = (columnState: ColumnState): string | null => {
+/** Encodes a column's default expression into its snapshot form (D67/D70) — `null` when the column has no default. */
+const encodeColumnDefaultExpr = (
+	columnState: ColumnState,
+): JsonValue | null => {
 	if (columnState.defaultValue === null) {
 		return null;
 	}
-	return renderExpr(columnState.defaultValue);
+	return encodeExprNode(columnState.defaultValue);
 };
 
 /** `{ notNull: true }` when the column is not-null, else `{}` — the compact-snapshot building block (Task 3 audit / D33): a `false`-default field is never recorded. */
@@ -88,9 +91,9 @@ const columnUniqueField = (value: boolean): Pick<ColumnSnapshot, "unique"> => {
 	return { unique: true };
 };
 
-/** `{ default: <sql> }` when the column has a default, else `{}` (compact snapshot). */
+/** `{ default: <node> }` when the column has a default, else `{}` (compact snapshot). */
 const defaultField = (
-	value: string | null,
+	value: JsonValue | null,
 ): Pick<ColumnSnapshot, "default"> => {
 	if (value === null) {
 		return {};
@@ -126,8 +129,8 @@ const indexColumnNullsField = (
 	return { nulls: value };
 };
 
-/** `{ where: <sql> }` when the index has a partial predicate, else `{}` (compact snapshot). */
-const whereField = (value: string | null): Pick<IndexSnapshot, "where"> => {
+/** `{ where: <node> }` when the index has a partial predicate, else `{}` (compact snapshot). */
+const whereField = (value: JsonValue | null): Pick<IndexSnapshot, "where"> => {
 	if (value === null) {
 		return {};
 	}
@@ -163,7 +166,7 @@ const serializeColumns = (
 		...notNullField(materializeNotNull(entry.columnState)),
 		...primaryKeyField(entry.columnState.primaryKey),
 		...columnUniqueField(entry.columnState.unique),
-		...defaultField(renderColumnDefaultExpr(entry.columnState)),
+		...defaultField(encodeColumnDefaultExpr(entry.columnState)),
 	}));
 
 const serializeIndexColumn = (
@@ -174,12 +177,12 @@ const serializeIndexColumn = (
 	...indexColumnNullsField(column.nulls),
 });
 
-/** Renders a partial index's predicate to SQL text — `null` when the index has none (V1: fully-qualified columns, same as `renderExpr` everywhere else). */
-const renderPredicate = (predicate: ExprNode | null): string | null => {
+/** Encodes a partial index's predicate into its snapshot form — `null` when the index has none. */
+const encodePredicate = (predicate: ExprNode | null): JsonValue | null => {
 	if (predicate === null) {
 		return null;
 	}
-	return renderExpr(predicate);
+	return encodeExprNode(predicate);
 };
 
 const serializeIndexes = (
@@ -189,7 +192,7 @@ const serializeIndexes = (
 		name: resolveIndexName(declaration.tableName, index),
 		columns: index.columns.map(serializeIndexColumn),
 		...indexUniqueField(index.unique),
-		...whereField(renderPredicate(index.predicate)),
+		...whereField(encodePredicate(index.predicate)),
 	}));
 
 const serializeForeignKeys = (
@@ -212,7 +215,7 @@ const serializeChecks = (
 ): ReadonlyArray<CheckSnapshot> =>
 	declaration.checks.map((check) => ({
 		name: check.checkName,
-		expression: renderExpr(check.expression),
+		expression: encodeExprNode(check.expression),
 	}));
 
 /** `{ checks }` when the table declares any, else `{}` — absent means "none" (compact snapshot). */
