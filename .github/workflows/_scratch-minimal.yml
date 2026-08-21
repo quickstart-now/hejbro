@@ -1,0 +1,16 @@
+name: scratch-minimal
+on:
+  push:
+    branches: [phase8-release-workflows-version-proof]
+concurrency:
+  group: scratch-minimal-test
+  cancel-in-progress: false
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  version:
+    if: github.repository == 'quickstart-now/hejbro'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
