@@ -202,6 +202,8 @@ export const posts = table(app, "posts", {
 }));
 ```
 
+A column's `notNull` in the snapshot is not always exactly what was chained: `.primaryKey()` implies it, and so does a `serial`/`smallserial`/`bigserial` type (D66) — the pseudo-type sugar itself carries the constraint in Postgres, independent of primary-key status, so a bare `serial()` column materializes as not-null even without `.notNull()` chained.
+
 ### 5.2 Functions (RPCs) — builder DSL
 
 ```ts
