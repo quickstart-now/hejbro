@@ -29,6 +29,11 @@ if [ -n "$SEED_FILE" ]; then
   psql -d fresh < "$SEED_FILE"
 fi
 
+# "|| true" keeps a no-match glob from tripping set -e/pipefail before the
+# guard below gets to print its own message.
+CHAIN_COUNT="$(ls -1 "$EXAMPLE_DIR"/migrations/*.sql 2>/dev/null | wc -l | tr -d ' ' || true)"
+[ "$CHAIN_COUNT" -ge 1 ] || { echo "no committed migrations in $EXAMPLE_DIR/migrations — nothing to compare" >&2; exit 2; }
+
 echo "== applying committed chain to 'chain'"
 for f in "$EXAMPLE_DIR"/migrations/*.sql; do
   echo "   $(basename "$f")"
@@ -37,18 +42,29 @@ done
 
 echo "== generating one fresh migration from the live declarations"
 cp -R "$EXAMPLE_DIR" "$WORK/example"
-rm -rf "$WORK/example/migrations" "$WORK/example/node_modules"
+# the fresh path must start from an empty snapshot (D48): keep the committed one
+# out of the copy, so init creates a real one and generate has something to
+# diff against — otherwise init skips it and generate silently reports zero
+# changes, defeating the two-path comparison. Assumes the example's default
+# `snapshotPath` (hejbro.snapshot.json); reading it from hejbro.config.ts is
+# a follow-up if an example ever overrides it.
+rm -rf "$WORK/example/migrations" "$WORK/example/node_modules" "$WORK/example/hejbro.snapshot.json"
 cp "$EXAMPLE_DIR/hejbro.snapshot.json" "$WORK/final.snapshot.json"
 (cd "$WORK/example" && mkdir -p node_modules && ln -s "$EXAMPLE_DIR/node_modules/hejbro" node_modules/hejbro \
   && node "$CLI" init >/dev/null && node "$CLI" generate >/dev/null)
+FRESH_COUNT="$(ls -1 "$WORK"/example/migrations/*.sql 2>/dev/null | wc -l | tr -d ' ' || true)"
+[ "$FRESH_COUNT" -eq 1 ] || { echo "fresh generate produced $FRESH_COUNT migrations (expected exactly 1) — the two-path comparison did not run" >&2; exit 1; }
 FRESH="$(ls "$WORK"/example/migrations/*.sql)"
+echo "   fresh migration: $(basename "$FRESH")"
 psql -d fresh < "$FRESH"
 cmp -s "$WORK/final.snapshot.json" "$WORK/example/hejbro.snapshot.json" || { echo "snapshot from fresh generate differs from the committed snapshot" >&2; exit 1; }
+echo "   snapshot reproduced"
 
 dump() { docker exec "$CONTAINER" pg_dump -U postgres -d "$1" --schema-only --no-owner --schema=app \
   | grep -vE '^(SET |SELECT pg_catalog\.set_config|--|\\restrict|\\unrestrict|$)'; }
 dump chain > "$WORK/chain.sql"
 dump fresh > "$WORK/fresh.sql"
+grep -q 'CREATE TABLE' "$WORK/chain.sql" || { echo "chain dump contains no tables — the comparison would be vacuous" >&2; exit 1; }
 
 echo "== diff (chain vs fresh)"
 if diff -u "$WORK/chain.sql" "$WORK/fresh.sql"; then
