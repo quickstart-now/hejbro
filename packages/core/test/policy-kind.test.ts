@@ -185,6 +185,58 @@ describe("policyKind.serialize", () => {
 			`exists (select 1 from "app"."posts" where "app"."posts"."id" = "app"."comments"."post_id")`,
 		);
 	});
+
+	// #110 item 22: pins the validating side effect of the renderExpr call
+	// encodeClauseExpr keeps for its result-discarding call (see the doc
+	// comment on encodeClauseExpr, policy-kind.ts). assertOwnColumnsOnly
+	// (dsl/rls.ts) doesn't descend into exists(), so a bad ref buried
+	// inside a correlated subquery reaches declaration time unrejected --
+	// this is the ONLY thing that catches it, and only because encoding
+	// still renders (and discards) the expression first. If that call is
+	// ever deleted as apparently-dead code, this test goes red.
+	it("rejects a correlated exists() referencing a third table outside both the subquery's own scope and the outer policy's table, at serialize time", () => {
+		const otherTable = table(app, "other_table", {
+			id: uuid().primaryKey().defaultRandom(),
+			flag: uuid().notNull(),
+		});
+		const comments = table(app, "comments3", {
+			id: uuid().primaryKey().defaultRandom(),
+			postId: uuid().notNull(),
+		});
+		const posts = table(
+			app,
+			"posts3",
+			{ id: uuid().primaryKey().defaultRandom() },
+			() => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("bad_cross_reference")
+						.for("select")
+						.to("anon")
+						.using(
+							exists(select(comments).where(eq(otherTable.flag, comments.id))),
+						),
+				}),
+			}),
+		);
+
+		// assertOwnColumnsOnly (declaration time) doesn't descend into
+		// exists(), so the declaration itself succeeds -- confirming the
+		// blind spot encodeClauseExpr's renderExpr call is the only thing
+		// that closes.
+		const meta = getTableMeta(posts);
+		if (meta.rls === null) {
+			throw new Error("expected rls declaration");
+		}
+		const [policy] = meta.rls.policies;
+		if (policy === undefined) {
+			throw new Error("expected one policy");
+		}
+
+		expect(() => policyKind.serialize(policy)).toThrowError(
+			expect.objectContaining({ code: "foreign-column-ref" }),
+		);
+	});
 });
 
 describe("policyKind.diff", () => {

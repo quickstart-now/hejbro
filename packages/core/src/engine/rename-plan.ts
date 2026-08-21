@@ -711,29 +711,6 @@ const rewriteForeignKeyReferenceColumn = (
 		});
 	}, objects);
 
-/**
- * Retargets every stored expression node (D67/D70) that mentions the
- * renamed table/column — column default, CHECK expression, partial index
- * `where`, and every table's policies' `using`/`withCheck` — across the
- * *whole* snapshot, not just the renamed table's own node. This is the
- * point of storing expressions structurally instead of as rendered text:
- * without it, a rename leaves stale identifiers behind wherever an
- * expression mentioned the old name.
- *
- * Full-scan, mirroring {@link rewriteForeignKeyTargets}'s established
- * pattern (this codebase already accepts that cost for foreign keys) --
- * a `using`/`withCheck` clause can `exists()` into *another* table
- * (rls.ts's own validator message teaches exactly this: "reach other
- * tables through exists()"), so a table rename can affect a policy
- * declared on a completely different table. Confirmed unreachable any
- * other way by direct reproduction before this function existed (#110
- * item 18) -- renaming the exists()-referenced table left the other
- * table's policy pointing at the old name, with nothing else catching it.
- *
- * Every retarget call returns the exact same object reference when
- * nothing matched, so `!==` cheaply detects "did anything change" without
- * a separate deep-equality pass.
- */
 /** `null` when `field` is absent (nothing to retarget) or unaffected (retargeting was a no-op) — `retargetExprNode` returns the exact same reference in that case, so this never re-encodes a node that didn't actually change. */
 const retargetField = (
 	field: JsonValue | undefined,

@@ -75,6 +75,20 @@ export const retargetExprNode = (
 				target.oldColumn !== null && node.columnName === target.oldColumn
 					? (target.newColumn ?? node.columnName)
 					: node.columnName;
+			// A table rename always changes schema/table, so this branch is
+			// reached meaning something changed -- but a column rename sets
+			// oldSchema===newSchema/oldTable===newTable, so a ref on the
+			// SAME table but a DIFFERENT column matches the schema/table
+			// check above without actually changing. Every value must be
+			// compared, not just "did we match the target" -- matching the
+			// invariant every other node kind in this file already keeps.
+			if (
+				node.schemaName === target.newSchema &&
+				node.tableName === target.newTable &&
+				node.columnName === columnName
+			) {
+				return node;
+			}
 			return {
 				...node,
 				schemaName: target.newSchema,

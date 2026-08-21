@@ -82,6 +82,24 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 		expect(retargetExprNode(node, tableRenameTarget)).toBe(node);
 	});
 
+	// #110 item 23/24: on a COLUMN rename (oldSchema===newSchema,
+	// oldTable===newTable), a columnRef on the same table but a DIFFERENT
+	// column must come back as the exact same reference -- schema/table
+	// matching the rename target is not enough on its own to mean "this
+	// node changed". retarget.ts:56 and rename-plan.ts's own doc comments
+	// assert this identity invariant for every composite node; this is
+	// the one case that was violating it (fixed in the same commit as
+	// this test -- see the PR body for the red-then-green order).
+	it("returns the exact same reference for an unrelated column on a column rename (not just an unrelated table)", () => {
+		const node: ExprNode = {
+			nodeKind: "columnRef",
+			schemaName: "app",
+			tableName: "posts",
+			columnName: "subtitle",
+		};
+		expect(retargetExprNode(node, columnRenameTarget)).toBe(node);
+	});
+
 	it("retargets a columnRef nested arbitrarily deep (logical/not/inList/between/functionCall/sqlTemplate)", () => {
 		const ref: ExprNode = {
 			nodeKind: "columnRef",
