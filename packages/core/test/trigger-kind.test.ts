@@ -41,7 +41,7 @@ describe("triggerKind", () => {
 			timing: string;
 			events: ReadonlyArray<unknown>;
 			forEach: string;
-			functionName: string;
+			function: string;
 		};
 		expect(snapshot).toEqual({
 			schema: "app",
@@ -50,7 +50,7 @@ describe("triggerKind", () => {
 			timing: "before",
 			events: [{ event: "insert" }],
 			forEach: "row",
-			functionName: "comments_single_depth_fn",
+			function: "comments_single_depth_fn",
 		});
 	});
 

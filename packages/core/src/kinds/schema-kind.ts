@@ -5,7 +5,7 @@ import type { JsonValue } from "../snapshot/stable-json";
 import { quoteIdentifier } from "../sql/identifier";
 import { statement } from "../sql/statement";
 
-type SchemaSnapshot = { readonly schemaName: string };
+type SchemaSnapshot = { readonly name: string };
 
 // Internal invariant: this shape is exactly what schemaKind.serialize below produces.
 const asSchemaSnapshot = (snapshot: JsonValue): SchemaSnapshot =>
@@ -20,8 +20,8 @@ export const schemaKind: ObjectKind<SchemaDeclaration> = {
 	dependsOn: [],
 	owns: (declaration): declaration is SchemaDeclaration =>
 		declaration.declarationKind === "schema",
-	serialize: (declaration) => ({ schemaName: declaration.schemaName }),
-	identify: (snapshot) => asSchemaSnapshot(snapshot).schemaName,
+	serialize: (declaration) => ({ name: declaration.schemaName }),
+	identify: (snapshot) => asSchemaSnapshot(snapshot).name,
 	diff: (previous, next, identity) => {
 		if (previous === null && next !== null) {
 			return [
@@ -60,7 +60,7 @@ export const schemaKind: ObjectKind<SchemaDeclaration> = {
 				}
 				return [
 					statement(
-						`create schema ${quoteIdentifier(asSchemaSnapshot(change.next).schemaName)};`,
+						`create schema ${quoteIdentifier(asSchemaSnapshot(change.next).name)};`,
 					),
 				];
 			}
@@ -73,7 +73,7 @@ export const schemaKind: ObjectKind<SchemaDeclaration> = {
 				}
 				return [
 					statement(
-						`drop schema ${quoteIdentifier(asSchemaSnapshot(change.previous).schemaName)};`,
+						`drop schema ${quoteIdentifier(asSchemaSnapshot(change.previous).name)};`,
 					),
 				];
 			}
