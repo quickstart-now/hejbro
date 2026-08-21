@@ -82,48 +82,85 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 		expect(retargetExprNode(node, tableRenameTarget)).toBe(node);
 	});
 
-	// #110 item 23/24: on a COLUMN rename (oldSchema===newSchema,
-	// oldTable===newTable), a columnRef on the same table but a DIFFERENT
-	// column must come back as the exact same reference -- schema/table
-	// matching the rename target is not enough on its own to mean "this
-	// node changed". retarget.ts:56 and rename-plan.ts's own doc comments
-	// assert this identity invariant for every composite node; this is
-	// the one case that was violating it (fixed in the same commit as
-	// this test -- see the PR body for the red-then-green order).
-	it("returns the exact same reference for an unrelated column on a column rename (not just an unrelated table)", () => {
-		const node: ExprNode = {
-			nodeKind: "columnRef",
-			schemaName: "app",
-			tableName: "posts",
-			columnName: "subtitle",
-		};
-		expect(retargetExprNode(node, columnRenameTarget)).toBe(node);
-	});
+	// #110 item 23/24, reviewer round 2: on a COLUMN rename
+	// (oldSchema===newSchema, oldTable===newTable), EVERY reference-bearing
+	// node kind that mentions the same table but is otherwise unaffected
+	// must come back as the exact SAME reference -- schema/table matching
+	// the rename target is not enough on its own to mean "this node
+	// changed" (a table rename always changes schema/table, so reaching a
+	// match branch there always means something changed; a column rename
+	// does not have that property).
+	//
+	// This was fixed twice, for two DIFFERENT node kinds, because the first
+	// test (a bare `columnRef` case) only exercised `retargetExprNode`'s own
+	// `columnRef` branch and never `retargetTableRef` -- a structurally
+	// different function, reached only through `exists()`'s `from`/`join`,
+	// with its own separate (and separately buggy) copy of the same
+	// comparison. Adding cases one at a time as gaps are found is exactly
+	// how the second bug was missed the first time; this table instead
+	// enumerates every reference-bearing node SHAPE once, in one place, so
+	// a future reference-bearing node kind has an obvious slot to add
+	// itself into rather than a new one-off `it` block.
+	const unrelatedColumnRenameCases: ReadonlyArray<readonly [string, ExprNode]> =
+		[
+			[
+				"columnRef (retargetExprNode's own columnRef branch)",
+				{
+					nodeKind: "columnRef",
+					schemaName: "app",
+					tableName: "posts",
+					columnName: "subtitle",
+				},
+			],
+			[
+				"exists()'s query.from (TableRefNode via retargetSelectNode -> retargetTableRef)",
+				{
+					nodeKind: "exists",
+					negated: false,
+					query: {
+						queryKind: "select",
+						projection: { projectionKind: "constantOne" },
+						from: { schemaName: "app", tableName: "posts" },
+						joins: [],
+						where: null,
+						orderBy: [],
+						limit: null,
+					},
+				},
+			],
+			[
+				"exists()'s join.table (TableRefNode via retargetSelectNode -> retargetJoin -> retargetTableRef, a different call site than query.from)",
+				{
+					nodeKind: "exists",
+					negated: false,
+					query: {
+						queryKind: "select",
+						projection: { projectionKind: "constantOne" },
+						from: { schemaName: "app", tableName: "comments" },
+						joins: [
+							{
+								joinKind: "inner",
+								table: { schemaName: "app", tableName: "posts" },
+								on: {
+									nodeKind: "literal",
+									literal: { literalKind: "boolean", value: true },
+								},
+							},
+						],
+						where: null,
+						orderBy: [],
+						limit: null,
+					},
+				},
+			],
+		];
 
-	// reviewer finding: retargetTableRef (used for exists()'s from/join
-	// table, not columnRef) had the exact same identity bug as columnRef
-	// did before the earlier fix in this file -- a column rename sets
-	// oldTable===newTable, so any TableRefNode on that table matched
-	// without anything actually changing, and still got rebuilt. This is
-	// why the earlier column-rename identity test (above) wasn't enough:
-	// it only exercised a bare columnRef, never a TableRefNode reached
-	// through exists()/joins.
-	it("returns the exact same reference for an exists() subquery on a column rename (TableRefNode, not just ColumnRefNode)", () => {
-		const node: ExprNode = {
-			nodeKind: "exists",
-			negated: false,
-			query: {
-				queryKind: "select",
-				projection: { projectionKind: "constantOne" },
-				from: { schemaName: "app", tableName: "posts" },
-				joins: [],
-				where: null,
-				orderBy: [],
-				limit: null,
-			},
-		};
-		expect(retargetExprNode(node, columnRenameTarget)).toBe(node);
-	});
+	it.each(unrelatedColumnRenameCases)(
+		"returns the exact same reference on an unrelated column rename: %s",
+		(_label, node) => {
+			expect(retargetExprNode(node, columnRenameTarget)).toBe(node);
+		},
+	);
 
 	it("retargets a columnRef nested arbitrarily deep (logical/not/inList/between/functionCall/sqlTemplate)", () => {
 		const ref: ExprNode = {

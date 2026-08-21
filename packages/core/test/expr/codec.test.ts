@@ -322,6 +322,28 @@ describe("expr codec — round-trip", () => {
 		expect(projectionKindOffenders).toEqual([]);
 	});
 
+	// reviewer round 2 (item 65's sibling, 🔴2a): "is kebab-case in
+	// isolation" is a weaker check than it looks -- a single-segment value
+	// like "columnref" (no hyphen) is valid kebab syntax too, so the check
+	// above wouldn't catch a spelling that's kebab-*shaped* but wrong. This
+	// computes the expected spelling independently from each map's own KEY
+	// (the same transform D70 documents: split camelCase word boundaries,
+	// lower-case, hyphenate) and asserts every VALUE equals it exactly --
+	// pinning the map's own internal consistency, not just its syntax.
+	const camelToKebab = (key: string): string =>
+		key.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+
+	it("every value in the encoding maps is exactly the kebab-case transform of its own key (not just kebab-shaped)", () => {
+		const nodeKindOffenders = Object.entries(NODE_KIND_TO_SNAPSHOT).filter(
+			([key, value]) => value !== camelToKebab(key),
+		);
+		const projectionKindOffenders = Object.entries(
+			PROJECTION_KIND_TO_SNAPSHOT,
+		).filter(([key, value]) => value !== camelToKebab(key));
+		expect(nodeKindOffenders).toEqual([]);
+		expect(projectionKindOffenders).toEqual([]);
+	});
+
 	// reviewer finding: decodeJoin/decodeSelectNode were fail-open --
 	// they called asRecord to confirm the node is an object, then
 	// hard-coded joinKind: "inner" / queryKind: "select" without ever
@@ -332,6 +354,20 @@ describe("expr codec — round-trip", () => {
 	// changing corruption. decodeProjection/decodeLiteral/
 	// decodeSqlTemplateChunk all validate and throw on an unrecognized
 	// value; these two now match that pattern.
+	//
+	// Reviewer round 2 sharpened the red-first reproduction of this exact
+	// symptom: decoding `{ joinKind: "left", ... }` against the pre-fix
+	// code and asserting the RESULT equals `"left"` is red for a reason
+	// that "expect a throw" alone doesn't show -- it fails with
+	// `Expected: "left", Received: "inner"`, i.e. the decoder didn't
+	// merely fail to validate, it silently substituted a *different*,
+	// wrong value. (Reproduced directly against the pre-fix decodeJoin
+	// from commit f9b3523, then cleaned up -- not kept as a permanent
+	// test, since JoinNode's type has only ever had the "inner" variant:
+	// once the fix makes the decoder reject anything else, "assert the
+	// result equals left" can no longer be the shape of a passing test --
+	// the assertion below, "rejects instead of silently decoding wrong",
+	// is what a decoder that validates its input looks like.)
 	it("rejects an unrecognized joinKind instead of silently decoding as inner", () => {
 		const malformed = {
 			nodeKind: "exists",

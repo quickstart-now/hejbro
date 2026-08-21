@@ -99,15 +99,44 @@ a discriminator value the fixture never exercises (found in #110 review:
 `"rawSql"`, camelCase, not kebab — went unnoticed by both this walker
 *and* the codec's round-trip tests, since encode/decode share one map, so
 a wrong-but-consistent spelling round-trips clean) unless something else
-also checks the map's own values. `expr/codec.test.ts` closes that:
-it asserts every value in `NODE_KIND_TO_SNAPSHOT`/
-`PROJECTION_KIND_TO_SNAPSHOT` is kebab-case directly, independent of what
-any test declaration constructs — the map *is* the whole vocabulary.
-The two are complementary, not redundant: the map test covers every
-discriminator regardless of whether any test happens to build it; the
-snapshot walker covers a discriminator that reaches an artifact through
-a path the map doesn't own (there is none today, but the walker is the
-backstop if one is ever added).
+also checks the map's own values. Closing that took two more layers, not
+one, because a single "is kebab-case" check on the map's values still
+missed a wrong-but-kebab-*shaped* spelling, and even a value-correct map
+doesn't prove every entry is ever actually reached:
+
+1. **Map-value correctness** (`expr/codec.test.ts`): every value in
+   `NODE_KIND_TO_SNAPSHOT`/`PROJECTION_KIND_TO_SNAPSHOT` is asserted to
+   equal the kebab-case transform of its *own key* (not just "is
+   kebab-shaped" in isolation, which a single-segment typo like
+   `"columnref"` would pass) — independent of what any test declaration
+   constructs, since the map *is* the whole vocabulary.
+2. **Map-key-set completeness** (`naming-conventions.test.ts`): the D70
+   fixture is built to exercise every reachable node/projection kind at
+   least once, and a dedicated assertion checks the map's key set equals
+   (what that fixture's walker actually saw) ∪ (an explicit, categorized
+   `UNREACHABLE_NODE_KINDS`/`UNREACHABLE_PROJECTION_KINDS` list, each
+   entry carrying a one-line reason — never a bare allowlist, the exact
+   pattern #87 already rejected once). Entries whose unreachability is a
+   *structural* fact (`plpgsqlRef` — the DSL has no code path that could
+   ever build one outside a plpgsql body) are prose-only. Entries whose
+   unreachability depends on some *other* function's *current* behavior
+   (`allColumns`/`columns` — unreachable only because `query/select.ts`'s
+   `buildExists` currently overwrites every subquery's projection with
+   `constantOne`) are backed by an actual pinning test asserting that
+   behavior, so that changing it turns the pinning test red first and
+   forces the list to be revisited — the same staleness failure mode this
+   whole completeness check exists to prevent, recurring one level up
+   inside its own exemption list, closed the same way.
+
+The three are complementary, not redundant: the snapshot walker covers a
+discriminator that reaches an artifact through a path the map doesn't own
+(there is none today, but it's the backstop if one is ever added); the
+map-value test covers every discriminator's *spelling* regardless of
+whether any test happens to build it; the completeness test covers every
+discriminator's *reachability*, so a brand-new node/projection kind that's
+added to the map but never wired into anything the fixture builds — and
+never added to the unreachable list — fails loudly instead of silently
+passing every other check.
 
 Machine enforcement of the TypeScript layer is a follow-up: Biome's
 `useNamingConvention` is not enabled yet because it currently reports 62

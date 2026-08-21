@@ -12,10 +12,12 @@ instead of leaving stale text behind. Rendered SQL output is
 unaffected: the same `renderExpr` produces the same text at emit
 time, now from a decoded node instead of a stored string.
 
-**No format-version bump** (this wave's version already opened the
-door for this in `phase8-snapshot-v5`), but this is a breaking shape
-change with no compatibility shim: a committed snapshot written before
-this change, containing any of these four fields, will fail with
+**No format-version bump.** `v5` was opened by #152 for this change
+(D68); a snapshot generated in the intermediate `dev` state between
+#152 and #153 is not supported — no published version ever produced
+such a snapshot. A committed snapshot containing any of these four
+fields as pre-rendered SQL text (the only shape any published version
+of `v5`, or any earlier format version, ever wrote) will fail with
 `error[malformed-snapshot-node]` when read by `hejbro generate` —
 confirmed by reading a real snapshot from immediately before this
 change. hejbro makes no snapshot-compatibility promise before 1.0
