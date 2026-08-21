@@ -14,7 +14,10 @@ import {
 	indexWhere,
 } from "../src/kinds/table-snapshot";
 import {
+	bigserial,
 	integer,
+	serial,
+	smallserial,
 	text,
 	timestamptz,
 	uuid,
@@ -54,6 +57,42 @@ describe("tableKind.serialize", () => {
 			}>;
 		};
 		expect(snapshot.columns[0]?.notNull).toBe(true);
+	});
+
+	// #23/D66 (measured against a real Postgres, not assumed): serial/
+	// smallserial/bigserial always imply NOT NULL on the column, independent
+	// of primaryKey status -- confirmed via `pg_dump` on a table declaring
+	// bigserial/smallserial columns with neither .primaryKey() nor
+	// .notNull() chained; pg_dump still showed NOT NULL on both. None of
+	// the three serial factories set `notNull` on their own
+	// (`column-builder-factories.ts`'s `initialColumnBuilder` defaults it to
+	// `false` for every simple type), so without this, a bare `serial()`/
+	// `bigserial()`/`smallserial()` column (no `.primaryKey()`, no
+	// `.notNull()`) would materialize as nullable -- a real column a real
+	// Postgres would never let exist, since the pseudo-type sugar itself
+	// carries the constraint.
+	it("materializes notNull for serial/smallserial/bigserial, independent of primaryKey", () => {
+		const widgets = table(app, "widgets", {
+			id: serial(),
+			bigId: bigserial(),
+			smallId: smallserial(),
+			label: text(),
+		});
+		const snapshot = tableKind.serialize(getTableMeta(widgets)) as {
+			readonly columns: ReadonlyArray<{
+				readonly name: string;
+				readonly notNull?: boolean;
+			}>;
+		};
+		const byName = new Map(
+			snapshot.columns.map((column) => [column.name, column]),
+		);
+		expect(byName.get("id")?.notNull).toBe(true);
+		expect(byName.get("big_id")?.notNull).toBe(true);
+		expect(byName.get("small_id")?.notNull).toBe(true);
+		// a genuinely nullable column stays compact (D33) -- not touched by
+		// the serial-family rule, still absent rather than `false`.
+		expect(byName.get("label")?.notNull).toBeUndefined();
 	});
 
 	it("derives deterministic index and foreign key names", () => {

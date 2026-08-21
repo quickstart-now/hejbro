@@ -31,6 +31,12 @@ export const simpleTypeNames = [
 /** @see simpleTypeNames */
 export type SimpleTypeName = (typeof simpleTypeNames)[number];
 
+/** The three `serial`-family pseudo-types (#23/D66) — Postgres `CREATE TABLE`/`ADD COLUMN` sugar for an owned sequence plus a `nextval(...)` default, never a real storable column type (`alter column … type serial` is rejected outright — confirmed against a real Postgres, not assumed). */
+export const serialTypeNames = ["serial", "smallserial", "bigserial"] as const;
+
+/** @see serialTypeNames */
+export type SerialTypeName = (typeof serialTypeNames)[number];
+
 /**
  * A structured Postgres column type. Discriminated by `typeName`: most
  * shapes are parameterless (see {@link SimpleTypeName}); `varchar`, `char`,
@@ -51,6 +57,10 @@ export type TypeNode =
 			readonly enumName: string;
 	  }
 	| { readonly typeName: "array"; readonly element: TypeNode };
+
+/** True when `node` is one of the three `serial`-family pseudo-types. Takes the whole {@link TypeNode}, not a bare name, since only the simple-type variant can ever be one and every caller already has a `TypeNode` in hand. */
+export const isSerialTypeNode = (node: TypeNode): boolean =>
+	(serialTypeNames as ReadonlyArray<string>).includes(node.typeName);
 
 const renderVarchar = (node: { readonly length: number | null }): string => {
 	if (node.length === null) {

@@ -11,6 +11,7 @@ import { diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { ColumnState } from "../types/column-builder";
+import { isSerialTypeNode } from "../types/type-node";
 import { emitTableSql } from "./table-kind-emit";
 import type {
 	CheckSnapshot,
@@ -34,9 +35,23 @@ export const deriveForeignKeyName = (
 	columns: ReadonlyArray<string>,
 ): string => `${tableName}_${columns.join("_")}_fk`;
 
-/** `primaryKey` implies `notNull` once a column is materialized into a snapshot. */
+/**
+ * `primaryKey` implies `notNull` once a column is materialized into a
+ * snapshot -- and so does a `serial`/`smallserial`/`bigserial` type (#23/
+ * D66): confirmed against a real Postgres (`pg_dump` on a table declaring
+ * `bigserial`/`smallserial` columns with neither `.primaryKey()` nor
+ * `.notNull()` chained still showed `NOT NULL` on both) that the
+ * pseudo-type sugar itself carries the constraint, independent of
+ * primary-key status. None of the three serial factories set `notNull` on
+ * their own construction, so without this, a bare `serial()` column would
+ * materialize as nullable -- a column a real Postgres would never let
+ * exist.
+ */
 const materializeNotNull = (columnState: ColumnState): boolean => {
 	if (columnState.primaryKey) {
+		return true;
+	}
+	if (isSerialTypeNode(columnState.typeNode)) {
 		return true;
 	}
 	return columnState.notNull;
