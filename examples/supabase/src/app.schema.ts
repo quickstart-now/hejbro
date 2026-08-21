@@ -162,6 +162,7 @@ export const attachmentsBucket = storageBucket("attachments", {
 	allowedMimeTypes: ["image/png", "image/jpeg", "application/pdf"],
 });
 
+export const appUsageGrant = grant(app).usage.to(anonRole, authenticatedRole);
 export const appTablesGrant = grant(app)
 	.tables("select")
 	.to(anonRole, authenticatedRole);
@@ -184,6 +185,7 @@ export const declarations: ReadonlyArray<HejbroInput> = [
 	attachmentBlobs,
 	drafts,
 	attachmentsBucket,
+	appUsageGrant,
 	appTablesGrant,
 	appDefaultTablesGrant,
 	profilesPublic,

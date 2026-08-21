@@ -3,8 +3,8 @@
 -- ~ table app.attachments [column "archived_at" added, column "storage_path" dropped]
 -- + rls app.attachment_blobs [new]
 -- + policy app.attachment_blobs.attachment_blobs_read_own [new]
--- parent-snapshot: sha256:00ed3d3867be6b741829328e4dd0e973488887f1407207e39d3af53ed36a99d2
--- snapshot: sha256:27747f79e9a6249ebb06cfef49a6b9947288b4b98bf5509a04de5b6bb116efd9
+-- parent-snapshot: sha256:c0f061001a2e1c7103903d48acc85be7ae94d412e1c6508939d126dcbb31e5f7
+-- snapshot: sha256:b0f5b226dcda3a38e37bcf37859aec7d4ce6627027b42017da53ef36230934d4
 
 create table "app"."attachment_blobs" (
 	"attachment_id" uuid not null,

@@ -34,6 +34,18 @@
 			"role": "authenticated",
 			"schema": "app"
 		},
+		"grant:app.schema-usage.anon": {
+			"grantKind": "schema-usage",
+			"privileges": [],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.schema-usage.authenticated": {
+			"grantKind": "schema-usage",
+			"privileges": [],
+			"role": "authenticated",
+			"schema": "app"
+		},
 		"policy:app.attachment_blobs.attachment_blobs_read_own": {
 			"command": "select",
 			"name": "attachment_blobs_read_own",
