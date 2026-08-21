@@ -30,9 +30,22 @@ export const comments = table(app, "comments", {
  * A 1:1 port of the original hand-written `comments_single_depth` trigger
  * (the original project's migrations, `20260815110756_smiling_whizzer.sql`
  * lines 203–241) — the phase 3 acceptance artifact. The FK from
- * `comments.postId`/`parentId` is omitted here to keep the case focused;
- * the raise messages stay Korean byte-for-byte — they are user data, not
- * GitHub-facing text.
+ * `comments.postId`/`parentId` is omitted here to keep the case focused.
+ *
+ * The raise messages were Korean byte-for-byte from phase 3 through #120,
+ * deliberately: they demonstrated hejbro carries arbitrary multibyte user
+ * data through `bodySql`/`bodyHash` unchanged. #120 revisited that
+ * rationale and translated them to English per AGENTS.md's
+ * GitHub-facing-text rule — a public reference example is GitHub-facing
+ * text, and that rule wins. The multibyte round-trip property didn't go
+ * unproven: it moved to an explicit test,
+ * `test/plpgsql/render-body.test.ts`'s "multibyte body content" describe
+ * block, instead of riding along on this example's language choice.
+ *
+ * `steps.ts` deliberately rephrases the "parent not found" message
+ * differently from the one here (not just re-punctuated) — that wording
+ * difference is what makes step 1's `bodyHash` actually change; see
+ * `steps.ts` for the full rationale.
  */
 export const commentsSingleDepth = defineTrigger(
 	comments,
@@ -55,14 +68,17 @@ export const commentsSingleDepth = defineTrigger(
 			"parent",
 		);
 		ctx.if(isNull(parent.postId), () => {
-			ctx.raise("부모 댓글을 찾을 수 없다 (parent_id=%)", row.parentId);
+			ctx.raise("Parent comment not found (parent_id=%)", row.parentId);
 		});
 		ctx.if(isNotNull(parent.parentId), () => {
-			ctx.raise("답글은 한 단계까지만 달 수 있다 (parent_id=%)", row.parentId);
+			ctx.raise(
+				"Replies can only be nested one level deep (parent_id=%)",
+				row.parentId,
+			);
 		});
 		ctx.if(ne(parent.postId, row.postId), () => {
 			ctx.raise(
-				"답글은 부모와 같은 글에 달아야 한다 (post_id=%, 부모의 post_id=%)",
+				"A reply must belong to the same post as its parent (post_id=%, parent's post_id=%)",
 				row.postId,
 				parent.postId,
 			);
