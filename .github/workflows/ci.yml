@@ -55,6 +55,7 @@ jobs:
       # fetch into the currently checked-out branch," is general, not
       # dev-specific).
       - run: git fetch origin phase8-ci-fetch-guard:phase8-ci-fetch-guard
+        if: github.ref != 'refs/heads/phase8-ci-fetch-guard'
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: "${{ matrix.node-version }}", cache: pnpm }
