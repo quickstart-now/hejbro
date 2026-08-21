@@ -48,6 +48,56 @@ const allowedMimeTypesField = (
 const manualDeletionNote = (bucketName: string): string =>
 	`bucket "${bucketName}" removed from declarations — buckets hold user files, so hejbro emits no delete; remove it manually in Supabase when ready.`;
 
+const publicChangedNote = (
+	previous: StorageBucketSnapshot,
+	next: StorageBucketSnapshot,
+): ReadonlyArray<string> => {
+	if ((previous.public ?? false) === (next.public ?? false)) {
+		return [];
+	}
+	return ["public changed"];
+};
+
+const fileSizeLimitChangedNote = (
+	previous: StorageBucketSnapshot,
+	next: StorageBucketSnapshot,
+): ReadonlyArray<string> => {
+	if (previous.fileSizeLimit === next.fileSizeLimit) {
+		return [];
+	}
+	return ["file size limit changed"];
+};
+
+const allowedMimeTypesChangedNote = (
+	previous: StorageBucketSnapshot,
+	next: StorageBucketSnapshot,
+): ReadonlyArray<string> => {
+	if (
+		sameJson(previous.allowedMimeTypes ?? null, next.allowedMimeTypes ?? null)
+	) {
+		return [];
+	}
+	return ["allowed mime types changed"];
+};
+
+/**
+ * Field-level alter notes (#116) — the banner otherwise had nothing to
+ * say about a bucket alter (`notes: []`, rendered as a bare `[]`, the
+ * only kind that did). Order matches the declaration order in
+ * {@link StorageBucketSnapshot}. `allowedMimeTypes` compares by
+ * `sameJson`, so it's order-sensitive like the rest of the snapshot diff
+ * (matches the top-level `sameJson` check this diff already uses to
+ * decide there's a change at all).
+ */
+const bucketAlterNotes = (
+	previous: StorageBucketSnapshot,
+	next: StorageBucketSnapshot,
+): ReadonlyArray<string> => [
+	...publicChangedNote(previous, next),
+	...fileSizeLimitChangedNote(previous, next),
+	...allowedMimeTypesChangedNote(previous, next),
+];
+
 const renderMimeTypesLiteral = (
 	values: ReadonlyArray<string> | undefined,
 ): string => {
@@ -149,6 +199,8 @@ export const storageBucketKind: ObjectKind<StorageBucketDeclaration> = {
 		if (sameJson(previous, next)) {
 			return [];
 		}
+		const previousSnapshot = asStorageBucketSnapshot(previous);
+		const nextSnapshot = asStorageBucketSnapshot(next);
 		return [
 			{
 				kind: "supabase-storage-bucket",
@@ -156,7 +208,7 @@ export const storageBucketKind: ObjectKind<StorageBucketDeclaration> = {
 				identity,
 				previous,
 				next,
-				notes: [],
+				notes: bucketAlterNotes(previousSnapshot, nextSnapshot),
 			},
 		];
 	},
