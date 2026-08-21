@@ -598,3 +598,80 @@ describe("tableKind.emit — unsupported column alters", () => {
 		expect(() => tableKind.emit(change)).toThrowError(/primary key/i);
 	});
 });
+
+// D74/#23: a serial-family column added to an *existing* table must
+// inline its sequence-backed default into the same `add column` statement
+// -- otherwise `add column ... not null;` alone fails immediately on any
+// table with rows (confirmed directly against a real Postgres). Detected
+// via a sibling `sequence` "create" change matching this column's
+// schema/table/name in `siblingChanges` (tableKind.emit's second,
+// optional argument).
+describe("tableKind.emit — sibling sequence coordination (D74/#23)", () => {
+	const sequenceChange = (column: string): KindChange => ({
+		kind: "sequence",
+		operation: "create",
+		identity: `app.posts_${column}_seq`,
+		previous: null,
+		next: {
+			schema: "app",
+			name: `posts_${column}_seq`,
+			table: "posts",
+			column,
+			baseType: "integer",
+		},
+		notes: [],
+	});
+
+	it("inlines the default when a matching sibling sequence create change is present", () => {
+		const before = table(app, "posts", { title: text() });
+		const after = table(app, "posts", { title: text(), id: integer() });
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
+		const change = expectSingleChange(
+			tableKind.diff(previous, next, "app.posts"),
+		);
+		const statements = tableKind.emit(change, [change, sequenceChange("id")]);
+		expect(statements).toEqual([
+			{
+				sql: `alter table "app"."posts" add column "id" integer default nextval('app.posts_id_seq');`,
+				stage: "main",
+			},
+		]);
+	});
+
+	it("does not inline when no sibling sequence change is present (control -- unaffected majority case)", () => {
+		const before = table(app, "posts", { title: text() });
+		const after = table(app, "posts", { title: text(), subtitle: text() });
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
+		const change = expectSingleChange(
+			tableKind.diff(previous, next, "app.posts"),
+		);
+		expect(tableKind.emit(change, [change])).toEqual([
+			{
+				sql: 'alter table "app"."posts" add column "subtitle" text;',
+				stage: "main",
+			},
+		]);
+	});
+
+	it("does not inline when the sibling sequence targets a *different* column (control -- precise matching)", () => {
+		const before = table(app, "posts", { title: text() });
+		const after = table(app, "posts", { title: text(), views: integer() });
+		const previous = tableKind.serialize(getTableMeta(before));
+		const next = tableKind.serialize(getTableMeta(after));
+		const change = expectSingleChange(
+			tableKind.diff(previous, next, "app.posts"),
+		);
+		const statements = tableKind.emit(change, [
+			change,
+			sequenceChange("some_other_column"),
+		]);
+		expect(statements).toEqual([
+			{
+				sql: 'alter table "app"."posts" add column "views" integer;',
+				stage: "main",
+			},
+		]);
+	});
+});

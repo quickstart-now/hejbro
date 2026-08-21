@@ -13,7 +13,7 @@ cast Postgres adds on its own read-back and the role-ownership statement
 hejbro deliberately skips, consistent with its role-agnostic stance
 elsewhere).
 
-**This closes four real defects, not a cosmetic change**:
+**This closes five real defects, not a cosmetic change**:
 
 - `integer()` → `serial()` used to render `alter column … type serial;`,
   which Postgres rejects outright — `serial` is `create table`/
@@ -31,6 +31,25 @@ elsewhere).
   directly against a real Postgres, not assumed) — the same drift the
   existing index/foreign-key name guards already close for those two
   kinds; sequences get the matching guard.
+- Dropping a table or column with a serial-family column double-dropped
+  the backing sequence: Postgres's own `owned by` link already cascades
+  the sequence away, but the `sequence` kind's own `drop default`/
+  `drop sequence` statements used to run afterward, against a target the
+  cascade already removed. Fixed structurally: both statements now go
+  out on the `predrop` stage, which always runs before every kind's
+  `main`-stage statements (the same stage `policyKind`/`triggerKind`
+  already use for their own drops, for the identical reason) — so they
+  always clear *before* the cascade could possibly race them.
+- Adding a `serial`-family column to a table that **already has rows**
+  used to fail outright: `add column … not null;` and a separate
+  `set default nextval(…)` cannot work as two statements, because
+  Postgres only backfills a `not null` column from a default present in
+  the *same* `add column` statement (confirmed directly against a real
+  Postgres). `ObjectKind.emit` now receives the diff's sibling changes
+  (`siblingChanges`, D74) so the `table` kind can inline a serial
+  column's default into its own `add column` statement when the owning
+  sequence is a sibling `create` change in the same diff — closing this
+  for both new and existing tables alike.
 
 Also: `serial`/`smallserial`/`bigserial` always imply `notNull` on the
 column, independent of primary-key status (confirmed via `pg_dump`:

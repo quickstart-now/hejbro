@@ -10,6 +10,8 @@ import {
 } from "../sql/statement";
 import type { TypeNode } from "../types/type-node";
 import { renderTypeNode } from "../types/type-node";
+import type { SequenceSnapshot } from "./sequence-kind";
+import { asSequenceSnapshot, nextvalExpression } from "./sequence-kind";
 import {
 	addCheckConstraintSql,
 	addForeignKeyConstraintSql,
@@ -27,6 +29,37 @@ import {
 	columnUnique,
 	tableChecks,
 } from "./table-snapshot";
+
+/**
+ * The sibling `sequence` "create" change (D74) whose owning `schema`/
+ * `table`/`column` matches this added column, or `null` if none — a
+ * serial-family column added to an *existing* table (#23) needs its
+ * default inlined into the same `add column` statement (see
+ * `emitAlter`'s own use below), because the default lives in the
+ * sequence's own snapshot node, never `ColumnSnapshot.default`.
+ */
+const sequenceForAddedColumn = (
+	schema: string,
+	tableName: string,
+	columnName: string,
+	siblingChanges: ReadonlyArray<KindChange>,
+): SequenceSnapshot | null => {
+	const candidates = siblingChanges
+		.filter(
+			(sibling) =>
+				sibling.kind === "sequence" &&
+				sibling.operation === "create" &&
+				sibling.next !== null,
+		)
+		.map((sibling) => asSequenceSnapshot(sibling.next));
+	const match = candidates.find(
+		(sequence) =>
+			sequence.schema === schema &&
+			sequence.table === tableName &&
+			sequence.column === columnName,
+	);
+	return match ?? null;
+};
 
 const emitCreate = (next: TableSnapshot): ReadonlyArray<SqlStatement> => [
 	statement(createTableSql(next)),
@@ -171,6 +204,7 @@ const alterColumnStatements = (
 const emitAlter = (
 	previous: TableSnapshot,
 	next: TableSnapshot,
+	siblingChanges: ReadonlyArray<KindChange>,
 ): ReadonlyArray<SqlStatement> => {
 	const columnDiff = diffByKey(
 		previous.columns.map((column) => ({ key: column.name, value: column })),
@@ -244,11 +278,23 @@ const emitAlter = (
 				`alter table ${qualifyName(next.schema, next.name)} drop column ${quoteIdentifier(entry.key)};`,
 			),
 		),
-		...columnDiff.added.map((entry) =>
-			statement(
-				`alter table ${qualifyName(next.schema, next.name)} add column ${renderColumnDefinition(entry.value)};`,
-			),
-		),
+		...columnDiff.added.map((entry) => {
+			const sequence = sequenceForAddedColumn(
+				next.schema,
+				next.name,
+				entry.key,
+				siblingChanges,
+			);
+			// #23: a serial-family column added to an existing table inlines
+			// its sequence-backed default into this same statement — see
+			// sequenceForAddedColumn's doc comment. `sequence === null` is
+			// every other added column (the vast majority), unaffected.
+			const overrideDefault =
+				sequence === null ? undefined : nextvalExpression(sequence);
+			return statement(
+				`alter table ${qualifyName(next.schema, next.name)} add column ${renderColumnDefinition(entry.value, overrideDefault)};`,
+			);
+		}),
 		...columnDiff.changed.flatMap((entry) =>
 			alterColumnStatements(next.schema, next.name, entry),
 		),
@@ -270,10 +316,14 @@ const emitAlter = (
  * Emits SQL for a table {@link KindChange}: `create table` (+ indexes +
  * deferred FK constraints) for creates, `drop table` for drops, and
  * targeted `alter table` statements for survivors — a dropped FK goes out
- * on `predrop` (#122/A′), everything else in `main`.
+ * on `predrop` (#122/A′), everything else in `main`. `siblingChanges`
+ * (D74) is only used by the `alter` case's `columnDiff.added` rendering,
+ * to inline a serial-family added column's sequence-backed default (#23)
+ * — see `sequenceForAddedColumn`'s doc comment.
  */
 export const emitTableSql = (
 	change: KindChange,
+	siblingChanges: ReadonlyArray<KindChange> = [],
 ): ReadonlyArray<SqlStatement> => {
 	switch (change.operation) {
 		case "create": {
@@ -304,6 +354,7 @@ export const emitTableSql = (
 			return emitAlter(
 				asTableSnapshot(change.previous),
 				asTableSnapshot(change.next),
+				siblingChanges,
 			);
 		}
 		default:

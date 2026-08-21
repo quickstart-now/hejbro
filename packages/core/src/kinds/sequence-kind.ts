@@ -1,6 +1,6 @@
 import type { SchemaDeclaration } from "../dsl/schema";
 import { assertNever, throwHejbroError } from "../error";
-import type { ObjectKind } from "../kind/object-kind";
+import type { KindChange, ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import {
@@ -102,22 +102,61 @@ const ownedBySql = (snapshot: SequenceSnapshot): string =>
 	`alter sequence ${qualifyName(snapshot.schema, snapshot.name)} owned by ${qualifyName(snapshot.schema, snapshot.table)}.${quoteIdentifier(snapshot.column)};`;
 
 /**
- * `alter table … alter column … set default nextval(…);` — the column's
- * default lives here, not in `ColumnSnapshot.default` (table-kind.ts never
- * sees a sequence-backed default at all): inlining it into `create table`
+ * `nextval('<schema>.<name>')` — the exact right-hand side of this
+ * sequence's default, exported (D74) so `table-kind-emit.ts` can inline
+ * the identical text into an `add column` statement instead of computing
+ * its own copy (a serial column added to an *existing* table, #23 — see
+ * that file's own doc comment). A bare string-literal argument (no
+ * `::regclass` cast) is valid Postgres — confirmed directly, not
+ * assumed. Both call sites reusing this one function is what keeps the
+ * two texts from drifting apart, rather than two independent renderings
+ * that happen to agree today.
+ */
+export const nextvalExpression = (snapshot: SequenceSnapshot): string =>
+	`nextval('${snapshot.schema}.${snapshot.name}')`;
+
+/**
+ * `alter table … alter column … set default nextval(…);` for a *brand-new*
+ * table's own serial column (the `create table` path — see `emit`'s
+ * `"create"` case below): the column's default lives here, not in
+ * `ColumnSnapshot.default` (table-kind.ts never sees a sequence-backed
+ * default for a new table's own column) — inlining it into `create table`
  * would need the sequence to exist before the table statement runs,
  * recreating the exact circular-dependency problem `pg_dump` itself
  * avoids by splitting the default into its own trailing `alter table`
  * (confirmed against a real Postgres, comparing this kind's own output
- * against `pg_dump`'s for a native `serial` column). A bare string-literal
- * argument (no `::regclass` cast) is valid Postgres — confirmed directly,
- * not assumed — so this reuses the existing expression codec's
- * `functionCall`/`literal` nodes conceptually, but is rendered as plain
- * SQL text here since the sequence kind owns this statement outright, not
- * through the expression codec.
+ * against `pg_dump`'s for a native `serial` column). Suppressed (not
+ * emitted at all) when the owning column is being added to an *existing*
+ * table instead — `table-kind-emit.ts` inlines this same
+ * `nextvalExpression` directly into that `add column` statement, so
+ * emitting this too would either duplicate it (harmless but confusing) or,
+ * worse, be the *only* place carrying the default while `add column` runs
+ * as a bare `not null` — exactly #23's non-empty-table defect.
  */
 const setDefaultSql = (snapshot: SequenceSnapshot): string =>
-	`alter table ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} set default nextval('${snapshot.schema}.${snapshot.name}');`;
+	`alter table ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} set default ${nextvalExpression(snapshot)};`;
+
+/**
+ * True when this sequence's owning column is being added to a table that
+ * *already existed* before this diff (a sibling `table` change with the
+ * matching identity, operation `"alter"`) rather than created fresh
+ * alongside it (operation `"create"`, or no sibling found — the type
+ * decomposition means a serial column's own type-alter transitions never
+ * reach a sequence `"create"` change without a matching table change, so
+ * "no sibling" is not a real case in practice, only a defensive default).
+ * Read by `emit`'s `"create"` case to decide whether to suppress
+ * `setDefaultSql` — see that statement's own doc comment for why.
+ */
+const ownedColumnAddedToExistingTable = (
+	snapshot: SequenceSnapshot,
+	siblingChanges: ReadonlyArray<KindChange>,
+): boolean =>
+	siblingChanges.some(
+		(sibling) =>
+			sibling.kind === "table" &&
+			sibling.identity === `${snapshot.schema}.${snapshot.table}` &&
+			sibling.operation === "alter",
+	);
 
 /**
  * `alter table … alter column … drop default;` — bare, not `if exists`.
@@ -222,7 +261,7 @@ export const sequenceKind: ObjectKind<SequenceDeclaration> = {
 			},
 		];
 	},
-	emit: (change) => {
+	emit: (change, siblingChanges = []) => {
 		switch (change.operation) {
 			case "create": {
 				if (change.next === null) {
@@ -232,6 +271,12 @@ export const sequenceKind: ObjectKind<SequenceDeclaration> = {
 					);
 				}
 				const nextSnapshot = asSequenceSnapshot(change.next);
+				if (ownedColumnAddedToExistingTable(nextSnapshot, siblingChanges)) {
+					return [
+						statement(createSequenceSql(nextSnapshot)),
+						deferredStatement(ownedBySql(nextSnapshot)),
+					];
+				}
 				return [
 					statement(createSequenceSql(nextSnapshot)),
 					deferredStatement(ownedBySql(nextSnapshot)),

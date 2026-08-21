@@ -139,6 +139,92 @@ describe("sequenceKind.emit", () => {
 		expect(statements[0]?.sql).toBe('create sequence "app"."posts_id_seq";');
 	});
 
+	// D74/#23: a serial column added to an *existing* table inlines its
+	// default into the table's own `add column` statement
+	// (table-kind-emit.ts), so this kind's own `set default` would either
+	// duplicate it or (worse, on a table with rows) be the only place
+	// carrying it while `add column` runs bare -- exactly the defect #23
+	// closes. Detected via a sibling `table` "alter" change with the
+	// matching identity in siblingChanges.
+	it("create: suppresses set-default when the owning table's sibling change is alter (column added to an existing table)", () => {
+		const next = sequenceKind.serialize(declaration());
+		const change = {
+			kind: "sequence" as const,
+			operation: "create" as const,
+			identity: "app.posts_id_seq",
+			previous: null,
+			next,
+			notes: [],
+		};
+		const siblingChanges = [
+			change,
+			{
+				kind: "table" as const,
+				operation: "alter" as const,
+				identity: "app.posts",
+				previous: {},
+				next: {},
+				notes: [],
+			},
+		];
+		const statements = sequenceKind.emit(change, siblingChanges);
+		expect(statements).toEqual([
+			{
+				sql: 'create sequence "app"."posts_id_seq" as integer;',
+				stage: "main",
+			},
+			{
+				sql: 'alter sequence "app"."posts_id_seq" owned by "app"."posts"."id";',
+				stage: "deferred",
+			},
+		]);
+	});
+
+	// Control/contrast: a sibling table "create" change (a brand-new table)
+	// keeps all three statements -- table-kind-emit.ts's own createTableSql
+	// never inlines a serial column's default (see that file's own doc
+	// comment), so this kind must still carry it.
+	it("create: keeps set-default when the owning table's sibling change is create (brand-new table)", () => {
+		const next = sequenceKind.serialize(declaration());
+		const change = {
+			kind: "sequence" as const,
+			operation: "create" as const,
+			identity: "app.posts_id_seq",
+			previous: null,
+			next,
+			notes: [],
+		};
+		const siblingChanges = [
+			change,
+			{
+				kind: "table" as const,
+				operation: "create" as const,
+				identity: "app.posts",
+				previous: null,
+				next: {},
+				notes: [],
+			},
+		];
+		const statements = sequenceKind.emit(change, siblingChanges);
+		expect(statements).toHaveLength(3);
+		expect(statements[2]?.sql).toBe(
+			`alter table "app"."posts" alter column "id" set default nextval('app.posts_id_seq');`,
+		);
+	});
+
+	it("create: keeps set-default when no siblingChanges are given at all (backward-compatible default)", () => {
+		const next = sequenceKind.serialize(declaration());
+		const statements = sequenceKind.emit({
+			kind: "sequence",
+			operation: "create",
+			identity: "app.posts_id_seq",
+			previous: null,
+			next,
+			notes: [],
+		});
+		expect(statements).toHaveLength(3);
+	});
+
 	// #23/D66. This kind's own emit always produces bare statements — no
 	// `if exists` — and a drop's statements go out on `predrop`, not
 	// `main` (#193 review): `predrop` runs before every kind's `main`-stage

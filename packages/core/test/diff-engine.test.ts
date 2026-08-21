@@ -3,9 +3,17 @@ import { pgEnum } from "../src/dsl/pg-enum";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { diffSnapshots } from "../src/engine/diff-engine";
-import { createDefaultRegistry } from "../src/kind/registry";
+import { generateMigration } from "../src/engine/generate";
+import {
+	createDefaultRegistry,
+	createKindRegistry,
+} from "../src/kind/registry";
+import { enumKind } from "../src/kinds/enum-kind";
+import { schemaKind } from "../src/kinds/schema-kind";
+import { sequenceKind } from "../src/kinds/sequence-kind";
+import { tableKind } from "../src/kinds/table-kind";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
-import { uuid } from "../src/types/column-builder-factories";
+import { serial, uuid } from "../src/types/column-builder-factories";
 
 const app = schema("app");
 const registry = createDefaultRegistry();
@@ -41,6 +49,61 @@ describe("diffSnapshots — kind dependency ordering", () => {
 			"schema",
 		]);
 		expect(changes.every((change) => change.operation === "drop")).toBe(true);
+	});
+
+	// D74/#23: table-kind.ts's add-column rendering inlines a serial
+	// column's sequence-backed default (`nextval('…')`), which requires
+	// the sequence to already exist -- so `sequence` creates must sort
+	// *before* `table` creates. Before tableKind.dependsOn declared
+	// "sequence", this held only because registry.ts happens to register
+	// sequenceKind ahead of tableKind (confirmed by measurement during
+	// #193 review: no dependsOn edge, no pinning test, `grep -rln
+	// "rankKinds|topoSortKindNames" packages/core/test/` returned nothing)
+	// -- a by-product of registration order, not a declared dependency.
+	it("orders creates: sequence, then table, for a serial-family column", () => {
+		const posts = table(app, "posts", { id: serial().primaryKey() });
+		// generateMigration, not buildSnapshot directly -- buildSnapshot takes
+		// already-resolved declarations and has no synthesis step of its own;
+		// only generateMigration's resolveDeclarations synthesizes the
+		// sequence declaration a raw serial() column implies.
+		const next = generateMigration({
+			declarations: [app, posts],
+			previousSnapshot: emptySnapshot,
+			registry,
+		}).snapshot;
+		const changes = diffSnapshots(emptySnapshot, next, registry);
+		expect(changes.map((change) => change.kind)).toEqual([
+			"schema",
+			"sequence",
+			"table",
+		]);
+	});
+
+	// The structural half of the claim above: this order must survive a
+	// registry that registers `table` *before* `sequence` -- the exact
+	// registration-order flip that would have silently broken the old,
+	// undeclared ordering. Built as a standalone registry (not a mutation
+	// of registry.ts itself) so this test exercises the real risk directly
+	// rather than asserting registry.ts's current line order stays put.
+	it("keeps sequence-before-table even when a registry registers table first (registration-order independence)", () => {
+		const reorderedRegistry = createKindRegistry();
+		reorderedRegistry.register(schemaKind);
+		reorderedRegistry.register(enumKind);
+		reorderedRegistry.register(tableKind);
+		reorderedRegistry.register(sequenceKind);
+
+		const posts = table(app, "posts", { id: serial().primaryKey() });
+		const next = generateMigration({
+			declarations: [app, posts],
+			previousSnapshot: emptySnapshot,
+			registry: reorderedRegistry,
+		}).snapshot;
+		const changes = diffSnapshots(emptySnapshot, next, reorderedRegistry);
+		expect(changes.map((change) => change.kind)).toEqual([
+			"schema",
+			"sequence",
+			"table",
+		]);
 	});
 
 	it("sorts changes by identity (byte order) within the same kind", () => {

@@ -295,10 +295,23 @@ const buildNotes = <TValue>(
  * whole tables, and a single `alter` change (notes listing every column,
  * index, and foreign key delta) for survivors — column reordering alone
  * produces no diff, since deltas are computed by name, not by array index.
+ *
+ * `dependsOn` includes `"sequence"` (D74/#23): a serial-family column
+ * added to an existing table now inlines `default nextval('…')` straight
+ * into its own `add column` statement (`table-kind-emit.ts`'s
+ * `sequenceForAddedColumn`), which requires the sequence to already exist
+ * — so `table`'s own create/alter statements must sort *after*
+ * `sequence`'s. This makes that ordering structural (kind rank, enforced
+ * regardless of registry.ts's registration order — see
+ * `diff-engine.test.ts`'s pinning test) rather than the incidental
+ * by-product it was before this dependency was declared (confirmed
+ * directly: without it, only `registry.ts`'s current registration order
+ * — sequence before table — happened to produce the right order, and
+ * nothing would have caught a future reordering).
  */
 export const tableKind: ObjectKind<TableDeclaration> = {
 	kind: "table",
-	dependsOn: ["schema", "enum"],
+	dependsOn: ["schema", "enum", "sequence"],
 	owns: (declaration): declaration is TableDeclaration =>
 		declaration.declarationKind === "table",
 	serialize: (declaration) => ({
@@ -403,5 +416,5 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			{ kind: "table", operation: "alter", identity, previous, next, notes },
 		];
 	},
-	emit: (change) => emitTableSql(change),
+	emit: (change, siblingChanges) => emitTableSql(change, siblingChanges),
 };
