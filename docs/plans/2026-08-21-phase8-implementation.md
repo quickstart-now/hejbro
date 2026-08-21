@@ -238,12 +238,26 @@ blind spot that let `serial` pass for two phases. And today
 `examples/supabase` runs against a role and a `storage.buckets` table
 **we wrote ourselves**, which makes the gap concrete.
 
-**Pin the image.** `supabase/postgres` publishes new tags constantly (the
-`.164` and `.165` builds landed on the same day), so the script pins
-**`supabase/postgres:17.6.1.165`** — the current PG17 multi-arch tag,
-matching the PG17 major the round-trip already uses. Record the resolved
-digest in the script's header comment so a re-tag cannot change what was
-verified, and treat a pin bump as its own PR.
+This table goes into `examples/README.md` as part of this PR, next to the
+round-trip's own description — for the same reason each chain step
+records the defect class it defends. Someone will eventually propose
+merging the two scripts, and the answer to "what would that lose?" has to
+be written down where they will look.
+
+**Pin the image, and enforce the pin.** `supabase/postgres` publishes new
+tags constantly (the `.164` and `.165` builds landed on the same day), so
+the script pins **`supabase/postgres:17.6.1.165`** — the current PG17
+multi-arch tag, matching the PG17 major the round-trip already uses.
+
+The pinned **digest is checked, not commented**. After pulling, the
+script resolves the image's actual digest, compares it against the
+recorded value, and **fails on a mismatch** — a re-tag cannot silently
+change what was verified. A comment would not do this: it only works if
+someone reads it, and nothing breaks when it goes stale, which is exactly
+the failure mode this plan bans elsewhere. The message follows §7 — what
+differs, why it matters, and a `Next:` line pointing at updating the
+recorded digest in its own PR. That also turns "a pin bump is its own PR"
+from a convention into something the script enforces.
 
 **What counts as a failure.** At minimum:
 
