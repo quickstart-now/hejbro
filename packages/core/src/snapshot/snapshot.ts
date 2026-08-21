@@ -206,7 +206,7 @@ export const parseSnapshot = (raw: string): Snapshot => {
 		}
 		return throwHejbroError(
 			"invalid-snapshot",
-			`snapshot version ${JSON.stringify(candidate.formatVersion)} is not a valid version number — check the file wasn't corrupted or hand-edited incorrectly.`,
+			`snapshot version ${JSON.stringify(candidate.hejbroSnapshot)} is not a valid version number — check the file wasn't corrupted or hand-edited incorrectly.`,
 		);
 	}
 	if (candidate.formatVersion !== HEJBRO_SNAPSHOT_VERSION) {

@@ -165,5 +165,19 @@ describe("renderSnapshot / parseSnapshot", () => {
 				expect.objectContaining({ code: "invalid-snapshot" }),
 			);
 		});
+
+		it("a non-numeric hejbroSnapshot is invalid-snapshot and echoes the actual bad value, not `undefined`", () => {
+			const raw = JSON.stringify({
+				hejbroSnapshot: "abc",
+				dialect: "postgres",
+				objects: {},
+			});
+			expect(() => parseSnapshot(raw)).toThrowError(
+				expect.objectContaining({
+					code: "invalid-snapshot",
+					message: expect.stringContaining('"abc"'),
+				}),
+			);
+		});
 	});
 });
