@@ -183,11 +183,27 @@ own claim.
   stricter than D13's own text ("the repo's own toolchain requires ≥ 22.18.0")
   and would fail install on the new matrix job. Lower the root to `>=22.18.0`
   so the repo's declaration, D13 and the published `engines` all agree; do not
-  paper over it by disabling the engine check. Then the smoke test fails on the
-  current packaging and passes after it. It must pack each published package,
-  install the tarball into a scratch project, and run
-  `init`/`generate`/`verify` there. This is the only thing that catches
-  `workspace:*` reaching a consumer, a missing `bin`, or a broken `exports`.
+  paper over it by disabling the engine check. The smoke test packs each
+  published package with `pnpm pack` — the tool `changeset publish` actually
+  uses under the hood for this pnpm workspace (D59/D63) — installs the tarball
+  into a scratch project with plain `npm install`, and runs
+  `init`/`generate`/`verify` there. Measured against the unpacked repo: the
+  `workspace:*`-absence and bin/CLI assertions already pass on a
+  `pnpm`-packed tarball, so they land as regression guards, not as the red
+  this PR turns green — what's actually red beforehand is the `hejbro`
+  tarball packing no `README.md` (missing package-level file). `npm pack`
+  (as opposed to `pnpm pack`) does leave `workspace:*` unresolved and produces
+  a tarball `npm install` rejects with `EUNSUPPORTEDPROTOCOL` — reproduced
+  during this PR — but fixing that would mean dropping the `workspace:`
+  protocol or rewriting dependency strings in `prepack`, both against D59's
+  direction, so the smoke packs with `pnpm` (what release actually ships) and
+  keeps the `npm pack` failure as the documented reason its two regression
+  assertions matter. That leaves a gap this PR does not close: the smoke
+  proves a `pnpm`-packed tarball installs cleanly, not that the real release
+  workflow packs with `pnpm` — `changeset publish`'s pnpm workspace detection
+  is automatic, and if it silently stops applying (or a workflow edit swaps in
+  `npm publish`), the smoke stays green while the shipped tarball breaks.
+  `phase8-release-workflows` closes this gap; see its row below.
 - **`phase8-changesets`** — `changeset status` runs clean; a dry version run
   bumps the three packages together. Document in `CONTRIBUTING.md` that the
   **first release needs a `minor` changeset**, since an all-`patch` set would
@@ -198,7 +214,16 @@ own claim.
 - **`phase8-release-workflows`** — the workflows are validated against
   `changesets/action`'s `action.yml` (input names differ between versions; do
   not copy a draft blindly). The publish job must refuse to run if the
-  pre-publish gate fails.
+  pre-publish gate fails. It must also close the gap `phase8-packaging`'s
+  smoke left open: that smoke proves a `pnpm`-packed tarball installs
+  cleanly, not that the real release actually packs with `pnpm`. `changeset
+  publish`'s choice of `pnpm publish` for this workspace is automatic
+  detection (D59/D63), not a pinned setting — this PR needs a check, at
+  publish time, of which tool actually packed (e.g. inspecting the published
+  tarball's own `package.json` for a leftover `workspace:` string before it
+  reaches the registry), so a detection change or a future workflow edit that
+  swaps in `npm publish` fails loudly instead of silently shipping the
+  `EUNSUPPORTEDPROTOCOL` tarball `phase8-packaging` reproduced and rejected.
 - **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
   reproducing #125's crash (a config importing a package that is not installed)
   first, then the diagnostic. Both `asHejbroError` sites are converted.
@@ -442,6 +467,13 @@ Deferred to 0.2.0 with a reason: **#130** (new commands; four design questions
 open; the manual rollback procedure in `docs/guide/renames.md` is complete once
 #129 lands), **#131** (internal tooling; the release path already builds from a
 clean install), **#132** (needs a per-path lint design first), **#139**
-(blocked until the packages exist).
+(blocked until the packages exist), **#141** (`design: core has no notion of
+which clause an expression sits in`, split off during #97's design pass —
+needs a brainstorm on whether a clause taxonomy belongs in core's extension
+interface).
+
+**#139** and **#141** are filed as sub-issues of **#9** only because no Phase 9
+issue exists yet — move them under Phase 9's issue once it's created, or a
+later reader won't find them there.
 
 Still unscheduled: the GitHub Pages site (D64).
