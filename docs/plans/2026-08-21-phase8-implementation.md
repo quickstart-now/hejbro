@@ -92,7 +92,13 @@ Two artifact sets regenerate, and they cost very different amounts.
 `packages/core/test/golden/cases/` (the harness walks the directory, so new
 cases are picked up automatically). Golden SQL files contain **no** banner hash
 lines — the harness calls `generateMigration` without `bannerHashes` — so a
-format change costs nothing there.
+format change costs nothing there. Until `phase8-snapshot-v5` declared
+`UPDATE_GOLDEN` in `packages/core/turbo.json`'s `test` inputs, this root-level
+form silently did nothing — turbo does not forward undeclared env vars to
+task processes, so the run passed through unchanged regardless of cache
+state. Earlier phases used `pnpm --filter @hejbro/core test`, which bypasses
+turbo and therefore worked; this line's own root-level form was untested
+until now.
 
 **Examples — scripted by `phase8-regen-script`, manual before it.** The eight
 committed example migrations
