@@ -12,6 +12,10 @@ name: release-version
 on:
   push:
     branches: [dev]
+  # TEMPORARY (scratch measurement, will be reverted before the real PR):
+  # lets this be triggered manually against a scratch branch without
+  # touching dev.
+  workflow_dispatch: {}
 
 # Two concurrent runs racing to open/update the "Version Packages" PR branch
 # could interleave pushes to it. Queue instead of overlapping; don't cancel
