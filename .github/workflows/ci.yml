@@ -6,11 +6,15 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: "${{ matrix.node-version }}", cache: pnpm }
+      - run: node --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm check-types
