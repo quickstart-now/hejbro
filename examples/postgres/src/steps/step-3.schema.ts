@@ -281,6 +281,13 @@ export const appReaderSelectGrant = grant(app)
 export const appWriterAllGrant = grant(app)
 	.tables("select", "insert", "update", "delete")
 	.to(appWriterRole);
+// one-shot grants only cover tables that exist when they run; default privileges cover the ones later migrations add — see #121
+export const appReaderDefaultSelectGrant = grant(app)
+	.defaultPrivileges.tables("select")
+	.to(appReaderRole);
+export const appWriterDefaultAllGrant = grant(app)
+	.defaultPrivileges.tables("select", "insert", "update", "delete")
+	.to(appWriterRole);
 
 export const declarations: ReadonlyArray<HejbroInput> = [
 	app,
@@ -293,4 +300,6 @@ export const declarations: ReadonlyArray<HejbroInput> = [
 	appUsageGrant,
 	appReaderSelectGrant,
 	appWriterAllGrant,
+	appReaderDefaultSelectGrant,
+	appWriterDefaultAllGrant,
 ];
