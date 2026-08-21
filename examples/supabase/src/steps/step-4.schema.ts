@@ -162,6 +162,10 @@ export const attachmentsBucket = storageBucket("attachments", {
 export const appTablesGrant = grant(app)
 	.tables("select")
 	.to(anonRole, authenticatedRole);
+// one-shot grants only cover tables that exist when they run; default privileges cover the ones later migrations add — see #121
+export const appDefaultTablesGrant = grant(app)
+	.defaultPrivileges.tables("select")
+	.to(anonRole, authenticatedRole);
 
 /** No `securityInvoker` over the RLS-protected `profiles` table — proves the view-security-invoker warning (#66, D39). */
 export const profilesPublic = defineView(
@@ -178,5 +182,6 @@ export const declarations: ReadonlyArray<HejbroInput> = [
 	drafts,
 	attachmentsBucket,
 	appTablesGrant,
+	appDefaultTablesGrant,
 	profilesPublic,
 ];
