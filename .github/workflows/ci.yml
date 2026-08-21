@@ -16,8 +16,10 @@ on:
   # check. The real blocker was narrower and different: a GITHUB_TOKEN-
   # opened PR DOES get a `pull_request` run, it just stalls in
   # `action_required` pending manual approval (this repo's Actions policy
-  # treats `github-actions[bot]` as a first-time contributor) -- see
-  # release-version.yml for that unresolved part.
+  # treats `github-actions[bot]` as a first-time contributor). Owner
+  # decision (2026-08-22, on #189): keep that as a manual step -- no
+  # settings/credential changes -- see release-version.yml for the full
+  # release procedure this produces.
   #
   # The trigger itself stays: it's harmless on its own (no inputs, no
   # credentials, just "run ci.yml against whatever ref you point it at")
