@@ -88,10 +88,26 @@ walks a real snapshot (built via `buildSnapshot(...)` in memory, never a
 committed file) asserting every `*Kind`-suffixed field's value is
 kebab-case and that no D57 camelCase reference key survives anywhere —
 generically, by field-name convention, not a hand-maintained list of known
-node shapes, so a new node kind is checked automatically. SQL's own
-tokens (`operator`, `direction`) are excluded by construction too — their
-field names don't end in `Kind`, so the walker never inspects them; no
-exemption list needed for them either.
+node shapes. SQL's own tokens (`operator`, `direction`) are excluded by
+construction too — their field names don't end in `Kind`, so the walker
+never inspects them; no exemption list needed for them either.
+
+**This walker is not, by itself, a complete D70 check** — it only ever
+sees whatever the one hand-written test fixture happens to construct, so
+a discriminator value the fixture never exercises (found in #110 review:
+`rawSql`'s own encoding — `NODE_KIND_TO_SNAPSHOT.rawSql` mapped to
+`"rawSql"`, camelCase, not kebab — went unnoticed by both this walker
+*and* the codec's round-trip tests, since encode/decode share one map, so
+a wrong-but-consistent spelling round-trips clean) unless something else
+also checks the map's own values. `expr/codec.test.ts` closes that:
+it asserts every value in `NODE_KIND_TO_SNAPSHOT`/
+`PROJECTION_KIND_TO_SNAPSHOT` is kebab-case directly, independent of what
+any test declaration constructs — the map *is* the whole vocabulary.
+The two are complementary, not redundant: the map test covers every
+discriminator regardless of whether any test happens to build it; the
+snapshot walker covers a discriminator that reaches an artifact through
+a path the map doesn't own (there is none today, but the walker is the
+backstop if one is ever added).
 
 Machine enforcement of the TypeScript layer is a follow-up: Biome's
 `useNamingConvention` is not enabled yet because it currently reports 62

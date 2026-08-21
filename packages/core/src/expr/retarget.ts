@@ -51,6 +51,20 @@ const retargetTableRef = (
 	) {
 		return ref;
 	}
+	// A table rename always changes schema/table, so reaching here means
+	// something changed -- but a column rename sets
+	// oldSchema===newSchema/oldTable===newTable, so a TableRefNode on the
+	// SAME table (reached via exists()'s from/join, unaffected by which
+	// column was renamed) matches the check above without anything
+	// actually changing. Compare the final values, not just "did we
+	// match the target" (the same distinction columnRef's own case
+	// above already makes -- this function had been missing it).
+	if (
+		ref.schemaName === target.newSchema &&
+		ref.tableName === target.newTable
+	) {
+		return ref;
+	}
 	return { schemaName: target.newSchema, tableName: target.newTable };
 };
 

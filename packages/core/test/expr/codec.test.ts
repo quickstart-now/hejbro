@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ExprNode } from "../../src/expr/ast";
-import { decodeExprNode, encodeExprNode } from "../../src/expr/codec";
+import {
+	decodeExprNode,
+	encodeExprNode,
+	NODE_KIND_TO_SNAPSHOT,
+	PROJECTION_KIND_TO_SNAPSHOT,
+} from "../../src/expr/codec";
+
+const KEBAB_CASE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 // #110: encode (ExprNode -> snapshot form) and decode (snapshot form ->
 // ExprNode) must round-trip losslessly in both directions -- this is what
@@ -291,5 +298,84 @@ describe("expr codec — round-trip", () => {
 			right: { nodeKind: "rawSql", sql: "b" },
 		}) as { readonly operator: string };
 		expect(encoded.operator).toBe("not like");
+	});
+
+	// reviewer finding: round-trip tests structurally can't catch a
+	// wrong-but-internally-consistent map entry -- encode and decode
+	// share the SAME map, so encode(decode(encode(x))) === encode(x)
+	// holds even if every entry is spelled wrong the same way. Proven by
+	// reproducing the exact case the reviewer found: NODE_KIND_TO_SNAPSHOT
+	// mapped "rawSql" -> "rawSql" (camelCase, not kebab) and every test
+	// in this file -- and naming-conventions.test.ts's recursive walker,
+	// which only ever sees whatever the one hand-written fixture happens
+	// to construct -- stayed green. Only a direct assertion against the
+	// map's own values closes this: the map IS the whole vocabulary,
+	// independent of what any test declaration happens to construct.
+	it("every discriminator value in the encoding maps is kebab-case (closes what round-trip tests structurally can't catch)", () => {
+		const nodeKindOffenders = Object.values(NODE_KIND_TO_SNAPSHOT).filter(
+			(value) => !KEBAB_CASE.test(value),
+		);
+		const projectionKindOffenders = Object.values(
+			PROJECTION_KIND_TO_SNAPSHOT,
+		).filter((value) => !KEBAB_CASE.test(value));
+		expect(nodeKindOffenders).toEqual([]);
+		expect(projectionKindOffenders).toEqual([]);
+	});
+
+	// reviewer finding: decodeJoin/decodeSelectNode were fail-open --
+	// they called asRecord to confirm the node is an object, then
+	// hard-coded joinKind: "inner" / queryKind: "select" without ever
+	// reading the actual field. A snapshot with joinKind: "left" (not a
+	// value hejbro's own encoder ever writes today, but JoinNode only has
+	// one variant, so nothing stopped a malformed or future-version file
+	// from silently decoding as "inner" instead) -- a silent, meaning-
+	// changing corruption. decodeProjection/decodeLiteral/
+	// decodeSqlTemplateChunk all validate and throw on an unrecognized
+	// value; these two now match that pattern.
+	it("rejects an unrecognized joinKind instead of silently decoding as inner", () => {
+		const malformed = {
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: { projectionKind: "constant-one" },
+				from: { schema: "app", table: "posts" },
+				joins: [
+					{
+						joinKind: "left",
+						table: { schema: "app", table: "authors" },
+						on: {
+							nodeKind: "literal",
+							literal: { literalKind: "boolean", value: true },
+						},
+					},
+				],
+				where: null,
+				orderBy: [],
+				limit: null,
+			},
+		};
+		expect(() => decodeExprNode(malformed)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("rejects an unrecognized queryKind instead of silently decoding as select", () => {
+		const malformed = {
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "insert",
+				projection: { projectionKind: "constant-one" },
+				from: { schema: "app", table: "posts" },
+				joins: [],
+				where: null,
+				orderBy: [],
+				limit: null,
+			},
+		};
+		expect(() => decodeExprNode(malformed)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
 	});
 });

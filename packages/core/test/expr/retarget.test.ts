@@ -100,6 +100,31 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 		expect(retargetExprNode(node, columnRenameTarget)).toBe(node);
 	});
 
+	// reviewer finding: retargetTableRef (used for exists()'s from/join
+	// table, not columnRef) had the exact same identity bug as columnRef
+	// did before the earlier fix in this file -- a column rename sets
+	// oldTable===newTable, so any TableRefNode on that table matched
+	// without anything actually changing, and still got rebuilt. This is
+	// why the earlier column-rename identity test (above) wasn't enough:
+	// it only exercised a bare columnRef, never a TableRefNode reached
+	// through exists()/joins.
+	it("returns the exact same reference for an exists() subquery on a column rename (TableRefNode, not just ColumnRefNode)", () => {
+		const node: ExprNode = {
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: { projectionKind: "constantOne" },
+				from: { schemaName: "app", tableName: "posts" },
+				joins: [],
+				where: null,
+				orderBy: [],
+				limit: null,
+			},
+		};
+		expect(retargetExprNode(node, columnRenameTarget)).toBe(node);
+	});
+
 	it("retargets a columnRef nested arbitrarily deep (logical/not/inList/between/functionCall/sqlTemplate)", () => {
 		const ref: ExprNode = {
 			nodeKind: "columnRef",

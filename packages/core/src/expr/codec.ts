@@ -57,7 +57,9 @@ import type {
 
 // --- discriminator value maps (camelCase <-> kebab-case) ---------------
 
-const NODE_KIND_TO_SNAPSHOT: Readonly<Record<ExprNode["nodeKind"], string>> = {
+export const NODE_KIND_TO_SNAPSHOT: Readonly<
+	Record<ExprNode["nodeKind"], string>
+> = {
 	literal: "literal",
 	columnRef: "column-ref",
 	plpgsqlRef: "plpgsql-ref",
@@ -81,7 +83,7 @@ const NODE_KIND_FROM_SNAPSHOT: Readonly<Record<string, ExprNode["nodeKind"]>> =
 		]),
 	);
 
-const PROJECTION_KIND_TO_SNAPSHOT: Readonly<
+export const PROJECTION_KIND_TO_SNAPSHOT: Readonly<
 	Record<ProjectionNode["projectionKind"], string>
 > = {
 	allColumns: "all-columns",
@@ -479,8 +481,12 @@ const decodeProjection = (value: JsonValue): ProjectionNode => {
 
 const decodeJoin = (value: JsonValue): JoinNode => {
 	const node = asRecord(value, "joinKind");
+	const joinKind = stringField(node, "joinKind");
+	if (joinKind !== "inner") {
+		return unknownDiscriminator("joinKind", joinKind);
+	}
 	return {
-		joinKind: "inner",
+		joinKind,
 		table: decodeTableRef(node.table as JsonValue),
 		on: decodeExprNode(node.on as JsonValue),
 	};
@@ -496,8 +502,12 @@ const decodeOrderByTerm = (value: JsonValue): OrderByTerm => {
 
 const decodeSelectNode = (value: JsonValue): SelectNode => {
 	const node = asRecord(value, "queryKind");
+	const queryKind = stringField(node, "queryKind");
+	if (queryKind !== "select") {
+		return unknownDiscriminator("queryKind", queryKind);
+	}
 	return {
-		queryKind: "select",
+		queryKind,
 		projection: decodeProjection(node.projection as JsonValue),
 		from: decodeTableRef(node.from as JsonValue),
 		joins: (node.joins as ReadonlyArray<JsonValue>).map(decodeJoin),
