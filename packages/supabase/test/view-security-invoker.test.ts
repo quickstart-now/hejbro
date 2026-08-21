@@ -11,6 +11,7 @@ import {
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { supabaseValidators } from "../src/index";
+import { rlsUncachedAuthCallValidator } from "../src/validators/rls-uncached-auth-call";
 import { viewSecurityInvokerValidator } from "../src/validators/view-security-invoker";
 
 describe("viewSecurityInvokerValidator", () => {
@@ -82,8 +83,9 @@ describe("viewSecurityInvokerValidator", () => {
 });
 
 describe("supabaseValidators", () => {
-	it("runs the reserved-schema, exposed-table, and view-security-invoker validators, in that order", () => {
-		expect(supabaseValidators).toHaveLength(3);
+	it("runs the reserved-schema, exposed-table, view-security-invoker, and rls-uncached-auth-call validators, in that order", () => {
+		expect(supabaseValidators).toHaveLength(4);
 		expect(supabaseValidators[2]).toBe(viewSecurityInvokerValidator);
+		expect(supabaseValidators[3]).toBe(rlsUncachedAuthCallValidator);
 	});
 });
