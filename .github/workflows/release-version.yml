@@ -26,12 +26,45 @@ permissions:
   pull-requests: write
 
 jobs:
-  version:
-    # Defence in depth, not a functional requirement: a push to `dev` can
-    # only originate on this repository (see the trigger comment above), but
-    # stating the intended repository explicitly means a fork or mirror
-    # never runs this by accident.
+  check-changesets:
     if: github.repository == 'quickstart-now/hejbro'
+    runs-on: ubuntu-latest
+    outputs:
+      has-changesets: ${{ steps.check.outputs.has-changesets }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Entry condition for the `version` job below, not a guard inside it:
+      # measured directly (scratch branch, changesets removed to simulate
+      # "the Version Packages PR was just merged" -- run:
+      # https://github.com/quickstart-now/hejbro/actions/runs/32503887251)
+      # that `changeset version` (the underlying CLI command
+      # `version-packages` runs) exits 1 with "No unreleased changesets
+      # found" when zero changesets are pending -- not a graceful no-op.
+      # And zero pending changesets is not an edge case: it is the exact
+      # state `dev` is in immediately after every "Version Packages" PR
+      # merge, and after merging any docs-only or private-package-only PR
+      # (AGENTS.md's changeset rule exempts both). Without this, the
+      # `version` job would fail on a predictable, recurring schedule.
+      # Counting `.changeset/*.md` directly (excluding the template
+      # `README.md`) rather than shelling out to `changeset status` keeps
+      # this job cheap: no install needed, just a checkout.
+      - id: check
+        run: |
+          count=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l)
+          if [ "$count" -gt 0 ]; then
+            echo "has-changesets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-changesets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  version:
+    needs: check-changesets
+    # Skipped entirely, not run-and-guarded, when there is nothing to
+    # version -- see check-changesets' comment above for why this is a
+    # recurring state, not a rare one.
+    if: >-
+      github.repository == 'quickstart-now/hejbro' &&
+      needs.check-changesets.outputs.has-changesets == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -40,14 +73,30 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      # changesets/action/version -- NOT the monolithic changesets/action:
-      # that action auto-selects version/publish/none mode from repo state
-      # (its own select-mode sub-action), and once a "Version Packages" PR
-      # merges into `dev`, `dev`'s state (no pending changesets, an
-      # unpublished version bump) is indistinguishable from "ready to
-      # publish" -- the very next push to `dev` would then auto-select
-      # publish mode. The version sub-action has no such mode selection: it
-      # only ever versions, so `dev` can never publish through this file.
+      # changesets/action/version -- NOT the monolithic changesets/action.
+      # The monolithic action does NOT call its own `select-mode`
+      # sub-action (confirmed: `grep -c "select-mode" dist/index.js` on
+      # this exact pinned commit returns 0) -- its mode choice is an inline
+      # switch in the same file, keyed on
+      # `(changesets pending?) x (was a "publish-script" input given?)`.
+      # With only `version-script` supplied (as an initial, mistaken draft
+      # of this file did), the "no changesets, no publish-script" case
+      # fires and the action explicitly returns without publishing
+      # ("Not publishing because no publish script found") -- so the
+      # monolithic action would NOT silently start publishing from `dev`
+      # today.
+      #
+      # The real difference is structural, not behavioral-today:
+      # changesets/action/version's own action.yml has no publish-related
+      # input at all (only script/commit-message/pr-title/pr-draft/
+      # pr-base-branch/push-with-git-cli/cwd) -- there is no field to add
+      # that would make it publish, because the capability doesn't exist
+      # in the file you'd be editing. The monolithic action is one
+      # `publish-script:` line away from publishing from `dev` on every
+      # future push, and nothing in its action.yml or a workflow using it
+      # warns that adding that line changes `dev`'s behavior this
+      # drastically. The failure mode is unrepresentable here, rather than
+      # merely unselected in the monolithic action as currently configured.
       #
       # Input name verified against this exact pinned commit's
       # version/action.yml (`script`, not `version-script` -- the

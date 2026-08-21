@@ -124,23 +124,56 @@ jobs:
       # made `changeset publish` exit non-zero with "Some packages failed to
       # publish" -- traced to `@changesets/cli@3.0.1`'s
       # commands/publish/index.ts, which throws `ExitError(1)` whenever any
-      # package's publish result is `"failed"`. The one path that could
-      # silently report success despite an auth problem -- an empty publish
-      # plan ("No unpublished projects to publish", exit 0) -- is reached
-      # via `getPublishPlan`'s per-package `pnpm info` check, which is an
-      # unauthenticated registry read and 404s for an unpublished package
-      # regardless of token validity; it cannot itself be the thing masking
-      # an auth failure here, because every real release publishes at least
-      # one genuinely new version.
+      # package's publish result is `"failed"`. The stronger, more direct
+      # version of this: `getUnpublishedPackages`
+      # (dist/getPublishPlan.mjs:586-591) maps only 404-shaped registry
+      # errors to "not yet published" -- any other error (401, 403,
+      # network) hits `throw new ExitError(1)` immediately, while building
+      # the publish plan, before "is there anything to publish" is even
+      # asked. An auth problem can't be masked by an empty plan; it can't
+      # reach the point where a plan is computed at all.
       - name: Verify NPM_TOKEN is configured
         run: |
           if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
             echo "::error::NPM_TOKEN secret is not set on quickstart-now/hejbro. Next: the owner must add a repository-level NPM_TOKEN secret (an npm automation token, not a publish token -- a publish token prompts for 2FA and fails in CI; see AGENTS.md's Owner actions) before this workflow can publish."
             exit 1
           fi
-      # changesets/action/publish -- NOT the monolithic changesets/action:
-      # see release-version.yml's comment on why the decomposed sub-actions
-      # are used instead of the mode-auto-selecting monolithic one.
+      # `npm whoami` -- confirms NPM_TOKEN actually authenticates against
+      # the real registry before handing it to changeset publish. Lives
+      # here, not in ci.yml's PR-time checks, deliberately: this job
+      # already has NODE_AUTH_TOKEN (see below), already ran only after
+      # `environment: npm`'s manual approval, and already ran only for a
+      # push to `main` -- so putting the check here costs nothing in
+      # credential exposure. The same check in `ci.yml`'s `verify` job (run
+      # on every PR, including from forks in theory) was tried, is what
+      # first surfaced this exact npm username in this repo's own CI log
+      # (a public repo), and was reverted for exactly that reason: it would
+      # make repository-secret credentials reachable on every PR run,
+      # which is what `environment: npm` exists to prevent. That reverted
+      # run (URL in this PR's description) confirmed `npm whoami` succeeds
+      # for this token -- so the question "does NPM_TOKEN authenticate at
+      # all" is already answered; this step exists so every future publish
+      # re-confirms it as a distinct, readable failure (rather than
+      # folding into changeset publish's own less specific error) at zero
+      # incremental cost, not to answer it again.
+      #
+      # `npm access list packages @hejbro` was tried alongside this and
+      # dropped: its own output couldn't distinguish "queried the @hejbro
+      # scope and it has zero packages" from "didn't understand @hejbro as
+      # an argument and silently no-op'd" (its accepted argument shapes are
+      # `<user>|<scope>|<scope:team>|<package>`) -- an unmeasured, possibly
+      # vacuous check isn't worth the credential exposure whoami already
+      # justifies.
+      - name: Verify NPM_TOKEN authenticates
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami --registry=https://registry.npmjs.org > /dev/null
+      # changesets/action/publish -- NOT the monolithic changesets/action.
+      # See release-version.yml's comment for the corrected reasoning (an
+      # earlier draft of this comment claimed the monolithic action would
+      # auto-select a publish mode via its own select-mode sub-action; it
+      # does neither -- read directly from the pinned commit's dist/index.js
+      # before repeating that claim again).
       #
       # Input name verified against this exact pinned commit's
       # publish/action.yml (`script`, not `publish-script` -- same trap as
