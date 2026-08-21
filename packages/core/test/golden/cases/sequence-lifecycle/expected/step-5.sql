@@ -1,8 +1,8 @@
 -- hejbro migration
--- ~ table app.posts [column "id" changed]
+-- - table app.posts [dropped]
 -- - sequence app.posts_id_seq [dropped]
 
-alter table "app"."posts" alter column "id" type integer;
+drop table "app"."posts";
 
 alter table if exists "app"."posts" alter column "id" drop default;
 

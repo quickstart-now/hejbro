@@ -67,8 +67,24 @@ const baseTypeClause = (baseType: SequenceBaseType): string => {
 const createSequenceSql = (snapshot: SequenceSnapshot): string =>
 	`create sequence ${qualifyName(snapshot.schema, snapshot.name)}${baseTypeClause(snapshot.baseType)};`;
 
+/**
+ * `drop sequence if exists …;` — `if exists`, not a bare `drop sequence`,
+ * because the sequence's own `owned by` link (see `ownedBySql` below)
+ * means Postgres already auto-drops it whenever the owning table is
+ * dropped. When a `serial`-family column's whole table is dropped in the
+ * same migration, the table's own `drop table` statement runs first
+ * (table-kind.ts's own stage), which already removes the sequence via
+ * that cascade — this statement would otherwise fail with
+ * `relation "…" does not exist`, confirmed by direct reproduction against
+ * a real Postgres (drop table, then a bare drop sequence for the same
+ * sequence: exactly that error). `policyKind`/`triggerKind`'s own drop
+ * statements already guard the same way (`drop policy if exists …`,
+ * `drop trigger if exists …`) for the identical reason — a dependent
+ * top-level kind's drop can't assume its own object still exists once
+ * the owning table's drop has already run.
+ */
 const dropSequenceSql = (snapshot: SequenceSnapshot): string =>
-	`drop sequence ${qualifyName(snapshot.schema, snapshot.name)};`;
+	`drop sequence if exists ${qualifyName(snapshot.schema, snapshot.name)};`;
 
 /**
  * `alter sequence … owned by …;` — links the sequence to its column so
@@ -88,18 +104,29 @@ const ownedBySql = (snapshot: SequenceSnapshot): string =>
  * would need the sequence to exist before the table statement runs,
  * recreating the exact circular-dependency problem `pg_dump` itself
  * avoids by splitting the default into its own trailing `alter table`
- * (confirmed against a real Postgres — see this PR's own D72-style
- * measurement notes). A bare string-literal argument (no `::regclass`
- * cast) is valid Postgres — confirmed directly, not assumed — so this
- * reuses the existing expression codec's `functionCall`/`literal` nodes
- * conceptually, but is rendered as plain SQL text here since the sequence
- * kind owns this statement outright, not through the expression codec.
+ * (confirmed against a real Postgres, comparing this kind's own output
+ * against `pg_dump`'s for a native `serial` column). A bare string-literal
+ * argument (no `::regclass` cast) is valid Postgres — confirmed directly,
+ * not assumed — so this reuses the existing expression codec's
+ * `functionCall`/`literal` nodes conceptually, but is rendered as plain
+ * SQL text here since the sequence kind owns this statement outright, not
+ * through the expression codec.
  */
 const setDefaultSql = (snapshot: SequenceSnapshot): string =>
 	`alter table ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} set default nextval('${snapshot.schema}.${snapshot.name}');`;
 
+/**
+ * `alter table if exists … drop default;` — `if exists` on the *table*,
+ * same reason as `dropSequenceSql`'s own guard: if the whole table (not
+ * just the column's serial-ness) is being dropped in the same migration,
+ * table-kind.ts's own `drop table` statement already ran and this
+ * statement's target no longer exists. Confirmed directly: `alter table
+ * if exists … drop default;` against an already-dropped table succeeds as
+ * a harmless no-op (`NOTICE: relation "…" does not exist, skipping`), not
+ * an error.
+ */
 const dropDefaultSql = (snapshot: SequenceSnapshot): string =>
-	`alter table ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} drop default;`;
+	`alter table if exists ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} drop default;`;
 
 const alterBaseTypeSql = (snapshot: SequenceSnapshot): string =>
 	`alter sequence ${qualifyName(snapshot.schema, snapshot.name)} as ${snapshot.baseType ?? "bigint"};`;

@@ -4,28 +4,6 @@
 	"objects": {
 		"schema:app": {
 			"name": "app"
-		},
-		"table:app.posts": {
-			"columns": [
-				{
-					"name": "id",
-					"notNull": true,
-					"primaryKey": true,
-					"typeNode": {
-						"typeName": "integer"
-					}
-				},
-				{
-					"name": "title",
-					"typeNode": {
-						"typeName": "text"
-					}
-				}
-			],
-			"foreignKeys": [],
-			"indexes": [],
-			"name": "posts",
-			"schema": "app"
 		}
 	}
 }

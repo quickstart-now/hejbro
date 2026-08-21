@@ -139,7 +139,16 @@ describe("sequenceKind.emit", () => {
 		expect(statements[0]?.sql).toBe('create sequence "app"."posts_id_seq";');
 	});
 
-	it("drop: drop default, then drop sequence, both main stage", () => {
+	// #23/D66, found by checking a real Postgres for what happens when a
+	// serial column's whole table is also dropped in the same migration:
+	// the table's own `drop table` cascades (via `owned by`) to the
+	// sequence too, so a bare (non-idempotent) `alter table … drop
+	// default;`/`drop sequence …;` pair would fail with `relation "…"
+	// does not exist` once `drop table` has already run. `if exists`
+	// makes both a harmless no-op in that case, matching the existing
+	// `policyKind`/`triggerKind` precedent (`drop policy if exists …`,
+	// `drop trigger if exists …`) for the same reason.
+	it("drop: drop default, then drop sequence, both main stage, both idempotent (if exists)", () => {
 		const previous = sequenceKind.serialize(declaration());
 		const statements = sequenceKind.emit({
 			kind: "sequence",
@@ -151,11 +160,11 @@ describe("sequenceKind.emit", () => {
 		});
 		expect(statements).toEqual([
 			{
-				sql: 'alter table "app"."posts" alter column "id" drop default;',
+				sql: 'alter table if exists "app"."posts" alter column "id" drop default;',
 				stage: "main",
 			},
 			{
-				sql: 'drop sequence "app"."posts_id_seq";',
+				sql: 'drop sequence if exists "app"."posts_id_seq";',
 				stage: "main",
 			},
 		]);

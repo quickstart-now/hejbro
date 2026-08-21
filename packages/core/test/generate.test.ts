@@ -257,9 +257,11 @@ describe("generateMigration", () => {
 			});
 			expect(result.errors).toEqual([]);
 			expect(result.sql).toContain(
-				'alter table "app"."posts" alter column "id" drop default;',
+				'alter table if exists "app"."posts" alter column "id" drop default;',
 			);
-			expect(result.sql).toContain('drop sequence "app"."posts_id_seq";');
+			expect(result.sql).toContain(
+				'drop sequence if exists "app"."posts_id_seq";',
+			);
 		});
 
 		it("serial() -> bigserial(): alter sequence as bigint + alter column type bigint, sequence identity unchanged", () => {
