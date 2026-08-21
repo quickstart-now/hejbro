@@ -1,7 +1,7 @@
 name: ci
 on:
   push:
-    branches: [dev, main, phase8-ci-fetch-guard]
+    branches: [dev, main]
   pull_request:
 jobs:
   verify:
@@ -48,13 +48,8 @@ jobs:
       # narrower condition that actually matches "a local `dev` branch is
       # missing": true for a PR ref and for a push to `main`, false only
       # for a push to `dev` (measured on all three — see the PR).
-      # TEMP EXPERIMENT (item 2(i), phase8-ci-fetch-guard, REVERTED before
-      # merge): fetch target renamed to match this branch, guard removed
-      # — reproduces the dev push failure structurally without touching
-      # the real dev branch (the underlying git mechanism, "refuse to
-      # fetch into the currently checked-out branch," is general, not
-      # dev-specific).
-      - run: git fetch origin phase8-ci-fetch-guard:phase8-ci-fetch-guard
+      - run: git fetch origin dev:dev
+        if: github.ref != 'refs/heads/dev'
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: "${{ matrix.node-version }}", cache: pnpm }
