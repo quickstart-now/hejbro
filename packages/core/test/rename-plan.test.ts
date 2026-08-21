@@ -4,6 +4,7 @@ import {
 	buildSnapshot,
 	check,
 	createDefaultRegistry,
+	defineView,
 	desc,
 	diffSnapshots,
 	emptySnapshot,
@@ -28,6 +29,8 @@ import {
 } from "../src";
 import type { PolicySnapshot } from "../src/kinds/policy-kind";
 import { policyUsing } from "../src/kinds/policy-kind";
+import type { ViewSnapshot } from "../src/kinds/view-kind";
+import { viewSelectSql } from "../src/kinds/view-kind";
 
 const app = schema("app");
 const registry = createDefaultRegistry();
@@ -820,5 +823,138 @@ describe("planRenames — same-table expression retargeting (#110 items 6/7)", (
 		});
 		expect(plan.errors).toEqual([]);
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+});
+
+// #157/D72: a view's own `query` is a structured SelectNode (D67/D70's
+// codec, reused as-is) -- the same class of gap item 18 measured first for
+// policies applies here too, so it's measured the same way: a real
+// before/after through planRenames, not just unit coverage of
+// retargetSelectNode in isolation (retarget.test.ts's own #157 loop
+// already covers that; this proves the wiring in rename-plan.ts).
+describe("planRenames — view query retargeting (#157/D72)", () => {
+	it("a table rename retargets a view's own from/where, with no leftover diff", () => {
+		const buildPosts = (tableName: string) =>
+			table(app, tableName, {
+				id: uuid().primaryKey(),
+				publishedAt: uuid(),
+			});
+		const buildView = (postsTableName: string, viewTableName: string) => {
+			const posts = buildPosts(postsTableName);
+			return defineView(
+				app,
+				viewTableName,
+				select(posts).where(isNotNull(posts.publishedAt)),
+			);
+		};
+
+		const previous = snap(
+			app,
+			buildPosts("posts"),
+			buildView("posts", "published_posts"),
+		);
+		const next = snap(
+			app,
+			buildPosts("articles"),
+			buildView("articles", "published_posts"),
+		);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+
+		const viewNode = plan.rewrittenPrevious.objects[
+			"view:app.published_posts"
+		] as ViewSnapshot;
+		expect(viewNode).toBeDefined();
+		const selectSql = viewSelectSql(viewNode);
+		expect(selectSql).toContain('"articles"');
+		expect(selectSql).not.toContain('"posts"');
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a column rename retargets a view's own where clause referencing that column, with no leftover diff", () => {
+		const postsBefore = table(app, "posts", {
+			id: uuid().primaryKey(),
+			price: integer(),
+		});
+		const postsAfter = table(app, "posts", {
+			id: uuid().primaryKey(),
+			cost: integer(),
+		});
+		const viewBefore = defineView(
+			app,
+			"cheap_posts",
+			select(postsBefore).where(gt(postsBefore.price, 0)),
+		);
+		const viewAfter = defineView(
+			app,
+			"cheap_posts",
+			select(postsAfter).where(gt(postsAfter.cost, 0)),
+		);
+
+		const previous = snap(app, postsBefore, viewBefore);
+		const next = snap(app, postsAfter, viewAfter);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "price",
+					newName: "cost",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("returns the exact same view object reference when a rename doesn't touch it (cheap no-op check)", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const otherTable = table(app, "other_table", { id: uuid().primaryKey() });
+		const view = defineView(app, "all_posts", select(posts));
+
+		const previous = snap(app, posts, otherTable, view);
+		const renamedOtherTable = table(app, "renamed_other_table", {
+			id: uuid().primaryKey(),
+		});
+		const next = snap(app, posts, renamedOtherTable, view);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "other_table",
+					newName: "renamed_other_table",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.rewrittenPrevious.objects["view:app.all_posts"]).toBe(
+			previous.objects["view:app.all_posts"],
+		);
 	});
 });

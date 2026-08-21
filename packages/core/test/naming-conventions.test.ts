@@ -12,6 +12,7 @@ import {
 	check,
 	createDefaultRegistry,
 	defineTrigger,
+	defineView,
 	emptySnapshot,
 	eq,
 	exists,
@@ -265,11 +266,12 @@ const walkJson = (
 
 describe("D70 naming convention: expression subtree discriminators are kebab-case", () => {
 	// Exercises every reachable ExprNode/ProjectionNode kind at least once
-	// (all but `plpgsqlRef`, `allColumns`, `columns` -- see
-	// UNREACHABLE_NODE_KINDS/UNREACHABLE_PROJECTION_KINDS below for why
-	// those three are excluded on purpose) so the completeness assertion
-	// further down has something real to compare the maps against, not
-	// just whatever a narrower fixture happened to construct.
+	// (all but `plpgsqlRef` -- see UNREACHABLE_NODE_KINDS below for why
+	// it's excluded on purpose) so the completeness assertion further down
+	// has something real to compare the maps against, not just whatever a
+	// narrower fixture happened to construct. `allColumns`/`columns`
+	// (#157/D72) are reached only through the two views below -- `exists()`
+	// itself still only ever produces `constantOne` (pinned further down).
 	const authors = table(app, "authors", { id: uuid().primaryKey() });
 	const posts = table(
 		app,
@@ -329,8 +331,27 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 		}),
 	);
 
+	// #157/D72: a view's own `query` is a structured SelectNode too, and
+	// (unlike exists(), which always normalizes to constantOne) reaches
+	// whichever projection kind `select()` actually produced -- one view
+	// per projection kind, so the completeness assertion further down sees
+	// both without relying on `exists()`'s own (deliberately narrower) set.
+	const allPricesView = defineView(app, "all_prices_view", select(posts));
+	const priceSummaryView = defineView(
+		app,
+		"price_summary_view",
+		select({ id: posts.id, price: posts.price }, posts),
+	);
+
 	const result = generateMigration({
-		declarations: [app, authors, posts, comments],
+		declarations: [
+			app,
+			authors,
+			posts,
+			comments,
+			allPricesView,
+			priceSummaryView,
+		],
 		previousSnapshot: emptySnapshot,
 		registry,
 	});
@@ -366,9 +387,13 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 	// every gap accounted for explicitly. This must NOT decay into a
 	// silent allowlist (#87's rejected pattern) -- every entry in
 	// `UNREACHABLE_NODE_KINDS`/`UNREACHABLE_PROJECTION_KINDS` carries a
-	// reason and a category (constructional vs. current-code-dependent,
-	// the latter backed by an actual pinning test below, not just prose --
-	// see `expr/reachable-kinds.ts` for the full explanation).
+	// reason and a category (constructional vs. current-code-dependent --
+	// a current-code-dependent entry, were one ever added again, would
+	// need an actual pinning test, not just prose -- see
+	// `expr/reachable-kinds.ts` for the full explanation).
+	// `UNREACHABLE_NODE_KINDS` currently holds only `plpgsqlRef`
+	// (constructional, prose-only); `UNREACHABLE_PROJECTION_KINDS` is
+	// empty since #157 (see below).
 	//
 	// `REACHABLE_NODE_KINDS`/`REACHABLE_PROJECTION_KINDS` and the
 	// unreachable sets both come from `expr/reachable-kinds.ts` -- the
@@ -378,14 +403,19 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 	// kind list, which is exactly the kind of duplication that let a real
 	// gap slip through one fix-a-case cycle already.
 	//
-	// Backs the two `current-code-dependent` entries in that module: if
-	// buildExists
-	// is ever changed to pass through the real projection instead of
-	// hardcoding constantOne, THIS test goes red first, forcing whoever
-	// makes that change to also revisit the unreachable-set above (which
-	// would otherwise go stale silently, reproducing the exact failure
-	// mode the completeness assertion below exists to prevent).
-	it("exists()/notExists() always normalize their subquery's projection to constantOne (backs the projection-kind unreachable-set entries above)", () => {
+	// `UNREACHABLE_PROJECTION_KINDS` is empty as of #157: `allColumns`/
+	// `columns` used to be unreachable *only* because `exists()` hardcoded
+	// `constantOne`, but a view's own query (#157/D72) reaches both
+	// directly, so they moved to `REACHABLE_PROJECTION_KINDS` instead. This
+	// test's claim about `exists()` itself is still true and still worth
+	// pinning on its own terms -- it documents that `exists()`'s narrow
+	// behavior is deliberate, not an oversight, and if `buildExists` is
+	// ever changed to pass the real projection through, THIS test goes red
+	// first, independent of whatever the completeness assertion below
+	// says about the map as a whole (which by then would already be
+	// satisfied through views, so it would stay green -- the two tests
+	// check different claims, not the same one twice).
+	it("exists()/notExists() always normalize their subquery's projection to constantOne", () => {
 		const widgets = table(app, "widgets", {
 			id: uuid().primaryKey(),
 			label: uuid().notNull(),
