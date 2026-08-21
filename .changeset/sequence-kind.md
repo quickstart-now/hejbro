@@ -39,23 +39,19 @@ the column not-null when it's serial-family) — a separate, narrower fix,
 landed as its own commit since it holds regardless of the sequence work
 above.
 
-No format-version bump: this is possible only because `formatVersion` 5
-has never been published. All three packages are still `0.0.0` and #179
-is the first release, so no user holds a v5 snapshot this change could
-break — there is no "stale reader" to protect yet. **This reasoning has
-an expiry date**: the same change after 0.1.0 would need a bump, because
-a snapshot with a `sequence` node, read by pre-this-PR code, throws
-`unknown-kind` (`generateMigration` — confirmed directly, see below)
-with a diagnostic that tells the user to register a preset that doesn't
-exist for a core kind. Phase 6's `supabase-storage-bucket` precedent
-does **not** transfer here: that kind only ever appears in a snapshot
-when a user explicitly registers the preset that provides it, so
-`unknown-kind` there means "you removed the preset from config" and the
-diagnostic's "register the preset" advice is the right fix. A `sequence`
-node appears the moment *any* declaration calls `serial()` — no preset,
-no opt-in — so for `sequence`, `unknown-kind` means "hejbro is older
-than the snapshot," and the same advice is wrong. Fixing the diagnostic
-message itself is out of scope for this PR — filed separately.
+No format-version bump. This is harmless right now because `formatVersion`
+5 has never been published (all three packages are `0.0.0`; #179 is the
+first release), so no reader exists to be broken — **but that is not the
+reason of record.** The reason is **D73 (#196)**: `formatVersion` tracks
+field *shape*, not vocabulary; adding a core kind never bumps it, before
+or after publication. An older hejbro reading a snapshot with a kind it
+doesn't know fails on the kind itself, not on the format — confirmed
+directly (a merge-base checkout of this repo, from before this PR,
+fed a hand-built v5 snapshot with a `sequence` node: `parseSnapshot`
+succeeds, `generateMigration` throws `unknown-kind`) — and #196's
+`unknown-kind` diagnostic is what tells that older hejbro to upgrade.
+Fixing that diagnostic's wording for a core (vs. preset) kind is out of
+scope for this PR — filed separately.
 
 No existing declaration used `serial`/`smallserial`/`bigserial` in the
 first place (confirmed:
