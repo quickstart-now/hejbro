@@ -134,7 +134,11 @@ importers:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(jiti@2.7.0))
 
-  packages/skills: {}
+  packages/skills:
+    devDependencies:
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(jiti@2.7.0))
 
   packages/supabase:
     dependencies:
