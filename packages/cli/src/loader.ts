@@ -1,11 +1,72 @@
-import { existsSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { HejbroInput } from "@hejbro/core";
-import { isTable, throwHejbroError } from "@hejbro/core";
+import { HejbroError, isTable, throwHejbroError } from "@hejbro/core";
 import { createJiti } from "jiti";
 import { glob } from "tinyglobby";
 import type { HejbroConfig } from "./config";
 import { parseConfig } from "./config";
+
+/** First line only — a Node error's `.message` can carry a trailing
+ * "Require stack:" block, and `Diagnostic.body`'s indentation assumes one
+ * line per entry (§7 grammar). */
+const firstLine = (message: string): string =>
+	message.split("\n")[0] ?? message;
+
+/** `base`, resolved — macOS's `/tmp` → `/private/tmp` symlink means a raw
+ * Node error can embed the *resolved* path even when `base` itself is the
+ * unresolved one; stripping only `base` would miss it. Falls back to
+ * `base` unchanged if it doesn't exist (nothing to resolve). */
+const safeRealpath = (base: string): string => {
+	try {
+		return realpathSync(base);
+	} catch {
+		return base;
+	}
+};
+
+/** Removes every `${base}/` (and its resolved-symlink equivalent) prefix
+ * from `text` — a Node module-resolution error can embed an absolute path
+ * built from `base` (e.g. `.../node_modules/<pkg>/dist/index.js`), and the
+ * CLI never puts an absolute path in its own output (Task 14). Leaves the
+ * informative suffix (package name, sub-path) intact. */
+const stripAbsolutePrefixes = (text: string, base: string): string =>
+	[base, safeRealpath(base)].reduce(
+		(withoutPrefix, prefix) => withoutPrefix.split(`${prefix}/`).join(""),
+		text,
+	);
+
+/**
+ * Runs a jiti import and converts any failure into a `<code>-load-failed`
+ * HejbroError — except a `HejbroError` itself, which passes through
+ * unchanged. A declaration file's own DSL validation errors (e.g.
+ * `schema("Bad Name")`) are thrown *during* `jiti.import`'s module
+ * evaluation, not by the import mechanism — wrapping those too would lose
+ * their real code and `declaredAt` and misreport them as a load failure
+ * (phase8-loader-diagnostics item 12; #146 is what makes this `instanceof`
+ * check reliable). Shared by `loadConfig` and `loadDeclarations` so a
+ * third load site added later picks up the same handling automatically.
+ */
+const importOrDiagnose = async <T>(
+	run: () => Promise<T>,
+	toDiagnostic: (reason: string) => {
+		readonly code: string;
+		readonly message: string;
+	},
+): Promise<T> => {
+	try {
+		return await run();
+	} catch (error) {
+		if (error instanceof HejbroError) {
+			throw error;
+		}
+		const reason = firstLine(
+			error instanceof Error ? error.message : String(error),
+		);
+		const { code, message } = toDiagnostic(reason);
+		return throwHejbroError(code, message);
+	}
+};
 
 const DEFAULT_CONFIG_FILE_NAME = "hejbro.config.ts";
 
@@ -45,7 +106,13 @@ export const loadConfig = async (
 	// handful of files; the reproduced failure was an external deletion of
 	// dist/ during a run, not the cache.
 	const jiti = createJiti(configPath, { fsCache: false });
-	const loaded = await jiti.import(configPath, { default: true });
+	const loaded = await importOrDiagnose(
+		() => jiti.import(configPath, { default: true }),
+		(reason) => ({
+			code: "config-load-failed",
+			message: `failed to load "${relative(cwd, configPath)}": ${stripAbsolutePrefixes(reason, cwd)}. Next: check that every import in hejbro.config.ts resolves — a package that isn't installed, or an installed package whose "exports" field doesn't resolve, both surface here. Install it, or check the package's own "exports" if it's already installed.`,
+		}),
+	);
 	const config = parseConfig(loaded, configPath);
 	return { config, configPath };
 };
@@ -140,8 +207,24 @@ export const loadDeclarations = async (
 	// handful of files; the reproduced failure was an external deletion of
 	// dist/ during a run, not the cache.
 	const jiti = createJiti(configPath, { fsCache: false });
+	// Promise.all, not allSettled: only the first failing file is reported,
+	// matching every other loader precondition (config-not-found,
+	// entry-not-found) — one throw, not a batch. Collecting every failing
+	// file would need a different return shape (a batch of errors instead
+	// of a declaration array) threaded through generate/verify's own
+	// batching, which is a larger redesign than "stop crashing raw" calls
+	// for; a user fixes the first reported file and reruns, same as they
+	// already do for every other precondition here.
 	const modules = await Promise.all(
-		sortedMatches.map((filePath) => jiti.import(filePath)),
+		sortedMatches.map((filePath) =>
+			importOrDiagnose(
+				() => jiti.import(filePath),
+				(reason) => ({
+					code: "declaration-load-failed",
+					message: `failed to load "${relative(entryDir, filePath)}": ${stripAbsolutePrefixes(reason, entryDir)}. Next: check that every import in this file resolves — a package that isn't installed, or an installed package whose "exports" field doesn't resolve, both surface here. Install it, or check the package's own "exports" if it's already installed.`,
+				}),
+			),
+		),
 	);
 	return modules.flatMap((moduleNamespace) =>
 		collectDeclarations(moduleNamespace as object),
