@@ -74,6 +74,18 @@ jobs:
       - run: pnpm build
       - run: pnpm smoke:pack-install
         if: matrix.node-version == 24
+      # #180: not "trust this branch" -- the question this step asks
+      # ("does every package this branch changed relative to dev have an
+      # accompanying pending changeset?") does not apply on a
+      # changeset-release/* branch. That branch's only content IS a
+      # version bump that CONSUMES pending changesets (deletes the
+      # `.changeset/*.md` files, applies their version bumps) -- so
+      # relative to dev it always looks like "packages changed, no
+      # changeset covers it," on every single Version Packages branch,
+      # not just this one. Measured directly on a scratch branch (#180):
+      # `pnpm changeset status` failed with exactly that message on both
+      # of two separate Version-branch commits.
       - run: pnpm changeset status
+        if: ${{ !startsWith(github.ref, 'refs/heads/changeset-release/') }}
       - run: pnpm check:first-release-version
       - run: pnpm check:next-marker
