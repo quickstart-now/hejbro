@@ -1013,7 +1013,9 @@ const rewriteForeignKeysForRename = (
  * <name>`), not a nested array inside the owning table's own node, so
  * renaming it (when its stored name was actually `deriveSequenceName(...)`
  * — the same `wasDerived` guard the index/FK case uses, never touching a
- * hypothetical future user-chosen name) means re-keying its `objects`
+ * name reachable today through a hand-edited or round-tripped snapshot
+ * (D33) — there is no DSL surface to author one directly, but D33 makes a
+ * snapshot on disk the ground truth regardless) means re-keying its `objects`
  * entry, not just editing a field in place. Operates on the whole
  * `objects` record directly (mirroring `rewriteForeignKeyTargets`'s
  * full-scan style) rather than on one table's own nested arrays, since
