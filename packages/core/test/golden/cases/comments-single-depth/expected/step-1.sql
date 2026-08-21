@@ -1,7 +1,7 @@
 -- hejbro migration
--- ~ function ddland.comments_enforce_single_depth [body changed]
+-- ~ function app.comments_enforce_single_depth [body changed]
 
-create or replace function "ddland"."comments_enforce_single_depth"()
+create or replace function "app"."comments_enforce_single_depth"()
 returns trigger
 language plpgsql
 as $function$
@@ -12,7 +12,7 @@ begin
 	if new.parent_id is null then
 		return new;
 	end if;
-	select "ddland"."comments"."post_id" as "post_id", "ddland"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "ddland"."comments" where "ddland"."comments"."id" = new.parent_id;
+	select "app"."comments"."post_id" as "post_id", "app"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "app"."comments" where "app"."comments"."id" = new.parent_id;
 	if parent_post_id is null then
 		raise exception '부모 댓글을 찾을 수 없습니다 (parent_id=%)', new.parent_id;
 	end if;

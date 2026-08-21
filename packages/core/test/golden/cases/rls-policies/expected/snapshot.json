@@ -2,25 +2,25 @@
 	"dialect": "postgres",
 	"hejbroSnapshot": 3,
 	"objects": {
-		"policy:ddland.posts.posts_read_published": {
+		"policy:app.posts.posts_read_published": {
 			"command": "select",
 			"name": "posts_read_published",
 			"roles": [
 				"anon"
 			],
-			"schema": "ddland",
+			"schema": "app",
 			"table": "posts",
-			"using": "\"ddland\".\"posts\".\"published_at\" is not null"
+			"using": "\"app\".\"posts\".\"published_at\" is not null"
 		},
-		"rls:ddland.posts": {
+		"rls:app.posts": {
 			"force": true,
-			"schema": "ddland",
+			"schema": "app",
 			"table": "posts"
 		},
-		"schema:ddland": {
-			"schemaName": "ddland"
+		"schema:app": {
+			"schemaName": "app"
 		},
-		"table:ddland.comments": {
+		"table:app.comments": {
 			"columns": [
 				{
 					"default": "gen_random_uuid()",
@@ -48,9 +48,9 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "comments",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"table:ddland.posts": {
+		"table:app.posts": {
 			"columns": [
 				{
 					"default": "gen_random_uuid()",
@@ -78,7 +78,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "posts",
-			"schema": "ddland"
+			"schema": "app"
 		}
 	}
 }

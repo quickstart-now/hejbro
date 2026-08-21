@@ -2,16 +2,16 @@
 	"dialect": "postgres",
 	"hejbroSnapshot": 3,
 	"objects": {
-		"grant:ddland.allTablesPrivileges.anon": {
+		"grant:app.allTablesPrivileges.anon": {
 			"grantKind": "allTablesPrivileges",
 			"privileges": [
 				"select",
 				"insert"
 			],
 			"role": "anon",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"grant:ddland.allTablesPrivileges.service_role": {
+		"grant:app.allTablesPrivileges.service_role": {
 			"grantKind": "allTablesPrivileges",
 			"privileges": [
 				"select",
@@ -19,22 +19,22 @@
 				"update"
 			],
 			"role": "service_role",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"grant:ddland.schemaUsage.anon": {
+		"grant:app.schemaUsage.anon": {
 			"grantKind": "schemaUsage",
 			"privileges": [],
 			"role": "anon",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"grant:ddland.schemaUsage.service_role": {
+		"grant:app.schemaUsage.service_role": {
 			"grantKind": "schemaUsage",
 			"privileges": [],
 			"role": "service_role",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"schema:ddland": {
-			"schemaName": "ddland"
+		"schema:app": {
+			"schemaName": "app"
 		}
 	}
 }

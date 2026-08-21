@@ -14,13 +14,13 @@ import {
 	uuid,
 } from "../../src/index";
 
-const ddland = schema("ddland");
-const posts = table(ddland, "posts", {
+const app = schema("app");
+const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	slug: text().notNull(),
 	publishedAt: timestamptz(),
 });
-const comments = table(ddland, "comments", {
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 });
@@ -32,7 +32,7 @@ describe("mutation builders", () => {
 			.where(eq(posts.slug, "hello"))
 			.returning();
 		expect(renderQuery(query.updateQuery)).toBe(
-			'update "ddland"."posts" set "published_at" = now() where "ddland"."posts"."slug" = \'hello\' returning "id", "slug", "published_at"',
+			'update "app"."posts" set "published_at" = now() where "app"."posts"."slug" = \'hello\' returning "id", "slug", "published_at"',
 		);
 	});
 	it("renders insert with on conflict do nothing", () => {
@@ -40,7 +40,7 @@ describe("mutation builders", () => {
 			.values({ slug: "hello" })
 			.onConflictDoNothing(posts.slug);
 		expect(renderQuery(query.insertQuery)).toBe(
-			'insert into "ddland"."posts" ("slug") values (\'hello\') on conflict ("slug") do nothing',
+			'insert into "app"."posts" ("slug") values (\'hello\') on conflict ("slug") do nothing',
 		);
 	});
 	it("fills missing multi-row keys with sql default", () => {
@@ -49,13 +49,13 @@ describe("mutation builders", () => {
 			{ slug: "b" },
 		]);
 		expect(renderQuery(query.insertQuery)).toBe(
-			'insert into "ddland"."posts" ("slug", "published_at") values (\'a\', now()), (\'b\', default)',
+			'insert into "app"."posts" ("slug", "published_at") values (\'a\', now()), (\'b\', default)',
 		);
 	});
 	it("renders delete with where and returning", () => {
 		const query = deleteFrom(posts).where(eq(posts.slug, "old")).returning();
 		expect(renderQuery(query.deleteQuery)).toBe(
-			'delete from "ddland"."posts" where "ddland"."posts"."slug" = \'old\' returning "id", "slug", "published_at"',
+			'delete from "app"."posts" where "app"."posts"."slug" = \'old\' returning "id", "slug", "published_at"',
 		);
 	});
 	it("rejects unknown column keys with an actionable error", () => {

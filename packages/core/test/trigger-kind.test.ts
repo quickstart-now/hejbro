@@ -10,8 +10,8 @@ import {
 	uuid,
 } from "../src/index";
 
-const ddland = schema("ddland");
-const comments = table(ddland, "comments", {
+const app = schema("app");
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 	parentId: uuid(),
@@ -44,7 +44,7 @@ describe("triggerKind", () => {
 			functionName: string;
 		};
 		expect(snapshot).toEqual({
-			schema: "ddland",
+			schema: "app",
 			table: "comments",
 			name: "comments_single_depth",
 			timing: "before",
@@ -57,13 +57,13 @@ describe("triggerKind", () => {
 	it("identifies as schema.table.name", () => {
 		const snapshot = triggerKind.serialize(makeTrigger("before"));
 		expect(triggerKind.identify(snapshot)).toBe(
-			"ddland.comments.comments_single_depth",
+			"app.comments.comments_single_depth",
 		);
 	});
 
 	it("diffs create when there is no previous snapshot", () => {
 		const next = triggerKind.serialize(makeTrigger("before"));
-		const identity = "ddland.comments.comments_single_depth";
+		const identity = "app.comments.comments_single_depth";
 		expect(triggerKind.diff(null, next, identity)).toEqual([
 			{
 				kind: "trigger",
@@ -78,7 +78,7 @@ describe("triggerKind", () => {
 
 	it("diffs drop when there is no next snapshot", () => {
 		const previous = triggerKind.serialize(makeTrigger("before"));
-		const identity = "ddland.comments.comments_single_depth";
+		const identity = "app.comments.comments_single_depth";
 		expect(triggerKind.diff(previous, null, identity)).toEqual([
 			{
 				kind: "trigger",
@@ -94,14 +94,14 @@ describe("triggerKind", () => {
 	it("diffs no change for identical declarations", () => {
 		const previous = triggerKind.serialize(makeTrigger("before"));
 		const next = triggerKind.serialize(makeTrigger("before"));
-		const identity = "ddland.comments.comments_single_depth";
+		const identity = "app.comments.comments_single_depth";
 		expect(triggerKind.diff(previous, next, identity)).toEqual([]);
 	});
 
 	it("diffs any field change as a single alter with a trigger-changed note", () => {
 		const previous = triggerKind.serialize(makeTrigger("before"));
 		const next = triggerKind.serialize(makeTrigger("after"));
-		const identity = "ddland.comments.comments_single_depth";
+		const identity = "app.comments.comments_single_depth";
 		expect(triggerKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "trigger",
@@ -119,7 +119,7 @@ describe("triggerKind", () => {
 		const statements = triggerKind.emit({
 			kind: "trigger",
 			operation: "create",
-			identity: "ddland.comments.comments_single_depth",
+			identity: "app.comments.comments_single_depth",
 			previous: null,
 			next,
 			notes: [],
@@ -135,7 +135,7 @@ describe("triggerKind", () => {
 		const statements = triggerKind.emit({
 			kind: "trigger",
 			operation: "alter",
-			identity: "ddland.comments.comments_single_depth",
+			identity: "app.comments.comments_single_depth",
 			previous,
 			next,
 			notes: ["trigger changed; recreating"],
@@ -151,7 +151,7 @@ describe("triggerKind", () => {
 		const statements = triggerKind.emit({
 			kind: "trigger",
 			operation: "drop",
-			identity: "ddland.comments.comments_single_depth",
+			identity: "app.comments.comments_single_depth",
 			previous,
 			next: null,
 			notes: [],
@@ -173,7 +173,7 @@ describe("triggerKind", () => {
 			previousSnapshot: emptySnapshot,
 		});
 		const functionIndex = result.sql.indexOf(
-			'create or replace function "ddland"."comments_single_depth_fn"',
+			'create or replace function "app"."comments_single_depth_fn"',
 		);
 		const triggerIndex = result.sql.indexOf(
 			'create trigger "comments_single_depth"',

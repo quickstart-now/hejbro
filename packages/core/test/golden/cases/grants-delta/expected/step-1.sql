@@ -1,7 +1,7 @@
 -- hejbro migration
--- ~ grant ddland.allTablesPrivileges.anon [+insert]
--- ~ grant ddland.allTablesPrivileges.service_role [-delete]
+-- ~ grant app.allTablesPrivileges.anon [+insert]
+-- ~ grant app.allTablesPrivileges.service_role [-delete]
 
-grant insert on all tables in schema "ddland" to "anon";
+grant insert on all tables in schema "app" to "anon";
 
-revoke delete on all tables in schema "ddland" from "service_role";
+revoke delete on all tables in schema "app" from "service_role";

@@ -11,14 +11,14 @@ import { buildAmbiguityDiagnostic } from "../src/rename-diagnostics";
 // template wording are right, and that they generalize correctly to real
 // (differently-named) ambiguities.
 
-const AT = 'examples/dd-land/schema.ts (export "posts")';
+const AT = 'examples/shop/schema.ts (export "posts")';
 
 describe("buildAmbiguityDiagnostic — column, single pair", () => {
 	const ambiguity: ColumnRenameAmbiguity = {
 		kind: "column",
-		schemaName: "ddland",
+		schemaName: "shop",
 		tableName: "posts",
-		identity: "ddland.posts",
+		identity: "shop.posts",
 		dropped: ["slug"],
 		added: ["handle"],
 		declaredAt: AT,
@@ -29,18 +29,18 @@ describe("buildAmbiguityDiagnostic — column, single pair", () => {
 		const rendered = renderDiagnostics([diagnostic], null);
 		expect(rendered).toBe(
 			[
-				"error[ambiguous-column-rename]: ddland.posts",
+				"error[ambiguous-column-rename]: shop.posts",
 				'  column "slug" was dropped and column "handle" was added in the same',
 				"  generate run — hejbro exited without writing SQL for this table; it",
 				"  won't guess between two possible next steps.",
 				"",
 				"  → if this is a rename, rerun:",
-				"      hejbro generate --rename ddland.posts.slug=handle",
+				"      hejbro generate --rename shop.posts.slug=handle",
 				"",
 				"  → if these are unrelated changes, rerun:",
-				"      hejbro generate --confirm-drop ddland.posts.slug",
+				"      hejbro generate --confirm-drop shop.posts.slug",
 				"",
-				'  at examples/dd-land/schema.ts (export "posts")',
+				'  at examples/shop/schema.ts (export "posts")',
 			].join("\n"),
 		);
 	});
@@ -54,7 +54,7 @@ describe("buildAmbiguityDiagnostic — column, single pair", () => {
 		expect(diagnostic.suggestions[0]?.lines).toEqual([
 			"hejbro generate \\",
 			"  --config db/hejbro.config.ts \\",
-			"  --rename ddland.posts.slug=handle",
+			"  --rename shop.posts.slug=handle",
 		]);
 	});
 });
@@ -62,9 +62,9 @@ describe("buildAmbiguityDiagnostic — column, single pair", () => {
 describe("buildAmbiguityDiagnostic — column, multiple pairs", () => {
 	const ambiguity: ColumnRenameAmbiguity = {
 		kind: "column",
-		schemaName: "ddland",
+		schemaName: "shop",
 		tableName: "posts",
-		identity: "ddland.posts",
+		identity: "shop.posts",
 		dropped: ["slug", "seo_title"],
 		added: ["handle", "meta_title"],
 		declaredAt: AT,
@@ -81,11 +81,11 @@ describe("buildAmbiguityDiagnostic — column, multiple pairs", () => {
 		expect(diagnostic.suggestions[0]).toEqual({
 			label: "every dropped column needs one of:",
 			lines: [
-				"--rename ddland.posts.slug=<new column, e.g. handle or meta_title>",
-				"--confirm-drop ddland.posts.slug",
+				"--rename shop.posts.slug=<new column, e.g. handle or meta_title>",
+				"--confirm-drop shop.posts.slug",
 				"",
-				"--rename ddland.posts.seo_title=<new column, e.g. handle or meta_title>",
-				"--confirm-drop ddland.posts.seo_title",
+				"--rename shop.posts.seo_title=<new column, e.g. handle or meta_title>",
+				"--confirm-drop shop.posts.seo_title",
 			],
 		});
 		expect(diagnostic.suggestions[1]?.label).toBe(
@@ -96,8 +96,8 @@ describe("buildAmbiguityDiagnostic — column, multiple pairs", () => {
 		// "seo_title" < "slug" — see rerun.test.ts.
 		expect(diagnostic.suggestions[1]?.lines).toEqual([
 			"hejbro generate \\",
-			"  --rename ddland.posts.seo_title=meta_title \\",
-			"  --rename ddland.posts.slug=handle",
+			"  --rename shop.posts.seo_title=meta_title \\",
+			"  --rename shop.posts.slug=handle",
 		]);
 	});
 });
@@ -105,33 +105,33 @@ describe("buildAmbiguityDiagnostic — column, multiple pairs", () => {
 describe("buildAmbiguityDiagnostic — table, 1:1", () => {
 	const ambiguity: TableRenameAmbiguity = {
 		kind: "table",
-		schemaName: "ddland",
+		schemaName: "shop",
 		droppedTables: ["posts"],
 		createdTables: ["blog_posts"],
-		declaredAt: 'examples/dd-land/schema.ts (export "blogPosts")',
+		declaredAt: 'examples/shop/schema.ts (export "blogPosts")',
 	};
 
 	it("matches the owner-approved table-rename mockup exactly, including the ⚠ callout hanging indent", () => {
 		const diagnostic = buildAmbiguityDiagnostic(
 			ambiguity,
 			[],
-			'examples/dd-land/schema.ts (export "blogPosts")',
+			'examples/shop/schema.ts (export "blogPosts")',
 		);
 		const rendered = renderDiagnostics([diagnostic], null);
 		expect(rendered).toBe(
 			[
-				"error[ambiguous-table-rename]: ddland",
+				"error[ambiguous-table-rename]: shop",
 				'  table "posts" was dropped, table "blog_posts" was created.',
 				"  ⚠ a table rename recreates every column, index, foreign key, RLS",
 				"    policy, and trigger on it — hejbro will not guess.",
 				"",
 				"  → if this is a rename, rerun:",
-				"      hejbro generate --rename ddland.posts=blog_posts",
+				"      hejbro generate --rename shop.posts=blog_posts",
 				"",
 				"  → if these are unrelated tables, rerun:",
-				"      hejbro generate --confirm-drop ddland.posts",
+				"      hejbro generate --confirm-drop shop.posts",
 				"",
-				'  at examples/dd-land/schema.ts (export "blogPosts")',
+				'  at examples/shop/schema.ts (export "blogPosts")',
 			].join("\n"),
 		);
 	});

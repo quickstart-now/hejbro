@@ -1,11 +1,11 @@
 import type { HejbroInput } from "../../../../src/index";
 import { index, table, text, timestamptz, uuid } from "../../../../src/index";
-import { ddland, postStatus } from "./declarations";
+import { app, postStatus } from "./declarations";
 
 // Step 1: initial — posts (with a published_at index) + comments (no FK to posts yet).
 
 const initialPosts = table(
-	ddland,
+	app,
 	"posts",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -17,14 +17,14 @@ const initialPosts = table(
 	}),
 );
 
-const initialComments = table(ddland, "comments", {
+const initialComments = table(app, "comments", {
 	id: uuid().primaryKey().defaultRandom(),
 	postId: uuid().notNull(),
 	body: text().notNull(),
 });
 
 const initial: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	postStatus,
 	initialPosts,
 	initialComments,
@@ -33,7 +33,7 @@ const initial: ReadonlyArray<HejbroInput> = [
 // Step 2: addSlugColumn — posts gains a unique slug column; comments is unchanged.
 
 const postsWithSlug = table(
-	ddland,
+	app,
 	"posts",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -47,7 +47,7 @@ const postsWithSlug = table(
 );
 
 const addSlugColumn: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	postStatus,
 	postsWithSlug,
 	initialComments,
@@ -55,7 +55,7 @@ const addSlugColumn: ReadonlyArray<HejbroInput> = [
 
 // Step 3: dropIndexAddFk — posts drops the published_at index; comments gains its FK to posts.
 
-const postsWithoutIndex = table(ddland, "posts", {
+const postsWithoutIndex = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	publishedAt: timestamptz(),
 	status: postStatus.column().notNull(),
@@ -63,7 +63,7 @@ const postsWithoutIndex = table(ddland, "posts", {
 });
 
 const commentsWithFk = table(
-	ddland,
+	app,
 	"comments",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -85,7 +85,7 @@ const commentsWithFk = table(
 );
 
 const dropIndexAddFk: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	postStatus,
 	postsWithoutIndex,
 	commentsWithFk,

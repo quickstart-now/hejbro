@@ -9,8 +9,8 @@ import {
 	uuid,
 } from "../../src/index";
 
-const ddland = schema("ddland");
-const comments = table(ddland, "comments", {
+const app = schema("app");
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 	parentId: uuid(),
@@ -36,7 +36,7 @@ describe("renderSelectInto", () => {
 				},
 			),
 		).toBe(
-			'select "ddland"."comments"."post_id" as "post_id", "ddland"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "ddland"."comments" where "ddland"."comments"."id" = new.parent_id',
+			'select "app"."comments"."post_id" as "post_id", "app"."comments"."parent_id" as "parent_id" into parent_post_id, parent_parent_id from "app"."comments" where "app"."comments"."id" = new.parent_id',
 		);
 	});
 	it("renders strict", () => {

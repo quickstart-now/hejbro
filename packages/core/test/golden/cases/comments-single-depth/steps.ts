@@ -7,12 +7,12 @@ import {
 	ne,
 	select,
 } from "../../../../src/index";
-import { comments, commentsSingleDepth, ddland, posts } from "./declarations";
+import { app, comments, commentsSingleDepth, posts } from "./declarations";
 
 // Step 0: from empty — posts, comments, and the comments-single-depth trigger.
 
 const fromEmpty: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	posts,
 	comments,
 	commentsSingleDepth,
@@ -61,7 +61,7 @@ const commentsSingleDepthBodyChanged = defineTrigger(
 );
 
 const bodyOnlyChange: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	posts,
 	comments,
 	commentsSingleDepthBodyChanged,
@@ -110,7 +110,7 @@ const commentsSingleDepthEventsChanged = defineTrigger(
 );
 
 const triggerDefChange: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	posts,
 	comments,
 	commentsSingleDepthEventsChanged,

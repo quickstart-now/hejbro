@@ -1,9 +1,9 @@
 -- hejbro migration
--- ~ rls ddland.posts [force row level security]
--- ~ policy ddland.posts.posts_read_published [policy changed; recreating]
+-- ~ rls app.posts [force row level security]
+-- ~ policy app.posts.posts_read_published [policy changed; recreating]
 
-drop policy if exists "posts_read_published" on "ddland"."posts";
+drop policy if exists "posts_read_published" on "app"."posts";
 
-alter table "ddland"."posts" force row level security;
+alter table "app"."posts" force row level security;
 
-create policy "posts_read_published" on "ddland"."posts" for select to "anon" using ("ddland"."posts"."published_at" is not null);
+create policy "posts_read_published" on "app"."posts" for select to "anon" using ("app"."posts"."published_at" is not null);

@@ -40,7 +40,7 @@ describe("pgEnum()", () => {
 	});
 });
 
-describe("table() — dd.land-style posts", () => {
+describe("table() — app-style posts", () => {
 	const app = schema("app");
 	const postStatus = pgEnum(app, "post_status", ["draft", "published"]);
 

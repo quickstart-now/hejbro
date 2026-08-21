@@ -1,16 +1,16 @@
 import { grant, schema } from "../../../../src/index";
 
-/** The dd.land example schema (spec §5.1), extended with its grants corpus (Phase 4 acceptance case, D28). */
-export const ddland = schema("ddland");
+/** The original production schema (spec §5.1), extended with its grants corpus (Phase 4 acceptance case, D28). */
+export const app = schema("app");
 
-export const usageGrants = grant(ddland).usage.to("anon", "service_role");
+export const usageGrants = grant(app).usage.to("anon", "service_role");
 
-export const anonSelectGrant = grant(ddland).tables("select").to("anon");
+export const anonSelectGrant = grant(app).tables("select").to("anon");
 
-export const serviceRoleFullGrant = grant(ddland)
+export const serviceRoleFullGrant = grant(app)
 	.tables("select", "insert", "update", "delete")
 	.to("service_role");
 
-export const anonDefaultSelectGrant = grant(ddland)
+export const anonDefaultSelectGrant = grant(app)
 	.defaultPrivileges.tables("select")
 	.to("anon");

@@ -86,13 +86,11 @@ describe("golden cases", () => {
 describe("determinism", () => {
 	it("two runs produce byte-identical snapshot and sql", async () => {
 		const { steps }: StepsModule = await import(
-			join(casesDirectory, "ddland-posts", "steps.ts")
+			join(casesDirectory, "app-posts", "steps.ts")
 		);
 		const [initialDeclarations] = steps;
 		if (initialDeclarations === undefined) {
-			throw new Error(
-				"expected the ddland-posts case to have at least one step",
-			);
+			throw new Error("expected the app-posts case to have at least one step");
 		}
 		const runOnce = () =>
 			generateMigration({

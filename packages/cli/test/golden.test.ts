@@ -235,11 +235,11 @@ describe("golden error corpus (Task 14, owner-approved ⑥ texts)", () => {
 		const result = await runCli(cwd, [
 			"generate",
 			"--rename",
-			"ddland.posts.slug.extra=handle",
+			"app.posts.slug.extra=handle",
 		]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain(
-			'--rename value "ddland.posts.slug.extra=handle" isn\'t in the expected "<schema>.<table>.<old>=<new>" (column) or "<schema>.<old>=<new>" (table) form. Next: check for extra "." characters, and make sure the value contains exactly one "=".',
+			'--rename value "app.posts.slug.extra=handle" isn\'t in the expected "<schema>.<table>.<old>=<new>" (column) or "<schema>.<old>=<new>" (table) form. Next: check for extra "." characters, and make sure the value contains exactly one "=".',
 		);
 		expectNoAbsolutePath(result.stderr);
 	});
@@ -248,11 +248,11 @@ describe("golden error corpus (Task 14, owner-approved ⑥ texts)", () => {
 		const result = await runCli(cwd, [
 			"generate",
 			"--confirm-drop",
-			"ddland.posts.slug.extra",
+			"app.posts.slug.extra",
 		]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain(
-			'--confirm-drop value "ddland.posts.slug.extra" isn\'t in the expected "<schema>.<table>.<column>" (column) or "<schema>.<table>" (table) form. Next: check for extra "." characters.',
+			'--confirm-drop value "app.posts.slug.extra" isn\'t in the expected "<schema>.<table>.<column>" (column) or "<schema>.<table>" (table) form. Next: check for extra "." characters.',
 		);
 		expectNoAbsolutePath(result.stderr);
 	});

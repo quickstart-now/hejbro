@@ -2,16 +2,16 @@
 	"dialect": "postgres",
 	"hejbroSnapshot": 3,
 	"objects": {
-		"grant:ddland.allTablesPrivileges.anon": {
+		"grant:app.allTablesPrivileges.anon": {
 			"grantKind": "allTablesPrivileges",
 			"privileges": [
 				"select",
 				"insert"
 			],
 			"role": "anon",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"grant:ddland.allTablesPrivileges.service_role": {
+		"grant:app.allTablesPrivileges.service_role": {
 			"grantKind": "allTablesPrivileges",
 			"privileges": [
 				"select",
@@ -20,74 +20,74 @@
 				"delete"
 			],
 			"role": "service_role",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"grant:ddland.defaultTablePrivileges.anon": {
+		"grant:app.defaultTablePrivileges.anon": {
 			"grantKind": "defaultTablePrivileges",
 			"privileges": [
 				"select"
 			],
 			"role": "anon",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"grant:ddland.schemaUsage.anon": {
+		"grant:app.schemaUsage.anon": {
 			"grantKind": "schemaUsage",
 			"privileges": [],
 			"role": "anon",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"grant:ddland.schemaUsage.service_role": {
+		"grant:app.schemaUsage.service_role": {
 			"grantKind": "schemaUsage",
 			"privileges": [],
 			"role": "service_role",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"policy:ddland.comments.comments_read_visible": {
+		"policy:app.comments.comments_read_visible": {
 			"command": "select",
 			"name": "comments_read_visible",
 			"roles": [
 				"anon"
 			],
-			"schema": "ddland",
+			"schema": "app",
 			"table": "comments",
-			"using": "(\"ddland\".\"comments\".\"deleted_at\" is null) and exists (select 1 from \"ddland\".\"posts\" where (\"ddland\".\"posts\".\"id\" = \"ddland\".\"comments\".\"post_id\") and (\"ddland\".\"posts\".\"status\" = 'published') and (\"ddland\".\"posts\".\"published_at\" <= now()))"
+			"using": "(\"app\".\"comments\".\"deleted_at\" is null) and exists (select 1 from \"app\".\"posts\" where (\"app\".\"posts\".\"id\" = \"app\".\"comments\".\"post_id\") and (\"app\".\"posts\".\"status\" = 'published') and (\"app\".\"posts\".\"published_at\" <= now()))"
 		},
-		"policy:ddland.post_translations.post_translations_read_published": {
+		"policy:app.post_translations.post_translations_read_published": {
 			"command": "select",
 			"name": "post_translations_read_published",
 			"roles": [
 				"anon"
 			],
-			"schema": "ddland",
+			"schema": "app",
 			"table": "post_translations",
-			"using": "exists (select 1 from \"ddland\".\"posts\" where (\"ddland\".\"posts\".\"id\" = \"ddland\".\"post_translations\".\"post_id\") and (\"ddland\".\"posts\".\"status\" = 'published') and (\"ddland\".\"posts\".\"published_at\" <= now()))"
+			"using": "exists (select 1 from \"app\".\"posts\" where (\"app\".\"posts\".\"id\" = \"app\".\"post_translations\".\"post_id\") and (\"app\".\"posts\".\"status\" = 'published') and (\"app\".\"posts\".\"published_at\" <= now()))"
 		},
-		"policy:ddland.posts.posts_read_published": {
+		"policy:app.posts.posts_read_published": {
 			"command": "select",
 			"name": "posts_read_published",
 			"roles": [
 				"anon"
 			],
-			"schema": "ddland",
+			"schema": "app",
 			"table": "posts",
-			"using": "\"ddland\".\"posts\".\"status\" = 'published'"
+			"using": "\"app\".\"posts\".\"status\" = 'published'"
 		},
-		"rls:ddland.comments": {
-			"schema": "ddland",
+		"rls:app.comments": {
+			"schema": "app",
 			"table": "comments"
 		},
-		"rls:ddland.post_translations": {
-			"schema": "ddland",
+		"rls:app.post_translations": {
+			"schema": "app",
 			"table": "post_translations"
 		},
-		"rls:ddland.posts": {
-			"schema": "ddland",
+		"rls:app.posts": {
+			"schema": "app",
 			"table": "posts"
 		},
-		"schema:ddland": {
-			"schemaName": "ddland"
+		"schema:app": {
+			"schemaName": "app"
 		},
-		"table:ddland.comments": {
+		"table:app.comments": {
 			"columns": [
 				{
 					"default": "gen_random_uuid()",
@@ -115,9 +115,9 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "comments",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"table:ddland.post_translations": {
+		"table:app.post_translations": {
 			"columns": [
 				{
 					"default": "gen_random_uuid()",
@@ -146,9 +146,9 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "post_translations",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"table:ddland.posts": {
+		"table:app.posts": {
 			"columns": [
 				{
 					"default": "gen_random_uuid()",
@@ -176,7 +176,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "posts",
-			"schema": "ddland"
+			"schema": "app"
 		}
 	}
 }

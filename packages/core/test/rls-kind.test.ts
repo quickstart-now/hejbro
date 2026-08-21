@@ -5,10 +5,10 @@ import { getTableMeta, table } from "../src/dsl/table";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { rlsKind } from "../src/kinds/rls-kind";
 
-const ddland = schema("ddland");
+const app = schema("app");
 
 const buildPosts = (force: boolean) => {
-	const declared = table(ddland, "posts", {}, () => ({
+	const declared = table(app, "posts", {}, () => ({
 		rls: rls.enabled({}, { force }),
 	}));
 	const meta = getTableMeta(declared);
@@ -25,19 +25,19 @@ describe("rlsKind", () => {
 	it("serializes to schema/table, without policies (force omitted at its false default — compact snapshot)", () => {
 		const declaration = bareRls();
 		expect(rlsKind.serialize(declaration)).toEqual({
-			schema: "ddland",
+			schema: "app",
 			table: "posts",
 		});
 	});
 
 	it("identifies as schema.table", () => {
 		const snapshot = rlsKind.serialize(bareRls());
-		expect(rlsKind.identify(snapshot)).toBe("ddland.posts");
+		expect(rlsKind.identify(snapshot)).toBe("app.posts");
 	});
 
 	it("diffs create when there is no previous snapshot", () => {
 		const next = rlsKind.serialize(bareRls());
-		const identity = "ddland.posts";
+		const identity = "app.posts";
 		expect(rlsKind.diff(null, next, identity)).toEqual([
 			{
 				kind: "rls",
@@ -52,7 +52,7 @@ describe("rlsKind", () => {
 
 	it("diffs drop when there is no next snapshot", () => {
 		const previous = rlsKind.serialize(bareRls());
-		const identity = "ddland.posts";
+		const identity = "app.posts";
 		expect(rlsKind.diff(previous, null, identity)).toEqual([
 			{
 				kind: "rls",
@@ -68,13 +68,13 @@ describe("rlsKind", () => {
 	it("diffs no change for identical force values", () => {
 		const previous = rlsKind.serialize(bareRls());
 		const next = rlsKind.serialize(bareRls());
-		expect(rlsKind.diff(previous, next, "ddland.posts")).toEqual([]);
+		expect(rlsKind.diff(previous, next, "app.posts")).toEqual([]);
 	});
 
 	it("diffs a force flip as a single alter", () => {
 		const previous = rlsKind.serialize(bareRls());
 		const next = rlsKind.serialize(forcedRls());
-		const identity = "ddland.posts";
+		const identity = "app.posts";
 		expect(rlsKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "rls",
@@ -90,7 +90,7 @@ describe("rlsKind", () => {
 	it("diffs an unforce flip as a single alter", () => {
 		const previous = rlsKind.serialize(forcedRls());
 		const next = rlsKind.serialize(bareRls());
-		const identity = "ddland.posts";
+		const identity = "app.posts";
 		expect(rlsKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "rls",
@@ -108,13 +108,13 @@ describe("rlsKind", () => {
 		const statements = rlsKind.emit({
 			kind: "rls",
 			operation: "create",
-			identity: "ddland.posts",
+			identity: "app.posts",
 			previous: null,
 			next,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'alter table "ddland"."posts" enable row level security;',
+			'alter table "app"."posts" enable row level security;',
 		]);
 	});
 
@@ -123,14 +123,14 @@ describe("rlsKind", () => {
 		const statements = rlsKind.emit({
 			kind: "rls",
 			operation: "create",
-			identity: "ddland.posts",
+			identity: "app.posts",
 			previous: null,
 			next,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'alter table "ddland"."posts" enable row level security;',
-			'alter table "ddland"."posts" force row level security;',
+			'alter table "app"."posts" enable row level security;',
+			'alter table "app"."posts" force row level security;',
 		]);
 	});
 
@@ -140,13 +140,13 @@ describe("rlsKind", () => {
 		const statements = rlsKind.emit({
 			kind: "rls",
 			operation: "alter",
-			identity: "ddland.posts",
+			identity: "app.posts",
 			previous,
 			next,
 			notes: ["force row level security"],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'alter table "ddland"."posts" force row level security;',
+			'alter table "app"."posts" force row level security;',
 		]);
 	});
 
@@ -156,13 +156,13 @@ describe("rlsKind", () => {
 		const statements = rlsKind.emit({
 			kind: "rls",
 			operation: "alter",
-			identity: "ddland.posts",
+			identity: "app.posts",
 			previous,
 			next,
 			notes: ["no force row level security"],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'alter table "ddland"."posts" no force row level security;',
+			'alter table "app"."posts" no force row level security;',
 		]);
 	});
 
@@ -171,13 +171,13 @@ describe("rlsKind", () => {
 		const statements = rlsKind.emit({
 			kind: "rls",
 			operation: "drop",
-			identity: "ddland.posts",
+			identity: "app.posts",
 			previous,
 			next: null,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'alter table "ddland"."posts" disable row level security;',
+			'alter table "app"."posts" disable row level security;',
 		]);
 	});
 

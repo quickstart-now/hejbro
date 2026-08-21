@@ -11,8 +11,8 @@ import {
 	uuid,
 } from "../../src/index";
 
-const ddland = schema("ddland");
-const comments = table(ddland, "comments", {
+const app = schema("app");
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 	parentId: uuid(),
@@ -210,7 +210,7 @@ describe("body-context recording", () => {
 	it("reserved local name throws reserved-local-name", () => {
 		expect(() =>
 			defineFunction(
-				"ddland",
+				"app",
 				"reserved_name_fn",
 				{ args: { when: uuid() }, returns: comments },
 				() => {},
@@ -260,7 +260,7 @@ describe("body-context recording", () => {
 
 	it("defineFunction args become ArgRefs with plpgsqlRef paths and snake_cased names", () => {
 		const declaration = defineFunction(
-			"ddland",
+			"app",
 			"publish_post",
 			{ args: { postId: uuid() }, returns: comments },
 			(ctx, { postId }) => {

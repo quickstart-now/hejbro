@@ -2,18 +2,18 @@
 	"dialect": "postgres",
 	"hejbroSnapshot": 3,
 	"objects": {
-		"enum:ddland.post_status": {
+		"enum:app.post_status": {
 			"name": "post_status",
-			"schema": "ddland",
+			"schema": "app",
 			"values": [
 				"draft",
 				"published"
 			]
 		},
-		"schema:ddland": {
-			"schemaName": "ddland"
+		"schema:app": {
+			"schemaName": "app"
 		},
-		"table:ddland.comments": {
+		"table:app.comments": {
 			"columns": [
 				{
 					"default": "gen_random_uuid()",
@@ -49,14 +49,14 @@
 					"referencesColumns": [
 						"id"
 					],
-					"referencesTable": "ddland.posts"
+					"referencesTable": "app.posts"
 				}
 			],
 			"indexes": [],
 			"name": "comments",
-			"schema": "ddland"
+			"schema": "app"
 		},
-		"table:ddland.posts": {
+		"table:app.posts": {
 			"columns": [
 				{
 					"default": "gen_random_uuid()",
@@ -78,7 +78,7 @@
 					"notNull": true,
 					"typeNode": {
 						"enumName": "post_status",
-						"enumSchema": "ddland",
+						"enumSchema": "app",
 						"typeName": "enum"
 					}
 				},
@@ -94,7 +94,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "posts",
-			"schema": "ddland"
+			"schema": "app"
 		}
 	}
 }

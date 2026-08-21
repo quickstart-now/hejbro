@@ -27,14 +27,14 @@ describe("familyOfTypeNode", () => {
 
 describe("columnRef", () => {
 	it("builds a ref carrying family, node, and sql name", () => {
-		const ref = columnRef("ddland", "posts", "published_at", {
+		const ref = columnRef("app", "posts", "published_at", {
 			typeName: "timestamptz",
 		});
 		expect(ref.family).toBe("datetime");
 		expect(ref.sqlName).toBe("published_at");
 		expect(ref.exprNode).toEqual({
 			nodeKind: "columnRef",
-			schemaName: "ddland",
+			schemaName: "app",
 			tableName: "posts",
 			columnName: "published_at",
 		});

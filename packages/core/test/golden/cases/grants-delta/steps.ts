@@ -3,7 +3,7 @@ import { grant } from "../../../../src/index";
 import {
 	anonDefaultSelectGrant,
 	anonSelectGrant,
-	ddland,
+	app,
 	serviceRoleFullGrant,
 	usageGrants,
 } from "./declarations";
@@ -13,7 +13,7 @@ import {
 // privileges select for anon.
 
 const fromEmpty: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	usageGrants,
 	anonSelectGrant,
 	serviceRoleFullGrant,
@@ -24,13 +24,13 @@ const fromEmpty: ReadonlyArray<HejbroInput> = [
 // service_role loses delete (alter -> `revoke delete ...`). usage and the
 // default-privileges grant are untouched.
 
-const anonGainsInsert = grant(ddland).tables("select", "insert").to("anon");
-const serviceRoleLosesDelete = grant(ddland)
+const anonGainsInsert = grant(app).tables("select", "insert").to("anon");
+const serviceRoleLosesDelete = grant(app)
 	.tables("select", "insert", "update")
 	.to("service_role");
 
 const privilegeDeltas: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	usageGrants,
 	anonGainsInsert,
 	serviceRoleLosesDelete,
@@ -41,7 +41,7 @@ const privilegeDeltas: ReadonlyArray<HejbroInput> = [
 // expect a drop (`alter default privileges ... revoke ...`).
 
 const defaultPrivilegesRemoved: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	usageGrants,
 	anonGainsInsert,
 	serviceRoleLosesDelete,

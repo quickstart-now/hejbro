@@ -7,11 +7,11 @@ import {
 	timestamptz,
 	uuid,
 } from "../../../../src/index";
-import { comments, ddland, posts } from "./declarations";
+import { app, comments, posts } from "./declarations";
 
 // Step 0: from empty — posts and comments, each with their own rls policy.
 
-const fromEmpty: ReadonlyArray<HejbroInput> = [ddland, posts, comments];
+const fromEmpty: ReadonlyArray<HejbroInput> = [app, posts, comments];
 
 // Step 1: posts' policy expression drops the `status` conjunct (down to
 // just `isNotNull(publishedAt)`), and posts' rls gains `{ force: true }`.
@@ -20,7 +20,7 @@ const fromEmpty: ReadonlyArray<HejbroInput> = [ddland, posts, comments];
 // touching comments' unrelated policy.
 
 const postsForceChanged = table(
-	ddland,
+	app,
 	"posts",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -42,7 +42,7 @@ const postsForceChanged = table(
 );
 
 const policyAndForceChange: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	postsForceChanged,
 	comments,
 ];
@@ -51,14 +51,14 @@ const policyAndForceChange: ReadonlyArray<HejbroInput> = [
 // followed by an rls disable statement (policy depends on rls and table,
 // so its drop is ordered first).
 
-const commentsRlsRemoved = table(ddland, "comments", {
+const commentsRlsRemoved = table(app, "comments", {
 	id: uuid().primaryKey().defaultRandom(),
 	postId: uuid().notNull(),
 	deletedAt: timestamptz(),
 });
 
 const commentsRlsDropped: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	postsForceChanged,
 	commentsRlsRemoved,
 ];

@@ -11,14 +11,14 @@ import {
 	uuid,
 } from "../src/index";
 
-const ddland = schema("ddland");
-const posts = table(ddland, "posts", {
+const app = schema("app");
+const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 });
 
 const makeDeclaration = (message: string, argBuilder: () => ColumnBuilder) =>
 	defineFunction(
-		"ddland",
+		"app",
 		"publish_post",
 		{ args: { postId: argBuilder() }, returns: posts, security: "definer" },
 		(ctx, { postId }) => {
@@ -40,32 +40,32 @@ describe("functionKind", () => {
 			bodyHash: string;
 			bodySql: string;
 		};
-		expect(snapshot.schema).toBe("ddland");
+		expect(snapshot.schema).toBe("app");
 		expect(snapshot.name).toBe("publish_post");
 		expect(snapshot.args).toEqual([{ name: "post_id", type: "uuid" }]);
-		expect(snapshot.returns).toBe('setof "ddland"."posts"');
+		expect(snapshot.returns).toBe('setof "app"."posts"');
 		expect(snapshot.security).toBe("definer");
 		expect(snapshot.language).toBe("plpgsql");
 		expect(snapshot.bodyHash).toMatch(/^[0-9a-f]{8}$/);
 		expect(snapshot.bodySql).toContain(
-			'create or replace function "ddland"."publish_post"',
+			'create or replace function "app"."publish_post"',
 		);
 	});
 
 	it("identifies as schema.name", () => {
 		const declaration = makeDeclaration("noop=%", uuid);
 		const snapshot = functionKind.serialize(declaration);
-		expect(functionKind.identify(snapshot)).toBe("ddland.publish_post");
+		expect(functionKind.identify(snapshot)).toBe("app.publish_post");
 	});
 
 	it("diffs create when there is no previous snapshot", () => {
 		const next = functionKind.serialize(makeDeclaration("noop=%", uuid));
-		const changes = functionKind.diff(null, next, "ddland.publish_post");
+		const changes = functionKind.diff(null, next, "app.publish_post");
 		expect(changes).toEqual([
 			{
 				kind: "function",
 				operation: "create",
-				identity: "ddland.publish_post",
+				identity: "app.publish_post",
 				previous: null,
 				next,
 				notes: [],
@@ -75,12 +75,12 @@ describe("functionKind", () => {
 
 	it("diffs drop when there is no next snapshot", () => {
 		const previous = functionKind.serialize(makeDeclaration("noop=%", uuid));
-		const changes = functionKind.diff(previous, null, "ddland.publish_post");
+		const changes = functionKind.diff(previous, null, "app.publish_post");
 		expect(changes).toEqual([
 			{
 				kind: "function",
 				operation: "drop",
-				identity: "ddland.publish_post",
+				identity: "app.publish_post",
 				previous,
 				next: null,
 				notes: [],
@@ -91,20 +91,18 @@ describe("functionKind", () => {
 	it("diffs no change for identical declarations", () => {
 		const previous = functionKind.serialize(makeDeclaration("noop=%", uuid));
 		const next = functionKind.serialize(makeDeclaration("noop=%", uuid));
-		expect(functionKind.diff(previous, next, "ddland.publish_post")).toEqual(
-			[],
-		);
+		expect(functionKind.diff(previous, next, "app.publish_post")).toEqual([]);
 	});
 
 	it("diffs a body-only change as a single alter with a body-changed note", () => {
 		const previous = functionKind.serialize(makeDeclaration("noop=%", uuid));
 		const next = functionKind.serialize(makeDeclaration("changed=%", uuid));
-		const changes = functionKind.diff(previous, next, "ddland.publish_post");
+		const changes = functionKind.diff(previous, next, "app.publish_post");
 		expect(changes).toEqual([
 			{
 				kind: "function",
 				operation: "alter",
-				identity: "ddland.publish_post",
+				identity: "app.publish_post",
 				previous,
 				next,
 				notes: ["body changed"],
@@ -115,12 +113,12 @@ describe("functionKind", () => {
 	it("diffs an arg-type change as a single alter with a signature-changed note", () => {
 		const previous = functionKind.serialize(makeDeclaration("noop=%", uuid));
 		const next = functionKind.serialize(makeDeclaration("noop=%", text));
-		const changes = functionKind.diff(previous, next, "ddland.publish_post");
+		const changes = functionKind.diff(previous, next, "app.publish_post");
 		expect(changes).toEqual([
 			{
 				kind: "function",
 				operation: "alter",
-				identity: "ddland.publish_post",
+				identity: "app.publish_post",
 				previous,
 				next,
 				notes: ["signature changed; recreating"],
@@ -133,7 +131,7 @@ describe("functionKind", () => {
 		const createSql = functionKind.emit({
 			kind: "function",
 			operation: "create",
-			identity: "ddland.publish_post",
+			identity: "app.publish_post",
 			previous: null,
 			next,
 			notes: [],
@@ -144,7 +142,7 @@ describe("functionKind", () => {
 		const alterSql = functionKind.emit({
 			kind: "function",
 			operation: "alter",
-			identity: "ddland.publish_post",
+			identity: "app.publish_post",
 			previous: next,
 			next,
 			notes: ["body changed"],
@@ -158,13 +156,13 @@ describe("functionKind", () => {
 		const statements = functionKind.emit({
 			kind: "function",
 			operation: "alter",
-			identity: "ddland.publish_post",
+			identity: "app.publish_post",
 			previous,
 			next,
 			notes: ["signature changed; recreating"],
 		});
 		expect(statements).toEqual([
-			{ sql: 'drop function "ddland"."publish_post"(uuid);', stage: "main" },
+			{ sql: 'drop function "app"."publish_post"(uuid);', stage: "main" },
 			{ sql: (next as { bodySql: string }).bodySql, stage: "main" },
 		]);
 	});
@@ -174,13 +172,13 @@ describe("functionKind", () => {
 		const dropSql = functionKind.emit({
 			kind: "function",
 			operation: "drop",
-			identity: "ddland.publish_post",
+			identity: "app.publish_post",
 			previous,
 			next: null,
 			notes: [],
 		});
 		expect(dropSql).toEqual([
-			{ sql: 'drop function "ddland"."publish_post"(uuid);', stage: "main" },
+			{ sql: 'drop function "app"."publish_post"(uuid);', stage: "main" },
 		]);
 	});
 

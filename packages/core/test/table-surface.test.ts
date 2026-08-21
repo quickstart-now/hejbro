@@ -10,11 +10,11 @@ import {
 	uuid,
 } from "../src/index";
 
-const ddland = schema("ddland");
+const shop = schema("shop");
 
 describe("table() surface (D15)", () => {
 	it("exposes columns as top-level ColumnRef properties", () => {
-		const posts = table(ddland, "posts", {
+		const posts = table(shop, "posts", {
 			id: uuid().primaryKey(),
 			publishedAt: timestamptz(),
 		});
@@ -22,13 +22,13 @@ describe("table() surface (D15)", () => {
 		expect(posts.publishedAt.sqlName).toBe("published_at");
 		expect(posts.publishedAt.exprNode).toEqual({
 			nodeKind: "columnRef",
-			schemaName: "ddland",
+			schemaName: "shop",
 			tableName: "posts",
 			columnName: "published_at",
 		});
 	});
 	it("hides declaration metadata behind the symbol", () => {
-		const posts = table(ddland, "posts", { id: uuid() });
+		const posts = table(shop, "posts", { id: uuid() });
 		expect(isTable(posts)).toBe(true);
 		const meta = getTableMeta(posts);
 		expect(meta.tableName).toBe("posts");
@@ -37,7 +37,7 @@ describe("table() surface (D15)", () => {
 	});
 	it("passes column refs to extras and resolves index()/fk inputs", () => {
 		const posts = table(
-			ddland,
+			shop,
 			"posts",
 			{ id: uuid().primaryKey(), publishedAt: timestamptz() },
 			(t) => ({ indexes: [index().on(t.publishedAt)] }),
@@ -46,7 +46,7 @@ describe("table() surface (D15)", () => {
 			{ name: "published_at", desc: false, nulls: null },
 		]);
 		const comments = table(
-			ddland,
+			shop,
 			"comments",
 			{ id: uuid().primaryKey(), postId: uuid().notNull() },
 			(t) => ({
@@ -65,7 +65,7 @@ describe("table() surface (D15)", () => {
 	});
 	it("keeps rejecting duplicate snake_cased column names", () => {
 		expect(() =>
-			table(ddland, "posts", { postId: uuid(), post_id: uuid() }),
+			table(shop, "posts", { postId: uuid(), post_id: uuid() }),
 		).toThrowError(/duplicate-column|duplicate column/);
 	});
 });

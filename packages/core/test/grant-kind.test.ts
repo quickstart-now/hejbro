@@ -7,7 +7,7 @@ import { createDefaultRegistry } from "../src/kind/registry";
 import { grantKind } from "../src/kinds/grant-kind";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 
-const ddland = schema("ddland");
+const app = schema("app");
 const registry = createDefaultRegistry();
 
 const requireGrant = (
@@ -21,14 +21,14 @@ const requireGrant = (
 };
 
 const usageGrant = (role = "anon"): GrantDeclaration =>
-	requireGrant(grant(ddland).usage.to(role).grants);
+	requireGrant(grant(app).usage.to(role).grants);
 
 const allTablesGrant = (
 	privileges: ReadonlyArray<TablePrivilege>,
 	role = "service_role",
 ): GrantDeclaration =>
 	requireGrant(
-		grant(ddland)
+		grant(app)
 			.tables(...privileges)
 			.to(role).grants,
 	);
@@ -38,7 +38,7 @@ const defaultPrivilegesGrant = (
 	role = "anon",
 ): GrantDeclaration =>
 	requireGrant(
-		grant(ddland)
+		grant(app)
 			.defaultPrivileges.tables(...privileges)
 			.to(role).grants,
 	);
@@ -47,7 +47,7 @@ describe("grantKind.serialize / identify", () => {
 	it("serializes to schema/grantKind/role/privileges", () => {
 		const declaration = allTablesGrant(["select", "insert"]);
 		expect(grantKind.serialize(declaration)).toEqual({
-			schema: "ddland",
+			schema: "app",
 			grantKind: "allTablesPrivileges",
 			role: "service_role",
 			privileges: ["select", "insert"],
@@ -56,14 +56,14 @@ describe("grantKind.serialize / identify", () => {
 
 	it("identifies as schema.grantKind.role", () => {
 		const snapshot = grantKind.serialize(usageGrant());
-		expect(grantKind.identify(snapshot)).toBe("ddland.schemaUsage.anon");
+		expect(grantKind.identify(snapshot)).toBe("app.schemaUsage.anon");
 	});
 });
 
 describe("grantKind.diff", () => {
 	it("diffs create when there is no previous snapshot", () => {
 		const next = grantKind.serialize(usageGrant());
-		const identity = "ddland.schemaUsage.anon";
+		const identity = "app.schemaUsage.anon";
 		expect(grantKind.diff(null, next, identity)).toEqual([
 			{
 				kind: "grant",
@@ -78,7 +78,7 @@ describe("grantKind.diff", () => {
 
 	it("diffs drop when there is no next snapshot", () => {
 		const previous = grantKind.serialize(usageGrant());
-		const identity = "ddland.schemaUsage.anon";
+		const identity = "app.schemaUsage.anon";
 		expect(grantKind.diff(previous, null, identity)).toEqual([
 			{
 				kind: "grant",
@@ -95,14 +95,14 @@ describe("grantKind.diff", () => {
 		const previous = grantKind.serialize(allTablesGrant(["select"]));
 		const next = grantKind.serialize(allTablesGrant(["select"]));
 		expect(
-			grantKind.diff(previous, next, "ddland.allTablesPrivileges.service_role"),
+			grantKind.diff(previous, next, "app.allTablesPrivileges.service_role"),
 		).toEqual([]);
 	});
 
 	it("diffs a privilege-set change as a single alter, notes in canonical +/- order", () => {
 		const previous = grantKind.serialize(allTablesGrant(["select", "update"]));
 		const next = grantKind.serialize(allTablesGrant(["select", "insert"]));
-		const identity = "ddland.allTablesPrivileges.service_role";
+		const identity = "app.allTablesPrivileges.service_role";
 		expect(grantKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "grant",
@@ -122,13 +122,13 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "create",
-			identity: "ddland.schemaUsage.anon",
+			identity: "app.schemaUsage.anon",
 			previous: null,
 			next,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'grant usage on schema "ddland" to "anon";',
+			'grant usage on schema "app" to "anon";',
 		]);
 	});
 
@@ -137,13 +137,13 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "drop",
-			identity: "ddland.schemaUsage.anon",
+			identity: "app.schemaUsage.anon",
 			previous,
 			next: null,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'revoke usage on schema "ddland" from "anon";',
+			'revoke usage on schema "app" from "anon";',
 		]);
 	});
 
@@ -152,14 +152,12 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "create",
-			identity: "ddland.schemaUsage.public",
+			identity: "app.schemaUsage.public",
 			previous: null,
 			next,
 			notes: [],
 		});
-		expect(statements[0]?.sql).toBe(
-			'grant usage on schema "ddland" to public;',
-		);
+		expect(statements[0]?.sql).toBe('grant usage on schema "app" to public;');
 	});
 
 	it("allTablesPrivileges: create", () => {
@@ -167,13 +165,13 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "create",
-			identity: "ddland.allTablesPrivileges.service_role",
+			identity: "app.allTablesPrivileges.service_role",
 			previous: null,
 			next,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'grant select, insert on all tables in schema "ddland" to "service_role";',
+			'grant select, insert on all tables in schema "app" to "service_role";',
 		]);
 	});
 
@@ -184,13 +182,13 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "drop",
-			identity: "ddland.allTablesPrivileges.service_role",
+			identity: "app.allTablesPrivileges.service_role",
 			previous,
 			next: null,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'revoke select, insert, update, delete on all tables in schema "ddland" from "service_role";',
+			'revoke select, insert, update, delete on all tables in schema "app" from "service_role";',
 		]);
 	});
 
@@ -200,14 +198,14 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "alter",
-			identity: "ddland.allTablesPrivileges.service_role",
+			identity: "app.allTablesPrivileges.service_role",
 			previous,
 			next,
 			notes: ["+insert", "-update"],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'grant insert on all tables in schema "ddland" to "service_role";',
-			'revoke update on all tables in schema "ddland" from "service_role";',
+			'grant insert on all tables in schema "app" to "service_role";',
+			'revoke update on all tables in schema "app" from "service_role";',
 		]);
 	});
 
@@ -217,13 +215,13 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "alter",
-			identity: "ddland.allTablesPrivileges.service_role",
+			identity: "app.allTablesPrivileges.service_role",
 			previous,
 			next,
 			notes: ["+insert"],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'grant insert on all tables in schema "ddland" to "service_role";',
+			'grant insert on all tables in schema "app" to "service_role";',
 		]);
 	});
 
@@ -232,13 +230,13 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "create",
-			identity: "ddland.defaultTablePrivileges.anon",
+			identity: "app.defaultTablePrivileges.anon",
 			previous: null,
 			next,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'alter default privileges in schema "ddland" grant select on tables to "anon";',
+			'alter default privileges in schema "app" grant select on tables to "anon";',
 		]);
 	});
 
@@ -249,13 +247,13 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "drop",
-			identity: "ddland.defaultTablePrivileges.anon",
+			identity: "app.defaultTablePrivileges.anon",
 			previous,
 			next: null,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'alter default privileges in schema "ddland" revoke select, insert on tables from "anon";',
+			'alter default privileges in schema "app" revoke select, insert on tables from "anon";',
 		]);
 	});
 
@@ -265,14 +263,14 @@ describe("grantKind.emit", () => {
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "alter",
-			identity: "ddland.defaultTablePrivileges.anon",
+			identity: "app.defaultTablePrivileges.anon",
 			previous,
 			next,
 			notes: ["+insert", "-select"],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'alter default privileges in schema "ddland" grant insert on tables to "anon";',
-			'alter default privileges in schema "ddland" revoke select on tables from "anon";',
+			'alter default privileges in schema "app" grant insert on tables to "anon";',
+			'alter default privileges in schema "app" revoke select on tables from "anon";',
 		]);
 	});
 
@@ -284,16 +282,16 @@ describe("grantKind.emit", () => {
 
 describe("grant-set expansion through generateMigration", () => {
 	it("fans out to(...) roles into one snapshot entry per role", () => {
-		const grantSet = grant(ddland).usage.to("anon", "authenticated");
+		const grantSet = grant(app).usage.to("anon", "authenticated");
 		const result = generateMigration({
-			declarations: [ddland, grantSet],
+			declarations: [app, grantSet],
 			previousSnapshot: emptySnapshot,
 			registry,
 		});
 		expect(Object.keys(result.snapshot.objects)).toEqual(
 			expect.arrayContaining([
-				"grant:ddland.schemaUsage.anon",
-				"grant:ddland.schemaUsage.authenticated",
+				"grant:app.schemaUsage.anon",
+				"grant:app.schemaUsage.authenticated",
 			]),
 		);
 	});

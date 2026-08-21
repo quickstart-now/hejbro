@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { grant } from "../../src/dsl/grant";
 import { schema } from "../../src/dsl/schema";
 
-const ddland = schema("ddland");
+const app = schema("app");
 
-describe("grant() — the dd.land corpus forms", () => {
+describe("grant() — the app schema's grant corpus forms", () => {
 	it("grant(schema).usage.to(...) fans out one declaration per role (spec §5.4)", () => {
-		const { grants } = grant(ddland).usage.to("authenticated", "anon");
+		const { grants } = grant(app).usage.to("authenticated", "anon");
 		expect(grants).toHaveLength(2);
 		expect(grants.map((g) => g.role)).toEqual(["authenticated", "anon"]);
 		expect(grants.map((g) => g.declarationKind)).toEqual(["grant", "grant"]);
@@ -14,23 +14,23 @@ describe("grant() — the dd.land corpus forms", () => {
 			"schemaUsage",
 			"schemaUsage",
 		]);
-		expect(grants.map((g) => g.schemaName)).toEqual(["ddland", "ddland"]);
+		expect(grants.map((g) => g.schemaName)).toEqual(["app", "app"]);
 		expect(grants.map((g) => g.privileges)).toEqual([[], []]);
 	});
 
 	it("grant(schema).tables(select).to(role) — a single table privilege", () => {
-		const { grants } = grant(ddland).tables("select").to("anon");
+		const { grants } = grant(app).tables("select").to("anon");
 		expect(grants).toHaveLength(1);
 		expect(grants[0]).toMatchObject({
 			grantKind: "allTablesPrivileges",
-			schemaName: "ddland",
+			schemaName: "app",
 			privileges: ["select"],
 			role: "anon",
 		});
 	});
 
 	it("grant(schema).tables(...) — full CRUD for one role", () => {
-		const { grants } = grant(ddland)
+		const { grants } = grant(app)
 			.tables("select", "insert", "update", "delete")
 			.to("service_role");
 		expect(grants).toHaveLength(1);
@@ -42,9 +42,7 @@ describe("grant() — the dd.land corpus forms", () => {
 	});
 
 	it("grant(schema).defaultPrivileges.tables(select).to(role)", () => {
-		const { grants } = grant(ddland)
-			.defaultPrivileges.tables("select")
-			.to("anon");
+		const { grants } = grant(app).defaultPrivileges.tables("select").to("anon");
 		expect(grants).toHaveLength(1);
 		expect(grants[0]).toMatchObject({
 			grantKind: "defaultTablePrivileges",
@@ -56,7 +54,7 @@ describe("grant() — the dd.land corpus forms", () => {
 
 describe("grant() — privilege normalization", () => {
 	it("normalizes to canonical order and dedupes, regardless of call order", () => {
-		const { grants } = grant(ddland)
+		const { grants } = grant(app)
 			.tables("delete", "select", "select")
 			.to("anon");
 		expect(grants[0]?.privileges).toEqual(["select", "delete"]);
@@ -65,25 +63,25 @@ describe("grant() — privilege normalization", () => {
 
 describe("grant() — errors", () => {
 	it("rejects .tables() with zero privileges", () => {
-		expect(() => grant(ddland).tables()).toThrowError(
+		expect(() => grant(app).tables()).toThrowError(
 			expect.objectContaining({ code: "grant-empty-privileges" }),
 		);
 	});
 
 	it("rejects .defaultPrivileges.tables() with zero privileges", () => {
-		expect(() => grant(ddland).defaultPrivileges.tables()).toThrowError(
+		expect(() => grant(app).defaultPrivileges.tables()).toThrowError(
 			expect.objectContaining({ code: "grant-empty-privileges" }),
 		);
 	});
 
 	it("rejects .usage.to() with no roles", () => {
-		expect(() => grant(ddland).usage.to()).toThrowError(
+		expect(() => grant(app).usage.to()).toThrowError(
 			expect.objectContaining({ code: "grant-missing-roles" }),
 		);
 	});
 
 	it("rejects .tables(...).to() with no roles", () => {
-		expect(() => grant(ddland).tables("select").to()).toThrowError(
+		expect(() => grant(app).tables("select").to()).toThrowError(
 			expect.objectContaining({ code: "grant-missing-roles" }),
 		);
 	});

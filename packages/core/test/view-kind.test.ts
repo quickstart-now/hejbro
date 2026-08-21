@@ -10,8 +10,8 @@ import { select } from "../src/query/select";
 import { emptySnapshot } from "../src/snapshot/snapshot";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
 
-const ddland = schema("ddland");
-const posts = table(ddland, "posts", {
+const app = schema("app");
+const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	status: text().notNull(),
 	publishedAt: timestamptz(),
@@ -21,7 +21,7 @@ const registry = createDefaultRegistry();
 describe("viewKind.serialize", () => {
 	it("derives columns from an allColumns projection (securityInvoker omitted at its false default — compact snapshot)", () => {
 		const view = defineView(
-			ddland,
+			app,
 			"published_posts",
 			select(posts).where(isNotNull(posts.publishedAt)),
 		);
@@ -33,17 +33,17 @@ describe("viewKind.serialize", () => {
 			securityInvoker?: true;
 		};
 		expect(snapshot).toEqual({
-			schema: "ddland",
+			schema: "app",
 			name: "published_posts",
 			columns: ["id", "status", "published_at"],
 			selectSql:
-				'select "id", "status", "published_at" from "ddland"."posts" where "ddland"."posts"."published_at" is not null',
+				'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."published_at" is not null',
 		});
 	});
 
 	it("derives columns from an object projection, in alias order", () => {
 		const view = defineView(
-			ddland,
+			app,
 			"post_status",
 			select({ postId: posts.id, postStatus: posts.status }, posts),
 		);
@@ -54,7 +54,7 @@ describe("viewKind.serialize", () => {
 	});
 
 	it("throws invalid-view-projection for a constantOne projection (defensive; unreachable via defineView)", () => {
-		const view = defineView(ddland, "impossible", select(posts));
+		const view = defineView(app, "impossible", select(posts));
 		const withConstantOne = {
 			...view,
 			query: {
@@ -70,9 +70,9 @@ describe("viewKind.serialize", () => {
 
 describe("viewKind.identify", () => {
 	it("identifies as schema.name", () => {
-		const view = defineView(ddland, "published_posts", select(posts));
+		const view = defineView(app, "published_posts", select(posts));
 		expect(viewKind.identify(viewKind.serialize(view))).toBe(
-			"ddland.published_posts",
+			"app.published_posts",
 		);
 	});
 });
@@ -80,9 +80,9 @@ describe("viewKind.identify", () => {
 describe("viewKind.diff", () => {
 	it("diffs create when there is no previous snapshot", () => {
 		const next = viewKind.serialize(
-			defineView(ddland, "published_posts", select(posts)),
+			defineView(app, "published_posts", select(posts)),
 		);
-		const identity = "ddland.published_posts";
+		const identity = "app.published_posts";
 		expect(viewKind.diff(null, next, identity)).toEqual([
 			{
 				kind: "view",
@@ -97,9 +97,9 @@ describe("viewKind.diff", () => {
 
 	it("diffs drop when there is no next snapshot", () => {
 		const previous = viewKind.serialize(
-			defineView(ddland, "published_posts", select(posts)),
+			defineView(app, "published_posts", select(posts)),
 		);
-		const identity = "ddland.published_posts";
+		const identity = "app.published_posts";
 		expect(viewKind.diff(previous, null, identity)).toEqual([
 			{
 				kind: "view",
@@ -114,30 +114,30 @@ describe("viewKind.diff", () => {
 
 	it("diffs no change for identical views", () => {
 		const previous = viewKind.serialize(
-			defineView(ddland, "published_posts", select(posts)),
+			defineView(app, "published_posts", select(posts)),
 		);
 		const next = viewKind.serialize(
-			defineView(ddland, "published_posts", select(posts)),
+			defineView(app, "published_posts", select(posts)),
 		);
-		expect(viewKind.diff(previous, next, "ddland.published_posts")).toEqual([]);
+		expect(viewKind.diff(previous, next, "app.published_posts")).toEqual([]);
 	});
 
 	it("diffs a body-only change (same columns) as a single alter with 'view changed'", () => {
 		const previous = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"published_posts",
 				select(posts).where(isNotNull(posts.publishedAt)),
 			),
 		);
 		const next = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"published_posts",
 				select(posts).where(eq(posts.status, "published")),
 			),
 		);
-		const identity = "ddland.published_posts";
+		const identity = "app.published_posts";
 		expect(viewKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "view",
@@ -152,16 +152,16 @@ describe("viewKind.diff", () => {
 
 	it("diffs a column append (previous columns a prefix of next) as 'view changed'", () => {
 		const previous = viewKind.serialize(
-			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+			defineView(app, "post_titles", select({ id: posts.id }, posts)),
 		);
 		const next = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"post_titles",
 				select({ id: posts.id, status: posts.status }, posts),
 			),
 		);
-		const identity = "ddland.post_titles";
+		const identity = "app.post_titles";
 		expect(viewKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "view",
@@ -177,15 +177,15 @@ describe("viewKind.diff", () => {
 	it("diffs a column removal as 'view columns changed; recreating'", () => {
 		const previous = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"post_titles",
 				select({ id: posts.id, status: posts.status }, posts),
 			),
 		);
 		const next = viewKind.serialize(
-			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+			defineView(app, "post_titles", select({ id: posts.id }, posts)),
 		);
-		const identity = "ddland.post_titles";
+		const identity = "app.post_titles";
 		expect(viewKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "view",
@@ -200,12 +200,12 @@ describe("viewKind.diff", () => {
 
 	it("diffs a column rename as 'view columns changed; recreating'", () => {
 		const previous = viewKind.serialize(
-			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+			defineView(app, "post_titles", select({ id: posts.id }, posts)),
 		);
 		const next = viewKind.serialize(
-			defineView(ddland, "post_titles", select({ postId: posts.id }, posts)),
+			defineView(app, "post_titles", select({ postId: posts.id }, posts)),
 		);
-		const identity = "ddland.post_titles";
+		const identity = "app.post_titles";
 		expect(viewKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "view",
@@ -223,7 +223,7 @@ describe("viewKind.emit", () => {
 	it("emits create or replace alone for a create change", () => {
 		const next = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"published_posts",
 				select(posts).where(isNotNull(posts.publishedAt)),
 			),
@@ -231,42 +231,42 @@ describe("viewKind.emit", () => {
 		const statements = viewKind.emit({
 			kind: "view",
 			operation: "create",
-			identity: "ddland.published_posts",
+			identity: "app.published_posts",
 			previous: null,
 			next,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'create or replace view "ddland"."published_posts" as select "id", "status", "published_at" from "ddland"."posts" where "ddland"."posts"."published_at" is not null;',
+			'create or replace view "app"."published_posts" as select "id", "status", "published_at" from "app"."posts" where "app"."posts"."published_at" is not null;',
 		]);
 	});
 
 	it("inserts with (security_invoker = true) before as when set", () => {
 		const next = viewKind.serialize(
-			defineView(ddland, "published_posts", select(posts), {
+			defineView(app, "published_posts", select(posts), {
 				securityInvoker: true,
 			}),
 		);
 		const statements = viewKind.emit({
 			kind: "view",
 			operation: "create",
-			identity: "ddland.published_posts",
+			identity: "app.published_posts",
 			previous: null,
 			next,
 			notes: [],
 		});
 		expect(statements[0]?.sql).toBe(
-			'create or replace view "ddland"."published_posts" with (security_invoker = true) as select "id", "status", "published_at" from "ddland"."posts";',
+			'create or replace view "app"."published_posts" with (security_invoker = true) as select "id", "status", "published_at" from "app"."posts";',
 		);
 	});
 
 	it("emits create or replace alone for a prefix-rule alter", () => {
 		const previous = viewKind.serialize(
-			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+			defineView(app, "post_titles", select({ id: posts.id }, posts)),
 		);
 		const next = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"post_titles",
 				select({ id: posts.id, status: posts.status }, posts),
 			),
@@ -274,38 +274,38 @@ describe("viewKind.emit", () => {
 		const statements = viewKind.emit({
 			kind: "view",
 			operation: "alter",
-			identity: "ddland.post_titles",
+			identity: "app.post_titles",
 			previous,
 			next,
 			notes: ["view changed"],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'create or replace view "ddland"."post_titles" as select "ddland"."posts"."id" as "id", "ddland"."posts"."status" as "status" from "ddland"."posts";',
+			'create or replace view "app"."post_titles" as select "app"."posts"."id" as "id", "app"."posts"."status" as "status" from "app"."posts";',
 		]);
 	});
 
 	it("emits drop then create or replace for a recreating alter", () => {
 		const previous = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"post_titles",
 				select({ id: posts.id, status: posts.status }, posts),
 			),
 		);
 		const next = viewKind.serialize(
-			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+			defineView(app, "post_titles", select({ id: posts.id }, posts)),
 		);
 		const statements = viewKind.emit({
 			kind: "view",
 			operation: "alter",
-			identity: "ddland.post_titles",
+			identity: "app.post_titles",
 			previous,
 			next,
 			notes: ["view columns changed; recreating"],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'drop view if exists "ddland"."post_titles";',
-			'create or replace view "ddland"."post_titles" as select "ddland"."posts"."id" as "id" from "ddland"."posts";',
+			'drop view if exists "app"."post_titles";',
+			'create or replace view "app"."post_titles" as select "app"."posts"."id" as "id" from "app"."posts";',
 		]);
 	});
 
@@ -316,35 +316,35 @@ describe("viewKind.emit", () => {
 	it("recreates even with empty notes, since the prefix rule is recomputed from the snapshots", () => {
 		const previous = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"post_titles",
 				select({ id: posts.id, status: posts.status }, posts),
 			),
 		);
 		const next = viewKind.serialize(
-			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+			defineView(app, "post_titles", select({ id: posts.id }, posts)),
 		);
 		const statements = viewKind.emit({
 			kind: "view",
 			operation: "alter",
-			identity: "ddland.post_titles",
+			identity: "app.post_titles",
 			previous,
 			next,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'drop view if exists "ddland"."post_titles";',
-			'create or replace view "ddland"."post_titles" as select "ddland"."posts"."id" as "id" from "ddland"."posts";',
+			'drop view if exists "app"."post_titles";',
+			'create or replace view "app"."post_titles" as select "app"."posts"."id" as "id" from "app"."posts";',
 		]);
 	});
 
 	it("stays a single create or replace even with a stale recreate note, when the snapshots are actually a prefix", () => {
 		const previous = viewKind.serialize(
-			defineView(ddland, "post_titles", select({ id: posts.id }, posts)),
+			defineView(app, "post_titles", select({ id: posts.id }, posts)),
 		);
 		const next = viewKind.serialize(
 			defineView(
-				ddland,
+				app,
 				"post_titles",
 				select({ id: posts.id, status: posts.status }, posts),
 			),
@@ -352,30 +352,30 @@ describe("viewKind.emit", () => {
 		const statements = viewKind.emit({
 			kind: "view",
 			operation: "alter",
-			identity: "ddland.post_titles",
+			identity: "app.post_titles",
 			previous,
 			next,
 			notes: ["view columns changed; recreating"],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'create or replace view "ddland"."post_titles" as select "ddland"."posts"."id" as "id", "ddland"."posts"."status" as "status" from "ddland"."posts";',
+			'create or replace view "app"."post_titles" as select "app"."posts"."id" as "id", "app"."posts"."status" as "status" from "app"."posts";',
 		]);
 	});
 
 	it("emits only drop for a drop change", () => {
 		const previous = viewKind.serialize(
-			defineView(ddland, "published_posts", select(posts)),
+			defineView(app, "published_posts", select(posts)),
 		);
 		const statements = viewKind.emit({
 			kind: "view",
 			operation: "drop",
-			identity: "ddland.published_posts",
+			identity: "app.published_posts",
 			previous,
 			next: null,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			'drop view if exists "ddland"."published_posts";',
+			'drop view if exists "app"."published_posts";',
 		]);
 	});
 
@@ -388,7 +388,7 @@ describe("viewKind.emit", () => {
 describe("view recreate ordering through generateMigration", () => {
 	it("a column removal drops before it creates, exactly once", () => {
 		const viewV1 = defineView(
-			ddland,
+			app,
 			"post_titles",
 			select({ id: posts.id, status: posts.status }, posts),
 		);
@@ -399,7 +399,7 @@ describe("view recreate ordering through generateMigration", () => {
 		});
 
 		const viewV2 = defineView(
-			ddland,
+			app,
 			"post_titles",
 			select({ id: posts.id }, posts),
 		);
@@ -416,10 +416,10 @@ describe("view recreate ordering through generateMigration", () => {
 		});
 
 		const dropIndex = result2.sql.indexOf(
-			'drop view if exists "ddland"."post_titles";',
+			'drop view if exists "app"."post_titles";',
 		);
 		const createIndex = result2.sql.indexOf(
-			'create or replace view "ddland"."post_titles"',
+			'create or replace view "app"."post_titles"',
 		);
 		expect(dropIndex).toBeGreaterThanOrEqual(0);
 		expect(createIndex).toBeGreaterThan(dropIndex);

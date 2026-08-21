@@ -14,15 +14,15 @@ import {
 } from "../../../../src/index";
 
 /**
- * The dd.land example schema (spec §5.1), extended with row-level security
+ * The original production schema (spec §5.1), extended with row-level security
  * (Phase 4 acceptance case): `posts` is readable when published; `comments`
  * is readable when not soft-deleted and its post is published — a
  * correlated `exists()` reaching from `comments` back to `posts` (D26).
  */
-export const ddland = schema("ddland");
+export const app = schema("app");
 
 export const posts = table(
-	ddland,
+	app,
 	"posts",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -41,7 +41,7 @@ export const posts = table(
 );
 
 export const comments = table(
-	ddland,
+	app,
 	"comments",
 	{
 		id: uuid().primaryKey().defaultRandom(),

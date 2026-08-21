@@ -11,8 +11,8 @@ import {
 import {
 	anonDefaultSelectGrant,
 	anonSelectGrant,
+	app,
 	comments,
-	ddland,
 	posts,
 	postTranslations,
 	serviceRoleDefaultGrant,
@@ -23,7 +23,7 @@ import {
 // Step 0: the full corpus from empty — tables, rls, policies, and grants.
 
 const fromEmpty: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	posts,
 	postTranslations,
 	comments,
@@ -41,7 +41,7 @@ const fromEmpty: ReadonlyArray<HejbroInput> = [
 // unrelated privilege-set delta together.
 
 const postsPolicyChanged = table(
-	ddland,
+	app,
 	"posts",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -64,10 +64,10 @@ const postsPolicyChanged = table(
 	}),
 );
 
-const anonGainsInsert = grant(ddland).tables("select", "insert").to("anon");
+const anonGainsInsert = grant(app).tables("select", "insert").to("anon");
 
 const policyChangeAndPrivilegeDelta: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	postsPolicyChanged,
 	postTranslations,
 	comments,
@@ -83,7 +83,7 @@ const policyChangeAndPrivilegeDelta: ReadonlyArray<HejbroInput> = [
 // declaration is removed entirely (revoke).
 
 const postsInsertPolicyDropped = table(
-	ddland,
+	app,
 	"posts",
 	{
 		id: uuid().primaryKey().defaultRandom(),
@@ -102,7 +102,7 @@ const postsInsertPolicyDropped = table(
 );
 
 const policyDropAndGrantRemoved: ReadonlyArray<HejbroInput> = [
-	ddland,
+	app,
 	postsInsertPolicyDropped,
 	postTranslations,
 	comments,

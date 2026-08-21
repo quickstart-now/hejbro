@@ -10,7 +10,7 @@ import { exists, select } from "../src/query/select";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
 
-const ddland = schema("ddland");
+const app = schema("app");
 const registry = createDefaultRegistry();
 
 describe("policyKind.emit", () => {
@@ -18,23 +18,23 @@ describe("policyKind.emit", () => {
 		const created = policyKind.emit({
 			kind: "policy",
 			operation: "create",
-			identity: "ddland.posts.posts_read_published",
+			identity: "app.posts.posts_read_published",
 			previous: null,
 			next: {
-				schema: "ddland",
+				schema: "app",
 				table: "posts",
 				name: "posts_read_published",
 				permissive: true,
 				command: "select",
 				roles: ["anon"],
-				using: `"ddland"."posts"."published_at" is not null`,
+				using: `"app"."posts"."published_at" is not null`,
 				withCheck: null,
 			},
 			notes: [],
 		});
 		expect(created.map((s) => s.sql)).toEqual([
-			`drop policy if exists "posts_read_published" on "ddland"."posts";`,
-			`create policy "posts_read_published" on "ddland"."posts" for select to "anon" using ("ddland"."posts"."published_at" is not null);`,
+			`drop policy if exists "posts_read_published" on "app"."posts";`,
+			`create policy "posts_read_published" on "app"."posts" for select to "anon" using ("app"."posts"."published_at" is not null);`,
 		]);
 	});
 
@@ -42,23 +42,23 @@ describe("policyKind.emit", () => {
 		const created = policyKind.emit({
 			kind: "policy",
 			operation: "create",
-			identity: "ddland.posts.insert_gate",
+			identity: "app.posts.insert_gate",
 			previous: null,
 			next: {
-				schema: "ddland",
+				schema: "app",
 				table: "posts",
 				name: "insert_gate",
 				permissive: false,
 				command: "insert",
 				roles: ["anon", "authenticated"],
 				using: null,
-				withCheck: `"ddland"."posts"."status" = 'draft'`,
+				withCheck: `"app"."posts"."status" = 'draft'`,
 			},
 			notes: [],
 		});
 		expect(created.map((s) => s.sql)).toEqual([
-			`drop policy if exists "insert_gate" on "ddland"."posts";`,
-			`create policy "insert_gate" on "ddland"."posts" as restrictive for insert to "anon", "authenticated" with check ("ddland"."posts"."status" = 'draft');`,
+			`drop policy if exists "insert_gate" on "app"."posts";`,
+			`create policy "insert_gate" on "app"."posts" as restrictive for insert to "anon", "authenticated" with check ("app"."posts"."status" = 'draft');`,
 		]);
 	});
 
@@ -66,10 +66,10 @@ describe("policyKind.emit", () => {
 		const created = policyKind.emit({
 			kind: "policy",
 			operation: "create",
-			identity: "ddland.posts.everyone",
+			identity: "app.posts.everyone",
 			previous: null,
 			next: {
-				schema: "ddland",
+				schema: "app",
 				table: "posts",
 				name: "everyone",
 				permissive: true,
@@ -81,8 +81,8 @@ describe("policyKind.emit", () => {
 			notes: [],
 		});
 		expect(created.map((s) => s.sql)).toEqual([
-			`drop policy if exists "everyone" on "ddland"."posts";`,
-			`create policy "everyone" on "ddland"."posts" for select to public using (true);`,
+			`drop policy if exists "everyone" on "app"."posts";`,
+			`create policy "everyone" on "app"."posts" for select to public using (true);`,
 		]);
 	});
 
@@ -90,34 +90,34 @@ describe("policyKind.emit", () => {
 		const statements = policyKind.emit({
 			kind: "policy",
 			operation: "drop",
-			identity: "ddland.posts.posts_read_published",
+			identity: "app.posts.posts_read_published",
 			previous: {
-				schema: "ddland",
+				schema: "app",
 				table: "posts",
 				name: "posts_read_published",
 				permissive: true,
 				command: "select",
 				roles: ["anon"],
-				using: `"ddland"."posts"."published_at" is not null`,
+				using: `"app"."posts"."published_at" is not null`,
 				withCheck: null,
 			},
 			next: null,
 			notes: [],
 		});
 		expect(statements.map((s) => s.sql)).toEqual([
-			`drop policy if exists "posts_read_published" on "ddland"."posts";`,
+			`drop policy if exists "posts_read_published" on "app"."posts";`,
 		]);
 	});
 });
 
 describe("policyKind.serialize", () => {
 	it("renders a correlated exists() with the policed table as outer scope", () => {
-		const posts = table(ddland, "posts", {
+		const posts = table(app, "posts", {
 			id: uuid().primaryKey().defaultRandom(),
 			status: text().notNull(),
 		});
 		const comments = table(
-			ddland,
+			app,
 			"comments",
 			{
 				id: uuid().primaryKey().defaultRandom(),
@@ -146,7 +146,7 @@ describe("policyKind.serialize", () => {
 			using: string | null;
 		};
 		expect(snapshot.using).toBe(
-			`exists (select 1 from "ddland"."posts" where "ddland"."posts"."id" = "ddland"."comments"."post_id")`,
+			`exists (select 1 from "app"."posts" where "app"."posts"."id" = "app"."comments"."post_id")`,
 		);
 	});
 });
@@ -154,7 +154,7 @@ describe("policyKind.serialize", () => {
 describe("policyKind.diff", () => {
 	const buildPolicy = (using: string) => {
 		const posts = table(
-			ddland,
+			app,
 			"posts",
 			{
 				id: uuid().primaryKey().defaultRandom(),
@@ -184,7 +184,7 @@ describe("policyKind.diff", () => {
 
 	it("diffs create when there is no previous snapshot", () => {
 		const next = policyKind.serialize(buildPolicy("published"));
-		const identity = "ddland.posts.posts_read_published";
+		const identity = "app.posts.posts_read_published";
 		expect(policyKind.diff(null, next, identity)).toEqual([
 			{
 				kind: "policy",
@@ -201,14 +201,14 @@ describe("policyKind.diff", () => {
 		const previous = policyKind.serialize(buildPolicy("published"));
 		const next = policyKind.serialize(buildPolicy("published"));
 		expect(
-			policyKind.diff(previous, next, "ddland.posts.posts_read_published"),
+			policyKind.diff(previous, next, "app.posts.posts_read_published"),
 		).toEqual([]);
 	});
 
 	it("diffs any change as a single alter with a recreating note", () => {
 		const previous = policyKind.serialize(buildPolicy("published"));
 		const next = policyKind.serialize(buildPolicy("live"));
-		const identity = "ddland.posts.posts_read_published";
+		const identity = "app.posts.posts_read_published";
 		expect(policyKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "policy",
@@ -223,7 +223,7 @@ describe("policyKind.diff", () => {
 
 	it("diffs drop when there is no next snapshot", () => {
 		const previous = policyKind.serialize(buildPolicy("published"));
-		const identity = "ddland.posts.posts_read_published";
+		const identity = "app.posts.posts_read_published";
 		expect(policyKind.diff(previous, null, identity)).toEqual([
 			{
 				kind: "policy",
@@ -245,7 +245,7 @@ describe("policyKind.diff", () => {
 describe("policy recreate ordering through generateMigration", () => {
 	it("a policy's using change drops before it creates, exactly once", () => {
 		const postsV1 = table(
-			ddland,
+			app,
 			"posts",
 			{
 				id: uuid().primaryKey().defaultRandom(),
@@ -271,7 +271,7 @@ describe("policy recreate ordering through generateMigration", () => {
 		);
 
 		const postsV2 = table(
-			ddland,
+			app,
 			"posts",
 			{
 				id: uuid().primaryKey().defaultRandom(),
@@ -301,7 +301,7 @@ describe("policy recreate ordering through generateMigration", () => {
 		});
 
 		const dropIndex = result.sql.indexOf(
-			'drop policy if exists "posts_read_published" on "ddland"."posts";',
+			'drop policy if exists "posts_read_published" on "app"."posts";',
 		);
 		const createIndex = result.sql.indexOf(
 			'create policy "posts_read_published"',
@@ -325,7 +325,7 @@ describe("update/all policy chain termination through generateMigration (D26 reg
 		clause: "using" | "withCheck",
 	) =>
 		table(
-			ddland,
+			app,
 			"posts",
 			{
 				id: uuid().primaryKey().defaultRandom(),

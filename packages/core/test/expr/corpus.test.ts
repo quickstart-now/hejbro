@@ -41,26 +41,26 @@ import {
 	uuid,
 } from "../../src/index";
 
-const ddland = schema("ddland");
-const posts = table(ddland, "posts", {
+const app = schema("app");
+const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	status: text().notNull(),
 	slug: text().notNull(),
 	views: integer().notNull(),
 	publishedAt: timestamptz(),
 });
-const comments = table(ddland, "comments", {
+const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
 	body: text().notNull(),
 });
-const reactions = table(ddland, "reactions", {
+const reactions = table(app, "reactions", {
 	id: uuid().primaryKey(),
 	commentId: uuid().notNull(),
 });
 
-const commentsTableRef = { schemaName: "ddland", tableName: "comments" };
-const reactionsTableRef = { schemaName: "ddland", tableName: "reactions" };
+const commentsTableRef = { schemaName: "app", tableName: "comments" };
+const reactionsTableRef = { schemaName: "app", tableName: "reactions" };
 
 // The correlated "comment's post is published" guard — the canonical rls
 // form used both to filter reads (using) and to constrain writes (with
@@ -191,7 +191,7 @@ const corpus: ReadonlyArray<CorpusEntry> = [
 	},
 	{ label: "sql.raw verbatim", sql: renderExpr(sql.raw("1 = 1").exprNode) },
 
-	// --- dd.land RLS shapes (D19) ---
+	// --- app schema RLS shapes (D19) ---
 	{
 		label: "using: and/or grouping",
 		sql: renderExpr(
