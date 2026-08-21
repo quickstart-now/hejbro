@@ -76,8 +76,26 @@ export type TableDeclaration = {
 	readonly declaredAt: string | null;
 };
 
-/** Hides a {@link Table}'s declaration metadata behind a unique symbol, keeping the object's own enumerable keys limited to its columns (D15). */
-export const tableMeta: unique symbol = Symbol("hejbro:table-meta");
+/**
+ * Hides a {@link Table}'s declaration metadata behind a unique symbol,
+ * keeping the object's own enumerable keys limited to its columns (D15).
+ *
+ * `Symbol.for` (the global symbol registry), not `Symbol(...)`: two
+ * installed copies of `@hejbro/core` (a real, if rare, package-manager
+ * outcome — e.g. a version-conflict-driven nested install) would
+ * otherwise mint two different `Symbol()` values sharing this
+ * description, and every cross-instance check (`isTable`, `getTableMeta`,
+ * a foreign key's `references.table` cross-check, the CLI loader's
+ * declaration collection) would silently disagree about a table's
+ * identity — confirmed empirically (phase8-symbol-for, #138): a foreign
+ * key referencing an `existingTable` built by a different core instance
+ * (the shape `@hejbro/supabase`'s `authUsers` is used in) crashed with a
+ * raw `TypeError`, not a diagnostic. `Symbol.for` makes the identity
+ * global-registry-backed instead of per-module, so it survives being
+ * installed twice. Public export (`core/src/index.ts`), so this is
+ * pre-publication-only cost — free now, breaking after (D61/D65).
+ */
+export const tableMeta: unique symbol = Symbol.for("hejbro:table-meta");
 
 /** Maps a table's column builders to the typed {@link ColumnRef}s exposed at the top level of the built {@link Table}. */
 export type TableColumns<TColumns extends Record<string, ColumnBuilder>> = {

@@ -122,26 +122,26 @@ export const loadConfig = async (
 };
 
 /**
- * `Table`'s hidden metadata lives behind a per-module-instance `Symbol()`
- * (D15, `dsl/table.ts`'s `tableMeta`). `isTable()` compares against *this*
- * `@hejbro/core` instance's symbol — correct for the normal case (one
- * deduped `@hejbro/core` across the loader and every jiti-loaded file).
- * Matching by the symbol's `description` instead is a cross-instance-safe
- * fallback for the rare case a declaration file resolves a *different*
- * `@hejbro/core` copy (e.g. a nested duplicate install, or a test runner's
- * own module graph running jiti-loaded code and this file through two
- * different loaders) — `isTable` alone would silently drop the table.
+ * `Table`'s hidden metadata lived behind a per-module-instance `Symbol()`
+ * (D15, `dsl/table.ts`'s `tableMeta`) — `isTable()` used to compare
+ * against *this* `@hejbro/core` instance's symbol only, which silently
+ * failed for a declaration file that resolved a *different* `@hejbro/core`
+ * copy (e.g. a nested duplicate install, or a test runner's own module
+ * graph running jiti-loaded code and this file through two different
+ * loaders). `tableMeta` now uses `Symbol.for` (phase8-symbol-for, #138),
+ * which is identical across module instances by construction, so
+ * `isTable()` alone is cross-instance-safe and the description-matching
+ * fallback that used to sit here is no longer needed — measured, not
+ * assumed: removing it here still passes `loader.test.ts`'s
+ * "collects every exported hejbro declaration" case, which is a *real*
+ * instance of this exact split (jiti's native `import()` vs. vitest's own
+ * SSR module graph), not a synthetic one.
  */
-const hasTableMetaSymbol = (value: object): boolean =>
-	Object.getOwnPropertySymbols(value).some(
-		(symbol) => symbol.description === "hejbro:table-meta",
-	);
-
 const isHejbroInput = (value: unknown): value is HejbroInput => {
 	if (typeof value !== "object" || value === null) {
 		return false;
 	}
-	if (isTable(value) || hasTableMetaSymbol(value)) {
+	if (isTable(value)) {
 		return true;
 	}
 	return (
