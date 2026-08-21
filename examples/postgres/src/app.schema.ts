@@ -14,6 +14,7 @@ import {
 	index,
 	isNotNull,
 	isNull,
+	literal,
 	lt,
 	ne,
 	numeric,
@@ -62,19 +63,19 @@ export const members = table(
 			),
 		],
 		rls: rls.enabled({
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			readAll: rls
 				.policy("members_read_all")
 				.for("select")
 				.to(appReaderRole)
-				.using(isNotNull(t.id)),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
+				.using(literal(true)),
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			writeAll: rls
 				.policy("members_write_all")
 				.for("all")
 				.to(appWriterRole)
-				.using(isNotNull(t.id))
-				.withCheck(isNotNull(t.id)),
+				.using(literal(true))
+				.withCheck(literal(true)),
 		}),
 	}),
 );
@@ -111,13 +112,13 @@ export const projects = table(
 				.for("select")
 				.to(appReaderRole)
 				.using(isNull(t.archivedAt)),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			writeAll: rls
 				.policy("projects_write_all")
 				.for("all")
 				.to(appWriterRole)
-				.using(isNotNull(t.id))
-				.withCheck(isNotNull(t.id)),
+				.using(literal(true))
+				.withCheck(literal(true)),
 		}),
 	}),
 );
@@ -173,13 +174,13 @@ export const tasks = table(
 						),
 					),
 				),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			writeAll: rls
 				.policy("tasks_write_all")
 				.for("all")
 				.to(appWriterRole)
-				.using(isNotNull(t.id))
-				.withCheck(isNotNull(t.id)),
+				.using(literal(true))
+				.withCheck(literal(true)),
 		}),
 	}),
 );
@@ -206,19 +207,19 @@ export const taskSchedules = table(
 			check("task_schedules_reminder_before_due", lt(t.reminderAt, t.dueAt)),
 		],
 		rls: rls.enabled({
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			readAll: rls
 				.policy("task_schedules_read_all")
 				.for("select")
 				.to(appReaderRole)
-				.using(isNotNull(t.taskId)),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
+				.using(literal(true)),
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			writeAll: rls
 				.policy("task_schedules_write_all")
 				.for("all")
 				.to(appWriterRole)
-				.using(isNotNull(t.taskId))
-				.withCheck(isNotNull(t.taskId)),
+				.using(literal(true))
+				.withCheck(literal(true)),
 		}),
 	}),
 );
@@ -251,19 +252,19 @@ export const comments = table(
 			check("comments_body_not_blank", sql`length(btrim(${t.body})) > 0`),
 		],
 		rls: rls.enabled({
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			readAll: rls
 				.policy("comments_read_all")
 				.for("select")
 				.to(appReaderRole)
-				.using(isNotNull(t.id)),
-			// permissive by design — this example shows the reader/writer role split, not row filtering (hejbro has no literal `true` helper yet — see #113).
+				.using(literal(true)),
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			writeAll: rls
 				.policy("comments_write_all")
 				.for("all")
 				.to(appWriterRole)
-				.using(isNotNull(t.id))
-				.withCheck(isNotNull(t.id)),
+				.using(literal(true))
+				.withCheck(literal(true)),
 		}),
 	}),
 );

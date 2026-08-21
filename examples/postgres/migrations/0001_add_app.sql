@@ -26,7 +26,7 @@
 -- + grant app.schema-usage.app_reader [new]
 -- + grant app.schema-usage.app_writer [new]
 -- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:cc0779ad73b21b8b7216fb5e9b0f1381e0be266c0fae190fd2326afe0a032d22
+-- snapshot: sha256:8ae8aa374f2640edb767d9df71b35784a9af88f355f818bfb1d5f4af02fb0cfb
 
 create schema "app";
 
@@ -109,19 +109,19 @@ alter table "app"."tasks" enable row level security;
 
 drop policy if exists "comments_read_all" on "app"."comments";
 
-create policy "comments_read_all" on "app"."comments" for select to "app_reader" using ("app"."comments"."id" is not null);
+create policy "comments_read_all" on "app"."comments" for select to "app_reader" using (true);
 
 drop policy if exists "comments_write_all" on "app"."comments";
 
-create policy "comments_write_all" on "app"."comments" for all to "app_writer" using ("app"."comments"."id" is not null) with check ("app"."comments"."id" is not null);
+create policy "comments_write_all" on "app"."comments" for all to "app_writer" using (true) with check (true);
 
 drop policy if exists "members_read_all" on "app"."members";
 
-create policy "members_read_all" on "app"."members" for select to "app_reader" using ("app"."members"."id" is not null);
+create policy "members_read_all" on "app"."members" for select to "app_reader" using (true);
 
 drop policy if exists "members_write_all" on "app"."members";
 
-create policy "members_write_all" on "app"."members" for all to "app_writer" using ("app"."members"."id" is not null) with check ("app"."members"."id" is not null);
+create policy "members_write_all" on "app"."members" for all to "app_writer" using (true) with check (true);
 
 drop policy if exists "projects_read_all" on "app"."projects";
 
@@ -129,7 +129,7 @@ create policy "projects_read_all" on "app"."projects" for select to "app_reader"
 
 drop policy if exists "projects_write_all" on "app"."projects";
 
-create policy "projects_write_all" on "app"."projects" for all to "app_writer" using ("app"."projects"."id" is not null) with check ("app"."projects"."id" is not null);
+create policy "projects_write_all" on "app"."projects" for all to "app_writer" using (true) with check (true);
 
 drop policy if exists "tasks_read_all" on "app"."tasks";
 
@@ -137,7 +137,7 @@ create policy "tasks_read_all" on "app"."tasks" for select to "app_reader" using
 
 drop policy if exists "tasks_write_all" on "app"."tasks";
 
-create policy "tasks_write_all" on "app"."tasks" for all to "app_writer" using ("app"."tasks"."id" is not null) with check ("app"."tasks"."id" is not null);
+create policy "tasks_write_all" on "app"."tasks" for all to "app_writer" using (true) with check (true);
 
 create or replace view "app"."open_tasks" with (security_invoker = true) as select "id", "project_id", "title", "status", "priority", "due_at" from "app"."tasks" where "app"."tasks"."status" <> 'done';
 

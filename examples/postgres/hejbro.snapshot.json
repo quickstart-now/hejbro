@@ -71,14 +71,11 @@
 			"schema": "app",
 			"table": "comments",
 			"using": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "comments"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			}
 		},
 		"policy:app.comments.comments_write_all": {
@@ -90,24 +87,18 @@
 			"schema": "app",
 			"table": "comments",
 			"using": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "comments"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			},
 			"withCheck": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "comments"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			}
 		},
 		"policy:app.members.members_read_all": {
@@ -119,14 +110,11 @@
 			"schema": "app",
 			"table": "members",
 			"using": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "members"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			}
 		},
 		"policy:app.members.members_write_all": {
@@ -138,24 +126,18 @@
 			"schema": "app",
 			"table": "members",
 			"using": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "members"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			},
 			"withCheck": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "members"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			}
 		},
 		"policy:app.projects.projects_read_all": {
@@ -186,24 +168,18 @@
 			"schema": "app",
 			"table": "projects",
 			"using": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "projects"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			},
 			"withCheck": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "projects"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			}
 		},
 		"policy:app.task_schedules.task_schedules_read_all": {
@@ -215,14 +191,11 @@
 			"schema": "app",
 			"table": "task_schedules",
 			"using": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "task_id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "task_schedules"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			}
 		},
 		"policy:app.task_schedules.task_schedules_write_all": {
@@ -234,24 +207,18 @@
 			"schema": "app",
 			"table": "task_schedules",
 			"using": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "task_id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "task_schedules"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			},
 			"withCheck": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "task_id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "task_schedules"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			}
 		},
 		"policy:app.tasks.tasks_read_all": {
@@ -321,24 +288,18 @@
 			"schema": "app",
 			"table": "tasks",
 			"using": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "tasks"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			},
 			"withCheck": {
-				"negated": true,
-				"nodeKind": "null-test",
-				"operand": {
-					"column": "id",
-					"nodeKind": "column-ref",
-					"schema": "app",
-					"table": "tasks"
-				}
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
 			}
 		},
 		"rls:app.comments": {
