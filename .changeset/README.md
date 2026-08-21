@@ -10,10 +10,11 @@ We also have a quick list of common questions to get you started engaging with t
   published packages always version together. `@hejbro/skills` is
   intentionally excluded (D62: `private`, no npm channel).
 - `updateInternalDependencies: "patch"` is the changesets default and,
-  **measured across 11 configurations** during `phase8-changesets`
-  (`patch` / `minor` / field removed × dependency bumped `patch` / `minor`
-  × dep range `workspace:*` / `workspace:^` / `^0.0.0`), makes **no
-  observable difference here**. A dependent gets a `patch` bump when an
+  **measured across eleven combinations** during `phase8-changesets` (the
+  key's value `patch` / `minor` / removed, the dependency's own bump type
+  `patch` / `minor`, and its declared range `workspace:*` / `workspace:^` /
+  `^0.0.0` — a selected sample, not a full `3 × 2 × 3 = 18` cross), makes
+  **no observable difference here**. A dependent gets a `patch` bump when an
   internal dependency is released regardless of this field — that is
   changesets' **default dependent behaviour**, not this setting. Separately:
   `changeset version` leaves `workspace:` ranges verbatim (a plain semver

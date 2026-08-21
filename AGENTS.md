@@ -65,9 +65,13 @@ pnpm build           # turbo build
 - Releases: `dev` → `main` PR, **merge commit** (never squash/rebase).
 - Conventional commits, enforced by commitlint (husky):
   `<type>(<scope>): <subject>` — lower-case subject, ≤72 chars.
-- **Every PR carries exactly one `.changeset/*.md`** (D59), starting with
-  `phase8-changesets` (this rule's own landing PR included — it ships a
-  `minor` changeset). Run `pnpm changeset` and answer its prompts; pick
+- **Every PR that changes a published package carries exactly one
+  `.changeset/*.md`** (D59), starting with `phase8-changesets` (this rule's
+  own landing PR included — it ships a `minor` changeset). CI's `changeset
+  status` enforces exactly this scope — a docs-only or private-package-only
+  PR (`@hejbro/skills`, `examples/`, this file) doesn't need one and the
+  gate doesn't ask for one; use `pnpm changeset add --empty` if you want an
+  explicit record anyway. Run `pnpm changeset` and answer its prompts; pick
   `minor` for a new capability, `patch` for a fix, and `major` is not used
   before 1.0 (see the design spec's decision log). The three published
   packages (`@hejbro/core`, `hejbro`, `@hejbro/supabase`) are a **fixed**

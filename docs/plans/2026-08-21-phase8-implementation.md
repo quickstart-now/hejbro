@@ -223,11 +223,24 @@ own claim.
   moving *the same way*, not just that it stops moving — changesets patch-
   bumps any dependent of a released package by default, `fixed` membership
   or not, so "the removed package doesn't move at all" was never an
-  achievable outcome to demand. (The acceptance wording originally asked
-  for exactly that — "only that package stops moving" — and turned out to
-  be unachievable once measured; the fix was to change what the proof
-  showed, not to abandon it. See the `updateInternalDependencies` write-up
-  below for the same lesson applied to a different claim.)
+  achievable outcome to demand. Three requirements in this PR's review
+  turned out to be wrong, not just the implementation checking them —
+  worth keeping in one place, because a requirement is as capable of being
+  unverified as an implementation is: (1) the acceptance wording for this
+  criterion originally asked for exactly that unachievable outcome —
+  "only that package stops moving" — fixed by changing what the proof
+  showed, not by abandoning it; (2) a review round asked this PR to prove
+  the `AGENTS.md` changeset rule needed real enforcement, on the premise
+  that it currently had none — the premise was wrong, found by running
+  `changeset status` rather than trusting the premise (see
+  `phase8-release-workflows`'s criterion above); (3) the observation
+  behind that premise was itself a green read the wrong way — measured
+  with the changeset removed but the package left unchanged, so the gate
+  had nothing to catch (see "a green proves nothing unless the defect was
+  actually present" below). Requesters and reviewers are gates too — the
+  same discipline applies. See the `updateInternalDependencies` write-up
+  below for the same "vary what you credit" lesson applied to a causal
+  claim rather than a requirement.
 - **`phase8-regen-script`** — running the script reproduces the committed
   example migrations and snapshots **byte for byte** before any format change.
   That is the script's own test. Prove the script's range by mutation:
@@ -261,23 +274,24 @@ own claim.
   older commit — and confirm the gate still stops the stale tarball.
 
   An earlier draft of this criterion claimed the `AGENTS.md`
-  changeset-presence rule was enforced only incidentally (by
-  `check:first-release-version`, which self-invalidates at the first
-  release) and asked this PR to add a real check. **That was wrong, checked
-  by running it rather than reading the CLI's docs**: `pnpm changeset
-  status` already enforces it, on its own, with no `--since` flag needed —
-  `baseBranch: "dev"` in `.changeset/config.json` (`phase8-changesets`) is
-  enough for it to diff against `dev` by default. Measured directly: a
-  commit that changes `packages/core` with no covering changeset makes
-  `changeset status` exit `1` with `"Some packages have been changed but no
-  changesets were found"`; the same commit with a changeset exits `0`;
-  `--since=dev` explicit changes nothing (control: a commit touching only
-  `examples/postgres/README.md`, a private package, exits `0` either way —
-  the check is correctly scoped to the published packages, not every file
-  change). `phase8-changesets` already wires `changeset status` into
-  `ci.yml`, so this enforcement is live from that PR onward, permanently
-  (not self-invalidating like the version guard) — nothing left for this
-  PR to add here.
+  changeset-presence rule was enforced only incidentally and asked this PR
+  to add a real check. **That was wrong, checked by running it rather than
+  reading the CLI's docs.** `check:first-release-version` and `changeset
+  status` ask different questions and neither substitutes for the other:
+  `check:first-release-version` asks *"is the first release 0.1.0?"* and
+  **skips itself** once it is; `changeset status` asks *"does a changed
+  published package have a changeset?"* and **keeps working** — it is
+  already wired into CI and already enforces D59's rule, no `--since` flag
+  needed, because `baseBranch: "dev"` in `.changeset/config.json`
+  (`phase8-changesets`) is enough for it to diff against `dev` by default.
+  Measured across five cells (changeset present/absent × nothing changed /
+  a published package changed / a private-only package changed): the only
+  red cell is *changeset absent + a published package changed*
+  (`"Some packages have been changed but no changesets were found"`),
+  identically with or without `--since=dev`. `phase8-changesets` already
+  wires `changeset status` into `ci.yml`, so this enforcement is live from
+  that PR onward and does not self-invalidate — nothing left for this PR to
+  add here.
 - **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
   reproducing #125's crash (a config importing a package that is not
   installed) first, then the diagnostic. Both `asHejbroError` sites are
@@ -476,18 +490,31 @@ exists to catch, injected one at a time, each turning it red.
 
 This applies to configuration too — and to the causal claims made about it.
 `updateInternalDependencies` went through two readings in this phase, both
-grounded in something real and both wrong: the first concluded "no-op" from
-the range form alone, without running anything. The second ran `changeset
+grounded in something real and **neither established**: the first concluded
+"no-op" from the range form alone, without running anything — the conclusion
+happened to hold, but nothing had tested it. The second ran `changeset
 version` on a copy (`phase8-changesets`), saw a dependent bump, and
 attributed it to the setting — without ever changing the setting itself.
 **Vary the thing you are attributing the effect to.** A variable you did not
-vary cannot be the cause. Eleven configurations later (`patch` / `minor` /
-the field removed, crossed with the dependency's own bump type and its
-declared range), the bump was identical in all eleven: changesets bumps a
-dependent by default when its internal dependency releases, and this field
-changes nothing observable in this repo. A config key is a gate like any
-other — run it before describing what it does, and change the specific
-thing you're crediting before crediting it.
+vary cannot be the cause. Measured across eleven combinations of the key's
+value (`patch` / `minor` / removed), the dependency's own bump type, and its
+declared range — not a full cross (`3 × 2 × 3 = 18`), a selected sample of
+eleven — the bump was identical every time: changesets bumps a dependent by
+default when its internal dependency releases, and this field changes
+nothing observable in this repo. A config key is a gate like any other — run
+it before describing what it does, and change the specific thing you're
+crediting before crediting it.
+
+**A green proves nothing unless the defect was actually present.** The
+converse of "break it on purpose": before concluding a gate doesn't catch
+something, confirm the thing it was supposed to catch was actually there to
+catch — the same discipline as varying the variable you credit, aimed at the
+opposite failure. This phase concluded `changeset status` "enforces nothing"
+from a measurement where only the changeset was removed and the package
+itself was left unchanged — the gate had nothing to catch, so its green
+proved nothing about its range. A negative result is more dangerous than a
+positive one here: a red gate is evidence something happened, but a green
+gate does not distinguish "didn't catch it" from "nothing to catch."
 
 **Mutate the producer, not the artifact.** A `prepack` or regeneration step
 will silently heal an artifact-level mutation, and the gate passes for the
