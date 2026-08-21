@@ -60,8 +60,10 @@ export const isGrantDeclaration = (
 
 /**
  * Resolves the Postgres schema a normalized declaration targets, per
- * `declarationKind` (shared by the reserved-schema and exposed-table
- * validators). `null` for declaration kinds with no single owning schema.
+ * `declarationKind` (this module's declaration narrowers are shared
+ * with the exposed-table validator, though `schemaOf` itself isn't --
+ * see its only caller below). `null` for declaration kinds with no
+ * single owning schema.
  *
  * This isn't a hypothetical fallback for some future kind -- it's live
  * today. `HejbroDeclaration` is structurally open
