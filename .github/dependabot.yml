@@ -1,0 +1,43 @@
+version: 2
+updates:
+  # Workflow actions -- checked directly, not assumed: the GitHub-Actions
+  # updater in dependabot-core does bump the `# vX.Y.Z` version comment
+  # next to a SHA-pinned `uses:` line alongside the SHA itself (shipped
+  # 2022-10-31), which is the whole reason #155's SHA-pinning convention
+  # (release-version.yml, release-publish.yml) doesn't rot into a comment
+  # that lies about what SHA is actually pinned. One known, narrower edge
+  # case remains open upstream as of 2026 (dependabot-core#14716): if the
+  # new SHA a bump lands on is an untagged branch-HEAD commit rather than
+  # a tagged release, the comment can go stale. Every action pinned in
+  # this repo is pinned to a tagged release's commit, so the common case
+  # this repo actually hits should keep SHA and comment in sync -- but
+  # this is the one thing about Dependabot's own behavior this config
+  # could not directly exercise (it only runs on Dependabot's own
+  # schedule), so treat it as a residual risk, not a closed question.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # npm/pnpm workspace: root plus every workspace package
+  # (pnpm-workspace.yaml's own `packages: [packages/*, examples/*]`).
+  # `directories` (plural, glob-capable) rather than a single `directory`,
+  # since a pnpm workspace's actual dependency declarations live in each
+  # package's own package.json, not just the root's devDependencies.
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/packages/*"
+      - "/examples/*"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
