@@ -8,10 +8,15 @@
 		"format": "biome format --write .",
 		"check": "biome check .",
 		"smoke:pack-install": "bash scripts/pack-install-smoke.sh",
+		"check:first-release-version": "node scripts/check-first-release-version.mjs",
+		"changeset": "changeset",
+		"version-packages": "changeset version",
+		"release": "pnpm build && changeset publish",
 		"prepare": "husky"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",
+		"@changesets/cli": "^3.0.1",
 		"@commitlint/cli": "^21.0.1",
 		"@commitlint/config-conventional": "^21.0.1",
 		"husky": "^9.1.7",

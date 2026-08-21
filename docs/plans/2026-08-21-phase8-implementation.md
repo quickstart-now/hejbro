@@ -68,7 +68,9 @@ Constraints that came with them, and that a later PR must not quietly undo:
 ## Global constraints
 
 - Every PR carries exactly one `.changeset/*.md` once `phase8-changesets` has
-  landed (D59). PRs before that do not.
+  landed (D59) — including `phase8-changesets` itself, which carries a
+  `minor` changeset (introducing the release infrastructure is not a patch).
+  PRs before that do not.
 - Every PR body lists the commits to be squashed and references its issue. The
   phase issue stays open: use `Refs #9`, and `Closes #N` only for the specific
   issue a PR finishes.
@@ -203,11 +205,52 @@ own claim.
   workflow packs with `pnpm` — `changeset publish`'s pnpm workspace detection
   is automatic, and if it silently stops applying (or a workflow edit swaps in
   `npm publish`), the smoke stays green while the shipped tarball breaks.
-  `phase8-release-workflows` closes this gap; see its row below.
+  `phase8-release-workflows` closes this gap; see its row below. The CI leg
+  also proved the script portable — `mktemp -d`, `tar -tzf`, `grep -qxF` and
+  the here-string all behave on a Linux runner, which local macOS runs cannot
+  show.
 - **`phase8-changesets`** — `changeset status` runs clean; a dry version run
   bumps the three packages together. Document in `CONTRIBUTING.md` that the
   **first release needs a `minor` changeset**, since an all-`patch` set would
-  publish `0.0.1`.
+  publish `0.0.1`. "Runs clean in CI" is not free: the requirement to prove
+  `baseBranch: "dev"` actually works in CI (not just in local config)
+  produced a real failure — `changeset status` shells out to `git merge-base
+  dev HEAD`, which needs a local branch literally named `dev` that a
+  `pull_request` checkout never creates on its own. The requirement earned
+  its keep by finding this before release did — and the failure mode itself
+  is worth noting: `changeset status` doesn't silently pass when its
+  `baseBranch` ref is missing, it hard-fails with a stack trace (see
+  `ci.yml`'s comment on the fetch step), which is exactly why the CI break
+  was visible instead of a quiet false green. Prove `fixed` is the cause
+  of the three packages moving together, not a coincidence of all three
+  starting at `0.0.0`: take one package out of `fixed` and show it stops
+  moving *the same way*, not just that it stops moving — changesets patch-
+  bumps any dependent of a released package by default, `fixed` membership
+  or not, so "the removed package doesn't move at all" was never an
+  achievable outcome to demand. Four requirements or claims in this PR's
+  review turned out to be wrong, not just the implementation checking
+  them — worth keeping in one place with who introduced each, because a
+  requirement is as capable of being unverified as an implementation is,
+  and because the four are genuinely different failures, not one mistake
+  repeated: (1) the acceptance wording for this criterion originally asked
+  for exactly that unachievable outcome — "only that package stops
+  moving" — fixed by changing what the proof showed, not by abandoning
+  it; (2) a separate instruction asked this PR to confirm whether
+  `changeset status --since=<base>` closes an enforcement gap, on the
+  premise that the flag itself would matter — it doesn't, in either
+  direction, since `baseBranch: "dev"` already supplies it; (3) that
+  instruction was itself downstream of relaying an observation into a
+  requirement without independently verifying it first; (4) the
+  observation being relayed was a green read the wrong way — measured
+  with the changeset removed but the package left unchanged, so the gate
+  had nothing to catch (see "a green proves nothing unless the defect was
+  actually present" below). (1) and (2) are unverified *requirements*;
+  (3) is passing a claim along without checking it; (4) is a green
+  wrongly read as absence-of-enforcement — distinct failures, not the
+  same one four times. Requesters and reviewers are gates too — the same
+  discipline applies. See the `updateInternalDependencies` write-up below
+  for the same "vary what you credit" lesson applied to a causal claim
+  rather than a requirement.
 - **`phase8-regen-script`** — running the script reproduces the committed
   example migrations and snapshots **byte for byte** before any format change.
   That is the script's own test. Prove the script's range by mutation:
@@ -239,6 +282,27 @@ own claim.
   regenerated it). Disable or bypass the build step itself — e.g. temporarily
   remove the `prepack` script, or point the pack at a `dist` produced from an
   older commit — and confirm the gate still stops the stale tarball.
+
+  An earlier draft of this criterion claimed the `AGENTS.md`
+  changeset-presence rule was enforced only incidentally and asked this PR
+  to add a real check. **That was wrong, checked by running it rather than
+  reading the CLI's docs.** `check:first-release-version` and `changeset
+  status` ask different questions and neither substitutes for the other:
+  `check:first-release-version` asks *"is the first release 0.1.0?"* and
+  **skips itself** once it is; `changeset status` asks *"does a changed
+  published package have a changeset?"* and **keeps working** — it is
+  already wired into CI and already enforces D59's rule, no `--since` flag
+  needed, because `baseBranch: "dev"` in `.changeset/config.json`
+  (`phase8-changesets`) is enough for it to diff against `dev` by default.
+  Measured across five cells: the changeset present or absent, against
+  nothing changed / a published package changed / a private-only package
+  changed. The only red cell is *changeset absent + a published package
+  changed*
+  (`"Some packages have been changed but no changesets were found"`),
+  identically with or without `--since=dev`. `phase8-changesets` already
+  wires `changeset status` into `ci.yml`, so this enforcement is live from
+  that PR onward and does not self-invalidate — nothing left for this PR to
+  add here.
 - **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
   reproducing #125's crash (a config importing a package that is not
   installed) first, then the diagnostic. Both `asHejbroError` sites are
@@ -272,9 +336,16 @@ own claim.
   few known fields), so a `constantOne` or a stray `columnName` inside an
   expression subtree would pass unnoticed. Extend it first with a case that
   walks a v5 snapshot recursively and asserts every discriminator value and
-  every reference key, then make it green. Prove the extension by mutation:
-  a camelCase discriminator and a `columnName` reference key, each planted in
-  a v5 snapshot, must each turn it red — this is the device that got its own
+  every reference key, then make it green. Prove the extension by mutation,
+  **against the producer**: make the expression codec emit a camelCase
+  discriminator (and a `columnName` reference key), then confirm each turns
+  the test red. Planting a token in a committed snapshot proves nothing —
+  `naming-conventions.test.ts` builds its snapshot in memory
+  (`buildSnapshot(...)`) and never reads the committed file, so the planted
+  token is not merely healed on the next `generate`, it is never looked at
+  in the first place — a stronger failure than the hand-edited-`dist` trap
+  (see "Mutate the producer, not the artifact" below), which at least gets
+  looked at before being overwritten. This is the device that got its own
   range mis-stated earlier in this same plan (see "And one rule for writing
   them" below), so the claim that it's been extended needs to be shown, not
   just made.
@@ -428,6 +499,41 @@ misattribution was visible from reading the script. So: a PR that builds
 or extends a verification device shows the same evidence — the defects it
 exists to catch, injected one at a time, each turning it red.
 
+This applies to configuration too — and to the causal claims made about it.
+`updateInternalDependencies` went through two readings in this phase, both
+grounded in something real and **neither established**: the first concluded
+"no-op" from the range form alone, without running anything — the conclusion
+happened to hold, but nothing had tested it. The second ran `changeset
+version` on a copy (`phase8-changesets`), saw a dependent bump, and
+attributed it to the setting — without ever changing the setting itself.
+**Vary the thing you are attributing the effect to.** A variable you did not
+vary cannot be the cause. Measured across eleven combinations of the key's
+value (`patch` / `minor` / removed), the dependency's own bump type, and its
+declared range — not a full cross (`3 × 2 × 3 = 18`), a selected sample of
+eleven — the bump was identical every time: changesets bumps a dependent by
+default when its internal dependency releases, and this field changes
+nothing observable in this repo. A config key is a gate like any other — run
+it before describing what it does, and change the specific thing you're
+crediting before crediting it.
+
+The two are not the same rule. **"Vary what you credit" applies to a causal
+claim** — you saw an effect and named a cause. **"A green proves nothing"
+applies to a requirement or an observation** — you saw nothing and concluded
+there was nothing to see. This phase produced both: the
+`updateInternalDependencies` write-up above is the first, the "`changeset
+status` enforces nothing" premise below is the second.
+
+**A green proves nothing unless the defect was actually present.** The
+converse of "break it on purpose": before concluding a gate doesn't catch
+something, confirm the thing it was supposed to catch was actually there to
+catch — the same discipline as varying the variable you credit, aimed at the
+opposite failure. This phase concluded `changeset status` "enforces nothing"
+from a measurement where only the changeset was removed and the package
+itself was left unchanged — the gate had nothing to catch, so its green
+proved nothing about its range. A negative result is more dangerous than a
+positive one here: a red gate is evidence something happened, but a green
+gate does not distinguish "didn't catch it" from "nothing to catch."
+
 **Mutate the producer, not the artifact.** A `prepack` or regeneration step
 will silently heal an artifact-level mutation, and the gate passes for the
 wrong reason. `phase8-packaging` hit this while verifying its own `.d.ts`
@@ -438,6 +544,15 @@ the *producer* was changed instead (tsdown's config set to `dts: false`, so
 no `.d.ts` is emitted at all). The mutation has to target whatever produces
 the artifact — the build step, the source it builds from, or the config that
 drives it — not the artifact itself once it exists.
+
+This rule came from the same review: deleting `dist/cli.d.ts` did not turn
+the smoke red, because `prepack` rebuilds `dist` during `pnpm pack`. The gate
+was fine; the mutation was healed before it could be seen. Two of the
+mutation scenarios written into this plan had the same flaw and were
+rewritten above (`phase8-release-workflows`'s stale-`dist` case and
+`phase8-expr-nodes`'s snapshot-planting case) — the standard was written
+before its own trap was known, which is worth keeping on record rather than
+quietly fixing.
 
 ## Settled: expression discriminators in the snapshot (D70)
 
