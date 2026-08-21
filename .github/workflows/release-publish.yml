@@ -50,9 +50,30 @@ jobs:
     needs: gate
     if: github.repository == 'quickstart-now/hejbro'
     runs-on: ubuntu-latest
+    # Placeholder for a protected Environment gate (owner decision pending,
+    # not yet made): adding `environment: release` here, plus a required
+    # reviewer on that Environment in repo settings, would pause this job
+    # for manual approval before it runs -- an additive change (this one
+    # line) that does not require re-touching anything else below. Left
+    # unset for now because that Environment doesn't exist yet.
+    # environment: release
     permissions:
       contents: write # changesets/action/publish pushes git tags + GitHub releases
-      id-token: write # required for npm provenance (NPM_CONFIG_PROVENANCE), independent of the auth method below
+      # Required for npm provenance (NPM_CONFIG_PROVENANCE) -- independent of
+      # the NODE_AUTH_TOKEN auth method below. Verified directly (not
+      # assumed) on a real Actions runner against an isolated, disposable
+      # Verdaccio service container (never the real npm registry): without
+      # this permission, `npm publish --provenance` fails immediately with
+      # `EUSAGE: Provenance generation in GitHub Actions requires "write"
+      # access to the "id-token" permission` -- a loud, non-zero-exit
+      # failure, not a silent publish without provenance. With it, npm
+      # obtained a real OIDC token, signed a real provenance statement, and
+      # published a real entry to Sigstore's public transparency log before
+      # the (test-rig-only) registry rejected the provenance-attached
+      # publish call as an unsupported API -- confirming the OIDC handshake
+      # itself, which real npmjs.org's registry does support, works end to
+      # end.
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { fetch-depth: 0 } # full history: this job pushes git tags
@@ -63,16 +84,38 @@ jobs:
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
       - run: pnpm install --frozen-lockfile
-      # Org secret NPM_TOKEN's visibility is "private" -- GitHub's org-secret
-      # scoping term for "private repositories only" -- and this repository
-      # is public, so `secrets.NPM_TOKEN` resolves to an empty string here
-      # until the owner adds a repository-level secret (AGENTS.md's Owner
-      # actions). Failing fast on that, before ever invoking npm/pnpm with
-      # an empty token, is the whole point of this step: the alternative is
-      # `changeset version` having already run (irrelevant here, this
-      # workflow never versions) or the publish step failing deep inside
-      # npm's own auth error handling with a less specific message. Value is
-      # never printed -- only ever tested for absence.
+      # `NPM_TOKEN` is a repository-level secret on quickstart-now/hejbro (an
+      # npm automation token, added 2026-08-21) -- deliberately NOT the org
+      # secret of the same name: that org secret's visibility is "private"
+      # (GitHub's org-secret scoping term for "the org's private repos
+      # only"), it is already relied on by the other 12 (all private) repos
+      # in the org, and hejbro is the org's one public repo, so exposing
+      # that shared token here would widen its blast radius to every repo
+      # that already trusts it. This guard step is defence in depth, not a
+      # response to a currently-missing secret: if the repo secret is ever
+      # removed, renamed, or this workflow is ever copied to a repo without
+      # it, this fails loudly and immediately instead of invoking npm/pnpm
+      # with an empty token. Value is never printed -- only ever tested for
+      # absence.
+      #
+      # This does NOT cover "the token is present, authenticates, but lacks
+      # publish rights for the @hejbro scope" (a real open question -- no
+      # one has confirmed the token's scope permissions yet, since doing so
+      # needs the token value itself). That case was verified separately
+      # (not guessed): against an isolated, disposable Verdaccio registry
+      # (never npmjs.org), both an invalid token (401) and a validly
+      # authenticated user denied publish rights on the target scope (403)
+      # made `changeset publish` exit non-zero with "Some packages failed to
+      # publish" -- traced to `@changesets/cli@3.0.1`'s
+      # commands/publish/index.ts, which throws `ExitError(1)` whenever any
+      # package's publish result is `"failed"`. The one path that could
+      # silently report success despite an auth problem -- an empty publish
+      # plan ("No unpublished projects to publish", exit 0) -- is reached
+      # via `getPublishPlan`'s per-package `pnpm info` check, which is an
+      # unauthenticated registry read and 404s for an unpublished package
+      # regardless of token validity; it cannot itself be the thing masking
+      # an auth failure here, because every real release publishes at least
+      # one genuinely new version.
       - name: Verify NPM_TOKEN is configured
         run: |
           if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
