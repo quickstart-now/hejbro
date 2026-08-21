@@ -11,6 +11,14 @@ jobs:
         node-version: [22, 24]
     steps:
       - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      # `changeset status`'s baseBranch (dev) diffing shells out to `git
+      # merge-base dev HEAD` — it needs a *local* branch literally named
+      # `dev`, which a pull_request checkout never creates on its own (it
+      # only checks out the PR ref). `fetch-depth: 0` alone doesn't fix
+      # this: it deepens the ref actually fetched, not "fetch every
+      # branch."
+      - run: git fetch origin dev:dev
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: "${{ matrix.node-version }}", cache: pnpm }
