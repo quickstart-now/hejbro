@@ -212,7 +212,12 @@ own claim.
 - **`phase8-changesets`** — `changeset status` runs clean; a dry version run
   bumps the three packages together. Document in `CONTRIBUTING.md` that the
   **first release needs a `minor` changeset**, since an all-`patch` set would
-  publish `0.0.1`.
+  publish `0.0.1`. "Runs clean in CI" is not free: the requirement to prove
+  `baseBranch: "dev"` actually works in CI (not just in local config)
+  produced a real failure — `changeset status` shells out to `git merge-base
+  dev HEAD`, which needs a local branch literally named `dev` that a
+  `pull_request` checkout never creates on its own. The requirement earned
+  its keep by finding this before release did.
 - **`phase8-regen-script`** — running the script reproduces the committed
   example migrations and snapshots **byte for byte** before any format change.
   That is the script's own test. Prove the script's range by mutation:
@@ -439,6 +444,13 @@ assertion that supposedly guards it ever runs). Neither the gap nor the
 misattribution was visible from reading the script. So: a PR that builds
 or extends a verification device shows the same evidence — the defects it
 exists to catch, injected one at a time, each turning it red.
+
+This applies to configuration too. `updateInternalDependencies` was assumed
+to be a no-op in this repo because internal deps are `workspace:*` — reading
+the name and the range form was enough to make it sound obvious. Running
+`changeset version` on a copy (`phase8-changesets`) showed it bumps
+dependents' own versions regardless of range form. A config key is a gate
+like any other: run it before describing what it does.
 
 **Mutate the producer, not the artifact.** A `prepack` or regeneration step
 will silently heal an artifact-level mutation, and the gate passes for the
