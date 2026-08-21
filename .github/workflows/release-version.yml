@@ -11,11 +11,10 @@ name: release-version
 # a version PR there).
 on:
   push:
-    branches: [dev]
-  # TEMPORARY (scratch measurement, will be reverted before the real PR):
-  # lets this be triggered manually against a scratch branch without
-  # touching dev.
-  workflow_dispatch: {}
+    # TEMPORARY (scratch measurement, will be reverted before the real PR):
+    # also trigger on this scratch branch so the workflow can run without
+    # touching dev.
+    branches: [dev, phase8-release-workflows-version-proof]
 
 # Two concurrent runs racing to open/update the "Version Packages" PR branch
 # could interleave pushes to it. Queue instead of overlapping; don't cancel
