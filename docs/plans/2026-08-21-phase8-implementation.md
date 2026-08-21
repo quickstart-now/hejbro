@@ -68,7 +68,7 @@ undo:
 
 ## Global constraints
 
-- Every PR carries exactly one `.changeset/*.md` once PR 3 has landed
+- Every PR carries exactly one `.changeset/*.md` once `phase8-changesets` has landed
   (D59). PRs before that do not.
 - Every PR body lists the commits to be squashed and references its
   issue. The phase issue stays open: use `Refs #9`, and `Closes #N` only
@@ -93,11 +93,11 @@ new cases are picked up automatically). Golden SQL files contain **no**
 banner hash lines — the harness calls `generateMigration` without
 `bannerHashes` — so a format change costs nothing there.
 
-**Examples — scripted by PR 4, manual before it.** The eight committed
+**Examples — scripted by `phase8-regen-script`, manual before it.** The eight committed
 example migrations (`examples/{postgres,supabase}/migrations/0001…0004`)
 *do* carry `parent-snapshot:`/`snapshot:` lines, and core never hashes
 (D33) — only the CLI does. Regenerating therefore means driving the built
-CLI once per step. `scripts/regen-examples.sh` (PR 4) automates this and
+CLI once per step. `scripts/regen-examples.sh` (`phase8-regen-script`) automates this and
 **enumerates the step files** rather than hard-coding four, because the
 chains grow in PRs 15 and 17.
 
@@ -130,9 +130,20 @@ Postgres rather than by our reading of the docs.
 
 ## PR map
 
-Ordering constraints: **6 → 7** · **12 → 17** · **4 → 12–15** · **12
-first in the format wave** (one bump) · **2 before any release** ·
-**3 before every later PR's changeset**.
+Ordering constraints, by branch name rather than row number:
+`phase8-error-subclass` → `phase8-loader-diagnostics` ·
+`phase8-snapshot-v5` → `phase8-grant-sync` ·
+`phase8-regen-script` before the whole format wave ·
+`phase8-snapshot-v5` first within it (one bump) ·
+`phase8-packaging` before any release ·
+`phase8-changesets` before every later PR's changeset.
+
+**Refer to PRs by branch name, not by row number.** The numbers below are
+reading order and shift whenever a PR is inserted — which already
+produced two stale references in review (a chain step attributed to PRs
+that did not own it, and "the chains grow in 17 and 18" pointing at a
+golden-translation PR). Branch names do not move. If a number does end up
+in prose, re-check every one of them when the map changes.
 
 | # | PR | Scope | Issues |
 |---|---|---|---|
@@ -160,16 +171,16 @@ first in the format wave** (one bump) · **2 before any release** ·
 | 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69) | — |
 | 23 | `phase8-docs-release` | README status and install instructions, `CONTRIBUTING.md`, then the 0.1.0 release | — |
 
-PR 16 lands **before** 15 in dependency terms but is listed after it for
+`phase8-pk-guard` lands **before** 15 in dependency terms but is listed after it for
 readability: the guard is a small, independent PR that can go as early as
-the diagnostics wave, and PR 15 then replaces it with real SQL.
+the diagnostics wave, and `phase8-constraint-names` then replaces it with real SQL.
 
 ## Per-PR completion criteria
 
 Beyond the global gates (`check`, `check-types`, `test`), each PR proves
 its own claim.
 
-- **PR 2** — the Node 22 matrix entry has to actually run. The root
+- **`phase8-packaging`** — the Node 22 matrix entry has to actually run. The root
   `package.json` declares `engines: { node: ">=24.0.0" }`, which is
   stricter than D13's own text ("the repo's own toolchain requires
   ≥ 22.18.0") and would fail install on the new matrix job. Lower the root
@@ -180,32 +191,32 @@ its own claim.
   a scratch project, and run `init`/`generate`/`verify` there. This is the
   only thing that catches `workspace:*` reaching a consumer, a missing
   `bin`, or a broken `exports`.
-- **PR 3** — `changeset status` runs clean; a dry version run bumps the
+- **`phase8-changesets`** — `changeset status` runs clean; a dry version run bumps the
   three packages together. Document in `CONTRIBUTING.md` that the **first
   release needs a `minor` changeset**, since an all-`patch` set would
   publish `0.0.1`.
-- **PR 4** — running the script reproduces the committed example
+- **`phase8-regen-script`** — running the script reproduces the committed example
   migrations and snapshots **byte for byte** before any format change.
   That is the script's own test.
-- **PR 5** — the workflows are validated against `changesets/action`'s
+- **`phase8-release-workflows`** — the workflows are validated against `changesets/action`'s
   `action.yml` (input names differ between versions; do not copy a draft
   blindly). The publish job must refuse to run if the pre-publish gate
   fails.
-- **PR 6 → 7** — a test reproducing #125's crash (a config importing a
+- **`phase8-error-subclass` → 7** — a test reproducing #125's crash (a config importing a
   package that is not installed) first, then the diagnostic. Both
   `asHejbroError` sites are converted.
-- **PR 8** — a chain that rolls back and then forward again verifies
+- **`phase8-chain-walk`** — a chain that rolls back and then forward again verifies
   clean; the two O2-approved message texts are unchanged.
-- **PR 11** — the count is roughly 75 user-facing throw sites; internal
+- **`phase8-next-marker`** — the count is roughly 75 user-facing throw sites; internal
   invariant guards (`unreachable`, `internal hejbro bug`) are **not**
   targets. Goldens are expected to be unaffected: the CLI golden pins two
   Phase 5 codes that already carry `Next:`, and core's message assertions
   are substring or regex matches that appending to does not break. If a
   golden does move, stop and re-check the classification.
-- **PR 12** — the version-mismatch message is true after publication and
+- **`phase8-snapshot-v5`** — the version-mismatch message is true after publication and
   no longer sends the user in a circle (delete the snapshot → `verify`
   says restore it from version control).
-- **PR 13** — a rename retargets a policy `using`, a CHECK expression and
+- **`phase8-expr-nodes`** — a rename retargets a policy `using`, a CHECK expression and
   a partial index predicate, with no drop/add pair left over. Expression
   nodes serialize by D70: kebab-case discriminators and `schema`/`table`
   reference fields in the snapshot, camelCase in the TypeScript union.
@@ -213,28 +224,28 @@ its own claim.
   **`naming-conventions.test.ts` passes on v5 output with no carve-out
   added** — that test is what enforces this decision, so weakening it
   would defeat the purpose.
-- **PR 14** — the invalid `alter column … type serial` path is closed;
+- **`phase8-sequence-kind`** — the invalid `alter column … type serial` path is closed;
   a column rename and a table rename both keep the sequence in step;
   `serial()` → `integer()` emits the default drop and the sequence drop.
-- **PR 15** — pk/unique changes emit drop + add using names taken from
+- **`phase8-constraint-names`** — pk/unique changes emit drop + add using names taken from
   the snapshot; #137's add and drop paths are covered by tests, and the
   chain step added in this PR exercises them under real Postgres.
-- **PR 16** — a PK column added to an existing table is refused loudly
+- **`phase8-pk-guard`** — a PK column added to an existing table is refused loudly
   rather than emitted without its constraint.
-- **PR 17** — a table added under a schema-wide grant reaches the grant;
+- **`phase8-grant-sync`** — a table added under a schema-wide grant reaches the grant;
   `pnpm --filter example-postgres roundtrip` produces an empty diff.
-- **PR 21** — the skill reference, the README paragraph and the three
+- **`phase8-authuid-cached`** — the skill reference, the README paragraph and the three
   example policies all move to the cached form. **The README's D45
   paragraph currently tells users to wrap the call themselves "until
   then"; that text becomes false and must be rewritten** — the same class
   of defect as #136.
-- **PR 22** — see the section below.
-- **PR 23** — README's `## Status` no longer says "Nothing is published
+- **`phase8-supabase-image`** — see the section below.
+- **`phase8-docs-release`** — README's `## Status` no longer says "Nothing is published
   yet"; install instructions exist; `CONTRIBUTING.md` states plainly that
   merging the version PR publishes immediately and that npm burns a
   version number even if it is unpublished.
 
-## PR 22 — verifying the preset against a real image (D69)
+## `phase8-supabase-image` — verifying the preset against a real image (D69)
 
 **Why it is not redundant with the round-trip.** The two scripts answer
 different questions and both are kept:
@@ -304,7 +315,7 @@ handled #136–#138. Given what the first honest look at the round-trip
 produced in Phase 7 (six defects) and what this brainstorm's research
 produced (four), expect this to find something.
 
-**Placement.** After PR 21, so that every preset change (#116, #97,
+**Placement.** After `phase8-authuid-cached`, so that every preset change (#116, #97,
 #113) is already in, and before the docs-and-release PR — a mismatch
 found here may change what the docs should say.
 
@@ -323,7 +334,7 @@ rule rather than a reminder:
   an internal roadmap number to users. Those two strings disappear with
   #24, but only because that work removes the throw sites.
 - `packages/supabase/README.md`'s D45 paragraph tells users to wrap
-  `auth.uid()` themselves "until then". PR 21 is *then*, and leaving the
+  `auth.uid()` themselves "until then". `phase8-authuid-cached` is *then*, and leaving the
   paragraph in place would publish advice for a workaround that is no
   longer needed.
 
@@ -352,7 +363,7 @@ codec. `packages/core/test/naming-conventions.test.ts` scans generated
 output rather than source — by design — so it is the enforcement
 mechanism, not an obstacle to work around.
 
-## Design input needed before PR 21
+## Design input needed before `phase8-authuid-cached`
 
 The cached `authUid()` variant is a public API surface decision: the
 export's name, and — more importantly — **which form the skill and the
@@ -369,11 +380,11 @@ none of them blocks starting.
 
 | Claim | Settled by |
 |---|---|
-| `alter table … add primary key (cols)` is valid without a constraint name | PR 15 chain step (real Postgres) |
-| Dropping one column of a composite primary key drops the whole constraint | PR 15 chain step (real Postgres) |
-| `alter column … type serial` is rejected by Postgres | PR 14 |
-| A new `ExprNode` kind reaches `assertNever` in an older build | PR 13 |
-| #87's user-facing count (~75, ±5) and its zero golden impact | PR 11's first commit |
+| `alter table … add primary key (cols)` is valid without a constraint name | `phase8-constraint-names` chain step (real Postgres) |
+| Dropping one column of a composite primary key drops the whole constraint | `phase8-constraint-names` chain step (real Postgres) |
+| `alter column … type serial` is rejected by Postgres | `phase8-sequence-kind` |
+| A new `ExprNode` kind reaches `assertNever` in an older build | `phase8-expr-nodes` |
+| #87's user-facing count (~75, ±5) and its zero golden impact | `phase8-next-marker`'s first commit |
 | #132's 62 lint findings | 0.2.0, when the rule is designed |
 
 One note for whoever picks up #132: `biome check` fails with
