@@ -14,6 +14,7 @@
 		"check:pnpm-publish-tool": "node scripts/verify-pnpm-publish-tool.mjs",
 		"check:crap": "pnpm test:coverage && node scripts/check-crap.mjs",
 		"regen:examples": "bash scripts/regen-examples.sh",
+		"verify:supabase-image": "bash scripts/verify-supabase-image.sh",
 		"changeset": "changeset",
 		"version-packages": "changeset version",
 		"release": "pnpm build && changeset publish",
