@@ -2,32 +2,32 @@
 	"dialect": "postgres",
 	"hejbroSnapshot": 3,
 	"objects": {
-		"grant:app.allTablesPrivileges.anon": {
-			"grantKind": "allTablesPrivileges",
+		"grant:app.all-tables-privileges.anon": {
+			"grantKind": "all-tables-privileges",
 			"privileges": [
 				"select"
 			],
 			"role": "anon",
 			"schema": "app"
 		},
-		"grant:app.allTablesPrivileges.authenticated": {
-			"grantKind": "allTablesPrivileges",
+		"grant:app.all-tables-privileges.authenticated": {
+			"grantKind": "all-tables-privileges",
 			"privileges": [
 				"select"
 			],
 			"role": "authenticated",
 			"schema": "app"
 		},
-		"grant:app.defaultTablePrivileges.anon": {
-			"grantKind": "defaultTablePrivileges",
+		"grant:app.default-table-privileges.anon": {
+			"grantKind": "default-table-privileges",
 			"privileges": [
 				"select"
 			],
 			"role": "anon",
 			"schema": "app"
 		},
-		"grant:app.defaultTablePrivileges.authenticated": {
-			"grantKind": "defaultTablePrivileges",
+		"grant:app.default-table-privileges.authenticated": {
+			"grantKind": "default-table-privileges",
 			"privileges": [
 				"select"
 			],
@@ -77,7 +77,7 @@
 			"table": "profiles"
 		},
 		"schema:app": {
-			"schemaName": "app"
+			"name": "app"
 		},
 		"supabase-storage-bucket:attachments": {
 			"allowedMimeTypes": [

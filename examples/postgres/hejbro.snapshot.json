@@ -12,16 +12,16 @@
 			"schema": "app",
 			"security": "invoker"
 		},
-		"grant:app.allTablesPrivileges.app_reader": {
-			"grantKind": "allTablesPrivileges",
+		"grant:app.all-tables-privileges.app_reader": {
+			"grantKind": "all-tables-privileges",
 			"privileges": [
 				"select"
 			],
 			"role": "app_reader",
 			"schema": "app"
 		},
-		"grant:app.allTablesPrivileges.app_writer": {
-			"grantKind": "allTablesPrivileges",
+		"grant:app.all-tables-privileges.app_writer": {
+			"grantKind": "all-tables-privileges",
 			"privileges": [
 				"select",
 				"insert",
@@ -31,16 +31,16 @@
 			"role": "app_writer",
 			"schema": "app"
 		},
-		"grant:app.defaultTablePrivileges.app_reader": {
-			"grantKind": "defaultTablePrivileges",
+		"grant:app.default-table-privileges.app_reader": {
+			"grantKind": "default-table-privileges",
 			"privileges": [
 				"select"
 			],
 			"role": "app_reader",
 			"schema": "app"
 		},
-		"grant:app.defaultTablePrivileges.app_writer": {
-			"grantKind": "defaultTablePrivileges",
+		"grant:app.default-table-privileges.app_writer": {
+			"grantKind": "default-table-privileges",
 			"privileges": [
 				"select",
 				"insert",
@@ -50,14 +50,14 @@
 			"role": "app_writer",
 			"schema": "app"
 		},
-		"grant:app.schemaUsage.app_reader": {
-			"grantKind": "schemaUsage",
+		"grant:app.schema-usage.app_reader": {
+			"grantKind": "schema-usage",
 			"privileges": [],
 			"role": "app_reader",
 			"schema": "app"
 		},
-		"grant:app.schemaUsage.app_writer": {
-			"grantKind": "schemaUsage",
+		"grant:app.schema-usage.app_writer": {
+			"grantKind": "schema-usage",
 			"privileges": [],
 			"role": "app_writer",
 			"schema": "app"
@@ -188,7 +188,7 @@
 			"table": "tasks"
 		},
 		"schema:app": {
-			"schemaName": "app"
+			"name": "app"
 		},
 		"table:app.comments": {
 			"checks": [
@@ -540,7 +540,7 @@
 				}
 			],
 			"forEach": "row",
-			"functionName": "comments_enforce_single_depth",
+			"function": "comments_enforce_single_depth",
 			"name": "comments_single_depth",
 			"schema": "app",
 			"table": "comments",

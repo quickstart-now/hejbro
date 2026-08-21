@@ -19,14 +19,14 @@
 -- + policy app.tasks.tasks_read_all [new]
 -- + policy app.tasks.tasks_write_all [new]
 -- + view app.open_tasks [new]
--- + grant app.allTablesPrivileges.app_reader [new]
--- + grant app.allTablesPrivileges.app_writer [new]
--- + grant app.defaultTablePrivileges.app_reader [new]
--- + grant app.defaultTablePrivileges.app_writer [new]
--- + grant app.schemaUsage.app_reader [new]
--- + grant app.schemaUsage.app_writer [new]
+-- + grant app.all-tables-privileges.app_reader [new]
+-- + grant app.all-tables-privileges.app_writer [new]
+-- + grant app.default-table-privileges.app_reader [new]
+-- + grant app.default-table-privileges.app_writer [new]
+-- + grant app.schema-usage.app_reader [new]
+-- + grant app.schema-usage.app_writer [new]
 -- parent-snapshot: sha256:f86ae7ebc6d8bd93524149ab39f929814ff7413a6e5e1cfdb1d21367bf9bd295
--- snapshot: sha256:454ce6cc18da277eeda66e75fc0095bbf23b843cb0aa34105e5c67fc1a281dad
+-- snapshot: sha256:a03201ac2af2fe9b9cc662e6c9801fbb3086b6213a5f72b4f6298ca16cdec6b5
 
 create schema "app";
 
