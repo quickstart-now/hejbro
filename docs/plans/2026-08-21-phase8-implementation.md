@@ -98,8 +98,8 @@ committed example migrations
 `parent-snapshot:`/`snapshot:` lines, and core never hashes (D33) — only the
 CLI does. Regenerating therefore means driving the built CLI once per step.
 `scripts/regen-examples.sh` (`phase8-regen-script`) automates this and
-**enumerates the step files** rather than hard-coding four, because the chains grow
-in `phase8-constraint-names` and `phase8-grant-sync`.
+**enumerates the step files** rather than hard-coding four, because the
+chains grow in `phase8-constraint-names` and `phase8-grant-sync`.
 
 **Commit split.** Any PR that regenerates examples splits its commits in two:
 *declaration and code changes* first, *regenerated artifacts* second, with the
@@ -158,7 +158,7 @@ when the map changes.
 | 12 | `phase8-snapshot-v5` | `formatVersion` → 5, parser handling, **and** the version-mismatch message (#136); snapshot deep-validation (#26) | #136, #26 |
 | 13 | `phase8-expr-nodes` | Expressions stored as structured nodes; rename retargets them (D67) | #110 |
 | 14 | `phase8-sequence-kind` | `sequence` object kind, rename drift guard, type-change semantics | #23 |
-| 15 | `phase8-constraint-names` | Constraint names in the snapshot (#24(iii)), pk/unique alter emission, #137's full fix replacing PR 16's guard, **and the chain step that exercises the PK add and drop paths** | #24, #137 |
+| 15 | `phase8-constraint-names` | Constraint names in the snapshot (#24(iii)), pk/unique alter emission, #137's full fix replacing `phase8-pk-guard`'s guard, **and the chain step that exercises the PK add and drop paths** | #24, #137 |
 | 16 | `phase8-pk-guard` | Extend the `unsupported-column-alter` guard to the `added`/`removed` paths so the silent omission becomes a loud refusal | #137 |
 | 17 | `phase8-grant-sync` | Schema-wide grants follow tables added later, **plus** a chain step that adds a table under a schema-wide grant | #121 |
 | 18 | `phase8-golden-english` | Golden trigger messages translated to English | #120 |
