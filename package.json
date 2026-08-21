@@ -10,6 +10,7 @@
 		"smoke:pack-install": "bash scripts/pack-install-smoke.sh",
 		"check:first-release-version": "node scripts/check-first-release-version.mjs",
 		"check:next-marker": "node scripts/check-next-marker.mjs",
+		"check:pnpm-publish-tool": "node scripts/verify-pnpm-publish-tool.mjs",
 		"regen:examples": "bash scripts/regen-examples.sh",
 		"changeset": "changeset",
 		"version-packages": "changeset version",
@@ -21,6 +22,7 @@
 		"@changesets/cli": "^3.0.1",
 		"@commitlint/cli": "^21.0.1",
 		"@commitlint/config-conventional": "^21.0.1",
+		"@manypkg/get-packages": "^3.1.0",
 		"husky": "^9.1.7",
 		"turbo": "^2.9.8",
 		"typescript": "catalog:"

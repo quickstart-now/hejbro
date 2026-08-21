@@ -1,0 +1,59 @@
+name: release-version
+# `dev` is where every merged PR's changeset accumulates (AGENTS.md: PRs
+# squash-merge into `dev`). This workflow's only job is to keep the
+# "Version Packages" PR (branch + changelog + version bumps) in sync with
+# whatever changesets are currently pending on `dev` -- it must never
+# publish. Scoped to `push` on `dev` only: never `pull_request` (a fork PR
+# would run this in the fork's own Actions context anyway, not ours, since
+# PR branches live on quickstart-now/hejbro per AGENTS.md -- but `push` is
+# the narrower, correct condition regardless of that fact) and never `main`
+# (main only receives dev -> main merge-commit PRs; nothing should re-open
+# a version PR there).
+on:
+  push:
+    branches: [dev]
+
+# Two concurrent runs racing to open/update the "Version Packages" PR branch
+# could interleave pushes to it. Queue instead of overlapping; don't cancel
+# a run in progress -- a run cancelled mid-push could leave that branch in a
+# half-updated state that the next run then has to untangle.
+concurrency:
+  group: release-version-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version:
+    # Defence in depth, not a functional requirement: a push to `dev` can
+    # only originate on this repository (see the trigger comment above), but
+    # stating the intended repository explicitly means a fork or mirror
+    # never runs this by accident.
+    if: github.repository == 'quickstart-now/hejbro'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # changesets/action/version -- NOT the monolithic changesets/action:
+      # that action auto-selects version/publish/none mode from repo state
+      # (its own select-mode sub-action), and once a "Version Packages" PR
+      # merges into `dev`, `dev`'s state (no pending changesets, an
+      # unpublished version bump) is indistinguishable from "ready to
+      # publish" -- the very next push to `dev` would then auto-select
+      # publish mode. The version sub-action has no such mode selection: it
+      # only ever versions, so `dev` can never publish through this file.
+      #
+      # Input name verified against this exact pinned commit's
+      # version/action.yml (`script`, not `version-script` -- the
+      # monolithic action's top-level input is named `version-script`, the
+      # decomposed sub-action's is `script`; they differ even within the
+      # same release, which is the trap this comment exists to name).
+      - uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          script: pnpm run version-packages
