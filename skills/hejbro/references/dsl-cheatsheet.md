@@ -52,7 +52,13 @@ self-referencing `comments.parent_id` FK in
 `rls.policy(name).as("permissive" | "restrictive").for(command).to(...roles)`
 then `.using(expr)` and/or `.withCheck(expr)` depending on the command.
 Attach the built policies via a table's `extras.rls: rls.enabled({...})`.
-See `packages/core/src/dsl/rls.ts`.
+`expr` is the same accepted shape as CHECK's — a typed operator
+(`eq`, `isNotNull`, …) or a raw `sql\`...\`` template. For an
+intentionally permissive policy ("allow every row"), use
+`literal(true)` rather than a workaround like `isNotNull(someColumn)` —
+it reads as the stated intent. See `packages/core/src/dsl/rls.ts` and
+the reader/writer role-split policies in
+`examples/postgres/src/app.schema.ts`.
 
 ## Grants
 
