@@ -2,7 +2,7 @@
 
 Brainstorm resolved 2026-08-21 (owner-approved): decision log entries
 **D58–D68**, plus an in-place amendment to **D33**. This plan turns those
-decisions into 23 PRs, plus D69, decided at plan review.
+decisions into 23 PRs, plus D69, added at plan review.
 
 Issue: **#9**. Sub-issues filed from this phase's research: **#136**,
 **#137**, **#138**, **#139**.
@@ -98,7 +98,7 @@ example migrations (`examples/{postgres,supabase}/migrations/0001…0004`)
 (D33) — only the CLI does. Regenerating therefore means driving the built
 CLI once per step. `scripts/regen-examples.sh` (PR 4) automates this and
 **enumerates the step files** rather than hard-coding four, because the
-chains grow in PRs 17 and 18.
+chains grow in PRs 15 and 17.
 
 **Commit split.** Any PR that regenerates examples splits its commits in
 two: *declaration and code changes* first, *regenerated artifacts*
@@ -246,8 +246,12 @@ blind spot that let `serial` pass for two phases. And today
 `examples/supabase` runs against a role and a `storage.buckets` table
 **we wrote ourselves**, which makes the gap concrete.
 
-This table goes into `examples/README.md` as part of this PR, next to the
-round-trip's own description — for the same reason each chain step
+`scripts/roundtrip.sh` already takes a `HEJBRO_PG_IMAGE` override, so
+"just point the round-trip at the Supabase image" is a proposal someone
+will make — and it does not work, because the round-trip's comparison is
+symmetric no matter which image it runs on. This table goes into
+`examples/README.md` as part of this PR, next to the round-trip's own
+description — for the same reason each chain step
 records the defect class it defends. Someone will eventually propose
 merging the two scripts, and the answer to "what would that lose?" has to
 be written down where they will look.
@@ -262,10 +266,19 @@ script resolves the image's actual digest, compares it against the
 recorded value, and **fails on a mismatch** — a re-tag cannot silently
 change what was verified. A comment would not do this: it only works if
 someone reads it, and nothing breaks when it goes stale, which is exactly
-the failure mode this plan bans elsewhere. The message follows §7 — what
-differs, why it matters, and a `Next:` line pointing at updating the
-recorded digest in its own PR. That also turns "a pin bump is its own PR"
-from a convention into something the script enforces.
+the failure mode this plan bans elsewhere. The message follows §7's substance — what differs, why it matters, and
+what to do about it (update the recorded digest in its own PR). It does
+not use the literal `Next:` token: that belongs to the CLI diagnostic
+grammar Phase 5 defined, and `scripts/roundtrip.sh` already states its
+failures without it. Matching the sibling script matters more than
+matching a grammar written for a different medium. This also turns "a pin
+bump is its own PR" from a convention into something the script enforces.
+
+One implementation trap: `17.6.1.165` is multi-arch, so it has both a
+manifest-list digest and per-architecture digests. Compare the
+**manifest-list** digest (`docker inspect -f '{{index .RepoDigests 0}}'`),
+not the local image ID — the latter differs between arm64 and amd64 and
+would fail on a healthy machine.
 
 **What counts as a failure.** At minimum:
 
