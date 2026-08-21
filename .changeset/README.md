@@ -9,11 +9,13 @@ We also have a quick list of common questions to get you started engaging with t
 - `fixed: [["@hejbro/core", "hejbro", "@hejbro/supabase"]]` — the three
   published packages always version together. `@hejbro/skills` is
   intentionally excluded (D62: `private`, no npm channel).
-- `updateInternalDependencies: "patch"` does **not** rewrite the
-  `workspace:*` range — that string stays literal through `changeset
-  version`. It sets the minimum bump a package gets when an internal
-  dependency of its own is released. With all three published packages in
-  one `fixed` group this never shows: they move together anyway. **It
-  becomes visible the moment someone takes a package out of `fixed`** —
-  measured during `phase8-changesets`: with `hejbro` outside the group and
-  a core-only changeset, `hejbro` moved `0.0.0 → 0.0.1` on its own.
+- `updateInternalDependencies: "patch"` is the changesets default and,
+  **measured across 11 configurations** during `phase8-changesets`
+  (`patch` / `minor` / field removed × dependency bumped `patch` / `minor`
+  × dep range `workspace:*` / `workspace:^` / `^0.0.0`), makes **no
+  observable difference here**. A dependent gets a `patch` bump when an
+  internal dependency is released regardless of this field — that is
+  changesets' **default dependent behaviour**, not this setting. Separately:
+  `changeset version` leaves `workspace:` ranges verbatim (a plain semver
+  range like `^0.0.0` *is* rewritten to `^0.1.0`), which is what D59 relies
+  on.

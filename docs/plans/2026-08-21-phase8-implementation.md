@@ -248,7 +248,15 @@ own claim.
   assertion's expectations passed only because `prepack` had already
   regenerated it). Disable or bypass the build step itself — e.g. temporarily
   remove the `prepack` script, or point the pack at a `dist` produced from an
-  older commit — and confirm the gate still stops the stale tarball.
+  older commit — and confirm the gate still stops the stale tarball. The
+  changeset-presence rule `AGENTS.md` states (`phase8-changesets`) is
+  currently enforced only **incidentally**, by `check:first-release-version`
+  going red when no changeset covers the published packages — and that guard
+  **self-invalidates at the first release**. From 0.1.0 on, nothing enforces
+  it. This PR adds the actual check (a changesets bot/action, or `changeset
+  status --since=origin/dev` failing when a published package changed
+  without a changeset), and proves it by mutation: a PR touching
+  `packages/core` with no `.changeset/*.md` must go red.
 - **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
   reproducing #125's crash (a config importing a package that is not
   installed) first, then the diagnostic. Both `asHejbroError` sites are
@@ -445,12 +453,20 @@ misattribution was visible from reading the script. So: a PR that builds
 or extends a verification device shows the same evidence — the defects it
 exists to catch, injected one at a time, each turning it red.
 
-This applies to configuration too. `updateInternalDependencies` was assumed
-to be a no-op in this repo because internal deps are `workspace:*` — reading
-the name and the range form was enough to make it sound obvious. Running
-`changeset version` on a copy (`phase8-changesets`) showed it bumps
-dependents' own versions regardless of range form. A config key is a gate
-like any other: run it before describing what it does.
+This applies to configuration too — and to the causal claims made about it.
+`updateInternalDependencies` went through two readings in this phase, both
+grounded in something real and both wrong: the first concluded "no-op" from
+the range form alone, without running anything. The second ran `changeset
+version` on a copy (`phase8-changesets`), saw a dependent bump, and
+attributed it to the setting — without ever changing the setting itself.
+**Vary the thing you are attributing the effect to.** A variable you did not
+vary cannot be the cause. Eleven configurations later (`patch` / `minor` /
+the field removed, crossed with the dependency's own bump type and its
+declared range), the bump was identical in all eleven: changesets bumps a
+dependent by default when its internal dependency releases, and this field
+changes nothing observable in this repo. A config key is a gate like any
+other — run it before describing what it does, and change the specific
+thing you're crediting before crediting it.
 
 **Mutate the producer, not the artifact.** A `prepack` or regeneration step
 will silently heal an artifact-level mutation, and the gate passes for the

@@ -17,7 +17,9 @@ jobs:
       # `dev`, which a pull_request checkout never creates on its own (it
       # only checks out the PR ref). `fetch-depth: 0` alone doesn't fix
       # this: it deepens the ref actually fetched, not "fetch every
-      # branch."
+      # branch." `origin` here is quickstart-now/hejbro itself: this works
+      # because our PR branches live on the org repo, not a fork — a fork
+      # PR's `origin` would be the fork, without a `dev` branch to fetch.
       - run: git fetch origin dev:dev
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
