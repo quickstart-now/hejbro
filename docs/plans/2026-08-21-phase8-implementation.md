@@ -2,7 +2,9 @@
 
 Brainstorm resolved 2026-08-21 (owner-approved): decision log entries
 **D58–D68**, plus an in-place amendment to **D33**. This plan turns those
-decisions into 23 PRs, plus D69 and D70, added at plan review.
+decisions into 23 PRs, plus D69 and D70, added at plan review, plus D71 and
+D72 and the PRs they brought with them — 34 rows as of 2026-08-22. The map is
+a catalogue; the track queues below it are the schedule.
 
 Issue: **#9**. Sub-issues filed from this phase's research: **#136**, **#137**,
 **#138**, **#139**.
@@ -48,6 +50,8 @@ after publication).
 | D68 | **Snapshot `formatVersion` → 5**, carrying #110(b) and #24(iii) |
 | D69 | The Supabase preset is **verified against a real `supabase/postgres` image** before publishing — a second local-Docker script, not CI |
 | D70 | Expression nodes **serialize by D57's rules** — kebab-case discriminators and `schema`/`table` reference fields in the snapshot, camelCase in the TypeScript union |
+| D71 | **CRAP is gated** (`CC² × (1 − coverage)³ + CC`) for `@hejbro/core` and `@hejbro/supabase` — at 10 first, then ratcheted to 5 in this same phase. At 100% coverage `CRAP = CC`, so each threshold is a cap on cyclomatic complexity. The CLI is out of scope: subprocess e2e coverage is invisible to in-process V8 |
+| D72 | A view's own query is stored as a structured `SelectNode` too (D67's precedent applied to `ViewSnapshot.selectSql`, D27's original shape) — **not a defect fix**, done pre-publication because it changes how an unchanged view declaration renders (D65). `formatVersion` stays **5**: v5 was opened by D68 for this class of change and carries the view field as well, not a new bump |
 
 Constraints that came with them, and that a later PR must not quietly undo:
 
@@ -175,11 +179,58 @@ when the map changes.
 | 21 | `phase8-authuid-cached` | `authUid()`'s cached variant (reusing the existing `rawSql` node) and the three places that teach the uncached form | #97 |
 | 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69) | — |
 | 23 | `phase8-docs-release` | README status and install instructions, `CONTRIBUTING.md`, then the 0.1.0 release | — |
+| 24 | `phase8-crap-tooling` | `@vitest/coverage-v8`, a `test:coverage` task, `scripts/check-crap.mjs` — **reports only, not wired into CI** | #154 |
+| 25 | `phase8-crap-refactor` | The 13 functions at complexity ≥ 10 — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests | #154 |
+| 26 | `phase8-crap-coverage` | The 4 functions at complexity 8–9, which clear at 70–77% coverage | #154 |
+| 27 | `phase8-crap-gate` | `check:crap` wired into CI with a non-zero exit, **and the D71 decision-log row** | #154 |
+| 28 | `phase8-diagnostic-xref` | A check that every error code quoted inside a diagnostic message actually exists; **`style/noTernary` turned on in `biome.json`** and the 7 existing violations fixed; the `.mjs` style-rule scope question, answered `yes` | — |
+| 29 | `phase8-view-nodes` | `ViewSnapshot.selectSql` becomes a structured node (the 5th and last pre-rendered field), rename retargeting extended to views, **D72** | #157 |
+| 30 | `phase8-preset-goldens` | `stripBanner`'s division of labour written down, and the `create` banner pinned — `drop` and `alter` already are | #167 |
+| 31 | `phase8-crap-ratchet-5` | The remaining 29 violations resolved, then `CRAP_THRESHOLD = 5` | #154 |
+| 32 | `phase8-roadmap-sync` | The roadmap's Phase 8 section gains the coverage-gating work group and #157 — the two things the brainstorm did not know about | #154, #157 |
+| 33 | `phase8-cli-timeout` | `packages/cli` has no `testTimeout`, so its subprocess e2e chain runs against vitest's 5s default and flakes under runner contention — now a merge blocker, since `verify (22)`/`verify (24)` became required checks | #173 |
+| 34 | `phase8-plan-rules` | This file: the rules measured during the phase, the rows added after plan review, the track queues, D71 and D72 | — |
 
 `phase8-pk-guard` lands **before** `phase8-constraint-names` in dependency
 terms but is listed after it for readability: the guard is a small, independent
 PR that can go as early as the diagnostics wave, and `phase8-constraint-names`
 then replaces it with real SQL.
+
+## Track queues
+
+Since 2026-08-22 the work runs on three parallel tracks split by file area, so
+the table above is a catalogue, not a schedule. **These queues are the
+schedule**, and they are stated by branch name for the reason given above.
+
+| Track | Area | Queue |
+|---|---|---|
+| A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics | `expr-nodes` → `view-nodes` → `sequence-kind` → `constraint-names` → `chain-walk` → `crap-refactor`/`crap-coverage` (core half) → `crap-ratchet-5` |
+| B | `.github/workflows/`, `scripts/`, `docs/` | `release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `diagnostic-xref` → `supabase-image` → `docs-release` |
+| C | `examples/`, golden content, `packages/supabase` | `golden-english` → `bucket-notes` → `preset-goldens` → `crap-coverage` (the `supabase/validators/schema-of.ts` entry) |
+
+Track A is the bottleneck and cannot be widened: core semantics are sequential
+and format-dependent, so a fourth pair of hands there produces conflicts rather
+than throughput. The lever is being stricter about what enters track A at all.
+
+**One open PR at a time per implementer when root files are involved.** The
+track split prevents conflicts *between* tracks; it does nothing about two PRs
+open *within* one. `phase8-release-workflows` and `phase8-crap-tooling` were
+both track B, both by the same implementer, both open at once, and both edited
+the root `package.json` and `pnpm-lock.yaml` — the second merged and the first
+went `CONFLICTING`. Those files were already recorded as this phase's
+third-ranked conflict source before either PR existed. So: a second PR that
+touches `package.json`, `pnpm-lock.yaml`, `turbo.json` or `ci.yml` waits for
+the first to merge and then rebases, or branches off the first. Checking this
+is part of assigning, not part of reviewing.
+
+**Entry filter for track A**: anything proposed for this queue is first asked
+*"does this have to happen before publication?"*, and the answer travels with
+the proposal. Most of the queue is there because D65 leaves no choice — a
+snapshot's shape cannot change after 0.1.0 without a format version and a
+migration path. `phase8-crap-ratchet-5` is currently the only entry with no
+pre-publication deadline of its own; it is a CI threshold, not a format
+change. Recording that now matters because if the release runs late, the
+pressure lands first on the items that cannot move.
 
 ## Per-PR completion criteria
 
@@ -499,7 +550,87 @@ this to find something.
 #113) is already in, and before the docs-and-release PR — a mismatch
 found here may change what the docs should say.
 
-## Two rules that apply to every PR
+## Rules that apply to every PR
+
+Each of these was paid for during the phase; none is a reminder.
+
+**A round trip proves preservation, not convention.** `decode(encode(x)) === x`
+holds just as well when the spelling in between is wrong, because both
+directions read the same table — so a symmetric test can never be evidence that
+an encoding follows a naming rule. Anything asserting a *convention* has to pin
+one end: assert against the table itself, or against a literal expected form.
+Measured in `phase8-expr-nodes`: 21 green round-trip cases while `rawSql` was
+reachable, user-facing (`sql.raw()`, D18), and encoded with no gate on its
+spelling at all — breaking its entry in `NODE_KIND_TO_SNAPSHOT` left the entire
+root `pnpm test` green. This applies to every encode/decode pair here, not just
+the expression codec.
+
+**A claim about machinery you do not control has to be executed, not reasoned
+about.** Code we own is caught by our own tests when we are wrong; nothing
+catches us outside that boundary. Four instances in one day, all external:
+GitHub's "Allow GitHub Actions to create and approve pull requests" was off, so
+`release-version.yml` could not open the PR it exists to open; the monolithic
+`changesets/action` neither calls a `select-mode` sub-action nor picks its mode
+from repository state alone; `npm publish --dry-run` was assumed to
+authenticate and makes no registry call at all; and `npm access list packages
+@hejbro` returned nothing, which was read as "the scope is empty" when it may
+equally mean the argument form was never understood. Two of these — that
+Actions setting and the `npm` environment — are **release-machinery startup
+settings that live outside the workflow files**, so no amount of code review
+surfaces them. List them together wherever a fork or a new preset repository
+would need them.
+
+**A new turbo task inherits nothing — give it `test`'s `dependsOn` on
+purpose.** Three incidents, all the same shape: a package's tests import a
+workspace dependency's built output, so they only pass where a `dist/` already
+exists. #102 deleted a shared worktree's `dist`; #146 ran `pnpm --filter`,
+which bypasses turbo and its `dependsOn` entirely; and `test:coverage` shipped
+with no `dependsOn` at all while `test` carried `dependsOn: ["build"]` in three
+separate turbo configs. Each time the claim "it runs end-to-end" was true in
+the author's worktree and false on a clean clone. The same file has now misled
+two readers the same way: turbo's override layout invites "read the root config
+and you know the graph", and `packages/*/turbo.json` is where `dependsOn`
+actually lives. **`turbo.json` means all four of them.**
+
+**Record the failed runs too — and don't copy the tool's explanation for
+them.** Writing down only the runs that went green is selection, not
+measurement; writing down a failure with the tool's own reason attached can be
+worse, because it files a wrong cause as fact. GitHub reported `This run likely
+failed because of a workflow file issue`, and the workflow file's blob sha was
+byte-identical across the failing run and the run 94 seconds later that
+succeeded. The real cause was a repository setting changed 7 seconds earlier —
+an `allowed_actions` pattern list that did not yet cover sub-directory actions.
+
+**When the same defect returns, change the axis of the question.**
+`phase8-bucket-notes` took four review rounds on one function, and the rounds
+were not repetitions — each asked a question one level down. The symptom is
+gone; the condition producing it was already false for an existing field, not a
+future risk; the cause was not *which* sentinel was chosen (`?? false`, then
+`?? null`) but that a sentinel was used at all when the top-level comparison
+uses none; and removing the normalization left the same *kind* of dependency
+behind, a cast resting on `JSON.stringify` silently dropping `undefined`
+properties. What ended it was moving from *"is it wrong for this value?"* to
+*"what is this function relying on?"*.
+
+**A judgement is attached to content, not to a SHA.** When a branch is rebased
+after review, compare the PR's own diff against each base — same files, same
+`+/-` counts means the review transfers; anything else means it does not.
+Measured in `phase8-bucket-notes`: `67b9670...dc0b93c` and `4b922fe...239d1c0`
+produced identical six-file diffs.
+
+**"I recorded it" is a claim, and it takes a commit SHA.** Three times in one
+day a correction existed in prose but not in the artifact: an issue whose
+non-goals contradicted its own amended decision, a PR body that still called a
+confirmed cause an inference, and this file's rules — reported as written while
+they sat uncommitted in a stale worktree whose base was 350 lines behind `dev`.
+Report the SHA, and prefer a pushed one.
+
+**`pnpm changeset status` does not answer "does this PR need a changeset".**
+Measured by reading the CLI's source: it only errors when
+`releasePlan.changesets.length === 0`, so any changeset already sitting on
+`dev` makes it pass regardless of what the current PR changed. Its silence was
+used as evidence of "no changeset needed" at least once. The rule in AGENTS.md
+is decided by looking at what the PR changed, not by that command's exit code.
 
 **Does this change make a currently-true document false?** If it does, fixing
 that text is part of the PR, not a follow-up.
