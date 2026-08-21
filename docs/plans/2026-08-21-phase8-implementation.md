@@ -588,11 +588,15 @@ failed *nine* golden tests; a re-measurement found the whole suite green and
 concluded the defect was silent; a third, controlled run reproduced all
 nine. The variable neither re-measurement controlled was **build
 freshness**. `test/golden.test.ts` drives the built `dist/cli.js` as a
-child process, `assertBuiltCli` checks only that the file *exists*, and
-`turbo.json`'s `test` task declares no `dependsOn` — so editing source
-without rebuilding re-validates the previous artifact. A reproduction that
-fails is a signal to re-examine the *procedure*, not a verdict on the
-defect.
+child process and `assertBuiltCli` checks only that the file *exists*,
+not that it is current. Under `turbo` that is harmless —
+`packages/cli/turbo.json` declares `test: { dependsOn: ["build"] }`, so
+`pnpm test` rebuilds first. **`pnpm --filter hejbro test` bypasses turbo
+entirely**, running the package's `vitest` script directly, and the
+`dependsOn` never applies: source edits are then measured against the
+previous artifact. The trap is not the task graph but the choice of entry
+point. A reproduction that fails is a signal to re-examine the
+*procedure*, not a verdict on the defect.
 
 Two people confirmed the wrong conclusion before the third measured it: the
 review's supporting claim (*"the golden suite's only error assertions are
@@ -601,6 +605,22 @@ the assertions that spell the code literally — the nine that assert the
 message body were outside the instrument's range. **Naming the mechanism
 and then checking its range** is the rule already written above; it failed
 here because the check *looked* like a measurement.
+
+The same failure recurred while diagnosing itself: the mechanism first
+offered for the stale artifact — *"turbo declares no `dependsOn`"* — was
+read off the **root** `turbo.json` alone, missing the package-level
+`packages/cli/turbo.json` that overrides it. Twice in one review an
+instrument too narrow for the claim produced a confident wrong answer.
+
+**When two of your own measurements disagree, one of them is invalid —
+find which, before explaining why both could be true.** In this review one
+session produced both *"the suite is green, so nothing catches this"* and
+*"the rebuilt CLI prints `undefined`, so the defect is real"*, and instead
+of treating the pair as a contradiction to resolve, it produced an
+explanation for how both could hold (*"the tests bypass that path"*) —
+which then read as verified because a narrow instrument agreed with it. A
+reconciling explanation is almost always available, and inventing one
+feels like discovering it.
 
 **Don't conclude "nothing catches this" from one gate.** Twice in this phase
 a requirement was written on the premise that a defect would pass silently —
