@@ -406,8 +406,22 @@ describe("storageBucketKind end-to-end via generateMigration", () => {
 			registry,
 		});
 		expect(result.hasChanges).toBe(true);
-		expect(result.sql).toContain(
-			"values ('avatars', 'avatars', true, 5242880, array['image/png', 'image/jpeg']::text[])",
+		// Full-string, banner included -- drop already pins its banner this
+		// way (below) and alter does too (#166); create didn't, so a
+		// regression in the "[new]" marker specifically had no test at the
+		// preset-kind layer to catch it. See #167.
+		expect(result.sql).toBe(
+			[
+				"-- hejbro migration",
+				"-- + supabase-storage-bucket avatars [new]",
+				"",
+				`insert into storage.buckets ("id", "name", "public", "file_size_limit", "allowed_mime_types")`,
+				`values ('avatars', 'avatars', true, 5242880, array['image/png', 'image/jpeg']::text[])`,
+				`on conflict ("id") do update set`,
+				`  "public" = excluded."public",`,
+				`  "file_size_limit" = excluded."file_size_limit",`,
+				`  "allowed_mime_types" = excluded."allowed_mime_types";`,
+			].join("\n"),
 		);
 		expect(result.snapshot.objects["supabase-storage-bucket:avatars"]).toEqual({
 			name: "avatars",

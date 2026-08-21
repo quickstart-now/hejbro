@@ -21,6 +21,17 @@ const root = join(import.meta.dirname, "..");
 const migrationFiles = readdirSync(join(root, "migrations"))
 	.filter((f) => f.endsWith(".sql"))
 	.sort();
+// Deliberately drops every banner line (the `-- hejbro migration` header,
+// each `+`/`~`/`-` change line, and the parent-snapshot/snapshot hash
+// pair) before comparing -- this test's job is to confirm regenerating
+// from the step declarations reproduces the committed *SQL statements*,
+// not the banner text that summarizes them. Banner correctness for a
+// preset (non-core) kind is the preset's own responsibility: e.g. the
+// storage bucket kind's create/alter/drop banners are pinned directly in
+// `packages/supabase/test/storage-bucket-kind.test.ts`, full-string, not
+// here. That's a division of labor, not a gap -- this example-layer test
+// would never catch a banner regression like #116's on its own, and
+// isn't meant to.
 const stripBanner = (sql: string): string =>
 	sql
 		.split("\n")

@@ -206,10 +206,16 @@ describe("multibyte body content", () => {
 		);
 
 		// bodyHash is what function-kind.ts's diff engine actually compares
-		// (spec §6.4) -- pinning it, not just bodySql, is what proves the
-		// hash function treats the UTF-8 bytes deterministically rather than
-		// e.g. silently normalizing or mis-counting multibyte code points.
-		expect(fnv1aHex(bodySql)).toBe(fnv1aHex(bodySql));
+		// (spec §6.4) -- pinning it to a literal, not just bodySql, is what
+		// proves the hash function treats the UTF-8 bytes deterministically
+		// rather than e.g. silently normalizing or mis-counting multibyte
+		// code points: a run that hashed differently would fail this
+		// literal comparison, on any run, not just this one. (An earlier
+		// version of this test also asserted
+		// `fnv1aHex(bodySql) === fnv1aHex(bodySql)` -- calling the same
+		// pure function twice in one process can't fail, so it proved
+		// nothing beyond what the literal pin below already does; removed
+		// during #167.)
 		expect(fnv1aHex(bodySql)).toMatch(/^[0-9a-f]{8}$/);
 		expect(fnv1aHex(bodySql)).toBe("61e17272");
 	});
