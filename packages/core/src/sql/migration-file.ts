@@ -75,10 +75,13 @@ const dropLabel = (notes: ReadonlyArray<string>): string => {
  * since "dropped" is itself the note), an alter has no such fallback word:
  * a kind whose alter notes are empty means the caller has nothing to
  * report, so the bracket is omitted entirely rather than rendered empty.
- * No built-in kind currently reaches this empty case — each guards its own
- * alter notes — but nothing stopped a kind from doing so (the storage
- * bucket kind did, until #116's other fix), so the banner itself now
- * closes that gap too.
+ * This isn't a hypothetical gap: the storage bucket kind did reach it —
+ * see `examples/supabase`'s `migrations/0002_alter_attachments.sql`
+ * before #116, which committed a `-- ~ supabase-storage-bucket
+ * attachments []` banner line. #116 also fixed the storage bucket kind
+ * itself to always populate notes, but nothing in the type system stops
+ * a future kind from reaching this same empty case, so the banner now
+ * guards it independently of any one kind's diligence.
  */
 const alterLabel = (notes: ReadonlyArray<string>): string => {
 	if (notes.length === 0) {
