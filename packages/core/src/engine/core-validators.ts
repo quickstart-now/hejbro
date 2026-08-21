@@ -1,4 +1,5 @@
 import type { KindChange } from "../kind/object-kind";
+import { asSequenceSnapshot } from "../kinds/sequence-kind";
 import {
 	asTableSnapshot,
 	columnDefault,
@@ -6,6 +7,30 @@ import {
 } from "../kinds/table-snapshot";
 import type { Diagnostic } from "./validate";
 import { diagnostic } from "./validate";
+
+/**
+ * `"<schema>.<table>.<column>"` for every `sequence` change in this diff
+ * whose sequence still exists in `next` (a `create` or an `alter`, never a
+ * `drop`) — the set of columns that effectively *do* have a default, even
+ * though a `serial`-family column's default lives in the `sequence` kind's
+ * own snapshot node, not `ColumnSnapshot.default` (#23/D66). Read by
+ * {@link notNullWithoutDefaultWarnings} below so it doesn't warn on a
+ * column whose default this diff is about to attach via a sibling
+ * `sequence` change — the two kinds' changes live in the same `changes`
+ * array this function already receives, so no new cross-kind plumbing is
+ * needed, only reading what's already there.
+ */
+const sequenceOwnedColumns = (
+	changes: ReadonlyArray<KindChange>,
+): ReadonlySet<string> =>
+	new Set(
+		changes
+			.filter((change) => change.kind === "sequence" && change.next !== null)
+			.map((change) => asSequenceSnapshot(change.next))
+			.map(
+				(sequence) => `${sequence.schema}.${sequence.table}.${sequence.column}`,
+			),
+	);
 
 /**
  * Warns when a table `alter` change adds a `not null` column with no
@@ -18,12 +43,14 @@ import { diagnostic } from "./validate";
  * Only genuinely *new* columns are flagged (present in `next`, absent
  * from `previous`); a `create` change (a brand-new table) never appears
  * here because `notNullWithoutDefaultWarnings` only looks at `alter`
- * changes.
+ * changes. A column owned by a `sequence` change in the same diff is
+ * never flagged either (#23/D66) — see {@link sequenceOwnedColumns}.
  */
 export const notNullWithoutDefaultWarnings = (
 	changes: ReadonlyArray<KindChange>,
-): ReadonlyArray<Diagnostic> =>
-	changes.flatMap((change) => {
+): ReadonlyArray<Diagnostic> => {
+	const ownedBySequence = sequenceOwnedColumns(changes);
+	return changes.flatMap((change) => {
 		if (
 			change.kind !== "table" ||
 			change.operation !== "alter" ||
@@ -41,7 +68,8 @@ export const notNullWithoutDefaultWarnings = (
 			(column) =>
 				!previousColumnNames.has(column.name) &&
 				columnNotNull(column) &&
-				columnDefault(column) === null,
+				columnDefault(column) === null &&
+				!ownedBySequence.has(`${next.schema}.${next.name}.${column.name}`),
 		);
 		return addedWithoutDefault.map((column) =>
 			diagnostic(
@@ -51,3 +79,4 @@ export const notNullWithoutDefaultWarnings = (
 			),
 		);
 	});
+};

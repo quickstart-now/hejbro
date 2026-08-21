@@ -51,7 +51,8 @@ export type SequenceSnapshot = {
 };
 
 // Internal invariant: this shape is exactly what sequenceKind.serialize below produces.
-const asSequenceSnapshot = (snapshot: JsonValue): SequenceSnapshot =>
+/** Narrows a raw snapshot `JsonValue` to {@link SequenceSnapshot} — exported so `core-validators.ts` can cross-reference a sequence's owning `table`/`column` without duplicating this kind's snapshot shape (D66's `not-null-without-default` fix). */
+export const asSequenceSnapshot = (snapshot: JsonValue): SequenceSnapshot =>
 	snapshot as SequenceSnapshot;
 
 const sequenceIdentity = (schema: string, name: string): string =>

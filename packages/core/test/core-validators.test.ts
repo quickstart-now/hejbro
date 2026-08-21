@@ -112,4 +112,81 @@ describe("notNullWithoutDefaultWarnings", () => {
 
 		expect(notNullWithoutDefaultWarnings([change])).toEqual([]);
 	});
+
+	// #23/D66: a serial-family column's default lives in the sequence kind's
+	// own snapshot node, not ColumnSnapshot.default (see sequence-kind.ts) --
+	// so at the ColumnSnapshot level this column looks exactly like a plain
+	// not-null column with no default. Without cross-referencing the
+	// sibling `sequence` change in the same diff, this validator would warn
+	// on every serial column ever added to an existing table -- a
+	// permanent false positive users would learn to ignore, which is
+	// exactly how #23's underlying SQL defect stayed invisible until now.
+	it("does not warn when the added not-null column is owned by a sequence in the same diff (serial column add)", () => {
+		const tableChange = alterChange(
+			[{ name: "title", notNull: true }],
+			[
+				{ name: "title", notNull: true },
+				{ name: "n", notNull: true },
+			],
+		);
+		const sequenceChange: KindChange = {
+			kind: "sequence",
+			operation: "create",
+			identity: "app.posts_n_seq",
+			previous: null,
+			next: {
+				schema: "app",
+				name: "posts_n_seq",
+				table: "posts",
+				column: "n",
+				baseType: "integer",
+			},
+			notes: [],
+		};
+
+		expect(
+			notNullWithoutDefaultWarnings([tableChange, sequenceChange]),
+		).toEqual([]);
+	});
+
+	// Control group for the case above, in the *same* diff: a plain
+	// not-null column with no default and no owning sequence still warns --
+	// the sequence cross-reference only suppresses the specific column a
+	// sequence in this diff actually owns, not the whole diff.
+	it("still warns for a plain not-null column with no default alongside a serial column add in the same diff", () => {
+		const tableChange = alterChange(
+			[{ name: "title", notNull: true }],
+			[
+				{ name: "title", notNull: true },
+				{ name: "n", notNull: true },
+				{ name: "status", notNull: true },
+			],
+		);
+		const sequenceChange: KindChange = {
+			kind: "sequence",
+			operation: "create",
+			identity: "app.posts_n_seq",
+			previous: null,
+			next: {
+				schema: "app",
+				name: "posts_n_seq",
+				table: "posts",
+				column: "n",
+				baseType: "integer",
+			},
+			notes: [],
+		};
+
+		expect(
+			notNullWithoutDefaultWarnings([tableChange, sequenceChange]),
+		).toEqual([
+			{
+				severity: "warning",
+				code: "not-null-without-default",
+				message:
+					'column "app"."posts"."status" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.',
+				declaredAt: null,
+			},
+		]);
+	});
 });
