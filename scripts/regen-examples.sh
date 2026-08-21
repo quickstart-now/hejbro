@@ -20,7 +20,30 @@
 # in practice, so fewer migrations after a run almost always means a step
 # file was deleted or misnamed — this must be a loud failure of the
 # script itself, not something that only shows up if someone happens to
-# read `git status` afterward.
+# read `git status` afterward. Growing the chain is not blocked: the
+# check compares `<`, so e.g. 5 step files against 4 committed migrations
+# passes — phase8-constraint-names and phase8-grant-sync both add steps
+# and will not trip it.
+#
+# The shrink check and the no-op-step check below it are complementary,
+# not redundant: a deleted step keeps `steps == migrations` (both drop by
+# one, so `regenerated < committed` fires but `regenerated != steps`
+# wouldn't), and a no-op step (one whose declarations don't differ from
+# the previous step, so `generate` writes nothing) keeps the migration
+# count unchanged (so `regenerated != steps` fires but `regenerated <
+# committed` wouldn't, since nothing actually shrank). Neither check sees
+# the other's failure mode.
+#
+# The shrink check reads its baseline from `git ls-files`, not the
+# working tree — deliberately, and re-derived once already the hard way.
+# An earlier version counted the working tree via `find`, which the
+# script's own `rm -rf` (below) then edits mid-run: on a real shrink, the
+# first invocation correctly failed, but a second invocation (the first
+# thing anyone tries after a failing script) counted the *already-
+# shrunk* tree against itself and passed. `git ls-files` reads the
+# index, which nothing in this script ever touches, so it can't be
+# laundered by a retry. Generalizes: a guard must read its baseline from
+# something it cannot itself change.
 #
 # Ambiguous drop+add pairs (e.g. a column renamed alongside an unrelated
 # schema change, as the postgres/supabase chains' step 4 both are) are
@@ -78,11 +101,19 @@ run_generate() {
 
   # The CLI prints the exact rerun command on its own line, e.g.:
   #   hejbro generate --confirm-drop app.tasks.due_at
-  # A multi-pair ambiguity instead prints a backslash-continued command
-  # with <...> placeholders a human has to fill in — reject that instead
-  # of running it verbatim.
+  # A multi-pair ambiguity's example rerun is backslash-continued across
+  # several lines instead (packages/cli/src/rename-diagnostics.ts,
+  # buildColumnAmbiguityDiagnostic's multi-pair branch), so the single-
+  # line grep below never matches it — confirm_drop_target comes back
+  # empty on its own, verified in isolation against a synthetic
+  # multi-pair stderr. The `grep -q 'placeholders'` alongside it is
+  # belt-and-suspenders for that diagnostic's own "edit the <...>
+  # placeholders" label, not the primary signal — scanning for a bare
+  # `<` instead (an earlier version of this check did) would risk
+  # hard-stopping an unrelated, perfectly resolvable single-pair case if
+  # some future diagnostic happened to contain that character elsewhere.
   confirm_drop_target="$(grep -o 'hejbro generate --confirm-drop [^[:space:]]*' <<< "$stderr_output" | tail -1 | awk '{print $NF}')"
-  if [ -z "$confirm_drop_target" ] || grep -q '<' <<< "$stderr_output"; then
+  if [ -z "$confirm_drop_target" ] || grep -q 'placeholders' <<< "$stderr_output"; then
     echo "$stderr_output" >&2
     echo "regen-examples.sh: ambiguous-column-rename didn't offer a single directly-runnable --confirm-drop command (likely a multi-pair ambiguity) — resolve it by hand and update this script" >&2
     exit 1
@@ -132,6 +163,23 @@ regen_one() {
   regenerated_count="$(find "$example_dir/migrations" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')"
   if [ "$regenerated_count" -lt "$committed_count" ]; then
     echo "regen-examples.sh: $name regenerated only $regenerated_count migration(s), but $committed_count were committed before this run — a step file was likely deleted or renamed under src/steps/. If the chain is genuinely meant to shrink, that's not something this script does automatically; resolve it by hand." >&2
+    echo "regen-examples.sh: the working tree has already been rewritten to this shorter state — restore with \`git checkout -- examples/$name\` before retrying, or the next run will compare against this reduced state instead of what was actually committed." >&2
+    exit 1
+  fi
+
+  # A step file existing is not the same as a step file *doing* anything.
+  # If a new step's declarations don't actually differ from the previous
+  # step's, `generate` reports no changes and writes nothing — the step
+  # count above (${#steps[@]}) is then higher than the migration count
+  # here, silently, because nothing else looks at that relationship.
+  # `examples/README.md` states "every step defends at least one defect
+  # class" as a rule; this is what enforces it. Complementary to the
+  # shrink check above, not redundant with it: a deleted step keeps
+  # `steps == migrations` (both drop by one), and a no-op step keeps
+  # `migrations >= committed` (the count never goes down) — each check
+  # is blind to the other's failure mode.
+  if [ "$regenerated_count" -ne "${#steps[@]}" ]; then
+    echo "regen-examples.sh: $name has ${#steps[@]} step file(s) but produced $regenerated_count migration(s) — a step whose declarations don't differ from the previous one generates nothing. Every step must change something (examples/README.md: each step defends a defect class)." >&2
     exit 1
   fi
 }
