@@ -71,7 +71,15 @@ const CORE_KINDS: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [
  * guessing from the name's shape (a hyphen/prefix heuristic was tried and
  * rejected: the one real preset kind, `supabase-storage-bucket`, is a
  * sample of one, nothing enforces the convention on a *user's own* preset,
- * and a wrong guess reproduces this exact issue's bug in a new shape).
+ * and a wrong guess reproduces this exact issue's bug in a new shape) —
+ * and that shape guess wouldn't just be *unreliable today*, it would be
+ * *wrong by design* the moment core needs it: `.claude/rules/naming.md`
+ * Rule 2 (D57) requires every snapshot identity token, kind ids included,
+ * to be kebab-case, so a multi-word core kind id **must** itself carry a
+ * hyphen (`materialized-view` is the standing example) — that isn't a
+ * convention someone forgot to follow, it's the shape D57 mandates. The
+ * first three reasons above are all "this could go wrong"; this one is
+ * "this is guaranteed to go wrong, the day core has a two-word kind name".
  */
 export const CORE_KIND_IDS: ReadonlySet<string> = new Set(
 	CORE_KINDS.map((kind) => kind.kind),
