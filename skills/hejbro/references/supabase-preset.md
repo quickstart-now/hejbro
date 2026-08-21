@@ -51,5 +51,6 @@ those schemas, or any object inside one, is a hard error, not a warning.
 
 The Docker round-trip for a Supabase-preset example needs a seed file for
 the Supabase-isms a generic Postgres lacks (roles, `storage.buckets`,
-`auth.users` stubs) — see `examples/supabase/seed/supabase.sql`, wired up
-in `packages/supabase/README.md`.
+`auth.users`, and `auth.uid()` stubs) — see
+`examples/supabase/seed/supabase.sql`, wired up as the `roundtrip` script
+in `examples/supabase/package.json`.
