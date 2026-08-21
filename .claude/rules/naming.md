@@ -58,3 +58,8 @@ artifacts** — snapshot identity keys, `grantKind` values, kind ids, error
 codes, config fields, and golden directory names — and asserts the two
 rules above. It tests artifacts, not source text, so internal TS
 discriminators are out of scope by construction and need no allowlist.
+
+Machine enforcement of the TypeScript layer is a follow-up: Biome's
+`useNamingConvention` is not enabled yet because it currently reports 62
+warnings, most of them test fixtures whose snake_case deliberately mirrors
+SQL identifiers (#132).
