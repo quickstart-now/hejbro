@@ -8,7 +8,7 @@ import { quoteIdentifier, renderRoleName } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
 import { statement } from "../sql/statement";
 
-/** A grant's serialized snapshot node. `privileges` is always `[]` for `schemaUsage`. */
+/** A grant's serialized snapshot node. `privileges` is always `[]` for `schema-usage`. */
 export type GrantSnapshot = {
 	readonly schema: string;
 	readonly grantKind: GrantKind;
@@ -62,7 +62,7 @@ const removedPrivileges = (
 		(privilege) => previous.includes(privilege) && !next.includes(privilege),
 	);
 
-/** Renders a `grant`/`alter default privileges ... grant` statement for `grantKind`. `privileges` is ignored for `schemaUsage` (always `usage`). */
+/** Renders a `grant`/`alter default privileges ... grant` statement for `grantKind`. `privileges` is ignored for `schema-usage` (always `usage`). */
 const renderGrantStatement = (
 	grantKind: GrantKind,
 	schema: string,
@@ -72,18 +72,18 @@ const renderGrantStatement = (
 	const schemaRef = quoteIdentifier(schema);
 	const roleRef = renderRoleName(role);
 	switch (grantKind) {
-		case "schemaUsage":
+		case "schema-usage":
 			return `grant usage on schema ${schemaRef} to ${roleRef};`;
-		case "allTablesPrivileges":
+		case "all-tables-privileges":
 			return `grant ${privilegeList(privileges)} on all tables in schema ${schemaRef} to ${roleRef};`;
-		case "defaultTablePrivileges":
+		case "default-table-privileges":
 			return `alter default privileges in schema ${schemaRef} grant ${privilegeList(privileges)} on tables to ${roleRef};`;
 		default:
 			return assertNever(grantKind);
 	}
 };
 
-/** Renders a `revoke`/`alter default privileges ... revoke` statement for `grantKind`. `privileges` is ignored for `schemaUsage` (always `usage`). */
+/** Renders a `revoke`/`alter default privileges ... revoke` statement for `grantKind`. `privileges` is ignored for `schema-usage` (always `usage`). */
 const renderRevokeStatement = (
 	grantKind: GrantKind,
 	schema: string,
@@ -93,11 +93,11 @@ const renderRevokeStatement = (
 	const schemaRef = quoteIdentifier(schema);
 	const roleRef = renderRoleName(role);
 	switch (grantKind) {
-		case "schemaUsage":
+		case "schema-usage":
 			return `revoke usage on schema ${schemaRef} from ${roleRef};`;
-		case "allTablesPrivileges":
+		case "all-tables-privileges":
 			return `revoke ${privilegeList(privileges)} on all tables in schema ${schemaRef} from ${roleRef};`;
-		case "defaultTablePrivileges":
+		case "default-table-privileges":
 			return `alter default privileges in schema ${schemaRef} revoke ${privilegeList(privileges)} on tables from ${roleRef};`;
 		default:
 			return assertNever(grantKind);
@@ -116,15 +116,15 @@ const statementIfAny = (
 };
 
 /**
- * The built-in object kind for grants (D28): `schemaUsage`,
- * `allTablesPrivileges`, and `defaultTablePrivileges` (the dd.land subset
+ * The built-in object kind for grants (D28): `schema-usage`,
+ * `all-tables-privileges`, and `default-table-privileges` (the dd.land subset
  * of `alter default privileges`). Identity is
  * `"<schema>.<grantKind>.<role>"`. `diff` is a privilege-set delta: a
  * changed privilege list emits a single `alter` whose `emit` re-derives
  * the added/removed privileges from `previous`/`next` (notes are
  * display-only banner text — the equivalent PR #71 review fix applied
- * here from the start). `schemaUsage` never alters — its privilege list
- * is always `[]`, so two `schemaUsage` snapshots are never merely
+ * here from the start). `schema-usage` never alters — its privilege list
+ * is always `[]`, so two `schema-usage` snapshots are never merely
  * "different privileges".
  */
 export const grantKind: ObjectKind<GrantDeclaration> = {

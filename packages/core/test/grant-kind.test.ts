@@ -48,7 +48,7 @@ describe("grantKind.serialize / identify", () => {
 		const declaration = allTablesGrant(["select", "insert"]);
 		expect(grantKind.serialize(declaration)).toEqual({
 			schema: "app",
-			grantKind: "allTablesPrivileges",
+			grantKind: "all-tables-privileges",
 			role: "service_role",
 			privileges: ["select", "insert"],
 		});
@@ -56,14 +56,14 @@ describe("grantKind.serialize / identify", () => {
 
 	it("identifies as schema.grantKind.role", () => {
 		const snapshot = grantKind.serialize(usageGrant());
-		expect(grantKind.identify(snapshot)).toBe("app.schemaUsage.anon");
+		expect(grantKind.identify(snapshot)).toBe("app.schema-usage.anon");
 	});
 });
 
 describe("grantKind.diff", () => {
 	it("diffs create when there is no previous snapshot", () => {
 		const next = grantKind.serialize(usageGrant());
-		const identity = "app.schemaUsage.anon";
+		const identity = "app.schema-usage.anon";
 		expect(grantKind.diff(null, next, identity)).toEqual([
 			{
 				kind: "grant",
@@ -78,7 +78,7 @@ describe("grantKind.diff", () => {
 
 	it("diffs drop when there is no next snapshot", () => {
 		const previous = grantKind.serialize(usageGrant());
-		const identity = "app.schemaUsage.anon";
+		const identity = "app.schema-usage.anon";
 		expect(grantKind.diff(previous, null, identity)).toEqual([
 			{
 				kind: "grant",
@@ -95,14 +95,14 @@ describe("grantKind.diff", () => {
 		const previous = grantKind.serialize(allTablesGrant(["select"]));
 		const next = grantKind.serialize(allTablesGrant(["select"]));
 		expect(
-			grantKind.diff(previous, next, "app.allTablesPrivileges.service_role"),
+			grantKind.diff(previous, next, "app.all-tables-privileges.service_role"),
 		).toEqual([]);
 	});
 
 	it("diffs a privilege-set change as a single alter, notes in canonical +/- order", () => {
 		const previous = grantKind.serialize(allTablesGrant(["select", "update"]));
 		const next = grantKind.serialize(allTablesGrant(["select", "insert"]));
-		const identity = "app.allTablesPrivileges.service_role";
+		const identity = "app.all-tables-privileges.service_role";
 		expect(grantKind.diff(previous, next, identity)).toEqual([
 			{
 				kind: "grant",
@@ -117,12 +117,12 @@ describe("grantKind.diff", () => {
 });
 
 describe("grantKind.emit", () => {
-	it("schemaUsage: create", () => {
+	it("schema-usage: create", () => {
 		const next = grantKind.serialize(usageGrant());
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "create",
-			identity: "app.schemaUsage.anon",
+			identity: "app.schema-usage.anon",
 			previous: null,
 			next,
 			notes: [],
@@ -132,12 +132,12 @@ describe("grantKind.emit", () => {
 		]);
 	});
 
-	it("schemaUsage: drop", () => {
+	it("schema-usage: drop", () => {
 		const previous = grantKind.serialize(usageGrant());
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "drop",
-			identity: "app.schemaUsage.anon",
+			identity: "app.schema-usage.anon",
 			previous,
 			next: null,
 			notes: [],
@@ -147,12 +147,12 @@ describe("grantKind.emit", () => {
 		]);
 	});
 
-	it("schemaUsage: renders the public role bare", () => {
+	it("schema-usage: renders the public role bare", () => {
 		const next = grantKind.serialize(usageGrant("public"));
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "create",
-			identity: "app.schemaUsage.public",
+			identity: "app.schema-usage.public",
 			previous: null,
 			next,
 			notes: [],
@@ -160,12 +160,12 @@ describe("grantKind.emit", () => {
 		expect(statements[0]?.sql).toBe('grant usage on schema "app" to public;');
 	});
 
-	it("allTablesPrivileges: create", () => {
+	it("all-tables-privileges: create", () => {
 		const next = grantKind.serialize(allTablesGrant(["select", "insert"]));
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "create",
-			identity: "app.allTablesPrivileges.service_role",
+			identity: "app.all-tables-privileges.service_role",
 			previous: null,
 			next,
 			notes: [],
@@ -175,14 +175,14 @@ describe("grantKind.emit", () => {
 		]);
 	});
 
-	it("allTablesPrivileges: drop revokes the full previous list", () => {
+	it("all-tables-privileges: drop revokes the full previous list", () => {
 		const previous = grantKind.serialize(
 			allTablesGrant(["select", "insert", "update", "delete"]),
 		);
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "drop",
-			identity: "app.allTablesPrivileges.service_role",
+			identity: "app.all-tables-privileges.service_role",
 			previous,
 			next: null,
 			notes: [],
@@ -192,13 +192,13 @@ describe("grantKind.emit", () => {
 		]);
 	});
 
-	it("allTablesPrivileges: alter emits grant for additions and revoke for removals", () => {
+	it("all-tables-privileges: alter emits grant for additions and revoke for removals", () => {
 		const previous = grantKind.serialize(allTablesGrant(["select", "update"]));
 		const next = grantKind.serialize(allTablesGrant(["select", "insert"]));
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "alter",
-			identity: "app.allTablesPrivileges.service_role",
+			identity: "app.all-tables-privileges.service_role",
 			previous,
 			next,
 			notes: ["+insert", "-update"],
@@ -209,13 +209,13 @@ describe("grantKind.emit", () => {
 		]);
 	});
 
-	it("allTablesPrivileges: alter emits only a grant statement when nothing was removed", () => {
+	it("all-tables-privileges: alter emits only a grant statement when nothing was removed", () => {
 		const previous = grantKind.serialize(allTablesGrant(["select"]));
 		const next = grantKind.serialize(allTablesGrant(["select", "insert"]));
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "alter",
-			identity: "app.allTablesPrivileges.service_role",
+			identity: "app.all-tables-privileges.service_role",
 			previous,
 			next,
 			notes: ["+insert"],
@@ -225,12 +225,12 @@ describe("grantKind.emit", () => {
 		]);
 	});
 
-	it("defaultTablePrivileges: create", () => {
+	it("default-table-privileges: create", () => {
 		const next = grantKind.serialize(defaultPrivilegesGrant(["select"]));
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "create",
-			identity: "app.defaultTablePrivileges.anon",
+			identity: "app.default-table-privileges.anon",
 			previous: null,
 			next,
 			notes: [],
@@ -240,14 +240,14 @@ describe("grantKind.emit", () => {
 		]);
 	});
 
-	it("defaultTablePrivileges: drop revokes the full previous list", () => {
+	it("default-table-privileges: drop revokes the full previous list", () => {
 		const previous = grantKind.serialize(
 			defaultPrivilegesGrant(["select", "insert"]),
 		);
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "drop",
-			identity: "app.defaultTablePrivileges.anon",
+			identity: "app.default-table-privileges.anon",
 			previous,
 			next: null,
 			notes: [],
@@ -257,13 +257,13 @@ describe("grantKind.emit", () => {
 		]);
 	});
 
-	it("defaultTablePrivileges: alter mirrors allTablesPrivileges with the wrapper", () => {
+	it("default-table-privileges: alter mirrors all-tables-privileges with the wrapper", () => {
 		const previous = grantKind.serialize(defaultPrivilegesGrant(["select"]));
 		const next = grantKind.serialize(defaultPrivilegesGrant(["insert"]));
 		const statements = grantKind.emit({
 			kind: "grant",
 			operation: "alter",
-			identity: "app.defaultTablePrivileges.anon",
+			identity: "app.default-table-privileges.anon",
 			previous,
 			next,
 			notes: ["+insert", "-select"],
@@ -290,8 +290,8 @@ describe("grant-set expansion through generateMigration", () => {
 		});
 		expect(Object.keys(result.snapshot.objects)).toEqual(
 			expect.arrayContaining([
-				"grant:app.schemaUsage.anon",
-				"grant:app.schemaUsage.authenticated",
+				"grant:app.schema-usage.anon",
+				"grant:app.schema-usage.authenticated",
 			]),
 		);
 	});

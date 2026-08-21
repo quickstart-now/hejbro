@@ -9,14 +9,14 @@ import {
 
 const apiRoles: ReadonlyArray<string> = ["anon", "authenticated"];
 const exposingGrantKinds: ReadonlyArray<string> = [
-	"allTablesPrivileges",
-	"defaultTablePrivileges",
+	"all-tables-privileges",
+	"default-table-privileges",
 ];
 
 const exposedTableMessage = (schemaName: string, tableName: string): string =>
 	`table "${schemaName}"."${tableName}" is reachable by API roles (grant to "anon"/"authenticated" on schema "${schemaName}") but has no row-level security — every row is readable/writable through the API. Declare rls(...) on the table, or drop the schema grant.`;
 
-/** Schemas carrying an `allTablesPrivileges`/`defaultTablePrivileges` grant to `anon`/`authenticated` (D40). */
+/** Schemas carrying an `all-tables-privileges`/`default-table-privileges` grant to `anon`/`authenticated` (D40). */
 const exposedSchemas = (
 	declarations: ReadonlyArray<HejbroDeclaration>,
 ): ReadonlySet<string> =>
@@ -43,7 +43,7 @@ const rlsProtectedTables = (
 
 /**
  * Warns when a table sits in a schema granted to `anon`/`authenticated`
- * (`allTablesPrivileges`/`defaultTablePrivileges`) but declares no RLS
+ * (`all-tables-privileges`/`default-table-privileges`) but declares no RLS
  * (D40) — every row in that table is then readable/writable through the
  * Supabase API. Order is declaration order.
  */
