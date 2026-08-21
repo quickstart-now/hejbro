@@ -190,6 +190,7 @@ when the map changes.
 | 32 | `phase8-roadmap-sync` | The roadmap's Phase 8 section gains the coverage-gating work group and #157 — the two things the brainstorm did not know about | #154, #157 |
 | 33 | `phase8-cli-timeout` | `packages/cli` has no `testTimeout`, so its subprocess e2e chain runs against vitest's 5s default and flakes under runner contention — now a merge blocker, since `verify (22)`/`verify (24)` became required checks | #173 |
 | 34 | `phase8-plan-rules` | This file: the rules measured during the phase, the rows added after plan review, the track queues, D71 and D72 | — |
+| 35 | `phase8-unknown-kind-diagnostic` | `unknown-kind` names both remedies instead of one (an older build cannot tell a future core kind from an unregistered preset — neither name is in any list it holds), `register()` enforces a namespace prefix on the preset channel, **D73** | #196 |
 
 `phase8-pk-guard` lands **before** `phase8-constraint-names` in dependency
 terms but is listed after it for readability: the guard is a small, independent
@@ -777,6 +778,89 @@ reversed, the six sites would have surfaced during the mechanical
 replacement pass, when the count is a thing to reconcile rather than a
 thing to question.
 
+**When you report an absence, run a positive control in the same breath.**
+`[]`, `0 occurrences`, and `could not reproduce` are indistinguishable from
+*the instrument never reached the subject*, and the only cheap way to tell
+them apart is to point the same instrument at a case you know is present.
+A review reported a validator staying silent on a reachable defect; the
+silence was real but it was the probe's, not the validator's — the probe
+called the validator directly on a table whose policies live nested under
+`extras.rls`, skipping the `resolveDeclarations` fan-out that the real
+pipeline performs, so it would have returned `[]` for every input. A
+control (an uncached call in a `where` clause, which the validator
+certainly walks) returned `[]` too, and that is what exposed it.
+
+The sharper half of that report is why it slipped when three earlier
+instrument failures in the same series had not: **those produced green,
+which contradicted the hypothesis; this produced empty, which confirmed
+it.** Suspicion is asymmetric by default — a result that agrees with you
+gets audited less. The control is what removes the asymmetry, so it is
+needed most exactly when the answer looks right.
+
+Every rule above this one guards against a wrong answer. This one, and the
+`formatVersion` case below, guard against **a right answer resting on a
+wrong reason** — the more durable failure, because nothing downstream ever
+prompts a re-examination. `#23` concluded correctly that no format-version
+bump was needed, on the grounds that a new object kind is "purely
+additive". Measured in both directions, that premise is false for a *core*
+kind: an older build parses the snapshot cleanly (both sides say
+`formatVersion: 5`) and then throws `unknown-kind` from the diff engine,
+advising the user to register a preset that does not exist. The only reason
+that actually holds is that v5 has never been published — a fact with an
+expiry date. Left unexamined, the stated reason would have been reused
+after 0.1.0, where the same conclusion is wrong.
+
+**"Unreachable" is a claim about an input surface, so name the surface.**
+Most of core's functions read a *snapshot*, not the DSL, and D33 makes a
+hand-edited or round-tripped snapshot a first-class input. So "the DSL
+cannot produce this" and "this cannot occur" are different statements, and
+only the first is usually true. Three defensive branches this phase were
+annotated with the second and tested with neither — `allColumns` (#174),
+`schemaOf` (#183), and the `wasDerived` guard (#193), whose whole test
+suite stayed green (547/547) with the guard replaced by `if (false)`. All
+three had the same shape: a guard, no test crossing it, and a mutation that
+passes in silence. If a value is reachable through a snapshot, it is a
+branch you can write a fixture for, not an assumption you record in a
+comment.
+
+**Read a precedent's reason, not its name.** Twice this phase a precedent
+was cited by shape and turned out not to transfer. Phase 6 added an object
+kind without a format bump, which reads as "adding a kind never needs one" —
+but a bucket is a *preset* kind, present only because the user opted in and
+recoverable from configuration, whereas a core kind arrives because the
+user typed `serial()` once and is recoverable only by upgrading. And
+`policyKind`/`triggerKind` both emit `drop … if exists`, which reads as "a
+dependent kind guards its drop against the owner's cascade" — but the
+comment at `trigger-kind.ts:34-49` says it exists because the recreate path
+is reused for a genuine first create, and the repo's actual answer to
+cross-kind ordering is the `predrop` stage (#122). Copying the surface
+would have added a third kind to #198's scope; copying the mechanism kept
+sequences out of it. "It is spelled the same way" and "it is there for the
+same reason" are separate findings, and only the second licenses reuse.
+
+**A decision reversed by one new piece of evidence will be reversed
+again.** The `sequence`-drop mechanism was decided four times — suppress,
+then `if exists`, then a hybrid, then `predrop` — and each flip followed a
+single observation looked at in isolation: the emitted order, then the
+precedent's name, then one golden file's diff, then the precedent's
+recorded reason. Only the last was of a different kind: it read what the
+precedent was *for* and measured the alternative against a real Postgres,
+including a control showing the current behaviour actually fails. So the
+rule is not "decide once" but **state, at each reversal, why the previous
+reason was wrong** — that sentence is what makes the difference between
+converging and oscillating, and if it cannot be written the new evidence is
+not yet strong enough to act on.
+
+**Pinning an expected count in the spec is what reveals a narrow
+instrument.** #97's red-first criterion named "3 occurrences". The first
+implementation of its tree walker found 1, because it skipped `exists()`
+subqueries — mirroring core's own `someExprNode`, which does the same. With
+no number written down, 1 would have been reported as the answer and the
+walker's blind spot would have shipped. Every other instrument failure this
+phase was caught *after* producing a wrong result; this one was caught
+before, and the only difference was that someone had recorded what the
+right result was.
+
 **Before measuring CLI behaviour, confirm `dist` is newer than the source
 you changed.** `test/golden.test.ts` and the other spawn-the-built-CLI
 suites validate `dist/cli.js`, and `assertBuiltCli` checks only that it
@@ -1026,7 +1110,17 @@ clean install), **#132** (needs a per-path lint design first), **#139**
 (blocked until the packages exist), **#141** (`design: core has no notion of
 which clause an expression sits in`, split off during #97's design pass —
 needs a brainstorm on whether a clause taxonomy belongs in core's extension
-interface).
+interface), **#198** (`dependent kinds' drop … if exists convention absorbs
+snapshot/DB drift silently`, split off during #193's precedent check —
+verify whether `verify`/the round-trip already catches it before deciding
+whether to change three kinds at once).
+
+#198's premise sharpened while it was being filed, which is worth carrying
+into the work: `policyKind`/`triggerKind` emit their drops on the `predrop`
+stage, so those statements always run before the owning table's `main`-stage
+drop. The `if exists` therefore contributes nothing to same-diff cascade
+safety — the object is always still there. Swallowing *external* drift is
+not a side effect of that guard; it is the only thing it does.
 
 **#139** and **#141** stay as sub-issues of **#9**. There is no Phase 9 — the
 owner decided (2026-08-21) that Phase 8 is the last phase and what follows
