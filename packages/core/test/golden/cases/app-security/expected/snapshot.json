@@ -50,7 +50,94 @@
 			],
 			"schema": "app",
 			"table": "comments",
-			"using": "(\"app\".\"comments\".\"deleted_at\" is null) and exists (select 1 from \"app\".\"posts\" where (\"app\".\"posts\".\"id\" = \"app\".\"comments\".\"post_id\") and (\"app\".\"posts\".\"status\" = 'published') and (\"app\".\"posts\".\"published_at\" <= now()))"
+			"using": {
+				"nodeKind": "logical",
+				"operands": [
+					{
+						"negated": false,
+						"nodeKind": "null-test",
+						"operand": {
+							"column": "deleted_at",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "comments"
+						}
+					},
+					{
+						"negated": false,
+						"nodeKind": "exists",
+						"query": {
+							"from": {
+								"schema": "app",
+								"table": "posts"
+							},
+							"joins": [],
+							"limit": null,
+							"orderBy": [],
+							"projection": {
+								"projectionKind": "constant-one"
+							},
+							"queryKind": "select",
+							"where": {
+								"nodeKind": "logical",
+								"operands": [
+									{
+										"left": {
+											"column": "id",
+											"nodeKind": "column-ref",
+											"schema": "app",
+											"table": "posts"
+										},
+										"nodeKind": "comparison",
+										"operator": "=",
+										"right": {
+											"column": "post_id",
+											"nodeKind": "column-ref",
+											"schema": "app",
+											"table": "comments"
+										}
+									},
+									{
+										"left": {
+											"column": "status",
+											"nodeKind": "column-ref",
+											"schema": "app",
+											"table": "posts"
+										},
+										"nodeKind": "comparison",
+										"operator": "=",
+										"right": {
+											"literal": {
+												"literalKind": "string",
+												"value": "published"
+											},
+											"nodeKind": "literal"
+										}
+									},
+									{
+										"left": {
+											"column": "published_at",
+											"nodeKind": "column-ref",
+											"schema": "app",
+											"table": "posts"
+										},
+										"nodeKind": "comparison",
+										"operator": "<=",
+										"right": {
+											"args": [],
+											"function": "now",
+											"nodeKind": "function-call",
+											"schema": null
+										}
+									}
+								],
+								"operator": "and"
+							}
+						}
+					}
+				],
+				"operator": "and"
+			}
 		},
 		"policy:app.post_translations.post_translations_read_published": {
 			"command": "select",
@@ -60,7 +147,78 @@
 			],
 			"schema": "app",
 			"table": "post_translations",
-			"using": "exists (select 1 from \"app\".\"posts\" where (\"app\".\"posts\".\"id\" = \"app\".\"post_translations\".\"post_id\") and (\"app\".\"posts\".\"status\" = 'published') and (\"app\".\"posts\".\"published_at\" <= now()))"
+			"using": {
+				"negated": false,
+				"nodeKind": "exists",
+				"query": {
+					"from": {
+						"schema": "app",
+						"table": "posts"
+					},
+					"joins": [],
+					"limit": null,
+					"orderBy": [],
+					"projection": {
+						"projectionKind": "constant-one"
+					},
+					"queryKind": "select",
+					"where": {
+						"nodeKind": "logical",
+						"operands": [
+							{
+								"left": {
+									"column": "id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "posts"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"column": "post_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "post_translations"
+								}
+							},
+							{
+								"left": {
+									"column": "status",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "posts"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"literal": {
+										"literalKind": "string",
+										"value": "published"
+									},
+									"nodeKind": "literal"
+								}
+							},
+							{
+								"left": {
+									"column": "published_at",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "posts"
+								},
+								"nodeKind": "comparison",
+								"operator": "<=",
+								"right": {
+									"args": [],
+									"function": "now",
+									"nodeKind": "function-call",
+									"schema": null
+								}
+							}
+						],
+						"operator": "and"
+					}
+				}
+			}
 		},
 		"policy:app.posts.posts_read_published": {
 			"command": "select",
@@ -70,7 +228,23 @@
 			],
 			"schema": "app",
 			"table": "posts",
-			"using": "\"app\".\"posts\".\"status\" = 'published'"
+			"using": {
+				"left": {
+					"column": "status",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "posts"
+				},
+				"nodeKind": "comparison",
+				"operator": "=",
+				"right": {
+					"literal": {
+						"literalKind": "string",
+						"value": "published"
+					},
+					"nodeKind": "literal"
+				}
+			}
 		},
 		"rls:app.comments": {
 			"schema": "app",
@@ -90,7 +264,12 @@
 		"table:app.comments": {
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -120,7 +299,12 @@
 		"table:app.post_translations": {
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -151,7 +335,12 @@
 		"table:app.posts": {
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,

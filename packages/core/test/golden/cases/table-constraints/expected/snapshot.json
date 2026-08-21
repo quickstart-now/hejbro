@@ -8,7 +8,12 @@
 		"table:app.comments": {
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -69,17 +74,75 @@
 		"table:app.posts": {
 			"checks": [
 				{
-					"expression": "\"app\".\"posts\".\"status\" in ('draft', 'published', 'archived')",
+					"expression": {
+						"negated": false,
+						"nodeKind": "in-list",
+						"operand": {
+							"column": "status",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "posts"
+						},
+						"values": [
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "draft"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "published"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "archived"
+								},
+								"nodeKind": "literal"
+							}
+						]
+					},
 					"name": "posts_status_check"
 				},
 				{
-					"expression": "\"app\".\"posts\".\"slug\" ~ '^[a-z0-9-]+$'",
+					"expression": {
+						"chunks": [
+							{
+								"chunkKind": "text",
+								"text": ""
+							},
+							{
+								"chunkKind": "expr",
+								"expr": {
+									"column": "slug",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "posts"
+								}
+							},
+							{
+								"chunkKind": "text",
+								"text": " ~ '^[a-z0-9-]+$'"
+							}
+						],
+						"nodeKind": "sql-template"
+					},
 					"name": "posts_slug_format_check"
 				}
 			],
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,

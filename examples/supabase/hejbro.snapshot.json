@@ -42,7 +42,85 @@
 			],
 			"schema": "app",
 			"table": "attachment_blobs",
-			"using": "exists (select 1 from \"app\".\"attachments\" inner join \"app\".\"profiles\" on \"app\".\"profiles\".\"id\" = \"app\".\"attachments\".\"profile_id\" where (\"app\".\"attachments\".\"id\" = \"app\".\"attachment_blobs\".\"attachment_id\") and (\"app\".\"profiles\".\"user_id\" = auth.uid()))"
+			"using": {
+				"negated": false,
+				"nodeKind": "exists",
+				"query": {
+					"from": {
+						"schema": "app",
+						"table": "attachments"
+					},
+					"joins": [
+						{
+							"joinKind": "inner",
+							"on": {
+								"left": {
+									"column": "id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "profiles"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"column": "profile_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "attachments"
+								}
+							},
+							"table": {
+								"schema": "app",
+								"table": "profiles"
+							}
+						}
+					],
+					"limit": null,
+					"orderBy": [],
+					"projection": {
+						"projectionKind": "constant-one"
+					},
+					"queryKind": "select",
+					"where": {
+						"nodeKind": "logical",
+						"operands": [
+							{
+								"left": {
+									"column": "id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "attachments"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"column": "attachment_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "attachment_blobs"
+								}
+							},
+							{
+								"left": {
+									"column": "user_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "profiles"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"args": [],
+									"function": "uid",
+									"nodeKind": "function-call",
+									"schema": "auth"
+								}
+							}
+						],
+						"operator": "and"
+					}
+				}
+			}
 		},
 		"policy:app.attachments.attachments_read_own": {
 			"command": "select",
@@ -52,7 +130,61 @@
 			],
 			"schema": "app",
 			"table": "attachments",
-			"using": "exists (select 1 from \"app\".\"profiles\" where (\"app\".\"profiles\".\"id\" = \"app\".\"attachments\".\"profile_id\") and (\"app\".\"profiles\".\"user_id\" = auth.uid()))"
+			"using": {
+				"negated": false,
+				"nodeKind": "exists",
+				"query": {
+					"from": {
+						"schema": "app",
+						"table": "profiles"
+					},
+					"joins": [],
+					"limit": null,
+					"orderBy": [],
+					"projection": {
+						"projectionKind": "constant-one"
+					},
+					"queryKind": "select",
+					"where": {
+						"nodeKind": "logical",
+						"operands": [
+							{
+								"left": {
+									"column": "id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "profiles"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"column": "profile_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "attachments"
+								}
+							},
+							{
+								"left": {
+									"column": "user_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "profiles"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"args": [],
+									"function": "uid",
+									"nodeKind": "function-call",
+									"schema": "auth"
+								}
+							}
+						],
+						"operator": "and"
+					}
+				}
+			}
 		},
 		"policy:app.profiles.profiles_read_own": {
 			"command": "select",
@@ -62,7 +194,22 @@
 			],
 			"schema": "app",
 			"table": "profiles",
-			"using": "\"app\".\"profiles\".\"user_id\" = auth.uid()"
+			"using": {
+				"left": {
+					"column": "user_id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "profiles"
+				},
+				"nodeKind": "comparison",
+				"operator": "=",
+				"right": {
+					"args": [],
+					"function": "uid",
+					"nodeKind": "function-call",
+					"schema": "auth"
+				}
+			}
 		},
 		"rls:app.attachment_blobs": {
 			"schema": "app",
@@ -133,17 +280,63 @@
 		"table:app.attachments": {
 			"checks": [
 				{
-					"expression": "\"app\".\"attachments\".\"size_bytes\" > 0",
+					"expression": {
+						"left": {
+							"column": "size_bytes",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "attachments"
+						},
+						"nodeKind": "comparison",
+						"operator": ">",
+						"right": {
+							"literal": {
+								"literalKind": "number",
+								"value": 0
+							},
+							"nodeKind": "literal"
+						}
+					},
 					"name": "attachments_size_bytes_positive"
 				},
 				{
-					"expression": "\"app\".\"attachments\".\"content_type\" in ('image/png', 'image/jpeg')",
+					"expression": {
+						"negated": false,
+						"nodeKind": "in-list",
+						"operand": {
+							"column": "content_type",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "attachments"
+						},
+						"values": [
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "image/png"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "image/jpeg"
+								},
+								"nodeKind": "literal"
+							}
+						]
+					},
 					"name": "attachments_content_type_allowed"
 				}
 			],
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -199,7 +392,12 @@
 		"table:app.drafts": {
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -223,7 +421,12 @@
 		"table:app.profiles": {
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
