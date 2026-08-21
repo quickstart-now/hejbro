@@ -217,30 +217,40 @@ own claim.
   produced a real failure — `changeset status` shells out to `git merge-base
   dev HEAD`, which needs a local branch literally named `dev` that a
   `pull_request` checkout never creates on its own. The requirement earned
-  its keep by finding this before release did. Prove `fixed` is the cause
+  its keep by finding this before release did — and the failure mode itself
+  is worth noting: `changeset status` doesn't silently pass when its
+  `baseBranch` ref is missing, it hard-fails with a stack trace (see
+  `ci.yml`'s comment on the fetch step), which is exactly why the CI break
+  was visible instead of a quiet false green. Prove `fixed` is the cause
   of the three packages moving together, not a coincidence of all three
   starting at `0.0.0`: take one package out of `fixed` and show it stops
   moving *the same way*, not just that it stops moving — changesets patch-
   bumps any dependent of a released package by default, `fixed` membership
   or not, so "the removed package doesn't move at all" was never an
-  achievable outcome to demand. Three requirements in this PR's review
-  turned out to be wrong, not just the implementation checking them —
-  worth keeping in one place, because a requirement is as capable of being
-  unverified as an implementation is: (1) the acceptance wording for this
-  criterion originally asked for exactly that unachievable outcome —
-  "only that package stops moving" — fixed by changing what the proof
-  showed, not by abandoning it; (2) a review round asked this PR to prove
-  the `AGENTS.md` changeset rule needed real enforcement, on the premise
-  that it currently had none — the premise was wrong, found by running
-  `changeset status` rather than trusting the premise (see
-  `phase8-release-workflows`'s criterion above); (3) the observation
-  behind that premise was itself a green read the wrong way — measured
+  achievable outcome to demand. Four requirements or claims in this PR's
+  review turned out to be wrong, not just the implementation checking
+  them — worth keeping in one place with who introduced each, because a
+  requirement is as capable of being unverified as an implementation is,
+  and because the four are genuinely different failures, not one mistake
+  repeated: (1) the acceptance wording for this criterion originally asked
+  for exactly that unachievable outcome — "only that package stops
+  moving" — fixed by changing what the proof showed, not by abandoning
+  it; (2) a separate instruction asked this PR to confirm whether
+  `changeset status --since=<base>` closes an enforcement gap, on the
+  premise that the flag itself would matter — it doesn't, in either
+  direction, since `baseBranch: "dev"` already supplies it; (3) that
+  instruction was itself downstream of relaying an observation into a
+  requirement without independently verifying it first; (4) the
+  observation being relayed was a green read the wrong way — measured
   with the changeset removed but the package left unchanged, so the gate
   had nothing to catch (see "a green proves nothing unless the defect was
-  actually present" below). Requesters and reviewers are gates too — the
-  same discipline applies. See the `updateInternalDependencies` write-up
-  below for the same "vary what you credit" lesson applied to a causal
-  claim rather than a requirement.
+  actually present" below). (1) and (2) are unverified *requirements*;
+  (3) is passing a claim along without checking it; (4) is a green
+  wrongly read as absence-of-enforcement — distinct failures, not the
+  same one four times. Requesters and reviewers are gates too — the same
+  discipline applies. See the `updateInternalDependencies` write-up below
+  for the same "vary what you credit" lesson applied to a causal claim
+  rather than a requirement.
 - **`phase8-regen-script`** — running the script reproduces the committed
   example migrations and snapshots **byte for byte** before any format change.
   That is the script's own test. Prove the script's range by mutation:

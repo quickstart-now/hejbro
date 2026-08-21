@@ -26,6 +26,16 @@ jobs:
       # `origin` here is quickstart-now/hejbro itself: this works because
       # our PR branches live on the org repo, not a fork — a fork PR's
       # `origin` would be the fork, without a `dev` branch to fetch.
+      #
+      # This step existing at all is why the CI failure that led to it was
+      # visible in the first place: `changeset status` has no silent-pass
+      # failure mode when its baseBranch ref is missing — it hard-fails
+      # with a stack trace out of `getChangedPackagesSinceRef` instead of
+      # quietly comparing against nothing. A gate that can't find its own
+      # reference point breaking loudly, rather than reporting a vacuous
+      # "nothing to do," is the one place in this round's chain of
+      # corrections where the risk this phase kept finding elsewhere
+      # (a check that looks like it ran but didn't) doesn't apply.
       - run: git fetch origin dev:dev
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
