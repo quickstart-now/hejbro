@@ -8,6 +8,7 @@ import {
 	inArray,
 	isNotNull,
 	like,
+	literal,
 	ne,
 	not,
 	now,
@@ -52,5 +53,11 @@ describe("operators", () => {
 		eq(postId, 42);
 		// @ts-expect-error boolean combinator fed a non-boolean expression
 		and(status);
+	});
+	// #113
+	it("builds a boolean literal", () => {
+		expect(renderExpr(literal(true).exprNode)).toBe("true");
+		expect(renderExpr(literal(false).exprNode)).toBe("false");
+		expectTypeOf(literal(true)).toEqualTypeOf<Expr<"boolean">>();
 	});
 });

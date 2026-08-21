@@ -148,6 +148,19 @@ export const genRandomUuid = (): Expr<"uuid"> =>
 		args: [],
 	});
 
+// #113: a boolean literal helper. Typed narrowly (`value: boolean`), not
+// routed through liftLiteral's runtime type-narrowing dispatch (unlike
+// liftOperand's raw-JS-value acceptance elsewhere in this file) --
+// there's nothing to narrow when the input type is already `boolean`.
+// Exists mainly so an "allow every row" RLS policy (D26/#113) can read as
+// stated intent (`.using(literal(true))`) instead of a borrowed-meaning
+// workaround like `isNotNull(someNotNullColumn)`.
+export const literal = (value: boolean): Expr<"boolean"> =>
+	expr("boolean", {
+		nodeKind: "literal",
+		literal: { literalKind: "boolean", value },
+	});
+
 export const coalesce = <TFamily extends SqlTypeFamily>(
 	first: Expr<TFamily>,
 	...rest: ReadonlyArray<Operand<TFamily>>
