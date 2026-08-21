@@ -24,6 +24,10 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  # #180: lets the `version` job's dispatch step (below) start ci.yml via
+  # `gh workflow run` -- see that step's comment for why this is
+  # necessary at all.
+  actions: write
 
 jobs:
   check-changesets:
@@ -104,5 +108,50 @@ jobs:
       # decomposed sub-action's is `script`; they differ even within the
       # same release, which is the trap this comment exists to name).
       - uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        id: version
         with:
           script: pnpm run version-packages
+          # Hardcoded, not `${{ github.ref_name }}`: this workflow only
+          # ever triggers on `push` to `dev` (see the file-level comment
+          # above `on:`), so `github.ref_name` would always resolve to
+          # "dev" here anyway -- but hardcoding it names the one branch
+          # this step is allowed to target, explicitly, rather than
+          # inheriting whatever ref happened to trigger the run. That
+          # distinction is exactly what a 2026-08-22 incident (during
+          # #180's own scratch testing) got wrong: a scratch run had
+          # `pr-base-branch` set to `${{ github.ref_name }}` while testing
+          # on a non-dev branch, computed `changeset-release/dev` anyway
+          # by coincidence of the scratch branch's own naming, and force-
+          # pushed test commits onto the real Version Packages PR (#179)'s
+          # branch. Parameterizing was necessary ONLY inside that scratch
+          # test itself (to target an isolated `changeset-release/<scratch
+          # branch>`, never `changeset-release/dev`) -- it was never
+          # correct here, in the workflow this repository actually runs.
+          pr-base-branch: dev
+      # #180: a PR opened/updated with GITHUB_TOKEN (the step above just
+      # did exactly that, for "Version Packages") never triggers a
+      # workflow through its normal push/pull_request events -- GitHub's
+      # own recursion guard, not a bug. `dev`'s ruleset requires
+      # `verify (22)`/`verify (24)`, so without this, that PR can never
+      # gain those checks and the owner can never merge it with the
+      # merge button. `workflow_dispatch` is the documented exception:
+      # starting ci.yml this way still creates real check runs, attached
+      # to the branch's current head commit, which is what the ruleset's
+      # required-status-check evaluation actually looks at.
+      #
+      # `if:` guards against the one case `changesets/action/version`
+      # itself distinguishes via its own `pr-number` output: when every
+      # pending changeset is empty, it logs "All changesets are empty;
+      # not creating PR" and never pushes anything -- dispatching then
+      # would target a branch this run didn't touch.
+      #
+      # Runs on every push to `dev` that reaches this step, so every
+      # later update of the Version PR re-dispatches and the checks
+      # track whatever the current head is -- see this repo's PR for
+      # #180 for the measured behavior when a dispatch races a second
+      # `dev` push in the same window.
+      - name: Dispatch ci.yml for the Version PR's required checks
+        if: steps.version.outputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref changeset-release/dev
