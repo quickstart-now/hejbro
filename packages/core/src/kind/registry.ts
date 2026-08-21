@@ -58,7 +58,10 @@ const CORE_KINDS: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [
 
 /**
  * Every kind id core itself owns, as of *this build* — not "every kind id
- * core will ever own". Two uses, both below:
+ * core will ever own". One meaning ("is this one of core's own kind
+ * ids"), consulted from two places below; this set itself only ever
+ * changes when core's own kind list does, regardless of how many places
+ * read it.
  *
  * **`unknown-kind`** (`unknownKindMessage`): rules out one cause for
  * certain. A name in this set that isn't registered in the current
@@ -87,11 +90,10 @@ const CORE_KINDS: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [
  *
  * **`register()`'s namespace-prefix requirement** (#201, below): exempts
  * every kind `createDefaultRegistry` itself registers from needing a
- * prefix. A different, narrower use than `unknown-kind`'s — it only ever
- * needs "is this one of core's own", not "is this name core-shaped",
- * so it isn't exposed to the same shape-guessing problem. See
- * {@link hasNamespacePrefix}'s own comment for what this exemption does
- * and does not buy.
+ * prefix — the same "is this core's own" question, just asked about one
+ * kind object at registration time rather than about an unregistered
+ * name at lookup time. See {@link hasNamespacePrefix}'s own comment for
+ * what this exemption does and does not buy.
  */
 export const CORE_KIND_IDS: ReadonlySet<string> = new Set(
 	CORE_KINDS.map((kind) => kind.kind),
