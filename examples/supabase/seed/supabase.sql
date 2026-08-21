@@ -36,13 +36,23 @@ create table if not exists auth.users (id uuid not null primary key);
 -- auth.uid() stub: the RLS policies built with authUid() call this at
 -- policy-creation time (it just needs to exist with the right signature —
 -- the round-trip only diffs schema, never queries through RLS as a real
--- session). Modeled on supabase/auth migrations/20221208132122_backfill_email_last_sign_in_at.sql's auth.uid().
-create or replace function auth.uid() returns uuid
-	language sql stable
-	as $$
-	select
-		coalesce(
-			nullif(current_setting('request.jwt.claim.sub', true), ''),
-			(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
-		)::uuid
+-- session). Modeled on supabase/auth migrations/20221208132122_backfill_email_last_sign_in_at.sql's auth.uid(). Guarded like every other stub above: a real Supabase database already has its own auth.uid(), so this must be a no-op there, never an overwrite.
+do $$
+begin
+	if not exists (
+		select 1 from pg_proc p
+		join pg_namespace n on n.oid = p.pronamespace
+		where n.nspname = 'auth' and p.proname = 'uid'
+	) then
+		create function auth.uid() returns uuid
+			language sql stable
+			as $body$
+			select
+				coalesce(
+					nullif(current_setting('request.jwt.claim.sub', true), ''),
+					(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+				)::uuid
+		$body$;
+	end if;
+end
 $$;
