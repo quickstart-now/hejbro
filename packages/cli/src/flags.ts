@@ -1,6 +1,52 @@
 import type { ConfirmDropSpec, RenameSpec } from "@hejbro/core";
 import { throwHejbroError } from "@hejbro/core";
 
+/**
+ * Every value-taking flag `hejbro generate` accepts (rerun.ts:5's own
+ * list) — the complete surface, confirmed by reading every command
+ * (`verify`/`init` take none). Adding a 5th value-taking flag means
+ * adding it here too, or it silently keeps requiring the space form.
+ */
+const VALUE_TAKING_FLAGS: ReadonlyArray<string> = [
+	"--config",
+	"--name",
+	"--rename",
+	"--confirm-drop",
+];
+
+/**
+ * Splits a `--flag=value` token into `["--flag", "value"]` so it's
+ * indistinguishable from the space form (`--flag`, `value`) to every
+ * downstream consumer — flag-value collection (this file's callers) and
+ * `rerun.ts`'s argv pairing both need this to already be true, so it's
+ * applied exactly once, at `runGenerate`'s entry point, rather than
+ * separately in each. Only tokens that start with a *known* flag name
+ * followed by `=` are split — a value token that happens to start with
+ * `--something=` (unlikely, but not impossible for `--config`) is left
+ * alone unless `--something` is itself one of the four flags above.
+ * Splits on the *first* `=` only, so `--rename=a.b.c=d` (a value that
+ * itself contains `=`) becomes `["--rename", "a.b.c=d"]`, not truncated.
+ * An empty value (`--flag=`) becomes `["--flag", ""]` — deliberately not
+ * special-cased; the existing per-flag value parser (e.g.
+ * `parseRenameFlag("")`) already rejects it with its own diagnostic, the
+ * same as an empty space-form value would. A value that looks like
+ * another flag (`--flag=--other`) is taken literally as the string
+ * `"--other"` — consistent with the space form, which never inspects a
+ * value for looking flag-like either.
+ */
+export const normalizeEqualsFlags = (
+	argv: ReadonlyArray<string>,
+): ReadonlyArray<string> =>
+	argv.flatMap((token) => {
+		const flag = VALUE_TAKING_FLAGS.find((candidate) =>
+			token.startsWith(`${candidate}=`),
+		);
+		if (flag === undefined) {
+			return [token];
+		}
+		return [flag, token.slice(flag.length + 1)];
+	});
+
 const invalidRenameFlagMessage = (value: string): string =>
 	`--rename value "${value}" isn't in the expected "<schema>.<table>.<old>=<new>" (column) or "<schema>.<old>=<new>" (table) form. Next: check for extra "." characters, and make sure the value contains exactly one "=".`;
 

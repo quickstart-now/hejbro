@@ -23,7 +23,11 @@ import {
 	renderDiagnostics,
 } from "../diagnostics";
 import { asHejbroError } from "../errors";
-import { parseConfirmDropFlag, parseRenameFlag } from "../flags";
+import {
+	normalizeEqualsFlags,
+	parseConfirmDropFlag,
+	parseRenameFlag,
+} from "../flags";
 import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
@@ -325,9 +329,17 @@ const warningStderr = (
  */
 export const runGenerate = async (
 	cwd: string,
-	rawArgs: ReadonlyArray<string>,
+	argv: ReadonlyArray<string>,
 	now: () => Date = () => new Date(),
 ): Promise<GenerateResult> => {
+	// Normalized once, here, before anything else sees it: flag-value
+	// collection below and the rerun-command suggestion (buildDiagnostics
+	// → buildAmbiguityDiagnostic → rerun.ts, fed this same `rawArgs`)
+	// both assume `[flag, value]` as two separate tokens — a single
+	// `--flag=value` token would otherwise misparse in both places, and
+	// in rerun.ts's case, corrupt every pair after it too. One shared
+	// normalization point means a flag added later doesn't need its own.
+	const rawArgs = normalizeEqualsFlags(argv);
 	const parsedArgv = parseGenerateArgv(rawArgs);
 	const fallbackIdentity = parsedArgv.configFlag ?? "hejbro.config.ts";
 	try {
