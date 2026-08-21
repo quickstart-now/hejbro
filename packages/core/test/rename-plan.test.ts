@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { HejbroDeclaration, HejbroInput } from "../src";
 import {
 	buildSnapshot,
+	check,
 	createDefaultRegistry,
 	desc,
 	diffSnapshots,
@@ -10,7 +11,10 @@ import {
 	exists,
 	generateMigration,
 	getTableMeta,
+	gt,
 	index,
+	integer,
+	isNotNull,
 	isTable,
 	planRenames,
 	renderSnapshot,
@@ -643,8 +647,8 @@ describe("planRenames", () => {
 // today expressions are pre-rendered strings at build time, so nothing
 // rewrites that text on a rename -- this pins the current (broken) shape
 // so the fix later in this PR has a before/after to point at.
-describe("planRenames — cross-table exists() retargeting (#110, currently broken)", () => {
-	it("renaming the exists()-referenced table leaves a comments-table policy's `using` text pointing at the old name", () => {
+describe("planRenames — cross-table exists() retargeting (#110, item 7/18)", () => {
+	it("retargets a cross-table exists()-embedded policy reference on a table rename", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		const comments = table(
 			app,
@@ -717,15 +721,104 @@ describe("planRenames — cross-table exists() retargeting (#110, currently brok
 			];
 		expect(policyNode).toBeDefined();
 
-		// Current (broken) behavior: the policy's `using` -- now a
-		// structured node (D67/D70), decoded and rendered back to SQL
-		// text via the same accessor emit uses -- still says "posts",
-		// not "articles". rename-plan.ts never touches policy nodes yet.
-		// This assertion documents the gap; #110's fix (later in this
-		// PR) makes it say "articles" instead, and this test is updated
-		// alongside that fix (see PR body for before/after).
+		// Fixed behavior (was broken before rewriteExpressionReferences
+		// landed, see this file's git history and the PR body's
+		// before/after): the policy's `using` -- a structured node
+		// (D67/D70), decoded and rendered back to SQL text via the same
+		// accessor emit uses -- follows the rename to "articles", even
+		// though the policy itself is declared on a *different* table
+		// (comments) and only reaches "posts" through exists().
 		const usingSql = policyUsing(policyNode as PolicySnapshot);
-		expect(usingSql).toContain('"posts"');
-		expect(usingSql).not.toContain('"articles"');
+		expect(usingSql).toContain('"articles"');
+		expect(usingSql).not.toContain('"posts"');
+	});
+});
+
+// #110 items 6/7: same-table retargeting -- the point D67 was adopted for.
+// Proof shape matches the file's own existing convention (e.g. "a --rename
+// spec resolves the pair into a RENAME statement" above): after a valid
+// rename, rewrittenPrevious must diff to *no changes* against next -- any
+// leftover stale identifier inside a default/check/where expression would
+// show up as a spurious diff (a drop+add pair the rename should have
+// prevented), which diffSnapshots would catch by comparing the two
+// snapshots' full structural content (sameJson), not just field presence.
+describe("planRenames — same-table expression retargeting (#110 items 6/7)", () => {
+	it("a table rename retargets its own CHECK expression and partial index where predicate, with no leftover diff", () => {
+		const buildPosts = (tableName: string) =>
+			table(
+				app,
+				tableName,
+				{ id: uuid().primaryKey(), price: integer(), publishedAt: uuid() },
+				(t) => ({
+					checks: [check("posts_price_check", gt(t.price, 0))],
+					indexes: [
+						index("posts_published_idx")
+							.on(t.publishedAt)
+							.where(isNotNull(t.publishedAt)),
+					],
+				}),
+			);
+		const previous = snap(app, buildPosts("posts"));
+		const next = snap(app, buildPosts("articles"));
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a column rename retargets a CHECK expression referencing that column, with no leftover diff", () => {
+		const previous = snap(
+			app,
+			table(
+				app,
+				"posts",
+				{ id: uuid().primaryKey(), price: integer() },
+				(t) => ({
+					checks: [check("posts_price_check", gt(t.price, 0))],
+				}),
+			),
+		);
+		const next = snap(
+			app,
+			table(
+				app,
+				"posts",
+				{ id: uuid().primaryKey(), cost: integer() },
+				(t) => ({
+					checks: [check("posts_price_check", gt(t.cost, 0))],
+				}),
+			),
+		);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "price",
+					newName: "cost",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
 });

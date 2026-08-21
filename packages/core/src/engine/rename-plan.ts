@@ -1,5 +1,8 @@
 import type { HejbroError } from "../error";
 import { guardSnapshotRead, hejbroError } from "../error";
+import { decodeExprNode, encodeExprNode } from "../expr/codec";
+import type { RenameTarget } from "../expr/retarget";
+import { retargetExprNode } from "../expr/retarget";
 import type { KindChange } from "../kind/object-kind";
 import type { PolicySnapshot } from "../kinds/policy-kind";
 import type { RlsSnapshot } from "../kinds/rls-kind";
@@ -708,6 +711,149 @@ const rewriteForeignKeyReferenceColumn = (
 		});
 	}, objects);
 
+/**
+ * Retargets every stored expression node (D67/D70) that mentions the
+ * renamed table/column — column default, CHECK expression, partial index
+ * `where`, and every table's policies' `using`/`withCheck` — across the
+ * *whole* snapshot, not just the renamed table's own node. This is the
+ * point of storing expressions structurally instead of as rendered text:
+ * without it, a rename leaves stale identifiers behind wherever an
+ * expression mentioned the old name.
+ *
+ * Full-scan, mirroring {@link rewriteForeignKeyTargets}'s established
+ * pattern (this codebase already accepts that cost for foreign keys) --
+ * a `using`/`withCheck` clause can `exists()` into *another* table
+ * (rls.ts's own validator message teaches exactly this: "reach other
+ * tables through exists()"), so a table rename can affect a policy
+ * declared on a completely different table. Confirmed unreachable any
+ * other way by direct reproduction before this function existed (#110
+ * item 18) -- renaming the exists()-referenced table left the other
+ * table's policy pointing at the old name, with nothing else catching it.
+ *
+ * Every retarget call returns the exact same object reference when
+ * nothing matched, so `!==` cheaply detects "did anything change" without
+ * a separate deep-equality pass.
+ */
+/** `null` when `field` is absent (nothing to retarget) or unaffected (retargeting was a no-op) — `retargetExprNode` returns the exact same reference in that case, so this never re-encodes a node that didn't actually change. */
+const retargetField = (
+	field: JsonValue | undefined,
+	target: RenameTarget,
+): JsonValue | null => {
+	if (field === undefined) {
+		return null;
+	}
+	const decoded = decodeExprNode(field);
+	const retargeted = retargetExprNode(decoded, target);
+	if (retargeted === decoded) {
+		return null;
+	}
+	return encodeExprNode(retargeted);
+};
+
+const retargetTableFields = (
+	tableSnapshot: TableSnapshot,
+	target: RenameTarget,
+): TableSnapshot | null => {
+	const columnResults = tableSnapshot.columns.map(
+		(column) => [column, retargetField(column.default, target)] as const,
+	);
+	const indexResults = tableSnapshot.indexes.map(
+		(index) => [index, retargetField(index.where, target)] as const,
+	);
+	const checkResults = (tableSnapshot.checks ?? []).map(
+		(check) => [check, retargetField(check.expression, target)] as const,
+	);
+	const anyChanged =
+		columnResults.some(([, retargeted]) => retargeted !== null) ||
+		indexResults.some(([, retargeted]) => retargeted !== null) ||
+		checkResults.some(([, retargeted]) => retargeted !== null);
+	if (!anyChanged) {
+		return null;
+	}
+	return {
+		...tableSnapshot,
+		columns: columnResults.map(([column, retargeted]) =>
+			retargeted === null ? column : { ...column, default: retargeted },
+		),
+		indexes: indexResults.map(([index, retargeted]) =>
+			retargeted === null ? index : { ...index, where: retargeted },
+		),
+		...(tableSnapshot.checks === undefined
+			? {}
+			: {
+					checks: checkResults.map(([check, retargeted]) =>
+						retargeted === null ? check : { ...check, expression: retargeted },
+					),
+				}),
+	};
+};
+
+const retargetPolicyFields = (
+	policySnapshot: PolicySnapshot,
+	target: RenameTarget,
+): PolicySnapshot | null => {
+	const using = retargetField(policySnapshot.using, target);
+	const withCheck = retargetField(policySnapshot.withCheck, target);
+	if (using === null && withCheck === null) {
+		return null;
+	}
+	return {
+		...policySnapshot,
+		...(using === null ? {} : { using }),
+		...(withCheck === null ? {} : { withCheck }),
+	};
+};
+
+/**
+ * Retargets every stored expression node (D67/D70) that mentions the
+ * renamed table/column — column default, CHECK expression, partial index
+ * `where`, and every table's policies' `using`/`withCheck` — across the
+ * *whole* snapshot, not just the renamed table's own node. This is the
+ * point of storing expressions structurally instead of as rendered text:
+ * without it, a rename leaves stale identifiers behind wherever an
+ * expression mentioned the old name.
+ *
+ * Full-scan, mirroring {@link rewriteForeignKeyTargets}'s established
+ * pattern (this codebase already accepts that cost for foreign keys) --
+ * a `using`/`withCheck` clause can `exists()` into *another* table
+ * (rls.ts's own validator message teaches exactly this: "reach other
+ * tables through exists()"), so a table rename can affect a policy
+ * declared on a completely different table. Confirmed unreachable any
+ * other way by direct reproduction before this function existed (#110
+ * item 18) -- renaming the exists()-referenced table left the other
+ * table's policy pointing at the old name, with nothing else catching it.
+ *
+ * Only entries with an actual match are rewritten (a `hasMatch`-style
+ * short-circuit, same shape as {@link rewriteForeignKeyTargets}) — an
+ * unaffected table or policy keeps its exact original object reference.
+ */
+const rewriteExpressionReferences = (
+	objects: ObjectsRecord,
+	target: RenameTarget,
+): ObjectsRecord => {
+	const withRetargetedTables = entriesWithPrefix(objects, TABLE_PREFIX).reduce(
+		(acc, [key, node]) => {
+			const retargeted = retargetTableFields(asTableSnapshot(node), target);
+			if (retargeted === null) {
+				return acc;
+			}
+			return setKey(acc, key, retargeted);
+		},
+		objects,
+	);
+
+	return entriesWithPrefix(withRetargetedTables, POLICY_PREFIX).reduce(
+		(acc, [key, node]) => {
+			const retargeted = retargetPolicyFields(node as PolicySnapshot, target);
+			if (retargeted === null) {
+				return acc;
+			}
+			return setKey(acc, key, retargeted);
+		},
+		withRetargetedTables,
+	);
+};
+
 // --- table-node level index/FK rewriting -------------------------------
 
 const renameColumnInList = (
@@ -875,6 +1021,17 @@ const applyTableRename = (
 		oldIdentity,
 		newIdentity,
 	);
+	const withExpressionReferences = rewriteExpressionReferences(
+		withForeignKeyTargets,
+		{
+			oldSchema: spec.schemaName,
+			oldTable: spec.oldName,
+			newSchema: spec.schemaName,
+			newTable: spec.newName,
+			oldColumn: null,
+			newColumn: null,
+		},
+	);
 
 	const change: KindChange = {
 		kind: "table",
@@ -886,7 +1043,7 @@ const applyTableRename = (
 	};
 
 	return {
-		objects: withForeignKeyTargets,
+		objects: withExpressionReferences,
 		statements: [
 			...state.statements,
 			renderTableRename(spec),
@@ -954,6 +1111,17 @@ const applyColumnRename = (
 		spec.oldName,
 		spec.newName,
 	);
+	const withExpressionReferences = rewriteExpressionReferences(
+		withForeignKeyReferences,
+		{
+			oldSchema: spec.schemaName,
+			oldTable: effectiveTableName,
+			newSchema: spec.schemaName,
+			newTable: effectiveTableName,
+			oldColumn: spec.oldName,
+			newColumn: spec.newName,
+		},
+	);
 
 	const change: KindChange = {
 		kind: "table",
@@ -965,7 +1133,7 @@ const applyColumnRename = (
 	};
 
 	return {
-		objects: withForeignKeyReferences,
+		objects: withExpressionReferences,
 		statements: [
 			...state.statements,
 			renderColumnRename({ ...spec, tableName: effectiveTableName }),
