@@ -6,6 +6,7 @@ import { getTableMeta, table } from "../src/dsl/table";
 import { inArray, isNotNull } from "../src/expr/operators";
 import type { KindChange } from "../src/kind/object-kind";
 import { tableKind } from "../src/kinds/table-kind";
+import { asTableSnapshot, columnDefault } from "../src/kinds/table-snapshot";
 import {
 	integer,
 	text,
@@ -273,12 +274,13 @@ describe("tableKind.emit — alter", () => {
 		});
 
 		const snapshot = tableKind.serialize(getTableMeta(withQuotedDefault));
-		const snapshotColumns = (
-			snapshot as {
-				readonly columns: ReadonlyArray<{ readonly default: unknown }>;
-			}
-		).columns;
-		expect(snapshotColumns[1]?.default).toBe("'it''s'");
+		// default is a structured node (D67/D70); assert the final SQL via
+		// columnDefault, the same accessor emit uses.
+		const [, titleColumn] = asTableSnapshot(snapshot).columns;
+		if (titleColumn === undefined) {
+			throw new Error("expected a title column");
+		}
+		expect(columnDefault(titleColumn)).toBe("'it''s'");
 
 		const setDefaultChange = expectSingleChange(
 			tableKind.diff(

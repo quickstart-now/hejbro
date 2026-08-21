@@ -8,7 +8,12 @@
 		"table:app.posts": {
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -66,7 +71,23 @@
 					],
 					"name": "posts_slug_published_uidx",
 					"unique": true,
-					"where": "\"app\".\"posts\".\"status\" = 'published'"
+					"where": {
+						"left": {
+							"column": "status",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "posts"
+						},
+						"nodeKind": "comparison",
+						"operator": "=",
+						"right": {
+							"literal": {
+								"literalKind": "string",
+								"value": "published"
+							},
+							"nodeKind": "literal"
+						}
+					}
 				}
 			],
 			"name": "posts",

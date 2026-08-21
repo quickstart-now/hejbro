@@ -70,7 +70,16 @@
 			],
 			"schema": "app",
 			"table": "comments",
-			"using": "\"app\".\"comments\".\"id\" is not null"
+			"using": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "comments"
+				}
+			}
 		},
 		"policy:app.comments.comments_write_all": {
 			"command": "all",
@@ -80,8 +89,26 @@
 			],
 			"schema": "app",
 			"table": "comments",
-			"using": "\"app\".\"comments\".\"id\" is not null",
-			"withCheck": "\"app\".\"comments\".\"id\" is not null"
+			"using": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "comments"
+				}
+			},
+			"withCheck": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "comments"
+				}
+			}
 		},
 		"policy:app.members.members_read_all": {
 			"command": "select",
@@ -91,7 +118,16 @@
 			],
 			"schema": "app",
 			"table": "members",
-			"using": "\"app\".\"members\".\"id\" is not null"
+			"using": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "members"
+				}
+			}
 		},
 		"policy:app.members.members_write_all": {
 			"command": "all",
@@ -101,8 +137,26 @@
 			],
 			"schema": "app",
 			"table": "members",
-			"using": "\"app\".\"members\".\"id\" is not null",
-			"withCheck": "\"app\".\"members\".\"id\" is not null"
+			"using": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "members"
+				}
+			},
+			"withCheck": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "members"
+				}
+			}
 		},
 		"policy:app.projects.projects_read_all": {
 			"command": "select",
@@ -112,7 +166,16 @@
 			],
 			"schema": "app",
 			"table": "projects",
-			"using": "\"app\".\"projects\".\"archived_at\" is null"
+			"using": {
+				"negated": false,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "archived_at",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "projects"
+				}
+			}
 		},
 		"policy:app.projects.projects_write_all": {
 			"command": "all",
@@ -122,8 +185,26 @@
 			],
 			"schema": "app",
 			"table": "projects",
-			"using": "\"app\".\"projects\".\"id\" is not null",
-			"withCheck": "\"app\".\"projects\".\"id\" is not null"
+			"using": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "projects"
+				}
+			},
+			"withCheck": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "projects"
+				}
+			}
 		},
 		"policy:app.task_schedules.task_schedules_read_all": {
 			"command": "select",
@@ -133,7 +214,16 @@
 			],
 			"schema": "app",
 			"table": "task_schedules",
-			"using": "\"app\".\"task_schedules\".\"task_id\" is not null"
+			"using": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "task_id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "task_schedules"
+				}
+			}
 		},
 		"policy:app.task_schedules.task_schedules_write_all": {
 			"command": "all",
@@ -143,8 +233,26 @@
 			],
 			"schema": "app",
 			"table": "task_schedules",
-			"using": "\"app\".\"task_schedules\".\"task_id\" is not null",
-			"withCheck": "\"app\".\"task_schedules\".\"task_id\" is not null"
+			"using": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "task_id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "task_schedules"
+				}
+			},
+			"withCheck": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "task_id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "task_schedules"
+				}
+			}
 		},
 		"policy:app.tasks.tasks_read_all": {
 			"command": "select",
@@ -154,7 +262,55 @@
 			],
 			"schema": "app",
 			"table": "tasks",
-			"using": "exists (select 1 from \"app\".\"projects\" where (\"app\".\"projects\".\"id\" = \"app\".\"tasks\".\"project_id\") and (\"app\".\"projects\".\"archived_at\" is null))"
+			"using": {
+				"negated": false,
+				"nodeKind": "exists",
+				"query": {
+					"from": {
+						"schema": "app",
+						"table": "projects"
+					},
+					"joins": [],
+					"limit": null,
+					"orderBy": [],
+					"projection": {
+						"projectionKind": "constant-one"
+					},
+					"queryKind": "select",
+					"where": {
+						"nodeKind": "logical",
+						"operands": [
+							{
+								"left": {
+									"column": "id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "projects"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"column": "project_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "tasks"
+								}
+							},
+							{
+								"negated": false,
+								"nodeKind": "null-test",
+								"operand": {
+									"column": "archived_at",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "projects"
+								}
+							}
+						],
+						"operator": "and"
+					}
+				}
+			}
 		},
 		"policy:app.tasks.tasks_write_all": {
 			"command": "all",
@@ -164,8 +320,26 @@
 			],
 			"schema": "app",
 			"table": "tasks",
-			"using": "\"app\".\"tasks\".\"id\" is not null",
-			"withCheck": "\"app\".\"tasks\".\"id\" is not null"
+			"using": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "tasks"
+				}
+			},
+			"withCheck": {
+				"negated": true,
+				"nodeKind": "null-test",
+				"operand": {
+					"column": "id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "tasks"
+				}
+			}
 		},
 		"rls:app.comments": {
 			"schema": "app",
@@ -193,13 +367,39 @@
 		"table:app.comments": {
 			"checks": [
 				{
-					"expression": "length(btrim(\"app\".\"comments\".\"body\")) > 0",
+					"expression": {
+						"chunks": [
+							{
+								"chunkKind": "text",
+								"text": "length(btrim("
+							},
+							{
+								"chunkKind": "expr",
+								"expr": {
+									"column": "body",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "comments"
+								}
+							},
+							{
+								"chunkKind": "text",
+								"text": ")) > 0"
+							}
+						],
+						"nodeKind": "sql-template"
+					},
 					"name": "comments_body_not_blank"
 				}
 			],
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -259,13 +459,50 @@
 		"table:app.members": {
 			"checks": [
 				{
-					"expression": "\"app\".\"members\".\"role\" in ('owner', 'admin', 'member')",
+					"expression": {
+						"negated": false,
+						"nodeKind": "in-list",
+						"operand": {
+							"column": "role",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "members"
+						},
+						"values": [
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "owner"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "admin"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "member"
+								},
+								"nodeKind": "literal"
+							}
+						]
+					},
 					"name": "members_role_valid"
 				}
 			],
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -289,7 +526,13 @@
 					}
 				},
 				{
-					"default": "'member'",
+					"default": {
+						"literal": {
+							"literalKind": "string",
+							"value": "member"
+						},
+						"nodeKind": "literal"
+					},
 					"name": "role",
 					"notNull": true,
 					"typeNode": {
@@ -305,13 +548,39 @@
 		"table:app.projects": {
 			"checks": [
 				{
-					"expression": "\"app\".\"projects\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'",
+					"expression": {
+						"chunks": [
+							{
+								"chunkKind": "text",
+								"text": ""
+							},
+							{
+								"chunkKind": "expr",
+								"expr": {
+									"column": "slug",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "projects"
+								}
+							},
+							{
+								"chunkKind": "text",
+								"text": " ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+							}
+						],
+						"nodeKind": "sql-template"
+					},
 					"name": "projects_slug_format"
 				}
 			],
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -369,7 +638,22 @@
 		"table:app.task_schedules": {
 			"checks": [
 				{
-					"expression": "\"app\".\"task_schedules\".\"reminder_at\" < \"app\".\"task_schedules\".\"due_at\"",
+					"expression": {
+						"left": {
+							"column": "reminder_at",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "task_schedules"
+						},
+						"nodeKind": "comparison",
+						"operator": "<",
+						"right": {
+							"column": "due_at",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "task_schedules"
+						}
+					},
 					"name": "task_schedules_reminder_before_due"
 				}
 			],
@@ -425,25 +709,122 @@
 		"table:app.tasks": {
 			"checks": [
 				{
-					"expression": "char_length(\"app\".\"tasks\".\"title\") between 1 and 200",
+					"expression": {
+						"chunks": [
+							{
+								"chunkKind": "text",
+								"text": "char_length("
+							},
+							{
+								"chunkKind": "expr",
+								"expr": {
+									"column": "title",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "tasks"
+								}
+							},
+							{
+								"chunkKind": "text",
+								"text": ") between 1 and 200"
+							}
+						],
+						"nodeKind": "sql-template"
+					},
 					"name": "tasks_title_length"
 				},
 				{
-					"expression": "\"app\".\"tasks\".\"status\" in ('todo', 'in_progress', 'done')",
+					"expression": {
+						"negated": false,
+						"nodeKind": "in-list",
+						"operand": {
+							"column": "status",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "tasks"
+						},
+						"values": [
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "todo"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "in_progress"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "done"
+								},
+								"nodeKind": "literal"
+							}
+						]
+					},
 					"name": "tasks_status_valid"
 				},
 				{
-					"expression": "\"app\".\"tasks\".\"priority\" between 1 and 5",
+					"expression": {
+						"lowerBound": {
+							"literal": {
+								"literalKind": "number",
+								"value": 1
+							},
+							"nodeKind": "literal"
+						},
+						"negated": false,
+						"nodeKind": "between",
+						"operand": {
+							"column": "priority",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "tasks"
+						},
+						"upperBound": {
+							"literal": {
+								"literalKind": "number",
+								"value": 5
+							},
+							"nodeKind": "literal"
+						}
+					},
 					"name": "tasks_priority_range"
 				},
 				{
-					"expression": "\"app\".\"tasks\".\"estimate_hours\" >= 0",
+					"expression": {
+						"left": {
+							"column": "estimate_hours",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "tasks"
+						},
+						"nodeKind": "comparison",
+						"operator": ">=",
+						"right": {
+							"literal": {
+								"literalKind": "number",
+								"value": 0
+							},
+							"nodeKind": "literal"
+						}
+					},
 					"name": "tasks_estimate_hours_non_negative"
 				}
 			],
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,
@@ -466,7 +847,13 @@
 					}
 				},
 				{
-					"default": "'todo'",
+					"default": {
+						"literal": {
+							"literalKind": "string",
+							"value": "todo"
+						},
+						"nodeKind": "literal"
+					},
 					"name": "status",
 					"notNull": true,
 					"typeNode": {
@@ -474,7 +861,13 @@
 					}
 				},
 				{
-					"default": "3",
+					"default": {
+						"literal": {
+							"literalKind": "number",
+							"value": 3
+						},
+						"nodeKind": "literal"
+					},
 					"name": "priority",
 					"notNull": true,
 					"typeNode": {
@@ -521,7 +914,23 @@
 					],
 					"name": "tasks_project_id_title_idx",
 					"unique": true,
-					"where": "\"app\".\"tasks\".\"status\" <> 'done'"
+					"where": {
+						"left": {
+							"column": "status",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "tasks"
+						},
+						"nodeKind": "comparison",
+						"operator": "<>",
+						"right": {
+							"literal": {
+								"literalKind": "string",
+								"value": "done"
+							},
+							"nodeKind": "literal"
+						}
+					}
 				}
 			],
 			"name": "tasks",

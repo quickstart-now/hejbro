@@ -1,13 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { notNullWithoutDefaultWarnings } from "../src/engine/core-validators";
+import { encodeExprNode } from "../src/expr/codec";
 import type { KindChange } from "../src/kind/object-kind";
+import type { JsonValue } from "../src/snapshot/stable-json";
+
+// #110: default is now a structured expression node (D67/D70); this
+// builds a minimal valid one -- notNullWithoutDefaultWarnings only checks
+// presence (columnDefault(...) === null), not content.
+const stringDefault = (value: string): JsonValue =>
+	encodeExprNode({
+		nodeKind: "literal",
+		literal: { literalKind: "string", value },
+	});
 
 const tableSnapshot = (
 	name: string,
 	columns: ReadonlyArray<{
 		readonly name: string;
 		readonly notNull?: true;
-		readonly default?: string;
+		readonly default?: JsonValue;
 	}>,
 ) => ({
 	schema: "app",
@@ -21,12 +32,12 @@ const alterChange = (
 	previousColumns: ReadonlyArray<{
 		readonly name: string;
 		readonly notNull?: true;
-		readonly default?: string;
+		readonly default?: JsonValue;
 	}>,
 	nextColumns: ReadonlyArray<{
 		readonly name: string;
 		readonly notNull?: true;
-		readonly default?: string;
+		readonly default?: JsonValue;
 	}>,
 ): KindChange => ({
 	kind: "table",
@@ -41,7 +52,7 @@ const createChange = (
 	columns: ReadonlyArray<{
 		readonly name: string;
 		readonly notNull?: true;
-		readonly default?: string;
+		readonly default?: JsonValue;
 	}>,
 ): KindChange => ({
 	kind: "table",
@@ -86,7 +97,7 @@ describe("notNullWithoutDefaultWarnings", () => {
 			[{ name: "id", notNull: true }],
 			[
 				{ name: "id", notNull: true },
-				{ name: "status", notNull: true, default: "'draft'" },
+				{ name: "status", notNull: true, default: stringDefault("draft") },
 			],
 		);
 

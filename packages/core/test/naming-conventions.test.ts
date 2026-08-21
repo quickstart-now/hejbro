@@ -2,19 +2,46 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	NODE_KIND_TO_SNAPSHOT,
+	PROJECTION_KIND_TO_SNAPSHOT,
+} from "../src/expr/codec";
+import {
+	and,
+	between,
 	buildSnapshot,
+	check,
 	createDefaultRegistry,
 	defineTrigger,
 	emptySnapshot,
+	eq,
+	exists,
 	generateMigration,
 	getTableMeta,
 	grant,
+	gt,
+	inArray,
+	index,
+	integer,
+	isNotNull,
+	isNull,
 	migrationPrefixStrategies,
+	not,
+	rls,
 	roleName,
 	schema,
+	select,
+	sql,
 	table,
+	timestamptz,
 	uuid,
 } from "../src/index";
+import type { JsonValue } from "../src/snapshot/stable-json";
+import {
+	REACHABLE_NODE_KINDS,
+	REACHABLE_PROJECTION_KINDS,
+	UNREACHABLE_NODE_KINDS,
+	UNREACHABLE_PROJECTION_KINDS,
+} from "./expr/reachable-kinds";
 
 // D57 (#128): output tokens hejbro authors itself must be kebab-case
 // (snapshot values, identity segments, kind ids, diagnostic codes, config
@@ -186,5 +213,245 @@ describe("D57 naming convention: output tokens are kebab-case", () => {
 			.map((warning) => warning.code)
 			.filter((code) => !KEBAB_CASE.test(code));
 		expect(offenders).toEqual([]);
+	});
+});
+
+// D70 (#110): every discriminator anywhere in a serialized expression
+// subtree is kebab-case (stated as a rule, not a node list, so it can't go
+// stale as nodes are added — nodeKind, projectionKind, joinKind, queryKind,
+// literalKind, chunkKind today); every field naming another schema/table/
+// function object uses D57's vocabulary. Deliberately generic — not a list
+// of known node shapes — so a brand-new node kind is checked automatically,
+// with no carve-out to add or forget.
+const FORBIDDEN_REFERENCE_KEYS = [
+	"schemaName",
+	"tableName",
+	"columnName",
+	"columnNames",
+	"functionName",
+];
+
+/**
+ * This relies on the convention that every discriminator field is named
+ * `*Kind` (true across `ast.ts` today: `nodeKind`, `projectionKind`,
+ * `joinKind`, `queryKind`, `literalKind`, `chunkKind`). A discriminator
+ * introduced under another name would not be checked here.
+ *
+ * SQL's own tokens (`ComparisonNode.operator`, `OrderByTerm.direction`)
+ * are excluded *by construction*, not by an exemption list: neither field
+ * name ends in `Kind`, so this walker never inspects them (D36).
+ */
+const walkJson = (
+	value: JsonValue,
+	visit: (key: string, value: JsonValue) => void,
+): void => {
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			walkJson(entry, visit);
+		}
+		return;
+	}
+	if (typeof value !== "object" || value === null) {
+		return;
+	}
+	for (const [key, entryValue] of Object.entries(value)) {
+		if (entryValue === undefined) {
+			continue;
+		}
+		visit(key, entryValue);
+		walkJson(entryValue, visit);
+	}
+};
+
+describe("D70 naming convention: expression subtree discriminators are kebab-case", () => {
+	// Exercises every reachable ExprNode/ProjectionNode kind at least once
+	// (all but `plpgsqlRef`, `allColumns`, `columns` -- see
+	// UNREACHABLE_NODE_KINDS/UNREACHABLE_PROJECTION_KINDS below for why
+	// those three are excluded on purpose) so the completeness assertion
+	// further down has something real to compare the maps against, not
+	// just whatever a narrower fixture happened to construct.
+	const authors = table(app, "authors", { id: uuid().primaryKey() });
+	const posts = table(
+		app,
+		"posts",
+		{
+			id: uuid().primaryKey(),
+			authorId: uuid().notNull(),
+			price: integer(),
+			publishedAt: timestamptz().defaultNow(),
+		},
+		(t) => ({
+			checks: [
+				// comparison, literal (number)
+				check("posts_price_check", gt(t.price, 0)),
+				// logical(and), between, inList, not, nullTest
+				check(
+					"posts_price_range_check",
+					and(
+						between(t.price, 0, 1000),
+						inArray(t.price, [10, 20, 30]),
+						not(isNull(t.price)),
+					),
+				),
+				// sqlTemplate (text chunk + expr chunk, columnRef inside)
+				check("posts_price_sql_template_check", sql`${t.price} > 0`),
+				// rawSql
+				check("posts_price_raw_sql_check", sql.raw("price > 0")),
+			],
+			indexes: [
+				index("posts_published_idx")
+					.on(t.publishedAt)
+					.where(isNotNull(t.publishedAt)),
+			],
+		}),
+	);
+	const comments = table(
+		app,
+		"comments",
+		{ id: uuid().primaryKey(), postId: uuid().notNull() },
+		(t) => ({
+			rls: rls.enabled({
+				read: rls
+					.policy("comments_read_visible")
+					.for("select")
+					.to("anon")
+					.using(
+						// exists (constantOne projection, join, where, orderBy, limit)
+						exists(
+							select(posts)
+								.innerJoin(authors, eq(posts.authorId, authors.id))
+								.where(eq(posts.id, t.postId))
+								.orderBy({ by: posts.publishedAt, direction: "desc" })
+								.limit(1),
+						),
+					),
+			}),
+		}),
+	);
+
+	const result = generateMigration({
+		declarations: [app, authors, posts, comments],
+		previousSnapshot: emptySnapshot,
+		registry,
+	});
+
+	it("every *Kind field's value is kebab-case, and no D57 camelCase reference key survives, across a snapshot exercising column default, CHECK, partial index, and a cross-table exists() policy", () => {
+		const kebabOffenders: Array<{
+			readonly key: string;
+			readonly value: string;
+		}> = [];
+		const forbiddenKeyOffenders: Array<string> = [];
+		for (const node of Object.values(result.snapshot.objects)) {
+			walkJson(node, (key, value) => {
+				if (FORBIDDEN_REFERENCE_KEYS.includes(key)) {
+					forbiddenKeyOffenders.push(key);
+					return;
+				}
+				if (key.endsWith("Kind") && typeof value === "string") {
+					if (!KEBAB_CASE.test(value)) {
+						kebabOffenders.push({ key, value });
+					}
+				}
+			});
+		}
+		expect(forbiddenKeyOffenders).toEqual([]);
+		expect(kebabOffenders).toEqual([]);
+	});
+
+	// reviewer round 2/3 (🔴2b, refined by items 65/72): the walker above
+	// only ever sees whatever the fixture happens to construct -- it can
+	// prove "everything this fixture reached is spelled correctly", never
+	// "everything the map claims to support was checked". Closing that
+	// needs the map's own key set compared against what got reached, with
+	// every gap accounted for explicitly. This must NOT decay into a
+	// silent allowlist (#87's rejected pattern) -- every entry in
+	// `UNREACHABLE_NODE_KINDS`/`UNREACHABLE_PROJECTION_KINDS` carries a
+	// reason and a category (constructional vs. current-code-dependent,
+	// the latter backed by an actual pinning test below, not just prose --
+	// see `expr/reachable-kinds.ts` for the full explanation).
+	//
+	// `REACHABLE_NODE_KINDS`/`REACHABLE_PROJECTION_KINDS` and the
+	// unreachable sets both come from `expr/reachable-kinds.ts` -- the
+	// SAME array `retarget.test.ts`'s reference-identity loop iterates
+	// (#110 item 72). Before that module existed, this file and
+	// `retarget.test.ts` each kept their own separately-maintained node-
+	// kind list, which is exactly the kind of duplication that let a real
+	// gap slip through one fix-a-case cycle already.
+	//
+	// Backs the two `current-code-dependent` entries in that module: if
+	// buildExists
+	// is ever changed to pass through the real projection instead of
+	// hardcoding constantOne, THIS test goes red first, forcing whoever
+	// makes that change to also revisit the unreachable-set above (which
+	// would otherwise go stale silently, reproducing the exact failure
+	// mode the completeness assertion below exists to prevent).
+	it("exists()/notExists() always normalize their subquery's projection to constantOne (backs the projection-kind unreachable-set entries above)", () => {
+		const widgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			label: uuid().notNull(),
+		});
+		const viaAllColumns = exists(select(widgets));
+		const viaColumns = exists(select({ id: widgets.id }, widgets));
+		expect(viaAllColumns.exprNode).toMatchObject({
+			nodeKind: "exists",
+			query: { projection: { projectionKind: "constantOne" } },
+		});
+		expect(viaColumns.exprNode).toMatchObject({
+			nodeKind: "exists",
+			query: { projection: { projectionKind: "constantOne" } },
+		});
+	});
+
+	it("the encoding maps' full vocabulary equals what the fixture above actually reached, plus the explicitly-unreachable set (no silent allowlist)", () => {
+		const seenNodeKinds = new Set<string>();
+		const seenProjectionKinds = new Set<string>();
+		for (const node of Object.values(result.snapshot.objects)) {
+			walkJson(node, (key, value) => {
+				if (key === "nodeKind" && typeof value === "string") {
+					seenNodeKinds.add(value);
+				}
+				if (key === "projectionKind" && typeof value === "string") {
+					seenProjectionKinds.add(value);
+				}
+			});
+		}
+
+		// expected sets come from `expr/reachable-kinds.ts` -- the same
+		// source `retarget.test.ts`'s loop iterates (item 72) -- not a
+		// second, separately-maintained list here.
+		const expectedReachableNodeKindValues = REACHABLE_NODE_KINDS.map(
+			(kind) => NODE_KIND_TO_SNAPSHOT[kind],
+		);
+		expect([...seenNodeKinds].sort()).toEqual(
+			[...expectedReachableNodeKindValues].sort(),
+		);
+		// every declared-unreachable entry really is unreached by the
+		// fixture -- otherwise its reason is already stale.
+		const declaredUnreachableNodeKindValues = new Set(
+			UNREACHABLE_NODE_KINDS.map((entry) => NODE_KIND_TO_SNAPSHOT[entry.kind]),
+		);
+		expect(
+			[...seenNodeKinds].filter((value) =>
+				declaredUnreachableNodeKindValues.has(value),
+			),
+		).toEqual([]);
+
+		const expectedReachableProjectionKindValues =
+			REACHABLE_PROJECTION_KINDS.map(
+				(kind) => PROJECTION_KIND_TO_SNAPSHOT[kind],
+			);
+		expect([...seenProjectionKinds].sort()).toEqual(
+			[...expectedReachableProjectionKindValues].sort(),
+		);
+		const declaredUnreachableProjectionKindValues = new Set(
+			UNREACHABLE_PROJECTION_KINDS.map(
+				(entry) => PROJECTION_KIND_TO_SNAPSHOT[entry.kind],
+			),
+		);
+		expect(
+			[...seenProjectionKinds].filter((value) =>
+				declaredUnreachableProjectionKindValues.has(value),
+			),
+		).toEqual([]);
 	});
 });

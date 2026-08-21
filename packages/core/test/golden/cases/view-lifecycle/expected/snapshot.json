@@ -8,7 +8,12 @@
 		"table:app.posts": {
 			"columns": [
 				{
-					"default": "gen_random_uuid()",
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
 					"name": "id",
 					"notNull": true,
 					"primaryKey": true,

@@ -11,6 +11,7 @@ import type {
 	TableSnapshot,
 } from "./table-snapshot";
 import {
+	checkExpression,
 	columnDefault,
 	columnNotNull,
 	columnPrimaryKey,
@@ -88,7 +89,7 @@ const primaryKeyConstraint = (
 const checkConstraintLines = (snapshot: TableSnapshot): ReadonlyArray<string> =>
 	tableChecks(snapshot).map(
 		(check) =>
-			`constraint ${quoteIdentifier(check.name)} check (${check.expression})`,
+			`constraint ${quoteIdentifier(check.name)} check (${checkExpression(check)})`,
 	);
 
 /** Renders `create table … (…);` for a table snapshot, columns in declaration order, then table-level constraints (primary key, then CHECKs, D50). */
@@ -185,7 +186,7 @@ export const addCheckConstraintSql = (
 	tableName: string,
 	check: CheckSnapshot,
 ): string =>
-	`alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(check.name)} check (${check.expression});`;
+	`alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(check.name)} check (${checkExpression(check)});`;
 
 /** Renders `alter table … drop constraint …;` — shared by foreign keys and checks (the constraint namespace is one per table in Postgres). */
 export const dropConstraintSql = (
