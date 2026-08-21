@@ -1,21 +1,41 @@
 import type { ExecException } from "node:child_process";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readdir, rm, symlink } from "node:fs/promises";
+import {
+	cp,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-// Task 17 acceptance: drives the *built* CLI (dist/cli.js, not any
+// Task 24 acceptance: drives the *built* CLI (dist/cli.js, not any
 // in-process import) against a tmp copy of this example **with its
 // committed migrations/ and snapshot already in place** — proving the
-// committed chain is what a fresh `verify`/`generate` sees, mirroring
-// examples/cli-smoke/test/e2e.test.ts's tmp-copy harness.
+// committed chain is what a fresh `verify` sees, mirroring
+// examples/postgres/test/cli.test.ts's tmp-copy harness. `generate`'s
+// "no changes" path never renders warnings (packages/cli/src/commands/
+// generate.ts short-circuits with `stderr: null` before running
+// validators' output through the renderer) — so the warning assertion
+// below adds one harmless nullable column to force a real change first.
 
 const EXAMPLE_ROOT = join(import.meta.dirname, "..");
 const CLI_PACKAGE_ROOT = join(EXAMPLE_ROOT, "..", "..", "packages", "cli");
 const CLI_PATH = join(CLI_PACKAGE_ROOT, "dist", "cli.js");
 const CLI_INDEX_PATH = join(CLI_PACKAGE_ROOT, "dist", "index.js");
+const SUPABASE_PACKAGE_ROOT = join(
+	EXAMPLE_ROOT,
+	"..",
+	"..",
+	"packages",
+	"supabase",
+);
 
 /** Mirrors packages/cli/test/support/cli-runner.ts's `assertBuiltCli` (#102) — a confusing "no such file" spawn error otherwise hides an incomplete build. */
 const assertBuiltCli = (): void => {
@@ -78,7 +98,7 @@ const runCli = (cwd: string, args: ReadonlyArray<string>): Promise<CliRun> =>
 let cwd: string;
 
 beforeEach(async () => {
-	cwd = await mkdtemp(join(tmpdir(), "hejbro-example-postgres-"));
+	cwd = await mkdtemp(join(tmpdir(), "hejbro-example-supabase-"));
 	await Promise.all([
 		cp(join(EXAMPLE_ROOT, "hejbro.config.ts"), join(cwd, "hejbro.config.ts")),
 		cp(
@@ -96,31 +116,64 @@ beforeEach(async () => {
 		),
 	]);
 	// A tmp dir outside the workspace has no node_modules, so the
-	// fixture's `import { ... } from "hejbro"` (U2 self-import cycle)
-	// can't resolve on its own — link straight to the built package.
-	await mkdir(join(cwd, "node_modules"), { recursive: true });
+	// fixture's `import { ... } from "hejbro"`/`"@hejbro/supabase"` can't
+	// resolve on its own — link straight to the built packages.
+	await mkdir(join(cwd, "node_modules", "@hejbro"), { recursive: true });
 	await symlink(CLI_PACKAGE_ROOT, join(cwd, "node_modules", "hejbro"), "dir");
+	await symlink(
+		SUPABASE_PACKAGE_ROOT,
+		join(cwd, "node_modules", "@hejbro", "supabase"),
+		"dir",
+	);
 });
 
 afterEach(async () => {
 	await rm(cwd, { recursive: true, force: true });
 });
 
-describe("hejbro cli (built CLI, tmp copy of examples/postgres with its committed chain)", () => {
-	it("verify passes and generate reports no changes against the committed chain", async () => {
+describe("hejbro cli (built CLI, tmp copy of examples/supabase with its committed chain)", () => {
+	it("verify passes against the committed chain", async () => {
 		const verifyResult = await runCli(cwd, ["verify"]);
 		expect(verifyResult.exitCode).toBe(0);
 		expect(verifyResult.stdout).toContain("verify:");
-
-		const generateResult = await runCli(cwd, ["generate"]);
-		expect(generateResult.exitCode).toBe(0);
-		expect(generateResult.stdout).toContain(
-			"no changes — snapshot already matches your declarations.",
-		);
 
 		const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
 			(name) => name.endsWith(".sql"),
 		);
 		expect(migrationFiles).toHaveLength(4);
+	});
+
+	it("generate reports no changes on the committed chain, and both preset warnings render on stderr with exit 0 once something actually changes", async () => {
+		const noChangeResult = await runCli(cwd, ["generate"]);
+		expect(noChangeResult.exitCode).toBe(0);
+		expect(noChangeResult.stdout).toContain(
+			"no changes — snapshot already matches your declarations.",
+		);
+		expect(noChangeResult.stderr).toBe("");
+
+		const schemaPath = join(cwd, "src", "app.schema.ts");
+		const schemaSource = await readFile(schemaPath, "utf8");
+		await writeFile(
+			schemaPath,
+			schemaSource.replace(
+				"title: text().notNull(),\n});",
+				"title: text().notNull(),\n\tnote: text(),\n});",
+			),
+		);
+
+		const changedResult = await runCli(cwd, ["generate"]);
+		expect(changedResult.exitCode).toBe(0);
+		expect(changedResult.stdout).toContain("2 warning(s) — see below");
+		expect(changedResult.stderr).toContain(
+			"warning[exposed-table-without-rls]",
+		);
+		expect(changedResult.stderr).toContain(
+			"warning[view-over-rls-without-security-invoker]",
+		);
+
+		const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
+			(name) => name.endsWith(".sql"),
+		);
+		expect(migrationFiles).toHaveLength(5);
 	});
 });

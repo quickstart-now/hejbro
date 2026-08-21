@@ -29,9 +29,9 @@ if [ -n "$SEED_FILE" ]; then
   psql -d fresh < "$SEED_FILE"
 fi
 
-# "|| true" keeps a no-match glob from tripping set -e/pipefail before the
-# guard below gets to print its own message.
-CHAIN_COUNT="$(ls -1 "$EXAMPLE_DIR"/migrations/*.sql 2>/dev/null | wc -l | tr -d ' ' || true)"
+# "|| true" keeps a missing/empty migrations dir from tripping set -e/pipefail
+# before the guard below gets to print its own message.
+CHAIN_COUNT="$(find "$EXAMPLE_DIR/migrations" -maxdepth 1 -name '*.sql' 2>/dev/null | wc -l | tr -d ' ' || true)"
 [ "$CHAIN_COUNT" -ge 1 ] || { echo "no committed migrations in $EXAMPLE_DIR/migrations — nothing to compare" >&2; exit 2; }
 
 echo "== applying committed chain to 'chain'"
@@ -50,9 +50,30 @@ cp -R "$EXAMPLE_DIR" "$WORK/example"
 # a follow-up if an example ever overrides it.
 rm -rf "$WORK/example/migrations" "$WORK/example/node_modules" "$WORK/example/hejbro.snapshot.json"
 cp "$EXAMPLE_DIR/hejbro.snapshot.json" "$WORK/final.snapshot.json"
-(cd "$WORK/example" && mkdir -p node_modules && ln -s "$EXAMPLE_DIR/node_modules/hejbro" node_modules/hejbro \
-  && node "$CLI" init >/dev/null && node "$CLI" generate >/dev/null)
-FRESH_COUNT="$(ls -1 "$WORK"/example/migrations/*.sql 2>/dev/null | wc -l | tr -d ' ' || true)"
+# Relink every one of the example's own node_modules entries (not just
+# "hejbro") with absolute targets — an example that imports a preset
+# package (e.g. examples/supabase's "@hejbro/supabase") needs it resolvable
+# too, and `cp -R`'s copies of pnpm's relative symlinks would otherwise
+# point nowhere from $WORK's different directory depth. Scoped packages
+# (`@scope/name`) get their own directory so each entry underneath still
+# resolves.
+mkdir -p "$WORK/example/node_modules"
+for entry in "$EXAMPLE_DIR"/node_modules/*; do
+  name="$(basename "$entry")"
+  case "$name" in
+    .*) continue ;;
+  esac
+  if [ "${name#@}" != "$name" ]; then
+    mkdir -p "$WORK/example/node_modules/$name"
+    for scoped in "$entry"/*; do
+      ln -s "$scoped" "$WORK/example/node_modules/$name/$(basename "$scoped")"
+    done
+  else
+    ln -s "$entry" "$WORK/example/node_modules/$name"
+  fi
+done
+(cd "$WORK/example" && node "$CLI" init >/dev/null && node "$CLI" generate >/dev/null)
+FRESH_COUNT="$(find "$WORK/example/migrations" -maxdepth 1 -name '*.sql' 2>/dev/null | wc -l | tr -d ' ' || true)"
 [ "$FRESH_COUNT" -eq 1 ] || { echo "fresh generate produced $FRESH_COUNT migrations (expected exactly 1) — the two-path comparison did not run" >&2; exit 1; }
 FRESH="$(ls "$WORK"/example/migrations/*.sql)"
 echo "   fresh migration: $(basename "$FRESH")"

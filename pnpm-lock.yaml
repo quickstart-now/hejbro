@@ -52,22 +52,6 @@ importers:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(jiti@2.7.0))
 
-  examples/dd-land:
-    dependencies:
-      '@hejbro/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@hejbro/supabase':
-        specifier: workspace:*
-        version: link:../../packages/supabase
-    devDependencies:
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.11(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(jiti@2.7.0))
-
   examples/postgres:
     dependencies:
       hejbro:
@@ -86,6 +70,22 @@ importers:
       '@hejbro/core':
         specifier: workspace:*
         version: link:../../packages/core
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(jiti@2.7.0))
+
+  examples/supabase:
+    dependencies:
+      '@hejbro/supabase':
+        specifier: workspace:*
+        version: link:../../packages/supabase
+      hejbro:
+        specifier: workspace:*
+        version: link:../../packages/cli
     devDependencies:
       typescript:
         specifier: 'catalog:'

@@ -1,0 +1,276 @@
+{
+	"dialect": "postgres",
+	"hejbroSnapshot": 3,
+	"objects": {
+		"grant:app.allTablesPrivileges.anon": {
+			"grantKind": "allTablesPrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.allTablesPrivileges.authenticated": {
+			"grantKind": "allTablesPrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "authenticated",
+			"schema": "app"
+		},
+		"grant:app.defaultTablePrivileges.anon": {
+			"grantKind": "defaultTablePrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.defaultTablePrivileges.authenticated": {
+			"grantKind": "defaultTablePrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "authenticated",
+			"schema": "app"
+		},
+		"policy:app.attachment_blobs.attachment_blobs_read_own": {
+			"command": "select",
+			"name": "attachment_blobs_read_own",
+			"roles": [
+				"authenticated"
+			],
+			"schema": "app",
+			"table": "attachment_blobs",
+			"using": "exists (select 1 from \"app\".\"attachments\" inner join \"app\".\"profiles\" on \"app\".\"profiles\".\"id\" = \"app\".\"attachments\".\"profile_id\" where (\"app\".\"attachments\".\"id\" = \"app\".\"attachment_blobs\".\"attachment_id\") and (\"app\".\"profiles\".\"user_id\" = auth.uid()))"
+		},
+		"policy:app.attachments.attachments_read_own": {
+			"command": "select",
+			"name": "attachments_read_own",
+			"roles": [
+				"authenticated"
+			],
+			"schema": "app",
+			"table": "attachments",
+			"using": "exists (select 1 from \"app\".\"profiles\" where (\"app\".\"profiles\".\"id\" = \"app\".\"attachments\".\"profile_id\") and (\"app\".\"profiles\".\"user_id\" = auth.uid()))"
+		},
+		"policy:app.profiles.profiles_read_own": {
+			"command": "select",
+			"name": "profiles_read_own",
+			"roles": [
+				"authenticated"
+			],
+			"schema": "app",
+			"table": "profiles",
+			"using": "\"app\".\"profiles\".\"user_id\" = auth.uid()"
+		},
+		"rls:app.attachment_blobs": {
+			"schema": "app",
+			"table": "attachment_blobs"
+		},
+		"rls:app.attachments": {
+			"schema": "app",
+			"table": "attachments"
+		},
+		"rls:app.profiles": {
+			"schema": "app",
+			"table": "profiles"
+		},
+		"schema:app": {
+			"schemaName": "app"
+		},
+		"supabase-storage-bucket:attachments": {
+			"allowedMimeTypes": [
+				"image/png",
+				"image/jpeg",
+				"application/pdf"
+			],
+			"fileSizeLimit": 10485760,
+			"name": "attachments"
+		},
+		"table:app.attachment_blobs": {
+			"columns": [
+				{
+					"name": "attachment_id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "storage_path",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "checksum",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"attachment_id"
+					],
+					"name": "attachment_blobs_attachment_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.attachments"
+				}
+			],
+			"indexes": [],
+			"name": "attachment_blobs",
+			"schema": "app"
+		},
+		"table:app.attachments": {
+			"checks": [
+				{
+					"expression": "\"app\".\"attachments\".\"size_bytes\" > 0",
+					"name": "attachments_size_bytes_positive"
+				},
+				{
+					"expression": "\"app\".\"attachments\".\"content_type\" in ('image/png', 'image/jpeg')",
+					"name": "attachments_content_type_allowed"
+				}
+			],
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "profile_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "size_bytes",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "bigint"
+					}
+				},
+				{
+					"name": "content_type",
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "archived_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"profile_id"
+					],
+					"name": "attachments_profile_id_fk",
+					"onDelete": "cascade",
+					"onUpdate": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.profiles"
+				}
+			],
+			"indexes": [],
+			"name": "attachments",
+			"schema": "app"
+		},
+		"table:app.drafts": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "title",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "drafts",
+			"schema": "app"
+		},
+		"table:app.profiles": {
+			"columns": [
+				{
+					"default": "gen_random_uuid()",
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "user_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "display_name",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"user_id"
+					],
+					"name": "profiles_user_id_fk",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "auth.users"
+				}
+			],
+			"indexes": [],
+			"name": "profiles",
+			"schema": "app"
+		},
+		"view:app.profiles_public": {
+			"columns": [
+				"id",
+				"user_id",
+				"display_name"
+			],
+			"name": "profiles_public",
+			"schema": "app",
+			"selectSql": "select \"id\", \"user_id\", \"display_name\" from \"app\".\"profiles\""
+		}
+	}
+}
