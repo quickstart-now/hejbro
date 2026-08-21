@@ -234,6 +234,50 @@ describe("rlsUncachedAuthCallValidator", () => {
 		expect(result.warnings[0]?.code).toBe("rls-uncached-auth-call");
 	});
 
+	it("finds a plain authUid() inside an exists(...) subquery's orderBy term", () => {
+		// buildExists (packages/core/src/query/select.ts) only overrides the
+		// wrapped query's projection to constantOne -- it does not clear
+		// orderBy, so a term set via the public .orderBy(...) builder before
+		// exists(...) wraps the query survives into the persisted
+		// ExistsNode untouched. Confirmed directly against the built
+		// ExprNode before writing this test: exists(select(t).where(...)
+		// .orderBy(authUid())) produces query.orderBy[0].expr === the
+		// uncached functionCall node. Meaningless for what EXISTS actually
+		// returns, but still a real, type-checking path through the DSL,
+		// so it must warn.
+		const profiles = table(app, "profiles", {
+			id: uuid().primaryKey(),
+			userId: uuid().notNull(),
+		});
+		const accounts = table(
+			app,
+			"accounts",
+			{ id: uuid().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readOwn: rls
+						.policy("accounts_read_own")
+						.for("select")
+						.to("authenticated")
+						.using(
+							exists(
+								select(profiles)
+									.where(eq(profiles.id, profiles.id))
+									.orderBy(authUid()),
+							),
+						),
+				}),
+			}),
+		);
+		const result = generateMigration({
+			declarations: [app, profiles, accounts],
+			previousSnapshot: emptySnapshot,
+			validators: [rlsUncachedAuthCallValidator],
+		});
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]?.code).toBe("rls-uncached-auth-call");
+	});
+
 	it("does not warn on an exists(...) subquery with no where clause (nothing to walk)", () => {
 		const profiles = table(app, "profiles", { id: uuid().primaryKey() });
 		const accounts = table(

@@ -39,10 +39,10 @@ const whereClauseOf = (query: SelectNode): ReadonlyArray<ExprNode> => {
 };
 
 /**
- * An `exists(...)` node's child expressions: its `where` clause and each
- * join's `on` condition. Split out from {@link childrenOf} (a separate
- * module-scope function, not a nested one) to keep both functions' own
- * complexity low (D71).
+ * An `exists(...)` node's child expressions: its `where` clause, each
+ * join's `on` condition, and each `orderBy` term's expression. Split out
+ * from {@link childrenOf} (a separate module-scope function, not a nested
+ * one) to keep both functions' own complexity low (D71).
  *
  * Deliberately descends into these, unlike core's own `someExprNode`
  * (`packages/core/src/expr/walk.ts`), which treats `exists` as opaque —
@@ -52,13 +52,29 @@ const whereClauseOf = (query: SelectNode): ReadonlyArray<ExprNode> => {
  * `exists(select(...).where(eq(profiles.userId, authUid())))` is exactly
  * as expensive as one directly in `using(...)` — and this is the common
  * real shape: `examples/supabase`'s own policies hit this path twice out
- * of the three real uncached calls. Projection columns and `orderBy`
- * aren't walked: an `exists()` subquery's projection is always
- * `constantOne` (D70), and ordering is meaningless inside `exists(...)`.
+ * of the three real uncached calls.
+ *
+ * `orderBy` is walked for the same reason, not skipped: `exists()`
+ * (`buildExists` in `packages/core/src/query/select.ts`) only overrides
+ * the subquery's `projection` to `constantOne` -- it does not clear
+ * `orderBy`, so a term set via the public `.orderBy(...)` builder before
+ * `exists(...)` wraps the query survives into the persisted `ExistsNode`
+ * untouched. Confirmed directly: `exists(select(t).where(...).orderBy(
+ * authUid()))` produces an `ExistsNode` whose `query.orderBy[0].expr` is
+ * the same uncached `functionCall` node an unwalked `orderBy` would miss
+ * warning about, even though it's meaningless for what `EXISTS` actually
+ * returns.
+ *
+ * Projection *is* skipped, and that omission is the one that's actually
+ * unreachable: `buildExists` always replaces `projection` with the fixed
+ * `constantOne` shape (D70) before the query becomes an `ExistsNode`, so
+ * there is no path through the public DSL for an expression -- cached or
+ * not -- to end up in an `exists()` subquery's projection at all.
  */
 const childrenOfExists = (node: ExistsNode): ReadonlyArray<ExprNode> => [
 	...whereClauseOf(node.query),
 	...node.query.joins.map((join) => join.on),
+	...node.query.orderBy.map((term) => term.expr),
 ];
 
 /** `comparison`/`not`/`nullTest`'s fixed-arity children — the other half of {@link childrenOf}'s switch, split out to keep each half's own complexity low (D71). */
