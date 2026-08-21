@@ -1,7 +1,7 @@
 name: ci
 on:
   push:
-    branches: [dev, main]
+    branches: [dev, main, phase8-ci-fetch-guard]
   pull_request:
 jobs:
   verify:
