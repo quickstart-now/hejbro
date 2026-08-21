@@ -65,15 +65,16 @@ hejbro generate
 ```sql
 -- hejbro migration
 -- + schema app [new]
--- + table app.comments [new]
--- + table app.members [new]
-…
+-- + table app.projects [new]
+-- + function app.archive_project [new]
+-- + rls app.projects [new]
+-- + policy app.projects.projects_read_all [new]
 -- parent-snapshot: sha256:f86ae7eb…
--- snapshot: sha256:454ce6cc…
+-- snapshot: sha256:97e0b3df…
 
 create schema "app";
 
-create table "app"."comments" (
+create table "app"."projects" (
 	"id" uuid not null default gen_random_uuid(),
 	…
 );
@@ -115,8 +116,11 @@ and Nile planned on the same extension interface.
 - [`examples/supabase`](examples/supabase) — the Supabase preset: role
   presets, `authUsers`, `authUid()`, a storage bucket.
 
+Roles are cluster-level objects hejbro never creates — both examples seed
+theirs (`seed/`).
+
 Both carry a four-step migration history and a local round-trip against real
-Postgres (Docker Desktop required):
+Postgres (a Docker daemon required — Docker Desktop, OrbStack, or colima):
 
 ```bash
 pnpm build && pnpm --filter example-postgres roundtrip
