@@ -48,55 +48,56 @@ const allowedMimeTypesField = (
 const manualDeletionNote = (bucketName: string): string =>
 	`bucket "${bucketName}" removed from declarations — buckets hold user files, so hejbro emits no delete; remove it manually in Supabase when ready.`;
 
-const publicChangedNote = (
-	previous: StorageBucketSnapshot,
-	next: StorageBucketSnapshot,
-): ReadonlyArray<string> => {
-	if ((previous.public ?? false) === (next.public ?? false)) {
-		return [];
-	}
-	return ["public changed"];
-};
+/** `"fileSizeLimit"` -> `"file size limit"`. Generic camelCase-to-words split, not a lookup table -- a new snapshot field is readable in a note without adding an entry here. */
+const humanizeFieldName = (key: string): string =>
+	key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
 
-const fileSizeLimitChangedNote = (
-	previous: StorageBucketSnapshot,
-	next: StorageBucketSnapshot,
+/**
+ * Which top-level keys actually differ between two snapshot objects,
+ * `sameJson`-compared (so an array field like `allowedMimeTypes` is
+ * order-sensitive, matching the top-level `sameJson` check this kind's
+ * `diff` already uses to decide there's a change at all). `name` is
+ * excluded: it's the identity `diff` groups by, never itself an "alter".
+ *
+ * Candidate order is `next`'s own key order (matching the compact
+ * snapshot's declaration order, since `serialize` builds it as an object
+ * literal) followed by any key present in `previous` but entirely absent
+ * from `next` (a field unset back to its default) -- so notes read in a
+ * stable, field-declaration-like order without hardcoding one.
+ */
+const changedFieldNames = (
+	previous: Record<string, JsonValue>,
+	next: Record<string, JsonValue>,
 ): ReadonlyArray<string> => {
-	if (previous.fileSizeLimit === next.fileSizeLimit) {
-		return [];
-	}
-	return ["file size limit changed"];
-};
-
-const allowedMimeTypesChangedNote = (
-	previous: StorageBucketSnapshot,
-	next: StorageBucketSnapshot,
-): ReadonlyArray<string> => {
-	if (
-		sameJson(previous.allowedMimeTypes ?? null, next.allowedMimeTypes ?? null)
-	) {
-		return [];
-	}
-	return ["allowed mime types changed"];
+	const unsetKeys = Object.keys(previous).filter((key) => !(key in next));
+	const orderedKeys = [...Object.keys(next), ...unsetKeys].filter(
+		(key) => key !== "name",
+	);
+	return orderedKeys.filter(
+		(key) => !sameJson(previous[key] ?? null, next[key] ?? null),
+	);
 };
 
 /**
  * Field-level alter notes (#116) — the banner otherwise had nothing to
  * say about a bucket alter (`notes: []`, rendered as a bare `[]`, the
- * only kind that did). Order matches the declaration order in
- * {@link StorageBucketSnapshot}. `allowedMimeTypes` compares by
- * `sameJson`, so it's order-sensitive like the rest of the snapshot diff
- * (matches the top-level `sameJson` check this diff already uses to
- * decide there's a change at all).
+ * only kind that did). Derived generically from whichever snapshot keys
+ * differ, not enumerated per field: a review probe showed that a
+ * field-by-field version (`publicChangedNote`/etc., one function per
+ * named field) still reaches `notes: []` the moment a snapshot carries a
+ * key none of those functions know about — reintroducing #116's own bug
+ * for the next field. Diffing the snapshots' own key sets instead means
+ * "an alter always has non-empty notes" holds for any key difference,
+ * present or future, without touching this function again.
  */
 const bucketAlterNotes = (
 	previous: StorageBucketSnapshot,
 	next: StorageBucketSnapshot,
-): ReadonlyArray<string> => [
-	...publicChangedNote(previous, next),
-	...fileSizeLimitChangedNote(previous, next),
-	...allowedMimeTypesChangedNote(previous, next),
-];
+): ReadonlyArray<string> =>
+	changedFieldNames(
+		previous as unknown as Record<string, JsonValue>,
+		next as unknown as Record<string, JsonValue>,
+	).map((key) => `${humanizeFieldName(key)} changed`);
 
 const renderMimeTypesLiteral = (
 	values: ReadonlyArray<string> | undefined,

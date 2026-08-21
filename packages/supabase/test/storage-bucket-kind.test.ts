@@ -175,6 +175,29 @@ describe("storageBucketKind.diff", () => {
 			},
 		]);
 	});
+
+	it("never reaches an alter with empty notes, for a field name bucketAlterNotes doesn't know about (#116 regression)", () => {
+		// Mirrors the review probe that broke the first field-by-field
+		// version of bucketAlterNotes: two snapshots differing only in a
+		// field ("owner") that isn't part of StorageBucketSnapshot at all.
+		// notes is derived from the snapshots' own key sets, not a fixed
+		// list of known fields, so this stays non-empty no matter what key
+		// changes -- if notes derivation ever regresses back to a
+		// per-field enumeration, this is the first thing that goes red,
+		// before a fourth real field has to be added to notice.
+		const previous = { name: "avatars", owner: "team-a" };
+		const next = { name: "avatars", owner: "team-b" };
+		expect(storageBucketKind.diff(previous, next, "avatars")).toEqual([
+			{
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous,
+				next,
+				notes: ["owner changed"],
+			},
+		]);
+	});
 });
 
 describe("storageBucketKind registration", () => {
