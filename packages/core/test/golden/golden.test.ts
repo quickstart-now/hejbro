@@ -27,6 +27,21 @@ const stepLabel = (index: number): string => {
 	return `step-${index}`;
 };
 
+// Every step in every case is declared because it changes something; a
+// step whose generated SQL is nothing but the `-- hejbro migration` banner
+// (or is empty outright) means the step stopped testing anything -- most
+// often because two declarations that were supposed to differ came to read
+// the same. `UPDATE_GOLDEN=1` happily rewrites `expected/*.sql` to match
+// whatever gets generated, including an empty file, so this can't be an
+// `expect(generated.sql).toBe(readOrRecord(...))` check: that comparison
+// is satisfied by construction the moment the file is (re)written. This
+// runs against `generated.sql` directly, independent of UPDATE_GOLDEN, so
+// a no-op step fails here even immediately after a regen.
+const hasStatementBeyondBanner = (sql: string): boolean =>
+	sql
+		.split("\n")
+		.some((line) => line.trim() !== "" && !line.trimStart().startsWith("--"));
+
 const casesDirectory = join(import.meta.dirname, "cases");
 const shouldUpdate = process.env.UPDATE_GOLDEN === "1";
 
@@ -62,6 +77,10 @@ describe("golden cases", () => {
 						previousSnapshot: state.snapshot,
 					});
 					const label = stepLabel(stepIndex);
+					expect(
+						hasStatementBeyondBanner(generated.sql),
+						`${caseName} ${label}: generated SQL has no statement beyond the banner comments -- this step is a no-op (see hasStatementBeyondBanner's comment)`,
+					).toBe(true);
 					expect(generated.sql).toBe(
 						readOrRecord(
 							join(caseDirectory, "expected", `${label}.sql`),
