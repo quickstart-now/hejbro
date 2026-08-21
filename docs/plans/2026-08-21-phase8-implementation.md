@@ -225,15 +225,30 @@ own claim.
   tool actually packed**, e.g. `pnpm publish --dry-run` output, or that the
   tarball manifest's internal dependency resolved to a semver version rather
   than a `workspace:` string. Checking for the string alone is the weaker
-  form: `phase8-packaging`'s own smoke measured that npm already rejects a
+  form: measured during `phase8-packaging`'s review that npm already rejects a
   `workspace:` string in `dependencies`/`peerDependencies`/
   `optionalDependencies` at install time with `EUNSUPPORTEDPROTOCOL` — the
   string check only adds value for `devDependencies`, where npm installs
   without resolving. Prove the pre-publish gate by mutation: a tarball with a
-  `workspace:` string and a stale `dist` must each stop the publish job.
+  `workspace:` string must stop the publish job, and so must a stale `dist` —
+  but mutate the **producer** for the second one, not the artifact.
+  `phase8-packaging`'s own `prepack: "pnpm build"` rebuilds `dist` on every
+  pack, so hand-editing a packed `dist` file proves nothing (reviewer found
+  exactly this while verifying that PR: deleting a required `.d.ts` from the
+  assertion's expectations passed only because `prepack` had already
+  regenerated it). Disable or bypass the build step itself — e.g. temporarily
+  remove the `prepack` script, or point the pack at a `dist` produced from an
+  older commit — and confirm the gate still stops the stale tarball.
 - **`phase8-error-subclass` → `phase8-loader-diagnostics`** — a test
-  reproducing #125's crash (a config importing a package that is not installed)
-  first, then the diagnostic. Both `asHejbroError` sites are converted.
+  reproducing #125's crash (a config importing a package that is not
+  installed) first, then the diagnostic. Both `asHejbroError` sites are
+  converted. Also cover the shape `phase8-packaging`'s smoke produces: a
+  config importing an **installed** package whose `exports` entry does not
+  resolve — same duck-typing path, different failure shape (not-installed vs.
+  installed-but-unresolvable). Re-run that mutation (break
+  `@hejbro/supabase`'s `exports`, run `pnpm smoke:pack-install`) and confirm
+  the failure now **names the package** instead of crashing in
+  `toDiagnostic`.
 - **`phase8-chain-walk`** — a chain that rolls back and then forward again
   verifies clean; the two O2-approved message texts are unchanged.
 - **`phase8-next-marker`** — the count is roughly 75 user-facing throw sites;
@@ -412,6 +427,17 @@ assertion that supposedly guards it ever runs). Neither the gap nor the
 misattribution was visible from reading the script. So: a PR that builds
 or extends a verification device shows the same evidence — the defects it
 exists to catch, injected one at a time, each turning it red.
+
+**Mutate the producer, not the artifact.** A `prepack` or regeneration step
+will silently heal an artifact-level mutation, and the gate passes for the
+wrong reason. `phase8-packaging` hit this while verifying its own `.d.ts`
+assertion: deleting `dist/cli.d.ts` before packing didn't turn the assertion
+red, because `prepack: "pnpm build"` rebuilds `dist` — including the deleted
+file — as part of every `pnpm pack`. The assertion only actually fired once
+the *producer* was changed instead (tsdown's config set to `dts: false`, so
+no `.d.ts` is emitted at all). The mutation has to target whatever produces
+the artifact — the build step, the source it builds from, or the config that
+drives it — not the artifact itself once it exists.
 
 ## Settled: expression discriminators in the snapshot (D70)
 
