@@ -34,6 +34,20 @@
 # suggested command has unfillable `<…>` placeholders, a table-rename
 # ambiguity) is not something this script can safely resolve on its own —
 # it stops and says so, rather than guessing.
+#
+# Where the "is this an ambiguity at all" line is drawn: only a `stderr`
+# containing the literal diagnostic code prefix `error[ambiguous-column-
+# rename]` (the CLI's own §7 grammar, not prose that changes casually)
+# is ever treated as one; anything else — a real error, or a future
+# reworded diagnostic that no longer matches — hard-stops with the raw
+# CLI output printed, never silently proceeds without `--confirm-drop`.
+# One real boundary worth naming: this script always resolves a
+# single-pair ambiguity as a drop+add (`--confirm-drop`), never as a
+# rename (`--rename`), because that's what every ambiguity in this
+# chain actually is today. A future step that's a genuine rename would
+# still match this path and get the wrong resolution silently — that
+# case needs a human reading the regenerated migration's content, not
+# this script.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -96,8 +110,12 @@ regen_one() {
   # already committed is therefore almost always a mistake (a step file
   # deleted or misnamed), not an intentional shrink — and it must not
   # pass by only leaving a smaller `git diff` for someone to notice on
-  # their own. Recorded before wiping anything below.
-  committed_count="$(find "$example_dir/migrations" -maxdepth 1 -name '*.sql' 2>/dev/null | wc -l | tr -d ' ')"
+  # their own. Recorded before wiping anything below, from `git ls-files`
+  # rather than a filesystem `find`: a stray *untracked* .sql file left
+  # over from an earlier interrupted run must not inflate the baseline
+  # and mask a real shrink (or, as happened once while developing this
+  # script, cause a false failure by disappearing on the next wipe).
+  committed_count="$(git -C "$example_dir" ls-files 'migrations/*.sql' | wc -l | tr -d ' ')"
 
   echo "== $name (${#steps[@]} steps, ${committed_count} committed migrations)"
 
