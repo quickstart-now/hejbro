@@ -580,6 +580,28 @@ proved nothing about its range. A negative result is more dangerous than a
 positive one here: a red gate is evidence something happened, but a green
 gate does not distinguish "didn't catch it" from "nothing to catch."
 
+**A failed reproduction is not evidence of absence.** When one measurement
+contradicts another, the answer is not to pick the more recent or the more
+senior one — it is to find the variable that differs. In
+`phase8-error-subclass` a review reported that restoring the object spread
+failed *nine* golden tests; a re-measurement found the whole suite green and
+concluded the defect was silent; a third, controlled run reproduced all
+nine. The variable neither re-measurement controlled was **build
+freshness**. `test/golden.test.ts` drives the built `dist/cli.js` as a
+child process, `assertBuiltCli` checks only that the file *exists*, and
+`turbo.json`'s `test` task declares no `dependsOn` — so editing source
+without rebuilding re-validates the previous artifact. A reproduction that
+fails is a signal to re-examine the *procedure*, not a verdict on the
+defect.
+
+Two people confirmed the wrong conclusion before the third measured it: the
+review's supporting claim (*"the golden suite's only error assertions are
+ambiguity errors"*) was checked with `grep "error\["`, which matches only
+the assertions that spell the code literally — the nine that assert the
+message body were outside the instrument's range. **Naming the mechanism
+and then checking its range** is the rule already written above; it failed
+here because the check *looked* like a measurement.
+
 **Don't conclude "nothing catches this" from one gate.** Twice in this phase
 a requirement was written on the premise that a defect would pass silently —
 a shrinking chain, a misread rename — and both times another gate already
