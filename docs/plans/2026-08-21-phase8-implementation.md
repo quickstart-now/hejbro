@@ -554,6 +554,16 @@ found here may change what the docs should say.
 
 Each of these was paid for during the phase; none is a reminder.
 
+Four of them share one shape, and it is worth naming before the list: **the
+claim of having checked was wider than what was actually checked.** Not a wrong
+answer — a right answer whose evidence covered less ground than the sentence
+reporting it. "I ran the mutation" but not in the file the mutation was in. "I
+ran the tests" but against a build made before the mutation. "I read it" but
+one of the two files that had to agree. "It's frozen" but the SHA that gets
+merged is not the SHA that was read. Each reads as diligence and each leaves
+the same hole, so the fix in every case is the same: say what you checked, not
+that you checked.
+
 **A round trip proves preservation, not convention.** `decode(encode(x)) === x`
 holds just as well when the spelling in between is wrong, because both
 directions read the same table — so a symmetric test can never be evidence that
@@ -598,6 +608,13 @@ tests until `pnpm build` runs, because those tests import the dependency's
 `dist`. Within a package it never bites — vitest transpiles the source
 directly — so the habit of "edit, run, read" survives right up to the moment
 it crosses a package boundary and silently measures the pre-mutation build.
+A third instance landed the same day, from a different direction: a mutation
+inserted at `rindex("return null;")` went into the *second* of that file's two
+`return null` statements, and the run came back green. Same reading — "the
+mutation didn't reproduce" — from a mutation that was never in the code path
+under test. **Look at the line you planted before you read the result**; `sed
+-n '103,106p'` is the whole procedure.
+
 Both times the first reading was "the mutation didn't reproduce", which is the
 worst possible failure mode for a mutation test: it says the gate is broken
 when the gate is fine. **Rebuild between planting and measuring, or measure in
@@ -640,6 +657,23 @@ after review, compare the PR's own diff against each base — same files, same
 `+/-` counts means the review transfers; anything else means it does not.
 Measured in `phase8-bucket-notes`: `67b9670...dc0b93c` and `4b922fe...239d1c0`
 produced identical six-file diffs.
+
+**"I read it" is a claim too, and it takes the list of files.** A review of
+`phase8-remove-dispatch` reported the release-procedure comments as verified
+line by line; the verification covered `release-version.yml`, where the fix had
+landed, and not `ci.yml`, where the sentence originally quoted as wrong still
+sat. The cross-reference was in the file that had been read *first*, before the
+fix, and never re-read after it. When a correction spans two files, the one
+that started the complaint is the one most likely to be skipped.
+
+**A freeze is not a promise to stop pushing — it is a claim that the SHA you
+verified is the SHA that merges.** That distinction is checkable, and the
+project checks it: merging with `--match-head-commit` refuses when the branch
+head has moved since the declaration. It refused once, on
+`phase8-remove-dispatch`, and the four lines it protected were a stale
+cross-reference in a comment that the freeze declaration had claimed to have
+read. So a push after a freeze — even an allowed one, even a comment-only fix —
+means the declaration is void until it is re-issued against the new SHA.
 
 **"I recorded it" is a claim, and it takes a commit SHA.** Three times in one
 day a correction existed in prose but not in the artifact: an issue whose
