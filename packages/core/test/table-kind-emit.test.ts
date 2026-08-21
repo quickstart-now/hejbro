@@ -597,4 +597,124 @@ describe("tableKind.emit — unsupported column alters", () => {
 		);
 		expect(() => tableKind.emit(change)).toThrowError(/primary key/i);
 	});
+
+	// #137: `renderColumnDefinition` (used for `add column`) never emits the
+	// `primary key` clause -- that's a `createTableSql`-only, table-level
+	// concern. Adding a `.primaryKey()` column to an *existing* table used
+	// to silently emit `alter table ... add column ... not null;` with no
+	// constraint at all -- no error, a plausible-looking statement, a
+	// missing primary key. `phase8-pk-guard` (#137) turns that silent leak
+	// into a loud refusal; `phase8-constraint-names` (#24) replaces this
+	// guard with the real `add constraint ... primary key (...)` emission.
+	it("throws when a primary-key column is added to an existing table (#137 add-path leak)", () => {
+		const before = table(app, "posts", { title: text() });
+		const after = table(app, "posts", {
+			title: text(),
+			id: uuid().primaryKey(),
+		});
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).toThrowError(/primary key/i);
+	});
+
+	it("does not throw when a *non*-primary-key column is added (control)", () => {
+		const before = table(app, "posts", { title: text() });
+		const after = table(app, "posts", { title: text(), subtitle: text() });
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).not.toThrow();
+	});
+
+	it("does not throw when a unique column is added (control -- already correct, inline)", () => {
+		const before = table(app, "posts", { title: text() });
+		const after = table(app, "posts", {
+			title: text(),
+			slug: text().unique(),
+		});
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).not.toThrow();
+	});
+
+	// #137: dropping one column of a composite primary key drops the whole
+	// constraint on Postgres's side -- confirmed directly against a real
+	// Postgres (no NOTICE, the surviving column(s) silently lose primary-key
+	// status too). A fresh build of the same target declaration still
+	// renders `primary key ("b")` for the surviving column, so the
+	// chain-built database and a fresh one disagree (#137/#121's defect
+	// class). `phase8-constraint-names` (#24) replaces this guard with the
+	// real `drop constraint` + `add constraint ... primary key (survivors)`
+	// emission.
+	it("throws when dropping one column of a composite primary key leaves a surviving primary-key column (#137 drop-path asymmetry)", () => {
+		const before = table(app, "posts", {
+			a: uuid().primaryKey(),
+			b: uuid().primaryKey(),
+			title: text(),
+		});
+		const after = table(app, "posts", {
+			b: uuid().primaryKey(),
+			title: text(),
+		});
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).toThrowError(/primary key/i);
+	});
+
+	// Control/contrast: dropping the *only* primary-key column (no survivor
+	// in `next` still declares `.primaryKey()`) is the case #137's own text
+	// calls "happens to be correct... because Postgres removes the
+	// dependent constraint, not because hejbro noticed" -- a bare
+	// `drop column` matches what `next` wants (no primary key at all), so
+	// this must not throw.
+	it("does not throw when dropping the only primary-key column (control -- single-column PK removal is already correct)", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text(),
+		});
+		const after = table(app, "posts", { title: text() });
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).not.toThrow();
+	});
+
+	it("does not throw when dropping a non-primary-key column (control)", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text(),
+		});
+		const after = table(app, "posts", { id: uuid().primaryKey() });
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(() => tableKind.emit(change)).not.toThrow();
+	});
 });

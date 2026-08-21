@@ -195,6 +195,41 @@ const emitAlter = (
 		tableChecks(next).map((check) => ({ key: check.name, value: check })),
 	);
 
+	// #137 (phase8-pk-guard): a PK constraint is table-level, not a
+	// column-level clause `add column`/`drop column` can express, so both
+	// the added and removed paths need their own guard alongside
+	// `alterColumnStatements`'s existing one for a *changed* column's own
+	// flag. Widens the silent leak into a loud refusal; `phase8-
+	// constraint-names` (#24) replaces both with real `add constraint`/
+	// `drop constraint` emission.
+	const addedPrimaryKeyColumn = columnDiff.added.find((entry) =>
+		columnPrimaryKey(entry.value),
+	);
+	if (addedPrimaryKeyColumn !== undefined) {
+		return throwHejbroError(
+			"unsupported-column-alter",
+			`column "${addedPrimaryKeyColumn.key}" on table "${next.name}" was added as a primary key — hejbro does not emit the constraint for a primary key column added to an existing table in Phase 1 (only \`alter table … add column …\` is emitted, silently omitting \`add primary key\`). Next: add the column without \`.primaryKey()\` and add the constraint manually, or recreate the table.`,
+		);
+	}
+	// A single-column primary key being dropped entirely is already
+	// correct (Postgres removes the dependent constraint on its own,
+	// matching a `next` that no longer wants a primary key at all) — only
+	// a *composite* primary key's partial drop is the defect: Postgres
+	// drops the whole constraint with no NOTICE, silently leaving any
+	// surviving `.primaryKey()` column in `next` without one (confirmed
+	// directly against a real Postgres).
+	const removedPrimaryKeyColumnLeavesASurvivor = columnDiff.removed.some(
+		(entry) =>
+			columnPrimaryKey(entry.value) &&
+			next.columns.some((column) => columnPrimaryKey(column)),
+	);
+	if (removedPrimaryKeyColumnLeavesASurvivor) {
+		return throwHejbroError(
+			"unsupported-column-alter",
+			`table "${next.name}" drops a column that is part of its primary key, while another column still declares \`.primaryKey()\` — Postgres drops the entire constraint the moment any of its columns is dropped, silently leaving the surviving column(s) without a primary key. hejbro does not re-add it in Phase 1. Next: drop the whole primary key explicitly and re-add it for the surviving column(s), or recreate the table.`,
+		);
+	}
+
 	const foreignKeysToDrop = [
 		...foreignKeyDiff.removed.map((entry) => entry.key),
 		...foreignKeyDiff.changed.map((entry) => entry.key),
