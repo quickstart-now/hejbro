@@ -3,17 +3,28 @@ on:
   push:
     branches: [dev, main]
   pull_request:
-  # #180: a PUSH or PR made with GITHUB_TOKEN (as release-version.yml's
-  # "Version Packages" PR is) never starts a workflow via its normal
-  # triggers -- GitHub's own recursion guard. workflow_dispatch and
-  # repository_dispatch are the documented exceptions: an event raised
-  # through them DOES start a workflow even when GITHUB_TOKEN raised it.
-  # release-version.yml uses this (after pushing the Version PR's branch)
-  # to get a real check run onto that branch's head, which is otherwise
-  # the one PR in this repo that can never satisfy `dev`'s required
-  # `verify (22)`/`verify (24)` checks on its own. No inputs needed --
-  # this dispatch always means "check the current head of whatever ref
-  # you're pointed at".
+  # #180 added this trigger so release-version.yml could
+  # `gh workflow run ci.yml --ref changeset-release/dev` after pushing
+  # the "Version Packages" PR's branch, on the theory that a GITHUB_TOKEN
+  # push/PR never gets a `push`/`pull_request` run at all (GitHub's
+  # recursion guard) and this was the documented way around it. #189
+  # removed that dispatch step: the run it started did fire and did
+  # attach real, passing check runs to the right head SHA, but those
+  # check runs never populated the PR's `statusCheckRollup` (measured via
+  # a same-commit control on #179's real head -- see release-version.yml
+  # for the full account), so it never actually unblocked a required
+  # check. The real blocker was narrower and different: a GITHUB_TOKEN-
+  # opened PR DOES get a `pull_request` run, it just stalls in
+  # `action_required` pending manual approval (this repo's Actions policy
+  # treats `github-actions[bot]` as a first-time contributor). Owner
+  # decision (2026-08-22, on #189): keep that as a manual step -- no
+  # settings/credential changes -- see release-version.yml for the full
+  # release procedure this produces.
+  #
+  # The trigger itself stays: it's harmless on its own (no inputs, no
+  # credentials, just "run ci.yml against whatever ref you point it at")
+  # and useful for a manual re-run of this workflow against an arbitrary
+  # branch without needing a new commit.
   workflow_dispatch: {}
 jobs:
   verify:
@@ -103,6 +114,12 @@ jobs:
       # the source branch name on it; `ref_name` is the bare branch name
       # on `push`/`workflow_dispatch`. The `||` picks whichever one the
       # current event actually populates.
+      #
+      # Still required after #189 removed the `workflow_dispatch`
+      # dispatch step from release-version.yml: the path that actually
+      # unblocks the Version PR is its own (approved) `pull_request` run,
+      # which hits this exact step -- without this skip, that approved
+      # run would fail here instead of passing.
       - run: pnpm changeset status
         if: ${{ !startsWith(github.head_ref || github.ref_name, 'changeset-release/') }}
       - run: pnpm check:first-release-version
