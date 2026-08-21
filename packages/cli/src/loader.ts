@@ -14,9 +14,13 @@ const firstLine = (message: string): string =>
 	message.split("\n")[0] ?? message;
 
 /** `base`, resolved — macOS's `/tmp` → `/private/tmp` symlink means a raw
- * Node error can embed the *resolved* path even when `base` itself is the
- * unresolved one; stripping only `base` would miss it. Falls back to
- * `base` unchanged if it doesn't exist (nothing to resolve). */
+ * Node error could in principle embed the *resolved* path even when
+ * `base` itself is the unresolved one, which stripping only `base` would
+ * miss. Kept defensively; not observed in the current tests (every
+ * MODULE_NOT_FOUND message seen so far already carries the unresolved
+ * form, so `base` alone strips it) — this covers a jiti/Node resolution
+ * path this repo hasn't hit yet. Falls back to `base` unchanged if it
+ * doesn't exist (nothing to resolve). */
 const safeRealpath = (base: string): string => {
 	try {
 		return realpathSync(base);
