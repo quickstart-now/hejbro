@@ -580,6 +580,22 @@ proved nothing about its range. A negative result is more dangerous than a
 positive one here: a red gate is evidence something happened, but a green
 gate does not distinguish "didn't catch it" from "nothing to catch."
 
+**Don't conclude "nothing catches this" from one gate.** Twice in this phase
+a requirement was written on the premise that a defect would pass silently —
+a shrinking chain, a misread rename — and both times another gate already
+caught it (`chain.test.ts`'s static imports and its `confirmedDropsForStep`,
+`cli.test.ts`'s count). The claim *"this is silent"* is itself a measurement,
+not an observation.
+
+A third instance in the same review differed in one way that mattered: the
+premise (a known-ambiguity list to guard against a silently-misread rename)
+was questioned *before* the requirement was written, so it cost a question
+instead of an implementation round — the first two were discovered only
+after the code already existed, once someone went looking for what else
+might already cover them. **Order is the whole difference.** A premise
+checked before the requirement is written costs asking; a premise checked
+after costs building, reviewing, and unwinding.
+
 **A guard must read its baseline from something it cannot itself change.**
 `phase8-regen-script`'s shrink guard counted the committed migrations from
 the working tree, then exited after the script had already shrunk that

@@ -70,7 +70,19 @@
 # chain actually is today. A future step that's a genuine rename would
 # still match this path and get the wrong resolution silently — that
 # case needs a human reading the regenerated migration's content, not
-# this script.
+# this script. That is safe because the interpretation doesn't end
+# here: a step with an ambiguity cannot be committed without also
+# writing it into `test/chain.test.ts`'s `confirmedDropsForStep`
+# (in-process, using `generateMigration` directly — not this script),
+# and that test fails first if it's missing, with the CLI's own
+# diagnostic offering *both* `--rename` and `--confirm-drop` side by
+# side (verified: removing a `confirmedDropsForStep` entry reproduces
+# exactly that "hejbro cannot tell whether this is a rename" failure).
+# A genuine rename gets caught there, by a human reading the same
+# diagnostic this script parses. This script's guess is a convenience;
+# the decision is recorded by hand, in source, one gate later — not a
+# reason to build a list of known-safe ambiguities here, which would
+# just be the same information kept in two places, able to drift apart.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -141,12 +153,23 @@ regen_one() {
   # already committed is therefore almost always a mistake (a step file
   # deleted or misnamed), not an intentional shrink — and it must not
   # pass by only leaving a smaller `git diff` for someone to notice on
-  # their own. Recorded before wiping anything below, from `git ls-files`
-  # rather than a filesystem `find`: a stray *untracked* .sql file left
-  # over from an earlier interrupted run must not inflate the baseline
-  # and mask a real shrink (or, as happened once while developing this
-  # script, cause a false failure by disappearing on the next wipe).
-  committed_count="$(git -C "$example_dir" ls-files 'migrations/*.sql' | wc -l | tr -d ' ')"
+  # their own. Recorded before wiping anything below.
+  #
+  # The baseline comes from the index (`git ls-files`), not the
+  # filesystem, for two separate reasons a `find`-based count gets both
+  # wrong: (1) a `find` count includes files this script itself just
+  # wrote, so a failed run launders itself on a retry — the first thing
+  # anyone does after a failure; (2) it also includes untracked leftovers
+  # from earlier experiments, which is how this was found: a stray
+  # `0005_*.sql` left over from a test run made the guard fail against a
+  # chain that was actually intact. Notably, a `find`-based count would
+  # *not* have caught either failure — untracked files inflate its count
+  # the same way committed ones do, so switching to the stricter, more
+  # correct source (the index) is exactly what surfaced both problems.
+  # `git ls-files` fails outside a git checkout; falls back to 0 (no
+  # shrink to compare against) rather than aborting the whole script —
+  # the no-op check below doesn't depend on this value.
+  committed_count="$(git -C "$example_dir" ls-files 'migrations/*.sql' 2>/dev/null | wc -l | tr -d ' ')" || committed_count=0
 
   echo "== $name (${#steps[@]} steps, ${committed_count} committed migrations)"
 
