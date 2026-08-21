@@ -22,3 +22,5 @@ jobs:
       - run: pnpm build
       - run: pnpm smoke:pack-install
         if: matrix.node-version == 24
+      - run: pnpm changeset status
+      - run: pnpm check:first-release-version
