@@ -2,7 +2,7 @@
 
 Brainstorm resolved 2026-08-21 (owner-approved): decision log entries
 **D58–D68**, plus an in-place amendment to **D33**. This plan turns those
-decisions into 22 PRs.
+decisions into 23 PRs, plus D69, decided at plan review.
 
 Issue: **#9**. Sub-issues filed from this phase's research: **#136**,
 **#137**, **#138**, **#139**.
@@ -46,6 +46,7 @@ options being breaking after publication).
 | D66 | #23 as a **`sequence` object kind**, `serial` kept and modelled |
 | D67 | #110 fixed with **(b)** — structured expression nodes; D33 amended |
 | D68 | **Snapshot `formatVersion` → 5**, carrying #110(b) and #24(iii) |
+| D69 | The Supabase preset is **verified against a real `supabase/postgres` image** before publishing — a second local-Docker script, not CI |
 
 Constraints that came with them, and that a later PR must not quietly
 undo:
@@ -134,7 +135,7 @@ first in the format wave** (one bump) · **2 before any release** ·
 
 | # | PR | Scope | Issues |
 |---|---|---|---|
-| 1 | `phase8-plan` | This plan, the D58–D68 rows, the D33 amendment, the roadmap section, the AGENTS.md hard-gate change | Refs #9 |
+| 1 | `phase8-plan` | This plan, the D58–D69 rows, the D33 amendment, the roadmap section, the AGENTS.md hard-gate change | Refs #9 |
 | 2 | `phase8-packaging` | #86 pack-install smoke test **and the packaging it proves**: LICENSE in all three published packages, a README for `hejbro`, `homepage`/`bugs`/`keywords`, `prepack`; `engines` (D58) + Node 22 CI matrix; `@hejbro/skills` → `private: true` (D62); root `typescript` → `catalog:` | #86, #28 |
 | 3 | `phase8-changesets` | `.changeset/config.json` (`fixed` group of the three published packages, `access: "public"`, `baseBranch: "dev"`, `updateInternalDependencies: "patch"`), release scripts, the changeset rule in AGENTS.md | — |
 | 4 | `phase8-regen-script` | `scripts/regen-examples.sh` + `pnpm regen:examples` | — |
@@ -155,7 +156,8 @@ first in the format wave** (one bump) · **2 before any release** ·
 | 19 | `phase8-policy-predicates` | RLS predicate widening; the showcase drops `using(isNotNull(t.id))` | #113 |
 | 20 | `phase8-bucket-notes` | Field-level notes for bucket alters; empty note lists stop rendering `[]` | #116 |
 | 21 | `phase8-authuid-cached` | `authUid()`'s cached variant (reusing the existing `rawSql` node) and the three places that teach the uncached form | #97 |
-| 22 | `phase8-docs-release` | README status and install instructions, `CONTRIBUTING.md`, then the 0.1.0 release | — |
+| 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69) | — |
+| 23 | `phase8-docs-release` | README status and install instructions, `CONTRIBUTING.md`, then the 0.1.0 release | — |
 
 PR 16 lands **before** 15 in dependency terms but is listed after it for
 readability: the guard is a small, independent PR that can go as early as
@@ -213,10 +215,58 @@ its own claim.
   paragraph currently tells users to wrap the call themselves "until
   then"; that text becomes false and must be rewritten** — the same class
   of defect as #136.
-- **PR 22** — README's `## Status` no longer says "Nothing is published
+- **PR 22** — see the section below.
+- **PR 23** — README's `## Status` no longer says "Nothing is published
   yet"; install instructions exist; `CONTRIBUTING.md` states plainly that
   merging the version PR publishes immediately and that npm burns a
   version number even if it is unpublished.
+
+## PR 22 — verifying the preset against a real image (D69)
+
+**Why it is not redundant with the round-trip.** The two scripts answer
+different questions and both are kept:
+
+| | `scripts/roundtrip.sh` | `scripts/verify-supabase-image.sh` |
+|---|---|---|
+| Runs on | `postgres:17-alpine` | `supabase/postgres:17.6.1.165` |
+| Asks | is the generator **deterministic** — does a chain-built schema equal a freshly built one? | does the preset **match the platform it targets**? |
+| Compares | our output against our output | our assumptions against the real thing |
+
+The round-trip cannot answer the second question by construction: it is a
+symmetric comparison, so an error both sides make is invisible — the same
+blind spot that let `serial` pass for two phases. And today
+`examples/supabase` runs against a role and a `storage.buckets` table
+**we wrote ourselves**, which makes the gap concrete.
+
+**Pin the image.** `supabase/postgres` publishes new tags constantly (the
+`.164` and `.165` builds landed on the same day), so the script pins
+**`supabase/postgres:17.6.1.165`** — the current PG17 multi-arch tag,
+matching the PG17 major the round-trip already uses. Record the resolved
+digest in the script's header comment so a re-tag cannot change what was
+verified, and treat a pin bump as its own PR.
+
+**What counts as a failure.** At minimum:
+
+1. The committed migration chain does not apply cleanly to the real
+   image.
+2. The `storage.buckets` stub's column set disagrees with the real table
+   (names, types, nullability, defaults).
+3. A role name or a grant the preset relies on does not exist, or does
+   not carry the privileges assumed.
+4. An RLS policy that uses `authUid()` does not behave as intended in the
+   real `auth` environment.
+5. An extension or schema the preset assumes (`auth`, `storage`,
+   `pgcrypto`, …) is absent or differs.
+
+**Any mismatch is a new defect, not a script bug.** File it as an issue
+under #9 with the observed-vs-assumed difference, exactly as this phase
+handled #136–#138. Given what the first honest look at the round-trip
+produced in Phase 7 (six defects) and what this brainstorm's research
+produced (four), expect this to find something.
+
+**Placement.** After PR 21, so that every preset change (#116, #97,
+#113) is already in, and before the docs-and-release PR — a mismatch
+found here may change what the docs should say.
 
 ## One completion criterion applies to every PR
 
@@ -265,6 +315,11 @@ none of them blocks starting.
 | #87's user-facing count (~75, ±5) and its zero golden impact | PR 11's first commit |
 | #132's 62 lint findings | 0.2.0, when the rule is designed |
 
+One note for whoever picks up #132: `biome check` fails with
+"configuration resulted in errors" in a fresh worktree that has not run
+`pnpm install`. That is a missing `node_modules`, not a broken
+`biome.json` — install first, then measure.
+
 ## Owner actions
 
 **Before the first release**
@@ -293,6 +348,4 @@ is complete once #129 lands), **#131** (internal tooling; the release path
 already builds from a clean install), **#132** (needs a per-path lint
 design first), **#139** (blocked until the packages exist).
 
-Still unscheduled: verifying the Supabase preset against a real
-`supabase/postgres` image (D49 kept Phase 7 on plain Postgres), and the
-GitHub Pages site (D64).
+Still unscheduled: the GitHub Pages site (D64).
