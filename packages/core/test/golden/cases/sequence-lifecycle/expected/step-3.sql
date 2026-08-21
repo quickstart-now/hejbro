@@ -4,6 +4,6 @@
 
 alter table "app"."posts" alter column "id" type integer;
 
-alter table if exists "app"."posts" alter column "id" drop default;
+alter table "app"."posts" alter column "id" drop default;
 
-drop sequence if exists "app"."posts_id_seq";
+drop sequence "app"."posts_id_seq";

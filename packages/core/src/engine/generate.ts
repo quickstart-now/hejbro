@@ -8,8 +8,9 @@ import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { createDefaultRegistry } from "../kind/registry";
 import type { SequenceDeclaration } from "../kinds/sequence-kind";
+import { asSequenceSnapshot } from "../kinds/sequence-kind";
 import { deriveSequenceName } from "../kinds/table-kind";
-import { tableIdentity } from "../kinds/table-snapshot";
+import { asTableSnapshot, tableIdentity } from "../kinds/table-snapshot";
 import type { Snapshot } from "../snapshot/snapshot";
 import { buildSnapshot } from "../snapshot/snapshot";
 import { compareKeys } from "../sort";
@@ -103,6 +104,48 @@ const resolveDeclarations = (
 		return input.grants;
 	}
 	return [input];
+};
+
+/**
+ * True for a `sequence` `drop` change whose owning `table`/`column` is
+ * already gone from `next` — either the whole table (its `table:<schema>.
+ * <table>` key is absent) or just this column (the table entry still
+ * exists but its `columns` array no longer has this name). #193 review: a
+ * serial column's sequence is linked `owned by` its column (`sequence-
+ * kind.ts`'s `ownedBySql`), so Postgres already cascades the sequence away
+ * the moment the owning table or column is dropped — confirmed directly
+ * against a real Postgres (`drop table` alone leaves 0 sequences behind).
+ * If `sequenceKind.emit` still produced its own `drop default`/
+ * `drop sequence` statements for that change, they would run against a
+ * table or column that's already gone, and fail.
+ *
+ * This reads `next` — the plain snapshot JSON already available here —
+ * rather than reaching into another kind's logic, matching D42's own
+ * precedent (a storage bucket's `drop` change also emits no SQL, for an
+ * unrelated reason: destroying user data would need an explicit choice).
+ * Every *other* path this kind's `emit` produces stays a bare statement,
+ * not `if exists` — a mismatch between this check and the real database
+ * state (e.g. a hand-run migration against a database that's drifted from
+ * the snapshot) should fail loudly, not be silently swallowed.
+ */
+const sequenceDropIsCascaded = (
+	change: KindChange,
+	next: Snapshot,
+): boolean => {
+	if (
+		change.kind !== "sequence" ||
+		change.operation !== "drop" ||
+		change.previous === null
+	) {
+		return false;
+	}
+	const sequence = asSequenceSnapshot(change.previous);
+	const tableNode = next.objects[`table:${sequence.schema}.${sequence.table}`];
+	if (tableNode === undefined) {
+		return true;
+	}
+	const table = asTableSnapshot(tableNode);
+	return !table.columns.some((column) => column.name === sequence.column);
 };
 
 type GenerateMigrationOptions = {
@@ -232,12 +275,19 @@ export const generateMigration = (
 	const emittedStatements: ReadonlyArray<{
 		readonly change: KindChange;
 		readonly statement: SqlStatement;
-	}> = changes.flatMap((change) =>
-		registry
+	}> = changes.flatMap((change) => {
+		// #193: a sequence drop that Postgres's own `owned by` cascade already
+		// covers emits no SQL (banner only) — see sequenceDropIsCascaded's doc
+		// comment. The change itself stays in `changes` (and so in the
+		// banner), only its SQL is suppressed.
+		if (sequenceDropIsCascaded(change, snapshot)) {
+			return [];
+		}
+		return registry
 			.get(change.kind)
 			.emit(change)
-			.map((statement) => ({ change, statement })),
-	);
+			.map((statement) => ({ change, statement }));
+	});
 
 	// `predrop` runs before every `main` statement, ordered by descending
 	// kind-dependency rank — the same reasoning `diffSnapshots` already

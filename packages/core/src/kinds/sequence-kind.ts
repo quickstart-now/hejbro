@@ -69,23 +69,20 @@ const createSequenceSql = (snapshot: SequenceSnapshot): string =>
 	`create sequence ${qualifyName(snapshot.schema, snapshot.name)}${baseTypeClause(snapshot.baseType)};`;
 
 /**
- * `drop sequence if exists …;` — `if exists`, not a bare `drop sequence`,
- * because the sequence's own `owned by` link (see `ownedBySql` below)
- * means Postgres already auto-drops it whenever the owning table is
- * dropped. When a `serial`-family column's whole table is dropped in the
- * same migration, the table's own `drop table` statement runs first
- * (table-kind.ts's own stage), which already removes the sequence via
- * that cascade — this statement would otherwise fail with
- * `relation "…" does not exist`, confirmed by direct reproduction against
- * a real Postgres (drop table, then a bare drop sequence for the same
- * sequence: exactly that error). `policyKind`/`triggerKind`'s own drop
- * statements already guard the same way (`drop policy if exists …`,
- * `drop trigger if exists …`) for the identical reason — a dependent
- * top-level kind's drop can't assume its own object still exists once
- * the owning table's drop has already run.
+ * `drop sequence …;` — bare, not `if exists`. When this column's whole
+ * `table` (or just this `column`) is also gone from the *next* snapshot in
+ * the same diff, Postgres's own `owned by` link (see `ownedBySql` below)
+ * already cascaded the sequence away the moment that drop ran — and
+ * `generate.ts` never calls `emit` for this change in that case at all
+ * (D42-style: banner only, no SQL — see `sequenceOwningColumnGone` there).
+ * So by the time this bare statement runs, the owning column is
+ * guaranteed to still exist: a drift between that guarantee and reality
+ * (e.g. a hand-run migration against a database that doesn't match the
+ * snapshot) should fail loudly, the same as every other statement this
+ * kind emits — `if exists` would swallow that drift silently instead.
  */
 const dropSequenceSql = (snapshot: SequenceSnapshot): string =>
-	`drop sequence if exists ${qualifyName(snapshot.schema, snapshot.name)};`;
+	`drop sequence ${qualifyName(snapshot.schema, snapshot.name)};`;
 
 /**
  * `alter sequence … owned by …;` — links the sequence to its column so
@@ -117,17 +114,15 @@ const setDefaultSql = (snapshot: SequenceSnapshot): string =>
 	`alter table ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} set default nextval('${snapshot.schema}.${snapshot.name}');`;
 
 /**
- * `alter table if exists … drop default;` — `if exists` on the *table*,
- * same reason as `dropSequenceSql`'s own guard: if the whole table (not
- * just the column's serial-ness) is being dropped in the same migration,
- * table-kind.ts's own `drop table` statement already ran and this
- * statement's target no longer exists. Confirmed directly: `alter table
- * if exists … drop default;` against an already-dropped table succeeds as
- * a harmless no-op (`NOTICE: relation "…" does not exist, skipping`), not
- * an error.
+ * `alter table … alter column … drop default;` — bare, not
+ * `if exists`/`if exists` on the column. Same reasoning as
+ * `dropSequenceSql` above: `generate.ts` suppresses this statement
+ * entirely (never calls `emit`) when the owning table/column is already
+ * gone from the next snapshot, so this always runs against a table and
+ * column that are still there.
  */
 const dropDefaultSql = (snapshot: SequenceSnapshot): string =>
-	`alter table if exists ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} drop default;`;
+	`alter table ${qualifyName(snapshot.schema, snapshot.table)} alter column ${quoteIdentifier(snapshot.column)} drop default;`;
 
 const alterBaseTypeSql = (snapshot: SequenceSnapshot): string =>
 	`alter sequence ${qualifyName(snapshot.schema, snapshot.name)} as ${snapshot.baseType ?? "bigint"};`;

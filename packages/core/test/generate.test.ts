@@ -257,11 +257,9 @@ describe("generateMigration", () => {
 			});
 			expect(result.errors).toEqual([]);
 			expect(result.sql).toContain(
-				'alter table if exists "app"."posts" alter column "id" drop default;',
+				'alter table "app"."posts" alter column "id" drop default;',
 			);
-			expect(result.sql).toContain(
-				'drop sequence if exists "app"."posts_id_seq";',
-			);
+			expect(result.sql).toContain('drop sequence "app"."posts_id_seq";');
 		});
 
 		it("serial() -> bigserial(): alter sequence as bigint + alter column type bigint, sequence identity unchanged", () => {
@@ -304,6 +302,82 @@ describe("generateMigration", () => {
 			});
 			expect(result.hasChanges).toBe(false);
 			expect(result.changes).toEqual([]);
+		});
+	});
+
+	// #193 review: a serial column's sequence is `owned by` its column, so
+	// Postgres already cascades the sequence away the moment the owning
+	// table *or* column is dropped (confirmed directly against a real
+	// Postgres for both). If sequenceKind still emitted its own
+	// `drop default`/`drop sequence` statements for that change, they'd run
+	// against a target the cascade already removed, and fail. This three-
+	// point matrix pins the fix (generate.ts's sequenceDropIsCascaded):
+	// table drop and column drop both suppress the sequence's own SQL
+	// (banner only), while a type transition that leaves the column alive
+	// (serial() -> integer(), already covered above) keeps emitting bare
+	// drop statements normally.
+	describe("#193: a sequence drop cascaded by Postgres emits no SQL of its own", () => {
+		it("dropping the whole table emits only `drop table`, no drop default/drop sequence", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", { id: serial().primaryKey() });
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const result = generateMigration({
+				declarations: [seqApp],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			expect(result.changes.map((c) => `${c.operation} ${c.kind}`)).toEqual([
+				"drop table",
+				"drop sequence",
+			]);
+			expect(result.sql).toContain('drop table "app"."posts";');
+			expect(result.sql).not.toContain("drop default");
+			expect(result.sql).not.toContain("drop sequence");
+		});
+
+		it("dropping just the serial column emits only `drop column`, no drop default/drop sequence", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", {
+				id: serial().primaryKey(),
+				title: text(),
+			});
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(seqApp, "posts", { title: text() });
+			const result = generateMigration({
+				declarations: [seqApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			expect(result.sql).toContain(
+				'alter table "app"."posts" drop column "id";',
+			);
+			expect(result.sql).not.toContain("drop default");
+			expect(result.sql).not.toContain("drop sequence");
+		});
+
+		it("a type transition that keeps the column alive (serial -> integer) still emits bare drop statements", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", { id: serial().primaryKey() });
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(seqApp, "posts", { id: integer().primaryKey() });
+			const result = generateMigration({
+				declarations: [seqApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			expect(result.sql).toContain(
+				'alter table "app"."posts" alter column "id" drop default;',
+			);
+			expect(result.sql).toContain('drop sequence "app"."posts_id_seq";');
 		});
 	});
 });

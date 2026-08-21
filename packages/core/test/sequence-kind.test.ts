@@ -139,16 +139,16 @@ describe("sequenceKind.emit", () => {
 		expect(statements[0]?.sql).toBe('create sequence "app"."posts_id_seq";');
 	});
 
-	// #23/D66, found by checking a real Postgres for what happens when a
-	// serial column's whole table is also dropped in the same migration:
-	// the table's own `drop table` cascades (via `owned by`) to the
-	// sequence too, so a bare (non-idempotent) `alter table … drop
-	// default;`/`drop sequence …;` pair would fail with `relation "…"
-	// does not exist` once `drop table` has already run. `if exists`
-	// makes both a harmless no-op in that case, matching the existing
-	// `policyKind`/`triggerKind` precedent (`drop policy if exists …`,
-	// `drop trigger if exists …`) for the same reason.
-	it("drop: drop default, then drop sequence, both main stage, both idempotent (if exists)", () => {
+	// #23/D66. This kind's own emit always produces bare statements — no
+	// `if exists` — because a genuine cascade (the owning table/column
+	// already gone via Postgres's own `owned by` link) is handled one
+	// layer up: `generate.ts`'s `sequenceDropIsCascaded` reads the *next*
+	// snapshot and skips calling `emit` entirely for a drop change whose
+	// owning table/column is already gone there (banner only, D42-style;
+	// see `generate.test.ts`'s "#193" describe block for that path). A
+	// drift between that check and reality should fail loudly, which is
+	// exactly what a bare (non-`if exists`) statement does.
+	it("drop: drop default, then drop sequence, both main stage, both bare (no if exists)", () => {
 		const previous = sequenceKind.serialize(declaration());
 		const statements = sequenceKind.emit({
 			kind: "sequence",
@@ -160,11 +160,11 @@ describe("sequenceKind.emit", () => {
 		});
 		expect(statements).toEqual([
 			{
-				sql: 'alter table if exists "app"."posts" alter column "id" drop default;',
+				sql: 'alter table "app"."posts" alter column "id" drop default;',
 				stage: "main",
 			},
 			{
-				sql: 'drop sequence if exists "app"."posts_id_seq";',
+				sql: 'drop sequence "app"."posts_id_seq";',
 				stage: "main",
 			},
 		]);

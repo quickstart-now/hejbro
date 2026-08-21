@@ -43,18 +43,41 @@ const serialToBigserial: ReadonlyArray<HejbroInput> = [app, widenedToBigserial];
 const removedSerial: ReadonlyArray<HejbroInput> = [app, plainInteger];
 
 // Step 4: integer() -> serial() again -- re-introduce the sequence so the
-// next step drops a table that still has a live serial column, exercising
-// the OWNED BY cascade scenario specifically (self-check requested by
-// planner: does dropping the whole table double-drop the sequence, or
-// error on a sequence Postgres already cascaded away?).
+// next step can drop just the serial *column* while the table survives,
+// exercising the OWNED BY cascade at the column level specifically (#193
+// review: reviewer's own predicted scenario -- table drop and column drop
+// are the same defect class, but table drop alone doesn't prove column
+// drop is covered too).
 
 const reAddedSerial: ReadonlyArray<HejbroInput> = [app, addedSerial];
 
-// Step 5: drop the whole table -- posts (and its serial column, and its
+// Step 5: drop just the "id" column (table survives, "title" remains).
+// Postgres's `owned by` link cascades the sequence away the moment the
+// *column* is dropped, not just the table -- confirmed directly against a
+// real Postgres (see the commit message for the exact repro). Proves
+// generate.ts's cascade suppression triggers on a column drop too, not
+// only a whole-table drop.
+
+const onlyTitle = table(app, "posts", { title: text() });
+
+const droppedSerialColumn: ReadonlyArray<HejbroInput> = [app, onlyTitle];
+
+// Step 6: integer() -> serial() a third time -- re-introduce the sequence
+// once more so the next step drops a table that still has a live serial
+// column, exercising the OWNED BY cascade at the table level (self-check
+// requested by planner: does dropping the whole table double-drop the
+// sequence, or error on a sequence Postgres already cascaded away?).
+
+const reReAddedSerial: ReadonlyArray<HejbroInput> = [
+	app,
+	table(app, "posts", { id: serial().primaryKey(), title: text() }),
+];
+
+// Step 7: drop the whole table -- posts (and its serial column, and its
 // `posts_id_seq` sequence) is gone entirely. Postgres's own `owned by`
 // link means `drop table` alone already cascades the sequence drop; this
-// step proves sequenceKind's own (independent, idempotent) drop statements
-// don't then error on a target the cascade already removed.
+// step proves generate.ts suppresses sequenceKind's own drop statements
+// rather than emitting SQL against a target the cascade already removed.
 
 const droppedTable: ReadonlyArray<HejbroInput> = [app];
 
@@ -64,5 +87,7 @@ export const steps: ReadonlyArray<ReadonlyArray<HejbroInput>> = [
 	serialToBigserial,
 	removedSerial,
 	reAddedSerial,
+	droppedSerialColumn,
+	reReAddedSerial,
 	droppedTable,
 ];
