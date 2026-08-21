@@ -10,6 +10,7 @@ import type {
 import {
 	deriveSlug,
 	generateMigration,
+	hejbroError,
 	migrationFileName,
 	parseSnapshot,
 	renderSnapshot,
@@ -21,6 +22,7 @@ import {
 	fromWarning,
 	renderDiagnostics,
 } from "../diagnostics";
+import { asHejbroError } from "../errors";
 import { parseConfirmDropFlag, parseRenameFlag } from "../flags";
 import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
@@ -147,7 +149,18 @@ const toDiagnostic = (
 	cwd: string,
 ): Diagnostic =>
 	fromHejbroError(
-		{ ...error, declaredAt: relativizeDeclaredAt(error.declaredAt, cwd) },
+		// Rebuilt via the factory, not `{ ...error, declaredAt: ... }` —
+		// `HejbroError` is an `Error` subclass, and `Error.prototype.message`
+		// is own-but-non-enumerable, so an object spread silently drops it
+		// (empirically confirmed; caught by test/golden.test.ts's exact-text
+		// pins once HejbroError became a class). The factory's signature
+		// also means a future field addition fails to compile here instead
+		// of failing silently the same way.
+		hejbroError(
+			error.code,
+			error.message,
+			relativizeDeclaredAt(error.declaredAt, cwd),
+		),
 		identityFromMessage(error.message, fallbackIdentity),
 	);
 
@@ -269,18 +282,6 @@ const errorResult = (
 		stdout: [],
 		stderr: withOnboardingExample(rendered, errors),
 	};
-};
-
-const asHejbroError = (error: unknown): HejbroError => {
-	if (
-		typeof error === "object" &&
-		error !== null &&
-		"code" in error &&
-		"message" in error
-	) {
-		return error as HejbroError;
-	}
-	throw error;
 };
 
 /** `["${N} warning(s) — see below"]` when there are warnings, else `[]` — inserted into stdout right after the `wrote <file>` line (O3), so a stdout-only consumer still learns warnings exist. */

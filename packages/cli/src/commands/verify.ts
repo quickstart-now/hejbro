@@ -20,6 +20,7 @@ import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
 import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
+import { asHejbroError } from "../errors";
 import { sha256Hex } from "../hash";
 import { loadConfig, loadDeclarations } from "../loader";
 import { buildRegistry } from "../presets";
@@ -112,18 +113,6 @@ const preconditionErrorResult = (
 	stdout: [],
 	stderr: renderDiagnostics([errorDiagnostic(error, fallbackIdentity)], null),
 });
-
-const asHejbroError = (error: unknown): HejbroError => {
-	if (
-		typeof error === "object" &&
-		error !== null &&
-		"code" in error &&
-		"message" in error
-	) {
-		return error as HejbroError;
-	}
-	throw error;
-};
 
 /** Every migration file's hash-chain lines, in directory-sorted order — files with no hash lines at all (pre-Phase-5 history) are silently skipped, matching checkChain's "caller filters the unhashed prefix" contract. */
 const readChainEntries = (

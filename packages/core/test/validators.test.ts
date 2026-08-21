@@ -38,7 +38,11 @@ describe("generateMigration validators", () => {
 			],
 		});
 		expect(result.errors).toEqual([
-			{ code: "test-error", message: "an error.", declaredAt: "app.ts:1" },
+			expect.objectContaining({
+				code: "test-error",
+				message: "an error.",
+				declaredAt: "app.ts:1",
+			}),
 		]);
 		expect(result.sql).toBe("");
 		expect(result.hasChanges).toBe(false);
