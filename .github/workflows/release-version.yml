@@ -24,6 +24,10 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  # #180: lets the `version` job's dispatch step (below) start ci.yml via
+  # `gh workflow run` -- see that step's comment for why this is
+  # necessary at all.
+  actions: write
 
 jobs:
   check-changesets:
@@ -104,5 +108,33 @@ jobs:
       # decomposed sub-action's is `script`; they differ even within the
       # same release, which is the trap this comment exists to name).
       - uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        id: version
         with:
           script: pnpm run version-packages
+      # #180: a PR opened/updated with GITHUB_TOKEN (the step above just
+      # did exactly that, for "Version Packages") never triggers a
+      # workflow through its normal push/pull_request events -- GitHub's
+      # own recursion guard, not a bug. `dev`'s ruleset requires
+      # `verify (22)`/`verify (24)`, so without this, that PR can never
+      # gain those checks and the owner can never merge it with the
+      # merge button. `workflow_dispatch` is the documented exception:
+      # starting ci.yml this way still creates real check runs, attached
+      # to the branch's current head commit, which is what the ruleset's
+      # required-status-check evaluation actually looks at.
+      #
+      # `if:` guards against the one case `changesets/action/version`
+      # itself distinguishes via its own `pr-number` output: when every
+      # pending changeset is empty, it logs "All changesets are empty;
+      # not creating PR" and never pushes anything -- dispatching then
+      # would target a branch this run didn't touch.
+      #
+      # Runs on every push to `dev` that reaches this step, so every
+      # later update of the Version PR re-dispatches and the checks
+      # track whatever the current head is -- see this repo's PR for
+      # #180 for the measured behavior when a dispatch races a second
+      # `dev` push in the same window.
+      - name: Dispatch ci.yml for the Version PR's required checks
+        if: steps.version.outputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref changeset-release/dev

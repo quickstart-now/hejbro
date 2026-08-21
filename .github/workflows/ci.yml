@@ -3,6 +3,18 @@ on:
   push:
     branches: [dev, main]
   pull_request:
+  # #180: a PUSH or PR made with GITHUB_TOKEN (as release-version.yml's
+  # "Version Packages" PR is) never starts a workflow via its normal
+  # triggers -- GitHub's own recursion guard. workflow_dispatch and
+  # repository_dispatch are the documented exceptions: an event raised
+  # through them DOES start a workflow even when GITHUB_TOKEN raised it.
+  # release-version.yml uses this (after pushing the Version PR's branch)
+  # to get a real check run onto that branch's head, which is otherwise
+  # the one PR in this repo that can never satisfy `dev`'s required
+  # `verify (22)`/`verify (24)` checks on its own. No inputs needed --
+  # this dispatch always means "check the current head of whatever ref
+  # you're pointed at".
+  workflow_dispatch: {}
 jobs:
   verify:
     runs-on: ubuntu-latest
