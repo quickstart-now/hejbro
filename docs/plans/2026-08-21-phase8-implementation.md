@@ -320,7 +320,7 @@ this to find something.
 #113) is already in, and before the docs-and-release PR — a mismatch
 found here may change what the docs should say.
 
-## One completion criterion applies to every PR
+## Two rules that apply to every PR
 
 **Does this change make a currently-true document false?** If it does, fixing
 that text is part of the PR, not a follow-up.
@@ -379,7 +379,11 @@ camelCase, and the mapping lives in the expression codec. D70 is written as a
 rule over the whole serialized subtree rather than a list of nodes, because the
 subtree is wider than `ExprNode`: `exists(...)` pulls a `SelectNode` in with
 it, which is how `projectionKind: "constantOne"` reaches a snapshot — two of
-the three policies in `examples/supabase` already take that path.
+the three policies in `examples/supabase` already take that path. One limit on
+"every discriminator": `operator` and `direction` values (`not like`, `ilike`,
+`asc`, …) are SQL's own tokens rather than hejbro vocabulary, so they are
+stored verbatim — kebab-casing `not like` would produce SQL Postgres does not
+accept. D57 draws the same line for user-supplied SQL identifiers (D36).
 `packages/core/test/naming-conventions.test.ts` scans generated output rather
 than source — by design — so it is the enforcement mechanism, not an obstacle
 to work around.
