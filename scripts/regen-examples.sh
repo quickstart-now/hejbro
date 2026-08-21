@@ -14,6 +14,14 @@
 # phase8-grant-sync, and a hard-coded count would silently regenerate fewer
 # steps the moment a new one is added and this script isn't updated for it.
 #
+# The script also refuses to *shrink* a chain on its own: it records how
+# many migrations were committed before wiping anything, and fails if
+# regeneration produces fewer than that. The step history is append-only
+# in practice, so fewer migrations after a run almost always means a step
+# file was deleted or misnamed — this must be a loud failure of the
+# script itself, not something that only shows up if someone happens to
+# read `git status` afterward.
+#
 # Ambiguous drop+add pairs (e.g. a column renamed alongside an unrelated
 # schema change, as the postgres/supabase chains' step 4 both are) are
 # resolved generically: on an `ambiguous-column-rename` diagnostic, this
@@ -82,7 +90,16 @@ regen_one() {
   done < <(find "$example_dir/src/steps" -maxdepth 1 -name 'step-*.schema.ts' | sort -V)
   [ "${#steps[@]}" -ge 1 ] || { echo "$example_dir/src/steps has no step-*.schema.ts files" >&2; exit 2; }
 
-  echo "== $name (${#steps[@]} steps)"
+  # The step history is append-only in practice — a chain only ever grows
+  # (phase8-constraint-names, phase8-grant-sync add steps; none remove
+  # one). A regeneration that produces *fewer* migrations than were
+  # already committed is therefore almost always a mistake (a step file
+  # deleted or misnamed), not an intentional shrink — and it must not
+  # pass by only leaving a smaller `git diff` for someone to notice on
+  # their own. Recorded before wiping anything below.
+  committed_count="$(find "$example_dir/migrations" -maxdepth 1 -name '*.sql' 2>/dev/null | wc -l | tr -d ' ')"
+
+  echo "== $name (${#steps[@]} steps, ${committed_count} committed migrations)"
 
   rm -rf "$example_dir/migrations"
   rm -f "$example_dir/hejbro.snapshot.json"
@@ -93,6 +110,12 @@ regen_one() {
     cp "$step" "$entry"
     run_generate "$example_dir"
   done
+
+  regenerated_count="$(find "$example_dir/migrations" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')"
+  if [ "$regenerated_count" -lt "$committed_count" ]; then
+    echo "regen-examples.sh: $name regenerated only $regenerated_count migration(s), but $committed_count were committed before this run — a step file was likely deleted or renamed under src/steps/. If the chain is genuinely meant to shrink, that's not something this script does automatically; resolve it by hand." >&2
+    exit 1
+  fi
 }
 
 for dir in "${EXAMPLE_DIRS[@]}"; do
