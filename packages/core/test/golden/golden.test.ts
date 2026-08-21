@@ -37,6 +37,19 @@ const stepLabel = (index: number): string => {
 // is satisfied by construction the moment the file is (re)written. This
 // runs against `generated.sql` directly, independent of UPDATE_GOLDEN, so
 // a no-op step fails here even immediately after a regen.
+//
+// "Changes something" and "emits a SQL statement" aren't the same thing,
+// though: D42 has the storage bucket kind's `drop` emit no SQL at all (a
+// banner-only migration, on purpose -- auto-deleting a bucket would
+// destroy user files), and `storage-bucket-kind.test.ts` pins exactly that
+// as a real, intended migration. None of today's 8 core golden cases use
+// a preset kind, so this guard has never had to distinguish the two. If a
+// golden case is ever added that reaches a legitimately banner-only step
+// (a preset drop, most likely), the fix is a documented, case-specific
+// opt-out for that one step -- not deleting or loosening this guard,
+// which would drop the no-op protection for all 8 (soon more) existing
+// cases along with it.
+
 const hasStatementBeyondBanner = (sql: string): boolean =>
 	sql
 		.split("\n")
