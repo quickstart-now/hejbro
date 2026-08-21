@@ -229,13 +229,16 @@ export const generateMigration = (
 		};
 	}
 
+	// D74: every kind's emit sees the whole diff's changes (siblingChanges),
+	// read-only and optional -- most kinds ignore it; sequenceKind/tableKind
+	// use it to coordinate a serial column's single-statement add (#23).
 	const emittedStatements: ReadonlyArray<{
 		readonly change: KindChange;
 		readonly statement: SqlStatement;
 	}> = changes.flatMap((change) =>
 		registry
 			.get(change.kind)
-			.emit(change)
+			.emit(change, changes)
 			.map((statement) => ({ change, statement })),
 	);
 

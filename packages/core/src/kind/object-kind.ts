@@ -44,5 +44,23 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 		next: JsonValue | null,
 		identity: string,
 	): ReadonlyArray<KindChange>;
-	emit(change: KindChange): ReadonlyArray<SqlStatement>;
+	/**
+	 * `siblingChanges` (D74) is the *whole* diff's change list — every
+	 * `KindChange`, across every kind, `generate.ts` is about to emit in
+	 * this run, `change` included — passed read-only and optional, mirroring
+	 * the view `Validator` (`engine/validate.ts`, D37) has had since before
+	 * this: a kind whose SQL for one change depends on a sibling kind's
+	 * change in the *same* diff can render both facts in a single
+	 * statement instead of two that can't work independently (the
+	 * motivating case, #23: a `not null` column backfills from a default
+	 * only when the default is present in the *same* `add column`
+	 * statement — a separate `set default` afterwards is too late for a
+	 * table that already has rows). Optional because only `sequenceKind`/
+	 * `tableKind` use it today; every other kind's `emit` ignores the
+	 * second parameter and needs no change.
+	 */
+	emit(
+		change: KindChange,
+		siblingChanges?: ReadonlyArray<KindChange>,
+	): ReadonlyArray<SqlStatement>;
 }
