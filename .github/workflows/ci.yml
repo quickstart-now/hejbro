@@ -3,6 +3,14 @@ on:
   push:
     branches: [dev, main]
   pull_request:
+  # #180: lets release-version.yml's `version` job trigger this workflow
+  # against a Version Packages PR branch (changeset-release/dev) via `gh
+  # workflow run` -- a GITHUB_TOKEN-authored push/branch-update doesn't
+  # trigger `push`/`pull_request` itself (recursion guard), so without this
+  # explicit dispatch trigger the PR's required status checks never attach
+  # and it stays permanently blocked. workflow_dispatch is the documented
+  # exception to that guard.
+  workflow_dispatch: {}
 jobs:
   verify:
     runs-on: ubuntu-latest

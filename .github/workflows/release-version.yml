@@ -11,7 +11,12 @@ name: release-version
 # a version PR there).
 on:
   push:
-    branches: [dev]
+    # SCRATCH TEST for #180 (do not merge as-is): scratch-180-base added
+    # temporarily so this workflow triggers on the isolated scratch branch
+    # instead of dev, to measure the dispatch mechanism without touching
+    # the real Version Packages PR (#179) again after the 2026-08-22
+    # incident. Reverted to [dev] only before the real PR is opened.
+    branches: [dev, scratch-180-base]
 
 # Two concurrent runs racing to open/update the "Version Packages" PR branch
 # could interleave pushes to it. Queue instead of overlapping; don't cancel
@@ -24,6 +29,9 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  # #180: lets the `version` job's dispatch step (below) start ci.yml via
+  # `gh workflow run`.
+  actions: write
 
 jobs:
   check-changesets:
@@ -103,6 +111,23 @@ jobs:
       # monolithic action's top-level input is named `version-script`, the
       # decomposed sub-action's is `script`; they differ even within the
       # same release, which is the trap this comment exists to name).
-      - uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+      - id: version
+        uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
           script: pnpm run version-packages
+          # SCRATCH TEST for #180 (do not merge as-is): parameterized to
+          # github.ref_name rather than hardcoded "dev", specifically so
+          # this scratch run targets changeset-release/scratch-180-base
+          # and can never touch changeset-release/dev (PR #179's branch)
+          # again -- hardcoding "dev" here on a non-dev trigger branch is
+          # exactly the mistake that contaminated #179 earlier today.
+          pr-base-branch: ${{ github.ref_name }}
+      # SCRATCH TEST for #180 (do not merge as-is): dispatch ref is
+      # parameterized for the same reason as pr-base-branch above --
+      # must resolve to changeset-release/scratch-180-base here, never
+      # changeset-release/dev.
+      - name: Dispatch ci.yml for the Version PR's required checks
+        if: steps.version.outputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref changeset-release/${{ github.ref_name }}
