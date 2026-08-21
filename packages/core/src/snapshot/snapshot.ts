@@ -193,10 +193,11 @@ const parseJson = (raw: string): unknown => {
 
 /**
  * `snapshot version <v> is older than this build supports …` — pre-1.0, no
- * format-migration path (D51 addendum, owner-approved 2026-08-20).
+ * format-migration path. Owner-approved verbatim (2026-08-21, #136,
+ * phase8-snapshot-v5), superseding the original D51 addendum text
+ * (owner-approved 2026-08-20).
  *
- * ⚠️ Wording pending owner approval (#136, phase8-snapshot-v5). The
- * previous text told the reader to delete the snapshot and regenerate,
+ * The previous text told the reader to delete the snapshot and regenerate,
  * which does not work: with prior migrations present, `hejbro generate`
  * refuses (`snapshot-lost`); routing around that via `hejbro init` first
  * produces a chain `hejbro verify` then rejects (`chain-tip-mismatch` or
