@@ -1,6 +1,7 @@
 import type { ViewDeclaration } from "../dsl/define-view";
 import { assertNever, throwHejbroError } from "../error";
 import type { ProjectionNode } from "../expr/ast";
+import { decodeSelectNode, encodeSelectNode } from "../expr/codec";
 import { renderSelect } from "../expr/render-sql";
 import { sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
@@ -9,18 +10,32 @@ import { qualifyName } from "../sql/identifier";
 import { predropStatement, statement } from "../sql/statement";
 
 /**
- * A view's serialized snapshot node — `selectSql` is pre-rendered (D24
- * precedent), `columns` drives the recreate-vs-replace decision (D27).
- * **Compact** (Task 3 audit / D33): `securityInvoker` is present only when
- * `true` (declared default `false`) — read via {@link viewSecurityInvoker}.
+ * A view's serialized snapshot node — `columns` drives the
+ * recreate-vs-replace decision (D27). **Compact** (Task 3 audit / D33):
+ * `securityInvoker` is present only when `true` (declared default
+ * `false`) — read via {@link viewSecurityInvoker}.
+ *
+ * `query` is a **structured expression-codec `SelectNode`** (D67/D70/D72),
+ * not pre-rendered SQL text (that was D24/D27's original shape, matching
+ * `ColumnSnapshot.default`'s own pre-D67 shape) — encoded/decoded with
+ * #110's own `encodeSelectNode`/`decodeSelectNode`, reused unchanged since
+ * neither assumes it's only ever called from inside an `ExistsNode`.
+ * {@link viewSelectSql} decodes and renders it back to SQL text on demand,
+ * so every caller of that accessor is unaffected by this shape change.
+ * This is **not a defect fix** — `create or replace view` already
+ * resolves a renamed dependency correctly today — see D72's rationale.
  */
 export type ViewSnapshot = {
 	readonly schema: string;
 	readonly name: string;
 	readonly columns: ReadonlyArray<string>;
-	readonly selectSql: string;
+	readonly query: JsonValue;
 	readonly securityInvoker?: true;
 };
+
+/** `snapshot.query` decoded and rendered back to SQL text. */
+export const viewSelectSql = (snapshot: ViewSnapshot): string =>
+	renderSelect(decodeSelectNode(snapshot.query));
 
 /** `snapshot.securityInvoker`, defaulting to `false` when absent (compact snapshot). */
 export const viewSecurityInvoker = (snapshot: ViewSnapshot): boolean =>
@@ -46,8 +61,16 @@ const viewIdentity = (schema: string, name: string): string =>
 const VIEW_CHANGED_NOTE = "view changed";
 const VIEW_RECREATE_NOTE = "view columns changed; recreating";
 
-/** Derives a view's ordered column-name list from its query's projection (`constantOne` is unreachable via `select()`, hence `defineView`). */
-const projectionColumns = (
+/**
+ * Derives a view's ordered column-name list from its query's projection
+ * (`constantOne` is unreachable via `select()`, hence `defineView`).
+ * Exported so `rename-plan.ts`'s `retargetViewFields` can recompute
+ * `ViewSnapshot.columns` from a retargeted query, the same way `serialize`
+ * derives it the first time — a column rename changes `allColumns`'s
+ * `columnNames` (via `retargetProjection`), and `columns` must follow it,
+ * or the D27 prefix-rule diff compares a stale name against the new one.
+ */
+export const projectionColumns = (
 	projection: ProjectionNode,
 ): ReadonlyArray<string> => {
 	switch (projection.projectionKind) {
@@ -82,7 +105,7 @@ const securityInvokerClause = (securityInvoker: boolean): string => {
 };
 
 const createOrReplaceSql = (snapshot: ViewSnapshot): string =>
-	`create or replace view ${qualifyName(snapshot.schema, snapshot.name)}${securityInvokerClause(viewSecurityInvoker(snapshot))} as ${snapshot.selectSql};`;
+	`create or replace view ${qualifyName(snapshot.schema, snapshot.name)}${securityInvokerClause(viewSecurityInvoker(snapshot))} as ${viewSelectSql(snapshot)};`;
 
 /**
  * The built-in object kind for Postgres views. Identity is
@@ -111,7 +134,7 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 			schema: declaration.schema.schemaName,
 			name: declaration.viewName,
 			columns: projectionColumns(declaration.query.projection),
-			selectSql: renderSelect(declaration.query),
+			query: encodeSelectNode(declaration.query),
 			...securityInvokerField(declaration.securityInvoker),
 		};
 		return snapshot;

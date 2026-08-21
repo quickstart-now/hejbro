@@ -238,10 +238,44 @@ const retargetSqlTemplate = (
 	return { ...node, chunks };
 };
 
+/**
+ * `from` is the projection's OWN `SelectNode.from` (unretargeted) --
+ * needed only for `allColumns`, whose `columnNames` is a denormalized
+ * snapshot-only copy of the *same* table's real column names (D27,
+ * `view-kind.ts`'s `projectionColumns`; `allColumns` only ever comes from
+ * `select(table)`, which always sets `from` to that exact table — never a
+ * join). A column rename must rename a matching entry in that list too,
+ * or a view's own `ViewSnapshot.columns` (derived from it) goes stale
+ * (found while wiring #157's `rewriteExpressionReferences`: the "no
+ * leftover diff" test failed with a stale name surviving in `columns`,
+ * even though `query`'s own `columnRef`s were correctly retargeted --
+ * `allColumns` was never reachable through the four pre-#157 fields, so
+ * this branch was untested dead code until a view could reach it). A
+ * table rename needs no such rewrite here — column *names* don't change
+ * on a table rename, only `query.from`'s table name does (handled by
+ * {@link retargetTableRef} at the call site).
+ */
 const retargetProjection = (
 	projection: ProjectionNode,
+	from: TableRefNode,
 	target: RenameTarget,
 ): ProjectionNode => {
+	if (projection.projectionKind === "allColumns") {
+		if (
+			target.oldColumn === null ||
+			from.schemaName !== target.oldSchema ||
+			from.tableName !== target.oldTable ||
+			!projection.columnNames.includes(target.oldColumn)
+		) {
+			return projection;
+		}
+		return {
+			...projection,
+			columnNames: projection.columnNames.map((name) =>
+				name === target.oldColumn ? (target.newColumn ?? name) : name,
+			),
+		};
+	}
 	if (projection.projectionKind !== "columns") {
 		return projection;
 	}
@@ -278,11 +312,18 @@ const retargetOrderByTerm = (
 	return { ...term, expr };
 };
 
-const retargetSelectNode = (
+/**
+ * Retargets a whole {@link SelectNode} for `target`, same identity
+ * invariant as {@link retargetExprNode} (returns the exact same reference
+ * when nothing matched). Not `exists()`-specific — reused as-is for a
+ * view's top-level query (#157), not just one nested inside an
+ * `ExistsNode`.
+ */
+export const retargetSelectNode = (
 	query: SelectNode,
 	target: RenameTarget,
 ): SelectNode => {
-	const projection = retargetProjection(query.projection, target);
+	const projection = retargetProjection(query.projection, query.from, target);
 	const from = retargetTableRef(query.from, target);
 	const joins = query.joins.map((join) => retargetJoin(join, target));
 	const where =

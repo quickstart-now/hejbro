@@ -298,7 +298,13 @@ const encodeOrderByTerm = (term: OrderByTerm): JsonValue => ({
 	direction: term.direction,
 });
 
-const encodeSelectNode = (node: SelectNode): JsonValue => ({
+/**
+ * Encodes a whole {@link SelectNode} to its snapshot form. Not
+ * `exists()`-specific — this is what lets #157 (view snapshots) reuse it
+ * unchanged for a top-level query, not just one nested inside an
+ * `ExistsNode`.
+ */
+export const encodeSelectNode = (node: SelectNode): JsonValue => ({
 	queryKind: node.queryKind,
 	projection: encodeProjection(node.projection),
 	from: encodeTableRef(node.from),
@@ -500,7 +506,8 @@ const decodeOrderByTerm = (value: JsonValue): OrderByTerm => {
 	};
 };
 
-const decodeSelectNode = (value: JsonValue): SelectNode => {
+/** Decodes a whole {@link SelectNode} from its snapshot form — the counterpart to {@link encodeSelectNode}, equally reusable for a top-level query (#157) as for `exists()`'s nested one. */
+export const decodeSelectNode = (value: JsonValue): SelectNode => {
 	const node = asRecord(value, "queryKind");
 	const queryKind = stringField(node, "queryKind");
 	if (queryKind !== "select") {
