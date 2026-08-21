@@ -10,9 +10,11 @@
 -- + view app.profiles_public [new]
 -- + grant app.allTablesPrivileges.anon [new]
 -- + grant app.allTablesPrivileges.authenticated [new]
+-- + grant app.defaultTablePrivileges.anon [new]
+-- + grant app.defaultTablePrivileges.authenticated [new]
 -- + supabase-storage-bucket attachments [new]
 -- parent-snapshot: sha256:f86ae7ebc6d8bd93524149ab39f929814ff7413a6e5e1cfdb1d21367bf9bd295
--- snapshot: sha256:a8a54d1240a768884cc5afb9a3f8d9595257ad4bd8378178be091c1fdc2b07bb
+-- snapshot: sha256:9bcb44dc93fa255414e6b11ec3c67e5525ae7f015ee5b5e55193fe2039efa81e
 
 create schema "app";
 
@@ -55,6 +57,10 @@ create or replace view "app"."profiles_public" as select "id", "user_id", "displ
 grant select on all tables in schema "app" to "anon";
 
 grant select on all tables in schema "app" to "authenticated";
+
+alter default privileges in schema "app" grant select on tables to "anon";
+
+alter default privileges in schema "app" grant select on tables to "authenticated";
 
 insert into storage.buckets ("id", "name", "public", "file_size_limit", "allowed_mime_types")
 values ('attachments', 'attachments', false, 10485760, array['image/png', 'image/jpeg']::text[])

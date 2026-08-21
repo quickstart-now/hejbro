@@ -18,6 +18,22 @@
 			"role": "authenticated",
 			"schema": "app"
 		},
+		"grant:app.defaultTablePrivileges.anon": {
+			"grantKind": "defaultTablePrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.defaultTablePrivileges.authenticated": {
+			"grantKind": "defaultTablePrivileges",
+			"privileges": [
+				"select"
+			],
+			"role": "authenticated",
+			"schema": "app"
+		},
 		"policy:app.attachment_blobs.attachment_blobs_read_own": {
 			"command": "select",
 			"name": "attachment_blobs_read_own",
