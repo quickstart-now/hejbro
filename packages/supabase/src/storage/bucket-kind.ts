@@ -81,14 +81,19 @@ const humanizeFieldName = (key: string): string =>
  * from `next` (a field unset back to its default) -- so notes read in a
  * stable, field-declaration-like order without hardcoding one.
  */
-// `sameJson` takes `JsonValue`, which has no `undefined` variant -- but
-// `stableJson` (which it's built on) uses `JSON.stringify`, and
-// `JSON.stringify` drops an object property whose value is `undefined` as
-// if the key were never there. So a single-key wrapper around a possibly-
-// absent value is safe at runtime even though the static type doesn't say
-// so; the cast documents that gap rather than hiding it.
-const wrapKey = (key: string, value: JsonValue | undefined): JsonValue =>
-	({ [key]: value }) as JsonValue;
+// An absent key (`value === undefined`) wraps to `{}`, a present one to
+// `{ [key]: value }` -- written as an explicit branch, not
+// `{ [key]: value } as JsonValue` relying on `JSON.stringify` dropping
+// `undefined`-valued properties. Both produce the same comparison, but this
+// way "absent" and "present" are a visible branch in this function, not a
+// property of the serializer `sameJson` happens to be built on -- the kind
+// of implicit normalization this whole fix exists to get rid of.
+const wrapKey = (key: string, value: JsonValue | undefined): JsonValue => {
+	if (value === undefined) {
+		return {};
+	}
+	return { [key]: value };
+};
 
 const changedFieldNames = (
 	previous: Record<string, JsonValue>,
