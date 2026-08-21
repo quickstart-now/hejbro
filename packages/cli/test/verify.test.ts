@@ -135,6 +135,28 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		expect(result.stderr).toContain("error[entry-not-found]");
 	});
 
+	// #125/phase8-loader-diagnostics: verify calls the same loadConfig/
+	// loadDeclarations as generate (both from loader.ts's shared
+	// importOrDiagnose) — confirms the fix isn't generate-only (the exact
+	// "one call site fixed, the other left raw" gap #146 closed for
+	// asHejbroError).
+	it("surfaces a declaration-load-failed diagnostic (not a raw crash) for a declaration file whose import doesn't resolve", async () => {
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+		await writeFixtureFile(
+			cwd,
+			"src/app.schema.ts",
+			'import { schema } from "hejbro";\nimport "totally-not-installed-package";\n\nexport const app = schema("app");\n',
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("error[declaration-load-failed]");
+		expect(result.stderr).toContain("app.schema.ts");
+		expect(result.stderr).toContain("totally-not-installed-package");
+		expect(result.stderr).not.toContain("node:internal/modules");
+		expect(result.stderr).not.toContain(cwd);
+	});
+
 	it("M1 regression: exits 1 with a proper config-not-found diagnostic (not a raw object dump) when there's no hejbro.config.ts at all", async () => {
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);

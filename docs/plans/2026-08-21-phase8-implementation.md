@@ -533,6 +533,15 @@ thing. If it does not, extending it is part of the PR — and the extension
 lands **first, failing**, so its reach is proven before the code that
 needs it.
 
+**Before measuring CLI behaviour, confirm `dist` is newer than the source
+you changed.** `test/golden.test.ts` and the other spawn-the-built-CLI
+suites validate `dist/cli.js`, and `assertBuiltCli` checks only that it
+exists. Root `pnpm test` goes through turbo and rebuilds first;
+`pnpm --filter hejbro test` does not. This applies to every PR that
+measures the CLI by spawning it — `phase8-loader-diagnostics`,
+`phase8-flag-equals`, and the format wave. See "a failed reproduction is
+not evidence of absence" below for what this looks like when missed.
+
 **How to check a gate's range: break it on purpose.** Reading a gate and
 judging whether it covers something is weaker than injecting the defect
 and watching it fail. `phase8-packaging`'s review did exactly that — seven
