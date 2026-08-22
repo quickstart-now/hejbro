@@ -22,6 +22,7 @@ import {
 	parseSnapshot,
 	planDuplicateVersionFix,
 	renderSnapshot,
+	requiredKeysByKind,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
@@ -364,11 +365,15 @@ type Check1Result = {
 	readonly outcome: CheckOutcome;
 };
 
-/** Check 1 (always runs): the snapshot file exists and parses — a missing file reuses generate's own snapshot-not-found/snapshot-lost branch (readSnapshotFileText, shared to avoid drift), a malformed one surfaces core's invalid-snapshot. Never throws — every failure mode becomes a CheckOutcome so check 3 still runs independently. */
-const runCheck1 = (cwd: string, config: HejbroConfig): Check1Result => {
+/** Check 1 (always runs): the snapshot file exists and parses (including each entry's own required keys, D79/#159) — a missing file reuses generate's own snapshot-not-found/snapshot-lost branch (readSnapshotFileText, shared to avoid drift), a malformed one surfaces core's invalid-snapshot. Never throws — every failure mode becomes a CheckOutcome so check 3 still runs independently. */
+const runCheck1 = (
+	cwd: string,
+	config: HejbroConfig,
+	registry: KindRegistry,
+): Check1Result => {
 	try {
 		const diskText = readSnapshotFileText(cwd, config);
-		parseSnapshot(diskText);
+		parseSnapshot(diskText, requiredKeysByKind(registry));
 		return { diskText, outcome: { ok: true } };
 	} catch (error) {
 		return {
@@ -570,7 +575,7 @@ export const runVerify = async (
 		const declarations = await loadDeclarations(configPath, config);
 		const registry = buildRegistry(config);
 
-		const check1 = runCheck1(cwd, config);
+		const check1 = runCheck1(cwd, config, registry);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
 		const initialFileNames = listMigrationFiles(migrationsDirPath);
 		const fixOutcome = applyDuplicateVersionFixesIfRequested(

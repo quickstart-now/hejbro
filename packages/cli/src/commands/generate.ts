@@ -14,6 +14,7 @@ import {
 	migrationFileName,
 	parseSnapshot,
 	renderSnapshot,
+	requiredKeysByKind,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { Diagnostic } from "../diagnostics";
@@ -373,8 +374,11 @@ export const runGenerate = async (
 		// nested inside this same block (the outer catch also handles
 		// config-loading failures, before `config` exists at all).
 		try {
-			const previousSnapshot = parseSnapshot(readSnapshotFileText(cwd, config));
 			const registry = buildRegistry(config);
+			const previousSnapshot = parseSnapshot(
+				readSnapshotFileText(cwd, config),
+				requiredKeysByKind(registry),
+			);
 			const validators = configValidators(config);
 
 			const firstPass = generateMigration({
