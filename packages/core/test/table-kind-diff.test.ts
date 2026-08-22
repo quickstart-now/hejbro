@@ -9,7 +9,10 @@ import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import type { ColumnRef, Expr } from "../src/expr/ast";
+import { decodeExprNode } from "../src/expr/codec";
 import { inArray, isNotNull } from "../src/expr/operators";
+import { renderExpr } from "../src/expr/render-sql";
+import { sql } from "../src/expr/sql-template";
 import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
@@ -21,9 +24,11 @@ import type {
 import {
 	asTableSnapshot,
 	checkExpression,
+	indexColumnExpression,
 	indexColumnOpclass,
 	indexMethod,
 	indexWhere,
+	isExpressionIndexColumn,
 } from "../src/kinds/table-snapshot";
 import {
 	buildSnapshot,
@@ -555,6 +560,45 @@ describe("tableKind.serialize — index columns and where (v3, D51)", () => {
 			{ name: "data", opclass: "text_pattern_ops" },
 		]);
 		expect(byName.get("posts_plain_idx")?.columns).toEqual([{ name: "plain" }]);
+	});
+
+	// #284 US3 (T032): expression indexes — serialize writes `expression`
+	// as `encodeExprNode` output (D57 vocabulary) and round-trips through
+	// `decodeExprNode`.
+	it("serializes an expression column as encodeExprNode output, round-tripping through decodeExprNode", () => {
+		const posts = table(app, "posts", { email: text() }, (t) => ({
+			indexes: [index("posts_email_lower_idx").on(sql`lower(${t.email})`)],
+		}));
+		const snapshot = asTableSnapshot(tableKind.serialize(getTableMeta(posts)));
+		const [firstIndex] = snapshot.indexes;
+		if (firstIndex === undefined) {
+			throw new Error("expected one index");
+		}
+		const [column] = firstIndex.columns;
+		if (column === undefined || !isExpressionIndexColumn(column)) {
+			throw new Error("expected an expression column");
+		}
+		expect(column.expression).toEqual({
+			nodeKind: "sql-template",
+			chunks: [
+				{ chunkKind: "text", text: "lower(" },
+				{
+					chunkKind: "expr",
+					expr: {
+						nodeKind: "column-ref",
+						schema: "app",
+						table: "posts",
+						column: "email",
+					},
+				},
+				{ chunkKind: "text", text: ")" },
+			],
+		});
+		expect(renderExpr(decodeExprNode(column.expression))).toBe(
+			'lower("app"."posts"."email")',
+		);
+		// indexColumnExpression is the accessor emit/preset code actually uses.
+		expect(indexColumnExpression(column)).toBe('lower("app"."posts"."email")');
 	});
 });
 

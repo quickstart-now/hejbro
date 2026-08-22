@@ -18,16 +18,19 @@ import {
 	derivePrimaryKeyName,
 	deriveSequenceName,
 	deriveUniqueName,
+	namedIndexColumnNames,
 } from "../kinds/table-kind";
 import type {
 	ColumnSnapshot,
 	ForeignKeySnapshot,
+	IndexColumnSnapshot,
 	IndexSnapshot,
 	TableSnapshot,
 } from "../kinds/table-snapshot";
 import {
 	asTableSnapshot,
 	columnUniqueName,
+	isExpressionIndexColumn,
 	tableIdentity,
 	tablePrimaryKeyName,
 } from "../kinds/table-snapshot";
@@ -820,6 +823,48 @@ const applyRetargetedWhere = (
 	return { ...index, where: retargeted };
 };
 
+/** Retargets one index column's `expression` for `target` (R5/R10a) — `null` for a plain (`name`) entry or a no-op retarget, the same convention {@link retargetField} itself uses. */
+const retargetIndexColumnExpression = (
+	column: IndexColumnSnapshot,
+	target: RenameTarget,
+): JsonValue | null => {
+	if (!isExpressionIndexColumn(column)) {
+		return null;
+	}
+	return retargetField(column.expression, target);
+};
+
+/** Did any of an index's own column expressions actually change? */
+const anyIndexColumnChanged = (
+	results: ReadonlyArray<JsonValue | null>,
+): boolean => results.some((retargeted) => retargeted !== null);
+
+const applyRetargetedIndexColumn = (
+	column: IndexColumnSnapshot,
+	retargeted: JsonValue | null,
+): IndexColumnSnapshot => {
+	if (retargeted === null || !isExpressionIndexColumn(column)) {
+		return column;
+	}
+	return { ...column, expression: retargeted };
+};
+
+/** {@link retargetTableFields}'s fourth field family (R10a): each index column's `expression` retargeted by node, rebuilding the index's `columns` only when at least one actually changed — a no-op index (all `null`s) keeps its exact original object reference, the same short-circuit {@link applyRetargetedWhere} gets from {@link retargetField} returning `null`. */
+const applyRetargetedIndexColumns = (
+	index: TableSnapshot["indexes"][number],
+	results: ReadonlyArray<JsonValue | null>,
+): TableSnapshot["indexes"][number] => {
+	if (!anyIndexColumnChanged(results)) {
+		return index;
+	}
+	return {
+		...index,
+		columns: index.columns.map((column, columnIndex) =>
+			applyRetargetedIndexColumn(column, results[columnIndex] ?? null),
+		),
+	};
+};
+
 const applyRetargetedCheckExpression = (
 	check: NonNullable<TableSnapshot["checks"]>[number],
 	retargeted: JsonValue | null,
@@ -837,20 +882,24 @@ type ColumnRetargetResult = readonly [
 type IndexRetargetResult = readonly [
 	TableSnapshot["indexes"][number],
 	JsonValue | null,
+	ReadonlyArray<JsonValue | null>,
 ];
 type CheckRetargetResult = readonly [
 	NonNullable<TableSnapshot["checks"]>[number],
 	JsonValue | null,
 ];
 
-/** Did retargeting `tableSnapshot`'s columns, indexes, or checks for `target` actually change any of them? */
+/** Did retargeting `tableSnapshot`'s columns, indexes (their own `where` or any column's `expression`, R10a), or checks for `target` actually change any of them? */
 const anyFieldChanged = (
 	columnResults: ReadonlyArray<ColumnRetargetResult>,
 	indexResults: ReadonlyArray<IndexRetargetResult>,
 	checkResults: ReadonlyArray<CheckRetargetResult>,
 ): boolean =>
 	columnResults.some(([, retargeted]) => retargeted !== null) ||
-	indexResults.some(([, retargeted]) => retargeted !== null) ||
+	indexResults.some(
+		([, whereRetargeted, columnResults]) =>
+			whereRetargeted !== null || anyIndexColumnChanged(columnResults),
+	) ||
 	checkResults.some(([, retargeted]) => retargeted !== null);
 
 /**
@@ -883,7 +932,14 @@ const retargetTableFields = (
 		(column) => [column, retargetField(column.default, target)] as const,
 	);
 	const indexResults = tableSnapshot.indexes.map(
-		(index) => [index, retargetField(index.where, target)] as const,
+		(index) =>
+			[
+				index,
+				retargetField(index.where, target),
+				index.columns.map((column) =>
+					retargetIndexColumnExpression(column, target),
+				),
+			] as const,
 	);
 	const checkResults = (tableSnapshot.checks ?? []).map(
 		(check) => [check, retargetField(check.expression, target)] as const,
@@ -896,8 +952,11 @@ const retargetTableFields = (
 		columns: columnResults.map(([column, retargeted]) =>
 			applyRetargetedDefault(column, retargeted),
 		),
-		indexes: indexResults.map(([index, retargeted]) =>
-			applyRetargetedWhere(index, retargeted),
+		indexes: indexResults.map(([index, whereRetargeted, columnResults]) =>
+			applyRetargetedIndexColumns(
+				applyRetargetedWhere(index, whereRetargeted),
+				columnResults,
+			),
 		),
 		...checksPatch(tableSnapshot, checkResults),
 	};
@@ -970,9 +1029,12 @@ const retargetViewFields = (
 /**
  * Retargets every stored expression node (D67/D70) that mentions the
  * renamed table/column — column default, CHECK expression, partial index
- * `where`, every table's policies' `using`/`withCheck`, and every view's
- * `query` (#157/D72) — across the *whole* snapshot, not just the renamed
- * table's own node. This is the point of storing expressions structurally
+ * `where`, **an index column's own `expression` (R5/R10a — a rename
+ * touching only an expression index is recognised as a reference, not a
+ * drop + add)**, every table's policies' `using`/`withCheck`, and every
+ * view's `query` (#157/D72) — across the *whole* snapshot, not just the
+ * renamed table's own node. This is the point of storing expressions
+ * structurally
  * instead of as rendered text: without it, a rename leaves stale
  * identifiers behind wherever an expression mentioned the old name.
  *
@@ -1055,7 +1117,25 @@ const resolveRenamedColumns = (
 	return renameColumnInList(columns, oldColumnName, newColumnName);
 };
 
-/** Rewrites one table's indexes for either a table rename (new table name, unchanged columns) or a column rename (unchanged table name, one renamed column) — synthesizing derived-name rename statements only for names that were actually `derive(...)`-generated (algorithm step 4). */
+/** Renames each `name` entry of an index's column list for a column-rename spec; an expression entry (R5) is retargeted by node (`applyRetargetedIndexColumns`), not renamed by name, so it passes through unchanged here. */
+const renameNamedIndexColumns = (
+	columns: ReadonlyArray<IndexColumnSnapshot>,
+	oldColumnName: string | null,
+	newColumnName: string | null,
+): ReadonlyArray<IndexColumnSnapshot> =>
+	columns.map((column) => {
+		if (!("name" in column)) {
+			return column;
+		}
+		const [renamed] = resolveRenamedColumns(
+			[column.name],
+			oldColumnName,
+			newColumnName,
+		);
+		return { ...column, name: renamed ?? column.name };
+	});
+
+/** Rewrites one table's indexes for either a table rename (new table name, unchanged columns) or a column rename (unchanged table name, one renamed column) — synthesizing derived-name rename statements only for names that were actually `derive(...)`-generated (algorithm step 4). An expression entry (R5) names no column of its own, so it's excluded from derived-name recomputation (R10b) — see {@link renameNamedIndexColumns} for its own (node-level) retargeting. */
 const rewriteIndexesForRename = (
 	schemaName: string,
 	oldTableName: string,
@@ -1069,22 +1149,23 @@ const rewriteIndexesForRename = (
 } => {
 	const sorted = [...indexes].sort((a, b) => compareKeys(a.name, b.name));
 	const rewritten = sorted.map((entry) => {
-		const columnNames = entry.columns.map((column) => column.name);
-		const oldDerivedName = deriveIndexName(oldTableName, columnNames);
-		const newColumnNames = resolveRenamedColumns(
-			columnNames,
+		const oldDerivedName = deriveIndexName(
+			oldTableName,
+			namedIndexColumnNames(entry.columns),
+		);
+		const newColumns = renameNamedIndexColumns(
+			entry.columns,
 			oldColumnName,
 			newColumnName,
 		);
-		const newColumns = entry.columns.map((column, columnIndex) => ({
-			...column,
-			name: newColumnNames[columnIndex] ?? column.name,
-		}));
 		const wasDerived = entry.name === oldDerivedName;
 		if (!wasDerived) {
 			return { entry: { ...entry, columns: newColumns }, statement: null };
 		}
-		const newDerivedName = deriveIndexName(newTableName, newColumnNames);
+		const newDerivedName = deriveIndexName(
+			newTableName,
+			namedIndexColumnNames(newColumns),
+		);
 		if (newDerivedName === entry.name) {
 			return { entry: { ...entry, columns: newColumns }, statement: null };
 		}

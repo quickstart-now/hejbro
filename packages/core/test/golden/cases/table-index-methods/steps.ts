@@ -1,25 +1,29 @@
-import type { HejbroInput } from "../../../../src/index";
+import type { HejbroInput, RenameSpec } from "../../../../src/index";
 import {
 	index,
+	isNull,
 	jsonb,
 	op,
+	sql,
 	table,
 	text,
 	timestamptz,
 	uuid,
 } from "../../../../src/index";
-import { app, docs } from "./declarations";
+import { app, docs, users } from "./declarations";
 
-// Step 0: from empty — non-btree access methods (gin/brin/hash, #284 US1)
-// and per-column operator classes (jsonb_path_ops/gin_trgm_ops, #284 US2).
+// Step 0: from empty — non-btree access methods (gin/brin/hash, #284 US1),
+// per-column operator classes (jsonb_path_ops/gin_trgm_ops, #284 US2), and
+// expression columns (#284 US3).
 
-const fromEmpty: ReadonlyArray<HejbroInput> = [app, docs];
+const fromEmpty: ReadonlyArray<HejbroInput> = [app, docs, users];
 
-// Step 1: docs_data_idx's opclass is dropped (jsonb_path_ops -> none) under
-// the same name and the same method (gin) — exercises the drop + create
-// path for a same-name index whose opclass changed (R9). Matches
-// contracts/sql.md's step-1 shape exactly (`using gin ("data")`, no
-// opclass). The other three indexes are unchanged.
+// Step 1: two definition changes under the same names (matches
+// contracts/sql.md's own combined step-1 exactly):
+// - docs_data_idx's opclass is dropped (jsonb_path_ops -> none), method
+//   unchanged (gin) — #284 US2.
+// - users_email_lower_idx's expression changes (lower(email) ->
+//   lower(btrim(email))) — #284 US3. users_email_lower_uidx is untouched.
 
 const docsOpclassChanged = table(
 	app,
@@ -41,9 +45,75 @@ const docsOpclassChanged = table(
 	}),
 );
 
-const opclassChanged: ReadonlyArray<HejbroInput> = [app, docsOpclassChanged];
+const usersExpressionChanged = table(
+	app,
+	"users",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		email: text(),
+		deletedAt: timestamptz(),
+	},
+	(t) => ({
+		indexes: [
+			index("users_email_lower_idx").on(sql`lower(btrim(${t.email}))`),
+			index("users_email_lower_uidx")
+				.unique()
+				.on(sql`lower(${t.email})`)
+				.where(isNull(t.deletedAt)),
+		],
+	}),
+);
 
-export const steps: ReadonlyArray<ReadonlyArray<HejbroInput>> = [
-	fromEmpty,
-	opclassChanged,
+const definitionsChanged: ReadonlyArray<HejbroInput> = [
+	app,
+	docsOpclassChanged,
+	usersExpressionChanged,
 ];
+
+// Step 2: `--rename app.users.email=email_address` — the explicit name is
+// kept (never derived); the expression is retargeted; no
+// ambiguous-column-rename (#284 US3, T035).
+
+const usersColumnRenamed = table(
+	app,
+	"users",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		emailAddress: text(),
+		deletedAt: timestamptz(),
+	},
+	(t) => ({
+		indexes: [
+			index("users_email_lower_idx").on(sql`lower(btrim(${t.emailAddress}))`),
+			index("users_email_lower_uidx")
+				.unique()
+				.on(sql`lower(${t.emailAddress})`)
+				.where(isNull(t.deletedAt)),
+		],
+	}),
+);
+
+const emailRenamed: RenameSpec = {
+	target: "column",
+	schemaName: "app",
+	tableName: "users",
+	oldName: "email",
+	newName: "email_address",
+};
+
+const columnRenamed = {
+	declarations: [
+		app,
+		docsOpclassChanged,
+		usersColumnRenamed,
+	] as ReadonlyArray<HejbroInput>,
+	renames: [emailRenamed],
+};
+
+export const steps: ReadonlyArray<
+	| ReadonlyArray<HejbroInput>
+	| {
+			readonly declarations: ReadonlyArray<HejbroInput>;
+			readonly renames?: ReadonlyArray<RenameSpec>;
+	  }
+> = [fromEmpty, definitionsChanged, columnRenamed];

@@ -101,20 +101,20 @@
 
 ### Tests for User Story 3 (write first, see them fail)
 
-- [ ] T030 [P] [US3] Unit: `.on(sql\`…\`)` yields an `{ expression }` entry; `op(sql\`…\`, "c")` and `desc(sql\`…\`)` compose — packages/core/test/dsl/index-builder.test.ts
-- [ ] T031 [P] [US3] Unit (`table()`): unnamed expression index → `index-expression-requires-name` with the proposed name (`users_email_idx` for `lower(t.email)`, `users_expr_idx` for `sql\`now()\``); subquery → `index-expression-subquery`; foreign column → `index-expression-foreign-column-ref`; `unknown-index-column` ignores expression entries; duplicate-name check ignores expression entries — packages/core/test/table-surface.test.ts
-- [ ] T032 [P] [US3] Unit: serialize writes `expression` as `encodeExprNode` output (D57 vocabulary) and round-trips through `decodeExprNode` — packages/core/test/table-kind-diff.test.ts
-- [ ] T033 [P] [US3] Unit: emit renders `(lower("app"."users"."email"))`, composes with unique + where; expression change → drop + create — packages/core/test/table-kind-emit.test.ts
-- [ ] T034 [P] [US3] Unit: column rename inside an index expression retargets the node (`retargetTableFields`), keeps the explicit name, produces drop + create and **no** `ambiguous-column-rename`; table rename retargets too; `rewriteIndexesForRename` skips expression entries for name derivation — packages/core/test/rename-plan.test.ts
-- [ ] T035 [US3] Golden: add `users` table expression lines + step-1 expression change + step-2 `--rename app.users.email=email_address` to `table-index-methods`; re-record and review against contracts/sql.md
+- [x] T030 [P] [US3] Unit: `.on(sql\`…\`)` yields an `{ expression }` entry; `op(sql\`…\`, "c")` and `desc(sql\`…\`)` compose — packages/core/test/dsl/index-builder.test.ts
+- [x] T031 [P] [US3] Unit (`table()`): unnamed expression index → `index-expression-requires-name` with the proposed name (`users_email_idx` for `lower(t.email)`, `users_expr_idx` for `sql\`now()\``); subquery → `index-expression-subquery`; foreign column → `index-expression-foreign-column-ref`; `unknown-index-column` ignores expression entries; duplicate-name check ignores expression entries — packages/core/test/table-surface.test.ts
+- [x] T032 [P] [US3] Unit: serialize writes `expression` as `encodeExprNode` output (D57 vocabulary) and round-trips through `decodeExprNode` — packages/core/test/table-kind-diff.test.ts
+- [x] T033 [P] [US3] Unit: emit renders `(lower("app"."users"."email"))`, composes with unique + where; expression change → drop + create — packages/core/test/table-kind-emit.test.ts
+- [x] T034 [P] [US3] Unit: column rename inside an index expression retargets the node (`retargetTableFields`), keeps the explicit name, produces drop + create and **no** `ambiguous-column-rename`; table rename retargets too; `rewriteIndexesForRename` skips expression entries for name derivation — packages/core/test/rename-plan.test.ts (**deviation, flagged for review**: retargeting makes `rewrittenPrevious` byte-identical to `next`, same as the existing CHECK/view/policy precedent — the test asserts zero leftover diff, not drop+create; the golden case (T035) confirms `generateMigration` itself emits only the `alter table … rename column` statement, no index recreate, for a pure rename)
+- [x] T035 [US3] Golden: add `users` table expression lines + step-1 expression change + step-2 `--rename app.users.email=email_address` to `table-index-methods`; re-record and review against contracts/sql.md (**deviation, flagged for review**: contracts/sql.md's own step-2 shows a drop+create after the rename; the recorded golden has none — see T034's note)
 
 ### Implementation for User Story 3
 
-- [ ] T036 [US3] `IndexColumnInput` / `IndexColumn.column` widened to `Expr`; `toDeclarationColumn` expression branch — packages/core/src/dsl/index-builder.ts
-- [ ] T037 [US3] `validateIndexExpressions` (three codes, proposal via `collectColumnRefs` + `deriveIndexName`), `unknown-index-column` name-only, duplicate derivation name-only — packages/core/src/dsl/table.ts
-- [ ] T038 [US3] `serializeIndexColumn` expression branch (`encodeExprNode`) — packages/core/src/kinds/table-kind.ts
-- [ ] T039 [US3] `indexColumnSql` expression branch (`renderExpr(decodeExprNode(...))`, parenthesised) — packages/core/src/kinds/table-kind-emit-sql.ts
-- [ ] T040 [US3] Rename plumbing: `retargetTableFields` + `applyRetargetedIndexColumns`; `rewriteIndexesForRename` name-entries-only; reference list / ambiguity detection includes index-column expressions — packages/core/src/engine/rename-plan.ts
+- [x] T036 [US3] `IndexColumnInput` / `IndexColumn.column` widened to `Expr`; `toDeclarationColumn` expression branch — packages/core/src/dsl/index-builder.ts
+- [x] T037 [US3] `validateIndexExpressions` (three codes, proposal via `collectColumnRefs` + `deriveIndexName`), `unknown-index-column` name-only, duplicate derivation name-only — packages/core/src/dsl/table.ts
+- [x] T038 [US3] `serializeIndexColumn` expression branch (`encodeExprNode`) — packages/core/src/kinds/table-kind.ts
+- [x] T039 [US3] `indexColumnSql` expression branch (accessor-mediated via `indexColumnExpression`, not a direct `renderExpr(decodeExprNode(...))` call — table-kind-emit-sql.ts never imports the expression codec, matching `whereClause`'s existing convention; researcher-corrected from this task's original wording) — packages/core/src/kinds/table-kind-emit-sql.ts
+- [x] T040 [US3] Rename plumbing: `retargetTableFields` + `applyRetargetedIndexColumns`; `rewriteIndexesForRename` name-entries-only; reference list / ambiguity detection includes index-column expressions — packages/core/src/engine/rename-plan.ts
 
 **Checkpoint**: all three stories green; `pnpm check:crap` 0 over 5
 

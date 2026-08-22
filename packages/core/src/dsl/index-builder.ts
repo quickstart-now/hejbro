@@ -1,6 +1,7 @@
 import { throwHejbroError } from "../error";
 import type { ColumnRef, Expr } from "../expr/ast";
 import { isExpr } from "../expr/ast";
+import { renderExpr } from "../expr/render-sql";
 import { assertSqlName } from "../sql/identifier-rules";
 import type {
 	IndexColumnDeclaration,
@@ -10,21 +11,25 @@ import type {
 } from "./table";
 import { indexMethods } from "./table";
 
-/** One column of an ordered index: the column ref, its sort direction, an optional explicit nulls placement (D51), and an optional operator class (R4). */
+/** One column of an ordered index: a column ref or any expression (R5, e.g. `sql\`lower(${t.email})\``), its sort direction, an optional explicit nulls placement (D51), and an optional operator class (R4). */
 export type IndexColumn = {
-	readonly column: ColumnRef;
+	readonly column: ColumnRef | Expr;
 	readonly desc: boolean;
 	readonly nulls: IndexNulls | null;
 	readonly opclass: string | null;
 };
 
-/** What `.on(...)` accepts per column: a bare `ColumnRef` (ascending, no opclass, default nulls) or an `asc(...)`/`desc(...)`/`op(...)`-wrapped {@link IndexColumn} — the three wrappers compose in any order (R4). */
-export type IndexColumnInput = ColumnRef | IndexColumn;
+/** What `.on(...)` accepts per column: a bare `ColumnRef`, a bare expression (R5), or an `asc(...)`/`desc(...)`/`op(...)`-wrapped {@link IndexColumn} — the three wrappers compose in any order (R4). */
+export type IndexColumnInput = ColumnRef | Expr | IndexColumn;
 
 const isIndexColumn = (input: IndexColumnInput): input is IndexColumn =>
 	"column" in input && isExpr(input.column);
 
-/** Resolves an `IndexColumnInput` to its full {@link IndexColumn} shape — a bare ref defaults to ascending/no-opclass; an already-wrapped entry keeps its own fields, for its caller (`asc`/`desc`/`op`) to override just the one it owns. */
+/** A `ColumnRef` carries `sqlName`; a bare expression (`sql\`...\``, R5) doesn't — the one runtime distinction {@link toDeclarationColumn} needs to pick its `name` vs `expression` branch (same technique `query/mutate.ts`'s own `isColumnRef` uses). */
+const isColumnRef = (column: ColumnRef | Expr): column is ColumnRef =>
+	"sqlName" in column;
+
+/** Resolves an `IndexColumnInput` to its full {@link IndexColumn} shape — a bare ref/expression defaults to ascending/no-opclass; an already-wrapped entry keeps its own fields, for its caller (`asc`/`desc`/`op`) to override just the one it owns. */
 const resolveIndexColumn = (input: IndexColumnInput): IndexColumn => {
 	if (isIndexColumn(input)) {
 		return input;
@@ -54,12 +59,22 @@ export const op = (input: IndexColumnInput, opclass: string): IndexColumn => ({
 	opclass: assertSqlName(opclass, "operator class", null),
 });
 
+/** `{ name }` for a `ColumnRef` input, `{ expression: ExprNode }` for any other expression (R5) — {@link toDeclarationColumn}'s own field. */
+const declarationColumnSelf = (
+	column: ColumnRef | Expr,
+): { readonly name: string } | { readonly expression: Expr["exprNode"] } => {
+	if (isColumnRef(column)) {
+		return { name: column.sqlName };
+	}
+	return { expression: column.exprNode };
+};
+
 const toDeclarationColumn = (
 	input: IndexColumnInput,
 ): IndexDeclaration["columns"][number] => {
 	const resolved = resolveIndexColumn(input);
 	return {
-		name: resolved.column.sqlName,
+		...declarationColumnSelf(resolved.column),
 		desc: resolved.desc,
 		nulls: resolved.nulls,
 		opclass: resolved.opclass,
@@ -84,6 +99,16 @@ const normalizeIndexMethod = (method: IndexMethod): IndexMethod | null => {
 	return method;
 };
 
+/** One column's short description for {@link uniqueIndexMethodClause}'s unnamed-index fallback: a quoted column name, or a parenthesised rendering of an expression entry (R5) — same shape `@hejbro/supabase`'s `indexDescription` uses. */
+const uniqueIndexMethodColumnDescription = (
+	column: IndexColumnDeclaration,
+): string => {
+	if ("name" in column) {
+		return `"${column.name}"`;
+	}
+	return `(${renderExpr(column.expression)})`;
+};
+
 /** The `unique-index-method` message's opening clause (main-decided wording, #284): a named index states its own uniqueness (`index "<name>" is unique and uses "<m>"`), while an unnamed one is described by its column list, which already reads as unique (`the unique index on (...) uses "<m>"`) — same column-quoting convention `@hejbro/supabase`'s `indexDescription` uses. */
 const uniqueIndexMethodClause = (
 	indexName: string | null,
@@ -93,7 +118,7 @@ const uniqueIndexMethodClause = (
 	if (indexName !== null) {
 		return `index "${indexName}" is unique and uses "${method}"`;
 	}
-	const columnList = columns.map((column) => `"${column.name}"`).join(", ");
+	const columnList = columns.map(uniqueIndexMethodColumnDescription).join(", ");
 	return `the unique index on (${columnList}) uses "${method}"`;
 };
 

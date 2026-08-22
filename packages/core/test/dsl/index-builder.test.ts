@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { desc, index, op } from "../../src/dsl/index-builder";
+import { asc, desc, index, op } from "../../src/dsl/index-builder";
 import { schema } from "../../src/dsl/schema";
 import type { IndexColumnDeclaration, IndexMethod } from "../../src/dsl/table";
 import { getTableMeta, table } from "../../src/dsl/table";
 import { eq, isNotNull } from "../../src/expr/operators";
+import { sql } from "../../src/expr/sql-template";
 import { exists, select } from "../../src/query/select";
 import {
 	text,
@@ -255,5 +256,62 @@ describe("index builder — operator class (#284 US2)", () => {
 		expect(() => op(posts.data, "bad-class")).toThrow(
 			/invalid-sql-name|operator class name "bad-class" is not a valid hejbro SQL identifier/,
 		);
+	});
+});
+
+// #284 US3 (T030): expression indexes — `.on(sql\`…\`)` yields an
+// `{ expression }` entry; `op(...)`/`desc(...)` compose over an expression
+// the same way they do over a column ref (R5).
+describe("index builder — expression columns (#284 US3)", () => {
+	it(".on(sql`...`) yields an { expression } entry", () => {
+		const posts = table(app, "posts", { email: text() }, (t) => ({
+			indexes: [index("posts_email_lower_idx").on(sql`lower(${t.email})`)],
+		}));
+		const [column] = getTableMeta(posts).indexes[0]?.columns ?? [];
+		expect(column && "expression" in column).toBe(true);
+		expect(column?.desc).toBe(false);
+		expect(column?.nulls).toBeNull();
+		expect(column?.opclass).toBeNull();
+	});
+
+	it("op(sql`...`, opclass) composes over an expression", () => {
+		const posts = table(app, "posts", { email: text() }, (t) => ({
+			indexes: [
+				index("posts_email_lower_idx").on(
+					op(sql`lower(${t.email})`, "text_pattern_ops"),
+				),
+			],
+		}));
+		const [column] = getTableMeta(posts).indexes[0]?.columns ?? [];
+		expect(column && "expression" in column).toBe(true);
+		expect(column?.opclass).toBe("text_pattern_ops");
+	});
+
+	it("desc(sql`...`) composes over an expression", () => {
+		const posts = table(app, "posts", { email: text() }, (t) => ({
+			indexes: [
+				index("posts_email_lower_idx").on(
+					desc(sql`lower(${t.email})`, { nulls: "last" }),
+				),
+			],
+		}));
+		const [column] = getTableMeta(posts).indexes[0]?.columns ?? [];
+		expect(column && "expression" in column).toBe(true);
+		expect(column?.desc).toBe(true);
+		expect(column?.nulls).toBe("last");
+	});
+
+	it("asc(op(sql`...`, opclass)) keeps the opclass from the op(...) wrap", () => {
+		const posts = table(app, "posts", { email: text() }, (t) => ({
+			indexes: [
+				index("posts_email_lower_idx").on(
+					asc(op(sql`lower(${t.email})`, "text_pattern_ops")),
+				),
+			],
+		}));
+		const [column] = getTableMeta(posts).indexes[0]?.columns ?? [];
+		expect(column && "expression" in column).toBe(true);
+		expect(column?.opclass).toBe("text_pattern_ops");
+		expect(column?.desc).toBe(false);
 	});
 });

@@ -19,11 +19,13 @@ import {
 	foreignKeyOnDelete,
 	foreignKeyOnUpdate,
 	indexColumnDesc,
+	indexColumnExpression,
 	indexColumnNulls,
 	indexColumnOpclass,
 	indexMethod,
 	indexUnique,
 	indexWhere,
+	isExpressionIndexColumn,
 	tableChecks,
 	tablePrimaryKeyName,
 } from "./table-snapshot";
@@ -179,10 +181,30 @@ const opclassToken = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
 	return [opclass];
 };
 
-/** Renders one index column's clause: name, then its opclass when set, then `desc` when descending, then `nulls first|last` when set (D51/R4/R9 — `"col" <opclass> desc nulls first`). */
+/**
+ * The column/expression token of one index column's clause: a quoted
+ * name, or an expression entry's rendered SQL (R5/R9 — via
+ * {@link indexColumnExpression}, the same accessor-mediated render
+ * `whereClause` uses for `where`, so this module never imports the
+ * expression codec directly). No extra self-wrapping parens: the
+ * surrounding column list already supplies one pair
+ * ({@link createIndexSql}'s `(${…})`), and every expression this feature
+ * emits is itself a function call (`lower(...)`, `btrim(...)`) whose own
+ * call syntax is self-delimiting — real Postgres accepts
+ * `create index … (lower(email))` without an extra wrap, and the D51
+ * contract's own examples confirm the same byte count.
+ */
+const indexColumnTarget = (column: IndexColumnSnapshot): string => {
+	if (isExpressionIndexColumn(column)) {
+		return indexColumnExpression(column) ?? "";
+	}
+	return quoteIdentifier(column.name);
+};
+
+/** Renders one index column's clause: name/expression, then its opclass when set, then `desc` when descending, then `nulls first|last` when set (D51/R4/R9 — `"col" <opclass> desc nulls first`). */
 const indexColumnSql = (column: IndexColumnSnapshot): string =>
 	[
-		quoteIdentifier(column.name),
+		indexColumnTarget(column),
 		...opclassToken(column),
 		...descKeyword(column),
 		...nullsClause(column),

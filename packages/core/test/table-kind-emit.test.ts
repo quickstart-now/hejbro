@@ -4,6 +4,7 @@ import { desc, index, op } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { inArray, isNotNull } from "../src/expr/operators";
+import { sql } from "../src/expr/sql-template";
 import type { KindChange } from "../src/kind/object-kind";
 import type { GrantSnapshot } from "../src/kinds/grant-kind";
 import { tableKind } from "../src/kinds/table-kind";
@@ -782,6 +783,74 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
 			'drop index "app"."posts_data_idx";',
 			'create index "posts_data_idx" on "app"."posts" ("data");',
+		]);
+	});
+
+	// #284 US3 (T033): expression indexes — the expression renders
+	// parenthesised with fully-qualified column refs (R9), composes with
+	// unique + where, and an expression change recreates the index (same
+	// generic drop + create path).
+	it("renders the expression parenthesised with fully-qualified column refs", () => {
+		const users = table(app, "users", { email: text() }, (t) => ({
+			indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(users)),
+				"app.users",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
+			'create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."email"));',
+		);
+	});
+
+	it("composes an expression column with unique + where", () => {
+		const users = table(
+			app,
+			"users",
+			{ email: text(), deletedAt: timestamptz() },
+			(t) => ({
+				indexes: [
+					index("users_email_lower_uidx")
+						.unique()
+						.on(sql`lower(${t.email})`)
+						.where(isNotNull(t.deletedAt)),
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(users)),
+				"app.users",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
+			'create unique index "users_email_lower_uidx" on "app"."users" (lower("app"."users"."email")) where "app"."users"."deleted_at" is not null;',
+		);
+	});
+
+	it("recreates an index whose expression changed under the same name", () => {
+		const before = table(app, "users", { email: text() }, (t) => ({
+			indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
+		}));
+		const after = table(app, "users", { email: text() }, (t) => ({
+			indexes: [
+				index("users_email_lower_idx").on(sql`lower(btrim(${t.email}))`),
+			],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.users",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'drop index "app"."users_email_lower_idx";',
+			'create index "users_email_lower_idx" on "app"."users" (lower(btrim("app"."users"."email")));',
 		]);
 	});
 });

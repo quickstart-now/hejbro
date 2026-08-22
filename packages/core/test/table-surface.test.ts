@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+	eq,
+	exists,
 	getTableMeta,
 	index,
 	isTable,
 	schema,
+	select,
+	sql,
 	table,
 	text,
 	timestamptz,
@@ -163,6 +167,80 @@ describe("table() — duplicate index and foreign key name errors (D51)", () => 
 			})),
 		).toThrow(
 			/duplicate-foreign-key-name|a column set can only reference one table/,
+		);
+	});
+});
+
+// #284 US3 (T031): expression indexes — validation order (data-model.md):
+// unknown-index-column (name entries only) → duplicate names (name-only
+// derivation) → index-expression-requires-name → index-expression-subquery
+// → index-expression-foreign-column-ref.
+describe("table() — expression index validation (#284 US3)", () => {
+	it("requires an explicit name, proposing one from the columns the expression references", () => {
+		expect(() =>
+			table(app, "users", { email: text() }, (t) => ({
+				indexes: [index().on(sql`lower(${t.email})`)],
+			})),
+		).toThrow(
+			/index-expression-requires-name|Next: name it — index\("users_email_idx"\)/,
+		);
+	});
+
+	it("proposes <table>_expr_idx when the expression references no column", () => {
+		expect(() =>
+			table(app, "users", { email: text() }, () => ({
+				indexes: [index().on(sql`now()`)],
+			})),
+		).toThrow(
+			/index-expression-requires-name|Next: name it — index\("users_expr_idx"\)/,
+		);
+	});
+
+	it("rejects a subquery inside an index expression", () => {
+		const other = table(app, "other", { id: uuid() });
+		expect(() =>
+			table(app, "users", { id: uuid() }, (t) => ({
+				indexes: [
+					index("users_bad_idx").on(
+						exists(select(other).where(eq(other.id, t.id))),
+					),
+				],
+			})),
+		).toThrow(
+			/index-expression-subquery|Postgres forbids subqueries in index expressions/,
+		);
+	});
+
+	it("rejects an index expression referencing another table's column", () => {
+		const other = table(app, "other", { n: text() });
+		expect(() =>
+			table(app, "users", { id: uuid() }, () => ({
+				indexes: [index("users_bad_idx").on(sql`lower(${other.n})`)],
+			})),
+		).toThrow(
+			/index-expression-foreign-column-ref|can only see this table's own columns/,
+		);
+	});
+
+	it("unknown-index-column ignores expression entries — a mixed name+expression index composes without crashing", () => {
+		const users = table(app, "users", { id: uuid(), email: text() }, (t) => ({
+			indexes: [
+				index("users_id_lower_email_idx").on(t.id, sql`lower(${t.email})`),
+			],
+		}));
+		expect(getTableMeta(users).indexes[0]?.columns).toHaveLength(2);
+	});
+
+	it("duplicate-name derivation ignores expression entries — an unnamed mixed index derives its name from the name column alone", () => {
+		expect(() =>
+			table(app, "users", { email: text() }, (t) => ({
+				indexes: [
+					index("users_email_idx").on(t.email),
+					index().on(t.email, sql`lower(${t.email})`),
+				],
+			})),
+		).toThrow(
+			/duplicate-index-name|table "users" declares two indexes named "users_email_idx"/,
 		);
 	});
 });

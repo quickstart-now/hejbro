@@ -122,6 +122,29 @@ const materializeTypeNode = (columnState: ColumnState): TypeNode => {
 	return columnState.typeNode;
 };
 
+/**
+ * The `name` entries' names, in order — an expression entry (R5) names no
+ * column of its own and is retargeted on rename, not renamed by name, so
+ * it contributes nothing to derived-name recomputation (R7/R10b). Generic
+ * over both `IndexColumnDeclaration` (`dsl/table.ts`) and
+ * `IndexColumnSnapshot` (`table-snapshot.ts`) — they share this shape —
+ * so `dsl/table.ts`'s own validation and `engine/rename-plan.ts`'s rename
+ * plumbing both import this one implementation instead of each keeping
+ * their own copy (the same "shared with engine/rename-plan.ts" relationship
+ * {@link deriveIndexName} already has).
+ */
+export const namedIndexColumnNames = (
+	columns: ReadonlyArray<
+		{ readonly name: string } | { readonly expression: unknown }
+	>,
+): ReadonlyArray<string> =>
+	columns.flatMap((column) => {
+		if ("name" in column) {
+			return [column.name];
+		}
+		return [];
+	});
+
 const resolveIndexName = (
 	tableName: string,
 	index: IndexDeclaration,
@@ -129,10 +152,7 @@ const resolveIndexName = (
 	if (index.indexName !== null) {
 		return index.indexName;
 	}
-	return deriveIndexName(
-		tableName,
-		index.columns.map((column) => column.name),
-	);
+	return deriveIndexName(tableName, namedIndexColumnNames(index.columns));
 };
 
 /** Encodes a column's default expression into its snapshot form (D67/D70) — `null` when the column has no default. */
@@ -311,10 +331,20 @@ const serializeColumns = (
 		}) ?? null,
 	);
 
+/** `{ name }` for a plain-column entry, `{ expression: encodeExprNode(...) }` for an expression entry (R5/R8) — the two-variant column's own field. */
+const serializeIndexColumnSelf = (
+	column: IndexColumnDeclaration,
+): { readonly name: string } | { readonly expression: JsonValue } => {
+	if ("name" in column) {
+		return { name: column.name };
+	}
+	return { expression: encodeExprNode(column.expression) };
+};
+
 const serializeIndexColumn = (
 	column: IndexColumnDeclaration,
 ): IndexColumnSnapshot => ({
-	name: column.name,
+	...serializeIndexColumnSelf(column),
 	...indexColumnDescField(column.desc),
 	...indexColumnNullsField(column.nulls),
 	...indexColumnOpclassField(column.opclass),
