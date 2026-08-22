@@ -106,8 +106,117 @@ const bodyCheckDropped: ReadonlyArray<HejbroInput> = [
 	commentsBodyCheckDropped,
 ];
 
+// Steps 3-5 (#24): a fresh join table (post_tags), never touched by any
+// other table's foreign key, carries the primary key constraint through
+// its own full lifecycle -- created single-column, expanded to composite,
+// then partially dropped (#137's own hazard: a composite PK's *partial*
+// drop, one member column physically removed while the other survives).
+// A fresh table (not posts/comments) is deliberate: posts.id and
+// comments.id are both FK *targets* elsewhere in this same case, and
+// widening either into a composite PK would make it no longer uniquely
+// constrained on its own -- invalid against a real Postgres. post_tags
+// has no such entanglement, so its PK's own shape is free to move.
+
+// Step 3: post_tags is created with a single-column primary key (postId)
+// and a foreign key to posts.id -- ordinary create, no ALTER involved yet.
+const postTagsSingleColumnPk = table(
+	app,
+	"post_tags",
+	{
+		postId: uuid().notNull().primaryKey(),
+		tagSlug: text().notNull(),
+	},
+	(t) => ({
+		foreignKeys: [
+			{
+				columns: [t.postId],
+				references: {
+					table: postsStatusExpanded,
+					columns: [postsStatusExpanded.id],
+				},
+			},
+		],
+	}),
+);
+
+const postTagsCreated: ReadonlyArray<HejbroInput> = [
+	app,
+	postsStatusExpanded,
+	commentsBodyCheckDropped,
+	postTagsSingleColumnPk,
+];
+
+// Step 4: tagSlug also becomes a primary-key column -- postId alone can no
+// longer name the constraint (composite (postId, tagSlug) now models "each
+// post has each tag at most once"). Exercises planPrimaryKeyChange's
+// single-to-composite expansion: the old single-column "post_tags_pkey" is
+// explicitly dropped and a new composite one, same name, added -- a
+// constraint's column list can't be ALTERed in place on a real Postgres,
+// only replaced.
+const postTagsCompositePk = table(
+	app,
+	"post_tags",
+	{
+		postId: uuid().notNull().primaryKey(),
+		tagSlug: text().notNull().primaryKey(),
+	},
+	(t) => ({
+		foreignKeys: [
+			{
+				columns: [t.postId],
+				references: {
+					table: postsStatusExpanded,
+					columns: [postsStatusExpanded.id],
+				},
+			},
+		],
+	}),
+);
+
+const postTagsExpandedToComposite: ReadonlyArray<HejbroInput> = [
+	app,
+	postsStatusExpanded,
+	commentsBodyCheckDropped,
+	postTagsCompositePk,
+];
+
+// Step 5: tagSlug is dropped as a column entirely -- #137's own hazard,
+// now fixed (#24): postId survives as the sole primary-key column, and
+// hejbro must not rely on Postgres's cascade (which *would* silently drop
+// the whole constraint, then never re-add it for the survivor) -- an
+// explicit drop constraint (ahead of the drop column) and a fresh add
+// constraint naming just postId, same "post_tags_pkey" name throughout.
+const postTagsTagSlugDropped = table(
+	app,
+	"post_tags",
+	{
+		postId: uuid().notNull().primaryKey(),
+	},
+	(t) => ({
+		foreignKeys: [
+			{
+				columns: [t.postId],
+				references: {
+					table: postsStatusExpanded,
+					columns: [postsStatusExpanded.id],
+				},
+			},
+		],
+	}),
+);
+
+const postTagsBackToSingleColumnPk: ReadonlyArray<HejbroInput> = [
+	app,
+	postsStatusExpanded,
+	commentsBodyCheckDropped,
+	postTagsTagSlugDropped,
+];
+
 export const steps: ReadonlyArray<ReadonlyArray<HejbroInput>> = [
 	fromEmpty,
 	statusAndActionsChanged,
 	bodyCheckDropped,
+	postTagsCreated,
+	postTagsExpandedToComposite,
+	postTagsBackToSingleColumnPk,
 ];
