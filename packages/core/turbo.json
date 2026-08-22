@@ -1,0 +1,13 @@
+{
+	"$schema": "https://turborepo.dev/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"test": {
+			"dependsOn": ["build"],
+			"env": ["UPDATE_GOLDEN"]
+		},
+		"test:coverage": {
+			"dependsOn": ["build"]
+		}
+	}
+}

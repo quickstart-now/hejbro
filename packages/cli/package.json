@@ -1,14 +1,59 @@
 {
 	"name": "hejbro",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"description": "TypeScript-native Postgres schema & RPC management. Declare everything in TypeScript, generate deterministic migration SQL.",
 	"license": "MIT",
 	"type": "module",
-	"main": "src/index.ts",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/quickstart-now/hejbro",
+		"directory": "packages/cli"
+	},
+	"homepage": "https://github.com/quickstart-now/hejbro#readme",
+	"bugs": {
+		"url": "https://github.com/quickstart-now/hejbro/issues"
+	},
+	"keywords": [
+		"postgres",
+		"postgresql",
+		"schema",
+		"migrations",
+		"cli",
+		"typescript"
+	],
+	"bin": {
+		"hejbro": "./dist/cli.js"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": ">=22.18.0"
+	},
 	"scripts": {
-		"check-types": "tsc --noEmit"
+		"build": "tsdown",
+		"check-types": "tsc --noEmit",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
+		"prepack": "pnpm build"
 	},
 	"dependencies": {
-		"@hejbro/core": "workspace:*"
+		"@hejbro/core": "workspace:*",
+		"citty": "^0.2.2",
+		"jiti": "^2.7.0",
+		"tinyglobby": "^0.2.17",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@hejbro/supabase": "workspace:*",
+		"@vitest/coverage-v8": "catalog:",
+		"tsdown": "catalog:",
+		"vitest": "catalog:"
 	}
 }

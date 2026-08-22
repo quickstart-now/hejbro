@@ -1,11 +1,48 @@
 {
 	"name": "@hejbro/core",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"description": "hejbro core: declaration model, builder DSL, compiler, snapshot and diff engine. Pure — no filesystem, no database I/O.",
 	"license": "MIT",
 	"type": "module",
-	"main": "src/index.ts",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/quickstart-now/hejbro",
+		"directory": "packages/core"
+	},
+	"homepage": "https://github.com/quickstart-now/hejbro#readme",
+	"bugs": {
+		"url": "https://github.com/quickstart-now/hejbro/issues"
+	},
+	"keywords": [
+		"postgres",
+		"postgresql",
+		"schema",
+		"migrations",
+		"typescript"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": ">=22.18.0"
+	},
 	"scripts": {
-		"check-types": "tsc --noEmit"
+		"build": "tsdown",
+		"check-types": "tsc --noEmit",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
+		"prepack": "pnpm build"
+	},
+	"devDependencies": {
+		"@vitest/coverage-v8": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	}
 }

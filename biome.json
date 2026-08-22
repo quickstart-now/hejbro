@@ -16,7 +16,14 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"preset": "recommended"
+			"preset": "recommended",
+			"style": {
+				"noTernary": "error",
+				"useNamingConvention": {
+					"level": "error",
+					"options": { "strictCase": false }
+				}
+			}
 		}
 	},
 	"javascript": {
@@ -31,5 +38,50 @@
 				"organizeImports": "on"
 			}
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["**/test/golden/**/expected/**"],
+			"formatter": { "enabled": false },
+			"linter": { "enabled": false },
+			"assist": { "enabled": false }
+		},
+		{
+			"includes": [
+				"examples/*/hejbro.snapshot.json",
+				"examples/*/migrations/**"
+			],
+			"formatter": { "enabled": false },
+			"linter": { "enabled": false },
+			"assist": { "enabled": false }
+		},
+		{
+			"includes": [
+				"packages/core/src/kinds/**",
+				"packages/core/src/snapshot/**"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"useNamingConvention": {
+							"level": "error",
+							"options": {
+								"strictCase": false,
+								"conventions": [
+									{
+										"selector": { "kind": "objectLiteralProperty" },
+										"match": ".*"
+									},
+									{
+										"selector": { "kind": "typeProperty" },
+										"match": ".*"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		}
+	]
 }

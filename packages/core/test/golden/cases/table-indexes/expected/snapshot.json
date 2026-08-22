@@ -1,0 +1,98 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.posts": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "slug",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "status",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "created_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				},
+				{
+					"name": "published_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [
+				{
+					"columns": [
+						{
+							"desc": true,
+							"name": "published_at",
+							"nulls": "last"
+						},
+						{
+							"name": "created_at"
+						}
+					],
+					"name": "posts_recent_idx"
+				},
+				{
+					"columns": [
+						{
+							"name": "slug"
+						}
+					],
+					"name": "posts_slug_published_uidx",
+					"unique": true,
+					"where": {
+						"left": {
+							"column": "status",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "posts"
+						},
+						"nodeKind": "comparison",
+						"operator": "=",
+						"right": {
+							"literal": {
+								"literalKind": "string",
+								"value": "published"
+							},
+							"nodeKind": "literal"
+						}
+					}
+				}
+			],
+			"name": "posts",
+			"primaryKeyName": "posts_pkey",
+			"schema": "app"
+		}
+	}
+}

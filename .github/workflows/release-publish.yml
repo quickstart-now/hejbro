@@ -1,0 +1,208 @@
+name: release-publish
+# `main` only receives `dev -> main` merge-commit PRs (AGENTS.md's release
+# flow; never squash/rebase). This workflow's only job is to publish
+# whatever `main` currently holds -- it must never version. Scoped to
+# `push` on `main` only: never `pull_request` (a fork PR would run this in
+# the fork's own Actions context, not ours, and would find no `NPM_TOKEN`
+# there either -- but `push` is the narrower, correct condition regardless)
+# and never `dev` (only a landed push to `main` is a release).
+on:
+  push:
+    branches: [main]
+
+# Exactly one publish at a time, full stop. Not cancel-in-progress: a
+# cancelled `npm publish` mid-flight still burns the version number (npm
+# never lets the same version publish twice, published or not) without a
+# clean run to show what happened -- an in-flight publish must finish or
+# fail on its own, and a second push queues behind it instead of racing it.
+concurrency:
+  group: release-publish-main
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    # Defence in depth, not a functional requirement -- see
+    # release-version.yml's identical comment.
+    if: github.repository == 'quickstart-now/hejbro'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm check-types
+      - run: pnpm test
+      - run: pnpm build
+      # #86's smoke (phase8-packaging): packs the three published packages,
+      # installs the tarballs with plain `npm install`, runs
+      # init/generate/verify against them.
+      - run: pnpm smoke:pack-install
+      # Closes the gap #86's smoke leaves open (see
+      # scripts/verify-pnpm-publish-tool.mjs): the smoke proves *a*
+      # pnpm-packed tarball installs cleanly, not that `changeset publish`
+      # actually picks pnpm for this workspace. Asserts on
+      # @changesets/cli's own tool-detection call, not a guess at it.
+      - run: pnpm check:pnpm-publish-tool
+      # #184: added so #155's claim that this gate "re-runs the full
+      # suite" is actually true, not because this check does anything
+      # here. By the time this job runs (a push to `main`, always after
+      # a "Version Packages" PR already bumped versions on `dev`), every
+      # published package's version is already past `0.0.0` -- exactly
+      # the state this script is designed to self-skip on
+      # (scripts/check-first-release-version.mjs:9-11,37,40:
+      # "the first release has already happened"). It will never fail,
+      # or even meaningfully run, from this job -- it's here purely so
+      # the gate's step list matches what #155 said it covers, not
+      # because it protects anything main didn't already have covered
+      # elsewhere (it runs for real in `ci.yml`, pre-bump, on `dev`).
+      - run: pnpm check:first-release-version
+      # #184: unlike the check above, this one is a real, unconditional
+      # addition of coverage -- ci.yml's `check:next-marker` (a
+      # source-invariant scan over throwHejbroError/hejbroError call
+      # sites, independent of branch/version state) was simply absent
+      # from this gate, so `main` could in principle diverge from `dev`
+      # on this invariant between a Version PR's merge and its own
+      # `ci.yml` run without the gate ever noticing.
+      - run: pnpm check:next-marker
+
+  publish:
+    needs: gate
+    if: github.repository == 'quickstart-now/hejbro'
+    runs-on: ubuntu-latest
+    # `npm` below MUST match the name of the Environment the owner already
+    # created in repo settings (required reviewer hello-pooh, deployment
+    # branches restricted to `main`) -- NOT a label this file invents. If
+    # this string is ever changed to something that doesn't exist yet
+    # (typo, rename, "improving" it to `release`), GitHub does not error:
+    # it silently creates a brand-new Environment with no protection rules
+    # at all, and the job just runs straight through with no approval
+    # wait and no warning. A wrong name doesn't fail closed, it opens an
+    # unprotected door. This is what turns AGENTS.md's "who approves the
+    # release" hard gate from a convention into a mechanism -- `needs:
+    # gate` stops a red gate, but nothing before this line stops a green
+    # one from publishing unattended.
+    environment: npm
+    permissions:
+      contents: write # changesets/action/publish pushes git tags + GitHub releases
+      # Required for npm provenance (NPM_CONFIG_PROVENANCE) -- independent of
+      # the NODE_AUTH_TOKEN auth method below. Verified directly (not
+      # assumed) on a real Actions runner against an isolated, disposable
+      # Verdaccio service container (never the real npm registry): without
+      # this permission, `npm publish --provenance` fails immediately with
+      # `EUSAGE: Provenance generation in GitHub Actions requires "write"
+      # access to the "id-token" permission` -- a loud, non-zero-exit
+      # failure, not a silent publish without provenance. With it, npm
+      # obtained a real OIDC token, signed a real provenance statement, and
+      # published a real entry to Sigstore's public transparency log before
+      # the (test-rig-only) registry rejected the provenance-attached
+      # publish call as an unsupported API -- confirming the OIDC handshake
+      # itself, which real npmjs.org's registry does support, works end to
+      # end.
+      #
+      # Verified vs. assumed, in one line: the OIDC-token-and-signing
+      # mechanism is verified end to end against a real Actions runner;
+      # that npmjs.org's registry (as opposed to the Verdaccio test rig
+      # above) accepts the resulting provenance-attached publish call is
+      # assumed, on the strength of it being documented, generally-available
+      # npm registry behavior (`npm publish --help` on this pinned Node/npm
+      # advertises `--provenance` as a stable flag, not experimental) -- not
+      # independently executed against npmjs.org by this PR, since doing so
+      # would mean a real, irreversible publish.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { fetch-depth: 0 } # full history: this job pushes git tags
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+      - run: pnpm install --frozen-lockfile
+      # `NPM_TOKEN` is a repository-level secret on quickstart-now/hejbro (an
+      # npm automation token, added 2026-08-21) -- deliberately NOT the org
+      # secret of the same name: that org secret's visibility is "private"
+      # (GitHub's org-secret scoping term for "the org's private repos
+      # only"), it is already relied on by the other 12 (all private) repos
+      # in the org, and hejbro is the org's one public repo, so exposing
+      # that shared token here would widen its blast radius to every repo
+      # that already trusts it. This guard step is defence in depth, not a
+      # response to a currently-missing secret: if the repo secret is ever
+      # removed, renamed, or this workflow is ever copied to a repo without
+      # it, this fails loudly and immediately instead of invoking npm/pnpm
+      # with an empty token. Value is never printed -- only ever tested for
+      # absence.
+      #
+      # This does NOT cover "the token is present, authenticates, but lacks
+      # publish rights for the @hejbro scope" (a real open question -- no
+      # one has confirmed the token's scope permissions yet, since doing so
+      # needs the token value itself). That case was verified separately
+      # (not guessed): against an isolated, disposable Verdaccio registry
+      # (never npmjs.org), both an invalid token (401) and a validly
+      # authenticated user denied publish rights on the target scope (403)
+      # made `changeset publish` exit non-zero with "Some packages failed to
+      # publish" -- traced to `@changesets/cli@3.0.1`'s
+      # commands/publish/index.ts, which throws `ExitError(1)` whenever any
+      # package's publish result is `"failed"`. The stronger, more direct
+      # version of this: `getUnpublishedPackages`
+      # (dist/getPublishPlan.mjs:586-591) maps only 404-shaped registry
+      # errors to "not yet published" -- any other error (401, 403,
+      # network) hits `throw new ExitError(1)` immediately, while building
+      # the publish plan, before "is there anything to publish" is even
+      # asked. An auth problem can't be masked by an empty plan; it can't
+      # reach the point where a plan is computed at all.
+      - name: Verify NPM_TOKEN is configured
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "::error::NPM_TOKEN secret is not set on quickstart-now/hejbro. Next: the owner must add a repository-level NPM_TOKEN secret (an npm automation token, not a publish token -- a publish token prompts for 2FA and fails in CI; see AGENTS.md's Owner actions) before this workflow can publish."
+            exit 1
+          fi
+      # `npm whoami` -- confirms NPM_TOKEN actually authenticates against
+      # the real registry before handing it to changeset publish. Lives
+      # here, not in ci.yml's PR-time checks, deliberately: this job
+      # already has NODE_AUTH_TOKEN (see below), already ran only after
+      # `environment: npm`'s manual approval, and already ran only for a
+      # push to `main` -- so putting the check here costs nothing in
+      # credential exposure. The same check in `ci.yml`'s `verify` job (run
+      # on every PR, including from forks in theory) was tried, is what
+      # first surfaced this exact npm username in this repo's own CI log
+      # (a public repo), and was reverted for exactly that reason: it would
+      # make repository-secret credentials reachable on every PR run,
+      # which is what `environment: npm` exists to prevent. That reverted
+      # run (URL in this PR's description) confirmed `npm whoami` succeeds
+      # for this token -- so the question "does NPM_TOKEN authenticate at
+      # all" is already answered; this step exists so every future publish
+      # re-confirms it as a distinct, readable failure (rather than
+      # folding into changeset publish's own less specific error) at zero
+      # incremental cost, not to answer it again.
+      #
+      # `npm access list packages @hejbro` was tried alongside this and
+      # dropped: its own output couldn't distinguish "queried the @hejbro
+      # scope and it has zero packages" from "didn't understand @hejbro as
+      # an argument and silently no-op'd" (its accepted argument shapes are
+      # `<user>|<scope>|<scope:team>|<package>`) -- an unmeasured, possibly
+      # vacuous check isn't worth the credential exposure whoami already
+      # justifies.
+      - name: Verify NPM_TOKEN authenticates
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami --registry=https://registry.npmjs.org > /dev/null
+      # changesets/action/publish -- NOT the monolithic changesets/action.
+      # See release-version.yml's comment for the corrected reasoning (an
+      # earlier draft of this comment claimed the monolithic action would
+      # auto-select a publish mode via its own select-mode sub-action; it
+      # does neither -- read directly from the pinned commit's dist/index.js
+      # before repeating that claim again).
+      #
+      # Input name verified against this exact pinned commit's
+      # publish/action.yml (`script`, not `publish-script` -- same trap as
+      # noted in release-version.yml, the input name differs by which
+      # action you reference even within one release).
+      - uses: changesets/action/publish@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          script: pnpm release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true

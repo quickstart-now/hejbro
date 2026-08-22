@@ -1,0 +1,507 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"grant:app.all-tables-privileges.anon": {
+			"grantKind": "all-tables-privileges",
+			"privileges": [
+				"select"
+			],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.all-tables-privileges.authenticated": {
+			"grantKind": "all-tables-privileges",
+			"privileges": [
+				"select"
+			],
+			"role": "authenticated",
+			"schema": "app"
+		},
+		"grant:app.default-table-privileges.anon": {
+			"grantKind": "default-table-privileges",
+			"privileges": [
+				"select"
+			],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.default-table-privileges.authenticated": {
+			"grantKind": "default-table-privileges",
+			"privileges": [
+				"select"
+			],
+			"role": "authenticated",
+			"schema": "app"
+		},
+		"grant:app.schema-usage.anon": {
+			"grantKind": "schema-usage",
+			"privileges": [],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.schema-usage.authenticated": {
+			"grantKind": "schema-usage",
+			"privileges": [],
+			"role": "authenticated",
+			"schema": "app"
+		},
+		"policy:app.attachment_blobs.attachment_blobs_read_own": {
+			"command": "select",
+			"name": "attachment_blobs_read_own",
+			"roles": [
+				"authenticated"
+			],
+			"schema": "app",
+			"table": "attachment_blobs",
+			"using": {
+				"negated": false,
+				"nodeKind": "exists",
+				"query": {
+					"from": {
+						"schema": "app",
+						"table": "attachments"
+					},
+					"joins": [
+						{
+							"joinKind": "inner",
+							"on": {
+								"left": {
+									"column": "id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "profiles"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"column": "profile_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "attachments"
+								}
+							},
+							"table": {
+								"schema": "app",
+								"table": "profiles"
+							}
+						}
+					],
+					"limit": null,
+					"orderBy": [],
+					"projection": {
+						"projectionKind": "constant-one"
+					},
+					"queryKind": "select",
+					"where": {
+						"nodeKind": "logical",
+						"operands": [
+							{
+								"left": {
+									"column": "id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "attachments"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"column": "attachment_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "attachment_blobs"
+								}
+							},
+							{
+								"left": {
+									"column": "user_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "profiles"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"nodeKind": "raw-sql",
+									"sql": "(select auth.uid())"
+								}
+							}
+						],
+						"operator": "and"
+					}
+				}
+			}
+		},
+		"policy:app.attachments.attachments_read_own": {
+			"command": "select",
+			"name": "attachments_read_own",
+			"roles": [
+				"authenticated"
+			],
+			"schema": "app",
+			"table": "attachments",
+			"using": {
+				"negated": false,
+				"nodeKind": "exists",
+				"query": {
+					"from": {
+						"schema": "app",
+						"table": "profiles"
+					},
+					"joins": [],
+					"limit": null,
+					"orderBy": [],
+					"projection": {
+						"projectionKind": "constant-one"
+					},
+					"queryKind": "select",
+					"where": {
+						"nodeKind": "logical",
+						"operands": [
+							{
+								"left": {
+									"column": "id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "profiles"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"column": "profile_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "attachments"
+								}
+							},
+							{
+								"left": {
+									"column": "user_id",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "profiles"
+								},
+								"nodeKind": "comparison",
+								"operator": "=",
+								"right": {
+									"nodeKind": "raw-sql",
+									"sql": "(select auth.uid())"
+								}
+							}
+						],
+						"operator": "and"
+					}
+				}
+			}
+		},
+		"policy:app.profiles.profiles_read_own": {
+			"command": "select",
+			"name": "profiles_read_own",
+			"roles": [
+				"authenticated"
+			],
+			"schema": "app",
+			"table": "profiles",
+			"using": {
+				"left": {
+					"column": "user_id",
+					"nodeKind": "column-ref",
+					"schema": "app",
+					"table": "profiles"
+				},
+				"nodeKind": "comparison",
+				"operator": "=",
+				"right": {
+					"nodeKind": "raw-sql",
+					"sql": "(select auth.uid())"
+				}
+			}
+		},
+		"rls:app.attachment_blobs": {
+			"schema": "app",
+			"table": "attachment_blobs"
+		},
+		"rls:app.attachments": {
+			"schema": "app",
+			"table": "attachments"
+		},
+		"rls:app.profiles": {
+			"schema": "app",
+			"table": "profiles"
+		},
+		"schema:app": {
+			"name": "app"
+		},
+		"supabase-storage-bucket:attachments": {
+			"allowedMimeTypes": [
+				"image/png",
+				"image/jpeg",
+				"application/pdf"
+			],
+			"fileSizeLimit": 10485760,
+			"name": "attachments"
+		},
+		"table:app.attachment_blobs": {
+			"columns": [
+				{
+					"name": "attachment_id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "storage_path",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "checksum",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"attachment_id"
+					],
+					"name": "attachment_blobs_attachment_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.attachments"
+				}
+			],
+			"indexes": [],
+			"name": "attachment_blobs",
+			"primaryKeyName": "attachment_blobs_pkey",
+			"schema": "app"
+		},
+		"table:app.attachments": {
+			"checks": [
+				{
+					"expression": {
+						"left": {
+							"column": "size_bytes",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "attachments"
+						},
+						"nodeKind": "comparison",
+						"operator": ">",
+						"right": {
+							"literal": {
+								"literalKind": "number",
+								"value": 0
+							},
+							"nodeKind": "literal"
+						}
+					},
+					"name": "attachments_size_bytes_positive"
+				},
+				{
+					"expression": {
+						"negated": false,
+						"nodeKind": "in-list",
+						"operand": {
+							"column": "content_type",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "attachments"
+						},
+						"values": [
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "image/png"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "image/jpeg"
+								},
+								"nodeKind": "literal"
+							}
+						]
+					},
+					"name": "attachments_content_type_allowed"
+				}
+			],
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "profile_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "size_bytes",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "bigint"
+					}
+				},
+				{
+					"name": "content_type",
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "archived_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"profile_id"
+					],
+					"name": "attachments_profile_id_fk",
+					"onDelete": "cascade",
+					"onUpdate": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.profiles"
+				}
+			],
+			"indexes": [],
+			"name": "attachments",
+			"primaryKeyName": "attachments_pkey",
+			"schema": "app"
+		},
+		"table:app.drafts": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "title",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "drafts",
+			"primaryKeyName": "drafts_pkey",
+			"schema": "app"
+		},
+		"table:app.profiles": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "user_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "display_name",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"user_id"
+					],
+					"name": "profiles_user_id_fk",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "auth.users"
+				}
+			],
+			"indexes": [],
+			"name": "profiles",
+			"primaryKeyName": "profiles_pkey",
+			"schema": "app"
+		},
+		"view:app.profiles_public": {
+			"columns": [
+				"id",
+				"user_id",
+				"display_name"
+			],
+			"name": "profiles_public",
+			"query": {
+				"from": {
+					"schema": "app",
+					"table": "profiles"
+				},
+				"joins": [],
+				"limit": null,
+				"orderBy": [],
+				"projection": {
+					"columns": [
+						"id",
+						"user_id",
+						"display_name"
+					],
+					"projectionKind": "all-columns"
+				},
+				"queryKind": "select",
+				"where": null
+			},
+			"schema": "app"
+		}
+	}
+}

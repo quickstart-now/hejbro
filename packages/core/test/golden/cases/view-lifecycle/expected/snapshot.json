@@ -1,0 +1,45 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.posts": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "status",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "published_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"primaryKeyName": "posts_pkey",
+			"schema": "app"
+		}
+	}
+}

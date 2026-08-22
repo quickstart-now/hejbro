@@ -1,0 +1,133 @@
+name: ci
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+  # #180 added this trigger so release-version.yml could
+  # `gh workflow run ci.yml --ref changeset-release/dev` after pushing
+  # the "Version Packages" PR's branch, on the theory that a GITHUB_TOKEN
+  # push/PR never gets a `push`/`pull_request` run at all (GitHub's
+  # recursion guard) and this was the documented way around it. #189
+  # removed that dispatch step: the run it started did fire and did
+  # attach real, passing check runs to the right head SHA, but those
+  # check runs never populated the PR's `statusCheckRollup` (measured via
+  # a same-commit control on #179's real head -- see release-version.yml
+  # for the full account), so it never actually unblocked a required
+  # check. The real blocker was narrower and different: a GITHUB_TOKEN-
+  # opened PR DOES get a `pull_request` run, it just stalls in
+  # `action_required` pending manual approval (this repo's Actions policy
+  # treats `github-actions[bot]` as a first-time contributor). Owner
+  # decision (2026-08-22, on #189): keep that as a manual step -- no
+  # settings/credential changes -- see release-version.yml for the full
+  # release procedure this produces.
+  #
+  # The trigger itself stays: it's harmless on its own (no inputs, no
+  # credentials, just "run ci.yml against whatever ref you point it at")
+  # and useful for a manual re-run of this workflow against an arbitrary
+  # branch without needing a new commit.
+  workflow_dispatch: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      # `changeset status`'s baseBranch (dev) diffing shells out to `git
+      # merge-base dev HEAD` — it needs a *local* branch literally named
+      # `dev`, which a pull_request checkout never creates on its own (it
+      # only checks out the PR ref). Both lines below are required, and
+      # each is required for a different reason: `fetch-depth: 0` on its
+      # own deepens the ref actually fetched, not "fetch every branch," so
+      # it doesn't create a local `dev`; the explicit fetch on its own
+      # creates `dev` but a shallow PR ref might not share a common
+      # ancestor with it, and `merge-base` would fail anyway. `fetch-depth:
+      # 0` gives the PR ref enough history to share a merge base, and the
+      # explicit fetch creates the local `dev` branch to share it with.
+      # `origin` here is quickstart-now/hejbro itself: this works because
+      # our PR branches live on the org repo, not a fork — a fork PR's
+      # `origin` would be the fork, without a `dev` branch to fetch.
+      #
+      # This step existing at all is why the CI failure that led to it was
+      # visible in the first place: `changeset status` has no silent-pass
+      # failure mode when its baseBranch ref is missing — it hard-fails
+      # with a stack trace out of `getChangedPackagesSinceRef` instead of
+      # quietly comparing against nothing. A gate that can't find its own
+      # reference point breaking loudly, rather than reporting a vacuous
+      # "nothing to do," is the one place in this round's chain of
+      # corrections where the risk this phase kept finding elsewhere
+      # (a check that looks like it ran but didn't) doesn't apply.
+      #
+      # Guarded by `ref`, not `event_name`: on a push to `dev` itself, the
+      # runner's checkout *is* `dev` already, so this fetch is both
+      # refused (`fatal: refusing to fetch into branch 'refs/heads/dev'
+      # checked out at ...`, exit 128) and unnecessary (the local `dev`
+      # branch already exists). A push to `main` still needs it — no
+      # local `dev` exists there either — so gating on `event_name ==
+      # 'pull_request'` would skip it on a `main` push and break
+      # `changeset status` the same way. `ref != 'refs/heads/dev'` is the
+      # narrower condition that actually matches "a local `dev` branch is
+      # missing": true for a PR ref and for a push to `main`, false only
+      # for a push to `dev` (measured on all three — dev's case
+      # structurally, on this branch; see the PR).
+      - run: git fetch origin dev:dev
+        if: github.ref != 'refs/heads/dev'
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: "${{ matrix.node-version }}", cache: pnpm }
+      - run: node --version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm check-types
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm smoke:pack-install
+        if: matrix.node-version == 24
+      # #154/D71: CRAP score gate for @hejbro/core and @hejbro/supabase, at
+      # threshold 10 (see scripts/check-crap.mjs). Node-version-independent
+      # (complexity/coverage numbers don't vary by runtime), so gated to one
+      # matrix leg only, the same way smoke:pack-install above is.
+      - run: pnpm check:crap
+        if: matrix.node-version == 24
+      # #180: not "trust this branch" -- the question this step asks
+      # ("does every package this branch changed relative to dev have an
+      # accompanying pending changeset?") does not apply on a
+      # changeset-release/* branch. That branch's only content IS a
+      # version bump that CONSUMES pending changesets (deletes the
+      # `.changeset/*.md` files, applies their version bumps) -- so
+      # relative to dev it always looks like "packages changed, no
+      # changeset covers it," on every single Version Packages branch,
+      # not just this one. Measured directly on a scratch branch (#180):
+      # `pnpm changeset status` failed with exactly that message on both
+      # of two separate Version-branch commits.
+      #
+      # `github.head_ref || github.ref_name`, not `github.ref` -- checked
+      # via this exact PR's own `pull_request` runs: on that trigger,
+      # `github.ref` is the synthetic merge ref (`refs/pull/<N>/merge`,
+      # confirmed in this PR's own checkout logs, "Merge f8b9f12... into
+      # 45caf4e..."), which never starts with `refs/heads/...` no matter
+      # what the source branch is named -- so a naive
+      # `startsWith(github.ref, 'refs/heads/changeset-release/')` check is
+      # dead code on that trigger. This IS reachable: GitHub's GITHUB_TOKEN
+      # recursion guard only blocks workflows *started by* a GITHUB_TOKEN-
+      # authored event, not a `pull_request` a human opens/reopens against
+      # a changeset-release/* branch (e.g. closing and reopening the
+      # Version PR) -- which would then hit the `changeset status` failure
+      # this step exists to skip, while this condition (wrongly) believes
+      # it's covered. `head_ref` is empty outside `pull_request` and holds
+      # the source branch name on it; `ref_name` is the bare branch name
+      # on `push`/`workflow_dispatch`. The `||` picks whichever one the
+      # current event actually populates.
+      #
+      # Still required after #189 removed the `workflow_dispatch`
+      # dispatch step from release-version.yml: the path that actually
+      # unblocks the Version PR is its own (approved) `pull_request` run,
+      # which hits this exact step -- without this skip, that approved
+      # run would fail here instead of passing.
+      - run: pnpm changeset status
+        if: ${{ !startsWith(github.head_ref || github.ref_name, 'changeset-release/') }}
+      - run: pnpm check:first-release-version
+      - run: pnpm check:next-marker
+      - run: pnpm check:diagnostic-xref

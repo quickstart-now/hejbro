@@ -1,0 +1,9 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"moduleResolution": "bundler",
+		"module": "esnext",
+		"noEmit": true
+	},
+	"include": ["src", "test", "hejbro.config.ts", "vitest.config.ts"]
+}

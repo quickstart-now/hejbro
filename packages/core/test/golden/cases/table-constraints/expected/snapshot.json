@@ -1,0 +1,204 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.comments": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "post_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "parent_id",
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "body",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"parent_id"
+					],
+					"name": "comments_parent_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.comments"
+				},
+				{
+					"columns": [
+						"post_id"
+					],
+					"name": "comments_post_id_fk",
+					"onDelete": "cascade",
+					"onUpdate": "restrict",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.posts"
+				}
+			],
+			"indexes": [],
+			"name": "comments",
+			"primaryKeyName": "comments_pkey",
+			"schema": "app"
+		},
+		"table:app.post_tags": {
+			"columns": [
+				{
+					"name": "post_id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"post_id"
+					],
+					"name": "post_tags_post_id_fk",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.posts"
+				}
+			],
+			"indexes": [],
+			"name": "post_tags",
+			"primaryKeyName": "post_tags_pkey",
+			"schema": "app"
+		},
+		"table:app.posts": {
+			"checks": [
+				{
+					"expression": {
+						"negated": false,
+						"nodeKind": "in-list",
+						"operand": {
+							"column": "status",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "posts"
+						},
+						"values": [
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "draft"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "published"
+								},
+								"nodeKind": "literal"
+							},
+							{
+								"literal": {
+									"literalKind": "string",
+									"value": "archived"
+								},
+								"nodeKind": "literal"
+							}
+						]
+					},
+					"name": "posts_status_check"
+				},
+				{
+					"expression": {
+						"chunks": [
+							{
+								"chunkKind": "text",
+								"text": ""
+							},
+							{
+								"chunkKind": "expr",
+								"expr": {
+									"column": "slug",
+									"nodeKind": "column-ref",
+									"schema": "app",
+									"table": "posts"
+								}
+							},
+							{
+								"chunkKind": "text",
+								"text": " ~ '^[a-z0-9-]+$'"
+							}
+						],
+						"nodeKind": "sql-template"
+					},
+					"name": "posts_slug_format_check"
+				}
+			],
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "status",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "slug",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "posts",
+			"primaryKeyName": "posts_pkey",
+			"schema": "app"
+		}
+	}
+}

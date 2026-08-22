@@ -5,20 +5,34 @@
 		"build": "turbo run build",
 		"check-types": "turbo run check-types",
 		"test": "turbo run test",
+		"test:coverage": "turbo run test:coverage",
 		"format": "biome format --write .",
 		"check": "biome check .",
+		"smoke:pack-install": "bash scripts/pack-install-smoke.sh",
+		"check:first-release-version": "node scripts/check-first-release-version.mjs",
+		"check:next-marker": "node scripts/check-next-marker.mjs",
+		"check:diagnostic-xref": "node scripts/check-diagnostic-xref.mjs",
+		"check:pnpm-publish-tool": "node scripts/verify-pnpm-publish-tool.mjs",
+		"check:crap": "pnpm test:coverage && node scripts/check-crap.mjs",
+		"regen:examples": "bash scripts/regen-examples.sh",
+		"verify:supabase-image": "bash scripts/verify-supabase-image.sh",
+		"changeset": "changeset",
+		"version-packages": "changeset version",
+		"release": "pnpm build && changeset publish",
 		"prepare": "husky"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",
+		"@changesets/cli": "^3.0.1",
 		"@commitlint/cli": "^21.0.1",
 		"@commitlint/config-conventional": "^21.0.1",
+		"@manypkg/get-packages": "^3.1.0",
 		"husky": "^9.1.7",
 		"turbo": "^2.9.8",
-		"typescript": "^5.9.2"
+		"typescript": "catalog:"
 	},
 	"packageManager": "pnpm@10.19.0",
 	"engines": {
-		"node": ">=20"
+		"node": ">=22.18.0"
 	}
 }

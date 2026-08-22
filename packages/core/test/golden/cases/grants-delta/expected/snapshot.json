@@ -1,0 +1,40 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"grant:app.all-tables-privileges.anon": {
+			"grantKind": "all-tables-privileges",
+			"privileges": [
+				"select",
+				"insert"
+			],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.all-tables-privileges.service_role": {
+			"grantKind": "all-tables-privileges",
+			"privileges": [
+				"select",
+				"insert",
+				"update"
+			],
+			"role": "service_role",
+			"schema": "app"
+		},
+		"grant:app.schema-usage.anon": {
+			"grantKind": "schema-usage",
+			"privileges": [],
+			"role": "anon",
+			"schema": "app"
+		},
+		"grant:app.schema-usage.service_role": {
+			"grantKind": "schema-usage",
+			"privileges": [],
+			"role": "service_role",
+			"schema": "app"
+		},
+		"schema:app": {
+			"name": "app"
+		}
+	}
+}

@@ -1,0 +1,185 @@
+name: release-version
+# `dev` is where every merged PR's changeset accumulates (AGENTS.md: PRs
+# squash-merge into `dev`). This workflow's only job is to keep the
+# "Version Packages" PR (branch + changelog + version bumps) in sync with
+# whatever changesets are currently pending on `dev` -- it must never
+# publish. Scoped to `push` on `dev` only: never `pull_request` (a fork PR
+# would run this in the fork's own Actions context anyway, not ours, since
+# PR branches live on quickstart-now/hejbro per AGENTS.md -- but `push` is
+# the narrower, correct condition regardless of that fact) and never `main`
+# (main only receives dev -> main merge-commit PRs; nothing should re-open
+# a version PR there).
+on:
+  push:
+    branches: [dev]
+
+# Two concurrent runs racing to open/update the "Version Packages" PR branch
+# could interleave pushes to it. Queue instead of overlapping; don't cancel
+# a run in progress -- a run cancelled mid-push could leave that branch in a
+# half-updated state that the next run then has to untangle.
+concurrency:
+  group: release-version-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-changesets:
+    if: github.repository == 'quickstart-now/hejbro'
+    runs-on: ubuntu-latest
+    outputs:
+      has-changesets: ${{ steps.check.outputs.has-changesets }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Entry condition for the `version` job below, not a guard inside it:
+      # measured directly (scratch branch, changesets removed to simulate
+      # "the Version Packages PR was just merged" -- run:
+      # https://github.com/quickstart-now/hejbro/actions/runs/32503887251)
+      # that `changeset version` (the underlying CLI command
+      # `version-packages` runs) exits 1 with "No unreleased changesets
+      # found" when zero changesets are pending -- not a graceful no-op.
+      # And zero pending changesets is not an edge case: it is the exact
+      # state `dev` is in immediately after every "Version Packages" PR
+      # merge, and after merging any docs-only or private-package-only PR
+      # (AGENTS.md's changeset rule exempts both). Without this, the
+      # `version` job would fail on a predictable, recurring schedule.
+      # Counting `.changeset/*.md` directly (excluding the template
+      # `README.md`) rather than shelling out to `changeset status` keeps
+      # this job cheap: no install needed, just a checkout.
+      - id: check
+        run: |
+          count=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l)
+          if [ "$count" -gt 0 ]; then
+            echo "has-changesets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-changesets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  version:
+    needs: check-changesets
+    # Skipped entirely, not run-and-guarded, when there is nothing to
+    # version -- see check-changesets' comment above for why this is a
+    # recurring state, not a rare one.
+    if: >-
+      github.repository == 'quickstart-now/hejbro' &&
+      needs.check-changesets.outputs.has-changesets == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # changesets/action/version -- NOT the monolithic changesets/action.
+      # The monolithic action does NOT call its own `select-mode`
+      # sub-action (confirmed: `grep -c "select-mode" dist/index.js` on
+      # this exact pinned commit returns 0) -- its mode choice is an inline
+      # switch in the same file, keyed on
+      # `(changesets pending?) x (was a "publish-script" input given?)`.
+      # With only `version-script` supplied (as an initial, mistaken draft
+      # of this file did), the "no changesets, no publish-script" case
+      # fires and the action explicitly returns without publishing
+      # ("Not publishing because no publish script found") -- so the
+      # monolithic action would NOT silently start publishing from `dev`
+      # today.
+      #
+      # The real difference is structural, not behavioral-today:
+      # changesets/action/version's own action.yml has no publish-related
+      # input at all (only script/commit-message/pr-title/pr-draft/
+      # pr-base-branch/push-with-git-cli/cwd) -- there is no field to add
+      # that would make it publish, because the capability doesn't exist
+      # in the file you'd be editing. The monolithic action is one
+      # `publish-script:` line away from publishing from `dev` on every
+      # future push, and nothing in its action.yml or a workflow using it
+      # warns that adding that line changes `dev`'s behavior this
+      # drastically. The failure mode is unrepresentable here, rather than
+      # merely unselected in the monolithic action as currently configured.
+      #
+      # Input name verified against this exact pinned commit's
+      # version/action.yml (`script`, not `version-script` -- the
+      # monolithic action's top-level input is named `version-script`, the
+      # decomposed sub-action's is `script`; they differ even within the
+      # same release, which is the trap this comment exists to name).
+      - uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          script: pnpm run version-packages
+          # Hardcoded, not `${{ github.ref_name }}`: this workflow only
+          # ever triggers on `push` to `dev` (see the file-level comment
+          # above `on:`), so `github.ref_name` would always resolve to
+          # "dev" here anyway -- but hardcoding it names the one branch
+          # this step is allowed to target, explicitly, rather than
+          # inheriting whatever ref happened to trigger the run. That
+          # distinction is exactly what a 2026-08-22 incident (during
+          # #180's own scratch testing) got wrong: a scratch run had
+          # `pr-base-branch` set to `${{ github.ref_name }}` while testing
+          # on a non-dev branch, computed `changeset-release/dev` anyway
+          # by coincidence of the scratch branch's own naming, and force-
+          # pushed test commits onto the real Version Packages PR (#179)'s
+          # branch. Parameterizing was necessary ONLY inside that scratch
+          # test itself (to target an isolated `changeset-release/<scratch
+          # branch>`, never `changeset-release/dev`) -- it was never
+          # correct here, in the workflow this repository actually runs.
+          pr-base-branch: dev
+      # #180 added a step here (`gh workflow run ci.yml --ref
+      # changeset-release/dev`, right after this one) to unblock the
+      # "Version Packages" PR's required `verify (22)`/`verify (24)`
+      # checks. #189 removes it -- not because the dispatch failed to
+      # fire (it did: `workflow_dispatch` is a genuine, documented
+      # exception to the GITHUB_TOKEN-push recursion guard, and the
+      # triggered run completed successfully with both check runs
+      # attached to the right head SHA, exactly as #180 measured). It's
+      # removed because dispatching there never touched the actual
+      # blocker, confirmed by a same-commit control on #179's real head:
+      # that single commit carried 3 raw check-runs -- `verify (24)` and
+      # `verify (22)` (from this dispatch) plus a `.github/dependabot.yml`
+      # check (from Dependabot, unrelated to this workflow) -- but the
+      # commit's `statusCheckRollup` (what `mergeStateStatus`, the merge
+      # button, and `gh pr checks` all actually read) contained only the
+      # Dependabot-created one. Same commit, same moment, two sources:
+      # only the `push`/`pull_request`-triggered one reached the rollup.
+      # So this step was real CI cost (two extra jobs on every `dev`
+      # push) for zero effect on whether the PR could be merged.
+      #
+      # The actual blocker, and why it looked like "no pull_request run
+      # at all": a PR opened/updated with GITHUB_TOKEN (as
+      # changesets/action/version does) DOES get a `pull_request`-
+      # triggered `ci.yml` run -- #180's premise that GITHUB_TOKEN
+      # prevents that run from being created was wrong. What actually
+      # happens is narrower: the run is created but stalls in
+      # `action_required`, because this repo's Actions run-approval
+      # policy treats `github-actions[bot]` as a first-time external
+      # contributor whose runs need manual approval. Approving that run
+      # (not dispatching a separate one) is what populates the rollup and
+      # flips the PR to CLEAN -- so removing the dispatch step here loses
+      # nothing: the check run it used to create never reached the
+      # rollup anyway, and the approved `pull_request` run fills that
+      # role instead.
+      #
+      # Owner decision (2026-08-22, on #189): keep this as a manual step,
+      # not automated away. The release procedure is:
+      #   1. Right before releasing, open the "Version Packages" PR's
+      #      latest CI run and click "Approve and run".
+      #   2. The run completes, `statusCheckRollup` populates, the PR
+      #      goes BLOCKED -> CLEAN.
+      #   3. Squash-merge the Version PR into `dev`.
+      #   4. Open/merge the `dev` -> `main` PR (merge commit, per
+      #      AGENTS.md).
+      #   5. Approve the `npm` environment's deployment request --
+      #      that's the actual publish gate (#155/#165), unaffected by
+      #      any of this.
+      #
+      # One approval, not one per push: only the head commit that's
+      # about to be merged needs approving -- every earlier
+      # `action_required` run on an intermediate push can be left
+      # untouched; nothing fails, the PR just stays BLOCKED until someone
+      # approves its current head. A prior pass through this repo's
+      # history miscounted "N `action_required` runs observed" as "N
+      # approvals required" -- those are occurrences of the same
+      # recurring wait state on different heads, not a per-push
+      # obligation. Rejected alternatives (owner decision): relaxing the
+      # first-time-contributor run-approval policy, and giving this
+      # workflow a bot token/GitHub App identity -- neither changes
+      # credentials or settings; the manual approval click stays.

@@ -1,0 +1,18 @@
+{
+	"name": "preset-smoke",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Task 17 acceptance: a toy zero-Supabase custom kind and expression helper, proving @hejbro/core's provider extension interface (spec §4.1) is generic.",
+	"type": "module",
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@hejbro/core": "workspace:*"
+	},
+	"devDependencies": {
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}
