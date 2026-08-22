@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { defineFunction } from "../src/dsl/define-function";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
-import { literal } from "../src/expr/operators";
+import { eq, literal, now } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
 import type { TableSnapshot } from "../src/kinds/table-snapshot";
+import { update } from "../src/query/mutate";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import {
 	bigserial,
@@ -266,6 +268,53 @@ describe("generateMigration", () => {
 					(c) => c.name,
 				),
 			).toEqual(["id", "y", "moved"]);
+		});
+
+		// D81/golden `column-insert-mid`: a brand-new project declaring the
+		// widest (final) TypeScript shape directly from an empty snapshot
+		// gets *declaration* order, not the physical order an incremental
+		// migration chain to that same shape would have produced (the
+		// golden case's own `from-empty.sql` only ever sees 3 columns, since
+		// its first step is the narrowest declaration — this is the
+		// "different but equally valid physical order" case D81's decision
+		// log calls out, covered here instead).
+		it("a fresh build of the widest declaration gets declaration order, not the incremental chain's physical order", () => {
+			const projects = table(app, "projects", {
+				id: uuid(),
+				title: text(),
+				description: text(),
+				level: integer(),
+				archivedAt: timestamptz(),
+				note: text(),
+			});
+			const archiveProject = defineFunction(
+				"app",
+				"archive_project",
+				{ args: { projectId: uuid() }, returns: projects },
+				(ctx, { projectId }) => {
+					ctx.return(
+						update(projects)
+							.set({ archivedAt: now() })
+							.where(eq(projects.id, projectId))
+							.returning(),
+					);
+				},
+			);
+			const result = generateMigration({
+				declarations: [app, projects, archiveProject],
+				previousSnapshot: emptySnapshot,
+			});
+			expect(
+				(
+					result.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "title", "description", "level", "archived_at", "note"]);
+			expect(result.sql).toContain(
+				'"id" uuid,\n\t"title" text,\n\t"description" text,\n\t"level" integer,\n\t"archived_at" timestamp with time zone,\n\t"note" text',
+			);
+			expect(result.sql).toContain(
+				'returning "id", "title", "description", "level", "archived_at", "note"',
+			);
 		});
 	});
 

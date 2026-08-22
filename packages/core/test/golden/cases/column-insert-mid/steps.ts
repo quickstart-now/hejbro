@@ -23,6 +23,10 @@ import { app } from "./declarations";
 // and projects_v's `select` list follow that physical order, not
 // declaration order, because both are re-resolved at snapshot-build time
 // (D81), not frozen at DSL time the way they were before #261's fix.
+//
+// harness: index 0 = from-empty (initial create); a fresh build of the
+// final (step 2) declarations is covered by generate.test.ts's "a fresh
+// build of the widest declaration gets declaration order" test, not here.
 
 // Step 0: initial -- projects(id, title, archivedAt), archive_project, projects_v.
 
