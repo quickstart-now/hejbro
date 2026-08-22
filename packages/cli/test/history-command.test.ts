@@ -126,4 +126,55 @@ describe("hejbro history", () => {
 			await removeCliFixtureDir(cwd);
 		}
 	});
+
+	// A migration added on a feature branch and brought in via a real
+	// (non-squash) merge commit -- unlike migrationAddedCommits's own
+	// squash-merge fixture (restore-command.test.ts's restore-state-lost
+	// test), `git merge` here produces an actual merge commit with two
+	// parents. `git log --diff-filter=A` never diffs a merge commit by
+	// default (only regular, single-parent commits), so the question this
+	// answers is whether the *original* single-parent commit on the
+	// feature branch -- reachable from HEAD once merged -- is still what
+	// `migrationAddedCommits` finds, or whether merging hides it. Measured,
+	// not assumed: it's still found, and the row renders ok with the
+	// feature branch's own commit subject, not the merge commit's.
+	it("a migration added on a feature branch and merged via a real (non-squash) merge commit still renders ok, naming the feature branch's own commit", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			git(cwd, ["init", "-q", "-b", "main"]);
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await runCli(cwd, ["init"]);
+			git(cwd, ["add", "-A"]);
+			git(cwd, ["commit", "-q", "-m", "chore: init"]);
+
+			git(cwd, ["checkout", "-qb", "feat-posts"]);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_SOURCE);
+			await runCli(cwd, ["generate"]);
+			git(cwd, ["add", "-A"]);
+			git(cwd, ["commit", "-q", "-m", "feat: posts table"]);
+
+			git(cwd, ["checkout", "-q", "main"]);
+			// --no-ff forces a real merge commit even though main hasn't
+			// moved since the branch point (otherwise git fast-forwards and
+			// there is no merge commit to test against at all).
+			git(cwd, [
+				"merge",
+				"-q",
+				"--no-ff",
+				"-m",
+				"merge: feat-posts",
+				"feat-posts",
+			]);
+
+			const result = await runCli(cwd, ["history"]);
+			expect(result.exitCode).toBe(0);
+			const lines = result.stdout.trim().split("\n");
+			expect(lines[1]).toContain("0001_add_app.sql");
+			expect(lines[1]).toContain("ok");
+			expect(lines[1]).toContain("feat: posts table");
+			expect(lines[1]).not.toContain("merge: feat-posts");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
 });
