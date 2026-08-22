@@ -115,7 +115,7 @@ implemented, tested, and merged independently (one story may be one PR).
 
 - [ ] TXXX `pnpm check && pnpm check-types && pnpm test` — paste output in the PR
 - [ ] TXXX `pnpm check:crap` — README CRAP block refreshed, no function > 5
-- [ ] TXXX `.changeset/*.md` — exactly one, `minor` for a new capability, `patch` for a fix
+- [ ] TXXX `.changeset/*.md` — exactly one, `patch` (D83: features ship on 0.1.x; `minor` is the owner-cut 0.2.0 milestone)
 - [ ] TXXX Roadmap phase section updated (docs/plans/2026-08-22-0.2.0-roadmap.md)
 - [ ] TXXX Decision log: new D# rows for every decision the spec's "Decision-log impact" section proposed (docs/specs/2026-08-19-hejbro-design.md §3)
 - [ ] TXXX `/speckit-analyze` clean; `/speckit-converge` reports Converged

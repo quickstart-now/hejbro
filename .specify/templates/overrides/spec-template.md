@@ -1,6 +1,6 @@
 # Feature Specification: [FEATURE NAME]
 
-**Feature Directory**: `specs/[###-feature-name]` | **Issue**: #[NNN] (sub-issue of the phase issue) | **Target release**: [0.2.0]
+**Feature Directory**: `specs/[###-feature-name]` | **Issue**: #[NNN] (sub-issue of the phase issue) | **Target release**: [next 0.1.x patch — 0.2.0 is the owner-cut stability milestone, D83]
 
 **Created**: [DATE]
 

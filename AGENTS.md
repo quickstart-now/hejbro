@@ -15,8 +15,9 @@ Neon and Nile planned). MIT, built AI-natively under `quickstart-now`.
 1. `docs/specs/2026-08-19-hejbro-design.md` — approved design spec and
    decision log (D1–D12). Decisions were made explicitly by the project
    owner. Never silently revisit them; if blocked, surface it and ask.
-2. `docs/plans/2026-08-22-0.2.0-roadmap.md` — the current release line
-   (0.2.0): process, scope candidates, work list, frontier. Keep it current
+2. `docs/plans/2026-08-22-0.2.0-roadmap.md` — the current phase (Phase 10,
+   the road to 0.2.0 — features ship as 0.1.x patches, 0.2.0 marks the
+   stable set): process, scope candidates, work list, frontier. Keep it current
    as work lands so any session can find the frontier. Per-feature plans
    live in `specs/NNN-<feature>/`. The closed 0.1.x line (Phases 0–9) is
    `docs/plans/2026-08-19-roadmap.md`.
@@ -93,9 +94,12 @@ again.
   status` enforces exactly this scope — a docs-only or private-package-only
   PR (`@hejbro/skills`, `examples/`, this file) doesn't need one and the
   gate doesn't ask for one; use `pnpm changeset add --empty` if you want an
-  explicit record anyway. Run `pnpm changeset` and answer its prompts; pick
-  `minor` for a new capability, `patch` for a fix, and `major` is not used
-  before 1.0 (see the design spec's decision log). The three published
+  explicit record anyway. Run `pnpm changeset` and answer its prompts. Bump
+  policy on the 0.x line (D83): **every PR — new capability or fix — is a
+  `patch`**; a `minor` is cut only by the owner, as a stability milestone
+  once the shipped feature set has been dogfooded (0.2.0 = "the 0.1.x
+  feature set is stable", not "the release features arrive in"); `major`
+  is not used before 1.0 (see the design spec's decision log). The three published
   packages (`@hejbro/core`, `hejbro`, `@hejbro/supabase`) are a **fixed**
   group in `.changeset/config.json` — they always version together, so a
   changeset naming any one of them is enough to move all three.

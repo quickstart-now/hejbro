@@ -41,7 +41,7 @@
 | III | Deterministic output | SQL is a pure function of (parent, next) snapshot; explicit lists & identifiers; destructive changes flag-driven; diagnostics carry `Next:` | [PASS / VIOLATION] |
 | IV | Test-first, three layers | Tests named per layer (unit / golden / round-trip / example); TDD order in tasks; CRAP ≤ 5 budget stated | [PASS / VIOLATION] |
 | V | Decisions logged | "Decision-log impact" in spec is filled; nothing from roadmap *Deferred* without owner approval; snapshot/format/DSL decisions proposed as D# rows | [PASS / VIOLATION] |
-| VI | Spec before code | Issue #NNN exists as a sub-issue; `specs/NNN-*/` exists; one changeset planned (`minor`/`patch`) | [PASS / VIOLATION] |
+| VI | Spec before code | Issue #NNN exists as a sub-issue; `specs/NNN-*/` exists; one `patch` changeset planned (D83) | [PASS / VIOLATION] |
 
 ## Project Structure
 
