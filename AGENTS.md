@@ -110,5 +110,6 @@ again.
 ## Before claiming done
 
 - [ ] `pnpm check`, `pnpm check-types`, `pnpm test` all pass — show output
+- [ ] README CRAP block refreshed (`pnpm check:crap`)
 - [ ] Roadmap updated if phase progress changed
 - [ ] PR body lists the commits to be squashed

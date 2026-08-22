@@ -1,5 +1,9 @@
 # hejbro
 
+<!-- crap-badge:start -->
+[![CRAP ≤ 5 · 0 / 938](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%20938-brightgreen)](#status)
+<!-- crap-badge:end -->
+
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
 
 **TypeScript-native Postgres schema & RPC management.** Declare everything in
@@ -167,6 +171,10 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 
 - Design spec: [`docs/specs/2026-08-19-hejbro-design.md`](docs/specs/2026-08-19-hejbro-design.md)
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
+
+<!-- crap:start -->
+**Code quality gate:** every named function in `@hejbro/core` and `@hejbro/supabase` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 938 functions** over the threshold, highest score 5.00 — measured at `66117ac` (2026-08-22).
+<!-- crap:end -->
 
 ## License
 
