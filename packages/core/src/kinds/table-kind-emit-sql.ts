@@ -183,20 +183,23 @@ const opclassToken = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
 
 /**
  * The column/expression token of one index column's clause: a quoted
- * name, or an expression entry's rendered SQL (R5/R9 — via
- * {@link indexColumnExpression}, the same accessor-mediated render
- * `whereClause` uses for `where`, so this module never imports the
- * expression codec directly). No extra self-wrapping parens: the
- * surrounding column list already supplies one pair
- * ({@link createIndexSql}'s `(${…})`), and every expression this feature
- * emits is itself a function call (`lower(...)`, `btrim(...)`) whose own
- * call syntax is self-delimiting — real Postgres accepts
- * `create index … (lower(email))` without an extra wrap, and the D51
- * contract's own examples confirm the same byte count.
+ * name, or an expression entry's rendered SQL wrapped in its own
+ * parentheses (R5/R9 — via {@link indexColumnExpression}, the same
+ * accessor-mediated render `whereClause` uses for `where`, so this
+ * module never imports the expression codec directly). Always wrapped,
+ * not just when the expression happens to need it: Postgres' own
+ * `index_elem` grammar is `column_name | ( a_expr )` — a function call
+ * like `lower(email)` is self-delimiting and could skip the wrap, but an
+ * operator expression (`data ->> 'status'`, `a || b`) cannot, and
+ * Postgres normalizes either form to the same catalog entry / `pg_dump`
+ * output, so always wrapping is simpler and correct for every
+ * expression this feature can emit (owner decision 2026-08-22, F7 —
+ * corrects an earlier no-wrap reading of contracts/sql.md that only
+ * happened to work for the function-call examples it showed).
  */
 const indexColumnTarget = (column: IndexColumnSnapshot): string => {
 	if (isExpressionIndexColumn(column)) {
-		return indexColumnExpression(column) ?? "";
+		return `(${indexColumnExpression(column) ?? ""})`;
 	}
 	return quoteIdentifier(column.name);
 };

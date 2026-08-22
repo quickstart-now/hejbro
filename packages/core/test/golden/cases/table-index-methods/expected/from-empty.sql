@@ -29,6 +29,6 @@ create table "app"."users" (
 	constraint "users_pkey" primary key ("id")
 );
 
-create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."email"));
+create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));
 
-create unique index "users_email_lower_uidx" on "app"."users" (lower("app"."users"."email")) where "app"."users"."deleted_at" is null;
+create unique index "users_email_lower_uidx" on "app"."users" ((lower("app"."users"."email"))) where "app"."users"."deleted_at" is null;

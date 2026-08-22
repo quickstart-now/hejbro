@@ -786,11 +786,14 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 		]);
 	});
 
-	// #284 US3 (T033): expression indexes — the expression renders
-	// parenthesised with fully-qualified column refs (R9), composes with
-	// unique + where, and an expression change recreates the index (same
-	// generic drop + create path).
-	it("renders the expression parenthesised with fully-qualified column refs", () => {
+	// #284 US3 (T033): expression indexes — the expression always renders
+	// wrapped in its own parentheses (R9/F7 — Postgres' `index_elem`
+	// grammar is `column_name | ( a_expr )`; a bare function call could
+	// skip the wrap, but an operator expression cannot, and Postgres
+	// normalizes either form to the same catalog entry, so this feature
+	// always wraps), composes with unique + where, and an expression
+	// change recreates the index (same generic drop + create path).
+	it("renders the expression wrapped in its own parentheses, with fully-qualified column refs", () => {
 		const users = table(app, "users", { email: text() }, (t) => ({
 			indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
 		}));
@@ -802,7 +805,19 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 			),
 		);
 		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
-			'create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."email"));',
+			'create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));',
+		);
+	});
+
+	it("wraps an operator expression the same way — a bare function call isn't special-cased", () => {
+		const docs = table(app, "docs", { data: text() }, (t) => ({
+			indexes: [index("docs_data_status_idx").on(sql`${t.data} ->> 'status'`)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(null, tableKind.serialize(getTableMeta(docs)), "app.docs"),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
+			`create index "docs_data_status_idx" on "app"."docs" (("app"."docs"."data" ->> 'status'));`,
 		);
 	});
 
@@ -828,7 +843,7 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 			),
 		);
 		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
-			'create unique index "users_email_lower_uidx" on "app"."users" (lower("app"."users"."email")) where "app"."users"."deleted_at" is not null;',
+			'create unique index "users_email_lower_uidx" on "app"."users" ((lower("app"."users"."email"))) where "app"."users"."deleted_at" is not null;',
 		);
 	});
 
@@ -850,7 +865,7 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 		);
 		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
 			'drop index "app"."users_email_lower_idx";',
-			'create index "users_email_lower_idx" on "app"."users" (lower(btrim("app"."users"."email")));',
+			'create index "users_email_lower_idx" on "app"."users" ((lower(btrim("app"."users"."email"))));',
 		]);
 	});
 });
