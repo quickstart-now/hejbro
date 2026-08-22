@@ -1,7 +1,7 @@
 -- hejbro migration
 -- ~ table app.task_tags [column "tag_label" changed]
--- parent-snapshot: sha256:2ed61dceb2f146922c4e523dc04f28383075255c668ead883fbb77ada28f3405
--- snapshot: sha256:3136a801e3684b9c7861e43e480304cdd0587eed3c6622bed8ad56e769f89f63
+-- parent-snapshot: sha256:4fb0623cce0a72146a8e395b8284a2be10c4c8aa7702c11c43abb077fd7ac62a
+-- snapshot: sha256:98efec4dcbdf38a9f9636b413e4d5f251710b123e09e829b9c4b8d5b3e79670e
 
 alter table "app"."task_tags" drop constraint "task_tags_pkey";
 

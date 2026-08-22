@@ -5,8 +5,8 @@
 -- + policy app.task_schedules.task_schedules_read_all [new]
 -- + policy app.task_schedules.task_schedules_write_all [new]
 -- ~ view app.open_tasks [view columns changed; recreating]
--- parent-snapshot: sha256:6fc395cafe09d3cd46d1fd50baabac3f38190153206da1e7c61a302873f8349a
--- snapshot: sha256:a61bf4eeabff25fc69cb1cf000726a61520c24957f2fc53534d9074ff34ce578
+-- parent-snapshot: sha256:e476026cb0a3ba0d369649c5c18587f4b60f437fb47c64979a27a0c764cccc8c
+-- snapshot: sha256:0bdc80065c01a2baae3356c6a8c2bb153d33c809ce020a1efc6eb635cd58600e
 
 drop view if exists "app"."open_tasks";
 
@@ -19,6 +19,12 @@ create table "app"."task_schedules" (
 );
 
 create index "task_schedules_due_at_idx" on "app"."task_schedules" ("due_at" desc);
+
+grant select on all tables in schema "app" to "app_auditor";
+
+grant select on all tables in schema "app" to "app_reader";
+
+grant select, insert, update, delete on all tables in schema "app" to "app_writer";
 
 drop index "app"."tasks_project_id_due_at_idx";
 

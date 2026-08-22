@@ -1,8 +1,8 @@
 -- hejbro migration
 -- ~ table app.projects [foreign key "projects_owner_id_fk" changed]
 -- ~ table app.tasks [index "tasks_project_id_due_at_idx" changed]
--- parent-snapshot: sha256:37c1dd64b27834268ab1aa4d1fbd07544bd9acfcf9a0cd6bc84df197f8076be0
--- snapshot: sha256:6fc395cafe09d3cd46d1fd50baabac3f38190153206da1e7c61a302873f8349a
+-- parent-snapshot: sha256:69450c2b7d78030dea03cd62ed75a2fdf1c74a6ed40c508630c6e11ed8504240
+-- snapshot: sha256:e476026cb0a3ba0d369649c5c18587f4b60f437fb47c64979a27a0c764cccc8c
 
 alter table "app"."projects" drop constraint "projects_owner_id_fk";
 
