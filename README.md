@@ -10,6 +10,14 @@ The safe middle ground between letting AI touch your database directly (MCP)
 and writing raw SQL by hand: everything is code, every change is a
 reviewable, generated migration.
 
+## Install
+
+```bash
+pnpm add hejbro
+# using the Supabase preset?
+pnpm add @hejbro/supabase
+```
+
 ## 60 seconds
 
 ```ts
@@ -146,7 +154,8 @@ artifacts the agents work from — not documentation written after the fact.
 
 ## Status
 
-**Pre-alpha — under active design and development. Nothing is published yet.**
+**Pre-1.0 — under active design and development.** Only the latest published
+minor version is supported; see [`SECURITY.md`](SECURITY.md).
 
 - Design spec: [`docs/specs/2026-08-19-hejbro-design.md`](docs/specs/2026-08-19-hejbro-design.md)
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)

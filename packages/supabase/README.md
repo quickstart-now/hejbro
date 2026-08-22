@@ -8,8 +8,7 @@ helpers and their initPlan-cached forms `authUidCached()`/`authJwtCached()`
 bucket object kind, and four validators (reserved-schema protection,
 exposed-table-without-RLS, view-over-RLS-without-`security_invoker`, and
 uncached-`auth.*()`-call-in-a-policy).
-See `/docs/specs/2026-08-19-hejbro-design.md` and
-`/docs/plans/2026-08-19-roadmap.md` (Phase 6/7) for the full design.
+See `/docs/specs/2026-08-19-hejbro-design.md` for the full design.
 
 ## Using the preset (`hejbro.config.ts`, D55)
 
