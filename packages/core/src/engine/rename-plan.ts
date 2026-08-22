@@ -742,6 +742,36 @@ const retargetField = (
 	return encodeExprNode(retargeted);
 };
 
+const applyRetargetedDefault = (
+	column: TableSnapshot["columns"][number],
+	retargeted: JsonValue | null,
+): TableSnapshot["columns"][number] => {
+	if (retargeted === null) {
+		return column;
+	}
+	return { ...column, default: retargeted };
+};
+
+const applyRetargetedWhere = (
+	index: TableSnapshot["indexes"][number],
+	retargeted: JsonValue | null,
+): TableSnapshot["indexes"][number] => {
+	if (retargeted === null) {
+		return index;
+	}
+	return { ...index, where: retargeted };
+};
+
+const applyRetargetedCheckExpression = (
+	check: NonNullable<TableSnapshot["checks"]>[number],
+	retargeted: JsonValue | null,
+): NonNullable<TableSnapshot["checks"]>[number] => {
+	if (retargeted === null) {
+		return check;
+	}
+	return { ...check, expression: retargeted };
+};
+
 const retargetTableFields = (
 	tableSnapshot: TableSnapshot,
 	target: RenameTarget,
@@ -762,22 +792,46 @@ const retargetTableFields = (
 	if (!anyChanged) {
 		return null;
 	}
+	const checksPatch = ():
+		| Pick<TableSnapshot, "checks">
+		| Record<string, never> => {
+		if (tableSnapshot.checks === undefined) {
+			return {};
+		}
+		return {
+			checks: checkResults.map(([check, retargeted]) =>
+				applyRetargetedCheckExpression(check, retargeted),
+			),
+		};
+	};
 	return {
 		...tableSnapshot,
 		columns: columnResults.map(([column, retargeted]) =>
-			retargeted === null ? column : { ...column, default: retargeted },
+			applyRetargetedDefault(column, retargeted),
 		),
 		indexes: indexResults.map(([index, retargeted]) =>
-			retargeted === null ? index : { ...index, where: retargeted },
+			applyRetargetedWhere(index, retargeted),
 		),
-		...(tableSnapshot.checks === undefined
-			? {}
-			: {
-					checks: checkResults.map(([check, retargeted]) =>
-						retargeted === null ? check : { ...check, expression: retargeted },
-					),
-				}),
+		...checksPatch(),
 	};
+};
+
+const usingPatch = (
+	using: JsonValue | null,
+): Pick<PolicySnapshot, "using"> | Record<string, never> => {
+	if (using === null) {
+		return {};
+	}
+	return { using };
+};
+
+const withCheckPatch = (
+	withCheck: JsonValue | null,
+): Pick<PolicySnapshot, "withCheck"> | Record<string, never> => {
+	if (withCheck === null) {
+		return {};
+	}
+	return { withCheck };
 };
 
 const retargetPolicyFields = (
@@ -791,8 +845,8 @@ const retargetPolicyFields = (
 	}
 	return {
 		...policySnapshot,
-		...(using === null ? {} : { using }),
-		...(withCheck === null ? {} : { withCheck }),
+		...usingPatch(using),
+		...withCheckPatch(withCheck),
 	};
 };
 

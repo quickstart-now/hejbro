@@ -66,7 +66,10 @@ const messageOf = (fn: () => unknown): string => {
 	try {
 		fn();
 	} catch (error) {
-		return error instanceof Error ? error.message : String(error);
+		if (error instanceof Error) {
+			return error.message;
+		}
+		return String(error);
 	}
 	throw new Error("expected fn to throw");
 };

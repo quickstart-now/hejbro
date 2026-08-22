@@ -26,6 +26,23 @@ const renderRaiseSuffix = (args: ReadonlyArray<ExprNode>): string => {
 
 type IfStatement = Extract<BodyStatement, { readonly stmtKind: "if" }>;
 
+const renderElseLines = (
+	statement: IfStatement,
+	depth: number,
+	identity: string,
+	declaredAt: string | null,
+): ReadonlyArray<string> => {
+	if (statement.elseStatements === null) {
+		return [];
+	}
+	return [
+		`${indent(depth)}else`,
+		...statement.elseStatements.flatMap((inner) =>
+			renderStatementLines(inner, depth + 1, identity, declaredAt),
+		),
+	];
+};
+
 const renderIfLines = (
 	statement: IfStatement,
 	depth: number,
@@ -53,15 +70,7 @@ const renderIfLines = (
 			renderStatementLines(inner, depth + 1, identity, declaredAt),
 		),
 	]);
-	const elseLines =
-		statement.elseStatements === null
-			? []
-			: [
-					`${indent(depth)}else`,
-					...statement.elseStatements.flatMap((inner) =>
-						renderStatementLines(inner, depth + 1, identity, declaredAt),
-					),
-				];
+	const elseLines = renderElseLines(statement, depth, identity, declaredAt);
 
 	return [...ifLines, ...elsifLines, ...elseLines, `${indent(depth)}end if;`];
 };
@@ -134,6 +143,27 @@ const renderDeclarationLine = (local: PlpgsqlVarDeclaration): string => {
  * `body-contains-dollar-tag` if the rendered `declare`/`begin`/`end` body
  * contains the literal `$function$` dollar-quote tag.
  */
+const renderSecurityLines = (
+	declaration: FunctionDeclaration,
+): ReadonlyArray<string> => {
+	if (declaration.security === "definer") {
+		return ["security definer"];
+	}
+	return [];
+};
+
+const renderDeclareLines = (
+	declaration: FunctionDeclaration,
+): ReadonlyArray<string> => {
+	if (declaration.body.declarations.length === 0) {
+		return [];
+	}
+	return [
+		"declare",
+		...declaration.body.declarations.map(renderDeclarationLine),
+	];
+};
+
 export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
 	const identity = `${declaration.schemaName}.${declaration.functionName}`;
 	const argsSql = declaration.args
@@ -141,15 +171,8 @@ export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
 		.join(", ");
 	const header = `create or replace function ${qualifyName(declaration.schemaName, declaration.functionName)}(${argsSql})`;
 	const returnsLine = `returns ${renderFunctionReturnsClause(declaration.returns)}`;
-	const securityLines =
-		declaration.security === "definer" ? ["security definer"] : [];
-	const declareLines =
-		declaration.body.declarations.length === 0
-			? []
-			: [
-					"declare",
-					...declaration.body.declarations.map(renderDeclarationLine),
-				];
+	const securityLines = renderSecurityLines(declaration);
+	const declareLines = renderDeclareLines(declaration);
 	const bodyLines = declaration.body.statements.flatMap((stmt) =>
 		renderStatementLines(stmt, 1, identity, declaration.declaredAt),
 	);

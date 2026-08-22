@@ -61,6 +61,19 @@ const sequenceForAddedColumn = (
 	return match ?? null;
 };
 
+/** #23: a serial-family column added to an existing table inlines its
+ * sequence-backed default into the same `add column` statement -- see
+ * {@link sequenceForAddedColumn}'s doc comment. `sequence === null` is
+ * every other added column (the vast majority), unaffected. */
+const overrideDefaultForAddedColumn = (
+	sequence: SequenceSnapshot | null,
+): string | undefined => {
+	if (sequence === null) {
+		return undefined;
+	}
+	return nextvalExpression(sequence);
+};
+
 const emitCreate = (next: TableSnapshot): ReadonlyArray<SqlStatement> => [
 	statement(createTableSql(next)),
 	...next.indexes.map((index) =>
@@ -320,12 +333,7 @@ const emitAlter = (
 				entry.key,
 				siblingChanges,
 			);
-			// #23: a serial-family column added to an existing table inlines
-			// its sequence-backed default into this same statement — see
-			// sequenceForAddedColumn's doc comment. `sequence === null` is
-			// every other added column (the vast majority), unaffected.
-			const overrideDefault =
-				sequence === null ? undefined : nextvalExpression(sequence);
+			const overrideDefault = overrideDefaultForAddedColumn(sequence);
 			return statement(
 				`alter table ${qualifyName(next.schema, next.name)} add column ${renderColumnDefinition(entry.value, overrideDefault)};`,
 			);

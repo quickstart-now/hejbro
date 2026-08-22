@@ -69,6 +69,16 @@ const retargetTableRef = (
 
 const retargetUnchanged = (node: ExprNode): ExprNode => node;
 
+const retargetedColumnName = (
+	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
+	target: RenameTarget,
+): string => {
+	if (target.oldColumn !== null && node.columnName === target.oldColumn) {
+		return target.newColumn ?? node.columnName;
+	}
+	return node.columnName;
+};
+
 const retargetColumnRef = (
 	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
 	target: RenameTarget,
@@ -79,10 +89,7 @@ const retargetColumnRef = (
 	) {
 		return node;
 	}
-	const columnName =
-		target.oldColumn !== null && node.columnName === target.oldColumn
-			? (target.newColumn ?? node.columnName)
-			: node.columnName;
+	const columnName = retargetedColumnName(node, target);
 	// A table rename always changes schema/table, so this branch is
 	// reached meaning something changed -- but a column rename sets
 	// oldSchema===newSchema/oldTable===newTable, so a ref on the
@@ -227,6 +234,16 @@ const retargetSqlTemplate = (
  * on a table rename, only `query.from`'s table name does (handled by
  * {@link retargetTableRef} at the call site).
  */
+const retargetedAllColumnsName = (
+	name: string,
+	target: RenameTarget,
+): string => {
+	if (name === target.oldColumn) {
+		return target.newColumn ?? name;
+	}
+	return name;
+};
+
 const retargetProjection = (
 	projection: ProjectionNode,
 	from: TableRefNode,
@@ -244,7 +261,7 @@ const retargetProjection = (
 		return {
 			...projection,
 			columnNames: projection.columnNames.map((name) =>
-				name === target.oldColumn ? (target.newColumn ?? name) : name,
+				retargetedAllColumnsName(name, target),
 			),
 		};
 	}
@@ -284,6 +301,16 @@ const retargetOrderByTerm = (
 	return { ...term, expr };
 };
 
+const retargetWhere = (
+	where: ExprNode | null,
+	target: RenameTarget,
+): ExprNode | null => {
+	if (where === null) {
+		return null;
+	}
+	return retargetExprNode(where, target);
+};
+
 /**
  * Retargets a whole {@link SelectNode} for `target`, same identity
  * invariant as {@link retargetExprNode} (returns the exact same reference
@@ -298,8 +325,7 @@ export const retargetSelectNode = (
 	const projection = retargetProjection(query.projection, query.from, target);
 	const from = retargetTableRef(query.from, target);
 	const joins = query.joins.map((join) => retargetJoin(join, target));
-	const where =
-		query.where === null ? null : retargetExprNode(query.where, target);
+	const where = retargetWhere(query.where, target);
 	const orderBy = query.orderBy.map((term) =>
 		retargetOrderByTerm(term, target),
 	);
