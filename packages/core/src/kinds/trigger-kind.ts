@@ -1,6 +1,6 @@
 import type { TriggerDeclaration } from "../dsl/define-trigger";
 import { assertNever, throwHejbroError } from "../error";
-import { sameJson } from "../kind/diff-helpers";
+import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type {
 	TriggerEventShape,
@@ -78,34 +78,11 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 		);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "trigger",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
+		const guard = createOrDropDiff("trigger", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "trigger",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
-			return [];
-		}
-		if (sameJson(previous, next)) {
+		if (sameJson(guard.previous, guard.next)) {
 			return [];
 		}
 		return [
@@ -113,8 +90,8 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 				kind: "trigger",
 				operation: "alter",
 				identity,
-				previous,
-				next,
+				previous: guard.previous,
+				next: guard.next,
 				notes: [TRIGGER_CHANGED_NOTE],
 			},
 		];

@@ -126,44 +126,6 @@ const stringField = (node: Record<string, JsonValue>, key: string): string => {
 
 // --- encode: ExprNode (camelCase) -> snapshot form (kebab + D57 keys) --
 
-/** @internal exported for {@link decodeExprNode}'s exhaustive-switch symmetry and for tests. */
-export const encodeExprNode = (node: ExprNode): JsonValue => {
-	switch (node.nodeKind) {
-		case "literal":
-			return { nodeKind: "literal", literal: encodeLiteral(node.literal) };
-		case "columnRef":
-			return encodeColumnRef(node);
-		case "plpgsqlRef":
-			return encodePlpgsqlRef(node);
-		case "comparison":
-			return encodeComparison(node);
-		case "logical":
-			return {
-				nodeKind: "logical",
-				operator: node.operator,
-				operands: node.operands.map(encodeExprNode),
-			};
-		case "not":
-			return encodeNot(node);
-		case "nullTest":
-			return encodeNullTest(node);
-		case "inList":
-			return encodeInList(node);
-		case "between":
-			return encodeBetween(node);
-		case "functionCall":
-			return encodeFunctionCall(node);
-		case "sqlTemplate":
-			return encodeSqlTemplate(node);
-		case "rawSql":
-			return encodeRawSql(node);
-		case "exists":
-			return encodeExists(node);
-		default:
-			return assertNever(node);
-	}
-};
-
 const encodeLiteral = (literal: LiteralNode["literal"]): JsonValue => {
 	switch (literal.literalKind) {
 		case "string":
@@ -260,6 +222,54 @@ const encodeExists = (node: ExistsNode): JsonValue => ({
 	query: encodeSelectNode(node.query),
 });
 
+const encodeLiteralNode = (node: LiteralNode): JsonValue => ({
+	nodeKind: "literal",
+	literal: encodeLiteral(node.literal),
+});
+
+const encodeLogicalNode = (node: LogicalNode): JsonValue => ({
+	nodeKind: "logical",
+	operator: node.operator,
+	operands: node.operands.map(encodeExprNode),
+});
+
+/**
+ * One handler per {@link ExprNode} `nodeKind` for {@link encodeExprNode} —
+ * a mapped type over the full `nodeKind` union, not a hand-written list,
+ * so a missing handler is a `tsc` error the same way a `switch`'s
+ * `default: assertNever(node)` would have been (verified directly with a
+ * scratch dummy-variant edit, #154 PR2).
+ */
+type EncodeExprNodeHandlers = {
+	readonly [K in ExprNode["nodeKind"]]: (
+		node: Extract<ExprNode, { readonly nodeKind: K }>,
+	) => JsonValue;
+};
+
+const encodeExprNodeHandlers: EncodeExprNodeHandlers = {
+	literal: encodeLiteralNode,
+	columnRef: encodeColumnRef,
+	plpgsqlRef: encodePlpgsqlRef,
+	comparison: encodeComparison,
+	logical: encodeLogicalNode,
+	not: encodeNot,
+	nullTest: encodeNullTest,
+	inList: encodeInList,
+	between: encodeBetween,
+	functionCall: encodeFunctionCall,
+	sqlTemplate: encodeSqlTemplate,
+	rawSql: encodeRawSql,
+	exists: encodeExists,
+};
+
+/** @internal exported for {@link decodeExprNode}'s exhaustive-map symmetry and for tests. */
+export const encodeExprNode = (node: ExprNode): JsonValue => {
+	const handler = encodeExprNodeHandlers[node.nodeKind] as (
+		node: ExprNode,
+	) => JsonValue;
+	return handler(node);
+};
+
 const encodeTableRef = (node: TableRefNode): JsonValue => ({
 	schema: node.schemaName,
 	table: node.tableName,
@@ -316,6 +326,127 @@ export const encodeSelectNode = (node: SelectNode): JsonValue => ({
 
 // --- decode: snapshot form -> ExprNode (camelCase) ----------------------
 
+const decodeLiteralNode = (node: Record<string, JsonValue>): LiteralNode => ({
+	nodeKind: "literal",
+	literal: decodeLiteral(node.literal as JsonValue),
+});
+
+const decodeColumnRefNode = (
+	node: Record<string, JsonValue>,
+): ColumnRefNode => ({
+	nodeKind: "columnRef",
+	schemaName: stringField(node, "schema"),
+	tableName: stringField(node, "table"),
+	columnName: stringField(node, "column"),
+});
+
+const decodePlpgsqlRefNode = (
+	node: Record<string, JsonValue>,
+): PlpgsqlRefNode => ({
+	nodeKind: "plpgsqlRef",
+	path: (node.path as ReadonlyArray<string>) ?? [],
+});
+
+const decodeComparisonNode = (
+	node: Record<string, JsonValue>,
+): ComparisonNode => ({
+	nodeKind: "comparison",
+	operator: node.operator as ComparisonNode["operator"],
+	left: decodeExprNode(node.left as JsonValue),
+	right: decodeExprNode(node.right as JsonValue),
+});
+
+const decodeLogicalNode = (node: Record<string, JsonValue>): LogicalNode => ({
+	nodeKind: "logical",
+	operator: node.operator as LogicalNode["operator"],
+	operands: (node.operands as ReadonlyArray<JsonValue>).map(decodeExprNode),
+});
+
+const decodeNotNode = (node: Record<string, JsonValue>): NotNode => ({
+	nodeKind: "not",
+	operand: decodeExprNode(node.operand as JsonValue),
+});
+
+const decodeNullTestNode = (node: Record<string, JsonValue>): NullTestNode => ({
+	nodeKind: "nullTest",
+	negated: node.negated as boolean,
+	operand: decodeExprNode(node.operand as JsonValue),
+});
+
+const decodeInListNode = (node: Record<string, JsonValue>): InListNode => ({
+	nodeKind: "inList",
+	negated: node.negated as boolean,
+	operand: decodeExprNode(node.operand as JsonValue),
+	values: (node.values as ReadonlyArray<JsonValue>).map(decodeExprNode),
+});
+
+const decodeBetweenNode = (node: Record<string, JsonValue>): BetweenNode => ({
+	nodeKind: "between",
+	negated: node.negated as boolean,
+	operand: decodeExprNode(node.operand as JsonValue),
+	lowerBound: decodeExprNode(node.lowerBound as JsonValue),
+	upperBound: decodeExprNode(node.upperBound as JsonValue),
+});
+
+const decodeFunctionCallNode = (
+	node: Record<string, JsonValue>,
+): FunctionCallNode => ({
+	nodeKind: "functionCall",
+	schemaName: (node.schema as string | null) ?? null,
+	functionName: stringField(node, "function"),
+	args: (node.args as ReadonlyArray<JsonValue>).map(decodeExprNode),
+});
+
+const decodeSqlTemplateNode = (
+	node: Record<string, JsonValue>,
+): SqlTemplateNode => ({
+	nodeKind: "sqlTemplate",
+	chunks: (node.chunks as ReadonlyArray<JsonValue>).map(decodeSqlTemplateChunk),
+});
+
+const decodeRawSqlNode = (node: Record<string, JsonValue>): RawSqlNode => ({
+	nodeKind: "rawSql",
+	sql: stringField(node, "sql"),
+});
+
+const decodeExistsNode = (node: Record<string, JsonValue>): ExistsNode => ({
+	nodeKind: "exists",
+	negated: node.negated as boolean,
+	query: decodeSelectNode(node.query as JsonValue),
+});
+
+/**
+ * One handler per {@link ExprNode} `nodeKind` for {@link decodeExprNode} —
+ * a mapped type over the full `nodeKind` union, not a hand-written list,
+ * so a missing handler is a `tsc` error the same way a `switch`'s
+ * `default: assertNever(nodeKind)` would have been (verified directly
+ * with a scratch dummy-variant edit, #154 PR2). Every handler takes the
+ * same input shape (`Record<string, JsonValue>`, the already-parsed
+ * snapshot object) since the input isn't a discriminated union the way
+ * the output is — only the return type is narrowed per key.
+ */
+type DecodeExprNodeHandlers = {
+	readonly [K in ExprNode["nodeKind"]]: (
+		node: Record<string, JsonValue>,
+	) => Extract<ExprNode, { readonly nodeKind: K }>;
+};
+
+const decodeExprNodeHandlers: DecodeExprNodeHandlers = {
+	literal: decodeLiteralNode,
+	columnRef: decodeColumnRefNode,
+	plpgsqlRef: decodePlpgsqlRefNode,
+	comparison: decodeComparisonNode,
+	logical: decodeLogicalNode,
+	not: decodeNotNode,
+	nullTest: decodeNullTestNode,
+	inList: decodeInListNode,
+	between: decodeBetweenNode,
+	functionCall: decodeFunctionCallNode,
+	sqlTemplate: decodeSqlTemplateNode,
+	rawSql: decodeRawSqlNode,
+	exists: decodeExistsNode,
+};
+
 export const decodeExprNode = (value: JsonValue): ExprNode => {
 	const node = asRecord(value, "nodeKind");
 	const snapshotKind = stringField(node, "nodeKind");
@@ -323,90 +454,10 @@ export const decodeExprNode = (value: JsonValue): ExprNode => {
 	if (nodeKind === undefined) {
 		return unknownDiscriminator("nodeKind", snapshotKind);
 	}
-	switch (nodeKind) {
-		case "literal":
-			return {
-				nodeKind: "literal",
-				literal: decodeLiteral(node.literal as JsonValue),
-			};
-		case "columnRef":
-			return {
-				nodeKind: "columnRef",
-				schemaName: stringField(node, "schema"),
-				tableName: stringField(node, "table"),
-				columnName: stringField(node, "column"),
-			};
-		case "plpgsqlRef":
-			return {
-				nodeKind: "plpgsqlRef",
-				path: (node.path as ReadonlyArray<string>) ?? [],
-			};
-		case "comparison":
-			return {
-				nodeKind: "comparison",
-				operator: node.operator as ComparisonNode["operator"],
-				left: decodeExprNode(node.left as JsonValue),
-				right: decodeExprNode(node.right as JsonValue),
-			};
-		case "logical":
-			return {
-				nodeKind: "logical",
-				operator: node.operator as LogicalNode["operator"],
-				operands: (node.operands as ReadonlyArray<JsonValue>).map(
-					decodeExprNode,
-				),
-			};
-		case "not":
-			return {
-				nodeKind: "not",
-				operand: decodeExprNode(node.operand as JsonValue),
-			};
-		case "nullTest":
-			return {
-				nodeKind: "nullTest",
-				negated: node.negated as boolean,
-				operand: decodeExprNode(node.operand as JsonValue),
-			};
-		case "inList":
-			return {
-				nodeKind: "inList",
-				negated: node.negated as boolean,
-				operand: decodeExprNode(node.operand as JsonValue),
-				values: (node.values as ReadonlyArray<JsonValue>).map(decodeExprNode),
-			};
-		case "between":
-			return {
-				nodeKind: "between",
-				negated: node.negated as boolean,
-				operand: decodeExprNode(node.operand as JsonValue),
-				lowerBound: decodeExprNode(node.lowerBound as JsonValue),
-				upperBound: decodeExprNode(node.upperBound as JsonValue),
-			};
-		case "functionCall":
-			return {
-				nodeKind: "functionCall",
-				schemaName: (node.schema as string | null) ?? null,
-				functionName: stringField(node, "function"),
-				args: (node.args as ReadonlyArray<JsonValue>).map(decodeExprNode),
-			};
-		case "sqlTemplate":
-			return {
-				nodeKind: "sqlTemplate",
-				chunks: (node.chunks as ReadonlyArray<JsonValue>).map(
-					decodeSqlTemplateChunk,
-				),
-			};
-		case "rawSql":
-			return { nodeKind: "rawSql", sql: stringField(node, "sql") };
-		case "exists":
-			return {
-				nodeKind: "exists",
-				negated: node.negated as boolean,
-				query: decodeSelectNode(node.query as JsonValue),
-			};
-		default:
-			return assertNever(nodeKind);
-	}
+	const handler = decodeExprNodeHandlers[nodeKind] as (
+		node: Record<string, JsonValue>,
+	) => ExprNode;
+	return handler(node);
 };
 
 const decodeLiteral = (value: JsonValue): LiteralNode["literal"] => {

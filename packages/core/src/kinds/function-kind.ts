@@ -1,6 +1,6 @@
 import type { FunctionDeclaration } from "../dsl/define-function";
 import { assertNever, throwHejbroError } from "../error";
-import { sameJson } from "../kind/diff-helpers";
+import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
 import { fnv1aHex } from "../plpgsql/body-hash";
 import {
@@ -95,36 +95,13 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 		return functionIdentity(functionSnapshot.schema, functionSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "function",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
-		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "function",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
-			return [];
+		const guard = createOrDropDiff("function", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
 
-		const previousSnapshot = asFunctionSnapshot(previous);
-		const nextSnapshot = asFunctionSnapshot(next);
+		const previousSnapshot = asFunctionSnapshot(guard.previous);
+		const nextSnapshot = asFunctionSnapshot(guard.next);
 		const signatureSame = sameJson(
 			signatureOf(previousSnapshot),
 			signatureOf(nextSnapshot),
@@ -139,8 +116,8 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 					kind: "function",
 					operation: "alter",
 					identity,
-					previous,
-					next,
+					previous: guard.previous,
+					next: guard.next,
 					notes: ["body changed"],
 				},
 			];
@@ -150,8 +127,8 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 				kind: "function",
 				operation: "alter",
 				identity,
-				previous,
-				next,
+				previous: guard.previous,
+				next: guard.next,
 				notes: [SIGNATURE_CHANGED_NOTE],
 			},
 		];

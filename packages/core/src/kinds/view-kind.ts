@@ -3,7 +3,7 @@ import { assertNever, throwHejbroError } from "../error";
 import type { ProjectionNode } from "../expr/ast";
 import { decodeSelectNode, encodeSelectNode } from "../expr/codec";
 import { renderSelect } from "../expr/render-sql";
-import { sameJson } from "../kind/diff-helpers";
+import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
@@ -144,46 +144,23 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 		return viewIdentity(viewSnapshot.schema, viewSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "view",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
+		const guard = createOrDropDiff("view", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "view",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
+		if (sameJson(guard.previous, guard.next)) {
 			return [];
 		}
-		if (sameJson(previous, next)) {
-			return [];
-		}
-		const previousSnapshot = asViewSnapshot(previous);
-		const nextSnapshot = asViewSnapshot(next);
+		const previousSnapshot = asViewSnapshot(guard.previous);
+		const nextSnapshot = asViewSnapshot(guard.next);
 		if (isPrefixOf(previousSnapshot.columns, nextSnapshot.columns)) {
 			return [
 				{
 					kind: "view",
 					operation: "alter",
 					identity,
-					previous,
-					next,
+					previous: guard.previous,
+					next: guard.next,
 					notes: [VIEW_CHANGED_NOTE],
 				},
 			];
@@ -193,8 +170,8 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 				kind: "view",
 				operation: "alter",
 				identity,
-				previous,
-				next,
+				previous: guard.previous,
+				next: guard.next,
 				notes: [VIEW_RECREATE_NOTE],
 			},
 		];
