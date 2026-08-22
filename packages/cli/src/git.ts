@@ -61,6 +61,10 @@ const runGitBuffer = (cwd: string, args: ReadonlyArray<string>): Buffer =>
 export const isGitRepository = (cwd: string): boolean =>
 	runGit(cwd, ["rev-parse", "--is-inside-work-tree"]).status === 0;
 
+/** Owner-approved verbatim (§6, #130) — `history` and `restore`'s shared `not-a-git-repository` guard text, checked before either command reads anything else. */
+export const NOT_A_GIT_REPOSITORY_MESSAGE =
+	'this project is not inside a git repository — hejbro history/restore read migration history from git and need one to work. Next: run this command from inside a git-tracked hejbro project; if it hasn\'t been committed yet, run `git init && git add -A && git commit -m "initial commit"` first.';
+
 /** `true` when `cwd`'s working tree has any uncommitted change — tracked or untracked (`git status --porcelain`'s default already reports both). */
 export const isWorkingTreeDirty = (cwd: string): boolean =>
 	runGit(cwd, ["status", "--porcelain"]).stdout.trim() !== "";
