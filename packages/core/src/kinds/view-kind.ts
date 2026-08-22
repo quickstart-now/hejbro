@@ -6,6 +6,10 @@ import { renderSelect } from "../expr/render-sql";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import { dispatchEmit } from "../kind/emit-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
+import {
+	applyColumnOrderToSelect,
+	noColumnOrder,
+} from "../snapshot/column-order";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
@@ -169,6 +173,13 @@ const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
  * `previous`/`next`'s `columns` — notes are display-only banner text
  * (spec's `ObjectKind` contract), never a control channel that a wording
  * change to the banner could silently break.
+ *
+ * `serialize` re-resolves an `allColumns` projection against
+ * `context?.columnOrder` (D81) before deriving `columns`/encoding `query`
+ * — so a column added mid-declaration to the underlying table lands last
+ * in *this* snapshot's column list too, the same physical order the
+ * table's own snapshot uses, and the D27 prefix rule above sees a genuine
+ * prefix extension instead of a spurious reorder-shaped recreate.
  */
 export const viewKind: ObjectKind<ViewDeclaration> = {
 	kind: "view",
@@ -176,12 +187,16 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 	requiredKeys: ["schema", "name", "columns", "query"],
 	owns: (declaration): declaration is ViewDeclaration =>
 		declaration.declarationKind === "view",
-	serialize: (declaration) => {
+	serialize: (declaration, context) => {
+		const query = applyColumnOrderToSelect(
+			declaration.query,
+			context?.columnOrder ?? noColumnOrder,
+		);
 		const snapshot: ViewSnapshot = {
 			schema: declaration.schema.schemaName,
 			name: declaration.viewName,
-			columns: projectionColumns(declaration.query.projection),
-			query: encodeSelectNode(declaration.query),
+			columns: projectionColumns(query.projection),
+			query: encodeSelectNode(query),
 			...securityInvokerField(declaration.securityInvoker),
 		};
 		return snapshot;
