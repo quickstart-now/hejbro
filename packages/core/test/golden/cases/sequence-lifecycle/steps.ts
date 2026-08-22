@@ -67,10 +67,23 @@ const droppedSerialColumn: ReadonlyArray<HejbroInput> = [app, onlyTitle];
 // column, exercising the OWNED BY cascade at the table level (self-check
 // requested by planner: does dropping the whole table double-drop the
 // sequence, or error on a sequence Postgres already cascaded away?).
+//
+// Deliberately *not* `.primaryKey()` here (#137/#202 review): step 5
+// dropped "id" entirely, so re-adding it is a genuine `columnDiff.added`
+// column, not a type-alter on a survivor -- and #202's pk-guard correctly
+// refuses adding a `.primaryKey()` column to an existing table (the real
+// defect it closes: hejbro used to silently emit the column without its
+// constraint). This step's own purpose is only "a live serial column for
+// step 7 to drop", which a bare `serial()` already provides in full
+// (still not-null, via materializeNotNull's serial-implies-notNull rule,
+// independent of primary-key status) -- no `.primaryKey()` needed for
+// that. #24/phase8-constraint-names is what will let a step exercise
+// *adding* a primary-key column to an existing table for real; until
+// then, this golden case isn't the place to reach that guard.
 
 const reReAddedSerial: ReadonlyArray<HejbroInput> = [
 	app,
-	table(app, "posts", { id: serial().primaryKey(), title: text() }),
+	table(app, "posts", { id: serial(), title: text() }),
 ];
 
 // Step 7: drop the whole table -- posts (and its serial column, and its
