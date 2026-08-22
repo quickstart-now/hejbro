@@ -2,7 +2,11 @@ import type { GrantDeclaration, GrantKind, TablePrivilege } from "../dsl/grant";
 import { tablePrivileges } from "../dsl/grant";
 import { assertNever, throwHejbroError } from "../error";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
-import type { ObjectKind } from "../kind/object-kind";
+import type {
+	ChangeOperation,
+	KindChange,
+	ObjectKind,
+} from "../kind/object-kind";
 import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
 import { quoteIdentifier, renderRoleName } from "../sql/identifier";
@@ -156,6 +160,107 @@ const statementIfAny = (
 	return [statement(renderSql(privileges))];
 };
 
+/** {@link grantKind}'s `emit`, `"create"` case. */
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"grant create change is missing its next snapshot.",
+		);
+	}
+	const nextSnapshot = asGrantSnapshot(change.next);
+	return [
+		statement(
+			renderGrantStatement(
+				nextSnapshot.grantKind,
+				nextSnapshot.schema,
+				nextSnapshot.role,
+				nextSnapshot.privileges,
+			),
+		),
+	];
+};
+
+/** {@link grantKind}'s `emit`, `"drop"` case. */
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"grant drop change is missing its previous snapshot.",
+		);
+	}
+	const previousSnapshot = asGrantSnapshot(change.previous);
+	return [
+		statement(
+			renderRevokeStatement(
+				previousSnapshot.grantKind,
+				previousSnapshot.schema,
+				previousSnapshot.role,
+				previousSnapshot.privileges,
+			),
+		),
+	];
+};
+
+/** {@link grantKind}'s `emit`, `"alter"` case: re-grants the added privileges and revokes the removed ones, re-deriving both sets from `previous`/`next` (notes are display-only). */
+const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"grant alter change is missing its previous snapshot.",
+		);
+	}
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"grant alter change is missing its next snapshot.",
+		);
+	}
+	const previousSnapshot = asGrantSnapshot(change.previous);
+	const nextSnapshot = asGrantSnapshot(change.next);
+	const added = addedPrivileges(
+		previousSnapshot.privileges,
+		nextSnapshot.privileges,
+	);
+	const removed = removedPrivileges(
+		previousSnapshot.privileges,
+		nextSnapshot.privileges,
+	);
+	const grantStatement = statementIfAny(added, (privileges) =>
+		renderGrantStatement(
+			nextSnapshot.grantKind,
+			nextSnapshot.schema,
+			nextSnapshot.role,
+			privileges,
+		),
+	);
+	const revokeStatement = statementIfAny(removed, (privileges) =>
+		renderRevokeStatement(
+			nextSnapshot.grantKind,
+			nextSnapshot.schema,
+			nextSnapshot.role,
+			privileges,
+		),
+	);
+	return [...grantStatement, ...revokeStatement];
+};
+
+/**
+ * One handler per {@link ChangeOperation}, same technique used across this
+ * phase's other `emit` splits (#154 ratchet-5).
+ */
+type EmitHandlers = {
+	readonly [K in ChangeOperation]: (
+		change: KindChange,
+	) => ReadonlyArray<SqlStatement>;
+};
+
+const emitHandlers: EmitHandlers = {
+	create: emitCreate,
+	drop: emitDrop,
+	alter: emitAlter,
+};
+
 /**
  * The built-in object kind for grants (D28): `schema-usage`,
  * `all-tables-privileges`, and `default-table-privileges` (the original
@@ -215,89 +320,5 @@ export const grantKind: ObjectKind<GrantDeclaration> = {
 			},
 		];
 	},
-	emit: (change) => {
-		switch (change.operation) {
-			case "create": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"grant create change is missing its next snapshot.",
-					);
-				}
-				const nextSnapshot = asGrantSnapshot(change.next);
-				return [
-					statement(
-						renderGrantStatement(
-							nextSnapshot.grantKind,
-							nextSnapshot.schema,
-							nextSnapshot.role,
-							nextSnapshot.privileges,
-						),
-					),
-				];
-			}
-			case "drop": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"grant drop change is missing its previous snapshot.",
-					);
-				}
-				const previousSnapshot = asGrantSnapshot(change.previous);
-				return [
-					statement(
-						renderRevokeStatement(
-							previousSnapshot.grantKind,
-							previousSnapshot.schema,
-							previousSnapshot.role,
-							previousSnapshot.privileges,
-						),
-					),
-				];
-			}
-			case "alter": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"grant alter change is missing its previous snapshot.",
-					);
-				}
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"grant alter change is missing its next snapshot.",
-					);
-				}
-				const previousSnapshot = asGrantSnapshot(change.previous);
-				const nextSnapshot = asGrantSnapshot(change.next);
-				const added = addedPrivileges(
-					previousSnapshot.privileges,
-					nextSnapshot.privileges,
-				);
-				const removed = removedPrivileges(
-					previousSnapshot.privileges,
-					nextSnapshot.privileges,
-				);
-				const grantStatement = statementIfAny(added, (privileges) =>
-					renderGrantStatement(
-						nextSnapshot.grantKind,
-						nextSnapshot.schema,
-						nextSnapshot.role,
-						privileges,
-					),
-				);
-				const revokeStatement = statementIfAny(removed, (privileges) =>
-					renderRevokeStatement(
-						nextSnapshot.grantKind,
-						nextSnapshot.schema,
-						nextSnapshot.role,
-						privileges,
-					),
-				);
-				return [...grantStatement, ...revokeStatement];
-			}
-			default:
-				return assertNever(change.operation);
-		}
-	},
+	emit: (change) => emitHandlers[change.operation](change),
 };
