@@ -3,8 +3,10 @@ import type { TriggerSnapshotShape } from "../../src/index";
 import {
 	defineFunction,
 	defineTrigger,
+	deleteFrom,
 	eq,
 	fnv1aHex,
+	insert,
 	isNull,
 	now,
 	renderFunctionSql,
@@ -102,6 +104,40 @@ describe("renderFunctionSql", () => {
 		expect(sql).toContain('returns setof "app"."posts"');
 		expect(sql).toContain("security definer");
 		expect(sql).toMatch(/\treturn query update .*returning .*;/);
+	});
+
+	// #154 ratchet-5: recordReturn's insertQuery and deleteQuery branches
+	// (ctx.return(insert(...).returning()) / ctx.return(deleteFrom(...)
+	// .returning())) were never exercised -- only the trigger-row and
+	// update-query forms had a test, above.
+	it("renders a definer function with an insert-returning-query statement", () => {
+		const declaration = defineFunction(
+			"app",
+			"create_post",
+			{ args: {}, returns: posts, security: "definer" },
+			(ctx) => {
+				ctx.return(insert(posts).values({ publishedAt: now() }).returning());
+			},
+		);
+
+		const sql = renderFunctionSql(declaration);
+		expect(sql).toMatch(/\treturn query insert into .*returning .*;/);
+	});
+
+	it("renders a definer function with a delete-returning-query statement", () => {
+		const declaration = defineFunction(
+			"app",
+			"remove_published_posts",
+			{ args: {}, returns: posts, security: "definer" },
+			(ctx) => {
+				ctx.return(
+					deleteFrom(posts).where(isNull(posts.publishedAt)).returning(),
+				);
+			},
+		);
+
+		const sql = renderFunctionSql(declaration);
+		expect(sql).toMatch(/\treturn query delete from .*returning .*;/);
 	});
 
 	it("renders a forEach loop with an indented body and a record declaration", () => {

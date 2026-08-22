@@ -323,6 +323,41 @@ const recordRaise = (
 const isTriggerRow = (value: unknown): value is TriggerRow<Table> =>
 	typeof value === "object" && value !== null && triggerRowMeta in value;
 
+/**
+ * {@link recordReturn}'s `ReturnableQuery` half — split out to keep both
+ * halves' own complexity under threshold (D71/#154 ratchet-5). Returns
+ * `true` once it has pushed a `returnQuery` statement, `false` if `value`
+ * matched none of the four query shapes — structurally unreachable for a
+ * type-correct caller (`ReturnableQuery`'s own four members each carry
+ * exactly one of these keys), the same class of gap a `switch`'s
+ * `default: assertNever(...)` leaves elsewhere in this codebase, kept
+ * here as a real runtime `false` (not a throw) so {@link recordReturn}
+ * — not this function — decides what "no query shape matched" means for
+ * its own caller.
+ */
+const recordReturnQuery = (
+	state: RecordingState,
+	value: ReturnableQuery,
+): boolean => {
+	if ("selectQuery" in value) {
+		pushStatement(state, { stmtKind: "returnQuery", query: value.selectQuery });
+		return true;
+	}
+	if ("insertQuery" in value) {
+		pushStatement(state, { stmtKind: "returnQuery", query: value.insertQuery });
+		return true;
+	}
+	if ("updateQuery" in value) {
+		pushStatement(state, { stmtKind: "returnQuery", query: value.updateQuery });
+		return true;
+	}
+	if ("deleteQuery" in value) {
+		pushStatement(state, { stmtKind: "returnQuery", query: value.deleteQuery });
+		return true;
+	}
+	return false;
+};
+
 const recordReturn = (
 	state: RecordingState,
 	value: TriggerRow<Table> | ReturnableQuery,
@@ -334,20 +369,7 @@ const recordReturn = (
 		});
 		return;
 	}
-	if ("selectQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.selectQuery });
-		return;
-	}
-	if ("insertQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.insertQuery });
-		return;
-	}
-	if ("updateQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.updateQuery });
-		return;
-	}
-	if ("deleteQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.deleteQuery });
+	if (recordReturnQuery(state, value)) {
 		return;
 	}
 	throwHejbroError(
