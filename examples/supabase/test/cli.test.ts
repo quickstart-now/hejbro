@@ -1,6 +1,6 @@
 import type { ExecException } from "node:child_process";
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import {
 	cp,
 	mkdir,
@@ -36,8 +36,32 @@ const SUPABASE_PACKAGE_ROOT = join(
 	"packages",
 	"supabase",
 );
+const CORE_PACKAGE_ROOT = join(EXAMPLE_ROOT, "..", "..", "packages", "core");
 
-/** Mirrors packages/cli/test/support/cli-runner.ts's `assertBuiltCli` (#102) — a confusing "no such file" spawn error otherwise hides an incomplete build. */
+/** Mirrors packages/cli/test/support/cli-runner.ts's `newestMtimeMs`. */
+const newestMtimeMs = (dir: string): number => {
+	const entries = readdirSync(dir, { withFileTypes: true });
+	return entries.reduce((newest, entry) => {
+		const fullPath = join(dir, entry.name);
+		if (entry.isDirectory()) {
+			return Math.max(newest, newestMtimeMs(fullPath));
+		}
+		return Math.max(newest, statSync(fullPath).mtimeMs);
+	}, 0);
+};
+
+/** Mirrors packages/cli/test/support/cli-runner.ts's `assertFreshBuild` (#131) — this test spawns the built CLI, so it can't see an unbuilt source edit any other way. */
+const assertFreshBuild = (label: string, packageRoot: string): void => {
+	const srcMtime = newestMtimeMs(join(packageRoot, "src"));
+	const distMtime = newestMtimeMs(join(packageRoot, "dist"));
+	if (distMtime < srcMtime) {
+		throw new Error(
+			`${label}'s dist/ is older than its src/ (stale build) — Next: run \`pnpm build --force\` (a plain \`pnpm build\` can replay a cached run without rewriting dist).`,
+		);
+	}
+};
+
+/** Mirrors packages/cli/test/support/cli-runner.ts's `assertBuiltCli` (#102, #131) — a confusing "no such file" spawn error otherwise hides an incomplete build, and a stale-but-present one hides a silent false green. */
 const assertBuiltCli = (): void => {
 	const missing = [CLI_PATH, CLI_INDEX_PATH].filter((p) => !existsSync(p));
 	if (missing.length > 0) {
@@ -45,6 +69,9 @@ const assertBuiltCli = (): void => {
 			`built CLI artifacts missing: ${missing.join(", ")} — run pnpm build (turbo should have built hejbro before its tests; if you see this under turbo, capture the turbo log for #102)`,
 		);
 	}
+	assertFreshBuild("@hejbro/core", CORE_PACKAGE_ROOT);
+	assertFreshBuild("hejbro", CLI_PACKAGE_ROOT);
+	assertFreshBuild("@hejbro/supabase", SUPABASE_PACKAGE_ROOT);
 };
 
 beforeAll(assertBuiltCli);
