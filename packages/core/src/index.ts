@@ -273,14 +273,18 @@ export { qualifyName, quoteIdentifier } from "./sql/identifier";
 export { quoteStringLiteral } from "./sql/literal";
 export type {
 	BannerHashes,
+	DuplicateVersionGroup,
 	MigrationPrefixStrategy,
 } from "./sql/migration-file";
 export {
 	deriveSlug,
+	findDuplicateVersionGroups,
 	migrationFileName,
 	migrationPrefixStrategies,
+	migrationVersionOf,
 	parseBannerHashes,
 	renderBanner,
+	renderMigrationPrefix,
 } from "./sql/migration-file";
 export type { SqlStage, SqlStatement } from "./sql/statement";
 export {

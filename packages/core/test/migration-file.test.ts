@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { KindChange } from "../src/kind/object-kind";
 import {
 	deriveSlug,
+	findDuplicateVersionGroups,
 	migrationFileName,
+	migrationVersionOf,
 	parseBannerHashes,
 	renderBanner,
+	renderMigrationPrefix,
 } from "../src/sql/migration-file";
 
 const fixedDate = new Date(Date.UTC(2026, 7, 19, 14, 30, 52));
@@ -164,6 +167,117 @@ describe("parseBannerHashes", () => {
 
 	it("returns null for a hash-less banner", () => {
 		expect(parseBannerHashes(renderBanner([createChange]))).toBeNull();
+	});
+});
+
+describe("renderMigrationPrefix", () => {
+	it("renders just the prefix half, matching migrationFileName's own prefix (#220)", () => {
+		expect(
+			renderMigrationPrefix({
+				strategy: "timestamp",
+				generatedAt: fixedDate,
+				previousCount: 0,
+				slug: "ignored",
+			}),
+		).toBe("20260819143052");
+	});
+});
+
+describe("migrationVersionOf", () => {
+	it("parses a timestamp/unix/index-shaped prefix", () => {
+		expect(migrationVersionOf("20260822014246_add_posts.sql")).toBe(
+			"20260822014246",
+		);
+		expect(migrationVersionOf("1755840000_add_posts.sql")).toBe("1755840000");
+		expect(migrationVersionOf("0007_add_posts.sql")).toBe("0007");
+	});
+
+	it("returns null for a non-numeric (legacy, hand-written) prefix", () => {
+		expect(migrationVersionOf("legacy_no_hashes.sql")).toBeNull();
+	});
+});
+
+// #220: Supabase (and any tool tracking *applied* migrations by this
+// prefix, not the full filename) can only ever apply one of two files
+// sharing a version -- the other silently never runs. This is the
+// positive control for verify's duplicate-migration-version check: a
+// same-version pair must be reported, in file-name order, and any
+// non-colliding file must never appear in the result.
+describe("findDuplicateVersionGroups", () => {
+	it("reports a same-version pair, sorted by file name within the group", () => {
+		expect(
+			findDuplicateVersionGroups([
+				"20260822014246_add_body.sql",
+				"20260822014246_add_posts.sql",
+				"20260822014300_drop_legacy.sql",
+			]),
+		).toEqual([
+			{
+				version: "20260822014246",
+				fileNames: [
+					"20260822014246_add_body.sql",
+					"20260822014246_add_posts.sql",
+				],
+			},
+		]);
+	});
+
+	it("returns [] when every version is unique (control)", () => {
+		expect(
+			findDuplicateVersionGroups([
+				"20260822014245_add_posts.sql",
+				"20260822014246_add_body.sql",
+			]),
+		).toEqual([]);
+	});
+
+	it("reports every colliding group, sorted by version, when there is more than one", () => {
+		expect(
+			findDuplicateVersionGroups([
+				"0002_add_body.sql",
+				"0001_add_posts.sql",
+				"0002_add_slug.sql",
+				"0001_add_title.sql",
+			]),
+		).toEqual([
+			{
+				version: "0001",
+				fileNames: ["0001_add_posts.sql", "0001_add_title.sql"],
+			},
+			{
+				version: "0002",
+				fileNames: ["0002_add_body.sql", "0002_add_slug.sql"],
+			},
+		]);
+	});
+
+	it("names every participant in a 3-way collision, not just the first pair", () => {
+		expect(
+			findDuplicateVersionGroups([
+				"20260822014246_add_a.sql",
+				"20260822014246_add_b.sql",
+				"20260822014246_add_c.sql",
+			]),
+		).toEqual([
+			{
+				version: "20260822014246",
+				fileNames: [
+					"20260822014246_add_a.sql",
+					"20260822014246_add_b.sql",
+					"20260822014246_add_c.sql",
+				],
+			},
+		]);
+	});
+
+	it("never collides a legacy (non-numeric-prefix) file with anything", () => {
+		expect(
+			findDuplicateVersionGroups([
+				"legacy_no_hashes.sql",
+				"also_legacy.sql",
+				"20260822014246_add_posts.sql",
+			]),
+		).toEqual([]);
 	});
 });
 
