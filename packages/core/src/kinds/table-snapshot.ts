@@ -20,6 +20,15 @@ import type { TypeNode } from "../types/type-node";
  * identifiers inside it exactly, instead of leaving stale text behind).
  * {@link columnDefault} decodes and renders it back to SQL text on demand,
  * so every caller of that accessor is unaffected by this shape change.
+ *
+ * `uniqueName` (#24/D68) records the column's UNIQUE constraint's
+ * deterministic name (present exactly when `unique` is `true`) —
+ * Postgres's own default naming convention for a bare inline `unique`
+ * column clause, frozen now (pre-1.0, D65) so a future name-aware
+ * feature (e.g. UNIQUE alter emission) never has to disagree with a name
+ * already committed to a user's database. UNIQUE *emission* stays
+ * column-level and unimplemented in this wave (`table-kind-emit.ts`'s
+ * `unsupported-column-alter` guard) — only the name is recorded here.
  */
 export type ColumnSnapshot = {
 	readonly name: string;
@@ -27,6 +36,7 @@ export type ColumnSnapshot = {
 	readonly notNull?: true;
 	readonly primaryKey?: true;
 	readonly unique?: true;
+	readonly uniqueName?: string;
 	readonly default?: JsonValue;
 };
 
@@ -41,6 +51,10 @@ export const columnPrimaryKey = (column: ColumnSnapshot): boolean =>
 /** `column.unique`, defaulting to `false` when absent (compact snapshot). */
 export const columnUnique = (column: ColumnSnapshot): boolean =>
 	column.unique === true;
+
+/** `column.uniqueName`, defaulting to `null` when absent (compact snapshot — always absent when `unique` is `false`). */
+export const columnUniqueName = (column: ColumnSnapshot): string | null =>
+	column.uniqueName ?? null;
 
 /** `column.default` decoded and rendered back to SQL text, defaulting to `null` when absent (compact snapshot). */
 export const columnDefault = (column: ColumnSnapshot): string | null => {
@@ -116,7 +130,19 @@ export type CheckSnapshot = {
 export const checkExpression = (check: CheckSnapshot): string =>
 	renderExpr(decodeExprNode(check.expression));
 
-/** The full snapshot node `tableKind.serialize` produces for one table. **Compact**: `checks` is present only when the table declares at least one (default `[]`) — read via {@link tableChecks}. */
+/**
+ * The full snapshot node `tableKind.serialize` produces for one table.
+ * **Compact**: `checks` is present only when the table declares at least
+ * one (default `[]`) — read via {@link tableChecks}.
+ *
+ * `primaryKeyName` (#24/D68) records the table's primary key constraint's
+ * deterministic name — present exactly when at least one column has
+ * `primaryKey: true` (`columns` alone still owns *membership*; recording
+ * the name here, not per column, avoids duplicating it once per member —
+ * approved design, #24). Frozen now (pre-1.0, D65) for the same reason as
+ * {@link ColumnSnapshot.uniqueName}: a later PK-alter feature must never
+ * disagree with a name already committed to a user's database.
+ */
 export type TableSnapshot = {
 	readonly schema: string;
 	readonly name: string;
@@ -124,12 +150,17 @@ export type TableSnapshot = {
 	readonly indexes: ReadonlyArray<IndexSnapshot>;
 	readonly foreignKeys: ReadonlyArray<ForeignKeySnapshot>;
 	readonly checks?: ReadonlyArray<CheckSnapshot>;
+	readonly primaryKeyName?: string;
 };
 
 /** `snapshot.checks`, defaulting to `[]` when absent (compact snapshot, D33). */
 export const tableChecks = (
 	snapshot: TableSnapshot,
 ): ReadonlyArray<CheckSnapshot> => snapshot.checks ?? [];
+
+/** `snapshot.primaryKeyName`, defaulting to `null` when absent (compact snapshot — always absent when no column has `primaryKey: true`). */
+export const tablePrimaryKeyName = (snapshot: TableSnapshot): string | null =>
+	snapshot.primaryKeyName ?? null;
 
 // Internal invariant: this shape is exactly what tableKind.serialize (table-kind.ts) produces.
 /** Narrows a raw snapshot `JsonValue` to {@link TableSnapshot}. */

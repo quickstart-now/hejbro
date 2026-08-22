@@ -12,14 +12,14 @@ create table "app"."comments" (
 	"post_id" uuid not null,
 	"parent_id" uuid,
 	"body" text not null,
-	primary key ("id")
+	constraint "comments_pkey" primary key ("id")
 );
 
 create table "app"."posts" (
 	"id" uuid not null default gen_random_uuid(),
-	"slug" text not null unique,
+	"slug" text not null constraint "posts_slug_key" unique,
 	"published_at" timestamp with time zone,
-	primary key ("id")
+	constraint "posts_pkey" primary key ("id")
 );
 
 create or replace function "app"."comments_enforce_single_depth"()

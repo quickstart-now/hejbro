@@ -59,6 +59,7 @@
 			],
 			"indexes": [],
 			"name": "comments",
+			"primaryKeyName": "comments_pkey",
 			"schema": "app"
 		},
 		"table:app.posts": {
@@ -98,12 +99,14 @@
 					"typeNode": {
 						"typeName": "text"
 					},
-					"unique": true
+					"unique": true,
+					"uniqueName": "posts_slug_key"
 				}
 			],
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "posts",
+			"primaryKeyName": "posts_pkey",
 			"schema": "app"
 		}
 	}

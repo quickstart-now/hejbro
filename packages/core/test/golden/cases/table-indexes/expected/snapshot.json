@@ -91,6 +91,7 @@
 				}
 			],
 			"name": "posts",
+			"primaryKeyName": "posts_pkey",
 			"schema": "app"
 		}
 	}

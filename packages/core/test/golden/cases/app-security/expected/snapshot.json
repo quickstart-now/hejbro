@@ -294,6 +294,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "comments",
+			"primaryKeyName": "comments_pkey",
 			"schema": "app"
 		},
 		"table:app.post_translations": {
@@ -330,6 +331,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "post_translations",
+			"primaryKeyName": "post_translations_pkey",
 			"schema": "app"
 		},
 		"table:app.posts": {
@@ -365,6 +367,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "posts",
+			"primaryKeyName": "posts_pkey",
 			"schema": "app"
 		}
 	}

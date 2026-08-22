@@ -13,14 +13,14 @@ create table "app"."comments" (
 	"id" uuid not null default gen_random_uuid(),
 	"post_id" uuid not null,
 	"deleted_at" timestamp with time zone,
-	primary key ("id")
+	constraint "comments_pkey" primary key ("id")
 );
 
 create table "app"."posts" (
 	"id" uuid not null default gen_random_uuid(),
 	"status" text not null,
 	"published_at" timestamp with time zone,
-	primary key ("id")
+	constraint "posts_pkey" primary key ("id")
 );
 
 alter table "app"."comments" enable row level security;

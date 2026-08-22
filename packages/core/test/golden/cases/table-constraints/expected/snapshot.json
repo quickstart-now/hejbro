@@ -69,6 +69,35 @@
 			],
 			"indexes": [],
 			"name": "comments",
+			"primaryKeyName": "comments_pkey",
+			"schema": "app"
+		},
+		"table:app.post_tags": {
+			"columns": [
+				{
+					"name": "post_id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"post_id"
+					],
+					"name": "post_tags_post_id_fk",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.posts"
+				}
+			],
+			"indexes": [],
+			"name": "post_tags",
+			"primaryKeyName": "post_tags_pkey",
 			"schema": "app"
 		},
 		"table:app.posts": {
@@ -168,6 +197,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "posts",
+			"primaryKeyName": "posts_pkey",
 			"schema": "app"
 		}
 	}

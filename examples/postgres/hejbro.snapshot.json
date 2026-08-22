@@ -415,6 +415,7 @@
 			],
 			"indexes": [],
 			"name": "comments",
+			"primaryKeyName": "comments_pkey",
 			"schema": "app"
 		},
 		"table:app.members": {
@@ -477,7 +478,8 @@
 					"typeNode": {
 						"typeName": "text"
 					},
-					"unique": true
+					"unique": true,
+					"uniqueName": "members_email_key"
 				},
 				{
 					"name": "display_name",
@@ -504,6 +506,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "members",
+			"primaryKeyName": "members_pkey",
 			"schema": "app"
 		},
 		"table:app.projects": {
@@ -555,7 +558,8 @@
 					"typeNode": {
 						"typeName": "text"
 					},
-					"unique": true
+					"unique": true,
+					"uniqueName": "projects_slug_key"
 				},
 				{
 					"name": "name",
@@ -594,6 +598,7 @@
 			],
 			"indexes": [],
 			"name": "projects",
+			"primaryKeyName": "projects_pkey",
 			"schema": "app"
 		},
 		"table:app.task_schedules": {
@@ -665,6 +670,44 @@
 				}
 			],
 			"name": "task_schedules",
+			"primaryKeyName": "task_schedules_pkey",
+			"schema": "app"
+		},
+		"table:app.task_tags": {
+			"columns": [
+				{
+					"name": "task_id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "tag_label",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"task_id"
+					],
+					"name": "task_tags_task_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.tasks"
+				}
+			],
+			"indexes": [],
+			"name": "task_tags",
+			"primaryKeyName": "task_tags_pkey",
 			"schema": "app"
 		},
 		"table:app.tasks": {
@@ -895,6 +938,7 @@
 				}
 			],
 			"name": "tasks",
+			"primaryKeyName": "tasks_pkey",
 			"schema": "app"
 		},
 		"trigger:app.comments.comments_single_depth": {

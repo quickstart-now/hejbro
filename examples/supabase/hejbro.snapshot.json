@@ -281,6 +281,7 @@
 			],
 			"indexes": [],
 			"name": "attachment_blobs",
+			"primaryKeyName": "attachment_blobs_pkey",
 			"schema": "app"
 		},
 		"table:app.attachments": {
@@ -393,6 +394,7 @@
 			],
 			"indexes": [],
 			"name": "attachments",
+			"primaryKeyName": "attachments_pkey",
 			"schema": "app"
 		},
 		"table:app.drafts": {
@@ -422,6 +424,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "drafts",
+			"primaryKeyName": "drafts_pkey",
 			"schema": "app"
 		},
 		"table:app.profiles": {
@@ -469,6 +472,7 @@
 			],
 			"indexes": [],
 			"name": "profiles",
+			"primaryKeyName": "profiles_pkey",
 			"schema": "app"
 		},
 		"view:app.profiles_public": {

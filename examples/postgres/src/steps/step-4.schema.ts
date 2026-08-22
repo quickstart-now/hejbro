@@ -34,8 +34,8 @@ import {
  * A generic team-workspace schema (O1) exercising every core DSL feature
  * once: CHECK constraints (typed and `sql`-templated), a partial ordered
  * index, a partial unique index, a self-referencing FK, RLS with two
- * roles, a before-trigger, a view, and schema-level grants. Four steps
- * (`step-1` … `step-4`) evolve it; this is step 4 — moves `due_at` off
+ * roles, a before-trigger, a view, and schema-level grants. Six steps
+ * (`step-1` … `step-6`) evolve it; this is step 4 — moves `due_at` off
  * `tasks` and onto a new one-to-one `task_schedules` table, and adds
  * `tasks.closed_at` in the same step so the migration also exercises the
  * `--confirm-drop` path (D32 rule A needs a same-table drop + add pair).

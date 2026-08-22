@@ -1199,3 +1199,248 @@ describe("planRenames — sequence rename drift guard (#23/D66)", () => {
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
 });
+
+// #24: primary key and unique constraint names are recorded in the
+// snapshot (D68) but derived independently -- derivePrimaryKeyName depends
+// only on the table name, deriveUniqueName on both table and column name
+// (measured against pg_dump, table-kind.ts's own doc comments) -- so a
+// table rename can drift either, but a column rename can only ever drift
+// the unique one. Mirrors the index/FK wasDerived pattern exactly, and the
+// sequence describe block above for hand-built-snapshot coverage.
+describe("planRenames — primary key and unique-name rename drift guard (#24)", () => {
+	it("a table rename renames the primary key constraint to match, with no leftover diff", () => {
+		const previous = snap(
+			app,
+			table(app, "posts", { id: uuid().primaryKey() }),
+		);
+		const next = snap(app, table(app, "articles", { id: uuid().primaryKey() }));
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts" rename to "articles";`,
+			`alter table "app"."articles" rename constraint "posts_pkey" to "articles_pkey";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a column rename leaves the primary key constraint name untouched (column-independent by design)", () => {
+		const previous = snap(
+			app,
+			table(app, "posts", { id: uuid().primaryKey() }),
+		);
+		const next = snap(app, table(app, "posts", { pkId: uuid().primaryKey() }));
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "id",
+					newName: "pk_id",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts" rename column "id" to "pk_id";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a table rename renames a unique column's constraint name to match, with no leftover diff", () => {
+		const previous = snap(app, table(app, "posts", { slug: text().unique() }));
+		const next = snap(app, table(app, "articles", { slug: text().unique() }));
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts" rename to "articles";`,
+			`alter table "app"."articles" rename constraint "posts_slug_key" to "articles_slug_key";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a column rename renames its own unique constraint name to match, with no leftover diff", () => {
+		const previous = snap(app, table(app, "posts", { slug: text().unique() }));
+		const next = snap(app, table(app, "posts", { handle: text().unique() }));
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "slug",
+					newName: "handle",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts" rename column "slug" to "handle";`,
+			`alter table "app"."posts" rename constraint "posts_slug_key" to "posts_handle_key";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	// D33: no DSL surface authors a custom primary-key name directly, but
+	// the snapshot on disk is the ground truth regardless (a hand-edited or
+	// round-tripped snapshot behaves exactly like a freshly built one) --
+	// so a non-derived name is reachable, and the wasDerived guard must
+	// leave it alone on a table rename. (Mutation-proof the same way the
+	// sequence guard's own hand-built test is: `if (!wasDerived) -> if
+	// (false)` would go red here.)
+	it("leaves a non-derived primary key name untouched on a table rename (hand-built snapshot, D33)", () => {
+		const previousBase = snap(
+			app,
+			table(app, "posts", { id: uuid().primaryKey() }),
+		);
+		const previous = {
+			...previousBase,
+			objects: {
+				...previousBase.objects,
+				"table:app.posts": {
+					...(previousBase.objects["table:app.posts"] as object),
+					primaryKeyName: "legacy_posts_pk",
+				},
+			},
+		};
+		const nextBase = snap(
+			app,
+			table(app, "articles", { id: uuid().primaryKey() }),
+		);
+		const next = {
+			...nextBase,
+			objects: {
+				...nextBase.objects,
+				"table:app.articles": {
+					...(nextBase.objects["table:app.articles"] as object),
+					primaryKeyName: "legacy_posts_pk",
+				},
+			},
+		};
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+
+		expect(plan.errors).toEqual([]);
+		expect(
+			plan.renameStatements.some((s) => s.includes("legacy_posts_pk")),
+		).toBe(false);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	// @see the primary-key hand-built test above -- same reasoning, for
+	// ColumnSnapshot.uniqueName.
+	it("leaves a non-derived unique name untouched on a table rename (hand-built snapshot, D33)", () => {
+		const previousBase = snap(
+			app,
+			table(app, "posts", { slug: text().unique() }),
+		);
+		const previousTable = previousBase.objects["table:app.posts"] as {
+			readonly columns: ReadonlyArray<{ readonly name: string }>;
+		};
+		const previous = {
+			...previousBase,
+			objects: {
+				...previousBase.objects,
+				"table:app.posts": {
+					...previousTable,
+					columns: previousTable.columns.map((column) => {
+						if (column.name !== "slug") {
+							return column;
+						}
+						return { ...column, uniqueName: "legacy_slug_unique" };
+					}),
+				},
+			},
+		};
+		const nextBase = snap(
+			app,
+			table(app, "articles", { slug: text().unique() }),
+		);
+		const nextTable = nextBase.objects["table:app.articles"] as {
+			readonly columns: ReadonlyArray<{ readonly name: string }>;
+		};
+		const next = {
+			...nextBase,
+			objects: {
+				...nextBase.objects,
+				"table:app.articles": {
+					...nextTable,
+					columns: nextTable.columns.map((column) => {
+						if (column.name !== "slug") {
+							return column;
+						}
+						return { ...column, uniqueName: "legacy_slug_unique" };
+					}),
+				},
+			},
+		};
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+
+		expect(plan.errors).toEqual([]);
+		expect(
+			plan.renameStatements.some((s) => s.includes("legacy_slug_unique")),
+		).toBe(false);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+});

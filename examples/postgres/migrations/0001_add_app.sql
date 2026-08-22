@@ -26,7 +26,7 @@
 -- + grant app.schema-usage.app_reader [new]
 -- + grant app.schema-usage.app_writer [new]
 -- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:8ae8aa374f2640edb767d9df71b35784a9af88f355f818bfb1d5f4af02fb0cfb
+-- snapshot: sha256:549b6a31d81e336bf45ef9f77b8b8aefe2a7c4dbaa0d0d9da0f1a3f6a593c83c
 
 create schema "app";
 
@@ -35,26 +35,26 @@ create table "app"."comments" (
 	"task_id" uuid not null,
 	"parent_id" uuid,
 	"body" text not null,
-	primary key ("id"),
+	constraint "comments_pkey" primary key ("id"),
 	constraint "comments_body_not_blank" check (length(btrim("app"."comments"."body")) > 0)
 );
 
 create table "app"."members" (
 	"id" uuid not null default gen_random_uuid(),
-	"email" text not null unique,
+	"email" text not null constraint "members_email_key" unique,
 	"display_name" text not null,
 	"role" text not null default 'member',
-	primary key ("id"),
+	constraint "members_pkey" primary key ("id"),
 	constraint "members_role_valid" check ("app"."members"."role" in ('owner', 'admin', 'member'))
 );
 
 create table "app"."projects" (
 	"id" uuid not null default gen_random_uuid(),
-	"slug" text not null unique,
+	"slug" text not null constraint "projects_slug_key" unique,
 	"name" text not null,
 	"owner_id" uuid not null,
 	"archived_at" timestamp with time zone,
-	primary key ("id"),
+	constraint "projects_pkey" primary key ("id"),
 	constraint "projects_slug_format" check ("app"."projects"."slug" ~ '^[a-z0-9]+(-[a-z0-9]+)*$')
 );
 
@@ -65,7 +65,7 @@ create table "app"."tasks" (
 	"status" text not null default 'todo',
 	"priority" smallint not null default 3,
 	"due_at" timestamp with time zone,
-	primary key ("id"),
+	constraint "tasks_pkey" primary key ("id"),
 	constraint "tasks_title_length" check (char_length("app"."tasks"."title") between 1 and 200),
 	constraint "tasks_status_valid" check ("app"."tasks"."status" in ('todo', 'in_progress', 'done')),
 	constraint "tasks_priority_range" check ("app"."tasks"."priority" between 1 and 5)

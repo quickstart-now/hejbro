@@ -15,7 +15,7 @@ import {
 	columnDefault,
 	columnNotNull,
 	columnPrimaryKey,
-	columnUnique,
+	columnUniqueName,
 	foreignKeyOnDelete,
 	foreignKeyOnUpdate,
 	indexColumnDesc,
@@ -23,6 +23,7 @@ import {
 	indexUnique,
 	indexWhere,
 	tableChecks,
+	tablePrimaryKeyName,
 } from "./table-snapshot";
 
 /** Splits a `"schema.table"` identity string into its parts. */
@@ -56,11 +57,23 @@ const defaultClause = (value: string | null): ReadonlyArray<string> => {
 	return [`default ${value}`];
 };
 
+/**
+ * Renders `constraint "<name>" unique` (#24/D68) — named explicitly
+ * (rather than a bare `unique` and letting Postgres pick its own default
+ * name) so the identifier actually created always matches
+ * `ColumnSnapshot.uniqueName`, the name frozen into the snapshot; an
+ * implicit dependency on Postgres's own naming convention happening to
+ * agree is exactly what D68 records the name to avoid. `columnUniqueName`
+ * is only ever absent when `columnUnique` is `false` (paired fields,
+ * `uniqueNameField`/`columnUniqueField` in `table-kind.ts`), so the empty
+ * case here can't diverge from `columnUnique`'s own.
+ */
 const uniqueClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
-	if (!columnUnique(column)) {
+	const name = columnUniqueName(column);
+	if (name === null) {
 		return [];
 	}
-	return ["unique"];
+	return ["constraint", quoteIdentifier(name), "unique"];
 };
 
 /**
@@ -84,16 +97,28 @@ export const renderColumnDefinition = (
 		...uniqueClause(column),
 	].join(" ");
 
+/**
+ * Renders `constraint "<name>" primary key (...)` (#24/D68) — named
+ * explicitly for the same reason {@link uniqueClause} is: the identifier
+ * actually created must match `TableSnapshot.primaryKeyName`, the name
+ * frozen into the snapshot, rather than relying on Postgres's own default
+ * naming convention agreeing by coincidence. `primaryKeyName` is only
+ * ever absent when no column has `primaryKey: true` (`primaryKeyNameField`
+ * in `table-kind.ts`), matching `primaryKeyColumns.length === 0` below.
+ */
 const primaryKeyConstraint = (
-	columns: ReadonlyArray<ColumnSnapshot>,
+	snapshot: TableSnapshot,
 ): ReadonlyArray<string> => {
-	const primaryKeyColumns = columns
+	const primaryKeyColumns = snapshot.columns
 		.filter((column) => columnPrimaryKey(column))
 		.map((column) => quoteIdentifier(column.name));
-	if (primaryKeyColumns.length === 0) {
+	const name = tablePrimaryKeyName(snapshot);
+	if (primaryKeyColumns.length === 0 || name === null) {
 		return [];
 	}
-	return [`primary key (${primaryKeyColumns.join(", ")})`];
+	return [
+		`constraint ${quoteIdentifier(name)} primary key (${primaryKeyColumns.join(", ")})`,
+	];
 };
 
 const checkConstraintLines = (snapshot: TableSnapshot): ReadonlyArray<string> =>
@@ -106,7 +131,7 @@ const checkConstraintLines = (snapshot: TableSnapshot): ReadonlyArray<string> =>
 export const createTableSql = (snapshot: TableSnapshot): string => {
 	const bodyLines = [
 		...snapshot.columns.map((column) => renderColumnDefinition(column)),
-		...primaryKeyConstraint(snapshot.columns),
+		...primaryKeyConstraint(snapshot),
 		...checkConstraintLines(snapshot),
 	];
 	return `create table ${qualifyName(snapshot.schema, snapshot.name)} (\n\t${bodyLines.join(",\n\t")}\n);`;
@@ -198,7 +223,16 @@ export const addCheckConstraintSql = (
 ): string =>
 	`alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(check.name)} check (${checkExpression(check)});`;
 
-/** Renders `alter table … drop constraint …;` — shared by foreign keys and checks (the constraint namespace is one per table in Postgres). */
+/** Renders `alter table … add constraint "name" primary key (…);` (#24) — the ALTER-time counterpart of `createTableSql`'s inline `primaryKeyConstraint`, used both for a PK added to an existing table and for the add half of a composite PK's partial-drop repair (`table-kind-emit.ts`'s `emitAlter`). */
+export const addPrimaryKeyConstraintSql = (
+	schema: string,
+	tableName: string,
+	constraintName: string,
+	columnNames: ReadonlyArray<string>,
+): string =>
+	`alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(constraintName)} primary key (${columnNames.map(quoteIdentifier).join(", ")});`;
+
+/** Renders `alter table … drop constraint …;` — shared by foreign keys, checks, and primary keys (the constraint namespace is one per table in Postgres). */
 export const dropConstraintSql = (
 	schema: string,
 	tableName: string,

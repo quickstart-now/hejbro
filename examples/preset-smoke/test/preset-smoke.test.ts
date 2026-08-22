@@ -26,7 +26,7 @@ describe("preset-smoke", () => {
 				"",
 				'create schema "app";',
 				"",
-				'create table "app"."events" (\n\t"id" uuid not null default gen_random_uuid(),\n\t"created_txid" integer not null default txid_current(),\n\tprimary key ("id")\n);',
+				'create table "app"."events" (\n\t"id" uuid not null default gen_random_uuid(),\n\t"created_txid" integer not null default txid_current(),\n\tconstraint "events_pkey" primary key ("id")\n);',
 				"",
 				"comment on schema \"app\" is 'declared by preset-smoke, proving @hejbro/core''s extension interface is generic.';",
 			].join("\n"),

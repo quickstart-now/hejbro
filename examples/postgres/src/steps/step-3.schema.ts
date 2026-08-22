@@ -33,8 +33,8 @@ import {
  * A generic team-workspace schema (O1) exercising every core DSL feature
  * once: CHECK constraints (typed and `sql`-templated), a partial ordered
  * index, a partial unique index, a self-referencing FK, RLS with two
- * roles, a before-trigger, a view, and schema-level grants. Four steps
- * (`step-1` … `step-4`) evolve it; this is step 3 — tightens
+ * roles, a before-trigger, a view, and schema-level grants. Six steps
+ * (`step-1` … `step-6`) evolve it; this is step 3 — tightens
  * `projects.owner_id`'s referential actions and makes the due-date index's
  * nulls placement explicit.
  */

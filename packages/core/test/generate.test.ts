@@ -62,14 +62,14 @@ describe("generateMigration", () => {
 			'create table "app"."comments" (\n' +
 			'\t"id" uuid not null default gen_random_uuid(),\n' +
 			'\t"body" text not null,\n' +
-			'\tprimary key ("id")\n' +
+			'\tconstraint "comments_pkey" primary key ("id")\n' +
 			");";
 		const createPosts =
 			'create table "app"."posts" (\n' +
 			'\t"id" uuid not null default gen_random_uuid(),\n' +
 			'\t"title" text not null,\n' +
 			'\t"status" "app"."post_status" not null,\n' +
-			'\tprimary key ("id")\n' +
+			'\tconstraint "posts_pkey" primary key ("id")\n' +
 			");";
 
 		expect(result.sql).toBe(
@@ -188,7 +188,7 @@ describe("generateMigration", () => {
 				'create table "app"."posts" (\n' +
 				'\t"id" integer not null,\n' +
 				'\t"title" text,\n' +
-				'\tprimary key ("id")\n' +
+				'\tconstraint "posts_pkey" primary key ("id")\n' +
 				");";
 			const ownedBy =
 				'alter sequence "app"."posts_id_seq" owned by "app"."posts"."id";';
