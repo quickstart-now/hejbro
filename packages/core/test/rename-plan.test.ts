@@ -426,6 +426,41 @@ describe("planRenames", () => {
 		]);
 	});
 
+	// The table-target counterpart of the column-target case just above --
+	// validateTableRenameTarget's own branch (rename-plan.ts) had no direct
+	// test before this one; every existing table-rename test only ever
+	// exercised the valid path (both dropped and added true). This pins
+	// "dropped, but nothing by the claimed new name was added" specifically
+	// -- the exact shape an `&&`-to-`||` slip in that check would pass
+	// silently (a residual --rename left over from an unrelated table
+	// simply being dropped, not renamed, is the real scenario this guards
+	// against).
+	it("unknown-rename-target (table) when old is dropped but no table by the new name was added", () => {
+		const previous = snap(app, table(app, "posts", { slug: text() }));
+		const next = snap(app);
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([
+			expect.objectContaining({
+				code: "unknown-rename-target",
+				message:
+					'--rename "app.posts=articles" doesn\'t match this run: schema "app" has no dropped table named "posts" (or no added table named "articles"). Next: check both names for typos — --rename\'s left side must be a table this run drops, the right side a table this run adds.',
+			}),
+		]);
+	});
+
 	it("duplicate-rename-target when two specs claim the same old or new", () => {
 		const previous = snap(app, table(app, "posts", { slug: text() }));
 		const next = snap(app, table(app, "posts", { slug: text() }));
