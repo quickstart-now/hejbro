@@ -155,7 +155,7 @@ names do not move. If a number does end up in prose, re-check every one of them
 when the map changes.
 
 **The first column is a row number in this table, not an issue number.** They
-overlap — rows run 1–41 and issues run #9–#212, so `22` and `#22` are different
+overlap — rows run 1–49 and issues run #9–#220, so `22` and `#22` are different
 things and `#22` is a real, unrelated issue. Issues live in the last column and
 carry a `#`. A row whose issue column is `—` does **not** mean "no issue is
 needed": issue-first is the rule, so `—` means **file one before starting**. One
@@ -201,7 +201,7 @@ a sub-issue goes missing from the frontier.
 | 25 | `phase8-crap-refactor` | The functions `pnpm check:crap` reports at **CRAP > 10** (the gate is the definition; measured at 20, of which 16 are also complexity ≥ 10) — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests. Four share a byte-identical create/drop guard, so one helper clears three at once. **Landed at `dev@aea1cf9` (#210, ten commits: nine refactors + the changeset rewrite): the guard helper, `familyOfTypeNode` 29→1, `createRecordingContext` 17→1, and five walker `switch`es → type-closed handler maps. `pnpm check:crap` went 20→10 measured on the PR's original base `626c57f` and 19→8 on `dev@37f7f7b` (reviewer's re-measurement at `c1162daf`); the rest continues in `phase8-crap-walkers`** | #154 | — |
 | 26 | `phase8-crap-coverage` | The 4 functions at complexity 8–9, which clear at 70–77% coverage | #154 | — |
 | 27 | `phase8-crap-gate` | `check:crap` wired into CI with a non-zero exit, **and the D71 decision-log row** | #154 | — |
-| 28 | `phase8-diagnostic-xref` | A check that every error code quoted inside a diagnostic message actually exists; **`style/noTernary` turned on in `biome.json`** and the 7 existing violations fixed; the `.mjs` style-rule scope question, answered `yes` | — | — |
+| 28 | `phase8-diagnostic-xref` | A check that every error code quoted inside a diagnostic message actually exists (with a self-check: an empty defined or cited set is a failure, not "0 violations"); **`style/noTernary` turned on in `biome.json`** and the existing violations fixed — **23** counted by hand in the diff (cli 2 · core/src 15 · core/test 2 · scripts 4; `biome lint --only=style/noTernary --max-diagnostics=100` at `aea1cf9` reports the same 23 — the plan's earlier "7" was never measured), the `.mjs` style-rule scope question, answered `yes` | #216 | — |
 | 29 | `phase8-view-nodes` | `ViewSnapshot.selectSql` becomes a structured node (the 5th and last pre-rendered field), rename retargeting extended to views, **D72** | #157 | — |
 | 30 | `phase8-preset-goldens` | `stripBanner`'s division of labour written down, and the `create` banner pinned — `drop` and `alter` already are | #167 | — |
 | 31 | `phase8-crap-ratchet-5` | The remaining 29 violations resolved, then `CRAP_THRESHOLD = 5` | #154 | — |
@@ -214,7 +214,16 @@ a sub-issue goes missing from the frontier.
 | 38 | `phase8-required-keys` | Per-kind `requiredKeys` validation for snapshot nodes — a hand-edited snapshot (D33 makes that a first-class input) can today omit a field a kind depends on and fail later, in the diff engine | #159 | — |
 | 39 | `phase8-declared-vs-catalog` | After each executed migration step, both local-Docker harnesses (`scripts/roundtrip.sh`, `scripts/verify-supabase-image.sh`) check that **every object the snapshot declares exists in the catalog** — the reference is the snapshot, never the emitted SQL, because a statement that was never emitted cannot fail by running. Positive control: `dev@626c57f` (on `dev`'s history, so `git show` resolves it) must fail with `declared primary key … not found in catalog` | #212 | — |
 | 40 | `phase8-crap-walkers` | The walker `switch`es `phase8-crap-refactor` did not reach — starting with `renderTypeNode`, whose handler-map draft exists only as an uncommitted patch saved from the `phase8-crap-refactor` worktree (`/tmp/hejbro-render-type-node.patch`, 2026-08-22; no SHA — it is on no branch) — each replaced by a mapped-type handler map (exhaustiveness stays a `tsc` error, no runtime `default` throw, the module-load TDZ trap noted where a map references a later binding), then the remaining CRAP > 10 tail that is neither coverage-clearable (row 26) nor a walker | #154 | — |
-| 41 | `phase8-policy-schema-usage` | `warning[…]`: a policy sits in a schema none of its targeted roles has `usage` on, so RLS is never consulted — found by the D69 real-image run. Positive control: `examples/supabase` before the D69 grant (must warn); negative: `examples/postgres` (must not) | #203 | — |
+| 41 | `phase8-policy-schema-usage` | `warning[rls-unreachable-schema]`: a policy sits in a schema none of its targeted roles has `usage` on, so RLS is never consulted — found by the D69 real-image run. Reads declarations (the three supabase validators' channel); `public` follows Postgres semantics (a `usage` grant to `public` covers every role; a policy to `public` is satisfied by any `usage` grant on the schema); superuser and schema owner are outside hejbro's model — a known limit, not a special case. Positive control: `examples/supabase` before the D69 grant (must warn); negative: `examples/postgres` (must not) | #203 | — |
+| 42 | `phase8-duplicate-version` | **Principle (owner, 2026-08-22): no prevention features — detect, list the options, print the command.** `verify` reports two migrations sharing one 14-digit version (same-second `generate` calls in a test harness or across worktrees; #129's positional walk turned that tie into a hard `broken-chain`) **before** the chain walk, core pure (file-name list in); the `Next:` carries the computed `mv`; the `diverged-migrations` `Next:` is rewritten on the same principle (computed `rm … ; hejbro generate`, both options when the chain cannot decide — O2 wording changes, so the PR body shows the diff and main shows the owner). `generate` is unchanged; the test support waits for the next second itself and #217's `1_/2_/3_/4_` ordering workaround goes. Found by #217 | #220 | — |
+| 43 | `phase8-verify-fix` | `hejbro verify --fix`, for this one error only (the #130 commands stay separate): duplicate-version groups sorted by chain order, the later file renamed to "max version in the directory + 1 s" (several: +1 s each), every `before → after` printed, then the normal `verify`; a group whose order the chain cannot decide (diverged) is left alone. The rename *plan* is computed in core, the CLI performs it; the `Next:` of row 42 gains option (a) here and not before, so `dev` never advertises a flag it does not have. Branches from row 42 | #220 | — |
+| 44 | `phase8-catalog-types` | The second half of row 39: declared column types and defaults compared against `format_type()`/`pg_attrdef`, which needs the type-name mapping row 39 deliberately left out (and says so) | #218 | — |
+| 45 | `phase8-history-restore` | `hejbro history` / `hejbro restore <n>` (owner's design memo in the issue): migration-number ↔ commit correspondence through the snapshot hash in the banner, declaration files restored from the target commit, dirty-tree refusal, no TTY prompts (D32), git only in `packages/cli`. **Design first** (designer: CLI surface, byte-stable non-TTY output, link rules; researcher: the four open questions) → owner decisions, then code. Depends on #129 (landed) and row 42 | #130 | — |
+| 46 | `phase8-fresh-build` | Running `vitest` inside one package bypasses turbo's `^build` and asserts against whatever `dist` exists (a silently false green). Proposal first: per-package `pretest` build, a vitest `globalSetup` that builds dependencies, or a documented rule — measured against the edit/test loop they serve | #131 | — |
+| 47 | `phase8-naming-convention` | Biome `useNamingConvention` for hejbro's own TypeScript: the 62 warnings measured and categorised (genuine / SQL-mirroring fixtures under `assertSqlName` / other), the rule scoped per path so fixtures that model SQL identifiers stay snake_case, then enabled | #132 | — |
+| 48 | `phase8-clause-context` | `design:` an `Expr` does not know which clause it sits in, so `authUidCached()`'s `(select auth.uid())` cannot be refused outside RLS. Researcher compares: a marker outside the snapshot (the `Symbol.for` family, D33/D67/D70 intact) checked at each clause entry, render-time checking, or documenting the gap — and the shape row 37 (#160) should share. **Owner decision: does a clause taxonomy belong in core's extension interface?** Code only after that | #141 | — |
+| 49 | `phase8-drift-if-exists` | `design:` `policy`/`trigger` drop with `if exists`, which swallows out-of-band removal. Researcher **measures** whether `verify`, the pg_dump round-trip, or row 39's catalog check already detect that drift (Docker), then the owner chooses: keep `if exists` and record the detector in the spec, or the hybrid (suppress the drop only when the owner object is gone). Sequences already drop plainly on `predrop` | #198 | — |
+| — | `phase8-oidc-publishing` | Trusted publishing replaces `NPM_TOKEN` — per package, configurable only after the package exists on npm, so this is the **tail of Phase 8 after 0.1.0 is published**: the workflow diff is drafted now **on a branch only — no PR before the publish** — and applied with the owner (release workflows are an owner gate) | #139 | — |
 
 `phase8-pk-guard` lands **before** `phase8-constraint-names` in dependency
 terms but is listed after it for readability: the guard is a small, independent
@@ -229,9 +238,17 @@ schedule**, and they are stated by branch name for the reason given above.
 
 | Track | Area | Queue |
 |---|---|---|
-| A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics | ~~`expr-nodes` → `view-nodes` → `sequence-kind`~~ → `chain-walk` → `constraint-names` (work-unit proposal first; replaces the row-16 guard; closes #137) → `grant-sync` → `scope-nodes` → `policy-schema-usage` |
-| B | `.github/workflows/`, `scripts/`, `docs/` | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `supabase-image`~~ → `docs-release` → `diagnostic-xref` → `crap-gate` (opens only once `dev` reports 0 at the threshold) → (release: owner) |
-| C | `examples/`, golden content, `packages/supabase`, **and since 2026-08-22 the CRAP work** | ~~`golden-english` → `bucket-notes` → `preset-goldens`~~ → `crap-refactor` → `declared-vs-catalog` → `crap-walkers` → `crap-coverage` → `crap-gate` → `crap-ratchet-5` → `required-keys` |
+| A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics, `packages/cli` commands | ~~`expr-nodes` → `view-nodes` → `sequence-kind` → `chain-walk`~~ → `duplicate-version` → `verify-fix` → `constraint-names` (proposal approved 2026-08-22; replaces the row-16 guard; closes #137) → `grant-sync` → `scope-nodes` (**after** the row-48 decision — same surface) → `history-restore` (after its design and the owner's four answers; whichever of A/B is free then) |
+| B | `.github/workflows/`, `scripts/`, `docs/`, tooling, validators that touch no hot file | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `supabase-image` → `docs-release`~~ → `diagnostic-xref` → `policy-schema-usage` (moved from A on 2026-08-22: a new validator file, no hot-file overlap, and A is full) → `fresh-build` (proposal first) → `naming-convention` (proposal first) → `crap-gate` (opens only once `dev` reports 0 at the threshold; the branch is staged locally) → `oidc-publishing` (draft now, apply after 0.1.0 with the owner) |
+| C | `examples/`, golden content, `packages/supabase`, **and since 2026-08-22 the CRAP work and snapshot validation** | ~~`golden-english` → `bucket-notes` → `preset-goldens` → `crap-refactor`~~ → `declared-vs-catalog` → `crap-walkers` → the CRAP tail (`retargetProjection` split + tests, `parseSnapshot`, `validateRenameSpecTarget`) → `crap-coverage` (this is where `dev` reaches 0 and unblocks B's `crap-gate`) → `catalog-types` → `required-keys` → `crap-ratchet-5` (after `crap-gate`; last) → `drift-if-exists` (if the row-49 decision is code) |
+| design first (researcher / designer, no code) | — | `drift-if-exists` (measure) · `clause-context` (options) · `history-restore` (CLI surface + the four questions) → planner → main → **one owner-decision bundle**, each item on its own as *background → options → what each option produces (SQL / CLI output)*, because the owner decides one item at a time with the full background; an item the measurement settles (#198 may) leaves the bundle and is reported as a result |
+
+**Owner decision (2026-08-22): every open sub-issue of #9 is handled in this
+phase** — #130, #131, #132 and #139, deferred to 0.2.0 until then, came back
+in (the roadmap's "Deferred" hard gate is satisfied by that decision). The
+queues above are the resulting schedule; the former *Out of scope* section
+below records what was deferred and why, for the history, and no longer
+lists anything as deferred.
 
 Struck entries are merged; the queue is read from the first live entry — and
 the strike is checked against the merged PR list, not against memory: the
@@ -1322,6 +1339,9 @@ measure.
 `dev` push run green; main reports `release-ready` at that moment and
 nothing after it is an agent action:
 
+0. "Approve and run" the Version Packages PR's CI — the bot PR opens as
+   `action_required` and stays `BLOCKED` until that click (#189), which is
+   why the owner touches the release four times, not three.
 1. Review the open "Version Packages" PR (#179; the bot re-pushes it on
    every `dev` change, so read it last) and merge it — **this is the
    release decision**, and it is reversible: `release-version.yml` runs on
@@ -1342,9 +1362,13 @@ organization `quickstart-now`, repository `hejbro`, workflow filename
 **check `npm publish` under allowed actions**. Then `NODE_AUTH_TOKEN` can be
 dropped from the workflow.
 
-## Out of scope
+## Formerly out of scope (dissolved 2026-08-22)
 
-Deferred to 0.2.0 with a reason: **#130** (new commands; four design questions
+Until the owner's decision of 2026-08-22 (every open sub-issue of #9 is
+handled in this phase) this section deferred six issues to 0.2.0; they are
+rows 45–49 and `phase8-oidc-publishing` now, and the reasons are kept here
+because they shaped the order (design before code for three of them; #139
+after publication). Deferred to 0.2.0 with a reason, as it stood: **#130** (new commands; four design questions
 open; the manual rollback procedure in `docs/guide/renames.md` is complete once
 #129 lands), **#131** (internal tooling; the release path already builds from a
 clean install), **#132** (needs a per-path lint design first), **#139**
@@ -1377,8 +1401,8 @@ table nor this section is a bookkeeping bug, not a decision.**
 
 **#139** and **#141** stay as sub-issues of **#9**. There is no Phase 9 — the
 owner decided (2026-08-21) that Phase 8 is the last phase and what follows
-0.1.0 is release work, not a numbered phase. So "deferred to 0.2.0" is a
-milestone, not a parent: both keep #9 as their parent issue so they remain
-findable, and neither blocks the 0.1.0 release.
+0.1.0 is release work, not a numbered phase. Since 2026-08-22 "deferred to
+0.2.0" no longer applies to any of them; #139 is simply the one item that
+must follow the publish, and none of the six blocks 0.1.0.
 
 Still unscheduled: the GitHub Pages site (D64).
