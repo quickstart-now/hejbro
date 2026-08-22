@@ -45,12 +45,14 @@ create index "docs_data_idx" on "app"."docs" using gin ("data" jsonb_path_ops);
 create index "docs_created_at_idx" on "app"."docs" using brin ("created_at");
 create index "docs_owner_id_idx" on "app"."docs" using hash ("owner_id");
 create index "docs_body_trgm_idx" on "app"."docs" using gin ("body" gin_trgm_ops);
-create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."email"));
-create unique index "users_email_lower_live_uidx" on "app"."users" (lower("app"."users"."email")) where "app"."users"."deleted_at" is null;
+create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));
+create unique index "users_email_lower_live_uidx" on "app"."users" ((lower("app"."users"."email"))) where "app"."users"."deleted_at" is null;
 ```
 
-Later, `hejbro generate --rename app.users.email=email_address` re-creates
-both expression indexes with the new column inside the expression.
+Later, `hejbro generate --rename app.users.email=email_address` retargets
+both expression indexes' stored expression to the new column name — the
+indexes are neither dropped nor re-created, only the `rename column`
+statement is emitted.
 
 What fails at declaration time (with a `Next:` line): `using("gim")`
 (unknown method), `index().unique().using("gin")` (unique is B-tree only),

@@ -3,6 +3,11 @@
 Golden case `packages/core/test/golden/cases/table-index-methods/` is the
 executable form of this contract; the lines below are what its
 `expected/*.sql` must contain (modulo banner and statement order rules).
+Expressions are always wrapped in their own parentheses (Postgres'
+`index_elem` grammar: `column_name | ( a_expr )` — a bare function call
+could skip the wrap, but an operator expression can't, and Postgres
+normalizes either form to the same catalog entry, so this feature always
+wraps; owner decision 2026-08-22, F7).
 
 ## from-empty
 
@@ -11,15 +16,16 @@ create index "docs_data_idx" on "app"."docs" using gin ("data" jsonb_path_ops);
 create index "docs_created_at_idx" on "app"."docs" using brin ("created_at");
 create index "docs_owner_id_idx" on "app"."docs" using hash ("owner_id");
 create index "docs_body_trgm_idx" on "app"."docs" using gin ("body" gin_trgm_ops);
-create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."email"));
-create unique index "users_email_lower_uidx" on "app"."users" (lower("app"."users"."email")) where "app"."users"."deleted_at" is null;
+create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));
+create unique index "users_email_lower_uidx" on "app"."users" ((lower("app"."users"."email"))) where "app"."users"."deleted_at" is null;
 ```
 
 Rules exercised: `using <method>` after the table name; B-tree never
 rendered (`create index … on … (…)` as today); opclass after the column;
-expression parenthesised, column refs fully qualified (same renderer as
-partial predicates); unique + expression + partial compose; `desc` /
-`nulls` follow the opclass (`("data" jsonb_path_ops desc nulls last)`).
+expression always parenthesised in its own pair, column refs fully
+qualified (same renderer as partial predicates); unique + expression +
+partial compose; `desc` / `nulls` follow the opclass (`("data"
+jsonb_path_ops desc nulls last)`).
 
 ## step-1 (same names, definition changed → drop + create)
 
@@ -27,7 +33,7 @@ partial predicates); unique + expression + partial compose; `desc` /
 drop index "app"."docs_data_idx";
 drop index "app"."users_email_lower_idx";
 create index "docs_data_idx" on "app"."docs" using gin ("data");
-create index "users_email_lower_idx" on "app"."users" (lower(btrim("app"."users"."email")));
+create index "users_email_lower_idx" on "app"."users" ((lower(btrim("app"."users"."email"))));
 ```
 
 Banner: `-- ~ table app.docs [index "docs_data_idx" changed]` (existing

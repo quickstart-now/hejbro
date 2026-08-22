@@ -50,7 +50,7 @@ A user wants case-insensitive lookups (`lower(email)`), an index on a JSON path 
 
 **Why this priority**: less frequent than GIN / operator classes, and it raises a naming question (an expression has no column name to derive the index name from — see Clarifications); it is still part of "complete" because Drizzle covers it and users hit it early on `email` columns.
 
-**Independent Test**: Declare `index("users_email_lower_idx").on(sql\`lower(${t.email})\`)`, generate: `create index "users_email_lower_idx" on … (lower("email"))`. Rename `email` → `emailAddress` with `--rename`, generate: the index is re-created with `lower("email_address")` and no ambiguity error. Restore to the previous commit: the expression renders identically.
+**Independent Test**: Declare `index("users_email_lower_idx").on(sql\`lower(${t.email})\`)`, generate: `create index "users_email_lower_idx" on … ((lower("email")))` (the expression always renders in its own parentheses — F7). Rename `email` → `emailAddress` with `--rename`, generate: only `alter table … rename column "email" to "email_address"` — the expression is retargeted in the snapshot and the index is neither dropped nor re-created, with no ambiguity error. Restore to the previous commit: the expression renders identically.
 
 **Acceptance Scenarios**:
 
