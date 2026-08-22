@@ -91,7 +91,7 @@ const columnDefaultDiagnostics = (
 		return [
 			diagnostic(
 				"error",
-				"cached-auth-call-outside-rls",
+				"rls-cached-auth-outside-rls",
 				cachedAuthCallMessage(
 					`column "${table.schema.schemaName}"."${table.tableName}"."${columnName}"'s default`,
 					functionName,
@@ -110,7 +110,7 @@ const checkDiagnostics = (table: TableDeclaration): ReadonlyArray<Diagnostic> =>
 		return [
 			diagnostic(
 				"error",
-				"cached-auth-call-outside-rls",
+				"rls-cached-auth-outside-rls",
 				cachedAuthCallMessage(
 					`check "${check.checkName}" on table "${table.schema.schemaName}"."${table.tableName}"`,
 					functionName,
@@ -134,7 +134,7 @@ const indexPredicateDiagnostics = (
 		return [
 			diagnostic(
 				"error",
-				"cached-auth-call-outside-rls",
+				"rls-cached-auth-outside-rls",
 				cachedAuthCallMessage(
 					`${indexDescription(index)} on table "${table.schema.schemaName}"."${table.tableName}"`,
 					functionName,
@@ -160,7 +160,7 @@ const indexPredicateDiagnostics = (
  * ownership-style subquery is caught the same way it would be missed by
  * core's shallower `someExprNode`.
  */
-export const cachedAuthCallOutsideRlsValidator: Validator = (
+export const rlsCachedAuthOutsideRlsValidator: Validator = (
 	_snapshot,
 	declarations,
 ) =>

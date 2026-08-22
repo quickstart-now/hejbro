@@ -74,7 +74,7 @@ const result = generateMigration({
 The `rls-uncached-auth-call` validator (part of `supabaseValidators`)
 warns if a policy calls the plain form where the cached one belongs; it
 does not look at column `default`/`check` expressions at all, since the
-plain form is correct there. The `cached-auth-call-outside-rls`
+plain form is correct there. The `rls-cached-auth-outside-rls`
 validator (#141) covers the opposite mistake: it errors if a column
 `default`, a CHECK, or a partial-index predicate calls the cached form
 — including one buried inside an `exists(...)` subquery — since core

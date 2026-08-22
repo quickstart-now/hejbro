@@ -14,9 +14,9 @@ import {
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { authJwtCached, authUid, authUidCached } from "../src/auth";
-import { cachedAuthCallOutsideRlsValidator } from "../src/validators/cached-auth-call-outside-rls";
+import { rlsCachedAuthOutsideRlsValidator } from "../src/validators/rls-cached-auth-outside-rls";
 
-describe("cachedAuthCallOutsideRlsValidator", () => {
+describe("rlsCachedAuthOutsideRlsValidator", () => {
 	const app = schema("app");
 
 	it("errors when a column default calls authUidCached()", () => {
@@ -27,10 +27,10 @@ describe("cachedAuthCallOutsideRlsValidator", () => {
 		const result = generateMigration({
 			declarations: [app, accounts],
 			previousSnapshot: emptySnapshot,
-			validators: [cachedAuthCallOutsideRlsValidator],
+			validators: [rlsCachedAuthOutsideRlsValidator],
 		});
 		expect(result.errors).toHaveLength(1);
-		expect(result.errors[0]?.code).toBe("cached-auth-call-outside-rls");
+		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
 		expect(result.errors[0]?.message).toBe(
 			'column "app"."accounts"."created_by"\'s default calls authUidCached() — a scalar subquery is illegal here. Next: use authUid() here, or move the check into a policy.',
 		);
@@ -44,7 +44,7 @@ describe("cachedAuthCallOutsideRlsValidator", () => {
 		const result = generateMigration({
 			declarations: [app, accounts],
 			previousSnapshot: emptySnapshot,
-			validators: [cachedAuthCallOutsideRlsValidator],
+			validators: [rlsCachedAuthOutsideRlsValidator],
 		});
 		expect(result.errors).toEqual([]);
 	});
@@ -61,10 +61,10 @@ describe("cachedAuthCallOutsideRlsValidator", () => {
 		const result = generateMigration({
 			declarations: [app, accounts],
 			previousSnapshot: emptySnapshot,
-			validators: [cachedAuthCallOutsideRlsValidator],
+			validators: [rlsCachedAuthOutsideRlsValidator],
 		});
 		expect(result.errors).toHaveLength(1);
-		expect(result.errors[0]?.code).toBe("cached-auth-call-outside-rls");
+		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
 		expect(result.errors[0]?.message).toBe(
 			'check "accounts_role_check" on table "app"."accounts" calls authJwtCached() — a scalar subquery is illegal here. Next: use authJwt() here, or move the check into a policy.',
 		);
@@ -86,10 +86,10 @@ describe("cachedAuthCallOutsideRlsValidator", () => {
 		const result = generateMigration({
 			declarations: [app, accounts],
 			previousSnapshot: emptySnapshot,
-			validators: [cachedAuthCallOutsideRlsValidator],
+			validators: [rlsCachedAuthOutsideRlsValidator],
 		});
 		expect(result.errors).toHaveLength(1);
-		expect(result.errors[0]?.code).toBe("cached-auth-call-outside-rls");
+		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
 		expect(result.errors[0]?.message).toBe(
 			'index "accounts_created_by_idx" on table "app"."accounts" calls authUidCached() — a scalar subquery is illegal here. Next: use authUid() here, or move the check into a policy.',
 		);
@@ -119,10 +119,10 @@ describe("cachedAuthCallOutsideRlsValidator", () => {
 		const result = generateMigration({
 			declarations: [app, profiles, accounts],
 			previousSnapshot: emptySnapshot,
-			validators: [cachedAuthCallOutsideRlsValidator],
+			validators: [rlsCachedAuthOutsideRlsValidator],
 		});
 		expect(result.errors).toHaveLength(1);
-		expect(result.errors[0]?.code).toBe("cached-auth-call-outside-rls");
+		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
 	});
 
 	it("does not error on a table with no default/check/index at all", () => {
@@ -130,7 +130,7 @@ describe("cachedAuthCallOutsideRlsValidator", () => {
 		const result = generateMigration({
 			declarations: [app, accounts],
 			previousSnapshot: emptySnapshot,
-			validators: [cachedAuthCallOutsideRlsValidator],
+			validators: [rlsCachedAuthOutsideRlsValidator],
 		});
 		expect(result.errors).toEqual([]);
 	});
