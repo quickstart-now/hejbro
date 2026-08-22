@@ -1,4 +1,6 @@
-import type { KindChange } from "../kind/object-kind";
+import type { GrantDeclaration } from "../dsl/grant";
+import type { PolicyDeclaration } from "../dsl/rls";
+import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import { asSequenceSnapshot } from "../kinds/sequence-kind";
 import {
 	asTableSnapshot,
@@ -78,5 +80,118 @@ export const notNullWithoutDefaultWarnings = (
 				`column "${next.schema}"."${next.name}"."${column.name}" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.`,
 			),
 		);
+	});
+};
+
+const isPolicyDeclaration = (
+	declaration: HejbroDeclaration,
+): declaration is PolicyDeclaration => declaration.declarationKind === "policy";
+
+const isGrantDeclaration = (
+	declaration: HejbroDeclaration,
+): declaration is GrantDeclaration => declaration.declarationKind === "grant";
+
+/** PostgreSQL's `PUBLIC` pseudo-role, as it appears in a `.to(...)`/`grant(...).usage.to(...)` role list -- not the `public` *schema* (unrelated, no special-casing here; see #203). */
+const PUBLIC_ROLE = "public";
+
+/** Schema name -> the set of roles a `schema-usage` grant names for it. A `"public"` member is PostgreSQL's PUBLIC pseudo-role -- `grant usage on schema … to public` covers every role, not only one literally named `"public"` (read by {@link policyReachable}). */
+const schemaUsageGrantedRoles = (
+	declarations: ReadonlyArray<HejbroDeclaration>,
+): ReadonlyMap<string, ReadonlySet<string>> => {
+	const grants = declarations
+		.filter(isGrantDeclaration)
+		.filter((grant) => grant.grantKind === "schema-usage");
+	const schemaNames = new Set(grants.map((grant) => grant.schemaName));
+	return new Map(
+		[...schemaNames].map((schemaName) => [
+			schemaName,
+			new Set(
+				grants
+					.filter((grant) => grant.schemaName === schemaName)
+					.map((grant) => grant.role),
+			),
+		]),
+	);
+};
+
+/**
+ * Whether at least one role bound by `policy` can actually reach
+ * `policy`'s schema, given `grantedRoles` (the schema's granted
+ * `schema-usage` roles). Two PUBLIC-pseudo-role cases, both real
+ * PostgreSQL semantics rather than a hejbro-specific carve-out: a grant
+ * *to* `"public"` covers every role, so it satisfies any policy; a
+ * policy *targeting* `"public"` (`.to("public")`, applies to every role)
+ * is reachable as soon as the schema grants usage to any role at all --
+ * that role is bound by the policy too and can reach it, so the policy
+ * isn't universally dead the way it would be with zero grants.
+ */
+const policyReachable = (
+	policy: PolicyDeclaration,
+	grantedRoles: ReadonlySet<string>,
+): boolean => {
+	if (policy.roles.includes(PUBLIC_ROLE)) {
+		return grantedRoles.size > 0;
+	}
+	if (grantedRoles.has(PUBLIC_ROLE)) {
+		return true;
+	}
+	return policy.roles.some((role) => grantedRoles.has(role));
+};
+
+const rlsUnreachableSchemaMessage = (policy: PolicyDeclaration): string => {
+	const roleList = [...policy.roles]
+		.sort()
+		.map((role) => `"${role}"`)
+		.join(", ");
+	return `policy "${policy.policyName}" on "${policy.schemaName}"."${policy.tableName}" targets role(s) ${roleList} but schema "${policy.schemaName}" grants usage to none of them — every row is unreachable through this policy (permission denied for schema before RLS is even consulted). Next: grant(schema).usage.to(${roleList}), or add the missing role(s) to an existing schema-usage grant.`;
+};
+
+/**
+ * Warns when a policy's schema grants `usage` to none of the roles it
+ * targets (#203) — Postgres checks schema `usage` before RLS is even
+ * consulted, so such a policy can never run at all; the failure is
+ * `permission denied for schema`, not an RLS denial. Plain PostgreSQL
+ * semantics, not Supabase-specific, so this lives in core and runs
+ * unconditionally — like {@link notNullWithoutDefaultWarnings}, called
+ * directly by `generateMigration` rather than gated behind a preset's
+ * opt-in `options.validators` (D37).
+ *
+ * Judges from the normalized declarations, matching every existing
+ * preset `Validator` in this codebase (`exposed-tables`/
+ * `reserved-schemas`/`view-security-invoker`, all `packages/supabase`)
+ * — `PolicyDeclaration`/`GrantDeclaration` are already flattened to
+ * top-level declarations by `resolveDeclarations` (D28's `grant(...).to(...)`
+ * fan-out), so no snapshot decoding is needed.
+ *
+ * Known limitation: hejbro doesn't model superuser roles or schema
+ * ownership, both of which bypass PostgreSQL's schema-usage check in
+ * reality (a superuser, or the schema's owner, can use any schema
+ * regardless of grants) — a policy scoped to such a role can warn here
+ * despite being reachable in practice.
+ *
+ * No PUBLIC-by-omission case to handle: `rls.ts`'s policy builder forces
+ * a `.to(...)` call with at least one role (a zero-arg `.to()` throws
+ * `rls-policy-missing-roles`) before `using`/`withCheck` even become
+ * reachable, so `PolicyDeclaration.roles` is never empty — a policy can
+ * target PUBLIC only by naming it explicitly, `.to("public")`.
+ */
+export const rlsUnreachableSchemaWarnings = (
+	declarations: ReadonlyArray<HejbroDeclaration>,
+): ReadonlyArray<Diagnostic> => {
+	const grantsBySchema = schemaUsageGrantedRoles(declarations);
+	return declarations.filter(isPolicyDeclaration).flatMap((policy) => {
+		const grantedRoles =
+			grantsBySchema.get(policy.schemaName) ?? new Set<string>();
+		if (policyReachable(policy, grantedRoles)) {
+			return [];
+		}
+		return [
+			diagnostic(
+				"warning",
+				"rls-unreachable-schema",
+				rlsUnreachableSchemaMessage(policy),
+				policy.declaredAt,
+			),
+		];
 	});
 };

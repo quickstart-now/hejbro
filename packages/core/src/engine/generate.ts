@@ -17,7 +17,10 @@ import type { BannerHashes } from "../sql/migration-file";
 import { renderBanner } from "../sql/migration-file";
 import type { SqlStatement } from "../sql/statement";
 import { isSerialTypeNode, serialSequenceBaseType } from "../types/type-node";
-import { notNullWithoutDefaultWarnings } from "./core-validators";
+import {
+	notNullWithoutDefaultWarnings,
+	rlsUnreachableSchemaWarnings,
+} from "./core-validators";
 import { diffSnapshots, rankKinds } from "./diff-engine";
 import type {
 	ConfirmDropSpec,
@@ -188,7 +191,10 @@ export const generateMigration = (
 		snapshot,
 		normalized,
 	);
-	const warnings = validatorDiagnostics.filter((d) => d.severity === "warning");
+	const warnings = [
+		...validatorDiagnostics.filter((d) => d.severity === "warning"),
+		...rlsUnreachableSchemaWarnings(normalized),
+	];
 	const validatorErrors = validatorDiagnostics
 		.filter((d) => d.severity === "error")
 		.map((d) => hejbroError(d.code, d.message, d.declaredAt));
