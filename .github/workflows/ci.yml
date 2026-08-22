@@ -91,6 +91,19 @@ jobs:
       # matrix leg only, the same way smoke:pack-install above is.
       - run: pnpm check:crap
         if: matrix.node-version == 24
+      # #278: `pnpm check:crap` (above) rewrites README.md's CRAP block and
+      # badge from its own results before gating -- a PR that moves the
+      # scanned/violation/highest-score numbers but doesn't carry the
+      # refreshed README fails here instead of silently going stale. Same
+      # leg as check:crap (Node-version-independent, and running it twice
+      # would just repeat the same diff-or-not verdict).
+      - name: README CRAP block is current
+        if: matrix.node-version == 24
+        run: |
+          if ! git diff --exit-code -- README.md; then
+            echo "error[check-crap-readme]: README's CRAP block is stale. Next: run pnpm check:crap and commit README.md" >&2
+            exit 1
+          fi
       # #180: not "trust this branch" -- the question this step asks
       # ("does every package this branch changed relative to dev have an
       # accompanying pending changeset?") does not apply on a
