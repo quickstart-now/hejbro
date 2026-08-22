@@ -217,8 +217,19 @@ verify_rls_as_authenticated() {
   echo "   RLS filters correctly for both rows"
 }
 
+# #212: catches a statement the generator silently never emitted -- this
+# script's own applied-chain-against-a-real-image approach can run clean
+# with a gap the same way scripts/roundtrip.sh's chain-vs-fresh dump diff
+# can (see that script's own #212 comment); checking against the declared
+# snapshot is what actually closes it.
+check_declared_vs_catalog() {
+  echo "== checking the applied chain against the declared snapshot (#212)"
+  node "$REPO_ROOT/scripts/check-declared-vs-catalog.mjs" "$CONTAINER" postgres "$EXAMPLE_DIR/hejbro.snapshot.json"
+}
+
 verify_digest
 apply_chain
+check_declared_vs_catalog
 verify_roles
 verify_auth_uid_definition
 verify_rls_as_authenticated
