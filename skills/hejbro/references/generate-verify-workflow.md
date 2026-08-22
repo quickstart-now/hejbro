@@ -48,10 +48,11 @@ it `not null` in a later migration.
 
 ## `hejbro verify`
 
-Four checks, entirely from checked-out files — no live database
-connection: snapshot parses, declarations match the snapshot, the
-migration chain is linear (no diverged/broken parent links), and the
-chain's tip hash matches the snapshot. Run it in CI. See
+Five checks, entirely from checked-out files — no live database
+connection: snapshot parses, no two migration files share a version,
+declarations match the snapshot, the migration chain is linear (no
+diverged/broken parent links), and the chain's tip hash matches the
+snapshot. Run it in CI. See
 `packages/cli/src/commands/verify.ts` (guide page lands in #109).
 
 The **local Docker round-trip** (`pnpm roundtrip` in an example package)

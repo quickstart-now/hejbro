@@ -25,13 +25,13 @@ jobs:
 
 ## Exit codes
 
-`hejbro verify` exits `0` when all four checks pass, `1` if any fails. A failure prints every failing check as a diagnostic block plus a summary line:
+`hejbro verify` exits `0` when all five checks pass, `1` if any fails. A failure prints every failing check as a diagnostic block plus a summary line:
 
 ```
 error[snapshot-stale]: hejbro.snapshot.json
   the checked-in snapshot at "hejbro.snapshot.json" does not match your declarations — either the declarations changed without a new migration, or the snapshot file was hand-edited. Next: run `hejbro generate` and commit the result (or, if the snapshot is correct and the declarations are wrong, restore the declarations you meant).
 
-verify: 1 of 4 checks failed — fix the errors above and rerun `hejbro verify`.
+verify: 1 of 5 checks failed — fix the errors above and rerun `hejbro verify`.
 ```
 
 ## No `--fail-on-warning`
