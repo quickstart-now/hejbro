@@ -65,21 +65,20 @@ const walkGroup = (
  * - 2+ members share the exact same `parent` hash — a genuine fork
  *   (diverged-migrations), not just a same-second version-string
  *   collision. Renaming a fork's files wouldn't resolve the fork, so
- *   `--fix` doesn't touch it.
+ *   `--fix` doesn't touch it. No separate check for this: a fork at the
+ *   very root surfaces as 2+ entries with no predecessor of their own
+ *   (caught by the root count below), and a fork further in surfaces as
+ *   {@link walkGroup} running out of matching entries partway through
+ *   (some group member's `parent` is claimed by two others, so only one
+ *   of them is ever reachable by the single-step walk) — both already
+ *   return `null` without a dedicated fork check (#154 ratchet-5;
+ *   verified directly against this file's own fork tests, not assumed).
  * - the entries don't form one connected line at all (not producible by a
  *   real chain, but not assumed away).
  */
 export const orderGroupByChain = (
 	entries: ReadonlyArray<ChainEntry>,
 ): ReadonlyArray<ChainEntry> | null => {
-	const parentCounts = entries.reduce((counts, entry) => {
-		counts.set(entry.parent, (counts.get(entry.parent) ?? 0) + 1);
-		return counts;
-	}, new Map<string, number>());
-	const hasFork = Array.from(parentCounts.values()).some((count) => count > 1);
-	if (hasFork) {
-		return null;
-	}
 	const roots = entries.filter(
 		(entry) => !hasPredecessorInGroup(entry, entries),
 	);
@@ -94,29 +93,39 @@ export const orderGroupByChain = (
 	);
 };
 
+/** {@link parseVersionAsInstant}'s `"unix"` case: `version` as whole seconds since the epoch. */
+const parseUnixVersion = (version: string): Date | null => {
+	const seconds = Number(version);
+	if (!Number.isFinite(seconds)) {
+		return null;
+	}
+	return new Date(seconds * 1000);
+};
+
+/** {@link parseVersionAsInstant}'s `"timestamp"` case: `version` as a fixed-width `YYYYMMDDHHmmss` string. */
+const parseTimestampVersion = (version: string): Date | null => {
+	if (version.length !== 14) {
+		return null;
+	}
+	const year = Number(version.slice(0, 4));
+	const month = Number(version.slice(4, 6));
+	const day = Number(version.slice(6, 8));
+	const hour = Number(version.slice(8, 10));
+	const minute = Number(version.slice(10, 12));
+	const second = Number(version.slice(12, 14));
+	return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+};
+
 /** `version` (as `renderMigrationPrefix` would render it) parsed back into the instant it names — `null` for `index` (no clock) or a version that doesn't parse as `strategy`'s shape. Mirrors `verify.ts`'s own `parseVersionAsDate` (CLI-side, for the `Next:` suggestion text) — kept separately here since core can't import from the CLI package, and this one only ever feeds a rename *plan*, never diagnostic text. */
 const parseVersionAsInstant = (
 	version: string,
 	strategy: MigrationPrefixStrategy,
 ): Date | null => {
 	if (strategy === "unix") {
-		const seconds = Number(version);
-		if (!Number.isFinite(seconds)) {
-			return null;
-		}
-		return new Date(seconds * 1000);
+		return parseUnixVersion(version);
 	}
 	if (strategy === "timestamp") {
-		if (version.length !== 14) {
-			return null;
-		}
-		const year = Number(version.slice(0, 4));
-		const month = Number(version.slice(4, 6));
-		const day = Number(version.slice(6, 8));
-		const hour = Number(version.slice(8, 10));
-		const minute = Number(version.slice(10, 12));
-		const second = Number(version.slice(12, 14));
-		return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+		return parseTimestampVersion(version);
 	}
 	return null;
 };

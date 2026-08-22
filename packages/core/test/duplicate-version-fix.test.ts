@@ -53,6 +53,23 @@ describe("orderGroupByChain", () => {
 		];
 		expect(orderGroupByChain(entries)).toBeNull();
 	});
+
+	// #154 ratchet-5: a fork one level *into* the chain (not at the root)
+	// has a single, well-defined root (r) -- the root-count check alone
+	// wouldn't reject it. It's still rejected: walkGroup consumes exactly
+	// one of {a, b} when stepping off r (an arbitrary pick via .find()),
+	// then finds nothing whose parent matches that pick's own current, so
+	// the walk fails to consume every entry. This is the case removing
+	// the former hasFork pre-check depends on walkGroup already covering.
+	it("returns null for a fork one level into the chain, not at the root", () => {
+		const root = entry("20260822010000_r.sql", "sha256:external", "sha256:r");
+		const entries = [
+			root,
+			entry("20260822010000_a.sql", "sha256:r", "sha256:a"),
+			entry("20260822010000_b.sql", "sha256:r", "sha256:b"),
+		];
+		expect(orderGroupByChain(entries)).toBeNull();
+	});
 });
 
 describe("planDuplicateVersionFix", () => {
@@ -143,6 +160,53 @@ describe("planDuplicateVersionFix", () => {
 		]);
 	});
 
+	// #154 ratchet-5: every test above used strategy: "timestamp" -- the
+	// "unix" strategy (parseUnixVersion) had zero coverage, both its happy
+	// path and its defensive non-finite fallback.
+	it("plans a rename using the unix strategy's own seconds-since-epoch clock", () => {
+		const duplicateGroup = group("1700000000", [
+			"1700000000_a.sql",
+			"1700000000_b.sql",
+		]);
+		const groupEntries = [
+			entry("1700000000_a.sql", "sha256:root", "sha256:a"),
+			entry("1700000000_b.sql", "sha256:a", "sha256:b"),
+		];
+		const allFileNames = ["1700000000_a.sql", "1700000000_b.sql"];
+		const plan = planDuplicateVersionFix(
+			duplicateGroup,
+			groupEntries,
+			allFileNames,
+			"unix",
+		);
+		expect(plan).toEqual([
+			{
+				fileName: "1700000000_b.sql",
+				newFileName: "1700000001_b.sql",
+			},
+		]);
+	});
+
+	it("treats a unix-strategy version that overflows Number as unparseable (defensive)", () => {
+		const hugeVersion = "9".repeat(400);
+		const duplicateGroup = group(hugeVersion, [
+			`${hugeVersion}_a.sql`,
+			`${hugeVersion}_b.sql`,
+		]);
+		const groupEntries = [
+			entry(`${hugeVersion}_a.sql`, "sha256:root", "sha256:a"),
+			entry(`${hugeVersion}_b.sql`, "sha256:a", "sha256:b"),
+		];
+		const allFileNames = [`${hugeVersion}_a.sql`, `${hugeVersion}_b.sql`];
+		const plan = planDuplicateVersionFix(
+			duplicateGroup,
+			groupEntries,
+			allFileNames,
+			"unix",
+		);
+		expect(plan).toBeNull();
+	});
+
 	it("returns null (no-op) for a diverged group — same parent, a genuine fork", () => {
 		const duplicateGroup = group("20260822010000", [
 			"20260822010000_a.sql",
@@ -174,6 +238,28 @@ describe("planDuplicateVersionFix", () => {
 			entry("20260822010000_a.sql", "sha256:root", "sha256:a"),
 		];
 		const allFileNames = ["20260822010000_a.sql", "20260822010000_b.sql"];
+		expect(
+			planDuplicateVersionFix(
+				duplicateGroup,
+				groupEntries,
+				allFileNames,
+				"timestamp",
+			),
+		).toBeNull();
+	});
+
+	// #154 ratchet-5: DuplicateVersionGroup's own doc comment says a real
+	// group always has 2+ members (this rest.length === 0 branch "never
+	// actually reachable" from there) -- but the type itself (fileNames:
+	// ReadonlyArray<string>) doesn't enforce that, so this pins the
+	// defensive branch directly rather than leaving it permanently
+	// unreachable from any test.
+	it("returns null for a single-member group (defensive -- never produced by a real duplicate-version collision)", () => {
+		const duplicateGroup = group("20260822010000", ["20260822010000_a.sql"]);
+		const groupEntries = [
+			entry("20260822010000_a.sql", "sha256:root", "sha256:a"),
+		];
+		const allFileNames = ["20260822010000_a.sql"];
 		expect(
 			planDuplicateVersionFix(
 				duplicateGroup,
