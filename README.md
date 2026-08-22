@@ -36,7 +36,7 @@ export default defineConfig({
 ```ts
 // src/app.schema.ts
 import {
-	defineFunction, eq, isNull, now, rls,
+	defineFunction, eq, grant, isNull, now, rls,
 	roleName, schema, table, text, timestamptz, update, uuid,
 } from "hejbro";
 
@@ -53,6 +53,8 @@ export const projects = table(app, "projects", {
 			.to(appReaderRole).using(isNull(t.archivedAt)),
 	}),
 }));
+
+export const appUsage = grant(app).usage.to(appReaderRole);
 
 export const archiveProject = defineFunction(
 	app, "archive_project",
@@ -72,13 +74,15 @@ hejbro generate
 
 ```sql
 -- hejbro migration
+-- hejbro: 0.1.0
 -- + schema app [new]
 -- + table app.projects [new]
 -- + function app.archive_project [new]
 -- + rls app.projects [new]
 -- + policy app.projects.projects_read_all [new]
--- parent-snapshot: sha256:f86ae7eb…
--- snapshot: sha256:97e0b3df…
+-- + grant app.schema-usage.app_reader [new]
+-- parent-snapshot: sha256:d379e957…
+-- snapshot: sha256:c7a5883a…
 
 create schema "app";
 
@@ -86,6 +90,10 @@ create table "app"."projects" (
 	"id" uuid not null default gen_random_uuid(),
 	…
 );
+
+…
+
+grant usage on schema "app" to "app_reader";
 ```
 
 ## How it works
