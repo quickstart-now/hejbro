@@ -1,7 +1,13 @@
+import { throwHejbroError } from "../error";
 import type { ColumnRef, Expr } from "../expr/ast";
 import { isExpr } from "../expr/ast";
 import { assertSqlName } from "../sql/identifier-rules";
-import type { IndexDeclaration, IndexNulls } from "./table";
+import type {
+	IndexColumnDeclaration,
+	IndexDeclaration,
+	IndexMethod,
+	IndexNulls,
+} from "./table";
 
 /** One column of an ordered index: the column ref, its sort direction, and an optional explicit nulls placement (D51). */
 export type IndexColumn = {
@@ -46,30 +52,93 @@ const toDeclarationColumn = (
 	return { name: input.sqlName, desc: false, nulls: null, opclass: null };
 };
 
+/** Postgres access methods hejbro accepts (D85) — mirrors {@link IndexMethod} for the runtime guard `.using()` needs against untyped callers (R2). */
+const indexMethods: ReadonlyArray<IndexMethod> = [
+	"btree",
+	"hash",
+	"gin",
+	"gist",
+	"spgist",
+	"brin",
+	"hnsw",
+	"ivfflat",
+];
+
+const isIndexMethod = (value: string): value is IndexMethod =>
+	(indexMethods as ReadonlyArray<string>).includes(value);
+
+/** Validates `method` against the closed set (`unknown-index-method`), then normalizes `"btree"` — Postgres' own default — to `null` so it's never recorded (SC-004, R2). */
+const normalizeIndexMethod = (method: IndexMethod): IndexMethod | null => {
+	if (!isIndexMethod(method)) {
+		throwHejbroError(
+			"unknown-index-method",
+			`index access method "${method}" is not one hejbro accepts — supported: btree, hash, gin, gist, spgist, brin, hnsw, ivfflat. Next: pick one of those (extension methods are added on request).`,
+		);
+	}
+	if (method === "btree") {
+		return null;
+	}
+	return method;
+};
+
+/** The `unique-index-method` message's opening clause (main-decided wording, #284): a named index states its own uniqueness (`index "<name>" is unique and uses "<m>"`), while an unnamed one is described by its column list, which already reads as unique (`the unique index on (...) uses "<m>"`) — same column-quoting convention `@hejbro/supabase`'s `indexDescription` uses. */
+const uniqueIndexMethodClause = (
+	indexName: string | null,
+	method: IndexMethod,
+	columns: ReadonlyArray<IndexColumnDeclaration>,
+): string => {
+	if (indexName !== null) {
+		return `index "${indexName}" is unique and uses "${method}"`;
+	}
+	const columnList = columns.map((column) => `"${column.name}"`).join(", ");
+	return `the unique index on (${columnList}) uses "${method}"`;
+};
+
+/** Rejects `unique` combined with a non-btree `method` (Postgres: "Only B-tree indexes can be declared unique", R3) — both flags are known at `.on()`, so this fails at declaration time with no table context needed. */
+const assertUniqueIndexMethod = (
+	unique: boolean,
+	method: IndexMethod | null,
+	indexName: string | null,
+	columns: ReadonlyArray<IndexColumnDeclaration>,
+): void => {
+	if (!unique || method === null) {
+		return;
+	}
+	throwHejbroError(
+		"unique-index-method",
+		`${uniqueIndexMethodClause(indexName, method, columns)} — Postgres supports unique only on btree indexes. Next: drop .unique() or drop .using("${method}").`,
+	);
+};
+
 /** An index declaration once `.on(...)` has run — still chainable with `.where(predicate)` for a partial index. */
 export type IndexDeclarationBuilder = IndexDeclaration & {
 	where(predicate: Expr<"boolean"> | Expr<"unknown">): IndexDeclaration;
 };
 
-/** An immutable chainable builder for a table index (spec §5.1: `index().on(t.publishedAt)`); `.on(...)` accepts bare column refs or `asc(...)`/`desc(...)`, and the result can chain `.where(predicate)` for a partial index (D51). */
+/** An immutable chainable builder for a table index (spec §5.1: `index().on(t.publishedAt)`); `.using(method)`/`.unique()` compose in either order, `.on(...)` accepts bare column refs or `asc(...)`/`desc(...)`, and the result can chain `.where(predicate)` for a partial index (D51). */
 export type IndexBuilder = {
 	unique(): IndexBuilder;
+	using(method: IndexMethod): IndexBuilder;
 	on(...columns: ReadonlyArray<IndexColumnInput>): IndexDeclarationBuilder;
 };
 
 const createIndexBuilder = (
 	indexName: string | null,
 	unique: boolean,
+	method: IndexMethod | null,
 ): IndexBuilder => ({
-	unique: () => createIndexBuilder(indexName, true),
+	unique: () => createIndexBuilder(indexName, true, method),
+	using: (rawMethod) =>
+		createIndexBuilder(indexName, unique, normalizeIndexMethod(rawMethod)),
 	on: (...columns) => {
+		const declarationColumns = columns.map(toDeclarationColumn);
+		assertUniqueIndexMethod(unique, method, indexName, declarationColumns);
 		const declaration: IndexDeclaration = {
-			columns: columns.map(toDeclarationColumn),
+			columns: declarationColumns,
 			unique,
 			indexName,
 			predicate: null,
-			// `.using(...)` lands in US1 (T014) — every index is btree (`null`) until then.
-			method: null,
+			method,
 		};
 		return {
 			...declaration,
@@ -89,6 +158,6 @@ const resolveIndexName = (indexName: string | undefined): string | null => {
 	return assertSqlName(indexName, "index", null);
 };
 
-/** Starts an index declaration, optionally named (validated per D36) — chain `.unique()`, finish with `.on(...columns)`, optionally `.where(predicate)`. */
+/** Starts an index declaration, optionally named (validated per D36) — chain `.unique()`/`.using(method)` in either order, finish with `.on(...columns)`, optionally `.where(predicate)`. */
 export const index = (indexName?: string): IndexBuilder =>
-	createIndexBuilder(resolveIndexName(indexName), false);
+	createIndexBuilder(resolveIndexName(indexName), false, null);

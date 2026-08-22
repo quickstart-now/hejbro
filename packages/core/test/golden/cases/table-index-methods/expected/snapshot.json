@@ -1,0 +1,78 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.docs": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "data",
+					"typeNode": {
+						"typeName": "jsonb"
+					}
+				},
+				{
+					"name": "created_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				},
+				{
+					"name": "owner_id",
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [
+				{
+					"columns": [
+						{
+							"name": "data"
+						}
+					],
+					"method": "hash",
+					"name": "docs_data_idx"
+				},
+				{
+					"columns": [
+						{
+							"name": "created_at"
+						}
+					],
+					"method": "brin",
+					"name": "docs_created_at_idx"
+				},
+				{
+					"columns": [
+						{
+							"name": "owner_id"
+						}
+					],
+					"method": "hash",
+					"name": "docs_owner_id_idx"
+				}
+			],
+			"name": "docs",
+			"primaryKeyName": "docs_pkey",
+			"schema": "app"
+		}
+	}
+}

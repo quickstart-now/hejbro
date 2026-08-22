@@ -522,6 +522,23 @@ describe("tableKind.serialize — index columns and where (v3, D51)", () => {
 			'"app"."posts"."published_at" is not null',
 		);
 	});
+
+	// #284 US1 (T011): access method — serialize writes `method` for a
+	// non-btree index and omits it for btree/unset (SC-004).
+	it("serializes method for a non-btree index, and omits it for btree/unset", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [
+				index("posts_data_idx").using("gin").on(t.data),
+				index("posts_data2_idx").using("btree").on(t.data),
+				index("posts_data3_idx").on(t.data),
+			],
+		}));
+		const snapshot = asTableSnapshot(tableKind.serialize(getTableMeta(posts)));
+		const byName = new Map(snapshot.indexes.map((ix) => [ix.name, ix]));
+		expect(byName.get("posts_data_idx")?.method).toBe("gin");
+		expect(byName.get("posts_data2_idx")?.method).toBeUndefined();
+		expect(byName.get("posts_data3_idx")?.method).toBeUndefined();
+	});
 });
 
 describe("createDefaultRegistry", () => {

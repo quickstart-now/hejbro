@@ -53,17 +53,17 @@
 
 ### Tests for User Story 1 (write first, see them fail)
 
-- [ ] T010 [P] [US1] Unit: `.using()` records `method`; `using("btree")` → `method: null`; `using("gim")` throws `unknown-index-method` with the eight-name list; `.unique().using("gin").on(…)` and `.using("gin").unique().on(…)` throw `unique-index-method`; messages match contracts/errors.md up to `Next:` — packages/core/test/dsl/index-builder.test.ts
-- [ ] T011 [P] [US1] Unit: `tableKind.serialize` writes `method: "gin"` and omits it for btree/null — packages/core/test/table-kind-diff.test.ts
-- [ ] T012 [P] [US1] Unit: `createIndexSql` renders ` using gin` after the table name and nothing for btree; `emitAlter` drops + creates on a method change under the same name — packages/core/test/table-kind-emit.test.ts
-- [ ] T013 [US1] Golden: create `packages/core/test/golden/cases/table-index-methods/{declarations.ts,steps.ts}` with the `docs` table (gin/brin/hash lines of contracts/sql.md; opclass/expression lines are added in US2/US3) and a step-1 method change; record `expected/` with `UPDATE_GOLDEN=1`, review that from-empty and step-1 match contracts/sql.md
+- [x] T010 [P] [US1] Unit: `.using()` records `method`; `using("btree")` → `method: null`; `using("gim")` throws `unknown-index-method` with the eight-name list; `.unique().using("gin").on(…)` and `.using("gin").unique().on(…)` throw `unique-index-method`; messages match contracts/errors.md up to `Next:` — packages/core/test/dsl/index-builder.test.ts (unnamed-case wording corrected per owner decision — see contracts/errors.md)
+- [x] T011 [P] [US1] Unit: `tableKind.serialize` writes `method: "gin"` and omits it for btree/null — packages/core/test/table-kind-diff.test.ts
+- [x] T012 [P] [US1] Unit: `createIndexSql` renders ` using gin` after the table name and nothing for btree; `emitAlter` drops + creates on a method change under the same name — packages/core/test/table-kind-emit.test.ts
+- [x] T013 [US1] Golden: create `packages/core/test/golden/cases/table-index-methods/{declarations.ts,steps.ts}` with the `docs` table (gin/brin/hash lines of contracts/sql.md; opclass/expression lines are added in US2/US3) and a step-1 method change; record `expected/` with `UPDATE_GOLDEN=1`, review that from-empty and step-1 match contracts/sql.md
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] `IndexBuilder.using(method)` + `IndexMethod` runtime guard (`unknown-index-method`) + `unique-index-method` check in `.on()`; `createIndexBuilder(indexName, unique, method)` — packages/core/src/dsl/index-builder.ts
-- [ ] T015 [US1] `serializeIndexes`: `...methodField(index.method)` compact helper next to `indexUniqueField` — packages/core/src/kinds/table-kind.ts
-- [ ] T016 [US1] `usingClause(index)` in `createIndexSql` — packages/core/src/kinds/table-kind-emit-sql.ts
-- [ ] T017 [US1] `naming-conventions.test.ts` passes with `method` values verbatim (if the test flags `gin`, add `method` to its verbatim-token allowlist with a comment citing the naming rule's SQL-token exception) — packages/core/test/naming-conventions.test.ts
+- [x] T014 [US1] `IndexBuilder.using(method)` + `IndexMethod` runtime guard (`unknown-index-method`) + `unique-index-method` check in `.on()`; `createIndexBuilder(indexName, unique, method)` — packages/core/src/dsl/index-builder.ts
+- [x] T015 [US1] `serializeIndexes`: `...methodField(index.method)` compact helper next to `indexUniqueField` — packages/core/src/kinds/table-kind.ts
+- [x] T016 [US1] `usingClause(index)` in `createIndexSql` — packages/core/src/kinds/table-kind-emit-sql.ts
+- [x] T017 [US1] `naming-conventions.test.ts` passes with `method` values verbatim (confirmed: the test only scans `*Kind`-suffixed discriminator keys, `method`/`opclass` are structurally out of scope — no allowlist edit) — packages/core/test/naming-conventions.test.ts
 
 **Checkpoint**: US1 green; golden `table-indexes` still byte-identical
 

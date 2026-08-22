@@ -125,3 +125,78 @@ describe("index builder — Foundational types (#284)", () => {
 	// (T036) — see IndexColumnDeclaration's doc comment (#284 Foundational
 	// review).
 });
+
+// #284 US1 (T010): access method — `.using(method)` records/normalizes
+// `method`, rejects an unknown method, and rejects `unique()` combined with
+// a non-btree method (Postgres: "Only B-tree indexes can be declared
+// unique", R3).
+describe("index builder — access method (#284 US1)", () => {
+	it("using(method) records the method", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").using("gin").on(t.data)],
+		}));
+		expect(getTableMeta(posts).indexes[0]?.method).toBe("gin");
+	});
+
+	it("using(btree) normalizes to method: null (SC-004 — btree is never recorded)", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").using("btree").on(t.data)],
+		}));
+		expect(getTableMeta(posts).indexes[0]?.method).toBeNull();
+	});
+
+	it("using() and unique() compose regardless of call order", () => {
+		const usingThenUnique = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").using("btree").unique().on(t.data)],
+		}));
+		const uniqueThenUsing = table(app, "comments", { data: text() }, (t) => ({
+			indexes: [index("comments_data_idx").unique().using("btree").on(t.data)],
+		}));
+		const [byUsingFirst] = getTableMeta(usingThenUnique).indexes;
+		const [byUniqueFirst] = getTableMeta(uniqueThenUsing).indexes;
+		expect(byUsingFirst?.method).toBeNull();
+		expect(byUsingFirst?.unique).toBe(true);
+		expect(byUniqueFirst?.method).toBeNull();
+		expect(byUniqueFirst?.unique).toBe(true);
+	});
+
+	it("rejects an unknown access method with the eight-name list", () => {
+		// R2: `.using()` also runtime-checks its argument for untyped callers
+		// — assert from `string`, not a narrower literal, so the cast itself
+		// exercises that path rather than merely satisfying the compiler.
+		const untypedMethod: string = "gim";
+		expect(() => index("bad").using(untypedMethod as IndexMethod)).toThrow(
+			/unknown-index-method|index access method "gim" is not one hejbro accepts — supported: btree, hash, gin, gist, spgist, brin, hnsw, ivfflat\. Next: pick one of those/,
+		);
+	});
+
+	it("rejects .unique().using(<non-btree>).on(...) — named index", () => {
+		expect(() =>
+			table(app, "posts", { data: text() }, (t) => ({
+				indexes: [index("posts_data_idx").unique().using("gin").on(t.data)],
+			})),
+		).toThrow(
+			/unique-index-method|index "posts_data_idx" is unique and uses "gin" — Postgres supports unique only on btree indexes\. Next: drop \.unique\(\) or drop \.using\("gin"\)\./,
+		);
+	});
+
+	it("rejects .using(<non-btree>).unique().on(...) — order-independent", () => {
+		expect(() =>
+			table(app, "posts", { data: text() }, (t) => ({
+				indexes: [index("posts_data_idx").using("gin").unique().on(t.data)],
+			})),
+		).toThrow(
+			/index "posts_data_idx" is unique and uses "gin" — Postgres supports unique only on btree indexes\. Next: drop \.unique\(\) or drop \.using\("gin"\)\./,
+		);
+	});
+
+	it("rejects an unnamed unique + non-btree index, describing it by its columns", () => {
+		expect(() =>
+			table(app, "posts", { a: text(), b: text() }, (t) => ({
+				indexes: [index().unique().using("gin").on(t.a, t.b)],
+			})),
+		).toThrow(
+			/the unique index on \("a", "b"\) uses "gin" — Postgres supports unique only on btree indexes\. Next: drop \.unique\(\) or drop \.using\("gin"\)\./,
+		);
+	});
+});

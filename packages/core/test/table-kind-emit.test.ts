@@ -695,6 +695,52 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 			'create unique index "posts_ab_idx" on "app"."posts" ("a", "b");',
 		]);
 	});
+
+	// #284 US1 (T012): access method — `using <method>` after the table
+	// name, nothing for btree; a method change recreates the index (same
+	// drop + create path as any other definition change, R9).
+	it("renders using <method> after the table name, and nothing for btree", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [
+				index("posts_data_idx").using("gin").on(t.data),
+				index("posts_data2_idx").using("btree").on(t.data),
+			],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(posts)),
+				"app.posts",
+			),
+		);
+		const sql = tableKind.emit(change).map((statement) => statement.sql);
+		expect(sql).toContain(
+			'create index "posts_data_idx" on "app"."posts" using gin ("data");',
+		);
+		expect(sql).toContain(
+			'create index "posts_data2_idx" on "app"."posts" ("data");',
+		);
+	});
+
+	it("recreates an index whose method changed under the same name", () => {
+		const before = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").using("gin").on(t.data)],
+		}));
+		const after = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").using("brin").on(t.data)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'drop index "app"."posts_data_idx";',
+			'create index "posts_data_idx" on "app"."posts" using brin ("data");',
+		]);
+	});
 });
 
 describe("tableKind.emit — unsupported column alters", () => {

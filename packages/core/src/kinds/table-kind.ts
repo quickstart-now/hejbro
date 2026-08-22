@@ -2,6 +2,7 @@ import type {
 	ForeignKeyAction,
 	IndexColumnDeclaration,
 	IndexDeclaration,
+	IndexMethod,
 	IndexNulls,
 	TableDeclaration,
 } from "../dsl/table";
@@ -200,6 +201,16 @@ const indexUniqueField = (value: boolean): Pick<IndexSnapshot, "unique"> => {
 	return { unique: true };
 };
 
+/** `{ method: <method> }` for a non-btree access method, else `{}` (compact snapshot — `btree`, Postgres' own default, is never recorded, SC-004). */
+const methodField = (
+	value: IndexMethod | null,
+): Pick<IndexSnapshot, "method"> => {
+	if (value === null || value === "btree") {
+		return {};
+	}
+	return { method: value };
+};
+
 /** `{ desc: true }` when the column sorts descending, else `{}` (compact snapshot). */
 const indexColumnDescField = (
 	value: boolean,
@@ -314,6 +325,7 @@ const serializeIndexes = (
 		columns: index.columns.map(serializeIndexColumn),
 		...indexUniqueField(index.unique),
 		...whereField(encodePredicate(index.predicate)),
+		...methodField(index.method),
 	}));
 
 const serializeForeignKeys = (

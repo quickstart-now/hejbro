@@ -20,6 +20,7 @@ import {
 	foreignKeyOnUpdate,
 	indexColumnDesc,
 	indexColumnNulls,
+	indexMethod,
 	indexUnique,
 	indexWhere,
 	tableChecks,
@@ -144,6 +145,15 @@ const uniqueIndexKeyword = (index: IndexSnapshot): string => {
 	return "";
 };
 
+/** Renders ` using <method>` for a non-btree access method, or `""` for btree — Postgres' own default, never spelled out (D85, SC-004). */
+const usingClause = (index: IndexSnapshot): string => {
+	const method = indexMethod(index);
+	if (method === "btree") {
+		return "";
+	}
+	return ` using ${method}`;
+};
+
 const descKeyword = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
 	if (indexColumnDesc(column)) {
 		return ["desc"];
@@ -182,7 +192,7 @@ export const createIndexSql = (
 	tableName: string,
 	index: IndexSnapshot,
 ): string =>
-	`create ${uniqueIndexKeyword(index)}index ${quoteIdentifier(index.name)} on ${qualifyName(schema, tableName)} (${index.columns
+	`create ${uniqueIndexKeyword(index)}index ${quoteIdentifier(index.name)} on ${qualifyName(schema, tableName)}${usingClause(index)} (${index.columns
 		.map(indexColumnSql)
 		.join(", ")})${whereClause(index)};`;
 
