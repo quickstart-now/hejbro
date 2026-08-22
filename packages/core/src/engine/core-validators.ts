@@ -2,11 +2,13 @@ import type { GrantDeclaration } from "../dsl/grant";
 import type { PolicyDeclaration } from "../dsl/rls";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import { asSequenceSnapshot } from "../kinds/sequence-kind";
+import type { ColumnSnapshot } from "../kinds/table-snapshot";
 import {
 	asTableSnapshot,
 	columnDefault,
 	columnNotNull,
 } from "../kinds/table-snapshot";
+import type { JsonValue } from "../snapshot/stable-json";
 import type { Diagnostic } from "./validate";
 import { diagnostic } from "./validate";
 
@@ -34,6 +36,58 @@ const sequenceOwnedColumns = (
 			),
 	);
 
+/** A `table` `alter` change — {@link notNullWithoutDefaultWarnings}'s own concern, everything else it skips. */
+type TableAlterChange = KindChange & {
+	readonly previous: JsonValue;
+	readonly next: JsonValue;
+};
+
+/** Is `change` a `table` `alter` with both snapshots present (an `alter` always carries both — this also excludes `create`/`drop`, which have one side `null` by definition)? */
+const isTableAlterChange = (change: KindChange): change is TableAlterChange =>
+	change.kind === "table" &&
+	change.operation === "alter" &&
+	change.previous !== null &&
+	change.next !== null;
+
+/** Was `column` just added, as `not null`, with no default — the one shape {@link notNullWithoutDefaultWarnings} warns about? */
+const isAddedWithoutDefault = (
+	column: ColumnSnapshot,
+	previousColumnNames: ReadonlySet<string>,
+	ownedBySequence: ReadonlySet<string>,
+	tableIdentity: string,
+): boolean =>
+	!previousColumnNames.has(column.name) &&
+	columnNotNull(column) &&
+	columnDefault(column) === null &&
+	!ownedBySequence.has(`${tableIdentity}.${column.name}`);
+
+/** {@link notNullWithoutDefaultWarnings}'s own warnings for one `table` `alter` change. */
+const tableAlterWarnings = (
+	change: TableAlterChange,
+	ownedBySequence: ReadonlySet<string>,
+): ReadonlyArray<Diagnostic> => {
+	const previous = asTableSnapshot(change.previous);
+	const next = asTableSnapshot(change.next);
+	const previousColumnNames = new Set(
+		previous.columns.map((column) => column.name),
+	);
+	const addedWithoutDefault = next.columns.filter((column) =>
+		isAddedWithoutDefault(
+			column,
+			previousColumnNames,
+			ownedBySequence,
+			`${next.schema}.${next.name}`,
+		),
+	);
+	return addedWithoutDefault.map((column) =>
+		diagnostic(
+			"warning",
+			"not-null-without-default",
+			`column "${next.schema}"."${next.name}"."${column.name}" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.`,
+		),
+	);
+};
+
 /**
  * Warns when a table `alter` change adds a `not null` column with no
  * `default` — such a migration fails on any table that already has rows.
@@ -52,35 +106,9 @@ export const notNullWithoutDefaultWarnings = (
 	changes: ReadonlyArray<KindChange>,
 ): ReadonlyArray<Diagnostic> => {
 	const ownedBySequence = sequenceOwnedColumns(changes);
-	return changes.flatMap((change) => {
-		if (
-			change.kind !== "table" ||
-			change.operation !== "alter" ||
-			change.previous === null ||
-			change.next === null
-		) {
-			return [];
-		}
-		const previous = asTableSnapshot(change.previous);
-		const next = asTableSnapshot(change.next);
-		const previousColumnNames = new Set(
-			previous.columns.map((column) => column.name),
-		);
-		const addedWithoutDefault = next.columns.filter(
-			(column) =>
-				!previousColumnNames.has(column.name) &&
-				columnNotNull(column) &&
-				columnDefault(column) === null &&
-				!ownedBySequence.has(`${next.schema}.${next.name}.${column.name}`),
-		);
-		return addedWithoutDefault.map((column) =>
-			diagnostic(
-				"warning",
-				"not-null-without-default",
-				`column "${next.schema}"."${next.name}"."${column.name}" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.`,
-			),
-		);
-	});
+	return changes
+		.filter(isTableAlterChange)
+		.flatMap((change) => tableAlterWarnings(change, ownedBySequence));
 };
 
 const isPolicyDeclaration = (
