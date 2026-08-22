@@ -1,16 +1,18 @@
 import type { PolicyCommand, PolicyDeclaration } from "../dsl/rls";
-import { assertNever, throwHejbroError } from "../error";
+import { throwHejbroError } from "../error";
 import type { ExprNode, TableRefNode } from "../expr/ast";
 import { decodeExprNode, encodeExprNode } from "../expr/codec";
 import { renderExpr } from "../expr/render-sql";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
-import type { ObjectKind } from "../kind/object-kind";
+import { dispatchEmit } from "../kind/emit-helpers";
+import type { KindChange, ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import {
 	qualifyName,
 	quoteIdentifier,
 	renderRoleName,
 } from "../sql/identifier";
+import type { SqlStatement } from "../sql/statement";
 import { predropStatement, statement } from "../sql/statement";
 
 /**
@@ -191,6 +193,49 @@ const withCheckField = (
  * same table is about to drop (#122), so the policy must be gone before
  * that alter runs.
  */
+/** `create policy` (plus its own idempotent-guard drop, #122/A′ — not a real drop, see the doc comment above `policyKind`) for a `create` change. */
+const emitCreateChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"policy create change is missing its next snapshot.",
+		);
+	}
+	const nextSnapshot = asPolicySnapshot(change.next);
+	return [
+		statement(dropPolicySql(nextSnapshot, true)),
+		statement(createPolicySql(nextSnapshot)),
+	];
+};
+
+/** A real drop (D75, `predrop` stage) followed by `create policy` (`main` stage) for an `alter` change — Postgres has no `alter policy` for clause/role/command changes (idempotent recreate, spec §6.5). */
+const emitAlterChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"policy alter change is missing its next snapshot.",
+		);
+	}
+	const nextSnapshot = asPolicySnapshot(change.next);
+	return [
+		predropStatement(dropPolicySql(nextSnapshot, false)),
+		statement(createPolicySql(nextSnapshot)),
+	];
+};
+
+/** A real drop (D75, `predrop` stage) for a `drop` change. */
+const emitDropChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"policy drop change is missing its previous snapshot.",
+		);
+	}
+	return [
+		predropStatement(dropPolicySql(asPolicySnapshot(change.previous), false)),
+	];
+};
+
 export const policyKind: ObjectKind<PolicyDeclaration> = {
 	kind: "policy",
 	dependsOn: ["rls", "table"],
@@ -237,51 +282,13 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 			},
 		];
 	},
-	emit: (change) => {
-		switch (change.operation) {
-			case "create": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"policy create change is missing its next snapshot.",
-					);
-				}
-				// Idempotent guard text, not a real drop (#122/A′) — see the
-				// doc comment above.
-				const nextSnapshot = asPolicySnapshot(change.next);
-				return [
-					statement(dropPolicySql(nextSnapshot, true)),
-					statement(createPolicySql(nextSnapshot)),
-				];
-			}
-			case "alter": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"policy alter change is missing its next snapshot.",
-					);
-				}
-				const nextSnapshot = asPolicySnapshot(change.next);
-				return [
-					predropStatement(dropPolicySql(nextSnapshot, false)),
-					statement(createPolicySql(nextSnapshot)),
-				];
-			}
-			case "drop": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"policy drop change is missing its previous snapshot.",
-					);
-				}
-				return [
-					predropStatement(
-						dropPolicySql(asPolicySnapshot(change.previous), false),
-					),
-				];
-			}
-			default:
-				return assertNever(change.operation);
-		}
-	},
+	emit: (change) =>
+		dispatchEmit(
+			{
+				create: emitCreateChange,
+				alter: emitAlterChange,
+				drop: emitDropChange,
+			},
+			change,
+		),
 };
