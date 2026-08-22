@@ -28,6 +28,14 @@ pnpm test            # vitest via turbo (harness lands in Phase 1)
 pnpm build           # turbo build
 ```
 
+In-process package tests (`packages/supabase`, `packages/cli`,
+`examples/{postgres,supabase}`'s chain tests) import `@hejbro/core` (and
+`hejbro`/`@hejbro/supabase`) straight from source via a vitest alias, so
+they never go stale even run outside turbo (#131). CLI subprocess tests
+(the ones that spawn the built `dist/cli.js`) can't be aliased the same
+way — they check that `dist` is at least as new as its own `src` and fail
+loudly if not.
+
 ## Repo map
 
 | Path | Package | Constraint |
