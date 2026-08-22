@@ -85,7 +85,8 @@ pnpm build           # turbo build
   Actions, so the gate is not "who runs the publish command" but **who
   approves the release**: merging the "Version Packages" PR is the release
   decision and is reserved for the owner. Publishing then runs from GitHub
-  Actions; the owner touches it three times — (1) merge the Version
+  Actions; the owner touches it four times — (0) "Approve and run" the
+  bot PR's CI (it opens as `action_required`), (1) merge the Version
   Packages PR on `dev`, (2) merge `dev` → `main` with a merge commit,
   (3) approve the `npm` environment — and step 3 is the irreversible one:
   npm keeps a version number even if it is unpublished. Never merge that
