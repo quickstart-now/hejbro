@@ -7,7 +7,7 @@ import type {
 import type { ExprNode } from "../expr/ast";
 import { encodeExprNode } from "../expr/codec";
 import type { KeyedDiff } from "../kind/diff-helpers";
-import { diffByKey } from "../kind/diff-helpers";
+import { createOrDropDiff, diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { ColumnState } from "../types/column-builder";
@@ -327,36 +327,13 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		return tableIdentity(tableSnapshot.schema, tableSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "table",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
-		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "table",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
-			return [];
+		const guard = createOrDropDiff("table", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
 
-		const previousSnapshot = asTableSnapshot(previous);
-		const nextSnapshot = asTableSnapshot(next);
+		const previousSnapshot = asTableSnapshot(guard.previous);
+		const nextSnapshot = asTableSnapshot(guard.next);
 
 		const columnDiff = diffByKey(
 			previousSnapshot.columns.map((column) => ({
@@ -413,7 +390,14 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		];
 
 		return [
-			{ kind: "table", operation: "alter", identity, previous, next, notes },
+			{
+				kind: "table",
+				operation: "alter",
+				identity,
+				previous: guard.previous,
+				next: guard.next,
+				notes,
+			},
 		];
 	},
 	emit: (change, siblingChanges) => emitTableSql(change, siblingChanges),
