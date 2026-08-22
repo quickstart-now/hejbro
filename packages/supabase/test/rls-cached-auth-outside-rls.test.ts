@@ -7,6 +7,7 @@ import {
 	generateMigration,
 	index,
 	isNotNull,
+	rls,
 	schema,
 	select,
 	table,
@@ -123,6 +124,42 @@ describe("rlsCachedAuthOutsideRlsValidator", () => {
 		});
 		expect(result.errors).toHaveLength(1);
 		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
+	});
+
+	// This validator is scoped to default/CHECK/index-predicate only (its
+	// own doc comment) -- a policy's using/withCheck is exactly where
+	// authUidCached()/authJwtCached() belong (that's what makes them
+	// legal there and illegal everywhere else this file checks): Postgres
+	// evaluates a policy's own clause once per statement already, so the
+	// scalar-subquery form is correct, not a violation. rls-uncached-auth-call.ts
+	// covers the opposite direction (the plain, uncached form inside a
+	// policy).
+	it("does not error when a policy's using/withCheck calls authUidCached()/authJwtCached() (out of this validator's scope)", () => {
+		const accounts = table(
+			app,
+			"accounts",
+			{ id: uuid().primaryKey() },
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("accounts_read_own")
+						.for("select")
+						.to("authenticated")
+						.using(eq(t.id, authUidCached())),
+					write: rls
+						.policy("accounts_write_own")
+						.for("insert")
+						.to("authenticated")
+						.withCheck(isNotNull(authJwtCached())),
+				}),
+			}),
+		);
+		const result = generateMigration({
+			declarations: [app, accounts],
+			previousSnapshot: emptySnapshot,
+			validators: [rlsCachedAuthOutsideRlsValidator],
+		});
+		expect(result.errors).toEqual([]);
 	});
 
 	it("does not error on a table with no default/check/index at all", () => {

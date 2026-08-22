@@ -77,37 +77,43 @@ const childrenOfExists = (node: ExistsNode): ReadonlyArray<ExprNode> => [
 	...node.query.orderBy.map((term) => term.expr),
 ];
 
-/** `comparison`/`not`/`nullTest`'s fixed-arity children — the other half of {@link childrenOf}'s switch, split out to keep each half's own complexity low (D71). */
-const childrenOfFixedArity = (node: ExprNode): ReadonlyArray<ExprNode> => {
-	switch (node.nodeKind) {
-		case "comparison":
-			return [node.left, node.right];
-		case "not":
-		case "nullTest":
-			return [node.operand];
-		default:
-			return [];
-	}
+/**
+ * One handler per {@link ExprNode} `nodeKind`, receiving the node narrowed
+ * to that exact variant — same technique core's own `someExprNodeHandlers`
+ * uses (`packages/core/src/expr/walk.ts`): a mapped type over the full
+ * `nodeKind` union, not a hand-written list, so the object literal below
+ * must cover every key — a missing one is a compile error, the same
+ * guarantee a `switch`'s `default: assertNever(node)` gives at runtime.
+ * Replaces the two former `childrenOfFixedArity`/`childrenOfVariableArity`
+ * switches (#154 ratchet-5): each entry here is its own object-literal
+ * function the CRAP tool scores independently (see `scripts/check-crap.mjs`'s
+ * own file comment), so splitting by `nodeKind` this way doesn't just move
+ * the switch's branch count around, it removes it — every entry below has
+ * no branches of its own.
+ */
+type ChildrenOfHandlers = {
+	readonly [K in ExprNode["nodeKind"]]: (
+		node: Extract<ExprNode, { readonly nodeKind: K }>,
+	) => ReadonlyArray<ExprNode>;
 };
 
-/** `logical`/`inList`/`between`/`functionCall`/`sqlTemplate`'s variable-arity children — the other half, see {@link childrenOfFixedArity}. */
-const childrenOfVariableArity = (node: ExprNode): ReadonlyArray<ExprNode> => {
-	switch (node.nodeKind) {
-		case "logical":
-			return node.operands;
-		case "inList":
-			return [node.operand, ...node.values];
-		case "between":
-			return [node.operand, node.lowerBound, node.upperBound];
-		case "functionCall":
-			return node.args;
-		case "sqlTemplate":
-			return node.chunks
-				.filter((chunk) => chunk.chunkKind === "expr")
-				.map((chunk) => chunk.expr);
-		default:
-			return [];
-	}
+const childrenOfHandlers: ChildrenOfHandlers = {
+	literal: () => [],
+	rawSql: () => [],
+	plpgsqlRef: () => [],
+	columnRef: () => [],
+	comparison: (node) => [node.left, node.right],
+	not: (node) => [node.operand],
+	nullTest: (node) => [node.operand],
+	logical: (node) => node.operands,
+	inList: (node) => [node.operand, ...node.values],
+	between: (node) => [node.operand, node.lowerBound, node.upperBound],
+	functionCall: (node) => node.args,
+	sqlTemplate: (node) =>
+		node.chunks
+			.filter((chunk) => chunk.chunkKind === "expr")
+			.map((chunk) => chunk.expr),
+	exists: childrenOfExists,
 };
 
 /**
@@ -116,17 +122,14 @@ const childrenOfVariableArity = (node: ExprNode): ReadonlyArray<ExprNode> => {
  * low (D71) rather than folding the whole traversal into one function —
  * the same "children lookup" split core's own `someExprNode` doesn't need
  * but this validator does, since core's version isn't part of the public
- * API surface and can't be imported here. Delegates to
- * {@link childrenOfExists}/{@link childrenOfFixedArity}/
- * {@link childrenOfVariableArity}, each covering a disjoint subset of
- * `nodeKind`s, so at most one of the three ever returns anything for a
- * given node.
+ * API surface and can't be imported here. Dispatches through
+ * {@link childrenOfHandlers}, a closed map keyed by `nodeKind`.
  */
 const childrenOf = (node: ExprNode): ReadonlyArray<ExprNode> => {
-	if (node.nodeKind === "exists") {
-		return childrenOfExists(node);
-	}
-	return [...childrenOfFixedArity(node), ...childrenOfVariableArity(node)];
+	const handler = childrenOfHandlers[node.nodeKind] as (
+		node: ExprNode,
+	) => ReadonlyArray<ExprNode>;
+	return handler(node);
 };
 
 /** Depth-first search for the first uncached `auth.uid()`/`auth.jwt()` call anywhere in `node`'s tree. */
