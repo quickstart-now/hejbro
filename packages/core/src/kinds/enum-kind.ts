@@ -1,10 +1,12 @@
 import type { EnumDeclaration } from "../dsl/pg-enum";
-import { assertNever, throwHejbroError } from "../error";
+import { throwHejbroError } from "../error";
 import { createOrDropDiff } from "../kind/diff-helpers";
-import type { ObjectKind } from "../kind/object-kind";
+import { dispatchEmit } from "../kind/emit-helpers";
+import type { KindChange, ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import { quoteStringLiteral } from "../sql/literal";
+import type { SqlStatement } from "../sql/statement";
 import { statement } from "../sql/statement";
 
 type EnumSnapshot = {
@@ -49,6 +51,47 @@ const addValueStatements = (
 			`alter type ${qualifyName(snapshot.schema, snapshot.name)} add value ${quoteStringLiteral(value)};`,
 		),
 	);
+
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"enum create change is missing its next snapshot.",
+		);
+	}
+	return [statement(createTypeSql(asEnumSnapshot(change.next)))];
+};
+
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"enum drop change is missing its previous snapshot.",
+		);
+	}
+	return [statement(dropTypeSql(asEnumSnapshot(change.previous)))];
+};
+
+const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null || change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"enum alter change is missing its previous or next snapshot.",
+		);
+	}
+	const previousSnapshot = asEnumSnapshot(change.previous);
+	const nextSnapshot = asEnumSnapshot(change.next);
+	if (isAppendOnly(previousSnapshot.values, nextSnapshot.values)) {
+		const addedValues = nextSnapshot.values.slice(
+			previousSnapshot.values.length,
+		);
+		return addValueStatements(nextSnapshot, addedValues);
+	}
+	return [
+		statement(dropTypeSql(previousSnapshot)),
+		statement(createTypeSql(nextSnapshot)),
+	];
+};
 
 /**
  * The built-in object kind for Postgres enum types. Identity is
@@ -114,48 +157,10 @@ export const enumKind: ObjectKind<EnumDeclaration> = {
 			},
 		];
 	},
-	emit: (change) => {
-		switch (change.operation) {
-			case "create": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"enum create change is missing its next snapshot.",
-					);
-				}
-				return [statement(createTypeSql(asEnumSnapshot(change.next)))];
-			}
-			case "drop": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"enum drop change is missing its previous snapshot.",
-					);
-				}
-				return [statement(dropTypeSql(asEnumSnapshot(change.previous)))];
-			}
-			case "alter": {
-				if (change.previous === null || change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"enum alter change is missing its previous or next snapshot.",
-					);
-				}
-				const previousSnapshot = asEnumSnapshot(change.previous);
-				const nextSnapshot = asEnumSnapshot(change.next);
-				if (isAppendOnly(previousSnapshot.values, nextSnapshot.values)) {
-					const addedValues = nextSnapshot.values.slice(
-						previousSnapshot.values.length,
-					);
-					return addValueStatements(nextSnapshot, addedValues);
-				}
-				return [
-					statement(dropTypeSql(previousSnapshot)),
-					statement(createTypeSql(nextSnapshot)),
-				];
-			}
-			default:
-				return assertNever(change.operation);
-		}
-	},
+	emit: (change, siblingChanges) =>
+		dispatchEmit(
+			{ create: emitCreate, alter: emitAlter, drop: emitDrop },
+			change,
+			siblingChanges,
+		),
 };
