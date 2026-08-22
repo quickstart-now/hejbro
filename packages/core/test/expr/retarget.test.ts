@@ -310,6 +310,30 @@ describe("retargetSelectNode (#157 item 96: same identity-preservation disciplin
 		},
 	);
 
+	// #154 ratchet-5: every buildQuery() above sets orderBy: [], so an
+	// unrelated-rename query never reaches the identity-preservation check
+	// with a non-empty orderBy term to compare -- this is the one case
+	// that does.
+	it("returns the exact same reference on an unrelated column rename with a populated, unrelated orderBy term", () => {
+		const query: SelectNode = {
+			...buildQuery(null),
+			orderBy: [
+				{
+					expr: {
+						nodeKind: "columnRef",
+						schemaName: "app",
+						tableName: "posts",
+						columnName: "id",
+					},
+					direction: "asc",
+				},
+			],
+		};
+		const retargeted = retargetSelectNode(query, columnRenameTarget);
+		expect(retargeted).toBe(query);
+		expect(retargeted.orderBy).toBe(query.orderBy);
+	});
+
 	it("retargets a view-shaped query's from/where when the rename actually matches", () => {
 		const query = buildQuery({
 			nodeKind: "columnRef",
