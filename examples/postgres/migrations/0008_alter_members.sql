@@ -6,7 +6,7 @@
 -- parent-snapshot: sha256:2009e0c2a17e1aed6ab619cf3d69943dc636beafffd9fb29fefb416f363188bd
 -- snapshot: sha256:d03ce75beee84229bc34e6dcd7c07b6a6acf4735249289cef72026d11643e58d
 
-create index "members_email_lower_idx" on "app"."members" (lower("app"."members"."email"));
+create index "members_email_lower_idx" on "app"."members" ((lower("app"."members"."email")));
 
 alter table "app"."tasks" add column "metadata" jsonb;
 
