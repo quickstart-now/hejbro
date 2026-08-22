@@ -79,29 +79,48 @@ const retargetedColumnName = (
 	return node.columnName;
 };
 
+/**
+ * Does this ref actually name the schema/table `target` renames? Split
+ * out of {@link retargetColumnRef} (D71/#154 ratchet-5) so that
+ * function's own complexity stays low without folding this question's
+ * two comparisons into it.
+ */
+const matchesOldTarget = (
+	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
+	target: RenameTarget,
+): boolean =>
+	node.schemaName === target.oldSchema && node.tableName === target.oldTable;
+
+/**
+ * Would rewriting this ref for `target` actually change anything, or is
+ * it already at the target identity? Split out of {@link
+ * retargetColumnRef} the same way as {@link matchesOldTarget}. A table
+ * rename always changes schema/table, so reaching this function means
+ * something changed -- but a column rename sets
+ * oldSchema===newSchema/oldTable===newTable, so a ref on the SAME table
+ * but a DIFFERENT column matches {@link matchesOldTarget} without
+ * actually changing. Every value must be compared, not just "did we
+ * match the target" -- the invariant every other node kind in this file
+ * already keeps.
+ */
+const alreadyAtNewTarget = (
+	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
+	target: RenameTarget,
+	columnName: string,
+): boolean =>
+	node.schemaName === target.newSchema &&
+	node.tableName === target.newTable &&
+	node.columnName === columnName;
+
 const retargetColumnRef = (
 	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
 	target: RenameTarget,
 ): ExprNode => {
-	if (
-		node.schemaName !== target.oldSchema ||
-		node.tableName !== target.oldTable
-	) {
+	if (!matchesOldTarget(node, target)) {
 		return node;
 	}
 	const columnName = retargetedColumnName(node, target);
-	// A table rename always changes schema/table, so this branch is
-	// reached meaning something changed -- but a column rename sets
-	// oldSchema===newSchema/oldTable===newTable, so a ref on the
-	// SAME table but a DIFFERENT column matches the schema/table
-	// check above without actually changing. Every value must be
-	// compared, not just "did we match the target" -- matching the
-	// invariant every other node kind in this file already keeps.
-	if (
-		node.schemaName === target.newSchema &&
-		node.tableName === target.newTable &&
-		node.columnName === columnName
-	) {
+	if (alreadyAtNewTarget(node, target, columnName)) {
 		return node;
 	}
 	return {
@@ -340,6 +359,28 @@ const retargetWhere = (
 };
 
 /**
+ * Did retargeting `query` for `target` actually produce anything
+ * different from the original, or can {@link retargetSelectNode} return
+ * `query` itself unchanged? Split out the same way as {@link
+ * matchesOldTarget}/{@link alreadyAtNewTarget} above (D71/#154
+ * ratchet-5), so the five-way comparison's own complexity doesn't fold
+ * into `retargetSelectNode`.
+ */
+const isSelectNodeUnchanged = (
+	query: SelectNode,
+	projection: ProjectionNode,
+	from: TableRefNode,
+	joins: ReadonlyArray<JoinNode>,
+	where: ExprNode | null,
+	orderBy: ReadonlyArray<OrderByTerm>,
+): boolean =>
+	projection === query.projection &&
+	from === query.from &&
+	joins.every((join, i) => join === query.joins[i]) &&
+	where === query.where &&
+	orderBy.every((term, i) => term === query.orderBy[i]);
+
+/**
  * Retargets a whole {@link SelectNode} for `target`, same identity
  * invariant as {@link retargetExprNode} (returns the exact same reference
  * when nothing matched). Not `exists()`-specific — reused as-is for a
@@ -357,13 +398,7 @@ export const retargetSelectNode = (
 	const orderBy = query.orderBy.map((term) =>
 		retargetOrderByTerm(term, target),
 	);
-	if (
-		projection === query.projection &&
-		from === query.from &&
-		joins.every((join, i) => join === query.joins[i]) &&
-		where === query.where &&
-		orderBy.every((term, i) => term === query.orderBy[i])
-	) {
+	if (isSelectNodeUnchanged(query, projection, from, joins, where, orderBy)) {
 		return query;
 	}
 	return { ...query, projection, from, joins, where, orderBy };

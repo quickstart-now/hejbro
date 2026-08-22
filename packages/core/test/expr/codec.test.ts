@@ -414,4 +414,18 @@ describe("expr codec — round-trip", () => {
 			expect.objectContaining({ code: "malformed-snapshot-node" }),
 		);
 	});
+
+	// #154 ratchet-5: decodeLiteral's malformed-input fallback (an
+	// unrecognized literalKind, unlike encodeLiteral's structurally
+	// unreachable assertNever default -- literalKind comes from unvalidated
+	// JSON, not a closed TypeScript union) had no test at all.
+	it("rejects an unrecognized literalKind instead of silently decoding as one of the known kinds", () => {
+		const malformed = {
+			nodeKind: "literal",
+			literal: { literalKind: "date", value: "2026-01-01" },
+		};
+		expect(() => decodeExprNode(malformed)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
 });

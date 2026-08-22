@@ -75,37 +75,63 @@ const renderIfLines = (
 	return [...ifLines, ...elsifLines, ...elseLines, `${indent(depth)}end if;`];
 };
 
+/**
+ * One handler per {@link BodyStatement} `stmtKind`, same technique used
+ * across this phase's other tree-walker/renderer switches (#154
+ * ratchet-5): a mapped type over the closed union, so a missing entry is
+ * a compile error. The former `switch`'s `default: assertNever(statement)`
+ * was structurally unreachable (`BodyStatement` has exactly these six
+ * kinds), so no test could ever reach it. `forEach`'s handler recurses
+ * into {@link renderStatementLines} — resolved lazily through the closure
+ * at call time, so it's fine that this map is defined before that
+ * function is (unlike a handler *value* like `if`'s, which must already
+ * be initialized when this object literal itself runs).
+ */
+type RenderStatementHandlers = {
+	readonly [K in BodyStatement["stmtKind"]]: (
+		statement: Extract<BodyStatement, { readonly stmtKind: K }>,
+		depth: number,
+		identity: string,
+		declaredAt: string | null,
+	) => ReadonlyArray<string>;
+};
+
+const renderStatementHandlers: RenderStatementHandlers = {
+	selectInto: (statement, depth) => [
+		`${indent(depth)}${renderSelectInto(statement.query, statement.intoVariables, { strict: statement.strict })};`,
+	],
+	raise: (statement, depth) => [
+		`${indent(depth)}raise exception ${quoteStringLiteral(statement.message)}${renderRaiseSuffix(statement.args)};`,
+	],
+	returnRef: (statement, depth) => [
+		`${indent(depth)}return ${statement.refName};`,
+	],
+	returnQuery: (statement, depth) => [
+		`${indent(depth)}return query ${renderQuery(statement.query)};`,
+	],
+	if: renderIfLines,
+	forEach: (statement, depth, identity, declaredAt) => {
+		const headerLine = `${indent(depth)}for ${statement.loopName} in ${renderSelect(statement.query)} loop`;
+		const bodyLines = statement.statements.flatMap((inner) =>
+			renderStatementLines(inner, depth + 1, identity, declaredAt),
+		);
+		return [headerLine, ...bodyLines, `${indent(depth)}end loop;`];
+	},
+};
+
 const renderStatementLines = (
 	statement: BodyStatement,
 	depth: number,
 	identity: string,
 	declaredAt: string | null,
 ): ReadonlyArray<string> => {
-	switch (statement.stmtKind) {
-		case "selectInto":
-			return [
-				`${indent(depth)}${renderSelectInto(statement.query, statement.intoVariables, { strict: statement.strict })};`,
-			];
-		case "raise":
-			return [
-				`${indent(depth)}raise exception ${quoteStringLiteral(statement.message)}${renderRaiseSuffix(statement.args)};`,
-			];
-		case "returnRef":
-			return [`${indent(depth)}return ${statement.refName};`];
-		case "returnQuery":
-			return [`${indent(depth)}return query ${renderQuery(statement.query)};`];
-		case "if":
-			return renderIfLines(statement, depth, identity, declaredAt);
-		case "forEach": {
-			const headerLine = `${indent(depth)}for ${statement.loopName} in ${renderSelect(statement.query)} loop`;
-			const bodyLines = statement.statements.flatMap((inner) =>
-				renderStatementLines(inner, depth + 1, identity, declaredAt),
-			);
-			return [headerLine, ...bodyLines, `${indent(depth)}end loop;`];
-		}
-		default:
-			return assertNever(statement);
-	}
+	const handler = renderStatementHandlers[statement.stmtKind] as (
+		statement: BodyStatement,
+		depth: number,
+		identity: string,
+		declaredAt: string | null,
+	) => ReadonlyArray<string>;
+	return handler(statement, depth, identity, declaredAt);
 };
 
 /** Renders a {@link FunctionDeclaration}'s `returns` clause text — `"trigger"`, `` `setof "schema"."table"` ``, or the scalar type. Shared by {@link renderFunctionSql} and `functionKind.serialize`'s snapshot `returns` field, so the two never drift apart. */
