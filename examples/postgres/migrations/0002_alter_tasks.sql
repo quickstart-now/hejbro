@@ -1,8 +1,8 @@
 -- hejbro migration
 -- ~ table app.tasks [column "estimate_hours" added, check "tasks_estimate_hours_non_negative" added]
 -- ~ view app.open_tasks [view changed]
--- parent-snapshot: sha256:549b6a31d81e336bf45ef9f77b8b8aefe2a7c4dbaa0d0d9da0f1a3f6a593c83c
--- snapshot: sha256:37c1dd64b27834268ab1aa4d1fbd07544bd9acfcf9a0cd6bc84df197f8076be0
+-- parent-snapshot: sha256:baef89083332405915919c78109c40015b75eef8dd51a8a28dc2d1c47af6f2cf
+-- snapshot: sha256:69450c2b7d78030dea03cd62ed75a2fdf1c74a6ed40c508630c6e11ed8504240
 
 alter table "app"."tasks" add column "estimate_hours" numeric;
 

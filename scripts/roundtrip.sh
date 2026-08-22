@@ -98,8 +98,37 @@ dump chain > "$WORK/chain.sql"
 dump fresh > "$WORK/fresh.sql"
 grep -q 'CREATE TABLE' "$WORK/chain.sql" || { echo "chain dump contains no tables — the comparison would be vacuous" >&2; exit 1; }
 
-echo "== diff (chain vs fresh)"
-if diff -u "$WORK/chain.sql" "$WORK/fresh.sql"; then
+# #121: sorts each *contiguous run* of GRANT/REVOKE lines among themselves,
+# leaving every other line's position untouched. Postgres's own aclitem
+# array order (pg_class.relacl, what pg_dump actually reads back) reflects
+# grant *issuance* history for that object, not schema meaning -- a
+# schema-wide grant re-issued for a table a later migration added (#121)
+# can land a real, harmless pg_dump text reorder relative to a fresh
+# single-migration database that issues every grant in one batch.
+# information_schema.role_table_grants (check-declared-vs-catalog.mjs's own
+# comparison, #212, order-insensitive by construction) is the authority
+# for whether two databases actually agree on privileges; this
+# normalization exists only so the line-by-line diff below stops flagging
+# an artifact that check has already proven harmless, without hiding a
+# genuine missing/extra grant (which still shows up as a real added/
+# removed line even after sorting, and check-declared-vs-catalog.mjs would
+# separately fail on it too, above).
+normalize_grant_order() {
+  awk '
+    function is_grant(line) { return line ~ /^(GRANT|REVOKE) / }
+    {
+      cur = is_grant($0)
+      if (NR == 1 || cur != prevcur || cur == 0) { group++ }
+      prevcur = cur
+      printf "%06d\t%s\n", group, $0
+    }
+  ' "$1" | sort -t "$(printf '\t')" -k1,1n -k2 | cut -f2-
+}
+normalize_grant_order "$WORK/chain.sql" > "$WORK/chain.normalized.sql"
+normalize_grant_order "$WORK/fresh.sql" > "$WORK/fresh.normalized.sql"
+
+echo "== diff (chain vs fresh, GRANT/REVOKE runs order-normalized)"
+if diff -u "$WORK/chain.normalized.sql" "$WORK/fresh.normalized.sql"; then
   echo "round-trip OK: $(wc -l < "$WORK/chain.sql") dump lines identical"
 else
   echo "round-trip FAILED: the migration chain and a fresh migration produce different schemas" >&2

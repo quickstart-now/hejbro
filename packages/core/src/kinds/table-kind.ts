@@ -462,5 +462,6 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			},
 		];
 	},
-	emit: (change, siblingChanges) => emitTableSql(change, siblingChanges),
+	emit: (change, siblingChanges, nextSnapshot) =>
+		emitTableSql(change, siblingChanges, nextSnapshot),
 };

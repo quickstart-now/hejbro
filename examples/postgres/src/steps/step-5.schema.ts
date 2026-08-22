@@ -34,8 +34,8 @@ import {
  * A generic team-workspace schema (O1) exercising every core DSL feature
  * once: CHECK constraints (typed and `sql`-templated), a partial ordered
  * index, a partial unique index, a self-referencing FK, RLS with two
- * roles, a before-trigger, a view, and schema-level grants. Six steps
- * (`step-1` … `step-6`) evolve it; this is step 5 — adds a new join table
+ * roles, a before-trigger, a view, and schema-level grants. Seven steps
+ * (`step-1` … `step-7`) evolve it; this is step 5 — adds a new join table
  * `task_tags` with a single-column primary key (`taskId`, which also
  * doubles as its FK to `tasks`), created fresh so step 6's composite
  * expansion is a real `alter table` against an existing table, not part
@@ -358,6 +358,15 @@ export const appReaderDefaultSelectGrant = grant(app)
 export const appWriterDefaultAllGrant = grant(app)
 	.defaultPrivileges.tables("select", "insert", "update", "delete")
 	.to(appWriterRole);
+// #121: standing from step 1, like the reader/writer grants above — but
+// deliberately given *no* matching defaultPrivileges counterpart, so a
+// table added by a later step (task_labels, step 7) proves whether hejbro
+// keeps a one-shot schema-wide grant in step with new tables. See
+// step-7.schema.ts's own top doc comment for the payoff.
+export const appAuditorRole = roleName("app_auditor");
+export const appAuditorSelectGrant = grant(app)
+	.tables("select")
+	.to(appAuditorRole);
 
 export const declarations: ReadonlyArray<HejbroInput> = [
 	app,
@@ -374,4 +383,5 @@ export const declarations: ReadonlyArray<HejbroInput> = [
 	appWriterAllGrant,
 	appReaderDefaultSelectGrant,
 	appWriterDefaultAllGrant,
+	appAuditorSelectGrant,
 ];

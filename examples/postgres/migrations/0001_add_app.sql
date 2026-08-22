@@ -19,6 +19,7 @@
 -- + policy app.tasks.tasks_read_all [new]
 -- + policy app.tasks.tasks_write_all [new]
 -- + view app.open_tasks [new]
+-- + grant app.all-tables-privileges.app_auditor [new]
 -- + grant app.all-tables-privileges.app_reader [new]
 -- + grant app.all-tables-privileges.app_writer [new]
 -- + grant app.default-table-privileges.app_reader [new]
@@ -26,7 +27,7 @@
 -- + grant app.schema-usage.app_reader [new]
 -- + grant app.schema-usage.app_writer [new]
 -- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:549b6a31d81e336bf45ef9f77b8b8aefe2a7c4dbaa0d0d9da0f1a3f6a593c83c
+-- snapshot: sha256:baef89083332405915919c78109c40015b75eef8dd51a8a28dc2d1c47af6f2cf
 
 create schema "app";
 
@@ -140,6 +141,8 @@ drop policy if exists "tasks_write_all" on "app"."tasks";
 create policy "tasks_write_all" on "app"."tasks" for all to "app_writer" using (true) with check (true);
 
 create or replace view "app"."open_tasks" with (security_invoker = true) as select "id", "project_id", "title", "status", "priority", "due_at" from "app"."tasks" where "app"."tasks"."status" <> 'done';
+
+grant select on all tables in schema "app" to "app_auditor";
 
 grant select on all tables in schema "app" to "app_reader";
 

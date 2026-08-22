@@ -12,6 +12,14 @@
 			"schema": "app",
 			"security": "invoker"
 		},
+		"grant:app.all-tables-privileges.app_auditor": {
+			"grantKind": "all-tables-privileges",
+			"privileges": [
+				"select"
+			],
+			"role": "app_auditor",
+			"schema": "app"
+		},
 		"grant:app.all-tables-privileges.app_reader": {
 			"grantKind": "all-tables-privileges",
 			"privileges": [
@@ -182,6 +190,45 @@
 				"nodeKind": "literal"
 			}
 		},
+		"policy:app.task_labels.task_labels_read_all": {
+			"command": "select",
+			"name": "task_labels_read_all",
+			"roles": [
+				"app_reader"
+			],
+			"schema": "app",
+			"table": "task_labels",
+			"using": {
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
+			}
+		},
+		"policy:app.task_labels.task_labels_write_all": {
+			"command": "all",
+			"name": "task_labels_write_all",
+			"roles": [
+				"app_writer"
+			],
+			"schema": "app",
+			"table": "task_labels",
+			"using": {
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
+			},
+			"withCheck": {
+				"literal": {
+					"literalKind": "boolean",
+					"value": true
+				},
+				"nodeKind": "literal"
+			}
+		},
 		"policy:app.task_schedules.task_schedules_read_all": {
 			"command": "select",
 			"name": "task_schedules_read_all",
@@ -313,6 +360,10 @@
 		"rls:app.projects": {
 			"schema": "app",
 			"table": "projects"
+		},
+		"rls:app.task_labels": {
+			"schema": "app",
+			"table": "task_labels"
 		},
 		"rls:app.task_schedules": {
 			"schema": "app",
@@ -599,6 +650,55 @@
 			"indexes": [],
 			"name": "projects",
 			"primaryKeyName": "projects_pkey",
+			"schema": "app"
+		},
+		"table:app.task_labels": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "task_id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "label",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"task_id"
+					],
+					"name": "task_labels_task_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.tasks"
+				}
+			],
+			"indexes": [],
+			"name": "task_labels",
+			"primaryKeyName": "task_labels_pkey",
 			"schema": "app"
 		},
 		"table:app.task_schedules": {

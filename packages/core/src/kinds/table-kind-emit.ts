@@ -3,6 +3,7 @@ import type { KeyedDiff } from "../kind/diff-helpers";
 import { diffByKey, sameJson } from "../kind/diff-helpers";
 import { dispatchEmit } from "../kind/emit-helpers";
 import type { KindChange } from "../kind/object-kind";
+import type { Snapshot } from "../snapshot/snapshot";
 import { compareKeys } from "../sort";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
@@ -13,6 +14,11 @@ import {
 } from "../sql/statement";
 import type { TypeNode } from "../types/type-node";
 import { renderTypeNode } from "../types/type-node";
+import {
+	grantIdentity,
+	renderGrantStatement,
+	standingAllTablesGrants,
+} from "./grant-kind";
 import type { SequenceSnapshot } from "./sequence-kind";
 import { asSequenceSnapshot, nextvalExpression } from "./sequence-kind";
 import {
@@ -79,7 +85,63 @@ const overrideDefaultForAddedColumn = (
 	return nextvalExpression(sequence);
 };
 
-const emitCreate = (next: TableSnapshot): ReadonlyArray<SqlStatement> => [
+/**
+ * Re-issues (verbatim, `renderGrantStatement`) every *standing*
+ * `all-tables-privileges` grant already declared for `next`'s schema
+ * (#121/D78) — "standing" excludes a grant that's *also* being newly
+ * created in this same diff (`siblingChanges` already carries a matching
+ * `grant` "create", D74): that grant's own `create` emit already covers
+ * this table via `on all tables in schema`, so re-issuing it here too
+ * would be a harmless but confusing duplicate statement in the table's
+ * *first-ever* migration. Deliberately the *schema-wide* statement again
+ * (not a hand-rolled `grant ... on table ...`) — see `renderGrantStatement`'s
+ * own doc comment for why a table-scoped rewrite isn't equivalent for a
+ * real `pg_dump` comparison even though it produces the same catalog
+ * privileges. `nextSnapshot` is `undefined` only when a caller invokes
+ * `emitTableSql` without it (no in-repo caller does; kept optional to
+ * match `emit`'s own optional third parameter), in which case this table
+ * is silently ungranted the same way it always was before #121, rather
+ * than throwing.
+ */
+const standingGrantStatements = (
+	next: TableSnapshot,
+	nextSnapshot: Snapshot | undefined,
+	siblingChanges: ReadonlyArray<KindChange>,
+): ReadonlyArray<SqlStatement> => {
+	if (nextSnapshot === undefined) {
+		return [];
+	}
+	const newlyCreatedGrantIdentities = new Set(
+		siblingChanges
+			.filter(
+				(sibling) => sibling.kind === "grant" && sibling.operation === "create",
+			)
+			.map((sibling) => sibling.identity),
+	);
+	return standingAllTablesGrants(next.schema, nextSnapshot)
+		.filter(
+			(grant) =>
+				!newlyCreatedGrantIdentities.has(
+					grantIdentity(grant.schema, grant.grantKind, grant.role),
+				),
+		)
+		.map((grant) =>
+			statement(
+				renderGrantStatement(
+					"all-tables-privileges",
+					next.schema,
+					grant.role,
+					grant.privileges,
+				),
+			),
+		);
+};
+
+const emitCreate = (
+	next: TableSnapshot,
+	nextSnapshot: Snapshot | undefined,
+	siblingChanges: ReadonlyArray<KindChange>,
+): ReadonlyArray<SqlStatement> => [
 	statement(createTableSql(next)),
 	...next.indexes.map((index) =>
 		statement(createIndexSql(next.schema, next.name, index)),
@@ -89,6 +151,7 @@ const emitCreate = (next: TableSnapshot): ReadonlyArray<SqlStatement> => [
 			addForeignKeyConstraintSql(next.schema, next.name, foreignKey),
 		),
 	),
+	...standingGrantStatements(next, nextSnapshot, siblingChanges),
 ];
 
 const emitDrop = (previous: TableSnapshot): ReadonlyArray<SqlStatement> => [
@@ -470,14 +533,18 @@ const emitAlter = (
 	];
 };
 
-const emitCreateChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
+const emitCreateChange = (
+	change: KindChange,
+	siblingChanges: ReadonlyArray<KindChange>,
+	nextSnapshot: Snapshot | undefined,
+): ReadonlyArray<SqlStatement> => {
 	if (change.next === null) {
 		return throwHejbroError(
 			"invalid-kind-change",
 			"table create change is missing its next snapshot.",
 		);
 	}
-	return emitCreate(asTableSnapshot(change.next));
+	return emitCreate(asTableSnapshot(change.next), nextSnapshot, siblingChanges);
 };
 
 const emitDropChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
@@ -509,20 +576,28 @@ const emitAlterChange = (
 
 /**
  * Emits SQL for a table {@link KindChange}: `create table` (+ indexes +
- * deferred FK constraints) for creates, `drop table` for drops, and
+ * deferred FK constraints + any standing schema-wide grant re-issued for
+ * this new table, #121/D78) for creates, `drop table` for drops, and
  * targeted `alter table` statements for survivors — a dropped FK goes out
  * on `predrop` (#122/A′), everything else in `main`. `siblingChanges`
  * (D74) is only used by the `alter` case's `columnDiff.added` rendering,
  * to inline a serial-family added column's sequence-backed default (#23)
- * — see `sequenceForAddedColumn`'s doc comment.
+ * — see `sequenceForAddedColumn`'s doc comment. `nextSnapshot` (D78) is
+ * only used by the `create` case — see `standingGrantStatements`'s doc
+ * comment. `dispatchEmit`'s handler map is 2-parameter
+ * (`EmitOperationHandlers`, shared by 3 other kinds); `create`'s own
+ * 3-parameter `emitCreateChange` is closed over `nextSnapshot` here
+ * rather than widening that shared type for one kind's one case.
  */
 export const emitTableSql = (
 	change: KindChange,
 	siblingChanges: ReadonlyArray<KindChange> = [],
+	nextSnapshot?: Snapshot,
 ): ReadonlyArray<SqlStatement> =>
 	dispatchEmit(
 		{
-			create: emitCreateChange,
+			create: (createChange, createSiblingChanges) =>
+				emitCreateChange(createChange, createSiblingChanges, nextSnapshot),
 			alter: emitAlterChange,
 			drop: emitDropChange,
 		},
