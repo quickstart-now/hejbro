@@ -1,5 +1,6 @@
-import { assertNever, throwHejbroError } from "../error";
+import { throwHejbroError } from "../error";
 import { diffByKey, sameJson } from "../kind/diff-helpers";
+import { dispatchEmit } from "../kind/emit-helpers";
 import type { KindChange } from "../kind/object-kind";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
@@ -355,6 +356,43 @@ const emitAlter = (
 	];
 };
 
+const emitCreateChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"table create change is missing its next snapshot.",
+		);
+	}
+	return emitCreate(asTableSnapshot(change.next));
+};
+
+const emitDropChange = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"table drop change is missing its previous snapshot.",
+		);
+	}
+	return emitDrop(asTableSnapshot(change.previous));
+};
+
+const emitAlterChange = (
+	change: KindChange,
+	siblingChanges: ReadonlyArray<KindChange>,
+): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null || change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"table alter change is missing its previous or next snapshot.",
+		);
+	}
+	return emitAlter(
+		asTableSnapshot(change.previous),
+		asTableSnapshot(change.next),
+		siblingChanges,
+	);
+};
+
 /**
  * Emits SQL for a table {@link KindChange}: `create table` (+ indexes +
  * deferred FK constraints) for creates, `drop table` for drops, and
@@ -367,40 +405,13 @@ const emitAlter = (
 export const emitTableSql = (
 	change: KindChange,
 	siblingChanges: ReadonlyArray<KindChange> = [],
-): ReadonlyArray<SqlStatement> => {
-	switch (change.operation) {
-		case "create": {
-			if (change.next === null) {
-				return throwHejbroError(
-					"invalid-kind-change",
-					"table create change is missing its next snapshot.",
-				);
-			}
-			return emitCreate(asTableSnapshot(change.next));
-		}
-		case "drop": {
-			if (change.previous === null) {
-				return throwHejbroError(
-					"invalid-kind-change",
-					"table drop change is missing its previous snapshot.",
-				);
-			}
-			return emitDrop(asTableSnapshot(change.previous));
-		}
-		case "alter": {
-			if (change.previous === null || change.next === null) {
-				return throwHejbroError(
-					"invalid-kind-change",
-					"table alter change is missing its previous or next snapshot.",
-				);
-			}
-			return emitAlter(
-				asTableSnapshot(change.previous),
-				asTableSnapshot(change.next),
-				siblingChanges,
-			);
-		}
-		default:
-			return assertNever(change.operation);
-	}
-};
+): ReadonlyArray<SqlStatement> =>
+	dispatchEmit(
+		{
+			create: emitCreateChange,
+			alter: emitAlterChange,
+			drop: emitDropChange,
+		},
+		change,
+		siblingChanges,
+	);
