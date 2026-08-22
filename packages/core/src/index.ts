@@ -181,6 +181,7 @@ export type {
 	SqlTypeFamily,
 } from "./expr/type-family";
 export { familyOfTypeNode, sqlTypeFamilies } from "./expr/type-family";
+export { someDeepExprNode } from "./expr/walk";
 export type { KeyedDiff } from "./kind/diff-helpers";
 export { diffByKey, sameJson } from "./kind/diff-helpers";
 export type {
