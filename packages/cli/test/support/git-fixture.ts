@@ -1,4 +1,3 @@
-// biome-ignore-all lint/style/useNamingConvention: every SCREAMING_CASE key below is a git environment variable name, not a naming choice of this codebase's own
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,10 +11,15 @@ import { join } from "node:path";
 // share this exact env instead of each declaring their own copy.
 export const GIT_TEST_ENV = {
 	...process.env,
+	// biome-ignore lint/style/useNamingConvention: git environment variable name
 	TZ: "UTC",
+	// biome-ignore lint/style/useNamingConvention: git environment variable name
 	GIT_AUTHOR_NAME: "hejbro test",
+	// biome-ignore lint/style/useNamingConvention: git environment variable name
 	GIT_AUTHOR_EMAIL: "test@example.com",
+	// biome-ignore lint/style/useNamingConvention: git environment variable name
 	GIT_COMMITTER_NAME: "hejbro test",
+	// biome-ignore lint/style/useNamingConvention: git environment variable name
 	GIT_COMMITTER_EMAIL: "test@example.com",
 };
 
@@ -44,7 +48,9 @@ export const createGitFixture = async (): Promise<GitFixture> => {
 	const commit = (message: string, isoDate: string): string => {
 		runGit(cwd, ["add", "-A"]);
 		runGit(cwd, ["commit", "-q", "-m", message], {
+			// biome-ignore lint/style/useNamingConvention: git environment variable name
 			GIT_AUTHOR_DATE: isoDate,
+			// biome-ignore lint/style/useNamingConvention: git environment variable name
 			GIT_COMMITTER_DATE: isoDate,
 		});
 		return runGit(cwd, ["rev-parse", "HEAD"]).trim();

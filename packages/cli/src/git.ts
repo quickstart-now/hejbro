@@ -1,4 +1,3 @@
-// biome-ignore-all lint/style/useNamingConvention: TZ below is a git/POSIX environment variable name, not a naming choice of this codebase's own
 import { execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -11,7 +10,11 @@ import { sha256Hex } from "./hash";
  * would otherwise render in the host's local timezone, breaking the
  * byte-stable golden fixtures §11 requires.
  */
-const GIT_ENV = { ...process.env, TZ: "UTC" };
+const GIT_ENV = {
+	...process.env,
+	// biome-ignore lint/style/useNamingConvention: TZ is a POSIX environment variable name, not a naming choice of this codebase's own
+	TZ: "UTC",
+};
 
 type ExecFileError = {
 	readonly stdout?: string;
