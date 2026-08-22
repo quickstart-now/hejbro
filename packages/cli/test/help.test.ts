@@ -16,6 +16,7 @@ beforeAll(assertBuiltCli);
 // is required for a deterministic, ANSI-free capture.
 
 const runHelp = (cwd: string, args: ReadonlyArray<string>) =>
+	// biome-ignore lint/style/useNamingConvention: NO_COLOR is the env var itself (https://no-color.org), not a hejbro-authored identifier — its spelling isn't ours to change.
 	runCli(cwd, args, { env: { ...process.env, NO_COLOR: "1" } });
 
 let cwd: string;

@@ -18,7 +18,11 @@
 		"rules": {
 			"preset": "recommended",
 			"style": {
-				"noTernary": "error"
+				"noTernary": "error",
+				"useNamingConvention": {
+					"level": "error",
+					"options": { "strictCase": false }
+				}
 			}
 		}
 	},
@@ -50,6 +54,34 @@
 			"formatter": { "enabled": false },
 			"linter": { "enabled": false },
 			"assist": { "enabled": false }
+		},
+		{
+			"includes": [
+				"packages/core/src/kinds/**",
+				"packages/core/src/snapshot/**"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"useNamingConvention": {
+							"level": "error",
+							"options": {
+								"strictCase": false,
+								"conventions": [
+									{
+										"selector": { "kind": "objectLiteralProperty" },
+										"match": ".*"
+									},
+									{
+										"selector": { "kind": "typeProperty" },
+										"match": ".*"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
 		}
 	]
 }
