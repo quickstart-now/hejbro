@@ -13,6 +13,7 @@ import type {
 	Validator,
 } from "@hejbro/core";
 import { storageBucketKind } from "./storage/bucket-kind";
+import { cachedAuthCallOutsideRlsValidator } from "./validators/cached-auth-call-outside-rls";
 import { exposedTableValidator } from "./validators/exposed-tables";
 import { reservedSchemaValidator } from "./validators/reserved-schemas";
 import { rlsUncachedAuthCallValidator } from "./validators/rls-uncached-auth-call";
@@ -28,6 +29,7 @@ export type {
 export { storageBucket } from "./storage/bucket";
 export type { StorageBucketSnapshot } from "./storage/bucket-kind";
 export { storageBucketKind } from "./storage/bucket-kind";
+export { cachedAuthCallOutsideRlsValidator } from "./validators/cached-auth-call-outside-rls";
 export { exposedTableValidator } from "./validators/exposed-tables";
 export {
 	reservedSchemas,
@@ -36,12 +38,13 @@ export {
 export { rlsUncachedAuthCallValidator } from "./validators/rls-uncached-auth-call";
 export { viewSecurityInvokerValidator } from "./validators/view-security-invoker";
 
-/** All four Supabase preset validators (D38/D40/#66 view-security-invoker/#97 rls-uncached-auth-call), in the order `generateMigration` should run them. */
+/** All five Supabase preset validators (D38/D40/#66 view-security-invoker/#97 rls-uncached-auth-call/#141 cached-auth-call-outside-rls), in the order `generateMigration` should run them. */
 export const supabaseValidators: ReadonlyArray<Validator> = [
 	reservedSchemaValidator,
 	exposedTableValidator,
 	viewSecurityInvokerValidator,
 	rlsUncachedAuthCallValidator,
+	cachedAuthCallOutsideRlsValidator,
 ];
 
 /** The Supabase preset as a config-listable data object (D55): `presets: [supabasePreset]` in `hejbro.config.ts`. The cast to the erased `ObjectKind<HejbroDeclaration>` is sanctioned (a registry is heterogeneous across kinds), like `roleName()`'s `as Role` in core. */

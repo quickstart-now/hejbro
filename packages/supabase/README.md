@@ -74,4 +74,18 @@ const result = generateMigration({
 The `rls-uncached-auth-call` validator (part of `supabaseValidators`)
 warns if a policy calls the plain form where the cached one belongs; it
 does not look at column `default`/`check` expressions at all, since the
-plain form is correct there.
+plain form is correct there. The `cached-auth-call-outside-rls`
+validator (#141) covers the opposite mistake: it errors if a column
+`default`, a CHECK, or a partial-index predicate calls the cached form
+— including one buried inside an `exists(...)` subquery — since core
+has no notion of which clause an expression sits in and can't reject
+this on its own.
+
+That second check matches on `authUidCached()`/`authJwtCached()`'s
+exact rendered text, so it also catches a hand-written
+`sql.raw("(select auth.uid())")` in the same wrong place — but nothing
+else inside `sql.raw(...)`/the `sql` template's raw chunks is inspected.
+Beyond that one literal match, the escape hatch is exactly what it
+says: hejbro renders raw SQL text as given, and placing it in the right
+clause is the caller's own responsibility, the same as writing raw SQL
+anywhere else.
