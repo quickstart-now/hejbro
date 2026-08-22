@@ -94,9 +94,11 @@ index expression columns, and view queries are stored in the snapshot as
 structured expression nodes, not rendered SQL text (D67/D70) — so a
 `--rename` retargets the identifiers inside them exactly, the same way it
 retargets a plain column reference. Renaming a column used inside
-``index("…").on(sql`lower(${t.email})`)``, for example, re-creates that
-index with the new name in the expression and no ambiguity error. See the
-[indexes guide](indexes.md) for the expression-index example end to end.
+``index("…").on(sql`lower(${t.email})`)``, for example, retargets the
+stored expression to the new column name — no index DDL is emitted (no
+drop, no create), only the `alter table … rename column` statement, and no
+ambiguity error. See the [indexes guide](indexes.md) for the
+expression-index example end to end.
 
 ## Rolling back
 

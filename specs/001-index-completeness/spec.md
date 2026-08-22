@@ -79,6 +79,10 @@ A user wants case-insensitive lookups (`lower(email)`), an index on a JSON path 
 - Q: How is an expression index named when no name is given? → A: it is not — an explicit name is required; the error's `Next:` proposes `<table>_<referenced columns>_idx` (FR-009, → D86).
 - Q: How does the next 0.1.x read a 0.1.1 snapshot (format 5)? → A: unchanged, format stays 5; new index fields are additive and compact; rule: additive compact fields never bump the version (FR-010, SC-004, → D84).
 
+### Session 2026-08-22 (implementation)
+
+- Q: does a column rename inside an index expression re-create the index? → A: no — the expression node is retargeted like CHECK/policy/partial-predicate nodes (D32 rule A); Postgres references attnums so no DDL is needed; SC-005 and contracts/sql.md step-2 corrected accordingly (approved by main 2026-08-22).
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -110,7 +114,7 @@ A user wants case-insensitive lookups (`lower(email)`), an index on a JSON path 
 - **SC-002**: `examples/postgres` (or `examples/supabase`) gains at least one non-B-tree index with an operator class and one expression index, and its two-path round-trip (`pnpm roundtrip`) produces identical `pg_dump` output.
 - **SC-003**: Every invalid declaration listed under Edge Cases fails at declaration time with a message that names the fix; none reaches `generate`.
 - **SC-004**: A 0.1.1 project that only uses B-tree indexes regenerates on the next 0.1.x with **zero** migration output and an unchanged snapshot hash (no spurious migration, no format-induced noise beyond what Q3 decides).
-- **SC-005**: A `--rename` of a column used in an index expression produces one migration that drops and re-creates the index with the new name and no ambiguity error.
+- **SC-005**: A `--rename` of a column used in an index expression produces one migration containing only the `rename column` statement; the index is neither dropped nor re-created; no ambiguity error.
 
 ## Decision-log impact *(mandatory)*
 

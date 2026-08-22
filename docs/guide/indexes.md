@@ -61,8 +61,9 @@ create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."emai
 create unique index "users_email_lower_live_uidx" on "app"."users" (lower("app"."users"."email")) where "app"."users"."deleted_at" is null;
 ```
 
-Later, `hejbro generate --rename app.users.email=email_address` re-creates
-both expression indexes with the new column inside the expression.
+Later, `hejbro generate --rename app.users.email=email_address` retargets
+the expression stored for both indexes to the new column — no index DDL
+is emitted, only `alter table … rename column`.
 
 ## Access method
 
@@ -150,12 +151,13 @@ CHECK expressions already use (see [renames](renames.md)). An expression
 that references another table's columns or contains a subquery fails at
 declaration time, the same rule partial-index predicates already enforce.
 
-```
-hejbro generate --rename app.users.email=email_address
+```sql
+alter table "app"."users" rename column "email" to "email_address";
 ```
 
-re-creates the expression index with `lower("app"."users"."email_address")`
-and no ambiguity error.
+The snapshot's expression is retargeted to
+`lower("app"."users"."email_address")`; no index DDL is emitted — no drop,
+no create, just the column rename above — and no ambiguity error.
 
 ## Extensions
 
@@ -174,6 +176,11 @@ index change today — Postgres has no `alter index … set method`. `hejbro
 generate`, `verify`, `history --links` and `restore` all render method,
 operator classes and expressions from the snapshot alone (D24); nothing
 needs the original declaration to reproduce a past state.
+
+A `--rename` that only retargets a column reference inside an expression is
+not this case — see [Expression indexes](#expression-indexes) above: the
+identifier changes but the expression's shape doesn't, so no index DDL is
+emitted at all.
 
 See `packages/core/src/dsl/index-builder.ts` and the GIN / expression
 indexes in `examples/postgres/src/app.schema.ts`.

@@ -105,8 +105,8 @@
 - [x] T031 [P] [US3] Unit (`table()`): unnamed expression index → `index-expression-requires-name` with the proposed name (`users_email_idx` for `lower(t.email)`, `users_expr_idx` for `sql\`now()\``); subquery → `index-expression-subquery`; foreign column → `index-expression-foreign-column-ref`; `unknown-index-column` ignores expression entries; duplicate-name check ignores expression entries — packages/core/test/table-surface.test.ts
 - [x] T032 [P] [US3] Unit: serialize writes `expression` as `encodeExprNode` output (D57 vocabulary) and round-trips through `decodeExprNode` — packages/core/test/table-kind-diff.test.ts
 - [x] T033 [P] [US3] Unit: emit renders `(lower("app"."users"."email"))`, composes with unique + where; expression change → drop + create — packages/core/test/table-kind-emit.test.ts
-- [x] T034 [P] [US3] Unit: column rename inside an index expression retargets the node (`retargetTableFields`), keeps the explicit name, produces drop + create and **no** `ambiguous-column-rename`; table rename retargets too; `rewriteIndexesForRename` skips expression entries for name derivation — packages/core/test/rename-plan.test.ts (**deviation, flagged for review**: retargeting makes `rewrittenPrevious` byte-identical to `next`, same as the existing CHECK/view/policy precedent — the test asserts zero leftover diff, not drop+create; the golden case (T035) confirms `generateMigration` itself emits only the `alter table … rename column` statement, no index recreate, for a pure rename)
-- [x] T035 [US3] Golden: add `users` table expression lines + step-1 expression change + step-2 `--rename app.users.email=email_address` to `table-index-methods`; re-record and review against contracts/sql.md (**deviation, flagged for review**: contracts/sql.md's own step-2 shows a drop+create after the rename; the recorded golden has none — see T034's note)
+- [x] T034 [P] [US3] Unit: column rename inside an index expression retargets the node (`retargetTableFields`), keeps the explicit name, produces drop + create and **no** `ambiguous-column-rename`; table rename retargets too; `rewriteIndexesForRename` skips expression entries for name derivation — packages/core/test/rename-plan.test.ts (spec corrected: rename only, no drop + create — see spec.md Clarifications 2026-08-22 (implementation))
+- [x] T035 [US3] Golden: add `users` table expression lines + step-1 expression change + step-2 `--rename app.users.email=email_address` to `table-index-methods`; re-record and review against contracts/sql.md (spec corrected: rename only, no drop + create — see spec.md Clarifications 2026-08-22 (implementation))
 
 ### Implementation for User Story 3
 
@@ -122,8 +122,8 @@
 
 ## Phase 6: Round-trip & example
 
-- [ ] T050 `examples/postgres`: new `src/steps/step-8.schema.ts` + `src/app.schema.ts` adding a GIN `jsonb_path_ops` index on a `jsonb` column and `index("…_email_lower_idx").on(sql\`lower(${t.email})\`)` (built-ins only); generate `migrations/0008_*.sql`, update `hejbro.snapshot.json`, extend `test/chain.test.ts` — examples/postgres/**
-- [ ] T051 `pnpm build` then `cd examples/postgres && pnpm roundtrip` on `postgres:17-alpine` — two-path `pg_dump` identical; paste the tail in the PR
+- [x] T050 `examples/postgres`: new `src/steps/step-8.schema.ts` + `src/app.schema.ts` adding a GIN `jsonb_path_ops` index on a `jsonb` column and `index("…_email_lower_idx").on(sql\`lower(${t.email})\`)` (built-ins only); generate `migrations/0008_*.sql`, update `hejbro.snapshot.json`, extend `test/chain.test.ts` — examples/postgres/**
+- [x] T051 `pnpm build` then `cd examples/postgres && pnpm roundtrip` on `postgres:17-alpine` — two-path `pg_dump` identical; paste the tail in the PR
 
 ---
 
