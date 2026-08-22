@@ -373,6 +373,7 @@ const buildNotes = <TValue>(
 export const tableKind: ObjectKind<TableDeclaration> = {
 	kind: "table",
 	dependsOn: ["schema", "enum", "sequence"],
+	requiredKeys: ["schema", "name", "columns", "indexes", "foreignKeys"],
 	owns: (declaration): declaration is TableDeclaration =>
 		declaration.declarationKind === "table",
 	serialize: (declaration) => ({

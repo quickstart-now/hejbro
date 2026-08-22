@@ -120,6 +120,16 @@ const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
 export const functionKind: ObjectKind<FunctionDeclaration> = {
 	kind: "function",
 	dependsOn: ["schema", "enum", "table"],
+	requiredKeys: [
+		"schema",
+		"name",
+		"args",
+		"returns",
+		"security",
+		"language",
+		"bodyHash",
+		"bodySql",
+	],
 	owns: (declaration): declaration is FunctionDeclaration =>
 		declaration.declarationKind === "function",
 	serialize: (declaration) => {
