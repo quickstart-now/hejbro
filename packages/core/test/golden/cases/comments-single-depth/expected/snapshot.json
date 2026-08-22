@@ -55,6 +55,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "comments",
+			"primaryKeyName": "comments_pkey",
 			"schema": "app"
 		},
 		"table:app.posts": {
@@ -79,7 +80,8 @@
 					"typeNode": {
 						"typeName": "text"
 					},
-					"unique": true
+					"unique": true,
+					"uniqueName": "posts_slug_key"
 				},
 				{
 					"name": "published_at",
@@ -91,6 +93,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "posts",
+			"primaryKeyName": "posts_pkey",
 			"schema": "app"
 		},
 		"trigger:app.comments.comments_single_depth": {

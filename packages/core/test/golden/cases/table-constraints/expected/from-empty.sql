@@ -10,7 +10,7 @@ create table "app"."comments" (
 	"post_id" uuid not null,
 	"parent_id" uuid,
 	"body" text not null,
-	primary key ("id"),
+	constraint "comments_pkey" primary key ("id"),
 	constraint "comments_body_length_check" check (length("app"."comments"."body") > 0)
 );
 
@@ -18,7 +18,7 @@ create table "app"."posts" (
 	"id" uuid not null default gen_random_uuid(),
 	"status" text not null,
 	"slug" text not null,
-	primary key ("id"),
+	constraint "posts_pkey" primary key ("id"),
 	constraint "posts_status_check" check ("app"."posts"."status" in ('draft', 'published')),
 	constraint "posts_slug_format_check" check ("app"."posts"."slug" ~ '^[a-z0-9-]+$')
 );

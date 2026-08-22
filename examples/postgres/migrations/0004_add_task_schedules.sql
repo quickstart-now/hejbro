@@ -5,8 +5,8 @@
 -- + policy app.task_schedules.task_schedules_read_all [new]
 -- + policy app.task_schedules.task_schedules_write_all [new]
 -- ~ view app.open_tasks [view columns changed; recreating]
--- parent-snapshot: sha256:f4d42d6d62d92fc08cdac691f850c9b7141d6e36f2df66ec818583831d997ece
--- snapshot: sha256:14853d141b3137ce52bdd8994b1cffc23ce028499f5a73020bdef2eacc5da69a
+-- parent-snapshot: sha256:6fc395cafe09d3cd46d1fd50baabac3f38190153206da1e7c61a302873f8349a
+-- snapshot: sha256:a61bf4eeabff25fc69cb1cf000726a61520c24957f2fc53534d9074ff34ce578
 
 drop view if exists "app"."open_tasks";
 
@@ -14,7 +14,7 @@ create table "app"."task_schedules" (
 	"task_id" uuid not null,
 	"due_at" timestamp with time zone,
 	"reminder_at" timestamp with time zone,
-	primary key ("task_id"),
+	constraint "task_schedules_pkey" primary key ("task_id"),
 	constraint "task_schedules_reminder_before_due" check ("app"."task_schedules"."reminder_at" < "app"."task_schedules"."due_at")
 );
 

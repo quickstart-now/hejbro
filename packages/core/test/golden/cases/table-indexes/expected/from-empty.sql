@@ -10,7 +10,7 @@ create table "app"."posts" (
 	"status" text not null,
 	"created_at" timestamp with time zone,
 	"published_at" timestamp with time zone,
-	primary key ("id")
+	constraint "posts_pkey" primary key ("id")
 );
 
 create index "posts_recent_idx" on "app"."posts" ("created_at", "published_at" desc nulls first);

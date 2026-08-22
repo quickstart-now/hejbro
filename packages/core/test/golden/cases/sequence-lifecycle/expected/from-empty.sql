@@ -7,5 +7,5 @@ create schema "app";
 create table "app"."posts" (
 	"id" integer not null,
 	"title" text,
-	primary key ("id")
+	constraint "posts_pkey" primary key ("id")
 );

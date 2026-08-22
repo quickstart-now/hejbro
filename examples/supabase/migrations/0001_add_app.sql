@@ -16,7 +16,7 @@
 -- + grant app.schema-usage.authenticated [new]
 -- + supabase-storage-bucket attachments [new]
 -- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:cb11b15444e9e96dda3b8b6a4833a93a68e7b7e2d3d910f64e19f8be77a1e58a
+-- snapshot: sha256:3c2e312f47848c6d24d4893659fb324214b9b0d1b9f2fbe5a462865bf4848c29
 
 create schema "app";
 
@@ -25,21 +25,21 @@ create table "app"."attachments" (
 	"profile_id" uuid not null,
 	"storage_path" text not null,
 	"size_bytes" bigint not null,
-	primary key ("id"),
+	constraint "attachments_pkey" primary key ("id"),
 	constraint "attachments_size_bytes_positive" check ("app"."attachments"."size_bytes" > 0)
 );
 
 create table "app"."drafts" (
 	"id" uuid not null default gen_random_uuid(),
 	"title" text not null,
-	primary key ("id")
+	constraint "drafts_pkey" primary key ("id")
 );
 
 create table "app"."profiles" (
 	"id" uuid not null default gen_random_uuid(),
 	"user_id" uuid not null,
 	"display_name" text not null,
-	primary key ("id")
+	constraint "profiles_pkey" primary key ("id")
 );
 
 alter table "app"."attachments" enable row level security;

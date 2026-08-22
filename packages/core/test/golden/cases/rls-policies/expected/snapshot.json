@@ -62,6 +62,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "comments",
+			"primaryKeyName": "comments_pkey",
 			"schema": "app"
 		},
 		"table:app.posts": {
@@ -97,6 +98,7 @@
 			"foreignKeys": [],
 			"indexes": [],
 			"name": "posts",
+			"primaryKeyName": "posts_pkey",
 			"schema": "app"
 		}
 	}
