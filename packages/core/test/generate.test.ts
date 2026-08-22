@@ -316,6 +316,60 @@ describe("generateMigration", () => {
 				'returning "id", "title", "description", "level", "archived_at", "note"',
 			);
 		});
+
+		// D81 (dogfood first pass, #261 variant): when the mid-inserted
+		// column shares a SQL type with the columns around it (here, both
+		// `note` and the inserted `description` are `text`), `returns
+		// setof <table>` doesn't error at all — Postgres accepts the
+		// positional match silently and returns each value under the
+		// *wrong* column name (`note`'s value would read back as
+		// `description`, `description` as nothing). The type-mismatch case
+		// (D81's original repro) at least fails loudly; this one doesn't,
+		// so it's pinned on its own.
+		it("orders a same-type column inserted mid-declaration behind the existing ones so returning lists cannot silently mislabel values (d81)", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						title: text(),
+						note: text(),
+					}),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const projectsV2 = table(app, "projects", {
+				id: uuid(),
+				title: text(),
+				description: text(),
+				note: text(),
+			});
+			const archiveProjectV2 = defineFunction(
+				"app",
+				"archive_project",
+				{ args: { projectId: uuid() }, returns: projectsV2 },
+				(ctx, { projectId }) => {
+					ctx.return(
+						update(projectsV2)
+							.set({ title: "x" })
+							.where(eq(projectsV2.id, projectId))
+							.returning(),
+					);
+				},
+			);
+			const v2 = generateMigration({
+				declarations: [app, projectsV2, archiveProjectV2],
+				previousSnapshot: v1.snapshot,
+			});
+			expect(
+				(
+					v2.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "title", "note", "description"]);
+			expect(v2.sql).toContain(
+				'returning "id", "title", "note", "description"',
+			);
+		});
 	});
 
 	// #23/D66: resolveDeclarations synthesizes one SequenceDeclaration per
