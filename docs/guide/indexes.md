@@ -85,7 +85,7 @@ Postgres allows `unique` only on B-tree, so combining it with any other
 method fails at declaration time:
 
 ```ts
-index().unique().using("gin").on(t.data);
+index("docs_data_idx").unique().using("gin").on(t.data);
 ```
 
 ```
