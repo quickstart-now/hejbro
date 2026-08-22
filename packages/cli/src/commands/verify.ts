@@ -3,17 +3,22 @@ import { join } from "node:path";
 import type {
 	ChainEntry,
 	ChainReport,
+	DuplicateVersionGroup,
 	HejbroError,
 	HejbroInput,
 	KindRegistry,
+	MigrationPrefixStrategy,
 } from "@hejbro/core";
 import {
 	checkChain,
 	emptySnapshot,
+	findDuplicateVersionGroups,
 	generateMigration,
 	hejbroError,
+	migrationVersionOf,
 	parseBannerHashes,
 	parseSnapshot,
+	renderMigrationPrefix,
 	renderSnapshot,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -41,11 +46,42 @@ const snapshotStaleMessage = (snapshotPath: string): string =>
 const CHAIN_TIP_MISMATCH_MESSAGE =
 	"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.";
 
+/** `<migrationsDir>/<fileName>`, always POSIX-joined (`config.migrationsDir` is a shell-command path fragment here, not a filesystem path Node needs to resolve — `path.join` would use `\` on Windows and break the very command this renders). */
+const migrationPath = (migrationsDir: string, fileName: string): string =>
+	`${migrationsDir}/${fileName}`;
+
+/**
+ * One computed, directly-runnable resolution per candidate: delete every
+ * *other* diverged file and regenerate, keeping this one (owner principle,
+ * #220 review — "detect, then offer choices with a command already typed
+ * out," not prose asking the reader to figure out the command
+ * themselves). hejbro can't know which branch's change was meant to win
+ * (that's the human call the ambiguity exists to surface), so every
+ * candidate gets its own ready-to-run option rather than picking one.
+ */
+const divergedMigrationsOption = (
+	keptName: string,
+	allNames: ReadonlyArray<string>,
+	migrationsDir: string,
+): string => {
+	const toDelete = allNames.filter((name) => name !== keptName);
+	return `rm ${toDelete.map((name) => migrationPath(migrationsDir, name)).join(" ")} && hejbro generate   # keeps ${keptName}`;
+};
+
+const OPTION_LETTERS = "abcdefghijklmnopqrstuvwxyz";
+
 const divergedMigrationsMessage = (
 	fileNames: ReadonlyArray<string>,
+	migrationsDir: string,
 ): string => {
 	const fileList = fileNames.map((name) => `"${name}"`).join(", ");
-	return `the migration chain has diverged: ${fileList} all branch from the same prior snapshot state — this usually happens when two branches each ran \`hejbro generate\` before merging. Next: keep whichever migration merged first (usually the one with the earlier timestamp/index prefix); delete the other, then rerun \`hejbro generate\` so it's recreated against the now-current chain.`;
+	const options = fileNames
+		.map((keptName, index) => {
+			const letter = OPTION_LETTERS[index] ?? String(index + 1);
+			return `  (${letter}) ${divergedMigrationsOption(keptName, fileNames, migrationsDir)}`;
+		})
+		.join("\n");
+	return `the migration chain has diverged: ${fileList} all branch from the same prior snapshot state — this usually happens when two branches each ran \`hejbro generate\` before merging. Next, pick one:\n${options}`;
 };
 
 const brokenChainMessage = (fileName: string): string =>
@@ -53,32 +89,157 @@ const brokenChainMessage = (fileName: string): string =>
 
 const chainErrorMessage = (
 	report: Extract<ChainReport, { readonly ok: false }>,
+	migrationsDir: string,
 ): string => {
 	if (report.code === "diverged-migrations") {
-		return divergedMigrationsMessage(report.details);
+		return divergedMigrationsMessage(report.details, migrationsDir);
 	}
 	const [fileName] = report.details;
 	return brokenChainMessage(fileName ?? "");
 };
 
 /**
+ * `version` (as `renderMigrationPrefix` would render it) parsed back into
+ * the instant it names — `null` for `index` (no clock, and
+ * `findDuplicateVersionGroups` never fires for it: structurally
+ * monotonic) or a version that doesn't parse as the shape `strategy`
+ * expects. Only ever used to compute a *suggested* rename target for the
+ * `duplicate-migration-version` diagnostic's `Next:` — never to decide
+ * whether the collision itself is real (that's `findDuplicateVersionGroups`
+ * alone, on the raw strings).
+ */
+const parseVersionAsDate = (
+	version: string,
+	strategy: MigrationPrefixStrategy,
+): Date | null => {
+	if (strategy === "unix") {
+		const seconds = Number(version);
+		if (!Number.isFinite(seconds)) {
+			return null;
+		}
+		return new Date(seconds * 1000);
+	}
+	if (strategy === "timestamp") {
+		if (version.length !== 14) {
+			return null;
+		}
+		const year = Number(version.slice(0, 4));
+		const month = Number(version.slice(4, 6));
+		const day = Number(version.slice(6, 8));
+		const hour = Number(version.slice(8, 10));
+		const minute = Number(version.slice(10, 12));
+		const second = Number(version.slice(12, 14));
+		return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+	}
+	return null;
+};
+
+/** The instant one second after every migration's own version in `fileNames` — `null` when there's nothing to compare against, or `strategy` has no meaningful clock (`index`). */
+const nextInstantAfterAll = (
+	fileNames: ReadonlyArray<string>,
+	strategy: MigrationPrefixStrategy,
+): Date | null => {
+	const dates = fileNames
+		.map((name) => migrationVersionOf(name))
+		.filter((version): version is string => version !== null)
+		.map((version) => parseVersionAsDate(version, strategy))
+		.filter((date): date is Date => date !== null);
+	if (dates.length === 0) {
+		return null;
+	}
+	const maxMs = Math.max(...dates.map((date) => date.getTime()));
+	return new Date(maxMs + 1000);
+};
+
+/** The original slug half of a migration filename (`<version>_<slug>.sql`) — everything after the first `_`, extension included, so a suggested rename keeps it byte-for-byte. */
+const slugOf = (fileName: string): string =>
+	fileName.slice(fileName.indexOf("_") + 1);
+
+/**
+ * Renders `mv <migrationsDir>/<name> <migrationsDir>/<newVersion>_<slug>`
+ * for one file, `newVersion` a whole second after `baseInstant` plus
+ * `index` seconds — spacing multiple renamed files a second apart so a
+ * 3+-way collision's suggestions don't just create a new collision among
+ * themselves.
+ */
+const renameSuggestion = (
+	fileName: string,
+	baseInstant: Date,
+	index: number,
+	strategy: MigrationPrefixStrategy,
+	migrationsDir: string,
+): string => {
+	const targetInstant = new Date(baseInstant.getTime() + index * 1000);
+	const targetVersion = renderMigrationPrefix({
+		strategy,
+		generatedAt: targetInstant,
+		previousCount: 0,
+		slug: "",
+	});
+	return `mv ${migrationPath(migrationsDir, fileName)} ${migrationPath(migrationsDir, `${targetVersion}_${slugOf(fileName)}`)}`;
+};
+
+/**
+ * Owner principle (#220 review): detect, then hand back a command already
+ * typed out — `Next:` names the one file worth keeping as-is (sorted
+ * first, deterministic) and gives a computed `mv` for every other member
+ * of the group, spaced a second apart so renaming more than one member at
+ * once can't recreate the collision among themselves. `hejbro verify
+ * --fix` (a later PR, #220 tracking issue) automates exactly this
+ * suggestion; until it exists, `Next:` only ever names the manual `mv`,
+ * never a flag that isn't there yet.
+ */
+const duplicateVersionMessage = (
+	group: DuplicateVersionGroup,
+	allFileNames: ReadonlyArray<string>,
+	strategy: MigrationPrefixStrategy,
+	migrationsDir: string,
+): string => {
+	const fileList = group.fileNames.map((name) => `"${name}"`).join(", ");
+	const [kept, ...rest] = group.fileNames;
+	const baseInstant = nextInstantAfterAll(allFileNames, strategy);
+	const reason = `${group.fileNames.length} migrations share the version "${group.version}" (${fileList}) — Supabase (and any tool that tracks *applied* migrations by this version prefix, not the full filename) can only ever apply one of them; the rest silently never run.`;
+	if (kept === undefined || rest.length === 0 || baseInstant === null) {
+		// Structurally unreachable: findDuplicateVersionGroups only ever
+		// returns groups with 2+ members, and it only ever fires for
+		// timestamp/unix versions (index can't collide by construction), both
+		// of which parseVersionAsDate handles — kept as a defensive fallback
+		// so a future caller misuse degrades to a still-correct, if less
+		// actionable, message instead of crashing.
+		return `${reason} Next: rename every file in this group but one to a version after the current latest, then rerun \`hejbro verify\`.`;
+	}
+	const renameCommands = rest
+		.map((name, index) =>
+			renameSuggestion(name, baseInstant, index, strategy, migrationsDir),
+		)
+		.join(" && ");
+	return `${reason} Next: keep "${kept}" as is; ${renameCommands}; then rerun \`hejbro verify\`.`;
+};
+
+/**
  * Owner-approved verbatim (⑥) — the skip/summary lines for the
- * dependency-aware batch redesign (checks 1 and 3 always run; 2 needs
- * 1; 4 needs 1 and 3). See `test/verify.test.ts` for the golden pins.
+ * dependency-aware batch redesign (duplicate-version and check 1 always
+ * run; check 3 needs duplicate-version, since a version collision leaves
+ * chain order undefined; check 2 needs check 1; check 4 needs check 1 and
+ * check 3). See `test/verify.test.ts` for the golden pins.
  */
 const SKIPPED_CHECK_2_LINE =
 	"skipped: declarations ↔ snapshot (needs a parseable snapshot file)";
+const SKIPPED_CHECK_3_LINE =
+	"skipped: chain linearity (needs every migration to have a unique version)";
 const SKIPPED_CHECK_4_LINE =
 	"skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)";
+
+const TOTAL_CHECKS = 5;
 
 const failureSummaryLine = (
 	failedCount: number,
 	skippedCount: number,
 ): string => {
 	if (skippedCount === 0) {
-		return `verify: ${failedCount} of 4 checks failed — fix the errors above and rerun \`hejbro verify\`.`;
+		return `verify: ${failedCount} of ${TOTAL_CHECKS} checks failed — fix the errors above and rerun \`hejbro verify\`.`;
 	}
-	return `verify: ${failedCount} of 4 checks failed, ${skippedCount} skipped — fix the errors above and rerun \`hejbro verify\`.`;
+	return `verify: ${failedCount} of ${TOTAL_CHECKS} checks failed, ${skippedCount} skipped — fix the errors above and rerun \`hejbro verify\`.`;
 };
 
 export type VerifyResult = {
@@ -175,14 +336,34 @@ const runCheck2 = (
 	};
 };
 
+/** Check (always runs, before chain linearity — a version collision leaves chain order undefined, so it must be caught first): no two migration files claim the same version prefix. Pure detection (findDuplicateVersionGroups) over the raw filenames; the message's suggested rename needs `strategy` and `migrationsDir` (config-relative — the path fragment a copy-pasted `mv` command should use, never the absolute filesystem path `runVerify` reads files from). */
+const runCheckDuplicateVersion = (
+	fileNames: ReadonlyArray<string>,
+	strategy: MigrationPrefixStrategy,
+	migrationsDir: string,
+): CheckOutcome => {
+	const [group] = findDuplicateVersionGroups(fileNames);
+	if (group === undefined) {
+		return { ok: true };
+	}
+	return {
+		ok: false,
+		error: hejbroError(
+			"duplicate-migration-version",
+			duplicateVersionMessage(group, fileNames, strategy, migrationsDir),
+		),
+	};
+};
+
 type Check3Result = {
 	readonly report: ChainReport;
 	readonly outcome: CheckOutcome;
 };
 
-/** Check 3 (always runs): every migration's hash-chain lines form one linked list. */
+/** Check 3: every migration's hash-chain lines form one linked list. Only runs when the duplicate-version check passed (`runCheck3IfEligible`) — with two files sharing a version, "which one comes first" isn't defined, so a chain walk over them can't mean anything yet. `migrationsDirPath` reads the files; `migrationsDir` (config-relative) is what a diverged-migrations `rm`/`generate` suggestion should print. */
 const runCheck3 = (
 	migrationsDirPath: string,
+	migrationsDir: string,
 	fileNames: ReadonlyArray<string>,
 ): Check3Result => {
 	const report = checkChain(readChainEntries(migrationsDirPath, fileNames));
@@ -193,9 +374,22 @@ const runCheck3 = (
 		report,
 		outcome: {
 			ok: false,
-			error: hejbroError(report.code, chainErrorMessage(report)),
+			error: hejbroError(report.code, chainErrorMessage(report, migrationsDir)),
 		},
 	};
+};
+
+/** `null` when the duplicate-version check failed (chain order is undefined until every version is unique); otherwise runs check 3. */
+const runCheck3IfEligible = (
+	duplicateVersionOutcome: CheckOutcome,
+	migrationsDirPath: string,
+	migrationsDir: string,
+	fileNames: ReadonlyArray<string>,
+): Check3Result | null => {
+	if (!duplicateVersionOutcome.ok) {
+		return null;
+	}
+	return runCheck3(migrationsDirPath, migrationsDir, fileNames);
 };
 
 /** Check 4 (runs only when checks 1 and 3 both passed): the chain tip hash equals the on-disk snapshot's normalized hash (same normalization `generate` uses for `parent`). Trivially passes when there are no migrations yet (tip is null — nothing to compare). */
@@ -225,12 +419,12 @@ const runCheck2IfEligible = (
 	return runCheck2(declarations, check1DiskText, snapshotPath, registry);
 };
 
-/** `null` when check 1 or check 3 failed (check 4 needs both); otherwise runs check 4. */
+/** `null` when check 1 failed, check 3 was itself skipped (duplicate-version failed), or check 3 ran but failed (check 4 needs a parseable snapshot and a linear chain); otherwise runs check 4. */
 const runCheck4IfEligible = (
 	check1DiskText: string | null,
-	check3: Check3Result,
+	check3: Check3Result | null,
 ): CheckOutcome | null => {
-	if (check1DiskText === null || !check3.report.ok) {
+	if (check1DiskText === null || check3 === null || !check3.report.ok) {
 		return null;
 	}
 	return runCheck4(check1DiskText, check3.report.tip);
@@ -243,6 +437,21 @@ const check2SkipLine = (check2: CheckOutcome | null): string | null => {
 	return null;
 };
 
+const check3SkipLine = (check3: Check3Result | null): string | null => {
+	if (check3 === null) {
+		return SKIPPED_CHECK_3_LINE;
+	}
+	return null;
+};
+
+/** `null` when check 3 was itself skipped (duplicate-version failed); otherwise its own outcome — for folding into the flat `outcomes` list `runVerify` filters for failures. */
+const check3Outcome = (check3: Check3Result | null): CheckOutcome | null => {
+	if (check3 === null) {
+		return null;
+	}
+	return check3.outcome;
+};
+
 const check4SkipLine = (check4: CheckOutcome | null): string | null => {
 	if (check4 === null) {
 		return SKIPPED_CHECK_4_LINE;
@@ -251,16 +460,19 @@ const check4SkipLine = (check4: CheckOutcome | null): string | null => {
 };
 
 /**
- * `hejbro verify`'s four checks (U6), dependency-aware batch reporting
- * (reviewer-redesigned, PR D round 2): checks 1 (snapshot parses) and 3
- * (chain linearity) always run, independent of each other; check 2
- * (declarations ↔ snapshot) runs only when 1 passed; check 4 (tip ↔
- * snapshot) runs only when 1 and 3 both passed. Every failure is
- * collected and rendered as one multi-diagnostic batch; a check skipped
- * for a failed dependency gets a fixed `skipped:` line instead. Loader
- * errors (config-not-found/entry-not-found) are a precondition of all
- * four checks, not one of them — a single-diagnostic early exit, as
- * before. Exit 1 when any check failed.
+ * `hejbro verify`'s five checks (U6, #220 adds duplicate-version),
+ * dependency-aware batch reporting (reviewer-redesigned, PR D round 2;
+ * extended #220): duplicate-version and check 1 (snapshot parses) always
+ * run, independent of each other; check 3 (chain linearity) runs only
+ * when duplicate-version passed (a version collision leaves chain order
+ * undefined — checked first, ahead of the chain walk, on purpose); check
+ * 2 (declarations ↔ snapshot) runs only when check 1 passed; check 4 (tip
+ * ↔ snapshot) runs only when check 1 passed and check 3 both ran and
+ * passed. Every failure is collected and rendered as one multi-diagnostic
+ * batch; a check skipped for a failed dependency gets a fixed `skipped:`
+ * line instead. Loader errors (config-not-found/entry-not-found) are a
+ * precondition of all five checks, not one of them — a single-diagnostic
+ * early exit, as before. Exit 1 when any check failed.
  */
 export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 	const fallbackIdentity = "hejbro.config.ts";
@@ -272,7 +484,17 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 		const check1 = runCheck1(cwd, config);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
 		const fileNames = listMigrationFiles(migrationsDirPath);
-		const check3 = runCheck3(migrationsDirPath, fileNames);
+		const checkDuplicateVersion = runCheckDuplicateVersion(
+			fileNames,
+			config.prefixStrategy,
+			config.migrationsDir,
+		);
+		const check3 = runCheck3IfEligible(
+			checkDuplicateVersion,
+			migrationsDirPath,
+			config.migrationsDir,
+			fileNames,
+		);
 
 		const check2 = runCheck2IfEligible(
 			check1.diskText,
@@ -282,7 +504,13 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 		);
 		const check4 = runCheck4IfEligible(check1.diskText, check3);
 
-		const outcomes = [check1.outcome, check2, check3.outcome, check4];
+		const outcomes = [
+			checkDuplicateVersion,
+			check1.outcome,
+			check2,
+			check3Outcome(check3),
+			check4,
+		];
 		const failures = outcomes.filter(
 			(outcome): outcome is Extract<CheckOutcome, { ok: false }> =>
 				outcome !== null && !outcome.ok,
@@ -296,7 +524,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 			return {
 				exitCode: 0,
 				stdout: [
-					`verify: 4 checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
+					`verify: ${TOTAL_CHECKS} checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
 				],
 				stderr: null,
 			};
@@ -306,6 +534,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 			errorDiagnostic(failure.error, fallbackIdentity),
 		);
 		const skippedLines = [
+			check3SkipLine(check3),
 			check2SkipLine(check2),
 			check4SkipLine(check4),
 		].filter((line): line is string => line !== null);

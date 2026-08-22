@@ -118,12 +118,33 @@ export const createCliFixtureDir = async (): Promise<string> => {
 export const removeCliFixtureDir = (cwd: string): Promise<void> =>
 	rm(cwd, { recursive: true, force: true });
 
-export const runCli = (
+/** Milliseconds remaining until the next whole-second wall-clock boundary — always in `(0, 1000]`. */
+const msUntilNextSecondBoundary = (): number => 1000 - (Date.now() % 1000);
+
+/**
+ * #220: `generate`'s `timestamp`/`unix` prefixes have second resolution,
+ * and production code deliberately does *not* prevent a same-second
+ * collision (owner decision — detect + offer a command at `verify` time,
+ * not a generate-time wait/reject). A test that drives two `generate`
+ * calls back to back would otherwise be flaky: whether they land in the
+ * same second is real-clock timing, and a same-second collision now trips
+ * verify's own `duplicate-migration-version` check. This wait is
+ * test-support only — nothing in the shipped CLI ever calls it — so it
+ * buys determinism for the *test suite* without reintroducing the
+ * generate-time wait the owner rejected for the product itself.
+ */
+const waitForNextSecondBoundary = (): Promise<void> =>
+	new Promise((resolve) => setTimeout(resolve, msUntilNextSecondBoundary()));
+
+export const runCli = async (
 	cwd: string,
 	args: ReadonlyArray<string>,
 	options?: { readonly env?: NodeJS.ProcessEnv },
-): Promise<CliRun> =>
-	new Promise((resolve) => {
+): Promise<CliRun> => {
+	if (args[0] === "generate") {
+		await waitForNextSecondBoundary();
+	}
+	return new Promise((resolve) => {
 		execFile(
 			process.execPath,
 			[CLI_PATH, ...args],
@@ -146,6 +167,7 @@ export const runCli = (
 			},
 		);
 	});
+};
 
 export const writeFixtureFile = async (
 	cwd: string,

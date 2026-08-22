@@ -1,5 +1,6 @@
 import { assertNever } from "../error";
 import type { ChangeOperation, KindChange } from "../kind/object-kind";
+import { compareKeys } from "../sort";
 
 /** The supported migration filename prefix strategies (D14). */
 export const migrationPrefixStrategies = [
@@ -26,7 +27,10 @@ type MigrationFileNameOptions = {
 	readonly slug: string;
 };
 
-const renderPrefix = (options: MigrationFileNameOptions): string => {
+/** @see migrationFileName — exported (not just `migrationFileName`-internal) so a caller building a *suggested* filename (verify's `duplicate-migration-version` diagnostic, #220) can render just the prefix half, keeping the original file's own slug. */
+export const renderMigrationPrefix = (
+	options: MigrationFileNameOptions,
+): string => {
 	switch (options.strategy) {
 		case "timestamp":
 			return formatUtcTimestamp(options.generatedAt);
@@ -46,7 +50,57 @@ const renderPrefix = (options: MigrationFileNameOptions): string => {
  * filesystem.
  */
 export const migrationFileName = (options: MigrationFileNameOptions): string =>
-	`${renderPrefix(options)}_${options.slug}.sql`;
+	`${renderMigrationPrefix(options)}_${options.slug}.sql`;
+
+/** The substring of `fileName` before its first `_`, or `null` if that substring isn't a plain non-negative integer — every `migrationFileName` strategy renders one; a hand-written legacy file with a non-numeric prefix is `null` and drops out of the comparison rather than crashing it. */
+export const migrationVersionOf = (fileName: string): string | null => {
+	const version = fileName.split("_", 1)[0] ?? "";
+	if (!/^\d+$/.test(version)) {
+		return null;
+	}
+	return version;
+};
+
+/** One group of 2+ migration files that all render the exact same version prefix — Supabase (and any tool that tracks *applied* migrations by this prefix, not by full filename) can only ever apply one of them; the rest silently never run. */
+export type DuplicateVersionGroup = {
+	readonly version: string;
+	readonly fileNames: ReadonlyArray<string>;
+};
+
+/**
+ * Groups `fileNames` by their version prefix (`migrationVersionOf`),
+ * keeping only groups with 2 or more members — the collision
+ * `hejbro verify`'s `duplicate-migration-version` check reports (#220).
+ * Deterministically ordered: groups sorted by version, each group's
+ * `fileNames` sorted by name. Files with no version at all (a legacy,
+ * hand-written prefix) never collide with anything here, matching
+ * `checkChain`'s own "caller filters what it can't classify" contract.
+ *
+ * Pure and strategy-agnostic on purpose: `index`-strategy prefixes can't
+ * collide by construction (`previousCount + 1`, always the very next
+ * integer no other file has claimed), so this never fires for them in
+ * practice — but the check itself doesn't need to know which strategy a
+ * project uses to say "these two files claim the same version."
+ */
+export const findDuplicateVersionGroups = (
+	fileNames: ReadonlyArray<string>,
+): ReadonlyArray<DuplicateVersionGroup> => {
+	const byVersion = fileNames.reduce((acc, fileName) => {
+		const version = migrationVersionOf(fileName);
+		if (version === null) {
+			return acc;
+		}
+		const existing = acc.get(version) ?? [];
+		return acc.set(version, [...existing, fileName]);
+	}, new Map<string, ReadonlyArray<string>>());
+	return Array.from(byVersion.entries())
+		.filter(([, names]) => names.length > 1)
+		.map(([version, names]) => ({
+			version,
+			fileNames: [...names].sort(compareKeys),
+		}))
+		.sort((a, b) => compareKeys(a.version, b.version));
+};
 
 const bannerMarker = (operation: ChangeOperation): string => {
 	switch (operation) {

@@ -229,7 +229,7 @@ describe("hejbro cli-smoke e2e (built CLI, tmp copy of examples/cli-smoke)", () 
 		// 4. verify → exit 0.
 		const firstVerify = await runCli(cwd, ["verify"]);
 		expect(firstVerify.exitCode).toBe(0);
-		expect(firstVerify.stdout).toContain("verify: 4 checks passed");
+		expect(firstVerify.stdout).toContain("verify: 5 checks passed");
 
 		// 5. rename a column in the fixture source → generate exits 1 with
 		// ambiguous-column-rename → rerun with the suggested --rename →
@@ -269,6 +269,6 @@ describe("hejbro cli-smoke e2e (built CLI, tmp copy of examples/cli-smoke)", () 
 
 		const secondVerify = await runCli(cwd, ["verify"]);
 		expect(secondVerify.exitCode).toBe(0);
-		expect(secondVerify.stdout).toContain("verify: 4 checks passed");
+		expect(secondVerify.stdout).toContain("verify: 5 checks passed");
 	});
 });
