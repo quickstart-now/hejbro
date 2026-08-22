@@ -43,17 +43,35 @@
 // expression node, decoded and rendered the same way `@hejbro/core`
 // itself would) against `pg_get_expr(adbin, adrelid)`. Compared after
 // minimal, *measured* normalization only (trimming/collapsing
-// whitespace, and stripping a trailing `::<type>` cast Postgres adds to
-// a literal default that `renderExpr` itself never emits) -- never a
-// blanket case-fold, which risked silently accepting a genuinely wrong
-// string literal's content as a false negative with no concrete
-// DSL-reachable case-divergent scenario found to justify it.
+// whitespace, stripping a trailing `::<type>` cast Postgres adds to a
+// literal default that `renderExpr` itself never emits, and -- numeric
+// literals only -- also stripping a wrapping `'...'` Postgres adds
+// around a *negative* numeric literal, e.g. `.default(-1)` reading back
+// as `'-1'::integer`) -- never a blanket case-fold, which risked
+// silently accepting a genuinely wrong string literal's content as a
+// false negative with no concrete DSL-reachable case-divergent scenario
+// found to justify it.
 //
 // What this still DOES NOT check (deliberately out of scope, honest
 // non-comparison over a guessed rule that might misfire either
 // direction): an index's declared column list or expression, a check
 // constraint's declared expression, a function's/view's declared body, a
 // trigger's declared timing/event beyond its name.
+//
+// A known false-gap risk in the default comparison, not a "does not
+// check": a *compound* expression default (anything beyond a single
+// literal or a bare function call -- e.g. `sql`'a' || 'b'`` ``) can have
+// Postgres rewrite it with a per-operand cast on write (measured:
+// `('a' || 'b')` comes back as `('a'::text || 'b'::text)`) -- this
+// check's own cast-stripping only ever strips one trailing cast on the
+// *whole* value (see matchesWithCastSuffix), not a cast Postgres
+// inserted *inside* a multi-operand expression, so a column default
+// like this can report a false gap. Not normalized away: the general
+// rule ("Postgres may rewrite an expression's own internals on write")
+// is exactly the kind of guess this script's own default-comparison
+// doc comment above already declined to make for case-folding, for the
+// same reason -- a real rewrite this narrow regex can't anticipate the
+// exact shape of.
 //
 // `supabase-storage-bucket` (the one preset-only kind, `@hejbro/
 // supabase`) is skipped entirely, same as verify-supabase-image.sh's own
@@ -356,12 +374,52 @@ const escapeForRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * never emits this cast itself (`renderLiteral`'s string case renders
  * bare `'member'`), so it's always Postgres's own addition, safe to
  * strip without separately validating the cast's own spelling -- a wrong
- * *type* is already caught by `columnTypeGap`, independently.
+ * *type* is already caught by `columnTypeGap`, independently. The cast
+ * target's own character class also allows `[`/`]`/`(`/`)`/`,` -- measured
+ * for the brackets: an array-column literal default casts to its own
+ * array type (`'{}'::text[]`, `'{1.5,2.5}'::numeric[]`), and those
+ * brackets are the array-cast's own syntax, not a value this check
+ * re-validates (a wrong element type is still `columnTypeGap`'s job).
+ * Parens/comma widen the same way for a parameterized cast target
+ * (e.g. `numeric(10,2)`) if Postgres ever emits one on a literal default
+ * -- not reproduced directly (every numeric literal measured either
+ * needed no cast at all or cast to bare `numeric`, see this PR's own
+ * body), kept as defensive width for a shape this check should not
+ * false-gap on if it does occur, at no cost: nothing about the
+ * surrounding anchors changes, and a wrong type is still independently
+ * caught by `columnTypeGap`.
  */
 const matchesWithCastSuffix = (declaredText, catalogText) =>
 	new RegExp(
-		`^${escapeForRegExp(declaredText)}::[A-Za-z_][A-Za-z0-9_. ]*$`,
+		`^${escapeForRegExp(declaredText)}::[A-Za-z_][A-Za-z0-9_., \\[\\]()]*$`,
 	).test(catalogText);
+
+const NUMERIC_LITERAL = /^-?\d+(\.\d+)?$/;
+
+/**
+ * True when `catalogText` is `declaredText` -- a bare numeric literal,
+ * matched only when it has that exact shape -- wrapped in single quotes
+ * plus Postgres's own trailing `::<type>` cast. Measured directly:
+ * `.default(-1)` on an `integer` column reads back as `'-1'::integer`;
+ * `.default(-1.5)` on `numeric` reads back as `'-1.5'::numeric`. A
+ * *positive* literal default doesn't get this treatment (`.default(1)`
+ * stays bare `1` in the catalog too), so this only ever fires for a
+ * negative (or otherwise unusual) numeric default. Restricted to a
+ * numeric-literal-shaped `declaredText` on purpose: `renderExpr` always
+ * quotes a *string* literal already (`'member'`), so a string default
+ * never reaches this branch to begin with, and widening the match
+ * beyond digits/sign/decimal-point would risk a false match like
+ * `'abc'::text` against some other bare, unquoted declared text that
+ * was never the case this needed to cover.
+ */
+const matchesQuotedNumericCast = (declaredText, catalogText) => {
+	if (!NUMERIC_LITERAL.test(declaredText)) {
+		return false;
+	}
+	return new RegExp(
+		`^'${escapeForRegExp(declaredText)}'::[A-Za-z_][A-Za-z0-9_., \\[\\]()]*$`,
+	).test(catalogText);
+};
 
 const defaultsMatch = (declaredText, catalogText) => {
 	const declared = normalizeSql(declaredText);
@@ -369,7 +427,10 @@ const defaultsMatch = (declaredText, catalogText) => {
 	if (declared === actual) {
 		return true;
 	}
-	return matchesWithCastSuffix(declared, actual);
+	if (matchesWithCastSuffix(declared, actual)) {
+		return true;
+	}
+	return matchesQuotedNumericCast(declared, actual);
 };
 
 const columnDefaultGap = (schema, table, column, row) => {
