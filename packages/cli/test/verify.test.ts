@@ -294,6 +294,92 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		);
 	});
 
+	// #129: readChainEntries -> checkChain integration, at the level unit
+	// tests on checkChain alone (packages/core/test/chain.test.ts) can't
+	// reach -- these drive the real built CLI end to end (real `generate`
+	// calls building a real rollback history, real hash-less legacy file on
+	// disk), so a regression in *how verify wires the two together* (not
+	// just in checkChain's own classification logic) would show up here.
+	describe("chain linearity: rollback histories (#129 integration)", () => {
+		it("passes verify after declarations roll back to an earlier state via re-declaration, then continue", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(BASE_SCHEMA);
+			// Explicit --name on every call (timestampStrategy default,
+			// second-granularity, D14) with a leading ordinal: distinct names
+			// alone stop generate from silently overwriting a file when two
+			// calls land in the same UTC second, but listMigrationFiles then
+			// sorts by *filename*, timestamp prefix first -- a same-second
+			// tie falls through to comparing the rest of the name, and
+			// "add_body" < "add_posts" lexicographically would reorder
+			// migration 2 before migration 1 on exactly that tie -- a real,
+			// user-reachable defect this PR surfaces rather than causes
+			// (#220), worked around here (not fixed) so this suite tests
+			// #129 deterministically. The "1_"/"2_"/"3_"/"4_" prefix makes
+			// the sort match generation order regardless of any timestamp
+			// collision.
+			await runCli(cwd, ["generate", "--name", "1_add_posts"]); // migration 1: empty -> A
+			await writeSchema(CHANGED_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "2_add_body"]); // migration 2: A -> B
+			await writeSchema(BASE_SCHEMA); // revert: back to A
+			await runCli(cwd, ["generate", "--name", "3_drop_body_rollback"]); // migration 3: B -> A (rollback)
+			// A 4th step whose *own* parent (A) reoccurs (not just its
+			// current, which migration 3 already reused) is what the
+			// pre-#129 algorithm actually got wrong (reviewer, #217 review):
+			// migrations 1-3 alone have parents {empty, A, B} -- all
+			// distinct -- so that shape passes even the old global-grouping
+			// checkChain and doesn't exercise the fix. Parent A appears on
+			// both migration 2 and migration 4 here, exactly the shape the
+			// old algorithm misreads as two entries racing for the same
+			// slot (diverged-migrations) instead of "A legitimately recurred
+			// after migration 3's rollback, and migration 4 continues from
+			// it."
+			await writeSchema(CHANGED_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "4_add_body_again"]); // migration 4: A -> B (again)
+
+			const fileNames = await migrationFileNames();
+			expect(fileNames).toHaveLength(4);
+
+			const result = await runCli(cwd, ["verify"]);
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain(
+				"verify: 4 checks passed (4 migrations, snapshot sha256:",
+			);
+		});
+
+		it("keeps a rollback-tolerant chain valid alongside a legacy (hash-less) migration file that precedes it", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(BASE_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "1_add_posts"]);
+			await writeSchema(CHANGED_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "2_add_body"]);
+			await writeSchema(BASE_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "3_drop_body_rollback"]);
+			// See the sibling test above for why a 4th step (parent A
+			// reoccurring, not just current A) is required to actually
+			// exercise #129 rather than a shape the old algorithm already
+			// passed.
+			await writeSchema(CHANGED_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "4_add_body_again"]);
+
+			// Sorts before every generated file (timestamp prefixes), and has
+			// no "-- parent-snapshot:"/"-- snapshot:" banner lines at all --
+			// readChainEntries (verify.ts) filters it out via
+			// parseBannerHashes -> null, so it must have zero effect on
+			// whether the rollback chain after it still verifies.
+			await writeFixtureFile(
+				cwd,
+				"migrations/00000000000000_legacy_no_hashes.sql",
+				"-- hand-written migration from before hejbro tracked hash chains\ncreate table app.legacy_marker (id integer);\n",
+			);
+
+			const result = await runCli(cwd, ["verify"]);
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain(
+				"verify: 4 checks passed (5 migrations, snapshot sha256:",
+			);
+		});
+	});
+
 	// Dependency-aware batch reporting (reviewer-redesigned, PR D round 2):
 	// checks 1 and 3 always run; 2 needs 1; 4 needs 1 and 3. skip/summary
 	// text is owner-approved verbatim (⑥), pinned below.
