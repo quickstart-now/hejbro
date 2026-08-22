@@ -1,6 +1,6 @@
 import type { RlsDeclaration } from "../dsl/rls";
 import { assertNever, throwHejbroError } from "../error";
-import { sameJson } from "../kind/diff-helpers";
+import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
@@ -82,44 +82,21 @@ export const rlsKind: ObjectKind<RlsDeclaration> = {
 		return rlsIdentity(rlsSnapshot.schema, rlsSnapshot.table);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "rls",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
+		const guard = createOrDropDiff("rls", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "rls",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
+		if (sameJson(guard.previous, guard.next)) {
 			return [];
 		}
-		if (sameJson(previous, next)) {
-			return [];
-		}
-		const nextSnapshot = asRlsSnapshot(next);
+		const nextSnapshot = asRlsSnapshot(guard.next);
 		return [
 			{
 				kind: "rls",
 				operation: "alter",
 				identity,
-				previous,
-				next,
+				previous: guard.previous,
+				next: guard.next,
 				notes: [forceNote(rlsForce(nextSnapshot))],
 			},
 		];

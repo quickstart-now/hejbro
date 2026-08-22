@@ -1,5 +1,6 @@
 import type { EnumDeclaration } from "../dsl/pg-enum";
 import { assertNever, throwHejbroError } from "../error";
+import { createOrDropDiff } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
@@ -75,36 +76,13 @@ export const enumKind: ObjectKind<EnumDeclaration> = {
 		return enumIdentity(enumSnapshot.schema, enumSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "enum",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
-		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "enum",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
-			return [];
+		const guard = createOrDropDiff("enum", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
 
-		const previousValues = asEnumSnapshot(previous).values;
-		const nextValues = asEnumSnapshot(next).values;
+		const previousValues = asEnumSnapshot(guard.previous).values;
+		const nextValues = asEnumSnapshot(guard.next).values;
 		const appendOnly = isAppendOnly(previousValues, nextValues);
 
 		if (appendOnly && previousValues.length === nextValues.length) {
@@ -114,7 +92,14 @@ export const enumKind: ObjectKind<EnumDeclaration> = {
 			const addedValues = nextValues.slice(previousValues.length);
 			const notes = addedValues.map((value) => `value "${value}" added`);
 			return [
-				{ kind: "enum", operation: "alter", identity, previous, next, notes },
+				{
+					kind: "enum",
+					operation: "alter",
+					identity,
+					previous: guard.previous,
+					next: guard.next,
+					notes,
+				},
 			];
 		}
 
@@ -123,8 +108,8 @@ export const enumKind: ObjectKind<EnumDeclaration> = {
 				kind: "enum",
 				operation: "alter",
 				identity,
-				previous,
-				next,
+				previous: guard.previous,
+				next: guard.next,
 				notes: [REMOVED_VALUES_NOTE],
 			},
 		];

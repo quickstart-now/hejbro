@@ -1,7 +1,7 @@
 import type { GrantDeclaration, GrantKind, TablePrivilege } from "../dsl/grant";
 import { tablePrivileges } from "../dsl/grant";
 import { assertNever, throwHejbroError } from "../error";
-import { sameJson } from "../kind/diff-helpers";
+import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { quoteIdentifier, renderRoleName } from "../sql/identifier";
@@ -150,45 +150,22 @@ export const grantKind: ObjectKind<GrantDeclaration> = {
 		);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "grant",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
+		const guard = createOrDropDiff("grant", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "grant",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
+		if (sameJson(guard.previous, guard.next)) {
 			return [];
 		}
-		if (sameJson(previous, next)) {
-			return [];
-		}
-		const previousSnapshot = asGrantSnapshot(previous);
-		const nextSnapshot = asGrantSnapshot(next);
+		const previousSnapshot = asGrantSnapshot(guard.previous);
+		const nextSnapshot = asGrantSnapshot(guard.next);
 		return [
 			{
 				kind: "grant",
 				operation: "alter",
 				identity,
-				previous,
-				next,
+				previous: guard.previous,
+				next: guard.next,
 				notes: privilegeDelta(
 					previousSnapshot.privileges,
 					nextSnapshot.privileges,

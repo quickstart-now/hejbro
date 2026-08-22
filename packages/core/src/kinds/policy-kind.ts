@@ -3,7 +3,7 @@ import { assertNever, throwHejbroError } from "../error";
 import type { ExprNode, TableRefNode } from "../expr/ast";
 import { decodeExprNode, encodeExprNode } from "../expr/codec";
 import { renderExpr } from "../expr/render-sql";
-import { sameJson } from "../kind/diff-helpers";
+import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import {
@@ -204,34 +204,11 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 		);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "policy",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
+		const guard = createOrDropDiff("policy", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "policy",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
-			return [];
-		}
-		if (sameJson(previous, next)) {
+		if (sameJson(guard.previous, guard.next)) {
 			return [];
 		}
 		return [
@@ -239,8 +216,8 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 				kind: "policy",
 				operation: "alter",
 				identity,
-				previous,
-				next,
+				previous: guard.previous,
+				next: guard.next,
 				notes: [POLICY_CHANGED_NOTE],
 			},
 		];
