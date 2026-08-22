@@ -15,8 +15,11 @@ Neon and Nile planned). MIT, built AI-natively under `quickstart-now`.
 1. `docs/specs/2026-08-19-hejbro-design.md` — approved design spec and
    decision log (D1–D12). Decisions were made explicitly by the project
    owner. Never silently revisit them; if blocked, surface it and ask.
-2. `docs/plans/2026-08-19-roadmap.md` — phased plan and current frontier.
-   Keep it current as work lands so any session can find the frontier.
+2. `docs/plans/2026-08-22-0.2.0-roadmap.md` — the current release line
+   (0.2.0): process, scope candidates, work list, frontier. Keep it current
+   as work lands so any session can find the frontier. Per-feature plans
+   live in `specs/NNN-<feature>/`. The closed 0.1.x line (Phases 0–9) is
+   `docs/plans/2026-08-19-roadmap.md`.
 
 ## Commands
 
@@ -52,8 +55,15 @@ again.
 
 ## Hard rules
 
-- **One phase at a time.** Each roadmap phase: brainstorm unknowns → written
-  implementation plan → TDD → review → PR. Never start a phase by writing
+- **One phase at a time, spec before code.** From 0.2.0 (Phase 10) each
+  feature runs GitHub Spec Kit for the *what* — `/speckit-specify` →
+  `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks`, artifacts under
+  `specs/NNN-<feature>/` — and the superpowers cycle for the *how* (TDD,
+  subagent-driven implementation, review, PR). The constitution lives at
+  `.specify/memory/constitution.md`; templates are overridden under
+  `.specify/templates/overrides/` (never edit the core templates). Phases
+  1–9 used `brainstorming` → `writing-plans` instead; their plans stay
+  under `docs/plans/`. Never start a phase or a feature by writing
   production code.
 - **Core purity is load-bearing.** If a change needs I/O in `@hejbro/core`,
   the design is being violated — stop and reconsider.
