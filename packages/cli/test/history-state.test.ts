@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { migrationAddedCommits } from "../src/git";
@@ -114,28 +114,33 @@ describe("computeMigrationState", () => {
 	});
 
 	// `rewritten` (a migration file that IS tracked and clean, yet no
-	// commit reachable from HEAD ever shows it as freshly added) has no
-	// natural, reliable git repro -- every path git considers "add"-able
-	// this way includes committing it at all. Exercised directly instead:
-	// the "no candidate" branch with a file that's tracked and clean is
-	// exactly `computeMigrationState`'s own `rewritten` case, and this is
-	// the scenario a genuinely lost `--diff-filter=A` event (a corrupted
-	// or unusually-rewritten history) would present as.
-	it("rewritten: the file is tracked and clean, but migrationAddedCommits has no entry for it", async () => {
+	// commit reachable from HEAD ever shows it as freshly added) DOES have
+	// a natural repro: a rename. Git's default rename detection (on since
+	// 2.9, confirmed empirically against this machine's git 2.50.1) turns
+	// a plain rename into an `R100` log entry instead of a `D`+`A` pair --
+	// so the renamed path never appears under `--diff-filter=A`, exactly
+	// as if its own add-commit had been lost to history rewriting.
+	it("rewritten: a migration file renamed after its own commit has no add-commit event of its own (real git repro)", async () => {
 		write(fixture.cwd, "migrations/0001_add_a.sql", "-- hejbro migration\n");
 		write(fixture.cwd, "hejbro.snapshot.json", '{"formatVersion":5,"v":1}');
 		fixture.commit("feat: a", "2026-01-01T10:00:00Z");
 
-		// An empty map simulates "migrationAddedCommits found no add event
-		// for this file" without needing to fabricate the git history that
-		// would produce it.
+		renameSync(
+			join(fixture.cwd, "migrations/0001_add_a.sql"),
+			join(fixture.cwd, "migrations/0001_add_a_renamed.sql"),
+		);
+		fixture.commit("chore: rename", "2026-01-02T10:00:00Z");
+
+		const addedCommits = migrationAddedCommits(fixture.cwd, "migrations");
+		expect(addedCommits.has("0001_add_a_renamed.sql")).toBe(false);
+
 		const result = computeMigrationState(
 			fixture.cwd,
 			"migrations",
 			"hejbro.snapshot.json",
 			"sha256:whatever",
-			new Map(),
-			"0001_add_a.sql",
+			addedCommits,
+			"0001_add_a_renamed.sql",
 		);
 		expect(result.state).toBe("rewritten");
 		expect(result.commit).toBeNull();
