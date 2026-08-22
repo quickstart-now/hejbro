@@ -214,7 +214,7 @@ A column's `notNull` in the snapshot is not always exactly what was chained: `.p
 ### 5.2 Functions (RPCs) — builder DSL
 
 ```ts
-export const publishPost = defineFunction("app", "publish_post", {
+export const publishPost = defineFunction(app, "publish_post", {
 	args: { postId: uuid() },
 	returns: posts,              // table reference → emits `returns setof app.posts`
 	security: "definer",
