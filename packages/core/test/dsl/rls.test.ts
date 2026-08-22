@@ -165,7 +165,10 @@ describe("rls.enabled", () => {
 // own defensive re-check for a PolicyInput that reaches it some other
 // way (bindRls is exported; nothing stops a caller from constructing one
 // by hand, bypassing the chain entirely). These are the first tests to
-// actually exercise that path.
+// actually exercise that path. `bindRls` is a module seam (`dsl/table.ts`
+// is its only caller), not a public export -- it's absent from
+// `packages/core/src/index.ts`, so this test file reaches it directly
+// from `dsl/rls.ts`.
 const defensivePolicyInput = (
 	overrides: Partial<PolicyInput>,
 ): PolicyInput => ({
