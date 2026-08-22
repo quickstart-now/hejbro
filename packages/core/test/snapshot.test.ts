@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { pgEnum } from "../src/dsl/pg-enum";
+import type { SchemaDeclaration } from "../src/dsl/schema";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import type { ObjectKind } from "../src/kind/object-kind";
 import {
 	createDefaultRegistry,
 	requiredKeysByKind,
 } from "../src/kind/registry";
+import { schemaKind } from "../src/kinds/schema-kind";
 import {
 	buildSnapshot,
 	emptySnapshot,
@@ -28,6 +31,29 @@ describe("emptySnapshot", () => {
 
 	it("renders with the v5 version marker (D68)", () => {
 		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 5`);
+	});
+});
+
+describe("ObjectKind.serialize's optional SerializeContext", () => {
+	it("accepts a kind whose serialize ignores the context, and one that reads it", () => {
+		const ignoring: ObjectKind<SchemaDeclaration> = {
+			...schemaKind,
+			serialize: (declaration) => schemaKind.serialize(declaration),
+		};
+		const reading: ObjectKind<SchemaDeclaration> = {
+			...schemaKind,
+			serialize: (declaration, context) => ({
+				...(schemaKind.serialize(declaration) as Record<string, unknown>),
+				probe:
+					context?.columnOrder({ schemaName: "x", tableName: "y" }) ?? null,
+			}),
+		};
+		expect(ignoring.serialize(schema("a"))).toEqual(
+			schemaKind.serialize(schema("a")),
+		);
+		expect(
+			reading.serialize(schema("a"), { columnOrder: () => ["k"] }),
+		).toMatchObject({ probe: ["k"] });
 	});
 });
 

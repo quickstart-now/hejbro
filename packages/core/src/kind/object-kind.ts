@@ -1,3 +1,4 @@
+import type { ColumnOrderOracle } from "../snapshot/column-order";
 import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { SqlStatement } from "../sql/statement";
@@ -26,6 +27,11 @@ export type KindChange = {
 /** The common shape every user declaration (schema, table, enum, …) satisfies. */
 export type HejbroDeclaration = { readonly declarationKind: string };
 
+/** What `buildSnapshot` knows while serializing that a single declaration cannot: the physical column order of every table in this build (D81). Optional on `serialize` so kinds that never read it — and every preset kind written before it existed — are untouched. */
+export type SerializeContext = {
+	readonly columnOrder: ColumnOrderOracle;
+};
+
 /**
  * The extension interface every database object kind implements — built-in
  * kinds and provider-preset kinds alike (spec §4.1). Four explicit stages:
@@ -38,7 +44,7 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 	readonly dependsOn: ReadonlyArray<string>;
 	/** narrow an unknown declaration to this kind (used by buildSnapshot) */
 	owns(declaration: HejbroDeclaration): declaration is TDeclaration;
-	serialize(declaration: TDeclaration): JsonValue;
+	serialize(declaration: TDeclaration, context?: SerializeContext): JsonValue;
 	identify(snapshot: JsonValue): string;
 	diff(
 		previous: JsonValue | null,
