@@ -57,8 +57,8 @@ create index "docs_data_idx" on "app"."docs" using gin ("data" jsonb_path_ops);
 create index "docs_created_at_idx" on "app"."docs" using brin ("created_at");
 create index "docs_owner_id_idx" on "app"."docs" using hash ("owner_id");
 create index "docs_body_trgm_idx" on "app"."docs" using gin ("body" gin_trgm_ops);
-create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."email"));
-create unique index "users_email_lower_live_uidx" on "app"."users" (lower("app"."users"."email")) where "app"."users"."deleted_at" is null;
+create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));
+create unique index "users_email_lower_live_uidx" on "app"."users" ((lower("app"."users"."email"))) where "app"."users"."deleted_at" is null;
 ```
 
 Later, `hejbro generate --rename app.users.email=email_address` retargets
@@ -119,7 +119,7 @@ index("docs_body_trgm_idx").using("gin").on(op(t.body, "gin_trgm_ops"));
 column; Postgres' own order is `<column or (expression)> [<opclass>]
 [asc|desc] [nulls first|last]`, so `op(desc(t.col, { nulls: "first" }), "c")`
 renders `"col" c desc nulls first`. `op` also wraps an expression, not just
-a column — ``op(sql`lower(${t.email})`, "c")`` renders `(lower("app"."users"."email")) c`.
+a column — ``op(sql`lower(${t.email})`, "c")`` renders `((lower("app"."users"."email"))) c`.
 
 ## Expression indexes
 
@@ -133,8 +133,16 @@ index("users_email_lower_idx").on(sql`lower(${t.email})`);
 ```
 
 ```sql
-create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."email"));
+create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));
 ```
+
+The double parentheses follow Postgres' `index_elem` grammar for a column
+list entry — a column, a function call, or a parenthesized `( a_expr )` —
+which hejbro always renders as the `(a_expr)` form, uniformly, rather than
+special-casing "is this a bare function call". `lower(...)` is itself
+already parenthesized as a function call, so the `(a_expr)` wrap adds one
+more pair around it; an operator expression like `"data" ->> 'status'`
+needs the same wrap: `(("data" ->> 'status'))`.
 
 **An expression index requires an explicit name.** There is no column to
 derive one from, so ``index().on(sql`lower(${t.email})`)`` (unnamed) fails
