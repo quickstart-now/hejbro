@@ -330,3 +330,76 @@ describe("retargetSelectNode (#157 item 96: same identity-preservation disciplin
 		});
 	});
 });
+
+// A `"columns"` projection (an explicit column list, e.g. `defineView`'s
+// own selected/aliased expressions) is a wholly separate ProjectionNode
+// variant from the `"allColumns"` shape every other retargetSelectNode
+// test above builds -- unreached by any of them, and by nothing else in
+// this file either, until now (0% coverage on this branch specifically,
+// #154 PR4's own retargetColumnsProjection extraction).
+describe('retargetSelectNode with a "columns" projection (defineView\'s own column list)', () => {
+	const buildColumnsQuery = (
+		columns: ReadonlyArray<{ readonly alias: string; readonly expr: ExprNode }>,
+	): SelectNode => ({
+		queryKind: "select",
+		projection: { projectionKind: "columns", columns },
+		from: { schemaName: "app", tableName: "posts" },
+		joins: [],
+		where: null,
+		orderBy: [],
+		limit: null,
+	});
+
+	it("retargets the matching column's own expr, leaving an unrelated column entry's reference untouched", () => {
+		const untouched = {
+			alias: "id",
+			expr: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "id",
+			} as ExprNode,
+		};
+		const renamed = {
+			alias: "title",
+			expr: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "title",
+			} as ExprNode,
+		};
+		const query = buildColumnsQuery([untouched, renamed]);
+		const retargeted = retargetSelectNode(query, columnRenameTarget);
+		expect(retargeted).not.toBe(query);
+		if (retargeted.projection.projectionKind !== "columns") {
+			throw new Error("expected a columns projection");
+		}
+		expect(retargeted.projection.columns[0]).toBe(untouched);
+		expect(retargeted.projection.columns[1]).toEqual({
+			alias: "title",
+			expr: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "headline",
+			},
+		});
+	});
+
+	it("returns the exact same reference when no column entry's expr matches the rename", () => {
+		const query = buildColumnsQuery([
+			{
+				alias: "id",
+				expr: {
+					nodeKind: "columnRef",
+					schemaName: "app",
+					tableName: "posts",
+					columnName: "id",
+				},
+			},
+		]);
+		const retargeted = retargetSelectNode(query, columnRenameTarget);
+		expect(retargeted).toBe(query);
+	});
+});
