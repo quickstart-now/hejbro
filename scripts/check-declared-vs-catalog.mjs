@@ -43,11 +43,14 @@
 // expression node, decoded and rendered the same way `@hejbro/core`
 // itself would) against `pg_get_expr(adbin, adrelid)`. Compared after
 // minimal, *measured* normalization only (trimming/collapsing
-// whitespace, and stripping a trailing `::<type>` cast Postgres adds to
-// a literal default that `renderExpr` itself never emits) -- never a
-// blanket case-fold, which risked silently accepting a genuinely wrong
-// string literal's content as a false negative with no concrete
-// DSL-reachable case-divergent scenario found to justify it.
+// whitespace, stripping a trailing `::<type>` cast Postgres adds to a
+// literal default that `renderExpr` itself never emits, and -- numeric
+// literals only -- also stripping a wrapping `'...'` Postgres adds
+// around a *negative* numeric literal, e.g. `.default(-1)` reading back
+// as `'-1'::integer`) -- never a blanket case-fold, which risked
+// silently accepting a genuinely wrong string literal's content as a
+// false negative with no concrete DSL-reachable case-divergent scenario
+// found to justify it.
 //
 // What this still DOES NOT check (deliberately out of scope, honest
 // non-comparison over a guessed rule that might misfire either
@@ -391,13 +394,43 @@ const matchesWithCastSuffix = (declaredText, catalogText) =>
 		`^${escapeForRegExp(declaredText)}::[A-Za-z_][A-Za-z0-9_., \\[\\]()]*$`,
 	).test(catalogText);
 
+const NUMERIC_LITERAL = /^-?\d+(\.\d+)?$/;
+
+/**
+ * True when `catalogText` is `declaredText` -- a bare numeric literal,
+ * matched only when it has that exact shape -- wrapped in single quotes
+ * plus Postgres's own trailing `::<type>` cast. Measured directly:
+ * `.default(-1)` on an `integer` column reads back as `'-1'::integer`;
+ * `.default(-1.5)` on `numeric` reads back as `'-1.5'::numeric`. A
+ * *positive* literal default doesn't get this treatment (`.default(1)`
+ * stays bare `1` in the catalog too), so this only ever fires for a
+ * negative (or otherwise unusual) numeric default. Restricted to a
+ * numeric-literal-shaped `declaredText` on purpose: `renderExpr` always
+ * quotes a *string* literal already (`'member'`), so a string default
+ * never reaches this branch to begin with, and widening the match
+ * beyond digits/sign/decimal-point would risk a false match like
+ * `'abc'::text` against some other bare, unquoted declared text that
+ * was never the case this needed to cover.
+ */
+const matchesQuotedNumericCast = (declaredText, catalogText) => {
+	if (!NUMERIC_LITERAL.test(declaredText)) {
+		return false;
+	}
+	return new RegExp(
+		`^'${escapeForRegExp(declaredText)}'::[A-Za-z_][A-Za-z0-9_., \\[\\]()]*$`,
+	).test(catalogText);
+};
+
 const defaultsMatch = (declaredText, catalogText) => {
 	const declared = normalizeSql(declaredText);
 	const actual = normalizeSql(catalogText);
 	if (declared === actual) {
 		return true;
 	}
-	return matchesWithCastSuffix(declared, actual);
+	if (matchesWithCastSuffix(declared, actual)) {
+		return true;
+	}
+	return matchesQuotedNumericCast(declared, actual);
 };
 
 const columnDefaultGap = (schema, table, column, row) => {
