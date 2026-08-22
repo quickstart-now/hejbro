@@ -493,11 +493,18 @@ const buildMismatchError = (
 	);
 };
 
-/** The `hejbro restore <n>` citty subcommand — see {@link runRestore}. No flags (spec §1) — `<n>` is read straight from `ctx.rawArgs`. */
+/** The `hejbro restore <n>` citty subcommand — see {@link runRestore}. No flags (spec §1) — `<n>` is read straight from `ctx.rawArgs`; the `n` arg below exists only so `--help` documents it (Task 13, #264) — `required: false` keeps citty from throwing its own "Missing required positional argument" before `run` gets a chance to print the owner-approved `restore-target-out-of-range` message. */
 export const restoreCommand = defineCommand({
 	meta: {
 		name: "restore",
 		description: RESTORE_DESCRIPTION,
+	},
+	args: {
+		n: {
+			type: "positional",
+			description: "the migration's number in `hejbro history` (1 = oldest)",
+			required: false,
+		},
 	},
 	run: async (ctx) => {
 		const result = await runRestore(process.cwd(), ctx.rawArgs);

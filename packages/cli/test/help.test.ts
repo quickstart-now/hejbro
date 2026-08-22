@@ -46,6 +46,17 @@ describe("hejbro --help", () => {
 	});
 });
 
+describe("hejbro restore --help", () => {
+	it("documents the migration number positional", async () => {
+		const result = await runHelp(cwd, ["restore", "--help"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("hejbro restore [OPTIONS] [N]");
+		expect(result.stdout).toContain(
+			"the migration's number in `hejbro history` (1 = oldest)",
+		);
+	});
+});
+
 describe("hejbro generate --help", () => {
 	it("prints the owner-approved two-paragraph description verbatim, ANSI-free under NO_COLOR", async () => {
 		const result = await runHelp(cwd, ["generate", "--help"]);
