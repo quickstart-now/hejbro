@@ -131,260 +131,313 @@ type IfStatementDraft = {
 };
 
 /**
+ * The mutable state one `createRecordingContext` call threads through
+ * every recording function below — extracted so those functions can live
+ * at module scope (see the doc comment on {@link createRecordingContext}
+ * for why that matters for CRAP, #154 PR2) instead of as closures nested
+ * inside it. `identity`/`declaredAt` never change after construction;
+ * everything else does, in place, the same way it did as closure-captured
+ * locals before this split — only the capture mechanism changed, from
+ * lexical scope to an explicit parameter every function here takes first.
+ */
+type RecordingState = {
+	readonly identity: string;
+	readonly declaredAt: string | null;
+	readonly declarations: Array<PlpgsqlVarDeclaration>;
+	readonly declaredNames: Set<string>;
+	readonly frames: Array<Array<BodyStatement>>;
+	readonly rowCounter: { current: number };
+	readonly loopCounter: { current: number };
+};
+
+const currentFrame = (state: RecordingState): Array<BodyStatement> => {
+	const frame = state.frames.at(-1);
+	if (frame === undefined) {
+		return throwHejbroError(
+			"unreachable",
+			`${state.identity}: plpgsql body recording has an empty frame stack.`,
+			state.declaredAt,
+		);
+	}
+	return frame;
+};
+
+const popFrame = (state: RecordingState): Array<BodyStatement> => {
+	const frame = state.frames.pop();
+	if (frame === undefined) {
+		return throwHejbroError(
+			"unreachable",
+			`${state.identity}: plpgsql body recording popped an empty frame stack.`,
+			state.declaredAt,
+		);
+	}
+	return frame;
+};
+
+const pushStatement = (
+	state: RecordingState,
+	statement: BodyStatement,
+): void => {
+	currentFrame(state).push(statement);
+};
+
+const registerLocalName = (state: RecordingState, name: string): void => {
+	assertValidLocalName(name, state.identity, state.declaredAt);
+	if (state.declaredNames.has(name)) {
+		throwHejbroError(
+			"duplicate-local-name",
+			`local name "${name}" is already declared in ${state.identity}. Next: pick a different row name or variable.`,
+			state.declaredAt,
+		);
+	}
+	state.declaredNames.add(name);
+};
+
+const resolveRowEntries = (
+	state: RecordingState,
+	projectionInput: RowProjection,
+): ReadonlyArray<{ readonly key: string; readonly columnRef: ColumnRef }> =>
+	Object.entries(asRecord(projectionInput)).map(([key, value]) => {
+		if (!isColumnRefValue(value)) {
+			return throwHejbroError(
+				"row-projection-not-column",
+				`ctx.row()/ctx.rowOrNull() projection key "${key}" in ${state.identity} isn't a plain column reference. Next: pass table columns (e.g. table.column), not computed expressions.`,
+				state.declaredAt,
+			);
+		}
+		return { key, columnRef: value };
+	});
+
+const recordRow =
+	(state: RecordingState, strict: boolean) =>
+	<TProjection extends RowProjection>(
+		query: SelectLimited<TProjection>,
+		name?: string,
+	): RowColumns<TProjection> => {
+		state.rowCounter.current += 1;
+		const rowName = name ?? `row_${state.rowCounter.current}`;
+		const entries = resolveRowEntries(state, query.projectionInput);
+
+		const composed = entries.map((entry) => {
+			const varName = `${rowName}_${toSnakeCase(entry.key)}`;
+			registerLocalName(state, varName);
+			state.declarations.push({
+				declKind: "scalar",
+				name: varName,
+				typeNode: entry.columnRef.typeNode,
+			});
+			return { key: entry.key, varName, family: entry.columnRef.family };
+		});
+
+		pushStatement(state, {
+			stmtKind: "selectInto",
+			query: query.selectQuery,
+			strict,
+			intoVariables: composed.map((entry) => entry.varName),
+		});
+
+		return Object.fromEntries(
+			composed.map((entry) => [
+				entry.key,
+				expr(entry.family, { nodeKind: "plpgsqlRef", path: [entry.varName] }),
+			]),
+		) as RowColumns<TProjection>;
+	};
+
+const makeIfChain = (
+	state: RecordingState,
+	branches: Array<IfBranch>,
+	statement: IfStatementDraft,
+): IfChain => ({
+	elseIf: (condition, branch) => {
+		if (statement.elseStatements !== null) {
+			throwHejbroError(
+				"invalid-if-chain",
+				`ctx.if() chain in ${state.identity} called .elseIf() after .else(). Next: reorder every .elseIf() before the single .else(), or drop the extra branch.`,
+				state.declaredAt,
+			);
+		}
+		state.frames.push([]);
+		branch();
+		const branchStatements = popFrame(state);
+		branches.push({
+			condition: condition.exprNode,
+			statements: branchStatements,
+		});
+		return makeIfChain(state, branches, statement);
+	},
+	else: (branch) => {
+		if (statement.elseStatements !== null) {
+			throwHejbroError(
+				"invalid-if-chain",
+				`ctx.if() chain in ${state.identity} called .else() more than once — an if/elseIf chain can have at most one .else(). Next: remove the duplicate call.`,
+				state.declaredAt,
+			);
+		}
+		state.frames.push([]);
+		branch();
+		statement.elseStatements = popFrame(state);
+	},
+});
+
+const recordIf = (
+	state: RecordingState,
+	condition: Expr<"boolean">,
+	thenBranch: () => void,
+): IfChain => {
+	state.frames.push([]);
+	thenBranch();
+	const thenStatements = popFrame(state);
+	const branches: Array<IfBranch> = [
+		{ condition: condition.exprNode, statements: thenStatements },
+	];
+	const statement: IfStatementDraft = {
+		stmtKind: "if",
+		branches,
+		elseStatements: null,
+	};
+	pushStatement(state, statement);
+	return makeIfChain(state, branches, statement);
+};
+
+const recordRaise = (
+	state: RecordingState,
+	message: string,
+	args: ReadonlyArray<RaiseArg>,
+): void => {
+	const placeholderCount = countPlaceholders(message);
+	if (placeholderCount !== args.length) {
+		throwHejbroError(
+			"raise-arg-count-mismatch",
+			`ctx.raise() message in ${state.identity} has ${placeholderCount} "%" placeholder(s) but received ${args.length} argument(s) ("%%" renders as a literal percent sign). Next: add the missing argument(s) to ctx.raise(), or remove the extra "%" placeholder(s) from the message.`,
+			state.declaredAt,
+		);
+	}
+	pushStatement(state, {
+		stmtKind: "raise",
+		message,
+		args: args.map((arg) => liftOperand(arg, "unknown")),
+	});
+};
+
+const isTriggerRow = (value: unknown): value is TriggerRow<Table> =>
+	typeof value === "object" && value !== null && triggerRowMeta in value;
+
+const recordReturn = (
+	state: RecordingState,
+	value: TriggerRow<Table> | ReturnableQuery,
+): void => {
+	if (isTriggerRow(value)) {
+		pushStatement(state, {
+			stmtKind: "returnRef",
+			refName: value[triggerRowMeta],
+		});
+		return;
+	}
+	if ("selectQuery" in value) {
+		pushStatement(state, { stmtKind: "returnQuery", query: value.selectQuery });
+		return;
+	}
+	if ("insertQuery" in value) {
+		pushStatement(state, { stmtKind: "returnQuery", query: value.insertQuery });
+		return;
+	}
+	if ("updateQuery" in value) {
+		pushStatement(state, { stmtKind: "returnQuery", query: value.updateQuery });
+		return;
+	}
+	if ("deleteQuery" in value) {
+		pushStatement(state, { stmtKind: "returnQuery", query: value.deleteQuery });
+		return;
+	}
+	throwHejbroError(
+		"unsupported-return-value",
+		`ctx.return() in ${state.identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
+		state.declaredAt,
+	);
+};
+
+const recordForEach = <TProjection extends RowProjection>(
+	state: RecordingState,
+	query: SelectLimited<TProjection>,
+	body: (row: RowColumns<TProjection>) => void,
+	name?: string,
+): void => {
+	state.loopCounter.current += 1;
+	const loopName = name ?? `loop_${state.loopCounter.current}`;
+	registerLocalName(state, loopName);
+	state.declarations.push({ declKind: "record", name: loopName });
+
+	const entries = resolveRowEntries(state, query.projectionInput);
+	const rowProxy = Object.fromEntries(
+		entries.map((entry) => [
+			entry.key,
+			expr(entry.columnRef.family, {
+				nodeKind: "plpgsqlRef",
+				path: [loopName, toSnakeCase(entry.key)],
+			}),
+		]),
+	) as RowColumns<TProjection>;
+
+	state.frames.push([]);
+	body(rowProxy);
+	const bodyStatements = popFrame(state);
+
+	pushStatement(state, {
+		stmtKind: "forEach",
+		loopName,
+		query: query.selectQuery,
+		statements: bodyStatements,
+	});
+};
+
+/**
  * Builds the recording {@link BodyContext} for one `defineFunction`/
  * `defineTrigger` call: every `ctx.*` call appends to (or reads back) a
  * frame stack of {@link BodyStatement}s. `finish()` reads the finished tree
  * back out — call it exactly once, after the body callback has returned.
+ *
+ * The actual recording logic lives in the module-scope functions above
+ * (`recordRow`, `recordIf`, `recordRaise`, `recordReturn`, `recordForEach`,
+ * and their shared helpers), each taking the mutable {@link RecordingState}
+ * as an explicit first parameter, rather than as ~15 closures nested
+ * inside this function capturing its locals directly. That used to be a
+ * CRAP-gate violation (#154 PR2): a CRAP/complexity tool attributes every
+ * nested closure's own complexity to whichever named function lexically
+ * contains it (the correct granularity for "which function would a human
+ * actually refactor" — see `scripts/check-crap.mjs`'s own file comment),
+ * so this function's reported complexity used to be the *sum* of all ~15
+ * closures' complexity, even though each one is individually simple. Only
+ * the capture mechanism changed here — module-scope functions taking an
+ * explicit `state` parameter instead of closures reading it lexically —
+ * not the recording behavior itself.
  */
 export const createRecordingContext = (
 	identity: string,
 	declaredAt: string | null,
 ): { readonly ctx: BodyContext; readonly finish: () => FunctionBody } => {
-	const declarations: Array<PlpgsqlVarDeclaration> = [];
-	const declaredNames = new Set<string>();
-	const frames: Array<Array<BodyStatement>> = [[]];
-	const rowCounter = { current: 0 };
-	const loopCounter = { current: 0 };
-
-	const currentFrame = (): Array<BodyStatement> => {
-		const frame = frames.at(-1);
-		if (frame === undefined) {
-			return throwHejbroError(
-				"unreachable",
-				`${identity}: plpgsql body recording has an empty frame stack.`,
-				declaredAt,
-			);
-		}
-		return frame;
-	};
-
-	const popFrame = (): Array<BodyStatement> => {
-		const frame = frames.pop();
-		if (frame === undefined) {
-			return throwHejbroError(
-				"unreachable",
-				`${identity}: plpgsql body recording popped an empty frame stack.`,
-				declaredAt,
-			);
-		}
-		return frame;
-	};
-
-	const pushStatement = (statement: BodyStatement): void => {
-		currentFrame().push(statement);
-	};
-
-	const registerLocalName = (name: string): void => {
-		assertValidLocalName(name, identity, declaredAt);
-		if (declaredNames.has(name)) {
-			throwHejbroError(
-				"duplicate-local-name",
-				`local name "${name}" is already declared in ${identity}. Next: pick a different row name or variable.`,
-				declaredAt,
-			);
-		}
-		declaredNames.add(name);
-	};
-
-	const resolveRowEntries = (
-		projectionInput: RowProjection,
-	): ReadonlyArray<{ readonly key: string; readonly columnRef: ColumnRef }> =>
-		Object.entries(asRecord(projectionInput)).map(([key, value]) => {
-			if (!isColumnRefValue(value)) {
-				return throwHejbroError(
-					"row-projection-not-column",
-					`ctx.row()/ctx.rowOrNull() projection key "${key}" in ${identity} isn't a plain column reference. Next: pass table columns (e.g. table.column), not computed expressions.`,
-					declaredAt,
-				);
-			}
-			return { key, columnRef: value };
-		});
-
-	const recordRow =
-		(strict: boolean) =>
-		<TProjection extends RowProjection>(
-			query: SelectLimited<TProjection>,
-			name?: string,
-		): RowColumns<TProjection> => {
-			rowCounter.current += 1;
-			const rowName = name ?? `row_${rowCounter.current}`;
-			const entries = resolveRowEntries(query.projectionInput);
-
-			const composed = entries.map((entry) => {
-				const varName = `${rowName}_${toSnakeCase(entry.key)}`;
-				registerLocalName(varName);
-				declarations.push({
-					declKind: "scalar",
-					name: varName,
-					typeNode: entry.columnRef.typeNode,
-				});
-				return { key: entry.key, varName, family: entry.columnRef.family };
-			});
-
-			pushStatement({
-				stmtKind: "selectInto",
-				query: query.selectQuery,
-				strict,
-				intoVariables: composed.map((entry) => entry.varName),
-			});
-
-			return Object.fromEntries(
-				composed.map((entry) => [
-					entry.key,
-					expr(entry.family, { nodeKind: "plpgsqlRef", path: [entry.varName] }),
-				]),
-			) as RowColumns<TProjection>;
-		};
-
-	const makeIfChain = (
-		branches: Array<IfBranch>,
-		statement: IfStatementDraft,
-	): IfChain => ({
-		elseIf: (condition, branch) => {
-			if (statement.elseStatements !== null) {
-				throwHejbroError(
-					"invalid-if-chain",
-					`ctx.if() chain in ${identity} called .elseIf() after .else(). Next: reorder every .elseIf() before the single .else(), or drop the extra branch.`,
-					declaredAt,
-				);
-			}
-			frames.push([]);
-			branch();
-			const branchStatements = popFrame();
-			branches.push({
-				condition: condition.exprNode,
-				statements: branchStatements,
-			});
-			return makeIfChain(branches, statement);
-		},
-		else: (branch) => {
-			if (statement.elseStatements !== null) {
-				throwHejbroError(
-					"invalid-if-chain",
-					`ctx.if() chain in ${identity} called .else() more than once — an if/elseIf chain can have at most one .else(). Next: remove the duplicate call.`,
-					declaredAt,
-				);
-			}
-			frames.push([]);
-			branch();
-			statement.elseStatements = popFrame();
-		},
-	});
-
-	const recordIf = (
-		condition: Expr<"boolean">,
-		thenBranch: () => void,
-	): IfChain => {
-		frames.push([]);
-		thenBranch();
-		const thenStatements = popFrame();
-		const branches: Array<IfBranch> = [
-			{ condition: condition.exprNode, statements: thenStatements },
-		];
-		const statement: IfStatementDraft = {
-			stmtKind: "if",
-			branches,
-			elseStatements: null,
-		};
-		pushStatement(statement);
-		return makeIfChain(branches, statement);
-	};
-
-	const recordRaise = (
-		message: string,
-		...args: ReadonlyArray<RaiseArg>
-	): void => {
-		const placeholderCount = countPlaceholders(message);
-		if (placeholderCount !== args.length) {
-			throwHejbroError(
-				"raise-arg-count-mismatch",
-				`ctx.raise() message in ${identity} has ${placeholderCount} "%" placeholder(s) but received ${args.length} argument(s) ("%%" renders as a literal percent sign). Next: add the missing argument(s) to ctx.raise(), or remove the extra "%" placeholder(s) from the message.`,
-				declaredAt,
-			);
-		}
-		pushStatement({
-			stmtKind: "raise",
-			message,
-			args: args.map((arg) => liftOperand(arg, "unknown")),
-		});
-	};
-
-	const isTriggerRow = (value: unknown): value is TriggerRow<Table> =>
-		typeof value === "object" && value !== null && triggerRowMeta in value;
-
-	const recordReturn = (value: TriggerRow<Table> | ReturnableQuery): void => {
-		if (isTriggerRow(value)) {
-			pushStatement({ stmtKind: "returnRef", refName: value[triggerRowMeta] });
-			return;
-		}
-		if ("selectQuery" in value) {
-			pushStatement({ stmtKind: "returnQuery", query: value.selectQuery });
-			return;
-		}
-		if ("insertQuery" in value) {
-			pushStatement({ stmtKind: "returnQuery", query: value.insertQuery });
-			return;
-		}
-		if ("updateQuery" in value) {
-			pushStatement({ stmtKind: "returnQuery", query: value.updateQuery });
-			return;
-		}
-		if ("deleteQuery" in value) {
-			pushStatement({ stmtKind: "returnQuery", query: value.deleteQuery });
-			return;
-		}
-		throwHejbroError(
-			"unsupported-return-value",
-			`ctx.return() in ${identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
-			declaredAt,
-		);
-	};
-
-	const recordForEach = <TProjection extends RowProjection>(
-		query: SelectLimited<TProjection>,
-		body: (row: RowColumns<TProjection>) => void,
-		name?: string,
-	): void => {
-		loopCounter.current += 1;
-		const loopName = name ?? `loop_${loopCounter.current}`;
-		registerLocalName(loopName);
-		declarations.push({ declKind: "record", name: loopName });
-
-		const entries = resolveRowEntries(query.projectionInput);
-		const rowProxy = Object.fromEntries(
-			entries.map((entry) => [
-				entry.key,
-				expr(entry.columnRef.family, {
-					nodeKind: "plpgsqlRef",
-					path: [loopName, toSnakeCase(entry.key)],
-				}),
-			]),
-		) as RowColumns<TProjection>;
-
-		frames.push([]);
-		body(rowProxy);
-		const bodyStatements = popFrame();
-
-		pushStatement({
-			stmtKind: "forEach",
-			loopName,
-			query: query.selectQuery,
-			statements: bodyStatements,
-		});
+	const state: RecordingState = {
+		identity,
+		declaredAt,
+		declarations: [],
+		declaredNames: new Set(),
+		frames: [[]],
+		rowCounter: { current: 0 },
+		loopCounter: { current: 0 },
 	};
 
 	const ctx: BodyContext = {
-		row: recordRow(true),
-		rowOrNull: recordRow(false),
-		if: recordIf,
-		raise: recordRaise,
-		return: recordReturn,
-		forEach: recordForEach,
+		row: recordRow(state, true),
+		rowOrNull: recordRow(state, false),
+		if: (condition, thenBranch) => recordIf(state, condition, thenBranch),
+		raise: (message, ...args) => recordRaise(state, message, args),
+		return: (value) => recordReturn(state, value),
+		forEach: (query, body, name) => recordForEach(state, query, body, name),
 	};
 
 	const finish = (): FunctionBody => ({
-		declarations: [...declarations],
-		statements: popFrame(),
+		declarations: [...state.declarations],
+		statements: popFrame(state),
 	});
 
 	return { ctx, finish };
