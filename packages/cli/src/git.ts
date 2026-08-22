@@ -65,6 +65,10 @@ export const isGitRepository = (cwd: string): boolean =>
 export const isWorkingTreeDirty = (cwd: string): boolean =>
 	runGit(cwd, ["status", "--porcelain"]).stdout.trim() !== "";
 
+/** `true` when `path` (cwd-relative) itself has an uncommitted change — untracked or modified — distinguishing a single migration file's own `uncommitted` state (§2) from the working tree at large. */
+export const isPathDirty = (cwd: string, path: string): boolean =>
+	runGit(cwd, ["status", "--porcelain", "--", path]).stdout.trim() !== "";
+
 /** One commit, as far as `history`/`restore` care: its short-enough-to-be-unique full sha, its author date (`YYYY-MM-DD`, UTC), and its subject line. */
 export type GitCommitInfo = {
 	readonly sha: string;
