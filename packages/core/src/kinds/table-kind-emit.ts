@@ -181,15 +181,21 @@ const alterColumnStatements = (
 	// A column's own primaryKey flag flipping (with the column itself
 	// neither added nor dropped) used to be its own guard here
 	// (throwHejbroError, unsupported-column-alter) — #24 folds it into
-	// emitAlter's single table-wide `primaryKeyColumnsChanged` check
-	// instead (see there), the same rule that now also handles a PK
-	// column being added or a composite PK's partial drop. All three used
-	// to be three separate special cases; they're one column-set diff.
+	// emitAlter's `planPrimaryKeyChange` instead (see there), the same
+	// rule that now also handles a PK column being added or a composite
+	// PK's partial drop. All three used to be three separate special
+	// cases; they're one column-set diff.
 
+	// Absorbed from the #202 review (#24): unlike the primary key, UNIQUE
+	// stays diffed and guarded per column (the approved design keeps its
+	// *emission* out of scope this wave — only its name is now recorded,
+	// table-kind.ts's uniqueNameField/deriveUniqueName) — but the message
+	// must still carry a *why*, the same shape the other three
+	// unsupported-column-alter messages in this file already do.
 	if (uniqueChanged) {
 		return throwHejbroError(
 			"unsupported-column-alter",
-			`column "${entry.key}" on table "${tableName}" changed its unique flag — hejbro does not emit sql for that. Next: add/drop the column, or add/drop a unique constraint manually.`,
+			`column "${entry.key}" on table "${tableName}" changed its unique flag — a unique constraint is table-level, not expressible as a single alter column. Next: add/drop the column, or add/drop a unique constraint manually.`,
 		);
 	}
 
