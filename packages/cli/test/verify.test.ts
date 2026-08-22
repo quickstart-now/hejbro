@@ -111,7 +111,7 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain(
-			"verify: 4 checks passed (1 migrations, snapshot sha256:",
+			"verify: 5 checks passed (1 migrations, snapshot sha256:",
 		);
 	});
 
@@ -241,8 +241,18 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("error[diverged-migrations]");
+		// #220 review: Next now hands back a computed, directly-runnable
+		// resolution per candidate (owner principle — detect, then offer a
+		// command already typed out) instead of prose asking the reader to
+		// pick a file and type the commands themselves.
 		expect(result.stderr).toContain(
-			"all branch from the same prior snapshot state — this usually happens when two branches each ran `hejbro generate` before merging. Next: keep whichever migration merged first (usually the one with the earlier timestamp/index prefix); delete the other, then rerun `hejbro generate` so it's recreated against the now-current chain.",
+			"all branch from the same prior snapshot state — this usually happens when two branches each ran `hejbro generate` before merging. Next, pick one:",
+		);
+		expect(result.stderr).toContain(
+			`(a) rm migrations/99999999999999_fork.sql && hejbro generate   # keeps ${fileName}`,
+		);
+		expect(result.stderr).toContain(
+			`(b) rm migrations/${fileName} && hejbro generate   # keeps 99999999999999_fork.sql`,
 		);
 		expect(result.stderr).toContain(fileName as string);
 		expect(result.stderr).toContain("99999999999999_fork.sql");
@@ -294,6 +304,62 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		);
 	});
 
+	// #220: two migrations claiming the same version prefix -- Supabase (and
+	// any tool that tracks *applied* migrations by that prefix, not the full
+	// filename) can only ever apply one of them. This drives the built CLI
+	// end to end (readChainEntries -> checkChain integration alone, in
+	// packages/core/test/migration-file.test.ts, can't reach the CLI's own
+	// wiring: that duplicate-version runs *before* chain linearity, and
+	// skips it, rather than letting an undefined chain order through).
+	describe("duplicate migration version (#220)", () => {
+		it("exits 1 with duplicate-migration-version, skipping chain linearity and chain tip", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(BASE_SCHEMA);
+			await runCli(cwd, ["generate"]);
+
+			const [fileName] = await migrationFileNames();
+			const version = (fileName as string).split("_", 1)[0] as string;
+			const duplicateName = `${version}_manually_added_duplicate.sql`;
+			await writeFixtureFile(
+				cwd,
+				`migrations/${duplicateName}`,
+				"-- hand-added file sharing the real migration's version on purpose\n",
+			);
+
+			const result = await runCli(cwd, ["verify"]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[duplicate-migration-version]");
+			expect(result.stderr).toContain(
+				`migrations share the version "${version}"`,
+			);
+			expect(result.stderr).toContain(
+				"Supabase (and any tool that tracks *applied* migrations by this version prefix, not the full filename) can only ever apply one of them",
+			);
+			expect(result.stderr).toContain("Next: keep");
+			expect(result.stderr).toContain("mv migrations/");
+			expect(result.stderr).not.toContain("--fix");
+			expect(result.stderr).toContain(
+				"skipped: chain linearity (needs every migration to have a unique version)",
+			);
+			expect(result.stderr).toContain(
+				"skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)",
+			);
+			expect(result.stderr).toContain(
+				"verify: 1 of 5 checks failed, 2 skipped — fix the errors above and rerun `hejbro verify`.",
+			);
+		});
+
+		it("does not fire when every migration has a distinct version (control)", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(BASE_SCHEMA);
+			await runCli(cwd, ["generate"]);
+
+			const result = await runCli(cwd, ["verify"]);
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain("verify: 5 checks passed");
+		});
+	});
+
 	// #129: readChainEntries -> checkChain integration, at the level unit
 	// tests on checkChain alone (packages/core/test/chain.test.ts) can't
 	// reach -- these drive the real built CLI end to end (real `generate`
@@ -305,23 +371,24 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			await runCli(cwd, ["init"]);
 			await writeSchema(BASE_SCHEMA);
 			// Explicit --name on every call (timestampStrategy default,
-			// second-granularity, D14) with a leading ordinal: distinct names
-			// alone stop generate from silently overwriting a file when two
-			// calls land in the same UTC second, but listMigrationFiles then
-			// sorts by *filename*, timestamp prefix first -- a same-second
-			// tie falls through to comparing the rest of the name, and
-			// "add_body" < "add_posts" lexicographically would reorder
-			// migration 2 before migration 1 on exactly that tie -- a real,
-			// user-reachable defect this PR surfaces rather than causes
-			// (#220), worked around here (not fixed) so this suite tests
-			// #129 deterministically. The "1_"/"2_"/"3_"/"4_" prefix makes
-			// the sort match generation order regardless of any timestamp
-			// collision.
-			await runCli(cwd, ["generate", "--name", "1_add_posts"]); // migration 1: empty -> A
+			// second-granularity, D14) — plain semantic names, deliberately
+			// including the exact adversarial pair that used to reorder this
+			// suite when two generate calls landed in the same UTC second:
+			// "add_body" < "add_posts" lexicographically, so a same-second
+			// collision between migrations 1 and 2 used to let the *name*
+			// comparison invert generation order. #220 fixed this at the
+			// source (generate now waits for the next second and retries
+			// rather than letting a same-second prefix tie fall through to
+			// the name) — an earlier revision of this suite carried an
+			// ordinal "1_"/"2_"/"3_"/"4_" --name prefix as a workaround before
+			// #220 landed; it's gone now that the real fix makes it
+			// unnecessary, and keeping the adversarial names here is itself
+			// a regression guard against #220 recurring.
+			await runCli(cwd, ["generate", "--name", "add_posts"]); // migration 1: empty -> A
 			await writeSchema(CHANGED_SCHEMA);
-			await runCli(cwd, ["generate", "--name", "2_add_body"]); // migration 2: A -> B
+			await runCli(cwd, ["generate", "--name", "add_body"]); // migration 2: A -> B
 			await writeSchema(BASE_SCHEMA); // revert: back to A
-			await runCli(cwd, ["generate", "--name", "3_drop_body_rollback"]); // migration 3: B -> A (rollback)
+			await runCli(cwd, ["generate", "--name", "drop_body_rollback"]); // migration 3: B -> A (rollback)
 			// A 4th step whose *own* parent (A) reoccurs (not just its
 			// current, which migration 3 already reused) is what the
 			// pre-#129 algorithm actually got wrong (reviewer, #217 review):
@@ -334,7 +401,7 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			// after migration 3's rollback, and migration 4 continues from
 			// it."
 			await writeSchema(CHANGED_SCHEMA);
-			await runCli(cwd, ["generate", "--name", "4_add_body_again"]); // migration 4: A -> B (again)
+			await runCli(cwd, ["generate", "--name", "add_body_again"]); // migration 4: A -> B (again)
 
 			const fileNames = await migrationFileNames();
 			expect(fileNames).toHaveLength(4);
@@ -342,24 +409,24 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			const result = await runCli(cwd, ["verify"]);
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout).toContain(
-				"verify: 4 checks passed (4 migrations, snapshot sha256:",
+				"verify: 5 checks passed (4 migrations, snapshot sha256:",
 			);
 		});
 
 		it("keeps a rollback-tolerant chain valid alongside a legacy (hash-less) migration file that precedes it", async () => {
 			await runCli(cwd, ["init"]);
 			await writeSchema(BASE_SCHEMA);
-			await runCli(cwd, ["generate", "--name", "1_add_posts"]);
+			await runCli(cwd, ["generate", "--name", "add_posts"]);
 			await writeSchema(CHANGED_SCHEMA);
-			await runCli(cwd, ["generate", "--name", "2_add_body"]);
+			await runCli(cwd, ["generate", "--name", "add_body"]);
 			await writeSchema(BASE_SCHEMA);
-			await runCli(cwd, ["generate", "--name", "3_drop_body_rollback"]);
+			await runCli(cwd, ["generate", "--name", "drop_body_rollback"]);
 			// See the sibling test above for why a 4th step (parent A
 			// reoccurring, not just current A) is required to actually
 			// exercise #129 rather than a shape the old algorithm already
 			// passed.
 			await writeSchema(CHANGED_SCHEMA);
-			await runCli(cwd, ["generate", "--name", "4_add_body_again"]);
+			await runCli(cwd, ["generate", "--name", "add_body_again"]);
 
 			// Sorts before every generated file (timestamp prefixes), and has
 			// no "-- parent-snapshot:"/"-- snapshot:" banner lines at all --
@@ -375,7 +442,7 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			const result = await runCli(cwd, ["verify"]);
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout).toContain(
-				"verify: 4 checks passed (5 migrations, snapshot sha256:",
+				"verify: 5 checks passed (5 migrations, snapshot sha256:",
 			);
 		});
 	});
@@ -413,7 +480,7 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			"skipped: declarations ↔ snapshot (needs a parseable snapshot file)",
 		);
 		expect(result.stderr).toContain(
-			"verify: 1 of 4 checks failed, 1 skipped — fix the errors above and rerun `hejbro verify`.",
+			"verify: 1 of 5 checks failed, 1 skipped — fix the errors above and rerun `hejbro verify`.",
 		);
 	});
 
@@ -449,7 +516,7 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			"skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)",
 		);
 		expect(result.stderr).toContain(
-			"verify: 2 of 4 checks failed, 2 skipped — fix the errors above and rerun `hejbro verify`.",
+			"verify: 2 of 5 checks failed, 2 skipped — fix the errors above and rerun `hejbro verify`.",
 		);
 	});
 
@@ -464,7 +531,7 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		expect(result.stderr).toContain("error[snapshot-stale]");
 		expect(result.stderr).not.toContain("skipped:");
 		expect(result.stderr).toContain(
-			"verify: 1 of 4 checks failed — fix the errors above and rerun `hejbro verify`.",
+			"verify: 1 of 5 checks failed — fix the errors above and rerun `hejbro verify`.",
 		);
 	});
 
