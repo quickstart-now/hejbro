@@ -40,6 +40,14 @@ for f in "$EXAMPLE_DIR"/migrations/*.sql; do
   psql -d chain < "$f"
 done
 
+# #212: the chain-vs-fresh dump diff below can only catch the two paths
+# disagreeing with EACH OTHER -- a statement the generator silently never
+# emits is missing from both, so they'd still agree. This checks each
+# path against the snapshot instead, the one thing this harness never ran
+# through the diff engine's "does it emit anything" logic.
+echo "== checking 'chain' against the declared snapshot (#212)"
+node "$REPO_ROOT/scripts/check-declared-vs-catalog.mjs" "$CONTAINER" chain "$EXAMPLE_DIR/hejbro.snapshot.json"
+
 echo "== generating one fresh migration from the live declarations"
 cp -R "$EXAMPLE_DIR" "$WORK/example"
 # the fresh path must start from an empty snapshot (D48): keep the committed one
@@ -80,6 +88,9 @@ echo "   fresh migration: $(basename "$FRESH")"
 psql -d fresh < "$FRESH"
 cmp -s "$WORK/final.snapshot.json" "$WORK/example/hejbro.snapshot.json" || { echo "snapshot from fresh generate differs from the committed snapshot" >&2; exit 1; }
 echo "   snapshot reproduced"
+
+echo "== checking 'fresh' against the declared snapshot (#212)"
+node "$REPO_ROOT/scripts/check-declared-vs-catalog.mjs" "$CONTAINER" fresh "$EXAMPLE_DIR/hejbro.snapshot.json"
 
 dump() { docker exec "$CONTAINER" pg_dump -U postgres -d "$1" --schema-only --no-owner --schema=app \
   | grep -vE '^(SET |SELECT pg_catalog\.set_config|--|\\restrict|\\unrestrict|$)'; }
