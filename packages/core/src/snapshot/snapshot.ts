@@ -1,7 +1,9 @@
+import type { RenameSpec } from "../engine/rename-plan";
 import { throwHejbroError } from "../error";
-import type { HejbroDeclaration } from "../kind/object-kind";
+import type { HejbroDeclaration, SerializeContext } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { compareKeys } from "../sort";
+import { computeColumnOrder } from "./column-order";
 import type { JsonValue } from "./stable-json";
 import { stableJson } from "./stable-json";
 
@@ -61,6 +63,7 @@ const buildEntry = (
 	declaration: HejbroDeclaration,
 	declarationIndex: number,
 	registry: KindRegistry,
+	context: SerializeContext,
 ): BuiltEntry => {
 	const matchingKinds = registry
 		.list()
@@ -88,7 +91,7 @@ const buildEntry = (
 			`declaration at index ${declarationIndex} matched no kind — this indicates an internal hejbro bug.`,
 		);
 	}
-	const node = kind.serialize(declaration);
+	const node = kind.serialize(declaration, context);
 	const identity = kind.identify(node);
 	return { key: `${kind.kind}:${identity}`, node, declarationIndex };
 };
@@ -118,13 +121,26 @@ const findDuplicateKey = (
  * one to the registered kind whose `owns()` matches it. Throws if a
  * declaration is owned by zero or multiple kinds, or if two declarations
  * produce the same `kind:identity`.
+ *
+ * `previous` is the snapshot this build succeeds — D81 derives every
+ * table's physical column order from it (parent order for surviving
+ * columns, declaration order for newcomers) and hands that oracle to every
+ * kind's `serialize` as {@link SerializeContext}. Pass {@link emptySnapshot}
+ * for a first build. `renames` is the same `--rename` plan `generate`
+ * already validates; it retargets the oracle's parent lookup so a renamed
+ * column/table keeps its position.
  */
 export const buildSnapshot = (
 	declarations: ReadonlyArray<HejbroDeclaration>,
 	registry: KindRegistry,
+	previous: Snapshot,
+	renames: ReadonlyArray<RenameSpec> = [],
 ): Snapshot => {
+	const context: SerializeContext = {
+		columnOrder: computeColumnOrder(declarations, previous, renames),
+	};
 	const entries = declarations.map((declaration, declarationIndex) =>
-		buildEntry(declaration, declarationIndex, registry),
+		buildEntry(declaration, declarationIndex, registry, context),
 	);
 
 	const duplicate = findDuplicateKey(entries);

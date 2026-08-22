@@ -44,7 +44,7 @@ const unwrap = (input: HejbroInput): HejbroDeclaration => {
 	return input;
 };
 const snap = (...decls: ReadonlyArray<HejbroInput>) =>
-	buildSnapshot(decls.map(unwrap), registry);
+	buildSnapshot(decls.map(unwrap), registry, emptySnapshot);
 const noDeclSites = new Map<string, string | null>();
 
 describe("planRenames", () => {

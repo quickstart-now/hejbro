@@ -319,6 +319,7 @@ describe("policy recreate ordering through generateMigration", () => {
 				...(getTableMeta(postsV1).rls?.policies ?? []),
 			].filter((d): d is NonNullable<typeof d> => d !== null),
 			registry,
+			emptySnapshot,
 		);
 
 		const postsV2 = table(

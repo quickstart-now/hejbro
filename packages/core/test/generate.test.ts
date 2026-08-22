@@ -83,7 +83,7 @@ describe("generateMigration", () => {
 
 	it("returns hasChanges: false and an empty sql string when nothing changed", () => {
 		const registry = createDefaultRegistry();
-		const snapshot = buildSnapshot(declarations, registry);
+		const snapshot = buildSnapshot(declarations, registry, emptySnapshot);
 		const result = generateMigration({
 			declarations,
 			previousSnapshot: snapshot,
@@ -103,6 +103,7 @@ describe("generateMigration", () => {
 		const previousSnapshot = buildSnapshot(
 			[renameApp, getTableMeta(previousPosts)],
 			createDefaultRegistry(),
+			emptySnapshot,
 		);
 
 		it("returns errors and empty sql for an ambiguous drop+add pair", () => {

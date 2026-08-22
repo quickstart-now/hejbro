@@ -6,16 +6,18 @@ import { getTableMeta, table } from "../src/dsl/table";
 import type { ObjectKind } from "../src/kind/object-kind";
 import {
 	createDefaultRegistry,
+	createKindRegistry,
 	requiredKeysByKind,
 } from "../src/kind/registry";
 import { schemaKind } from "../src/kinds/schema-kind";
+import { tableKind } from "../src/kinds/table-kind";
 import {
 	buildSnapshot,
 	emptySnapshot,
 	parseSnapshot,
 	renderSnapshot,
 } from "../src/snapshot/snapshot";
-import { uuid } from "../src/types/column-builder-factories";
+import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
 
 const app = schema("app");
 const registry = createDefaultRegistry();
@@ -55,12 +57,58 @@ describe("ObjectKind.serialize's optional SerializeContext", () => {
 			reading.serialize(schema("a"), { columnOrder: () => ["k"] }),
 		).toMatchObject({ probe: ["k"] });
 	});
+
+	it("hands every kind a columnOrder oracle computed from the parent", () => {
+		const probe: ObjectKind<SchemaDeclaration> = {
+			...schemaKind,
+			serialize: (declaration, context) => ({
+				...(schemaKind.serialize(declaration) as Record<string, unknown>),
+				order:
+					context?.columnOrder({ schemaName: "app", tableName: "projects" }) ??
+					null,
+			}),
+		};
+		const probeRegistry = createKindRegistry();
+		probeRegistry.register(probe);
+		probeRegistry.register(tableKind);
+		const parent = buildSnapshot(
+			[
+				app,
+				getTableMeta(
+					table(app, "projects", { id: uuid(), archivedAt: timestamptz() }),
+				),
+			],
+			probeRegistry,
+			emptySnapshot,
+		);
+		const next = buildSnapshot(
+			[
+				app,
+				getTableMeta(
+					table(app, "projects", {
+						id: uuid(),
+						description: text(),
+						archivedAt: timestamptz(),
+					}),
+				),
+			],
+			probeRegistry,
+			parent,
+		);
+		expect(next.objects["schema:app"]).toMatchObject({
+			order: ["id", "archived_at", "description"],
+		});
+	});
 });
 
 describe("buildSnapshot", () => {
 	it("routes declarations to their owning kind and keys objects by kind:identity", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const snapshot = buildSnapshot([app, getTableMeta(posts)], registry);
+		const snapshot = buildSnapshot(
+			[app, getTableMeta(posts)],
+			registry,
+			emptySnapshot,
+		);
 		expect(Object.keys(snapshot.objects)).toEqual([
 			"schema:app",
 			"table:app.posts",
@@ -73,6 +121,7 @@ describe("buildSnapshot", () => {
 		const snapshot = buildSnapshot(
 			[getTableMeta(zebra), getTableMeta(alpha), app],
 			registry,
+			emptySnapshot,
 		);
 		expect(Object.keys(snapshot.objects)).toEqual([
 			"schema:app",
@@ -83,7 +132,7 @@ describe("buildSnapshot", () => {
 
 	it("owns an enum declaration and keys it by schema.enumName", () => {
 		const postStatus = pgEnum(app, "post_status", ["draft", "published"]);
-		const snapshot = buildSnapshot([app, postStatus], registry);
+		const snapshot = buildSnapshot([app, postStatus], registry, emptySnapshot);
 		expect(Object.keys(snapshot.objects)).toEqual([
 			"enum:app.post_status",
 			"schema:app",
@@ -94,7 +143,11 @@ describe("buildSnapshot", () => {
 		const first = table(app, "posts", { id: uuid().primaryKey() });
 		const second = table(app, "posts", { id: uuid().primaryKey() });
 		expect(() =>
-			buildSnapshot([getTableMeta(first), getTableMeta(second)], registry),
+			buildSnapshot(
+				[getTableMeta(first), getTableMeta(second)],
+				registry,
+				emptySnapshot,
+			),
 		).toThrowError(/index 0.*index 1/i);
 	});
 });
@@ -102,7 +155,11 @@ describe("buildSnapshot", () => {
 describe("renderSnapshot / parseSnapshot", () => {
 	it("round-trips through render and parse", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const snapshot = buildSnapshot([app, getTableMeta(posts)], registry);
+		const snapshot = buildSnapshot(
+			[app, getTableMeta(posts)],
+			registry,
+			emptySnapshot,
+		);
 		const rendered = renderSnapshot(snapshot);
 		expect(parseSnapshot(rendered)).toEqual(snapshot);
 	});
