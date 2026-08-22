@@ -3,6 +3,7 @@ import {
 	emptySnapshot,
 	eq,
 	generateMigration,
+	grant,
 	rls,
 	schema,
 	select,
@@ -26,11 +27,14 @@ describe("viewSecurityInvokerValidator", () => {
 		}),
 	}));
 	const comments = table(app, "comments", { id: uuid().primaryKey() });
+	// posts's own RLS policy targets "anon" -- #203's schema-usage check
+	// would otherwise also warn here, which isn't what these tests exercise.
+	const usageGrant = grant(app).usage.to("anon");
 
 	it("warns when a view's from-table is RLS-protected and omits security_invoker", () => {
 		const view = defineView(app, "recent_posts", select(posts));
 		const result = generateMigration({
-			declarations: [app, posts, view],
+			declarations: [app, posts, usageGrant, view],
 			previousSnapshot: emptySnapshot,
 			validators: [viewSecurityInvokerValidator],
 		});
@@ -47,7 +51,7 @@ describe("viewSecurityInvokerValidator", () => {
 			securityInvoker: true,
 		});
 		const result = generateMigration({
-			declarations: [app, posts, view],
+			declarations: [app, posts, usageGrant, view],
 			previousSnapshot: emptySnapshot,
 			validators: [viewSecurityInvokerValidator],
 		});
@@ -71,7 +75,7 @@ describe("viewSecurityInvokerValidator", () => {
 			select(comments).innerJoin(posts, eq(comments.id, posts.id)),
 		);
 		const result = generateMigration({
-			declarations: [app, posts, comments, view],
+			declarations: [app, posts, comments, usageGrant, view],
 			previousSnapshot: emptySnapshot,
 			validators: [viewSecurityInvokerValidator],
 		});

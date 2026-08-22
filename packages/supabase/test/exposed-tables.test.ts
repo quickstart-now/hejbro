@@ -37,7 +37,12 @@ describe("exposedTableValidator", () => {
 			}),
 		}));
 		const result = generateMigration({
-			declarations: [app, posts, grant(app).tables("select").to("anon")],
+			declarations: [
+				app,
+				posts,
+				grant(app).tables("select").to("anon"),
+				grant(app).usage.to("anon"),
+			],
 			previousSnapshot: emptySnapshot,
 			validators: [exposedTableValidator],
 		});

@@ -5,6 +5,7 @@ import {
 	eq,
 	exists,
 	generateMigration,
+	grant,
 	isNotNull,
 	not,
 	rls,
@@ -19,6 +20,10 @@ import { rlsUncachedAuthCallValidator } from "../src/validators/rls-uncached-aut
 
 describe("rlsUncachedAuthCallValidator", () => {
 	const app = schema("app");
+	// Every policy below targets "authenticated" -- #203's schema-usage
+	// check would otherwise also warn, which isn't what these tests
+	// exercise (that check has its own suite, core-validators.test.ts).
+	const usageGrant = grant(app).usage.to("authenticated");
 
 	it("warns on a plain authUid() in a policy's using clause", () => {
 		const accounts = table(
@@ -36,7 +41,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, accounts],
+			declarations: [app, usageGrant, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -68,7 +73,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, accounts],
+			declarations: [app, usageGrant, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -100,7 +105,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, accounts],
+			declarations: [app, usageGrant, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -123,7 +128,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, accounts],
+			declarations: [app, usageGrant, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -150,7 +155,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, comments],
+			declarations: [app, usageGrant, comments],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -175,7 +180,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, accounts],
+			declarations: [app, usageGrant, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -202,7 +207,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, accounts],
+			declarations: [app, usageGrant, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -226,7 +231,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, accounts],
+			declarations: [app, usageGrant, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -270,7 +275,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, profiles, accounts],
+			declarations: [app, usageGrant, profiles, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -295,7 +300,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, profiles, accounts],
+			declarations: [app, usageGrant, profiles, accounts],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -338,7 +343,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, profiles, attachments],
+			declarations: [app, usageGrant, profiles, attachments],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
@@ -376,7 +381,7 @@ describe("rlsUncachedAuthCallValidator", () => {
 			}),
 		);
 		const result = generateMigration({
-			declarations: [app, profiles, attachments, attachmentBlobs],
+			declarations: [app, usageGrant, profiles, attachments, attachmentBlobs],
 			previousSnapshot: emptySnapshot,
 			validators: [rlsUncachedAuthCallValidator],
 		});
