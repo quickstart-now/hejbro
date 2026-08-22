@@ -56,7 +56,7 @@ const assertFreshBuild = (label: string, packageRoot: string): void => {
 	const distMtime = newestMtimeMs(join(packageRoot, "dist"));
 	if (distMtime < srcMtime) {
 		throw new Error(
-			`${label}'s dist/ is older than its src/ (stale build) — Next: run \`pnpm build\` (or \`pnpm test\` at the root, which builds first).`,
+			`${label}'s dist/ is older than its src/ (stale build) — Next: run \`pnpm build --force\` (a plain \`pnpm build\` can replay a cached run without rewriting dist).`,
 		);
 	}
 };

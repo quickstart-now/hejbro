@@ -41,13 +41,25 @@ const newestMtimeMs = (dir: string): number => {
  * process see a source edit that hasn't been rebuilt yet. Detection, not
  * prevention, is the right shape here: a checkable precondition (dist
  * newer than src) fails loudly instead of being trusted silently.
+ *
+ * The remedy has to say `--force`: turbo's cache is content-addressed, so
+ * a src file whose *mtime* moved but whose *content* didn't (a branch
+ * switch, a `git stash pop`, `touch`) still hits the cache — a plain
+ * `pnpm build` then replays the previous run's logs without writing
+ * `dist` again, leaving this guard red and the suggested fix unable to
+ * clear it (reproduced: `touch`ed a content-unchanged src file, `pnpm
+ * build` printed "cache hit" and left `dist` older than `src`, `pnpm
+ * build --force` fixed it). Over-eager rather than dangerous either way
+ * — the false-positive direction this guard can take is "demands a
+ * rebuild turbo considers unnecessary," never "silently accepts a stale
+ * one."
  */
 const assertFreshBuild = (label: string, packageRoot: string): void => {
 	const srcMtime = newestMtimeMs(join(packageRoot, "src"));
 	const distMtime = newestMtimeMs(join(packageRoot, "dist"));
 	if (distMtime < srcMtime) {
 		throw new Error(
-			`${label}'s dist/ is older than its src/ (stale build) — Next: run \`pnpm build\` (or \`pnpm test\` at the root, which builds first).`,
+			`${label}'s dist/ is older than its src/ (stale build) — Next: run \`pnpm build --force\` (a plain \`pnpm build\` can replay a cached run without rewriting dist).`,
 		);
 	}
 };

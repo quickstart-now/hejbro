@@ -34,7 +34,11 @@ In-process package tests (`packages/supabase`, `packages/cli`,
 they never go stale even run outside turbo (#131). CLI subprocess tests
 (the ones that spawn the built `dist/cli.js`) can't be aliased the same
 way — they check that `dist` is at least as new as its own `src` and fail
-loudly if not.
+loudly if not. That check's own remedy is `pnpm build --force`, not a
+plain `pnpm build`: turbo's cache is content-addressed, so a src file
+whose mtime moved without its content changing can still hit the cache,
+and a plain `pnpm build` then replays old logs without writing `dist`
+again.
 
 ## Repo map
 
