@@ -18,7 +18,7 @@ const posts = table(app, "posts", {
 
 const makeDeclaration = (message: string, argBuilder: () => ColumnBuilder) =>
 	defineFunction(
-		"app",
+		app,
 		"publish_post",
 		{ args: { postId: argBuilder() }, returns: posts, security: "definer" },
 		(ctx, { postId }) => {

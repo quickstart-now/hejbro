@@ -55,7 +55,7 @@ export const projects = table(app, "projects", {
 }));
 
 export const archiveProject = defineFunction(
-	"app", "archive_project",
+	app, "archive_project",
 	{ args: { projectId: uuid() }, returns: projects, security: "definer" },
 	(ctx, { projectId }) => {
 		ctx.return(

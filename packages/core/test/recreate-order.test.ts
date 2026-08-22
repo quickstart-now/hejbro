@@ -87,7 +87,7 @@ describe("recreate ordering through generateMigration", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 
 		const functionV1 = defineFunction(
-			"app",
+			app,
 			"publish_post",
 			{ args: { postId: uuid() }, returns: posts, security: "invoker" },
 			(ctx) => {
