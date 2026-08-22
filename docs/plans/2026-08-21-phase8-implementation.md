@@ -155,7 +155,7 @@ names do not move. If a number does end up in prose, re-check every one of them
 when the map changes.
 
 **The first column is a row number in this table, not an issue number.** They
-overlap — rows run 1–38 and issues run #7–#207, so `22` and `#22` are different
+overlap — rows run 1–41 and issues run #7–#212, so `22` and `#22` are different
 things and `#22` is a real, unrelated issue. Issues live in the last column and
 carry a `#`. A row whose issue column is `—` does **not** mean "no issue is
 needed": issue-first is the rule, so `—` means **file one before starting**. One
@@ -163,7 +163,14 @@ PR body reached `Closes #22` by reading a row number as an issue number, and
 would have closed an unrelated issue on merge.
 
 **`Blocks 0.1.0`** marks the provisional release-blocking set (owner to confirm).
-Everything else in this table is Phase 8 scope but may ship in 0.1.x.
+Everything else in this table is Phase 8 scope but may ship in 0.1.x. **`yes`
+is a statement about the PR, not about the issue next to it**: it means the PR
+has to merge before the release, and says nothing about whether the issue
+closes when it does. Row 16 is the case that forced the distinction — its
+guard merged (#202) and the release is unblocked, but #137 is still open
+because the guard refuses the case rather than fixing it, and the fix is row
+15. *Unblocked is not done*; reading `yes` + merged as "issue closed" is how
+a sub-issue goes missing from the frontier.
 
 | # | PR | Scope | Issues | Blocks 0.1.0 |
 |---|---|---|---|---|
@@ -182,16 +189,16 @@ Everything else in this table is Phase 8 scope but may ship in 0.1.x.
 | 13 | `phase8-expr-nodes` | Expressions stored as structured nodes; rename retargets them (D67) | #110 | — |
 | 14 | `phase8-sequence-kind` | `sequence` object kind, rename drift guard, type-change semantics | #23 | yes |
 | 15 | `phase8-constraint-names` | Constraint names in the snapshot (#24(iii)), pk/unique alter emission, #137's full fix replacing `phase8-pk-guard`'s guard, **and the chain step that exercises the PK add and drop paths** | #24, #137 | — |
-| 16 | `phase8-pk-guard` | Extend the `unsupported-column-alter` guard to the `added`/`removed` paths so the silent omission becomes a loud refusal | #137 | yes |
+| 16 | `phase8-pk-guard` | Extend the `unsupported-column-alter` guard to the `added`/`removed` paths so the silent omission becomes a loud refusal. **Merged (#202) as the interim: it unblocks 0.1.0 and leaves #137 open — #137 closes with `phase8-constraint-names`** | #137 | yes |
 | 17 | `phase8-grant-sync` | Schema-wide grants follow tables added later, **plus** a chain step that adds a table under a schema-wide grant | #121 | — |
 | 18 | `phase8-golden-english` | Golden trigger messages translated to English | #120 | — |
 | 19 | `phase8-policy-predicates` | RLS predicate widening; the showcase drops **56 workaround expressions inside 34 `see #113`-marked policy blocks** — done = both counts 0, per-file distribution reported | #113 | — |
 | 20 | `phase8-bucket-notes` | Field-level notes for bucket alters; empty note lists stop rendering `[]` | #116 | — |
 | 21 | `phase8-authuid-cached` | `authUid()`'s cached variant (reusing the existing `rawSql` node), a `warning[rls-uncached-auth-call]` validator, and the **12 call sites across 5 files** that teach the uncached form | #97 | — |
 | 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69). Storage is **outside** what one Postgres image can verify: `storage.buckets` is created by the Storage API service, not the image | #207 | yes |
-| 23 | `phase8-docs-release` | README status and install instructions across **all three published packages** (#142 — `packages/core`'s README still describes landed features as future phases, and it becomes the npm page), `CONTRIBUTING.md`, then the 0.1.0 release | #142 | yes |
+| 23 | `phase8-docs-release` | README status and install instructions across **all three published packages** (#142 — `packages/core`'s README still describes landed features as future phases, and it becomes the npm page; `## Status` describes the repository, never the registry, so "Nothing is published yet" goes and the install instructions carry that information), a new `CONTRIBUTING.md` that is a thin pointer to `AGENTS.md` plus the loud warning that merging the Version Packages PR publishes immediately and irreversibly, `packages/skills/README.md`'s citation of the overturned D54 (→ D62, cheap and in the same files' neighbourhood), and the grep instrument with its positive control (four stale lines: core 3, supabase 1, cli 0). **The 0.1.0 release is not in this PR** — it is the owner's sequence under *Owner actions*, and this PR's merge is what makes `release-ready` true | #142 | yes |
 | 24 | `phase8-crap-tooling` | `@vitest/coverage-v8`, a `test:coverage` task, `scripts/check-crap.mjs` — **reports only, not wired into CI** | #154 | — |
-| 25 | `phase8-crap-refactor` | The functions `pnpm check:crap` reports at **CRAP > 10** (the gate is the definition; measured at 20, of which 16 are also complexity ≥ 10) — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests. Four share a byte-identical create/drop guard, so one helper clears three at once | #154 | — |
+| 25 | `phase8-crap-refactor` | The functions `pnpm check:crap` reports at **CRAP > 10** (the gate is the definition; measured at 20, of which 16 are also complexity ≥ 10) — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests. Four share a byte-identical create/drop guard, so one helper clears three at once. **Landed as nine commits (#210): the guard helper, `familyOfTypeNode` 29→1, `createRecordingContext` 17→1, and five walker `switch`es → type-closed handler maps; the count went 20→10 and the rest continues in `phase8-crap-walkers`** | #154 | — |
 | 26 | `phase8-crap-coverage` | The 4 functions at complexity 8–9, which clear at 70–77% coverage | #154 | — |
 | 27 | `phase8-crap-gate` | `check:crap` wired into CI with a non-zero exit, **and the D71 decision-log row** | #154 | — |
 | 28 | `phase8-diagnostic-xref` | A check that every error code quoted inside a diagnostic message actually exists; **`style/noTernary` turned on in `biome.json`** and the 7 existing violations fixed; the `.mjs` style-rule scope question, answered `yes` | — | — |
@@ -205,6 +212,9 @@ Everything else in this table is Phase 8 scope but may ship in 0.1.x.
 | 36 | `phase8-preset-kind-prefix` | `register()` rejects an unprefixed kind id on the preset channel (`createDefaultRegistry`'s own kinds exempt) — predictable preset ids, and the advice moves from the collision error to registration time. **Buys no classification soundness**: D57 Rule 2 mandates kebab-case for snapshot identity tokens, so "core ⇒ no hyphen" cannot be enforced to match | #201 | — |
 | 37 | `phase8-scope-nodes` | `warning[rls-uncached-auth-call]`'s scope question generalised: core has no notion of which clause an expression sits in, so `assertOwnColumnsOnly` treats `exists()` as opaque. Make the scope rule explicit rather than a side effect of `renderExpr` | #160 | — |
 | 38 | `phase8-required-keys` | Per-kind `requiredKeys` validation for snapshot nodes — a hand-edited snapshot (D33 makes that a first-class input) can today omit a field a kind depends on and fail later, in the diff engine | #159 | — |
+| 39 | `phase8-declared-vs-catalog` | After each executed migration step, both local-Docker harnesses (`scripts/roundtrip.sh`, `scripts/verify-supabase-image.sh`) check that **every object the snapshot declares exists in the catalog** — the reference is the snapshot, never the emitted SQL, because a statement that was never emitted cannot fail by running. Positive control: `dev@626c57f` (on `dev`'s history, so `git show` resolves it) must fail with `declared primary key … not found in catalog` | #212 | — |
+| 40 | `phase8-crap-walkers` | The walker `switch`es `phase8-crap-refactor` did not reach — starting with `renderTypeNode`, whose handler-map draft already exists — each replaced by a mapped-type handler map (exhaustiveness stays a `tsc` error, no runtime `default` throw, the module-load TDZ trap noted where a map references a later binding), then the remaining CRAP > 10 tail that is neither coverage-clearable (row 26) nor a walker | #154 | — |
+| 41 | `phase8-policy-schema-usage` | `warning[…]`: a policy sits in a schema none of its targeted roles has `usage` on, so RLS is never consulted — found by the D69 real-image run. Positive control: `examples/supabase` before the D69 grant (must warn); negative: `examples/postgres` (must not) | #203 | — |
 
 `phase8-pk-guard` lands **before** `phase8-constraint-names` in dependency
 terms but is listed after it for readability: the guard is a small, independent
@@ -219,9 +229,16 @@ schedule**, and they are stated by branch name for the reason given above.
 
 | Track | Area | Queue |
 |---|---|---|
-| A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics | `expr-nodes` → `view-nodes` → `sequence-kind` → `constraint-names` → `chain-walk` → `crap-refactor`/`crap-coverage` (core half) → `crap-ratchet-5` |
-| B | `.github/workflows/`, `scripts/`, `docs/` | `release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `diagnostic-xref` → `supabase-image` → `docs-release` |
-| C | `examples/`, golden content, `packages/supabase` | `golden-english` → `bucket-notes` → `preset-goldens` → `crap-coverage` (the `supabase/validators/schema-of.ts` entry) |
+| A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics | ~~`expr-nodes` → `view-nodes` → `sequence-kind`~~ → `chain-walk` → `constraint-names` (work-unit proposal first; replaces the row-16 guard; closes #137) → `grant-sync` → `scope-nodes` → `policy-schema-usage` |
+| B | `.github/workflows/`, `scripts/`, `docs/` | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `diagnostic-xref` → `supabase-image`~~ → `docs-release` → (release: owner) |
+| C | `examples/`, golden content, `packages/supabase`, **and since 2026-08-22 the CRAP work** | ~~`golden-english` → `bucket-notes` → `preset-goldens`~~ → `crap-refactor` → `declared-vs-catalog` → `crap-walkers` → `crap-coverage` → `crap-gate` → `crap-ratchet-5` → `required-keys` |
+
+Struck entries are merged; the queue is read from the first live entry. The
+CRAP rows moved from track A to track C on 2026-08-22 (owner: the CRAP work,
+ratchet to 5 included, stays inside Phase 8): they touch files across every
+package rather than core semantics, and their only ordering constraint is
+with each other, so they belong on the track whose other entries are
+content, not format.
 
 Track A is the bottleneck and cannot be widened: core semantics are sequential
 and format-dependent, so a fourth pair of hands there produces conflicts rather
@@ -242,10 +259,12 @@ is part of assigning, not part of reviewing.
 *"does this have to happen before publication?"*, and the answer travels with
 the proposal. Most of the queue is there because D65 leaves no choice — a
 snapshot's shape cannot change after 0.1.0 without a format version and a
-migration path. `phase8-crap-ratchet-5` is currently the only entry with no
-pre-publication deadline of its own; it is a CI threshold, not a format
-change. Recording that now matters because if the release runs late, the
-pressure lands first on the items that cannot move.
+migration path. `phase8-policy-schema-usage` is the one entry that answers
+*no* — it is a validator, not a format change, and is in the queue because
+the owner decided this phase does not carry its own defects forward, not
+because 0.1.0 waits for it. (`phase8-crap-ratchet-5` used to be that entry;
+it now sits in track C.) Recording that now matters because if the release
+runs late, the pressure lands first on the items that cannot move.
 
 ## Per-PR completion criteria
 
@@ -490,7 +509,31 @@ own claim.
   that merging the version PR publishes immediately and that npm burns a
   version number even if it is unpublished. And **#142**: the three package
   READMEs drop the roadmap/phase-status framing entirely (an npm page has no
-  use for a pointer to our roadmap file), not just a wording refresh.
+  use for a pointer to our roadmap file), not just a wording refresh. The
+  instrument is a grep for the stale phrasings across the three READMEs; its
+  positive control is the four lines it finds on `dev` before the PR (core
+  3, supabase 1, cli 0 — so `packages/cli/README.md` is untouched, and a
+  diff there is a question, not a fix), and done is that grep at 0 with the
+  per-file distribution in the PR body. `packages/skills/README.md` line 15
+  cites the overturned D54; it is fixed in the same PR and named in the body
+  as out of scope but cheap.
+- **`phase8-declared-vs-catalog`** — the reference the check reads is the
+  snapshot, never the emitted SQL; an omitted statement leaves no trace in
+  the SQL, which is the whole reason the check exists. The positive control
+  is the tree at `dev@626c57f` (the #193 golden × #202 guard crossing that
+  made dev red): the check must fail there with `declared primary key … not
+  found in catalog`, and the PR body carries that output with the SHA.
+- **`phase8-crap-walkers`** — for each walker, exhaustiveness is proved the
+  way `phase8-crap-refactor` did: a scratch variant added to the union must
+  make `tsc` fail on the handler map, and the edit is reverted; no walker
+  gains a runtime `default` that throws. `pnpm check:crap` before/after is
+  in the PR body, and the handler-map doc comment's counts match the map
+  (the draft said "fifteen" verbatim handlers over twenty-one entries).
+- **`phase8-policy-schema-usage`** — both controls named with the right
+  labels (see the rule on labels below): `examples/supabase` at
+  `dev@9cdbc2b` (the commit before #206 added the two `schema-usage` grants)
+  must warn, `examples/postgres` must not, and the warning names the schema
+  and the role.
 
 ## `phase8-supabase-image` — verifying the preset against a real image (D69)
 
@@ -900,6 +943,25 @@ compares two documents, write down what it cannot see — and if the answer is
 "whether any of this runs", that gap needs a second harness rather than a
 wider diff.
 
+The gap has a second form, found a day later (#209/#211): **a regeneration
+that produces no diff does not distinguish "correct" from "that part of the
+declaration is ignored".** #193's golden declared `.primaryKey()` on a
+re-added column and the generated step had no `add primary key` in it;
+removing the chain call regenerated to a 0-line diff, because the step had
+never depended on it. Four layers looked at that step and only one spoke:
+
+| Layer | What it asked | Why it stayed green |
+|---|---|---|
+| string-compare golden | does the SQL match the pinned text? | the pinned text had the same omission |
+| PG17 execution | does the SQL run? | a statement that is not there cannot fail |
+| regeneration, 0 diff | did the declaration change the output? | the declaration was ignored before and after |
+| the row-16 guard (#202) | is a PK being added on the `added` path? | **it was — this is the one that fired** |
+
+So a 0-diff regeneration is a measurement of the *producer's* stability,
+not of the declaration's effect; the instrument that asks whether what was
+declared now *exists* is `phase8-declared-vs-catalog`, and until it lands
+the only layer with range over this defect is the guard.
+
 **When you report an absence, run a positive control in the same breath.**
 `[]`, `0 occurrences`, and `could not reproduce` are indistinguishable from
 *the instrument never reached the subject*, and the only cheap way to tell
@@ -1147,6 +1209,36 @@ rewritten above (`phase8-release-workflows`'s stale-`dist` case and
 before its own trap was known, which is worth keeping on record rather than
 quietly fixing.
 
+**A measurement of a moving artifact needs a version anchor.** PR bodies,
+issue text and this table all change under a reader, and four of one day's
+five crossings were exactly that: a directive written against a body that
+had been edited, a body written against a plan row that had been reworded,
+a review of a head that had moved. A positive control proves the tool
+reached the target *then*; it cannot prove the target did not change
+afterwards. So a number or a quote taken from one of those carries the
+moment it was read — the SHA, the comment link, or the time — and a reader
+who finds the artifact different from the quote knows which of the two is
+stale instead of guessing. (The freeze rule above is the special case of
+this for branch heads.)
+
+**After every merge to `dev`, read the `dev` push run before merging the
+next PR.** The ruleset is non-strict: a PR's checks run against the PR's
+own base, so two PRs that are each green on the base they were opened from
+can together make `dev` red — #193's golden and #202's guard did precisely
+that at `626c57f`, and #211 fixed it forward. The zero-cost guard is that
+the merge is not finished when the button is pressed; it is finished when
+the push run on `dev` is green, and the next merge waits for that. (The
+owner may choose the strict ruleset instead, which serializes merges; until
+then this is the rule.)
+
+**A number from someone else's report is not your measurement.** If you
+quote it, carry what it measured and on which base, and check that scope
+against the claim you are attaching it to. "577/578" was `packages/core`
+alone on a red `dev`; the claim it was quoted under was about the whole
+monorepo on the branch, where the count was 744/744 — the same kind of
+range mismatch as the instrument rules above, except that here the
+instrument was a sentence in someone else's message.
+
 ## Settled: expression discriminators in the snapshot (D70)
 
 D57 exempts one thing explicitly: *"internal expression/statement AST
@@ -1216,6 +1308,20 @@ measure.
 3. Decide what happens to the local `NPM_TOKEN` rule in the private
    owner-workflow notes, which assumes publishing from a laptop.
 
+**Releasing 0.1.0** — the trigger is `phase8-docs-release` merged and the
+`dev` push run green; main reports `release-ready` at that moment and
+nothing after it is an agent action:
+
+1. Review the open "Version Packages" PR (#179; the bot re-pushes it on
+   every `dev` change, so read it last) and merge it — **this is the
+   irreversible step**: it publishes, and npm keeps the version number even
+   after an unpublish.
+2. Open `dev` → `main` and merge it with a **merge commit** (never squash or
+   rebase — the `main` history is the release history).
+3. Approve the `npm` environment when `release-publish.yml` pauses on it.
+4. Confirm with `npm view @hejbro/core version` (and the other two) — no
+   auth is needed to read.
+
 **After the first release (#139)** — for each of `@hejbro/core`, `hejbro` and
 `@hejbro/supabase`: package **Settings → Trusted Publisher → GitHub Actions**,
 organization `quickstart-now`, repository `hejbro`, workflow filename
@@ -1250,7 +1356,10 @@ rather than assumed: #121, #129, #142, #159 and #160 were all open with no
 row in the table and no entry here, so they were neither scheduled nor
 deferred. All five carry `parent = #9`, and with no Phase 9 to move them to,
 "unlisted" was the only thing wrong with them. Rows 37 and 38 and row 23's
-widened scope close that gap. **An open issue that appears in neither the
+widened scope closed that gap; #203 and #212, filed during the D69 and #211
+work, were the same bug a day later and are rows 41 and 39. The check is
+mechanical and worth repeating at every plan edit: every open sub-issue of
+#9 resolves to a row here or a line in this section. **An open issue that appears in neither the
 table nor this section is a bookkeeping bug, not a decision.**
 
 **#139** and **#141** stay as sub-issues of **#9**. There is no Phase 9 — the
