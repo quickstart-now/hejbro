@@ -22,7 +22,6 @@ import {
 import type {
 	ColumnSnapshot,
 	ForeignKeySnapshot,
-	IndexColumnSnapshot,
 	IndexSnapshot,
 	TableSnapshot,
 } from "../kinds/table-snapshot";
@@ -1056,38 +1055,6 @@ const resolveRenamedColumns = (
 	return renameColumnInList(columns, oldColumnName, newColumnName);
 };
 
-/** `[column.name]` for a plain-column entry, else `[]` — the `flatMap` step of {@link namedIndexColumnNames}. */
-const indexColumnNameOrEmpty = (
-	column: IndexColumnSnapshot,
-): ReadonlyArray<string> => {
-	if ("name" in column) {
-		return [column.name];
-	}
-	return [];
-};
-
-/** The `name` entries' names, in order — an expression entry (R5) names no column of its own and is retargeted, not renamed (US3/T040's `applyRetargetedIndexColumns`), so it contributes nothing to derived-name recomputation (R10b). */
-const namedIndexColumnNames = (
-	columns: ReadonlyArray<IndexColumnSnapshot>,
-): ReadonlyArray<string> => columns.flatMap(indexColumnNameOrEmpty);
-
-/** One index column, renamed in place for a column-rename spec (unchanged for a table-rename spec or an expression entry, R10b). */
-const renameIndexColumnEntry = (
-	column: IndexColumnSnapshot,
-	oldColumnName: string | null,
-	newColumnName: string | null,
-): IndexColumnSnapshot => {
-	if (!("name" in column)) {
-		return column;
-	}
-	const [renamed] = resolveRenamedColumns(
-		[column.name],
-		oldColumnName,
-		newColumnName,
-	);
-	return { ...column, name: renamed ?? column.name };
-};
-
 /** Rewrites one table's indexes for either a table rename (new table name, unchanged columns) or a column rename (unchanged table name, one renamed column) — synthesizing derived-name rename statements only for names that were actually `derive(...)`-generated (algorithm step 4). */
 const rewriteIndexesForRename = (
 	schemaName: string,
@@ -1102,21 +1069,22 @@ const rewriteIndexesForRename = (
 } => {
 	const sorted = [...indexes].sort((a, b) => compareKeys(a.name, b.name));
 	const rewritten = sorted.map((entry) => {
-		const oldDerivedName = deriveIndexName(
-			oldTableName,
-			namedIndexColumnNames(entry.columns),
+		const columnNames = entry.columns.map((column) => column.name);
+		const oldDerivedName = deriveIndexName(oldTableName, columnNames);
+		const newColumnNames = resolveRenamedColumns(
+			columnNames,
+			oldColumnName,
+			newColumnName,
 		);
-		const newColumns = entry.columns.map((column) =>
-			renameIndexColumnEntry(column, oldColumnName, newColumnName),
-		);
+		const newColumns = entry.columns.map((column, columnIndex) => ({
+			...column,
+			name: newColumnNames[columnIndex] ?? column.name,
+		}));
 		const wasDerived = entry.name === oldDerivedName;
 		if (!wasDerived) {
 			return { entry: { ...entry, columns: newColumns }, statement: null };
 		}
-		const newDerivedName = deriveIndexName(
-			newTableName,
-			namedIndexColumnNames(newColumns),
-		);
+		const newDerivedName = deriveIndexName(newTableName, newColumnNames);
 		if (newDerivedName === entry.name) {
 			return { entry: { ...entry, columns: newColumns }, statement: null };
 		}

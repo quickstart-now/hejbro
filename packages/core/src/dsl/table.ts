@@ -42,11 +42,18 @@ export type IndexMethod =
 	| "hnsw"
 	| "ivfflat";
 
-/** One entry of an index's column list after `table()` resolves it (D51/R5): a plain column (`name`) or an expression column (`expression`, a structured node reused from the partial-predicate machinery, D46) — exactly one of the two — plus its sort direction, nulls placement, and optional operator class (R4). */
-export type IndexColumnDeclaration = (
-	| { readonly name: string }
-	| { readonly expression: ExprNode }
-) & {
+/**
+ * One entry of an index's column list after `table()` resolves it (D51):
+ * a plain column, its sort direction, nulls placement, and optional
+ * operator class (R4). The expression-column variant (R5, `.on(sql\`...\`)`)
+ * lands in US3 (T036) — adding it here would break every current
+ * `column.name` reader (`table.ts`'s own validation, `table-kind.ts`'s
+ * name derivation, `rename-plan.ts`'s `rewriteIndexesForRename`) ahead of
+ * that story's own tests, so it's deliberately out of this Foundational
+ * shape (owner decision, #284 Foundational review).
+ */
+export type IndexColumnDeclaration = {
+	readonly name: string;
 	readonly desc: boolean;
 	readonly nulls: IndexNulls | null;
 	readonly opclass: string | null;
@@ -221,21 +228,6 @@ export const buildColumnRefs = <TColumns extends Record<string, ColumnBuilder>>(
 		]),
 	) as TableColumns<TColumns>;
 
-/** `[column.name]` for a plain-column entry, else `[]` — the `flatMap` step of {@link namedIndexColumnNames}. */
-const indexColumnNameOrEmpty = (
-	column: IndexColumnDeclaration,
-): ReadonlyArray<string> => {
-	if ("name" in column) {
-		return [column.name];
-	}
-	return [];
-};
-
-/** The `name` entries of an index's column list — expression entries (R5) name no column of their own and are validated separately (`index-expression-*`, R7). */
-const namedIndexColumnNames = (
-	columns: ReadonlyArray<IndexColumnDeclaration>,
-): ReadonlyArray<string> => columns.flatMap(indexColumnNameOrEmpty);
-
 const validateColumnRefs = (
 	tableName: string,
 	knownColumnNames: ReadonlySet<string>,
@@ -243,7 +235,7 @@ const validateColumnRefs = (
 	foreignKeys: ReadonlyArray<ForeignKeyDeclaration>,
 ): void => {
 	const badIndexColumn = indexes
-		.flatMap((index) => namedIndexColumnNames(index.columns))
+		.flatMap((index) => index.columns.map((column) => column.name))
 		.find((columnName) => !knownColumnNames.has(columnName));
 	if (badIndexColumn !== undefined) {
 		throwHejbroError(
@@ -275,7 +267,10 @@ const validateDuplicateNames = (
 	const indexNames = indexes.map(
 		(index) =>
 			index.indexName ??
-			deriveIndexName(tableName, namedIndexColumnNames(index.columns)),
+			deriveIndexName(
+				tableName,
+				index.columns.map((column) => column.name),
+			),
 	);
 	const duplicateIndex = firstDuplicate(indexNames);
 	if (duplicateIndex !== undefined) {
@@ -360,7 +355,10 @@ const indexPredicateEntries = (
 			{
 				name:
 					index.indexName ??
-					deriveIndexName(tableName, namedIndexColumnNames(index.columns)),
+					deriveIndexName(
+						tableName,
+						index.columns.map((column) => column.name),
+					),
 				predicate: index.predicate,
 			},
 		];

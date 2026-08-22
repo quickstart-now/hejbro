@@ -34,12 +34,12 @@
 
 **Purpose**: the widened public types every story depends on; no behaviour yet. All compact / optional, so every existing test stays green.
 
-- [ ] T002 Unit test (failing): `IndexMethod` union is exported and `IndexDeclaration` carries `method: null` by default; `IndexColumnDeclaration` accepts `{ name }` and `{ expression }` variants with `opclass: null` — in packages/core/test/dsl/index-builder.test.ts
-- [ ] T003 Add `IndexMethod`, `IndexColumnDeclaration` (two-variant + `opclass`), `IndexDeclaration.method` in packages/core/src/dsl/table.ts; `resolveIndex` carries `method` and the new column fields; export `IndexMethod`, `IndexColumnDeclaration` from packages/core/src/index.ts
-- [ ] T004 [P] Unit test (failing): `IndexSnapshot.method?`, `IndexColumnSnapshot` variants + `opclass?`, accessors `indexMethod` (→ `"btree"` when absent), `indexColumnOpclass`, `indexColumnExpression`, `isExpressionIndexColumn` — in packages/core/test/table-kind-diff.test.ts
-- [ ] T005 [P] Add the snapshot types and accessors in packages/core/src/kinds/table-snapshot.ts (compact: absent = default; `HEJBRO_SNAPSHOT_VERSION` untouched — assert in the test that it is still 5)
-- [ ] T006 Unit test (failing) then fix: `@hejbro/supabase` `indexDescription` renders an expression entry as `(<expression>)` and a named entry as today — packages/supabase/test/rls-cached-auth-outside-rls.test.ts, packages/supabase/src/validators/rls-cached-auth-outside-rls.ts (compile-driven by T003)
-- [ ] T007 SC-004 regression test: serialize `packages/core/test/golden/cases/table-indexes/declarations.ts` through `buildSnapshot` and assert byte-equality with its committed `expected/snapshot.json`; also `pnpm test` must show every existing golden `expected/*` unchanged — in packages/core/test/table-kind-diff.test.ts
+- [x] T002 Unit test (failing): `IndexMethod` union is exported and `IndexDeclaration` carries `method: null` by default; `IndexColumnDeclaration` accepts `{ name }` and `{ expression }` variants with `opclass: null` — in packages/core/test/dsl/index-builder.test.ts (expression variant moved to US3)
+- [x] T003 Add `IndexMethod`, `IndexColumnDeclaration` (two-variant + `opclass`), `IndexDeclaration.method` in packages/core/src/dsl/table.ts; `resolveIndex` carries `method` and the new column fields; export `IndexMethod`, `IndexColumnDeclaration` from packages/core/src/index.ts (expression variant moved to US3)
+- [x] T004 [P] Unit test (failing): `IndexSnapshot.method?`, `IndexColumnSnapshot` variants + `opclass?`, accessors `indexMethod` (→ `"btree"` when absent), `indexColumnOpclass`, `indexColumnExpression`, `isExpressionIndexColumn` — in packages/core/test/table-kind-diff.test.ts (expression variant moved to US3)
+- [x] T005 [P] Add the snapshot types and accessors in packages/core/src/kinds/table-snapshot.ts (compact: absent = default; `HEJBRO_SNAPSHOT_VERSION` untouched — assert in the test that it is still 5) (expression variant moved to US3)
+- [x] T006 Unit test (failing) then fix: `@hejbro/supabase` `indexDescription` renders an expression entry as `(<expression>)` and a named entry as today — packages/supabase/test/rls-cached-auth-outside-rls.test.ts, packages/supabase/src/validators/rls-cached-auth-outside-rls.ts (compile-driven by T003) (expression variant moved to US3)
+- [x] T007 SC-004 regression test: serialize `packages/core/test/golden/cases/table-indexes/declarations.ts` through `buildSnapshot` and assert byte-equality with its committed `expected/snapshot.json`; also `pnpm test` must show every existing golden `expected/*` unchanged — in packages/core/test/table-kind-diff.test.ts
 
 **Checkpoint**: `pnpm check && pnpm check-types && pnpm test` green; no golden file changed
 

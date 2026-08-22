@@ -65,22 +65,21 @@ export const columnDefault = (column: ColumnSnapshot): string | null => {
 };
 
 /**
- * One column of an index as materialized in a table snapshot (D51/R8):
- * either a plain column (`name`) or an expression column (`expression`,
- * `encodeExprNode` output — see {@link ColumnSnapshot.default}'s doc
- * comment for why expressions are structured nodes, not rendered text),
- * exactly one of the two, plus its sort direction, nulls placement, and
- * operator class. **Compact**: `desc`/`nulls`/`opclass` are present only
- * when non-default — read via {@link indexColumnDesc}/
- * {@link indexColumnNulls}/{@link indexColumnOpclass}/
- * {@link indexColumnExpression}. `opclass` is a D36 identifier stored
+ * One column of an index as materialized in a table snapshot (D51/R8): its
+ * name, sort direction, nulls placement, and operator class. The
+ * expression-column variant (R5) lands in US3 (T038) alongside its
+ * `indexColumnExpression`/`isExpressionIndexColumn` accessors and its
+ * `table-kind.ts`/`table-kind-emit-sql.ts` consumers, in the same commit
+ * (owner decision, #284 Foundational review — see
+ * {@link ../dsl/table.ts}'s `IndexColumnDeclaration` doc comment for why).
+ * **Compact**: `desc`/`nulls`/`opclass` are present only when non-default
+ * — read via {@link indexColumnDesc}/{@link indexColumnNulls}/
+ * {@link indexColumnOpclass}. `opclass` is a D36 identifier stored
  * verbatim — SQL's own token, the same naming-rule exception as
  * `ComparisonNode.operator`/`OrderByTerm.direction` (R8).
  */
-export type IndexColumnSnapshot = (
-	| { readonly name: string }
-	| { readonly expression: JsonValue }
-) & {
+export type IndexColumnSnapshot = {
+	readonly name: string;
 	readonly desc?: true;
 	readonly nulls?: IndexNulls;
 	readonly opclass?: string;
@@ -99,22 +98,6 @@ export const indexColumnNulls = (
 export const indexColumnOpclass = (
 	column: IndexColumnSnapshot,
 ): string | null => column.opclass ?? null;
-
-/** Narrows `column` to its `expression` variant (R5/R8). */
-export const isExpressionIndexColumn = (
-	column: IndexColumnSnapshot,
-): column is Extract<IndexColumnSnapshot, { readonly expression: JsonValue }> =>
-	"expression" in column;
-
-/** `column.expression` decoded and rendered back to SQL text, `null` for a plain-column entry (mirrors {@link indexWhere}). */
-export const indexColumnExpression = (
-	column: IndexColumnSnapshot,
-): string | null => {
-	if (!isExpressionIndexColumn(column)) {
-		return null;
-	}
-	return renderExpr(decodeExprNode(column.expression));
-};
 
 /**
  * A single index as materialized in a table snapshot, with its name

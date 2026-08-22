@@ -9,9 +9,7 @@ import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import type { ColumnRef, Expr } from "../src/expr/ast";
-import { encodeExprNode } from "../src/expr/codec";
 import { inArray, isNotNull } from "../src/expr/operators";
-import { sql } from "../src/expr/sql-template";
 import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
@@ -23,11 +21,9 @@ import type {
 import {
 	asTableSnapshot,
 	checkExpression,
-	indexColumnExpression,
 	indexColumnOpclass,
 	indexMethod,
 	indexWhere,
-	isExpressionIndexColumn,
 } from "../src/kinds/table-snapshot";
 import {
 	buildSnapshot,
@@ -561,23 +557,9 @@ describe("index snapshot accessors — Foundational types (#284)", () => {
 		expect(indexColumnOpclass(withClass)).toBe("jsonb_path_ops");
 	});
 
-	it("indexColumnExpression is null for a name entry, and renders an expression entry's SQL", () => {
-		const named: IndexColumnSnapshot = { name: "email" };
-		const expressionColumn: IndexColumnSnapshot = {
-			expression: encodeExprNode(sql`lower(email)`.exprNode),
-		};
-		expect(indexColumnExpression(named)).toBeNull();
-		expect(indexColumnExpression(expressionColumn)).toBe("lower(email)");
-	});
-
-	it("isExpressionIndexColumn narrows to the expression variant", () => {
-		const named: IndexColumnSnapshot = { name: "email" };
-		const expressionColumn: IndexColumnSnapshot = {
-			expression: encodeExprNode(sql`lower(email)`.exprNode),
-		};
-		expect(isExpressionIndexColumn(named)).toBe(false);
-		expect(isExpressionIndexColumn(expressionColumn)).toBe(true);
-	});
+	// indexColumnExpression/isExpressionIndexColumn land in US3 (T038) with
+	// the expression-column variant itself (owner decision, #284
+	// Foundational review) — see IndexColumnSnapshot's doc comment.
 });
 
 // #284 Foundational (T007, SC-004): the type widening above must not move a

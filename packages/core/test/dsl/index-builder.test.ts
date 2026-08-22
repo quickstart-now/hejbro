@@ -4,7 +4,6 @@ import { schema } from "../../src/dsl/schema";
 import type { IndexColumnDeclaration, IndexMethod } from "../../src/dsl/table";
 import { getTableMeta, table } from "../../src/dsl/table";
 import { eq, isNotNull } from "../../src/expr/operators";
-import { sql } from "../../src/expr/sql-template";
 import { exists, select } from "../../src/query/select";
 import {
 	text,
@@ -112,21 +111,17 @@ describe("index builder — Foundational types (#284)", () => {
 		expect(methods).toHaveLength(8);
 	});
 
-	it("IndexColumnDeclaration accepts a name entry and an expression entry, both carrying opclass", () => {
+	it("IndexColumnDeclaration carries opclass alongside name/desc/nulls", () => {
 		const byName: IndexColumnDeclaration = {
 			name: "email",
 			desc: false,
 			nulls: null,
 			opclass: null,
 		};
-		const byExpression: IndexColumnDeclaration = {
-			expression: sql`lower(email)`.exprNode,
-			desc: false,
-			nulls: null,
-			opclass: null,
-		};
 		expect(byName.opclass).toBeNull();
-		expect(byExpression.opclass).toBeNull();
-		expect("name" in byExpression).toBe(false);
 	});
+
+	// The expression-column variant (`.on(sql\`...\`)`, R5) lands in US3
+	// (T036) — see IndexColumnDeclaration's doc comment (#284 Foundational
+	// review).
 });
