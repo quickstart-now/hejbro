@@ -3,6 +3,7 @@ import { rls } from "../../src/dsl/rls";
 import { schema } from "../../src/dsl/schema";
 import { getTableMeta, table } from "../../src/dsl/table";
 import { eq, isNotNull } from "../../src/expr/operators";
+import { sql } from "../../src/expr/sql-template";
 import { tableKind } from "../../src/kinds/table-kind";
 import { exists, select } from "../../src/query/select";
 import { stableJson } from "../../src/snapshot/stable-json";
@@ -135,6 +136,38 @@ describe("binding rls to a table", () => {
 							.for("select")
 							.to("anon")
 							.using(eq(comments.postId, t.id)),
+					}),
+				}),
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "rls-policy-foreign-column" }),
+		);
+	});
+
+	// #154 ratchet-5: findExprScopeViolation's sqlTemplate handler
+	// (an embedded ${...} expression inside a sql`` template) had zero
+	// coverage -- every other scope-violation test above used a plain
+	// comparison, never a raw-SQL template.
+	it("rejects a foreign column reference embedded in a sql`` template", () => {
+		const comments = table(app, "comments_sql_fc", {
+			id: uuid().primaryKey().defaultRandom(),
+			postId: uuid().notNull(),
+		});
+
+		expect(() =>
+			table(
+				app,
+				"posts_sql_fc",
+				{
+					id: uuid().primaryKey().defaultRandom(),
+				},
+				(t) => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("bad")
+							.for("select")
+							.to("anon")
+							.using(sql`${t.id} = ${comments.postId}`),
 					}),
 				}),
 			),

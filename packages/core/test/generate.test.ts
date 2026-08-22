@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { pgEnum } from "../src/dsl/pg-enum";
+import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
+import { literal } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import {
@@ -384,6 +386,104 @@ describe("generateMigration", () => {
 				'alter table "app"."posts" alter column "id" drop default;',
 			);
 			expect(result.sql).toContain('drop sequence "app"."posts_id_seq";');
+		});
+
+		// #154 ratchet-5: sortPredropStatements's identity tiebreak (two
+		// predrop statements at the *same* kind-dependency rank, ordered by
+		// compareKeys(a.change.identity, b.change.identity) rather than
+		// encounter order) had no test of its own -- every case above drops
+		// exactly one sequence, so the tiebreak branch never had two same-rank
+		// entries to actually choose between. Dropping two serial columns at
+		// once puts two "sequence"-kind predrop entries at the identical
+		// rank; bValue is declared first, so encounter order alone would put
+		// posts_b_value_seq ahead of posts_a_value_seq -- the identity
+		// tiebreak is what puts them the other way around. diffSnapshots
+		// already sorts changes by identity within a kind, so this branch
+		// isn't reachable through a red-first mutation of the tiebreak itself
+		// (the upstream sort produces the same final order either way) --
+		// this test pins the observable order instead of proving the branch
+		// load-bearing by mutation.
+		it("two same-rank predrop statements (two dropped sequences) are ordered by identity, not declaration order", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", {
+				id: uuid().primaryKey(),
+				bValue: serial(),
+				aValue: serial(),
+			});
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(seqApp, "posts", { id: uuid().primaryKey() });
+			const result = generateMigration({
+				declarations: [seqApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			const aIndex = result.sql.indexOf(
+				'drop sequence "app"."posts_a_value_seq"',
+			);
+			const bIndex = result.sql.indexOf(
+				'drop sequence "app"."posts_b_value_seq"',
+			);
+			expect(aIndex).toBeGreaterThan(-1);
+			expect(bIndex).toBeGreaterThan(-1);
+			expect(aIndex).toBeLessThan(bIndex);
+		});
+
+		// #154 ratchet-5, reviewer-2 finding: sortPredropStatements's
+		// descending rank ordering (rankOf(b) - rankOf(a), #122's "a
+		// dependent kind's drop must clear before the kind it depends on is
+		// altered") had no test spanning two *different* kinds' predrop
+		// statements -- every case above predrops only "sequence"-kind
+		// entries, so a sign flip on the rank comparison alone (all 729 core
+		// tests stay green) never surfaced. A policy's role changing (still
+		// alive, but re-created) and a serial-to-uuid column type change in
+		// the same migration both contribute a predrop statement: "policy"
+		// depends (transitively, via "table") on "sequence", so it ranks
+		// higher and must drop first.
+		it("predrops a higher-rank kind (policy) before a lower-rank one (sequence) it transitively depends on (#122)", () => {
+			const rankApp = schema("app");
+			const before = table(
+				rankApp,
+				"posts",
+				{ id: serial().primaryKey(), title: text() },
+				() => ({
+					rls: rls.enabled({
+						read: rls.policy("p").for("select").to("anon").using(literal(true)),
+					}),
+				}),
+			);
+			const previous = generateMigration({
+				declarations: [rankApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(
+				rankApp,
+				"posts",
+				{ id: uuid().primaryKey(), title: text() },
+				() => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("p")
+							.for("select")
+							.to("authenticated")
+							.using(literal(true)),
+					}),
+				}),
+			);
+			const result = generateMigration({
+				declarations: [rankApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			const policyDropIndex = result.sql.indexOf('drop policy "p"');
+			const sequenceDropIndex = result.sql.indexOf(
+				'drop sequence "app"."posts_id_seq"',
+			);
+			expect(policyDropIndex).toBeGreaterThan(-1);
+			expect(sequenceDropIndex).toBeGreaterThan(-1);
+			expect(policyDropIndex).toBeLessThan(sequenceDropIndex);
 		});
 	});
 });
