@@ -178,19 +178,32 @@ export type BannerHashes = {
 
 const PARENT_SNAPSHOT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
+const VERSION_PREFIX = "-- hejbro: ";
 
 /**
  * Renders a one-line-per-change summary banner: `+` for creates, `~` for
- * alters (with notes bracketed), `-` for drops. When `hashes` is given,
- * appends the two banner hash-chain lines (D33) `hejbro verify` reads back
- * via {@link parseBannerHashes}.
+ * alters (with notes bracketed), `-` for drops. When `version` is given,
+ * inserts the `-- hejbro: <version>` line (#229) directly below the
+ * `-- hejbro migration` line — the CLI reads its own `package.json` for
+ * this string; core never does. When `hashes` is given, appends the two
+ * banner hash-chain lines (D33) `hejbro verify` reads back via
+ * {@link parseBannerHashes}.
  */
+const versionLines = (version: string | undefined): ReadonlyArray<string> => {
+	if (version === undefined) {
+		return [];
+	}
+	return [`${VERSION_PREFIX}${version}`];
+};
+
 export const renderBanner = (
 	changes: ReadonlyArray<KindChange>,
 	hashes?: BannerHashes,
+	version?: string,
 ): string => {
 	const lines = [
 		"-- hejbro migration",
+		...versionLines(version),
 		...changes.map((change) => renderBannerLine(change)),
 	];
 	if (hashes === undefined) {
@@ -222,6 +235,25 @@ export const parseBannerHashes = (fileContent: string): BannerHashes | null => {
 		parent: parentLine.slice(PARENT_SNAPSHOT_PREFIX.length),
 		current: currentLine.slice(SNAPSHOT_PREFIX.length),
 	};
+};
+
+/**
+ * Reads a migration file's `-- hejbro: <version>` line (#229), or `null`
+ * when the line is absent — every pre-#229 migration file, and the only
+ * signal that lets `hejbro restore`'s `restore-state-mismatch` diagnostic
+ * name the exact hejbro version a migration was generated with. Unknown
+ * banner lines are otherwise ignored by every parser here (each one
+ * scans for its own known prefix only), so an older hejbro reading a
+ * newer file with this line stays unaffected.
+ */
+export const parseBannerVersion = (fileContent: string): string | null => {
+	const versionLine = fileContent
+		.split("\n")
+		.find((line) => line.startsWith(VERSION_PREFIX));
+	if (versionLine === undefined) {
+		return null;
+	}
+	return versionLine.slice(VERSION_PREFIX.length);
 };
 
 const changeVerb = (operation: ChangeOperation): string => {

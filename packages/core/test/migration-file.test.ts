@@ -6,6 +6,7 @@ import {
 	migrationFileName,
 	migrationVersionOf,
 	parseBannerHashes,
+	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,
 } from "../src/sql/migration-file";
@@ -151,6 +152,28 @@ describe("renderBanner", () => {
 	it("omits the hash lines when no hashes are given", () => {
 		expect(renderBanner([createChange])).not.toContain("parent-snapshot");
 	});
+
+	it("inserts the -- hejbro: <version> line directly below -- hejbro migration when version is given (#229)", () => {
+		expect(renderBanner([createChange], undefined, "0.1.0")).toBe(
+			"-- hejbro migration\n-- hejbro: 0.1.0\n-- + table app.posts [new]",
+		);
+	});
+
+	it("places the version line above the hash-chain lines when both are given", () => {
+		expect(
+			renderBanner(
+				[createChange],
+				{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+				"0.1.0",
+			),
+		).toBe(
+			"-- hejbro migration\n-- hejbro: 0.1.0\n-- + table app.posts [new]\n-- parent-snapshot: sha256:aaaa\n-- snapshot: sha256:bbbb",
+		);
+	});
+
+	it("omits the version line when no version is given", () => {
+		expect(renderBanner([createChange])).not.toContain("-- hejbro:");
+	});
 });
 
 describe("parseBannerHashes", () => {
@@ -167,6 +190,29 @@ describe("parseBannerHashes", () => {
 
 	it("returns null for a hash-less banner", () => {
 		expect(parseBannerHashes(renderBanner([createChange]))).toBeNull();
+	});
+
+	it("still parses hashes when a version line sits between the banner lines and the hash lines (#229 unknown-line tolerance)", () => {
+		const sql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+		);
+		expect(parseBannerHashes(sql)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:bbbb",
+		});
+	});
+});
+
+describe("parseBannerVersion", () => {
+	it("round-trips a banner rendered with a version", () => {
+		const sql = renderBanner([createChange], undefined, "0.1.0");
+		expect(parseBannerVersion(sql)).toBe("0.1.0");
+	});
+
+	it("returns null for a version-less banner (every pre-#229 migration file)", () => {
+		expect(parseBannerVersion(renderBanner([createChange]))).toBeNull();
 	});
 });
 

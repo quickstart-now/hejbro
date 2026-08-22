@@ -118,6 +118,8 @@ type GenerateMigrationOptions = {
 	readonly confirmedDrops?: ReadonlyArray<ConfirmDropSpec>;
 	/** the banner's tamper-evident hash-chain lines (D33) — opaque `"sha256:<hex>"` strings the CLI computes; core never hashes. */
 	readonly bannerHashes?: BannerHashes;
+	/** the banner's `-- hejbro: <version>` line (#229) — the CLI reads its own `package.json` for this string; core only receives it and renders it verbatim. */
+	readonly hejbroVersion?: string;
 	/** preset-supplied pure checks run over the built snapshot + normalized declarations (D37); error severity joins `errors` and short-circuits like rename errors. */
 	readonly validators?: ReadonlyArray<Validator>;
 };
@@ -274,7 +276,11 @@ export const generateMigration = (
 	);
 
 	const sql = [
-		renderBanner([...plan.renameChanges, ...changes], options.bannerHashes),
+		renderBanner(
+			[...plan.renameChanges, ...changes],
+			options.bannerHashes,
+			options.hejbroVersion,
+		),
 		...plan.renameStatements,
 		...predropStatements.map((entry) => entry.statement.sql),
 		...mainStatements.map((entry) => entry.statement.sql),
