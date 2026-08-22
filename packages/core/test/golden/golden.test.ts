@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { HejbroInput, Snapshot } from "../../src/index";
+import type { HejbroInput, RenameSpec, Snapshot } from "../../src/index";
 import {
 	emptySnapshot,
 	generateMigration,
@@ -17,9 +17,34 @@ import {
 
 // The case modules under test/golden/cases are loaded via a runtime-built
 // path (join(...)), so TypeScript can't statically resolve their exports —
-// this describes the one shape every case's steps.ts must satisfy.
+// this describes the one shape every case's steps.ts must satisfy. A step
+// is either a bare declarations array (the common case, every case but
+// #284's `table-index-methods`) or `{ declarations, renames }` when the
+// step also exercises `--rename` (US3/T035 — a column rename retargeting
+// an index expression, which needs `generateMigration`'s own `renames`
+// resolution, not just a declaration-set diff).
+type StepEntry =
+	| ReadonlyArray<HejbroInput>
+	| {
+			readonly declarations: ReadonlyArray<HejbroInput>;
+			readonly renames?: ReadonlyArray<RenameSpec>;
+	  };
+
 type StepsModule = {
-	readonly steps: ReadonlyArray<ReadonlyArray<HejbroInput>>;
+	readonly steps: ReadonlyArray<StepEntry>;
+};
+
+/** Normalizes a `StepEntry` to its `declarations`/`renames` pair — a bare array has no renames. */
+const normalizeStep = (
+	entry: StepEntry,
+): {
+	readonly declarations: ReadonlyArray<HejbroInput>;
+	readonly renames: ReadonlyArray<RenameSpec>;
+} => {
+	if ("declarations" in entry) {
+		return { declarations: entry.declarations, renames: entry.renames ?? [] };
+	}
+	return { declarations: entry, renames: [] };
 };
 
 const stepLabel = (index: number): string => {
@@ -82,12 +107,14 @@ describe("golden cases", () => {
 			const outcome = steps.reduce(
 				(
 					state: { readonly snapshot: Snapshot },
-					declarations: ReadonlyArray<HejbroInput>,
+					entry: StepEntry,
 					stepIndex: number,
 				) => {
+					const { declarations, renames } = normalizeStep(entry);
 					const generated = generateMigration({
 						declarations,
 						previousSnapshot: state.snapshot,
+						renames,
 					});
 					const label = stepLabel(stepIndex);
 					expect(
@@ -120,14 +147,16 @@ describe("determinism", () => {
 		const { steps }: StepsModule = await import(
 			join(casesDirectory, "app-posts", "steps.ts")
 		);
-		const [initialDeclarations] = steps;
-		if (initialDeclarations === undefined) {
+		const [firstEntry] = steps;
+		if (firstEntry === undefined) {
 			throw new Error("expected the app-posts case to have at least one step");
 		}
+		const { declarations, renames } = normalizeStep(firstEntry);
 		const runOnce = () =>
 			generateMigration({
-				declarations: initialDeclarations,
+				declarations,
 				previousSnapshot: emptySnapshot,
+				renames,
 			});
 		expect(renderSnapshot(runOnce().snapshot)).toBe(
 			renderSnapshot(runOnce().snapshot),
