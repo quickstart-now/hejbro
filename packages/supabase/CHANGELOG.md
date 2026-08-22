@@ -1,5 +1,18 @@
 # @hejbro/supabase
 
+## 0.1.1
+
+### Patch Changes
+
+- 2ff02b7: `hejbro restore --help` documents the `<n>` positional; `hejbro --help` keeps each command on one line; `restore`'s undo hint notes that restored files are staged.
+- 66117ac: Fix: a function declared `returns: <table>` failed at call time (`structure of query does not match function result type`) — or silently returned values under the wrong column names when the swapped columns share a type — once a column had been added to that table in the middle of its TypeScript declaration in a later migration. Snapshot column order is now the table's physical order: existing columns keep their order, new columns are appended, a renamed column keeps its position — the rule Postgres applies. `select(table)` / `.returning()` lists in function bodies and view definitions follow it. No snapshot format change; unchanged declarations render unchanged. Known limitation: a snapshot that already diverged from the database on 0.1.0 (a mid-declaration insert generated before this fix) is not repaired — hejbro has no database access by design; regenerate that table's functions by hand once, or drop and re-add the column.
+- 1ebb306: `defineFunction` now takes the declared schema object as its first argument, like `table`/`defineView`/`grant` (#269) --
+  `defineFunction(app, "archive_project", …)` instead of `defineFunction("app", "archive_project", …)`. The string form is still accepted on the 0.1.x line for compatibility (deprecated in JSDoc) and will be removed in 0.2.0.
+- Updated dependencies [2ff02b7]
+- Updated dependencies [66117ac]
+- Updated dependencies [1ebb306]
+  - @hejbro/core@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
