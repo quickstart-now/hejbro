@@ -85,6 +85,12 @@ jobs:
       - run: pnpm build
       - run: pnpm smoke:pack-install
         if: matrix.node-version == 24
+      # #154/D71: CRAP score gate for @hejbro/core and @hejbro/supabase, at
+      # threshold 10 (see scripts/check-crap.mjs). Node-version-independent
+      # (complexity/coverage numbers don't vary by runtime), so gated to one
+      # matrix leg only, the same way smoke:pack-install above is.
+      - run: pnpm check:crap
+        if: matrix.node-version == 24
       # #180: not "trust this branch" -- the question this step asks
       # ("does every package this branch changed relative to dev have an
       # accompanying pending changeset?") does not apply on a
