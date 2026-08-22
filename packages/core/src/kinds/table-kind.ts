@@ -50,6 +50,37 @@ export const deriveSequenceName = (
 ): string => `${tableName}_${columnName}_seq`;
 
 /**
+ * Derives a table's primary key constraint's default name from its owning
+ * table (#24/D68) — matches Postgres's own naming convention exactly
+ * (confirmed via `pg_dump`: a table's primary key constraint, however
+ * declared, is named `<table>_pkey`). Column-name-independent, unlike
+ * {@link deriveIndexName}/{@link deriveForeignKeyName} — a column *rename*
+ * therefore never changes this name, only a *table* rename does (measured
+ * against `pg_dump` output; `engine/rename-plan.ts`'s drift guard for this
+ * name only needs to run on the table-rename path as a result). Shared
+ * with `engine/rename-plan.ts`'s drift guard, the same way
+ * `deriveIndexName`/`deriveForeignKeyName`/`deriveSequenceName` already
+ * are.
+ */
+export const derivePrimaryKeyName = (tableName: string): string =>
+	`${tableName}_pkey`;
+
+/**
+ * Derives a single-column UNIQUE constraint's default name from its owning
+ * table and column (#24/D68) — matches Postgres's own naming convention
+ * exactly (confirmed via `pg_dump`: a bare inline `unique` column clause
+ * produces `<table>_<column>_key`). Recorded in the snapshot now
+ * (`ColumnSnapshot.uniqueName`) so a future UNIQUE-alter feature never has
+ * to disagree with a name already committed to a user's database — UNIQUE
+ * *emission* itself stays unimplemented this wave (`table-kind-emit.ts`'s
+ * `unsupported-column-alter` guard).
+ */
+export const deriveUniqueName = (
+	tableName: string,
+	columnName: string,
+): string => `${tableName}_${columnName}_key`;
+
+/**
  * `primaryKey` implies `notNull` once a column is materialized into a
  * snapshot -- and so does a `serial`/`smallserial`/`bigserial` type (#23/
  * D66): confirmed against a real Postgres (`pg_dump` on a table declaring
@@ -138,6 +169,18 @@ const columnUniqueField = (value: boolean): Pick<ColumnSnapshot, "unique"> => {
 	return { unique: true };
 };
 
+/** `{ uniqueName: derive(...) }` when the column is unique, else `{}` (compact snapshot, #24/D68) — always paired with `columnUniqueField`, never present on its own. */
+const uniqueNameField = (
+	tableName: string,
+	columnName: string,
+	unique: boolean,
+): Pick<ColumnSnapshot, "uniqueName"> => {
+	if (!unique) {
+		return {};
+	}
+	return { uniqueName: deriveUniqueName(tableName, columnName) };
+};
+
 /** `{ default: <node> }` when the column has a default, else `{}` (compact snapshot). */
 const defaultField = (
 	value: JsonValue | null,
@@ -213,6 +256,11 @@ const serializeColumns = (
 		...notNullField(materializeNotNull(entry.columnState)),
 		...primaryKeyField(entry.columnState.primaryKey),
 		...columnUniqueField(entry.columnState.unique),
+		...uniqueNameField(
+			declaration.tableName,
+			entry.columnName,
+			entry.columnState.unique,
+		),
 		...defaultField(encodeColumnDefaultExpr(entry.columnState)),
 	}));
 
@@ -275,6 +323,19 @@ const checksField = (
 	return { checks };
 };
 
+/** `{ primaryKeyName: derive(...) }` when at least one column declares `.primaryKey()`, else `{}` (compact snapshot, #24/D68) — membership itself stays on the columns (`columnPrimaryKey`); this is only the constraint's name, recorded once at table level rather than once per member column. */
+const primaryKeyNameField = (
+	declaration: TableDeclaration,
+): Pick<TableSnapshot, "primaryKeyName"> => {
+	const hasPrimaryKey = declaration.columns.some(
+		(entry) => entry.columnState.primaryKey,
+	);
+	if (!hasPrimaryKey) {
+		return {};
+	}
+	return { primaryKeyName: derivePrimaryKeyName(declaration.tableName) };
+};
+
 const isEmptyKeyedDiff = <TValue>(diff: KeyedDiff<TValue>): boolean =>
 	diff.added.length === 0 &&
 	diff.removed.length === 0 &&
@@ -321,6 +382,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		indexes: serializeIndexes(declaration),
 		foreignKeys: serializeForeignKeys(declaration),
 		...checksField(serializeChecks(declaration)),
+		...primaryKeyNameField(declaration),
 	}),
 	identify: (snapshot) => {
 		const tableSnapshot = asTableSnapshot(snapshot);

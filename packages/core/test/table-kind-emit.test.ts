@@ -70,7 +70,7 @@ describe("tableKind.emit — create", () => {
 					'create table "app"."comments" (\n' +
 					'\t"id" uuid not null default gen_random_uuid(),\n' +
 					'\t"post_id" uuid not null,\n' +
-					'\tprimary key ("id")\n' +
+					'\tconstraint "comments_pkey" primary key ("id")\n' +
 					");",
 				stage: "main",
 			},
@@ -105,7 +105,7 @@ describe("tableKind.emit — create", () => {
 		const change = expectSingleChange(tableKind.diff(null, next, "app.users"));
 		expect(tableKind.emit(change)).toEqual([
 			{
-				sql: 'create table "app"."users" (\n\t"email" text not null unique\n);',
+				sql: 'create table "app"."users" (\n\t"email" text not null constraint "users_email_key" unique\n);',
 				stage: "main",
 			},
 			{
@@ -465,7 +465,7 @@ describe("tableKind.emit — checks", () => {
 			),
 		);
 		expect(tableKind.emit(change)[0]?.sql).toBe(
-			'create table "app"."posts" (\n\t"id" uuid not null,\n\t"status" text not null,\n\tprimary key ("id"),\n\tconstraint "posts_status_check" check ("app"."posts"."status" in (\'draft\', \'published\'))\n);',
+			'create table "app"."posts" (\n\t"id" uuid not null,\n\t"status" text not null,\n\tconstraint "posts_pkey" primary key ("id"),\n\tconstraint "posts_status_check" check ("app"."posts"."status" in (\'draft\', \'published\'))\n);',
 		);
 	});
 
