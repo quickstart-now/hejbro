@@ -41,3 +41,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # TypeScript 7.x is not landable until 7.1 ships the programmatic
+      # Compiler API that scripts/check-crap.mjs depends on (#267, #258).
+      # Drop this entry to re-evaluate once 7.1 is out.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
