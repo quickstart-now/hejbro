@@ -18,7 +18,11 @@
 		"rules": {
 			"preset": "recommended",
 			"style": {
-				"noTernary": "error"
+				"noTernary": "error",
+				"useNamingConvention": {
+					"level": "warn",
+					"options": { "strictCase": false }
+				}
 			}
 		}
 	},

@@ -142,6 +142,7 @@ describe("table() — app-style posts", () => {
 		expect(() =>
 			table(app, "widgets", {
 				fooBar: text(),
+				// biome-ignore lint/style/useNamingConvention: foo_bar models the real SQL column name assertSqlName (D36) would derive from fooBar -- the test's whole point is this exact collision.
 				foo_bar: text(),
 			}),
 		).toThrowError(/widgets/);

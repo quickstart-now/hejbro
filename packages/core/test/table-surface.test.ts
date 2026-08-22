@@ -65,6 +65,7 @@ describe("table() surface (D15)", () => {
 	});
 	it("keeps rejecting duplicate snake_cased column names", () => {
 		expect(() =>
+			// biome-ignore lint/style/useNamingConvention: post_id models the real SQL column name assertSqlName (D36) would derive from postId -- the test's whole point is this exact collision.
 			table(shop, "posts", { postId: uuid(), post_id: uuid() }),
 		).toThrowError(/duplicate-column|duplicate column/);
 	});
