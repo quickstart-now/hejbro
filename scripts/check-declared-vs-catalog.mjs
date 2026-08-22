@@ -55,6 +55,21 @@
 // constraint's declared expression, a function's/view's declared body, a
 // trigger's declared timing/event beyond its name.
 //
+// A known false-gap risk in the default comparison, not a "does not
+// check": a *compound* expression default (anything beyond a single
+// literal or a bare function call -- e.g. `sql`'a' || 'b'`` ``) can have
+// Postgres rewrite it with a per-operand cast on write (measured:
+// `('a' || 'b')` comes back as `('a'::text || 'b'::text)`) -- this
+// check's own cast-stripping only ever strips one trailing cast on the
+// *whole* value (see matchesWithCastSuffix), not a cast Postgres
+// inserted *inside* a multi-operand expression, so a column default
+// like this can report a false gap. Not normalized away: the general
+// rule ("Postgres may rewrite an expression's own internals on write")
+// is exactly the kind of guess this script's own default-comparison
+// doc comment above already declined to make for case-folding, for the
+// same reason -- a real rewrite this narrow regex can't anticipate the
+// exact shape of.
+//
 // `supabase-storage-bucket` (the one preset-only kind, `@hejbro/
 // supabase`) is skipped entirely, same as verify-supabase-image.sh's own
 // skip_storage_kind: storage.buckets is a row in a table the Storage API
@@ -356,11 +371,24 @@ const escapeForRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * never emits this cast itself (`renderLiteral`'s string case renders
  * bare `'member'`), so it's always Postgres's own addition, safe to
  * strip without separately validating the cast's own spelling -- a wrong
- * *type* is already caught by `columnTypeGap`, independently.
+ * *type* is already caught by `columnTypeGap`, independently. The cast
+ * target's own character class also allows `[`/`]`/`(`/`)`/`,` -- measured
+ * for the brackets: an array-column literal default casts to its own
+ * array type (`'{}'::text[]`, `'{1.5,2.5}'::numeric[]`), and those
+ * brackets are the array-cast's own syntax, not a value this check
+ * re-validates (a wrong element type is still `columnTypeGap`'s job).
+ * Parens/comma widen the same way for a parameterized cast target
+ * (e.g. `numeric(10,2)`) if Postgres ever emits one on a literal default
+ * -- not reproduced directly (every numeric literal measured either
+ * needed no cast at all or cast to bare `numeric`, see this PR's own
+ * body), kept as defensive width for a shape this check should not
+ * false-gap on if it does occur, at no cost: nothing about the
+ * surrounding anchors changes, and a wrong type is still independently
+ * caught by `columnTypeGap`.
  */
 const matchesWithCastSuffix = (declaredText, catalogText) =>
 	new RegExp(
-		`^${escapeForRegExp(declaredText)}::[A-Za-z_][A-Za-z0-9_. ]*$`,
+		`^${escapeForRegExp(declaredText)}::[A-Za-z_][A-Za-z0-9_., \\[\\]()]*$`,
 	).test(catalogText);
 
 const defaultsMatch = (declaredText, catalogText) => {
