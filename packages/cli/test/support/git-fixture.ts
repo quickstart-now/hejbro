@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNamingConvention: every SCREAMING_CASE key below is a git environment variable name, not a naming choice of this codebase's own
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,8 +7,10 @@ import { join } from "node:path";
 // Real, scratch `git init` repos for history/restore tests (#130 spec
 // §11) — byte-stable only because every commit's author/committer date
 // is pinned via GIT_AUTHOR_DATE/GIT_COMMITTER_DATE and every git
-// subprocess (here and in git.ts itself) runs with TZ=UTC.
-const GIT_TEST_ENV = {
+// subprocess (here and in git.ts itself) runs with TZ=UTC. Exported so
+// history-command.test.ts/restore-command.test.ts's own git() helpers
+// share this exact env instead of each declaring their own copy.
+export const GIT_TEST_ENV = {
 	...process.env,
 	TZ: "UTC",
 	GIT_AUTHOR_NAME: "hejbro test",

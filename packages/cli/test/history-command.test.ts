@@ -7,6 +7,7 @@ import {
 	runCli,
 	writeFixtureFile,
 } from "./support/cli-runner";
+import { GIT_TEST_ENV } from "./support/git-fixture";
 
 beforeAll(assertBuiltCli);
 
@@ -35,19 +36,21 @@ export const posts = table(app, "posts", {
 });
 `;
 
-const GIT_ENV = {
-	...process.env,
-	TZ: "UTC",
-	GIT_AUTHOR_NAME: "hejbro test",
-	GIT_AUTHOR_EMAIL: "test@example.com",
-	GIT_COMMITTER_NAME: "hejbro test",
-	GIT_COMMITTER_EMAIL: "test@example.com",
+// git environment variable names below, not a naming choice of this codebase's own
+const FIXED_COMMIT_DATE_ENV = {
+	...GIT_TEST_ENV,
+	// biome-ignore lint/style/useNamingConvention: git environment variable name
 	GIT_AUTHOR_DATE: "2026-01-01T10:00:00Z",
+	// biome-ignore lint/style/useNamingConvention: git environment variable name
 	GIT_COMMITTER_DATE: "2026-01-01T10:00:00Z",
 };
 
 const git = (cwd: string, args: ReadonlyArray<string>): string =>
-	execFileSync("git", args, { cwd, encoding: "utf8", env: GIT_ENV });
+	execFileSync("git", args, {
+		cwd,
+		encoding: "utf8",
+		env: FIXED_COMMIT_DATE_ENV,
+	});
 
 describe("hejbro history", () => {
 	it("not-a-git-repository: exits 1 with the shared guard message", async () => {

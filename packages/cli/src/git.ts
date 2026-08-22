@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNamingConvention: TZ below is a git/POSIX environment variable name, not a naming choice of this codebase's own
 import { execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { basename, join } from "node:path";
