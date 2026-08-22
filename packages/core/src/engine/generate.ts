@@ -71,6 +71,25 @@ const synthesizeSequenceDeclarations = (
 		];
 	});
 
+/** {@link resolveDeclarations}'s `Table` case: the table itself, its synthesized sequences, and (if declared) its RLS block and policies. */
+const resolveTableDeclarations = (
+	input: Table,
+): ReadonlyArray<HejbroDeclaration> => {
+	const meta = getTableMeta(input);
+	if (meta.existing) {
+		return throwHejbroError(
+			"existing-table-declared",
+			`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration. Next: remove it from the declarations list (managed tables are declared with table()).`,
+			meta.declaredAt,
+		);
+	}
+	const sequences = synthesizeSequenceDeclarations(meta);
+	if (meta.rls === null) {
+		return [meta, ...sequences];
+	}
+	return [meta, ...sequences, meta.rls, ...meta.rls.policies];
+};
+
 /**
  * Resolves one `HejbroInput` into the declaration(s) it contributes to the
  * snapshot. A `defineTrigger` declaration expands into its own function
@@ -79,25 +98,13 @@ const synthesizeSequenceDeclarations = (
  * `defineFunction` call. A `grant(...).to(...)` `grant-set` expands into
  * its per-role `GrantDeclaration`s (D28 fan-out). A `table()` with any
  * `serial`-family columns similarly expands into one `SequenceDeclaration`
- * per such column (#23/D66).
+ * per such column (#23/D66) — see {@link resolveTableDeclarations}.
  */
 const resolveDeclarations = (
 	input: HejbroInput,
 ): ReadonlyArray<HejbroDeclaration> => {
 	if (isTable(input)) {
-		const meta = getTableMeta(input);
-		if (meta.existing) {
-			return throwHejbroError(
-				"existing-table-declared",
-				`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration. Next: remove it from the declarations list (managed tables are declared with table()).`,
-				meta.declaredAt,
-			);
-		}
-		const sequences = synthesizeSequenceDeclarations(meta);
-		if (meta.rls === null) {
-			return [meta, ...sequences];
-		}
-		return [meta, ...sequences, meta.rls, ...meta.rls.policies];
+		return resolveTableDeclarations(input);
 	}
 	if (isTriggerDeclaration(input)) {
 		return [input.functionDeclaration, input];

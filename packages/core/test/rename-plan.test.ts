@@ -653,6 +653,45 @@ describe("planRenames", () => {
 		expect(rendered).toBe(renderSnapshot(next));
 	});
 
+	// #154 ratchet-5: every existing --confirm-drop test used target:
+	// "column" -- target: "table" had zero coverage (neither the valid nor
+	// the unknown-confirm-drop-target path).
+	it("a --confirm-drop target: table spec silences a table drop+create ambiguity", () => {
+		const previous = snap(app, table(app, "posts", { id: text() }));
+		const next = snap(app, table(app, "articles", { id: text() }));
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [],
+			confirmedDrops: [
+				{ target: "table", schemaName: "app", tableName: "posts" },
+			],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+	});
+
+	it("unknown-confirm-drop-target for a table this run does not drop", () => {
+		const previous = snap(app, table(app, "posts", { title: text() }));
+		const next = snap(app, table(app, "posts", { title: text() }));
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [],
+			confirmedDrops: [
+				{ target: "table", schemaName: "app", tableName: "posts" },
+			],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([
+			expect.objectContaining({
+				code: "unknown-confirm-drop-target",
+				message:
+					'--confirm-drop "app.posts" doesn\'t match this run: schema "app" has no dropped table named "posts". Next: check the name for typos — --confirm-drop\'s target must be a column (or table) this run actually drops.',
+			}),
+		]);
+	});
+
 	it("unknown-confirm-drop-target for a column this run does not drop", () => {
 		const previous = snap(app, table(app, "posts", { title: text() }));
 		const next = snap(app, table(app, "posts", { title: text() }));
