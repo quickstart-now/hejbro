@@ -673,6 +673,43 @@
 			"primaryKeyName": "task_schedules_pkey",
 			"schema": "app"
 		},
+		"table:app.task_tags": {
+			"columns": [
+				{
+					"name": "task_id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "tag_label",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [
+				{
+					"columns": [
+						"task_id"
+					],
+					"name": "task_tags_task_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.tasks"
+				}
+			],
+			"indexes": [],
+			"name": "task_tags",
+			"primaryKeyName": "task_tags_pkey",
+			"schema": "app"
+		},
 		"table:app.tasks": {
 			"checks": [
 				{

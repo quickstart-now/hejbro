@@ -15,6 +15,7 @@ import {
 	isNotNull,
 	isNull,
 	literal,
+	lt,
 	ne,
 	numeric,
 	rls,
@@ -34,7 +35,15 @@ import {
  * once: CHECK constraints (typed and `sql`-templated), a partial ordered
  * index, a partial unique index, a self-referencing FK, RLS with two
  * roles, a before-trigger, a view, and schema-level grants. Six steps
- * (`step-1` … `step-6`) evolve it; this is step 2 — adds `tasks.estimate_hours`.
+ * (`step-1` … `step-6`) evolve it; this is step 5 — adds a new join table
+ * `task_tags` with a single-column primary key (`taskId`, which also
+ * doubles as its FK to `tasks`), created fresh so step 6's composite
+ * expansion is a real `alter table` against an existing table, not part
+ * of the same `create table` (#24/#137: the round-trip's job is proving
+ * `add`/`drop constraint ... primary key` are real, accepted Postgres
+ * statements, not just correctly-generated SQL text — the golden case
+ * `table-constraints` already covers the same lifecycle as a text
+ * comparison; this is the executed counterpart, D48/D49).
  */
 export const app = schema("app");
 
@@ -88,11 +97,11 @@ export const projects = table(
 	},
 	(t) => ({
 		foreignKeys: [
-			// Step 1/2: default referential actions (no explicit onDelete/onUpdate) —
-			// step 3 tightens this to `on delete restrict on update cascade`.
 			{
 				columns: [t.ownerId],
 				references: { table: members, columns: [members.id] },
+				onDelete: "restrict",
+				onUpdate: "cascade",
 			},
 		],
 		checks: [
@@ -128,8 +137,9 @@ export const tasks = table(
 		title: text().notNull(),
 		status: text().notNull().default("todo"),
 		priority: smallint().notNull().default(3),
-		dueAt: timestamptz(),
 		estimateHours: numeric(),
+		// unrelated to due_at's move — added in the same step so the chain exercises the --confirm-drop path (D32 rule A needs a same-table drop + add pair).
+		closedAt: timestamptz(),
 	},
 	(t) => ({
 		foreignKeys: [
@@ -139,10 +149,9 @@ export const tasks = table(
 				onDelete: "cascade",
 			},
 		],
+		// Step 4: the partial index over `due_at` is dropped along with the
+		// column itself — `task_schedules` below gets its own ordered index.
 		indexes: [
-			// Step 1/2: plain `desc` (Postgres default nulls placement) — step 3
-			// makes the nulls placement explicit (`nulls last`).
-			index().on(t.projectId, desc(t.dueAt)).where(ne(t.status, "done")),
 			index().unique().on(t.projectId, t.title).where(ne(t.status, "done")),
 		],
 		checks: [
@@ -173,6 +182,45 @@ export const tasks = table(
 			// permissive by design — this example shows the reader/writer role split, not row filtering.
 			writeAll: rls
 				.policy("tasks_write_all")
+				.for("all")
+				.to(appWriterRole)
+				.using(literal(true))
+				.withCheck(literal(true)),
+		}),
+	}),
+);
+
+/** One-to-one with `tasks`: the FK column doubles as the primary key — carries the scheduling fields `due_at` used to hold directly on `tasks`. */
+export const taskSchedules = table(
+	app,
+	"task_schedules",
+	{
+		taskId: uuid().primaryKey(),
+		dueAt: timestamptz(),
+		reminderAt: timestamptz(),
+	},
+	(t) => ({
+		foreignKeys: [
+			{
+				columns: [t.taskId],
+				references: { table: tasks, columns: [tasks.id] },
+				onDelete: "cascade",
+			},
+		],
+		indexes: [index().on(desc(t.dueAt))],
+		checks: [
+			check("task_schedules_reminder_before_due", lt(t.reminderAt, t.dueAt)),
+		],
+		rls: rls.enabled({
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
+			readAll: rls
+				.policy("task_schedules_read_all")
+				.for("select")
+				.to(appReaderRole)
+				.using(literal(true)),
+			// permissive by design — this example shows the reader/writer role split, not row filtering.
+			writeAll: rls
+				.policy("task_schedules_write_all")
 				.for("all")
 				.to(appWriterRole)
 				.using(literal(true))
@@ -223,6 +271,33 @@ export const comments = table(
 				.using(literal(true))
 				.withCheck(literal(true)),
 		}),
+	}),
+);
+
+/**
+ * A tag on a task (#24/#137): `taskId` is a single-column primary key
+ * that also doubles as the FK to `tasks` (the same one-to-one shape
+ * `task_schedules` above already uses) — deliberately not `tasks.id`
+ * itself or `comments.id`, both of which are FK *targets* elsewhere in
+ * this schema and would need to stay singly unique on their own if
+ * widened into a composite key. `task_tags` has no such entanglement,
+ * so step 6 is free to expand its primary key to `(taskId, tagLabel)`.
+ */
+export const taskTags = table(
+	app,
+	"task_tags",
+	{
+		taskId: uuid().primaryKey(),
+		tagLabel: text().notNull(),
+	},
+	(t) => ({
+		foreignKeys: [
+			{
+				columns: [t.taskId],
+				references: { table: tasks, columns: [tasks.id] },
+				onDelete: "cascade",
+			},
+		],
 	}),
 );
 
@@ -289,6 +364,8 @@ export const declarations: ReadonlyArray<HejbroInput> = [
 	members,
 	projects,
 	tasks,
+	taskSchedules,
+	taskTags,
 	comments,
 	commentsSingleDepth,
 	openTasks,
