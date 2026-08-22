@@ -252,6 +252,9 @@ const sortPredropStatements = (
 			if (rankDelta !== 0) {
 				return rankDelta;
 			}
+			// Predrop order must not depend on diffSnapshots already sorting
+			// within a kind; the tiebreak keeps emission deterministic on its
+			// own instead of borrowing that guarantee from another module.
 			return compareKeys(a.change.identity, b.change.identity);
 		});
 };
