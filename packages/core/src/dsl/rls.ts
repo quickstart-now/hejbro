@@ -236,17 +236,27 @@ const clauseNotAllowed = (
 		policy.declaredAt,
 	);
 
-/** Defensive runtime guard for clause/command combinations the type-state chain (D26) already prevents. */
-const assertClauseAllowed = (policy: PolicyInput): void => {
+/** `select`/`delete` policies take `using` only — Postgres rejects a `with check` on either (#154 ratchet-5: split out of assertClauseAllowed so each independent rule reads as its own guard). */
+const assertWithCheckNotOnReadCommands = (policy: PolicyInput): void => {
 	if (
 		(policy.command === "select" || policy.command === "delete") &&
 		policy.withCheckExpr !== null
 	) {
 		clauseNotAllowed(policy, "with check", "using");
 	}
+};
+
+/** `insert` policies take `with check` only — Postgres rejects a `using` on it (#154 ratchet-5, see assertWithCheckNotOnReadCommands). */
+const assertUsingNotOnInsert = (policy: PolicyInput): void => {
 	if (policy.command === "insert" && policy.usingExpr !== null) {
 		clauseNotAllowed(policy, "using", "with check");
 	}
+};
+
+/** Defensive runtime guard for clause/command combinations the type-state chain (D26) already prevents — one independent rule per command/clause pair, see the two guards above. */
+const assertClauseAllowed = (policy: PolicyInput): void => {
+	assertWithCheckNotOnReadCommands(policy);
+	assertUsingNotOnInsert(policy);
 };
 
 /**

@@ -317,30 +317,35 @@ type IndexPredicateEntry = {
 	readonly predicate: ExprNode;
 };
 
+/** Every index that declares a `.where(...)` predicate, named (deriving the default index name when none was given) and paired with that predicate — the input `validateIndexPredicates`'s own two rejection checks both scan (#154 ratchet-5: split out so the conditional-`flatMap` construction reads as its own step, separate from what it's built for). */
+const indexPredicateEntries = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): ReadonlyArray<IndexPredicateEntry> =>
+	indexes.flatMap((index) => {
+		if (index.predicate === null) {
+			return [];
+		}
+		return [
+			{
+				name:
+					index.indexName ??
+					deriveIndexName(
+						tableName,
+						index.columns.map((column) => column.name),
+					),
+				predicate: index.predicate,
+			},
+		];
+	});
+
 /** Rejects a partial index `.where(...)` predicate that contains a subquery or references another table's column, mirroring {@link validateChecks} (D50/D51). */
 const validateIndexPredicates = (
 	owner: SchemaDeclaration,
 	tableName: string,
 	indexes: ReadonlyArray<IndexDeclaration>,
 ): void => {
-	const withPredicate: ReadonlyArray<IndexPredicateEntry> = indexes.flatMap(
-		(index) => {
-			if (index.predicate === null) {
-				return [];
-			}
-			return [
-				{
-					name:
-						index.indexName ??
-						deriveIndexName(
-							tableName,
-							index.columns.map((column) => column.name),
-						),
-					predicate: index.predicate,
-				},
-			];
-		},
-	);
+	const withPredicate = indexPredicateEntries(tableName, indexes);
 
 	const subquery = withPredicate.find((entry) =>
 		someExprNode(entry.predicate, (node) => node.nodeKind === "exists"),
@@ -382,45 +387,79 @@ const findForeignColumnRef = (
 			ref.exprNode.tableName !== tableName,
 	);
 
-/** Resolves a foreign key's `references` to its identity parts (D52): the referenced table is derived from the referenced columns' own `exprNode`s, and cross-checked against an explicit `table` when one is given. */
-const resolveReferenceTarget = (
+type ReferencedTable = {
+	readonly schemaName: string;
+	readonly tableName: string;
+};
+
+/** The first referenced column, or throws when `references.columns` is empty (#154 ratchet-5: split out of resolveReferenceTarget so each of its three sequential checks reads as its own guard). */
+const firstReferencedColumnOrThrow = (
 	tableName: string,
-	references: ForeignKeyInput["references"],
-): ForeignKeyReferenceTarget => {
-	const [first, ...rest] = references.columns;
+	columns: ForeignKeyInput["references"]["columns"],
+): ColumnRef => {
+	const [first] = columns;
 	if (first === undefined) {
 		return throwHejbroError(
 			"foreign-key-empty-references",
 			`table "${tableName}" declares a foreign key with no referenced columns (references.columns is empty). Next: list at least one referenced column, e.g. references: { columns: [posts.id] }.`,
 		);
 	}
-	const derived = {
-		schemaName: first.exprNode.schemaName,
-		tableName: first.exprNode.tableName,
-	};
+	return first;
+};
+
+/** Rejects a `references.columns` list spanning more than one table — every column after the first must name the same table `derived` was read from (#154 ratchet-5, see firstReferencedColumnOrThrow). */
+const assertSingleReferencedTable = (
+	tableName: string,
+	derived: ReferencedTable,
+	rest: ReadonlyArray<ColumnRef>,
+): void => {
 	const stray = rest.find(
 		(ref) =>
 			ref.exprNode.schemaName !== derived.schemaName ||
 			ref.exprNode.tableName !== derived.tableName,
 	);
 	if (stray !== undefined) {
-		return throwHejbroError(
+		throwHejbroError(
 			"foreign-key-mixed-reference-tables",
 			`table "${tableName}" declares a foreign key referencing columns of both "${derived.schemaName}"."${derived.tableName}" and "${stray.exprNode.schemaName}"."${stray.exprNode.tableName}" — a foreign key can only target one table. Next: split it into one foreign key per referenced table.`,
 		);
 	}
-	if (references.table !== undefined) {
-		const meta = getTableMeta(references.table);
-		if (
-			meta.schema.schemaName !== derived.schemaName ||
-			meta.tableName !== derived.tableName
-		) {
-			return throwHejbroError(
-				"foreign-key-table-mismatch",
-				`table "${tableName}" declares a foreign key whose references.columns point at "${derived.schemaName}"."${derived.tableName}" but references.table names "${meta.schema.schemaName}"."${meta.tableName}". Next: drop references.table (it's inferred from the columns) or point both at the same table.`,
-			);
-		}
+};
+
+/** Rejects an explicit `references.table` that disagrees with the table `references.columns` actually named (#154 ratchet-5, see firstReferencedColumnOrThrow). A no-op when `table` wasn't given at all — inferring it from the columns is the common case. */
+const assertReferencesTableMatches = (
+	tableName: string,
+	derived: ReferencedTable,
+	table: ForeignKeyInput["references"]["table"],
+): void => {
+	if (table === undefined) {
+		return;
 	}
+	const meta = getTableMeta(table);
+	if (
+		meta.schema.schemaName !== derived.schemaName ||
+		meta.tableName !== derived.tableName
+	) {
+		throwHejbroError(
+			"foreign-key-table-mismatch",
+			`table "${tableName}" declares a foreign key whose references.columns point at "${derived.schemaName}"."${derived.tableName}" but references.table names "${meta.schema.schemaName}"."${meta.tableName}". Next: drop references.table (it's inferred from the columns) or point both at the same table.`,
+		);
+	}
+};
+
+/** Resolves a foreign key's `references` to its identity parts (D52): the referenced table is derived from the referenced columns' own `exprNode`s, and cross-checked against an explicit `table` when one is given — see the three guards above for each of this function's sequential checks. */
+const resolveReferenceTarget = (
+	tableName: string,
+	references: ForeignKeyInput["references"],
+): ForeignKeyReferenceTarget => {
+	const first = firstReferencedColumnOrThrow(tableName, references.columns);
+	const [, ...rest] = references.columns;
+	const derived: ReferencedTable = {
+		schemaName: first.exprNode.schemaName,
+		tableName: first.exprNode.tableName,
+	};
+	assertSingleReferencedTable(tableName, derived, rest);
+	assertReferencesTableMatches(tableName, derived, references.table);
 	return {
 		...derived,
 		columns: references.columns.map((column) => column.sqlName),

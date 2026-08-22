@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { rls } from "../../src/dsl/rls";
+import type { PolicyInput } from "../../src/dsl/rls";
+import { bindRls, rls } from "../../src/dsl/rls";
 import { schema } from "../../src/dsl/schema";
 import { table } from "../../src/dsl/table";
 import { eq, isNotNull, literal } from "../../src/expr/operators";
@@ -154,5 +155,81 @@ describe("rls.enabled", () => {
 
 	it("accepts force: true", () => {
 		expect(rls.enabled({}, { force: true }).force).toBe(true);
+	});
+});
+
+// #154 ratchet-5: the type-state chain (D26) already prevents building a
+// select/delete policy with withCheck, or an insert policy with using,
+// through rls.policy(...) itself -- assertClauseAllowed (now split into
+// assertWithCheckNotOnReadCommands/assertUsingNotOnInsert) is bindRls's
+// own defensive re-check for a PolicyInput that reaches it some other
+// way (bindRls is exported; nothing stops a caller from constructing one
+// by hand, bypassing the chain entirely). These are the first tests to
+// actually exercise that path.
+const defensivePolicyInput = (
+	overrides: Partial<PolicyInput>,
+): PolicyInput => ({
+	policyInputKind: "policy",
+	policyName: "defensive_guard",
+	permissive: true,
+	command: "select",
+	roles: ["anon"],
+	usingExpr: null,
+	withCheckExpr: null,
+	declaredAt: null,
+	...overrides,
+});
+
+describe("bindRls — defensive clause/command guard (#154 ratchet-5)", () => {
+	it("rejects a select policy carrying a withCheck expression", () => {
+		const badPolicy = defensivePolicyInput({
+			command: "select",
+			withCheckExpr: literal(true).exprNode,
+		});
+
+		expect(() =>
+			bindRls("app", "posts", {
+				rlsInputKind: "rls",
+				force: false,
+				policies: { bad: badPolicy },
+				declaredAt: null,
+			}),
+		).toThrowError(
+			expect.objectContaining({ code: "rls-policy-clause-not-allowed" }),
+		);
+	});
+
+	it("rejects an insert policy carrying a using expression", () => {
+		const badPolicy = defensivePolicyInput({
+			command: "insert",
+			usingExpr: literal(true).exprNode,
+		});
+
+		expect(() =>
+			bindRls("app", "posts", {
+				rlsInputKind: "rls",
+				force: false,
+				policies: { bad: badPolicy },
+				declaredAt: null,
+			}),
+		).toThrowError(
+			expect.objectContaining({ code: "rls-policy-clause-not-allowed" }),
+		);
+	});
+
+	it("accepts a delete policy with using and no withCheck (control)", () => {
+		const goodPolicy = defensivePolicyInput({
+			command: "delete",
+			usingExpr: literal(true).exprNode,
+		});
+
+		expect(() =>
+			bindRls("app", "posts", {
+				rlsInputKind: "rls",
+				force: false,
+				policies: { good: goodPolicy },
+				declaredAt: null,
+			}),
+		).not.toThrow();
 	});
 });
