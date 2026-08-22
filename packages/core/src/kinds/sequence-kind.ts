@@ -1,8 +1,14 @@
 import type { SchemaDeclaration } from "../dsl/schema";
-import { assertNever, throwHejbroError } from "../error";
-import type { KindChange, ObjectKind } from "../kind/object-kind";
+import { throwHejbroError } from "../error";
+import { createOrDropDiff } from "../kind/diff-helpers";
+import type {
+	ChangeOperation,
+	KindChange,
+	ObjectKind,
+} from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
+import type { SqlStatement } from "../sql/statement";
 import {
 	deferredStatement,
 	predropStatement,
@@ -171,6 +177,78 @@ const dropDefaultSql = (snapshot: SequenceSnapshot): string =>
 const alterBaseTypeSql = (snapshot: SequenceSnapshot): string =>
 	`alter sequence ${qualifyName(snapshot.schema, snapshot.name)} as ${snapshot.baseType ?? "bigint"};`;
 
+/** {@link sequenceKind}'s `emit`, `"create"` case: create the sequence, link it to its column, and (for a brand-new table only) set the column's default. */
+const emitCreate = (
+	change: KindChange,
+	siblingChanges: ReadonlyArray<KindChange>,
+): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"sequence create change is missing its next snapshot.",
+		);
+	}
+	const nextSnapshot = asSequenceSnapshot(change.next);
+	if (ownedColumnAddedToExistingTable(nextSnapshot, siblingChanges)) {
+		return [
+			statement(createSequenceSql(nextSnapshot)),
+			deferredStatement(ownedBySql(nextSnapshot)),
+		];
+	}
+	return [
+		statement(createSequenceSql(nextSnapshot)),
+		deferredStatement(ownedBySql(nextSnapshot)),
+		deferredStatement(setDefaultSql(nextSnapshot)),
+	];
+};
+
+/** {@link sequenceKind}'s `emit`, `"drop"` case: drop the column's default, then the sequence itself, both on `predrop` (#193, see the doc comment above {@link sequenceKind}). */
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"sequence drop change is missing its previous snapshot.",
+		);
+	}
+	const previousSnapshot = asSequenceSnapshot(change.previous);
+	return [
+		predropStatement(dropDefaultSql(previousSnapshot)),
+		predropStatement(dropSequenceSql(previousSnapshot)),
+	];
+};
+
+/** {@link sequenceKind}'s `emit`, `"alter"` case: only the base type can change once the sequence already exists. */
+const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"sequence alter change is missing its next snapshot.",
+		);
+	}
+	return [statement(alterBaseTypeSql(asSequenceSnapshot(change.next)))];
+};
+
+/**
+ * One handler per {@link ChangeOperation}, same technique used across this
+ * phase's other `emit` splits (#154 ratchet-5): a mapped type over the
+ * closed operation union, so a missing entry is a compile error instead
+ * of a `switch`'s `default: assertNever(...)` at runtime. `siblingChanges`
+ * is only `create`'s own concern, but every handler takes it for a
+ * uniform dispatch signature.
+ */
+type EmitHandlers = {
+	readonly [K in ChangeOperation]: (
+		change: KindChange,
+		siblingChanges: ReadonlyArray<KindChange>,
+	) => ReadonlyArray<SqlStatement>;
+};
+
+const emitHandlers: EmitHandlers = {
+	create: emitCreate,
+	drop: (change) => emitDrop(change),
+	alter: (change) => emitAlter(change),
+};
+
 /**
  * The built-in object kind for a `serial`/`smallserial`/`bigserial`
  * column's backing sequence (#23/D66). Identity is `"<schema>.<name>"`,
@@ -223,35 +301,12 @@ export const sequenceKind: ObjectKind<SequenceDeclaration> = {
 		return sequenceIdentity(sequenceSnapshot.schema, sequenceSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "sequence",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
+		const guard = createOrDropDiff("sequence", previous, next, identity);
+		if (guard.done) {
+			return guard.changes;
 		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "sequence",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			];
-		}
-		if (previous === null || next === null) {
-			return [];
-		}
-		const previousSnapshot = asSequenceSnapshot(previous);
-		const nextSnapshot = asSequenceSnapshot(next);
+		const previousSnapshot = asSequenceSnapshot(guard.previous);
+		const nextSnapshot = asSequenceSnapshot(guard.next);
 		if (previousSnapshot.baseType === nextSnapshot.baseType) {
 			return [];
 		}
@@ -260,58 +315,12 @@ export const sequenceKind: ObjectKind<SequenceDeclaration> = {
 				kind: "sequence",
 				operation: "alter",
 				identity,
-				previous,
-				next,
+				previous: guard.previous,
+				next: guard.next,
 				notes: ["base type changed"],
 			},
 		];
 	},
-	emit: (change, siblingChanges = []) => {
-		switch (change.operation) {
-			case "create": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"sequence create change is missing its next snapshot.",
-					);
-				}
-				const nextSnapshot = asSequenceSnapshot(change.next);
-				if (ownedColumnAddedToExistingTable(nextSnapshot, siblingChanges)) {
-					return [
-						statement(createSequenceSql(nextSnapshot)),
-						deferredStatement(ownedBySql(nextSnapshot)),
-					];
-				}
-				return [
-					statement(createSequenceSql(nextSnapshot)),
-					deferredStatement(ownedBySql(nextSnapshot)),
-					deferredStatement(setDefaultSql(nextSnapshot)),
-				];
-			}
-			case "drop": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"sequence drop change is missing its previous snapshot.",
-					);
-				}
-				const previousSnapshot = asSequenceSnapshot(change.previous);
-				return [
-					predropStatement(dropDefaultSql(previousSnapshot)),
-					predropStatement(dropSequenceSql(previousSnapshot)),
-				];
-			}
-			case "alter": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"sequence alter change is missing its next snapshot.",
-					);
-				}
-				return [statement(alterBaseTypeSql(asSequenceSnapshot(change.next)))];
-			}
-			default:
-				return assertNever(change.operation);
-		}
-	},
+	emit: (change, siblingChanges = []) =>
+		emitHandlers[change.operation](change, siblingChanges),
 };

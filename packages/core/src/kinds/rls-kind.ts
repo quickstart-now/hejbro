@@ -1,9 +1,14 @@
 import type { RlsDeclaration } from "../dsl/rls";
-import { assertNever, throwHejbroError } from "../error";
+import { throwHejbroError } from "../error";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
-import type { ObjectKind } from "../kind/object-kind";
+import type {
+	ChangeOperation,
+	KindChange,
+	ObjectKind,
+} from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
+import type { SqlStatement } from "../sql/statement";
 import { statement } from "../sql/statement";
 
 /**
@@ -58,6 +63,65 @@ const enableStatementSql = (snapshot: RlsSnapshot): string =>
 const disableStatementSql = (snapshot: RlsSnapshot): string =>
 	`alter table ${qualifyName(snapshot.schema, snapshot.table)} disable row level security;`;
 
+/** {@link rlsKind}'s `emit`, `"create"` case: enable RLS, and force it too when the declaration asks for that. */
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"rls create change is missing its next snapshot.",
+		);
+	}
+	const nextSnapshot = asRlsSnapshot(change.next);
+	if (rlsForce(nextSnapshot)) {
+		return [
+			statement(enableStatementSql(nextSnapshot)),
+			statement(forceStatementSql(nextSnapshot)),
+		];
+	}
+	return [statement(enableStatementSql(nextSnapshot))];
+};
+
+/** {@link rlsKind}'s `emit`, `"alter"` case: only `force` can change once RLS is already enabled. */
+const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"rls alter change is missing its next snapshot.",
+		);
+	}
+	return [statement(forceStatementSql(asRlsSnapshot(change.next)))];
+};
+
+/** {@link rlsKind}'s `emit`, `"drop"` case: disable RLS. */
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"rls drop change is missing its previous snapshot.",
+		);
+	}
+	return [statement(disableStatementSql(asRlsSnapshot(change.previous)))];
+};
+
+/**
+ * One handler per {@link ChangeOperation}, same technique used across this
+ * phase's other `emit` splits (e.g. `@hejbro/supabase`'s `bucket-kind.ts`,
+ * #241): a mapped type over the closed operation union, so a missing
+ * entry is a compile error instead of a `switch`'s `default:
+ * assertNever(...)` at runtime.
+ */
+type EmitHandlers = {
+	readonly [K in ChangeOperation]: (
+		change: KindChange,
+	) => ReadonlyArray<SqlStatement>;
+};
+
+const emitHandlers: EmitHandlers = {
+	create: emitCreate,
+	alter: emitAlter,
+	drop: emitDrop,
+};
+
 /**
  * The built-in object kind for a table's row-level-security enable/force
  * state. Identity is `"<schema>.<table>"`. Policies are separate `policy`
@@ -102,44 +166,5 @@ export const rlsKind: ObjectKind<RlsDeclaration> = {
 			},
 		];
 	},
-	emit: (change) => {
-		switch (change.operation) {
-			case "create": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"rls create change is missing its next snapshot.",
-					);
-				}
-				const nextSnapshot = asRlsSnapshot(change.next);
-				if (rlsForce(nextSnapshot)) {
-					return [
-						statement(enableStatementSql(nextSnapshot)),
-						statement(forceStatementSql(nextSnapshot)),
-					];
-				}
-				return [statement(enableStatementSql(nextSnapshot))];
-			}
-			case "alter": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"rls alter change is missing its next snapshot.",
-					);
-				}
-				return [statement(forceStatementSql(asRlsSnapshot(change.next)))];
-			}
-			case "drop": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"rls drop change is missing its previous snapshot.",
-					);
-				}
-				return [statement(disableStatementSql(asRlsSnapshot(change.previous)))];
-			}
-			default:
-				return assertNever(change.operation);
-		}
-	},
+	emit: (change) => emitHandlers[change.operation](change),
 };
