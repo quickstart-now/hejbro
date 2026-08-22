@@ -126,21 +126,36 @@ const stringField = (node: Record<string, JsonValue>, key: string): string => {
 
 // --- encode: ExprNode (camelCase) -> snapshot form (kebab + D57 keys) --
 
+/**
+ * One handler per {@link LiteralNode}'s `literal.literalKind`, same
+ * technique used elsewhere this phase: a mapped type over the closed
+ * union, so a missing entry is a compile error. Applied here for coverage,
+ * not complexity (#154 ratchet-5): the former `switch`'s `default:
+ * assertNever(literal)` was structurally unreachable (this union has
+ * exactly these five kinds), so no test could ever reach it.
+ */
+type EncodeLiteralHandlers = {
+	readonly [K in LiteralNode["literal"]["literalKind"]]: (
+		literal: Extract<LiteralNode["literal"], { readonly literalKind: K }>,
+	) => JsonValue;
+};
+
+const encodeLiteralHandlers: EncodeLiteralHandlers = {
+	string: (literal) => ({ literalKind: "string", value: literal.value }),
+	number: (literal) => ({ literalKind: "number", value: literal.value }),
+	boolean: (literal) => ({ literalKind: "boolean", value: literal.value }),
+	null: () => ({ literalKind: "null" }),
+	timestamp: (literal) => ({
+		literalKind: "timestamp",
+		isoValue: literal.isoValue,
+	}),
+};
+
 const encodeLiteral = (literal: LiteralNode["literal"]): JsonValue => {
-	switch (literal.literalKind) {
-		case "string":
-			return { literalKind: "string", value: literal.value };
-		case "number":
-			return { literalKind: "number", value: literal.value };
-		case "boolean":
-			return { literalKind: "boolean", value: literal.value };
-		case "null":
-			return { literalKind: "null" };
-		case "timestamp":
-			return { literalKind: "timestamp", isoValue: literal.isoValue };
-		default:
-			return assertNever(literal);
-	}
+	const handler = encodeLiteralHandlers[literal.literalKind] as (
+		literal: LiteralNode["literal"],
+	) => JsonValue;
+	return handler(literal);
 };
 
 const encodeColumnRef = (node: ColumnRefNode): JsonValue => ({
@@ -467,23 +482,50 @@ export const decodeExprNode = (value: JsonValue): ExprNode => {
 	return handler(node);
 };
 
+/**
+ * One handler per {@link LiteralNode}'s `literal.literalKind`, same shape
+ * as {@link decodeExprNodeHandlers} above but keyed by the discriminator
+ * itself (`literalKind` round-trips unchanged, unlike `nodeKind`'s snake-
+ * case-on-disk / camelCase-in-memory pair, so there's no
+ * `NODE_KIND_FROM_SNAPSHOT`-style remap table here — {@link
+ * isKnownLiteralKind} checks membership directly). Applied for coverage,
+ * not complexity (#154 ratchet-5): the five real cases were already well
+ * covered; only the malformed-input fallback (`unknownDiscriminator`, a
+ * real runtime check on unvalidated JSON, unlike a `switch`'s
+ * unreachable `assertNever` default) was thin.
+ */
+type DecodeLiteralHandlers = {
+	readonly [K in LiteralNode["literal"]["literalKind"]]: (
+		node: Record<string, JsonValue>,
+	) => Extract<LiteralNode["literal"], { readonly literalKind: K }>;
+};
+
+const decodeLiteralHandlers: DecodeLiteralHandlers = {
+	string: (node) => ({ literalKind: "string", value: node.value as string }),
+	number: (node) => ({ literalKind: "number", value: node.value as number }),
+	boolean: (node) => ({
+		literalKind: "boolean",
+		value: node.value as boolean,
+	}),
+	null: () => ({ literalKind: "null" }),
+	timestamp: (node) => ({
+		literalKind: "timestamp",
+		isoValue: node.isoValue as string,
+	}),
+};
+
+const isKnownLiteralKind = (
+	value: string,
+): value is LiteralNode["literal"]["literalKind"] =>
+	value in decodeLiteralHandlers;
+
 const decodeLiteral = (value: JsonValue): LiteralNode["literal"] => {
 	const node = asRecord(value, "literalKind");
 	const literalKind = stringField(node, "literalKind");
-	switch (literalKind) {
-		case "string":
-			return { literalKind: "string", value: node.value as string };
-		case "number":
-			return { literalKind: "number", value: node.value as number };
-		case "boolean":
-			return { literalKind: "boolean", value: node.value as boolean };
-		case "null":
-			return { literalKind: "null" };
-		case "timestamp":
-			return { literalKind: "timestamp", isoValue: node.isoValue as string };
-		default:
-			return unknownDiscriminator("literalKind", literalKind);
+	if (!isKnownLiteralKind(literalKind)) {
+		return unknownDiscriminator("literalKind", literalKind);
 	}
+	return decodeLiteralHandlers[literalKind](node);
 };
 
 const decodeSqlTemplateChunk = (value: JsonValue): SqlTemplateChunk => {
@@ -510,6 +552,41 @@ const decodeTableRef = (value: JsonValue): TableRefNode => {
 	};
 };
 
+/**
+ * One handler per {@link ProjectionNode} `projectionKind`, same technique
+ * as {@link decodeExprNodeHandlers} above. Applied for coverage, not
+ * complexity (#154 ratchet-5): the former `switch`'s `default:
+ * assertNever(projectionKind)` was structurally unreachable (`projectionKind`
+ * is already narrowed to this closed union by the
+ * `PROJECTION_KIND_FROM_SNAPSHOT` lookup above), so no test could ever
+ * reach it.
+ */
+type DecodeProjectionHandlers = {
+	readonly [K in ProjectionNode["projectionKind"]]: (
+		node: Record<string, JsonValue>,
+	) => Extract<ProjectionNode, { readonly projectionKind: K }>;
+};
+
+const decodeProjectionHandlers: DecodeProjectionHandlers = {
+	allColumns: (node) => ({
+		projectionKind: "allColumns",
+		columnNames: (node.columns as ReadonlyArray<string>) ?? [],
+	}),
+	columns: (node) => ({
+		projectionKind: "columns",
+		columns: (
+			node.columns as ReadonlyArray<{
+				readonly alias: string;
+				readonly expr: JsonValue;
+			}>
+		).map((entry) => ({
+			alias: entry.alias,
+			expr: decodeExprNode(entry.expr),
+		})),
+	}),
+	constantOne: () => ({ projectionKind: "constantOne" }),
+};
+
 const decodeProjection = (value: JsonValue): ProjectionNode => {
 	const node = asRecord(value, "projectionKind");
 	const snapshotKind = stringField(node, "projectionKind");
@@ -517,30 +594,10 @@ const decodeProjection = (value: JsonValue): ProjectionNode => {
 	if (projectionKind === undefined) {
 		return unknownDiscriminator("projectionKind", snapshotKind);
 	}
-	switch (projectionKind) {
-		case "allColumns":
-			return {
-				projectionKind: "allColumns",
-				columnNames: (node.columns as ReadonlyArray<string>) ?? [],
-			};
-		case "columns":
-			return {
-				projectionKind: "columns",
-				columns: (
-					node.columns as ReadonlyArray<{
-						readonly alias: string;
-						readonly expr: JsonValue;
-					}>
-				).map((entry) => ({
-					alias: entry.alias,
-					expr: decodeExprNode(entry.expr),
-				})),
-			};
-		case "constantOne":
-			return { projectionKind: "constantOne" };
-		default:
-			return assertNever(projectionKind);
-	}
+	const handler = decodeProjectionHandlers[projectionKind] as (
+		node: Record<string, JsonValue>,
+	) => ProjectionNode;
+	return handler(node);
 };
 
 const decodeJoin = (value: JsonValue): JoinNode => {
