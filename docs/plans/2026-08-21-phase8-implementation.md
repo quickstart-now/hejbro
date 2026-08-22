@@ -196,7 +196,7 @@ a sub-issue goes missing from the frontier.
 | 20 | `phase8-bucket-notes` | Field-level notes for bucket alters; empty note lists stop rendering `[]` | #116 | — |
 | 21 | `phase8-authuid-cached` | `authUid()`'s cached variant (reusing the existing `rawSql` node), a `warning[rls-uncached-auth-call]` validator, and the **12 call sites across 5 files** that teach the uncached form | #97 | — |
 | 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69). Storage is **outside** what one Postgres image can verify: `storage.buckets` is created by the Storage API service, not the image | #207 | yes |
-| 23 | `phase8-docs-release` | README status and install instructions across **all three published packages** (#142 — `packages/core`'s README still describes landed features as future phases, and it becomes the npm page; `## Status` describes the repository, never the registry, so "Nothing is published yet" goes and the install instructions carry that information), a new `CONTRIBUTING.md` that is a thin pointer to `AGENTS.md` plus the loud warning that merging the Version Packages PR publishes immediately and irreversibly, `packages/skills/README.md`'s citation of the overturned D54 (→ D62, cheap and in the same files' neighbourhood), and the grep instrument with its positive control (four stale lines: core 3, supabase 1, cli 0). **The 0.1.0 release is not in this PR** — it is the owner's sequence under *Owner actions*, and this PR's merge is what makes `release-ready` true | #142 | yes |
+| 23 | `phase8-docs-release` | README status and install instructions across **all three published packages** (#142 — `packages/core`'s README still describes landed features as future phases, and it becomes the npm page; `## Status` describes the repository, never the registry, so "Nothing is published yet" goes and the install instructions carry that information), a new `CONTRIBUTING.md` that is a thin pointer to `AGENTS.md` plus the loud warning that merging the Version Packages PR is the release decision, reserved for the owner, and that the release's third owner step (approving the `npm` environment after `dev` → `main`) is the irreversible one, `packages/skills/README.md`'s citation of the overturned D54 (→ D62, cheap and in the same files' neighbourhood), and the grep instrument with its positive control (four stale lines: core 3, supabase 1, cli 0). **The 0.1.0 release is not in this PR** — it is the owner's sequence under *Owner actions*, and this PR's merge is what makes `release-ready` true | #142 | yes |
 | 24 | `phase8-crap-tooling` | `@vitest/coverage-v8`, a `test:coverage` task, `scripts/check-crap.mjs` — **reports only, not wired into CI** | #154 | — |
 | 25 | `phase8-crap-refactor` | The functions `pnpm check:crap` reports at **CRAP > 10** (the gate is the definition; measured at 20, of which 16 are also complexity ≥ 10) — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests. Four share a byte-identical create/drop guard, so one helper clears three at once. **Landed at `dev@aea1cf9` (#210, ten commits: nine refactors + the changeset rewrite): the guard helper, `familyOfTypeNode` 29→1, `createRecordingContext` 17→1, and five walker `switch`es → type-closed handler maps. `pnpm check:crap` went 20→10 measured on the PR's original base `626c57f` and 19→8 on `dev@37f7f7b` (reviewer's re-measurement at `c1162daf`); the rest continues in `phase8-crap-walkers`** | #154 | — |
 | 26 | `phase8-crap-coverage` | The 4 functions at complexity 8–9, which clear at 70–77% coverage | #154 | — |
@@ -509,8 +509,14 @@ own claim.
   `storage.buckets` stub column must fail the run.
 - **`phase8-docs-release`** — README's `## Status` no longer says "Nothing is
   published yet"; install instructions exist; `CONTRIBUTING.md` states plainly
-  that merging the version PR publishes immediately and that npm burns a
-  version number even if it is unpublished. And **#142**: the three package
+  that merging the Version Packages PR is the owner's release decision, that
+  publishing then runs from GitHub Actions through `dev` → `main` and the
+  `npm` environment approval, that the approval is the irreversible step,
+  and that npm burns a version number even if it is unpublished (the first
+  draft of this criterion said the merge itself publishes; the workflows say
+  otherwise — `release-version.yml` only versions on `dev`, and
+  `release-publish.yml` publishes on `main` behind the environment). And
+  **#142**: the three package
   READMEs drop the roadmap/phase-status framing entirely (an npm page has no
   use for a pointer to our roadmap file), not just a wording refresh. The
   instrument is a grep for the stale phrasings across the three READMEs; its
@@ -1318,11 +1324,14 @@ nothing after it is an agent action:
 
 1. Review the open "Version Packages" PR (#179; the bot re-pushes it on
    every `dev` change, so read it last) and merge it — **this is the
-   irreversible step**: it publishes, and npm keeps the version number even
-   after an unpublish.
+   release decision**, and it is reversible: `release-version.yml` runs on
+   `dev` and only versions, so `dev` now carries the bumped `package.json`s
+   and changelogs and nothing has reached npm.
 2. Open `dev` → `main` and merge it with a **merge commit** (never squash or
-   rebase — the `main` history is the release history).
-3. Approve the `npm` environment when `release-publish.yml` pauses on it.
+   rebase — the `main` history is the release history). This starts
+   `release-publish.yml`, whose publish job waits on the `npm` environment.
+3. Approve the `npm` environment — **this is the irreversible step**: it
+   publishes, and npm keeps the version number even after an unpublish.
 4. Confirm with `npm view @hejbro/core version` (and the other two) — no
    auth is needed to read.
 
