@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -36,6 +36,37 @@ export const posts = table(app, "posts", {
 	id: uuid().primaryKey().defaultRandom(),
 	title: text().notNull(),
 	body: text().notNull(),
+});
+`;
+
+// #220 (PR B, --fix): branches from BASE_SCHEMA the same way CHANGED_SCHEMA
+// does, but with a *different* added column — used together with a
+// snapshot-file reset (see the --fix describe block below) to produce a
+// genuine two-way fork: two real, validly-hashed migrations that both
+// claim BASE_SCHEMA's migration as their parent.
+const FORKED_SCHEMA = `import { schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	summary: text().notNull(),
+});
+`;
+
+// #220 (PR B, --fix): a third, genuinely-linear step after CHANGED_SCHEMA —
+// used for the 3-way collision test, so all three migrations chain
+// A -> B -> C for real (not another fork).
+const THIRD_SCHEMA = `import { schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	body: text().notNull(),
+	summary: text().notNull(),
 });
 `;
 
@@ -118,6 +149,31 @@ const writeSchema = (source: string): Promise<void> =>
 const migrationFileNames = async (): Promise<ReadonlyArray<string>> => {
 	const entries = await readdir(join(cwd, "migrations"));
 	return entries.filter((name) => name.endsWith(".sql")).sort();
+};
+
+const versionOf = (fileName: string): string =>
+	fileName.split("_", 1)[0] as string;
+const slugOf = (fileName: string): string =>
+	fileName.slice(fileName.indexOf("_") + 1);
+
+/**
+ * Renames `fileName` (already in `migrations/`) so its version prefix
+ * becomes `newVersion`, keeping the slug and full byte content untouched —
+ * the deliberate way these tests force two *real*, validly-hashed
+ * migrations to collide on version without any real-clock timing (#220,
+ * PR B: same-second timing is exactly what the production code doesn't
+ * prevent, so forcing it by hand here is more deterministic than hoping
+ * two `generate` calls land in the same second).
+ */
+const forceMigrationVersion = async (
+	fileName: string,
+	newVersion: string,
+): Promise<string> => {
+	const newFileName = `${newVersion}_${slugOf(fileName)}`;
+	const content = await readFile(join(cwd, "migrations", fileName), "utf8");
+	await rm(join(cwd, "migrations", fileName));
+	await writeFixtureFile(cwd, `migrations/${newFileName}`, content);
+	return newFileName;
 };
 
 describe("hejbro verify (built CLI, tmp-dir)", () => {
@@ -353,9 +409,17 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			expect(result.stderr).toContain(
 				"Supabase (and any tool that tracks *applied* migrations by this version prefix, not the full filename) can only ever apply one of them",
 			);
-			expect(result.stderr).toContain("Next: keep");
-			expect(result.stderr).toContain("mv migrations/");
-			expect(result.stderr).not.toContain("--fix");
+			// The hand-added duplicate has no hash-chain banner at all, so
+			// hejbro can't order this group by chain — the fallback offers one
+			// full mv option per member instead of a confident "keep X" pick
+			// (owner principle: detect + a command already typed out, never
+			// prose, even when the order itself is unknown).
+			expect(result.stderr).toContain(
+				"Next, pick one: hejbro can't tell these files' chain order",
+			);
+			expect(result.stderr).toContain(`(a) mv migrations/${fileName}`);
+			expect(result.stderr).toContain(`(b) mv migrations/${duplicateName}`);
+			expect(result.stderr).not.toContain("hejbro verify --fix");
 			expect(result.stderr).toContain(
 				"skipped: chain linearity (needs every migration to have a unique version)",
 			);
@@ -410,8 +474,143 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			const result = await runCli(cwd, ["verify"]);
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain("error[duplicate-migration-version]");
+			expect(result.stderr).toContain(`mv db/migrations/${fileName}`);
 			expect(result.stderr).toContain(`mv db/migrations/${duplicateName}`);
 			expect(result.stderr).not.toContain("mv migrations/");
+		});
+	});
+
+	// #220 (PR B): `hejbro verify --fix` renames a resolvable
+	// duplicate-migration-version group's later file(s) on disk, then
+	// continues into the normal five checks. Every fixture here forces the
+	// collision by renaming an already-real, already-hashed migration file
+	// (never by racing two `generate` calls against the clock) — the same
+	// clock-independence `waitForNextSecondBoundary` buys the rest of this
+	// suite, applied the other direction on purpose.
+	describe("hejbro verify --fix (#220)", () => {
+		it("renames the later file of a resolvable 2-member group, prints before -> after, and verify then passes (positive control)", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(BASE_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "add_posts"]);
+			await writeSchema(CHANGED_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "add_body"]);
+
+			const [first, second] = (await migrationFileNames()) as [string, string];
+			const forcedName = await forceMigrationVersion(second, versionOf(first));
+
+			const before = await runCli(cwd, ["verify"]);
+			expect(before.exitCode).toBe(1);
+			expect(before.stderr).toContain("error[duplicate-migration-version]");
+			expect(before.stderr).toContain("Next, pick one:");
+			expect(before.stderr).toContain(
+				`(a) hejbro verify --fix   # renames "${forcedName}" (chain order decides which is later)`,
+			);
+			expect(before.stderr).toContain(
+				`(b) mv migrations/${forcedName} migrations/`,
+			);
+
+			const fixed = await runCli(cwd, ["verify", "--fix"]);
+			expect(fixed.exitCode).toBe(0);
+			expect(fixed.stdout).toContain(`migrations/${forcedName} -> migrations/`);
+			expect(fixed.stdout).toContain("verify: 5 checks passed");
+
+			const finalNames = await migrationFileNames();
+			expect(finalNames).toHaveLength(2);
+			expect(finalNames).not.toContain(forcedName);
+		});
+
+		it("stages a 3-way collision's renames a second apart, all three ending up distinct", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(BASE_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "add_posts"]);
+			await writeSchema(CHANGED_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "add_body"]);
+			await writeSchema(THIRD_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "add_summary"]);
+
+			const [first, second, third] = (await migrationFileNames()) as [
+				string,
+				string,
+				string,
+			];
+			const forcedVersion = versionOf(first);
+			const forcedSecond = await forceMigrationVersion(second, forcedVersion);
+			const forcedThird = await forceMigrationVersion(third, forcedVersion);
+
+			const fixed = await runCli(cwd, ["verify", "--fix"]);
+			expect(fixed.exitCode).toBe(0);
+			expect(fixed.stdout).toContain(
+				`migrations/${forcedSecond} -> migrations/`,
+			);
+			expect(fixed.stdout).toContain(
+				`migrations/${forcedThird} -> migrations/`,
+			);
+			expect(fixed.stdout).toContain("verify: 5 checks passed");
+
+			const finalNames = await migrationFileNames();
+			expect(finalNames).toHaveLength(3);
+			expect(finalNames).not.toContain(forcedSecond);
+			expect(finalNames).not.toContain(forcedThird);
+			// The two renamed files must not have recollided with each other.
+			expect(new Set(finalNames).size).toBe(3);
+		});
+
+		it("leaves a diverged (same-parent, genuine fork) group untouched — same error before and after --fix", async () => {
+			await runCli(cwd, ["init"]);
+			await writeSchema(BASE_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "add_posts"]);
+			const snapshotAfterBase = await readFile(
+				join(cwd, "hejbro.snapshot.json"),
+				"utf8",
+			);
+
+			await writeSchema(CHANGED_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "add_body"]);
+
+			// Reset the snapshot back to the post-"add_posts" state so the next
+			// `generate` diffs from the same parent as "add_body" did — a real
+			// second branch off the same prior state (simulates two branches
+			// each running `generate` before merging, #129's own scenario).
+			await writeFixtureFile(cwd, "hejbro.snapshot.json", snapshotAfterBase);
+			await writeSchema(FORKED_SCHEMA);
+			await runCli(cwd, ["generate", "--name", "add_summary"]);
+
+			const names = await migrationFileNames();
+			const branchAFile = names.find((name) =>
+				name.includes("add_body"),
+			) as string;
+			const branchBFile = names.find((name) =>
+				name.includes("add_summary"),
+			) as string;
+			const forcedBranchB = await forceMigrationVersion(
+				branchBFile,
+				versionOf(branchAFile),
+			);
+
+			const before = await runCli(cwd, ["verify"]);
+			expect(before.exitCode).toBe(1);
+			expect(before.stderr).toContain("error[duplicate-migration-version]");
+			expect(before.stderr).toContain(
+				"Next, pick one: hejbro can't tell these files' chain order",
+			);
+			expect(before.stderr).toContain("mv migrations/");
+			expect(before.stderr).not.toContain("hejbro verify --fix");
+
+			const namesBeforeFix = await migrationFileNames();
+			const fixed = await runCli(cwd, ["verify", "--fix"]);
+			expect(fixed.exitCode).toBe(1);
+			// --fix can't safely reorder this group (a genuine fork), so it's a
+			// no-op for it — but the no-op is itself reported, never silent
+			// (owner principle applies to --fix's own output too).
+			expect(fixed.stdout).toContain("— chain order undetermined, see Next");
+			expect(fixed.stderr).toContain("error[duplicate-migration-version]");
+			expect(fixed.stderr).toContain(
+				"Next, pick one: hejbro can't tell these files' chain order",
+			);
+
+			const namesAfterFix = await migrationFileNames();
+			expect(namesAfterFix).toEqual(namesBeforeFix);
+			expect(namesAfterFix).toContain(forcedBranchB);
 		});
 	});
 

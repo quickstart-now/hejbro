@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import type {
 	ChainEntry,
 	ChainReport,
+	DuplicateVersionFallbackOption,
+	DuplicateVersionFixPlan,
 	DuplicateVersionGroup,
 	HejbroError,
 	HejbroInput,
@@ -11,14 +13,14 @@ import type {
 } from "@hejbro/core";
 import {
 	checkChain,
+	duplicateVersionFallbackOptions,
 	emptySnapshot,
 	findDuplicateVersionGroups,
 	generateMigration,
 	hejbroError,
-	migrationVersionOf,
 	parseBannerHashes,
 	parseSnapshot,
-	renderMigrationPrefix,
+	planDuplicateVersionFix,
 	renderSnapshot,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -99,121 +101,89 @@ const chainErrorMessage = (
 };
 
 /**
- * `version` (as `renderMigrationPrefix` would render it) parsed back into
- * the instant it names — `null` for `index` (no clock, and
- * `findDuplicateVersionGroups` never fires for it: structurally
- * monotonic) or a version that doesn't parse as the shape `strategy`
- * expects. Only ever used to compute a *suggested* rename target for the
- * `duplicate-migration-version` diagnostic's `Next:` — never to decide
- * whether the collision itself is real (that's `findDuplicateVersionGroups`
- * alone, on the raw strings).
+ * The owner-principle-compliant fallback (#220 review, PR B round 2 —
+ * planner-relayed owner correction: a prose "resolve this yourself" still
+ * violates "detect, then hand back a command already typed out", even for
+ * a group `--fix` itself can't safely touch) for a group whose chain
+ * order `planDuplicateVersionFix` couldn't determine: one full option per
+ * member, each a `mv` that renames *just that member* past the current
+ * max, with a comment naming which other member(s) the human is thereby
+ * asserting came first — only the human, who wrote the files, can tell
+ * which option matches reality. Every option targets the exact same
+ * version (`duplicateVersionFallbackOptions`): only one is ever meant to
+ * run, so unlike a resolved group's simultaneous renames, there's nothing
+ * for these to collide with.
  */
-const parseVersionAsDate = (
-	version: string,
-	strategy: MigrationPrefixStrategy,
-): Date | null => {
-	if (strategy === "unix") {
-		const seconds = Number(version);
-		if (!Number.isFinite(seconds)) {
-			return null;
-		}
-		return new Date(seconds * 1000);
-	}
-	if (strategy === "timestamp") {
-		if (version.length !== 14) {
-			return null;
-		}
-		const year = Number(version.slice(0, 4));
-		const month = Number(version.slice(4, 6));
-		const day = Number(version.slice(6, 8));
-		const hour = Number(version.slice(8, 10));
-		const minute = Number(version.slice(10, 12));
-		const second = Number(version.slice(12, 14));
-		return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-	}
-	return null;
-};
-
-/** The instant one second after every migration's own version in `fileNames` — `null` when there's nothing to compare against, or `strategy` has no meaningful clock (`index`). */
-const nextInstantAfterAll = (
-	fileNames: ReadonlyArray<string>,
-	strategy: MigrationPrefixStrategy,
-): Date | null => {
-	const dates = fileNames
-		.map((name) => migrationVersionOf(name))
-		.filter((version): version is string => version !== null)
-		.map((version) => parseVersionAsDate(version, strategy))
-		.filter((date): date is Date => date !== null);
-	if (dates.length === 0) {
-		return null;
-	}
-	const maxMs = Math.max(...dates.map((date) => date.getTime()));
-	return new Date(maxMs + 1000);
-};
-
-/** The original slug half of a migration filename (`<version>_<slug>.sql`) — everything after the first `_`, extension included, so a suggested rename keeps it byte-for-byte. */
-const slugOf = (fileName: string): string =>
-	fileName.slice(fileName.indexOf("_") + 1);
-
-/**
- * Renders `mv <migrationsDir>/<name> <migrationsDir>/<newVersion>_<slug>`
- * for one file, `newVersion` a whole second after `baseInstant` plus
- * `index` seconds — spacing multiple renamed files a second apart so a
- * 3+-way collision's suggestions don't just create a new collision among
- * themselves.
- */
-const renameSuggestion = (
-	fileName: string,
-	baseInstant: Date,
-	index: number,
-	strategy: MigrationPrefixStrategy,
+const duplicateVersionFallbackMessage = (
+	reason: string,
+	options: ReadonlyArray<DuplicateVersionFallbackOption>,
 	migrationsDir: string,
 ): string => {
-	const targetInstant = new Date(baseInstant.getTime() + index * 1000);
-	const targetVersion = renderMigrationPrefix({
-		strategy,
-		generatedAt: targetInstant,
-		previousCount: 0,
-		slug: "",
-	});
-	return `mv ${migrationPath(migrationsDir, fileName)} ${migrationPath(migrationsDir, `${targetVersion}_${slugOf(fileName)}`)}`;
+	const optionLines = options
+		.map((option, index) => {
+			const letter = OPTION_LETTERS[index] ?? String(index + 1);
+			const assumedEarlierList = option.assumedEarlier
+				.map((name) => `"${name}"`)
+				.join(" or ");
+			return `  (${letter}) mv ${migrationPath(migrationsDir, option.renamed.fileName)} ${migrationPath(migrationsDir, option.renamed.newFileName)}   # if ${assumedEarlierList} came first`;
+		})
+		.join("\n");
+	return `${reason} Next, pick one: hejbro can't tell these files' chain order (a genuine fork, or a file with no readable hash-chain banner), so pick the one that was created later:\n${optionLines}`;
 };
 
 /**
  * Owner principle (#220 review): detect, then hand back a command already
- * typed out — `Next:` names the one file worth keeping as-is (sorted
- * first, deterministic) and gives a computed `mv` for every other member
- * of the group, spaced a second apart so renaming more than one member at
- * once can't recreate the collision among themselves. `hejbro verify
- * --fix` (a later PR, #220 tracking issue) automates exactly this
- * suggestion; until it exists, `Next:` only ever names the manual `mv`,
- * never a flag that isn't there yet.
+ * typed out. `plan` is `planDuplicateVersionFix`'s own output over this
+ * exact group (the *same* computation `hejbro verify --fix` runs, so the
+ * `(a)`/`(b)` options below can never disagree on which file is "later" or
+ * what its new name would be) — `null` when the group's own chain order
+ * can't be determined, in which case `fallbackOptions`
+ * (`duplicateVersionFallbackOptions`, same group) drives
+ * {@link duplicateVersionFallbackMessage} instead.
  */
 const duplicateVersionMessage = (
 	group: DuplicateVersionGroup,
-	allFileNames: ReadonlyArray<string>,
-	strategy: MigrationPrefixStrategy,
+	plan: DuplicateVersionFixPlan | null,
+	fallbackOptions: ReadonlyArray<DuplicateVersionFallbackOption> | null,
 	migrationsDir: string,
 ): string => {
 	const fileList = group.fileNames.map((name) => `"${name}"`).join(", ");
-	const [kept, ...rest] = group.fileNames;
-	const baseInstant = nextInstantAfterAll(allFileNames, strategy);
 	const reason = `${group.fileNames.length} migrations share the version "${group.version}" (${fileList}) — Supabase (and any tool that tracks *applied* migrations by this version prefix, not the full filename) can only ever apply one of them; the rest silently never run.`;
-	if (kept === undefined || rest.length === 0 || baseInstant === null) {
-		// Structurally unreachable: findDuplicateVersionGroups only ever
-		// returns groups with 2+ members, and it only ever fires for
-		// timestamp/unix versions (index can't collide by construction), both
-		// of which parseVersionAsDate handles — kept as a defensive fallback
-		// so a future caller misuse degrades to a still-correct, if less
-		// actionable, message instead of crashing.
-		return `${reason} Next: rename every file in this group but one to a version after the current latest, then rerun \`hejbro verify\`.`;
+	if (plan !== null && plan.length > 0) {
+		const laterList = plan.map((rename) => `"${rename.fileName}"`).join(", ");
+		const manualCommands = plan
+			.map(
+				(rename) =>
+					`mv ${migrationPath(migrationsDir, rename.fileName)} ${migrationPath(migrationsDir, rename.newFileName)}`,
+			)
+			.join(" && ");
+		return `${reason} Next, pick one:\n  (a) hejbro verify --fix   # renames ${laterList} (chain order decides which is later)\n  (b) ${manualCommands}   # the same by hand`;
 	}
-	const renameCommands = rest
-		.map((name, index) =>
-			renameSuggestion(name, baseInstant, index, strategy, migrationsDir),
-		)
-		.join(" && ");
-	return `${reason} Next: keep "${kept}" as is; ${renameCommands}; then rerun \`hejbro verify\`.`;
+	if (fallbackOptions !== null && fallbackOptions.length > 0) {
+		return duplicateVersionFallbackMessage(
+			reason,
+			fallbackOptions,
+			migrationsDir,
+		);
+	}
+	// Structurally unreachable: findDuplicateVersionGroups only ever fires
+	// for timestamp/unix versions (index can't collide by construction), so
+	// duplicateVersionFallbackOptions's own null case (no clock to parse)
+	// never actually happens here either — kept as a defensive fallback.
+	return `${reason} Next: rename every file in this group but one to a version after the current latest, then rerun \`hejbro verify\`.`;
+};
+
+/** `null` when `plan` resolved the group (no fallback needed); otherwise `duplicateVersionFallbackOptions` over the same group. */
+const fallbackOptionsIfUnresolved = (
+	plan: DuplicateVersionFixPlan | null,
+	group: DuplicateVersionGroup,
+	fileNames: ReadonlyArray<string>,
+	strategy: MigrationPrefixStrategy,
+): ReadonlyArray<DuplicateVersionFallbackOption> | null => {
+	if (plan !== null) {
+		return null;
+	}
+	return duplicateVersionFallbackOptions(group, fileNames, strategy);
 };
 
 /**
@@ -289,6 +259,99 @@ const readChainEntries = (
 		return [{ fileName, parent: hashes.parent, current: hashes.current }];
 	});
 
+/** `applyDuplicateVersionFixes`'s running state: `fileNames` is the current directory listing (rewritten in step as earlier groups' renames land, so a later group's plan sees a fixed group's new, higher versions too), `lines` collects every `<before> -> <after>` line printed to stdout, oldest first. */
+type FixOutcome = {
+	readonly fileNames: ReadonlyArray<string>;
+	readonly lines: ReadonlyArray<string>;
+};
+
+/** `applyGroupFix`'s no-op line for a group `planDuplicateVersionFix` couldn't order — printed to stdout (never silent: the owner principle applies to `--fix`'s own output, not just the diagnostic text) pointing at the same `Next:` a plain `hejbro verify` would show for this group. */
+const unresolvedGroupSkipLine = (group: DuplicateVersionGroup): string => {
+	const fileList = group.fileNames.map((name) => `"${name}"`).join(", ");
+	return `skipped: "${group.version}" (${fileList}) — chain order undetermined, see Next`;
+};
+
+/** One duplicate-version group's `--fix` step: plans it (same `planDuplicateVersionFix` the diagnostic message itself uses), and — only when a plan exists — renames every "later" file on disk (content untouched) and folds the rename into `outcome`. A `null` plan (fork, or an unparseable member) leaves the file listing untouched and records {@link unresolvedGroupSkipLine} instead: that group still fails `runCheckDuplicateVersion` afterward, same diagnostic as if `--fix` had never run. */
+const applyGroupFix = (
+	migrationsDirPath: string,
+	migrationsDir: string,
+	strategy: MigrationPrefixStrategy,
+	outcome: FixOutcome,
+	group: DuplicateVersionGroup,
+): FixOutcome => {
+	const groupEntries = readChainEntries(migrationsDirPath, group.fileNames);
+	const plan = planDuplicateVersionFix(
+		group,
+		groupEntries,
+		outcome.fileNames,
+		strategy,
+	);
+	if (plan === null) {
+		return {
+			fileNames: outcome.fileNames,
+			lines: [...outcome.lines, unresolvedGroupSkipLine(group)],
+		};
+	}
+	plan.map((rename) =>
+		renameSync(
+			join(migrationsDirPath, rename.fileName),
+			join(migrationsDirPath, rename.newFileName),
+		),
+	);
+	const renamedFrom = new Set(plan.map((rename) => rename.fileName));
+	const nextFileNames = [
+		...outcome.fileNames.filter((name) => !renamedFrom.has(name)),
+		...plan.map((rename) => rename.newFileName),
+	];
+	const lines = plan.map(
+		(rename) =>
+			`${migrationPath(migrationsDir, rename.fileName)} -> ${migrationPath(migrationsDir, rename.newFileName)}`,
+	);
+	return { fileNames: nextFileNames, lines: [...outcome.lines, ...lines] };
+};
+
+/**
+ * `hejbro verify --fix` (#220): renames every resolvable
+ * duplicate-migration-version group's "later" file(s) — file content and
+ * the checked-in snapshot are never touched, only filenames — before the
+ * normal five checks run against the refreshed directory listing. A group
+ * `planDuplicateVersionFix` can't resolve (a genuine fork, or a member
+ * with no readable hash-chain banner) is left exactly as `findDuplicateVersionGroups`
+ * found it, so it still surfaces as `duplicate-migration-version` afterward.
+ */
+const applyDuplicateVersionFixes = (
+	migrationsDirPath: string,
+	migrationsDir: string,
+	fileNames: ReadonlyArray<string>,
+	strategy: MigrationPrefixStrategy,
+): FixOutcome => {
+	const groups = findDuplicateVersionGroups(fileNames);
+	return groups.reduce<FixOutcome>(
+		(outcome, group) =>
+			applyGroupFix(migrationsDirPath, migrationsDir, strategy, outcome, group),
+		{ fileNames, lines: [] },
+	);
+};
+
+/** `null`-outcome-shaped no-op when `--fix` wasn't passed; otherwise runs {@link applyDuplicateVersionFixes}. Named to match this file's other `...IfEligible` gates, even though this one's gate is the flag itself rather than an earlier check's result. */
+const applyDuplicateVersionFixesIfRequested = (
+	fix: boolean,
+	migrationsDirPath: string,
+	migrationsDir: string,
+	fileNames: ReadonlyArray<string>,
+	strategy: MigrationPrefixStrategy,
+): FixOutcome => {
+	if (!fix) {
+		return { fileNames, lines: [] };
+	}
+	return applyDuplicateVersionFixes(
+		migrationsDirPath,
+		migrationsDir,
+		fileNames,
+		strategy,
+	);
+};
+
 const normalizedSnapshotHash = (diskText: string): string =>
 	`sha256:${sha256Hex(renderSnapshot(parseSnapshot(diskText)))}`;
 
@@ -336,8 +399,9 @@ const runCheck2 = (
 	};
 };
 
-/** Check (always runs, before chain linearity — a version collision leaves chain order undefined, so it must be caught first): no two migration files claim the same version prefix. Pure detection (findDuplicateVersionGroups) over the raw filenames; the message's suggested rename needs `strategy` and `migrationsDir` (config-relative — the path fragment a copy-pasted `mv` command should use, never the absolute filesystem path `runVerify` reads files from). */
+/** Check (always runs, before chain linearity — a version collision leaves chain order undefined, so it must be caught first): no two migration files claim the same version prefix. Pure detection (findDuplicateVersionGroups) over the raw filenames; the message's `--fix`/manual-`mv` options are both driven by `planDuplicateVersionFix` over the group's own hash-chain entries (`migrationsDirPath` reads the files; `migrationsDir`, config-relative, is what a printed command should use, never the absolute filesystem path). */
 const runCheckDuplicateVersion = (
+	migrationsDirPath: string,
 	fileNames: ReadonlyArray<string>,
 	strategy: MigrationPrefixStrategy,
 	migrationsDir: string,
@@ -346,11 +410,24 @@ const runCheckDuplicateVersion = (
 	if (group === undefined) {
 		return { ok: true };
 	}
+	const groupEntries = readChainEntries(migrationsDirPath, group.fileNames);
+	const plan = planDuplicateVersionFix(
+		group,
+		groupEntries,
+		fileNames,
+		strategy,
+	);
+	const fallbackOptions = fallbackOptionsIfUnresolved(
+		plan,
+		group,
+		fileNames,
+		strategy,
+	);
 	return {
 		ok: false,
 		error: hejbroError(
 			"duplicate-migration-version",
-			duplicateVersionMessage(group, fileNames, strategy, migrationsDir),
+			duplicateVersionMessage(group, plan, fallbackOptions, migrationsDir),
 		),
 	};
 };
@@ -473,9 +550,21 @@ const check4SkipLine = (check4: CheckOutcome | null): string | null => {
  * line instead. Loader errors (config-not-found/entry-not-found) are a
  * precondition of all five checks, not one of them — a single-diagnostic
  * early exit, as before. Exit 1 when any check failed.
+ *
+ * `--fix` (`argv`, #220): before any check runs, resolvable
+ * duplicate-migration-version groups are renamed on disk (content and
+ * snapshot untouched) via `applyDuplicateVersionFixes`; every `<before> ->
+ * <after>` line lands first in `stdout`, then the five checks run
+ * against the refreshed file listing exactly as if `--fix` had never been
+ * passed. A group `--fix` couldn't resolve still fails
+ * `duplicate-migration-version` afterward, same as without the flag.
  */
-export const runVerify = async (cwd: string): Promise<VerifyResult> => {
+export const runVerify = async (
+	cwd: string,
+	argv: ReadonlyArray<string> = [],
+): Promise<VerifyResult> => {
 	const fallbackIdentity = "hejbro.config.ts";
+	const fix = argv.includes("--fix");
 	try {
 		const { config, configPath } = await loadConfig(cwd, undefined);
 		const declarations = await loadDeclarations(configPath, config);
@@ -483,8 +572,17 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 
 		const check1 = runCheck1(cwd, config);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
-		const fileNames = listMigrationFiles(migrationsDirPath);
+		const initialFileNames = listMigrationFiles(migrationsDirPath);
+		const fixOutcome = applyDuplicateVersionFixesIfRequested(
+			fix,
+			migrationsDirPath,
+			config.migrationsDir,
+			initialFileNames,
+			config.prefixStrategy,
+		);
+		const fileNames = fixOutcome.fileNames;
 		const checkDuplicateVersion = runCheckDuplicateVersion(
+			migrationsDirPath,
 			fileNames,
 			config.prefixStrategy,
 			config.migrationsDir,
@@ -524,6 +622,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 			return {
 				exitCode: 0,
 				stdout: [
+					...fixOutcome.lines,
 					`verify: ${TOTAL_CHECKS} checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
 				],
 				stderr: null,
@@ -546,7 +645,7 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 
 		return {
 			exitCode: 1,
-			stdout: [],
+			stdout: fixOutcome.lines,
 			stderr: renderDiagnostics(diagnostics, summary),
 		};
 	} catch (error) {
@@ -554,14 +653,26 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 	}
 };
 
+// The `args` block exists only so `--help` renders this owner-approved
+// one-line description (mirrors generate.ts's GENERATE_ARGS) — `--fix`
+// itself is parsed by hand from `ctx.rawArgs` in `runVerify`.
+const VERIFY_ARGS = {
+	fix: {
+		type: "boolean",
+		description:
+			"rename duplicate-migration-version files whose chain order can be determined, then continue verifying",
+	},
+} as const;
+
 /** The `hejbro verify` citty subcommand — see {@link runVerify}. */
 export const verifyCommand = defineCommand({
 	meta: {
 		name: "verify",
 		description: VERIFY_DESCRIPTION,
 	},
-	run: async () => {
-		const result = await runVerify(process.cwd());
+	args: VERIFY_ARGS,
+	run: async (ctx) => {
+		const result = await runVerify(process.cwd(), ctx.rawArgs);
 		result.stdout.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);
