@@ -65,6 +65,10 @@ describe("storageBucketKind.diff", () => {
 		]);
 	});
 
+	it("diffs no change when both previous and next are absent (#154, defensive -- no real caller passes this)", () => {
+		expect(storageBucketKind.diff(null, null, "avatars")).toEqual([]);
+	});
+
 	it("diffs no change for identical snapshots", () => {
 		const previous = storageBucketKind.serialize(storageBucket("avatars"));
 		const next = storageBucketKind.serialize(storageBucket("avatars"));
@@ -356,6 +360,34 @@ describe("storageBucketKind.emit", () => {
 		expect(statements[0]?.sql).toContain(
 			"values ('avatars', 'avatars', true, null, null)",
 		);
+	});
+
+	it("throws invalid-kind-change when a create carries no next snapshot (malformed input, #154)", () => {
+		expect(() =>
+			storageBucketKind.emit({
+				kind: "supabase-storage-bucket",
+				operation: "create",
+				identity: "avatars",
+				previous: null,
+				next: null,
+				notes: [],
+			}),
+		).toThrowError(
+			"storage bucket create change is missing its next snapshot.",
+		);
+	});
+
+	it("throws invalid-kind-change when an alter carries no next snapshot (malformed input, #154)", () => {
+		expect(() =>
+			storageBucketKind.emit({
+				kind: "supabase-storage-bucket",
+				operation: "alter",
+				identity: "avatars",
+				previous: storageBucketKind.serialize(storageBucket("avatars")),
+				next: null,
+				notes: [],
+			}),
+		).toThrowError("storage bucket alter change is missing its next snapshot.");
 	});
 
 	it("drop emits no SQL", () => {

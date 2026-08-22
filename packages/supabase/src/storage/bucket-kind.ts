@@ -1,6 +1,11 @@
-import type { JsonValue, ObjectKind } from "@hejbro/core";
+import type {
+	ChangeOperation,
+	JsonValue,
+	KindChange,
+	ObjectKind,
+	SqlStatement,
+} from "@hejbro/core";
 import {
-	assertNever,
 	quoteStringLiteral,
 	sameJson,
 	statement,
@@ -175,6 +180,78 @@ const bucketUpsertSql = (snapshot: StorageBucketSnapshot): string => {
 };
 
 /**
+ * `create`/`drop` half of bucket-kind's `diff` (#154 ratchet-5) — split
+ * out to keep both halves' own complexity under threshold (D71), same
+ * shape as core's own `createOrDropDiff` (`packages/core/src/kind/
+ * diff-helpers.ts`, not reused directly: it always emits `notes: []` on
+ * drop, but a bucket drop carries {@link manualDeletionNote} instead — a
+ * real behavior difference, not just a rename). Returns the change when
+ * exactly one of `previous`/`next` is `null`, `null` when neither or both
+ * are (the caller's own `diff` decides what "both null" and "both
+ * present" mean).
+ */
+const bucketCreateOrDropChange = (
+	previous: JsonValue | null,
+	next: JsonValue | null,
+	identity: string,
+): KindChange | null => {
+	if (previous === null && next !== null) {
+		return {
+			kind: "supabase-storage-bucket",
+			operation: "create",
+			identity,
+			previous: null,
+			next,
+			notes: [],
+		};
+	}
+	if (previous !== null && next === null) {
+		return {
+			kind: "supabase-storage-bucket",
+			operation: "drop",
+			identity,
+			previous,
+			next: null,
+			notes: [manualDeletionNote(identity)],
+		};
+	}
+	return null;
+};
+
+/** `create`/`alter`'s shared `emit` behavior: render the upsert from `next`, or throw if it's missing (an invalid `KindChange`, not a real reachable state). */
+const emitUpsertOrThrow = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			`storage bucket ${change.operation} change is missing its next snapshot.`,
+		);
+	}
+	return [statement(bucketUpsertSql(asStorageBucketSnapshot(change.next)))];
+};
+
+/**
+ * One handler per {@link ChangeOperation}, same technique as
+ * `rls-uncached-auth-call.ts`'s `childrenOfHandlers`/core's own
+ * `someExprNodeHandlers`: a mapped type over the closed operation union, so
+ * a missing entry is a compile error. Applied here for coverage, not
+ * complexity (#154 ratchet-5): the former `switch`'s `default:
+ * assertNever(change.operation)` was structurally unreachable
+ * (`ChangeOperation` has exactly these three values), so no test could
+ * ever reach it.
+ */
+type EmitHandlers = {
+	readonly [K in ChangeOperation]: (
+		change: KindChange,
+	) => ReadonlyArray<SqlStatement>;
+};
+
+const emitHandlers: EmitHandlers = {
+	create: emitUpsertOrThrow,
+	alter: emitUpsertOrThrow,
+	drop: () => [],
+};
+
+/**
  * The Supabase preset's storage bucket object kind (D42) — the first
  * row-data kind: buckets are rows in Supabase's own `storage.buckets`
  * table, not DDL. Identity is the bucket name. `create`/`alter` both emit
@@ -200,29 +277,9 @@ export const storageBucketKind: ObjectKind<StorageBucketDeclaration> = {
 	},
 	identify: (snapshot) => asStorageBucketSnapshot(snapshot).name,
 	diff: (previous, next, identity) => {
-		if (previous === null && next !== null) {
-			return [
-				{
-					kind: "supabase-storage-bucket",
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			];
-		}
-		if (previous !== null && next === null) {
-			return [
-				{
-					kind: "supabase-storage-bucket",
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [manualDeletionNote(identity)],
-				},
-			];
+		const createOrDrop = bucketCreateOrDropChange(previous, next, identity);
+		if (createOrDrop !== null) {
+			return [createOrDrop];
 		}
 		if (previous === null || next === null) {
 			return [];
@@ -243,24 +300,5 @@ export const storageBucketKind: ObjectKind<StorageBucketDeclaration> = {
 			},
 		];
 	},
-	emit: (change) => {
-		switch (change.operation) {
-			case "create":
-			case "alter": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						`storage bucket ${change.operation} change is missing its next snapshot.`,
-					);
-				}
-				return [
-					statement(bucketUpsertSql(asStorageBucketSnapshot(change.next))),
-				];
-			}
-			case "drop":
-				return [];
-			default:
-				return assertNever(change.operation);
-		}
-	},
+	emit: (change) => emitHandlers[change.operation](change),
 };
