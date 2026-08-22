@@ -87,9 +87,18 @@ For a rename you'd rather ship as two safe, backward-compatible steps:
 
 This avoids a single migration that both adds and drops in the same statement batch — useful when you need a deploy window between the two.
 
-## What renames do not re-target yet
+## Expressions retarget too
 
-Rendered expression text — RLS policy `using`/`with check`, CHECK constraints, and partial-index predicates — keeps the old names inside the stored SQL string, so the generate after a rename emits one extra drop+add for those objects. The end state is correct; see issue #110.
+RLS policy `using`/`with check`, CHECK constraints, index predicates and
+index expression columns, and view queries are stored in the snapshot as
+structured expression nodes, not rendered SQL text (D67/D70) — so a
+`--rename` retargets the identifiers inside them exactly, the same way it
+retargets a plain column reference. Renaming a column used inside
+``index("…").on(sql`lower(${t.email})`)``, for example, retargets the
+stored expression to the new column name — no index DDL is emitted (no
+drop, no create), only the `alter table … rename column` statement, and no
+ambiguity error. See the [indexes guide](indexes.md) for the
+expression-index example end to end.
 
 ## Rolling back
 

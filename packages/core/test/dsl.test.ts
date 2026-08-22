@@ -101,10 +101,13 @@ describe("table() — app-style posts", () => {
 		}));
 		expect(getTableMeta(posts).indexes).toEqual([
 			{
-				columns: [{ name: "published_at", desc: false, nulls: null }],
+				columns: [
+					{ name: "published_at", desc: false, nulls: null, opclass: null },
+				],
 				unique: false,
 				indexName: null,
 				predicate: null,
+				method: null,
 			},
 		]);
 	});
@@ -114,10 +117,13 @@ describe("table() — app-style posts", () => {
 			table(app, "posts", { id: uuid().primaryKey() }, () => ({
 				indexes: [
 					{
-						columns: [{ name: "nonexistent", desc: false, nulls: null }],
+						columns: [
+							{ name: "nonexistent", desc: false, nulls: null, opclass: null },
+						],
 						unique: false,
 						indexName: null,
 						predicate: null,
+						method: null,
 					},
 				],
 			})),

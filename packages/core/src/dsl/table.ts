@@ -4,7 +4,11 @@ import type { ColumnRef, ExprNode } from "../expr/ast";
 import { columnRef } from "../expr/ast";
 import { collectColumnRefs } from "../expr/render-sql";
 import { someExprNode } from "../expr/walk";
-import { deriveForeignKeyName, deriveIndexName } from "../kinds/table-kind";
+import {
+	deriveForeignKeyName,
+	deriveIndexName,
+	namedIndexColumnNames,
+} from "../kinds/table-kind";
 import { assertSqlName } from "../sql/identifier-rules";
 import type {
 	BuilderFamily,
@@ -31,16 +35,44 @@ export type ForeignKeyAction = (typeof foreignKeyActions)[number];
 /** Where an ordered index column places SQL nulls relative to its sort order. */
 export type IndexNulls = "first" | "last";
 
-/** A declared index on one or more (already snake_cased) columns, each with its sort direction and nulls placement, plus an optional partial-index predicate (D51). */
+/** Postgres access methods hejbro accepts (D85, closed) — built-in six plus pgvector's two. `"btree"` is Postgres' own default and is never recorded in a declaration or snapshot (SC-004): see {@link IndexDeclaration.method}. */
+export const indexMethods = [
+	"btree",
+	"hash",
+	"gin",
+	"gist",
+	"spgist",
+	"brin",
+	"hnsw",
+	"ivfflat",
+] as const;
+
+/** @see indexMethods */
+export type IndexMethod = (typeof indexMethods)[number];
+
+/**
+ * One entry of an index's column list after `table()` resolves it (D51):
+ * a plain column (`name`) or an expression column (`expression`, a
+ * structured node reused from the partial-predicate machinery, D46) —
+ * exactly one of the two — plus its sort direction, nulls placement, and
+ * optional operator class (R4/R5).
+ */
+export type IndexColumnDeclaration = (
+	| { readonly name: string }
+	| { readonly expression: ExprNode }
+) & {
+	readonly desc: boolean;
+	readonly nulls: IndexNulls | null;
+	readonly opclass: string | null;
+};
+
+/** A declared index on one or more (already snake_cased) columns, each with its sort direction and nulls placement, plus an optional partial-index predicate (D51) and access method (R1/R2; `null` means Postgres' default, `btree`). */
 export type IndexDeclaration = {
-	readonly columns: ReadonlyArray<{
-		readonly name: string;
-		readonly desc: boolean;
-		readonly nulls: IndexNulls | null;
-	}>;
+	readonly columns: ReadonlyArray<IndexColumnDeclaration>;
 	readonly unique: boolean;
 	readonly indexName: string | null;
 	readonly predicate: ExprNode | null;
+	readonly method: IndexMethod | null;
 };
 
 /** The table a foreign key references, resolved to its identity parts (D52) — derived from the referenced columns' own refs, not carried as a live `TableDeclaration`. */
@@ -210,7 +242,7 @@ const validateColumnRefs = (
 	foreignKeys: ReadonlyArray<ForeignKeyDeclaration>,
 ): void => {
 	const badIndexColumn = indexes
-		.flatMap((index) => index.columns.map((column) => column.name))
+		.flatMap((index) => namedIndexColumnNames(index.columns))
 		.find((columnName) => !knownColumnNames.has(columnName));
 	if (badIndexColumn !== undefined) {
 		throwHejbroError(
@@ -242,10 +274,7 @@ const validateDuplicateNames = (
 	const indexNames = indexes.map(
 		(index) =>
 			index.indexName ??
-			deriveIndexName(
-				tableName,
-				index.columns.map((column) => column.name),
-			),
+			deriveIndexName(tableName, namedIndexColumnNames(index.columns)),
 	);
 	const duplicateIndex = firstDuplicate(indexNames);
 	if (duplicateIndex !== undefined) {
@@ -265,6 +294,140 @@ const validateDuplicateNames = (
 			`table "${tableName}" declares two foreign keys on the same local columns (both would be named "${duplicateForeignKey}") — a column set can only reference one table. Next: merge them into one foreign key, or remove one.`,
 		);
 	}
+};
+
+type IndexExpressionEntry = {
+	readonly indexName: string;
+	readonly expression: ExprNode;
+};
+
+/** `[column.expression]` for an expression entry, else `[]` — the `flatMap` step of {@link indexExpressions}. */
+const indexColumnExpressionOrEmpty = (
+	column: IndexColumnDeclaration,
+): ReadonlyArray<ExprNode> => {
+	if ("expression" in column) {
+		return [column.expression];
+	}
+	return [];
+};
+
+/** An index's own expression-column nodes, in declaration order (R5). */
+const indexExpressions = (index: IndexDeclaration): ReadonlyArray<ExprNode> =>
+	index.columns.flatMap(indexColumnExpressionOrEmpty);
+
+/** The column refs `collectColumnRefs` finds inside `expressions`, `.columnName`s only, in encounter order — {@link proposeExpressionIndexName}'s own input (R6). */
+const expressionColumnNames = (
+	expressions: ReadonlyArray<ExprNode>,
+): ReadonlyArray<string> =>
+	expressions.flatMap((expression) =>
+		collectColumnRefs(expression).map((ref) => ref.columnName),
+	);
+
+/** Proposes a name for an unnamed expression index (D86/R6): `<table>_<cols>_idx` from the columns its expressions reference, or `<table>_expr_idx` when they reference none. */
+const proposeExpressionIndexName = (
+	tableName: string,
+	expressions: ReadonlyArray<ExprNode>,
+): string => {
+	const columnNames = expressionColumnNames(expressions);
+	if (columnNames.length === 0) {
+		return `${tableName}_expr_idx`;
+	}
+	return deriveIndexName(tableName, columnNames);
+};
+
+/** Rejects an unnamed index with at least one expression column (D86/R6) — hejbro can't derive a name from an expression the way it derives one from plain columns, so it proposes one instead. */
+const assertIndexExpressionsAreNamed = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const unnamed = indexes.find(
+		(index) => index.indexName === null && indexExpressions(index).length > 0,
+	);
+	if (unnamed === undefined) {
+		return;
+	}
+	const proposedName = proposeExpressionIndexName(
+		tableName,
+		indexExpressions(unnamed),
+	);
+	throwHejbroError(
+		"index-expression-requires-name",
+		`table "${tableName}" declares an index over an expression without a name — hejbro cannot derive a name from an expression. Next: name it — index("${proposedName}").`,
+	);
+};
+
+/**
+ * Every named index's expression columns, paired with the index's own
+ * name — {@link assertNoIndexExpressionSubquery}/
+ * {@link assertNoForeignIndexExpressionColumn}'s shared scan input
+ * (mirrors {@link indexPredicateEntries}). By validation order
+ * (`assertIndexExpressionsAreNamed` runs first), every index reaching
+ * here that has an expression column is already named.
+ */
+const indexExpressionEntries = (
+	indexes: ReadonlyArray<IndexDeclaration>,
+): ReadonlyArray<IndexExpressionEntry> =>
+	indexes.flatMap((index) => {
+		const { indexName } = index;
+		if (indexName === null) {
+			return [];
+		}
+		return indexExpressions(index).map((expression) => ({
+			indexName,
+			expression,
+		}));
+	});
+
+/** Rejects an index expression containing a subquery — Postgres forbids subqueries in index expressions, mirroring {@link validateChecks}'s check-subquery guard. */
+const assertNoIndexExpressionSubquery = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const subquery = indexExpressionEntries(indexes).find((entry) =>
+		someExprNode(entry.expression, (node) => node.nodeKind === "exists"),
+	);
+	if (subquery !== undefined) {
+		throwHejbroError(
+			"index-expression-subquery",
+			`index "${subquery.indexName}" on table "${tableName}" contains a subquery in an index expression — Postgres forbids subqueries in index expressions. Next: express the column over this table's own columns, or index the plain column and filter elsewhere.`,
+		);
+	}
+};
+
+/** Rejects an index expression referencing another table's column, mirroring {@link validateChecks}'s check-foreign-column-ref guard. */
+const assertNoForeignIndexExpressionColumn = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const foreign = indexExpressionEntries(indexes)
+		.flatMap((entry) =>
+			collectColumnRefs(entry.expression).map((ref) => ({
+				indexName: entry.indexName,
+				ref,
+			})),
+		)
+		.find(
+			({ ref }) =>
+				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
+		);
+	if (foreign !== undefined) {
+		throwHejbroError(
+			"index-expression-foreign-column-ref",
+			`index "${foreign.indexName}" on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" in an index expression — an index expression can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`).`,
+		);
+	}
+};
+
+/** Rejects an unnamed expression index, then a subquery inside an index expression, then an index expression referencing another table's column, in that order (D86/R6/R7). */
+const validateIndexExpressions = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	assertIndexExpressionsAreNamed(tableName, indexes);
+	assertNoIndexExpressionSubquery(tableName, indexes);
+	assertNoForeignIndexExpressionColumn(owner, tableName, indexes);
 };
 
 /** Rejects duplicate CHECK names, subqueries, and cross-table column refs, in that order (D50). */
@@ -330,10 +493,7 @@ const indexPredicateEntries = (
 			{
 				name:
 					index.indexName ??
-					deriveIndexName(
-						tableName,
-						index.columns.map((column) => column.name),
-					),
+					deriveIndexName(tableName, namedIndexColumnNames(index.columns)),
 				predicate: index.predicate,
 			},
 		];
@@ -472,6 +632,7 @@ const resolveIndex = (input: IndexDeclaration): IndexDeclaration => ({
 	unique: input.unique,
 	indexName: input.indexName,
 	predicate: input.predicate,
+	method: input.method,
 });
 
 const resolveForeignKey = (
@@ -535,6 +696,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 	validateDuplicateNames(tableName, indexes, foreignKeys);
+	validateIndexExpressions(owner, tableName, indexes);
 	validateChecks(owner, tableName, checks);
 	validateIndexPredicates(owner, tableName, indexes);
 

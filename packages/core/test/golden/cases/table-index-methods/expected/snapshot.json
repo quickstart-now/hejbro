@@ -1,0 +1,199 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 5,
+	"objects": {
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.docs": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "data",
+					"typeNode": {
+						"typeName": "jsonb"
+					}
+				},
+				{
+					"name": "created_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				},
+				{
+					"name": "owner_id",
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "body",
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [
+				{
+					"columns": [
+						{
+							"name": "data"
+						}
+					],
+					"method": "gin",
+					"name": "docs_data_idx"
+				},
+				{
+					"columns": [
+						{
+							"name": "created_at"
+						}
+					],
+					"method": "brin",
+					"name": "docs_created_at_idx"
+				},
+				{
+					"columns": [
+						{
+							"name": "owner_id"
+						}
+					],
+					"method": "hash",
+					"name": "docs_owner_id_idx"
+				},
+				{
+					"columns": [
+						{
+							"name": "body",
+							"opclass": "gin_trgm_ops"
+						}
+					],
+					"method": "gin",
+					"name": "docs_body_trgm_idx"
+				}
+			],
+			"name": "docs",
+			"primaryKeyName": "docs_pkey",
+			"schema": "app"
+		},
+		"table:app.users": {
+			"columns": [
+				{
+					"default": {
+						"args": [],
+						"function": "gen_random_uuid",
+						"nodeKind": "function-call",
+						"schema": null
+					},
+					"name": "id",
+					"notNull": true,
+					"primaryKey": true,
+					"typeNode": {
+						"typeName": "uuid"
+					}
+				},
+				{
+					"name": "email_address",
+					"typeNode": {
+						"typeName": "text"
+					}
+				},
+				{
+					"name": "deleted_at",
+					"typeNode": {
+						"typeName": "timestamptz"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [
+				{
+					"columns": [
+						{
+							"expression": {
+								"chunks": [
+									{
+										"chunkKind": "text",
+										"text": "lower(btrim("
+									},
+									{
+										"chunkKind": "expr",
+										"expr": {
+											"column": "email_address",
+											"nodeKind": "column-ref",
+											"schema": "app",
+											"table": "users"
+										}
+									},
+									{
+										"chunkKind": "text",
+										"text": "))"
+									}
+								],
+								"nodeKind": "sql-template"
+							}
+						}
+					],
+					"name": "users_email_lower_idx"
+				},
+				{
+					"columns": [
+						{
+							"expression": {
+								"chunks": [
+									{
+										"chunkKind": "text",
+										"text": "lower("
+									},
+									{
+										"chunkKind": "expr",
+										"expr": {
+											"column": "email_address",
+											"nodeKind": "column-ref",
+											"schema": "app",
+											"table": "users"
+										}
+									},
+									{
+										"chunkKind": "text",
+										"text": ")"
+									}
+								],
+								"nodeKind": "sql-template"
+							}
+						}
+					],
+					"name": "users_email_lower_uidx",
+					"unique": true,
+					"where": {
+						"negated": false,
+						"nodeKind": "null-test",
+						"operand": {
+							"column": "deleted_at",
+							"nodeKind": "column-ref",
+							"schema": "app",
+							"table": "users"
+						}
+					}
+				}
+			],
+			"name": "users",
+			"primaryKeyName": "users_pkey",
+			"schema": "app"
+		}
+	}
+}

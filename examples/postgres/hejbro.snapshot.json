@@ -555,7 +555,37 @@
 				}
 			],
 			"foreignKeys": [],
-			"indexes": [],
+			"indexes": [
+				{
+					"columns": [
+						{
+							"expression": {
+								"chunks": [
+									{
+										"chunkKind": "text",
+										"text": "lower("
+									},
+									{
+										"chunkKind": "expr",
+										"expr": {
+											"column": "email",
+											"nodeKind": "column-ref",
+											"schema": "app",
+											"table": "members"
+										}
+									},
+									{
+										"chunkKind": "text",
+										"text": ")"
+									}
+								],
+								"nodeKind": "sql-template"
+							}
+						}
+					],
+					"name": "members_email_lower_idx"
+				}
+			],
 			"name": "members",
 			"primaryKeyName": "members_pkey",
 			"schema": "app"
@@ -991,6 +1021,12 @@
 					"typeNode": {
 						"typeName": "timestamptz"
 					}
+				},
+				{
+					"name": "metadata",
+					"typeNode": {
+						"typeName": "jsonb"
+					}
 				}
 			],
 			"foreignKeys": [
@@ -1035,6 +1071,16 @@
 							"nodeKind": "literal"
 						}
 					}
+				},
+				{
+					"columns": [
+						{
+							"name": "metadata",
+							"opclass": "jsonb_path_ops"
+						}
+					],
+					"method": "gin",
+					"name": "tasks_metadata_idx"
 				}
 			],
 			"name": "tasks",
@@ -1068,7 +1114,8 @@
 				"status",
 				"priority",
 				"estimate_hours",
-				"closed_at"
+				"closed_at",
+				"metadata"
 			],
 			"name": "open_tasks",
 			"query": {
@@ -1087,7 +1134,8 @@
 						"status",
 						"priority",
 						"estimate_hours",
-						"closed_at"
+						"closed_at",
+						"metadata"
 					],
 					"projectionKind": "all-columns"
 				},

@@ -1,4 +1,4 @@
-import type { ForeignKeyAction, IndexNulls } from "../dsl/table";
+import type { ForeignKeyAction, IndexMethod, IndexNulls } from "../dsl/table";
 import { decodeExprNode } from "../expr/codec";
 import { renderExpr } from "../expr/render-sql";
 import type { JsonValue } from "../snapshot/stable-json";
@@ -64,11 +64,26 @@ export const columnDefault = (column: ColumnSnapshot): string | null => {
 	return renderExpr(decodeExprNode(column.default));
 };
 
-/** One column of an index as materialized in a table snapshot: its name, sort direction, and nulls placement (D51). **Compact**: `desc` is present only when `true` (default `false`), `nulls` only when set (default `null`) — read via {@link indexColumnDesc}/{@link indexColumnNulls}. */
-export type IndexColumnSnapshot = {
-	readonly name: string;
+/**
+ * One column of an index as materialized in a table snapshot (D51/R8):
+ * either a plain column (`name`) or an expression column (`expression`,
+ * `encodeExprNode` output — see {@link ColumnSnapshot.default}'s doc
+ * comment for why expressions are structured nodes, not rendered text),
+ * exactly one of the two, plus its sort direction, nulls placement, and
+ * operator class. **Compact**: `desc`/`nulls`/`opclass` are present only
+ * when non-default — read via {@link indexColumnDesc}/
+ * {@link indexColumnNulls}/{@link indexColumnOpclass}/
+ * {@link indexColumnExpression}. `opclass` is a D36 identifier stored
+ * verbatim — SQL's own token, the same naming-rule exception as
+ * `ComparisonNode.operator`/`OrderByTerm.direction` (R8).
+ */
+export type IndexColumnSnapshot = (
+	| { readonly name: string }
+	| { readonly expression: JsonValue }
+) & {
 	readonly desc?: true;
 	readonly nulls?: IndexNulls;
+	readonly opclass?: string;
 };
 
 /** `column.desc`, defaulting to `false` when absent (compact snapshot). */
@@ -80,12 +95,43 @@ export const indexColumnNulls = (
 	column: IndexColumnSnapshot,
 ): IndexNulls | null => column.nulls ?? null;
 
-/** A single index as materialized in a table snapshot, with its name resolved. **Compact**: `unique` is present only when `true` (default `false`) — read via {@link indexUnique}; `where` (a structured expression node, D67/D70 — see {@link ColumnSnapshot.default}'s doc comment) is present only when the index has a partial predicate — read via {@link indexWhere}. */
+/** `column.opclass`, defaulting to `null` when absent (compact snapshot). */
+export const indexColumnOpclass = (
+	column: IndexColumnSnapshot,
+): string | null => column.opclass ?? null;
+
+/** Narrows `column` to its `expression` variant (R5/R8). */
+export const isExpressionIndexColumn = (
+	column: IndexColumnSnapshot,
+): column is Extract<IndexColumnSnapshot, { readonly expression: JsonValue }> =>
+	"expression" in column;
+
+/** `column.expression` decoded and rendered back to SQL text, `null` for a plain-column entry (mirrors {@link indexWhere}). */
+export const indexColumnExpression = (
+	column: IndexColumnSnapshot,
+): string | null => {
+	if (!isExpressionIndexColumn(column)) {
+		return null;
+	}
+	return renderExpr(decodeExprNode(column.expression));
+};
+
+/**
+ * A single index as materialized in a table snapshot, with its name
+ * resolved. **Compact**: `unique` is present only when `true` (default
+ * `false`) — read via {@link indexUnique}; `where` (a structured
+ * expression node, D67/D70 — see {@link ColumnSnapshot.default}'s doc
+ * comment) is present only when the index has a partial predicate — read
+ * via {@link indexWhere}; `method` is present only for a non-`btree`
+ * access method (D84/D85, R8) — `btree` (Postgres' own default) is never
+ * written — read via {@link indexMethod}.
+ */
 export type IndexSnapshot = {
 	readonly name: string;
 	readonly columns: ReadonlyArray<IndexColumnSnapshot>;
 	readonly unique?: true;
 	readonly where?: JsonValue;
+	readonly method?: Exclude<IndexMethod, "btree">;
 };
 
 /** `index.unique`, defaulting to `false` when absent (compact snapshot). */
@@ -99,6 +145,10 @@ export const indexWhere = (index: IndexSnapshot): string | null => {
 	}
 	return renderExpr(decodeExprNode(index.where));
 };
+
+/** `index.method`, defaulting to `"btree"` when absent (compact snapshot — `btree` is never written, R8). */
+export const indexMethod = (index: IndexSnapshot): IndexMethod =>
+	index.method ?? "btree";
 
 /** A single foreign key as materialized in a table snapshot, with its name derived and its target table resolved to an identity string. **Compact**: `onDelete`/`onUpdate` are present only when set (default `null`, meaning "unspecified") — read via {@link foreignKeyOnDelete}/{@link foreignKeyOnUpdate}. */
 export type ForeignKeySnapshot = {

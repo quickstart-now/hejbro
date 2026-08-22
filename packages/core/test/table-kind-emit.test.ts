@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { check } from "../src/dsl/check";
-import { desc, index } from "../src/dsl/index-builder";
+import { desc, index, op } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { inArray, isNotNull } from "../src/expr/operators";
+import { sql } from "../src/expr/sql-template";
 import type { KindChange } from "../src/kind/object-kind";
 import type { GrantSnapshot } from "../src/kinds/grant-kind";
 import { tableKind } from "../src/kinds/table-kind";
@@ -44,10 +45,18 @@ describe("tableKind.emit — create", () => {
 			(t) => ({
 				indexes: [
 					{
-						columns: [{ name: t.postId.sqlName, desc: false, nulls: null }],
+						columns: [
+							{
+								name: t.postId.sqlName,
+								desc: false,
+								nulls: null,
+								opclass: null,
+							},
+						],
 						unique: false,
 						indexName: null,
 						predicate: null,
+						method: null,
 					},
 				],
 				foreignKeys: [
@@ -95,10 +104,18 @@ describe("tableKind.emit — create", () => {
 			(t) => ({
 				indexes: [
 					{
-						columns: [{ name: t.email.sqlName, desc: false, nulls: null }],
+						columns: [
+							{
+								name: t.email.sqlName,
+								desc: false,
+								nulls: null,
+								opclass: null,
+							},
+						],
 						unique: true,
 						indexName: null,
 						predicate: null,
+						method: null,
 					},
 				],
 			}),
@@ -428,10 +445,13 @@ describe("tableKind.emit — alter", () => {
 		const after = table(app, "posts", { slug: text() }, (t) => ({
 			indexes: [
 				{
-					columns: [{ name: t.slug.sqlName, desc: false, nulls: null }],
+					columns: [
+						{ name: t.slug.sqlName, desc: false, nulls: null, opclass: null },
+					],
 					unique: false,
 					indexName: null,
 					predicate: null,
+					method: null,
 				},
 			],
 		}));
@@ -674,6 +694,178 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
 			'drop index "app"."posts_ab_idx";',
 			'create unique index "posts_ab_idx" on "app"."posts" ("a", "b");',
+		]);
+	});
+
+	// #284 US1 (T012): access method — `using <method>` after the table
+	// name, nothing for btree; a method change recreates the index (same
+	// drop + create path as any other definition change, R9).
+	it("renders using <method> after the table name, and nothing for btree", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [
+				index("posts_data_idx").using("gin").on(t.data),
+				index("posts_data2_idx").using("btree").on(t.data),
+			],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(posts)),
+				"app.posts",
+			),
+		);
+		const sql = tableKind.emit(change).map((statement) => statement.sql);
+		expect(sql).toContain(
+			'create index "posts_data_idx" on "app"."posts" using gin ("data");',
+		);
+		expect(sql).toContain(
+			'create index "posts_data2_idx" on "app"."posts" ("data");',
+		);
+	});
+
+	it("recreates an index whose method changed under the same name", () => {
+		const before = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").using("gin").on(t.data)],
+		}));
+		const after = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").using("brin").on(t.data)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'drop index "app"."posts_data_idx";',
+			'create index "posts_data_idx" on "app"."posts" using brin ("data");',
+		]);
+	});
+
+	// #284 US2 (T022): operator class — the opclass token sits between the
+	// column and `desc`/`nulls` (R4/R9); an opclass change recreates the
+	// index (same generic drop + create path as US1's method change).
+	it("renders the opclass between the column and desc/nulls", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [
+				index("posts_data_idx").on(
+					desc(op(t.data, "text_pattern_ops"), { nulls: "first" }),
+				),
+			],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(posts)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
+			'create index "posts_data_idx" on "app"."posts" ("data" text_pattern_ops desc nulls first);',
+		);
+	});
+
+	it("recreates an index whose opclass changed under the same name", () => {
+		const before = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").on(op(t.data, "text_pattern_ops"))],
+		}));
+		const after = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").on(t.data)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'drop index "app"."posts_data_idx";',
+			'create index "posts_data_idx" on "app"."posts" ("data");',
+		]);
+	});
+
+	// #284 US3 (T033): expression indexes — the expression always renders
+	// wrapped in its own parentheses (R9/F7 — Postgres' `index_elem`
+	// grammar is `column_name | ( a_expr )`; a bare function call could
+	// skip the wrap, but an operator expression cannot, and Postgres
+	// normalizes either form to the same catalog entry, so this feature
+	// always wraps), composes with unique + where, and an expression
+	// change recreates the index (same generic drop + create path).
+	it("renders the expression wrapped in its own parentheses, with fully-qualified column refs", () => {
+		const users = table(app, "users", { email: text() }, (t) => ({
+			indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(users)),
+				"app.users",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
+			'create index "users_email_lower_idx" on "app"."users" ((lower("app"."users"."email")));',
+		);
+	});
+
+	it("wraps an operator expression the same way — a bare function call isn't special-cased", () => {
+		const docs = table(app, "docs", { data: text() }, (t) => ({
+			indexes: [index("docs_data_status_idx").on(sql`${t.data} ->> 'status'`)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(null, tableKind.serialize(getTableMeta(docs)), "app.docs"),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
+			`create index "docs_data_status_idx" on "app"."docs" (("app"."docs"."data" ->> 'status'));`,
+		);
+	});
+
+	it("composes an expression column with unique + where", () => {
+		const users = table(
+			app,
+			"users",
+			{ email: text(), deletedAt: timestamptz() },
+			(t) => ({
+				indexes: [
+					index("users_email_lower_uidx")
+						.unique()
+						.on(sql`lower(${t.email})`)
+						.where(isNotNull(t.deletedAt)),
+				],
+			}),
+		);
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(users)),
+				"app.users",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
+			'create unique index "users_email_lower_uidx" on "app"."users" ((lower("app"."users"."email"))) where "app"."users"."deleted_at" is not null;',
+		);
+	});
+
+	it("recreates an index whose expression changed under the same name", () => {
+		const before = table(app, "users", { email: text() }, (t) => ({
+			indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
+		}));
+		const after = table(app, "users", { email: text() }, (t) => ({
+			indexes: [
+				index("users_email_lower_idx").on(sql`lower(btrim(${t.email}))`),
+			],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.users",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'drop index "app"."users_email_lower_idx";',
+			'create index "users_email_lower_idx" on "app"."users" ((lower(btrim("app"."users"."email"))));',
 		]);
 	});
 });

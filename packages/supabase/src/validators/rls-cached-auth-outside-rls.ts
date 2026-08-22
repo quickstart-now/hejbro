@@ -1,11 +1,12 @@
 import type {
 	Diagnostic,
 	ExprNode,
+	IndexColumnDeclaration,
 	IndexDeclaration,
 	TableDeclaration,
 	Validator,
 } from "@hejbro/core";
-import { diagnostic, someDeepExprNode } from "@hejbro/core";
+import { diagnostic, renderExpr, someDeepExprNode } from "@hejbro/core";
 import { declaredAtOf, isTableDeclaration } from "./schema-of";
 
 /** The two `auth` schema functions with an initPlan-cached form (#97) — same set {@link ../validators/rls-uncached-auth-call} covers, opposite direction. */
@@ -55,14 +56,20 @@ const findCachedAuthCall = (
 	return null;
 };
 
+/** One column's short description for {@link indexDescription}'s unnamed-index fallback: a quoted column name, or a parenthesised rendering of an expression entry (R5) — same shape `contracts/sql.md` uses for an expression index column. */
+const indexColumnDescription = (column: IndexColumnDeclaration): string => {
+	if ("name" in column) {
+		return `"${column.name}"`;
+	}
+	return `(${renderExpr(column.expression)})`;
+};
+
 /** `index.indexName`, or a description by column list when it's still `null` at validator time (auto-derivation, `deriveIndexName` in `packages/core/src/kinds/table-kind.ts`, is internal to core and not part of the public extension interface). */
 const indexDescription = (index: IndexDeclaration): string => {
 	if (index.indexName !== null) {
 		return `index "${index.indexName}"`;
 	}
-	const columnList = index.columns
-		.map((column) => `"${column.name}"`)
-		.join(", ");
+	const columnList = index.columns.map(indexColumnDescription).join(", ");
 	return `the index on (${columnList})`;
 };
 

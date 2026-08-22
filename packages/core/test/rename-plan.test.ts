@@ -17,12 +17,14 @@ import {
 	integer,
 	isNotNull,
 	isTable,
+	op,
 	planRenames,
 	renderSnapshot,
 	rls,
 	schema,
 	select,
 	serial,
+	sql,
 	table,
 	text,
 	uuid,
@@ -380,18 +382,26 @@ describe("planRenames", () => {
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
 
-	it("keeps desc/nulls on the renamed entry of an ordered index (D51)", () => {
+	it("keeps desc/nulls/opclass on the renamed entry of an ordered index (D51/R4)", () => {
 		const previous = snap(
 			app,
 			table(app, "posts", { slug: text(), publishedAt: text() }, (t) => ({
-				indexes: [index().on(t.slug, desc(t.publishedAt, { nulls: "first" }))],
+				indexes: [
+					index().on(
+						op(t.slug, "text_ops"),
+						desc(t.publishedAt, { nulls: "first" }),
+					),
+				],
 			})),
 		);
 		const next = snap(
 			app,
 			table(app, "posts", { handle: text(), publishedAt: text() }, (t) => ({
 				indexes: [
-					index().on(t.handle, desc(t.publishedAt, { nulls: "first" })),
+					index().on(
+						op(t.handle, "text_ops"),
+						desc(t.publishedAt, { nulls: "first" }),
+					),
 				],
 			})),
 		);
@@ -419,11 +429,12 @@ describe("planRenames", () => {
 					readonly name: string;
 					readonly desc?: true;
 					readonly nulls?: string;
+					readonly opclass?: string;
 				}>;
 			}>;
 		};
 		expect(rewrittenTable.indexes[0]?.columns).toEqual([
-			{ name: "handle" },
+			{ name: "handle", opclass: "text_ops" },
 			{ name: "published_at", desc: true, nulls: "first" },
 		]);
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
@@ -925,6 +936,86 @@ describe("planRenames — same-table expression retargeting (#110 items 6/7)", (
 					tableName: "posts",
 					oldName: "price",
 					newName: "cost",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	// #284 US3 (T034): expression indexes — renaming a column inside an
+	// index expression retargets the node (retargetTableFields), keeps the
+	// explicit name (never re-derived — an expression entry contributes
+	// nothing to derivation, R10b), and leaves no diff. Critically, no
+	// ambiguous-column-rename: plan.errors is empty.
+	it("a column rename retargets an index expression referencing that column, keeping the explicit name, with no leftover diff and no ambiguous-column-rename", () => {
+		const previous = snap(
+			app,
+			table(app, "users", { id: uuid().primaryKey(), email: text() }, (t) => ({
+				indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
+			})),
+		);
+		const next = snap(
+			app,
+			table(
+				app,
+				"users",
+				{ id: uuid().primaryKey(), emailAddress: text() },
+				(t) => ({
+					indexes: [
+						index("users_email_lower_idx").on(sql`lower(${t.emailAddress})`),
+					],
+				}),
+			),
+		);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "users",
+					oldName: "email",
+					newName: "email_address",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		const rewrittenTable = plan.rewrittenPrevious.objects[
+			"table:app.users"
+		] as { readonly indexes: ReadonlyArray<{ readonly name: string }> };
+		expect(rewrittenTable.indexes[0]?.name).toBe("users_email_lower_idx");
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a table rename retargets its own index expression, with no leftover diff", () => {
+		const buildUsers = (tableName: string) =>
+			table(
+				app,
+				tableName,
+				{ id: uuid().primaryKey(), email: text() },
+				(t) => ({
+					indexes: [index("users_email_lower_idx").on(sql`lower(${t.email})`)],
+				}),
+			);
+		const previous = snap(app, buildUsers("users"));
+		const next = snap(app, buildUsers("accounts"));
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "users",
+					newName: "accounts",
 				},
 			],
 			confirmedDrops: [],

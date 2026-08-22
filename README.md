@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 938](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%20938-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 973](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%20973-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -131,8 +131,9 @@ and Nile planned on the same extension interface.
 ## Examples
 
 - [`examples/postgres`](examples/postgres) — plain Postgres: CHECK
-  constraints, partial/ordered indexes, a self-referencing FK, RLS, a
-  trigger, grants, a view.
+  constraints, partial/ordered indexes, a GIN index with an operator class,
+  an expression index, a self-referencing FK, RLS, a trigger, grants, a
+  view.
 - [`examples/supabase`](examples/supabase) — the Supabase preset: role
   presets, `authUsers`, `authUid()`, a storage bucket.
 
@@ -147,7 +148,8 @@ pnpm build && pnpm --filter example-postgres roundtrip
 ```
 
 Guides: [getting started](docs/guide/getting-started.md) ·
-[renames](docs/guide/renames.md) · [CI](docs/guide/ci.md)
+[indexes](docs/guide/indexes.md) · [renames](docs/guide/renames.md) ·
+[CI](docs/guide/ci.md)
 
 ## For agents
 
@@ -173,7 +175,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core` and `@hejbro/supabase` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 938 functions** over the threshold, highest score 5.00 — measured at `66117ac` (2026-08-22).
+**Code quality gate:** every named function in `@hejbro/core` and `@hejbro/supabase` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 973 functions** over the threshold, highest score 5.00 — measured at `2164199` (2026-08-22).
 <!-- crap:end -->
 
 ## License

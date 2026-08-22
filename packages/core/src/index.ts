@@ -34,7 +34,7 @@ export type {
 	IndexColumn,
 	IndexColumnInput,
 } from "./dsl/index-builder";
-export { asc, desc, index } from "./dsl/index-builder";
+export { asc, desc, index, op } from "./dsl/index-builder";
 export type { EnumDeclaration } from "./dsl/pg-enum";
 export { pgEnum } from "./dsl/pg-enum";
 export type {
@@ -54,7 +54,9 @@ export type {
 	ForeignKeyDeclaration,
 	ForeignKeyInput,
 	ForeignKeyReferenceTarget,
+	IndexColumnDeclaration,
 	IndexDeclaration,
+	IndexMethod,
 	IndexNulls,
 	Table,
 	TableColumns,
@@ -64,6 +66,7 @@ export type {
 export {
 	foreignKeyActions,
 	getTableMeta,
+	indexMethods,
 	isTable,
 	table,
 	tableMeta,

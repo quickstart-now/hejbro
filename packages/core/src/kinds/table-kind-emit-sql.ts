@@ -19,9 +19,13 @@ import {
 	foreignKeyOnDelete,
 	foreignKeyOnUpdate,
 	indexColumnDesc,
+	indexColumnExpression,
 	indexColumnNulls,
+	indexColumnOpclass,
+	indexMethod,
 	indexUnique,
 	indexWhere,
+	isExpressionIndexColumn,
 	tableChecks,
 	tablePrimaryKeyName,
 } from "./table-snapshot";
@@ -144,6 +148,15 @@ const uniqueIndexKeyword = (index: IndexSnapshot): string => {
 	return "";
 };
 
+/** Renders ` using <method>` for a non-btree access method, or `""` for btree — Postgres' own default, never spelled out (D85, SC-004). */
+const usingClause = (index: IndexSnapshot): string => {
+	const method = indexMethod(index);
+	if (method === "btree") {
+		return "";
+	}
+	return ` using ${method}`;
+};
+
 const descKeyword = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
 	if (indexColumnDesc(column)) {
 		return ["desc"];
@@ -159,10 +172,43 @@ const nullsClause = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
 	return [`nulls ${nulls}`];
 };
 
-/** Renders one index column's clause: name, then `desc` when descending, then `nulls first|last` when set (D51). */
+/** Renders the operator class token (R4) — a bare identifier, unquoted like `using <method>` (D36 restricts it to snake_case, so quoting is never needed). */
+const opclassToken = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
+	const opclass = indexColumnOpclass(column);
+	if (opclass === null) {
+		return [];
+	}
+	return [opclass];
+};
+
+/**
+ * The column/expression token of one index column's clause: a quoted
+ * name, or an expression entry's rendered SQL wrapped in its own
+ * parentheses (R5/R9 — via {@link indexColumnExpression}, the same
+ * accessor-mediated render `whereClause` uses for `where`, so this
+ * module never imports the expression codec directly). Always wrapped,
+ * not just when the expression happens to need it: Postgres' own
+ * `index_elem` grammar is `column_name | ( a_expr )` — a function call
+ * like `lower(email)` is self-delimiting and could skip the wrap, but an
+ * operator expression (`data ->> 'status'`, `a || b`) cannot, and
+ * Postgres normalizes either form to the same catalog entry / `pg_dump`
+ * output, so always wrapping is simpler and correct for every
+ * expression this feature can emit (owner decision 2026-08-22, F7 —
+ * corrects an earlier no-wrap reading of contracts/sql.md that only
+ * happened to work for the function-call examples it showed).
+ */
+const indexColumnTarget = (column: IndexColumnSnapshot): string => {
+	if (isExpressionIndexColumn(column)) {
+		return `(${indexColumnExpression(column) ?? ""})`;
+	}
+	return quoteIdentifier(column.name);
+};
+
+/** Renders one index column's clause: name/expression, then its opclass when set, then `desc` when descending, then `nulls first|last` when set (D51/R4/R9 — `"col" <opclass> desc nulls first`). */
 const indexColumnSql = (column: IndexColumnSnapshot): string =>
 	[
-		quoteIdentifier(column.name),
+		indexColumnTarget(column),
+		...opclassToken(column),
 		...descKeyword(column),
 		...nullsClause(column),
 	].join(" ");
@@ -182,7 +228,7 @@ export const createIndexSql = (
 	tableName: string,
 	index: IndexSnapshot,
 ): string =>
-	`create ${uniqueIndexKeyword(index)}index ${quoteIdentifier(index.name)} on ${qualifyName(schema, tableName)} (${index.columns
+	`create ${uniqueIndexKeyword(index)}index ${quoteIdentifier(index.name)} on ${qualifyName(schema, tableName)}${usingClause(index)} (${index.columns
 		.map(indexColumnSql)
 		.join(", ")})${whereClause(index)};`;
 
