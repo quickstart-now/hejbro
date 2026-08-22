@@ -3,6 +3,7 @@ import { tablePrivileges } from "../dsl/grant";
 import { assertNever, throwHejbroError } from "../error";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
+import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
 import { quoteIdentifier, renderRoleName } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
@@ -20,7 +21,8 @@ export type GrantSnapshot = {
 const asGrantSnapshot = (snapshot: JsonValue): GrantSnapshot =>
 	snapshot as GrantSnapshot;
 
-const grantIdentity = (
+/** `"<schema>.<grantKind>.<role>"` — exported so `tableKind`'s `create` emit can tell a *newly created* schema-wide grant (already `siblingChanges`-visible, D74) apart from a *standing* one it's re-issuing for a new table (#121/D78, `standingAllTablesGrants`) — the former's own `create` emit already covers this table via `on all tables in schema`, so re-issuing it too would be a harmless but confusing duplicate statement. */
+export const grantIdentity = (
 	schema: string,
 	grantKind: GrantKind,
 	role: string,
@@ -62,8 +64,22 @@ const removedPrivileges = (
 		(privilege) => previous.includes(privilege) && !next.includes(privilege),
 	);
 
-/** Renders a `grant`/`alter default privileges ... grant` statement for `grantKind`. `privileges` is ignored for `schema-usage` (always `usage`). */
-const renderGrantStatement = (
+/**
+ * Renders a `grant`/`alter default privileges ... grant` statement for
+ * `grantKind`. `privileges` is ignored for `schema-usage` (always
+ * `usage`). Exported (not just `grantKind`-internal) so `tableKind`'s
+ * `create` emit can re-issue the exact same `all-tables-privileges`
+ * statement a standing grant's own `create` used, to catch up a table
+ * created after it (#121/D78, `standingAllTablesGrants`) — deliberately
+ * the *schema-wide* form, not a table-scoped `grant ... on table ...`: a
+ * hand-rolled table-scoped statement produces the same end privileges but
+ * a different Postgres ACL-array insertion order than the schema-wide
+ * form used everywhere else, which a real `pg_dump` (the local
+ * round-trip's own comparison) can tell apart even though `information_
+ * schema.role_table_grants` (#219's check) can't — re-issuing the
+ * identical statement sidesteps that entirely rather than fighting it.
+ */
+export const renderGrantStatement = (
 	grantKind: GrantKind,
 	schema: string,
 	role: string,
@@ -103,6 +119,31 @@ const renderRevokeStatement = (
 			return assertNever(grantKind);
 	}
 };
+
+const GRANT_KEY_PREFIX = "grant:";
+
+/**
+ * Every `all-tables-privileges` grant already declared for `schema` in
+ * `snapshot` — the standing schema-wide grants whose own Postgres
+ * statement (`grant ... on all tables in schema ...`) only ever covers
+ * whatever tables existed *when it ran*, so a table created by a later
+ * migration needs it re-issued to end up covered too (#121/D78). Read by
+ * `tableKind`'s `create` emit via the `nextSnapshot` it's handed (D78) —
+ * this never produces a new `KindChange`: the grant node itself never
+ * changes when an unrelated table is added, so `grantKind`'s own
+ * identity/diff stay untouched.
+ */
+export const standingAllTablesGrants = (
+	schema: string,
+	snapshot: Snapshot,
+): ReadonlyArray<GrantSnapshot> =>
+	Object.entries(snapshot.objects)
+		.filter(([key]) => key.startsWith(GRANT_KEY_PREFIX))
+		.map(([, node]) => asGrantSnapshot(node))
+		.filter(
+			(grant) =>
+				grant.schema === schema && grant.grantKind === "all-tables-privileges",
+		);
 
 /** Zero or one statement, depending on whether `privileges` is non-empty — the `if` helper an alter's optional grant/revoke half needs instead of a ternary. */
 const statementIfAny = (

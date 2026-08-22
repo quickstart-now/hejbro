@@ -240,13 +240,17 @@ export const generateMigration = (
 	// D74: every kind's emit sees the whole diff's changes (siblingChanges),
 	// read-only and optional -- most kinds ignore it; sequenceKind/tableKind
 	// use it to coordinate a serial column's single-statement add (#23).
+	// D78: emit also sees the full next snapshot, read-only and optional --
+	// tableKind uses it to re-grant a newly created table under a standing
+	// schema-wide grant (#121), which siblingChanges can't cover (the grant
+	// itself has no change in this diff).
 	const emittedStatements: ReadonlyArray<{
 		readonly change: KindChange;
 		readonly statement: SqlStatement;
 	}> = changes.flatMap((change) =>
 		registry
 			.get(change.kind)
-			.emit(change, changes)
+			.emit(change, changes, snapshot)
 			.map((statement) => ({ change, statement })),
 	);
 

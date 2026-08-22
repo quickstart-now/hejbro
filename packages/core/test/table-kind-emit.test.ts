@@ -5,8 +5,10 @@ import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { inArray, isNotNull } from "../src/expr/operators";
 import type { KindChange } from "../src/kind/object-kind";
+import type { GrantSnapshot } from "../src/kinds/grant-kind";
 import { tableKind } from "../src/kinds/table-kind";
 import { asTableSnapshot, columnDefault } from "../src/kinds/table-snapshot";
+import type { Snapshot } from "../src/snapshot/snapshot";
 import {
 	integer,
 	text,
@@ -113,6 +115,124 @@ describe("tableKind.emit — create", () => {
 				stage: "main",
 			},
 		]);
+	});
+});
+
+describe("tableKind.emit — create re-issues standing schema-wide grants (#121/D78)", () => {
+	const allTablesGrant = (
+		schemaName: string,
+		role: string,
+		privileges: GrantSnapshot["privileges"],
+	): GrantSnapshot => ({
+		schema: schemaName,
+		grantKind: "all-tables-privileges",
+		role,
+		privileges,
+	});
+
+	const snapshotWith = (objects: Record<string, unknown>): Snapshot => ({
+		formatVersion: 5,
+		dialect: "postgres",
+		objects: objects as Snapshot["objects"],
+	});
+
+	it("re-issues the exact schema-wide statement for a standing all-tables-privileges grant already declared in the table's schema", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const next = tableKind.serialize(getTableMeta(posts));
+		const change = expectSingleChange(tableKind.diff(null, next, "app.posts"));
+		const nextSnapshot = snapshotWith({
+			"grant:app.all-tables-privileges.app_reader": allTablesGrant(
+				"app",
+				"app_reader",
+				["select"],
+			),
+		});
+
+		const sqlStatements = tableKind.emit(change, [change], nextSnapshot);
+
+		// Deliberately the *schema-wide* form again — not a hand-rolled
+		// table-scoped rewrite (see renderGrantStatement's own doc comment,
+		// #121/D78, for why that matters for a real pg_dump comparison even
+		// though both forms produce the same catalog privileges).
+		expect(sqlStatements.at(-1)).toEqual({
+			sql: 'grant select on all tables in schema "app" to "app_reader";',
+			stage: "main",
+		});
+	});
+
+	it("does not duplicate a grant that is itself newly created in the same diff (first-ever migration)", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const next = tableKind.serialize(getTableMeta(posts));
+		const change = expectSingleChange(tableKind.diff(null, next, "app.posts"));
+		const grantSnapshot = allTablesGrant("app", "app_reader", ["select"]);
+		const grantCreateChange: KindChange = {
+			kind: "grant",
+			operation: "create",
+			identity: "app.all-tables-privileges.app_reader",
+			previous: null,
+			next: grantSnapshot,
+			notes: [],
+		};
+		const nextSnapshot = snapshotWith({
+			"grant:app.all-tables-privileges.app_reader": grantSnapshot,
+		});
+
+		const sqlStatements = tableKind.emit(
+			change,
+			[change, grantCreateChange],
+			nextSnapshot,
+		);
+
+		// Only the create-table statement — the grant's own "create" emit
+		// (elsewhere in the same diff) already covers this table via
+		// "on all tables in schema", so re-issuing it here too would just
+		// be a harmless but confusing duplicate.
+		expect(sqlStatements).toHaveLength(1);
+	});
+
+	it("ignores a standing grant in a different schema", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const next = tableKind.serialize(getTableMeta(posts));
+		const change = expectSingleChange(tableKind.diff(null, next, "app.posts"));
+		const nextSnapshot = snapshotWith({
+			"grant:other.all-tables-privileges.app_reader": allTablesGrant(
+				"other",
+				"app_reader",
+				["select"],
+			),
+		});
+
+		expect(tableKind.emit(change, [change], nextSnapshot)).toHaveLength(1);
+	});
+
+	it("ignores schema-usage and default-table-privileges grants (neither is a per-table statement)", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const next = tableKind.serialize(getTableMeta(posts));
+		const change = expectSingleChange(tableKind.diff(null, next, "app.posts"));
+		const nextSnapshot = snapshotWith({
+			"grant:app.schema-usage.app_reader": {
+				schema: "app",
+				grantKind: "schema-usage",
+				role: "app_reader",
+				privileges: [],
+			} satisfies GrantSnapshot,
+			"grant:app.default-table-privileges.app_reader": {
+				schema: "app",
+				grantKind: "default-table-privileges",
+				role: "app_reader",
+				privileges: ["select"],
+			} satisfies GrantSnapshot,
+		});
+
+		expect(tableKind.emit(change, [change], nextSnapshot)).toHaveLength(1);
+	});
+
+	it("stays exactly as before when no next snapshot is passed (back-compat: the optional third parameter)", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const next = tableKind.serialize(getTableMeta(posts));
+		const change = expectSingleChange(tableKind.diff(null, next, "app.posts"));
+
+		expect(tableKind.emit(change, [change])).toHaveLength(1);
 	});
 });
 

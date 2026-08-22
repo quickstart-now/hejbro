@@ -1,3 +1,4 @@
+import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { SqlStatement } from "../sql/statement";
 
@@ -68,8 +69,30 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 	 * shows the *engine* already granted this view internally, not that
 	 * this *extension interface* did before now.
 	 */
+	/**
+	 * `nextSnapshot` (D78) is the full snapshot `generateMigration` is
+	 * diffing *toward* — read-only, optional, and additive the same way
+	 * `siblingChanges` (D74) was: 10 of the 11 in-repo `emit`
+	 * implementations (9 in `packages/core`, 1 in `packages/supabase`)
+	 * ignore this third parameter and need no change; only `tableKind`
+	 * reads it. `siblingChanges` alone can't cover this case: it's the
+	 * *diff's own* change list, so a sibling object that *didn't* change
+	 * in this run — a standing schema-wide grant, unaffected by adding a
+	 * table — never appears there at all. `tableKind`'s `create` emit
+	 * reads `nextSnapshot` to find every `all-tables-privileges` grant
+	 * already declared for the new table's schema and re-issue that exact
+	 * schema-wide statement again right after `create table` (#121): the
+	 * statement Postgres ran when *that* grant was first created only
+	 * ever covered the tables that existed at that moment, so without
+	 * this a table added by a *later*
+	 * migration silently ends up ungranted — a defect a golden test can't
+	 * see (it never runs real SQL) but the local round-trip did (chain
+	 * path vs. a fresh single-migration regenerate disagreeing on exactly
+	 * this table's grants).
+	 */
 	emit(
 		change: KindChange,
 		siblingChanges?: ReadonlyArray<KindChange>,
+		nextSnapshot?: Snapshot,
 	): ReadonlyArray<SqlStatement>;
 }
