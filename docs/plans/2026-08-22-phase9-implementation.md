@@ -495,7 +495,7 @@ and change line 41 to `serialize(declaration: TDeclaration, context?: SerializeC
 **Files:**
 - Modify: `packages/core/src/snapshot/snapshot.ts:60–148`
 - Modify: `packages/core/src/engine/generate.ts:276`
-- Modify: every test call site of `buildSnapshot(` (≈40 — `grep -rln "buildSnapshot(" packages/*/test examples/*/test`): add `, emptySnapshot` as the third argument.
+- Modify: every test call site of `buildSnapshot(` (8 files, 20 calls — `grep -rln "buildSnapshot(" packages/*/test examples/*/test`): add `, emptySnapshot` as the third argument.
 - Test: `packages/core/test/snapshot.test.ts`
 
 **Interfaces:**
@@ -573,7 +573,7 @@ it("serializes columns in the oracle's order, declaration order when the oracle 
 
 it("emits create table in the snapshot's column order", () => {
 	// build `ordered` as above, then:
-	const sql = emitTableSql({ kind: "table", identity: "app.projects", changeKind: "create", previous: null, next: ordered, notes: [] });
+	const sql = emitTableSql({ kind: "table", identity: "app.projects", operation: "create", previous: null, next: ordered, notes: [] });
 	expect(sql.join("\n")).toMatch(/"id" uuid[\s\S]*"archived_at" timestamp with time zone[\s\S]*"description" text/);
 });
 ```
@@ -713,7 +713,7 @@ Note in the kind's doc comment: with D81 a column added mid-declaration to the u
 
 - [ ] **Step 1: Write the golden case**
 
-`declarations.ts`: `export const app = schema("app")`. `steps.ts` (mirror `cases/app-posts/steps.ts`'s shape exactly, including the `StepsModule` export):
+`declarations.ts`: `export const app = schema("app")`. `steps.ts` (mirror `cases/app-posts/steps.ts`'s shape exactly — `export const steps: ReadonlyArray<ReadonlyArray<HejbroInput>>`, the shape `golden.test.ts`'s `StepsModule` type expects):
 
 - step 1: `projects(id uuid pk default random, title text not null, archivedAt timestamptz)`, a `returns: projects` function `archive_project(projectId)` whose body is `ctx.return(update(projects).set({ archivedAt: now() }).where(eq(projects.id, projectId)).returning())`, and a view `projects_v = defineView(app, "projects_v", select(projects))`.
 - step 2: same, with `description: text()` inserted **between** `title` and `archivedAt`.
@@ -760,23 +760,26 @@ Add the `--confirm-drop` twin: drop `title`, add `summary` in the same run with 
 
 - [ ] **Step 1: Failing CLI tests**
 
-`verify.test.ts` — build a fixture by driving the in-process commands twice (copy the pattern the file already uses for `runGenerate` + `runVerify`):
+`verify.test.ts` — build a fixture by driving the **built** CLI twice as a
+subprocess (the file's own pattern: `runCli`, `writeFixtureFile`,
+`assertBuiltCli` from `./support/cli-runner`; its local `writeSchema(source)`
+takes one argument; `stdout` is a string):
 
 ```ts
 it("passes when the committed snapshot's column order differs from declaration order (D81)", async () => {
-	await writeSchema(cwd, `…projects: id, title, archivedAt…`);
-	await runGenerate(cwd, []);
-	await writeSchema(cwd, `…projects: id, title, description, archivedAt…`); // mid-declaration insert
-	await runGenerate(cwd, []);
+	await writeSchema(`…projects: id, title, archivedAt…`);
+	await runCli(cwd, ["generate"]);
+	await writeSchema(`…projects: id, title, description, archivedAt…`); // mid-declaration insert
+	await runCli(cwd, ["generate"]);
 	const snapshot = JSON.parse(await readFile(join(cwd, "hejbro.snapshot.json"), "utf8"));
 	expect(snapshot.objects["table:app.projects"].columns.map((c: { name: string }) => c.name)).toEqual(["id", "title", "archived_at", "description"]);
-	const result = await runVerify(cwd, []);
+	const result = await runCli(cwd, ["verify"]);
 	expect(result.exitCode).toBe(0);
-	expect(result.stdout.join("\n")).toContain("5 checks passed");
+	expect(result.stdout).toContain("5 checks passed");
 });
 ```
 
-Before the fix this fails at check 2 with `snapshot-stale` (the rebuild from `emptySnapshot` is in declaration order). `restore-command.test.ts`: same two-generate history committed to the fixture's git repo, then `runRestore(cwd, ["1"])` exits 0 and prints `verified: restored declarations reproduce migration 1's recorded snapshot`; and `runRestore(cwd, ["2"])` (a no-op restore) also verifies — before the fix the step-2 rebuild hash would not match the banner. `examples/cli-smoke/test/e2e.test.ts`: insert a mid-declaration column step between the existing `generate` and `verify` steps of the single flow.
+Before the fix this fails at check 2 with `snapshot-stale` (the rebuild from `emptySnapshot` is in declaration order). `restore-command.test.ts`: same two-generate history committed to the fixture's git repo, then `runCli(cwd, ["restore", "1"])` exits 0 and prints `verified: restored declarations reproduce migration 1's recorded snapshot`; and `runCli(cwd, ["restore", "2"])` (a no-op restore) also verifies — before the fix the step-2 rebuild hash would not match the banner. `examples/cli-smoke/test/e2e.test.ts`: insert a mid-declaration column step between the existing `generate` and `verify` steps of the single flow.
 
 - [ ] **Step 2: Run** — FAIL as described.
 
@@ -918,7 +921,7 @@ export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
   	it("documents the migration number positional", async () => {
   		const result = await runHelp(cwd, ["restore", "--help"]);
   		expect(result.exitCode).toBe(0);
-  		expect(result.stdout).toContain("hejbro restore <N>");
+  		expect(result.stdout).toContain("hejbro restore [N]"); // citty renders a `required: false` positional as `[N]`
   		expect(result.stdout).toContain("the migration's number in `hejbro history` (1 = oldest)");
   	});
   });
