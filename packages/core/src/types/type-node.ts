@@ -139,52 +139,62 @@ const assertNever = (node: never): never =>
 		`unexpected type node shape: ${JSON.stringify(node)}.`,
 	);
 
+/** Renders verbatim: the twenty-one simple type names Postgres spells exactly as hejbro's own `typeName` already does. */
+const renderVerbatim = (node: { readonly typeName: string }): string =>
+	node.typeName;
+
 /**
- * Renders a {@link TypeNode} as Postgres SQL. `timetz`/`timestamptz` render
- * in their canonical spelled-out form (`time with time zone` /
+ * One handler per {@link TypeNode} `typeName` — a mapped type over the
+ * full `typeName` union, not a hand-written list, so a missing handler is
+ * a `tsc` error the same way a `switch`'s `default: assertNever(node)`
+ * would have been (verified directly with a scratch dummy-variant edit,
+ * same technique as #154 PR2's `ExprNode` walkers). `timetz`/`timestamptz`
+ * render in their canonical spelled-out form (`time with time zone` /
  * `timestamp with time zone`) since that is what `pg_dump` and
- * `information_schema` emit — the short internal type names stay stable in
- * snapshots, only the rendered SQL changes.
+ * `information_schema` emit — the short internal type names stay stable
+ * in snapshots, only the rendered SQL changes.
  */
+type RenderTypeNodeHandlers = {
+	readonly [K in TypeNode["typeName"]]: (
+		node: Extract<TypeNode, { readonly typeName: K }>,
+	) => string;
+};
+
+const renderTypeNodeHandlers: RenderTypeNodeHandlers = {
+	uuid: renderVerbatim,
+	text: renderVerbatim,
+	boolean: renderVerbatim,
+	smallint: renderVerbatim,
+	integer: renderVerbatim,
+	bigint: renderVerbatim,
+	real: renderVerbatim,
+	"double precision": renderVerbatim,
+	date: renderVerbatim,
+	time: renderVerbatim,
+	timestamp: renderVerbatim,
+	interval: renderVerbatim,
+	json: renderVerbatim,
+	jsonb: renderVerbatim,
+	bytea: renderVerbatim,
+	inet: renderVerbatim,
+	cidr: renderVerbatim,
+	macaddr: renderVerbatim,
+	serial: renderVerbatim,
+	smallserial: renderVerbatim,
+	bigserial: renderVerbatim,
+	timetz: () => "time with time zone",
+	timestamptz: () => "timestamp with time zone",
+	varchar: renderVarchar,
+	char: (node) => `char(${node.length})`,
+	numeric: renderNumeric,
+	enum: (node) => qualifyName(node.enumSchema, node.enumName),
+	array: (node) => `${renderTypeNode(node.element)}[]`,
+};
+
+/** Renders a {@link TypeNode} as Postgres SQL. See {@link renderTypeNodeHandlers} for the per-`typeName` rules. */
 export const renderTypeNode = (node: TypeNode): string => {
-	switch (node.typeName) {
-		case "uuid":
-		case "text":
-		case "boolean":
-		case "smallint":
-		case "integer":
-		case "bigint":
-		case "real":
-		case "double precision":
-		case "date":
-		case "time":
-		case "timestamp":
-		case "interval":
-		case "json":
-		case "jsonb":
-		case "bytea":
-		case "inet":
-		case "cidr":
-		case "macaddr":
-		case "serial":
-		case "smallserial":
-		case "bigserial":
-			return node.typeName;
-		case "timetz":
-			return "time with time zone";
-		case "timestamptz":
-			return "timestamp with time zone";
-		case "varchar":
-			return renderVarchar(node);
-		case "char":
-			return `char(${node.length})`;
-		case "numeric":
-			return renderNumeric(node);
-		case "enum":
-			return qualifyName(node.enumSchema, node.enumName);
-		case "array":
-			return `${renderTypeNode(node.element)}[]`;
-		default:
-			return assertNever(node);
-	}
+	const handler = renderTypeNodeHandlers[node.typeName] as (
+		node: TypeNode,
+	) => string;
+	return handler(node);
 };
