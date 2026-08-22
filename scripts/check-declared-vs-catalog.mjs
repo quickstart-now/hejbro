@@ -19,17 +19,41 @@
 // (schema/table/column/constraint/index/policy/trigger/view/function/
 // sequence name, or schema+role+privilege-word for a grant) -- plus, for
 // columns specifically, whether `notNull` matches the catalog's
-// `attnotnull`.
+// `attnotnull`, whether the declared type matches the catalog's own type
+// (#218), and whether a declared default expression matches the
+// catalog's own default expression (#218).
 //
-// What this DOES NOT check (deliberately out of scope for this first
-// pass, #212's checkpoint decision -- a follow-up issue, filed as a
-// sub-issue of #9, covers closing this gap): a column's declared type
-// against the catalog's actual type, a column's declared default
-// expression against the catalog's actual default, an index's declared
-// column list or expression, a check constraint's declared expression, a
-// function's/view's declared body, a trigger's declared timing/event
-// beyond its name. All of these could exist under the right name while
-// still being wrong in a way this script cannot see.
+// #218's type comparison: `column.typeNode`, rendered through
+// `@hejbro/core`'s own `renderTypeNode` (the exact function that produced
+// the emitted SQL), then corrected onto the catalog's own display
+// spelling per the mapping table this script's own PR body records
+// (measured, not assumed -- `format_type()` and `renderTypeNode()` agree
+// for most of the twenty-one simple types, and disagree in a small,
+// specific set: `time`/`timestamp` spell out "without time zone",
+// `varchar`/`char` use their long-form names, and a precision-only
+// `numeric(p)` gets an explicit `,0` scale). An enum column is compared
+// by its base type's own schema-qualified name (`pg_type`/`pg_namespace`,
+// resolved through `pg_type.typelem` when the column is an array of
+// enums), never `format_type()`'s own enum spelling -- that string is
+// session `search_path`-sensitive (measured: the same column reads
+// "app.status" or bare "status" depending on what's on `search_path`),
+// so it isn't a stable comparison target on its own.
+//
+// #218's default comparison: the declared default (a structured
+// expression node, decoded and rendered the same way `@hejbro/core`
+// itself would) against `pg_get_expr(adbin, adrelid)`. Compared after
+// minimal, *measured* normalization only (trimming/collapsing
+// whitespace, and stripping a trailing `::<type>` cast Postgres adds to
+// a literal default that `renderExpr` itself never emits) -- never a
+// blanket case-fold, which risked silently accepting a genuinely wrong
+// string literal's content as a false negative with no concrete
+// DSL-reachable case-divergent scenario found to justify it.
+//
+// What this still DOES NOT check (deliberately out of scope, honest
+// non-comparison over a guessed rule that might misfire either
+// direction): an index's declared column list or expression, a check
+// constraint's declared expression, a function's/view's declared body, a
+// trigger's declared timing/event beyond its name.
 //
 // `supabase-storage-bucket` (the one preset-only kind, `@hejbro/
 // supabase`) is skipped entirely, same as verify-supabase-image.sh's own
@@ -38,6 +62,11 @@
 // catalog object for this script to check it against.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import {
+	decodeExprNode,
+	renderExpr,
+	renderTypeNode,
+} from "../packages/core/dist/index.js";
 
 const [, , container, database, snapshotPath] = process.argv;
 
@@ -86,12 +115,33 @@ const catalog = {
 		join pg_namespace n on n.oid = c.relnamespace
 		where c.relkind in ('r','p')
 	`),
+	// #218: "catalogType" is format_type()'s own display string --
+	// search-path-independent for every built-in type, but NOT for an
+	// enum's own name (measured: the same enum column reads "app.status"
+	// or bare "status" depending on what's on search_path). "baseTypeKind"/
+	// "baseTypeSchema"/"baseTypeName" resolve the column's *scalar* type
+	// regardless of whether it's wrapped in an array (pg_type.typcategory
+	// = 'A' unwraps through typelem) -- 'e' means enum, and the schema/name
+	// pair is this script's own, session-independent way to identify one,
+	// used instead of trusting catalogType's enum spelling. "catalogDefault"
+	// is pg_get_expr() over the column's own pg_attrdef row, null when the
+	// column has none.
 	columns: runPsqlJson(`
 		select n.nspname as schema, c.relname as "table", a.attname as name,
-			a.attnotnull as "notNull"
+			a.attnotnull as "notNull",
+			format_type(a.atttypid, a.atttypmod) as "catalogType",
+			bt.typtype as "baseTypeKind",
+			btn.nspname as "baseTypeSchema",
+			bt.typname as "baseTypeName",
+			pg_get_expr(ad.adbin, ad.adrelid) as "catalogDefault"
 		from pg_class c
 		join pg_namespace n on n.oid = c.relnamespace
 		join pg_attribute a on a.attrelid = c.oid
+		join pg_type t on t.oid = a.atttypid
+		left join pg_type bt
+			on bt.oid = (case when t.typcategory = 'A' then t.typelem else t.oid end)
+		left join pg_namespace btn on btn.oid = bt.typnamespace
+		left join pg_attrdef ad on ad.adrelid = a.attrelid and ad.adnum = a.attnum
 		where c.relkind in ('r','p') and a.attnum > 0 and not a.attisdropped
 	`),
 	constraints: runPsqlJson(`
@@ -223,6 +273,129 @@ const hasDefaultTableGrant = (schema, role, privilege) =>
 		(g) => g.schema === schema && g.role === role && g.privilege === privilege,
 	);
 
+// #218 type-mapping table (measured against a real postgres:17 -- see this
+// script's own PR body for the full per-typeName table this corrects
+// against): renderTypeNode() and format_type() agree for every simple
+// type except these. `numeric(p)` (precision given, scale omitted) is
+// the one case handled by regex rather than a literal substring, since
+// its corrected form still carries the caller's own precision digits.
+const TYPE_DISPLAY_CORRECTIONS = [
+	[/^time$/, "time without time zone"],
+	[/^timestamp$/, "timestamp without time zone"],
+	[/^varchar$/, "character varying"],
+	[/^varchar\((\d+)\)$/, "character varying($1)"],
+	[/^char\((\d+)\)$/, "character($1)"],
+	[/^numeric\((\d+)\)$/, "numeric($1,0)"],
+];
+
+/**
+ * The catalog's own display spelling for `typeNode`, mirroring
+ * `@hejbro/core`'s `renderTypeNode` (the exact function that rendered
+ * the emitted `create`/`alter` SQL) with the #218 correction table
+ * applied. `enum` renders schema-qualified (`schema.name`) directly from
+ * the node's own fields -- never through `renderTypeNode`, whose enum
+ * branch renders an *identifier* (quoted where needed for SQL), not the
+ * plain, unquoted form `catalogTypeDisplay` below compares against.
+ */
+const expectedCatalogType = (typeNode) => {
+	if (typeNode.typeName === "array") {
+		return `${expectedCatalogType(typeNode.element)}[]`;
+	}
+	if (typeNode.typeName === "enum") {
+		return `${typeNode.enumSchema}.${typeNode.enumName}`;
+	}
+	const rendered = renderTypeNode(typeNode);
+	const correction = TYPE_DISPLAY_CORRECTIONS.find(([pattern]) =>
+		pattern.test(rendered),
+	);
+	if (correction === undefined) {
+		return rendered;
+	}
+	const [pattern, replacement] = correction;
+	return rendered.replace(pattern, replacement);
+};
+
+/**
+ * The catalog row's own type, in the same shape `expectedCatalogType`
+ * produces -- `format_type()` directly for a built-in base type, or the
+ * base type's own schema-qualified name (never `format_type()`'s enum
+ * spelling, which is session `search_path`-sensitive, measured) when the
+ * column (or its array's element) is an enum.
+ */
+const catalogTypeDisplay = (row) => {
+	if (row.baseTypeKind !== "e") {
+		return row.catalogType;
+	}
+	const qualified = `${row.baseTypeSchema}.${row.baseTypeName}`;
+	if (row.catalogType.endsWith("[]")) {
+		return `${qualified}[]`;
+	}
+	return qualified;
+};
+
+const columnTypeGap = (schema, table, column, row) => {
+	const expected = expectedCatalogType(column.typeNode);
+	const actual = catalogTypeDisplay(row);
+	return missing(
+		expected === actual,
+		`declared column "${schema}.${table}.${column.name}" has type "${expected}", but the catalog shows "${actual}"`,
+	);
+};
+
+const WHITESPACE_RUN = /\s+/g;
+const normalizeSql = (text) => text.trim().replace(WHITESPACE_RUN, " ");
+
+const escapeForRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * True when `catalogText` is exactly `declaredText` plus Postgres's own
+ * trailing `::<type>` cast on a literal default -- measured directly
+ * (`'member'::text`, `'foo'::character varying`, `'a'::app.status`, even
+ * `'foo'::bpchar` for a `char` column, whose cast target doesn't match
+ * that same column's own `format_type()` spelling at all). `renderExpr`
+ * never emits this cast itself (`renderLiteral`'s string case renders
+ * bare `'member'`), so it's always Postgres's own addition, safe to
+ * strip without separately validating the cast's own spelling -- a wrong
+ * *type* is already caught by `columnTypeGap`, independently.
+ */
+const matchesWithCastSuffix = (declaredText, catalogText) =>
+	new RegExp(
+		`^${escapeForRegExp(declaredText)}::[A-Za-z_][A-Za-z0-9_. ]*$`,
+	).test(catalogText);
+
+const defaultsMatch = (declaredText, catalogText) => {
+	const declared = normalizeSql(declaredText);
+	const actual = normalizeSql(catalogText);
+	if (declared === actual) {
+		return true;
+	}
+	return matchesWithCastSuffix(declared, actual);
+};
+
+const columnDefaultGap = (schema, table, column, row) => {
+	const hasDeclaredDefault = column.default !== undefined;
+	const hasCatalogDefault =
+		row.catalogDefault !== null && row.catalogDefault !== undefined;
+	if (!hasDeclaredDefault && !hasCatalogDefault) {
+		return [];
+	}
+	if (hasDeclaredDefault && !hasCatalogDefault) {
+		return [
+			`declared column "${schema}.${table}.${column.name}" has a default in the declaration, but the catalog has none`,
+		];
+	}
+	if (!hasDeclaredDefault && hasCatalogDefault) {
+		return [
+			`declared column "${schema}.${table}.${column.name}" has no default in the declaration, but the catalog has one ("${row.catalogDefault}")`,
+		];
+	}
+	const declaredText = renderExpr(decodeExprNode(column.default));
+	return missing(
+		defaultsMatch(declaredText, row.catalogDefault),
+		`declared column "${schema}.${table}.${column.name}" default "${declaredText}" does not match the catalog's default "${row.catalogDefault}"`,
+	);
+};
+
 const columnGap = (schema, table, column) => {
 	const row = findColumn(schema, table, column.name);
 	if (!row) {
@@ -235,7 +408,10 @@ const columnGap = (schema, table, column) => {
 			`declared column "${schema}.${table}.${column.name}" is nullable in catalog, but declared not null`,
 		];
 	}
-	return [];
+	return [
+		...columnTypeGap(schema, table, column, row),
+		...columnDefaultGap(schema, table, column, row),
+	];
 };
 
 const primaryKeyGap = (schema, table, columns) => {
