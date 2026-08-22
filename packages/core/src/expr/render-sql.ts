@@ -95,6 +95,56 @@ export const renderTableRef = (node: TableRefNode): string =>
 	qualifyName(node.schemaName, node.tableName);
 
 /**
+ * One handler per {@link ExprNode} `nodeKind` for {@link collectColumnRefs}
+ * — a mapped type over the full `nodeKind` union, not a hand-written list,
+ * so a missing handler is a `tsc` error ("Property ... is missing") the
+ * same way a `switch`'s `default: assertNever(node)` would have been
+ * (verified directly with a scratch dummy-variant edit, #154 PR2).
+ */
+type CollectColumnRefsHandlers = {
+	readonly [K in ExprNode["nodeKind"]]: (
+		node: Extract<ExprNode, { readonly nodeKind: K }>,
+	) => ReadonlyArray<ColumnRefNode>;
+};
+
+/**
+ * `exists` returns `[]` here deliberately: a subquery validates its own
+ * scope independently when it is rendered (its `from`/joins extend the
+ * scope it inherits), so its column refs are never this walk's concern.
+ */
+const collectColumnRefsHandlers: CollectColumnRefsHandlers = {
+	literal: () => [],
+	rawSql: () => [],
+	exists: () => [],
+	plpgsqlRef: () => [],
+	columnRef: (node) => [node],
+	comparison: (node) => [
+		...collectColumnRefs(node.left),
+		...collectColumnRefs(node.right),
+	],
+	logical: (node) => node.operands.flatMap(collectColumnRefs),
+	not: (node) => collectColumnRefs(node.operand),
+	nullTest: (node) => collectColumnRefs(node.operand),
+	inList: (node) => [
+		...collectColumnRefs(node.operand),
+		...node.values.flatMap(collectColumnRefs),
+	],
+	between: (node) => [
+		...collectColumnRefs(node.operand),
+		...collectColumnRefs(node.lowerBound),
+		...collectColumnRefs(node.upperBound),
+	],
+	functionCall: (node) => node.args.flatMap(collectColumnRefs),
+	sqlTemplate: (node) =>
+		node.chunks.flatMap((chunk) => {
+			if (chunk.chunkKind === "expr") {
+				return collectColumnRefs(chunk.expr);
+			}
+			return [];
+		}),
+};
+
+/**
  * Walks an {@link ExprNode} collecting every {@link ColumnRefNode} it
  * mentions — used to validate a query's scope. Does NOT descend into
  * `exists` subqueries: a subquery validates its own scope independently
@@ -103,48 +153,10 @@ export const renderTableRef = (node: TableRefNode): string =>
 export const collectColumnRefs = (
 	node: ExprNode,
 ): ReadonlyArray<ColumnRefNode> => {
-	switch (node.nodeKind) {
-		case "literal":
-		case "rawSql":
-		case "exists":
-		case "plpgsqlRef":
-			return [];
-		case "columnRef":
-			return [node];
-		case "comparison":
-			return [
-				...collectColumnRefs(node.left),
-				...collectColumnRefs(node.right),
-			];
-		case "logical":
-			return node.operands.flatMap(collectColumnRefs);
-		case "not":
-			return collectColumnRefs(node.operand);
-		case "nullTest":
-			return collectColumnRefs(node.operand);
-		case "inList":
-			return [
-				...collectColumnRefs(node.operand),
-				...node.values.flatMap(collectColumnRefs),
-			];
-		case "between":
-			return [
-				...collectColumnRefs(node.operand),
-				...collectColumnRefs(node.lowerBound),
-				...collectColumnRefs(node.upperBound),
-			];
-		case "functionCall":
-			return node.args.flatMap(collectColumnRefs);
-		case "sqlTemplate":
-			return node.chunks.flatMap((chunk) => {
-				if (chunk.chunkKind === "expr") {
-					return collectColumnRefs(chunk.expr);
-				}
-				return [];
-			});
-		default:
-			return assertNever(node);
-	}
+	const handler = collectColumnRefsHandlers[node.nodeKind] as (
+		node: ExprNode,
+	) => ReadonlyArray<ColumnRefNode>;
+	return handler(node);
 };
 
 const isInScope = (
