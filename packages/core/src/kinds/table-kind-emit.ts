@@ -1,7 +1,9 @@
 import { throwHejbroError } from "../error";
+import type { KeyedDiff } from "../kind/diff-helpers";
 import { diffByKey, sameJson } from "../kind/diff-helpers";
 import { dispatchEmit } from "../kind/emit-helpers";
 import type { KindChange } from "../kind/object-kind";
+import { compareKeys } from "../sort";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
 import {
@@ -16,6 +18,7 @@ import { asSequenceSnapshot, nextvalExpression } from "./sequence-kind";
 import {
 	addCheckConstraintSql,
 	addForeignKeyConstraintSql,
+	addPrimaryKeyConstraintSql,
 	createIndexSql,
 	createTableSql,
 	dropConstraintSql,
@@ -29,6 +32,7 @@ import {
 	columnPrimaryKey,
 	columnUnique,
 	tableChecks,
+	tablePrimaryKeyName,
 } from "./table-snapshot";
 
 /**
@@ -174,15 +178,14 @@ const alterColumnStatements = (
 	);
 	const uniqueChanged =
 		columnUnique(entry.previous) !== columnUnique(entry.next);
-	const primaryKeyChanged =
-		columnPrimaryKey(entry.previous) !== columnPrimaryKey(entry.next);
+	// A column's own primaryKey flag flipping (with the column itself
+	// neither added nor dropped) used to be its own guard here
+	// (throwHejbroError, unsupported-column-alter) — #24 folds it into
+	// emitAlter's single table-wide `primaryKeyColumnsChanged` check
+	// instead (see there), the same rule that now also handles a PK
+	// column being added or a composite PK's partial drop. All three used
+	// to be three separate special cases; they're one column-set diff.
 
-	if (primaryKeyChanged) {
-		return throwHejbroError(
-			"unsupported-column-alter",
-			`column "${entry.key}" on table "${tableName}" changed its primary key status — hejbro does not support in-place primary key alters (primary key changes are not expressible as a single alter column). Next: recreate the table, or drop and re-add the column/constraint manually.`,
-		);
-	}
 	if (uniqueChanged) {
 		return throwHejbroError(
 			"unsupported-column-alter",
@@ -215,6 +218,137 @@ const alterColumnStatements = (
 	];
 };
 
+/** `snapshot`'s primary-key column names, in declared order (membership lives on the columns, `columnPrimaryKey` — #24, table-snapshot.ts's own doc comment). */
+const primaryKeyColumnNames = (
+	snapshot: TableSnapshot,
+): ReadonlyArray<string> =>
+	snapshot.columns
+		.filter((column) => columnPrimaryKey(column))
+		.map((column) => column.name);
+
+type PrimaryKeyChange = {
+	readonly dropStatement: SqlStatement | null;
+	readonly addStatement: SqlStatement | null;
+};
+
+const NO_PRIMARY_KEY_CHANGE: PrimaryKeyChange = {
+	dropStatement: null,
+	addStatement: null,
+};
+
+/** `[]` for `null`, `[maybeStatement]` otherwise — lets `emitAlter`'s return array `...spread` a possibly-absent statement the same way it spreads every array-sourced one. */
+const statementOrEmpty = (
+	maybeStatement: SqlStatement | null,
+): ReadonlyArray<SqlStatement> => {
+	if (maybeStatement === null) {
+		return [];
+	}
+	return [maybeStatement];
+};
+
+/**
+ * Plans the primary key's `drop constraint`/`add constraint` statements
+ * for one `alter` (#24, replacing #137's three separate guards —
+ * `alterColumnStatements`'s per-column flag check, and `emitAlter`'s own
+ * added/composite-partial-drop checks — with one column-*set* diff. A PK
+ * column added or dropped as a column, and an existing column's
+ * `.primaryKey()` flag flipping in place, all show up here identically:
+ * as a difference between `previousPkColumns` and `nextPkColumns`.
+ *
+ * - Unchanged column set (as a set — order doesn't matter, matching
+ *   "column reordering alone produces no diff" elsewhere in this kind):
+ *   no statements.
+ * - Changed, and every one of `previousPkColumns` is itself being
+ *   dropped as a column (`columnDiff.removed`): Postgres already cascades
+ *   the whole constraint away the moment any of its member columns is
+ *   dropped, so no explicit `drop constraint` is emitted — this is the
+ *   pre-#24 "single-column primary key dropped entirely" case, generalized
+ *   to "every member column dropped." `addStatement` still fires if
+ *   `nextPkColumns` is non-empty (a fresh PK naming different columns).
+ * - Changed, and *not* every previous member column is being dropped
+ *   (the #137 hazard: a composite PK's *partial* drop, or a flag flip on
+ *   a column that isn't being dropped at all): the constraint would
+ *   otherwise be silently gone (partial drop) or wrongly still present
+ *   (flag flip with no column event to cascade from) — emitted
+ *   explicitly instead of relying on cascade timing either way:
+ *   `drop constraint` (if `previous` had one) then `add constraint` (if
+ *   `next` wants one), covering add/drop/rename-by-reshuffle uniformly.
+ *
+ * Statement placement (`emitAlter`): `dropStatement` sorts with the other
+ * drops, *before* `columnDiff.removed`'s `drop column` statements (the
+ * constraint must be gone, or never touched, before its member column is
+ * — dropping the column first, when we *are* emitting an explicit drop,
+ * would either double-drop or hit a since-cascaded constraint that no
+ * longer exists). `addStatement` sorts with the other adds, after
+ * `columnDiff.added`'s `add column` statements (a new member column must
+ * exist before the constraint can name it).
+ */
+/** `planPrimaryKeyChange`'s drop half — `null` unless `previous` had a named constraint that Postgres won't already have cascaded away on its own (`everyPreviousMemberWasDropped`). */
+const primaryKeyDropStatement = (
+	previous: TableSnapshot,
+	next: TableSnapshot,
+	everyPreviousMemberWasDropped: boolean,
+): SqlStatement | null => {
+	const previousConstraintName = tablePrimaryKeyName(previous);
+	if (previousConstraintName === null || everyPreviousMemberWasDropped) {
+		return null;
+	}
+	return statement(
+		dropConstraintSql(next.schema, next.name, previousConstraintName),
+	);
+};
+
+/** `planPrimaryKeyChange`'s add half — `null` unless `next` wants a primary key at all. */
+const primaryKeyAddStatement = (
+	next: TableSnapshot,
+	nextPkColumns: ReadonlyArray<string>,
+): SqlStatement | null => {
+	const nextConstraintName = tablePrimaryKeyName(next);
+	if (nextConstraintName === null || nextPkColumns.length === 0) {
+		return null;
+	}
+	return statement(
+		addPrimaryKeyConstraintSql(
+			next.schema,
+			next.name,
+			nextConstraintName,
+			nextPkColumns,
+		),
+	);
+};
+
+const planPrimaryKeyChange = (
+	previous: TableSnapshot,
+	next: TableSnapshot,
+	columnDiff: KeyedDiff<ColumnSnapshot>,
+): PrimaryKeyChange => {
+	const previousPkColumns = primaryKeyColumnNames(previous);
+	const nextPkColumns = primaryKeyColumnNames(next);
+	const columnSetChanged = !sameJson(
+		[...previousPkColumns].sort(compareKeys),
+		[...nextPkColumns].sort(compareKeys),
+	);
+	if (!columnSetChanged) {
+		return NO_PRIMARY_KEY_CHANGE;
+	}
+
+	const droppedColumnNames = new Set(
+		columnDiff.removed.map((entry) => entry.key),
+	);
+	const everyPreviousMemberWasDropped =
+		previousPkColumns.length > 0 &&
+		previousPkColumns.every((name) => droppedColumnNames.has(name));
+
+	return {
+		dropStatement: primaryKeyDropStatement(
+			previous,
+			next,
+			everyPreviousMemberWasDropped,
+		),
+		addStatement: primaryKeyAddStatement(next, nextPkColumns),
+	};
+};
+
 const emitAlter = (
 	previous: TableSnapshot,
 	next: TableSnapshot,
@@ -243,40 +377,7 @@ const emitAlter = (
 		tableChecks(next).map((check) => ({ key: check.name, value: check })),
 	);
 
-	// #137 (phase8-pk-guard): a PK constraint is table-level, not a
-	// column-level clause `add column`/`drop column` can express, so both
-	// the added and removed paths need their own guard alongside
-	// `alterColumnStatements`'s existing one for a *changed* column's own
-	// flag. Widens the silent leak into a loud refusal; `phase8-
-	// constraint-names` (#24) replaces both with real `add constraint`/
-	// `drop constraint` emission.
-	const addedPrimaryKeyColumn = columnDiff.added.find((entry) =>
-		columnPrimaryKey(entry.value),
-	);
-	if (addedPrimaryKeyColumn !== undefined) {
-		return throwHejbroError(
-			"unsupported-column-alter",
-			`column "${addedPrimaryKeyColumn.key}" on table "${next.name}" was added as a primary key — hejbro does not emit the constraint for a primary key column added to an existing table (only \`alter table … add column …\` is emitted, silently omitting \`add primary key\`). Next: add the column without \`.primaryKey()\` and add the constraint manually, or recreate the table.`,
-		);
-	}
-	// A single-column primary key being dropped entirely is already
-	// correct (Postgres removes the dependent constraint on its own,
-	// matching a `next` that no longer wants a primary key at all) — only
-	// a *composite* primary key's partial drop is the defect: Postgres
-	// drops the whole constraint with no NOTICE, silently leaving any
-	// surviving `.primaryKey()` column in `next` without one (confirmed
-	// directly against a real Postgres).
-	const removedPrimaryKeyColumnLeavesASurvivor = columnDiff.removed.some(
-		(entry) =>
-			columnPrimaryKey(entry.value) &&
-			next.columns.some((column) => columnPrimaryKey(column)),
-	);
-	if (removedPrimaryKeyColumnLeavesASurvivor) {
-		return throwHejbroError(
-			"unsupported-column-alter",
-			`table "${next.name}" drops a column that is part of its primary key, while another column still declares \`.primaryKey()\` — Postgres drops the entire constraint the moment any of its columns is dropped, silently leaving the surviving column(s) without a primary key. hejbro does not re-add it. Next: drop the whole primary key explicitly and re-add it for the surviving column(s), or recreate the table.`,
-		);
-	}
+	const primaryKeyChange = planPrimaryKeyChange(previous, next, columnDiff);
 
 	const foreignKeysToDrop = [
 		...foreignKeyDiff.removed.map((entry) => entry.key),
@@ -322,6 +423,10 @@ const emitAlter = (
 		...indexesToDrop.map((name) =>
 			statement(`drop index ${qualifyName(next.schema, name)};`),
 		),
+		// Ahead of columnDiff.removed's own `drop column` statements below —
+		// see planPrimaryKeyChange's doc comment for why the ordering matters
+		// whenever this fires an explicit drop.
+		...statementOrEmpty(primaryKeyChange.dropStatement),
 		...columnDiff.removed.map((entry) =>
 			statement(
 				`alter table ${qualifyName(next.schema, next.name)} drop column ${quoteIdentifier(entry.key)};`,
@@ -342,6 +447,9 @@ const emitAlter = (
 		...columnDiff.changed.flatMap((entry) =>
 			alterColumnStatements(next.schema, next.name, entry),
 		),
+		// After every column add/change above — a new or reshuffled member
+		// column must already exist before the constraint can name it.
+		...statementOrEmpty(primaryKeyChange.addStatement),
 		...indexesToAdd.map((index) =>
 			statement(createIndexSql(next.schema, next.name, index)),
 		),

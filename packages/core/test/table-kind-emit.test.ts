@@ -585,7 +585,13 @@ describe("tableKind.emit — unsupported column alters", () => {
 		expect(() => tableKind.emit(change)).toThrowError(/unique/i);
 	});
 
-	it("throws when the primary key flag is unset (which also drops materialized not-null)", () => {
+	// #24: replaces the old #137 guard (throwHejbroError) with the real
+	// `drop constraint` emission. Unsetting `.primaryKey()` on a column
+	// that *stays* (no `drop column` event for Postgres to cascade from)
+	// needs an explicit drop -- nothing else would ever remove the
+	// constraint. Also drops materialized not-null (primaryKey no longer
+	// implies it), independently, via alterColumnStatements.
+	it("drops the primary key constraint explicitly when the flag is unset on a surviving column", () => {
 		const before = table(app, "posts", { id: uuid().primaryKey() });
 		const after = table(app, "posts", { id: uuid() });
 		const change = expectSingleChange(
@@ -595,18 +601,29 @@ describe("tableKind.emit — unsupported column alters", () => {
 				"app.posts",
 			),
 		);
-		expect(() => tableKind.emit(change)).toThrowError(/primary key/i);
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'alter table "app"."posts" drop constraint "posts_pkey";',
+				stage: "main",
+			},
+			{
+				sql: 'alter table "app"."posts" alter column "id" drop not null;',
+				stage: "main",
+			},
+		]);
 	});
 
-	// #137: `renderColumnDefinition` (used for `add column`) never emits the
-	// `primary key` clause -- that's a `createTableSql`-only, table-level
-	// concern. Adding a `.primaryKey()` column to an *existing* table used
-	// to silently emit `alter table ... add column ... not null;` with no
-	// constraint at all -- no error, a plausible-looking statement, a
-	// missing primary key. `phase8-pk-guard` (#137) turns that silent leak
-	// into a loud refusal; `phase8-constraint-names` (#24) replaces this
-	// guard with the real `add constraint ... primary key (...)` emission.
-	it("throws when a primary-key column is added to an existing table (#137 add-path leak)", () => {
+	// #137/#24: `renderColumnDefinition` (used for `add column`) never
+	// emits the `primary key` clause -- that's a `createTableSql`-only,
+	// table-level concern for a *create*. Adding a `.primaryKey()` column
+	// to an *existing* table used to silently emit
+	// `alter table ... add column ... not null;` with no constraint at
+	// all. `phase8-pk-guard` (#137) turned that silent leak into a loud
+	// refusal; `phase8-constraint-names` (#24) replaces the refusal with
+	// the real `add constraint ... primary key (...)` emission, after the
+	// column itself is added (it must exist before the constraint can
+	// name it).
+	it("adds the primary key constraint when a primary-key column is added to an existing table (#137 add-path leak, now fixed)", () => {
 		const before = table(app, "posts", { title: text() });
 		const after = table(app, "posts", {
 			title: text(),
@@ -619,7 +636,16 @@ describe("tableKind.emit — unsupported column alters", () => {
 				"app.posts",
 			),
 		);
-		expect(() => tableKind.emit(change)).toThrowError(/primary key/i);
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'alter table "app"."posts" add column "id" uuid not null;',
+				stage: "main",
+			},
+			{
+				sql: 'alter table "app"."posts" add constraint "posts_pkey" primary key ("id");',
+				stage: "main",
+			},
+		]);
 	});
 
 	it("does not throw when a *non*-primary-key column is added (control)", () => {
@@ -651,16 +677,73 @@ describe("tableKind.emit — unsupported column alters", () => {
 		expect(() => tableKind.emit(change)).not.toThrow();
 	});
 
+	// #24: the flag-toggle case, but the *add* direction, and on a column
+	// that already existed (not added alongside) -- exercises the same
+	// planPrimaryKeyChange rule as the "flag unset" test above, from the
+	// opposite end. Confirms the unification (#166-170's old per-column
+	// guard, #239-247's old added-column guard, #255-265's old
+	// composite-drop guard) really is one rule, not three coincidentally
+	// similar ones.
+	it("adds the primary key constraint when the flag is set on a column that already existed (unification control)", () => {
+		const before = table(app, "posts", { id: uuid() });
+		const after = table(app, "posts", { id: uuid().primaryKey() });
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'alter table "app"."posts" alter column "id" set not null;',
+				stage: "main",
+			},
+			{
+				sql: 'alter table "app"."posts" add constraint "posts_pkey" primary key ("id");',
+				stage: "main",
+			},
+		]);
+	});
+
+	// Control: the primary key column *set* staying the same (even though
+	// the table alters for an unrelated reason) must never touch the
+	// constraint at all -- no drop, no add, no-op on this axis.
+	it("touches nothing primary-key-related when an unrelated column alter leaves the pk column set unchanged", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text(),
+		});
+		const after = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+		});
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'alter table "app"."posts" alter column "title" set not null;',
+				stage: "main",
+			},
+		]);
+	});
+
 	// #137: dropping one column of a composite primary key drops the whole
-	// constraint on Postgres's side -- confirmed directly against a real
-	// Postgres (no NOTICE, the surviving column(s) silently lose primary-key
-	// status too). A fresh build of the same target declaration still
-	// renders `primary key ("b")` for the surviving column, so the
-	// chain-built database and a fresh one disagree (#137/#121's defect
-	// class). `phase8-constraint-names` (#24) replaces this guard with the
-	// real `drop constraint` + `add constraint ... primary key (survivors)`
-	// emission.
-	it("throws when dropping one column of a composite primary key leaves a surviving primary-key column (#137 drop-path asymmetry)", () => {
+	// constraint on Postgres's side (no NOTICE, confirmed directly) -- so
+	// hejbro must never rely on that cascade for the *survivor's* sake.
+	// `phase8-constraint-names` (#24) replaces the old guard with an
+	// explicit `drop constraint` — positioned *before* the `drop column`
+	// that would otherwise race the cascade — followed by
+	// `add constraint ... primary key (<survivors>)`, reusing the same
+	// constraint name (`derivePrimaryKeyName` depends only on the table
+	// name, never the member columns, so "posts_pkey" survives unchanged
+	// even though its membership does not).
+	it("drops and re-adds the primary key constraint when dropping one column of a composite key leaves a surviving member (#137 drop-path asymmetry, now fixed)", () => {
 		const before = table(app, "posts", {
 			a: uuid().primaryKey(),
 			b: uuid().primaryKey(),
@@ -677,7 +760,20 @@ describe("tableKind.emit — unsupported column alters", () => {
 				"app.posts",
 			),
 		);
-		expect(() => tableKind.emit(change)).toThrowError(/primary key/i);
+		expect(tableKind.emit(change)).toEqual([
+			{
+				sql: 'alter table "app"."posts" drop constraint "posts_pkey";',
+				stage: "main",
+			},
+			{
+				sql: 'alter table "app"."posts" drop column "a";',
+				stage: "main",
+			},
+			{
+				sql: 'alter table "app"."posts" add constraint "posts_pkey" primary key ("b");',
+				stage: "main",
+			},
+		]);
 	});
 
 	// Control/contrast: dropping the *only* primary-key column (no survivor

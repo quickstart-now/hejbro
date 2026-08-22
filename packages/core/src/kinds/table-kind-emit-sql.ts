@@ -223,7 +223,16 @@ export const addCheckConstraintSql = (
 ): string =>
 	`alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(check.name)} check (${checkExpression(check)});`;
 
-/** Renders `alter table … drop constraint …;` — shared by foreign keys and checks (the constraint namespace is one per table in Postgres). */
+/** Renders `alter table … add constraint "name" primary key (…);` (#24) — the ALTER-time counterpart of `createTableSql`'s inline `primaryKeyConstraint`, used both for a PK added to an existing table and for the add half of a composite PK's partial-drop repair (`table-kind-emit.ts`'s `emitAlter`). */
+export const addPrimaryKeyConstraintSql = (
+	schema: string,
+	tableName: string,
+	constraintName: string,
+	columnNames: ReadonlyArray<string>,
+): string =>
+	`alter table ${qualifyName(schema, tableName)} add constraint ${quoteIdentifier(constraintName)} primary key (${columnNames.map(quoteIdentifier).join(", ")});`;
+
+/** Renders `alter table … drop constraint …;` — shared by foreign keys, checks, and primary keys (the constraint namespace is one per table in Postgres). */
 export const dropConstraintSql = (
 	schema: string,
 	tableName: string,
