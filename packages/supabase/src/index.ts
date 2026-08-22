@@ -15,6 +15,7 @@ import type {
 import { storageBucketKind } from "./storage/bucket-kind";
 import { exposedTableValidator } from "./validators/exposed-tables";
 import { reservedSchemaValidator } from "./validators/reserved-schemas";
+import { rlsCachedAuthOutsideRlsValidator } from "./validators/rls-cached-auth-outside-rls";
 import { rlsUncachedAuthCallValidator } from "./validators/rls-uncached-auth-call";
 import { viewSecurityInvokerValidator } from "./validators/view-security-invoker";
 
@@ -33,15 +34,17 @@ export {
 	reservedSchemas,
 	reservedSchemaValidator,
 } from "./validators/reserved-schemas";
+export { rlsCachedAuthOutsideRlsValidator } from "./validators/rls-cached-auth-outside-rls";
 export { rlsUncachedAuthCallValidator } from "./validators/rls-uncached-auth-call";
 export { viewSecurityInvokerValidator } from "./validators/view-security-invoker";
 
-/** All four Supabase preset validators (D38/D40/#66 view-security-invoker/#97 rls-uncached-auth-call), in the order `generateMigration` should run them. */
+/** All five Supabase preset validators (D38/D40/#66 view-security-invoker/#97 rls-uncached-auth-call/#141 rls-cached-auth-outside-rls), in the order `generateMigration` should run them. */
 export const supabaseValidators: ReadonlyArray<Validator> = [
 	reservedSchemaValidator,
 	exposedTableValidator,
 	viewSecurityInvokerValidator,
 	rlsUncachedAuthCallValidator,
+	rlsCachedAuthOutsideRlsValidator,
 ];
 
 /** The Supabase preset as a config-listable data object (D55): `presets: [supabasePreset]` in `hejbro.config.ts`. The cast to the erased `ObjectKind<HejbroDeclaration>` is sanctioned (a registry is heterogeneous across kinds), like `roleName()`'s `as Role` in core. */

@@ -95,3 +95,86 @@ export const someExprNode = (
 	) => boolean;
 	return handler(node, predicate);
 };
+
+/**
+ * Same shape as {@link someExprNodeHandlers}, but every recursive call
+ * goes through {@link someDeepExprNode} instead of {@link someExprNode} --
+ * a genuine second table, not `someExprNodeHandlers` with one key
+ * overridden: each handler function's *body* names which recursive
+ * function it calls, so spreading the shallow table in would still
+ * recurse shallow everywhere except the top-level `exists` node itself
+ * (an `exists` three levels deep inside `and(...)` would never reach the
+ * override). Only `exists` differs in behavior -- it descends into the
+ * subquery's own child expressions instead of returning `false`.
+ */
+const someDeepExprNodeHandlers: SomeExprNodeHandlers = {
+	literal: () => false,
+	rawSql: () => false,
+	plpgsqlRef: () => false,
+	columnRef: () => false,
+	comparison: (node, predicate) =>
+		someDeepExprNode(node.left, predicate) ||
+		someDeepExprNode(node.right, predicate),
+	logical: (node, predicate) =>
+		node.operands.some((operand) => someDeepExprNode(operand, predicate)),
+	not: (node, predicate) => someDeepExprNode(node.operand, predicate),
+	nullTest: (node, predicate) => someDeepExprNode(node.operand, predicate),
+	inList: (node, predicate) =>
+		someDeepExprNode(node.operand, predicate) ||
+		node.values.some((value) => someDeepExprNode(value, predicate)),
+	between: (node, predicate) =>
+		someDeepExprNode(node.operand, predicate) ||
+		someDeepExprNode(node.lowerBound, predicate) ||
+		someDeepExprNode(node.upperBound, predicate),
+	functionCall: (node, predicate) =>
+		node.args.some((arg) => someDeepExprNode(arg, predicate)),
+	sqlTemplate: (node, predicate) =>
+		node.chunks.some(
+			(chunk) =>
+				chunk.chunkKind === "expr" && someDeepExprNode(chunk.expr, predicate),
+		),
+	exists: (node, predicate) => {
+		const { query } = node;
+		const whereMatch =
+			query.where !== null && someDeepExprNode(query.where, predicate);
+		const joinMatch = query.joins.some((join) =>
+			someDeepExprNode(join.on, predicate),
+		);
+		const orderByMatch = query.orderBy.some((term) =>
+			someDeepExprNode(term.expr, predicate),
+		);
+		return whereMatch || joinMatch || orderByMatch;
+	},
+};
+
+/**
+ * {@link someExprNode}'s deep counterpart (#141): descends into `exists`
+ * subqueries instead of treating them as opaque, so a predicate can find
+ * a node buried inside `exists(select(...).where(...))` — a real,
+ * common shape (`@hejbro/supabase`'s RLS-helper validators both walk
+ * ownership checks written exactly this way). `someExprNode`'s own doc
+ * comment names this exact gap and, until now, pointed callers at
+ * `retargetExprNode` or a validator's own hand-rolled local walker
+ * (`packages/supabase/src/validators/rls-uncached-auth-call.ts`'s
+ * `childrenOf`) as the only options — this consolidates that shape into
+ * one exported function instead of a second and third copy of it (#141,
+ * with #160's future `assertExprScope` as a third planned caller).
+ *
+ * `exists()`'s subquery `projection` is deliberately not walked: D70's
+ * `buildExists` always overwrites it with the fixed `constantOne` shape
+ * before an `ExistsNode` exists at all, so there is no path through the
+ * public DSL for a real expression to reach it.
+ */
+export const someDeepExprNode = (
+	node: ExprNode,
+	predicate: (candidate: ExprNode) => boolean,
+): boolean => {
+	if (predicate(node)) {
+		return true;
+	}
+	const handler = someDeepExprNodeHandlers[node.nodeKind] as (
+		node: ExprNode,
+		predicate: (candidate: ExprNode) => boolean,
+	) => boolean;
+	return handler(node, predicate);
+};
