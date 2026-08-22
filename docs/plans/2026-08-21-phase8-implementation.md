@@ -239,7 +239,7 @@ schedule**, and they are stated by branch name for the reason given above.
 | Track | Area | Queue |
 |---|---|---|
 | A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics, `packages/cli` commands | ~~`expr-nodes` → `view-nodes` → `sequence-kind` → `chain-walk`~~ → `duplicate-version` → `verify-fix` → `constraint-names` (proposal approved 2026-08-22; replaces the row-16 guard; closes #137) → `grant-sync` → `scope-nodes` (**after** the row-48 decision — same surface) → `history-restore` (after its design and the owner's four answers; whichever of A/B is free then) |
-| B | `.github/workflows/`, `scripts/`, `docs/`, tooling, validators that touch no hot file | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `supabase-image` → `docs-release`~~ → `diagnostic-xref` → `policy-schema-usage` (moved from A on 2026-08-22: a new validator file, no hot-file overlap, and A is full) → `fresh-build` (proposal first) → `naming-convention` (proposal first) → `crap-gate` (opens only once `dev` reports 0 at the threshold; the branch is staged locally) → `oidc-publishing` (draft now, apply after 0.1.0 with the owner) |
+| B | `.github/workflows/`, `scripts/`, `docs/`, tooling, validators that touch no hot file | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `supabase-image` → `docs-release` → `diagnostic-xref`~~ → `policy-schema-usage` (moved from A on 2026-08-22: a new validator file, no hot-file overlap, and A is full) → `fresh-build` (proposal first) → `naming-convention` (proposal first) → `crap-gate` (opens only once `dev` reports 0 at the threshold; the branch is staged locally) → `oidc-publishing` (draft now, apply after 0.1.0 with the owner) |
 | C | `examples/`, golden content, `packages/supabase`, **and since 2026-08-22 the CRAP work and snapshot validation** | ~~`golden-english` → `bucket-notes` → `preset-goldens` → `crap-refactor`~~ → `declared-vs-catalog` → `crap-walkers` → the CRAP tail (`retargetProjection` split + tests, `parseSnapshot`, `validateRenameSpecTarget`) → `crap-coverage` (this is where `dev` reaches 0 and unblocks B's `crap-gate`) → `catalog-types` → `required-keys` → `crap-ratchet-5` (after `crap-gate`; last) → `drift-if-exists` (if the row-49 decision is code) |
 | design first (researcher / designer, no code) | — | `drift-if-exists` (measure) · `clause-context` (options) · `history-restore` (CLI surface + the four questions) → planner → main → **one owner-decision bundle**, each item on its own as *background → options → what each option produces (SQL / CLI output)*, because the owner decides one item at a time with the full background; an item the measurement settles (#198 may) leaves the bundle and is reported as a result |
 
@@ -1358,7 +1358,10 @@ nothing after it is an agent action:
 **After the first release (#139)** — for each of `@hejbro/core`, `hejbro` and
 `@hejbro/supabase`: package **Settings → Trusted Publisher → GitHub Actions**,
 organization `quickstart-now`, repository `hejbro`, workflow filename
-`release-publish.yml` (the file name, not a path), environment blank, and
+`release-publish.yml` (the file name, not a path), **Environment = `npm`** (the
+environment exists since 2026-08-21 with a required reviewer; binding the
+trusted publisher to it makes npm and the workflow enforce the same gate —
+#139's "left empty" predates the environment), and
 **check `npm publish` under allowed actions**. Then `NODE_AUTH_TOKEN` can be
 dropped from the workflow.
 
