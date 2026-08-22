@@ -7,6 +7,8 @@ import { hejbroError, throwHejbroError } from "../error";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { createDefaultRegistry } from "../kind/registry";
+import type { SequenceDeclaration } from "../kinds/sequence-kind";
+import { deriveSequenceName } from "../kinds/table-kind";
 import { tableIdentity } from "../kinds/table-snapshot";
 import type { Snapshot } from "../snapshot/snapshot";
 import { buildSnapshot } from "../snapshot/snapshot";
@@ -14,6 +16,7 @@ import { compareKeys } from "../sort";
 import type { BannerHashes } from "../sql/migration-file";
 import { renderBanner } from "../sql/migration-file";
 import type { SqlStatement } from "../sql/statement";
+import { isSerialTypeNode, serialSequenceBaseType } from "../types/type-node";
 import { notNullWithoutDefaultWarnings } from "./core-validators";
 import { diffSnapshots, rankKinds } from "./diff-engine";
 import type {
@@ -39,12 +42,41 @@ const isGrantSetDeclaration = (
 	declaration.declarationKind === "grant-set";
 
 /**
+ * Synthesizes one `SequenceDeclaration` per `serial`/`smallserial`/
+ * `bigserial` column on `meta` (#23/D66) — there is no `defineSequence()`
+ * in the public DSL; a serial-family column's backing sequence is always
+ * derived from the table declaration itself, the same way `rls`/`policy`
+ * declarations below are derived from a table's own `rls` field.
+ */
+const synthesizeSequenceDeclarations = (
+	meta: TableDeclaration,
+): ReadonlyArray<SequenceDeclaration> =>
+	meta.columns.flatMap((column) => {
+		if (!isSerialTypeNode(column.columnState.typeNode)) {
+			return [];
+		}
+		const typeName = column.columnState.typeNode.typeName;
+		return [
+			{
+				declarationKind: "sequence",
+				schema: meta.schema,
+				sequenceName: deriveSequenceName(meta.tableName, column.columnName),
+				tableName: meta.tableName,
+				columnName: column.columnName,
+				baseType: serialSequenceBaseType(typeName),
+			},
+		];
+	});
+
+/**
  * Resolves one `HejbroInput` into the declaration(s) it contributes to the
  * snapshot. A `defineTrigger` declaration expands into its own function
  * declaration plus itself — `[functionDeclaration, triggerDeclaration]` —
  * so the function it creates lands in the snapshot without a separate
  * `defineFunction` call. A `grant(...).to(...)` `grant-set` expands into
- * its per-role `GrantDeclaration`s (D28 fan-out).
+ * its per-role `GrantDeclaration`s (D28 fan-out). A `table()` with any
+ * `serial`-family columns similarly expands into one `SequenceDeclaration`
+ * per such column (#23/D66).
  */
 const resolveDeclarations = (
 	input: HejbroInput,
@@ -58,10 +90,11 @@ const resolveDeclarations = (
 				meta.declaredAt,
 			);
 		}
+		const sequences = synthesizeSequenceDeclarations(meta);
 		if (meta.rls === null) {
-			return [meta];
+			return [meta, ...sequences];
 		}
-		return [meta, meta.rls, ...meta.rls.policies];
+		return [meta, ...sequences, meta.rls, ...meta.rls.policies];
 	}
 	if (isTriggerDeclaration(input)) {
 		return [input.functionDeclaration, input];
@@ -196,13 +229,16 @@ export const generateMigration = (
 		};
 	}
 
+	// D74: every kind's emit sees the whole diff's changes (siblingChanges),
+	// read-only and optional -- most kinds ignore it; sequenceKind/tableKind
+	// use it to coordinate a serial column's single-statement add (#23).
 	const emittedStatements: ReadonlyArray<{
 		readonly change: KindChange;
 		readonly statement: SqlStatement;
 	}> = changes.flatMap((change) =>
 		registry
 			.get(change.kind)
-			.emit(change)
+			.emit(change, changes)
 			.map((statement) => ({ change, statement })),
 	);
 

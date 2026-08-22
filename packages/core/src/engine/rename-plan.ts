@@ -11,7 +11,12 @@ import { retargetExprNode, retargetSelectNode } from "../expr/retarget";
 import type { KindChange } from "../kind/object-kind";
 import type { PolicySnapshot } from "../kinds/policy-kind";
 import type { RlsSnapshot } from "../kinds/rls-kind";
-import { deriveForeignKeyName, deriveIndexName } from "../kinds/table-kind";
+import type { SequenceSnapshot } from "../kinds/sequence-kind";
+import {
+	deriveForeignKeyName,
+	deriveIndexName,
+	deriveSequenceName,
+} from "../kinds/table-kind";
 import type {
 	ForeignKeySnapshot,
 	IndexSnapshot,
@@ -28,6 +33,7 @@ import {
 	renderColumnRename,
 	renderForeignKeyConstraintRename,
 	renderIndexRename,
+	renderSequenceRename,
 	renderTableRename,
 } from "../sql/rename-sql";
 
@@ -117,6 +123,7 @@ const RLS_PREFIX = "rls:";
 const POLICY_PREFIX = "policy:";
 const TRIGGER_PREFIX = "trigger:";
 const VIEW_PREFIX = "view:";
+const SEQUENCE_PREFIX = "sequence:";
 
 type ObjectsRecord = Snapshot["objects"];
 
@@ -999,6 +1006,93 @@ const rewriteForeignKeysForRename = (
 	};
 };
 
+/**
+ * @see rewriteIndexesForRename, rewriteForeignKeysForRename — the
+ * `sequence` counterpart (#23/D66), with one structural difference: a
+ * sequence is its own top-level snapshot object (`sequence:<schema>.
+ * <name>`), not a nested array inside the owning table's own node, so
+ * renaming it (when its stored name was actually `deriveSequenceName(...)`
+ * — the same `wasDerived` guard the index/FK case uses, never touching a
+ * name reachable today through a hand-edited or round-tripped snapshot
+ * (D33) — there is no DSL surface to author one directly, but D33 makes a
+ * snapshot on disk the ground truth regardless) means re-keying its `objects`
+ * entry, not just editing a field in place. Operates on the whole
+ * `objects` record directly (mirroring `rewriteForeignKeyTargets`'s
+ * full-scan style) rather than on one table's own nested arrays, since
+ * that is where a top-level kind's entries live.
+ */
+const rewriteSequencesForRename = (
+	objects: ObjectsRecord,
+	schemaName: string,
+	oldTableName: string,
+	newTableName: string,
+	oldColumnName: string | null,
+	newColumnName: string | null,
+): {
+	readonly objects: ObjectsRecord;
+	readonly statements: ReadonlyArray<string>;
+} => {
+	const matches = entriesWithPrefix(objects, SEQUENCE_PREFIX)
+		.map(([key, node]) => [key, node as SequenceSnapshot] as const)
+		.filter(
+			([, sequence]) =>
+				sequence.schema === schemaName &&
+				sequence.table === oldTableName &&
+				(oldColumnName === null || sequence.column === oldColumnName),
+		)
+		.sort(([, a], [, b]) => compareKeys(a.name, b.name));
+
+	return matches.reduce(
+		(acc, [oldKey, sequence]) => {
+			const newColumn = resolveRenamedColumns(
+				[sequence.column],
+				oldColumnName,
+				newColumnName,
+			)[0];
+			if (newColumn === undefined) {
+				return acc;
+			}
+			const oldDerivedName = deriveSequenceName(oldTableName, sequence.column);
+			const wasDerived = sequence.name === oldDerivedName;
+			if (!wasDerived) {
+				const updated: SequenceSnapshot = {
+					...sequence,
+					table: newTableName,
+					column: newColumn,
+				};
+				return {
+					objects: setKey(acc.objects, oldKey, updated),
+					statements: acc.statements,
+				};
+			}
+			const newDerivedName = deriveSequenceName(newTableName, newColumn);
+			const updated: SequenceSnapshot = {
+				...sequence,
+				name: newDerivedName,
+				table: newTableName,
+				column: newColumn,
+			};
+			const newKey = `${SEQUENCE_PREFIX}${schemaName}.${newDerivedName}`;
+			const withRekeyed = setKey(
+				withoutKey(acc.objects, oldKey),
+				newKey,
+				updated,
+			);
+			if (newDerivedName === sequence.name) {
+				return { objects: withRekeyed, statements: acc.statements };
+			}
+			return {
+				objects: withRekeyed,
+				statements: [
+					...acc.statements,
+					renderSequenceRename(schemaName, sequence.name, newDerivedName),
+				],
+			};
+		},
+		{ objects, statements: [] as ReadonlyArray<string> },
+	);
+};
+
 const applyTableRename = (
 	state: RewriteState,
 	spec: TableRenameSpec,
@@ -1064,6 +1158,14 @@ const applyTableRename = (
 			newColumn: null,
 		},
 	);
+	const sequenceResult = rewriteSequencesForRename(
+		withExpressionReferences,
+		spec.schemaName,
+		spec.oldName,
+		spec.newName,
+		null,
+		null,
+	);
 
 	const change: KindChange = {
 		kind: "table",
@@ -1075,12 +1177,13 @@ const applyTableRename = (
 	};
 
 	return {
-		objects: withExpressionReferences,
+		objects: sequenceResult.objects,
 		statements: [
 			...state.statements,
 			renderTableRename(spec),
 			...indexResult.statements,
 			...foreignKeyResult.statements,
+			...sequenceResult.statements,
 		],
 		changes: [...state.changes, change],
 		tableNameByOldKey: new Map([
@@ -1154,6 +1257,14 @@ const applyColumnRename = (
 			newColumn: spec.newName,
 		},
 	);
+	const sequenceResult = rewriteSequencesForRename(
+		withExpressionReferences,
+		spec.schemaName,
+		effectiveTableName,
+		effectiveTableName,
+		spec.oldName,
+		spec.newName,
+	);
 
 	const change: KindChange = {
 		kind: "table",
@@ -1165,12 +1276,13 @@ const applyColumnRename = (
 	};
 
 	return {
-		objects: withExpressionReferences,
+		objects: sequenceResult.objects,
 		statements: [
 			...state.statements,
 			renderColumnRename({ ...spec, tableName: effectiveTableName }),
 			...indexResult.statements,
 			...foreignKeyResult.statements,
+			...sequenceResult.statements,
 		],
 		changes: [...state.changes, change],
 		tableNameByOldKey: state.tableNameByOldKey,

@@ -22,6 +22,7 @@ import {
 	rls,
 	schema,
 	select,
+	serial,
 	table,
 	text,
 	uuid,
@@ -956,5 +957,206 @@ describe("planRenames — view query retargeting (#157/D72)", () => {
 		expect(plan.rewrittenPrevious.objects["view:app.all_posts"]).toBe(
 			previous.objects["view:app.all_posts"],
 		);
+	});
+});
+
+// #23/D66: a serial-family column's backing sequence keeps its derived
+// name in step with a table/column rename -- measured against a real
+// Postgres first (not assumed): a table/column rename does NOT rename the
+// sequence on its own, so without this the sequence silently drifts from
+// what a fresh build of the same (renamed) declaration would produce.
+// Uses generateMigration (not this file's own snap() helper) to build
+// previous/next, since the sequence declaration is synthesized by
+// generate.ts's resolveDeclarations, which snap()'s buildSnapshot-direct
+// path deliberately bypasses (same reason #157's view tests didn't need
+// this: a view is declared directly, nothing to synthesize).
+describe("planRenames — sequence rename drift guard (#23/D66)", () => {
+	it("a table rename renames the sequence to match, with no leftover diff", () => {
+		const buildPosts = (tableName: string) =>
+			table(app, tableName, { id: serial().primaryKey() });
+
+		const previous = generateMigration({
+			declarations: [app, buildPosts("posts")],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+		const next = generateMigration({
+			declarations: [app, buildPosts("articles")],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toContain(
+			'alter sequence "app"."posts_id_seq" rename to "articles_id_seq";',
+		);
+		expect(
+			plan.rewrittenPrevious.objects["sequence:app.articles_id_seq"],
+		).toBeDefined();
+		expect(
+			plan.rewrittenPrevious.objects["sequence:app.posts_id_seq"],
+		).toBeUndefined();
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a column rename renames the sequence to match, with no leftover diff", () => {
+		const buildPosts = (columnKey: "id" | "postId") =>
+			table(app, "posts", { [columnKey]: serial().primaryKey() });
+
+		const previous = generateMigration({
+			declarations: [app, buildPosts("id")],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+		const next = generateMigration({
+			declarations: [app, buildPosts("postId")],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "id",
+					newName: "post_id",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toContain(
+			'alter sequence "app"."posts_id_seq" rename to "posts_post_id_seq";',
+		);
+		expect(
+			plan.rewrittenPrevious.objects["sequence:app.posts_post_id_seq"],
+		).toBeDefined();
+		expect(
+			plan.rewrittenPrevious.objects["sequence:app.posts_id_seq"],
+		).toBeUndefined();
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("returns the exact same sequence object reference when a rename doesn't touch it (cheap no-op check)", () => {
+		const posts = table(app, "posts", { id: serial().primaryKey() });
+		const otherTable = table(app, "other_table", { id: uuid().primaryKey() });
+
+		const previous = generateMigration({
+			declarations: [app, posts, otherTable],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+		const renamedOtherTable = table(app, "renamed_other_table", {
+			id: uuid().primaryKey(),
+		});
+		const next = generateMigration({
+			declarations: [app, posts, renamedOtherTable],
+			previousSnapshot: emptySnapshot,
+		}).snapshot;
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "other_table",
+					newName: "renamed_other_table",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.rewrittenPrevious.objects["sequence:app.posts_id_seq"]).toBe(
+			previous.objects["sequence:app.posts_id_seq"],
+		);
+	});
+
+	// #193 review: the DSL has no way to author a sequence with a
+	// non-derived name (generate.ts's resolveDeclarations only ever
+	// synthesizes deriveSequenceName(...)), but rewriteSequencesForRename
+	// reads the *snapshot*, not the DSL -- and D33 makes a hand-edited or
+	// round-tripped snapshot on disk behave exactly like a freshly built
+	// one. So a non-derived sequence name is reachable today, through a
+	// hand-built snapshot fixture exactly like this one, and the
+	// wasDerived guard must leave it alone on a table rename: only its
+	// `table`/`column` references follow, never its own name. (Reviewer
+	// mutation-proof: `if (!wasDerived)` -> `if (false)` made this go red
+	// with the old "hypothetical future" framing untested against it.)
+	it("leaves a non-derived sequence name untouched on a table rename (hand-built snapshot, D33)", () => {
+		const previousBase = snap(app, table(app, "posts", { id: integer() }));
+		const previous = {
+			...previousBase,
+			objects: {
+				...previousBase.objects,
+				"sequence:app.legacy_counter": {
+					schema: "app",
+					name: "legacy_counter",
+					table: "posts",
+					column: "id",
+					baseType: "integer",
+				},
+			},
+		};
+		const nextBase = snap(app, table(app, "articles", { id: integer() }));
+		const next = {
+			...nextBase,
+			objects: {
+				...nextBase.objects,
+				"sequence:app.legacy_counter": {
+					schema: "app",
+					name: "legacy_counter",
+					table: "articles",
+					column: "id",
+					baseType: "integer",
+				},
+			},
+		};
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+
+		expect(plan.errors).toEqual([]);
+		expect(
+			plan.renameStatements.some((s) => s.includes("legacy_counter")),
+		).toBe(false);
+		expect(
+			plan.rewrittenPrevious.objects["sequence:app.legacy_counter"],
+		).toEqual({
+			schema: "app",
+			name: "legacy_counter",
+			table: "articles",
+			column: "id",
+			baseType: "integer",
+		});
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
 });

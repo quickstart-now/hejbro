@@ -85,8 +85,13 @@ describe("unknown-kind: registration gap vs genuinely-unknown name (D73, #196)",
 	});
 
 	it("a name outside CORE_KIND_IDS states both possible causes, never guesses one (a future core kind)", () => {
-		expect(CORE_KIND_IDS.has("sequence")).toBe(false);
-		const message = messageOf(() => createDefaultRegistry().get("sequence"));
+		// "materialized-view" -- CORE_KIND_IDS's own doc comment uses this as
+		// its standing example of a not-yet-added core kind (#23's "sequence"
+		// filled that role until it actually landed, in this same PR).
+		expect(CORE_KIND_IDS.has("materialized-view")).toBe(false);
+		const message = messageOf(() =>
+			createDefaultRegistry().get("materialized-view"),
+		);
 		expect(message).toMatch(/newer hejbro/i);
 		expect(message).toMatch(/preset/i);
 	});

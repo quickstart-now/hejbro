@@ -49,8 +49,7 @@ const notNullClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
 	return [];
 };
 
-const defaultClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
-	const value = columnDefault(column);
+const defaultClause = (value: string | null): ReadonlyArray<string> => {
 	if (value === null) {
 		return [];
 	}
@@ -64,13 +63,24 @@ const uniqueClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
 	return ["unique"];
 };
 
-/** Renders one column's full definition clause (name, type, not null, default, unique). */
-export const renderColumnDefinition = (column: ColumnSnapshot): string =>
+/**
+ * Renders one column's full definition clause (name, type, not null,
+ * default, unique). `overrideDefault` (D74), when given, replaces
+ * `columnDefault(column)` as the default's SQL text — used for a
+ * serial-family column added to an *existing* table (#23): its default
+ * lives in a sibling `sequence` change, never `ColumnSnapshot.default`
+ * (see `table-kind-emit.ts`'s own `add column` rendering), so the value
+ * has to come from outside this column's own snapshot.
+ */
+export const renderColumnDefinition = (
+	column: ColumnSnapshot,
+	overrideDefault?: string,
+): string =>
 	[
 		quoteIdentifier(column.name),
 		renderTypeNode(column.typeNode),
 		...notNullClause(column),
-		...defaultClause(column),
+		...defaultClause(overrideDefault ?? columnDefault(column)),
 		...uniqueClause(column),
 	].join(" ");
 

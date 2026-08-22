@@ -54,3 +54,19 @@ export const renderForeignKeyConstraintRename = (
 	newName: string,
 ): string =>
 	`alter table ${qualifyName(schemaName, tableName)} rename constraint ${quoteIdentifier(oldName)} to ${quoteIdentifier(newName)};`;
+
+/**
+ * Renders `alter sequence … rename to …;` — the derived-name drift guard
+ * for a `serial`-family column's backing sequence, whose stored name was
+ * `deriveSequenceName(<old table>, <old column>)` (#23/D66). Confirmed
+ * against a real Postgres that a table/column rename does **not** rename
+ * the sequence on its own — without this, the sequence's name silently
+ * drifts from what a fresh build of the same (renamed) declaration would
+ * produce.
+ */
+export const renderSequenceRename = (
+	schemaName: string,
+	oldName: string,
+	newName: string,
+): string =>
+	`alter sequence ${qualifyName(schemaName, oldName)} rename to ${quoteIdentifier(newName)};`;

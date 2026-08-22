@@ -5,7 +5,13 @@ import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
-import { text, uuid } from "../src/types/column-builder-factories";
+import {
+	bigserial,
+	integer,
+	serial,
+	text,
+	uuid,
+} from "../src/types/column-builder-factories";
 
 const app = schema("app");
 const postStatus = pgEnum(app, "post_status", ["draft", "published"]);
@@ -138,6 +144,246 @@ describe("generateMigration", () => {
 			expect(firstStatement).toBe(
 				'alter table "app"."posts" rename column "slug" to "handle";',
 			);
+		});
+	});
+
+	// #23/D66: resolveDeclarations synthesizes one SequenceDeclaration per
+	// serial-family column -- verified end to end against a real Postgres
+	// (this exact SQL, applied to a scratch database, then compared via
+	// pg_dump against a native `serial primary key` column: structurally
+	// identical modulo the `::regclass` cast Postgres adds on its own
+	// read-back and the role-ownership statement this PR deliberately
+	// skips, matching the rest of hejbro's role-agnostic stance).
+	describe("serial-family columns synthesize a sequence declaration (#23/D66)", () => {
+		it("create: sequence (main), table (main), owned-by + set-default (deferred)", () => {
+			const seqApp = schema("app");
+			const posts = table(seqApp, "posts", {
+				id: serial().primaryKey(),
+				title: text(),
+			});
+			const result = generateMigration({
+				declarations: [seqApp, posts],
+				previousSnapshot: emptySnapshot,
+			});
+
+			expect(result.errors).toEqual([]);
+			expect(
+				result.changes.map(
+					(change) => `${change.operation} ${change.kind} ${change.identity}`,
+				),
+			).toEqual([
+				"create schema app",
+				"create sequence app.posts_id_seq",
+				"create table app.posts",
+			]);
+
+			const banner =
+				"-- hejbro migration\n" +
+				"-- + schema app [new]\n" +
+				"-- + sequence app.posts_id_seq [new]\n" +
+				"-- + table app.posts [new]";
+			const createSchema = 'create schema "app";';
+			const createSequence = 'create sequence "app"."posts_id_seq" as integer;';
+			const createTable =
+				'create table "app"."posts" (\n' +
+				'\t"id" integer not null,\n' +
+				'\t"title" text,\n' +
+				'\tprimary key ("id")\n' +
+				");";
+			const ownedBy =
+				'alter sequence "app"."posts_id_seq" owned by "app"."posts"."id";';
+			const setDefault =
+				'alter table "app"."posts" alter column "id" set default nextval(\'app.posts_id_seq\');';
+
+			expect(result.sql).toBe(
+				[
+					banner,
+					createSchema,
+					createSequence,
+					createTable,
+					ownedBy,
+					setDefault,
+				].join("\n\n"),
+			);
+		});
+
+		it("no sequence declaration for a table with no serial-family column", () => {
+			const seqApp = schema("app");
+			const posts = table(seqApp, "posts", {
+				id: uuid().primaryKey(),
+				title: text(),
+			});
+			const result = generateMigration({
+				declarations: [seqApp, posts],
+				previousSnapshot: emptySnapshot,
+			});
+			expect(result.changes.some((change) => change.kind === "sequence")).toBe(
+				false,
+			);
+		});
+
+		it("integer() -> serial(): create sequence, owned-by, set-default -- no invalid alter column type serial", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", { id: integer().primaryKey() });
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(seqApp, "posts", { id: serial().primaryKey() });
+			const result = generateMigration({
+				declarations: [seqApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			expect(result.sql).not.toContain("type serial");
+			expect(result.sql).toContain('create sequence "app"."posts_id_seq"');
+			expect(result.sql).toContain(
+				'alter sequence "app"."posts_id_seq" owned by "app"."posts"."id";',
+			);
+			expect(result.sql).toContain("set default nextval(");
+		});
+
+		it("serial() -> integer(): drop default, then drop sequence -- the omission #23/D66 recorded", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", { id: serial().primaryKey() });
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(seqApp, "posts", { id: integer().primaryKey() });
+			const result = generateMigration({
+				declarations: [seqApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			expect(result.sql).toContain(
+				'alter table "app"."posts" alter column "id" drop default;',
+			);
+			expect(result.sql).toContain('drop sequence "app"."posts_id_seq";');
+		});
+
+		it("serial() -> bigserial(): alter sequence as bigint + alter column type bigint, sequence identity unchanged", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", { id: serial().primaryKey() });
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(seqApp, "posts", { id: bigserial().primaryKey() });
+			const result = generateMigration({
+				declarations: [seqApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			expect(
+				result.changes.map(
+					(change) => `${change.operation} ${change.kind} ${change.identity}`,
+				),
+			).toEqual(["alter sequence app.posts_id_seq", "alter table app.posts"]);
+			expect(result.sql).toContain(
+				'alter sequence "app"."posts_id_seq" as bigint;',
+			);
+			expect(result.sql).toContain(
+				'alter table "app"."posts" alter column "id" type bigint;',
+			);
+		});
+
+		it("no-op: re-declaring the same serial column produces zero changes", () => {
+			const seqApp = schema("app");
+			const declareTable = () =>
+				table(seqApp, "posts", { id: serial().primaryKey(), title: text() });
+			const previous = generateMigration({
+				declarations: [seqApp, declareTable()],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const result = generateMigration({
+				declarations: [seqApp, declareTable()],
+				previousSnapshot: previous,
+			});
+			expect(result.hasChanges).toBe(false);
+			expect(result.changes).toEqual([]);
+		});
+	});
+
+	// #193 review: a serial column's sequence is `owned by` its column, so
+	// Postgres already cascades the sequence away the moment the owning
+	// table *or* column is dropped (confirmed directly against a real
+	// Postgres for both). sequenceKind's own `drop default`/`drop sequence`
+	// statements go out on the `predrop` stage (see sequence-kind.ts),
+	// which always runs before every kind's `main`-stage statements
+	// (generate.ts) -- so they always run *before* the table's own
+	// `drop table`/`drop column`, structurally ahead of the cascade rather
+	// than racing it. This three-point matrix pins the resulting statement
+	// *order*: table drop and column drop both put the sequence's own
+	// statements first, while a type transition that leaves the column
+	// alive (serial() -> integer(), already covered above) keeps emitting
+	// the same bare drop statements, just via the same predrop-first order.
+	describe("#193: a sequence drop always clears before the cascade that could remove it", () => {
+		it("dropping the whole table: drop default + drop sequence (predrop) before drop table (main)", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", { id: serial().primaryKey() });
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const result = generateMigration({
+				declarations: [seqApp],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			expect(result.changes.map((c) => `${c.operation} ${c.kind}`)).toEqual([
+				"drop table",
+				"drop sequence",
+			]);
+			const dropDefaultIndex = result.sql.indexOf("drop default");
+			const dropSequenceIndex = result.sql.indexOf("drop sequence");
+			const dropTableIndex = result.sql.indexOf("drop table");
+			expect(dropDefaultIndex).toBeGreaterThan(-1);
+			expect(dropSequenceIndex).toBeGreaterThan(dropDefaultIndex);
+			expect(dropTableIndex).toBeGreaterThan(dropSequenceIndex);
+		});
+
+		it("dropping just the serial column: drop default + drop sequence (predrop) before drop column (main)", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", {
+				id: serial().primaryKey(),
+				title: text(),
+			});
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(seqApp, "posts", { title: text() });
+			const result = generateMigration({
+				declarations: [seqApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			const dropDefaultIndex = result.sql.indexOf("drop default");
+			const dropSequenceIndex = result.sql.indexOf("drop sequence");
+			const dropColumnIndex = result.sql.indexOf("drop column");
+			expect(dropDefaultIndex).toBeGreaterThan(-1);
+			expect(dropSequenceIndex).toBeGreaterThan(dropDefaultIndex);
+			expect(dropColumnIndex).toBeGreaterThan(dropSequenceIndex);
+		});
+
+		it("a type transition that keeps the column alive (serial -> integer) still emits bare drop statements", () => {
+			const seqApp = schema("app");
+			const before = table(seqApp, "posts", { id: serial().primaryKey() });
+			const previous = generateMigration({
+				declarations: [seqApp, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot;
+			const after = table(seqApp, "posts", { id: integer().primaryKey() });
+			const result = generateMigration({
+				declarations: [seqApp, after],
+				previousSnapshot: previous,
+			});
+			expect(result.errors).toEqual([]);
+			expect(result.sql).toContain(
+				'alter table "app"."posts" alter column "id" drop default;',
+			);
+			expect(result.sql).toContain('drop sequence "app"."posts_id_seq";');
 		});
 	});
 });

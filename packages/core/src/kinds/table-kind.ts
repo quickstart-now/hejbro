@@ -11,6 +11,8 @@ import { diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { ColumnState } from "../types/column-builder";
+import type { TypeNode } from "../types/type-node";
+import { isSerialTypeNode, serialBaseType } from "../types/type-node";
 import { emitTableSql } from "./table-kind-emit";
 import type {
 	CheckSnapshot,
@@ -34,12 +36,57 @@ export const deriveForeignKeyName = (
 	columns: ReadonlyArray<string>,
 ): string => `${tableName}_${columns.join("_")}_fk`;
 
-/** `primaryKey` implies `notNull` once a column is materialized into a snapshot. */
+/**
+ * Derives a `serial`-family column's backing sequence name from its owning
+ * table and column (#23/D66) — matches Postgres's own naming convention
+ * exactly (confirmed via `pg_dump`: `serial primary key` on `posts.id`
+ * produces `posts_id_seq`). Shared with `engine/rename-plan.ts`'s drift
+ * guard, the same way `deriveIndexName`/`deriveForeignKeyName` already
+ * are.
+ */
+export const deriveSequenceName = (
+	tableName: string,
+	columnName: string,
+): string => `${tableName}_${columnName}_seq`;
+
+/**
+ * `primaryKey` implies `notNull` once a column is materialized into a
+ * snapshot -- and so does a `serial`/`smallserial`/`bigserial` type (#23/
+ * D66): confirmed against a real Postgres (`pg_dump` on a table declaring
+ * `bigserial`/`smallserial` columns with neither `.primaryKey()` nor
+ * `.notNull()` chained still showed `NOT NULL` on both) that the
+ * pseudo-type sugar itself carries the constraint, independent of
+ * primary-key status. None of the three serial factories set `notNull` on
+ * their own construction, so without this, a bare `serial()` column would
+ * materialize as nullable -- a column a real Postgres would never let
+ * exist.
+ */
 const materializeNotNull = (columnState: ColumnState): boolean => {
 	if (columnState.primaryKey) {
 		return true;
 	}
+	if (isSerialTypeNode(columnState.typeNode)) {
+		return true;
+	}
 	return columnState.notNull;
+};
+
+/**
+ * A `serial`-family pseudo-type materializes into its real, storable base
+ * type (#23/D66) — the column's `nextval(...)` default and its backing
+ * sequence are tracked entirely by the synthesized `sequence` declaration
+ * (`engine/generate.ts`'s `resolveDeclarations`, `kinds/sequence-kind.ts`),
+ * never by this column's own `typeNode`/`default`. This is what keeps the
+ * invalid `alter column … type serial` path structurally unreachable from
+ * `table-kind-emit.ts`'s generic type-alter path — a `ColumnSnapshot`
+ * simply never contains the pseudo-type past this point, so there is
+ * nothing to guard against at emit time.
+ */
+const materializeTypeNode = (columnState: ColumnState): TypeNode => {
+	if (isSerialTypeNode(columnState.typeNode)) {
+		return serialBaseType(columnState.typeNode.typeName);
+	}
+	return columnState.typeNode;
 };
 
 const resolveIndexName = (
@@ -162,7 +209,7 @@ const serializeColumns = (
 ): ReadonlyArray<ColumnSnapshot> =>
 	declaration.columns.map((entry) => ({
 		name: entry.columnName,
-		typeNode: entry.columnState.typeNode,
+		typeNode: materializeTypeNode(entry.columnState),
 		...notNullField(materializeNotNull(entry.columnState)),
 		...primaryKeyField(entry.columnState.primaryKey),
 		...columnUniqueField(entry.columnState.unique),
@@ -248,10 +295,23 @@ const buildNotes = <TValue>(
  * whole tables, and a single `alter` change (notes listing every column,
  * index, and foreign key delta) for survivors — column reordering alone
  * produces no diff, since deltas are computed by name, not by array index.
+ *
+ * `dependsOn` includes `"sequence"` (D74/#23): a serial-family column
+ * added to an existing table now inlines `default nextval('…')` straight
+ * into its own `add column` statement (`table-kind-emit.ts`'s
+ * `sequenceForAddedColumn`), which requires the sequence to already exist
+ * — so `table`'s own create/alter statements must sort *after*
+ * `sequence`'s. This makes that ordering structural (kind rank, enforced
+ * regardless of registry.ts's registration order — see
+ * `diff-engine.test.ts`'s pinning test) rather than the incidental
+ * by-product it was before this dependency was declared (confirmed
+ * directly: without it, only `registry.ts`'s current registration order
+ * — sequence before table — happened to produce the right order, and
+ * nothing would have caught a future reordering).
  */
 export const tableKind: ObjectKind<TableDeclaration> = {
 	kind: "table",
-	dependsOn: ["schema", "enum"],
+	dependsOn: ["schema", "enum", "sequence"],
 	owns: (declaration): declaration is TableDeclaration =>
 		declaration.declarationKind === "table",
 	serialize: (declaration) => ({
@@ -356,5 +416,5 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			{ kind: "table", operation: "alter", identity, previous, next, notes },
 		];
 	},
-	emit: (change) => emitTableSql(change),
+	emit: (change, siblingChanges) => emitTableSql(change, siblingChanges),
 };
