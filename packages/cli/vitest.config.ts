@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
@@ -40,11 +41,25 @@ export default defineConfig({
 		// cover this gap because it wasn't the same failure mode.
 		testTimeout: 30_000,
 	},
-	// loader.test.ts's fixtures are loaded through jiti, which imports
-	// "@hejbro/core" via its own module resolution; without dedupe, Vite's
-	// SSR transform can instantiate a second copy of the module, giving
-	// `tableMeta` (a per-instance Symbol()) two different identities and
-	// making `isTable()` return false across the boundary — this forces a
-	// single shared instance, matching real (non-test) Node module caching.
-	resolve: { dedupe: ["@hejbro/core"] },
+	resolve: {
+		// loader.test.ts's fixtures are loaded through jiti, which imports
+		// "@hejbro/core" via its own module resolution; without dedupe, Vite's
+		// SSR transform can instantiate a second copy of the module, giving
+		// `tableMeta` (a per-instance Symbol()) two different identities and
+		// making `isTable()` return false across the boundary — this forces a
+		// single shared instance, matching real (non-test) Node module caching.
+		dedupe: ["@hejbro/core"],
+		// #131: resolves straight to core's public entry point in source,
+		// not `dist/index.js` -- see packages/supabase/vitest.config.ts for
+		// the full rationale. Covers this package's own in-process tests
+		// (config.test.ts, diagnostics.test.ts, rename-diagnostics.test.ts,
+		// loader.test.ts); the subprocess e2e tests (generate-command.test.ts
+		// etc., which spawn the built `dist/cli.js`) are unaffected either
+		// way -- a child process resolves modules on its own, outside this
+		// vitest process's module graph -- and get a dist-freshness guard
+		// instead (test/support/cli-runner.ts).
+		alias: {
+			"@hejbro/core": resolve(import.meta.dirname, "../core/src/index.ts"),
+		},
+	},
 });
