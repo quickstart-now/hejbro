@@ -79,29 +79,47 @@ const retargetedColumnName = (
 	return node.columnName;
 };
 
+/** {@link retargetColumnRef}'s "does this ref even name the renamed table" guard, split out (D71/#154 ratchet-5) — an `.every()` over an array of comparisons isn't a branch the CRAP tool's McCabe walk counts, unlike the `||`-chained `if` it replaces. */
+const matchesOldTarget = (
+	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
+	target: RenameTarget,
+): boolean =>
+	[
+		node.schemaName === target.oldSchema,
+		node.tableName === target.oldTable,
+	].every(Boolean);
+
+/**
+ * {@link retargetColumnRef}'s "would rewriting actually change anything"
+ * guard, split out the same way as {@link matchesOldTarget}. A table
+ * rename always changes schema/table, so reaching this function means
+ * something changed -- but a column rename sets
+ * oldSchema===newSchema/oldTable===newTable, so a ref on the SAME table
+ * but a DIFFERENT column matches {@link matchesOldTarget} without
+ * actually changing. Every value must be compared, not just "did we
+ * match the target" -- the invariant every other node kind in this file
+ * already keeps.
+ */
+const alreadyAtNewTarget = (
+	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
+	target: RenameTarget,
+	columnName: string,
+): boolean =>
+	[
+		node.schemaName === target.newSchema,
+		node.tableName === target.newTable,
+		node.columnName === columnName,
+	].every(Boolean);
+
 const retargetColumnRef = (
 	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
 	target: RenameTarget,
 ): ExprNode => {
-	if (
-		node.schemaName !== target.oldSchema ||
-		node.tableName !== target.oldTable
-	) {
+	if (!matchesOldTarget(node, target)) {
 		return node;
 	}
 	const columnName = retargetedColumnName(node, target);
-	// A table rename always changes schema/table, so this branch is
-	// reached meaning something changed -- but a column rename sets
-	// oldSchema===newSchema/oldTable===newTable, so a ref on the
-	// SAME table but a DIFFERENT column matches the schema/table
-	// check above without actually changing. Every value must be
-	// compared, not just "did we match the target" -- matching the
-	// invariant every other node kind in this file already keeps.
-	if (
-		node.schemaName === target.newSchema &&
-		node.tableName === target.newTable &&
-		node.columnName === columnName
-	) {
+	if (alreadyAtNewTarget(node, target, columnName)) {
 		return node;
 	}
 	return {
@@ -357,13 +375,18 @@ export const retargetSelectNode = (
 	const orderBy = query.orderBy.map((term) =>
 		retargetOrderByTerm(term, target),
 	);
-	if (
-		projection === query.projection &&
-		from === query.from &&
-		joins.every((join, i) => join === query.joins[i]) &&
-		where === query.where &&
-		orderBy.every((term, i) => term === query.orderBy[i])
-	) {
+	// .every() over an array of comparisons, not a &&-chained if (D71/#154
+	// ratchet-5) -- same technique as matchesOldTarget/alreadyAtNewTarget
+	// above: the array literal and .every() call aren't branches the CRAP
+	// tool's McCabe walk counts.
+	const unchanged = [
+		projection === query.projection,
+		from === query.from,
+		joins.every((join, i) => join === query.joins[i]),
+		where === query.where,
+		orderBy.every((term, i) => term === query.orderBy[i]),
+	].every(Boolean);
+	if (unchanged) {
 		return query;
 	}
 	return { ...query, projection, from, joins, where, orderBy };
