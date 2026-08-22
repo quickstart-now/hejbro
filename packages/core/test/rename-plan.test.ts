@@ -270,6 +270,36 @@ describe("planRenames", () => {
 		]);
 	});
 
+	// #154 ratchet-5: ambiguousTableRenameMessage's exact-1:1 branch (above)
+	// was the only one exercised -- the generic count-based fallback (2+
+	// dropped or created tables in the same schema) never ran.
+	it("2 tables dropped + 2 created in one schema uses the generic count-based ambiguity message", () => {
+		const previous = snap(
+			app,
+			table(app, "posts", { id: text() }),
+			table(app, "comments", { id: text() }),
+		);
+		const next = snap(
+			app,
+			table(app, "articles", { id: text() }),
+			table(app, "replies", { id: text() }),
+		);
+		const ambiguous = planRenames({
+			previous,
+			next,
+			renames: [],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(ambiguous.errors).toEqual([
+			expect.objectContaining({
+				code: "ambiguous-table-rename",
+				message:
+					'schema "app" has an ambiguous table change: 2 tables were dropped ("comments", "posts") and 2 tables were created ("articles", "replies") in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. Next: resolve each dropped table with --rename or --confirm-drop and rerun — see the flags to add below.',
+			}),
+		]);
+	});
+
 	it("rename + type change yields RENAME plus a residual alter", () => {
 		// previous: slug text; next: handle varchar(64) — after rewrite the
 		// diff sees handle text→varchar, so emit produces the ALTER TYPE.
@@ -864,6 +894,103 @@ describe("planRenames — same-table expression retargeting (#110 items 6/7)", (
 		expect(plan.errors).toEqual([]);
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
+
+	// #154 ratchet-5: retargetForeignKeyReferenceColumn's two early-return
+	// branches (a foreign key referencing a different table; a foreign key
+	// referencing the same table but a different column) only run for real
+	// when the *same* table has one foreign key that matches the rename and
+	// at least one that doesn't -- rewriteForeignKeyReferenceColumn's own
+	// table-level hasMatch guard skips a table with no matching foreign key
+	// at all, so a single-foreign-key table can never exercise them. "orders"
+	// below carries three, one per branch (including the happy path).
+	it("a column rename retargets only the matching foreign key, leaving foreign keys to a different table or a different column untouched", () => {
+		const previousPosts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			slug: text(),
+		});
+		const previousUsers = table(app, "users", { id: uuid().primaryKey() });
+		const previousOrders = table(
+			app,
+			"orders",
+			{
+				id: uuid().primaryKey(),
+				postId: uuid().notNull(),
+				userId: uuid().notNull(),
+				postSlug: text().notNull(),
+			},
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: previousPosts, columns: [previousPosts.id] },
+					},
+					{
+						columns: [t.userId],
+						references: { table: previousUsers, columns: [previousUsers.id] },
+					},
+					{
+						columns: [t.postSlug],
+						references: {
+							table: previousPosts,
+							columns: [previousPosts.slug],
+						},
+					},
+				],
+			}),
+		);
+		const previous = snap(app, previousPosts, previousUsers, previousOrders);
+
+		const nextPosts = table(app, "posts", {
+			pid: uuid().primaryKey(),
+			slug: text(),
+		});
+		const nextUsers = table(app, "users", { id: uuid().primaryKey() });
+		const nextOrders = table(
+			app,
+			"orders",
+			{
+				id: uuid().primaryKey(),
+				postId: uuid().notNull(),
+				userId: uuid().notNull(),
+				postSlug: text().notNull(),
+			},
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: nextPosts, columns: [nextPosts.pid] },
+					},
+					{
+						columns: [t.userId],
+						references: { table: nextUsers, columns: [nextUsers.id] },
+					},
+					{
+						columns: [t.postSlug],
+						references: { table: nextPosts, columns: [nextPosts.slug] },
+					},
+				],
+			}),
+		);
+		const next = snap(app, nextPosts, nextUsers, nextOrders);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "id",
+					newName: "pid",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
 });
 
 // #157/D72: a view's own `query` is a structured SelectNode (D67/D70's
@@ -1440,6 +1567,240 @@ describe("planRenames — primary key and unique-name rename drift guard (#24)",
 		expect(plan.errors).toEqual([]);
 		expect(
 			plan.renameStatements.some((s) => s.includes("legacy_slug_unique")),
+		).toBe(false);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+});
+
+// #154 ratchet-5: rewriteForeignKeysForRename mirrors rewriteIndexesForRename
+// exactly (same wasDerived / newDerivedName-unchanged / renamed three-way
+// split) but ran on 0 of its 27 dev-suite calls before this block -- every
+// existing rename test's *renamed* table happened to carry no foreign keys
+// of its own (the FK-bearing table in the retargetForeignKeyReferenceColumn
+// tests above is a bystander, not the one being renamed). deriveForeignKeyName
+// depends on both table name and columns (table-kind.ts's own doc comment),
+// so unlike the primary-key case above, a *column* rename can drift it too
+// when the renamed column is one of the FK's own.
+describe("planRenames — foreign key constraint rename drift guard (#154)", () => {
+	it("a table rename renames a derived foreign key constraint to match, with no leftover diff", () => {
+		const previousUsers = table(app, "users", { id: uuid().primaryKey() });
+		const previous = snap(
+			app,
+			previousUsers,
+			table(
+				app,
+				"posts",
+				{ id: uuid().primaryKey(), authorId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: previousUsers, columns: [previousUsers.id] },
+						},
+					],
+				}),
+			),
+		);
+		const nextUsers = table(app, "users", { id: uuid().primaryKey() });
+		const next = snap(
+			app,
+			nextUsers,
+			table(
+				app,
+				"articles",
+				{ id: uuid().primaryKey(), authorId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: nextUsers, columns: [nextUsers.id] },
+						},
+					],
+				}),
+			),
+		);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts" rename to "articles";`,
+			`alter table "app"."articles" rename constraint "posts_author_id_fk" to "articles_author_id_fk";`,
+			`alter table "app"."articles" rename constraint "posts_pkey" to "articles_pkey";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	it("a column rename involving an unrelated column leaves a derived foreign key constraint untouched (newDerivedName === entry.name)", () => {
+		const previousUsers = table(app, "users", { id: uuid().primaryKey() });
+		const previous = snap(
+			app,
+			previousUsers,
+			table(
+				app,
+				"posts",
+				{
+					id: uuid().primaryKey(),
+					authorId: uuid().notNull(),
+					slug: text(),
+				},
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: previousUsers, columns: [previousUsers.id] },
+						},
+					],
+				}),
+			),
+		);
+		const nextUsers = table(app, "users", { id: uuid().primaryKey() });
+		const next = snap(
+			app,
+			nextUsers,
+			table(
+				app,
+				"posts",
+				{
+					id: uuid().primaryKey(),
+					authorId: uuid().notNull(),
+					handle: text(),
+				},
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: nextUsers, columns: [nextUsers.id] },
+						},
+					],
+				}),
+			),
+		);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "slug",
+					newName: "handle",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts" rename column "slug" to "handle";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	// @see the primary-key/unique hand-built tests above -- same reasoning,
+	// for ForeignKeySnapshot.name.
+	it("leaves a non-derived foreign key constraint name untouched on a table rename (hand-built snapshot, D33)", () => {
+		const previousUsers = table(app, "users", { id: uuid().primaryKey() });
+		const previousBase = snap(
+			app,
+			previousUsers,
+			table(
+				app,
+				"posts",
+				{ id: uuid().primaryKey(), authorId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: previousUsers, columns: [previousUsers.id] },
+						},
+					],
+				}),
+			),
+		);
+		const previousTable = previousBase.objects["table:app.posts"] as {
+			readonly foreignKeys: ReadonlyArray<{ readonly name: string }>;
+		};
+		const previous = {
+			...previousBase,
+			objects: {
+				...previousBase.objects,
+				"table:app.posts": {
+					...previousTable,
+					foreignKeys: previousTable.foreignKeys.map((foreignKey) => ({
+						...foreignKey,
+						name: "legacy_posts_author_fk",
+					})),
+				},
+			},
+		};
+		const nextUsers = table(app, "users", { id: uuid().primaryKey() });
+		const nextBase = snap(
+			app,
+			nextUsers,
+			table(
+				app,
+				"articles",
+				{ id: uuid().primaryKey(), authorId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: nextUsers, columns: [nextUsers.id] },
+						},
+					],
+				}),
+			),
+		);
+		const nextTable = nextBase.objects["table:app.articles"] as {
+			readonly foreignKeys: ReadonlyArray<{ readonly name: string }>;
+		};
+		const next = {
+			...nextBase,
+			objects: {
+				...nextBase.objects,
+				"table:app.articles": {
+					...nextTable,
+					foreignKeys: nextTable.foreignKeys.map((foreignKey) => ({
+						...foreignKey,
+						name: "legacy_posts_author_fk",
+					})),
+				},
+			},
+		};
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts",
+					newName: "articles",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+
+		expect(plan.errors).toEqual([]);
+		expect(
+			plan.renameStatements.some((s) => s.includes("legacy_posts_author_fk")),
 		).toBe(false);
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
