@@ -3,11 +3,12 @@
 `index("name")` (or unnamed, deriving a name from the table and columns)
 builds an index declaration: `.unique()`, `.using(method)`, `.on(...columns)`,
 optionally `.where(expr)` for a partial index. Columns can be wrapped in
-`asc(...)` / `desc(...)` (with `{ nulls: "first" | "last" }`) and, since this
-feature, `op(column, "class")` for an operator class, and an expression in
+`asc(...)` / `desc(...)` (with `{ nulls: "first" | "last" }`) and
+`op(column, "class")` for an operator class, and an expression can stand in
 place of a column reference. The wrappers compose in any order —
 `op(desc(t.col, { nulls: "first" }), "c")` and `desc(op(t.col, "c"), { nulls: "first" })`
-are the same declaration.
+are the same declaration, and `op` wraps an expression just as well as a
+column: ``op(sql`lower(${t.email})`, "c")``.
 
 ## Full example
 
@@ -69,16 +70,30 @@ both expression indexes with the new column inside the expression.
 accepts is `btree`, `hash`, `gin`, `gist`, `spgist`, `brin` (Postgres
 built-ins) and `hnsw`, `ivfflat` (pgvector). `btree` is the default and is
 never recorded as a change: an existing project whose indexes name no
-method regenerates with zero migration output on this feature's release.
-Any other name fails at declaration time with the accepted list.
+method regenerates with zero migration output. Any other name fails at
+declaration time with the accepted list.
 
 ```ts
-index().using("gin").on(t.tags);
+index().using("gin").on(t.data);
 ```
 
-`create index … using gin (…)`. Postgres allows `unique` only on B-tree, so
-`index().unique().using("gin")` fails at declaration time too — drop
-`.unique()` or drop `.using(...)`.
+```sql
+create index "docs_data_idx" on "app"."docs" using gin ("data");
+```
+
+Postgres allows `unique` only on B-tree, so combining it with any other
+method fails at declaration time:
+
+```ts
+index().unique().using("gin").on(t.data);
+```
+
+```
+error[unique-index-method]: docs_data_idx
+  index "docs_data_idx" is unique and uses "gin" — Postgres supports
+  unique only on btree indexes. Next: drop .unique() or drop
+  .using("gin").
+```
 
 Changing the method between two `generate` runs is a definition change like
 any other: the migration drops the old index and creates the new one under
@@ -102,7 +117,8 @@ index("docs_body_trgm_idx").using("gin").on(op(t.body, "gin_trgm_ops"));
 `op(...)` composes with `asc`/`desc` and nulls placement on the same
 column; Postgres' own order is `<column or (expression)> [<opclass>]
 [asc|desc] [nulls first|last]`, so `op(desc(t.col, { nulls: "first" }), "c")`
-renders `"col" c desc nulls first`.
+renders `"col" c desc nulls first`. `op` also wraps an expression, not just
+a column — ``op(sql`lower(${t.email})`, "c")`` renders `(lower("app"."users"."email")) c`.
 
 ## Expression indexes
 
@@ -115,14 +131,16 @@ column reference.
 index("users_email_lower_idx").on(sql`lower(${t.email})`);
 ```
 
-`create index "users_email_lower_idx" on … (lower("email"))`.
+```sql
+create index "users_email_lower_idx" on "app"."users" (lower("app"."users"."email"));
+```
 
 **An expression index requires an explicit name.** There is no column to
-derive one from, so `index().on(sql\`lower(${t.email})\`)` (unnamed) fails
+derive one from, so ``index().on(sql`lower(${t.email})`)`` (unnamed) fails
 at declaration time; the error's `Next:` line proposes
 `<table>_<referenced columns>_idx` (`users_email_idx` for `lower(t.email)`,
 or `<table>_expr_idx` when the expression references no column at all, e.g.
-`sql\`now()\``) — read it as a starting point, not a requirement to use it
+`` sql`now()` ``) — read it as a starting point, not a requirement to use it
 verbatim.
 
 The expression is stored in the snapshot as a structured node (D67/D70),
@@ -136,8 +154,8 @@ declaration time, the same rule partial-index predicates already enforce.
 hejbro generate --rename app.users.email=email_address
 ```
 
-re-creates the expression index with `lower("email_address")` and no
-ambiguity error.
+re-creates the expression index with `lower("app"."users"."email_address")`
+and no ambiguity error.
 
 ## Extensions
 
@@ -159,3 +177,9 @@ needs the original declaration to reproduce a past state.
 
 See `packages/core/src/dsl/index-builder.ts` and the GIN / expression
 indexes in `examples/postgres/src/app.schema.ts`.
+
+## Next
+
+- [Renames](renames.md) — how `--rename` retargets a column used inside an
+  index expression, and every other expression the snapshot stores
+  structurally.
