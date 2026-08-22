@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-22
 
-**Status**: Draft
+**Status**: Implemented (2026-08-23, branch `phase10-index-completeness`; see Clarifications "(implementation)" for the two corrections made while building)
 
 **Input**: User description: "Index completeness: `using` access method (btree/hash/gin/gist/spgist/brin/hnsw/ivfflat), expression indexes, operator classes — the most-used index capabilities hejbro cannot express today; first Phase 10 feature and the Spec Kit pilot."
 

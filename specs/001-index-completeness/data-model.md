@@ -131,7 +131,9 @@ Fields that reference a column, after this feature (was five):
 
 ## Public surface delta (`packages/core/src/index.ts`)
 
-Added exports: `op`, `IndexMethod`, `IndexColumnDeclaration`. Widened:
+Added exports: `op`, `IndexMethod`, `IndexColumnDeclaration`, and the
+`indexMethods` const array (the single source of the closed list, D85 —
+`.using()`'s runtime guard reads it). Widened:
 `IndexColumn`, `IndexColumnInput`, `IndexBuilder`, `IndexDeclaration`,
 `IndexSnapshot`, `IndexColumnSnapshot`. Removed: none. Behaviour of every
 existing call unchanged (B-tree default, same derived names, same SQL).
