@@ -17,16 +17,14 @@ workflows also needs the local Docker verification described in
 [`examples/README.md`](examples/README.md#running-the-round-trip-locally)
 — neither script runs in CI (D49).
 
-## 🔴 The one gate that matters most: merging the Version PR publishes
+## 🔴 The one gate that matters most: which release step is irreversible
 
-The release pipeline (`.github/workflows/release-version.yml`,
-`release-publish.yml`) opens and updates a "Version Packages" PR on every
-`dev` push that has pending changesets. **Merging that PR is not a normal
-merge** — it starts the chain that publishes `@hejbro/core`, `hejbro`, and
-`@hejbro/supabase` to npm, **immediately and irreversibly**: npm never
-lets the same version number publish twice, published or not, so even an
-unpublish burns that version forever.
+Merging the Version Packages PR is the release decision and is reserved
+for the owner. Publishing then runs from GitHub Actions; the owner
+touches it three times — (1) merge the Version Packages PR on `dev`,
+(2) merge `dev` → `main` with a merge commit, (3) approve the `npm`
+environment — and step 3 is the irreversible one: npm keeps a version
+number even if it is unpublished.
 
-This is why merging the Version Packages PR is an **owner-only action**
-(see `AGENTS.md`'s hard gates) — never merge it, and never change the
-release workflows, without the project owner.
+Never merge that PR, and never change the release workflows, without the
+owner (see `AGENTS.md`'s hard gates).
