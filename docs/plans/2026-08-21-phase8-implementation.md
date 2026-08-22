@@ -239,9 +239,9 @@ schedule**, and they are stated by branch name for the reason given above.
 
 | Track | Area | Queue |
 |---|---|---|
-| A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics, `packages/cli` commands | ~~`expr-nodes` → `view-nodes` → `sequence-kind` → `chain-walk`~~ → `duplicate-version` → `verify-fix` → `constraint-names` (proposal approved 2026-08-22; replaces the row-16 guard; closes #137; its first three steps are on a local branch) → `grant-sync` → `scope-nodes` (on the row-48 walker, after `clause-context` lands) |
-| B | `.github/workflows/`, `scripts/`, `docs/`, tooling, validators that touch no hot file | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `supabase-image` → `docs-release` → `diagnostic-xref` → `policy-schema-usage`~~ → `fresh-build` (in review) → `naming-convention` (decided; in progress) → `clause-context` (the walker export + the supabase validator + D76; #160 waits on it) → `crap-gate` (`dev` is at 0; opens once `fresh-build` merges — one root-file PR per implementer at a time; the branch is staged locally) → `oidc-publishing` (draft now, apply after 0.1.0 with the owner) |
-| C | `examples/`, golden content, `packages/supabase`, **and since 2026-08-22 the CRAP work and snapshot validation** | ~~`golden-english` → `bucket-notes` → `preset-goldens` → `crap-refactor` → `declared-vs-catalog` → `crap-walkers` → the CRAP tail~~ (`dev` reports 0 at the threshold since `836fa7b`, which is what opens B's `crap-gate`) → `drift-if-exists` (decided: alter/drop bare + D75; in progress) → `history-restore` (spec final; moved here because A and B are full and the work is CLI-only) → `banner-version` (after `constraint-names` merges) → `crap-coverage` → `catalog-types` → `required-keys` → `crap-ratchet-5` (after `crap-gate`; last) |
+| A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics, `packages/cli` commands | ~~`expr-nodes` → `view-nodes` → `sequence-kind` → `chain-walk`~~ → `duplicate-version` (in review: the computed commands must use `migrationsDir`) → `verify-fix` → `constraint-names` (proposal approved 2026-08-22; replaces the row-16 guard; closes #137; steps ①–⑥ and the golden steps are local, the example chain step is in progress) → `grant-sync` → `scope-nodes` (on the row-48 walker, after `clause-context` lands) |
+| B | `.github/workflows/`, `scripts/`, `docs/`, tooling, validators that touch no hot file | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `supabase-image` → `docs-release` → `diagnostic-xref` → `policy-schema-usage`~~ ~~→ `fresh-build` → `naming-convention`~~ → `crap-gate` (`dev` is at 0; in flight) → `clause-context` (the walker export + the supabase validator + D76; #160 waits on it) → `oidc-publishing` (draft now, apply after 0.1.0 with the owner) |
+| C | `examples/`, golden content, `packages/supabase`, **and since 2026-08-22 the CRAP work and snapshot validation** | ~~`golden-english` → `bucket-notes` → `preset-goldens` → `crap-refactor` → `declared-vs-catalog` → `crap-walkers` → the CRAP tail~~ (`dev` reports 0 at the threshold since `836fa7b`, which is what opens B's `crap-gate`) ~~→ `drift-if-exists`~~ → `history-restore` (spec final; in progress — moved here because A and B are full and the work is CLI-only) → `banner-version` (after `constraint-names` merges) → `crap-coverage` → `catalog-types` → `required-keys` → `crap-ratchet-5` (after `crap-gate`; last) |
 | design first (researcher / designer, no code) | — | ~~`drift-if-exists` (measure) · `clause-context` (options)~~ · ~~`history-restore`~~ (all six decisions taken, spec final) → planner → main → **one owner-decision bundle**, each item on its own as *background → options → what each option produces (SQL / CLI output)*, because the owner decides one item at a time with the full background; an item the measurement settles (#198 may) leaves the bundle and is reported as a result |
 
 **Owner decision (2026-08-22): every open sub-issue of #9 is handled in this
@@ -274,7 +274,10 @@ went `CONFLICTING`. Those files were already recorded as this phase's
 third-ranked conflict source before either PR existed. So: a second PR that
 touches `package.json`, `pnpm-lock.yaml`, `turbo.json` or `ci.yml` waits for
 the first to merge and then rebases, or branches off the first. Checking this
-is part of assigning, not part of reviewing.
+is part of assigning, not part of reviewing. The rule is about the *same*
+file: two root files that never overlap (`biome.json` in one PR, `ci.yml` in
+the other — `phase8-naming-convention` and `phase8-crap-gate`, 2026-08-22) can
+be open at once, because the conflict the rule prevents cannot happen (main).
 
 **Entry filter for track A**: anything proposed for this queue is first asked
 *"does this have to happen before publication?"*, and the answer travels with

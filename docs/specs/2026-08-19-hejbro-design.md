@@ -322,6 +322,13 @@ declarations ↔ snapshot ↔ migrations agree.
 
 - Every compile error carries the **declaration site** (file + export name).
 - Every error message states **why it failed AND what to do**, as a pair.
+- The "what to do" is one `Next:` sentence. When the recovery genuinely has
+  more than one option and hejbro cannot choose (a diverged chain: either
+  branch's migration may be the one meant to win), the diagnostic ends with
+  `Next, pick one:` followed by indented lines, each a command the user can
+  run as-is plus a `#` note — never prose asking the reader to work out the
+  command. A single option stays a single `Next:` sentence (owner, 2026-08-22,
+  #220).
 - The builder DSL's advantage (the API is the boundary) is completed by error
   message quality — this is a stated quality bar, not a nice-to-have.
 
