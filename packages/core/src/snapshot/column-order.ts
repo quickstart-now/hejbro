@@ -52,19 +52,24 @@ const parentColumnNames = (
 	tableName: string,
 	renames: ReadonlyArray<RenameSpec>,
 ): ReadonlyArray<string> => {
-	const node =
-		previous.objects[
-			`table:${schemaName}.${parentTableName(schemaName, tableName, renames)}`
-		];
+	const parentName = parentTableName(schemaName, tableName, renames);
+	const node = previous.objects[`table:${schemaName}.${parentName}`];
 	if (node === undefined) {
 		return [];
 	}
+	// A `ColumnRenameSpec.tableName` is always the table's *old* name
+	// (`applyColumnRename`, rename-plan.ts — a same-run table rename is
+	// resolved through `tableNameByOldKey`, keyed by the old identity), so
+	// this must match against `parentName`, not the declared `tableName`;
+	// when no table rename co-occurs the two are equal, and the `||`
+	// still accepts a spec spelled against the current name.
 	const renamed = new Map(
 		renames
 			.filter(isColumnRename)
 			.filter(
 				(spec) =>
-					spec.schemaName === schemaName && spec.tableName === tableName,
+					spec.schemaName === schemaName &&
+					(spec.tableName === parentName || spec.tableName === tableName),
 			)
 			.map((spec) => [spec.oldName, spec.newName] as const),
 	);

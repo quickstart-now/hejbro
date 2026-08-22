@@ -455,7 +455,6 @@ const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
  * when the oracle has no opinion (a table new to this build, or no
  * context at all). The diff stays name-keyed either way.
  *
-
  * `dependsOn` includes `"sequence"` (D74/#23): a serial-family column
  * added to an existing table now inlines `default nextval('…')` straight
  * into its own `add column` statement (`table-kind-emit.ts`'s

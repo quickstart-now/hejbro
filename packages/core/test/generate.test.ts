@@ -201,6 +201,59 @@ describe("generateMigration", () => {
 			expect(v2.sql).toContain('add column "description" text');
 		});
 
+		// D81 review fix (#277): the same rename combination end to end — a
+		// table rename and a column rename in one run — through the full
+		// generate pipeline (not just the oracle unit). The column-rename
+		// spec's `tableName` is the table's *old* name ("items"), matching
+		// what `--rename app.items.title=name` actually parses to (D81
+		// review: `ColumnRenameSpec.tableName` is always old-table-relative,
+		// resolved through rename-plan.ts's `tableNameByOldKey`).
+		it("keeps a renamed column in place on a table renamed in the same run", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "items", {
+						id: uuid(),
+						title: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const v2 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						name: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: v1.snapshot,
+				renames: [
+					{
+						target: "table",
+						schemaName: "app",
+						oldName: "items",
+						newName: "projects",
+					},
+					{
+						target: "column",
+						schemaName: "app",
+						tableName: "items",
+						oldName: "title",
+						newName: "name",
+					},
+				],
+			});
+			expect(
+				(
+					v2.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "name", "archived_at"]);
+			expect(v2.sql).toContain('rename column "title" to "name"');
+		});
+
 		it("appends a newcomer at the end after a confirmed drop+add pair", () => {
 			const v1 = generateMigration({
 				declarations: [

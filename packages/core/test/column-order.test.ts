@@ -112,6 +112,48 @@ describe("computeColumnOrder", () => {
 		expect(oracle(ref)).toEqual(["id", "title", "archived_at", "description"]);
 	});
 
+	// D81 review fix (#277): a `ColumnRenameSpec.tableName` is the table's
+	// *old* name, always -- `applyColumnRename` (rename-plan.ts) resolves a
+	// same-run table rename through `tableNameByOldKey`, keyed by the old
+	// identity, and CLI parsing rejects a column-rename spec spelled
+	// against the *new* table name as unknown-rename-target/ambiguous.
+	// Measured regression before this fix: v1 items(id,title,archivedAt) ->
+	// v2 projects(id,name,archivedAt) with both renames produced
+	// ["id","archived_at","name"] (the column rename silently dropped,
+	// since the oracle filtered on the new name only) instead of the
+	// physically correct ["id","name","archived_at"].
+	it("keeps a renamed column in place on a table renamed in the same run", () => {
+		const parentTable = parentWith(["id", "title", "archived_at"]).objects[
+			"table:app.projects"
+		];
+		if (parentTable === undefined) {
+			throw new Error("unreachable — parentWith always sets this key");
+		}
+		const oracle = computeColumnOrder(
+			[app, declared("id", "name", "archivedAt")],
+			{
+				...emptySnapshot,
+				objects: { "table:app.items": parentTable },
+			},
+			[
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "items",
+					newName: "projects",
+				},
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "items",
+					oldName: "title",
+					newName: "name",
+				},
+			],
+		);
+		expect(oracle(ref)).toEqual(["id", "name", "archived_at"]);
+	});
+
 	it("drops a column that left the declaration and appends it again if it comes back", () => {
 		const oracle = computeColumnOrder(
 			[app, declared("id", "archivedAt", "title")],
