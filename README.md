@@ -131,8 +131,9 @@ and Nile planned on the same extension interface.
 ## Examples
 
 - [`examples/postgres`](examples/postgres) — plain Postgres: CHECK
-  constraints, partial/ordered indexes, a self-referencing FK, RLS, a
-  trigger, grants, a view.
+  constraints, partial/ordered indexes, a GIN index with an operator class,
+  an expression index, a self-referencing FK, RLS, a trigger, grants, a
+  view.
 - [`examples/supabase`](examples/supabase) — the Supabase preset: role
   presets, `authUsers`, `authUid()`, a storage bucket.
 
@@ -147,7 +148,8 @@ pnpm build && pnpm --filter example-postgres roundtrip
 ```
 
 Guides: [getting started](docs/guide/getting-started.md) ·
-[renames](docs/guide/renames.md) · [CI](docs/guide/ci.md)
+[indexes](docs/guide/indexes.md) · [renames](docs/guide/renames.md) ·
+[CI](docs/guide/ci.md)
 
 ## For agents
 

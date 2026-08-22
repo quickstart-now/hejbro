@@ -38,11 +38,34 @@ status/slug CHECKs in `examples/postgres/src/app.schema.ts`.
 
 ## Indexes
 
-`index("name").unique().on(asc(col), desc(col, { nulls: "last" }))`,
+`index("name").unique().using(method).on(asc(col), desc(col, { nulls: "last" }))`,
 optionally partial via `.where(expr)`. An unnamed index derives its name
-from the table and columns. See `packages/core/src/dsl/index-builder.ts`
-and the partial ordered index in
-`examples/postgres/src/steps/step-3.schema.ts`.
+from the table and columns — except an expression index, which requires
+an explicit name (see below).
+
+`.using(method)` picks the access method: `btree` (default, never recorded
+as a change), `hash`, `gin`, `gist`, `spgist`, `brin`, or pgvector's `hnsw`
+/ `ivfflat` — any other name fails at declaration time with that list.
+`unique` is B-tree only; combining it with another method also fails at
+declaration time.
+
+`op(column, "class")` attaches an operator class to one index column
+(`jsonb_path_ops`, `gin_trgm_ops`, `vector_cosine_ops`, …) — validated as a
+SQL identifier (D36), otherwise passed through to Postgres unverified.
+`op(...)` composes with `asc`/`desc` in any order:
+`op(desc(t.col, { nulls: "first" }), "c")`.
+
+`.on(...)` also accepts an expression (the same `sql` template CHECK and
+partial predicates use) in place of a column — `index("users_email_lower_idx").on(sql\`lower(${t.email})\`)`.
+An expression index **must** carry an explicit name; the declaration-time
+error proposes `<table>_<referenced columns>_idx`. The expression is
+stored structurally (D67/D70), so `--rename` retargets a column used
+inside it exactly like partial predicates already do.
+
+See `packages/core/src/dsl/index-builder.ts`, the full guide at
+`docs/guide/indexes.md`, the partial ordered index in
+`examples/postgres/src/steps/step-3.schema.ts`, and the GIN / operator
+class / expression indexes in `examples/postgres/src/app.schema.ts`.
 
 ## Foreign keys
 
