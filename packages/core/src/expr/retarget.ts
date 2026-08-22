@@ -1,4 +1,3 @@
-import { assertNever } from "../error";
 import type {
 	BetweenNode,
 	ComparisonNode,
@@ -68,69 +67,42 @@ const retargetTableRef = (
 	return { schemaName: target.newSchema, tableName: target.newTable };
 };
 
-/** Walks every `ExprNode` reachable from `node` (including into an `exists()`'s own `SelectNode`) rewriting `ColumnRefNode`/`TableRefNode` matches for `target`. Returns `node` unchanged (same reference) when nothing matched, so a caller can cheaply check `retargeted !== node` to decide whether re-encoding is needed. */
-export const retargetExprNode = (
-	node: ExprNode,
+const retargetUnchanged = (node: ExprNode): ExprNode => node;
+
+const retargetColumnRef = (
+	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
 	target: RenameTarget,
 ): ExprNode => {
-	switch (node.nodeKind) {
-		case "literal":
-		case "rawSql":
-		case "plpgsqlRef":
-			return node;
-		case "columnRef": {
-			if (
-				node.schemaName !== target.oldSchema ||
-				node.tableName !== target.oldTable
-			) {
-				return node;
-			}
-			const columnName =
-				target.oldColumn !== null && node.columnName === target.oldColumn
-					? (target.newColumn ?? node.columnName)
-					: node.columnName;
-			// A table rename always changes schema/table, so this branch is
-			// reached meaning something changed -- but a column rename sets
-			// oldSchema===newSchema/oldTable===newTable, so a ref on the
-			// SAME table but a DIFFERENT column matches the schema/table
-			// check above without actually changing. Every value must be
-			// compared, not just "did we match the target" -- matching the
-			// invariant every other node kind in this file already keeps.
-			if (
-				node.schemaName === target.newSchema &&
-				node.tableName === target.newTable &&
-				node.columnName === columnName
-			) {
-				return node;
-			}
-			return {
-				...node,
-				schemaName: target.newSchema,
-				tableName: target.newTable,
-				columnName,
-			};
-		}
-		case "comparison":
-			return retargetComparison(node, target);
-		case "logical":
-			return retargetLogical(node, target);
-		case "not":
-			return retargetNot(node, target);
-		case "nullTest":
-			return retargetNullTest(node, target);
-		case "inList":
-			return retargetInList(node, target);
-		case "between":
-			return retargetBetween(node, target);
-		case "functionCall":
-			return retargetFunctionCall(node, target);
-		case "sqlTemplate":
-			return retargetSqlTemplate(node, target);
-		case "exists":
-			return retargetExists(node, target);
-		default:
-			return assertNever(node);
+	if (
+		node.schemaName !== target.oldSchema ||
+		node.tableName !== target.oldTable
+	) {
+		return node;
 	}
+	const columnName =
+		target.oldColumn !== null && node.columnName === target.oldColumn
+			? (target.newColumn ?? node.columnName)
+			: node.columnName;
+	// A table rename always changes schema/table, so this branch is
+	// reached meaning something changed -- but a column rename sets
+	// oldSchema===newSchema/oldTable===newTable, so a ref on the
+	// SAME table but a DIFFERENT column matches the schema/table
+	// check above without actually changing. Every value must be
+	// compared, not just "did we match the target" -- matching the
+	// invariant every other node kind in this file already keeps.
+	if (
+		node.schemaName === target.newSchema &&
+		node.tableName === target.newTable &&
+		node.columnName === columnName
+	) {
+		return node;
+	}
+	return {
+		...node,
+		schemaName: target.newSchema,
+		tableName: target.newTable,
+		columnName,
+	};
 };
 
 const retargetComparison = (
@@ -349,4 +321,49 @@ const retargetExists = (node: ExistsNode, target: RenameTarget): ExprNode => {
 		return node;
 	}
 	return { ...node, query };
+};
+
+/**
+ * One handler per {@link ExprNode} `nodeKind` for {@link retargetExprNode}
+ * — a mapped type over the full `nodeKind` union, not a hand-written list,
+ * so a missing handler is a `tsc` error the same way a `switch`'s
+ * `default: assertNever(node)` would have been (verified directly with a
+ * scratch dummy-variant edit, #154 PR2). Placed at the end of the file,
+ * after every handler it references: unlike a function body (which only
+ * runs when called), this object literal is evaluated at module load, so
+ * every value it names must already be an initialized const by then.
+ */
+type RetargetExprNodeHandlers = {
+	readonly [K in ExprNode["nodeKind"]]: (
+		node: Extract<ExprNode, { readonly nodeKind: K }>,
+		target: RenameTarget,
+	) => ExprNode;
+};
+
+const retargetExprNodeHandlers: RetargetExprNodeHandlers = {
+	literal: retargetUnchanged,
+	rawSql: retargetUnchanged,
+	plpgsqlRef: retargetUnchanged,
+	columnRef: retargetColumnRef,
+	comparison: retargetComparison,
+	logical: retargetLogical,
+	not: retargetNot,
+	nullTest: retargetNullTest,
+	inList: retargetInList,
+	between: retargetBetween,
+	functionCall: retargetFunctionCall,
+	sqlTemplate: retargetSqlTemplate,
+	exists: retargetExists,
+};
+
+/** Walks every `ExprNode` reachable from `node` (including into an `exists()`'s own `SelectNode`) rewriting `ColumnRefNode`/`TableRefNode` matches for `target`. Returns `node` unchanged (same reference) when nothing matched, so a caller can cheaply check `retargeted !== node` to decide whether re-encoding is needed. */
+export const retargetExprNode = (
+	node: ExprNode,
+	target: RenameTarget,
+): ExprNode => {
+	const handler = retargetExprNodeHandlers[node.nodeKind] as (
+		node: ExprNode,
+		target: RenameTarget,
+	) => ExprNode;
+	return handler(node, target);
 };
