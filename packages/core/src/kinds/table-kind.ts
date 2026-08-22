@@ -8,7 +8,7 @@ import type { ExprNode } from "../expr/ast";
 import { encodeExprNode } from "../expr/codec";
 import type { KeyedDiff } from "../kind/diff-helpers";
 import { createOrDropDiff, diffByKey } from "../kind/diff-helpers";
-import type { ObjectKind } from "../kind/object-kind";
+import type { ObjectKind, SerializeContext } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import type { ColumnState } from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
@@ -247,22 +247,47 @@ const onUpdateField = (
 	return { onUpdate: value };
 };
 
+/** D81: `order`'s columns, in `order`'s order — a name `order` carries that `columns` doesn't is skipped (defensive only: the oracle's order is always exactly this table's declared names). `order === null` (no parent, e.g. a table new to this build) keeps declaration order. */
+const orderByOracle = (
+	columns: ReadonlyArray<ColumnSnapshot>,
+	order: ReadonlyArray<string> | null,
+): ReadonlyArray<ColumnSnapshot> => {
+	if (order === null) {
+		return columns;
+	}
+	const byName = new Map(columns.map((column) => [column.name, column]));
+	return order.flatMap((name) => {
+		const column = byName.get(name);
+		if (column === undefined) {
+			return [];
+		}
+		return [column];
+	});
+};
+
 const serializeColumns = (
 	declaration: TableDeclaration,
+	context?: SerializeContext,
 ): ReadonlyArray<ColumnSnapshot> =>
-	declaration.columns.map((entry) => ({
-		name: entry.columnName,
-		typeNode: materializeTypeNode(entry.columnState),
-		...notNullField(materializeNotNull(entry.columnState)),
-		...primaryKeyField(entry.columnState.primaryKey),
-		...columnUniqueField(entry.columnState.unique),
-		...uniqueNameField(
-			declaration.tableName,
-			entry.columnName,
-			entry.columnState.unique,
-		),
-		...defaultField(encodeColumnDefaultExpr(entry.columnState)),
-	}));
+	orderByOracle(
+		declaration.columns.map((entry) => ({
+			name: entry.columnName,
+			typeNode: materializeTypeNode(entry.columnState),
+			...notNullField(materializeNotNull(entry.columnState)),
+			...primaryKeyField(entry.columnState.primaryKey),
+			...columnUniqueField(entry.columnState.unique),
+			...uniqueNameField(
+				declaration.tableName,
+				entry.columnName,
+				entry.columnState.unique,
+			),
+			...defaultField(encodeColumnDefaultExpr(entry.columnState)),
+		})),
+		context?.columnOrder({
+			schemaName: declaration.schema.schemaName,
+			tableName: declaration.tableName,
+		}) ?? null,
+	);
 
 const serializeIndexColumn = (
 	column: IndexDeclaration["columns"][number],
@@ -423,6 +448,14 @@ const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
  * index, and foreign key delta) for survivors — column reordering alone
  * produces no diff, since deltas are computed by name, not by array index.
  *
+ * `columns`' order in the snapshot this `serialize` produces is the
+ * table's *physical* column order (D81), not TypeScript declaration
+ * order: `context?.columnOrder` — the oracle `buildSnapshot` derives from
+ * the parent snapshot — decides it, falling back to declaration order
+ * when the oracle has no opinion (a table new to this build, or no
+ * context at all). The diff stays name-keyed either way.
+ *
+
  * `dependsOn` includes `"sequence"` (D74/#23): a serial-family column
  * added to an existing table now inlines `default nextval('…')` straight
  * into its own `add column` statement (`table-kind-emit.ts`'s
@@ -442,10 +475,10 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 	requiredKeys: ["schema", "name", "columns", "indexes", "foreignKeys"],
 	owns: (declaration): declaration is TableDeclaration =>
 		declaration.declarationKind === "table",
-	serialize: (declaration) => ({
+	serialize: (declaration, context) => ({
 		schema: declaration.schema.schemaName,
 		name: declaration.tableName,
-		columns: serializeColumns(declaration),
+		columns: serializeColumns(declaration, context),
 		indexes: serializeIndexes(declaration),
 		foreignKeys: serializeForeignKeys(declaration),
 		...checksField(serializeChecks(declaration)),

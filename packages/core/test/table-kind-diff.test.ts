@@ -8,6 +8,7 @@ import { inArray, isNotNull } from "../src/expr/operators";
 import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
+import type { TableSnapshot } from "../src/kinds/table-snapshot";
 import {
 	asTableSnapshot,
 	checkExpression,
@@ -93,6 +94,66 @@ describe("tableKind.serialize", () => {
 		// a genuinely nullable column stays compact (D33) -- not touched by
 		// the serial-family rule, still absent rather than `false`.
 		expect(byName.get("label")?.notNull).toBeUndefined();
+	});
+
+	// D81: the oracle, not declaration order, decides the snapshot's column
+	// order once one is supplied — `generate`'s only real caller of this
+	// (`buildSnapshot`) always supplies one built from the parent snapshot.
+	it("serializes columns in the oracle's order, declaration order when the oracle is silent", () => {
+		const declaration = getTableMeta(
+			table(app, "projects", {
+				id: uuid(),
+				description: text(),
+				archivedAt: timestamptz(),
+			}),
+		);
+		const silent = tableKind.serialize(declaration) as TableSnapshot;
+		expect(silent.columns.map((c) => c.name)).toEqual([
+			"id",
+			"description",
+			"archived_at",
+		]);
+		const ordered = tableKind.serialize(declaration, {
+			columnOrder: () => ["id", "archived_at", "description"],
+		}) as TableSnapshot;
+		expect(ordered.columns.map((c) => c.name)).toEqual([
+			"id",
+			"archived_at",
+			"description",
+		]);
+	});
+
+	it("ignores a stale name the oracle returns for a column the declaration no longer has", () => {
+		const declaration = getTableMeta(
+			table(app, "projects", { id: uuid(), title: text() }),
+		);
+		const ordered = tableKind.serialize(declaration, {
+			columnOrder: () => ["id", "archived_at", "title"],
+		}) as TableSnapshot;
+		expect(ordered.columns.map((c) => c.name)).toEqual(["id", "title"]);
+	});
+
+	it("emits create table in the snapshot's column order (D81)", () => {
+		const declaration = getTableMeta(
+			table(app, "projects", {
+				id: uuid(),
+				description: text(),
+				archivedAt: timestamptz(),
+			}),
+		);
+		const ordered = tableKind.serialize(declaration, {
+			columnOrder: () => ["id", "archived_at", "description"],
+		});
+		const change = expectSingleChange(
+			tableKind.diff(null, ordered, "app.projects"),
+		);
+		const sql = tableKind
+			.emit(change)
+			.map((statement) => statement.sql)
+			.join("\n");
+		expect(sql).toMatch(
+			/"id" uuid[\s\S]*"archived_at" timestamp with time zone[\s\S]*"description" text/,
+		);
 	});
 
 	it("derives deterministic index and foreign key names", () => {
