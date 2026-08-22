@@ -194,6 +194,7 @@ const withCheckField = (
 export const policyKind: ObjectKind<PolicyDeclaration> = {
 	kind: "policy",
 	dependsOn: ["rls", "table"],
+	requiredKeys: ["schema", "table", "name", "command", "roles"],
 	owns: (declaration): declaration is PolicyDeclaration =>
 		declaration.declarationKind === "policy",
 	serialize: (declaration) => {

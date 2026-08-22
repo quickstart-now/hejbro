@@ -95,4 +95,19 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 		siblingChanges?: ReadonlyArray<KindChange>,
 		nextSnapshot?: Snapshot,
 	): ReadonlyArray<SqlStatement>;
+	/**
+	 * `requiredKeys` (D79, #159) — the top-level keys this kind's own
+	 * `serialize` always produces, checked against every one of this
+	 * kind's snapshot nodes by `parseSnapshot` (optional there too:
+	 * passing no map at all keeps today's behavior). A hand-edited or
+	 * corrupted snapshot missing one of these is reported by kind and key
+	 * name at parse time — before `identify`/`diff`/`emit` ever run and
+	 * crash on the `undefined` instead — rather than only after some
+	 * downstream accessor happens to dereference the missing field.
+	 * Optional and additive, the same way `siblingChanges` (D74) and
+	 * `nextSnapshot` (D78) widened this interface: every existing kind
+	 * that doesn't set it (including any third-party preset kind
+	 * predating this field) is simply never checked, unaffected.
+	 */
+	readonly requiredKeys?: ReadonlyArray<string>;
 }

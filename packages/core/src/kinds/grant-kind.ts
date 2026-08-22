@@ -171,6 +171,7 @@ const statementIfAny = (
 export const grantKind: ObjectKind<GrantDeclaration> = {
 	kind: "grant",
 	dependsOn: ["schema"],
+	requiredKeys: ["schema", "grantKind", "role", "privileges"],
 	owns: (declaration): declaration is GrantDeclaration =>
 		declaration.declarationKind === "grant",
 	serialize: (declaration) => {

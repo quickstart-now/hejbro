@@ -67,6 +67,7 @@ const disableStatementSql = (snapshot: RlsSnapshot): string =>
 export const rlsKind: ObjectKind<RlsDeclaration> = {
 	kind: "rls",
 	dependsOn: ["table"],
+	requiredKeys: ["schema", "table"],
 	owns: (declaration): declaration is RlsDeclaration =>
 		declaration.declarationKind === "rls",
 	serialize: (declaration) => {

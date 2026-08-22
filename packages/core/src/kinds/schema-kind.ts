@@ -18,6 +18,7 @@ const asSchemaSnapshot = (snapshot: JsonValue): SchemaSnapshot =>
 export const schemaKind: ObjectKind<SchemaDeclaration> = {
 	kind: "schema",
 	dependsOn: [],
+	requiredKeys: ["name"],
 	owns: (declaration): declaration is SchemaDeclaration =>
 		declaration.declarationKind === "schema",
 	serialize: (declaration) => ({ name: declaration.schemaName }),

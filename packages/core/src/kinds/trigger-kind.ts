@@ -61,6 +61,15 @@ const TRIGGER_CHANGED_NOTE = "trigger changed; recreating";
 export const triggerKind: ObjectKind<TriggerDeclaration> = {
 	kind: "trigger",
 	dependsOn: ["function", "table"],
+	requiredKeys: [
+		"schema",
+		"table",
+		"name",
+		"timing",
+		"events",
+		"forEach",
+		"function",
+	],
 	owns: (declaration): declaration is TriggerDeclaration =>
 		declaration.declarationKind === "trigger",
 	serialize: (declaration) => {

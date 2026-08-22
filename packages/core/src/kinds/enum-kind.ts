@@ -107,6 +107,7 @@ const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
 export const enumKind: ObjectKind<EnumDeclaration> = {
 	kind: "enum",
 	dependsOn: ["schema"],
+	requiredKeys: ["schema", "name", "values"],
 	owns: (declaration): declaration is EnumDeclaration =>
 		declaration.declarationKind === "enum",
 	serialize: (declaration) => ({

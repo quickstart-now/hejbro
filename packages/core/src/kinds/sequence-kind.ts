@@ -205,6 +205,7 @@ const alterBaseTypeSql = (snapshot: SequenceSnapshot): string =>
 export const sequenceKind: ObjectKind<SequenceDeclaration> = {
 	kind: "sequence",
 	dependsOn: ["schema"],
+	requiredKeys: ["schema", "name", "table", "column", "baseType"],
 	owns: (declaration): declaration is SequenceDeclaration =>
 		declaration.declarationKind === "sequence",
 	serialize: (declaration) => {

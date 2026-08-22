@@ -2,6 +2,8 @@ import {
 	createKindRegistry,
 	emptySnapshot,
 	generateMigration,
+	parseSnapshot,
+	requiredKeysByKind,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { registerSupabaseKinds } from "../src/index";
@@ -542,6 +544,49 @@ describe("storageBucketKind end-to-end via generateMigration", () => {
 		// used — resolved gap, flagged during this PR's implementation.
 		expect(result.sql).toBe(
 			'-- hejbro migration\n-- - supabase-storage-bucket avatars [dropped: bucket "avatars" removed from declarations — buckets hold user files, so hejbro emits no delete; remove it manually in Supabase when ready.]',
+		);
+	});
+});
+
+// D79/#159: ObjectKind is the shared extension interface, so a preset kind
+// (not just a core one) opts into requiredKeys the same way -- checked
+// through the exact same parseSnapshot(text, requiredKeysByKind) path a
+// preset-registered kind's snapshot would really be parsed with.
+describe("storageBucketKind.requiredKeys (D79, #159)", () => {
+	const registryWithStorageBucket = () => {
+		const registry = createKindRegistry();
+		registerSupabaseKinds(registry);
+		return registry;
+	};
+
+	it("declares name as its own required key", () => {
+		expect(storageBucketKind.requiredKeys).toEqual(["name"]);
+	});
+
+	it("accepts a fully-populated node (negative control)", () => {
+		const raw = JSON.stringify({
+			formatVersion: 5,
+			dialect: "postgres",
+			objects: { "supabase-storage-bucket:avatars": { name: "avatars" } },
+		});
+		expect(() =>
+			parseSnapshot(raw, requiredKeysByKind(registryWithStorageBucket())),
+		).not.toThrow();
+	});
+
+	it("rejects a node missing name, by name", () => {
+		const raw = JSON.stringify({
+			formatVersion: 5,
+			dialect: "postgres",
+			objects: { "supabase-storage-bucket:avatars": {} },
+		});
+		expect(() =>
+			parseSnapshot(raw, requiredKeysByKind(registryWithStorageBucket())),
+		).toThrowError(
+			expect.objectContaining({
+				code: "invalid-snapshot",
+				message: expect.stringContaining('missing required key "name"'),
+			}),
 		);
 	});
 });

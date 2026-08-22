@@ -264,6 +264,7 @@ const emitHandlers: EmitHandlers = {
 export const storageBucketKind: ObjectKind<StorageBucketDeclaration> = {
 	kind: "supabase-storage-bucket",
 	dependsOn: [],
+	requiredKeys: ["name"],
 	owns: (declaration): declaration is StorageBucketDeclaration =>
 		declaration.declarationKind === "supabase-storage-bucket",
 	serialize: (declaration) => {

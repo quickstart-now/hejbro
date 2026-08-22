@@ -218,3 +218,28 @@ export const createDefaultRegistry = (): KindRegistry => {
 	});
 	return registry;
 };
+
+/**
+ * `registry`'s own `requiredKeys` (D79, #159), keyed by kind name — the
+ * plain `ReadonlyMap` shape {@link parseSnapshot} accepts, derived from
+ * whatever this build's registry actually has registered (core kinds
+ * plus any preset's) rather than a hand-maintained list of its own. A
+ * kind with no `requiredKeys` of its own (every kind predating this
+ * field, or a third-party preset that hasn't set it) is simply absent
+ * from the map — {@link parseSnapshot} skips the check for that kind,
+ * unaffected. Deliberately a plain map, not the `KindRegistry` itself:
+ * `snapshot.ts` would otherwise import `kind/registry.ts`, which
+ * registers kind modules that already import `Snapshot`'s own type from
+ * `snapshot.ts` — a needless coupling back for a function that only
+ * ever needs kind-name → string-list data, not the whole registry
+ * interface.
+ */
+export const requiredKeysByKind = (
+	registry: KindRegistry,
+): ReadonlyMap<string, ReadonlyArray<string>> =>
+	new Map(
+		registry
+			.list()
+			.filter((kind) => kind.requiredKeys !== undefined)
+			.map((kind) => [kind.kind, kind.requiredKeys as ReadonlyArray<string>]),
+	);

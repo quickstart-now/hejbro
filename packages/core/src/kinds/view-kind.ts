@@ -173,6 +173,7 @@ const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
 export const viewKind: ObjectKind<ViewDeclaration> = {
 	kind: "view",
 	dependsOn: ["schema", "table"],
+	requiredKeys: ["schema", "name", "columns", "query"],
 	owns: (declaration): declaration is ViewDeclaration =>
 		declaration.declarationKind === "view",
 	serialize: (declaration) => {

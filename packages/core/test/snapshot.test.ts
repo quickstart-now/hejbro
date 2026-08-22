@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
-import { createDefaultRegistry } from "../src/kind/registry";
+import {
+	createDefaultRegistry,
+	requiredKeysByKind,
+} from "../src/kind/registry";
 import {
 	buildSnapshot,
 	emptySnapshot,
@@ -221,5 +224,133 @@ describe("renderSnapshot / parseSnapshot", () => {
 				}),
 			);
 		});
+	});
+});
+
+// D79/#159: parseSnapshot's optional per-kind requiredKeys check. Every
+// fixture here is hand-built JSON (D33 -- never derived from buildSnapshot),
+// each missing exactly one of its own kind's requiredKeys (see each core
+// kind's own requiredKeys array for where these lists come from), so the
+// error names the exact missing key rather than a coincidental downstream
+// crash. requiredKeysByKind(createDefaultRegistry()) is the plain map
+// parseSnapshot's second argument accepts -- built from a real registry,
+// never hand-duplicated here.
+describe("parseSnapshot requiredKeys (D79, #159)", () => {
+	const requiredKeys = requiredKeysByKind(registry);
+
+	const validNodeByKind: Record<string, Record<string, unknown>> = {
+		schema: { name: "app" },
+		enum: { schema: "app", name: "status", values: ["a", "b"] },
+		sequence: {
+			schema: "app",
+			name: "posts_id_seq",
+			table: "posts",
+			column: "id",
+			baseType: "integer",
+		},
+		table: {
+			schema: "app",
+			name: "posts",
+			columns: [],
+			indexes: [],
+			foreignKeys: [],
+		},
+		function: {
+			schema: "app",
+			name: "fn",
+			args: [],
+			returns: "void",
+			security: "invoker",
+			language: "plpgsql",
+			bodyHash: "abc",
+			bodySql: "begin end;",
+		},
+		trigger: {
+			schema: "app",
+			table: "posts",
+			name: "trg",
+			timing: "before",
+			events: ["insert"],
+			forEach: "row",
+			function: "fn",
+		},
+		rls: { schema: "app", table: "posts" },
+		policy: {
+			schema: "app",
+			table: "posts",
+			name: "pol",
+			command: "select",
+			roles: ["anon"],
+		},
+		view: { schema: "app", name: "v", columns: [], query: {} },
+		grant: {
+			schema: "app",
+			grantKind: "all-tables-privileges",
+			role: "anon",
+			privileges: ["select"],
+		},
+	};
+
+	const rawSnapshotWith = (
+		kind: string,
+		node: Record<string, unknown>,
+	): string =>
+		JSON.stringify({
+			formatVersion: 5,
+			dialect: "postgres",
+			objects: { [`${kind}:fixture`]: node },
+		});
+
+	it("every core kind's own requiredKeys array is exercised by this test's own fixture table (no kind silently skipped)", () => {
+		const kindsWithRequiredKeys = registry
+			.list()
+			.filter((kind) => kind.requiredKeys !== undefined)
+			.map((kind) => kind.kind)
+			.sort();
+		expect(Object.keys(validNodeByKind).sort()).toEqual(kindsWithRequiredKeys);
+	});
+
+	it.each(Object.entries(validNodeByKind))(
+		"accepts a fully-populated %s node (negative control)",
+		(kind, node) => {
+			expect(() =>
+				parseSnapshot(rawSnapshotWith(kind, node), requiredKeys),
+			).not.toThrow();
+		},
+	);
+
+	it.each(
+		Object.entries(validNodeByKind).flatMap(([kind, node]) =>
+			Object.keys(node).map((missingKey) => [kind, missingKey] as const),
+		),
+	)(
+		"rejects a %s node missing its own required key %s, by name",
+		(kind, missingKey) => {
+			const node = validNodeByKind[kind];
+			if (node === undefined) {
+				throw new Error(`unreachable -- no fixture node for kind "${kind}"`);
+			}
+			const { [missingKey]: _omitted, ...withoutKey } = node;
+			expect(() =>
+				parseSnapshot(rawSnapshotWith(kind, withoutKey), requiredKeys),
+			).toThrowError(
+				expect.objectContaining({
+					code: "invalid-snapshot",
+					message: expect.stringContaining(
+						`missing required key "${missingKey}"`,
+					),
+				}),
+			);
+		},
+	);
+
+	it("omitting requiredKeysByKind entirely keeps parseSnapshot's pre-#159 behavior (a missing key is not reported)", () => {
+		const validEnum = validNodeByKind.enum;
+		if (validEnum === undefined) {
+			throw new Error('unreachable -- no fixture node for kind "enum"');
+		}
+		const { schema: _omitted, ...withoutSchema } = validEnum;
+		const raw = rawSnapshotWith("enum", withoutSchema);
+		expect(() => parseSnapshot(raw)).not.toThrow();
 	});
 });

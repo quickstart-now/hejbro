@@ -142,13 +142,14 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(await sqlFileNames()).toHaveLength(1);
 	});
 
-	// #26/#136 (identity fix, item 21 of phase8-snapshot-v5): a malformed
-	// on-disk snapshot node used to raw-crash inside planRenames; it's now
-	// a malformed-snapshot-node diagnostic. The identity line matters as
-	// much as the code — it must name the snapshot file, not
-	// hejbro.config.ts (identityFromMessage's fallback), since the
-	// problem is in the snapshot, not the config.
-	it("exits 1 with malformed-snapshot-node, naming the snapshot file (not hejbro.config.ts), for a corrupted table node", async () => {
+	// #26/#136 (identity fix, item 21 of phase8-snapshot-v5) originally
+	// caught this shape of corruption downstream, as a generic
+	// malformed-snapshot-node crash guard. D79/#159 catches it earlier and
+	// more precisely: parseSnapshot's own requiredKeys check now reports
+	// the exact missing key by name at parse time, naming the malformed
+	// entry itself (not hejbro.config.ts) as the identity — never reaching
+	// the downstream malformed-snapshot-node guard at all for this case.
+	it("exits 1 with invalid-snapshot, naming the exact missing key, for a corrupted table node (D79/#159, earlier than the former malformed-snapshot-node catch)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(SCHEMA_SOURCE);
 		await runCli(cwd, ["generate"]);
@@ -164,11 +165,9 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain(
-			"error[malformed-snapshot-node]: hejbro.snapshot.json",
-		);
+		expect(result.stderr).toContain("error[invalid-snapshot]: table:app.posts");
 		expect(result.stderr).not.toContain("hejbro.config.ts");
-		expect(result.stderr).toContain("hejbro verify");
+		expect(result.stderr).toContain('missing required key "columns"');
 	});
 
 	it("exits 1 with an ambiguous-column-rename diagnostic on a same-table drop+add", async () => {
