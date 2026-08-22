@@ -254,6 +254,51 @@ const validateSnapshotIsObject = (parsed: unknown): ParsedSnapshotShape => {
 };
 
 /**
+ * {@link validateFormatVersion}'s `formatVersion === undefined` half — a
+ * pre-D33 snapshot's legacy `hejbroSnapshot` number field, or a genuinely
+ * malformed one. Split out to keep both halves' own complexity under
+ * threshold (D71/#154 ratchet-5) rather than one function whose own
+ * complexity the whole cascade dominates.
+ */
+const validateMissingFormatVersion = (candidate: ParsedSnapshotShape): void => {
+	if (typeof candidate.hejbroSnapshot === "number") {
+		throwHejbroError(
+			"unsupported-snapshot-version",
+			olderVersionMessage(candidate.hejbroSnapshot),
+		);
+	}
+	throwHejbroError(
+		"invalid-snapshot",
+		`snapshot version ${JSON.stringify(candidate.hejbroSnapshot)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
+	);
+};
+
+/** {@link validateFormatVersion}'s `formatVersion !== undefined` half — matches current, malformed, older, or newer. See {@link validateMissingFormatVersion}. */
+const validatePresentFormatVersion = (formatVersion: unknown): void => {
+	if (formatVersion === HEJBRO_SNAPSHOT_VERSION) {
+		return;
+	}
+	if (typeof formatVersion !== "number") {
+		throwHejbroError(
+			"invalid-snapshot",
+			`snapshot version ${JSON.stringify(formatVersion)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
+		);
+		return;
+	}
+	if (formatVersion < HEJBRO_SNAPSHOT_VERSION) {
+		throwHejbroError(
+			"unsupported-snapshot-version",
+			olderVersionMessage(formatVersion),
+		);
+		return;
+	}
+	throwHejbroError(
+		"unsupported-snapshot-version",
+		newerVersionMessage(formatVersion),
+	);
+};
+
+/**
  * {@link parseSnapshot}'s version check (see that function's own doc
  * comment for the three cases this covers) — the whole cascade lives
  * here so `parseSnapshot` itself stays a flat sequence of validator
@@ -261,39 +306,10 @@ const validateSnapshotIsObject = (parsed: unknown): ParsedSnapshotShape => {
  */
 const validateFormatVersion = (candidate: ParsedSnapshotShape): void => {
 	if (candidate.formatVersion === undefined) {
-		if (typeof candidate.hejbroSnapshot === "number") {
-			throwHejbroError(
-				"unsupported-snapshot-version",
-				olderVersionMessage(candidate.hejbroSnapshot),
-			);
-		}
-		throwHejbroError(
-			"invalid-snapshot",
-			`snapshot version ${JSON.stringify(candidate.hejbroSnapshot)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
-		);
+		validateMissingFormatVersion(candidate);
 		return;
 	}
-	if (candidate.formatVersion === HEJBRO_SNAPSHOT_VERSION) {
-		return;
-	}
-	if (typeof candidate.formatVersion !== "number") {
-		throwHejbroError(
-			"invalid-snapshot",
-			`snapshot version ${JSON.stringify(candidate.formatVersion)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
-		);
-		return;
-	}
-	if (candidate.formatVersion < HEJBRO_SNAPSHOT_VERSION) {
-		throwHejbroError(
-			"unsupported-snapshot-version",
-			olderVersionMessage(candidate.formatVersion),
-		);
-		return;
-	}
-	throwHejbroError(
-		"unsupported-snapshot-version",
-		newerVersionMessage(candidate.formatVersion),
-	);
+	validatePresentFormatVersion(candidate.formatVersion);
 };
 
 /** {@link parseSnapshot}'s dialect check — only `"postgres"` is supported. */
