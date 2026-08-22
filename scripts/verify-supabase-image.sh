@@ -83,6 +83,19 @@ skip_storage_kind() {
   echo "   this script exists to avoid (see examples/README.md)."
 }
 
+skip_extension_coverage() {
+  echo "== skip: extension coverage (pg_cron, pg_net, pgsodium, ...) is not checked by this script"
+  echo "   Reason: deliberately not checked, and not simply omitted -- a naive '\\dx diff' would be"
+  echo "   a false baseline. Observed directly (2026-08-22): a fresh container's boot log shows"
+  echo "   'pg_net 0.20.4 worker' and 'pg_cron scheduler' running as background workers, but"
+  echo "   '\\dx' in the postgres database lists only pg_stat_statements/pgcrypto/plpgsql/"
+  echo "   supabase_vault/uuid-ossp -- pg_net and pg_cron are absent from that list despite"
+  echo "   visibly running. Cause not investigated (a shared_preload_libraries-loaded worker not"
+  echo "   registered via CREATE EXTENSION in this database is one candidate, not confirmed)."
+  echo "   Recorded as an open question, not treated as 'no extension there' -- a real check would"
+  echo "   have to resolve this before it could trust '\\dx' as a complete list."
+}
+
 # The committed migrations' one INSERT INTO storage.buckets (the bucket
 # kind's upsert) is the one statement class this script does not apply --
 # see skip_storage_kind above. Stripped before applying so the rest of each
@@ -210,4 +223,5 @@ verify_roles
 verify_auth_uid_definition
 verify_rls_as_authenticated
 skip_storage_kind
+skip_extension_coverage
 echo "verify-supabase-image.sh: done"
