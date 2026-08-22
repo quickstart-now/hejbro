@@ -8,6 +8,7 @@ import type {
 	IndexMethod,
 	IndexNulls,
 } from "./table";
+import { indexMethods } from "./table";
 
 /** One column of an ordered index: the column ref, its sort direction, an optional explicit nulls placement (D51), and an optional operator class (R4). */
 export type IndexColumn = {
@@ -65,18 +66,7 @@ const toDeclarationColumn = (
 	};
 };
 
-/** Postgres access methods hejbro accepts (D85) — mirrors {@link IndexMethod} for the runtime guard `.using()` needs against untyped callers (R2). */
-const indexMethods: ReadonlyArray<IndexMethod> = [
-	"btree",
-	"hash",
-	"gin",
-	"gist",
-	"spgist",
-	"brin",
-	"hnsw",
-	"ivfflat",
-];
-
+/** `.using()`'s runtime guard against untyped callers (R2) — reuses `indexMethods` (`./table`, D85) rather than re-listing the eight names, the same way `foreignKeyActions` is its own single source of truth. */
 const isIndexMethod = (value: string): value is IndexMethod =>
 	(indexMethods as ReadonlyArray<string>).includes(value);
 

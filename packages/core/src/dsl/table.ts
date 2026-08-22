@@ -32,15 +32,19 @@ export type ForeignKeyAction = (typeof foreignKeyActions)[number];
 export type IndexNulls = "first" | "last";
 
 /** Postgres access methods hejbro accepts (D85, closed) — built-in six plus pgvector's two. `"btree"` is Postgres' own default and is never recorded in a declaration or snapshot (SC-004): see {@link IndexDeclaration.method}. */
-export type IndexMethod =
-	| "btree"
-	| "hash"
-	| "gin"
-	| "gist"
-	| "spgist"
-	| "brin"
-	| "hnsw"
-	| "ivfflat";
+export const indexMethods = [
+	"btree",
+	"hash",
+	"gin",
+	"gist",
+	"spgist",
+	"brin",
+	"hnsw",
+	"ivfflat",
+] as const;
+
+/** @see indexMethods */
+export type IndexMethod = (typeof indexMethods)[number];
 
 /**
  * One entry of an index's column list after `table()` resolves it (D51):

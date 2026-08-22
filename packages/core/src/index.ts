@@ -66,6 +66,7 @@ export type {
 export {
 	foreignKeyActions,
 	getTableMeta,
+	indexMethods,
 	isTable,
 	table,
 	tableMeta,

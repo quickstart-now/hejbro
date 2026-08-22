@@ -166,7 +166,7 @@ describe("index builder — access method (#284 US1)", () => {
 		// exercises that path rather than merely satisfying the compiler.
 		const untypedMethod: string = "gim";
 		expect(() => index("bad").using(untypedMethod as IndexMethod)).toThrow(
-			/unknown-index-method|index access method "gim" is not one hejbro accepts — supported: btree, hash, gin, gist, spgist, brin, hnsw, ivfflat\. Next: pick one of those/,
+			/index access method "gim" is not one hejbro accepts — supported: btree, hash, gin, gist, spgist, brin, hnsw, ivfflat\. Next: pick one of those/,
 		);
 	});
 
@@ -176,7 +176,7 @@ describe("index builder — access method (#284 US1)", () => {
 				indexes: [index("posts_data_idx").unique().using("gin").on(t.data)],
 			})),
 		).toThrow(
-			/unique-index-method|index "posts_data_idx" is unique and uses "gin" — Postgres supports unique only on btree indexes\. Next: drop \.unique\(\) or drop \.using\("gin"\)\./,
+			/index "posts_data_idx" is unique and uses "gin" — Postgres supports unique only on btree indexes\. Next: drop \.unique\(\) or drop \.using\("gin"\)\./,
 		);
 	});
 
