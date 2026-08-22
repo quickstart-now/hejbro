@@ -27,6 +27,24 @@ describe("liftLiteral + renderLiteral", () => {
 			/invalid-literal|not a finite number/,
 		);
 	});
+	// #154 ratchet-5: liftLiteral's final fallback (a JS type none of the
+	// prior typeof checks match -- undefined, function, symbol, bigint) had
+	// no test at all.
+	it("rejects unsupported JS types (invalid-literal)", () => {
+		expect(() => liftLiteral(undefined, "text")).toThrowError(
+			expect.objectContaining({ code: "invalid-literal" }),
+		);
+		expect(() => liftLiteral(() => {}, "text")).toThrowError(
+			expect.objectContaining({ code: "invalid-literal" }),
+		);
+		expect(() => liftLiteral(Symbol("x"), "text")).toThrowError(
+			expect.objectContaining({ code: "invalid-literal" }),
+		);
+		expect(() => liftLiteral(10n, "numeric")).toThrowError(
+			expect.objectContaining({ code: "invalid-literal" }),
+		);
+	});
+
 	it("rejects arrays and plain objects (ambiguous-literal)", () => {
 		// hejbroError objects are not Error instances (issue #25), so match the
 		// thrown object's `code` directly rather than relying on `.message`.
