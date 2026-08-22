@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { defineView } from "../src/dsl/define-view";
 import { schema } from "../src/dsl/schema";
-import { table } from "../src/dsl/table";
+import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import { eq, isNotNull } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
 import type { ViewSnapshot } from "../src/kinds/view-kind";
 import { viewKind, viewSelectSql } from "../src/kinds/view-kind";
 import { select } from "../src/query/select";
-import { emptySnapshot } from "../src/snapshot/snapshot";
+import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
 
 const app = schema("app");
@@ -49,6 +49,25 @@ describe("viewKind.serialize", () => {
 			columns: ReadonlyArray<string>;
 		};
 		expect(snapshot.columns).toEqual(["post_id", "post_status"]);
+	});
+
+	// D81: the oracle, not the DSL-time projection, decides an allColumns
+	// view's column order and encoded query once the snapshot is built
+	// with one.
+	it("serializes columns and the encoded query in the oracle's order", () => {
+		const projects = table(app, "projects", {
+			id: uuid(),
+			description: text(),
+			archivedAt: timestamptz(),
+		});
+		const view = defineView(app, "projects_v", select(projects));
+		const snapshot = viewKind.serialize(view, {
+			columnOrder: () => ["id", "archived_at", "description"],
+		}) as ViewSnapshot;
+		expect(snapshot.columns).toEqual(["id", "archived_at", "description"]);
+		expect(viewSelectSql(snapshot)).toBe(
+			'select "id", "archived_at", "description" from "app"."projects"',
+		);
 	});
 
 	it("throws invalid-view-projection for a constantOne projection (defensive; unreachable via defineView)", () => {
@@ -422,5 +441,56 @@ describe("view recreate ordering through generateMigration", () => {
 		expect(dropIndex).toBeGreaterThanOrEqual(0);
 		expect(createIndex).toBeGreaterThan(dropIndex);
 		expect(result2.sql.match(/drop view if exists/g)).toHaveLength(1);
+	});
+
+	// D81: a column added mid-declaration to the underlying table lands
+	// *last* in the table's physical order, so the view built from it is a
+	// prefix extension (create or replace) — not the D27 drop + recreate a
+	// declaration-order-only reading of this same change would have been.
+	it("a mid-declaration column on the underlying table extends the view's own snapshot as a prefix, not a recreate", () => {
+		const projectsV1 = table(app, "projects", {
+			id: uuid(),
+			title: text(),
+			archivedAt: timestamptz(),
+		});
+		const viewV1 = defineView(app, "projects_v", select(projectsV1));
+		const parent = buildSnapshot(
+			[app, getTableMeta(projectsV1), viewV1],
+			registry,
+			emptySnapshot,
+		);
+
+		const projectsV2 = table(app, "projects", {
+			id: uuid(),
+			title: text(),
+			description: text(),
+			archivedAt: timestamptz(),
+		});
+		const viewV2 = defineView(app, "projects_v", select(projectsV2));
+		const next = buildSnapshot(
+			[app, getTableMeta(projectsV2), viewV2],
+			registry,
+			parent,
+		);
+
+		const nextView = next.objects["view:app.projects_v"] as ViewSnapshot;
+		expect(nextView.columns).toEqual([
+			"id",
+			"title",
+			"archived_at",
+			"description",
+		]);
+		const previousView = parent.objects["view:app.projects_v"] as ViewSnapshot;
+		const changes = viewKind.diff(previousView, nextView, "app.projects_v");
+		expect(changes).toEqual([
+			{
+				kind: "view",
+				operation: "alter",
+				identity: "app.projects_v",
+				previous: previousView,
+				next: nextView,
+				notes: ["view changed"],
+			},
+		]);
 	});
 });

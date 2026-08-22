@@ -82,7 +82,7 @@ hejbro generate --rename app.old_table=new_table
 
 For a rename you'd rather ship as two safe, backward-compatible steps:
 
-1. **Expand** — add the new column (nullable; no `--rename` needed, since nothing was dropped this run), generate, deploy, backfill data.
+1. **Expand** — add the new column (nullable; no `--rename` needed, since nothing was dropped this run), generate, deploy, backfill data (the new column is appended at the end of the table — Postgres has no "add column at position", and hejbro mirrors that in its snapshot).
 2. **Contract** — drop the old column in a later `generate` run, confirming it with `--confirm-drop`.
 
 This avoids a single migration that both adds and drops in the same statement batch — useful when you need a deploy window between the two.

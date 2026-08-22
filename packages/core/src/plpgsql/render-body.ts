@@ -7,6 +7,12 @@ import {
 	renderSelect,
 	renderSelectInto,
 } from "../expr/render-sql";
+import type { ColumnOrderOracle } from "../snapshot/column-order";
+import {
+	applyColumnOrderToQuery,
+	applyColumnOrderToSelect,
+	noColumnOrder,
+} from "../snapshot/column-order";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import { quoteStringLiteral } from "../sql/literal";
 import { renderTypeNode } from "../types/type-node";
@@ -31,6 +37,7 @@ const renderElseLines = (
 	depth: number,
 	identity: string,
 	declaredAt: string | null,
+	columnOrder: ColumnOrderOracle,
 ): ReadonlyArray<string> => {
 	if (statement.elseStatements === null) {
 		return [];
@@ -38,7 +45,7 @@ const renderElseLines = (
 	return [
 		`${indent(depth)}else`,
 		...statement.elseStatements.flatMap((inner) =>
-			renderStatementLines(inner, depth + 1, identity, declaredAt),
+			renderStatementLines(inner, depth + 1, identity, declaredAt, columnOrder),
 		),
 	];
 };
@@ -48,6 +55,7 @@ const renderIfLines = (
 	depth: number,
 	identity: string,
 	declaredAt: string | null,
+	columnOrder: ColumnOrderOracle,
 ): ReadonlyArray<string> => {
 	const [firstBranch, ...restBranches] = statement.branches;
 	if (firstBranch === undefined) {
@@ -61,16 +69,22 @@ const renderIfLines = (
 	const ifLines = [
 		`${indent(depth)}if ${renderExpr(firstBranch.condition)} then`,
 		...firstBranch.statements.flatMap((inner) =>
-			renderStatementLines(inner, depth + 1, identity, declaredAt),
+			renderStatementLines(inner, depth + 1, identity, declaredAt, columnOrder),
 		),
 	];
 	const elsifLines = restBranches.flatMap((branch) => [
 		`${indent(depth)}elsif ${renderExpr(branch.condition)} then`,
 		...branch.statements.flatMap((inner) =>
-			renderStatementLines(inner, depth + 1, identity, declaredAt),
+			renderStatementLines(inner, depth + 1, identity, declaredAt, columnOrder),
 		),
 	]);
-	const elseLines = renderElseLines(statement, depth, identity, declaredAt);
+	const elseLines = renderElseLines(
+		statement,
+		depth,
+		identity,
+		declaredAt,
+		columnOrder,
+	);
 
 	return [...ifLines, ...elsifLines, ...elseLines, `${indent(depth)}end if;`];
 };
@@ -93,12 +107,13 @@ type RenderStatementHandlers = {
 		depth: number,
 		identity: string,
 		declaredAt: string | null,
+		columnOrder: ColumnOrderOracle,
 	) => ReadonlyArray<string>;
 };
 
 const renderStatementHandlers: RenderStatementHandlers = {
-	selectInto: (statement, depth) => [
-		`${indent(depth)}${renderSelectInto(statement.query, statement.intoVariables, { strict: statement.strict })};`,
+	selectInto: (statement, depth, _identity, _declaredAt, columnOrder) => [
+		`${indent(depth)}${renderSelectInto(applyColumnOrderToSelect(statement.query, columnOrder), statement.intoVariables, { strict: statement.strict })};`,
 	],
 	raise: (statement, depth) => [
 		`${indent(depth)}raise exception ${quoteStringLiteral(statement.message)}${renderRaiseSuffix(statement.args)};`,
@@ -106,14 +121,14 @@ const renderStatementHandlers: RenderStatementHandlers = {
 	returnRef: (statement, depth) => [
 		`${indent(depth)}return ${statement.refName};`,
 	],
-	returnQuery: (statement, depth) => [
-		`${indent(depth)}return query ${renderQuery(statement.query)};`,
+	returnQuery: (statement, depth, _identity, _declaredAt, columnOrder) => [
+		`${indent(depth)}return query ${renderQuery(applyColumnOrderToQuery(statement.query, columnOrder))};`,
 	],
 	if: renderIfLines,
-	forEach: (statement, depth, identity, declaredAt) => {
-		const headerLine = `${indent(depth)}for ${statement.loopName} in ${renderSelect(statement.query)} loop`;
+	forEach: (statement, depth, identity, declaredAt, columnOrder) => {
+		const headerLine = `${indent(depth)}for ${statement.loopName} in ${renderSelect(applyColumnOrderToSelect(statement.query, columnOrder))} loop`;
 		const bodyLines = statement.statements.flatMap((inner) =>
-			renderStatementLines(inner, depth + 1, identity, declaredAt),
+			renderStatementLines(inner, depth + 1, identity, declaredAt, columnOrder),
 		);
 		return [headerLine, ...bodyLines, `${indent(depth)}end loop;`];
 	},
@@ -124,14 +139,16 @@ const renderStatementLines = (
 	depth: number,
 	identity: string,
 	declaredAt: string | null,
+	columnOrder: ColumnOrderOracle,
 ): ReadonlyArray<string> => {
 	const handler = renderStatementHandlers[statement.stmtKind] as (
 		statement: BodyStatement,
 		depth: number,
 		identity: string,
 		declaredAt: string | null,
+		columnOrder: ColumnOrderOracle,
 	) => ReadonlyArray<string>;
-	return handler(statement, depth, identity, declaredAt);
+	return handler(statement, depth, identity, declaredAt, columnOrder);
 };
 
 /** Renders a {@link FunctionDeclaration}'s `returns` clause text — `"trigger"`, `` `setof "schema"."table"` ``, or the scalar type. Shared by {@link renderFunctionSql} and `functionKind.serialize`'s snapshot `returns` field, so the two never drift apart. */
@@ -190,7 +207,10 @@ const renderDeclareLines = (
 	];
 };
 
-export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
+export const renderFunctionSql = (
+	declaration: FunctionDeclaration,
+	columnOrder: ColumnOrderOracle = noColumnOrder,
+): string => {
 	const identity = `${declaration.schemaName}.${declaration.functionName}`;
 	const argsSql = declaration.args
 		.map((arg) => `${arg.argName} ${renderTypeNode(arg.typeNode)}`)
@@ -200,7 +220,13 @@ export const renderFunctionSql = (declaration: FunctionDeclaration): string => {
 	const securityLines = renderSecurityLines(declaration);
 	const declareLines = renderDeclareLines(declaration);
 	const bodyLines = declaration.body.statements.flatMap((stmt) =>
-		renderStatementLines(stmt, 1, identity, declaration.declaredAt),
+		renderStatementLines(
+			stmt,
+			1,
+			identity,
+			declaration.declaredAt,
+			columnOrder,
+		),
 	);
 
 	const innerLines = [...declareLines, "begin", ...bodyLines, "end;"];

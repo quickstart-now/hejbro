@@ -295,6 +295,55 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 		);
 	});
 
+	// D81 (#261): before the fix, check 2's rebuild used an empty parent,
+	// so a mid-declaration column insert rebuilt in *declaration* order
+	// while the committed snapshot (built with the real parent) recorded
+	// *physical* order — a false snapshot-stale. Two real `generate` runs,
+	// the second inserting a column mid-declaration, must still verify.
+	it("passes when the committed snapshot's column order differs from declaration order (D81)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(
+			`import { schema, table, text, timestamptz, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const projects = table(app, "projects", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	archivedAt: timestamptz(),
+});
+`,
+		);
+		await runCli(cwd, ["generate"]);
+		await writeSchema(
+			`import { schema, table, text, timestamptz, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const projects = table(app, "projects", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	description: text(),
+	archivedAt: timestamptz(),
+});
+`,
+		);
+		await runCli(cwd, ["generate"]);
+
+		const snapshot = JSON.parse(
+			await readFile(join(cwd, "hejbro.snapshot.json"), "utf8"),
+		);
+		expect(
+			snapshot.objects["table:app.projects"].columns.map(
+				(c: { name: string }) => c.name,
+			),
+		).toEqual(["id", "title", "archived_at", "description"]);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("5 checks passed");
+	});
+
 	it("check 3 (chain linearity): exits 1 with diverged-migrations when two files share a parent", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(BASE_SCHEMA);

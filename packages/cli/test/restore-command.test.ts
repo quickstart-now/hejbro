@@ -257,6 +257,77 @@ describe("hejbro restore", () => {
 		}
 	});
 
+	// D81 (#261): before the fix, the post-restore reproduction rebuild used
+	// an empty parent, so a mid-declaration column insert (migration 2)
+	// rebuilt in *declaration* order while the target commit's snapshot
+	// (built with the real parent) recorded *physical* order — the
+	// reproduction hash would never match, even on a genuinely
+	// undisturbed history. Restoring either migration of a real
+	// mid-insert history must still verify.
+	it("restores and verifies both sides of a mid-declaration column insert (D81)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			git(cwd, ["init", "-q", "-b", "main"]);
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				`import { schema, table, text, timestamptz, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const projects = table(app, "projects", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	archivedAt: timestamptz(),
+});
+`,
+			);
+			await runCli(cwd, ["init"]);
+			await runCli(cwd, ["generate"]);
+			git(cwd, ["add", "-A"]);
+			git(cwd, ["commit", "-q", "-m", "feat: projects table"]);
+
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				`import { schema, table, text, timestamptz, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const projects = table(app, "projects", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	description: text(),
+	archivedAt: timestamptz(),
+});
+`,
+			);
+			await runCli(cwd, ["generate"]);
+			git(cwd, ["add", "-A"]);
+			git(cwd, ["commit", "-q", "-m", "feat: description column"]);
+
+			const restoreOldest = await runCli(cwd, ["restore", "1"]);
+			expect(restoreOldest.exitCode).toBe(0);
+			expect(restoreOldest.stdout).toContain(
+				"verified: restored declarations reproduce migration 1's recorded snapshot",
+			);
+			// restore 1 left src/app.schema.ts staged-but-uncommitted at
+			// migration 1's content; clean the working tree back to HEAD
+			// (migration 2) before the next restore -- restore refuses to run
+			// over pending edits (dirty-working-tree), by design, no --force.
+			git(cwd, ["checkout", "-q", "HEAD", "--", "src/app.schema.ts"]);
+
+			const restoreCurrent = await runCli(cwd, ["restore", "2"]);
+			expect(restoreCurrent.exitCode).toBe(0);
+			expect(restoreCurrent.stdout).toContain(
+				"verified: restored declarations reproduce migration 2's recorded snapshot",
+			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
 	it("restore-state-lost: a squash-merged PR folds two migrations' declaration state into one commit", async () => {
 		const cwd = await createCliFixtureDir();
 		try {
