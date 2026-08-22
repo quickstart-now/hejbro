@@ -4,9 +4,11 @@ import type { ProjectionNode } from "../expr/ast";
 import { decodeSelectNode, encodeSelectNode } from "../expr/codec";
 import { renderSelect } from "../expr/render-sql";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
-import type { ObjectKind } from "../kind/object-kind";
+import { dispatchEmit } from "../kind/emit-helpers";
+import type { KindChange, ObjectKind } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
+import type { SqlStatement } from "../sql/statement";
 import { predropStatement, statement } from "../sql/statement";
 
 /**
@@ -107,6 +109,50 @@ const securityInvokerClause = (securityInvoker: boolean): string => {
 const createOrReplaceSql = (snapshot: ViewSnapshot): string =>
 	`create or replace view ${qualifyName(snapshot.schema, snapshot.name)}${securityInvokerClause(viewSecurityInvoker(snapshot))} as ${viewSelectSql(snapshot)};`;
 
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"view create change is missing its next snapshot.",
+		);
+	}
+	return [statement(createOrReplaceSql(asViewSnapshot(change.next)))];
+};
+
+const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"view alter change is missing its next snapshot.",
+		);
+	}
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"view alter change is missing its previous snapshot.",
+		);
+	}
+	const previousSnapshot = asViewSnapshot(change.previous);
+	const nextSnapshot = asViewSnapshot(change.next);
+	if (isPrefixOf(previousSnapshot.columns, nextSnapshot.columns)) {
+		return [statement(createOrReplaceSql(nextSnapshot))];
+	}
+	return [
+		predropStatement(dropViewSql(nextSnapshot)),
+		statement(createOrReplaceSql(nextSnapshot)),
+	];
+};
+
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"view drop change is missing its previous snapshot.",
+		);
+	}
+	return [predropStatement(dropViewSql(asViewSnapshot(change.previous)))];
+};
+
 /**
  * The built-in object kind for Postgres views. Identity is
  * `"<schema>.<name>"`. `diff` applies the prefix rule (D27): when the
@@ -176,51 +222,10 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 			},
 		];
 	},
-	emit: (change) => {
-		switch (change.operation) {
-			case "create": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"view create change is missing its next snapshot.",
-					);
-				}
-				return [statement(createOrReplaceSql(asViewSnapshot(change.next)))];
-			}
-			case "alter": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"view alter change is missing its next snapshot.",
-					);
-				}
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"view alter change is missing its previous snapshot.",
-					);
-				}
-				const previousSnapshot = asViewSnapshot(change.previous);
-				const nextSnapshot = asViewSnapshot(change.next);
-				if (isPrefixOf(previousSnapshot.columns, nextSnapshot.columns)) {
-					return [statement(createOrReplaceSql(nextSnapshot))];
-				}
-				return [
-					predropStatement(dropViewSql(nextSnapshot)),
-					statement(createOrReplaceSql(nextSnapshot)),
-				];
-			}
-			case "drop": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"view drop change is missing its previous snapshot.",
-					);
-				}
-				return [predropStatement(dropViewSql(asViewSnapshot(change.previous)))];
-			}
-			default:
-				return assertNever(change.operation);
-		}
-	},
+	emit: (change, siblingChanges) =>
+		dispatchEmit(
+			{ create: emitCreate, alter: emitAlter, drop: emitDrop },
+			change,
+			siblingChanges,
+		),
 };
