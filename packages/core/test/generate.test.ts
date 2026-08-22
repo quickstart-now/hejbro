@@ -6,12 +6,14 @@ import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import { literal } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
+import type { TableSnapshot } from "../src/kinds/table-snapshot";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import {
 	bigserial,
 	integer,
 	serial,
 	text,
+	timestamptz,
 	uuid,
 } from "../src/types/column-builder-factories";
 
@@ -147,6 +149,123 @@ describe("generateMigration", () => {
 			expect(firstStatement).toBe(
 				'alter table "app"."posts" rename column "slug" to "handle";',
 			);
+		});
+	});
+
+	// D81 (#261): a renamed/dropped/moved column's *position* survives (or
+	// doesn't) the same way its identity does — the oracle (`buildSnapshot`)
+	// reads the same `renames`/`confirmedDrops` `generateMigration` already
+	// validates.
+	describe("column order across renames and drops (D81)", () => {
+		it("keeps a renamed column in place and appends a newcomer behind it", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						title: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const v2 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						name: text(),
+						description: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: v1.snapshot,
+				renames: [
+					{
+						target: "column",
+						schemaName: "app",
+						tableName: "projects",
+						oldName: "title",
+						newName: "name",
+					},
+				],
+			});
+			expect(
+				(
+					v2.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "name", "archived_at", "description"]);
+			expect(v2.sql).toContain('rename column "title" to "name"');
+			expect(v2.sql).toContain('add column "description" text');
+		});
+
+		it("appends a newcomer at the end after a confirmed drop+add pair", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						title: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const v2 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						archivedAt: timestamptz(),
+						summary: text(),
+					}),
+				],
+				previousSnapshot: v1.snapshot,
+				confirmedDrops: [
+					{
+						target: "column",
+						schemaName: "app",
+						tableName: "projects",
+						columnName: "title",
+					},
+				],
+			});
+			expect(
+				(
+					v2.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "archived_at", "summary"]);
+			expect(v2.sql).toContain('drop column "title"');
+			expect(v2.sql).toContain('add column "summary" text');
+		});
+
+		it("a column that moves to a different table lands last in its new table", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "a", { id: uuid(), moved: text(), x: text() }),
+					table(app, "b", { id: uuid(), y: text() }),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const v2 = generateMigration({
+				declarations: [
+					app,
+					table(app, "a", { id: uuid(), x: text() }),
+					table(app, "b", { id: uuid(), y: text(), moved: text() }),
+				],
+				previousSnapshot: v1.snapshot,
+			});
+			expect(
+				(v2.snapshot.objects["table:app.a"] as TableSnapshot).columns.map(
+					(c) => c.name,
+				),
+			).toEqual(["id", "x"]);
+			expect(
+				(v2.snapshot.objects["table:app.b"] as TableSnapshot).columns.map(
+					(c) => c.name,
+				),
+			).toEqual(["id", "y", "moved"]);
 		});
 	});
 
