@@ -119,7 +119,7 @@ index("docs_body_trgm_idx").using("gin").on(op(t.body, "gin_trgm_ops"));
 column; Postgres' own order is `<column or (expression)> [<opclass>]
 [asc|desc] [nulls first|last]`, so `op(desc(t.col, { nulls: "first" }), "c")`
 renders `"col" c desc nulls first`. `op` also wraps an expression, not just
-a column — ``op(sql`lower(${t.email})`, "c")`` renders `((lower("app"."users"."email"))) c`.
+a column — ``op(sql`lower(${t.email})`, "c")`` renders `(lower("app"."users"."email")) c`.
 
 ## Expression indexes
 
