@@ -1,6 +1,7 @@
 import type { FunctionDeclaration } from "../dsl/define-function";
-import { assertNever, throwHejbroError } from "../error";
+import { throwHejbroError } from "../error";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
+import { dispatchEmit } from "../kind/emit-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
 import { fnv1aHex } from "../plpgsql/body-hash";
 import {
@@ -9,6 +10,7 @@ import {
 } from "../plpgsql/render-body";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
+import type { SqlStatement } from "../sql/statement";
 import { statement } from "../sql/statement";
 import { renderTypeNode } from "../types/type-node";
 
@@ -54,6 +56,53 @@ const SIGNATURE_CHANGED_NOTE = "signature changed; recreating";
 
 const dropFunctionStatementSql = (snapshot: FunctionSnapshot): string =>
 	`drop function ${qualifyName(snapshot.schema, snapshot.name)}(${argTypeList(snapshot.args)});`;
+
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"function create change is missing its next snapshot.",
+		);
+	}
+	return [statement(asFunctionSnapshot(change.next).bodySql)];
+};
+
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.previous === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"function drop change is missing its previous snapshot.",
+		);
+	}
+	return [
+		statement(dropFunctionStatementSql(asFunctionSnapshot(change.previous))),
+	];
+};
+
+const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
+	if (change.next === null) {
+		return throwHejbroError(
+			"invalid-kind-change",
+			"function alter change is missing its next snapshot.",
+		);
+	}
+	const nextSnapshot = asFunctionSnapshot(change.next);
+	if (change.previous === null) {
+		return [statement(nextSnapshot.bodySql)];
+	}
+	const previousSnapshot = asFunctionSnapshot(change.previous);
+	const signatureSame = sameJson(
+		signatureOf(previousSnapshot),
+		signatureOf(nextSnapshot),
+	);
+	if (signatureSame) {
+		return [statement(nextSnapshot.bodySql)];
+	}
+	return [
+		statement(dropFunctionStatementSql(previousSnapshot)),
+		statement(nextSnapshot.bodySql),
+	];
+};
 
 /**
  * The built-in object kind for Postgres functions. Identity is
@@ -133,56 +182,10 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 			},
 		];
 	},
-	emit: (change: KindChange) => {
-		switch (change.operation) {
-			case "create": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"function create change is missing its next snapshot.",
-					);
-				}
-				return [statement(asFunctionSnapshot(change.next).bodySql)];
-			}
-			case "drop": {
-				if (change.previous === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"function drop change is missing its previous snapshot.",
-					);
-				}
-				return [
-					statement(
-						dropFunctionStatementSql(asFunctionSnapshot(change.previous)),
-					),
-				];
-			}
-			case "alter": {
-				if (change.next === null) {
-					return throwHejbroError(
-						"invalid-kind-change",
-						"function alter change is missing its next snapshot.",
-					);
-				}
-				const nextSnapshot = asFunctionSnapshot(change.next);
-				if (change.previous === null) {
-					return [statement(nextSnapshot.bodySql)];
-				}
-				const previousSnapshot = asFunctionSnapshot(change.previous);
-				const signatureSame = sameJson(
-					signatureOf(previousSnapshot),
-					signatureOf(nextSnapshot),
-				);
-				if (signatureSame) {
-					return [statement(nextSnapshot.bodySql)];
-				}
-				return [
-					statement(dropFunctionStatementSql(previousSnapshot)),
-					statement(nextSnapshot.bodySql),
-				];
-			}
-			default:
-				return assertNever(change.operation);
-		}
-	},
+	emit: (change, siblingChanges) =>
+		dispatchEmit(
+			{ create: emitCreate, alter: emitAlter, drop: emitDrop },
+			change,
+			siblingChanges,
+		),
 };
