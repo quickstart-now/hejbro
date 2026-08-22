@@ -250,12 +250,9 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
 	functionCall: (node, scope) => firstScopeViolation(node.args, scope),
 	sqlTemplate: (node, scope) =>
 		firstScopeViolation(
-			node.chunks.flatMap((chunk) => {
-				if (chunk.chunkKind === "expr") {
-					return [chunk.expr];
-				}
-				return [];
-			}),
+			node.chunks
+				.filter((chunk) => chunk.chunkKind === "expr")
+				.map((chunk) => chunk.expr),
 			scope,
 		),
 	exists: (node, scope) => {
