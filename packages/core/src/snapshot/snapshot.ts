@@ -374,6 +374,39 @@ const firstMissingRequiredKey = (
 	return missing ?? null;
 };
 
+type RequiredKeyGap = {
+	readonly key: string;
+	readonly kind: string;
+	readonly missingKey: string;
+};
+
+/**
+ * The required-key gap `[key, node]` reports, or `null` when it's fine:
+ * `key` doesn't parse as `"kind:identity"`, its kind has no
+ * `requiredKeys` of its own, or every required key is present. Split out
+ * of {@link validateRequiredKeys} (D71/#154 ratchet-5) so this shape's
+ * own three questions don't fold into that function's complexity.
+ */
+const requiredKeyGapFor = (
+	key: string,
+	node: JsonValue,
+	requiredKeysByKind: ReadonlyMap<string, ReadonlyArray<string>>,
+): RequiredKeyGap | null => {
+	const kind = kindOfObjectKey(key);
+	if (kind === null) {
+		return null;
+	}
+	const requiredKeys = requiredKeysByKind.get(kind);
+	if (requiredKeys === undefined) {
+		return null;
+	}
+	const missingKey = firstMissingRequiredKey(node, requiredKeys);
+	if (missingKey === null) {
+		return null;
+	}
+	return { key, kind, missingKey };
+};
+
 /**
  * {@link parseSnapshot}'s optional per-kind required-key check (D79,
  * #159) — every kind's own `ObjectKind.requiredKeys`, looked up by this
@@ -393,21 +426,7 @@ const validateRequiredKeys = (
 		return;
 	}
 	const gap = Object.entries(objects)
-		.map(([key, node]) => {
-			const kind = kindOfObjectKey(key);
-			if (kind === null) {
-				return null;
-			}
-			const requiredKeys = requiredKeysByKind.get(kind);
-			if (requiredKeys === undefined) {
-				return null;
-			}
-			const missingKey = firstMissingRequiredKey(node, requiredKeys);
-			if (missingKey === null) {
-				return null;
-			}
-			return { key, kind, missingKey };
-		})
+		.map(([key, node]) => requiredKeyGapFor(key, node, requiredKeysByKind))
 		.find((candidate) => candidate !== null);
 	if (gap === undefined || gap === null) {
 		return;
