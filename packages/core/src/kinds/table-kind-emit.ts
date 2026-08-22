@@ -41,6 +41,23 @@ import {
 	tablePrimaryKeyName,
 } from "./table-snapshot";
 
+/** A sibling change that is itself a `sequence` "create" (D74) — the only shape `sequenceForAddedColumn` can borrow a snapshot from (#154 ratchet-5: named separately from the column-match test below so each reads as its own rule). */
+const isMatchingSequenceCreate = (sibling: KindChange): boolean =>
+	sibling.kind === "sequence" &&
+	sibling.operation === "create" &&
+	sibling.next !== null;
+
+/** `true` when `sequence` is the owning sequence for `schema`.`table`.`column` (#154 ratchet-5, see isMatchingSequenceCreate). */
+const sequenceOwnsColumn = (
+	sequence: SequenceSnapshot,
+	schema: string,
+	tableName: string,
+	columnName: string,
+): boolean =>
+	sequence.schema === schema &&
+	sequence.table === tableName &&
+	sequence.column === columnName;
+
 /**
  * The sibling `sequence` "create" change (D74) whose owning `schema`/
  * `table`/`column` matches this added column, or `null` if none — a
@@ -56,18 +73,10 @@ const sequenceForAddedColumn = (
 	siblingChanges: ReadonlyArray<KindChange>,
 ): SequenceSnapshot | null => {
 	const candidates = siblingChanges
-		.filter(
-			(sibling) =>
-				sibling.kind === "sequence" &&
-				sibling.operation === "create" &&
-				sibling.next !== null,
-		)
+		.filter(isMatchingSequenceCreate)
 		.map((sibling) => asSequenceSnapshot(sibling.next));
-	const match = candidates.find(
-		(sequence) =>
-			sequence.schema === schema &&
-			sequence.table === tableName &&
-			sequence.column === columnName,
+	const match = candidates.find((sequence) =>
+		sequenceOwnsColumn(sequence, schema, tableName, columnName),
 	);
 	return match ?? null;
 };

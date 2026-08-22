@@ -350,6 +350,72 @@ const buildNotes = <TValue>(
 	...diff.changed.map((entry) => `${label} "${entry.key}" changed`),
 ];
 
+/** The four keyed diffs a survivor-to-survivor table `diff` compares — one per field a table alter can touch (#154 ratchet-5: split out of tableKind.diff so computing them reads as its own step, separate from what they're used for). */
+type TableFieldDiffs = {
+	readonly columnDiff: KeyedDiff<ColumnSnapshot>;
+	readonly indexDiff: KeyedDiff<IndexSnapshot>;
+	readonly foreignKeyDiff: KeyedDiff<ForeignKeySnapshot>;
+	readonly checkDiff: KeyedDiff<CheckSnapshot>;
+};
+
+const tableFieldDiffs = (
+	previousSnapshot: TableSnapshot,
+	nextSnapshot: TableSnapshot,
+): TableFieldDiffs => ({
+	columnDiff: diffByKey(
+		previousSnapshot.columns.map((column) => ({
+			key: column.name,
+			value: column,
+		})),
+		nextSnapshot.columns.map((column) => ({
+			key: column.name,
+			value: column,
+		})),
+	),
+	indexDiff: diffByKey(
+		previousSnapshot.indexes.map((index) => ({
+			key: index.name,
+			value: index,
+		})),
+		nextSnapshot.indexes.map((index) => ({ key: index.name, value: index })),
+	),
+	foreignKeyDiff: diffByKey(
+		previousSnapshot.foreignKeys.map((foreignKey) => ({
+			key: foreignKey.name,
+			value: foreignKey,
+		})),
+		nextSnapshot.foreignKeys.map((foreignKey) => ({
+			key: foreignKey.name,
+			value: foreignKey,
+		})),
+	),
+	checkDiff: diffByKey(
+		tableChecks(previousSnapshot).map((check) => ({
+			key: check.name,
+			value: check,
+		})),
+		tableChecks(nextSnapshot).map((check) => ({
+			key: check.name,
+			value: check,
+		})),
+	),
+});
+
+/** `true` when none of `diffs`' four fields changed at all — a survivor whose columns/indexes/foreign keys/checks are all byte-identical produces no alter change (#154 ratchet-5, see tableFieldDiffs). */
+const isEmptyTableFieldDiffs = (diffs: TableFieldDiffs): boolean =>
+	isEmptyKeyedDiff(diffs.columnDiff) &&
+	isEmptyKeyedDiff(diffs.indexDiff) &&
+	isEmptyKeyedDiff(diffs.foreignKeyDiff) &&
+	isEmptyKeyedDiff(diffs.checkDiff);
+
+/** One banner note per added/dropped/changed entry across all four of `diffs`' fields (#154 ratchet-5, see tableFieldDiffs). */
+const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
+	...buildNotes("column", diffs.columnDiff),
+	...buildNotes("index", diffs.indexDiff),
+	...buildNotes("foreign key", diffs.foreignKeyDiff),
+	...buildNotes("check", diffs.checkDiff),
+];
+
 /**
  * The built-in object kind for Postgres tables. Identity is
  * `"<schema>.<tableName>"`. `diff` reports one `create`/`drop` change for
@@ -395,62 +461,13 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 			return guard.changes;
 		}
 
-		const previousSnapshot = asTableSnapshot(guard.previous);
-		const nextSnapshot = asTableSnapshot(guard.next);
-
-		const columnDiff = diffByKey(
-			previousSnapshot.columns.map((column) => ({
-				key: column.name,
-				value: column,
-			})),
-			nextSnapshot.columns.map((column) => ({
-				key: column.name,
-				value: column,
-			})),
+		const diffs = tableFieldDiffs(
+			asTableSnapshot(guard.previous),
+			asTableSnapshot(guard.next),
 		);
-		const indexDiff = diffByKey(
-			previousSnapshot.indexes.map((index) => ({
-				key: index.name,
-				value: index,
-			})),
-			nextSnapshot.indexes.map((index) => ({ key: index.name, value: index })),
-		);
-		const foreignKeyDiff = diffByKey(
-			previousSnapshot.foreignKeys.map((foreignKey) => ({
-				key: foreignKey.name,
-				value: foreignKey,
-			})),
-			nextSnapshot.foreignKeys.map((foreignKey) => ({
-				key: foreignKey.name,
-				value: foreignKey,
-			})),
-		);
-		const checkDiff = diffByKey(
-			tableChecks(previousSnapshot).map((check) => ({
-				key: check.name,
-				value: check,
-			})),
-			tableChecks(nextSnapshot).map((check) => ({
-				key: check.name,
-				value: check,
-			})),
-		);
-
-		if (
-			isEmptyKeyedDiff(columnDiff) &&
-			isEmptyKeyedDiff(indexDiff) &&
-			isEmptyKeyedDiff(foreignKeyDiff) &&
-			isEmptyKeyedDiff(checkDiff)
-		) {
+		if (isEmptyTableFieldDiffs(diffs)) {
 			return [];
 		}
-
-		const notes = [
-			...buildNotes("column", columnDiff),
-			...buildNotes("index", indexDiff),
-			...buildNotes("foreign key", foreignKeyDiff),
-			...buildNotes("check", checkDiff),
-		];
 
 		return [
 			{
@@ -459,7 +476,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 				identity,
 				previous: guard.previous,
 				next: guard.next,
-				notes,
+				notes: tableFieldDiffNotes(diffs),
 			},
 		];
 	},
