@@ -15,14 +15,22 @@ import type { SequenceSnapshot } from "../kinds/sequence-kind";
 import {
 	deriveForeignKeyName,
 	deriveIndexName,
+	derivePrimaryKeyName,
 	deriveSequenceName,
+	deriveUniqueName,
 } from "../kinds/table-kind";
 import type {
+	ColumnSnapshot,
 	ForeignKeySnapshot,
 	IndexSnapshot,
 	TableSnapshot,
 } from "../kinds/table-snapshot";
-import { asTableSnapshot, tableIdentity } from "../kinds/table-snapshot";
+import {
+	asTableSnapshot,
+	columnUniqueName,
+	tableIdentity,
+	tablePrimaryKeyName,
+} from "../kinds/table-snapshot";
 import type { TriggerSnapshot } from "../kinds/trigger-kind";
 import type { ViewSnapshot } from "../kinds/view-kind";
 import { projectionColumns } from "../kinds/view-kind";
@@ -1087,6 +1095,140 @@ const rewriteForeignKeysForRename = (
 };
 
 /**
+ * @see rewriteIndexesForRename, rewriteForeignKeysForRename — the primary
+ * key counterpart (#24), with one structural difference in the *other*
+ * direction from `rewriteSequencesForRename`'s: a table has at most one
+ * primary key, a single optional field on the table's own node
+ * (`TableSnapshot.primaryKeyName`), never an array to `.map` over.
+ *
+ * `derivePrimaryKeyName` depends only on the table name, never the member
+ * columns (measured against `pg_dump`: renaming a table's primary-key
+ * columns never renames its `<table>_pkey` constraint on its own, but
+ * neither does the constraint's name have anything to say about *which*
+ * columns it covers). A **column** rename therefore never changes this
+ * name — callers only need this on the table-rename path (`oldColumnName`/
+ * `newColumnName` both `null` in that call; `applyColumnRename` doesn't
+ * call this at all, unlike the index/FK/unique cases).
+ */
+/** `[]` for `null`, `[maybeStatement]` otherwise — `applyTableRename`'s statements array `...spread`s a possibly-absent rename statement the same way it spreads every array-sourced one. */
+const statementStringOrEmpty = (
+	maybeStatement: string | null,
+): ReadonlyArray<string> => {
+	if (maybeStatement === null) {
+		return [];
+	}
+	return [maybeStatement];
+};
+
+/** `{ ...node, primaryKeyName: name }` when `name` is given, else `node` unchanged — `rewritePrimaryKeyForRename` only omits `primaryKeyName` from its result when the table never had one, so `undefined` here always means "leave absent," never "clear an existing value." */
+const withPrimaryKeyName = (
+	node: TableSnapshot,
+	name: string | undefined,
+): TableSnapshot => {
+	if (name === undefined) {
+		return node;
+	}
+	return { ...node, primaryKeyName: name };
+};
+
+const rewritePrimaryKeyForRename = (
+	schemaName: string,
+	oldTableName: string,
+	newTableName: string,
+	table: TableSnapshot,
+): { readonly primaryKeyName?: string; readonly statement: string | null } => {
+	const previousName = tablePrimaryKeyName(table);
+	if (previousName === null) {
+		return { statement: null };
+	}
+	const oldDerivedName = derivePrimaryKeyName(oldTableName);
+	const wasDerived = previousName === oldDerivedName;
+	if (!wasDerived) {
+		return { primaryKeyName: previousName, statement: null };
+	}
+	const newDerivedName = derivePrimaryKeyName(newTableName);
+	if (newDerivedName === previousName) {
+		return { primaryKeyName: previousName, statement: null };
+	}
+	return {
+		primaryKeyName: newDerivedName,
+		statement: renderForeignKeyConstraintRename(
+			schemaName,
+			newTableName,
+			previousName,
+			newDerivedName,
+		),
+	};
+};
+
+/**
+ * @see rewriteIndexesForRename, rewriteForeignKeysForRename — the
+ * `ColumnSnapshot.uniqueName` counterpart (#24): unlike the primary key,
+ * `deriveUniqueName` depends on *both* the table name and the column's own
+ * name, the same shape as index/FK, so both the table-rename and the
+ * column-rename paths need this (mirrors those two exactly, down to the
+ * per-entry `wasDerived` check — a column whose recorded `uniqueName`
+ * doesn't match `deriveUniqueName(oldTableName, oldColumnName)` was never
+ * following the derivation in the first place, today only reachable
+ * through a hand-edited or round-tripped snapshot, D33, since there is no
+ * DSL surface to author a custom unique-constraint name). UNIQUE's own
+ * *emission* stays out of scope this wave (`table-kind-emit.ts`'s
+ * surviving `unsupported-column-alter` guard) — this only keeps the
+ * recorded name from drifting out from under a rename.
+ */
+const rewriteUniqueNamesForRename = (
+	schemaName: string,
+	oldTableName: string,
+	newTableName: string,
+	oldColumnName: string | null,
+	newColumnName: string | null,
+	columns: ReadonlyArray<ColumnSnapshot>,
+): {
+	readonly columns: ReadonlyArray<ColumnSnapshot>;
+	readonly statements: ReadonlyArray<string>;
+} => {
+	const rewritten = columns.map((column) => {
+		// Every column's own `name` field is renamed here, unconditionally
+		// (matching `oldColumnName` if given), the same way
+		// rewriteIndexesForRename/rewriteForeignKeysForRename rename their
+		// own nested column-name arrays -- callers pass this function's
+		// `columns` result on, rather than separately renaming columns
+		// themselves, so the rename happens exactly once.
+		const newName =
+			resolveRenamedColumns([column.name], oldColumnName, newColumnName)[0] ??
+			column.name;
+		const previousUniqueName = columnUniqueName(column);
+		if (previousUniqueName === null) {
+			return { entry: { ...column, name: newName }, statement: null };
+		}
+		const oldDerivedName = deriveUniqueName(oldTableName, column.name);
+		const wasDerived = previousUniqueName === oldDerivedName;
+		if (!wasDerived) {
+			return { entry: { ...column, name: newName }, statement: null };
+		}
+		const newDerivedName = deriveUniqueName(newTableName, newName);
+		if (newDerivedName === previousUniqueName) {
+			return { entry: { ...column, name: newName }, statement: null };
+		}
+		return {
+			entry: { ...column, name: newName, uniqueName: newDerivedName },
+			statement: renderForeignKeyConstraintRename(
+				schemaName,
+				newTableName,
+				previousUniqueName,
+				newDerivedName,
+			),
+		};
+	});
+	return {
+		columns: rewritten.map((r) => r.entry),
+		statements: rewritten
+			.map((r) => r.statement)
+			.filter((s): s is string => s !== null),
+	};
+};
+
+/**
  * @see rewriteIndexesForRename, rewriteForeignKeysForRename — the
  * `sequence` counterpart (#23/D66), with one structural difference: a
  * sequence is its own top-level snapshot object (`sequence:<schema>.
@@ -1202,13 +1344,31 @@ const applyTableRename = (
 		null,
 		tableSnapshot.foreignKeys,
 	);
+	const primaryKeyResult = rewritePrimaryKeyForRename(
+		spec.schemaName,
+		spec.oldName,
+		spec.newName,
+		tableSnapshot,
+	);
+	const uniqueNameResult = rewriteUniqueNamesForRename(
+		spec.schemaName,
+		spec.oldName,
+		spec.newName,
+		null,
+		null,
+		tableSnapshot.columns,
+	);
 
-	const renamedNode: TableSnapshot = {
-		...tableSnapshot,
-		name: spec.newName,
-		indexes: indexResult.indexes,
-		foreignKeys: foreignKeyResult.foreignKeys,
-	};
+	const renamedNode: TableSnapshot = withPrimaryKeyName(
+		{
+			...tableSnapshot,
+			name: spec.newName,
+			columns: uniqueNameResult.columns,
+			indexes: indexResult.indexes,
+			foreignKeys: foreignKeyResult.foreignKeys,
+		},
+		primaryKeyResult.primaryKeyName,
+	);
 
 	const withoutOld = withoutKey(state.objects, oldKey);
 	const withNewTable = setKey(
@@ -1263,6 +1423,8 @@ const applyTableRename = (
 			renderTableRename(spec),
 			...indexResult.statements,
 			...foreignKeyResult.statements,
+			...statementStringOrEmpty(primaryKeyResult.statement),
+			...uniqueNameResult.statements,
 			...sequenceResult.statements,
 		],
 		changes: [...state.changes, change],
@@ -1289,12 +1451,6 @@ const applyColumnRename = (
 	}
 	const tableSnapshot = asTableSnapshot(raw);
 
-	const rewrittenColumns = tableSnapshot.columns.map((column) => {
-		if (column.name !== spec.oldName) {
-			return column;
-		}
-		return { ...column, name: spec.newName };
-	});
 	const indexResult = rewriteIndexesForRename(
 		spec.schemaName,
 		effectiveTableName,
@@ -1311,10 +1467,21 @@ const applyColumnRename = (
 		spec.newName,
 		tableSnapshot.foreignKeys,
 	);
+	// derivePrimaryKeyName is column-name-independent (rewritePrimaryKeyForRename's
+	// own doc comment) -- a column rename never touches it, so there is no
+	// call here, unlike the index/FK/unique cases right above and below.
+	const uniqueNameResult = rewriteUniqueNamesForRename(
+		spec.schemaName,
+		effectiveTableName,
+		effectiveTableName,
+		spec.oldName,
+		spec.newName,
+		tableSnapshot.columns,
+	);
 
 	const renamedNode: TableSnapshot = {
 		...tableSnapshot,
-		columns: rewrittenColumns,
+		columns: uniqueNameResult.columns,
 		indexes: indexResult.indexes,
 		foreignKeys: foreignKeyResult.foreignKeys,
 	};
@@ -1362,6 +1529,7 @@ const applyColumnRename = (
 			renderColumnRename({ ...spec, tableName: effectiveTableName }),
 			...indexResult.statements,
 			...foreignKeyResult.statements,
+			...uniqueNameResult.statements,
 			...sequenceResult.statements,
 		],
 		changes: [...state.changes, change],

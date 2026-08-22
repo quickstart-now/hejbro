@@ -42,10 +42,14 @@ export const renderIndexRename = (
 
 /**
  * Renders `alter table … rename constraint … to …;` — the derived-name
- * drift guard for a foreign key whose stored name was
- * `derive(<old names>)` (Task 6 algorithm step 4). `tableName` is the
- * table's *current* name — after a table rename, that rename statement has
- * already run, so this must be the new name.
+ * drift guard for a single-table constraint whose stored name was
+ * `derive(<old names>)` (Task 6 algorithm step 4; #24 for primary key and
+ * unique). The rename syntax itself is identical for every constraint
+ * kind Postgres has, so despite the name this is shared beyond foreign
+ * keys — `rename-plan.ts`'s own primary-key and unique-name rewrites call
+ * it too. `tableName` is the table's *current* name — after a table
+ * rename, that rename statement has already run, so this must be the new
+ * name.
  */
 export const renderForeignKeyConstraintRename = (
 	schemaName: string,
