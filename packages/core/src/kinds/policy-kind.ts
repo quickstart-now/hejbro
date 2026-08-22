@@ -77,26 +77,26 @@ const POLICY_CHANGED_NOTE = "policy changed; recreating";
 
 /**
  * Encodes a `using`/`withCheck` clause into its snapshot form (D67/D70).
- * Still calls `renderExpr` first, at declaration time, purely for its
- * validating side effect — a correlated `exists()` subquery referencing a
- * column outside `[query's own from/joins, ...outerScope]` throws
- * `foreign-column-ref` from inside `renderSelect`'s scope check, and
- * `assertOwnColumnsOnly` (dsl/rls.ts) only catches a *direct* out-of-table
- * ref (it doesn't descend into `exists()`), so this is the only place
- * that catches a bad ref buried inside a correlated subquery. Rendering
- * to text and discarding it looks wasteful, but calling `encodeExprNode`
- * alone would silently skip this validation until whenever `emit` next
- * decodes and renders the node — which, for a policy that never changes
- * again, could be never.
+ * Used to also call `renderExpr` here first, purely for its validating
+ * side effect — a correlated `exists()` subquery referencing a column
+ * outside scope threw `foreign-column-ref` from inside `renderSelect`'s
+ * own scope check, and `assertOwnColumnsOnly` (`dsl/rls.ts`) used to only
+ * catch a *direct* out-of-table ref (it never descended into `exists()`),
+ * so this was the only place that caught a bad ref buried inside a
+ * correlated subquery. `assertOwnColumnsOnly` now descends into
+ * `exists()` too (`findExprScopeViolation`, #160) and runs at declaration
+ * time, before a `PolicyDeclaration` — let alone this snapshot node —
+ * exists at all, so this encode-time re-check was pure duplication: no
+ * `PolicyInput` can reach this function without already having passed
+ * the declaration-time check, and nothing between declaration and here
+ * (a rename's own retargeting, `engine/rename-plan.ts`) can turn an
+ * already-in-scope reference into an out-of-scope one, only rename what
+ * it already legally pointed at.
  */
-const encodeClauseExpr = (
-	expr: ExprNode | null,
-	outerScope: ReadonlyArray<TableRefNode>,
-): JsonValue | null => {
+const encodeClauseExpr = (expr: ExprNode | null): JsonValue | null => {
 	if (expr === null) {
 		return null;
 	}
-	renderExpr(expr, outerScope);
 	return encodeExprNode(expr);
 };
 
@@ -197,9 +197,6 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 	owns: (declaration): declaration is PolicyDeclaration =>
 		declaration.declarationKind === "policy",
 	serialize: (declaration) => {
-		const outerScope: ReadonlyArray<TableRefNode> = [
-			{ schemaName: declaration.schemaName, tableName: declaration.tableName },
-		];
 		const snapshot: PolicySnapshot = {
 			schema: declaration.schemaName,
 			table: declaration.tableName,
@@ -207,8 +204,8 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 			command: declaration.command,
 			roles: declaration.roles,
 			...permissiveField(declaration.permissive),
-			...usingField(encodeClauseExpr(declaration.using, outerScope)),
-			...withCheckField(encodeClauseExpr(declaration.withCheck, outerScope)),
+			...usingField(encodeClauseExpr(declaration.using)),
+			...withCheckField(encodeClauseExpr(declaration.withCheck)),
 		};
 		return snapshot;
 	},

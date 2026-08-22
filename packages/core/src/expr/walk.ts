@@ -1,4 +1,31 @@
-import type { ExprNode } from "./ast";
+import type { ColumnRefNode, ExistsNode, ExprNode, TableRefNode } from "./ast";
+
+/**
+ * The expressions an `exists()` node's own subquery can itself contain:
+ * its `where`, every join's `on`, and every `orderBy` term's `expr` —
+ * exactly the fields a correlated reference or a nested `exists()` can
+ * appear in (the subquery's `projection` is always `constantOne`, D70,
+ * so there is no path through the public DSL for a real expression to
+ * reach it — see {@link someDeepExprNode}'s own doc comment). Shared by
+ * {@link someDeepExprNode}'s `exists` handler and `dsl/rls.ts`'s
+ * declaration-time scope walk (#160), so the two walkers can't drift
+ * apart on what "descending into `exists`" means.
+ */
+const whereExprOrEmpty = (where: ExprNode | null): ReadonlyArray<ExprNode> => {
+	if (where === null) {
+		return [];
+	}
+	return [where];
+};
+
+export const existsChildExprs = (node: ExistsNode): ReadonlyArray<ExprNode> => {
+	const { query } = node;
+	return [
+		...whereExprOrEmpty(query.where),
+		...query.joins.map((join) => join.on),
+		...query.orderBy.map((term) => term.expr),
+	];
+};
 
 /**
  * One handler per {@link ExprNode} `nodeKind`, receiving the node narrowed
@@ -133,18 +160,8 @@ const someDeepExprNodeHandlers: SomeExprNodeHandlers = {
 			(chunk) =>
 				chunk.chunkKind === "expr" && someDeepExprNode(chunk.expr, predicate),
 		),
-	exists: (node, predicate) => {
-		const { query } = node;
-		const whereMatch =
-			query.where !== null && someDeepExprNode(query.where, predicate);
-		const joinMatch = query.joins.some((join) =>
-			someDeepExprNode(join.on, predicate),
-		);
-		const orderByMatch = query.orderBy.some((term) =>
-			someDeepExprNode(term.expr, predicate),
-		);
-		return whereMatch || joinMatch || orderByMatch;
-	},
+	exists: (node, predicate) =>
+		existsChildExprs(node).some((child) => someDeepExprNode(child, predicate)),
 };
 
 /**
@@ -158,7 +175,7 @@ const someDeepExprNodeHandlers: SomeExprNodeHandlers = {
  * (`packages/supabase/src/validators/rls-uncached-auth-call.ts`'s
  * `childrenOf`) as the only options — this consolidates that shape into
  * one exported function instead of a second and third copy of it (#141,
- * with #160's future `assertExprScope` as a third planned caller).
+ * with #160's `findExprScopeViolation` below as a third caller).
  *
  * `exists()`'s subquery `projection` is deliberately not walked: D70's
  * `buildExists` always overwrites it with the fixed `constantOne` shape
@@ -177,4 +194,106 @@ export const someDeepExprNode = (
 		predicate: (candidate: ExprNode) => boolean,
 	) => boolean;
 	return handler(node, predicate);
+};
+
+const isRefInScope = (
+	scope: ReadonlyArray<TableRefNode>,
+	ref: ColumnRefNode,
+): boolean =>
+	scope.some(
+		(table) =>
+			table.schemaName === ref.schemaName && table.tableName === ref.tableName,
+	);
+
+/**
+ * One handler per {@link ExprNode} `nodeKind` for
+ * {@link findExprScopeViolation} — same mapped-type shape as this file's
+ * other two handler tables, so a missing handler is a `tsc` error.
+ */
+type ScopeViolationHandlers = {
+	readonly [K in ExprNode["nodeKind"]]: (
+		node: Extract<ExprNode, { readonly nodeKind: K }>,
+		scope: ReadonlyArray<TableRefNode>,
+	) => ColumnRefNode | undefined;
+};
+
+const firstScopeViolation = (
+	children: ReadonlyArray<ExprNode>,
+	scope: ReadonlyArray<TableRefNode>,
+): ColumnRefNode | undefined =>
+	children
+		.map((child) => findExprScopeViolation(child, scope))
+		.find((ref): ref is ColumnRefNode => ref !== undefined);
+
+const scopeViolationHandlers: ScopeViolationHandlers = {
+	literal: () => undefined,
+	rawSql: () => undefined,
+	plpgsqlRef: () => undefined,
+	columnRef: (node, scope) => {
+		if (isRefInScope(scope, node)) {
+			return undefined;
+		}
+		return node;
+	},
+	comparison: (node, scope) =>
+		firstScopeViolation([node.left, node.right], scope),
+	logical: (node, scope) => firstScopeViolation(node.operands, scope),
+	not: (node, scope) => findExprScopeViolation(node.operand, scope),
+	nullTest: (node, scope) => findExprScopeViolation(node.operand, scope),
+	inList: (node, scope) =>
+		firstScopeViolation([node.operand, ...node.values], scope),
+	between: (node, scope) =>
+		firstScopeViolation(
+			[node.operand, node.lowerBound, node.upperBound],
+			scope,
+		),
+	functionCall: (node, scope) => firstScopeViolation(node.args, scope),
+	sqlTemplate: (node, scope) =>
+		firstScopeViolation(
+			node.chunks.flatMap((chunk) => {
+				if (chunk.chunkKind === "expr") {
+					return [chunk.expr];
+				}
+				return [];
+			}),
+			scope,
+		),
+	exists: (node, scope) => {
+		const extendedScope = [
+			node.query.from,
+			...node.query.joins.map((join) => join.table),
+			...scope,
+		];
+		return firstScopeViolation(existsChildExprs(node), extendedScope);
+	},
+};
+
+/**
+ * The first {@link ColumnRefNode} in `expr` that resolves to a table
+ * outside `scope`, or `undefined` when every ref is in scope — depth-first,
+ * descending into `exists()` subqueries with `scope` *extended* by that
+ * subquery's own `from`/joins (exactly the rule `render-sql.ts`'s
+ * `renderSelectClauses` applies when it actually renders one), unlike
+ * {@link collectColumnRefs} in `render-sql.ts` (which stops at `exists()`
+ * on purpose — a subquery's refs are that caller's own concern, not a
+ * flat "every ref in this tree" collection's). A correlated reference to
+ * an outer table stays legal at any depth; a reference to any *other*
+ * table is a violation, whether it sits at the top level or buried
+ * inside `exists()` (#160). Pure and declaration-time-safe: no rendering,
+ * no throwing — the caller decides what error (and error *code*) a
+ * violation means for its own field (`dsl/rls.ts`'s policy `using`/
+ * `withCheck` is the only caller today; CHECK/partial-index `where` don't
+ * need this at all, since they reject `exists()` outright at declaration
+ * time already — see `dsl/table.ts`'s `validateChecks`/
+ * `validateIndexPredicates`).
+ */
+export const findExprScopeViolation = (
+	expr: ExprNode,
+	scope: ReadonlyArray<TableRefNode>,
+): ColumnRefNode | undefined => {
+	const handler = scopeViolationHandlers[expr.nodeKind] as (
+		node: ExprNode,
+		scope: ReadonlyArray<TableRefNode>,
+	) => ColumnRefNode | undefined;
+	return handler(expr, scope);
 };
