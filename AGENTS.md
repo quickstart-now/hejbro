@@ -83,10 +83,13 @@ pnpm build           # turbo build
 - Publishing to npm. The `@hejbro` scope is owned by the project owner
   (confirmed 2026-08-19). Since D63 the release itself runs in GitHub
   Actions, so the gate is not "who runs the publish command" but **who
-  approves the release**: merging the "Version Packages" PR publishes
-  immediately and irreversibly (npm burns a version number even if it is
-  unpublished), and that merge is an owner action. Never merge it, and
-  never change the release workflows, without the owner.
+  approves the release**: merging the "Version Packages" PR is the release
+  decision and is reserved for the owner. Publishing then runs from GitHub
+  Actions; the owner touches it three times — (1) merge the Version
+  Packages PR on `dev`, (2) merge `dev` → `main` with a merge commit,
+  (3) approve the `npm` environment — and step 3 is the irreversible one:
+  npm keeps a version number even if it is unpublished. Never merge that
+  PR, and never change the release workflows, without the owner.
 - Adding runtime dependencies to `@hejbro/core`.
 - Changing any decision in the spec's decision log.
 - Building anything listed under "Deferred" in the roadmap.
