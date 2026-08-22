@@ -73,8 +73,9 @@ describe("recreate ordering through generateMigration", () => {
 			operation: "alter",
 		});
 
+		// D75: an alter's own drop half is bare, not `if exists`.
 		const dropIndex = result.sql.indexOf(
-			'drop trigger if exists "guard" on "app"."comments";',
+			'drop trigger "guard" on "app"."comments";',
 		);
 		const createIndex = result.sql.indexOf('create trigger "guard"');
 		expect(dropIndex).toBeGreaterThanOrEqual(0);
@@ -237,8 +238,9 @@ describe("recreate ordering through generateMigration", () => {
 			registry,
 		});
 
+		// D75: an alter's own drop half is bare, not `if exists`.
 		const dropTriggerIndex = result.sql.indexOf(
-			'drop trigger if exists "guard" on "app"."comments";',
+			'drop trigger "guard" on "app"."comments";',
 		);
 		const dropColumnIndex = result.sql.indexOf('drop column "watched_at"');
 		const createTriggerIndex = result.sql.indexOf('create trigger "guard"');
@@ -289,8 +291,9 @@ describe("recreate ordering through generateMigration", () => {
 			registry,
 		});
 
+		// D75: an alter's own drop half is bare, not `if exists`.
 		const dropPolicyIndex = result.sql.indexOf(
-			'drop policy if exists "members_read_all" on "app"."members";',
+			'drop policy "members_read_all" on "app"."members";',
 		);
 		const dropColumnIndex = result.sql.indexOf('drop column "suspended_at"');
 		const createPolicyIndex = result.sql.indexOf(

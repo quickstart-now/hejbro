@@ -129,7 +129,9 @@ describe("triggerKind", () => {
 		expect(statements[1]?.sql).toContain("create trigger");
 	});
 
-	it("emits drop-if-exists + create, in that order, for an alter change", () => {
+	// D75: an alter's own drop half is bare, not `if exists` -- only a
+	// true first-time create keeps the idempotent guard text (below).
+	it("emits a bare drop + create, in that order, for an alter change", () => {
 		const previous = triggerKind.serialize(makeTrigger("before"));
 		const next = triggerKind.serialize(makeTrigger("after"));
 		const statements = triggerKind.emit({
@@ -141,12 +143,13 @@ describe("triggerKind", () => {
 			notes: ["trigger changed; recreating"],
 		});
 		expect(statements).toHaveLength(2);
-		expect(statements[0]?.sql).toContain("drop trigger if exists");
+		expect(statements[0]?.sql).toContain("drop trigger ");
+		expect(statements[0]?.sql).not.toContain("if exists");
 		expect(statements[1]?.sql).toContain("create trigger");
 		expect(statements[1]?.sql).toContain("after");
 	});
 
-	it("emits only drop-if-exists for a drop change", () => {
+	it("emits only a bare drop for a drop change", () => {
 		const previous = triggerKind.serialize(makeTrigger("before"));
 		const statements = triggerKind.emit({
 			kind: "trigger",
@@ -157,7 +160,8 @@ describe("triggerKind", () => {
 			notes: [],
 		});
 		expect(statements).toHaveLength(1);
-		expect(statements[0]?.sql).toContain("drop trigger if exists");
+		expect(statements[0]?.sql).toContain("drop trigger ");
+		expect(statements[0]?.sql).not.toContain("if exists");
 	});
 
 	it("is registered by createDefaultRegistry, depending on function and table", () => {

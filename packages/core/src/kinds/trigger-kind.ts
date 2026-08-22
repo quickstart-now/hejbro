@@ -6,7 +6,11 @@ import type {
 	TriggerEventShape,
 	TriggerSnapshotShape,
 } from "../plpgsql/render-body";
-import { renderTriggerSql } from "../plpgsql/render-body";
+import {
+	renderTriggerCreateSql,
+	renderTriggerDropSql,
+	renderTriggerSql,
+} from "../plpgsql/render-body";
 import type { JsonValue } from "../snapshot/stable-json";
 import { predropStatement, statement } from "../sql/statement";
 
@@ -41,16 +45,18 @@ const TRIGGER_CHANGED_NOTE = "trigger changed; recreating";
  * a single `alter` change (**not** a separate drop + create pair — the
  * diff engine's global create/alter-before-drop ordering would otherwise
  * hoist a same-identity create ahead of its own drop, dropping the trigger
- * it just created; see #55) whose `emit` returns the `drop trigger if
- * exists` and `create trigger` statements in that order (idempotent
- * recreate, spec §6.5) — including on a true first-time create. The drop
- * half (recreate, and a true drop) goes out on the `predrop` stage — a
- * trigger's `update of <column>` event list can name a column that a
+ * it just created; see #55) whose `emit` returns a drop and a `create
+ * trigger` statement in that order (idempotent recreate on create only,
+ * spec §6.5). Only a true first-time create's drop half uses `if exists`
+ * (idempotent guard text — nothing can already depend on a trigger that
+ * doesn't exist yet, so it stays in `main` alongside its own `create
+ * trigger`); `alter`/`drop` emit a bare `drop trigger` (D75) so an
+ * out-of-band removal of a trigger hejbro still declares fails loudly at
+ * the next change instead of `if exists` silently re-creating it. The
+ * drop half (recreate, and a true drop) goes out on the `predrop` stage —
+ * a trigger's `update of <column>` event list can name a column that a
  * `main`-stage alter on that same table is about to drop (#122), so the
- * trigger must be gone before that alter runs — a true first-time create's
- * `drop trigger if exists` is just idempotent guard text (nothing can
- * depend on a trigger that doesn't exist yet), so it stays in `main`
- * alongside its own `create trigger`.
+ * trigger must be gone before that alter runs.
  */
 export const triggerKind: ObjectKind<TriggerDeclaration> = {
 	kind: "trigger",
@@ -122,9 +128,9 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 						"trigger alter change is missing its next snapshot.",
 					);
 				}
-				const [dropSql, createSql] = renderTriggerSql(
-					asTriggerSnapshot(change.next),
-				);
+				const nextSnapshot = asTriggerSnapshot(change.next);
+				const dropSql = renderTriggerDropSql(nextSnapshot, false);
+				const createSql = renderTriggerCreateSql(nextSnapshot);
 				return [predropStatement(dropSql), statement(createSql)];
 			}
 			case "drop": {
@@ -134,7 +140,10 @@ export const triggerKind: ObjectKind<TriggerDeclaration> = {
 						"trigger drop change is missing its previous snapshot.",
 					);
 				}
-				const [dropSql] = renderTriggerSql(asTriggerSnapshot(change.previous));
+				const dropSql = renderTriggerDropSql(
+					asTriggerSnapshot(change.previous),
+					false,
+				);
 				return [predropStatement(dropSql)];
 			}
 			default:
