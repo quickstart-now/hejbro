@@ -778,7 +778,15 @@ the planner had asked to verify) and `phase8-history-restore` (a rebase onto a
 each merge, and each needed a re-freeze. The rule that follows: a "rebase base"
 announcement is for PRs being opened or reworked — a frozen PR keeps its base
 and merges through the squash; if a change is really needed, the first message
-is "freeze cancel", and the re-freeze comes after.
+is "freeze cancel", and the re-freeze comes after. (3) A fourth instance the
+same day (`phase8-crap-ratchet5-engine`, a rebase pushed while the planner's
+"no push" was still in transit) showed that the corollary above still leaves a
+window — the implementer has to know the PR is frozen — so the rule is now
+stated without that dependency: **once a PR is open, the implementer pushes
+to its branch only on an explicit planner message that says "rework" or
+"rebase" for that PR.** No self-initiated rebase when `dev` moves, no tidy-up
+push, frozen or not; the planner's instruction is the only trigger, and it
+names the PR. A message that does not name the PR does not authorise a push.
 
 The habit that makes this cheap: **declare the freeze by pasting the output of
 `git rev-parse HEAD`, not by typing a SHA you remember.** A remembered SHA is a
