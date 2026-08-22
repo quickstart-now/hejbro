@@ -14,7 +14,6 @@ import type {
 import {
 	checkChain,
 	duplicateVersionFallbackOptions,
-	emptySnapshot,
 	findDuplicateVersionGroups,
 	generateMigration,
 	hejbroError,
@@ -383,7 +382,7 @@ const runCheck1 = (
 	}
 };
 
-/** Check 2 (runs only when check 1 passed): the rebuilt-from-declarations snapshot text equals the on-disk text, byte for byte. */
+/** Check 2 (runs only when check 1 passed): the rebuilt-from-declarations snapshot text equals the on-disk text, byte for byte. Rebuilds against the *real* committed snapshot as its parent (D81) — an empty parent would rebuild every table's `allColumns` lists in declaration order, disagreeing with the committed snapshot's physical order the moment a column was ever inserted mid-declaration. */
 const runCheck2 = (
 	declarations: ReadonlyArray<HejbroInput>,
 	diskText: string,
@@ -392,7 +391,7 @@ const runCheck2 = (
 ): CheckOutcome => {
 	const currentSnapshot = generateMigration({
 		declarations,
-		previousSnapshot: emptySnapshot,
+		previousSnapshot: parseSnapshot(diskText, requiredKeysByKind(registry)),
 		registry,
 	}).snapshot;
 	if (renderSnapshot(currentSnapshot) === diskText) {

@@ -3,11 +3,15 @@ import type { ColumnBuilder } from "../src/index";
 import {
 	createDefaultRegistry,
 	defineFunction,
+	eq,
 	functionKind,
+	now,
 	schema,
 	select,
 	table,
 	text,
+	timestamptz,
+	update,
 	uuid,
 } from "../src/index";
 
@@ -18,7 +22,7 @@ const posts = table(app, "posts", {
 
 const makeDeclaration = (message: string, argBuilder: () => ColumnBuilder) =>
 	defineFunction(
-		"app",
+		app,
 		"publish_post",
 		{ args: { postId: argBuilder() }, returns: posts, security: "definer" },
 		(ctx, { postId }) => {
@@ -185,5 +189,65 @@ describe("functionKind", () => {
 	it("is registered by createDefaultRegistry", () => {
 		const registry = createDefaultRegistry();
 		expect(registry.get("function")).toBe(functionKind);
+	});
+
+	// D81: the oracle, not the DSL-time projection, decides an allColumns
+	// list's order once the snapshot is built with one — the exact defect
+	// #261 reported (a `returning` list frozen in declaration order at DSL
+	// time, out of sync with the table's physical column order).
+	describe("SerializeContext.columnOrder (D81)", () => {
+		const projects = table(app, "projects", {
+			id: uuid().primaryKey(),
+			description: text(),
+			archivedAt: timestamptz(),
+		});
+		const archiveFn = defineFunction(
+			"app",
+			"archive",
+			{ args: { projectId: uuid() }, returns: projects, security: "invoker" },
+			(ctx, { projectId }) => {
+				ctx.return(
+					update(projects)
+						.set({ archivedAt: now() })
+						.where(eq(projects.id, projectId))
+						.returning(),
+				);
+			},
+		);
+		const oracle = () => ["id", "archived_at", "description"];
+
+		it("renders a returning list in the oracle's order", () => {
+			const sql = (
+				functionKind.serialize(archiveFn, { columnOrder: oracle }) as {
+					bodySql: string;
+				}
+			).bodySql;
+			expect(sql).toContain('returning "id", "archived_at", "description"');
+		});
+
+		it("renders declaration order when there is no context", () => {
+			const sql = (functionKind.serialize(archiveFn) as { bodySql: string })
+				.bodySql;
+			expect(sql).toContain('returning "id", "description", "archived_at"');
+		});
+
+		it("renders a select-all list in the oracle's order", () => {
+			const selectFn = defineFunction(
+				"app",
+				"list_projects",
+				{ args: {}, returns: projects, security: "invoker" },
+				(ctx) => {
+					ctx.return(select(projects));
+				},
+			);
+			const sql = (
+				functionKind.serialize(selectFn, { columnOrder: oracle }) as {
+					bodySql: string;
+				}
+			).bodySql;
+			expect(sql).toContain(
+				'select "id", "archived_at", "description" from "app"."projects"',
+			);
+		});
 	});
 });

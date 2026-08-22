@@ -8,6 +8,12 @@ Read this when writing or editing a schema declaration.
 declares a table. Column keys are camelCase in TypeScript and render
 snake_case in SQL.
 
+Column order: the declaration order is used when the table is created; a
+column added later lands at the **end** of the table in Postgres whatever
+position it has in the object literal, and hejbro's snapshot and generated
+SQL follow that physical order (reordering existing columns in TypeScript
+changes nothing).
+
 ```ts
 export const app = schema("app");
 export const posts = table(app, "posts", { id: uuid().primaryKey() });

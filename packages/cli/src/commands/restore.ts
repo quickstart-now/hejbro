@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-	emptySnapshot,
 	generateMigration,
 	HEJBRO_SNAPSHOT_VERSION,
 	hejbroError,
 	parseBannerHashes,
 	parseBannerVersion,
+	parseSnapshot,
 	renderSnapshot,
+	requiredKeysByKind,
 	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -390,9 +391,17 @@ export const runRestore = async (
 		}
 
 		const registry = buildRegistry(config);
+		// D81: rebuild against the target commit's own snapshot as parent --
+		// an empty parent would rebuild every table's `allColumns` lists in
+		// declaration order, disagreeing with the recorded physical order
+		// the moment a column was ever inserted mid-declaration.
+		const targetSnapshot = parseSnapshot(
+			targetSnapshotText,
+			requiredKeysByKind(registry),
+		);
 		const rebuilt = generateMigration({
 			declarations,
-			previousSnapshot: emptySnapshot,
+			previousSnapshot: targetSnapshot,
 			registry,
 		});
 		const rebuiltHash = renderSnapshotHash(rebuilt.snapshot);
@@ -493,11 +502,18 @@ const buildMismatchError = (
 	);
 };
 
-/** The `hejbro restore <n>` citty subcommand — see {@link runRestore}. No flags (spec §1) — `<n>` is read straight from `ctx.rawArgs`. */
+/** The `hejbro restore <n>` citty subcommand — see {@link runRestore}. No flags (spec §1) — `<n>` is read straight from `ctx.rawArgs`; the `n` arg below exists only so `--help` documents it (Task 13, #264) — `required: false` keeps citty from throwing its own "Missing required positional argument" before `run` gets a chance to print the owner-approved `restore-target-out-of-range` message. */
 export const restoreCommand = defineCommand({
 	meta: {
 		name: "restore",
 		description: RESTORE_DESCRIPTION,
+	},
+	args: {
+		n: {
+			type: "positional",
+			description: "the migration's number in `hejbro history` (1 = oldest)",
+			required: false,
+		},
 	},
 	run: async (ctx) => {
 		const result = await runRestore(process.cwd(), ctx.rawArgs);

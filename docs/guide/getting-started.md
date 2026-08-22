@@ -1,10 +1,11 @@
 # Getting Started
 
-hejbro is pre-alpha and not yet published to npm (see the repo [Status](../../README.md#status)). Until then, add it as a pnpm workspace dependency or build the repo locally.
+Install the user-facing package (and the Supabase preset if you use it):
 
-```json
-// package.json
-{ "dependencies": { "hejbro": "workspace:*" } }
+```bash
+pnpm add hejbro
+# using the Supabase preset?
+pnpm add @hejbro/supabase
 ```
 
 ## `hejbro init`
@@ -49,12 +50,13 @@ hejbro generate
 ```
 hejbro generate
 loaded 2 declarations
-wrote migrations/20260821013035_add_app.sql
+wrote migrations/20260822101852_add_app.sql
 -- hejbro migration
+-- hejbro: 0.1.0
 -- + schema app [new]
 -- + table app.posts [new]
--- parent-snapshot: sha256:f86ae7ebc6d8bd93524149ab39f929814ff7413a6e5e1cfdb1d21367bf9bd295
--- snapshot: sha256:bbbb3da456292b8f95558af28191cd1aa733843d80eb41a5eaff437571c950e7
+-- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
+-- snapshot: sha256:bd905e603caa3c2de0f0afe0b0e00670806fce16bd0e5231de98850da2ad3d8c
 ```
 
 ## Reading the banner
@@ -63,6 +65,7 @@ Every migration file opens with a structured comment — read this before you re
 
 ```
 -- hejbro migration
+-- hejbro: <version>
 -- + table app.posts [new]
 -- parent-snapshot: sha256:<hex>
 -- snapshot: sha256:<hex>
@@ -72,30 +75,31 @@ Every migration file opens with a structured comment — read this before you re
 
 ```sql
 -- hejbro migration
+-- hejbro: 0.1.0
 -- + schema app [new]
 -- + table app.posts [new]
--- parent-snapshot: sha256:f86ae7ebc6d8bd93524149ab39f929814ff7413a6e5e1cfdb1d21367bf9bd295
--- snapshot: sha256:bbbb3da456292b8f95558af28191cd1aa733843d80eb41a5eaff437571c950e7
+-- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
+-- snapshot: sha256:bd905e603caa3c2de0f0afe0b0e00670806fce16bd0e5231de98850da2ad3d8c
 
 create schema "app";
 
 create table "app"."posts" (
 	"id" uuid not null default gen_random_uuid(),
 	"title" text not null,
-	primary key ("id")
+	constraint "posts_pkey" primary key ("id")
 );
 ```
 
 ## `hejbro verify`
 
-Re-derives the whole chain from checked-out files only — no live database. Four checks: the snapshot file parses; declarations rebuild to byte-identical snapshot text; the migration files' hash chain is linear; the chain's tip hash matches the current snapshot.
+Re-derives the whole chain from checked-out files only — no live database. Five checks: the snapshot file parses; no two migration files share a version; declarations rebuild to byte-identical snapshot text; the migration files' hash chain is linear; the chain's tip hash matches the current snapshot.
 
 ```
 hejbro verify
 ```
 
 ```
-verify: 4 checks passed (1 migrations, snapshot sha256:bbbb3da45629…)
+verify: 5 checks passed (1 migrations, snapshot sha256:bd905e603caa…)
 ```
 
 ## Next

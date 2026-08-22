@@ -9,6 +9,7 @@ import { recordBodyWithGuard } from "../plpgsql/body-context";
 import { assertValidLocalName } from "../plpgsql/reserved";
 import type { BuilderFamily, ColumnBuilder } from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
+import type { SchemaDeclaration } from "./schema";
 import type { Table } from "./table";
 import { getTableMeta, isTable, toSnakeCase } from "./table";
 
@@ -107,6 +108,14 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 	return { declarations, refs };
 };
 
+/** The schema name a `defineFunction` owner argument resolves to, whichever form it was given. */
+const schemaNameOf = (owner: SchemaDeclaration | string): string => {
+	if (typeof owner === "string") {
+		return owner;
+	}
+	return owner.schemaName;
+};
+
 /**
  * Declares a Postgres function: `config.args` becomes its typed parameter
  * list, `body` records its plpgsql. `body` runs **twice** with fresh
@@ -114,7 +123,13 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
  * identical, or this throws `nondeterministic-body` (spec §6.2 decision A4).
  */
 export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
-	schemaName: string,
+	/**
+	 * The declared schema (`schema("app")`), like `table`/`defineView`/`grant`.
+	 * @deprecated Passing the schema name as a string is accepted on 0.1.x
+	 * for compatibility and is removed in 0.2.0 — pass the `schema(...)`
+	 * object instead.
+	 */
+	owner: SchemaDeclaration | string,
 	functionName: string,
 	config: {
 		readonly args?: TArgs;
@@ -123,6 +138,7 @@ export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
 	},
 	body: (ctx: BodyContext, args: ArgRefs<TArgs>) => void,
 ): FunctionDeclaration => {
+	const schemaName = schemaNameOf(owner);
 	const identity = `${schemaName}.${functionName}`;
 	const declaredAt = captureDeclarationSite();
 	const security = config.security ?? "invoker";

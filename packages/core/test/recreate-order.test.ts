@@ -46,6 +46,7 @@ describe("recreate ordering through generateMigration", () => {
 		const previousSnapshot = buildSnapshot(
 			[getTableMeta(comments), triggerV1.functionDeclaration, triggerV1],
 			registry,
+			emptySnapshot,
 		);
 
 		const triggerV2 = defineTrigger(
@@ -87,14 +88,18 @@ describe("recreate ordering through generateMigration", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 
 		const functionV1 = defineFunction(
-			"app",
+			app,
 			"publish_post",
 			{ args: { postId: uuid() }, returns: posts, security: "invoker" },
 			(ctx) => {
 				ctx.return(select(posts));
 			},
 		);
-		const previousSnapshot = buildSnapshot([functionV1], registry);
+		const previousSnapshot = buildSnapshot(
+			[functionV1],
+			registry,
+			emptySnapshot,
+		);
 
 		const functionV2 = defineFunction(
 			"app",
@@ -130,7 +135,7 @@ describe("recreate ordering through generateMigration", () => {
 
 	it("removing an enum value drops the type before recreating it", () => {
 		const statusV1 = pgEnum(app, "post_status", ["draft", "published"]);
-		const previousSnapshot = buildSnapshot([statusV1], registry);
+		const previousSnapshot = buildSnapshot([statusV1], registry, emptySnapshot);
 
 		const statusV2 = pgEnum(app, "post_status", ["draft"]);
 		const result = generateMigration({

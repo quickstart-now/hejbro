@@ -8,6 +8,7 @@ import {
 	renderFunctionReturnsClause,
 	renderFunctionSql,
 } from "../plpgsql/render-body";
+import { noColumnOrder } from "../snapshot/column-order";
 import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
@@ -132,8 +133,11 @@ export const functionKind: ObjectKind<FunctionDeclaration> = {
 	],
 	owns: (declaration): declaration is FunctionDeclaration =>
 		declaration.declarationKind === "function",
-	serialize: (declaration) => {
-		const bodySql = renderFunctionSql(declaration);
+	serialize: (declaration, context) => {
+		const bodySql = renderFunctionSql(
+			declaration,
+			context?.columnOrder ?? noColumnOrder,
+		);
 		const snapshot: FunctionSnapshot = {
 			schema: declaration.schemaName,
 			name: declaration.functionName,

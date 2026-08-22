@@ -200,6 +200,7 @@ export type {
 	HejbroDeclaration,
 	KindChange,
 	ObjectKind,
+	SerializeContext,
 } from "./kind/object-kind";
 export { changeOperations } from "./kind/object-kind";
 export type { KindRegistry, RegisteredObjectKind } from "./kind/registry";
@@ -275,6 +276,8 @@ export type {
 	SelectProjection,
 } from "./query/select";
 export { exists, notExists, select } from "./query/select";
+export type { ColumnOrderOracle } from "./snapshot/column-order";
+export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
 export type { Snapshot } from "./snapshot/snapshot";
 export {
 	buildSnapshot,

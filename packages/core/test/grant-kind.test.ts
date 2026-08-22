@@ -299,8 +299,8 @@ describe("grant-set expansion through generateMigration", () => {
 	it("routes duplicate (schema, grantKind, role) through buildSnapshot's duplicate-identity error (D28)", () => {
 		const first = allTablesGrant(["select"]);
 		const second = allTablesGrant(["insert"]);
-		expect(() => buildSnapshot([first, second], registry)).toThrowError(
-			expect.objectContaining({ code: "duplicate-identity" }),
-		);
+		expect(() =>
+			buildSnapshot([first, second], registry, emptySnapshot),
+		).toThrowError(expect.objectContaining({ code: "duplicate-identity" }));
 	});
 });

@@ -195,7 +195,11 @@ describe("D57 naming convention: output tokens are kebab-case", () => {
 			id: uuid().primaryKey(),
 			slug: uuid().notNull(),
 		});
-		const previousSnapshot = buildSnapshot([getTableMeta(postsV1)], registry);
+		const previousSnapshot = buildSnapshot(
+			[getTableMeta(postsV1)],
+			registry,
+			emptySnapshot,
+		);
 		const postsV2 = table(app, "posts", {
 			id: uuid().primaryKey(),
 			handle: uuid().notNull(),
@@ -214,7 +218,11 @@ describe("D57 naming convention: output tokens are kebab-case", () => {
 
 	it("a real warning diagnostic code is kebab-case (not-null-without-default)", () => {
 		const usersV1 = table(app, "users", { id: uuid().primaryKey() });
-		const previousSnapshot = buildSnapshot([getTableMeta(usersV1)], registry);
+		const previousSnapshot = buildSnapshot(
+			[getTableMeta(usersV1)],
+			registry,
+			emptySnapshot,
+		);
 		const usersV2 = table(app, "users", {
 			id: uuid().primaryKey(),
 			email: uuid().notNull(),

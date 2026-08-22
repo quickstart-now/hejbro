@@ -25,6 +25,7 @@ describe("diffSnapshots — kind dependency ordering", () => {
 		const next = buildSnapshot(
 			[app, postStatus, getTableMeta(posts)],
 			registry,
+			emptySnapshot,
 		);
 		const changes = diffSnapshots(emptySnapshot, next, registry);
 		expect(changes.map((change) => change.kind)).toEqual([
@@ -41,6 +42,7 @@ describe("diffSnapshots — kind dependency ordering", () => {
 		const previous = buildSnapshot(
 			[app, postStatus, getTableMeta(posts)],
 			registry,
+			emptySnapshot,
 		);
 		const changes = diffSnapshots(previous, emptySnapshot, registry);
 		expect(changes.map((change) => change.kind)).toEqual([
@@ -112,6 +114,7 @@ describe("diffSnapshots — kind dependency ordering", () => {
 		const next = buildSnapshot(
 			[app, getTableMeta(zebra), getTableMeta(alpha)],
 			registry,
+			emptySnapshot,
 		);
 		const changes = diffSnapshots(emptySnapshot, next, registry).filter(
 			(change) => change.kind === "table",
@@ -126,7 +129,11 @@ describe("diffSnapshots — kind dependency ordering", () => {
 describe("diffSnapshots — no-op", () => {
 	it("has no changes between identical snapshots", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const snapshot = buildSnapshot([app, getTableMeta(posts)], registry);
+		const snapshot = buildSnapshot(
+			[app, getTableMeta(posts)],
+			registry,
+			emptySnapshot,
+		);
 		expect(diffSnapshots(snapshot, snapshot, registry)).toEqual([]);
 	});
 });
@@ -134,7 +141,11 @@ describe("diffSnapshots — no-op", () => {
 describe("diffSnapshots — malformed snapshot node (#26)", () => {
 	it("wraps a raw crash from a malformed table node into malformed-snapshot-node, naming the entry", () => {
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
-		const next = buildSnapshot([app, getTableMeta(posts)], registry);
+		const next = buildSnapshot(
+			[app, getTableMeta(posts)],
+			registry,
+			emptySnapshot,
+		);
 		const corruptedPrevious = {
 			...next,
 			objects: {

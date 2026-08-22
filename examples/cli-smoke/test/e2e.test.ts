@@ -113,12 +113,50 @@ const runCli = (cwd: string, args: ReadonlyArray<string>): Promise<CliRun> =>
 // customers.email → customers.emailAddress (email_address) — a
 // single-pair same-table drop+add, exercising the ambiguous-column-rename
 // path end to end.
+// D81 (#261): `phone` is declared *between* `id` and `email` in the
+// TypeScript object, but the table already exists (the first `generate`
+// created it) — hejbro's snapshot must land `phone` *last*, matching what
+// Postgres itself does for a real `add column`, not where it sits in the
+// object literal.
+const MID_INSERT_SCHEMA_SOURCE = `import { index, schema, table, text, timestamp, uuid } from "hejbro";
+
+export const shop = schema("shop");
+
+export const customers = table(shop, "customers", {
+	id: uuid().primaryKey().defaultRandom(),
+	phone: text(),
+	email: text().notNull(),
+	createdAt: timestamp().notNull().defaultNow(),
+});
+
+export const orders = table(
+	shop,
+	"orders",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		customerId: uuid().notNull(),
+		placedAt: timestamp().notNull().defaultNow(),
+	},
+	(t) => ({
+		foreignKeys: [
+			{
+				columns: [t.customerId],
+				references: { table: customers, columns: [customers.id] },
+				onDelete: "cascade",
+			},
+		],
+		indexes: [index().on(t.customerId)],
+	}),
+);
+`;
+
 const RENAMED_SCHEMA_SOURCE = `import { index, schema, table, text, timestamp, uuid } from "hejbro";
 
 export const shop = schema("shop");
 
 export const customers = table(shop, "customers", {
 	id: uuid().primaryKey().defaultRandom(),
+	phone: text(),
 	emailAddress: text().notNull(),
 	createdAt: timestamp().notNull().defaultNow(),
 });
@@ -231,6 +269,24 @@ describe("hejbro cli-smoke e2e (built CLI, tmp copy of examples/cli-smoke)", () 
 		expect(firstVerify.exitCode).toBe(0);
 		expect(firstVerify.stdout).toContain("verify: 5 checks passed");
 
+		// 4b. D81 (#261): insert a column mid-declaration on the already-
+		// existing customers table → generate writes a plain `add column`
+		// migration → verify still passes (the CLI round-trip regression
+		// for #261: before the fix, verify's rebuild used an empty parent
+		// and disagreed with the committed snapshot's physical order).
+		await writeFile(
+			join(cwd, "src", "app.schema.ts"),
+			MID_INSERT_SCHEMA_SOURCE,
+		);
+
+		const midInsertGenerate = await runCli(cwd, ["generate"]);
+		expect(midInsertGenerate.exitCode).toBe(0);
+		expect(await migrationFileNames()).toHaveLength(2);
+
+		const midInsertVerify = await runCli(cwd, ["verify"]);
+		expect(midInsertVerify.exitCode).toBe(0);
+		expect(midInsertVerify.stdout).toContain("verify: 5 checks passed");
+
 		// 5. rename a column in the fixture source → generate exits 1 with
 		// ambiguous-column-rename → rerun with the suggested --rename →
 		// RENAME migration written → verify exits 0.
@@ -244,7 +300,7 @@ describe("hejbro cli-smoke e2e (built CLI, tmp copy of examples/cli-smoke)", () 
 		expect(ambiguousGenerate.stderr).toContain(
 			"shop.customers.email=email_address",
 		);
-		expect(await migrationFileNames()).toHaveLength(1);
+		expect(await migrationFileNames()).toHaveLength(2);
 
 		const renameGenerate = await runCli(cwd, [
 			"generate",
@@ -253,7 +309,7 @@ describe("hejbro cli-smoke e2e (built CLI, tmp copy of examples/cli-smoke)", () 
 		]);
 		expect(renameGenerate.exitCode).toBe(0);
 		const fileNamesAfterRename = await migrationFileNames();
-		expect(fileNamesAfterRename).toHaveLength(2);
+		expect(fileNamesAfterRename).toHaveLength(3);
 		const renameMigrationTexts = await Promise.all(
 			fileNamesAfterRename.map((name) =>
 				readFile(join(cwd, "migrations", name), "utf8"),

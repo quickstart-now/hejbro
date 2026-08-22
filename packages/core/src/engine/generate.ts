@@ -273,7 +273,12 @@ export const generateMigration = (
 ): GenerateMigrationResult => {
 	const resolved = resolveGenerateMigrationOptions(options);
 	const normalized = options.declarations.flatMap(resolveDeclarations);
-	const snapshot = buildSnapshot(normalized, resolved.registry);
+	const snapshot = buildSnapshot(
+		normalized,
+		resolved.registry,
+		options.previousSnapshot,
+		resolved.renames,
+	);
 
 	const validatorDiagnostics = runValidators(
 		resolved.validators,

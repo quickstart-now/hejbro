@@ -84,7 +84,7 @@ describe("renderFunctionSql", () => {
 
 	it("renders a definer function with args and a return-query statement", () => {
 		const declaration = defineFunction(
-			"app",
+			app,
 			"publish_post",
 			{ args: { postId: uuid() }, returns: posts, security: "definer" },
 			(ctx, { postId }) => {

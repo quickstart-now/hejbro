@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
+import { defineFunction } from "../src/dsl/define-function";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
-import { literal } from "../src/expr/operators";
+import { eq, literal, now } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
+import type { TableSnapshot } from "../src/kinds/table-snapshot";
+import { update } from "../src/query/mutate";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import {
 	bigserial,
 	integer,
 	serial,
 	text,
+	timestamptz,
 	uuid,
 } from "../src/types/column-builder-factories";
 
@@ -83,7 +87,7 @@ describe("generateMigration", () => {
 
 	it("returns hasChanges: false and an empty sql string when nothing changed", () => {
 		const registry = createDefaultRegistry();
-		const snapshot = buildSnapshot(declarations, registry);
+		const snapshot = buildSnapshot(declarations, registry, emptySnapshot);
 		const result = generateMigration({
 			declarations,
 			previousSnapshot: snapshot,
@@ -103,6 +107,7 @@ describe("generateMigration", () => {
 		const previousSnapshot = buildSnapshot(
 			[renameApp, getTableMeta(previousPosts)],
 			createDefaultRegistry(),
+			emptySnapshot,
 		);
 
 		it("returns errors and empty sql for an ambiguous drop+add pair", () => {
@@ -145,6 +150,277 @@ describe("generateMigration", () => {
 			const [, firstStatement] = result.sql.split("\n\n");
 			expect(firstStatement).toBe(
 				'alter table "app"."posts" rename column "slug" to "handle";',
+			);
+		});
+	});
+
+	// D81 (#261): a renamed/dropped/moved column's *position* survives (or
+	// doesn't) the same way its identity does — the oracle (`buildSnapshot`)
+	// reads the same `renames`/`confirmedDrops` `generateMigration` already
+	// validates.
+	describe("column order across renames and drops (D81)", () => {
+		it("keeps a renamed column in place and appends a newcomer behind it", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						title: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const v2 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						name: text(),
+						description: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: v1.snapshot,
+				renames: [
+					{
+						target: "column",
+						schemaName: "app",
+						tableName: "projects",
+						oldName: "title",
+						newName: "name",
+					},
+				],
+			});
+			expect(
+				(
+					v2.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "name", "archived_at", "description"]);
+			expect(v2.sql).toContain('rename column "title" to "name"');
+			expect(v2.sql).toContain('add column "description" text');
+		});
+
+		// D81 review fix (#277): the same rename combination end to end — a
+		// table rename and a column rename in one run — through the full
+		// generate pipeline (not just the oracle unit). The column-rename
+		// spec's `tableName` is the table's *old* name ("items"), matching
+		// what `--rename app.items.title=name` actually parses to (D81
+		// review: `ColumnRenameSpec.tableName` is always old-table-relative,
+		// resolved through rename-plan.ts's `tableNameByOldKey`).
+		it("keeps a renamed column in place on a table renamed in the same run", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "items", {
+						id: uuid(),
+						title: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const v2 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						name: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: v1.snapshot,
+				renames: [
+					{
+						target: "table",
+						schemaName: "app",
+						oldName: "items",
+						newName: "projects",
+					},
+					{
+						target: "column",
+						schemaName: "app",
+						tableName: "items",
+						oldName: "title",
+						newName: "name",
+					},
+				],
+			});
+			expect(
+				(
+					v2.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "name", "archived_at"]);
+			expect(v2.sql).toContain('rename column "title" to "name"');
+		});
+
+		it("appends a newcomer at the end after a confirmed drop+add pair", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						title: text(),
+						archivedAt: timestamptz(),
+					}),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const v2 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						archivedAt: timestamptz(),
+						summary: text(),
+					}),
+				],
+				previousSnapshot: v1.snapshot,
+				confirmedDrops: [
+					{
+						target: "column",
+						schemaName: "app",
+						tableName: "projects",
+						columnName: "title",
+					},
+				],
+			});
+			expect(
+				(
+					v2.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "archived_at", "summary"]);
+			expect(v2.sql).toContain('drop column "title"');
+			expect(v2.sql).toContain('add column "summary" text');
+		});
+
+		it("a column that moves to a different table lands last in its new table", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "a", { id: uuid(), moved: text(), x: text() }),
+					table(app, "b", { id: uuid(), y: text() }),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const v2 = generateMigration({
+				declarations: [
+					app,
+					table(app, "a", { id: uuid(), x: text() }),
+					table(app, "b", { id: uuid(), y: text(), moved: text() }),
+				],
+				previousSnapshot: v1.snapshot,
+			});
+			expect(
+				(v2.snapshot.objects["table:app.a"] as TableSnapshot).columns.map(
+					(c) => c.name,
+				),
+			).toEqual(["id", "x"]);
+			expect(
+				(v2.snapshot.objects["table:app.b"] as TableSnapshot).columns.map(
+					(c) => c.name,
+				),
+			).toEqual(["id", "y", "moved"]);
+		});
+
+		// D81/golden `column-insert-mid`: a brand-new project declaring the
+		// widest (final) TypeScript shape directly from an empty snapshot
+		// gets *declaration* order, not the physical order an incremental
+		// migration chain to that same shape would have produced (the
+		// golden case's own `from-empty.sql` only ever sees 3 columns, since
+		// its first step is the narrowest declaration — this is the
+		// "different but equally valid physical order" case D81's decision
+		// log calls out, covered here instead).
+		it("a fresh build of the widest declaration gets declaration order, not the incremental chain's physical order", () => {
+			const projects = table(app, "projects", {
+				id: uuid(),
+				title: text(),
+				description: text(),
+				level: integer(),
+				archivedAt: timestamptz(),
+				note: text(),
+			});
+			const archiveProject = defineFunction(
+				"app",
+				"archive_project",
+				{ args: { projectId: uuid() }, returns: projects },
+				(ctx, { projectId }) => {
+					ctx.return(
+						update(projects)
+							.set({ archivedAt: now() })
+							.where(eq(projects.id, projectId))
+							.returning(),
+					);
+				},
+			);
+			const result = generateMigration({
+				declarations: [app, projects, archiveProject],
+				previousSnapshot: emptySnapshot,
+			});
+			expect(
+				(
+					result.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "title", "description", "level", "archived_at", "note"]);
+			expect(result.sql).toContain(
+				'"id" uuid,\n\t"title" text,\n\t"description" text,\n\t"level" integer,\n\t"archived_at" timestamp with time zone,\n\t"note" text',
+			);
+			expect(result.sql).toContain(
+				'returning "id", "title", "description", "level", "archived_at", "note"',
+			);
+		});
+
+		// D81 (dogfood first pass, #261 variant): when the mid-inserted
+		// column shares a SQL type with the columns around it (here, both
+		// `note` and the inserted `description` are `text`), `returns
+		// setof <table>` doesn't error at all — Postgres accepts the
+		// positional match silently and returns each value under the
+		// *wrong* column name (`note`'s value would read back as
+		// `description`, `description` as nothing). The type-mismatch case
+		// (D81's original repro) at least fails loudly; this one doesn't,
+		// so it's pinned on its own.
+		it("orders a same-type column inserted mid-declaration behind the existing ones so returning lists cannot silently mislabel values (d81)", () => {
+			const v1 = generateMigration({
+				declarations: [
+					app,
+					table(app, "projects", {
+						id: uuid(),
+						title: text(),
+						note: text(),
+					}),
+				],
+				previousSnapshot: emptySnapshot,
+			});
+			const projectsV2 = table(app, "projects", {
+				id: uuid(),
+				title: text(),
+				description: text(),
+				note: text(),
+			});
+			const archiveProjectV2 = defineFunction(
+				"app",
+				"archive_project",
+				{ args: { projectId: uuid() }, returns: projectsV2 },
+				(ctx, { projectId }) => {
+					ctx.return(
+						update(projectsV2)
+							.set({ title: "x" })
+							.where(eq(projectsV2.id, projectId))
+							.returning(),
+					);
+				},
+			);
+			const v2 = generateMigration({
+				declarations: [app, projectsV2, archiveProjectV2],
+				previousSnapshot: v1.snapshot,
+			});
+			expect(
+				(
+					v2.snapshot.objects["table:app.projects"] as TableSnapshot
+				).columns.map((c) => c.name),
+			).toEqual(["id", "title", "note", "description"]);
+			expect(v2.sql).toContain(
+				'returning "id", "title", "note", "description"',
 			);
 		});
 	});

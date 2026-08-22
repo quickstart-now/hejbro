@@ -64,7 +64,7 @@ describe("computeFileDiff", () => {
 		const diff = computeFileDiff(fixture.cwd, sha1, ["src/**/*.schema.ts"]);
 		const undo = renderUndoBlock(diff);
 		expect(undo).toEqual([
-			"restore never commits — everything above is undoable:",
+			"restore never commits — the restored files are staged; everything above is undoable:",
 			"git checkout HEAD -- src/c.schema.ts     # bring back the removed file",
 			"rm src/b.schema.ts     # remove the resurrected file (didn't exist before restore)",
 			"git checkout HEAD -- src/a.schema.ts     # revert the modified files",
