@@ -155,7 +155,7 @@ names do not move. If a number does end up in prose, re-check every one of them
 when the map changes.
 
 **The first column is a row number in this table, not an issue number.** They
-overlap — rows run 1–41 and issues run #7–#212, so `22` and `#22` are different
+overlap — rows run 1–41 and issues run #9–#212, so `22` and `#22` are different
 things and `#22` is a real, unrelated issue. Issues live in the last column and
 carry a `#`. A row whose issue column is `—` does **not** mean "no issue is
 needed": issue-first is the rule, so `—` means **file one before starting**. One
@@ -198,7 +198,7 @@ a sub-issue goes missing from the frontier.
 | 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69). Storage is **outside** what one Postgres image can verify: `storage.buckets` is created by the Storage API service, not the image | #207 | yes |
 | 23 | `phase8-docs-release` | README status and install instructions across **all three published packages** (#142 — `packages/core`'s README still describes landed features as future phases, and it becomes the npm page; `## Status` describes the repository, never the registry, so "Nothing is published yet" goes and the install instructions carry that information), a new `CONTRIBUTING.md` that is a thin pointer to `AGENTS.md` plus the loud warning that merging the Version Packages PR publishes immediately and irreversibly, `packages/skills/README.md`'s citation of the overturned D54 (→ D62, cheap and in the same files' neighbourhood), and the grep instrument with its positive control (four stale lines: core 3, supabase 1, cli 0). **The 0.1.0 release is not in this PR** — it is the owner's sequence under *Owner actions*, and this PR's merge is what makes `release-ready` true | #142 | yes |
 | 24 | `phase8-crap-tooling` | `@vitest/coverage-v8`, a `test:coverage` task, `scripts/check-crap.mjs` — **reports only, not wired into CI** | #154 | — |
-| 25 | `phase8-crap-refactor` | The functions `pnpm check:crap` reports at **CRAP > 10** (the gate is the definition; measured at 20, of which 16 are also complexity ≥ 10) — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests. Four share a byte-identical create/drop guard, so one helper clears three at once. **Landed as nine commits (#210): the guard helper, `familyOfTypeNode` 29→1, `createRecordingContext` 17→1, and five walker `switch`es → type-closed handler maps; the count went 20→10 and the rest continues in `phase8-crap-walkers`** | #154 | — |
+| 25 | `phase8-crap-refactor` | The functions `pnpm check:crap` reports at **CRAP > 10** (the gate is the definition; measured at 20, of which 16 are also complexity ≥ 10) — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests. Four share a byte-identical create/drop guard, so one helper clears three at once. **Landed at `dev@aea1cf9` (#210, ten commits: nine refactors + the changeset rewrite): the guard helper, `familyOfTypeNode` 29→1, `createRecordingContext` 17→1, and five walker `switch`es → type-closed handler maps. `pnpm check:crap` went 20→10 measured on the PR's original base `626c57f` and 19→8 on `dev@37f7f7b` (reviewer's re-measurement at `c1162daf`); the rest continues in `phase8-crap-walkers`** | #154 | — |
 | 26 | `phase8-crap-coverage` | The 4 functions at complexity 8–9, which clear at 70–77% coverage | #154 | — |
 | 27 | `phase8-crap-gate` | `check:crap` wired into CI with a non-zero exit, **and the D71 decision-log row** | #154 | — |
 | 28 | `phase8-diagnostic-xref` | A check that every error code quoted inside a diagnostic message actually exists; **`style/noTernary` turned on in `biome.json`** and the 7 existing violations fixed; the `.mjs` style-rule scope question, answered `yes` | — | — |
@@ -213,7 +213,7 @@ a sub-issue goes missing from the frontier.
 | 37 | `phase8-scope-nodes` | `warning[rls-uncached-auth-call]`'s scope question generalised: core has no notion of which clause an expression sits in, so `assertOwnColumnsOnly` treats `exists()` as opaque. Make the scope rule explicit rather than a side effect of `renderExpr` | #160 | — |
 | 38 | `phase8-required-keys` | Per-kind `requiredKeys` validation for snapshot nodes — a hand-edited snapshot (D33 makes that a first-class input) can today omit a field a kind depends on and fail later, in the diff engine | #159 | — |
 | 39 | `phase8-declared-vs-catalog` | After each executed migration step, both local-Docker harnesses (`scripts/roundtrip.sh`, `scripts/verify-supabase-image.sh`) check that **every object the snapshot declares exists in the catalog** — the reference is the snapshot, never the emitted SQL, because a statement that was never emitted cannot fail by running. Positive control: `dev@626c57f` (on `dev`'s history, so `git show` resolves it) must fail with `declared primary key … not found in catalog` | #212 | — |
-| 40 | `phase8-crap-walkers` | The walker `switch`es `phase8-crap-refactor` did not reach — starting with `renderTypeNode`, whose handler-map draft already exists — each replaced by a mapped-type handler map (exhaustiveness stays a `tsc` error, no runtime `default` throw, the module-load TDZ trap noted where a map references a later binding), then the remaining CRAP > 10 tail that is neither coverage-clearable (row 26) nor a walker | #154 | — |
+| 40 | `phase8-crap-walkers` | The walker `switch`es `phase8-crap-refactor` did not reach — starting with `renderTypeNode`, whose handler-map draft exists only as an uncommitted patch saved from the `phase8-crap-refactor` worktree (`/tmp/hejbro-render-type-node.patch`, 2026-08-22; no SHA — it is on no branch) — each replaced by a mapped-type handler map (exhaustiveness stays a `tsc` error, no runtime `default` throw, the module-load TDZ trap noted where a map references a later binding), then the remaining CRAP > 10 tail that is neither coverage-clearable (row 26) nor a walker | #154 | — |
 | 41 | `phase8-policy-schema-usage` | `warning[…]`: a policy sits in a schema none of its targeted roles has `usage` on, so RLS is never consulted — found by the D69 real-image run. Positive control: `examples/supabase` before the D69 grant (must warn); negative: `examples/postgres` (must not) | #203 | — |
 
 `phase8-pk-guard` lands **before** `phase8-constraint-names` in dependency
@@ -230,11 +230,14 @@ schedule**, and they are stated by branch name for the reason given above.
 | Track | Area | Queue |
 |---|---|---|
 | A | `packages/core/src/expr`, `packages/core/src/kinds`, core semantics | ~~`expr-nodes` → `view-nodes` → `sequence-kind`~~ → `chain-walk` → `constraint-names` (work-unit proposal first; replaces the row-16 guard; closes #137) → `grant-sync` → `scope-nodes` → `policy-schema-usage` |
-| B | `.github/workflows/`, `scripts/`, `docs/` | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `diagnostic-xref` → `supabase-image`~~ → `docs-release` → (release: owner) |
+| B | `.github/workflows/`, `scripts/`, `docs/` | ~~`release-workflows` → `crap-tooling` → `roadmap-sync` → `cli-timeout` → `supabase-image`~~ → `docs-release` → `diagnostic-xref` → `crap-gate` (opens only once `dev` reports 0 at the threshold) → (release: owner) |
 | C | `examples/`, golden content, `packages/supabase`, **and since 2026-08-22 the CRAP work** | ~~`golden-english` → `bucket-notes` → `preset-goldens`~~ → `crap-refactor` → `declared-vs-catalog` → `crap-walkers` → `crap-coverage` → `crap-gate` → `crap-ratchet-5` → `required-keys` |
 
-Struck entries are merged; the queue is read from the first live entry. The
-CRAP rows moved from track A to track C on 2026-08-22 (owner: the CRAP work,
+Struck entries are merged; the queue is read from the first live entry — and
+the strike is checked against the merged PR list, not against memory: the
+first version of this paragraph struck `diagnostic-xref`, which has no PR at
+all, because it sat between two merged entries and the strikethrough ran
+over it. The CRAP rows moved from track A to track C on 2026-08-22 (owner: the CRAP work,
 ratchet to 5 included, stays inside Phase 8): they touch files across every
 package rather than core semantics, and their only ordering constraint is
 with each other, so they belong on the track whose other entries are
@@ -528,7 +531,8 @@ own claim.
   make `tsc` fail on the handler map, and the edit is reverted; no walker
   gains a runtime `default` that throws. `pnpm check:crap` before/after is
   in the PR body, and the handler-map doc comment's counts match the map
-  (the draft said "fifteen" verbatim handlers over twenty-one entries).
+  (the uncommitted `renderTypeNode` draft named above says "fifteen"
+  verbatim handlers over twenty-one entries — a count to fix, not copy).
 - **`phase8-policy-schema-usage`** — both controls named with the right
   labels (see the rule on labels below): `examples/supabase` at
   `dev@9cdbc2b` (the commit before #206 added the two `schema-usage` grants)
