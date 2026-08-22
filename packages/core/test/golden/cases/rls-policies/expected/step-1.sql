@@ -2,7 +2,7 @@
 -- ~ rls app.posts [force row level security]
 -- ~ policy app.posts.posts_read_published [policy changed; recreating]
 
-drop policy if exists "posts_read_published" on "app"."posts";
+drop policy "posts_read_published" on "app"."posts";
 
 alter table "app"."posts" force row level security;
 

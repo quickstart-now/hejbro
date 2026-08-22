@@ -139,8 +139,10 @@ describe("policyKind.emit", () => {
 			next: null,
 			notes: [],
 		});
+		// D75: a real drop is bare -- an out-of-band removal fails loudly
+		// at the next change instead of `if exists` silently tolerating it.
 		expect(statements.map((s) => s.sql)).toEqual([
-			`drop policy if exists "posts_read_published" on "app"."posts";`,
+			`drop policy "posts_read_published" on "app"."posts";`,
 		]);
 	});
 });
@@ -388,15 +390,17 @@ describe("policy recreate ordering through generateMigration", () => {
 			operation: "alter",
 		});
 
+		// D75: an alter's own drop half is bare, not `if exists` -- only a
+		// true first-time create keeps the idempotent guard text.
 		const dropIndex = result.sql.indexOf(
-			'drop policy if exists "posts_read_published" on "app"."posts";',
+			'drop policy "posts_read_published" on "app"."posts";',
 		);
 		const createIndex = result.sql.indexOf(
 			'create policy "posts_read_published"',
 		);
 		expect(dropIndex).toBeGreaterThanOrEqual(0);
 		expect(createIndex).toBeGreaterThan(dropIndex);
-		expect(result.sql.match(/drop policy if exists/g)).toHaveLength(1);
+		expect(result.sql).not.toContain("drop policy if exists");
 	});
 });
 

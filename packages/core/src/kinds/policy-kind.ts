@@ -100,8 +100,22 @@ const encodeClauseExpr = (
 	return encodeExprNode(expr);
 };
 
-const dropPolicySql = (snapshot: PolicySnapshot): string =>
-	`drop policy if exists ${quoteIdentifier(snapshot.name)} on ${qualifyName(snapshot.schema, snapshot.table)};`;
+const dropPolicyGuardClause = (ifExists: boolean): string => {
+	if (ifExists) {
+		return "if exists ";
+	}
+	return "";
+};
+
+/**
+ * `ifExists` true for a first-time create's idempotent guard text
+ * (nothing can already depend on a policy that doesn't exist yet),
+ * `false` for a real alter/drop's own drop half (D75) — so an out-of-
+ * band removal of a policy hejbro still declares fails loudly at the
+ * next change instead of `if exists` silently re-creating it.
+ */
+const dropPolicySql = (snapshot: PolicySnapshot, ifExists: boolean): string =>
+	`drop policy ${dropPolicyGuardClause(ifExists)}${quoteIdentifier(snapshot.name)} on ${qualifyName(snapshot.schema, snapshot.table)};`;
 
 const kindClause = (permissive: boolean): string => {
 	if (permissive) {
@@ -163,16 +177,19 @@ const withCheckField = (
  * Identity is `"<schema>.<table>.<name>"`. Postgres has no `alter policy`
  * for clause/role/command changes, so `diff` treats any field difference
  * as a single `alter` change (**not** a separate drop + create pair — see
- * `trigger-kind.ts`'s equivalent note and #55) whose `emit` returns the
- * `drop policy if exists` and `create policy` statements in that order
- * (idempotent recreate, spec §6.5), including on a true first-time create.
- * The `alter`'s and a true `drop`'s drop halves go out on the `predrop`
- * stage — a policy's `using`/`withCheck` expression can reference a column
- * that a `main`-stage alter on that same table is about to drop (#122), so
- * the policy must be gone before that alter runs. A true first-time
- * create's `drop policy if exists` is just idempotent guard text (nothing
- * can depend on a policy that doesn't exist yet), so it stays in `main`
- * alongside its own `create policy`.
+ * `trigger-kind.ts`'s equivalent note and #55) whose `emit` returns a
+ * drop and a `create policy` statement in that order (idempotent
+ * recreate on create only, spec §6.5). Only a true first-time create's
+ * drop half uses `if exists` (idempotent guard text — nothing can
+ * already depend on a policy that doesn't exist yet, so it stays in
+ * `main` alongside its own `create policy`); `alter`/`drop` emit a bare
+ * `drop policy` (D75) so an out-of-band removal of a policy hejbro still
+ * declares fails loudly at the next change instead of `if exists`
+ * silently re-creating it. The `alter`'s and a true `drop`'s drop halves
+ * go out on the `predrop` stage — a policy's `using`/`withCheck`
+ * expression can reference a column that a `main`-stage alter on that
+ * same table is about to drop (#122), so the policy must be gone before
+ * that alter runs.
  */
 export const policyKind: ObjectKind<PolicyDeclaration> = {
 	kind: "policy",
@@ -235,7 +252,7 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 				// doc comment above.
 				const nextSnapshot = asPolicySnapshot(change.next);
 				return [
-					statement(dropPolicySql(nextSnapshot)),
+					statement(dropPolicySql(nextSnapshot, true)),
 					statement(createPolicySql(nextSnapshot)),
 				];
 			}
@@ -248,7 +265,7 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 				}
 				const nextSnapshot = asPolicySnapshot(change.next);
 				return [
-					predropStatement(dropPolicySql(nextSnapshot)),
+					predropStatement(dropPolicySql(nextSnapshot, false)),
 					statement(createPolicySql(nextSnapshot)),
 				];
 			}
@@ -260,7 +277,9 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 					);
 				}
 				return [
-					predropStatement(dropPolicySql(asPolicySnapshot(change.previous))),
+					predropStatement(
+						dropPolicySql(asPolicySnapshot(change.previous), false),
+					),
 				];
 			}
 			default:

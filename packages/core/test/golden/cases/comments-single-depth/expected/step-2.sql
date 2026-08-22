@@ -1,7 +1,7 @@
 -- hejbro migration
 -- ~ trigger app.comments.comments_single_depth [trigger changed; recreating]
 
-drop trigger if exists "comments_single_depth" on "app"."comments";
+drop trigger "comments_single_depth" on "app"."comments";
 
 create trigger "comments_single_depth"
 	before insert on "app"."comments"

@@ -228,21 +228,48 @@ const renderTriggerEvent = (
 	return event.event;
 };
 
+const dropTriggerGuardClause = (ifExists: boolean): string => {
+	if (ifExists) {
+		return "if exists ";
+	}
+	return "";
+};
+
 /**
- * Renders a trigger's `[dropTriggerIfExists, createTrigger]` statement
- * pair. Always both statements — `drop trigger if exists` is idempotent,
- * so every trigger create (first-time or recreate) emits the same pair
- * (spec §6.5).
+ * Renders a trigger's own `drop trigger` statement (D75) — `ifExists`
+ * true for a first-time create's idempotent guard text (nothing can
+ * already depend on a trigger that doesn't exist yet), `false` for a
+ * real alter/drop's own drop half, so an out-of-band removal fails
+ * loudly at the next change instead of the `if exists` silently
+ * tolerating it.
  */
-export const renderTriggerSql = (
+export const renderTriggerDropSql = (
 	t: TriggerSnapshotShape,
-): readonly [dropTriggerIfExists: string, createTrigger: string] => {
-	const dropSql = `drop trigger if exists ${quoteIdentifier(t.name)} on ${qualifyName(t.schema, t.table)};`;
+	ifExists: boolean,
+): string =>
+	`drop trigger ${dropTriggerGuardClause(ifExists)}${quoteIdentifier(t.name)} on ${qualifyName(t.schema, t.table)};`;
+
+/** Renders a trigger's own `create trigger` statement, independent of the drop half. */
+export const renderTriggerCreateSql = (t: TriggerSnapshotShape): string => {
 	const eventsSql = t.events.map(renderTriggerEvent).join(" or ");
-	const createSql = [
+	return [
 		`create trigger ${quoteIdentifier(t.name)}`,
 		`${indent(1)}${t.timing} ${eventsSql} on ${qualifyName(t.schema, t.table)}`,
 		`${indent(1)}for each ${t.forEach} execute function ${qualifyName(t.schema, t.function)}();`,
 	].join("\n");
-	return [dropSql, createSql];
 };
+
+/**
+ * Renders a trigger's `[dropTriggerIfExists, createTrigger]` statement
+ * pair for a first-time create (spec §6.5) — `drop trigger if exists` is
+ * idempotent guard text there, not a real drop. `trigger-kind.ts`'s
+ * `alter`/`drop` cases render their own drop half via
+ * {@link renderTriggerDropSql} directly (`ifExists: false`, D75) instead
+ * of this pair.
+ */
+export const renderTriggerSql = (
+	t: TriggerSnapshotShape,
+): readonly [dropTriggerIfExists: string, createTrigger: string] => [
+	renderTriggerDropSql(t, true),
+	renderTriggerCreateSql(t),
+];

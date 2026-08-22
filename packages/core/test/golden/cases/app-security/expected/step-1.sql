@@ -2,7 +2,7 @@
 -- ~ policy app.posts.posts_read_published [policy changed; recreating]
 -- ~ grant app.all-tables-privileges.anon [+insert]
 
-drop policy if exists "posts_read_published" on "app"."posts";
+drop policy "posts_read_published" on "app"."posts";
 
 create policy "posts_read_published" on "app"."posts" for select to "anon" using ("app"."posts"."status" = 'published');
 
