@@ -167,6 +167,26 @@ const candidateDriftFiles = (
 		.sort();
 };
 
+type LoadDeclarationsResult =
+	| {
+			readonly ok: true;
+			readonly declarations: Awaited<ReturnType<typeof loadDeclarations>>;
+	  }
+	| { readonly ok: false; readonly error: unknown };
+
+/** Wraps {@link loadDeclarations} in a result object instead of letting its rejection propagate — the caller needs both outcomes as data (the diff/undo output prints either way), and a try/catch around a `let` assignment is the one shape this repo's own no-`let` convention can't express directly. */
+const tryLoadDeclarations = async (
+	configPath: string,
+	config: Parameters<typeof loadDeclarations>[1],
+): Promise<LoadDeclarationsResult> => {
+	try {
+		const declarations = await loadDeclarations(configPath, config);
+		return { ok: true, declarations };
+	} catch (error) {
+		return { ok: false, error };
+	}
+};
+
 const parsedFormatVersionOf = (snapshotText: string): unknown => {
 	const parsed = JSON.parse(snapshotText) as {
 		readonly formatVersion?: unknown;
@@ -274,11 +294,9 @@ export const runRestore = async (
 		const undoLines = renderUndoBlock(diff);
 		const verifiedCommitLine = `verified: commit ${shortSha}'s snapshot content matches migration ${targetNumber}'s banner hash`;
 
-		let declarations: Awaited<ReturnType<typeof loadDeclarations>>;
-		try {
-			declarations = await loadDeclarations(configPath, config);
-		} catch (loadError) {
-			const hejbroErr = asHejbroError(loadError);
+		const loaded = await tryLoadDeclarations(configPath, config);
+		if (!loaded.ok) {
+			const hejbroErr = asHejbroError(loaded.error);
 			return {
 				exitCode: 1,
 				stdout: [verifiedCommitLine, ...diffLines, "", ...undoLines],
@@ -293,6 +311,7 @@ export const runRestore = async (
 				),
 			};
 		}
+		const declarations = loaded.declarations;
 
 		const targetSnapshotText = blobAt(cwd, sha, config.snapshotPath).toString(
 			"utf8",
