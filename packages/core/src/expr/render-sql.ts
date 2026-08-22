@@ -555,23 +555,41 @@ export const renderDelete = (
 	return clauses.join(" ");
 };
 
+/**
+ * One handler per {@link QueryNode} `queryKind`, same technique as
+ * `renderExprHandlers` below: a mapped type over the full `queryKind`
+ * union, so the object literal must cover every key — a missing one is a
+ * compile error, the same guarantee a `switch`'s `default:
+ * assertNever(node)` gives at runtime. Applied here for coverage, not
+ * complexity (#154 ratchet-5): `renderQuery`'s own `default` branch was
+ * structurally unreachable (`QueryNode` has exactly these four kinds), so
+ * no test could ever reach it — a handler map has no such branch to leave
+ * uncovered.
+ */
+type RenderQueryHandlers = {
+	readonly [K in QueryNode["queryKind"]]: (
+		node: Extract<QueryNode, { readonly queryKind: K }>,
+		outerScope?: ReadonlyArray<TableRefNode>,
+	) => string;
+};
+
+const renderQueryHandlers: RenderQueryHandlers = {
+	select: renderSelect,
+	insert: renderInsert,
+	update: renderUpdate,
+	delete: renderDelete,
+};
+
 /** Dispatches a {@link QueryNode} to its renderer by `queryKind`. */
 export const renderQuery = (
 	node: QueryNode,
 	outerScope?: ReadonlyArray<TableRefNode>,
 ): string => {
-	switch (node.queryKind) {
-		case "select":
-			return renderSelect(node, outerScope);
-		case "insert":
-			return renderInsert(node, outerScope);
-		case "update":
-			return renderUpdate(node, outerScope);
-		case "delete":
-			return renderDelete(node, outerScope);
-		default:
-			return assertNever(node);
-	}
+	const handler = renderQueryHandlers[node.queryKind] as (
+		node: QueryNode,
+		outerScope?: ReadonlyArray<TableRefNode>,
+	) => string;
+	return handler(node, outerScope);
 };
 
 /**
