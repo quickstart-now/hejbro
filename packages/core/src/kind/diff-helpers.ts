@@ -41,6 +41,41 @@ export type DiffGuardResult =
 	  };
 
 /**
+ * {@link createOrDropDiff}'s create/drop half: does exactly one of
+ * `previous`/`next` exist? Split out (D71/#154 ratchet-5) so the
+ * caller-facing dispatcher below stays a flat sequence of guards instead
+ * of folding this shape's own branches into it.
+ */
+const createOrDropChange = (
+	kind: string,
+	previous: JsonValue | null,
+	next: JsonValue | null,
+	identity: string,
+): KindChange | null => {
+	if (previous === null && next !== null) {
+		return {
+			kind,
+			operation: "create",
+			identity,
+			previous: null,
+			next,
+			notes: [],
+		};
+	}
+	if (previous !== null && next === null) {
+		return {
+			kind,
+			operation: "drop",
+			identity,
+			previous,
+			next: null,
+			notes: [],
+		};
+	}
+	return null;
+};
+
+/**
  * The create/drop/neither-exists guard every `ObjectKind`'s own `diff`
  * opened with — byte-identical across eight kind files (`table-kind.ts`,
  * `function-kind.ts`, `enum-kind.ts`, `view-kind.ts`, `trigger-kind.ts`,
@@ -65,35 +100,9 @@ export const createOrDropDiff = (
 	next: JsonValue | null,
 	identity: string,
 ): DiffGuardResult => {
-	if (previous === null && next !== null) {
-		return {
-			done: true,
-			changes: [
-				{
-					kind,
-					operation: "create",
-					identity,
-					previous: null,
-					next,
-					notes: [],
-				},
-			],
-		};
-	}
-	if (previous !== null && next === null) {
-		return {
-			done: true,
-			changes: [
-				{
-					kind,
-					operation: "drop",
-					identity,
-					previous,
-					next: null,
-					notes: [],
-				},
-			],
-		};
+	const change = createOrDropChange(kind, previous, next, identity);
+	if (change !== null) {
+		return { done: true, changes: [change] };
 	}
 	if (previous === null || next === null) {
 		return { done: true, changes: [] };
