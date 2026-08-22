@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { check } from "../src/dsl/check";
-import { desc, index } from "../src/dsl/index-builder";
+import { desc, index, op } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
@@ -538,6 +538,23 @@ describe("tableKind.serialize — index columns and where (v3, D51)", () => {
 		expect(byName.get("posts_data_idx")?.method).toBe("gin");
 		expect(byName.get("posts_data2_idx")?.method).toBeUndefined();
 		expect(byName.get("posts_data3_idx")?.method).toBeUndefined();
+	});
+
+	// #284 US2 (T021): operator class — serialize writes `opclass` only
+	// when set.
+	it("serializes opclass only when set", () => {
+		const posts = table(app, "posts", { data: text(), plain: text() }, (t) => ({
+			indexes: [
+				index("posts_data_idx").on(op(t.data, "text_pattern_ops")),
+				index("posts_plain_idx").on(t.plain),
+			],
+		}));
+		const snapshot = asTableSnapshot(tableKind.serialize(getTableMeta(posts)));
+		const byName = new Map(snapshot.indexes.map((ix) => [ix.name, ix]));
+		expect(byName.get("posts_data_idx")?.columns).toEqual([
+			{ name: "data", opclass: "text_pattern_ops" },
+		]);
+		expect(byName.get("posts_plain_idx")?.columns).toEqual([{ name: "plain" }]);
 	});
 });
 

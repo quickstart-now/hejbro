@@ -3,4 +3,4 @@
 
 drop index "app"."docs_data_idx";
 
-create index "docs_data_idx" on "app"."docs" using hash ("data");
+create index "docs_data_idx" on "app"."docs" using gin ("data");

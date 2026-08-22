@@ -20,6 +20,7 @@ import {
 	foreignKeyOnUpdate,
 	indexColumnDesc,
 	indexColumnNulls,
+	indexColumnOpclass,
 	indexMethod,
 	indexUnique,
 	indexWhere,
@@ -169,10 +170,20 @@ const nullsClause = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
 	return [`nulls ${nulls}`];
 };
 
-/** Renders one index column's clause: name, then `desc` when descending, then `nulls first|last` when set (D51). */
+/** Renders the operator class token (R4) — a bare identifier, unquoted like `using <method>` (D36 restricts it to snake_case, so quoting is never needed). */
+const opclassToken = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
+	const opclass = indexColumnOpclass(column);
+	if (opclass === null) {
+		return [];
+	}
+	return [opclass];
+};
+
+/** Renders one index column's clause: name, then its opclass when set, then `desc` when descending, then `nulls first|last` when set (D51/R4/R9 — `"col" <opclass> desc nulls first`). */
 const indexColumnSql = (column: IndexColumnSnapshot): string =>
 	[
 		quoteIdentifier(column.name),
+		...opclassToken(column),
 		...descKeyword(column),
 		...nullsClause(column),
 	].join(" ");

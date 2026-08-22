@@ -77,17 +77,17 @@
 
 ### Tests for User Story 2 (write first, see them fail)
 
-- [ ] T020 [P] [US2] Unit: `op()` on a ref, on `desc(...)`, and `desc(op(...))` all yield `{ name, desc, nulls, opclass }`; invalid class → `invalid-sql-name` ("operator class"); — packages/core/test/dsl/index-builder.test.ts
-- [ ] T021 [P] [US2] Unit: `serializeIndexColumn` writes `opclass` only when set — packages/core/test/table-kind-diff.test.ts
-- [ ] T022 [P] [US2] Unit: `indexColumnSql` ordering `"col" <opclass> desc nulls first`; opclass change → drop + create — packages/core/test/table-kind-emit.test.ts
-- [ ] T023 [US2] Golden: add the `jsonb_path_ops` / `gin_trgm_ops` lines and a step-1 opclass change to `table-index-methods`; re-record and review
+- [x] T020 [P] [US2] Unit: `op()` on a ref, on `desc(...)`, and `desc(op(...))` all yield `{ name, desc, nulls, opclass }`; invalid class → `invalid-sql-name` ("operator class"); — packages/core/test/dsl/index-builder.test.ts
+- [x] T021 [P] [US2] Unit: `serializeIndexColumn` writes `opclass` only when set — packages/core/test/table-kind-diff.test.ts
+- [x] T022 [P] [US2] Unit: `indexColumnSql` ordering `"col" <opclass> desc nulls first`; opclass change → drop + create — packages/core/test/table-kind-emit.test.ts
+- [x] T023 [US2] Golden: add the `jsonb_path_ops` / `gin_trgm_ops` lines and a step-1 opclass change to `table-index-methods`; re-record and review (step-1 redefined as a pure opclass change on `docs_data_idx`, matching contracts/sql.md's own step-1 shape, replacing US1's method-change step — that behaviour stays unit-tested in table-kind-emit.test.ts)
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] `op(input, opclass)` wrapper; widen `asc`/`desc` to accept `IndexColumn`; `IndexColumn.opclass`; `toDeclarationColumn` carries it — packages/core/src/dsl/index-builder.ts (export `op` from packages/core/src/index.ts)
-- [ ] T025 [US2] `serializeIndexColumn` opclass compact field — packages/core/src/kinds/table-kind.ts
-- [ ] T026 [US2] `indexColumnSql` opclass token between column and desc — packages/core/src/kinds/table-kind-emit-sql.ts
-- [ ] T027 [US2] `rewriteIndexesForRename` keeps `opclass` on renamed entries (add to the existing "keeps desc/nulls on the renamed entry" test) — packages/core/test/rename-plan.test.ts, packages/core/src/engine/rename-plan.ts
+- [x] T024 [US2] `op(input, opclass)` wrapper; widen `asc`/`desc` to accept `IndexColumn`; `IndexColumn.opclass`; `toDeclarationColumn` carries it — packages/core/src/dsl/index-builder.ts (export `op` from packages/core/src/index.ts)
+- [x] T025 [US2] `serializeIndexColumn` opclass compact field — packages/core/src/kinds/table-kind.ts
+- [x] T026 [US2] `indexColumnSql` opclass token between column and desc — packages/core/src/kinds/table-kind-emit-sql.ts
+- [x] T027 [US2] `rewriteIndexesForRename` keeps `opclass` on renamed entries (add to the existing "keeps desc/nulls on the renamed entry" test) — packages/core/test/rename-plan.test.ts, packages/core/src/engine/rename-plan.ts (rename-plan.ts already spread the whole column object — no code change needed, only the test)
 
 **Checkpoint**: US1 + US2 green
 

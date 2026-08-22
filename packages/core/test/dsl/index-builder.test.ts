@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { desc, index } from "../../src/dsl/index-builder";
+import { desc, index, op } from "../../src/dsl/index-builder";
 import { schema } from "../../src/dsl/schema";
 import type { IndexColumnDeclaration, IndexMethod } from "../../src/dsl/table";
 import { getTableMeta, table } from "../../src/dsl/table";
@@ -197,6 +197,63 @@ describe("index builder — access method (#284 US1)", () => {
 			})),
 		).toThrow(
 			/the unique index on \("a", "b"\) uses "gin" — Postgres supports unique only on btree indexes\. Next: drop \.unique\(\) or drop \.using\("gin"\)\./,
+		);
+	});
+});
+
+// #284 US2 (T020): operator class — `op(input, opclass)` composes with
+// `asc(...)`/`desc(...)` in either order (R4); the opclass is a D36
+// identifier, validated the same way an index name is.
+describe("index builder — operator class (#284 US2)", () => {
+	it("op(column, opclass) records the opclass", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").on(op(t.data, "text_pattern_ops"))],
+		}));
+		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
+			{ name: "data", desc: false, nulls: null, opclass: "text_pattern_ops" },
+		]);
+	});
+
+	it("op(desc(column), opclass) keeps desc/nulls from the desc(...) wrap", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [
+				index("posts_data_idx").on(
+					op(desc(t.data, { nulls: "last" }), "text_pattern_ops"),
+				),
+			],
+		}));
+		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
+			{
+				name: "data",
+				desc: true,
+				nulls: "last",
+				opclass: "text_pattern_ops",
+			},
+		]);
+	});
+
+	it("desc(op(column, opclass), { nulls }) keeps the opclass from the op(...) wrap", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [
+				index("posts_data_idx").on(
+					desc(op(t.data, "text_pattern_ops"), { nulls: "first" }),
+				),
+			],
+		}));
+		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
+			{
+				name: "data",
+				desc: true,
+				nulls: "first",
+				opclass: "text_pattern_ops",
+			},
+		]);
+	});
+
+	it("rejects an invalid operator class name", () => {
+		const posts = table(app, "posts", { data: text() });
+		expect(() => op(posts.data, "bad-class")).toThrow(
+			/invalid-sql-name|operator class name "bad-class" is not a valid hejbro SQL identifier/,
 		);
 	});
 });

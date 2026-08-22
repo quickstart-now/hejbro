@@ -17,6 +17,7 @@ import {
 	integer,
 	isNotNull,
 	isTable,
+	op,
 	planRenames,
 	renderSnapshot,
 	rls,
@@ -380,18 +381,26 @@ describe("planRenames", () => {
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
 
-	it("keeps desc/nulls on the renamed entry of an ordered index (D51)", () => {
+	it("keeps desc/nulls/opclass on the renamed entry of an ordered index (D51/R4)", () => {
 		const previous = snap(
 			app,
 			table(app, "posts", { slug: text(), publishedAt: text() }, (t) => ({
-				indexes: [index().on(t.slug, desc(t.publishedAt, { nulls: "first" }))],
+				indexes: [
+					index().on(
+						op(t.slug, "text_ops"),
+						desc(t.publishedAt, { nulls: "first" }),
+					),
+				],
 			})),
 		);
 		const next = snap(
 			app,
 			table(app, "posts", { handle: text(), publishedAt: text() }, (t) => ({
 				indexes: [
-					index().on(t.handle, desc(t.publishedAt, { nulls: "first" })),
+					index().on(
+						op(t.handle, "text_ops"),
+						desc(t.publishedAt, { nulls: "first" }),
+					),
 				],
 			})),
 		);
@@ -419,11 +428,12 @@ describe("planRenames", () => {
 					readonly name: string;
 					readonly desc?: true;
 					readonly nulls?: string;
+					readonly opclass?: string;
 				}>;
 			}>;
 		};
 		expect(rewrittenTable.indexes[0]?.columns).toEqual([
-			{ name: "handle" },
+			{ name: "handle", opclass: "text_ops" },
 			{ name: "published_at", desc: true, nulls: "first" },
 		]);
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);

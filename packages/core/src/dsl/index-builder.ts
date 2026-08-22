@@ -9,47 +9,60 @@ import type {
 	IndexNulls,
 } from "./table";
 
-/** One column of an ordered index: the column ref, its sort direction, and an optional explicit nulls placement (D51). */
+/** One column of an ordered index: the column ref, its sort direction, an optional explicit nulls placement (D51), and an optional operator class (R4). */
 export type IndexColumn = {
 	readonly column: ColumnRef;
 	readonly desc: boolean;
 	readonly nulls: IndexNulls | null;
+	readonly opclass: string | null;
 };
 
-/** What `.on(...)` accepts per column: a bare `ColumnRef` (ascending, default nulls) or an `asc(...)`/`desc(...)`-wrapped {@link IndexColumn}. */
+/** What `.on(...)` accepts per column: a bare `ColumnRef` (ascending, no opclass, default nulls) or an `asc(...)`/`desc(...)`/`op(...)`-wrapped {@link IndexColumn} — the three wrappers compose in any order (R4). */
 export type IndexColumnInput = ColumnRef | IndexColumn;
 
 const isIndexColumn = (input: IndexColumnInput): input is IndexColumn =>
 	"column" in input && isExpr(input.column);
 
+/** Resolves an `IndexColumnInput` to its full {@link IndexColumn} shape — a bare ref defaults to ascending/no-opclass; an already-wrapped entry keeps its own fields, for its caller (`asc`/`desc`/`op`) to override just the one it owns. */
+const resolveIndexColumn = (input: IndexColumnInput): IndexColumn => {
+	if (isIndexColumn(input)) {
+		return input;
+	}
+	return { column: input, desc: false, nulls: null, opclass: null };
+};
+
 const orderedColumn =
 	(desc: boolean) =>
 	(
-		column: ColumnRef,
+		input: IndexColumnInput,
 		options?: { readonly nulls?: IndexNulls },
 	): IndexColumn => ({
-		column,
+		...resolveIndexColumn(input),
 		desc,
 		nulls: options?.nulls ?? null,
 	});
 
-/** Ascending index column, optionally with an explicit nulls placement. */
+/** Ascending index column, optionally with an explicit nulls placement — composes with `op(...)` in either order (R4). */
 export const asc = orderedColumn(false);
-/** Descending index column, optionally with an explicit nulls placement (`desc(t.publishedAt, { nulls: "first" })`). */
+/** Descending index column, optionally with an explicit nulls placement (`desc(t.publishedAt, { nulls: "first" })`) — composes with `op(...)` in either order (R4). */
 export const desc = orderedColumn(true);
+
+/** Wraps an index column with an operator class (R4, e.g. `op(t.data, "jsonb_path_ops")`) — composes with `asc(...)`/`desc(...)` in either order. `opclass` is a D36 identifier (`invalid-sql-name` when it isn't; catalog existence is Postgres' job, #220). */
+export const op = (input: IndexColumnInput, opclass: string): IndexColumn => ({
+	...resolveIndexColumn(input),
+	opclass: assertSqlName(opclass, "operator class", null),
+});
 
 const toDeclarationColumn = (
 	input: IndexColumnInput,
 ): IndexDeclaration["columns"][number] => {
-	if (isIndexColumn(input)) {
-		return {
-			name: input.column.sqlName,
-			desc: input.desc,
-			nulls: input.nulls,
-			opclass: null,
-		};
-	}
-	return { name: input.sqlName, desc: false, nulls: null, opclass: null };
+	const resolved = resolveIndexColumn(input);
+	return {
+		name: resolved.column.sqlName,
+		desc: resolved.desc,
+		nulls: resolved.nulls,
+		opclass: resolved.opclass,
+	};
 };
 
 /** Postgres access methods hejbro accepts (D85) — mirrors {@link IndexMethod} for the runtime guard `.using()` needs against untyped callers (R2). */

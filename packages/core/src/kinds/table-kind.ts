@@ -231,6 +231,16 @@ const indexColumnNullsField = (
 	return { nulls: value };
 };
 
+/** `{ opclass: <class> }` when set, else `{}` (compact snapshot). */
+const indexColumnOpclassField = (
+	value: string | null,
+): Pick<IndexColumnSnapshot, "opclass"> => {
+	if (value === null) {
+		return {};
+	}
+	return { opclass: value };
+};
+
 /** `{ where: <node> }` when the index has a partial predicate, else `{}` (compact snapshot). */
 const whereField = (value: JsonValue | null): Pick<IndexSnapshot, "where"> => {
 	if (value === null) {
@@ -307,6 +317,7 @@ const serializeIndexColumn = (
 	name: column.name,
 	...indexColumnDescField(column.desc),
 	...indexColumnNullsField(column.nulls),
+	...indexColumnOpclassField(column.opclass),
 });
 
 /** Encodes a partial index's predicate into its snapshot form — `null` when the index has none. */

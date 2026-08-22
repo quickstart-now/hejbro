@@ -38,6 +38,12 @@
 					"typeNode": {
 						"typeName": "uuid"
 					}
+				},
+				{
+					"name": "body",
+					"typeNode": {
+						"typeName": "text"
+					}
 				}
 			],
 			"foreignKeys": [],
@@ -48,7 +54,7 @@
 							"name": "data"
 						}
 					],
-					"method": "hash",
+					"method": "gin",
 					"name": "docs_data_idx"
 				},
 				{
@@ -68,6 +74,16 @@
 					],
 					"method": "hash",
 					"name": "docs_owner_id_idx"
+				},
+				{
+					"columns": [
+						{
+							"name": "body",
+							"opclass": "gin_trgm_ops"
+						}
+					],
+					"method": "gin",
+					"name": "docs_body_trgm_idx"
 				}
 			],
 			"name": "docs",

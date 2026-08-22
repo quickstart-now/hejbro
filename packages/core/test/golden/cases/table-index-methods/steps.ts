@@ -1,16 +1,27 @@
 import type { HejbroInput } from "../../../../src/index";
-import { index, jsonb, table, timestamptz, uuid } from "../../../../src/index";
+import {
+	index,
+	jsonb,
+	op,
+	table,
+	text,
+	timestamptz,
+	uuid,
+} from "../../../../src/index";
 import { app, docs } from "./declarations";
 
-// Step 0: from empty — three non-btree indexes (gin/brin/hash, #284 US1).
+// Step 0: from empty — non-btree access methods (gin/brin/hash, #284 US1)
+// and per-column operator classes (jsonb_path_ops/gin_trgm_ops, #284 US2).
 
 const fromEmpty: ReadonlyArray<HejbroInput> = [app, docs];
 
-// Step 1: docs_data_idx's method changes (gin -> hash) under the same
-// name — exercises the drop + create path for a same-name index whose
-// method changed (R9). The other two indexes are unchanged.
+// Step 1: docs_data_idx's opclass is dropped (jsonb_path_ops -> none) under
+// the same name and the same method (gin) — exercises the drop + create
+// path for a same-name index whose opclass changed (R9). Matches
+// contracts/sql.md's step-1 shape exactly (`using gin ("data")`, no
+// opclass). The other three indexes are unchanged.
 
-const docsMethodChanged = table(
+const docsOpclassChanged = table(
 	app,
 	"docs",
 	{
@@ -18,19 +29,21 @@ const docsMethodChanged = table(
 		data: jsonb(),
 		createdAt: timestamptz(),
 		ownerId: uuid(),
+		body: text(),
 	},
 	(t) => ({
 		indexes: [
-			index("docs_data_idx").using("hash").on(t.data),
+			index("docs_data_idx").using("gin").on(t.data),
 			index("docs_created_at_idx").using("brin").on(t.createdAt),
 			index("docs_owner_id_idx").using("hash").on(t.ownerId),
+			index("docs_body_trgm_idx").using("gin").on(op(t.body, "gin_trgm_ops")),
 		],
 	}),
 );
 
-const methodChanged: ReadonlyArray<HejbroInput> = [app, docsMethodChanged];
+const opclassChanged: ReadonlyArray<HejbroInput> = [app, docsOpclassChanged];
 
 export const steps: ReadonlyArray<ReadonlyArray<HejbroInput>> = [
 	fromEmpty,
-	methodChanged,
+	opclassChanged,
 ];

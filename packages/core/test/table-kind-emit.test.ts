@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { check } from "../src/dsl/check";
-import { desc, index } from "../src/dsl/index-builder";
+import { desc, index, op } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { inArray, isNotNull } from "../src/expr/operators";
@@ -739,6 +739,49 @@ describe("tableKind.emit — index ordering and where (D51)", () => {
 		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
 			'drop index "app"."posts_data_idx";',
 			'create index "posts_data_idx" on "app"."posts" using brin ("data");',
+		]);
+	});
+
+	// #284 US2 (T022): operator class — the opclass token sits between the
+	// column and `desc`/`nulls` (R4/R9); an opclass change recreates the
+	// index (same generic drop + create path as US1's method change).
+	it("renders the opclass between the column and desc/nulls", () => {
+		const posts = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [
+				index("posts_data_idx").on(
+					desc(op(t.data, "text_pattern_ops"), { nulls: "first" }),
+				),
+			],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				null,
+				tableKind.serialize(getTableMeta(posts)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toContain(
+			'create index "posts_data_idx" on "app"."posts" ("data" text_pattern_ops desc nulls first);',
+		);
+	});
+
+	it("recreates an index whose opclass changed under the same name", () => {
+		const before = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").on(op(t.data, "text_pattern_ops"))],
+		}));
+		const after = table(app, "posts", { data: text() }, (t) => ({
+			indexes: [index("posts_data_idx").on(t.data)],
+		}));
+		const change = expectSingleChange(
+			tableKind.diff(
+				tableKind.serialize(getTableMeta(before)),
+				tableKind.serialize(getTableMeta(after)),
+				"app.posts",
+			),
+		);
+		expect(tableKind.emit(change).map((s) => s.sql)).toEqual([
+			'drop index "app"."posts_data_idx";',
+			'create index "posts_data_idx" on "app"."posts" ("data");',
 		]);
 	});
 });
