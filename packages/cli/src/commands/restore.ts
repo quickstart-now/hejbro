@@ -350,11 +350,17 @@ export const runRestore = async (
 
 		const candidates = candidateDriftFiles(cwd, sha, config.entry);
 		const srcRoots = staticRootsOf(config.entry).join(" ");
+		const migrationRelativePath = `${config.migrationsDir}/${target.fileName}`;
+		const targetMigrationText = blobAt(
+			cwd,
+			sha,
+			migrationRelativePath,
+		).toString("utf8");
 		const mismatchError = buildMismatchError(
 			targetNumber,
 			shortSha,
 			candidates,
-			targetSnapshotText,
+			targetMigrationText,
 			srcRoots,
 		);
 		return {
@@ -396,7 +402,7 @@ const buildMismatchError = (
 	targetNumber: number,
 	shortSha: string,
 	candidates: ReadonlyArray<string>,
-	targetSnapshotText: string,
+	targetMigrationText: string,
 	srcRoots: string,
 ) => {
 	if (candidates.length > 0) {
@@ -405,7 +411,7 @@ const buildMismatchError = (
 			mismatchWithCandidatesMessage(targetNumber, shortSha, candidates),
 		);
 	}
-	const recordedVersion = recordedHejbroVersion(targetSnapshotText);
+	const recordedVersion = recordedHejbroVersion(targetMigrationText);
 	if (recordedVersion !== null) {
 		return hejbroError(
 			"restore-state-mismatch",
