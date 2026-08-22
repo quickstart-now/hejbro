@@ -154,44 +154,57 @@ and "the chains grow in 17 and 18" pointing at a golden-translation PR). Branch
 names do not move. If a number does end up in prose, re-check every one of them
 when the map changes.
 
-| # | PR | Scope | Issues |
-|---|---|---|---|
-| 1 | `phase8-plan` | This plan, the D58–D70 rows, the D33 amendment, the roadmap section, the AGENTS.md hard-gate change | Refs #9 |
-| 2 | `phase8-packaging` | #86 pack-install smoke test **and the packaging it proves**: LICENSE in all three published packages, a README for `hejbro`, `homepage`/`bugs`/`keywords`, `prepack`; `engines` (D58) + Node 22 CI matrix; `@hejbro/skills` → `private: true` (D62); root `typescript` → `catalog:` | #86, #28 |
-| 3 | `phase8-changesets` | `.changeset/config.json` (`fixed` group of the three published packages, `access: "public"`, `baseBranch: "dev"`, `updateInternalDependencies: "patch"`), release scripts, the changeset rule in AGENTS.md | — |
-| 4 | `phase8-regen-script` | `scripts/regen-examples.sh` + `pnpm regen:examples` | — |
-| 5 | `phase8-release-workflows` | `release-version.yml` (on `dev`, version only) and `release-publish.yml` (on `main`, publish only), `NPM_CONFIG_PROVENANCE`, `id-token: write`, and the pre-publish gate (`check`/`check-types`/`test`/`build` + the #86 smoke). Deferred past the format wave; not yet scheduled (see the phase issue). | — |
-| 6 | `phase8-error-subclass` | `HejbroError` becomes an `Error` subclass; both duck-typing sites (`commands/generate.ts`, `commands/verify.ts`) switch to `instanceof` | #25 |
-| 7 | `phase8-loader-diagnostics` | Declaration/config load failures become diagnostics instead of a raw `TypeError` | #125 |
-| 8 | `phase8-chain-walk` | `verify` accepts a chain that returns to an earlier snapshot state. Deferred past the format wave; not yet scheduled (see the phase issue). | #129 |
-| 9 | `phase8-flag-equals` | `--flag=value` token form | #89 |
-| 10 | `phase8-symbol-for` | `Symbol.for` for `tableMeta` and `triggerRowMeta` | #138 |
-| 11 | `phase8-next-marker` | `Next:` retrofit across the user-facing throw sites | #87 |
-| 12 | `phase8-snapshot-v5` | `formatVersion` → 5, parser handling, **and** the version-mismatch message (#136); snapshot deep-validation (#26) | #136, #26 |
-| 13 | `phase8-expr-nodes` | Expressions stored as structured nodes; rename retargets them (D67) | #110 |
-| 14 | `phase8-sequence-kind` | `sequence` object kind, rename drift guard, type-change semantics | #23 |
-| 15 | `phase8-constraint-names` | Constraint names in the snapshot (#24(iii)), pk/unique alter emission, #137's full fix replacing `phase8-pk-guard`'s guard, **and the chain step that exercises the PK add and drop paths** | #24, #137 |
-| 16 | `phase8-pk-guard` | Extend the `unsupported-column-alter` guard to the `added`/`removed` paths so the silent omission becomes a loud refusal | #137 |
-| 17 | `phase8-grant-sync` | Schema-wide grants follow tables added later, **plus** a chain step that adds a table under a schema-wide grant | #121 |
-| 18 | `phase8-golden-english` | Golden trigger messages translated to English | #120 |
-| 19 | `phase8-policy-predicates` | RLS predicate widening; the showcase drops **56 workaround expressions inside 34 `see #113`-marked policy blocks** — done = both counts 0, per-file distribution reported | #113 |
-| 20 | `phase8-bucket-notes` | Field-level notes for bucket alters; empty note lists stop rendering `[]` | #116 |
-| 21 | `phase8-authuid-cached` | `authUid()`'s cached variant (reusing the existing `rawSql` node), a `warning[rls-uncached-auth-call]` validator, and the **12 call sites across 5 files** that teach the uncached form | #97 |
-| 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69) | — |
-| 23 | `phase8-docs-release` | README status and install instructions, `CONTRIBUTING.md`, then the 0.1.0 release | — |
-| 24 | `phase8-crap-tooling` | `@vitest/coverage-v8`, a `test:coverage` task, `scripts/check-crap.mjs` — **reports only, not wired into CI** | #154 |
-| 25 | `phase8-crap-refactor` | The 13 functions at complexity ≥ 10 — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests | #154 |
-| 26 | `phase8-crap-coverage` | The 4 functions at complexity 8–9, which clear at 70–77% coverage | #154 |
-| 27 | `phase8-crap-gate` | `check:crap` wired into CI with a non-zero exit, **and the D71 decision-log row** | #154 |
-| 28 | `phase8-diagnostic-xref` | A check that every error code quoted inside a diagnostic message actually exists; **`style/noTernary` turned on in `biome.json`** and the 7 existing violations fixed; the `.mjs` style-rule scope question, answered `yes` | — |
-| 29 | `phase8-view-nodes` | `ViewSnapshot.selectSql` becomes a structured node (the 5th and last pre-rendered field), rename retargeting extended to views, **D72** | #157 |
-| 30 | `phase8-preset-goldens` | `stripBanner`'s division of labour written down, and the `create` banner pinned — `drop` and `alter` already are | #167 |
-| 31 | `phase8-crap-ratchet-5` | The remaining 29 violations resolved, then `CRAP_THRESHOLD = 5` | #154 |
-| 32 | `phase8-roadmap-sync` | The roadmap's Phase 8 section gains the coverage-gating work group and #157 — the two things the brainstorm did not know about | #154, #157 |
-| 33 | `phase8-cli-timeout` | `packages/cli` has no `testTimeout`, so its subprocess e2e chain runs against vitest's 5s default and flakes under runner contention — now a merge blocker, since `verify (22)`/`verify (24)` became required checks | #173 |
-| 34 | `phase8-plan-rules` | This file: the rules measured during the phase, the rows added after plan review, the track queues, D71 and D72 | — |
-| 35 | `phase8-unknown-kind-diagnostic` | `unknown-kind` names both remedies instead of one (an older build cannot tell a future core kind from an unregistered preset — neither name is in any list it holds), plus the third cause it *can* name: a hand-built registry missing a core kind. **D73** | #196 |
-| 36 | `phase8-preset-kind-prefix` | `register()` rejects an unprefixed kind id on the preset channel (`createDefaultRegistry`'s own kinds exempt) — predictable preset ids, and the advice moves from the collision error to registration time. **Buys no classification soundness**: D57 Rule 2 mandates kebab-case for snapshot identity tokens, so "core ⇒ no hyphen" cannot be enforced to match | #201 |
+**The first column is a row number in this table, not an issue number.** They
+overlap — rows run 1–38 and issues run #7–#207, so `22` and `#22` are different
+things and `#22` is a real, unrelated issue. Issues live in the last column and
+carry a `#`. A row whose issue column is `—` does **not** mean "no issue is
+needed": issue-first is the rule, so `—` means **file one before starting**. One
+PR body reached `Closes #22` by reading a row number as an issue number, and
+would have closed an unrelated issue on merge.
+
+**`Blocks 0.1.0`** marks the provisional release-blocking set (owner to confirm).
+Everything else in this table is Phase 8 scope but may ship in 0.1.x.
+
+| # | PR | Scope | Issues | Blocks 0.1.0 |
+|---|---|---|---|---|
+| 1 | `phase8-plan` | This plan, the D58–D70 rows, the D33 amendment, the roadmap section, the AGENTS.md hard-gate change | Refs #9 | — |
+| 2 | `phase8-packaging` | #86 pack-install smoke test **and the packaging it proves**: LICENSE in all three published packages, a README for `hejbro`, `homepage`/`bugs`/`keywords`, `prepack`; `engines` (D58) + Node 22 CI matrix; `@hejbro/skills` → `private: true` (D62); root `typescript` → `catalog:` | #86, #28 | — |
+| 3 | `phase8-changesets` | `.changeset/config.json` (`fixed` group of the three published packages, `access: "public"`, `baseBranch: "dev"`, `updateInternalDependencies: "patch"`), release scripts, the changeset rule in AGENTS.md | — | — |
+| 4 | `phase8-regen-script` | `scripts/regen-examples.sh` + `pnpm regen:examples` | — | — |
+| 5 | `phase8-release-workflows` | `release-version.yml` (on `dev`, version only) and `release-publish.yml` (on `main`, publish only), `NPM_CONFIG_PROVENANCE`, `id-token: write`, and the pre-publish gate (`check`/`check-types`/`test`/`build` + the #86 smoke). Deferred past the format wave; not yet scheduled (see the phase issue). | — | — |
+| 6 | `phase8-error-subclass` | `HejbroError` becomes an `Error` subclass; both duck-typing sites (`commands/generate.ts`, `commands/verify.ts`) switch to `instanceof` | #25 | — |
+| 7 | `phase8-loader-diagnostics` | Declaration/config load failures become diagnostics instead of a raw `TypeError` | #125 | — |
+| 8 | `phase8-chain-walk` | `verify` accepts a chain that returns to an earlier snapshot state. Deferred past the format wave; not yet scheduled (see the phase issue). | #129 | yes |
+| 9 | `phase8-flag-equals` | `--flag=value` token form | #89 | — |
+| 10 | `phase8-symbol-for` | `Symbol.for` for `tableMeta` and `triggerRowMeta` | #138 | — |
+| 11 | `phase8-next-marker` | `Next:` retrofit across the user-facing throw sites | #87 | — |
+| 12 | `phase8-snapshot-v5` | `formatVersion` → 5, parser handling, **and** the version-mismatch message (#136); snapshot deep-validation (#26) | #136, #26 | — |
+| 13 | `phase8-expr-nodes` | Expressions stored as structured nodes; rename retargets them (D67) | #110 | — |
+| 14 | `phase8-sequence-kind` | `sequence` object kind, rename drift guard, type-change semantics | #23 | yes |
+| 15 | `phase8-constraint-names` | Constraint names in the snapshot (#24(iii)), pk/unique alter emission, #137's full fix replacing `phase8-pk-guard`'s guard, **and the chain step that exercises the PK add and drop paths** | #24, #137 | — |
+| 16 | `phase8-pk-guard` | Extend the `unsupported-column-alter` guard to the `added`/`removed` paths so the silent omission becomes a loud refusal | #137 | yes |
+| 17 | `phase8-grant-sync` | Schema-wide grants follow tables added later, **plus** a chain step that adds a table under a schema-wide grant | #121 | — |
+| 18 | `phase8-golden-english` | Golden trigger messages translated to English | #120 | — |
+| 19 | `phase8-policy-predicates` | RLS predicate widening; the showcase drops **56 workaround expressions inside 34 `see #113`-marked policy blocks** — done = both counts 0, per-file distribution reported | #113 | — |
+| 20 | `phase8-bucket-notes` | Field-level notes for bucket alters; empty note lists stop rendering `[]` | #116 | — |
+| 21 | `phase8-authuid-cached` | `authUid()`'s cached variant (reusing the existing `rawSql` node), a `warning[rls-uncached-auth-call]` validator, and the **12 call sites across 5 files** that teach the uncached form | #97 | — |
+| 22 | `phase8-supabase-image` | `scripts/verify-supabase-image.sh` — the preset checked against a real `supabase/postgres` image (D69). Storage is **outside** what one Postgres image can verify: `storage.buckets` is created by the Storage API service, not the image | #207 | yes |
+| 23 | `phase8-docs-release` | README status and install instructions across **all three published packages** (#142 — `packages/core`'s README still describes landed features as future phases, and it becomes the npm page), `CONTRIBUTING.md`, then the 0.1.0 release | #142 | yes |
+| 24 | `phase8-crap-tooling` | `@vitest/coverage-v8`, a `test:coverage` task, `scripts/check-crap.mjs` — **reports only, not wired into CI** | #154 | — |
+| 25 | `phase8-crap-refactor` | The functions `pnpm check:crap` reports at **CRAP > 10** (the gate is the definition; measured at 20, of which 16 are also complexity ≥ 10) — at that complexity nothing below 100% coverage clears the threshold, so these need a split, not tests. Four share a byte-identical create/drop guard, so one helper clears three at once | #154 | — |
+| 26 | `phase8-crap-coverage` | The 4 functions at complexity 8–9, which clear at 70–77% coverage | #154 | — |
+| 27 | `phase8-crap-gate` | `check:crap` wired into CI with a non-zero exit, **and the D71 decision-log row** | #154 | — |
+| 28 | `phase8-diagnostic-xref` | A check that every error code quoted inside a diagnostic message actually exists; **`style/noTernary` turned on in `biome.json`** and the 7 existing violations fixed; the `.mjs` style-rule scope question, answered `yes` | — | — |
+| 29 | `phase8-view-nodes` | `ViewSnapshot.selectSql` becomes a structured node (the 5th and last pre-rendered field), rename retargeting extended to views, **D72** | #157 | — |
+| 30 | `phase8-preset-goldens` | `stripBanner`'s division of labour written down, and the `create` banner pinned — `drop` and `alter` already are | #167 | — |
+| 31 | `phase8-crap-ratchet-5` | The remaining 29 violations resolved, then `CRAP_THRESHOLD = 5` | #154 | — |
+| 32 | `phase8-roadmap-sync` | The roadmap's Phase 8 section gains the coverage-gating work group and #157 — the two things the brainstorm did not know about | #154, #157 | — |
+| 33 | `phase8-cli-timeout` | `packages/cli` has no `testTimeout`, so its subprocess e2e chain runs against vitest's 5s default and flakes under runner contention — now a merge blocker, since `verify (22)`/`verify (24)` became required checks | #173 | — |
+| 34 | `phase8-plan-rules` | This file: the rules measured during the phase, the rows added after plan review, the track queues, D71 and D72 | — | — |
+| 35 | `phase8-unknown-kind-diagnostic` | `unknown-kind` names both remedies instead of one (an older build cannot tell a future core kind from an unregistered preset — neither name is in any list it holds), plus the third cause it *can* name: a hand-built registry missing a core kind. **D73** | #196 | — |
+| 36 | `phase8-preset-kind-prefix` | `register()` rejects an unprefixed kind id on the preset channel (`createDefaultRegistry`'s own kinds exempt) — predictable preset ids, and the advice moves from the collision error to registration time. **Buys no classification soundness**: D57 Rule 2 mandates kebab-case for snapshot identity tokens, so "core ⇒ no hyphen" cannot be enforced to match | #201 | — |
+| 37 | `phase8-scope-nodes` | `warning[rls-uncached-auth-call]`'s scope question generalised: core has no notion of which clause an expression sits in, so `assertOwnColumnsOnly` treats `exists()` as opaque. Make the scope rule explicit rather than a side effect of `renderExpr` | #160 | — |
+| 38 | `phase8-required-keys` | Per-kind `requiredKeys` validation for snapshot nodes — a hand-edited snapshot (D33 makes that a first-class input) can today omit a field a kind depends on and fail later, in the diff engine | #159 | — |
 
 `phase8-pk-guard` lands **before** `phase8-constraint-names` in dependency
 terms but is listed after it for readability: the guard is a small, independent
@@ -742,9 +755,14 @@ rather than a reminder:
 - `snapshot.ts`'s version-mismatch message hard-codes "hejbro is
   pre-publication" and tells the user to delete the snapshot — after which
   `verify` tells them to restore it from version control (#136).
-- `table-kind-emit.ts` refuses two column alters "in Phase 1", exposing an
-  internal roadmap number to users. Those two strings disappear with
-  #24, but only because that work removes the throw sites.
+- `table-kind-emit.ts` refuses column alters "in Phase 1", exposing an
+  internal roadmap number to users. **This entry was wrong twice, in
+  opposite directions.** It said *two* strings: `phase8-pk-guard` added two
+  more before anyone counted, so there were four. And it said they would
+  disappear *with #24, because that work removes the throw sites*: #202
+  deleted all four outright, three words at a time, without waiting. Both
+  errors came from describing what a future PR would do instead of what the
+  file currently said — a count taken once and a plan assumed to hold.
 - `packages/supabase/README.md`'s D45 paragraph tells users to wrap
   `auth.uid()` themselves "until then". `phase8-authuid-cached` is *then*, and
   leaving the paragraph in place would publish advice for a workaround that is
@@ -863,6 +881,24 @@ number. It happened three times in this phase that an implementer pushed
 back on an instruction rather than following it, and all three times the
 instruction was wrong. What made that affordable was that the pushback came
 with a measurement, not an opinion.
+
+**Comparing an artifact is not running it, and the two heaviest defects this
+phase both hid in that gap.** A golden case compares generated SQL as text,
+so a step whose statements are correct but *ordered* wrongly passes — which
+is exactly how a sequence drop emitted after its owning table's drop stayed
+green until someone executed the eight steps against a real Postgres. The
+`examples/supabase` round-trip compares `pg_dump` output, so a schema whose
+objects are all present but *unreachable* passes — which is how a showcase
+whose RLS policies no role could read (`grant usage on schema app` was never
+declared) stayed green until someone connected as `authenticated` and ran a
+query. Both harnesses were working correctly; both were asked whether the
+right thing was **produced**, and neither was ever asked whether it **works**.
+
+The reviewer who found the second one named the shared shape, and it is the
+useful part: *"the output was compared, never exercised."* So when a check
+compares two documents, write down what it cannot see — and if the answer is
+"whether any of this runs", that gap needs a second harness rather than a
+wider diff.
 
 **When you report an absence, run a positive control in the same breath.**
 `[]`, `0 occurrences`, and `could not reproduce` are indistinguishable from
@@ -1207,6 +1243,15 @@ stage, so those statements always run before the owning table's `main`-stage
 drop. The `if exists` therefore contributes nothing to same-diff cascade
 safety — the object is always still there. Swallowing *external* drift is
 not a side effect of that guard; it is the only thing it does.
+
+**Everything else open under #9 is in scope**, which is not the same as
+blocking 0.1.0 — see the table's `Blocks 0.1.0` column. This was checked
+rather than assumed: #121, #129, #142, #159 and #160 were all open with no
+row in the table and no entry here, so they were neither scheduled nor
+deferred. All five carry `parent = #9`, and with no Phase 9 to move them to,
+"unlisted" was the only thing wrong with them. Rows 37 and 38 and row 23's
+widened scope close that gap. **An open issue that appears in neither the
+table nor this section is a bookkeeping bug, not a decision.**
 
 **#139** and **#141** stay as sub-issues of **#9**. There is no Phase 9 — the
 owner decided (2026-08-21) that Phase 8 is the last phase and what follows
