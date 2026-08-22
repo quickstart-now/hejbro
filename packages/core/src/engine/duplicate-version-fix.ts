@@ -83,6 +83,11 @@ export const orderGroupByChain = (
 		(entry) => !hasPredecessorInGroup(entry, entries),
 	);
 	const [root, ...extraRoots] = roots;
+	// Readability guard, not a required check: walkGroup below also fails
+	// (returns null) for zero or 2+ roots on its own, the same way it
+	// already covers a fork -- but naming the reason here ("more than one
+	// entry with no predecessor") is clearer than letting a reader infer
+	// it from the walk's own generic "ran out of matching entries".
 	if (root === undefined || extraRoots.length > 0) {
 		return null;
 	}
