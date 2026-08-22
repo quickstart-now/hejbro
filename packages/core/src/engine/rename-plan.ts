@@ -420,6 +420,20 @@ const findDuplicateRenameSpecs = (
 	return { duplicatedIndices, errors };
 };
 
+/**
+ * Does `oldName`/`newName` match a genuine drop+add pair in `sets`?
+ * Shared by {@link validateTableRenameTarget}/{@link
+ * validateColumnRenameTarget}, both of which ask exactly this question of
+ * a `NameSets` lookup (a schema's tables, or a table's columns) — one
+ * predicate instead of the same `?? false`-guarded pair repeated twice.
+ */
+const isDropAddPair = (
+	sets: NameSets | undefined,
+	oldName: string,
+	newName: string,
+): boolean =>
+	(sets?.dropped.has(oldName) ?? false) && (sets?.added.has(newName) ?? false);
+
 /** {@link validateRenameSpecTarget}'s `"table"` case: `spec`'s old/new names must match a table this run actually drops/adds in that schema. */
 const validateTableRenameTarget = (
 	spec: TableRenameSpec,
@@ -427,10 +441,7 @@ const validateTableRenameTarget = (
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
 ): HejbroError | null => {
 	const sets = schemaTableSets.get(spec.schemaName);
-	const isValid =
-		(sets?.dropped.has(spec.oldName) ?? false) &&
-		(sets?.added.has(spec.newName) ?? false);
-	if (isValid) {
+	if (isDropAddPair(sets, spec.oldName, spec.newName)) {
 		return null;
 	}
 	const declaredAt =
@@ -451,10 +462,7 @@ const validateColumnRenameTarget = (
 ): HejbroError | null => {
 	const identity = tableIdentity(spec.schemaName, spec.tableName);
 	const sets = tableColumnSets.get(identity);
-	const isValid =
-		(sets?.dropped.has(spec.oldName) ?? false) &&
-		(sets?.added.has(spec.newName) ?? false);
-	if (isValid) {
+	if (isDropAddPair(sets, spec.oldName, spec.newName)) {
 		return null;
 	}
 	const declaredAt = declaredAtByIdentity.get(identity) ?? null;
@@ -522,22 +530,27 @@ const partitionRenameSpecs = (
 	return { validSpecs, errors: [...duplicateErrors, ...targetErrors] };
 };
 
-const validateConfirmDropTarget = (
-	spec: ConfirmDropSpec,
+/** {@link validateConfirmDropTarget}'s `target: "table"` half: `spec.tableName` must be a table this run's schema actually drops. */
+const validateConfirmDropTableTarget = (
+	spec: Extract<ConfirmDropSpec, { readonly target: "table" }>,
 	schemaTableSets: SchemaTableSets,
+): HejbroError | null => {
+	const sets = schemaTableSets.get(spec.schemaName);
+	if (sets?.dropped.has(spec.tableName) ?? false) {
+		return null;
+	}
+	const identity = tableIdentity(spec.schemaName, spec.tableName);
+	return hejbroError(
+		"unknown-confirm-drop-target",
+		`--confirm-drop "${identity}" doesn't match this run: schema "${spec.schemaName}" has no dropped table named "${spec.tableName}". Next: check the name for typos — --confirm-drop's target must be a column (or table) this run actually drops.`,
+	);
+};
+
+/** {@link validateConfirmDropTarget}'s `target: "column"` half: `spec.columnName` must be a column this run's table actually drops. */
+const validateConfirmDropColumnTarget = (
+	spec: Extract<ConfirmDropSpec, { readonly target: "column" }>,
 	tableColumnSets: TableColumnSets,
 ): HejbroError | null => {
-	if (spec.target === "table") {
-		const sets = schemaTableSets.get(spec.schemaName);
-		if (sets?.dropped.has(spec.tableName) ?? false) {
-			return null;
-		}
-		const identity = tableIdentity(spec.schemaName, spec.tableName);
-		return hejbroError(
-			"unknown-confirm-drop-target",
-			`--confirm-drop "${identity}" doesn't match this run: schema "${spec.schemaName}" has no dropped table named "${spec.tableName}". Next: check the name for typos — --confirm-drop's target must be a column (or table) this run actually drops.`,
-		);
-	}
 	const identity = tableIdentity(spec.schemaName, spec.tableName);
 	const sets = tableColumnSets.get(identity);
 	if (sets?.dropped.has(spec.columnName) ?? false) {
@@ -547,6 +560,17 @@ const validateConfirmDropTarget = (
 		"unknown-confirm-drop-target",
 		`--confirm-drop "${identity}.${spec.columnName}" doesn't match this run: table "${identity}" has no dropped column named "${spec.columnName}". Next: check the name for typos — --confirm-drop's target must be a column (or table) this run actually drops.`,
 	);
+};
+
+const validateConfirmDropTarget = (
+	spec: ConfirmDropSpec,
+	schemaTableSets: SchemaTableSets,
+	tableColumnSets: TableColumnSets,
+): HejbroError | null => {
+	if (spec.target === "table") {
+		return validateConfirmDropTableTarget(spec, schemaTableSets);
+	}
+	return validateConfirmDropColumnTarget(spec, tableColumnSets);
 };
 
 const partitionConfirmDrops = (
@@ -806,6 +830,51 @@ const applyRetargetedCheckExpression = (
 	return { ...check, expression: retargeted };
 };
 
+type ColumnRetargetResult = readonly [
+	TableSnapshot["columns"][number],
+	JsonValue | null,
+];
+type IndexRetargetResult = readonly [
+	TableSnapshot["indexes"][number],
+	JsonValue | null,
+];
+type CheckRetargetResult = readonly [
+	NonNullable<TableSnapshot["checks"]>[number],
+	JsonValue | null,
+];
+
+/** Did retargeting `tableSnapshot`'s columns, indexes, or checks for `target` actually change any of them? */
+const anyFieldChanged = (
+	columnResults: ReadonlyArray<ColumnRetargetResult>,
+	indexResults: ReadonlyArray<IndexRetargetResult>,
+	checkResults: ReadonlyArray<CheckRetargetResult>,
+): boolean =>
+	columnResults.some(([, retargeted]) => retargeted !== null) ||
+	indexResults.some(([, retargeted]) => retargeted !== null) ||
+	checkResults.some(([, retargeted]) => retargeted !== null);
+
+/**
+ * {@link retargetTableFields}'s `checks` field — `{}` (D33 compact
+ * snapshot: an absent key stays absent) when `tableSnapshot` never had a
+ * `checks` field to begin with, otherwise the retargeted list. Extracted
+ * to module scope (not a nested closure) the same way #154 PR2's
+ * `plpgsql/body-context.ts` closures were, so its own `if` doesn't fold
+ * into {@link retargetTableFields}'s complexity.
+ */
+const checksPatch = (
+	tableSnapshot: TableSnapshot,
+	checkResults: ReadonlyArray<CheckRetargetResult>,
+): Pick<TableSnapshot, "checks"> | Record<string, never> => {
+	if (tableSnapshot.checks === undefined) {
+		return {};
+	}
+	return {
+		checks: checkResults.map(([check, retargeted]) =>
+			applyRetargetedCheckExpression(check, retargeted),
+		),
+	};
+};
+
 const retargetTableFields = (
 	tableSnapshot: TableSnapshot,
 	target: RenameTarget,
@@ -819,25 +888,9 @@ const retargetTableFields = (
 	const checkResults = (tableSnapshot.checks ?? []).map(
 		(check) => [check, retargetField(check.expression, target)] as const,
 	);
-	const anyChanged =
-		columnResults.some(([, retargeted]) => retargeted !== null) ||
-		indexResults.some(([, retargeted]) => retargeted !== null) ||
-		checkResults.some(([, retargeted]) => retargeted !== null);
-	if (!anyChanged) {
+	if (!anyFieldChanged(columnResults, indexResults, checkResults)) {
 		return null;
 	}
-	const checksPatch = ():
-		| Pick<TableSnapshot, "checks">
-		| Record<string, never> => {
-		if (tableSnapshot.checks === undefined) {
-			return {};
-		}
-		return {
-			checks: checkResults.map(([check, retargeted]) =>
-				applyRetargetedCheckExpression(check, retargeted),
-			),
-		};
-	};
 	return {
 		...tableSnapshot,
 		columns: columnResults.map(([column, retargeted]) =>
@@ -846,7 +899,7 @@ const retargetTableFields = (
 		indexes: indexResults.map(([index, retargeted]) =>
 			applyRetargetedWhere(index, retargeted),
 		),
-		...checksPatch(),
+		...checksPatch(tableSnapshot, checkResults),
 	};
 };
 
@@ -1243,6 +1296,80 @@ const rewriteUniqueNamesForRename = (
  * full-scan style) rather than on one table's own nested arrays, since
  * that is where a top-level kind's entries live.
  */
+/** Does `sequence` belong to the table/column {@link rewriteSequencesForRename} is renaming? */
+const matchesSequenceRename = (
+	sequence: SequenceSnapshot,
+	schemaName: string,
+	oldTableName: string,
+	oldColumnName: string | null,
+): boolean =>
+	sequence.schema === schemaName &&
+	sequence.table === oldTableName &&
+	(oldColumnName === null || sequence.column === oldColumnName);
+
+type SequenceRewriteAcc = {
+	readonly objects: ObjectsRecord;
+	readonly statements: ReadonlyArray<string>;
+};
+
+/**
+ * {@link rewriteSequencesForRename}'s own `.reduce()` step, one matching
+ * sequence at a time — extracted to module scope (not a nested closure)
+ * so its own if/else cascade doesn't fold into the calling function's
+ * complexity, the same de-nesting #154 PR2 already applied to
+ * `plpgsql/body-context.ts`'s recording closures.
+ */
+const rewriteSequenceEntry = (
+	acc: SequenceRewriteAcc,
+	[oldKey, sequence]: readonly [string, SequenceSnapshot],
+	schemaName: string,
+	oldTableName: string,
+	newTableName: string,
+	oldColumnName: string | null,
+	newColumnName: string | null,
+): SequenceRewriteAcc => {
+	const newColumn = resolveRenamedColumns(
+		[sequence.column],
+		oldColumnName,
+		newColumnName,
+	)[0];
+	if (newColumn === undefined) {
+		return acc;
+	}
+	const oldDerivedName = deriveSequenceName(oldTableName, sequence.column);
+	const wasDerived = sequence.name === oldDerivedName;
+	if (!wasDerived) {
+		const updated: SequenceSnapshot = {
+			...sequence,
+			table: newTableName,
+			column: newColumn,
+		};
+		return {
+			objects: setKey(acc.objects, oldKey, updated),
+			statements: acc.statements,
+		};
+	}
+	const newDerivedName = deriveSequenceName(newTableName, newColumn);
+	const updated: SequenceSnapshot = {
+		...sequence,
+		name: newDerivedName,
+		table: newTableName,
+		column: newColumn,
+	};
+	const newKey = `${SEQUENCE_PREFIX}${schemaName}.${newDerivedName}`;
+	const withRekeyed = setKey(withoutKey(acc.objects, oldKey), newKey, updated);
+	if (newDerivedName === sequence.name) {
+		return { objects: withRekeyed, statements: acc.statements };
+	}
+	return {
+		objects: withRekeyed,
+		statements: [
+			...acc.statements,
+			renderSequenceRename(schemaName, sequence.name, newDerivedName),
+		],
+	};
+};
+
 const rewriteSequencesForRename = (
 	objects: ObjectsRecord,
 	schemaName: string,
@@ -1256,61 +1383,22 @@ const rewriteSequencesForRename = (
 } => {
 	const matches = entriesWithPrefix(objects, SEQUENCE_PREFIX)
 		.map(([key, node]) => [key, node as SequenceSnapshot] as const)
-		.filter(
-			([, sequence]) =>
-				sequence.schema === schemaName &&
-				sequence.table === oldTableName &&
-				(oldColumnName === null || sequence.column === oldColumnName),
+		.filter(([, sequence]) =>
+			matchesSequenceRename(sequence, schemaName, oldTableName, oldColumnName),
 		)
 		.sort(([, a], [, b]) => compareKeys(a.name, b.name));
 
 	return matches.reduce(
-		(acc, [oldKey, sequence]) => {
-			const newColumn = resolveRenamedColumns(
-				[sequence.column],
+		(acc, entry) =>
+			rewriteSequenceEntry(
+				acc,
+				entry,
+				schemaName,
+				oldTableName,
+				newTableName,
 				oldColumnName,
 				newColumnName,
-			)[0];
-			if (newColumn === undefined) {
-				return acc;
-			}
-			const oldDerivedName = deriveSequenceName(oldTableName, sequence.column);
-			const wasDerived = sequence.name === oldDerivedName;
-			if (!wasDerived) {
-				const updated: SequenceSnapshot = {
-					...sequence,
-					table: newTableName,
-					column: newColumn,
-				};
-				return {
-					objects: setKey(acc.objects, oldKey, updated),
-					statements: acc.statements,
-				};
-			}
-			const newDerivedName = deriveSequenceName(newTableName, newColumn);
-			const updated: SequenceSnapshot = {
-				...sequence,
-				name: newDerivedName,
-				table: newTableName,
-				column: newColumn,
-			};
-			const newKey = `${SEQUENCE_PREFIX}${schemaName}.${newDerivedName}`;
-			const withRekeyed = setKey(
-				withoutKey(acc.objects, oldKey),
-				newKey,
-				updated,
-			);
-			if (newDerivedName === sequence.name) {
-				return { objects: withRekeyed, statements: acc.statements };
-			}
-			return {
-				objects: withRekeyed,
-				statements: [
-					...acc.statements,
-					renderSequenceRename(schemaName, sequence.name, newDerivedName),
-				],
-			};
-		},
+			),
 		{ objects, statements: [] as ReadonlyArray<string> },
 	);
 };
@@ -1787,52 +1875,85 @@ const residualColumnAmbiguities = (
 			];
 		});
 
+type ConsumedNameSets = {
+	readonly dropped: ReadonlySet<string>;
+	readonly added: ReadonlySet<string>;
+};
+
+/** `consumed`'s entry for `schemaName` — empty sets (nothing consumed yet) when this schema has none on record. */
+const consumedSetsFor = (
+	consumed: ReadonlyMap<string, ConsumedNameSets>,
+	schemaName: string,
+): ConsumedNameSets =>
+	consumed.get(schemaName) ?? { dropped: new Set(), added: new Set() };
+
+/** The `declaredAt` on record for the first (sorted) residual added table name. */
+const declaredAtForFirstAdded = (
+	declaredAtByIdentity: ReadonlyMap<string, string | null>,
+	schemaName: string,
+	addedNames: ReadonlyArray<string>,
+): string | null =>
+	declaredAtByIdentity.get(tableIdentity(schemaName, addedNames[0] ?? "")) ??
+	null;
+
+/**
+ * {@link residualTableAmbiguities}'s own diagnostics for one schema —
+ * extracted to module scope (not a nested closure) the same way
+ * {@link checksPatch} above was, so this shape's own branches don't fold
+ * into the calling function's complexity.
+ */
+const residualTableAmbiguityFor = (
+	schemaName: string,
+	sets: NameSets,
+	consumed: ReadonlyMap<string, ConsumedNameSets>,
+	declaredAtByIdentity: ReadonlyMap<string, string | null>,
+): ReadonlyArray<AmbiguityResult> => {
+	const consumedSets = consumedSetsFor(consumed, schemaName);
+	const residualDropped = setDifference(sets.dropped, consumedSets.dropped);
+	const residualAdded = setDifference(sets.added, consumedSets.added);
+	if (residualDropped.size === 0 || residualAdded.size === 0) {
+		return [];
+	}
+	const droppedNames = Array.from(residualDropped).sort(compareKeys);
+	const addedNames = Array.from(residualAdded).sort(compareKeys);
+	const declaredAt = declaredAtForFirstAdded(
+		declaredAtByIdentity,
+		schemaName,
+		addedNames,
+	);
+	return [
+		{
+			error: hejbroError(
+				"ambiguous-table-rename",
+				ambiguousTableRenameMessage(schemaName, droppedNames, addedNames),
+				declaredAt,
+			),
+			ambiguity: {
+				kind: "table",
+				schemaName,
+				droppedTables: droppedNames,
+				createdTables: addedNames,
+				declaredAt,
+			},
+		},
+	];
+};
+
 const residualTableAmbiguities = (
 	schemaTableSets: SchemaTableSets,
-	consumed: ReadonlyMap<
-		string,
-		{
-			readonly dropped: ReadonlySet<string>;
-			readonly added: ReadonlySet<string>;
-		}
-	>,
+	consumed: ReadonlyMap<string, ConsumedNameSets>,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
 ): ReadonlyArray<AmbiguityResult> =>
 	Array.from(schemaTableSets.entries())
 		.sort((a, b) => compareKeys(a[0], b[0]))
-		.flatMap(([schemaName, sets]) => {
-			const consumedSets = consumed.get(schemaName) ?? {
-				dropped: new Set<string>(),
-				added: new Set<string>(),
-			};
-			const residualDropped = setDifference(sets.dropped, consumedSets.dropped);
-			const residualAdded = setDifference(sets.added, consumedSets.added);
-			if (residualDropped.size === 0 || residualAdded.size === 0) {
-				return [];
-			}
-			const droppedNames = Array.from(residualDropped).sort(compareKeys);
-			const addedNames = Array.from(residualAdded).sort(compareKeys);
-			const declaredAt =
-				declaredAtByIdentity.get(
-					tableIdentity(schemaName, addedNames[0] ?? ""),
-				) ?? null;
-			return [
-				{
-					error: hejbroError(
-						"ambiguous-table-rename",
-						ambiguousTableRenameMessage(schemaName, droppedNames, addedNames),
-						declaredAt,
-					),
-					ambiguity: {
-						kind: "table",
-						schemaName,
-						droppedTables: droppedNames,
-						createdTables: addedNames,
-						declaredAt,
-					},
-				},
-			];
-		});
+		.flatMap(([schemaName, sets]) =>
+			residualTableAmbiguityFor(
+				schemaName,
+				sets,
+				consumed,
+				declaredAtByIdentity,
+			),
+		);
 
 /**
  * Resolves `--rename`/`--confirm-drop` flags against a `previous`→`next`
