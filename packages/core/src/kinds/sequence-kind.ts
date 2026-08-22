@@ -176,13 +176,17 @@ const alterBaseTypeSql = (snapshot: SequenceSnapshot): string =>
  * column's backing sequence (#23/D66). Identity is `"<schema>.<name>"`,
  * `name` auto-derived (`deriveSequenceName`, `engine/rename-plan.ts`) —
  * there is no way to declare a custom name today. `dependsOn` is just
- * `["schema"]`: unlike `viewKind`/`triggerKind`, this kind's `create`
- * statement never references the owning table (the `owned by`/
- * `set default` statements that do are `deferred`, which always runs
- * after every kind's `main`-stage statements — see the module doc above
- * `setDefaultSql`), so there is no dependency cycle with `tableKind` to
- * resolve, and `tableKind` needs no matching `dependsOn: ["sequence"]`
- * either.
+ * `["schema"]`: this kind's own `create` statement never references the
+ * owning table (the `owned by`/`set default` statements that do are
+ * `deferred`, which always runs after every kind's `main`-stage
+ * statements — see the module doc above `setDefaultSql`), so there is no
+ * dependency cycle with `tableKind` to resolve *from this kind's own
+ * side*. `tableKind` itself, unlike this kind, **does** need a matching
+ * `dependsOn: ["sequence"]` — not for anything this kind emits, but for
+ * `tableKind`'s own `add column` rendering, which inlines a serial
+ * column's default (D74/#23's non-empty-table fix) and so needs the
+ * sequence to already exist. See `table-kind.ts`'s own `dependsOn`
+ * comment for that edge's full reasoning.
  *
  * A `drop` change's statements (`dropDefaultSql`/`dropSequenceSql`) go
  * out on `predrop`, not `main` (#193 review) — the same stage

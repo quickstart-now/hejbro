@@ -47,17 +47,26 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 	/**
 	 * `siblingChanges` (D74) is the *whole* diff's change list — every
 	 * `KindChange`, across every kind, `generate.ts` is about to emit in
-	 * this run, `change` included — passed read-only and optional, mirroring
-	 * the view `Validator` (`engine/validate.ts`, D37) has had since before
-	 * this: a kind whose SQL for one change depends on a sibling kind's
-	 * change in the *same* diff can render both facts in a single
-	 * statement instead of two that can't work independently (the
-	 * motivating case, #23: a `not null` column backfills from a default
-	 * only when the default is present in the *same* `add column`
-	 * statement — a separate `set default` afterwards is too late for a
-	 * table that already has rows). Optional because only `sequenceKind`/
-	 * `tableKind` use it today; every other kind's `emit` ignores the
-	 * second parameter and needs no change.
+	 * this run, `change` included — passed read-only and optional: a kind
+	 * whose SQL for one change depends on a sibling kind's change in the
+	 * *same* diff can render both facts in a single statement instead of
+	 * two that can't work independently (the motivating case, #23: a
+	 * `not null` column backfills from a default only when the default is
+	 * present in the *same* `add column` statement — a separate
+	 * `set default` afterwards is too late for a table that already has
+	 * rows). `ObjectKind` **is** the extension interface
+	 * (`packages/supabase`'s storage bucket kind implements it), so this
+	 * widens that interface itself — additively and optionally: 9 of the
+	 * 11 in-repo `emit` implementations (8 in `packages/core`, 1 in
+	 * `packages/supabase`) ignore the second parameter and need no change;
+	 * only `sequenceKind`/`tableKind` (both core) read it. The nearest
+	 * precedent is core's own **built-in** `notNullWithoutDefaultWarnings`
+	 * diagnostic (#115, Phase 7), which already reads the full
+	 * `KindChange[]` at diff level — but that function is explicitly *not*
+	 * a preset `Validator` (`engine/validate.ts`, D37, whose signature
+	 * takes only `(snapshot, declarations)`, never `KindChange[]`), so it
+	 * shows the *engine* already granted this view internally, not that
+	 * this *extension interface* did before now.
 	 */
 	emit(
 		change: KindChange,
