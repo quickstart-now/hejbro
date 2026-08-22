@@ -1,6 +1,6 @@
 import type { ExecException } from "node:child_process";
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,13 +18,48 @@ const CLI_PACKAGE_ROOT = join(import.meta.dirname, "..", "..");
 export const CLI_PATH = join(CLI_PACKAGE_ROOT, "dist", "cli.js");
 const CLI_INDEX_PATH = join(CLI_PACKAGE_ROOT, "dist", "index.js");
 const SUPABASE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "supabase");
+const CORE_PACKAGE_ROOT = join(CLI_PACKAGE_ROOT, "..", "core");
+
+/** The most recent mtime (ms since epoch) of any file under `dir`, recursively. */
+const newestMtimeMs = (dir: string): number => {
+	const entries = readdirSync(dir, { withFileTypes: true });
+	return entries.reduce((newest, entry) => {
+		const fullPath = join(dir, entry.name);
+		if (entry.isDirectory()) {
+			return Math.max(newest, newestMtimeMs(fullPath));
+		}
+		return Math.max(newest, statSync(fullPath).mtimeMs);
+	}, 0);
+};
 
 /**
- * Asserts the built CLI artifacts exist before any test spawns them (#102):
- * turbo should always build `hejbro` before running its tests, but a
- * flaky/incomplete build would otherwise surface as a confusing "no such
- * file" spawn error deep inside `execFile`. Call from a `beforeAll` in
- * every test file that spawns the built CLI.
+ * Throws when `${packageRoot}/dist`'s newest file predates
+ * `${packageRoot}/src`'s newest file (#131) — a subprocess test spawns the
+ * built CLI directly, so it resolves every workspace package through
+ * `dist`, not through vitest's own module graph; `resolve.alias`ing
+ * in-process tests to source (the fix for those) can't help a child
+ * process see a source edit that hasn't been rebuilt yet. Detection, not
+ * prevention, is the right shape here: a checkable precondition (dist
+ * newer than src) fails loudly instead of being trusted silently.
+ */
+const assertFreshBuild = (label: string, packageRoot: string): void => {
+	const srcMtime = newestMtimeMs(join(packageRoot, "src"));
+	const distMtime = newestMtimeMs(join(packageRoot, "dist"));
+	if (distMtime < srcMtime) {
+		throw new Error(
+			`${label}'s dist/ is older than its src/ (stale build) — Next: run \`pnpm build\` (or \`pnpm test\` at the root, which builds first).`,
+		);
+	}
+};
+
+/**
+ * Asserts the built CLI artifacts exist, and are at least as fresh as
+ * their own and `@hejbro/core`'s source, before any test spawns them
+ * (#102, #131): turbo should always build `hejbro` before running its
+ * tests, but a flaky/incomplete build would otherwise surface as a
+ * confusing "no such file" spawn error deep inside `execFile`, and a
+ * stale-but-present build would surface as a silent false green. Call
+ * from a `beforeAll` in every test file that spawns the built CLI.
  */
 export const assertBuiltCli = (): void => {
 	const missing = [CLI_PATH, CLI_INDEX_PATH].filter((p) => !existsSync(p));
@@ -33,6 +68,8 @@ export const assertBuiltCli = (): void => {
 			`built CLI artifacts missing: ${missing.join(", ")} — run pnpm build (turbo should have built hejbro before its tests; if you see this under turbo, capture the turbo log for #102)`,
 		);
 	}
+	assertFreshBuild("@hejbro/core", CORE_PACKAGE_ROOT);
+	assertFreshBuild("hejbro", CLI_PACKAGE_ROOT);
 };
 
 /** `ExecException.code` is `string | number | undefined` (unlike `NodeJS.ErrnoException.code`, which is `string | undefined`) — typed to match what `execFile`'s callback actually hands us. */
