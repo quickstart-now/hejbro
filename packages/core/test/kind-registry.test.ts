@@ -7,7 +7,7 @@ import {
 } from "../src/kind/registry";
 
 const toyKind = {
-	kind: "toy",
+	kind: "toy-note",
 	dependsOn: [],
 	owns: (d: { declarationKind: string }): d is { declarationKind: string } =>
 		d.declarationKind === "toy",
@@ -21,7 +21,7 @@ describe("kind registry", () => {
 	it("registers and retrieves kinds", () => {
 		const registry = createKindRegistry();
 		registry.register(toyKind);
-		expect(registry.get("toy").kind).toBe("toy");
+		expect(registry.get("toy-note").kind).toBe("toy-note");
 	});
 	it("rejects duplicate kind names", () => {
 		const registry = createKindRegistry();
@@ -34,6 +34,30 @@ describe("kind registry", () => {
 		expect(() => createKindRegistry().get("nope")).toThrowError(
 			/no kind named "nope"/i,
 		);
+	});
+});
+
+describe("register(): a preset-channel kind id needs a namespace prefix (#201)", () => {
+	it("rejects a non-core kind id with no prefix", () => {
+		const unprefixed = { ...toyKind, kind: "note" };
+		const message = messageOf(() => createKindRegistry().register(unprefixed));
+		expect(message).toMatch(/no namespace prefix/i);
+		expect(message).toMatch(/rename it/i);
+	});
+
+	it("accepts a properly namespaced kind id", () => {
+		expect(() => createKindRegistry().register(toyKind)).not.toThrow(); // "toy-note"
+	});
+
+	it("exempts every kind createDefaultRegistry() itself registers, none of which are prefixed", () => {
+		expect(() => createDefaultRegistry()).not.toThrow();
+	});
+
+	it("passes for @hejbro/supabase's real kind, which is already prefixed", () => {
+		const registry = createKindRegistry();
+		expect(() =>
+			registry.register({ ...toyKind, kind: "supabase-storage-bucket" }),
+		).not.toThrow();
 	});
 });
 
