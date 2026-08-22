@@ -8,6 +8,11 @@ const commit = (sha: string, date: string, subject: string) => ({
 	subject,
 });
 
+/** Removes an osc8Link's own escape-sequence wrapper (both the opening `\x1b]8;;<url>\x1b\\` and the closing `\x1b]8;;\x1b\\`, the latter matching with an empty URL), leaving the wrapped text exactly as it was. */
+const stripOsc8 = (text: string): string =>
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: matching the exact OSC8 escape bytes osc8Link emits
+	text.replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
+
 describe("renderHistoryTable", () => {
 	it("renders an all-ok table, oldest first, columns aligned", () => {
 		const rows: ReadonlyArray<HistoryRow> = [
@@ -175,5 +180,45 @@ describe("renderHistoryTable", () => {
 		expect(output).toContain("0001_add_a.sql");
 		expect(output).toContain("aaaaaaa");
 		expect(output).toContain("\x1b]8;;https://github.com/example/repo/blob/");
+	});
+
+	it("osc8 mode keeps every column aligned with the plain render, even when the hyperlinked cell isn't the widest in its column (padding must happen before wrapping, not after)", () => {
+		const rows: ReadonlyArray<HistoryRow> = [
+			{
+				number: 1,
+				migrationFileName: "0001_add_a.sql",
+				state: "ok",
+				commit: commit(
+					"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					"2026-01-01",
+					"feat: a",
+				),
+				snapshotHash: "sha256:1111111111111111111111111111111111111111",
+			},
+			{
+				number: 2,
+				migrationFileName: "0002_add_a_much_longer_migration_name.sql",
+				state: "ok",
+				commit: commit(
+					"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+					"2026-01-02",
+					"feat: b",
+				),
+				snapshotHash: "sha256:2222222222222222222222222222222222222222",
+			},
+		];
+		const remote = "https://github.com/example/repo.git";
+		const migrationsDirRelative = "migrations";
+		const plainOutput = renderHistoryTable(rows, {
+			linkMode: "none",
+			remote,
+			migrationsDirRelative,
+		});
+		const osc8Output = renderHistoryTable(rows, {
+			linkMode: "osc8",
+			remote,
+			migrationsDirRelative,
+		});
+		expect(stripOsc8(osc8Output)).toBe(plainOutput);
 	});
 });

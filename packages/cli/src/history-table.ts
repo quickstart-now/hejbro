@@ -302,10 +302,26 @@ export const renderHistoryTable = (
 		if (links === null) {
 			return renderPlainRow(cells, keys, widths);
 		}
+		// Pad the plain cell text to its column width *before* wrapping it
+		// in the OSC8 escape sequence, not after: renderPlainRow's own
+		// padEnd call, run on an already-wrapped string, sees the escape
+		// bytes as part of the string's length and pads nothing further,
+		// silently losing the column separator's worth of alignment for
+		// every column after the first hyperlinked one (TTY-only --
+		// non-TTY output never reaches this branch, see shouldUseLinks).
 		const withHyperlinks: PlainRowCells = {
 			...cells,
-			migration: osc8Link(cells.migration, links.migrationUrl),
-			commit: osc8Link(cells.commit, links.commitUrl),
+			migration: osc8Link(
+				padCell(
+					cells.migration,
+					widths.get("migration") ?? cells.migration.length,
+				),
+				links.migrationUrl,
+			),
+			commit: osc8Link(
+				padCell(cells.commit, widths.get("commit") ?? cells.commit.length),
+				links.commitUrl,
+			),
 		};
 		return renderPlainRow(withHyperlinks, keys, widths);
 	});
