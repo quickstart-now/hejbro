@@ -34,6 +34,7 @@ import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
 import { buildRegistry, configValidators } from "../presets";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
+import { CLI_VERSION } from "../version";
 
 /**
  * `hejbro generate --help`'s owner-approved short-form description (④,
@@ -409,6 +410,7 @@ export const runGenerate = async (
 				renames,
 				confirmedDrops,
 				bannerHashes: { parent: parentHash, current: currentHash },
+				hejbroVersion: CLI_VERSION,
 				registry,
 				validators,
 			});

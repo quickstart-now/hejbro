@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { CLI_VERSION } from "../src/version";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -117,6 +118,7 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 			join(cwd, "migrations", fileName as string),
 			"utf8",
 		);
+		expect(migrationContent).toContain(`-- hejbro: ${CLI_VERSION}`);
 		expect(migrationContent).toContain("-- parent-snapshot: sha256:");
 		expect(migrationContent).toContain("-- snapshot: sha256:");
 
