@@ -308,6 +308,13 @@ const encodeOrderByTerm = (term: OrderByTerm): JsonValue => ({
 	direction: term.direction,
 });
 
+const encodeWhere = (where: ExprNode | null): JsonValue => {
+	if (where === null) {
+		return null;
+	}
+	return encodeExprNode(where);
+};
+
 /**
  * Encodes a whole {@link SelectNode} to its snapshot form. Not
  * `exists()`-specific — this is what lets #157 (view snapshots) reuse it
@@ -319,7 +326,7 @@ export const encodeSelectNode = (node: SelectNode): JsonValue => ({
 	projection: encodeProjection(node.projection),
 	from: encodeTableRef(node.from),
 	joins: node.joins.map(encodeJoin),
-	where: node.where === null ? null : encodeExprNode(node.where),
+	where: encodeWhere(node.where),
 	orderBy: node.orderBy.map(encodeOrderByTerm),
 	limit: node.limit,
 });
@@ -557,6 +564,13 @@ const decodeOrderByTerm = (value: JsonValue): OrderByTerm => {
 	};
 };
 
+const decodeWhere = (where: JsonValue): ExprNode | null => {
+	if (where === null) {
+		return null;
+	}
+	return decodeExprNode(where);
+};
+
 /** Decodes a whole {@link SelectNode} from its snapshot form — the counterpart to {@link encodeSelectNode}, equally reusable for a top-level query (#157) as for `exists()`'s nested one. */
 export const decodeSelectNode = (value: JsonValue): SelectNode => {
 	const node = asRecord(value, "queryKind");
@@ -569,7 +583,7 @@ export const decodeSelectNode = (value: JsonValue): SelectNode => {
 		projection: decodeProjection(node.projection as JsonValue),
 		from: decodeTableRef(node.from as JsonValue),
 		joins: (node.joins as ReadonlyArray<JsonValue>).map(decodeJoin),
-		where: node.where === null ? null : decodeExprNode(node.where as JsonValue),
+		where: decodeWhere(node.where as JsonValue),
 		orderBy: (node.orderBy as ReadonlyArray<JsonValue>).map(decodeOrderByTerm),
 		limit: node.limit as number | null,
 	};

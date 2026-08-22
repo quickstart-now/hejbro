@@ -231,7 +231,10 @@ const extractCode = (args) => {
 		return null;
 	}
 	const match = /^"([^"]+)"$/.exec(first);
-	return match === null ? null : match[1];
+	if (match === null) {
+		return null;
+	}
+	return match[1];
 };
 
 /** Finds `const NAME = <anything>;` (a top-level or block-scoped

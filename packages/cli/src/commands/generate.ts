@@ -147,6 +147,20 @@ const relativizeDeclaredAt = (
 	return relativizeLocation(declaredAt, cwd);
 };
 
+/** The identity to report for a fatal `catch`-level error: the snapshot's
+ * own path for a malformed-snapshot failure (there's no declaration to
+ * point at), `fallbackIdentity` otherwise. */
+const identityForGenerateError = (
+	error: HejbroError,
+	snapshotPath: string,
+	fallbackIdentity: string,
+): string => {
+	if (error.code === "malformed-snapshot-node") {
+		return snapshotPath;
+	}
+	return fallbackIdentity;
+};
+
 const toDiagnostic = (
 	error: HejbroError,
 	fallbackIdentity: string,
@@ -430,10 +444,11 @@ export const runGenerate = async (
 			};
 		} catch (error) {
 			const hejbroErr = asHejbroError(error);
-			const identity =
-				hejbroErr.code === "malformed-snapshot-node"
-					? config.snapshotPath
-					: fallbackIdentity;
+			const identity = identityForGenerateError(
+				hejbroErr,
+				config.snapshotPath,
+				fallbackIdentity,
+			);
 			return errorResult([hejbroErr], [], rawArgs, identity, cwd);
 		}
 	} catch (error) {

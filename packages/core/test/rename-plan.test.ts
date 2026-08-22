@@ -37,8 +37,12 @@ const app = schema("app");
 const registry = createDefaultRegistry();
 // table() returns a column-ref proxy (D15); unwrap to its declaration the
 // same way generate.ts's resolveDeclarations does before snapshotting.
-const unwrap = (input: HejbroInput): HejbroDeclaration =>
-	isTable(input) ? getTableMeta(input) : input;
+const unwrap = (input: HejbroInput): HejbroDeclaration => {
+	if (isTable(input)) {
+		return getTableMeta(input);
+	}
+	return input;
+};
 const snap = (...decls: ReadonlyArray<HejbroInput>) =>
 	buildSnapshot(decls.map(unwrap), registry);
 const noDeclSites = new Map<string, string | null>();

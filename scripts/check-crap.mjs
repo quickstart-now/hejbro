@@ -299,12 +299,15 @@ const owningUnitByLine = (units, line) => {
 		return undefined;
 	}
 	// Innermost: smallest line span.
-	return containing.reduce((smallest, candidate) =>
-		candidate.span.endLine - candidate.span.startLine <
-		smallest.span.endLine - smallest.span.startLine
-			? candidate
-			: smallest,
-	);
+	return containing.reduce((smallest, candidate) => {
+		if (
+			candidate.span.endLine - candidate.span.startLine <
+			smallest.span.endLine - smallest.span.startLine
+		) {
+			return candidate;
+		}
+		return smallest;
+	});
 };
 
 // Per-function statement coverage: each statementMap entry (istanbul's
@@ -351,6 +354,17 @@ const computeCoverageByUnit = (units, fileCoverage) => {
 	return byUnit;
 };
 
+// 100% for a unit that owns zero statements (nothing to be uncovered) --
+// same convention as the file comment above ("Coverage % is covered-
+// statements / total-statements owned by that unit -- 100% for a unit
+// that owns zero statements").
+const coverageRatioOf = (stats) => {
+	if (stats.total === 0) {
+		return 1;
+	}
+	return stats.covered / stats.total;
+};
+
 const toLineSpan = (sourceFile, unit) => {
 	const start =
 		sourceFile.getLineAndCharacterOfPosition(unit.functionNode.getStart())
@@ -377,7 +391,7 @@ const analyzeFile = (filePath, fileCoverage) => {
 	return units.map((unit) => {
 		const complexity = computeComplexity(unit);
 		const stats = coverageByUnit.get(unit);
-		const coverageRatio = stats.total === 0 ? 1 : stats.covered / stats.total;
+		const coverageRatio = coverageRatioOf(stats);
 		const crap = complexity ** 2 * (1 - coverageRatio) ** 3 + complexity;
 		const line =
 			sourceFile.getLineAndCharacterOfPosition(unit.nameNode.getStart()).line +
@@ -467,8 +481,11 @@ if (violations.length > 0 && EXIT_NONZERO_ON_VIOLATION) {
 	process.exit(1);
 }
 
-console.log(
-	EXIT_NONZERO_ON_VIOLATION
-		? "check-crap: ok -- no violations"
-		: "check-crap: reporting only (gate not yet wired -- see EXIT_NONZERO_ON_VIOLATION)",
-);
+const summaryLine = () => {
+	if (EXIT_NONZERO_ON_VIOLATION) {
+		return "check-crap: ok -- no violations";
+	}
+	return "check-crap: reporting only (gate not yet wired -- see EXIT_NONZERO_ON_VIOLATION)";
+};
+
+console.log(summaryLine());

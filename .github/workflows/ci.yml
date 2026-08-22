@@ -124,3 +124,4 @@ jobs:
         if: ${{ !startsWith(github.head_ref || github.ref_name, 'changeset-release/') }}
       - run: pnpm check:first-release-version
       - run: pnpm check:next-marker
+      - run: pnpm check:diagnostic-xref

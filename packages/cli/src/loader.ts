@@ -40,6 +40,15 @@ const stripAbsolutePrefixes = (text: string, base: string): string =>
 		text,
 	);
 
+/** A `catch` clause's `unknown` value's message, if it's an `Error`;
+ * its `String(...)` form otherwise (e.g. a thrown string/plain object). */
+const messageOfUnknownError = (error: unknown): string => {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return String(error);
+};
+
 /**
  * Runs a jiti import and converts any failure into a `<code>-load-failed`
  * HejbroError — except a `HejbroError` itself, which passes through
@@ -64,9 +73,7 @@ const importOrDiagnose = async <T>(
 		if (error instanceof HejbroError) {
 			throw error;
 		}
-		const reason = firstLine(
-			error instanceof Error ? error.message : String(error),
-		);
+		const reason = firstLine(messageOfUnknownError(error));
 		const { code, message } = toDiagnostic(reason);
 		return throwHejbroError(code, message);
 	}
