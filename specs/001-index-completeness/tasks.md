@@ -129,12 +129,12 @@
 
 ## Phase 7: Polish & Before-Claiming-Done
 
-- [ ] T060 [P] Docs: new docs/guide/indexes.md (method list, opclass, expressions + name rule, extension note, alter = drop + create); rewrite `## Indexes` in skills/hejbro/references/dsl-cheatsheet.md; README.md examples/postgres feature line; fix the stale expression-retargeting paragraph in docs/guide/renames.md (line ~92)
-- [ ] T061 [P] Decision log: write D84, D85, D86 rows (text from spec.md "Proposes") into docs/specs/2026-08-19-hejbro-design.md §3
-- [ ] T062 [P] `.changeset/phase10-index-completeness.md` — `patch` for the three fixed packages (D83), one user-facing paragraph
+- [x] T060 [P] Docs: new docs/guide/indexes.md (method list, opclass, expressions + name rule, extension note, alter = drop + create); rewrite `## Indexes` in skills/hejbro/references/dsl-cheatsheet.md; README.md examples/postgres feature line; fix the stale expression-retargeting paragraph in docs/guide/renames.md (line ~92)
+- [x] T061 [P] Decision log: write D84, D85, D86 rows (text from spec.md "Proposes") into docs/specs/2026-08-19-hejbro-design.md §3
+- [x] T062 [P] `.changeset/phase10-index-completeness.md` — `patch` for the three fixed packages (D83), one user-facing paragraph
 - [ ] T063 Roadmap: docs/plans/2026-08-22-0.2.0-roadmap.md frontier line + pilot verdict paragraph (ceremony cost, override quality, what to change)
-- [ ] T064 `pnpm check && pnpm check-types && pnpm test` — paste output in the PR
-- [ ] T065 `pnpm check:crap` — README CRAP block refreshed, 0 functions over 5
+- [x] T064 `pnpm check && pnpm check-types && pnpm test` — paste output in the PR
+- [x] T065 `pnpm check:crap` — README CRAP block refreshed, 0 functions over 5
 - [ ] T066 `/speckit-analyze` clean; `/speckit-converge` reports Converged (or its appended tasks are done)
 - [ ] T067 PR to `dev`: `Closes #284`, link to `specs/001-index-completeness/`, commit list; after squash merge `issue.sh close 284`
 
