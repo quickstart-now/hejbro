@@ -412,29 +412,35 @@ const findDuplicateRenameSpecs = (
 	return { duplicatedIndices, errors };
 };
 
-const validateRenameSpecTarget = (
-	spec: RenameSpec,
+/** {@link validateRenameSpecTarget}'s `"table"` case: `spec`'s old/new names must match a table this run actually drops/adds in that schema. */
+const validateTableRenameTarget = (
+	spec: TableRenameSpec,
 	schemaTableSets: SchemaTableSets,
+	declaredAtByIdentity: ReadonlyMap<string, string | null>,
+): HejbroError | null => {
+	const sets = schemaTableSets.get(spec.schemaName);
+	const isValid =
+		(sets?.dropped.has(spec.oldName) ?? false) &&
+		(sets?.added.has(spec.newName) ?? false);
+	if (isValid) {
+		return null;
+	}
+	const declaredAt =
+		declaredAtByIdentity.get(tableIdentity(spec.schemaName, spec.newName)) ??
+		null;
+	return hejbroError(
+		"unknown-rename-target",
+		`--rename "${spec.schemaName}.${spec.oldName}=${spec.newName}" doesn't match this run: schema "${spec.schemaName}" has no dropped table named "${spec.oldName}" (or no added table named "${spec.newName}"). Next: check both names for typos — --rename's left side must be a table this run drops, the right side a table this run adds.`,
+		declaredAt,
+	);
+};
+
+/** {@link validateRenameSpecTarget}'s `"column"` case: `spec`'s old/new names must match a column this run actually drops/adds on that table. */
+const validateColumnRenameTarget = (
+	spec: ColumnRenameSpec,
 	tableColumnSets: TableColumnSets,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
 ): HejbroError | null => {
-	if (spec.target === "table") {
-		const sets = schemaTableSets.get(spec.schemaName);
-		const isValid =
-			(sets?.dropped.has(spec.oldName) ?? false) &&
-			(sets?.added.has(spec.newName) ?? false);
-		if (isValid) {
-			return null;
-		}
-		const declaredAt =
-			declaredAtByIdentity.get(tableIdentity(spec.schemaName, spec.newName)) ??
-			null;
-		return hejbroError(
-			"unknown-rename-target",
-			`--rename "${spec.schemaName}.${spec.oldName}=${spec.newName}" doesn't match this run: schema "${spec.schemaName}" has no dropped table named "${spec.oldName}" (or no added table named "${spec.newName}"). Next: check both names for typos — --rename's left side must be a table this run drops, the right side a table this run adds.`,
-			declaredAt,
-		);
-	}
 	const identity = tableIdentity(spec.schemaName, spec.tableName);
 	const sets = tableColumnSets.get(identity);
 	const isValid =
@@ -448,6 +454,26 @@ const validateRenameSpecTarget = (
 		"unknown-rename-target",
 		`--rename "${identity}.${spec.oldName}=${spec.newName}" doesn't match this run: table "${identity}" has no dropped column named "${spec.oldName}" (or no added column named "${spec.newName}"). Next: check both names for typos — --rename's left side must be a column this run drops, the right side a column this run adds.`,
 		declaredAt,
+	);
+};
+
+const validateRenameSpecTarget = (
+	spec: RenameSpec,
+	schemaTableSets: SchemaTableSets,
+	tableColumnSets: TableColumnSets,
+	declaredAtByIdentity: ReadonlyMap<string, string | null>,
+): HejbroError | null => {
+	if (spec.target === "table") {
+		return validateTableRenameTarget(
+			spec,
+			schemaTableSets,
+			declaredAtByIdentity,
+		);
+	}
+	return validateColumnRenameTarget(
+		spec,
+		tableColumnSets,
+		declaredAtByIdentity,
 	);
 };
 

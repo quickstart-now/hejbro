@@ -242,51 +242,74 @@ const newerVersionMessage = (version: number): string =>
  * build the registry first — a bigger, cross-package change than this
  * function's own format/shape validation, and out of this PR's scope.
  */
-export const parseSnapshot = (raw: string): Snapshot => {
-	const parsed: unknown = parseJson(raw);
+/** {@link parseSnapshot}'s first check: the parsed JSON is a plain object, not an array/`null`/primitive — narrows `unknown` to {@link ParsedSnapshotShape} (a cast, not yet shape-validated beyond that) or throws. */
+const validateSnapshotIsObject = (parsed: unknown): ParsedSnapshotShape => {
 	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
 		return throwHejbroError(
 			"invalid-snapshot",
 			"snapshot is not a JSON object. Next: restore the snapshot from version control if it was corrupted, or delete it and run `hejbro init` then `hejbro generate` to rebuild it from your current declarations.",
 		);
 	}
-	const candidate = parsed as ParsedSnapshotShape;
+	return parsed as ParsedSnapshotShape;
+};
+
+/**
+ * {@link parseSnapshot}'s version check (see that function's own doc
+ * comment for the three cases this covers) — the whole cascade lives
+ * here so `parseSnapshot` itself stays a flat sequence of validator
+ * calls, not a function whose own complexity this cascade dominates.
+ */
+const validateFormatVersion = (candidate: ParsedSnapshotShape): void => {
 	if (candidate.formatVersion === undefined) {
 		if (typeof candidate.hejbroSnapshot === "number") {
-			return throwHejbroError(
+			throwHejbroError(
 				"unsupported-snapshot-version",
 				olderVersionMessage(candidate.hejbroSnapshot),
 			);
 		}
-		return throwHejbroError(
+		throwHejbroError(
 			"invalid-snapshot",
 			`snapshot version ${JSON.stringify(candidate.hejbroSnapshot)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
+		return;
 	}
-	if (candidate.formatVersion !== HEJBRO_SNAPSHOT_VERSION) {
-		if (typeof candidate.formatVersion !== "number") {
-			return throwHejbroError(
-				"invalid-snapshot",
-				`snapshot version ${JSON.stringify(candidate.formatVersion)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
-			);
-		}
-		if (candidate.formatVersion < HEJBRO_SNAPSHOT_VERSION) {
-			return throwHejbroError(
-				"unsupported-snapshot-version",
-				olderVersionMessage(candidate.formatVersion),
-			);
-		}
-		return throwHejbroError(
-			"unsupported-snapshot-version",
-			newerVersionMessage(candidate.formatVersion),
+	if (candidate.formatVersion === HEJBRO_SNAPSHOT_VERSION) {
+		return;
+	}
+	if (typeof candidate.formatVersion !== "number") {
+		throwHejbroError(
+			"invalid-snapshot",
+			`snapshot version ${JSON.stringify(candidate.formatVersion)} is not a valid version number. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
+		return;
 	}
+	if (candidate.formatVersion < HEJBRO_SNAPSHOT_VERSION) {
+		throwHejbroError(
+			"unsupported-snapshot-version",
+			olderVersionMessage(candidate.formatVersion),
+		);
+		return;
+	}
+	throwHejbroError(
+		"unsupported-snapshot-version",
+		newerVersionMessage(candidate.formatVersion),
+	);
+};
+
+/** {@link parseSnapshot}'s dialect check — only `"postgres"` is supported. */
+const validateDialect = (candidate: ParsedSnapshotShape): void => {
 	if (candidate.dialect !== "postgres") {
-		return throwHejbroError(
+		throwHejbroError(
 			"invalid-snapshot",
 			`snapshot dialect ${JSON.stringify(candidate.dialect)} is not supported — only "postgres" is. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
 	}
+};
+
+/** {@link parseSnapshot}'s `"objects"` shape check — narrows to {@link Snapshot}'s own `objects` type or throws. */
+const validateObjectsShape = (
+	candidate: ParsedSnapshotShape,
+): Snapshot["objects"] => {
 	if (
 		typeof candidate.objects !== "object" ||
 		candidate.objects === null ||
@@ -297,18 +320,32 @@ export const parseSnapshot = (raw: string): Snapshot => {
 			`snapshot is missing a valid "objects" map. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
 		);
 	}
-	const objects = candidate.objects as Snapshot["objects"];
+	return candidate.objects as Snapshot["objects"];
+};
+
+/** {@link parseSnapshot}'s per-entry check: every value in the `objects` map must itself be a plain object (the kind's own serialized snapshot node). */
+const validateObjectEntries = (objects: Snapshot["objects"]): void => {
 	const malformedEntry = Object.entries(objects).find(
 		([, value]) =>
 			typeof value !== "object" || value === null || Array.isArray(value),
 	);
-	if (malformedEntry !== undefined) {
-		const [key, value] = malformedEntry;
-		return throwHejbroError(
-			"invalid-snapshot",
-			`snapshot entry "${key}" is ${describeMalformedValue(value)}, not an object. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
-		);
+	if (malformedEntry === undefined) {
+		return;
 	}
+	const [key, value] = malformedEntry;
+	throwHejbroError(
+		"invalid-snapshot",
+		`snapshot entry "${key}" is ${describeMalformedValue(value)}, not an object. Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
+	);
+};
+
+export const parseSnapshot = (raw: string): Snapshot => {
+	const parsed: unknown = parseJson(raw);
+	const candidate = validateSnapshotIsObject(parsed);
+	validateFormatVersion(candidate);
+	validateDialect(candidate);
+	const objects = validateObjectsShape(candidate);
+	validateObjectEntries(objects);
 	return {
 		formatVersion: HEJBRO_SNAPSHOT_VERSION,
 		dialect: "postgres",

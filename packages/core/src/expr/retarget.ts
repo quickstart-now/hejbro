@@ -244,30 +244,44 @@ const retargetedAllColumnsName = (
 	return name;
 };
 
-const retargetProjection = (
-	projection: ProjectionNode,
+/**
+ * `retargetProjection`'s own `"allColumns"` case — `select(table)`'s
+ * whole-table projection, retargeted only when `target` actually renames
+ * a column of the exact table `from` refers to.
+ */
+const retargetAllColumnsProjection = (
+	projection: Extract<
+		ProjectionNode,
+		{ readonly projectionKind: "allColumns" }
+	>,
 	from: TableRefNode,
 	target: RenameTarget,
 ): ProjectionNode => {
-	if (projection.projectionKind === "allColumns") {
-		if (
-			target.oldColumn === null ||
-			from.schemaName !== target.oldSchema ||
-			from.tableName !== target.oldTable ||
-			!projection.columnNames.includes(target.oldColumn)
-		) {
-			return projection;
-		}
-		return {
-			...projection,
-			columnNames: projection.columnNames.map((name) =>
-				retargetedAllColumnsName(name, target),
-			),
-		};
-	}
-	if (projection.projectionKind !== "columns") {
+	if (
+		target.oldColumn === null ||
+		from.schemaName !== target.oldSchema ||
+		from.tableName !== target.oldTable ||
+		!projection.columnNames.includes(target.oldColumn)
+	) {
 		return projection;
 	}
+	return {
+		...projection,
+		columnNames: projection.columnNames.map((name) =>
+			retargetedAllColumnsName(name, target),
+		),
+	};
+};
+
+/**
+ * `retargetProjection`'s own `"columns"` case — an explicit column list
+ * (a view's `defineView` projection), retargeting each entry's own
+ * expression independently.
+ */
+const retargetColumnsProjection = (
+	projection: Extract<ProjectionNode, { readonly projectionKind: "columns" }>,
+	target: RenameTarget,
+): ProjectionNode => {
 	const columns = projection.columns.map((entry) => {
 		const expr = retargetExprNode(entry.expr, target);
 		if (expr === entry.expr) {
@@ -279,6 +293,20 @@ const retargetProjection = (
 		return projection;
 	}
 	return { ...projection, columns };
+};
+
+const retargetProjection = (
+	projection: ProjectionNode,
+	from: TableRefNode,
+	target: RenameTarget,
+): ProjectionNode => {
+	if (projection.projectionKind === "allColumns") {
+		return retargetAllColumnsProjection(projection, from, target);
+	}
+	if (projection.projectionKind !== "columns") {
+		return projection;
+	}
+	return retargetColumnsProjection(projection, target);
 };
 
 const retargetJoin = (join: JoinNode, target: RenameTarget): JoinNode => {
