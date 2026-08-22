@@ -260,7 +260,7 @@ describe("body-context recording", () => {
 
 	it("defineFunction args become ArgRefs with plpgsqlRef paths and snake_cased names", () => {
 		const declaration = defineFunction(
-			"app",
+			app,
 			"publish_post",
 			{ args: { postId: uuid() }, returns: comments },
 			(ctx, { postId }) => {
