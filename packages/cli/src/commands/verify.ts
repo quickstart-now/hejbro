@@ -46,6 +46,10 @@ const snapshotStaleMessage = (snapshotPath: string): string =>
 const CHAIN_TIP_MISMATCH_MESSAGE =
 	"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.";
 
+/** `<migrationsDir>/<fileName>`, always POSIX-joined (`config.migrationsDir` is a shell-command path fragment here, not a filesystem path Node needs to resolve — `path.join` would use `\` on Windows and break the very command this renders). */
+const migrationPath = (migrationsDir: string, fileName: string): string =>
+	`${migrationsDir}/${fileName}`;
+
 /**
  * One computed, directly-runnable resolution per candidate: delete every
  * *other* diverged file and regenerate, keeping this one (owner principle,
@@ -58,21 +62,23 @@ const CHAIN_TIP_MISMATCH_MESSAGE =
 const divergedMigrationsOption = (
 	keptName: string,
 	allNames: ReadonlyArray<string>,
+	migrationsDir: string,
 ): string => {
 	const toDelete = allNames.filter((name) => name !== keptName);
-	return `rm ${toDelete.map((name) => `migrations/${name}`).join(" ")} && hejbro generate   # keeps ${keptName}`;
+	return `rm ${toDelete.map((name) => migrationPath(migrationsDir, name)).join(" ")} && hejbro generate   # keeps ${keptName}`;
 };
 
 const OPTION_LETTERS = "abcdefghijklmnopqrstuvwxyz";
 
 const divergedMigrationsMessage = (
 	fileNames: ReadonlyArray<string>,
+	migrationsDir: string,
 ): string => {
 	const fileList = fileNames.map((name) => `"${name}"`).join(", ");
 	const options = fileNames
 		.map((keptName, index) => {
 			const letter = OPTION_LETTERS[index] ?? String(index + 1);
-			return `  (${letter}) ${divergedMigrationsOption(keptName, fileNames)}`;
+			return `  (${letter}) ${divergedMigrationsOption(keptName, fileNames, migrationsDir)}`;
 		})
 		.join("\n");
 	return `the migration chain has diverged: ${fileList} all branch from the same prior snapshot state — this usually happens when two branches each ran \`hejbro generate\` before merging. Next, pick one:\n${options}`;
@@ -83,9 +89,10 @@ const brokenChainMessage = (fileName: string): string =>
 
 const chainErrorMessage = (
 	report: Extract<ChainReport, { readonly ok: false }>,
+	migrationsDir: string,
 ): string => {
 	if (report.code === "diverged-migrations") {
-		return divergedMigrationsMessage(report.details);
+		return divergedMigrationsMessage(report.details, migrationsDir);
 	}
 	const [fileName] = report.details;
 	return brokenChainMessage(fileName ?? "");
@@ -149,10 +156,10 @@ const slugOf = (fileName: string): string =>
 	fileName.slice(fileName.indexOf("_") + 1);
 
 /**
- * Renders `mv migrations/<name> migrations/<newVersion>_<slug>` for one
- * file, `newVersion` a whole second after `baseInstant` plus `index`
- * seconds — spacing multiple renamed files a second apart so a 3+-way
- * collision's suggestions don't just create a new collision among
+ * Renders `mv <migrationsDir>/<name> <migrationsDir>/<newVersion>_<slug>`
+ * for one file, `newVersion` a whole second after `baseInstant` plus
+ * `index` seconds — spacing multiple renamed files a second apart so a
+ * 3+-way collision's suggestions don't just create a new collision among
  * themselves.
  */
 const renameSuggestion = (
@@ -160,6 +167,7 @@ const renameSuggestion = (
 	baseInstant: Date,
 	index: number,
 	strategy: MigrationPrefixStrategy,
+	migrationsDir: string,
 ): string => {
 	const targetInstant = new Date(baseInstant.getTime() + index * 1000);
 	const targetVersion = renderMigrationPrefix({
@@ -168,7 +176,7 @@ const renameSuggestion = (
 		previousCount: 0,
 		slug: "",
 	});
-	return `mv migrations/${fileName} migrations/${targetVersion}_${slugOf(fileName)}`;
+	return `mv ${migrationPath(migrationsDir, fileName)} ${migrationPath(migrationsDir, `${targetVersion}_${slugOf(fileName)}`)}`;
 };
 
 /**
@@ -185,6 +193,7 @@ const duplicateVersionMessage = (
 	group: DuplicateVersionGroup,
 	allFileNames: ReadonlyArray<string>,
 	strategy: MigrationPrefixStrategy,
+	migrationsDir: string,
 ): string => {
 	const fileList = group.fileNames.map((name) => `"${name}"`).join(", ");
 	const [kept, ...rest] = group.fileNames;
@@ -200,7 +209,9 @@ const duplicateVersionMessage = (
 		return `${reason} Next: rename every file in this group but one to a version after the current latest, then rerun \`hejbro verify\`.`;
 	}
 	const renameCommands = rest
-		.map((name, index) => renameSuggestion(name, baseInstant, index, strategy))
+		.map((name, index) =>
+			renameSuggestion(name, baseInstant, index, strategy, migrationsDir),
+		)
 		.join(" && ");
 	return `${reason} Next: keep "${kept}" as is; ${renameCommands}; then rerun \`hejbro verify\`.`;
 };
@@ -325,10 +336,11 @@ const runCheck2 = (
 	};
 };
 
-/** Check (always runs, before chain linearity — a version collision leaves chain order undefined, so it must be caught first): no two migration files claim the same version prefix. Pure detection (findDuplicateVersionGroups) over the raw filenames; only the message's suggested rename needs `strategy`. */
+/** Check (always runs, before chain linearity — a version collision leaves chain order undefined, so it must be caught first): no two migration files claim the same version prefix. Pure detection (findDuplicateVersionGroups) over the raw filenames; the message's suggested rename needs `strategy` and `migrationsDir` (config-relative — the path fragment a copy-pasted `mv` command should use, never the absolute filesystem path `runVerify` reads files from). */
 const runCheckDuplicateVersion = (
 	fileNames: ReadonlyArray<string>,
 	strategy: MigrationPrefixStrategy,
+	migrationsDir: string,
 ): CheckOutcome => {
 	const [group] = findDuplicateVersionGroups(fileNames);
 	if (group === undefined) {
@@ -338,7 +350,7 @@ const runCheckDuplicateVersion = (
 		ok: false,
 		error: hejbroError(
 			"duplicate-migration-version",
-			duplicateVersionMessage(group, fileNames, strategy),
+			duplicateVersionMessage(group, fileNames, strategy, migrationsDir),
 		),
 	};
 };
@@ -348,9 +360,10 @@ type Check3Result = {
 	readonly outcome: CheckOutcome;
 };
 
-/** Check 3: every migration's hash-chain lines form one linked list. Only runs when the duplicate-version check passed (`runCheck3IfEligible`) — with two files sharing a version, "which one comes first" isn't defined, so a chain walk over them can't mean anything yet. */
+/** Check 3: every migration's hash-chain lines form one linked list. Only runs when the duplicate-version check passed (`runCheck3IfEligible`) — with two files sharing a version, "which one comes first" isn't defined, so a chain walk over them can't mean anything yet. `migrationsDirPath` reads the files; `migrationsDir` (config-relative) is what a diverged-migrations `rm`/`generate` suggestion should print. */
 const runCheck3 = (
 	migrationsDirPath: string,
+	migrationsDir: string,
 	fileNames: ReadonlyArray<string>,
 ): Check3Result => {
 	const report = checkChain(readChainEntries(migrationsDirPath, fileNames));
@@ -361,7 +374,7 @@ const runCheck3 = (
 		report,
 		outcome: {
 			ok: false,
-			error: hejbroError(report.code, chainErrorMessage(report)),
+			error: hejbroError(report.code, chainErrorMessage(report, migrationsDir)),
 		},
 	};
 };
@@ -370,12 +383,13 @@ const runCheck3 = (
 const runCheck3IfEligible = (
 	duplicateVersionOutcome: CheckOutcome,
 	migrationsDirPath: string,
+	migrationsDir: string,
 	fileNames: ReadonlyArray<string>,
 ): Check3Result | null => {
 	if (!duplicateVersionOutcome.ok) {
 		return null;
 	}
-	return runCheck3(migrationsDirPath, fileNames);
+	return runCheck3(migrationsDirPath, migrationsDir, fileNames);
 };
 
 /** Check 4 (runs only when checks 1 and 3 both passed): the chain tip hash equals the on-disk snapshot's normalized hash (same normalization `generate` uses for `parent`). Trivially passes when there are no migrations yet (tip is null — nothing to compare). */
@@ -473,10 +487,12 @@ export const runVerify = async (cwd: string): Promise<VerifyResult> => {
 		const checkDuplicateVersion = runCheckDuplicateVersion(
 			fileNames,
 			config.prefixStrategy,
+			config.migrationsDir,
 		);
 		const check3 = runCheck3IfEligible(
 			checkDuplicateVersion,
 			migrationsDirPath,
+			config.migrationsDir,
 			fileNames,
 		);
 

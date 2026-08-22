@@ -49,6 +49,24 @@ export default defineConfig({
 });
 `;
 
+// #220 reviewer: verify's computed mv/rm suggestions must use whatever
+// migrationsDir the project actually configured, never a hardcoded
+// "migrations/" -- a project using this (a real, freely-choosable config
+// value) would otherwise get a Next: command that fails with "No such
+// file or directory".
+const CUSTOM_MIGRATIONS_DIR_CONFIG_SOURCE = `import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	migrationsDir: "db/migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "timestamp",
+});
+`;
+
+const EMPTY_SNAPSHOT_SOURCE =
+	'{\n\t"dialect": "postgres",\n\t"formatVersion": 5,\n\t"objects": {}\n}\n';
+
 const BUCKET_SCHEMA = `import { storageBucket } from "@hejbro/supabase";
 
 export const avatars = storageBucket("avatars");
@@ -357,6 +375,43 @@ describe("hejbro verify (built CLI, tmp-dir)", () => {
 			const result = await runCli(cwd, ["verify"]);
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout).toContain("verify: 5 checks passed");
+		});
+
+		// #220 reviewer: a custom migrationsDir must show up in the
+		// suggested command -- a hardcoded "migrations/" would print a
+		// command that fails with "No such file or directory" the moment
+		// migrationsDir isn't the default.
+		it('uses config.migrationsDir, not a hardcoded "migrations/", in the suggested mv command', async () => {
+			await writeFixtureFile(
+				cwd,
+				"hejbro.config.ts",
+				CUSTOM_MIGRATIONS_DIR_CONFIG_SOURCE,
+			);
+			await writeFixtureFile(
+				cwd,
+				"hejbro.snapshot.json",
+				EMPTY_SNAPSHOT_SOURCE,
+			);
+			await writeSchema(BASE_SCHEMA);
+			await runCli(cwd, ["generate"]);
+
+			const customDirFiles = (
+				await readdir(join(cwd, "db", "migrations"))
+			).filter((name) => name.endsWith(".sql"));
+			const [fileName] = customDirFiles;
+			const version = (fileName as string).split("_", 1)[0] as string;
+			const duplicateName = `${version}_manually_added_duplicate.sql`;
+			await writeFixtureFile(
+				cwd,
+				`db/migrations/${duplicateName}`,
+				"-- hand-added file sharing the real migration's version on purpose\n",
+			);
+
+			const result = await runCli(cwd, ["verify"]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[duplicate-migration-version]");
+			expect(result.stderr).toContain(`mv db/migrations/${duplicateName}`);
+			expect(result.stderr).not.toContain("mv migrations/");
 		});
 	});
 
