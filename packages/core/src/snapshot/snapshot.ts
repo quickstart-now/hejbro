@@ -355,13 +355,89 @@ const validateObjectEntries = (objects: Snapshot["objects"]): void => {
 	);
 };
 
-export const parseSnapshot = (raw: string): Snapshot => {
+/** The `kind` half of a `"kind:identity"` object key, or `null` for a key with no `:` separator — a malformed key like that is {@link validateObjectEntries}'s sibling check `invalid-snapshot-key` (`engine/diff-engine.ts`) to catch, once diffing actually reaches it; this function's own job is narrower (which kind's `requiredKeys` apply, if any), so it stays silent on a shape it isn't the one responsible for reporting. */
+const kindOfObjectKey = (key: string): string | null => {
+	const colonIndex = key.indexOf(":");
+	if (colonIndex === -1) {
+		return null;
+	}
+	return key.slice(0, colonIndex);
+};
+
+/** The first `requiredKeys` entry missing from `node` (in declaration order), or `null` if every one is present. */
+const firstMissingRequiredKey = (
+	node: JsonValue,
+	requiredKeys: ReadonlyArray<string>,
+): string | null => {
+	const record = node as Record<string, unknown>;
+	const missing = requiredKeys.find((key) => record[key] === undefined);
+	return missing ?? null;
+};
+
+/**
+ * {@link parseSnapshot}'s optional per-kind required-key check (D79,
+ * #159) — every kind's own `ObjectKind.requiredKeys`, looked up by this
+ * entry's kind name in `requiredKeysByKind` ({@link requiredKeysByKind}
+ * builds this from a real `KindRegistry`). Skipped entirely when
+ * `requiredKeysByKind` is omitted (today's default for every existing
+ * 1-argument call site, unaffected) or when a given entry's kind has no
+ * `requiredKeys` of its own (every kind predating this field). Reports
+ * the first missing key by name, before `identify`/`diff`/`emit` ever
+ * run and crash on the `undefined` field instead.
+ */
+const validateRequiredKeys = (
+	objects: Snapshot["objects"],
+	requiredKeysByKind: ReadonlyMap<string, ReadonlyArray<string>> | undefined,
+): void => {
+	if (requiredKeysByKind === undefined) {
+		return;
+	}
+	const gap = Object.entries(objects)
+		.map(([key, node]) => {
+			const kind = kindOfObjectKey(key);
+			if (kind === null) {
+				return null;
+			}
+			const requiredKeys = requiredKeysByKind.get(kind);
+			if (requiredKeys === undefined) {
+				return null;
+			}
+			const missingKey = firstMissingRequiredKey(node, requiredKeys);
+			if (missingKey === null) {
+				return null;
+			}
+			return { key, kind, missingKey };
+		})
+		.find((candidate) => candidate !== null);
+	if (gap === undefined || gap === null) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-snapshot",
+		`snapshot entry "${gap.key}" (kind "${gap.kind}") is missing required key "${gap.missingKey}". Next: restore the snapshot from version control if it was corrupted, or delete it and run \`hejbro init\` then \`hejbro generate\` to rebuild it from your current declarations.`,
+	);
+};
+
+/**
+ * Parses a rendered snapshot back into a {@link Snapshot}. `requiredKeysByKind`
+ * (D79, #159) is optional and additive: pass {@link requiredKeysByKind}'s
+ * own output (built from a real `KindRegistry`) to also check each
+ * entry's kind-specific required keys; omit it to keep this function's
+ * pre-#159 behavior exactly. Deliberately a plain map, not a
+ * `KindRegistry` itself — see {@link requiredKeysByKind}'s own doc
+ * comment for why.
+ */
+export const parseSnapshot = (
+	raw: string,
+	requiredKeysByKind?: ReadonlyMap<string, ReadonlyArray<string>>,
+): Snapshot => {
 	const parsed: unknown = parseJson(raw);
 	const candidate = validateSnapshotIsObject(parsed);
 	validateFormatVersion(candidate);
 	validateDialect(candidate);
 	const objects = validateObjectsShape(candidate);
 	validateObjectEntries(objects);
+	validateRequiredKeys(objects, requiredKeysByKind);
 	return {
 		formatVersion: HEJBRO_SNAPSHOT_VERSION,
 		dialect: "postgres",

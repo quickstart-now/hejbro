@@ -203,7 +203,11 @@ export type {
 } from "./kind/object-kind";
 export { changeOperations } from "./kind/object-kind";
 export type { KindRegistry, RegisteredObjectKind } from "./kind/registry";
-export { createDefaultRegistry, createKindRegistry } from "./kind/registry";
+export {
+	createDefaultRegistry,
+	createKindRegistry,
+	requiredKeysByKind,
+} from "./kind/registry";
 export { enumKind } from "./kinds/enum-kind";
 export type {
 	FunctionArgSnapshot,
