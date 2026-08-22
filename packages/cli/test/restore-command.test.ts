@@ -241,7 +241,7 @@ describe("hejbro restore", () => {
 				"declarations loaded successfully — ready to review and run `hejbro generate`.",
 			);
 			expect(result.stdout).toContain(
-				"restore never commits — everything above is undoable:",
+				"restore never commits — the restored files are staged; everything above is undoable:",
 			);
 			expect(result.stdout).toContain(
 				"git checkout HEAD -- src/app.schema.ts     # revert the modified files",
