@@ -1,16 +1,27 @@
 -- roundtrip seed: the Supabase-isms a generic Postgres lacks.
--- Roles: modeled on supabase/storage migrations/tenant/0002-storage-schema.sql
--- (CREATE ROLE … NOLOGIN NOINHERIT; service_role additionally BYPASSRLS).
+-- Roles: NOLOGIN INHERIT (service_role additionally BYPASSRLS) --
+-- measured directly against a real supabase/postgres:17.6.1.165 container
+-- (2026-08-22, phase8-supabase-image), not modeled from reading migration
+-- source as the prior version of this file was:
+--   select rolname, rolcanlogin, rolinherit, rolbypassrls from pg_roles
+--   where rolname in ('anon','authenticated','service_role');
+--       rolname    | rolcanlogin | rolinherit | rolbypassrls
+--    ---------------+-------------+------------+--------------
+--     anon          | f           | t          | f
+--     authenticated | f           | t          | f
+--     service_role  | f           | t          | t
+-- (this file previously created them NOLOGIN NOINHERIT -- INHERIT is what
+-- the real image actually ships.)
 do $$
 begin
 	if not exists (select 1 from pg_roles where rolname = 'anon') then
-		create role anon nologin noinherit;
+		create role anon nologin inherit;
 	end if;
 	if not exists (select 1 from pg_roles where rolname = 'authenticated') then
-		create role authenticated nologin noinherit;
+		create role authenticated nologin inherit;
 	end if;
 	if not exists (select 1 from pg_roles where rolname = 'service_role') then
-		create role service_role nologin noinherit bypassrls;
+		create role service_role nologin inherit bypassrls;
 	end if;
 end
 $$;
@@ -36,7 +47,22 @@ create table if not exists auth.users (id uuid not null primary key);
 -- auth.uid() stub: the RLS policies built with authUid() call this at
 -- policy-creation time (it just needs to exist with the right signature —
 -- the round-trip only diffs schema, never queries through RLS as a real
--- session). Modeled on supabase/auth migrations/20221208132122_backfill_email_last_sign_in_at.sql's auth.uid(). Guarded like every other stub above: a real Supabase database already has its own auth.uid(), so this must be a no-op there, never an overwrite.
+-- session). Body copied verbatim from a real supabase/postgres:17.6.1.165
+-- container (2026-08-22, phase8-supabase-image), not modeled from reading
+-- migration source as the prior version of this file was:
+--   \sf auth.uid
+--     CREATE OR REPLACE FUNCTION auth.uid()
+--      RETURNS uuid
+--      LANGUAGE sql
+--      STABLE
+--     AS $function$
+--       select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+--     $function$
+-- (this file previously added a `coalesce` fallback onto a second
+-- `request.jwt.claims` jsonb path that the real function does not have.)
+-- Guarded like every other stub above: a real Supabase database already
+-- has its own auth.uid(), so this must be a no-op there, never an
+-- overwrite.
 do $$
 begin
 	if not exists (
@@ -47,11 +73,7 @@ begin
 		create function auth.uid() returns uuid
 			language sql stable
 			as $body$
-			select
-				coalesce(
-					nullif(current_setting('request.jwt.claim.sub', true), ''),
-					(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
-				)::uuid
+			select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 		$body$;
 	end if;
 end

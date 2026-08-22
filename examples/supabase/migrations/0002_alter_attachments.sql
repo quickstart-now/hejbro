@@ -1,8 +1,8 @@
 -- hejbro migration
 -- ~ table app.attachments [column "content_type" added, check "attachments_content_type_allowed" added]
 -- ~ supabase-storage-bucket attachments [allowed mime types changed]
--- parent-snapshot: sha256:9c07b8c8091ec5194389e2a3df11b3e96dc22382b1d4a01d4f661aa5d558daeb
--- snapshot: sha256:752c1837d34d4a6077e96f377eed1bdedc4e71a52ee890bd05970500ea66644e
+-- parent-snapshot: sha256:cb11b15444e9e96dda3b8b6a4833a93a68e7b7e2d3d910f64e19f8be77a1e58a
+-- snapshot: sha256:df700b87ddbe34b9c9e4625b74bd91ca2a2a7eeee99fd7d5fe4d1789dac4121a
 
 alter table "app"."attachments" add column "content_type" text;
 

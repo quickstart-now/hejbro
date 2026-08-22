@@ -12,9 +12,11 @@
 -- + grant app.all-tables-privileges.authenticated [new]
 -- + grant app.default-table-privileges.anon [new]
 -- + grant app.default-table-privileges.authenticated [new]
+-- + grant app.schema-usage.anon [new]
+-- + grant app.schema-usage.authenticated [new]
 -- + supabase-storage-bucket attachments [new]
 -- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:9c07b8c8091ec5194389e2a3df11b3e96dc22382b1d4a01d4f661aa5d558daeb
+-- snapshot: sha256:cb11b15444e9e96dda3b8b6a4833a93a68e7b7e2d3d910f64e19f8be77a1e58a
 
 create schema "app";
 
@@ -61,6 +63,10 @@ grant select on all tables in schema "app" to "authenticated";
 alter default privileges in schema "app" grant select on tables to "anon";
 
 alter default privileges in schema "app" grant select on tables to "authenticated";
+
+grant usage on schema "app" to "anon";
+
+grant usage on schema "app" to "authenticated";
 
 insert into storage.buckets ("id", "name", "public", "file_size_limit", "allowed_mime_types")
 values ('attachments', 'attachments', false, 10485760, array['image/png', 'image/jpeg']::text[])
