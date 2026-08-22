@@ -168,4 +168,47 @@ describe("binding rls to a table", () => {
 			),
 		).not.toThrow();
 	});
+
+	// #160: a foreign ref buried inside exists() used to reach declaration
+	// time unrejected -- assertOwnColumnsOnly (dsl/rls.ts) only checked
+	// top-level refs, so this exact shape (a subquery correlating to a
+	// third table that's neither its own from() nor the outer policy's
+	// table) only ever got caught later, at generate/serialize time, by
+	// policyKind.serialize's own (now-removed) renderExpr side effect.
+	// findExprScopeViolation (expr/walk.ts) descends into exists() with
+	// the subquery's own scope extended, so this is now rejected here,
+	// at declaration time, like every other policy validation.
+	it("rejects a column reference inside exists() to a table that's neither the subquery's own nor the outer policy's (#160)", () => {
+		const comments = table(app, "comments_fc2", {
+			id: uuid().primaryKey().defaultRandom(),
+			postId: uuid().notNull(),
+		});
+		const otherTable = table(app, "other_table_fc2", {
+			id: uuid().primaryKey().defaultRandom(),
+			flag: uuid().notNull(),
+		});
+
+		expect(() =>
+			table(
+				app,
+				"posts_fc2",
+				{ id: uuid().primaryKey().defaultRandom() },
+				() => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("bad_cross_reference")
+							.for("select")
+							.to("anon")
+							.using(
+								exists(
+									select(comments).where(eq(otherTable.flag, comments.id)),
+								),
+							),
+					}),
+				}),
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "rls-policy-foreign-column" }),
+		);
+	});
 });

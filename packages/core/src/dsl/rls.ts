@@ -1,7 +1,7 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
-import type { Expr, ExprNode } from "../expr/ast";
-import { collectColumnRefs } from "../expr/render-sql";
+import type { ColumnRefNode, Expr, ExprNode, TableRefNode } from "../expr/ast";
+import { findExprScopeViolation } from "../expr/walk";
 import type { Role } from "./role";
 
 /** The Postgres commands a policy can be scoped to. */
@@ -249,31 +249,34 @@ const assertClauseAllowed = (policy: PolicyInput): void => {
 	}
 };
 
-const exprColumnRefs = (
-	expr: ExprNode | null,
-): ReadonlyArray<ReturnType<typeof collectColumnRefs>[number]> => {
-	if (expr === null) {
-		return [];
-	}
-	return collectColumnRefs(expr);
-};
-
+/**
+ * Rejects a column reference outside the policy's own table — including
+ * one buried inside an `exists()` subquery's own `where`/join `on`/
+ * `orderBy`, which used to reach declaration time unrejected (#160):
+ * {@link findExprScopeViolation} extends scope by the subquery's own
+ * `from`/joins as it descends, exactly the rule `render-sql.ts`'s
+ * `renderSelectClauses` applies when it actually renders one, so a
+ * correlated reference to this policy's own table stays legal at any
+ * depth and a reference to any *other* table is rejected wherever it
+ * sits. `policyKind.serialize` (`kinds/policy-kind.ts`) used to run this
+ * same check again at serialize time, via a `renderExpr` call whose
+ * result it discarded — this declaration-time version is now complete,
+ * so that redundant call is gone (#160).
+ */
 const assertOwnColumnsOnly = (
 	schemaName: string,
 	tableName: string,
 	policy: PolicyInput,
 ): void => {
-	const refs = [
-		...exprColumnRefs(policy.usingExpr),
-		...exprColumnRefs(policy.withCheckExpr),
-	];
-	const foreignRef = refs.find(
-		(ref) => ref.schemaName !== schemaName || ref.tableName !== tableName,
-	);
+	const scope: ReadonlyArray<TableRefNode> = [{ schemaName, tableName }];
+	const foreignRef = [policy.usingExpr, policy.withCheckExpr]
+		.filter((expr): expr is ExprNode => expr !== null)
+		.map((expr) => findExprScopeViolation(expr, scope))
+		.find((ref): ref is ColumnRefNode => ref !== undefined);
 	if (foreignRef !== undefined) {
 		throwHejbroError(
 			"rls-policy-foreign-column",
-			`policy "${policy.policyName}" on "${schemaName}.${tableName}" references column "${foreignRef.schemaName}.${foreignRef.tableName}.${foreignRef.columnName}" — a policy expression may only reference its own table's columns directly. Next: reach other tables through exists().`,
+			`policy "${policy.policyName}" on "${schemaName}.${tableName}" references column "${foreignRef.schemaName}.${foreignRef.tableName}.${foreignRef.columnName}" — a policy expression (including inside exists()) may only reference its own table's columns, or, from inside exists(), that subquery's own table. Next: reach a different table through exists(), correlating back to "${schemaName}.${tableName}" rather than referencing a third table directly.`,
 			policy.declaredAt,
 		);
 	}

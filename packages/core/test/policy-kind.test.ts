@@ -188,57 +188,18 @@ describe("policyKind.serialize", () => {
 		);
 	});
 
-	// #110 item 22: pins the validating side effect of the renderExpr call
-	// encodeClauseExpr keeps for its result-discarding call (see the doc
-	// comment on encodeClauseExpr, policy-kind.ts). assertOwnColumnsOnly
-	// (dsl/rls.ts) doesn't descend into exists(), so a bad ref buried
-	// inside a correlated subquery reaches declaration time unrejected --
-	// this is the ONLY thing that catches it, and only because encoding
-	// still renders (and discards) the expression first. If that call is
-	// ever deleted as apparently-dead code, this test goes red.
-	it("rejects a correlated exists() referencing a third table outside both the subquery's own scope and the outer policy's table, at serialize time", () => {
-		const otherTable = table(app, "other_table", {
-			id: uuid().primaryKey().defaultRandom(),
-			flag: uuid().notNull(),
-		});
-		const comments = table(app, "comments3", {
-			id: uuid().primaryKey().defaultRandom(),
-			postId: uuid().notNull(),
-		});
-		const posts = table(
-			app,
-			"posts3",
-			{ id: uuid().primaryKey().defaultRandom() },
-			() => ({
-				rls: rls.enabled({
-					read: rls
-						.policy("bad_cross_reference")
-						.for("select")
-						.to("anon")
-						.using(
-							exists(select(comments).where(eq(otherTable.flag, comments.id))),
-						),
-				}),
-			}),
-		);
-
-		// assertOwnColumnsOnly (declaration time) doesn't descend into
-		// exists(), so the declaration itself succeeds -- confirming the
-		// blind spot encodeClauseExpr's renderExpr call is the only thing
-		// that closes.
-		const meta = getTableMeta(posts);
-		if (meta.rls === null) {
-			throw new Error("expected rls declaration");
-		}
-		const [policy] = meta.rls.policies;
-		if (policy === undefined) {
-			throw new Error("expected one policy");
-		}
-
-		expect(() => policyKind.serialize(policy)).toThrowError(
-			expect.objectContaining({ code: "foreign-column-ref" }),
-		);
-	});
+	// #160: a correlated exists() referencing a third table outside both
+	// the subquery's own scope and the outer policy's table used to reach
+	// this point (serialize) unrejected by declaration time, and only
+	// this call's own discarded renderExpr side effect ever caught it (see
+	// this repo's git history for that version of this test, #110 item
+	// 22). assertOwnColumnsOnly (dsl/rls.ts) now descends into exists()
+	// itself (findExprScopeViolation, #160), so the declaration throws
+	// before a table() call bearing this policy even finishes -- see
+	// test/dsl/rls-binding.test.ts's "rejects a column reference inside
+	// exists() to a table that's neither the subquery's own nor the outer
+	// policy's (#160)" for that coverage now, and encodeClauseExpr
+	// (policy-kind.ts) no longer re-validates at all.
 });
 
 describe("policyKind.diff", () => {
