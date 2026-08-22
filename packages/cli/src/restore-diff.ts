@@ -150,7 +150,7 @@ const modifiedUndoLine = (
 	];
 };
 
-/** The `restore never commits — everything above is undoable:` block (§7) — one line per non-empty group, omitted entirely when `entries` is empty (nothing was written). */
+/** The `restore never commits — the restored files are staged; everything above is undoable:` block (§7) — one line per non-empty group, omitted entirely when `entries` is empty (nothing was written). The "staged" clause (#265) tells a user who runs `git checkout -- .` (working tree only) that the index still holds the restored content. */
 export const renderUndoBlock = (
 	entries: ReadonlyArray<FileDiffEntry>,
 ): ReadonlyArray<string> => {
@@ -158,7 +158,7 @@ export const renderUndoBlock = (
 		return [];
 	}
 	return [
-		"restore never commits — everything above is undoable:",
+		"restore never commits — the restored files are staged; everything above is undoable:",
 		...removedUndoLine(pathsWithMarker(entries, "-")),
 		...resurrectedUndoLine(pathsWithMarker(entries, "+")),
 		...modifiedUndoLine(pathsWithMarker(entries, "~")),

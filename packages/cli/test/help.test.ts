@@ -44,6 +44,30 @@ describe("hejbro --help", () => {
 		expect(result.stdout).toContain("init");
 		expect(result.stdout).toContain("generate");
 	});
+
+	it("renders each subcommand on one line in COMMANDS", async () => {
+		const result = await runHelp(cwd, ["--help"]);
+		const commands = result.stdout.split("COMMANDS")[1] ?? "";
+		const generateRow = commands
+			.split("\n")
+			.filter((line) => line.trimStart().startsWith("generate"));
+		expect(generateRow).toHaveLength(1);
+		expect(generateRow[0]).toContain(
+			"Diff your TypeScript declarations against the last snapshot and write a new migration file.",
+		);
+		expect(commands).not.toContain("Renames are never confirmed interactively");
+	});
+});
+
+describe("hejbro restore --help", () => {
+	it("documents the migration number positional", async () => {
+		const result = await runHelp(cwd, ["restore", "--help"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("hejbro restore [OPTIONS] [N]");
+		expect(result.stdout).toContain(
+			"the migration's number in `hejbro history` (1 = oldest)",
+		);
+	});
 });
 
 describe("hejbro generate --help", () => {
