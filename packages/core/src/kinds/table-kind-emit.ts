@@ -133,13 +133,13 @@ const alterColumnStatements = (
 	if (primaryKeyChanged) {
 		return throwHejbroError(
 			"unsupported-column-alter",
-			`column "${entry.key}" on table "${tableName}" changed its primary key status — hejbro does not support in-place primary key alters in Phase 1 (primary key changes are not expressible as a single alter column). Next: recreate the table, or drop and re-add the column/constraint manually.`,
+			`column "${entry.key}" on table "${tableName}" changed its primary key status — hejbro does not support in-place primary key alters (primary key changes are not expressible as a single alter column). Next: recreate the table, or drop and re-add the column/constraint manually.`,
 		);
 	}
 	if (uniqueChanged) {
 		return throwHejbroError(
 			"unsupported-column-alter",
-			`column "${entry.key}" on table "${tableName}" changed its unique flag — hejbro does not emit sql for that in Phase 1. Next: add/drop the column, or add/drop a unique constraint manually.`,
+			`column "${entry.key}" on table "${tableName}" changed its unique flag — hejbro does not emit sql for that. Next: add/drop the column, or add/drop a unique constraint manually.`,
 		);
 	}
 
@@ -208,7 +208,7 @@ const emitAlter = (
 	if (addedPrimaryKeyColumn !== undefined) {
 		return throwHejbroError(
 			"unsupported-column-alter",
-			`column "${addedPrimaryKeyColumn.key}" on table "${next.name}" was added as a primary key — hejbro does not emit the constraint for a primary key column added to an existing table in Phase 1 (only \`alter table … add column …\` is emitted, silently omitting \`add primary key\`). Next: add the column without \`.primaryKey()\` and add the constraint manually, or recreate the table.`,
+			`column "${addedPrimaryKeyColumn.key}" on table "${next.name}" was added as a primary key — hejbro does not emit the constraint for a primary key column added to an existing table (only \`alter table … add column …\` is emitted, silently omitting \`add primary key\`). Next: add the column without \`.primaryKey()\` and add the constraint manually, or recreate the table.`,
 		);
 	}
 	// A single-column primary key being dropped entirely is already
@@ -226,7 +226,7 @@ const emitAlter = (
 	if (removedPrimaryKeyColumnLeavesASurvivor) {
 		return throwHejbroError(
 			"unsupported-column-alter",
-			`table "${next.name}" drops a column that is part of its primary key, while another column still declares \`.primaryKey()\` — Postgres drops the entire constraint the moment any of its columns is dropped, silently leaving the surviving column(s) without a primary key. hejbro does not re-add it in Phase 1. Next: drop the whole primary key explicitly and re-add it for the surviving column(s), or recreate the table.`,
+			`table "${next.name}" drops a column that is part of its primary key, while another column still declares \`.primaryKey()\` — Postgres drops the entire constraint the moment any of its columns is dropped, silently leaving the surviving column(s) without a primary key. hejbro does not re-add it. Next: drop the whole primary key explicitly and re-add it for the surviving column(s), or recreate the table.`,
 		);
 	}
 
