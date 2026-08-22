@@ -72,6 +72,16 @@ export {
 export type { ChainEntry, ChainReport } from "./engine/chain";
 export { checkChain } from "./engine/chain";
 export { diffSnapshots } from "./engine/diff-engine";
+export type {
+	DuplicateVersionFallbackOption,
+	DuplicateVersionFixPlan,
+	DuplicateVersionRename,
+} from "./engine/duplicate-version-fix";
+export {
+	duplicateVersionFallbackOptions,
+	orderGroupByChain,
+	planDuplicateVersionFix,
+} from "./engine/duplicate-version-fix";
 export type { HejbroInput } from "./engine/generate";
 export { generateMigration } from "./engine/generate";
 export type { Preset } from "./engine/preset";
