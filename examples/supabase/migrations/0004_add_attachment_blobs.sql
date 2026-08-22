@@ -13,6 +13,10 @@ create table "app"."attachment_blobs" (
 	constraint "attachment_blobs_pkey" primary key ("attachment_id")
 );
 
+grant select on all tables in schema "app" to "anon";
+
+grant select on all tables in schema "app" to "authenticated";
+
 alter table "app"."attachments" drop column "storage_path";
 
 alter table "app"."attachments" add column "archived_at" timestamp with time zone;
