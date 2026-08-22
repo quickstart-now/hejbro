@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // #154: reports the CRAP score (complexity^2 * (1 - coverage)^3 + complexity)
 // for every named function in @hejbro/core and @hejbro/supabase, and fails
-// (non-zero exit) once any exceeds threshold 10 (D71). phase8-crap-tooling
-// through phase8-crap-coverage brought the violation count to 0;
-// phase8-crap-gate (this change) turns EXIT_NONZERO_ON_VIOLATION on. The
-// threshold itself ratchets to 5 in phase8-crap-ratchet-5, same phase,
-// before 0.1.0 (#154's plan, D71).
+// (non-zero exit) once any exceeds threshold 5 (D71). phase8-crap-tooling
+// through phase8-crap-coverage brought the violation count to 0 at
+// threshold 10, and phase8-crap-gate turned EXIT_NONZERO_ON_VIOLATION on;
+// phase8-crap-ratchet-5 (this change) ratchets the threshold itself to 5,
+// same phase, before 0.1.0 (#154's plan, D71).
 //
 // Deliberately package-scoped, not file-allowlisted: `hejbro` (the CLI) is
 // excluded by never being in TARGET_PACKAGES below, not by excluding
@@ -98,10 +98,10 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const CRAP_THRESHOLD = 10;
+const CRAP_THRESHOLD = 5;
 
 // phase8-crap-gate (D71): the violation count reached 0 on dev, so the gate
-// is now live. Ratchets to CRAP_THRESHOLD = 5 in phase8-crap-ratchet-5.
+// is now live at CRAP_THRESHOLD = 5 (phase8-crap-ratchet-5).
 const EXIT_NONZERO_ON_VIOLATION = true;
 
 const TARGET_PACKAGES = [
