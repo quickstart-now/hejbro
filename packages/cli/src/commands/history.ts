@@ -7,7 +7,7 @@ import { asHejbroError } from "../errors";
 import {
 	isGitRepository,
 	migrationAddedCommits,
-	NOT_A_GIT_REPOSITORY_MESSAGE,
+	NOT_A_GIT_REPOSITORY_WHY,
 	remoteUrl,
 } from "../git";
 import { computeMigrationState } from "../history-state";
@@ -109,7 +109,11 @@ export const runHistory = async (
 		const configFlag = lastFlagValue(rawArgs, "--config");
 		const { config } = await loadConfig(cwd, configFlag);
 		if (!isGitRepository(cwd)) {
-			throwHejbroError("not-a-git-repository", NOT_A_GIT_REPOSITORY_MESSAGE);
+			throwHejbroError(
+				"not-a-git-repository",
+				NOT_A_GIT_REPOSITORY_WHY +
+					' Next: run this command from inside a git-tracked hejbro project; if it hasn\'t been committed yet, run `git init && git add -A && git commit -m "initial commit"` first.',
+			);
 		}
 		const migrationsDirPath = join(cwd, config.migrationsDir);
 		const fileNames = listMigrationFiles(migrationsDirPath);
