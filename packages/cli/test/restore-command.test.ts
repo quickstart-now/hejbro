@@ -76,11 +76,15 @@ const soleMigrationFileName = async (cwd: string): Promise<string> => {
 	return fileName;
 };
 
+/** Strips a real `hejbro generate` run's own `-- hejbro: <version>` line — every migration this built-CLI harness generates carries one (#229), so both f-1 (a different, injected version) and f-2 (no version line at all) need to start from a clean slate rather than the real one this harness's own generate already wrote. */
+const withRemovedVersionLine = (migrationText: string): string =>
+	migrationText.replace(/^-- hejbro: .*\n/m, "");
+
 const withInjectedVersionLine = (
 	migrationText: string,
 	version: string,
 ): string =>
-	migrationText.replace(
+	withRemovedVersionLine(migrationText).replace(
 		"-- hejbro migration\n",
 		`-- hejbro migration\n-- hejbro: ${version}\n`,
 	);
@@ -347,6 +351,8 @@ describe("hejbro restore", () => {
 				...parsed,
 				__restoreFixtureMarker: "f-2",
 			}));
+			const withVersionLine = await readFile(migrationPath, "utf8");
+			await writeFile(migrationPath, withRemovedVersionLine(withVersionLine));
 			git(cwd, ["add", "-A"]);
 			git(cwd, ["commit", "-q", "-m", "feat: posts table"]);
 
