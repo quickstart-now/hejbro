@@ -36,9 +36,14 @@ const toDeclarationColumn = (
 	input: IndexColumnInput,
 ): IndexDeclaration["columns"][number] => {
 	if (isIndexColumn(input)) {
-		return { name: input.column.sqlName, desc: input.desc, nulls: input.nulls };
+		return {
+			name: input.column.sqlName,
+			desc: input.desc,
+			nulls: input.nulls,
+			opclass: null,
+		};
 	}
-	return { name: input.sqlName, desc: false, nulls: null };
+	return { name: input.sqlName, desc: false, nulls: null, opclass: null };
 };
 
 /** An index declaration once `.on(...)` has run — still chainable with `.where(predicate)` for a partial index. */
@@ -63,6 +68,8 @@ const createIndexBuilder = (
 			unique,
 			indexName,
 			predicate: null,
+			// `.using(...)` lands in US1 (T014) — every index is btree (`null`) until then.
+			method: null,
 		};
 		return {
 			...declaration,

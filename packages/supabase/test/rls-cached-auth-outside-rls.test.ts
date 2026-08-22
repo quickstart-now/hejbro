@@ -1,3 +1,4 @@
+import type { TableDeclaration } from "@hejbro/core";
 import {
 	boolean,
 	check,
@@ -10,6 +11,7 @@ import {
 	rls,
 	schema,
 	select,
+	sql,
 	table,
 	uuid,
 } from "@hejbro/core";
@@ -93,6 +95,53 @@ describe("rlsCachedAuthOutsideRlsValidator", () => {
 		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
 		expect(result.errors[0]?.message).toBe(
 			'index "accounts_created_by_idx" on table "app"."accounts" calls authUidCached() — a scalar subquery is illegal here. Next: use authUid() here, or move the check into a policy.',
+		);
+	});
+
+	// #284 (Foundational, T006): `IndexColumnDeclaration` widened to a
+	// two-variant union (`{ name }` | `{ expression }`, R5) — an unnamed
+	// index's description must render an expression entry the same way
+	// `contracts/sql.md` does (`(<expression>)`), not crash reading
+	// `.name` off a variant that doesn't have one. Built by hand (not
+	// `table()`) because `.on(...)` doesn't accept a bare expression until
+	// US3 (T036) — this is a pure unit test of `indexDescription` via the
+	// validator, on a hand-assembled `TableDeclaration` of core's public
+	// shape.
+	it("describes an unnamed index's expression column as its rendered SQL", () => {
+		const accounts: TableDeclaration = {
+			declarationKind: "table",
+			schema: app,
+			tableName: "accounts",
+			columns: [],
+			indexes: [
+				{
+					columns: [
+						{
+							expression: sql`lower(email)`.exprNode,
+							desc: false,
+							nulls: null,
+							opclass: null,
+						},
+					],
+					unique: false,
+					indexName: null,
+					predicate: authUidCached().exprNode,
+					method: null,
+				},
+			],
+			foreignKeys: [],
+			checks: [],
+			rls: null,
+			existing: false,
+			declaredAt: null,
+		};
+		const result = rlsCachedAuthOutsideRlsValidator(emptySnapshot, [
+			app,
+			accounts,
+		]);
+		expect(result).toHaveLength(1);
+		expect(result[0]?.message).toBe(
+			'the index on ((lower(email))) on table "app"."accounts" calls authUidCached() — a scalar subquery is illegal here. Next: use authUid() here, or move the check into a policy.',
 		);
 	});
 

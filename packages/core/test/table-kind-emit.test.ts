@@ -44,10 +44,18 @@ describe("tableKind.emit — create", () => {
 			(t) => ({
 				indexes: [
 					{
-						columns: [{ name: t.postId.sqlName, desc: false, nulls: null }],
+						columns: [
+							{
+								name: t.postId.sqlName,
+								desc: false,
+								nulls: null,
+								opclass: null,
+							},
+						],
 						unique: false,
 						indexName: null,
 						predicate: null,
+						method: null,
 					},
 				],
 				foreignKeys: [
@@ -95,10 +103,18 @@ describe("tableKind.emit — create", () => {
 			(t) => ({
 				indexes: [
 					{
-						columns: [{ name: t.email.sqlName, desc: false, nulls: null }],
+						columns: [
+							{
+								name: t.email.sqlName,
+								desc: false,
+								nulls: null,
+								opclass: null,
+							},
+						],
 						unique: true,
 						indexName: null,
 						predicate: null,
+						method: null,
 					},
 				],
 			}),
@@ -428,10 +444,13 @@ describe("tableKind.emit — alter", () => {
 		const after = table(app, "posts", { slug: text() }, (t) => ({
 			indexes: [
 				{
-					columns: [{ name: t.slug.sqlName, desc: false, nulls: null }],
+					columns: [
+						{ name: t.slug.sqlName, desc: false, nulls: null, opclass: null },
+					],
 					unique: false,
 					indexName: null,
 					predicate: null,
+					method: null,
 				},
 			],
 		}));

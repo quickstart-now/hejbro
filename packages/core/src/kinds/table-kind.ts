@@ -1,9 +1,11 @@
 import type {
 	ForeignKeyAction,
+	IndexColumnDeclaration,
 	IndexDeclaration,
 	IndexNulls,
 	TableDeclaration,
 } from "../dsl/table";
+import { throwHejbroError } from "../error";
 import type { ExprNode } from "../expr/ast";
 import { encodeExprNode } from "../expr/codec";
 import type { KeyedDiff } from "../kind/diff-helpers";
@@ -120,6 +122,16 @@ const materializeTypeNode = (columnState: ColumnState): TypeNode => {
 	return columnState.typeNode;
 };
 
+/** `[column.name]` for a plain-column entry, else `[]` (an expression entry, R5, names no column of its own). */
+const indexColumnNameOrEmpty = (
+	column: IndexColumnDeclaration,
+): ReadonlyArray<string> => {
+	if ("name" in column) {
+		return [column.name];
+	}
+	return [];
+};
+
 const resolveIndexName = (
 	tableName: string,
 	index: IndexDeclaration,
@@ -129,7 +141,7 @@ const resolveIndexName = (
 	}
 	return deriveIndexName(
 		tableName,
-		index.columns.map((column) => column.name),
+		index.columns.flatMap(indexColumnNameOrEmpty),
 	);
 };
 
@@ -289,10 +301,23 @@ const serializeColumns = (
 		}) ?? null,
 	);
 
+/** `{ name }` for a plain-column entry — an expression entry (R5) is US3's (T038): unreachable today because nothing before this point can produce one (a real internal-bug guard, not a structurally-unreachable `assertNever` case, same technique as {@link ../kinds/schema-kind.ts}'s `emitAlter`). */
+const serializeIndexColumnSelf = (
+	column: IndexColumnDeclaration,
+): { readonly name: string } => {
+	if ("name" in column) {
+		return { name: column.name };
+	}
+	return throwHejbroError(
+		"unsupported-operation",
+		"expression index columns are not yet serializable — this indicates an internal hejbro bug (US3/T038 lands the expression branch).",
+	);
+};
+
 const serializeIndexColumn = (
-	column: IndexDeclaration["columns"][number],
+	column: IndexColumnDeclaration,
 ): IndexColumnSnapshot => ({
-	name: column.name,
+	...serializeIndexColumnSelf(column),
 	...indexColumnDescField(column.desc),
 	...indexColumnNullsField(column.nulls),
 });

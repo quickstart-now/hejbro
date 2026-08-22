@@ -31,16 +31,34 @@ export type ForeignKeyAction = (typeof foreignKeyActions)[number];
 /** Where an ordered index column places SQL nulls relative to its sort order. */
 export type IndexNulls = "first" | "last";
 
-/** A declared index on one or more (already snake_cased) columns, each with its sort direction and nulls placement, plus an optional partial-index predicate (D51). */
+/** Postgres access methods hejbro accepts (D85, closed) — built-in six plus pgvector's two. `"btree"` is Postgres' own default and is never recorded in a declaration or snapshot (SC-004): see {@link IndexDeclaration.method}. */
+export type IndexMethod =
+	| "btree"
+	| "hash"
+	| "gin"
+	| "gist"
+	| "spgist"
+	| "brin"
+	| "hnsw"
+	| "ivfflat";
+
+/** One entry of an index's column list after `table()` resolves it (D51/R5): a plain column (`name`) or an expression column (`expression`, a structured node reused from the partial-predicate machinery, D46) — exactly one of the two — plus its sort direction, nulls placement, and optional operator class (R4). */
+export type IndexColumnDeclaration = (
+	| { readonly name: string }
+	| { readonly expression: ExprNode }
+) & {
+	readonly desc: boolean;
+	readonly nulls: IndexNulls | null;
+	readonly opclass: string | null;
+};
+
+/** A declared index on one or more (already snake_cased) columns, each with its sort direction and nulls placement, plus an optional partial-index predicate (D51) and access method (R1/R2; `null` means Postgres' default, `btree`). */
 export type IndexDeclaration = {
-	readonly columns: ReadonlyArray<{
-		readonly name: string;
-		readonly desc: boolean;
-		readonly nulls: IndexNulls | null;
-	}>;
+	readonly columns: ReadonlyArray<IndexColumnDeclaration>;
 	readonly unique: boolean;
 	readonly indexName: string | null;
 	readonly predicate: ExprNode | null;
+	readonly method: IndexMethod | null;
 };
 
 /** The table a foreign key references, resolved to its identity parts (D52) — derived from the referenced columns' own refs, not carried as a live `TableDeclaration`. */
@@ -203,6 +221,21 @@ export const buildColumnRefs = <TColumns extends Record<string, ColumnBuilder>>(
 		]),
 	) as TableColumns<TColumns>;
 
+/** `[column.name]` for a plain-column entry, else `[]` — the `flatMap` step of {@link namedIndexColumnNames}. */
+const indexColumnNameOrEmpty = (
+	column: IndexColumnDeclaration,
+): ReadonlyArray<string> => {
+	if ("name" in column) {
+		return [column.name];
+	}
+	return [];
+};
+
+/** The `name` entries of an index's column list — expression entries (R5) name no column of their own and are validated separately (`index-expression-*`, R7). */
+const namedIndexColumnNames = (
+	columns: ReadonlyArray<IndexColumnDeclaration>,
+): ReadonlyArray<string> => columns.flatMap(indexColumnNameOrEmpty);
+
 const validateColumnRefs = (
 	tableName: string,
 	knownColumnNames: ReadonlySet<string>,
@@ -210,7 +243,7 @@ const validateColumnRefs = (
 	foreignKeys: ReadonlyArray<ForeignKeyDeclaration>,
 ): void => {
 	const badIndexColumn = indexes
-		.flatMap((index) => index.columns.map((column) => column.name))
+		.flatMap((index) => namedIndexColumnNames(index.columns))
 		.find((columnName) => !knownColumnNames.has(columnName));
 	if (badIndexColumn !== undefined) {
 		throwHejbroError(
@@ -242,10 +275,7 @@ const validateDuplicateNames = (
 	const indexNames = indexes.map(
 		(index) =>
 			index.indexName ??
-			deriveIndexName(
-				tableName,
-				index.columns.map((column) => column.name),
-			),
+			deriveIndexName(tableName, namedIndexColumnNames(index.columns)),
 	);
 	const duplicateIndex = firstDuplicate(indexNames);
 	if (duplicateIndex !== undefined) {
@@ -330,10 +360,7 @@ const indexPredicateEntries = (
 			{
 				name:
 					index.indexName ??
-					deriveIndexName(
-						tableName,
-						index.columns.map((column) => column.name),
-					),
+					deriveIndexName(tableName, namedIndexColumnNames(index.columns)),
 				predicate: index.predicate,
 			},
 		];
@@ -472,6 +499,7 @@ const resolveIndex = (input: IndexDeclaration): IndexDeclaration => ({
 	unique: input.unique,
 	indexName: input.indexName,
 	predicate: input.predicate,
+	method: input.method,
 });
 
 const resolveForeignKey = (

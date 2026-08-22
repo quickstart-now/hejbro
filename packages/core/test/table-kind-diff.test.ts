@@ -1,19 +1,40 @@
+// fs allowed HERE — the golden-byte-equality regression (T007) reads a
+// committed expected/*.json the same way test/golden/golden.test.ts does.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { check } from "../src/dsl/check";
 import { desc, index } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import { generateMigration } from "../src/engine/generate";
 import type { ColumnRef, Expr } from "../src/expr/ast";
+import { encodeExprNode } from "../src/expr/codec";
 import { inArray, isNotNull } from "../src/expr/operators";
+import { sql } from "../src/expr/sql-template";
 import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { tableKind } from "../src/kinds/table-kind";
-import type { TableSnapshot } from "../src/kinds/table-snapshot";
+import type {
+	IndexColumnSnapshot,
+	IndexSnapshot,
+	TableSnapshot,
+} from "../src/kinds/table-snapshot";
 import {
 	asTableSnapshot,
 	checkExpression,
+	indexColumnExpression,
+	indexColumnOpclass,
+	indexMethod,
 	indexWhere,
+	isExpressionIndexColumn,
 } from "../src/kinds/table-snapshot";
+import {
+	buildSnapshot,
+	emptySnapshot,
+	HEJBRO_SNAPSHOT_VERSION,
+	renderSnapshot,
+} from "../src/snapshot/snapshot";
 import {
 	bigserial,
 	integer,
@@ -23,6 +44,11 @@ import {
 	timestamptz,
 	uuid,
 } from "../src/types/column-builder-factories";
+import {
+	posts as tableIndexesPosts,
+	app as tableIndexesSchema,
+} from "./golden/cases/table-indexes/declarations";
+import { steps as tableIndexesSteps } from "./golden/cases/table-indexes/steps";
 
 const app = schema("app");
 
@@ -161,10 +187,13 @@ describe("tableKind.serialize", () => {
 		const comments = table(app, "comments", { postId: uuid() }, (t) => ({
 			indexes: [
 				{
-					columns: [{ name: t.postId.sqlName, desc: false, nulls: null }],
+					columns: [
+						{ name: t.postId.sqlName, desc: false, nulls: null, opclass: null },
+					],
 					unique: false,
 					indexName: null,
 					predicate: null,
+					method: null,
 				},
 			],
 			foreignKeys: [
@@ -319,10 +348,18 @@ describe("tableKind.diff", () => {
 		const after = table(app, "posts", { publishedAt: timestamptz() }, (t) => ({
 			indexes: [
 				{
-					columns: [{ name: t.publishedAt.sqlName, desc: false, nulls: null }],
+					columns: [
+						{
+							name: t.publishedAt.sqlName,
+							desc: false,
+							nulls: null,
+							opclass: null,
+						},
+					],
 					unique: false,
 					indexName: null,
 					predicate: null,
+					method: null,
 				},
 			],
 		}));
@@ -494,5 +531,100 @@ describe("tableKind.serialize — index columns and where (v3, D51)", () => {
 describe("createDefaultRegistry", () => {
 	it("registers the table kind", () => {
 		expect(createDefaultRegistry().get("table").kind).toBe("table");
+	});
+});
+
+// #284 Foundational (T004/T005): the widened snapshot types and their
+// accessors — no `method`/`opclass`/`expression` is ever *written* by
+// today's builder (US1/US2/US3 add that), so these accessors are exercised
+// directly against hand-built snapshot fixtures, the same way indexWhere's
+// own tests do for `where`.
+describe("index snapshot accessors — Foundational types (#284)", () => {
+	it("HEJBRO_SNAPSHOT_VERSION stays 5 — this feature is a compact addition, not a format bump (D84)", () => {
+		expect(HEJBRO_SNAPSHOT_VERSION).toBe(5);
+	});
+
+	it("indexMethod defaults to btree when absent, and reads a recorded method", () => {
+		const bare: IndexSnapshot = { name: "idx", columns: [] };
+		const gin: IndexSnapshot = { name: "idx", columns: [], method: "gin" };
+		expect(indexMethod(bare)).toBe("btree");
+		expect(indexMethod(gin)).toBe("gin");
+	});
+
+	it("indexColumnOpclass defaults to null when absent, and reads a recorded class", () => {
+		const bare: IndexColumnSnapshot = { name: "data" };
+		const withClass: IndexColumnSnapshot = {
+			name: "data",
+			opclass: "jsonb_path_ops",
+		};
+		expect(indexColumnOpclass(bare)).toBeNull();
+		expect(indexColumnOpclass(withClass)).toBe("jsonb_path_ops");
+	});
+
+	it("indexColumnExpression is null for a name entry, and renders an expression entry's SQL", () => {
+		const named: IndexColumnSnapshot = { name: "email" };
+		const expressionColumn: IndexColumnSnapshot = {
+			expression: encodeExprNode(sql`lower(email)`.exprNode),
+		};
+		expect(indexColumnExpression(named)).toBeNull();
+		expect(indexColumnExpression(expressionColumn)).toBe("lower(email)");
+	});
+
+	it("isExpressionIndexColumn narrows to the expression variant", () => {
+		const named: IndexColumnSnapshot = { name: "email" };
+		const expressionColumn: IndexColumnSnapshot = {
+			expression: encodeExprNode(sql`lower(email)`.exprNode),
+		};
+		expect(isExpressionIndexColumn(named)).toBe(false);
+		expect(isExpressionIndexColumn(expressionColumn)).toBe(true);
+	});
+});
+
+// #284 Foundational (T007, SC-004): the type widening above must not move a
+// single byte of an existing snapshot. `golden/golden.test.ts` already pins
+// this generically for every case's expected/*.json on every `pnpm test`
+// run (it passed, unchanged, alongside these Foundational tests); this is
+// the same guarantee pinned specifically to `table-indexes` (D51's own
+// acceptance case, the one this feature's `IndexDeclaration`/
+// `IndexSnapshot` widening touches most directly), so a future regression
+// here fails right next to the types it would have broken, not only in the
+// generic golden runner. Its committed `expected/snapshot.json` is the
+// snapshot *after* `steps.ts`'s full 3-step chain (declarations.ts's
+// `[app, posts]` is only step 0 — steps.ts redefines `posts` twice more),
+// so this replays that chain via `generateMigration` — same technique
+// `golden.test.ts` itself uses — rather than a single `buildSnapshot` call
+// on `declarations.ts` alone, which would land on step 0's shape instead.
+describe("SC-004 regression: table-indexes still serializes byte-identical (#284)", () => {
+	it("declarations.ts's [app, posts] carries no method/opclass — btree stays absent (D85/R2)", () => {
+		const rendered = renderSnapshot(
+			buildSnapshot(
+				[tableIndexesSchema, getTableMeta(tableIndexesPosts)],
+				createDefaultRegistry(),
+				emptySnapshot,
+			),
+		);
+		expect(rendered).not.toContain('"method"');
+		expect(rendered).not.toContain('"opclass"');
+	});
+
+	it("replaying table-indexes' full step chain still matches the committed expected/snapshot.json byte-for-byte", () => {
+		const finalSnapshot = tableIndexesSteps.reduce(
+			(previousSnapshot, declarations) =>
+				generateMigration({ declarations, previousSnapshot }).snapshot,
+			emptySnapshot,
+		);
+		const rendered = renderSnapshot(finalSnapshot);
+		const expected = readFileSync(
+			join(
+				import.meta.dirname,
+				"golden",
+				"cases",
+				"table-indexes",
+				"expected",
+				"snapshot.json",
+			),
+			"utf8",
+		);
+		expect(rendered).toBe(expected);
 	});
 });

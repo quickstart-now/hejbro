@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { desc, index } from "../../src/dsl/index-builder";
 import { schema } from "../../src/dsl/schema";
+import type { IndexColumnDeclaration, IndexMethod } from "../../src/dsl/table";
 import { getTableMeta, table } from "../../src/dsl/table";
 import { eq, isNotNull } from "../../src/expr/operators";
+import { sql } from "../../src/expr/sql-template";
 import { exists, select } from "../../src/query/select";
 import {
 	text,
@@ -28,8 +30,8 @@ describe("index builder — ordering and partial predicates", () => {
 			}),
 		);
 		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
-			{ name: "created_at", desc: false, nulls: null },
-			{ name: "published_at", desc: true, nulls: "first" },
+			{ name: "created_at", desc: false, nulls: null, opclass: null },
+			{ name: "published_at", desc: true, nulls: "first", opclass: null },
 		]);
 	});
 
@@ -82,5 +84,49 @@ describe("index builder — ordering and partial predicates", () => {
 		expect(() => index("Bad Name")).toThrow(
 			/invalid-sql-name|not a valid hejbro SQL identifier/,
 		);
+	});
+});
+
+// #284 Foundational (T002): the widened public types every US1/US2/US3 story
+// depends on — no `.using()`/`op()`/expression-`.on()` behaviour yet (that's
+// T014/T024/T036), just the shape and its default.
+describe("index builder — Foundational types (#284)", () => {
+	it("IndexDeclaration.method defaults to null (btree) until .using() lands (US1)", () => {
+		const posts = table(app, "posts", { slug: text() }, (t) => ({
+			indexes: [index("posts_slug_idx").on(t.slug)],
+		}));
+		expect(getTableMeta(posts).indexes[0]?.method).toBeNull();
+	});
+
+	it("IndexMethod is the closed eight-name union (D85)", () => {
+		const methods: ReadonlyArray<IndexMethod> = [
+			"btree",
+			"hash",
+			"gin",
+			"gist",
+			"spgist",
+			"brin",
+			"hnsw",
+			"ivfflat",
+		];
+		expect(methods).toHaveLength(8);
+	});
+
+	it("IndexColumnDeclaration accepts a name entry and an expression entry, both carrying opclass", () => {
+		const byName: IndexColumnDeclaration = {
+			name: "email",
+			desc: false,
+			nulls: null,
+			opclass: null,
+		};
+		const byExpression: IndexColumnDeclaration = {
+			expression: sql`lower(email)`.exprNode,
+			desc: false,
+			nulls: null,
+			opclass: null,
+		};
+		expect(byName.opclass).toBeNull();
+		expect(byExpression.opclass).toBeNull();
+		expect("name" in byExpression).toBe(false);
 	});
 });

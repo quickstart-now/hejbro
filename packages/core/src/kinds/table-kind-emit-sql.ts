@@ -159,10 +159,21 @@ const nullsClause = (column: IndexColumnSnapshot): ReadonlyArray<string> => {
 	return [`nulls ${nulls}`];
 };
 
+/** The column/expression token of one index column's clause — an expression entry (R5) is US3's (T039): unreachable today because nothing before this point can produce one (a real internal-bug guard, not a structurally-unreachable `assertNever` case, same technique as {@link ../kinds/schema-kind.ts}'s `emitAlter`). */
+const indexColumnTarget = (column: IndexColumnSnapshot): string => {
+	if ("name" in column) {
+		return quoteIdentifier(column.name);
+	}
+	return throwHejbroError(
+		"unsupported-operation",
+		"expression index columns are not yet emittable — this indicates an internal hejbro bug (US3/T039 lands the expression branch).",
+	);
+};
+
 /** Renders one index column's clause: name, then `desc` when descending, then `nulls first|last` when set (D51). */
 const indexColumnSql = (column: IndexColumnSnapshot): string =>
 	[
-		quoteIdentifier(column.name),
+		indexColumnTarget(column),
 		...descKeyword(column),
 		...nullsClause(column),
 	].join(" ");
