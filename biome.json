@@ -20,7 +20,7 @@
 			"style": {
 				"noTernary": "error",
 				"useNamingConvention": {
-					"level": "warn",
+					"level": "error",
 					"options": { "strictCase": false }
 				}
 			}
