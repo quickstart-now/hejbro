@@ -135,6 +135,54 @@ run_generate() {
   (cd "$example_dir" && node "$CLI" generate --confirm-drop "$confirm_drop_target" >/dev/null)
 }
 
+# Rewrites $1 in place so its own `-- hejbro: <version>` banner line
+# matches $2 exactly: $2 non-empty replaces (or inserts, directly below
+# `-- hejbro migration`) the line; $2 empty strips any version line the
+# regenerated file has. Pure `awk`, not `sed -i`, so this runs
+# identically under macOS's BSD sed-less toolchain and Linux CI alike.
+rewrite_banner_version_line() {
+  file="$1"
+  desired_line="$2"
+  tmp="$(mktemp)"
+  awk -v desired="$desired_line" '
+    /^-- hejbro: / { next }
+    {
+      print
+      if ($0 == "-- hejbro migration" && desired != "") {
+        print desired
+      }
+    }
+  ' "$file" > "$tmp"
+  mv "$tmp" "$file"
+}
+
+# #229 landed *after* this script existed: driving the current CLI
+# through every step (including old ones) means every regenerated file
+# reflects *this build's* version, not whatever version it was actually
+# committed under -- so running this script after any version bump
+# would touch every already-committed migration's banner line, on its
+# own, contradicting "existing steps are history, unchanged" (#229)
+# merely by being re-run (measured, not assumed: confirmed empirically
+# against this repo's own two example chains -- all 10 previously
+# committed files gained a `+-- hejbro: 0.0.0` line with no code change
+# of their own). This restores each pre-existing step's own version
+# line to exactly what HEAD had (present or absent) by filename match;
+# a brand new step (no HEAD blob under that name) is left exactly as
+# generated -- getting the current version is what "new steps carry
+# the line" means.
+restore_committed_banner_versions() {
+  example_dir="$1"
+  example_rel="$2"
+  git -C "$REPO_ROOT" ls-tree -r --name-only HEAD -- "$example_rel/migrations" 2>/dev/null |
+    while IFS= read -r committed_path; do
+      name="$(basename "$committed_path")"
+      regenerated_path="$example_dir/migrations/$name"
+      [ -f "$regenerated_path" ] || continue
+      committed_version_line="$(git -C "$REPO_ROOT" show "HEAD:$committed_path" | grep '^-- hejbro: ' || true)"
+      rewrite_banner_version_line "$regenerated_path" "$committed_version_line"
+    done
+}
+
 regen_one() {
   example_dir="$1"
   name="$(basename "$example_dir")"
@@ -205,6 +253,8 @@ regen_one() {
     echo "regen-examples.sh: $name has ${#steps[@]} step file(s) but produced $regenerated_count migration(s) — a step whose declarations don't differ from the previous one generates nothing. Every step must change something (examples/README.md: each step defends a defect class)." >&2
     exit 1
   fi
+
+  restore_committed_banner_versions "$example_dir" "examples/$name"
 }
 
 for dir in "${EXAMPLE_DIRS[@]}"; do

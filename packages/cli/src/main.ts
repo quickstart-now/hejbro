@@ -2,6 +2,7 @@ import { defineCommand } from "citty";
 import { generateCommand } from "./commands/generate";
 import { initCommand } from "./commands/init";
 import { verifyCommand } from "./commands/verify";
+import { CLI_VERSION } from "./version";
 
 /**
  * The root `hejbro` command. Subcommands: `init` (Task 12), `generate`
@@ -17,7 +18,7 @@ import { verifyCommand } from "./commands/verify";
 export const main = defineCommand({
 	meta: {
 		name: "hejbro",
-		version: "0.0.0",
+		version: CLI_VERSION,
 		description:
 			"Declare your Postgres schema in TypeScript, generate deterministic migration SQL. Renames are handled non-interactively — run `hejbro generate --help` for the --rename/--confirm-drop flags.",
 	},

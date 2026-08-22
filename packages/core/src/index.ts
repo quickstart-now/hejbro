@@ -294,6 +294,7 @@ export {
 	migrationPrefixStrategies,
 	migrationVersionOf,
 	parseBannerHashes,
+	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,
 } from "./sql/migration-file";
