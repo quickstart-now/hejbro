@@ -68,7 +68,10 @@ const runPsqlJson = (query) => {
 		],
 		{ encoding: "utf8" },
 	).trim();
-	return stdout === "" ? [] : JSON.parse(stdout);
+	if (stdout === "") {
+		return [];
+	}
+	return JSON.parse(stdout);
 };
 
 // One query per catalog concern. No snapshot-derived value is ever
@@ -169,6 +172,16 @@ const catalog = {
 	`),
 };
 
+// The one recurring shape every check below reduces to: "is this declared
+// thing present?" -- present, no gap; absent, exactly one gap message.
+// Centralized so no individual check spells its own `cond ? [] : [msg]`.
+const missing = (found, message) => {
+	if (found) {
+		return [];
+	}
+	return [message];
+};
+
 const findTable = (schema, table) =>
 	catalog.tables.find((t) => t.schema === schema && t.name === table);
 
@@ -210,70 +223,91 @@ const hasDefaultTableGrant = (schema, role, privilege) =>
 		(g) => g.schema === schema && g.role === role && g.privilege === privilege,
 	);
 
+const columnGap = (schema, table, column) => {
+	const row = findColumn(schema, table, column.name);
+	if (!row) {
+		return [
+			`declared column "${schema}.${table}.${column.name}" not found in catalog`,
+		];
+	}
+	if (column.notNull === true && row.notNull !== true) {
+		return [
+			`declared column "${schema}.${table}.${column.name}" is nullable in catalog, but declared not null`,
+		];
+	}
+	return [];
+};
+
+const primaryKeyGap = (schema, table, columns) => {
+	const declaresPrimaryKey = (columns ?? []).some((c) => c.primaryKey === true);
+	if (!declaresPrimaryKey) {
+		return [];
+	}
+	return missing(
+		findConstraint(schema, table, "p", () => true) !== undefined,
+		`declared primary key on "${schema}.${table}" not found in catalog`,
+	);
+};
+
+const uniqueGap = (schema, table, column) => {
+	if (column.unique !== true) {
+		return [];
+	}
+	const found = findConstraint(
+		schema,
+		table,
+		"u",
+		(c) => c.columns.length === 1 && c.columns[0] === column.name,
+	);
+	return missing(
+		found !== undefined,
+		`declared unique constraint on "${schema}.${table}.${column.name}" not found in catalog`,
+	);
+};
+
+const foreignKeyGap = (schema, table, fk) =>
+	missing(
+		findConstraint(schema, table, "f", (c) => c.name === fk.name) !== undefined,
+		`declared foreign key "${fk.name}" on "${schema}.${table}" not found in catalog`,
+	);
+
+const checkConstraintGap = (schema, table, chk) =>
+	missing(
+		findConstraint(schema, table, "c", (c) => c.name === chk.name) !==
+			undefined,
+		`declared check constraint "${chk.name}" on "${schema}.${table}" not found in catalog`,
+	);
+
+const indexGap = (schema, table, idx) =>
+	missing(
+		findIndex(schema, table, idx.name) !== undefined,
+		`declared index "${idx.name}" on "${schema}.${table}" not found in catalog`,
+	);
+
 const checkTable = (schema, name, node) => {
 	const table = findTable(schema, name);
 	if (!table) {
 		return [`declared table "${schema}.${name}" not found in catalog`];
 	}
-	const columnGaps = (node.columns ?? []).flatMap((column) => {
-		const row = findColumn(schema, name, column.name);
-		if (!row) {
-			return [
-				`declared column "${schema}.${name}.${column.name}" not found in catalog`,
-			];
-		}
-		if (column.notNull === true && row.notNull !== true) {
-			return [
-				`declared column "${schema}.${name}.${column.name}" is nullable in catalog, but declared not null`,
-			];
-		}
-		return [];
-	});
-	const primaryKeyGaps = (node.columns ?? []).some((c) => c.primaryKey === true)
-		? findConstraint(schema, name, "p", () => true)
-			? []
-			: [`declared primary key on "${schema}.${name}" not found in catalog`]
-		: [];
-	const uniqueGaps = (node.columns ?? []).flatMap((column) => {
-		if (column.unique !== true) {
-			return [];
-		}
-		const found = findConstraint(
-			schema,
-			name,
-			"u",
-			(c) => c.columns.length === 1 && c.columns[0] === column.name,
-		);
-		return found
-			? []
-			: [
-					`declared unique constraint on "${schema}.${name}.${column.name}" not found in catalog`,
-				];
-	});
+	const columns = node.columns ?? [];
+	const columnGaps = columns.flatMap((column) =>
+		columnGap(schema, name, column),
+	);
+	const uniqueGaps = columns.flatMap((column) =>
+		uniqueGap(schema, name, column),
+	);
 	const foreignKeyGaps = (node.foreignKeys ?? []).flatMap((fk) =>
-		findConstraint(schema, name, "f", (c) => c.name === fk.name)
-			? []
-			: [
-					`declared foreign key "${fk.name}" on "${schema}.${name}" not found in catalog`,
-				],
+		foreignKeyGap(schema, name, fk),
 	);
 	const checkGaps = (node.checks ?? []).flatMap((chk) =>
-		findConstraint(schema, name, "c", (c) => c.name === chk.name)
-			? []
-			: [
-					`declared check constraint "${chk.name}" on "${schema}.${name}" not found in catalog`,
-				],
+		checkConstraintGap(schema, name, chk),
 	);
 	const indexGaps = (node.indexes ?? []).flatMap((idx) =>
-		findIndex(schema, name, idx.name)
-			? []
-			: [
-					`declared index "${idx.name}" on "${schema}.${name}" not found in catalog`,
-				],
+		indexGap(schema, name, idx),
 	);
 	return [
 		...columnGaps,
-		...primaryKeyGaps,
+		...primaryKeyGap(schema, name, columns),
 		...uniqueGaps,
 		...foreignKeyGaps,
 		...checkGaps,
@@ -281,110 +315,118 @@ const checkTable = (schema, name, node) => {
 	];
 };
 
+const schemaUsageGap = (schema, node) =>
+	missing(
+		hasSchemaUsage(schema, node.role),
+		`declared schema-usage grant to "${node.role}" on schema "${schema}" not found in catalog`,
+	);
+
+const allTablesPrivilegesGap = (schema, node, privileges) => {
+	const tablesInSchema = catalog.tables.filter((t) => t.schema === schema);
+	return tablesInSchema.flatMap((t) =>
+		privileges.flatMap((privilege) =>
+			missing(
+				hasTableGrant(schema, t.name, node.role, privilege),
+				`declared all-tables-privileges grant (${privilege.toLowerCase()}) to "${node.role}" on schema "${schema}": table "${schema}.${t.name}" is missing that privilege in catalog`,
+			),
+		),
+	);
+};
+
+const defaultTablePrivilegesGap = (schema, node, privileges) =>
+	privileges.flatMap((privilege) =>
+		missing(
+			hasDefaultTableGrant(schema, node.role, privilege),
+			`declared default-table-privileges grant (${privilege.toLowerCase()}) to "${node.role}" on schema "${schema}" not found in catalog`,
+		),
+	);
+
 const checkGrant = (schema, node) => {
 	const privileges = (node.privileges ?? []).map((p) => p.toUpperCase());
 	if (node.grantKind === "schema-usage") {
-		return hasSchemaUsage(schema, node.role)
-			? []
-			: [
-					`declared schema-usage grant to "${node.role}" on schema "${schema}" not found in catalog`,
-				];
+		return schemaUsageGap(schema, node);
 	}
 	if (node.grantKind === "all-tables-privileges") {
-		const tablesInSchema = catalog.tables.filter((t) => t.schema === schema);
-		return tablesInSchema.flatMap((t) =>
-			privileges.flatMap((privilege) =>
-				hasTableGrant(schema, t.name, node.role, privilege)
-					? []
-					: [
-							`declared all-tables-privileges grant (${privilege.toLowerCase()}) to "${node.role}" on schema "${schema}": table "${schema}.${t.name}" is missing that privilege in catalog`,
-						],
-			),
-		);
+		return allTablesPrivilegesGap(schema, node, privileges);
 	}
 	if (node.grantKind === "default-table-privileges") {
-		return privileges.flatMap((privilege) =>
-			hasDefaultTableGrant(schema, node.role, privilege)
-				? []
-				: [
-						`declared default-table-privileges grant (${privilege.toLowerCase()}) to "${node.role}" on schema "${schema}" not found in catalog`,
-					],
-		);
+		return defaultTablePrivilegesGap(schema, node, privileges);
 	}
 	return [`declared grant has unknown grantKind "${node.grantKind}"`];
+};
+
+const checkRls = (schema, table) => {
+	const found = findTable(schema, table);
+	if (!found) {
+		return [
+			`declared row-level security on "${schema}.${table}" not found in catalog (table missing)`,
+		];
+	}
+	return missing(
+		found.rls === true,
+		`declared row-level security on "${schema}.${table}" is not enabled in catalog`,
+	);
 };
 
 const checkObject = (kind, identity, node) => {
 	switch (kind) {
 		case "schema":
-			return catalog.schemas.some((s) => s.schema === node.name)
-				? []
-				: [`declared schema "${node.name}" not found in catalog`];
+			return missing(
+				catalog.schemas.some((s) => s.schema === node.name),
+				`declared schema "${node.name}" not found in catalog`,
+			);
 		case "table":
 			return checkTable(node.schema, node.name, node);
 		case "enum":
-			return catalog.enums.some(
-				(e) => e.schema === node.schema && e.name === node.name,
-			)
-				? []
-				: [`declared enum "${node.schema}.${node.name}" not found in catalog`];
+			return missing(
+				catalog.enums.some(
+					(e) => e.schema === node.schema && e.name === node.name,
+				),
+				`declared enum "${node.schema}.${node.name}" not found in catalog`,
+			);
 		case "sequence":
-			return catalog.sequences.some(
-				(s) => s.schema === node.schema && s.name === node.name,
-			)
-				? []
-				: [
-						`declared sequence "${node.schema}.${node.name}" not found in catalog`,
-					];
+			return missing(
+				catalog.sequences.some(
+					(s) => s.schema === node.schema && s.name === node.name,
+				),
+				`declared sequence "${node.schema}.${node.name}" not found in catalog`,
+			);
 		case "function":
-			return catalog.functions.some(
-				(f) => f.schema === node.schema && f.name === node.name,
-			)
-				? []
-				: [
-						`declared function "${node.schema}.${node.name}" not found in catalog`,
-					];
+			return missing(
+				catalog.functions.some(
+					(f) => f.schema === node.schema && f.name === node.name,
+				),
+				`declared function "${node.schema}.${node.name}" not found in catalog`,
+			);
 		case "view":
-			return catalog.views.some(
-				(v) => v.schema === node.schema && v.name === node.name,
-			)
-				? []
-				: [`declared view "${node.schema}.${node.name}" not found in catalog`];
+			return missing(
+				catalog.views.some(
+					(v) => v.schema === node.schema && v.name === node.name,
+				),
+				`declared view "${node.schema}.${node.name}" not found in catalog`,
+			);
 		case "policy":
-			return catalog.policies.some(
-				(p) =>
-					p.schema === node.schema &&
-					p.table === node.table &&
-					p.name === node.name,
-			)
-				? []
-				: [
-						`declared policy "${node.name}" on "${node.schema}.${node.table}" not found in catalog`,
-					];
+			return missing(
+				catalog.policies.some(
+					(p) =>
+						p.schema === node.schema &&
+						p.table === node.table &&
+						p.name === node.name,
+				),
+				`declared policy "${node.name}" on "${node.schema}.${node.table}" not found in catalog`,
+			);
 		case "trigger":
-			return catalog.triggers.some(
-				(t) =>
-					t.schema === node.schema &&
-					t.table === node.table &&
-					t.name === node.name,
-			)
-				? []
-				: [
-						`declared trigger "${node.name}" on "${node.schema}.${node.table}" not found in catalog`,
-					];
-		case "rls": {
-			const table = findTable(node.schema, node.table);
-			if (!table) {
-				return [
-					`declared row-level security on "${node.schema}.${node.table}" not found in catalog (table missing)`,
-				];
-			}
-			return table.rls === true
-				? []
-				: [
-						`declared row-level security on "${node.schema}.${node.table}" is not enabled in catalog`,
-					];
-		}
+			return missing(
+				catalog.triggers.some(
+					(t) =>
+						t.schema === node.schema &&
+						t.table === node.table &&
+						t.name === node.name,
+				),
+				`declared trigger "${node.name}" on "${node.schema}.${node.table}" not found in catalog`,
+			);
+		case "rls":
+			return checkRls(node.schema, node.table);
 		case "grant":
 			return checkGrant(node.schema, node);
 		case "supabase-storage-bucket":
@@ -396,6 +438,20 @@ const checkObject = (kind, identity, node) => {
 
 const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8"));
 const entries = Object.entries(snapshot.objects ?? {});
+
+// A snapshot that declares nothing would otherwise "pass" vacuously --
+// every check below is declared-object-driven, so zero declared objects
+// means zero gaps can ever be reported, even against a catalog missing
+// every table this project actually needs. That is never a real green
+// result; it is almost always the wrong file path. Refusing loudly
+// (exit 2, distinct from a real gap's exit 1) instead of reporting
+// "0 gaps" -- reproduced directly with a `{"objects":{}}` snapshot file.
+if (entries.length === 0) {
+	console.error(
+		`check-declared-vs-catalog: ${snapshotPath} declares 0 objects -- refusing to report "0 gaps" against an empty declared set (that would trivially pass no matter what the catalog is missing). Next: confirm ${snapshotPath} is the real, populated snapshot for this run, not an empty or wrong-path one.`,
+	);
+	process.exit(2);
+}
 
 console.log(
 	`check-declared-vs-catalog: comparing ${entries.length} declared object(s) in ${snapshotPath} against ${container}/${database}`,
@@ -415,9 +471,7 @@ if (gaps.length > 0) {
 	console.error(
 		`check-declared-vs-catalog: ${gaps.length} declared object(s) missing or differing in the catalog:`,
 	);
-	for (const gap of gaps) {
-		console.error(`  ${gap}`);
-	}
+	console.error(gaps.map((gap) => `  ${gap}`).join("\n"));
 	process.exit(1);
 }
 
