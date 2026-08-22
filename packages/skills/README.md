@@ -11,7 +11,8 @@ Agent skills that teach coding agents how to use hejbro correctly:
   preset warnings)
 
 Source of truth: `/skills/hejbro` (installed with
-`npx skills add quickstart-now/hejbro`); this package bundles those files
-on npm in Phase 8 (D54). The frontmatter `version` field in `SKILL.md` is
-display-only — the skills CLI compares the folder's tree SHA, not the
-version string, to decide whether an install is stale.
+`npx skills add quickstart-now/hejbro`); this package is `private` and
+ships no npm bundle — the repository stays the only distribution channel
+(D62). The frontmatter `version` field in `SKILL.md` is display-only —
+the skills CLI compares the folder's tree SHA, not the version string, to
+decide whether an install is stale.
