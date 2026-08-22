@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-	emptySnapshot,
 	generateMigration,
 	HEJBRO_SNAPSHOT_VERSION,
 	hejbroError,
 	parseBannerHashes,
 	parseBannerVersion,
+	parseSnapshot,
 	renderSnapshot,
+	requiredKeysByKind,
 	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -390,9 +391,17 @@ export const runRestore = async (
 		}
 
 		const registry = buildRegistry(config);
+		// D81: rebuild against the target commit's own snapshot as parent --
+		// an empty parent would rebuild every table's `allColumns` lists in
+		// declaration order, disagreeing with the recorded physical order
+		// the moment a column was ever inserted mid-declaration.
+		const targetSnapshot = parseSnapshot(
+			targetSnapshotText,
+			requiredKeysByKind(registry),
+		);
 		const rebuilt = generateMigration({
 			declarations,
-			previousSnapshot: emptySnapshot,
+			previousSnapshot: targetSnapshot,
 			registry,
 		});
 		const rebuiltHash = renderSnapshotHash(rebuilt.snapshot);
