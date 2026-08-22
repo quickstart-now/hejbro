@@ -1,4 +1,3 @@
-import { assertNever } from "../error";
 import type { TypeNode } from "../types/type-node";
 
 /** Coarse Postgres type families used for shallow compile-time expression checks (D17). */
@@ -85,48 +84,48 @@ export type FamilyOfTypeNode<TNode extends TypeNode> = TNode extends {
 										? "array"
 										: "unknown";
 
-/** Maps a structural {@link TypeNode} to its coarse {@link SqlTypeFamily}. */
-export const familyOfTypeNode = (node: TypeNode): SqlTypeFamily => {
-	switch (node.typeName) {
-		case "uuid":
-			return "uuid";
-		case "text":
-		case "varchar":
-		case "char":
-		case "enum":
-			return "text";
-		case "smallint":
-		case "integer":
-		case "bigint":
-		case "real":
-		case "double precision":
-		case "numeric":
-		case "serial":
-		case "smallserial":
-		case "bigserial":
-			return "numeric";
-		case "boolean":
-			return "boolean";
-		case "date":
-		case "time":
-		case "timetz":
-		case "timestamp":
-		case "timestamptz":
-			return "datetime";
-		case "interval":
-			return "interval";
-		case "json":
-		case "jsonb":
-			return "json";
-		case "bytea":
-			return "bytea";
-		case "inet":
-		case "cidr":
-		case "macaddr":
-			return "net";
-		case "array":
-			return "array";
-		default:
-			return assertNever(node);
-	}
+/**
+ * `TypeNode["typeName"]` → {@link SqlTypeFamily}, one entry per type name.
+ * A `Record` keyed by the full `typeName` union rather than a switch: TS
+ * itself enforces exhaustiveness here (a missing key is a compile error,
+ * "Property ... is missing"), the same guarantee a switch's `default:
+ * assertNever(node)` gives at runtime, so nothing is lost by dropping the
+ * runtime check. Extracted from the CRAP report's own group A (#154 PR2)
+ * — the mapping is data, not control flow, and a switch's cyclomatic
+ * complexity counts every `case` label as a branch even though none of
+ * them actually branch on anything but the type name itself.
+ */
+const TYPE_NAME_TO_FAMILY: Record<TypeNode["typeName"], SqlTypeFamily> = {
+	uuid: "uuid",
+	text: "text",
+	varchar: "text",
+	char: "text",
+	enum: "text",
+	smallint: "numeric",
+	integer: "numeric",
+	bigint: "numeric",
+	real: "numeric",
+	"double precision": "numeric",
+	numeric: "numeric",
+	serial: "numeric",
+	smallserial: "numeric",
+	bigserial: "numeric",
+	boolean: "boolean",
+	date: "datetime",
+	time: "datetime",
+	timetz: "datetime",
+	timestamp: "datetime",
+	timestamptz: "datetime",
+	interval: "interval",
+	json: "json",
+	jsonb: "json",
+	bytea: "bytea",
+	inet: "net",
+	cidr: "net",
+	macaddr: "net",
+	array: "array",
 };
+
+/** Maps a structural {@link TypeNode} to its coarse {@link SqlTypeFamily}. */
+export const familyOfTypeNode = (node: TypeNode): SqlTypeFamily =>
+	TYPE_NAME_TO_FAMILY[node.typeName];
