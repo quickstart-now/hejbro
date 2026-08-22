@@ -643,6 +643,14 @@ found here may change what the docs should say.
 
 Each of these was paid for during the phase; none is a reminder.
 
+**Tests never hard-code the package version string — read it from the
+version module.** Paid for at the release itself (#256): `packages/cli`'s
+build test asserted the literal `0.0.1`, so the Version Packages bump to
+0.1.0 — the one commit that *must* pass CI for the release to proceed —
+turned it red, and the owner's release sequence gained an unplanned hotfix
+PR. The `-- hejbro: <version>` banner line (D77) is the same value by the
+same route; anything that asserts on it reads `version.ts`.
+
 Four of them share one shape, and it is worth naming before the list: **the
 claim of having checked was wider than what was actually checked.** Not a wrong
 answer — a right answer whose evidence covered less ground than the sentence
@@ -1383,6 +1391,14 @@ nothing after it is an agent action:
 4. Confirm with `npm view @hejbro/core version` (and the other two) — no
    auth is needed to read.
 
+**Released 2026-08-22** — #256 (hotfix: the CLI build-version test had the
+version literal hard-coded and broke on the Version Packages bump; it now
+reads `version.ts`) → #179 merged on `dev` (`e1ae041`) → #257 `dev` → `main`
+merge commit (`5ee81de`) → `release-publish` run 32559742995, gate ✅, the
+owner approved the `npm` environment, `changeset publish` reported
+`@hejbro/core@0.1.0`, `hejbro@0.1.0`, `@hejbro/supabase@0.1.0`; dist-tag
+`latest` = 0.1.0 on all three, provenance attestations present.
+
 **After the first release (#139)** — for each of `@hejbro/core`, `hejbro` and
 `@hejbro/supabase`: package **Settings → Trusted Publisher → GitHub Actions**,
 organization `quickstart-now`, repository `hejbro`, workflow filename
@@ -1392,6 +1408,14 @@ trusted publisher to it makes npm and the workflow enforce the same gate —
 #139's "left empty" predates the environment), and
 **check `npm publish` under allowed actions**. Then `NODE_AUTH_TOKEN` can be
 dropped from the workflow.
+
+**Done 2026-08-22.** The owner registered the three trusted publishers
+(OTP in their own shell — a bypass-2FA granular token cannot do it) and
+#259 landed `phase8-oidc-publishing` on `dev` (`e8d693b`): `NODE_AUTH_TOKEN`
+is gone from the publish step. The first OIDC publish is verified at the
+**next** release; deleting the `NPM_TOKEN` repository secret waits for that
+(Phase 9, #268), as does the stale comment at `release-publish.yml` L93
+("independent of the NODE_AUTH_TOKEN auth method below").
 
 ## Formerly out of scope (dissolved 2026-08-22)
 
@@ -1432,7 +1456,10 @@ table nor this section is a bookkeeping bug, not a decision.**
 
 **#139** and **#141** stay as sub-issues of **#9**. There is no Phase 9 — the
 owner decided (2026-08-21) that Phase 8 is the last phase and what follows
-0.1.0 is release work, not a numbered phase. Since 2026-08-22 "deferred to
+0.1.0 is release work, not a numbered phase. **Superseded 2026-08-22:** after
+the first dogfood pass on the published packages the owner opened **Phase 9**
+(#260, `docs/plans/2026-08-22-phase9-implementation.md`, D80–D81) for the
+0.1.x line; #9 itself closed with every sub-issue done. Since 2026-08-22 "deferred to
 0.2.0" no longer applies to any of them; #139 is simply the one item that
 must follow the publish, and none of the six blocks 0.1.0.
 
