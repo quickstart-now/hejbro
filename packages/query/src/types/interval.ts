@@ -1,3 +1,5 @@
+import type { IntervalValue } from "@hejbro/core";
+
 /**
  * The TypeScript shape an `interval` column surfaces as (D4) — a
  * structured value, not `unknown`. **Every field is required, not
@@ -12,6 +14,12 @@
  * instead of `0`; equality checks and serialization need one canonical
  * shape per value, not one shape per how the text happened to be written.
  *
+ * The type itself now lives in `@hejbro/core` (`ts-type-map.ts`, D94: core
+ * owns the declaration DSL's type surface — `.$type<T>()`'s narrowing
+ * constraint needs to see it without core importing `@hejbro/query`) and
+ * is only re-exported here for backward-compatible imports; this parser
+ * (task 3.8) is what actually builds a normalized value.
+ *
  * **Why these seven fields, and why they're safe.** Postgres stores an
  * interval as exactly three independent values — `months`, `days`,
  * `microseconds` (`src/backend/utils/adt/timestamp.c`'s `Interval`
@@ -19,8 +27,8 @@
  * their own). Critically, **months and days do not convert into one
  * another** — a month is 28–31 days depending on which month, so there is
  * no fixed "days per month" this type could use, and it never tries to
- * compute one. Every field below maps onto exactly one of those three
- * Postgres axes, additively, and never crosses an axis boundary:
+ * compute one. Every field maps onto exactly one of those three Postgres
+ * axes, additively, and never crosses an axis boundary:
  *
  * - `years`, `months` → Postgres's `months` axis only
  *   (`totalMonths = years * 12 + months`). This is exactly how Postgres's
@@ -51,15 +59,7 @@
  * a value is a pure function per axis (task 3.8), never a type-level
  * computation, per this group's "no distributive tricks" guidance.
  */
-export type IntervalValue = {
-	readonly years: number;
-	readonly months: number;
-	readonly days: number;
-	readonly hours: number;
-	readonly minutes: number;
-	readonly seconds: number;
-	readonly microseconds: number;
-};
+export type { IntervalValue };
 
 /** The zero interval — every axis `0`. `parseInterval`'s starting point before it fills in whatever the source text actually mentioned. */
 const ZERO_INTERVAL: IntervalValue = {
