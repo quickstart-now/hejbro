@@ -116,7 +116,21 @@ export type ColumnBuilder<
 	/** type-only marker, never assigned — see {@link columnMetaBrand}. */
 	readonly [columnMetaBrand]?: TMeta;
 	notNull(): ColumnBuilder<TFamily, TMeta & { notNull: true }>;
-	/** implied `notNull` now mirrors `materializeNotNull` (`kinds/table-kind.ts`, task 3.16) at the *type* level — `columnState.notNull` itself is untouched here, so the runtime materialization this comment used to point to still does the real work at serialization time. */
+	/**
+	 * `TMeta`'s `notNull` now mirrors `materializeNotNull`
+	 * (`kinds/table-kind.ts:97-105`, task 3.16) — Postgres always renders a
+	 * primary-key column `NOT NULL`, so the *materialized* column is notNull
+	 * even here. `columnState.notNull` itself is deliberately left
+	 * untouched: it's the raw declaration, not the materialized column, and
+	 * stays `false` unless `.notNull()` was also called — serialization
+	 * still does the real `NOT NULL` rendering from `primaryKey`/`typeNode`,
+	 * exactly as before. **This divergence between the two is intentional,
+	 * not a bug** — "fixing" it by setting `columnState.notNull` here would
+	 * change the snapshot/generated-SQL shape for every already-declared
+	 * primary key (golden-breaking, C18) for a value nothing downstream
+	 * needs, since `materializeNotNull` already computes the true rendered
+	 * `NOT NULL` from `primaryKey`/`typeNode` independently of this flag.
+	 */
 	primaryKey(): ColumnBuilder<TFamily, TMeta & { notNull: true }>;
 	unique(): ColumnBuilder<TFamily, TMeta>;
 	/** a raw scalar (auto-lifted to a literal), or an expression built with operators/`sql` (D16) */

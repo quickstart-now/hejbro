@@ -114,8 +114,12 @@ export const macaddr = (): ColumnBuilder<"net", { typeName: "macaddr" }> =>
  * `notNull` without `hasDefault` would make a bare `serial().primaryKey()`
  * a *required* insert field (3.11's rule is "notNull without a default").
  * `columnState` itself stays exactly what `initialColumnBuilder` would
- * produce — only the type-level claim changes, so the generated SQL and
- * snapshot are unaffected.
+ * produce — `notNull: false`, `defaultValue: null` — only the type-level
+ * claim changes, so the generated SQL and snapshot are unaffected. `TMeta`
+ * mirrors `materializeNotNull` (the materialized column); `columnState`
+ * stays the raw declaration. **The divergence is intentional**, not a bug
+ * to "fix" toward matching `columnState` — see `primaryKey()`'s own tsdoc
+ * on `ColumnBuilder` for the same point.
  */
 const initialSerialColumnBuilder = <TName extends SimpleTypeName>(
 	typeName: TName,
