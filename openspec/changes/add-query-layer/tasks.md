@@ -186,7 +186,7 @@ on top of it. Settled decisions:
   `packages/core/test/column-builder.test.ts` "$type leaves the
   declaration byte-identical"; files
   `packages/core/src/types/column-builder.ts`. ~10m
-- [ ] 3.6 Declared type name (+ mode, + jsonb brand) → TypeScript
+- [x] 3.6 Declared type name (+ mode, + jsonb brand) → TypeScript
   mapping; red type test `packages/query/test/types/column-map.test.ts`
   "each declared type name maps to its TS type"; files
   `packages/query/src/types/column-map.ts`. ~10m
