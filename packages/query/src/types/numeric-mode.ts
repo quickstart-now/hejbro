@@ -57,43 +57,58 @@ const hasNonzeroFraction = (raw: string): boolean => {
 };
 
 /**
- * Converts an `int8`/`numeric` column's raw driver text to the TS value its
- * resolved `NumericMode` (task 3.4) promises — a pure function, fail-fast
- * (D3) in both directions: `'number'` throws beyond
- * `Number.MAX_SAFE_INTEGER` rather than losing precision silently, and
- * `'bigint'` throws on a nonzero fractional part rather than truncating it
- * away silently — truncation drops information exactly as quietly as an
- * overflow would, so both modes reject instead of guessing. A value that's
- * merely *written* with a fraction but equal to an integer (`'42.000'`)
- * still converts normally; nothing is lost there. `'string'` is always
- * exact — it's the raw text back, unchanged. Every mode shares one
- * upfront contract, checked before any mode-specific branch: input that
- * isn't decimal numeric text — including empty or whitespace-only text —
- * throws `unparsable-numeric-text` rather than silently becoming `0`/`0n`
+ * The upfront contract every mode shares, checked before any
+ * mode-specific branch: input that isn't decimal numeric text —
+ * including empty or whitespace-only text — throws
+ * `unparsable-numeric-text` rather than silently becoming `0`/`0n`
  * (`'string'` mode included, even though it merely returns text back —
  * "always exact" only holds for text that was numeric to begin with).
- * Wiring this into a live row's actual column (reading `columnState.mode`
- * off the declaration) is group 4's task.
+ * `mode` is only carried through for the error message; this never
+ * returns normally when the pattern fails, so a caller after this line
+ * always has valid numeric text.
+ */
+export const validateNumericText = (raw: string, mode: NumericMode): void => {
+	if (!NUMERIC_TEXT_PATTERN.test(raw)) {
+		throwUnparsableNumericText(raw, mode);
+	}
+};
+
+/** `'number'` mode's own conversion — fail-fast (D3) beyond `Number.MAX_SAFE_INTEGER`/`Number.MIN_SAFE_INTEGER` rather than losing precision silently. Assumes `raw` already passed {@link validateNumericText}. */
+export const convertNumberMode = (raw: string, mode: "number"): number => {
+	const value = Number(raw);
+	if (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER) {
+		return throwNumericModeOverflow(raw, mode);
+	}
+	return value;
+};
+
+/** `'bigint'` mode's own conversion — fail-fast (D3) on a nonzero fractional part rather than truncating it away silently (truncation drops information exactly as quietly as an overflow would). A value that's merely *written* with a fraction but equal to an integer (`'42.000'`) still converts normally; nothing is lost there. Assumes `raw` already passed {@link validateNumericText}. */
+export const convertBigintMode = (raw: string, mode: "bigint"): bigint => {
+	if (hasNonzeroFraction(raw)) {
+		return throwNumericModeFractionLoss(raw, mode);
+	}
+	return BigInt(integerPartText(raw));
+};
+
+/**
+ * Converts an `int8`/`numeric` column's raw driver text to the TS value its
+ * resolved `NumericMode` (task 3.4) promises — a pure function, fail-fast
+ * (D3) in both directions ({@link convertNumberMode}/
+ * {@link convertBigintMode}) after {@link validateNumericText}'s shared
+ * upfront check. `'string'` is always exact — it's the raw text back,
+ * unchanged, once validated. Wiring this into a live row's actual column
+ * (reading `columnState.mode` off the declaration) is group 4's task.
  */
 export const convertNumericText = (
 	raw: string,
 	mode: NumericMode,
 ): bigint | number | string => {
-	if (!NUMERIC_TEXT_PATTERN.test(raw)) {
-		return throwUnparsableNumericText(raw, mode);
-	}
+	validateNumericText(raw, mode);
 	if (mode === "string") {
 		return raw;
 	}
 	if (mode === "number") {
-		const value = Number(raw);
-		if (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER) {
-			return throwNumericModeOverflow(raw, mode);
-		}
-		return value;
+		return convertNumberMode(raw, mode);
 	}
-	if (hasNonzeroFraction(raw)) {
-		return throwNumericModeFractionLoss(raw, mode);
-	}
-	return BigInt(integerPartText(raw));
+	return convertBigintMode(raw, mode);
 };
