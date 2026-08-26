@@ -109,6 +109,11 @@ export const TARGET_PACKAGES = [
 			"packages/supabase/coverage/coverage-final.json",
 		),
 	},
+	{
+		name: "@hejbro/query",
+		srcDir: join(REPO_ROOT, "packages/query/src"),
+		coverageJson: join(REPO_ROOT, "packages/query/coverage/coverage-final.json"),
+	},
 ];
 
 const DECISION_LOOP_KINDS = new Set([
