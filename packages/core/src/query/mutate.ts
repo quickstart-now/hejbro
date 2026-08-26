@@ -36,36 +36,112 @@ export type MutationRow<TTable extends Table> =
 /** A `returning()` projection: aliased expressions, exactly like `select({ alias: expr })` (#293 group 1). */
 export type ReturningProjection = Record<string, Expr>;
 
-export type InsertFinal = { readonly insertQuery: InsertNode };
-export type InsertReturnable = InsertFinal & {
-	/** No-arg = every column, snake_cased and explicit (spec §5.2); an object projection = exactly those aliased expressions. */
-	returning(projection?: ReturningProjection): InsertFinal;
-};
-export type InsertConflictable<TTable extends Table> = InsertReturnable & {
-	onConflictDoNothing(
-		...targetColumns: ReadonlyArray<ColumnRef>
-	): InsertReturnable;
-	onConflictDoUpdate(config: {
-		readonly target: ReadonlyArray<ColumnRef>;
-		readonly set: MutationRow<TTable>;
-	}): InsertReturnable;
+/**
+ * Hides every mutation stage type's (`InsertFinal`/`UpdateFinal`/
+ * `DeleteFinal`) type-only `TTable`/`TReturning` marker behind one
+ * shared unique symbol (same technique as `dsl/define-function.ts`'s
+ * `functionDeclarationBrand`/`dsl/column-builder.ts`'s `columnMetaBrand`,
+ * D15/g3 precedent). Never assigned at runtime.
+ *
+ * **This anchor is not optional polish here — without it, task
+ * 4.11-mutation cannot exist at all.** `InsertFinal`'s only real field,
+ * `insertQuery: InsertNode`, is a plain runtime AST node that never
+ * varies with `TTable`/`TReturning` and never references them, not even
+ * recursively through another method the way `ColumnBuilder`'s own chain
+ * methods do (`FunctionDeclaration`'s `args`/`returns` were the same
+ * story). Without a non-recursive mention, `InsertFinal<A, X>` and
+ * `InsertFinal<B, Y>` would be structurally identical for any
+ * `A`/`B`/`X`/`Y` and mutually assignable — every `@ts-expect-error`
+ * probe below would pass regardless of whether the generics did
+ * anything.
+ */
+const mutationStageBrand: unique symbol = Symbol("hejbro:mutation-stage-meta");
+
+/** One mutation stage's phantom marker value shape — shared by insert/update/delete so the brand's own type is written once. */
+type MutationStageMeta<
+	TTable extends Table,
+	TReturning extends ReturningProjection | undefined,
+> = {
+	readonly table: TTable;
+	readonly returning: TReturning;
 };
 
-export type UpdateFinal = { readonly updateQuery: UpdateNode };
-export type UpdateReturnable = UpdateFinal & {
-	returning(projection?: ReturningProjection): UpdateFinal;
+/**
+ * The terminal insert stage: nothing left to chain but the compiled
+ * query. `TTable` defaults to the widest `Table` and `TReturning` to
+ * `undefined` (spec §5.2's "no projection = every column"), so every
+ * existing non-generic consumer keeps compiling against the bare
+ * `InsertFinal` name unchanged.
+ */
+export type InsertFinal<
+	TTable extends Table = Table,
+	TReturning extends ReturningProjection | undefined = undefined,
+> = {
+	readonly insertQuery: InsertNode;
+	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
+	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
 };
-export type UpdateFilterable = UpdateReturnable & {
-	where(condition: Expr<"boolean">): UpdateReturnable;
-};
+export type InsertReturnable<TTable extends Table = Table> =
+	InsertFinal<TTable> & {
+		/**
+		 * No-arg = every column, snake_cased and explicit (spec §5.2); an
+		 * object projection = exactly those aliased expressions. `TProjection`
+		 * is inferred from the call site — omitted vs. supplied resolve to two
+		 * different `InsertFinal` instantiations (task 4.11-mutation), not the
+		 * same erased shape either way.
+		 */
+		returning<TProjection extends ReturningProjection | undefined = undefined>(
+			projection?: TProjection,
+		): InsertFinal<TTable, TProjection>;
+	};
+export type InsertConflictable<TTable extends Table> =
+	InsertReturnable<TTable> & {
+		onConflictDoNothing(
+			...targetColumns: ReadonlyArray<ColumnRef>
+		): InsertReturnable<TTable>;
+		onConflictDoUpdate(config: {
+			readonly target: ReadonlyArray<ColumnRef>;
+			readonly set: MutationRow<TTable>;
+		}): InsertReturnable<TTable>;
+	};
 
-export type DeleteFinal = { readonly deleteQuery: DeleteNode };
-export type DeleteReturnable = DeleteFinal & {
-	returning(projection?: ReturningProjection): DeleteFinal;
+export type UpdateFinal<
+	TTable extends Table = Table,
+	TReturning extends ReturningProjection | undefined = undefined,
+> = {
+	readonly updateQuery: UpdateNode;
+	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
+	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
 };
-export type DeleteFilterable = DeleteReturnable & {
-	where(condition: Expr<"boolean">): DeleteReturnable;
+export type UpdateReturnable<TTable extends Table = Table> =
+	UpdateFinal<TTable> & {
+		returning<TProjection extends ReturningProjection | undefined = undefined>(
+			projection?: TProjection,
+		): UpdateFinal<TTable, TProjection>;
+	};
+export type UpdateFilterable<TTable extends Table = Table> =
+	UpdateReturnable<TTable> & {
+		where(condition: Expr<"boolean">): UpdateReturnable<TTable>;
+	};
+
+export type DeleteFinal<
+	TTable extends Table = Table,
+	TReturning extends ReturningProjection | undefined = undefined,
+> = {
+	readonly deleteQuery: DeleteNode;
+	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
+	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
 };
+export type DeleteReturnable<TTable extends Table = Table> =
+	DeleteFinal<TTable> & {
+		returning<TProjection extends ReturningProjection | undefined = undefined>(
+			projection?: TProjection,
+		): DeleteFinal<TTable, TProjection>;
+	};
+export type DeleteFilterable<TTable extends Table = Table> =
+	DeleteReturnable<TTable> & {
+		where(condition: Expr<"boolean">): DeleteReturnable<TTable>;
+	};
 
 /**
  * `MutationRow<TTable>`/row objects are keyed by a table's own TypeScript
@@ -214,60 +290,82 @@ const resolveInsertRows = (
 	return { columnNames, rows: resolvedRows };
 };
 
-const makeInsertFinal = (node: InsertNode): InsertFinal => ({
-	insertQuery: node,
-});
-
-const makeInsertReturnable = (
+/**
+ * `insertQuery` is the same plain runtime node for any `TTable`/
+ * `TReturning` — the cast at each of these factories' own return is
+ * exactly {@link mutationStageBrand}'s own promise: the phantom key is
+ * never actually set, so a real object without it is safe to narrow to
+ * whichever instantiation the caller asked for (same reasoning as
+ * `dsl/define-function.ts`'s `defineFunction` return and `compile.ts`'s
+ * `handler` cast, g2).
+ */
+const makeInsertFinal = <
+	TTable extends Table = Table,
+	TReturning extends ReturningProjection | undefined = undefined,
+>(
 	node: InsertNode,
-	target: Table,
-): InsertReturnable => ({
-	insertQuery: node,
-	returning: (projection) =>
-		makeInsertFinal({
-			...node,
-			returning: resolveReturning(target, projection),
-		}),
-});
+): InsertFinal<TTable, TReturning> =>
+	({ insertQuery: node }) as InsertFinal<TTable, TReturning>;
 
-const makeInsertConflictable = (
+const makeInsertReturnable = <TTable extends Table>(
 	node: InsertNode,
-	target: Table,
-): InsertConflictable<Table> => ({
-	insertQuery: node,
-	returning: (projection) =>
-		makeInsertFinal({
-			...node,
-			returning: resolveReturning(target, projection),
-		}),
-	onConflictDoNothing: (...targetColumns) =>
-		makeInsertReturnable(
-			{
+	target: TTable,
+): InsertReturnable<TTable> => {
+	const stage = {
+		insertQuery: node,
+		returning: (projection?: ReturningProjection) =>
+			makeInsertFinal({
 				...node,
-				onConflict: {
-					targetColumns: targetColumns.map((column) => column.sqlName),
-					action: { actionKind: "nothing" },
-				},
-			},
-			target,
-		),
-	onConflictDoUpdate: (config) => {
-		const tableRef = resolveTableRef(target);
-		return makeInsertReturnable(
-			{
+				returning: resolveReturning(target, projection),
+			}),
+	};
+	return stage as InsertReturnable<TTable>;
+};
+
+const makeInsertConflictable = <TTable extends Table>(
+	node: InsertNode,
+	target: TTable,
+): InsertConflictable<TTable> => {
+	const stage = {
+		insertQuery: node,
+		returning: (projection?: ReturningProjection) =>
+			makeInsertFinal({
 				...node,
-				onConflict: {
-					targetColumns: config.target.map((column) => column.sqlName),
-					action: {
-						actionKind: "update",
-						set: resolveSetEntries(target, tableRef, config.set),
+				returning: resolveReturning(target, projection),
+			}),
+		onConflictDoNothing: (...targetColumns: ReadonlyArray<ColumnRef>) =>
+			makeInsertReturnable(
+				{
+					...node,
+					onConflict: {
+						targetColumns: targetColumns.map((column) => column.sqlName),
+						action: { actionKind: "nothing" },
 					},
 				},
-			},
-			target,
-		);
-	},
-});
+				target,
+			),
+		onConflictDoUpdate: (config: {
+			readonly target: ReadonlyArray<ColumnRef>;
+			readonly set: MutationRow<TTable>;
+		}) => {
+			const tableRef = resolveTableRef(target);
+			return makeInsertReturnable(
+				{
+					...node,
+					onConflict: {
+						targetColumns: config.target.map((column) => column.sqlName),
+						action: {
+							actionKind: "update",
+							set: resolveSetEntries(target, tableRef, config.set),
+						},
+					},
+				},
+				target,
+			);
+		},
+	};
+	return stage as InsertConflictable<TTable>;
+};
 
 /** Starts an insert into `target` — chain `.values(row | rows)`. */
 export const insert = <TTable extends Table>(
@@ -296,40 +394,50 @@ export const insert = <TTable extends Table>(
 	},
 });
 
-const makeUpdateFinal = (node: UpdateNode): UpdateFinal => ({
-	updateQuery: node,
-});
-
-const makeUpdateReturnable = (
+const makeUpdateFinal = <
+	TTable extends Table = Table,
+	TReturning extends ReturningProjection | undefined = undefined,
+>(
 	node: UpdateNode,
-	target: Table,
-): UpdateReturnable => ({
-	updateQuery: node,
-	returning: (projection) =>
-		makeUpdateFinal({
-			...node,
-			returning: resolveReturning(target, projection),
-		}),
-});
+): UpdateFinal<TTable, TReturning> =>
+	({ updateQuery: node }) as UpdateFinal<TTable, TReturning>;
 
-const makeUpdateFilterable = (
+const makeUpdateReturnable = <TTable extends Table>(
 	node: UpdateNode,
-	target: Table,
-): UpdateFilterable => ({
-	updateQuery: node,
-	returning: (projection) =>
-		makeUpdateFinal({
-			...node,
-			returning: resolveReturning(target, projection),
-		}),
-	where: (condition) =>
-		makeUpdateReturnable({ ...node, where: condition.exprNode }, target),
-});
+	target: TTable,
+): UpdateReturnable<TTable> => {
+	const stage = {
+		updateQuery: node,
+		returning: (projection?: ReturningProjection) =>
+			makeUpdateFinal({
+				...node,
+				returning: resolveReturning(target, projection),
+			}),
+	};
+	return stage as UpdateReturnable<TTable>;
+};
+
+const makeUpdateFilterable = <TTable extends Table>(
+	node: UpdateNode,
+	target: TTable,
+): UpdateFilterable<TTable> => {
+	const stage = {
+		updateQuery: node,
+		returning: (projection?: ReturningProjection) =>
+			makeUpdateFinal({
+				...node,
+				returning: resolveReturning(target, projection),
+			}),
+		where: (condition: Expr<"boolean">) =>
+			makeUpdateReturnable({ ...node, where: condition.exprNode }, target),
+	};
+	return stage as UpdateFilterable<TTable>;
+};
 
 /** Starts an update of `target` — chain `.set(values)`. */
 export const update = <TTable extends Table>(
 	target: TTable,
-): { set(values: MutationRow<TTable>): UpdateFilterable } => ({
+): { set(values: MutationRow<TTable>): UpdateFilterable<TTable> } => ({
 	set: (values) => {
 		const tableRef = resolveTableRef(target);
 		const node: UpdateNode = {
@@ -343,38 +451,50 @@ export const update = <TTable extends Table>(
 	},
 });
 
-const makeDeleteFinal = (node: DeleteNode): DeleteFinal => ({
-	deleteQuery: node,
-});
-
-const makeDeleteReturnable = (
+const makeDeleteFinal = <
+	TTable extends Table = Table,
+	TReturning extends ReturningProjection | undefined = undefined,
+>(
 	node: DeleteNode,
-	target: Table,
-): DeleteReturnable => ({
-	deleteQuery: node,
-	returning: (projection) =>
-		makeDeleteFinal({
-			...node,
-			returning: resolveReturning(target, projection),
-		}),
-});
+): DeleteFinal<TTable, TReturning> =>
+	({ deleteQuery: node }) as DeleteFinal<TTable, TReturning>;
 
-const makeDeleteFilterable = (
+const makeDeleteReturnable = <TTable extends Table>(
 	node: DeleteNode,
-	target: Table,
-): DeleteFilterable => ({
-	deleteQuery: node,
-	returning: (projection) =>
-		makeDeleteFinal({
-			...node,
-			returning: resolveReturning(target, projection),
-		}),
-	where: (condition) =>
-		makeDeleteReturnable({ ...node, where: condition.exprNode }, target),
-});
+	target: TTable,
+): DeleteReturnable<TTable> => {
+	const stage = {
+		deleteQuery: node,
+		returning: (projection?: ReturningProjection) =>
+			makeDeleteFinal({
+				...node,
+				returning: resolveReturning(target, projection),
+			}),
+	};
+	return stage as DeleteReturnable<TTable>;
+};
+
+const makeDeleteFilterable = <TTable extends Table>(
+	node: DeleteNode,
+	target: TTable,
+): DeleteFilterable<TTable> => {
+	const stage = {
+		deleteQuery: node,
+		returning: (projection?: ReturningProjection) =>
+			makeDeleteFinal({
+				...node,
+				returning: resolveReturning(target, projection),
+			}),
+		where: (condition: Expr<"boolean">) =>
+			makeDeleteReturnable({ ...node, where: condition.exprNode }, target),
+	};
+	return stage as DeleteFilterable<TTable>;
+};
 
 /** Starts a delete from `target` (`deleteFrom` — `delete` is a reserved word). */
-export const deleteFrom = (target: Table): DeleteFilterable => {
+export const deleteFrom = <TTable extends Table>(
+	target: TTable,
+): DeleteFilterable<TTable> => {
 	const tableRef = resolveTableRef(target);
 	const node: DeleteNode = {
 		queryKind: "delete",

@@ -326,41 +326,241 @@ on top of it. Settled decisions:
 
 ## 4. Driver contract + db handle
 
-- [ ] 4.1 [design] Driver contract types + capability keys (kebab-case
-  tokens: `interactive-transactions`, `session-state`, …) readable as
-  data; red test `packages/query/test/driver/contract.test.ts`
-  "capabilities are inspectable before connecting"; files
+Reworked before summoning (2026-08-26) under the post-g3 discipline:
+every [design] decision below is owner-settled IN ADVANCE — ① driver
+capabilities are an exhaustive Record (`interactive-transactions`,
+`session-state`) under three contract criteria: a mandatory
+prerequisite (e.g. bind-parameter execution) is never a capability but
+part of the driver type itself; the exhaustive record makes an
+undeclared key a compile error, so no implicit default exists; `false`
+always fails closed with the explicit error. ② Execution errors wrap
+with code `query-execution-failed`, fields `{ kind }`, the
+parameterized SQL text in the message (values are all `$n`; `params`
+NEVER appear anywhere), driver error as `cause`; conversion failures
+are `result-conversion-failed` with `{ column }` and `cause`. ③
+`db.fn` is keyed by the declaration record's export names
+(`db.fn.helloWorld(args)`). ④ Nested `transaction()` throws
+`nested-transaction-unsupported` (savepoints parked as #313);
+IntervalStyle is pinned to `'postgres'` by driver session setup
+(contract requirement here, implemented by groups 5/6). Estimates are
+calibrated on measured pure processing (g2/g3: 0.8–1.1×). Handoff
+notes from earlier groups: `const f = (): never => …` does not narrow
+control flow after the call — use `function` declarations or `return
+throwX(...)`; conversion functions and their per-column runtime meta
+(`columnState.mode`/`typeName`) are reachable via the three verified
+paths (whole-table meta, projection ColumnRefs by name, db-held
+declarations for joined tables).
+
+Batch C owner decisions (relayed mid-group, recorded here rather than
+left implicit): `db()`'s argument shape settled as **(c′)** — a flat,
+heterogeneous schema-module record classified at runtime by
+`isTable()`/`declarationKind`, not the earlier `{tables, functions?}`
+shape (task 4.3-schema below). Task 4.10 (`db.fn.*` typing) settled as
+**(B)** — not the per-function `fn-types.ts` dispatch originally
+sketched, and not parked: `FunctionDeclaration` gains a core generic
+type surface (task 4.10a, the enabler) which `db.fn.*`'s own call
+signature (task 4.10 itself, the consumer — still open below until
+this lands) then reads through. Mutation `.returning()` typing settled
+as **(a)** — the
+same additive-generic treatment applied to `InsertFinal`/`UpdateFinal`/
+`DeleteFinal` (task 4.11-mutation below), completing what 4.11 (select)
+had explicitly parked pending this decision.
+
+- [x] 4.0 Scout: wiring inventory — enumerate the three
+  meta-access paths against the real g3 code, the compile-output →
+  driver surface, and the `(): never` spots to avoid; deliverable = a
+  short inventory in the group PR body draft (no code, no test). ~8m
+- [x] 4.1 Driver contract types: exhaustive capability Record +
+  the three capability criteria in tsdoc + minimal driver interface
+  (parameterized execute + transaction primitives + session-setup hook
+  for the IntervalStyle pin); red test
+  `packages/query/test/driver/contract.test.ts` "a driver missing a
+  capability key is a compile error (@ts-expect-error probe)"; files
   `src/driver/contract.ts`. ~10m
-- [ ] 4.2 [design] Missing-capability error shape (enriched Error,
-  kebab-case code, names capability + operation, thrown before any
-  send); red test `packages/query/test/driver/errors.test.ts`
-  "transaction on a non-transactional driver fails naming the
-  capability"; files `src/driver/errors.ts`. ~8m
-- [ ] 4.3 db handle creation (declarations + driver) and execute
-  passthrough — driver receives exactly `compile()` output (fake
-  driver); red test `packages/query/test/db/execute.test.ts` "executed
-  SQL equals previewed compile output"; files `src/db/db.ts`. ~10m
-- [ ] 4.4 Callback-scoped transaction API (begin/commit, rollback on
-  throw, capability check first); red test
+- [x] 4.2 Missing-capability error: code `driver-missing-capability`,
+  fields `{ capability, operation }`, thrown before any send; red test
+  `packages/query/test/driver/errors.test.ts` "transaction on a
+  non-transactional driver fails naming the capability"; files
+  `src/driver/errors.ts`. ~6m
+- [x] 4.3 db handle creation (declarations record + driver) and
+  execute passthrough — driver receives exactly `compile()` output
+  (fake driver); red test `packages/query/test/db/execute.test.ts`
+  "executed SQL equals previewed compile output"; files
+  `src/db/db.ts`. ~10m
+- [x] 4.3-schema (follow-up, owner decision (c′)): `db()`'s argument
+  shape migrated from the originally-scoped `{tables, functions?}`
+  record to a flat, heterogeneous schema-module record (e.g.
+  `db(schema, driver, {roles?})`), classified once at call time via
+  `isTable()`/`declarationKind` rather than pre-sorted by the caller;
+  adds an opt-in `options.roles?: ReadonlyArray<Role>` consumed by
+  4.7's role whitelist (source ③ of 4). red test
+  `packages/query/test/db/db.test.ts` "db(schema, driver, options?) --
+  owner decision (c') auto-classification"; files `src/db/db.ts`. ~10m
+- [x] 4.4 Result conversion wiring: driver rows normalized per column
+  meta (numeric mode, IntervalValue) via the three access paths;
+  failure = `result-conversion-failed` `{ column }` + cause; red test
+  `packages/query/test/db/convert.test.ts` "bigint text arrives as the
+  declared mode's type; a poisoned cell names its column"; files
+  `src/db/convert.ts`. ~10m
+- [x] 4.4-wiring (follow-up, self-discovered while reviewing 4.11):
+  `convert.ts` was self-contained but never called from the actual
+  execute pipeline -- `execute()`'s runtime rows stayed raw driver
+  text even though 4.11's types promised `bigint`/`IntervalValue`
+  ("narrows only, never lies" violation). `execute.ts`'s `executeOn`
+  now builds a column plan from the original `CompileInput` (a new
+  minimal `queryNodeOf`/`columnPlanForStatement` in `convert.ts`, not
+  a copy of `compile.ts`'s private unwrap) and converts rows before
+  returning, for both `db().execute` and `tx.execute` (same shared
+  pipeline, task 4.5/4.6); an empty plan (the `sql` escape hatch) now
+  means "pass the row through unchanged" (`convertRow`'s own
+  contract), not "rebuild with zero keys". red test
+  `packages/query/test/db/execute-conversion.test.ts` "bigint text and
+  interval text arrive converted -- not the driver's raw text"; files
+  `src/db/convert.ts`, `src/db/execute.ts`, `src/db/transaction.ts`,
+  `src/db/db.ts`. ~15m
+- [x] 4.5 Execution error wrapper: `query-execution-failed`,
+  `{ kind }`, parameterized SQL text in the message, params never,
+  driver error as cause, no retry; red test
+  `packages/query/test/db/errors.test.ts` "constraint violation
+  rejects with cause and value-free SQL text"; files `src/db/db.ts`.
+  ~8m
+- [x] 4.6 Callback-scoped transaction API (begin/commit, rollback on
+  throw, capability check first; nested call throws
+  `nested-transaction-unsupported` — savepoints parked #313); red test
   `packages/query/test/db/transaction.test.ts` "rolls back and
-  rethrows when the callback throws"; files `src/db/transaction.ts`.
-  ~10m
-- [ ] 4.5 `db.as(context)` generic mechanism: role + set_config list
-  applied via SET LOCAL inside the wrapping transaction; unscoped
-  handle unaffected; red test `packages/query/test/db/context.test.ts`
-  "context statements precede the query inside one transaction"; files
+  rethrows when the callback throws; nested call fails fast"; files
+  `src/db/transaction.ts`. ~10m
+- [x] 4.7 `db.as(context)` generic mechanism: role validated against
+  the 4-source declared-role union (`GrantDeclaration.role`,
+  `PolicyDeclaration.roles` walked per table, `db()`'s opt-in
+  `options.roles`, `driver.contributedRoles`) and quoted with core's
+  identifier rule only (`SET LOCAL ROLE` takes no bind parameters, and
+  never special-cases bare `public` — that exception is a `GRANT`/
+  `REVOKE` keyword rule, not a `SET LOCAL ROLE` one), settings applied
+  via the parameterized `select set_config($1, $2, true)` form, all
+  inside the wrapping transaction; unscoped handle unaffected; red
+  test `packages/query/test/db/context.test.ts` "context applies
+  quoted role + parameterized set_config inside one transaction;
+  adversarial role/setting strings cannot reach SQL text"; files
   `src/db/context.ts`. ~10m
-- [ ] 4.6 Database error propagation with the driver error as `cause`,
-  no retry; red test `packages/query/test/db/errors.test.ts`
-  "constraint violation rejects with cause"; files `src/db/db.ts`. ~6m
-- [ ] 4.7 `db.fn.*` runtime: parameterized invocation, explicit column
-  list for returns-table; red test
+- [x] 4.9-fallback (follow-up, owner review of task 4.10's own "known,
+  documented imprecision") `dispatchCall`'s unresolved-target-table
+  branch (task 4.9) silently fell back to a bare, untyped scalar call
+  instead of failing — the same "type lies" shape 4.4-wiring and the
+  missing-`"result"`-key guard (task 4.10) both already existed to rule
+  out, and an implicit guess this project consistently rejects
+  elsewhere (never `select *`, capability checks fail closed, an
+  undeclared role has no escape hatch). Now throws
+  `function-target-table-undeclared`, naming the missing table, before
+  any statement is sent; the now-unreachable "scalar call with no
+  declared type" path is removed with it. red test
+  `packages/query/test/db/fn.test.ts` "fails fast, never a silent
+  scalar guess, when the returns-table's target table isn't declared
+  in this handle's own schema module"; files `src/db/fn.ts`. ~10m
+- [x] 4.8 Spec deltas for the settled contracts: driver-contract
+  (exhaustive record + capability criteria + session-setup-hook
+  requirement, `IntervalStyle` pinning scoped to the driver's own
+  responsibility), query-execution (nested-transaction error, SQL-in-
+  message/params-never error contract, result-conversion/fail-fast
+  behavior), rls-execution-context (the role 4-source-union whitelist,
+  quoting + parameterization SHALLs); every added sentence traces to an
+  existing test (one new probe added first, `setupSession` mandatory on
+  `Driver`, mirroring the existing `execute`-mandatory one — needed
+  before the session-setup-hook sentence could name a test); no
+  narrowing or loosening of the pre-existing group 5/6-owned
+  requirements (vanilla/preset driver, `asUser`/`asAnon` context
+  surface) in the same files; verified by `openspec validate --strict`;
+  files
+  `openspec/changes/add-query-layer/specs/{driver-contract,query-execution,rls-execution-context}/spec.md`,
+  `packages/query/test/driver/contract.test.ts`.
+  ~10m
+- [x] 4.9 `db.fn.*` runtime: parameterized invocation, explicit column
+  list for returns-table, composes with `db.as`; red test
   `packages/query/test/db/fn.test.ts` "returns-table call renders
   explicit columns, never star"; files `src/db/fn.ts`. ~10m
-- [ ] 4.8 `db.fn.*` typing from defineFunction declarations (args +
-  return shape; mismatches fail type-check); red type test
-  `packages/query/test/db/fn-types.test-d.ts` "wrong argument type is
-  rejected statically"; files `src/db/fn-types.ts`. ~10m
+- [x] 4.10a (owner decision (B), enabler half of 4.10 — not the whole
+  task) core generic type surface for `defineFunction`:
+  `FunctionDeclaration` gains a defaulted `TArgs`/`TReturns` type
+  parameter pair carrying the declared args shape and return target,
+  via a non-enumerable phantom anchor field (mirrors
+  `column-builder.ts`'s `columnMetaBrand`); additive only — every
+  existing non-generic consumer (`function-kind.ts`,
+  `define-trigger.ts`, `render-body.ts`) compiles unchanged; red test
+  `packages/core/test/define-function.test.ts`
+  "FunctionDeclaration<TArgs, TReturns> generics (task 4.10)"; files
+  `packages/core/src/dsl/define-function.ts`. ~10m
+- [x] 4.10 `db.fn.*` typing from the declarations record (the
+  consumer half 4.10a enables): named-object call signature derived
+  from `TArgs` (owner decision, args-as-object) via g3's `ts-type-map`
+  (`ColumnTsType`); `TypedFnApi` keyed exactly to the declarations
+  record's function export names (a nonexistent key is a compile
+  error, owner decision ③'s static pinning) — required threading a
+  defaulted `TFunctions` type parameter through `Db`/`ScopedDb`/`db()`
+  itself (`fn-types.ts`'s own `FunctionsOf<TSchema>`), a larger surface
+  than this task's own `files:` line implied, confirmed in-scope
+  (`src/db/**`) before starting; return row type derived from
+  `TReturns` (a `Table` target resolves through `SelectResult<TTable>`,
+  a scalar `TypeNode` maps through core's public `BaseTsType` with a
+  local array-shape adapter). **4.9's own scalar contract turned out to
+  be spec-non-compliant** (`typed-function-execution` says a scalar
+  call "resolves to a value", `db.fn`'s runtime returned an unaliased
+  row array for both shapes) — fixed in the same task: scalar calls now
+  render an explicit `as "result"` alias and resolve to the bare
+  converted value, with a new `function-scalar-result-missing` fail-fast
+  guard and the first scalar-return `defineFunction` fixture/coverage
+  this codebase has had. Runtime still renders positional SQL in
+  declared argument order; the named→positional lookup reads each
+  argument by `declaration.args[].argName` (matched via `toSnakeCase`,
+  since `FunctionDeclaration.args` never preserves the original
+  camelCase key), never `Object.values(args)` (object key order is
+  call-site insertion order, not declaration order). red tests
+  `packages/query/test/db/fn-types.test.ts` — five `@ts-expect-error`
+  probes (typo key, missing key, wrong type, excess key on a fresh
+  object literal, nonexistent function key) — and
+  `packages/query/test/db/fn.test.ts`'s reversed-call-order fixture
+  asserting `params` (not the SQL text, which is `$1, $2` either way)
+  lands in declared order; files `packages/query/src/db/fn-types.ts`,
+  `src/db/fn.ts`, `src/db/db.ts`, `src/db/context.ts`. Initially left
+  `dispatchCall`'s own pre-existing unresolved-table fallback (task
+  4.9) as a documented imprecision (a `returns`-table function
+  resolving to a bare scalar value at runtime, while the type still
+  promised `ReadonlyArray<SelectResult<TTable>>`) — owner review
+  rejected leaving it documented (the same "type lies" shape already
+  fixed twice this task), so it was closed for real in task
+  4.9-fallback below instead of staying a caveat. ~35m
+- [x] 4.11-mutation (owner decision (a), completing what 4.11 below
+  parked) core generic type surface for the mutation builders:
+  `InsertFinal`/`UpdateFinal`/`DeleteFinal` (and their
+  `*Returnable`/`*Filterable` intermediates) gain defaulted
+  `TTable`/`TReturning` type parameters tracking the target table and
+  `.returning(...)` projection through the whole `insert`/`update`/
+  `deleteFrom` chain, via a shared non-enumerable phantom anchor; `Db`'s
+  `ExecuteResult` (task 4.11 below) gains the corresponding
+  `InsertFinal`/`UpdateFinal`/`DeleteFinal` conditional branches,
+  resolved through g3's existing `ReturningRow<TTable, TProjection>`
+  (reused, not recreated) — core stays free of `@hejbro/query`; red
+  tests `packages/core/test/query/mutate.test.ts`
+  "InsertFinal/UpdateFinal/DeleteFinal<TTable, TReturning> generics
+  (task 4.11-mutation)" and
+  `packages/query/test/db/execute-result-type.test.ts` "Db.execute's
+  resolved row type for mutations (task 4.11-mutation)"; files
+  `packages/core/src/query/mutate.ts`, `packages/query/src/db/db.ts`.
+  ~15m
+- [x] 4.11 (new, batch A review, #293 group 4) `execute()`'s resolved
+  row type for `select()` (query-execution's ADDED requirement "rows
+  typed by the statement's inferred result type" had no owning task —
+  reviewer's requirement-reversal found the gap): `Db["execute"]`
+  dispatches structurally on `SelectLimited<TProjection>` to
+  `SelectResult<TProjection>` (task 3.10) at the time this task landed;
+  mutation `returning()` typing was out of scope pending the owner's
+  `InsertFinal`/`UpdateFinal`/`DeleteFinal` genericity decision (same
+  erasure class as 4.10) and has since been completed by
+  4.11-mutation above, which added the corresponding conditional
+  branches to this same `ExecuteResult` type; everything else (bare
+  `QueryNode`, `sql`) keeps the plain `DriverRow` shape. red test
+  `packages/query/test/db/execute-result-type.test.ts` "a whole-table
+  select resolves the declared column types exactly"; files
+  `src/db/db.ts`. ~10m
 
 ## 5. `@hejbro/pg` vanilla driver
 
