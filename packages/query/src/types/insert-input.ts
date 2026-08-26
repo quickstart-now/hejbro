@@ -69,3 +69,22 @@ export type InsertInput<TTable extends Table> =
 				[K in OptionalInsertKeys<TColumns>]?: InsertColumnValue<TColumns[K]>;
 			}
 		: never;
+
+/**
+ * The row shape `update()` accepts (D1/D3, task 3.12) — every declared
+ * column is optional (D8's `col?: T`), regardless of `notNull`/
+ * `hasDefault`: an update only ever touches the columns it names, so
+ * `notNull`'s "this column can't be *absent* from a row" guarantee
+ * doesn't constrain which keys an update statement supplies. `notNull`
+ * still constrains the *value* though — {@link InsertColumnValue} is
+ * reused unchanged, so a `notNull` column's value type has no `| null`
+ * even though its key is optional: you may leave it out, but you may
+ * not explicitly write `null` to it. A pure type utility over
+ * `Table<infer TColumns>` (task 3.3's extraction pattern), not yet
+ * wired into `update()`'s actual parameter type (group 4's job, same
+ * deferral as {@link InsertInput}).
+ */
+export type UpdateInput<TTable extends Table> =
+	TTable extends Table<infer TColumns>
+		? { [K in keyof TColumns]?: InsertColumnValue<TColumns[K]> }
+		: never;

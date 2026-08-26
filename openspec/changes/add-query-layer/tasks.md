@@ -256,10 +256,16 @@ on top of it. Settled decisions:
   matrix: notNull decides required-vs-optional, hasDefault overrides
   notNull to optional"; files
   `packages/query/src/types/insert-input.ts`. ~10m
-- [ ] 3.12 Update input types: every declared column optional, unknown
-  columns rejected; red type test
-  `packages/query/test/types/insert-input.test.ts` "update accepts any
-  declared column and rejects unknown ones"; files
+- [x] 3.12 Update input types: every declared column optional, unknown
+  columns rejected — `notNull`/`hasDefault` don't affect update
+  optionality (every key is `col?: T` regardless), but `notNull` still
+  forbids an explicit `null` *value* (`InsertColumnValue`, task 3.11,
+  reused unchanged). The 3.11/3.12 boundary itself is pinned as a
+  contrast pair: the identical `notNull`-without-default declaration is
+  a required insert key but an optional update key; red type test
+  `packages/query/test/types/insert-input.test.ts` "3.11/3.12 boundary
+  contrast pair: the identical declaration (notNull, no default) is
+  required on insert but optional on update"; files
   `packages/query/src/types/insert-input.ts`. ~6m
 - [ ] 3.13 `returning` rows reuse the select inference rather than
   re-deriving it; red type test

@@ -1,6 +1,6 @@
 import { bigint, json, jsonb, schema, serial, table, text } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
-import type { InsertInput } from "../../src/types/insert-input";
+import type { InsertInput, UpdateInput } from "../../src/types/insert-input";
 
 const shop = schema("shop");
 
@@ -102,6 +102,55 @@ describe("insert-input (D1/D3/D8, task 3.11)", () => {
 			amountRequired: 1,
 			payloadRequired: { kind: "widget" },
 			payloadJsonRequired: { kind: "widget" },
+			// @ts-expect-error "email" was never declared on posts.
+			email: "nope@example.com",
+		};
+	});
+});
+
+describe("update-input (D1/D3, task 3.12)", () => {
+	it("every declared column is optional, regardless of notNull/hasDefault", () => {
+		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture.
+		const empty: UpdateInput<Posts> = {};
+		expectTypeOf<UpdateInput<Posts>["titleRequired"]>().toEqualTypeOf<
+			string | undefined
+		>();
+		expectTypeOf<UpdateInput<Posts>["id"]>().toEqualTypeOf<
+			number | undefined
+		>();
+	});
+
+	it("3.11/3.12 boundary contrast pair: the identical declaration (notNull, no default) is required on insert but optional on update", () => {
+		expectTypeOf<InsertInput<Posts>["titleRequired"]>().toEqualTypeOf<string>();
+		expectTypeOf<UpdateInput<Posts>["titleRequired"]>().toEqualTypeOf<
+			string | undefined
+		>();
+	});
+
+	it("field consumption: mode/brand/element still shape the value type, only optionality changes", () => {
+		expectTypeOf<UpdateInput<Posts>["amountRequired"]>().toEqualTypeOf<
+			number | undefined
+		>();
+		expectTypeOf<UpdateInput<Posts>["payloadRequired"]>().toEqualTypeOf<
+			Payload | undefined
+		>();
+		expectTypeOf<UpdateInput<Posts>["tagsRequired"]>().toEqualTypeOf<
+			ReadonlyArray<string> | undefined
+		>();
+	});
+
+	it("notNull still forbids an explicit null value, even though the key itself is optional (contrast with a nullable column)", () => {
+		// @ts-expect-error titleRequired is notNull -- null is not a legal value, only omission is.
+		const _nullOnNotNull: UpdateInput<Posts> = { titleRequired: null };
+		// A nullable column accepts an explicit null (positive control).
+		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture.
+		const nullOnNullable: UpdateInput<Posts> = { title: null };
+	});
+
+	it("rejects an undeclared column key", () => {
+		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture.
+		const withUnknownKey: UpdateInput<Posts> = {
+			titleRequired: "t",
 			// @ts-expect-error "email" was never declared on posts.
 			email: "nope@example.com",
 		};
