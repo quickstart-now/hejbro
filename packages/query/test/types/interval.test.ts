@@ -3,21 +3,23 @@ import type { IntervalValue } from "../../src/types/interval";
 import { parseInterval } from "../../src/types/interval";
 
 describe("IntervalValue (D4, task 3.7)", () => {
-	it("an interval column surfaces as a structured value", () => {
-		// exact shape: every field optional (D8's `col?: T`, defaults to 0),
-		// one axis each for Postgres's own months/days/microseconds triple.
+	it("an interval column surfaces as a structured, normalized value", () => {
+		// exact shape: every field required (owner decision overrides this
+		// task's own original D8-based proposal -- D8 governs insert input,
+		// not a value read back from the database), one axis each for
+		// Postgres's own months/days/microseconds triple.
 		expectTypeOf<IntervalValue>().toEqualTypeOf<{
-			readonly years?: number;
-			readonly months?: number;
-			readonly days?: number;
-			readonly hours?: number;
-			readonly minutes?: number;
-			readonly seconds?: number;
-			readonly microseconds?: number;
+			readonly years: number;
+			readonly months: number;
+			readonly days: number;
+			readonly hours: number;
+			readonly minutes: number;
+			readonly seconds: number;
+			readonly microseconds: number;
 		}>();
 
 		// a fully-specified value compiles (this line's own compilation is
-		// the assertion — a missing/renamed field would fail `check-types`)...
+		// the assertion — a missing/renamed field would fail `check-types`).
 		const full: IntervalValue = {
 			years: 1,
 			months: 2,
@@ -27,10 +29,8 @@ describe("IntervalValue (D4, task 3.7)", () => {
 			seconds: 6,
 			microseconds: 700000,
 		};
-		// ...and so does the empty interval (every field optional).
-		const empty: IntervalValue = {};
-		expectTypeOf(full.years).toEqualTypeOf<number | undefined>();
-		expectTypeOf(empty.microseconds).toEqualTypeOf<number | undefined>();
+		expectTypeOf(full.years).toEqualTypeOf<number>();
+		expectTypeOf(full.microseconds).toEqualTypeOf<number>();
 	});
 });
 
@@ -49,33 +49,59 @@ describe("parseInterval (task 3.8)", () => {
 		});
 	});
 
-	it("parses a date-only interval", () => {
-		expect(parseInterval("3 days")).toEqual<IntervalValue>({ days: 3 });
+	it("parses a date-only interval, normalized (missing axes are 0)", () => {
+		expect(parseInterval("3 days")).toEqual<IntervalValue>({
+			years: 0,
+			months: 0,
+			days: 3,
+			hours: 0,
+			minutes: 0,
+			seconds: 0,
+			microseconds: 0,
+		});
 	});
 
-	it("parses a time-only interval, no fraction", () => {
+	it("parses a time-only interval, no fraction, normalized", () => {
 		expect(parseInterval("04:05:06")).toEqual<IntervalValue>({
+			years: 0,
+			months: 0,
+			days: 0,
 			hours: 4,
 			minutes: 5,
 			seconds: 6,
+			microseconds: 0,
 		});
+	});
+
+	it("two source texts for the same interval normalize to the identical object", () => {
+		// owner's own motivating case: "3 days" and "3 days 0 mons" mean the
+		// same interval and must not become structurally different objects.
+		expect(parseInterval("3 days")).toEqual(
+			parseInterval("0 years 3 days 00:00:00"),
+		);
 	});
 
 	it("applies a single leading sign to the whole time part", () => {
 		expect(parseInterval("-1 mons +3 days -04:05:06")).toEqual<IntervalValue>({
+			years: 0,
 			months: -1,
 			days: 3,
 			hours: -4,
 			minutes: -5,
 			seconds: -6,
+			microseconds: 0,
 		});
 	});
 
 	it("parses the explicit zero interval", () => {
 		expect(parseInterval("00:00:00")).toEqual<IntervalValue>({
+			years: 0,
+			months: 0,
+			days: 0,
 			hours: 0,
 			minutes: 0,
 			seconds: 0,
+			microseconds: 0,
 		});
 	});
 

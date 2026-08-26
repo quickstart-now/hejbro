@@ -190,7 +190,7 @@ on top of it. Settled decisions:
   mapping; red type test `packages/query/test/types/column-map.test.ts`
   "each declared type name maps to its TS type"; files
   `packages/query/src/types/column-map.ts`. ~10m
-- [ ] 3.7 [design] `IntervalValue` shape — the field set is proposed
+- [x] 3.7 [design] `IntervalValue` shape — the field set is proposed
   here and confirmed by the owner at PR review, with the Postgres
   months/days/microseconds semantics recorded in tsdoc; red type test
   `packages/query/test/types/interval.test.ts` "an interval column

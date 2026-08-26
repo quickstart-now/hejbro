@@ -1,8 +1,16 @@
 /**
  * The TypeScript shape an `interval` column surfaces as (D4) — a
- * structured value, not `unknown`. Every field is optional and defaults to
- * `0` (D8's `col?: T` convention), so `{}` is the zero interval and a
- * caller only spells out the axes they actually use.
+ * structured value, not `unknown`. **Every field is required, not
+ * optional** (owner decision, overriding this task's own original D8-based
+ * proposal): D8's `col?: T` convention governs *insert input* shape, not a
+ * value read back from the database, and {@link parseInterval} always
+ * returns a normalized value with every axis present (`0` for one it
+ * didn't parse), never a sparse object. Two otherwise-identical intervals
+ * that happen to mention different axes in their source text — `"1 day"`
+ * and `"1 day 0 mons"` both mean the same interval — would be
+ * *structurally different* objects if a missing axis were `undefined`
+ * instead of `0`; equality checks and serialization need one canonical
+ * shape per value, not one shape per how the text happened to be written.
  *
  * **Why these seven fields, and why they're safe.** Postgres stores an
  * interval as exactly three independent values — `months`, `days`,
@@ -44,13 +52,24 @@
  * computation, per this group's "no distributive tricks" guidance.
  */
 export type IntervalValue = {
-	readonly years?: number;
-	readonly months?: number;
-	readonly days?: number;
-	readonly hours?: number;
-	readonly minutes?: number;
-	readonly seconds?: number;
-	readonly microseconds?: number;
+	readonly years: number;
+	readonly months: number;
+	readonly days: number;
+	readonly hours: number;
+	readonly minutes: number;
+	readonly seconds: number;
+	readonly microseconds: number;
+};
+
+/** The zero interval — every axis `0`. `parseInterval`'s starting point before it fills in whatever the source text actually mentioned. */
+const ZERO_INTERVAL: IntervalValue = {
+	years: 0,
+	months: 0,
+	days: 0,
+	hours: 0,
+	minutes: 0,
+	seconds: 0,
+	microseconds: 0,
 };
 
 /** A single `<number> <unit>` date-part pair, e.g. `"2 mons"` — the unit spellings Postgres's default ("postgres" style) `IntervalStyle` renders. */
@@ -233,5 +252,8 @@ export const parseInterval = (raw: string): IntervalValue => {
 	) {
 		return throwUnparsableInterval(raw, "no recognizable interval components");
 	}
-	return { ...dateFields, ...timeFields };
+	// normalize: every axis present, 0 for one the source text never
+	// mentioned -- "1 day" and "1 day 0 mons" read back as the identical
+	// object, not two structurally different ones.
+	return { ...ZERO_INTERVAL, ...dateFields, ...timeFields };
 };
