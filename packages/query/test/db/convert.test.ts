@@ -201,14 +201,20 @@ describe("columnPlanForResult + convertRow (task 4.4)", () => {
 		const node = select(posts).selectQuery;
 		const plan = columnPlanForResult(node, tables);
 
+		// "status" is declared (text, notNull) but has *no* mode/interval
+		// conversion of its own -- without the fail-fast guard, convertCell's
+		// fallback branch would happily return `undefined` for a missing key
+		// with no error at all (a numeric/interval column would coincidentally
+		// still throw, from convertNumericText/parseInterval choking on
+		// `String(undefined)` -- that's a different failure and would mask
+		// this guard being absent, so this test deliberately avoids it).
 		try {
-			// "amount" (declared, bigint mode) is missing from this row entirely.
-			convertRow({ id: "x", status: "draft", duration: "1 day" }, plan);
+			convertRow({ id: "x", amount: "1", duration: "1 day" }, plan);
 			expect.unreachable("convertRow should have thrown");
 		} catch (error) {
 			expect(error).toBeInstanceOf(Error);
 			expect(error).toHaveProperty("code", "result-conversion-failed");
-			expect(error).toHaveProperty("column", "amount");
+			expect(error).toHaveProperty("column", "status");
 			const cause = (error as Error & { cause?: unknown }).cause;
 			expect(cause).toBeInstanceOf(Error);
 			expect((error as Error).message).toMatch(/Next:/);
