@@ -9,6 +9,8 @@ import { getTableMeta, isTable } from "@hejbro/core";
 import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
 import type { SelectResult } from "../types/select-result";
+import type { DbContext, ScopedDb } from "./context";
+import { createAsApi } from "./context";
 import { executeOn } from "./execute";
 import type { Tx } from "./transaction";
 import { createTransactionApi } from "./transaction";
@@ -192,6 +194,14 @@ export type Db = {
 	 * from inside an already-open callback of this same member.
 	 */
 	transaction<T>(callback: (tx: Tx) => Promise<T>): Promise<T>;
+	/**
+	 * Scopes every statement in the returned {@link ScopedDb} to `context`
+	 * (task 4.7): validates `context.role` against the declared-role
+	 * whitelist immediately (fail-closed, `undeclared-role` if not),
+	 * applies `SET LOCAL ROLE`/`set_config` inside a wrapping transaction
+	 * on the actual work, and never touches this (unscoped) handle at all.
+	 */
+	as(context: DbContext): ScopedDb;
 };
 
 /**
@@ -245,5 +255,6 @@ export const db = (schema: Schema, driver: Driver, options?: DbOptions): Db => {
 		execute: ((statement: CompileInput) =>
 			executeImpl(driver, declarations.tables, statement)) as Db["execute"],
 		transaction: createTransactionApi(driver, declarations.tables),
+		as: createAsApi(driver, declarations.tables, declarations.roles),
 	};
 };

@@ -23,9 +23,13 @@ function throwQueryExecutionFailed(
  * *conversion* failure (task 4.4/4.4-wiring's `result-conversion-failed`,
  * thrown after this returns) is never caught here and misreported as an
  * execution failure; this `try`/`catch` only ever sees the driver's own
- * rejection.
+ * rejection. Exported for `context.ts`'s `db.as` (task 4.7): applying a
+ * context's role/settings is raw SQL this package builds itself, never
+ * routed through `compile()` (there is no builder-stage statement behind
+ * `set local role …`/`select set_config(...)`), but it still deserves
+ * the exact same query-execution-failed contract as everything else.
  */
-const sendCompiled = async (
+export const sendCompiled = async (
 	session: DriverSession,
 	compiled: CompileResult,
 ): Promise<ReadonlyArray<DriverRow>> => {
