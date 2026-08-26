@@ -1,4 +1,11 @@
-import type { IntervalValue, QueryNode, SelectLimited } from "@hejbro/core";
+import type {
+	DeleteFinal,
+	InsertFinal,
+	IntervalValue,
+	QueryNode,
+	SelectLimited,
+	UpdateFinal,
+} from "@hejbro/core";
 import { bigint, interval, schema, table, text, uuid } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { CompileInput } from "../../src/compile/compile";
@@ -66,5 +73,43 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 		expectTypeOf<ExecuteRows<QueryNode>>().toEqualTypeOf<
 			ReadonlyArray<Readonly<Record<string, unknown>>>
 		>();
+	});
+});
+
+describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", () => {
+	it("insert().returning() (no projection) resolves the whole declared table's shape", () => {
+		type Stage = InsertFinal<Posts>;
+
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("insert().returning({...}) (object projection) resolves exactly those keys -- a different instantiation from the whole-table case, not the same erased shape", () => {
+		type Stage = InsertFinal<Posts, { readonly total: Posts["amount"] }>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<Row>().toEqualTypeOf<{
+			readonly total: bigint | number | string | null;
+		}>();
+		// @ts-expect-error "status" was never projected -- not a key of Row.
+		type _Rejected = Row["status"];
+	});
+
+	it("update()/deleteFrom() resolve through the exact same ReturningRow mechanism -- one shared path, not three independently-typed copies", () => {
+		type UpdateStage = UpdateFinal<Posts>;
+		type DeleteStage = DeleteFinal<Posts, { readonly id: Posts["id"] }>;
+
+		expectTypeOf<ExecuteRows<UpdateStage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+		// object-projection widening (select-result.ts's own FamilyReadType
+		// branch, #311): a projected ColumnRef alone carries no notNull
+		// information, so even posts.id (declared primaryKey/notNull)
+		// widens to `| null` here -- the same honest widening the select-
+		// side object-projection test above already covers.
+		expectTypeOf<ExecuteRows<DeleteStage>[number]>().toEqualTypeOf<{
+			readonly id: string | null;
+		}>();
 	});
 });

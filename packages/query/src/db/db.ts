@@ -1,13 +1,17 @@
 import type {
+	DeleteFinal,
 	FunctionDeclaration,
+	InsertFinal,
 	Role,
 	SelectLimited,
 	SelectProjection,
 	Table,
+	UpdateFinal,
 } from "@hejbro/core";
 import { getTableMeta, isTable } from "@hejbro/core";
 import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
+import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
 import type { DbContext, ScopedDb } from "./context";
 import { createAsApi } from "./context";
@@ -139,27 +143,57 @@ const rolesOf = (
 	]);
 
 /**
- * The row type `execute(statement)` resolves to (task 4.11) — dispatches
- * on `statement`'s own **structural** shape, not a name check: any
- * `select()` builder stage (`select(table)`/`.where()`/`.orderBy()`/
- * `.limit()`/a join all structurally extend `SelectLimited`, core's
- * `query/select.ts`) carries `projectionInput`, so
- * {@link SelectResult}<TProjection> (task 3.10) resolves the declared row
- * shape — whole-table richness (numeric mode, `IntervalValue`, `notNull`)
- * included, object-projection's own narrower, honest widening included.
- * Everything else — a bare, already-unwrapped `QueryNode` (that
- * builder-stage richness is gone once unwrapped), an insert/update/delete
- * builder stage, or the `sql` escape hatch — resolves to the plain
- * {@link DriverRow} shape, exactly as it always has: mutation's
- * `InsertFinal`/`UpdateFinal`/`DeleteFinal` (core's `query/mutate.ts`) are
- * non-generic today (the same erasure task 4.10 hit on `defineFunction`),
- * so `returning()` typing is out of this task's scope pending an owner
- * decision, not silently guessed at here.
+ * The row type `execute(statement)` resolves to (tasks 4.11/4.11-mutation)
+ * — dispatches on `statement`'s own **structural** shape, not a name
+ * check:
+ *
+ * - Any `select()` builder stage (`select(table)`/`.where()`/
+ *   `.orderBy()`/`.limit()`/a join all structurally extend
+ *   `SelectLimited`, core's `query/select.ts`) carries `projectionInput`,
+ *   so {@link SelectResult}<TProjection> (task 3.10) resolves the
+ *   declared row shape — whole-table richness (numeric mode,
+ *   `IntervalValue`, `notNull`) included, object-projection's own
+ *   narrower, honest widening included.
+ * - An `insert()`/`update()`/`deleteFrom()` chain (any stage —
+ *   `InsertConflictable`/`InsertReturnable`/`InsertFinal` and their
+ *   update/delete equivalents all structurally carry `TTable`/
+ *   `TReturning` the same way, core's `query/mutate.ts`, task
+ *   4.11-mutation) resolves {@link ReturningRow}<TTable, TReturning> —
+ *   `TReturning` `undefined` (no `.returning()` call, or `.returning()`
+ *   with no projection) means the whole declared table's shape,
+ *   matching `ReturningRow`'s own default. **Known, documented
+ *   imprecision**: a chain that never called `.returning()` at all types
+ *   identically to one that called `.returning()` with no projection,
+ *   even though the former never issues a SQL `RETURNING` clause and
+ *   always resolves to an empty array at runtime — an empty array is a
+ *   structurally valid (if unhelpfully typed) instance of
+ *   `ReadonlyArray<ReturningRow<TTable, undefined>>`, so this is
+ *   imprecise typing, not an unsound one (no element could ever violate
+ *   the promised shape, because there are never any elements).
+ * - Everything else — a bare, already-unwrapped `QueryNode` (that
+ *   builder-stage richness is gone once unwrapped) or the `sql` escape
+ *   hatch — resolves to the plain {@link DriverRow} shape, exactly as it
+ *   always has.
  */
 export type ExecuteResult<TStatement> =
 	TStatement extends SelectLimited<infer TProjection extends SelectProjection>
 		? ReadonlyArray<SelectResult<TProjection>>
-		: ReadonlyArray<DriverRow>;
+		: TStatement extends InsertFinal<
+					infer TTable extends Table,
+					infer TReturning
+				>
+			? ReadonlyArray<ReturningRow<TTable, TReturning>>
+			: TStatement extends UpdateFinal<
+						infer TTable extends Table,
+						infer TReturning
+					>
+				? ReadonlyArray<ReturningRow<TTable, TReturning>>
+				: TStatement extends DeleteFinal<
+							infer TTable extends Table,
+							infer TReturning
+						>
+					? ReadonlyArray<ReturningRow<TTable, TReturning>>
+					: ReadonlyArray<DriverRow>;
 
 /**
  * A `db()` handle. `execute` is every other db operation's foundation —

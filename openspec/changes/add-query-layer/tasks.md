@@ -351,6 +351,18 @@ throwX(...)`; conversion functions and their per-column runtime meta
 paths (whole-table meta, projection ColumnRefs by name, db-held
 declarations for joined tables).
 
+Batch C owner decisions (relayed mid-group, recorded here rather than
+left implicit): `db()`'s argument shape settled as **(c′)** — a flat,
+heterogeneous schema-module record classified at runtime by
+`isTable()`/`declarationKind`, not the earlier `{tables, functions?}`
+shape (task 4.3-schema below). Task 4.10 (`db.fn.*` typing) settled as
+**(B)** — a core additive generic expansion of `FunctionDeclaration`
+itself, not the originally-scoped per-call `fn-types.ts` dispatch, and
+not parked. Mutation `.returning()` typing settled as **(a)** — the
+same additive-generic treatment applied to `InsertFinal`/`UpdateFinal`/
+`DeleteFinal` (task 4.11-mutation below), completing what 4.11 (select)
+had explicitly parked pending this decision.
+
 - [x] 4.0 Scout: wiring inventory — enumerate the three
   meta-access paths against the real g3 code, the compile-output →
   driver surface, and the `(): never` spots to avoid; deliverable = a
@@ -372,6 +384,15 @@ declarations for joined tables).
   (fake driver); red test `packages/query/test/db/execute.test.ts`
   "executed SQL equals previewed compile output"; files
   `src/db/db.ts`. ~10m
+- [x] 4.3-schema (follow-up, owner decision (c′)): `db()`'s argument
+  shape migrated from the originally-scoped `{tables, functions?}`
+  record to a flat, heterogeneous schema-module record (e.g.
+  `db(schema, driver, {roles?})`), classified once at call time via
+  `isTable()`/`declarationKind` rather than pre-sorted by the caller;
+  adds an opt-in `options.roles?: ReadonlyArray<Role>` consumed by
+  4.7's role whitelist (source ③ of 4). red test
+  `packages/query/test/db/db.test.ts` "db(schema, driver, options?) --
+  owner decision (c') auto-classification"; files `src/db/db.ts`. ~10m
 - [x] 4.4 Result conversion wiring: driver rows normalized per column
   meta (numeric mode, IntervalValue) via the three access paths;
   failure = `result-conversion-failed` `{ column }` + cause; red test
@@ -406,14 +427,18 @@ declarations for joined tables).
   `packages/query/test/db/transaction.test.ts` "rolls back and
   rethrows when the callback throws; nested call fails fast"; files
   `src/db/transaction.ts`. ~10m
-- [ ] 4.7 `db.as(context)` generic mechanism: role validated against
-  declared roles and quoted with core's identifier rule (`SET LOCAL
-  ROLE` takes no bind parameters), settings applied via the
-  parameterized `select set_config($1, $2, true)` form, all inside the
-  wrapping transaction; unscoped handle unaffected; red test
-  `packages/query/test/db/context.test.ts` "context applies quoted
-  role + parameterized set_config inside one transaction; adversarial
-  role/setting strings cannot reach SQL text"; files
+- [x] 4.7 `db.as(context)` generic mechanism: role validated against
+  the 4-source declared-role union (`GrantDeclaration.role`,
+  `PolicyDeclaration.roles` walked per table, `db()`'s opt-in
+  `options.roles`, `driver.contributedRoles`) and quoted with core's
+  identifier rule only (`SET LOCAL ROLE` takes no bind parameters, and
+  never special-cases bare `public` — that exception is a `GRANT`/
+  `REVOKE` keyword rule, not a `SET LOCAL ROLE` one), settings applied
+  via the parameterized `select set_config($1, $2, true)` form, all
+  inside the wrapping transaction; unscoped handle unaffected; red
+  test `packages/query/test/db/context.test.ts` "context applies
+  quoted role + parameterized set_config inside one transaction;
+  adversarial role/setting strings cannot reach SQL text"; files
   `src/db/context.ts`. ~10m
 - [ ] 4.8 Spec deltas for the settled contracts: driver-contract
   (exhaustive record + capability criteria + session IntervalStyle
@@ -423,25 +448,51 @@ declarations for joined tables).
   by `openspec validate --strict`; files
   `openspec/changes/add-query-layer/specs/{driver-contract,query-execution,rls-execution-context}/spec.md`.
   ~10m
-- [ ] 4.9 `db.fn.*` runtime: parameterized invocation, explicit column
+- [x] 4.9 `db.fn.*` runtime: parameterized invocation, explicit column
   list for returns-table, composes with `db.as`; red test
   `packages/query/test/db/fn.test.ts` "returns-table call renders
   explicit columns, never star"; files `src/db/fn.ts`. ~10m
-- [ ] 4.10 `db.fn.*` typing from the declarations record (export-name
-  keys; args + return shape; mismatches fail type-check with
-  @ts-expect-error probes); red test
-  `packages/query/test/db/fn-types.test.ts` "wrong argument type is
-  rejected statically"; files `src/db/fn-types.ts`. ~10m
+- [x] 4.10 (owner decision (B), redirected from the originally-scoped
+  per-call `fn-types.ts` dispatch) core generic type surface for
+  `defineFunction`: `FunctionDeclaration` gains a defaulted
+  `TArgs`/`TReturns` type parameter pair carrying the declared args
+  shape and return target, via a non-enumerable phantom anchor field
+  (mirrors `column-builder.ts`'s `columnMetaBrand`); additive only —
+  every existing non-generic consumer (`function-kind.ts`,
+  `define-trigger.ts`, `render-body.ts`) compiles unchanged; red test
+  `packages/core/test/define-function.test.ts`
+  "FunctionDeclaration<TArgs, TReturns> generics (task 4.10)"; files
+  `packages/core/src/dsl/define-function.ts`. ~10m
+- [x] 4.11-mutation (owner decision (a), completing what 4.11 below
+  parked) core generic type surface for the mutation builders:
+  `InsertFinal`/`UpdateFinal`/`DeleteFinal` (and their
+  `*Returnable`/`*Filterable` intermediates) gain defaulted
+  `TTable`/`TReturning` type parameters tracking the target table and
+  `.returning(...)` projection through the whole `insert`/`update`/
+  `deleteFrom` chain, via a shared non-enumerable phantom anchor; `Db`'s
+  `ExecuteResult` (task 4.11 below) gains the corresponding
+  `InsertFinal`/`UpdateFinal`/`DeleteFinal` conditional branches,
+  resolved through g3's existing `ReturningRow<TTable, TProjection>`
+  (reused, not recreated) — core stays free of `@hejbro/query`; red
+  tests `packages/core/test/query/mutate.test.ts`
+  "InsertFinal/UpdateFinal/DeleteFinal<TTable, TReturning> generics
+  (task 4.11-mutation)" and
+  `packages/query/test/db/execute-result-type.test.ts` "Db.execute's
+  resolved row type for mutations (task 4.11-mutation)"; files
+  `packages/core/src/query/mutate.ts`, `packages/query/src/db/db.ts`.
+  ~15m
 - [x] 4.11 (new, batch A review, #293 group 4) `execute()`'s resolved
   row type for `select()` (query-execution's ADDED requirement "rows
   typed by the statement's inferred result type" had no owning task —
   reviewer's requirement-reversal found the gap): `Db["execute"]`
   dispatches structurally on `SelectLimited<TProjection>` to
-  `SelectResult<TProjection>` (task 3.10), everything else (bare
-  `QueryNode`, mutation stages, `sql`) keeps the plain `DriverRow`
-  shape; mutation `returning()` typing stays out of scope pending the
-  owner's `InsertFinal`/`UpdateFinal`/`DeleteFinal` genericity decision
-  (same erasure class as 4.10). red test
+  `SelectResult<TProjection>` (task 3.10) at the time this task landed;
+  mutation `returning()` typing was out of scope pending the owner's
+  `InsertFinal`/`UpdateFinal`/`DeleteFinal` genericity decision (same
+  erasure class as 4.10) and has since been completed by
+  4.11-mutation above, which added the corresponding conditional
+  branches to this same `ExecuteResult` type; everything else (bare
+  `QueryNode`, `sql`) keeps the plain `DriverRow` shape. red test
   `packages/query/test/db/execute-result-type.test.ts` "a whole-table
   select resolves the declared column types exactly"; files
   `src/db/db.ts`. ~10m
