@@ -1,6 +1,7 @@
 import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
+import type { Declarations } from "./db";
 import { executeOn } from "./execute";
 
 /**
@@ -48,6 +49,7 @@ function throwNestedTransactionUnsupported(): never {
  */
 export const createTransactionApi = (
 	driver: Driver,
+	tables: Declarations["tables"],
 ): (<T>(callback: (tx: Tx) => Promise<T>) => Promise<T>) => {
 	const state = { active: false };
 	return async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
@@ -59,7 +61,7 @@ export const createTransactionApi = (
 		try {
 			return await driver.transaction(async (session: DriverSession) => {
 				const tx: Tx = {
-					execute: (statement) => executeOn(session, statement),
+					execute: (statement) => executeOn(session, statement, tables),
 				};
 				return callback(tx);
 			});

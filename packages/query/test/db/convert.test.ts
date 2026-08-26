@@ -13,6 +13,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
 	columnPlanForResult,
+	columnPlanForStatement,
 	convertRow,
 	resolveColumnState,
 } from "../../src/db/convert";
@@ -123,6 +124,15 @@ describe("columnPlanForResult + convertRow (task 4.4)", () => {
 		expect(converted.duration).toBeNull();
 	});
 
+	it("an empty plan passes the row through completely unchanged (task 4.4-wiring: the sql escape hatch's own case)", () => {
+		const row = { one: 1, two: "text", three: null };
+
+		const converted = convertRow(row, []);
+
+		expect(converted).toBe(row);
+		expect(converted).toEqual({ one: 1, two: "text", three: null });
+	});
+
 	it("a joined table's column resolves through the declarations record, not just the FROM table (path (c))", () => {
 		const node = select(
 			{ amount: posts.amount, postedAt: comments.postedAt },
@@ -174,5 +184,33 @@ describe("columnPlanForResult + convertRow (task 4.4)", () => {
 		);
 
 		expect(converted.amount).toBe(42n);
+	});
+});
+
+describe("columnPlanForStatement (task 4.4-wiring: the same resolver, from the CompileInput execute() actually receives)", () => {
+	it("resolves a select builder-stage statement exactly like columnPlanForResult would from its unwrapped node", () => {
+		const statement = select(posts);
+
+		expect(columnPlanForStatement(statement, tables)).toEqual(
+			columnPlanForResult(statement.selectQuery, tables),
+		);
+	});
+
+	it("resolves a bare (already-unwrapped) QueryNode the same way", () => {
+		const bareNode = select(posts).selectQuery;
+
+		expect(columnPlanForStatement(bareNode, tables)).toEqual(
+			columnPlanForResult(bareNode, tables),
+		);
+	});
+
+	it("the sql escape hatch resolves to an empty plan -- no declared column to resolve against at all", () => {
+		expect(columnPlanForStatement(sql`select 1`, tables)).toEqual([]);
+	});
+
+	it("a returning-less mutation resolves to an empty plan (InsertNode.returning === null)", () => {
+		const statement = insert(posts).values({ status: "draft" });
+
+		expect(columnPlanForStatement(statement, tables)).toEqual([]);
 	});
 });

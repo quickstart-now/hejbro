@@ -106,24 +106,26 @@ export type Db = {
  * `./transaction.ts`'s own factory (task 4.6) so a statement run inside
  * it shares that exact same `executeOn` pipeline.
  *
- * `execute`'s own runtime body only ever produces the plain
- * {@link DriverRow} shape (`executeOn` never inspects `statement` beyond
- * what `compile()` reads) — the cast to `Db["execute"]` below is
- * {@link ExecuteResult}'s compile-time-only narrowing of that exact same
- * value, never a runtime reshape (numeric-mode/interval conversion is
- * task 4.4's `db/convert.ts`, not yet wired into this pipeline — an open
- * gap, not something this cast papers over silently). Same reasoning as
+ * `execute`'s own runtime body always produces the plain
+ * {@link DriverRow} shape structurally (a plain object keyed by column
+ * alias) — the cast to `Db["execute"]` below is {@link ExecuteResult}'s
+ * compile-time-only narrowing of that same value, never a distinct
+ * runtime reshape: `executeOn` (task 4.4-wiring) already converts
+ * numeric-mode/`interval` cells per `declarations.tables` before this
+ * returns, so the cast's promise (`bigint`/`IntervalValue`, …) actually
+ * holds at runtime, not just at the type level. Same cast reasoning as
  * `compile.ts`'s own `handler` cast (g2).
  */
 const executeImpl = (
 	driver: Driver,
+	tables: Declarations["tables"],
 	statement: CompileInput,
-): Promise<ReadonlyArray<DriverRow>> => executeOn(driver, statement);
+): Promise<ReadonlyArray<DriverRow>> => executeOn(driver, statement, tables);
 
 export const db = (declarations: Declarations, driver: Driver): Db => ({
 	declarations,
 	driver,
 	execute: ((statement: CompileInput) =>
-		executeImpl(driver, statement)) as Db["execute"],
-	transaction: createTransactionApi(driver),
+		executeImpl(driver, declarations.tables, statement)) as Db["execute"],
+	transaction: createTransactionApi(driver, declarations.tables),
 });

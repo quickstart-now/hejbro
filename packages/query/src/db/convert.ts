@@ -8,6 +8,7 @@ import type {
 	TableRefNode,
 } from "@hejbro/core";
 import { getTableMeta } from "@hejbro/core";
+import type { CompileInput } from "../compile/compile";
 import type { DriverRow } from "../driver/contract";
 import { parseInterval } from "../types/interval";
 import { convertNumericText } from "../types/numeric-mode";
@@ -142,6 +143,55 @@ export const columnPlanForResult = (
 	return columnPlanFromReturning(node.returning, node.table, tables);
 };
 
+const compileInputWrapperKeys = [
+	"selectQuery",
+	"insertQuery",
+	"updateQuery",
+	"deleteQuery",
+] as const;
+
+type CompileInputWrapperKey = (typeof compileInputWrapperKeys)[number];
+
+/**
+ * Extracts the {@link QueryNode} a {@link CompileInput} carries, for
+ * column-plan resolution only — a minimal, single-purpose unwrap, never
+ * a copy of `compile.ts`'s own private `unwrapQueryNode` (out of this
+ * group's file scope, and a different job besides: that one feeds
+ * rendering, this one feeds declaration lookup — keeping one
+ * un-duplicated form here is what stops the two purposes from quietly
+ * drifting apart into two disagreeing unwraps). The `sql` escape hatch
+ * (`statementExpr`) has no declared column behind it at all — `undefined`,
+ * not a node with zero columns.
+ */
+const queryNodeOf = (statement: CompileInput): QueryNode | undefined => {
+	if ("statementExpr" in statement) {
+		return undefined;
+	}
+	const wrapperKey = compileInputWrapperKeys.find((key) => key in statement);
+	if (wrapperKey === undefined) {
+		return statement as QueryNode;
+	}
+	return (statement as Record<CompileInputWrapperKey, QueryNode>)[wrapperKey];
+};
+
+/**
+ * The per-result-column plan for `statement` exactly as `execute()`
+ * received it (task 4.4-wiring) — resolves {@link queryNodeOf}`(statement)`
+ * through {@link columnPlanForResult}, or an empty plan for the `sql`
+ * escape hatch. An empty plan means "pass every row through unchanged"
+ * ({@link convertRow}'s own contract), never "this row has zero columns".
+ */
+export const columnPlanForStatement = (
+	statement: CompileInput,
+	tables: Declarations["tables"],
+): ReadonlyArray<ColumnPlanEntry> => {
+	const node = queryNodeOf(statement);
+	if (node === undefined) {
+		return [];
+	}
+	return columnPlanForResult(node, tables);
+};
+
 /** Builds and throws the `result-conversion-failed`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). */
 function throwResultConversionFailed(column: string, cause: unknown): never {
 	throw Object.assign(
@@ -197,17 +247,28 @@ const convertCell = (
 	}
 };
 
-/** Converts every cell of one driver row per `plan` — the row-level entry point {@link convertRows} maps over. */
+/**
+ * Converts every cell of one driver row per `plan` — the row-level entry
+ * point {@link convertRows} maps over. An **empty** `plan` passes `row`
+ * through completely unchanged (task 4.4-wiring: the `sql` escape hatch
+ * has no declared columns to resolve a plan against at all — an empty
+ * plan means "nothing to convert", never "rebuild this row with zero
+ * keys").
+ */
 export const convertRow = (
 	row: DriverRow,
 	plan: ReadonlyArray<ColumnPlanEntry>,
-): DriverRow =>
-	Object.fromEntries(
+): DriverRow => {
+	if (plan.length === 0) {
+		return row;
+	}
+	return Object.fromEntries(
 		plan.map(({ alias, columnState }) => [
 			alias,
 			convertCell(row[alias], columnState, alias),
 		]),
 	);
+};
 
 /** Converts every row a driver returned, per the same `plan` (task 4.4). */
 export const convertRows = (

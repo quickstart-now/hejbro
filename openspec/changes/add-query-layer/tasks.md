@@ -378,6 +378,22 @@ declarations for joined tables).
   `packages/query/test/db/convert.test.ts` "bigint text arrives as the
   declared mode's type; a poisoned cell names its column"; files
   `src/db/convert.ts`. ~10m
+- [x] 4.4-wiring (follow-up, self-discovered while reviewing 4.11):
+  `convert.ts` was self-contained but never called from the actual
+  execute pipeline -- `execute()`'s runtime rows stayed raw driver
+  text even though 4.11's types promised `bigint`/`IntervalValue`
+  ("narrows only, never lies" violation). `execute.ts`'s `executeOn`
+  now builds a column plan from the original `CompileInput` (a new
+  minimal `queryNodeOf`/`columnPlanForStatement` in `convert.ts`, not
+  a copy of `compile.ts`'s private unwrap) and converts rows before
+  returning, for both `db().execute` and `tx.execute` (same shared
+  pipeline, task 4.5/4.6); an empty plan (the `sql` escape hatch) now
+  means "pass the row through unchanged" (`convertRow`'s own
+  contract), not "rebuild with zero keys". red test
+  `packages/query/test/db/execute-conversion.test.ts` "bigint text and
+  interval text arrive converted -- not the driver's raw text"; files
+  `src/db/convert.ts`, `src/db/execute.ts`, `src/db/transaction.ts`,
+  `src/db/db.ts`. ~15m
 - [x] 4.5 Execution error wrapper: `query-execution-failed`,
   `{ kind }`, parameterized SQL text in the message, params never,
   driver error as cause, no retry; red test
