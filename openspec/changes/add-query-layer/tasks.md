@@ -201,7 +201,7 @@ on top of it. Settled decisions:
   test `packages/query/test/types/interval.test.ts` "an unparsable
   interval is rejected, never half-parsed"; files
   `packages/query/src/types/interval.ts`. ~10m
-- [ ] 3.9 Pure numeric-mode conversions (int8/numeric text → `bigint`/
+- [x] 3.9 Pure numeric-mode conversions (int8/numeric text → `bigint`/
   `number`/`string`), where `'number'` mode throws a kebab-code enriched
   `Error` beyond `Number.MAX_SAFE_INTEGER` instead of losing precision;
   red test `packages/query/test/types/numeric-mode.test.ts` "number mode
