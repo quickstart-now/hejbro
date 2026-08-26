@@ -153,15 +153,34 @@ function throwResultConversionFailed(column: string, cause: unknown): never {
 }
 
 /**
+ * The actual conversion for a cell whose declared column is already known
+ * (`convertCell` has excluded `null`/no-`columnState` before this ever
+ * runs) — only numeric mode and `interval` have a declared conversion at
+ * this contract level (owner decision, task 4.4); every other declared
+ * type is already the shape the driver hands back. Split out from
+ * {@link convertCell} so each function's own branch count stays low
+ * (CRAP ≤ 5).
+ */
+const convertDeclaredValue = (
+	raw: unknown,
+	columnState: ColumnState,
+): unknown => {
+	if (columnState.mode !== null) {
+		return convertNumericText(String(raw), columnState.mode);
+	}
+	if (columnState.typeNode.typeName === "interval") {
+		return parseInterval(String(raw));
+	}
+	return raw;
+};
+
+/**
  * Converts one raw driver cell per its resolved `columnState` — `null`
  * always passes through unconverted (a SQL `NULL` is never "the wrong
  * shape" to convert), and a column with no resolved state (a computed
  * expression, or a table `columnPlanForResult` couldn't resolve) passes
  * its raw value through unchanged, matching `SelectResult`'s own honest
- * widening (`select-result.ts`, #311) rather than guessing. Only numeric
- * mode and `interval` have a declared conversion at this contract level
- * (owner decision, task 4.4) — every other declared type is already the
- * shape the driver hands back.
+ * widening (`select-result.ts`, #311) rather than guessing.
  */
 const convertCell = (
 	raw: unknown,
@@ -172,13 +191,7 @@ const convertCell = (
 		return raw;
 	}
 	try {
-		if (columnState.mode !== null) {
-			return convertNumericText(String(raw), columnState.mode);
-		}
-		if (columnState.typeNode.typeName === "interval") {
-			return parseInterval(String(raw));
-		}
-		return raw;
+		return convertDeclaredValue(raw, columnState);
 	} catch (cause) {
 		return throwResultConversionFailed(column, cause);
 	}
