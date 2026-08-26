@@ -8,3 +8,22 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-26,add-query-layer,2.4,2,8,12,0,subsumed by 2.2; landed as regression lock (joins + identifier quoting via hand-built QueryNode)
 2026-08-26,add-query-layer,2.5,2,10,30,0,insert/update/delete lift; compileUnlifted removed; default-marker regression + injection tests
 2026-08-26,add-query-layer,2.6,2,10,75,0,sql tag delegates to core; statementExpr branch + kind="sql" wired after owner decision; crash-pitfall restructure (Exclude-based dispatch)
+2026-08-26,add-query-layer,3.0,3,,6,0,pre-implementation investigation; coord wait ~29m excluded
+2026-08-26,add-query-layer,3.1,3,10,16,0,TMeta type parameter; phantom-TMeta discovery + unique-symbol anchor
+2026-08-26,add-query-layer,3.2,3,8,11,0,notNull/hasDefault narrowing; includes the brand-symbol rationale doc
+2026-08-26,add-query-layer,3.3,3,10,1,0,regression pin only - no production change; upper bound - wait inseparable
+2026-08-26,add-query-layer,3.4,3,10,12,0,numeric width modes; includes half of the shared index-export commit
+2026-08-26,add-query-layer,3.5,3,10,5,0,$type identity method + harmlessness proof
+2026-08-26,add-query-layer,3.6,3,10,13,0,original mapping only; re-homed to core by 3.pivot
+2026-08-26,add-query-layer,3.7,3,8,7,0,IntervalValue field set + required-fields rework; type re-homed by 3.pivot
+2026-08-26,add-query-layer,3.8,3,10,6,0,pure interval parser; fail-fast on unparsable input
+2026-08-26,add-query-layer,3.9,3,10,9,0,numeric-mode conversions; not red-first - see 3.9-rework
+2026-08-26,add-query-layer,3.9-rework,3,,18,0,fail-fast scope gap found by requirements back-derivation; cost of the red-first omission
+2026-08-26,add-query-layer,3.pivot,3,,20,0,$type narrowing decision re-homed the base mapping to core; see 3.6/3.7
+2026-08-26,add-query-layer,3.10,3,10,11,0,select result inference; object projection narrowed - see #311; coord wait ~1m excluded (design confirmation)
+2026-08-26,add-query-layer,3.11,3,10,5,0,insert input inference; F7 settlement - serial primary key is optional
+2026-08-26,add-query-layer,3.12,3,10,4,0,update input inference; insert/update boundary contrast pair
+2026-08-26,add-query-layer,3.13,3,8,5,0,returning reuses select inference; proven by a co-failing mutation
+2026-08-26,add-query-layer,3.14,3,10,2,0,delta spec alignment + the group changeset
+2026-08-26,add-query-layer,3.15,3,10,7,0,chain methods preserve the accumulated meta
+2026-08-26,add-query-layer,3.16,3,10,10,0,type-level notNull mirrors materializeNotNull
