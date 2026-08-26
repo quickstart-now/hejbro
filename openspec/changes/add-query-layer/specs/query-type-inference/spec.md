@@ -64,15 +64,25 @@ mention explicitly.
 - **THEN** the result field's TypeScript type is a structured object, not
   `unknown`, and none of its fields is dropped or rounded away
 
-### Requirement: jsonb is unknown unless branded
-A `jsonb` column SHALL surface as `unknown` in query types unless the
-declaration opts in to a `$type` brand, in which case the branded
-TypeScript type SHALL flow through results and inputs unchanged.
+### Requirement: `$type` narrows the visible type; jsonb is unknown unless branded
+On any declared column, `.$type<T>()` SHALL only narrow the visible
+TypeScript type — `T` MUST be a subset of the column's own base
+TypeScript type, and a `T` that is not SHALL fail to type-check rather
+than silently taking effect. A `json`/`jsonb` column SHALL surface as
+`unknown` in query types unless the declaration opts in to a `$type`
+brand, in which case the branded TypeScript type SHALL flow through
+results and inputs unchanged.
 
 #### Scenario: Opt-in brand flows through
 - **WHEN** a `jsonb` column declares a `$type` brand and is projected
 - **THEN** the result field has the branded type, and an unbranded
   `jsonb` column projected alongside it has type `unknown`
+
+#### Scenario: A brand outside the column's base type is rejected
+- **WHEN** a declaration calls `.$type<T>()` with a `T` that is not a
+  subset of the column's own base TypeScript type (e.g. `integer()`,
+  whose base type is `number`, with `.$type<string>()`)
+- **THEN** the declaration fails to type-check
 
 ### Requirement: No generated type artifacts
 Query typing SHALL work purely at the TypeScript type level from the
