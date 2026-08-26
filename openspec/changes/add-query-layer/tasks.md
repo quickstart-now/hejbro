@@ -137,7 +137,7 @@ on top of it. Settled decisions:
   `packages/core/src/types/column-builder.ts`,
   `packages/core/src/types/column-builder-factories.ts`,
   `packages/core/src/dsl/pg-enum.ts`. ~10m
-- [ ] 3.2 core modifiers narrow the meta: `notNull()` and `default()`/
+- [x] 3.2 core modifiers narrow the meta: `notNull()` and `default()`/
   `defaultRandom()`/`defaultNow()` record themselves in `TMeta`, so the
   `text().notNull()` assertion 3.1 re-pinned now separates from plain
   `text()` — the line that used to pin them as *the same type* is the

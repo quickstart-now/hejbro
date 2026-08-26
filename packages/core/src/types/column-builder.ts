@@ -17,14 +17,21 @@ export type ColumnState = {
 
 /**
  * The type-level metadata a {@link ColumnBuilder} carries in its second type
- * parameter `TMeta` (D1) — starts with just the declared type name, which a
- * coarse {@link SqlTypeFamily} alone can't answer (`json` vs `jsonb`, R3;
- * `smallint` vs `bigint`). Later tasks (query-layer group 3: notNull/default
- * visibility, numeric width mode, jsonb `$type` brand) widen this same type,
+ * parameter `TMeta` (D1) — the declared type name, plus (from task 3.2)
+ * whether `.notNull()`/a default were chained. `notNull`/`hasDefault` are
+ * optional rather than required `boolean`s: the twenty-odd factories and
+ * direct-construction call sites (task 3.1) only ever mention `typeName` in
+ * their literal `TMeta` type argument, and an absent optional key reads the
+ * same as `false` everywhere this group inspects it (3.10/3.11) — making
+ * them required would force every one of those call sites to spell out
+ * `notNull: false, hasDefault: false` for no behavioral gain. Later tasks
+ * (numeric width mode, jsonb `$type` brand) widen this same type,
  * additively, in place.
  */
 export type ColumnMeta = {
 	readonly typeName: TypeNode["typeName"];
+	readonly notNull?: boolean;
+	readonly hasDefault?: boolean;
 };
 
 /**
@@ -67,18 +74,18 @@ export type ColumnBuilder<
 	readonly columnState: ColumnState;
 	/** type-only marker, never assigned — see {@link columnMetaBrand}. */
 	readonly [columnMetaBrand]?: TMeta;
-	notNull(): ColumnBuilder<TFamily, TMeta>;
+	notNull(): ColumnBuilder<TFamily, TMeta & { notNull: true }>;
 	/** implies `notNull` when the column is materialized at serialization (Task 10), not here */
 	primaryKey(): ColumnBuilder<TFamily, TMeta>;
 	unique(): ColumnBuilder<TFamily, TMeta>;
 	/** a raw scalar (auto-lifted to a literal), or an expression built with operators/`sql` (D16) */
 	default(
 		value: LiftableFor<TFamily> | Expr<TFamily> | Expr<"unknown">,
-	): ColumnBuilder<TFamily, TMeta>;
+	): ColumnBuilder<TFamily, TMeta & { hasDefault: true }>;
 	/** uuid columns only — throws an actionable error otherwise */
-	defaultRandom(): ColumnBuilder<TFamily, TMeta>;
+	defaultRandom(): ColumnBuilder<TFamily, TMeta & { hasDefault: true }>;
 	/** date/time-family columns only — throws an actionable error otherwise */
-	defaultNow(): ColumnBuilder<TFamily, TMeta>;
+	defaultNow(): ColumnBuilder<TFamily, TMeta & { hasDefault: true }>;
 	array(): ColumnBuilder<"array", { typeName: "array" }>;
 };
 
@@ -121,13 +128,16 @@ export const createColumnBuilder = <
 ): ColumnBuilder<TFamily, TMeta> => ({
 	columnState,
 	notNull: () =>
-		createColumnBuilder<TFamily, TMeta>({ ...columnState, notNull: true }),
+		createColumnBuilder<TFamily, TMeta & { notNull: true }>({
+			...columnState,
+			notNull: true,
+		}),
 	primaryKey: () =>
 		createColumnBuilder<TFamily, TMeta>({ ...columnState, primaryKey: true }),
 	unique: () =>
 		createColumnBuilder<TFamily, TMeta>({ ...columnState, unique: true }),
 	default: (value) =>
-		createColumnBuilder<TFamily, TMeta>({
+		createColumnBuilder<TFamily, TMeta & { hasDefault: true }>({
 			...columnState,
 			defaultValue: resolveDefaultExprNode(value, columnState.typeNode),
 		}),
@@ -138,7 +148,7 @@ export const createColumnBuilder = <
 				`defaultRandom() only applies to uuid columns, but this column is "${columnState.typeNode.typeName}". Next: use .default(...) or drop defaultRandom() here.`,
 			);
 		}
-		return createColumnBuilder<TFamily, TMeta>({
+		return createColumnBuilder<TFamily, TMeta & { hasDefault: true }>({
 			...columnState,
 			defaultValue: {
 				nodeKind: "functionCall",
@@ -155,7 +165,7 @@ export const createColumnBuilder = <
 				`defaultNow() only applies to date/time columns, but this column is "${columnState.typeNode.typeName}". Next: use .default(...) instead.`,
 			);
 		}
-		return createColumnBuilder<TFamily, TMeta>({
+		return createColumnBuilder<TFamily, TMeta & { hasDefault: true }>({
 			...columnState,
 			defaultValue: {
 				nodeKind: "functionCall",

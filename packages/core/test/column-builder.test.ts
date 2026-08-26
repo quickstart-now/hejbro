@@ -164,10 +164,10 @@ describe("column builder type families", () => {
 		expectTypeOf(uuid()).toEqualTypeOf<
 			ColumnBuilder<"uuid", { typeName: "uuid" }>
 		>();
-		// notNull isn't visible in `TMeta` yet (that's group 3's task 3.2) —
-		// this stays pinned to the un-narrowed declared type name until then.
+		// this used to pin `text().notNull()` as *the same type* as `text()`
+		// (the exact gap group 3 closes) — it now separates (task 3.2).
 		expectTypeOf(text().notNull()).toEqualTypeOf<
-			ColumnBuilder<"text", { typeName: "text" }>
+			ColumnBuilder<"text", { typeName: "text" } & { notNull: true }>
 		>();
 		expectTypeOf(timestamptz()).toEqualTypeOf<
 			ColumnBuilder<"datetime", { typeName: "timestamptz" }>
@@ -212,6 +212,46 @@ describe("column builder declared type name (D1, R3)", () => {
 		>();
 		expectTypeOf(appEnum.column()).toEqualTypeOf<
 			ColumnBuilder<"text", { typeName: "enum" }>
+		>();
+	});
+});
+
+describe("notNull and default are visible in the builder type (D1, task 3.2)", () => {
+	it("notNull and default are visible in the builder type", () => {
+		// unmodified: neither key present in TMeta.
+		expectTypeOf(uuid()).toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" }>
+		>();
+		expectTypeOf(uuid().notNull()).toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" } & { notNull: true }>
+		>();
+		expectTypeOf(integer().default(1)).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "integer" } & { hasDefault: true }>
+		>();
+		expectTypeOf(uuid().defaultRandom()).toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" } & { hasDefault: true }>
+		>();
+		expectTypeOf(timestamptz().defaultNow()).toEqualTypeOf<
+			ColumnBuilder<
+				"datetime",
+				{ typeName: "timestamptz" } & { hasDefault: true }
+			>
+		>();
+		// chains: both keys accumulate, in either order.
+		expectTypeOf(uuid().notNull().defaultRandom()).toEqualTypeOf<
+			ColumnBuilder<
+				"uuid",
+				{ typeName: "uuid" } & { notNull: true } & { hasDefault: true }
+			>
+		>();
+		// primaryKey/unique don't touch TMeta — they stay runtime-only
+		// (primaryKey doesn't imply notNull at this layer, see its own
+		// tsdoc: "materialized later at serialization").
+		expectTypeOf(uuid().primaryKey()).toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" }>
+		>();
+		expectTypeOf(text().unique()).toEqualTypeOf<
+			ColumnBuilder<"text", { typeName: "text" }>
 		>();
 	});
 });
