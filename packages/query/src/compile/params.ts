@@ -105,8 +105,8 @@ const liftComparisonNode = (
 	};
 };
 
-/** Lifts an ordered list of expressions, threading `$n` numbering left to right. */
-const liftExprSequence = (
+/** Lifts an ordered list of expressions, threading `$n` numbering left to right. Exported for `mutation.ts`'s row/set-entry walkers. */
+export const liftExprSequence = (
 	nodes: ReadonlyArray<ExprNode>,
 	startIndex: number,
 ): Lifted<ReadonlyArray<ExprNode>> =>

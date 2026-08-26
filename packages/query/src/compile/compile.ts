@@ -5,7 +5,7 @@ import type {
 	SelectNode,
 	UpdateNode,
 } from "@hejbro/core";
-import { renderQuery } from "@hejbro/core";
+import { compileDelete, compileInsert, compileUpdate } from "./mutation";
 import { compileSelect } from "./select";
 
 /**
@@ -64,12 +64,6 @@ const unwrapQueryNode = (statement: CompileInput): QueryNode => {
 
 type RenderedQuery = Pick<CompileResult, "sql" | "params">;
 
-/** `insert`/`update`/`delete` render unlifted until task 2.5 gives them their own literal-lifting path in `mutation.ts`. */
-const compileUnlifted = (node: QueryNode): RenderedQuery => ({
-	sql: renderQuery(node),
-	params: [],
-});
-
 /**
  * One handler per {@link QueryNode} `queryKind` — a mapped type over the
  * full union, same technique as core's `renderQueryHandlers`, so every
@@ -81,9 +75,9 @@ const compileHandlers: {
 	) => RenderedQuery;
 } = {
 	select: compileSelect,
-	insert: compileUnlifted,
-	update: compileUnlifted,
-	delete: compileUnlifted,
+	insert: compileInsert,
+	update: compileUpdate,
+	delete: compileDelete,
 };
 
 /**
