@@ -1,4 +1,5 @@
 import {
+	coalesce,
 	eq,
 	schema,
 	select,
@@ -53,5 +54,35 @@ describe("compile: select with where", () => {
 			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = $1',
 		);
 		expect(result.params).toEqual(["$1"]);
+	});
+
+	it("order and limit render after where", () => {
+		const statement = select(posts)
+			.where(eq(posts.status, "published"))
+			.orderBy({ by: posts.publishedAt, direction: "desc" })
+			.limit(10);
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = $1 order by "app"."posts"."published_at" desc limit 10',
+		);
+		// limit is D3①'s explicit inline exception — it never becomes a
+		// bind parameter, so only where's one value is in params.
+		expect(result.params).toEqual(["published"]);
+	});
+
+	it("an orderBy literal receives the next parameter after where's", () => {
+		const statement = select(posts)
+			.where(eq(posts.status, "published"))
+			.orderBy({
+				by: coalesce(posts.publishedAt, new Date("2020-01-01T00:00:00.000Z")),
+				direction: "desc",
+			});
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = $1 order by coalesce("app"."posts"."published_at", $2::timestamptz) desc',
+		);
+		expect(result.params).toEqual(["published", "2020-01-01T00:00:00.000Z"]);
 	});
 });
