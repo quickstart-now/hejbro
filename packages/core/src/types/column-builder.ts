@@ -116,8 +116,8 @@ export type ColumnBuilder<
 	/** type-only marker, never assigned — see {@link columnMetaBrand}. */
 	readonly [columnMetaBrand]?: TMeta;
 	notNull(): ColumnBuilder<TFamily, TMeta & { notNull: true }>;
-	/** implies `notNull` when the column is materialized at serialization (Task 10), not here */
-	primaryKey(): ColumnBuilder<TFamily, TMeta>;
+	/** implied `notNull` now mirrors `materializeNotNull` (`kinds/table-kind.ts`, task 3.16) at the *type* level — `columnState.notNull` itself is untouched here, so the runtime materialization this comment used to point to still does the real work at serialization time. */
+	primaryKey(): ColumnBuilder<TFamily, TMeta & { notNull: true }>;
 	unique(): ColumnBuilder<TFamily, TMeta>;
 	/** a raw scalar (auto-lifted to a literal), or an expression built with operators/`sql` (D16) */
 	default(
@@ -178,7 +178,10 @@ export const createColumnBuilder = <
 			notNull: true,
 		}),
 	primaryKey: () =>
-		createColumnBuilder<TFamily, TMeta>({ ...columnState, primaryKey: true }),
+		createColumnBuilder<TFamily, TMeta & { notNull: true }>({
+			...columnState,
+			primaryKey: true,
+		}),
 	unique: () =>
 		createColumnBuilder<TFamily, TMeta>({ ...columnState, unique: true }),
 	default: (value) =>

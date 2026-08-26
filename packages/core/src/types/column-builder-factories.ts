@@ -104,19 +104,51 @@ export const cidr = (): ColumnBuilder<"net", { typeName: "cidr" }> =>
 /** `macaddr` column. */
 export const macaddr = (): ColumnBuilder<"net", { typeName: "macaddr" }> =>
 	initialColumnBuilder("macaddr");
-/** `serial` column. */
-export const serial = (): ColumnBuilder<"numeric", { typeName: "serial" }> =>
-	initialColumnBuilder("serial");
-/** `smallserial` column. */
+/**
+ * Builds the initial `ColumnBuilder` for a `serial`-family factory (task
+ * 3.16): typed `notNull` and `hasDefault` from the start, mirroring
+ * `materializeNotNull` (`kinds/table-kind.ts:97-105`) — a `serial` column is
+ * always `NOT NULL` in the generated SQL, and its `nextval(...)` default
+ * lives on the synthesized sequence declaration, never on
+ * `columnState.defaultValue`. The two have to move together: typing
+ * `notNull` without `hasDefault` would make a bare `serial().primaryKey()`
+ * a *required* insert field (3.11's rule is "notNull without a default").
+ * `columnState` itself stays exactly what `initialColumnBuilder` would
+ * produce — only the type-level claim changes, so the generated SQL and
+ * snapshot are unaffected.
+ */
+const initialSerialColumnBuilder = <TName extends SimpleTypeName>(
+	typeName: TName,
+): ColumnBuilder<
+	FamilyOfTypeNode<{ typeName: TName }>,
+	{ typeName: TName } & { notNull: true } & { hasDefault: true }
+> =>
+	createColumnBuilder<
+		FamilyOfTypeNode<{ typeName: TName }>,
+		{ typeName: TName } & { notNull: true } & { hasDefault: true }
+	>({
+		typeNode: { typeName },
+		notNull: false,
+		primaryKey: false,
+		unique: false,
+		defaultValue: null,
+	});
+
+/** `serial` column — implicitly `NOT NULL` with a sequence-backed default (D66); see {@link initialSerialColumnBuilder}. */
+export const serial = (): ColumnBuilder<
+	"numeric",
+	{ typeName: "serial" } & { notNull: true } & { hasDefault: true }
+> => initialSerialColumnBuilder("serial");
+/** `smallserial` column — see {@link serial}. */
 export const smallserial = (): ColumnBuilder<
 	"numeric",
-	{ typeName: "smallserial" }
-> => initialColumnBuilder("smallserial");
-/** `bigserial` column. */
+	{ typeName: "smallserial" } & { notNull: true } & { hasDefault: true }
+> => initialSerialColumnBuilder("smallserial");
+/** `bigserial` column — see {@link serial}. */
 export const bigserial = (): ColumnBuilder<
 	"numeric",
-	{ typeName: "bigserial" }
-> => initialColumnBuilder("bigserial");
+	{ typeName: "bigserial" } & { notNull: true } & { hasDefault: true }
+> => initialSerialColumnBuilder("bigserial");
 
 /** Config accepted by {@link varchar}. */
 export type VarcharConfig = { readonly length?: number };

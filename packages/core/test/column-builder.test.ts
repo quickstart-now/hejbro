@@ -245,11 +245,12 @@ describe("notNull and default are visible in the builder type (D1, task 3.2)", (
 				{ typeName: "uuid" } & { notNull: true } & { hasDefault: true }
 			>
 		>();
-		// primaryKey/unique don't touch TMeta — they stay runtime-only
-		// (primaryKey doesn't imply notNull at this layer, see its own
+		// unique() doesn't touch TMeta. primaryKey() implies notNull at the
+		// type level (task 3.16, mirrors materializeNotNull) even though
+		// columnState.notNull itself stays untouched here (see its own
 		// tsdoc: "materialized later at serialization").
 		expectTypeOf(uuid().primaryKey()).toEqualTypeOf<
-			ColumnBuilder<"uuid", { typeName: "uuid" }>
+			ColumnBuilder<"uuid", { typeName: "uuid" } & { notNull: true }>
 		>();
 		expectTypeOf(text().unique()).toEqualTypeOf<
 			ColumnBuilder<"text", { typeName: "text" }>
@@ -319,5 +320,69 @@ describe("serial family symmetry", () => {
 			typeName: "smallserial",
 		});
 		expect(bigserial().columnState.typeNode).toEqual({ typeName: "bigserial" });
+	});
+});
+
+describe("primary key and serial carry their implied not-null (D1, task 3.16)", () => {
+	it("primary key and serial carry their implied not-null", () => {
+		// primaryKey() implies notNull at the type level (mirrors
+		// materializeNotNull), but columnState.notNull itself is untouched --
+		// the runtime side effect stays false unless .notNull() is also
+		// called (positive/negative contrast, C12).
+		const pk = uuid().primaryKey();
+		expectTypeOf(pk).toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" } & { notNull: true }>
+		>();
+		expect(pk.columnState.notNull).toBe(false);
+
+		// serial/smallserial/bigserial imply both notNull and hasDefault --
+		// the two rules move together (a serial's nextval() default lives on
+		// the synthesized sequence, never on columnState.defaultValue), so
+		// dropping hasDefault would wrongly make serial().primaryKey() an
+		// insert-required field (3.11).
+		expectTypeOf(serial()).toEqualTypeOf<
+			ColumnBuilder<
+				"numeric",
+				{ typeName: "serial" } & { notNull: true } & { hasDefault: true }
+			>
+		>();
+		expectTypeOf(smallserial()).toEqualTypeOf<
+			ColumnBuilder<
+				"numeric",
+				{ typeName: "smallserial" } & { notNull: true } & { hasDefault: true }
+			>
+		>();
+		expectTypeOf(bigserial()).toEqualTypeOf<
+			ColumnBuilder<
+				"numeric",
+				{ typeName: "bigserial" } & { notNull: true } & { hasDefault: true }
+			>
+		>();
+		// columnState itself is untouched by the type-level claim -- same
+		// runtime shape a plain (non-implied) column would have.
+		expect(serial().columnState).toEqual({
+			typeNode: { typeName: "serial" },
+			notNull: false,
+			primaryKey: false,
+			unique: false,
+			defaultValue: null,
+		});
+
+		// serial().primaryKey() combines both sources of implied notNull --
+		// still notNull, still hasDefault, never a contradiction.
+		expectTypeOf(serial().primaryKey()).toEqualTypeOf<
+			ColumnBuilder<
+				"numeric",
+				{ typeName: "serial" } & { notNull: true } & { hasDefault: true } & {
+					notNull: true;
+				}
+			>
+		>();
+
+		// a plain (non-serial, non-primary-key) column carries neither flag
+		// -- the positive/negative contrast this whole task turns on.
+		expectTypeOf(integer()).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "integer" }>
+		>();
 	});
 });

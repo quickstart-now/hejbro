@@ -265,8 +265,9 @@ describe("table() columns carry their declared meta (D1, task 3.3)", () => {
 			title: text().notNull(),
 		});
 		type PostsColumns = ColumnBuildersOf<typeof posts>;
+		// task 3.16: primaryKey() implies notNull at the type level.
 		expectTypeOf<PostsColumns["id"]>().toEqualTypeOf<
-			ColumnBuilder<"uuid", { typeName: "uuid" }>
+			ColumnBuilder<"uuid", { typeName: "uuid" } & { notNull: true }>
 		>();
 		expectTypeOf<PostsColumns["title"]>().toEqualTypeOf<
 			ColumnBuilder<"text", { typeName: "text" } & { notNull: true }>

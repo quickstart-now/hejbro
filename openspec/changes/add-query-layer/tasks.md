@@ -231,7 +231,7 @@ on top of it. Settled decisions:
   `packages/core/test/column-builder.test.ts` "every chain method keeps
   the meta it was chained onto"; files
   `packages/core/src/types/column-builder.ts`. ~10m
-- [ ] 3.16 core type-level `notNull` mirrors `materializeNotNull`
+- [x] 3.16 core type-level `notNull` mirrors `materializeNotNull`
   (`kinds/table-kind.ts:97-105`): `primaryKey()` implies `notNull`, and
   the `serial` family implies both `notNull` and `hasDefault` — its
   `nextval(...)` lives on the synthesized sequence, never on
