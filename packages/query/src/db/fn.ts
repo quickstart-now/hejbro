@@ -5,7 +5,12 @@ import type {
 	Table,
 	TypeNode,
 } from "@hejbro/core";
-import { getTableMeta, qualifyName, quoteIdentifier } from "@hejbro/core";
+import {
+	getTableMeta,
+	qualifyName,
+	quoteIdentifier,
+	toSnakeCase,
+} from "@hejbro/core";
 import type { CompileResult } from "../compile/compile";
 import type { DriverRow, DriverSession } from "../driver/contract";
 import type { ColumnPlanEntry } from "./convert";
@@ -139,18 +144,49 @@ const scalarCall = (
 	};
 };
 
-/** Guards the one precondition every call shares: the caller passed exactly as many arguments as `declaration` declares. Split out from {@link buildCall} so each function's own branch count stays low (CRAP ≤ 5). */
+/** Guards the one precondition every call shares: the caller's named-argument object carries exactly as many keys as `declaration` declares. Split out from {@link buildCall} so each function's own branch count stays low (CRAP ≤ 5). A mismatched *name* (typo, wrong key) is TypeScript's job to reject before this ever runs (task 4.10's own `@ts-expect-error` probes); this is only the runtime's last-resort count sanity check, matching the spec's "no runtime coercion" (there is no attempt here to guess which name a caller meant). */
 const assertArgCount = (
 	declaration: FunctionDeclaration,
-	args: ReadonlyArray<unknown>,
+	namedArgs: Readonly<Record<string, unknown>>,
 ): void => {
-	if (args.length !== declaration.args.length) {
+	const actual = Object.keys(namedArgs).length;
+	if (actual !== declaration.args.length) {
 		throwArgumentCountMismatch(
 			declaration.functionName,
 			declaration.args.length,
-			args.length,
+			actual,
 		);
 	}
+};
+
+/**
+ * Maps a call's own named-argument object to the positional array
+ * `declaration.args`'s own declared order expects — matched by *name*
+ * (each declared argument's own `toSnakeCase`-transformed counterpart in
+ * the caller's object), **never by the caller's own key insertion order**
+ * (`Object.values(namedArgs)` would silently swap two arguments if a
+ * caller writes them in a different order than they were declared —
+ * JS object key order is call-site-dependent, not declaration-order,
+ * owner's own explicit warning for this task). A declared argument the
+ * caller's object doesn't (yet, past `assertArgCount`'s count check)
+ * carry resolves to `undefined` positionally, exactly like any other
+ * missing value this package already passes through to `liftOperand`
+ * elsewhere.
+ */
+const resolvePositionalArgs = (
+	declaration: FunctionDeclaration,
+	namedArgs: Readonly<Record<string, unknown>>,
+): ReadonlyArray<unknown> => {
+	const callerKeys = Object.keys(namedArgs);
+	return declaration.args.map((argDecl) => {
+		const matchingKey = callerKeys.find(
+			(key) => toSnakeCase(key) === argDecl.argName,
+		);
+		if (matchingKey === undefined) {
+			return undefined;
+		}
+		return namedArgs[matchingKey];
+	});
 };
 
 /** The two shapes a call can dispatch to — carried as a discriminated union (not two separate return types) so {@link callOne} can tell, after the fact, whether to extract one scalar value or convert a rows array; `callKind` is never surfaced past this file. */
@@ -200,16 +236,25 @@ const dispatchCall = (
 
 const buildCall = (
 	declaration: FunctionDeclaration,
-	args: ReadonlyArray<unknown>,
+	namedArgs: Readonly<Record<string, unknown>>,
 	tables: Declarations["tables"],
-): CallDispatch => {
-	assertArgCount(declaration, args);
-	const placeholders = paramPlaceholders(args.length);
-	return dispatchCall(declaration, placeholders, tables);
+): {
+	readonly dispatch: CallDispatch;
+	readonly positionalArgs: ReadonlyArray<unknown>;
+} => {
+	assertArgCount(declaration, namedArgs);
+	const positionalArgs = resolvePositionalArgs(declaration, namedArgs);
+	const placeholders = paramPlaceholders(positionalArgs.length);
+	return {
+		dispatch: dispatchCall(declaration, placeholders, tables),
+		positionalArgs,
+	};
 };
 
-/** One `db.fn.*` entry: takes the call's positional arguments (declared order), resolves to a scalar value or a rows array depending on the declaration's own return shape — loosely typed here on purpose (`unknown`, since which shape a given call resolves to varies per declaration); `fn-types.ts` (task 4.10) is what narrows this per function for the public `db.fn` surface, via the same cast-at-return-boundary pattern this whole group uses throughout. */
-export type FnCaller = (args: ReadonlyArray<unknown>) => Promise<unknown>;
+/** One `db.fn.*` entry: takes the call's own named-argument object (owner decision — a direct translation of `TArgs`'s own named shape, not a positional tuple), resolves to a scalar value or a rows array depending on the declaration's own return shape — loosely typed here on purpose (`Record<string, unknown>` in, `unknown` out, since both vary per declaration); `fn-types.ts` (task 4.10) is what narrows this per function for the public `db.fn` surface, via the same cast-at-return-boundary pattern this whole group uses throughout. The SQL itself still renders positional parameters, in declared order — {@link resolvePositionalArgs} is the one place that conversion happens. */
+export type FnCaller = (
+	args: Readonly<Record<string, unknown>>,
+) => Promise<unknown>;
 
 /** `db.fn`'s own shape: one {@link FnCaller} per declared function, keyed by the declarations record's own export name (owner decision ③) — the same keys {@link Declarations}`.functions` already carries. */
 export type FnApi = Readonly<Record<string, FnCaller>>;
@@ -258,14 +303,21 @@ const callOne = async (
 	) => Promise<ReadonlyArray<DriverRow>>,
 	declaration: FunctionDeclaration,
 	tables: Declarations["tables"],
-	args: ReadonlyArray<unknown>,
+	namedArgs: Readonly<Record<string, unknown>>,
 ): Promise<unknown> => {
 	// buildCall can throw synchronously (argument-count/return-kind guards)
 	// -- this function is itself `async` specifically so that throw becomes
 	// a rejected promise for every caller, never a synchronous exception a
 	// caller's own `await`/`.catch` wouldn't be positioned to catch.
-	const dispatch = buildCall(declaration, args, tables);
-	const withArgs: CompileResult = { ...dispatch.compiled, params: args };
+	const { dispatch, positionalArgs } = buildCall(
+		declaration,
+		namedArgs,
+		tables,
+	);
+	const withArgs: CompileResult = {
+		...dispatch.compiled,
+		params: positionalArgs,
+	};
 	const rows = await run((session) => sendCompiled(session, withArgs));
 	if (dispatch.callKind === "scalar") {
 		return extractScalarValue(
@@ -294,6 +346,7 @@ export const createFnApi = (
 	Object.fromEntries(
 		Object.entries(functions).map(([key, declaration]) => [
 			key,
-			(args: ReadonlyArray<unknown>) => callOne(run, declaration, tables, args),
+			(args: Readonly<Record<string, unknown>>) =>
+				callOne(run, declaration, tables, args),
 		]),
 	);

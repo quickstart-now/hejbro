@@ -3,6 +3,7 @@ import {
 	defineFunction,
 	defineTrigger,
 	eq,
+	integer,
 	roleName,
 	schema,
 	select,
@@ -55,6 +56,22 @@ const searchByStatus = defineFunction(
 );
 
 /**
+ * Two arguments of *different* families (`text`/`integer`) with
+ * distinguishable values, for the named-argument key-order test below --
+ * same-type arguments could silently swap without either the SQL or a
+ * `params` assertion noticing (batch A's own params-vacuity lesson,
+ * repeated here at the argument-mapping layer).
+ */
+const searchByStatusAndLimit = defineFunction(
+	app,
+	"search_by_status_and_max_rows",
+	{ args: { status: text(), maxRows: integer() }, returns: posts },
+	(ctx, args) => {
+		ctx.return(select(posts).where(eq(posts.status, args.status)));
+	},
+);
+
+/**
  * `defineTrigger`'s own function declaration (`returns.returnsKind ===
  * "trigger"`) is never meant to be called directly through SQL -- Postgres
  * only ever invokes it by attaching it to a table trigger. Exposed under a
@@ -94,6 +111,7 @@ const appSchema = {
 	posts,
 	listPublished,
 	searchByStatus,
+	searchByStatusAndLimit,
 	countPosts,
 	touchTriggerFn: touchTrigger.functionDeclaration,
 };
@@ -139,6 +157,7 @@ describe("db.fn.* (task 4.9)", () => {
 		expect(Object.keys(handle.fn)).toEqual([
 			"listPublished",
 			"searchByStatus",
+			"searchByStatusAndLimit",
 			"countPosts",
 			"touchTriggerFn",
 		]);
@@ -148,7 +167,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const { driver, sent } = recordingDriver([rawRow]);
 		const handle = db(appSchema, driver);
 
-		await requireFn(handle.fn, "listPublished")([]);
+		await requireFn(handle.fn, "listPublished")({});
 
 		expect(sent[0]?.sql).toBe(
 			'select "id", "status", "amount" from "app"."list_published"()',
@@ -162,13 +181,35 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver);
 		const marker = "published'; drop table posts --";
 
-		await requireFn(handle.fn, "searchByStatus")([marker]);
+		await requireFn(handle.fn, "searchByStatus")({ status: marker });
 
 		expect(sent[0]?.sql).toBe(
 			'select "id", "status", "amount" from "app"."search_by_status"($1)',
 		);
 		expect(sent[0]?.sql).not.toContain(marker);
 		expect(sent[0]?.params).toEqual([marker]);
+	});
+
+	it("named args resolve to positional SQL parameters in DECLARED order, regardless of call-site key order", async () => {
+		const { driver, sent } = recordingDriver([rawRow]);
+		const handle = db(appSchema, driver);
+
+		// declared order is (status, maxRows); called in the REVERSE order.
+		await requireFn(
+			handle.fn,
+			"searchByStatusAndLimit",
+		)({
+			maxRows: 10,
+			status: "published",
+		});
+
+		expect(sent[0]?.sql).toBe(
+			'select "id", "status", "amount" from "app"."search_by_status_and_max_rows"($1, $2)',
+		);
+		// the assertion that actually matters: params, not SQL text -- "$1,
+		// $2" renders identically whether or not the two got swapped
+		// (batch A's params-vacuity lesson, repeated at this layer).
+		expect(sent[0]?.params).toEqual(["published", 10]);
 	});
 
 	it("returns-table rows are converted per the target table's declared columns (numeric mode), same as a whole-table select", async () => {
@@ -184,7 +225,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const rows = (await requireFn(
 			handle.fn,
 			"listPublished",
-		)([])) as ReadonlyArray<DriverRow>;
+		)({})) as ReadonlyArray<DriverRow>;
 
 		expect(rows[0]?.amount).toBe(9007199254740993n);
 		expect(typeof rows[0]?.amount).toBe("bigint");
@@ -200,7 +241,7 @@ describe("db.fn.* (task 4.9)", () => {
 		// against, so the raw driver text passes through unconverted).
 		const handle = db({ listPublished }, driver);
 
-		const value = await requireFn(handle.fn, "listPublished")([]);
+		const value = await requireFn(handle.fn, "listPublished")({});
 
 		expect(sent[0]?.sql).toBe('select "app"."list_published"() as "result"');
 		expect(sent[0]?.sql).not.toContain("from");
@@ -211,7 +252,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const { driver } = recordingDriver();
 		const handle = db(appSchema, driver);
 
-		await expect(requireFn(handle.fn, "searchByStatus")([])).rejects.toThrow(
+		await expect(requireFn(handle.fn, "searchByStatus")({})).rejects.toThrow(
 			/argument/,
 		);
 		expect(driver.execute).not.toHaveBeenCalled();
@@ -222,7 +263,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const { driver, sent } = recordingDriver([{ result: "9007199254740993" }]);
 		const handle = db(appSchema, driver);
 
-		const value = await requireFn(handle.fn, "countPosts")([]);
+		const value = await requireFn(handle.fn, "countPosts")({});
 
 		expect(sent[0]?.sql).toBe('select "app"."count_posts"() as "result"');
 		// the declared bigint mode is honored even though there's no real
@@ -236,7 +277,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver);
 
 		try {
-			await requireFn(handle.fn, "countPosts")([]);
+			await requireFn(handle.fn, "countPosts")({});
 			expect.unreachable("db.fn should have rejected a missing scalar result");
 		} catch (error) {
 			expect(error).toHaveProperty("code", "function-scalar-result-missing");
@@ -254,7 +295,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db({ listPublished }, driver);
 
 		try {
-			await requireFn(handle.fn, "listPublished")([]);
+			await requireFn(handle.fn, "listPublished")({});
 			expect.unreachable("db.fn should have rejected a missing scalar result");
 		} catch (error) {
 			expect(error).toHaveProperty("code", "function-scalar-result-missing");
@@ -266,7 +307,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver);
 
 		try {
-			await requireFn(handle.fn, "touchTriggerFn")([]);
+			await requireFn(handle.fn, "touchTriggerFn")({});
 			expect.unreachable("db.fn should have rejected a trigger function");
 		} catch (error) {
 			expect(error).toHaveProperty("code", "function-return-kind-unsupported");
@@ -281,7 +322,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver, { roles: [roleName("app_reader")] });
 
 		const scoped = handle.as({ role: roleName("app_reader") });
-		await requireFn(scoped.fn, "listPublished")([]);
+		await requireFn(scoped.fn, "listPublished")({});
 
 		expect(driver.transaction).toHaveBeenCalledTimes(1);
 		expect(driver.execute).not.toHaveBeenCalled();
