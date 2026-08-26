@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { ColumnBuilder, Table } from "../src/index";
 import {
 	eq,
 	exists,
@@ -242,5 +243,36 @@ describe("table() — expression index validation (#284 US3)", () => {
 		).toThrow(
 			/duplicate-index-name|table "users" declares two indexes named "users_email_idx"/,
 		);
+	});
+});
+
+// D1: extracts a built Table<TColumns>'s own column builders (declared
+// type name, notNull, hasDefault -- the full TMeta each factory call
+// carried) from its TColumns type parameter, not from the runtime refs
+// object. TableColumns<TColumns> (the refs object type) stays
+// ColumnRef<BuilderFamily<TColumns[K]>> -- family only -- because
+// ColumnRef lives in expr/ast.ts, off limits to this change (column-source
+// tracking for ColumnRef is parked as #307). This is @hejbro/query's one
+// place to read per-column TMeta, and it needs no change to table.ts at
+// all: Table<TColumns>'s own type parameter already retains it.
+type ColumnBuildersOf<TTable extends Table> =
+	TTable extends Table<infer TColumns> ? TColumns : never;
+
+describe("table() columns carry their declared meta (D1, task 3.3)", () => {
+	it("table columns carry their declared meta", () => {
+		const posts = table(shop, "posts", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+		});
+		type PostsColumns = ColumnBuildersOf<typeof posts>;
+		expectTypeOf<PostsColumns["id"]>().toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" }>
+		>();
+		expectTypeOf<PostsColumns["title"]>().toEqualTypeOf<
+			ColumnBuilder<"text", { typeName: "text" } & { notNull: true }>
+		>();
+		// BuilderFamily extraction off the runtime refs object (table.ts's
+		// existing four call sites) is unchanged -- still family only.
+		expectTypeOf(posts.title.family).toEqualTypeOf<"text">();
 	});
 });

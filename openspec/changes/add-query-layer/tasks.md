@@ -146,11 +146,16 @@ on top of it. Settled decisions:
   `packages/core/test/column-builder.test.ts` "notNull and default are
   visible in the builder type"; files
   `packages/core/src/types/column-builder.ts`. ~8m
-- [ ] 3.3 core `TableColumns`/`Table` preserve `TMeta` so a table's
-  columns expose their declared meta, with `BuilderFamily` extraction
-  unchanged at its four call sites; red test
+- [x] 3.3 pin that `Table` preserves `TMeta`: `Table<TColumns>` already
+  keeps its own generic parameter, so once 3.1/3.2 narrowed the factory
+  return types the meta is recoverable from any `Table` by
+  `TTable extends Table<infer TColumns>` — no production change is
+  needed and the task's whole value is the regression pin (a later
+  edit that collapses `Table` to its refs object would silently break
+  every query-side inference). `TableColumns` and the four
+  `BuilderFamily` call sites stay untouched; red test
   `packages/core/test/table-surface.test.ts` "table columns carry their
-  declared meta"; files `packages/core/src/dsl/table.ts`. ~10m
+  declared meta"; files that test only. ~10m
 - [ ] 3.4 core numeric width modes: `bigint({ mode })` (default
   `'bigint'`, opt-in `'number'`/`'string'`) and `numeric({ mode })`
   (default `'string'`, opt-in `'number'`/`'bigint'`), mode carried in
@@ -213,6 +218,32 @@ on top of it. Settled decisions:
   `openspec validate add-query-layer`; files
   `openspec/changes/add-query-layer/specs/query-type-inference/spec.md`.
   ~8m
+- [ ] 3.15 core chain methods preserve the accumulated meta —
+  exhaustively, one assertion per method (`notNull`, `primaryKey`,
+  `unique`, `default`, `defaultRandom`, `defaultNow`, `array`), each
+  applied after `.notNull().default(...)` so dropping the accumulation
+  is visible. `array()` additionally records the element's declared
+  type name (3.6 maps arrays through it) and must swap `typeName`
+  rather than intersect it, since `"text" & "array"` is `never`. Found
+  during 3.2: `array()` returned a fixed meta, so
+  `text().notNull().array()` typed as nullable while its `columnState`
+  said otherwise — a class of bug, not one method's slip; red test
+  `packages/core/test/column-builder.test.ts` "every chain method keeps
+  the meta it was chained onto"; files
+  `packages/core/src/types/column-builder.ts`. ~10m
+- [ ] 3.16 core type-level `notNull` mirrors `materializeNotNull`
+  (`kinds/table-kind.ts:97-105`): `primaryKey()` implies `notNull`, and
+  the `serial` family implies both `notNull` and `hasDefault` — its
+  `nextval(...)` lives on the synthesized sequence, never on
+  `columnState.defaultValue`, so the two rules have to move together or
+  `serial().primaryKey()` becomes a *required* insert field. Without
+  this, `id: uuid().primaryKey().defaultRandom()` — the dominant
+  pattern across `examples/` — infers `string | null` for a column the
+  migration emits as `NOT NULL`; red test
+  `packages/core/test/column-builder.test.ts` "primary key and serial
+  carry their implied not-null"; files
+  `packages/core/src/types/column-builder.ts`,
+  `packages/core/src/types/column-builder-factories.ts`. ~10m
 
 ## 4. Driver contract + db handle
 
