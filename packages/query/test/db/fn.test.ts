@@ -244,6 +244,23 @@ describe("db.fn.* (task 4.9)", () => {
 		}
 	});
 
+	it('a fallback scalar call (no declared type, dispatchCall\'s unresolved-table path) still fails fast on a missing "result" key -- not silently undefined', async () => {
+		// no columnState at all for this path (found via mutation testing:
+		// convert.ts's own missing-declared-column guard only fires when a
+		// columnState IS resolved -- when it's undefined, a missing "result"
+		// key would otherwise resolve to `undefined` silently, exactly the
+		// "type lies" failure mode this guard exists to rule out).
+		const { driver } = recordingDriver([{ notResult: "42" }]);
+		const handle = db({ listPublished }, driver);
+
+		try {
+			await requireFn(handle.fn, "listPublished")([]);
+			expect.unreachable("db.fn should have rejected a missing scalar result");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "function-scalar-result-missing");
+		}
+	});
+
 	it("rejects a call to a trigger-returning function before any send (owner's explicit SQL over implicit)", async () => {
 		const { driver } = recordingDriver();
 		const handle = db(appSchema, driver);
