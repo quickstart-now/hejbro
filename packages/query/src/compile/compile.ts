@@ -6,6 +6,7 @@ import type {
 	UpdateNode,
 } from "@hejbro/core";
 import { renderQuery } from "@hejbro/core";
+import { compileSelect } from "./select";
 
 /**
  * `compile()`'s input: any stage of a `select`/`insert`/`update`/
@@ -61,13 +62,40 @@ const unwrapQueryNode = (statement: CompileInput): QueryNode => {
 	return (statement as Record<WrapperKey, QueryNode>)[wrapperKey];
 };
 
+type RenderedQuery = Pick<CompileResult, "sql" | "params">;
+
+/** `insert`/`update`/`delete` render unlifted until task 2.5 gives them their own literal-lifting path in `mutation.ts`. */
+const compileUnlifted = (node: QueryNode): RenderedQuery => ({
+	sql: renderQuery(node),
+	params: [],
+});
+
+/**
+ * One handler per {@link QueryNode} `queryKind` — a mapped type over the
+ * full union, same technique as core's `renderQueryHandlers`, so every
+ * kind must be covered.
+ */
+const compileHandlers: {
+	readonly [K in QueryNode["queryKind"]]: (
+		node: Extract<QueryNode, { readonly queryKind: K }>,
+	) => RenderedQuery;
+} = {
+	select: compileSelect,
+	insert: compileUnlifted,
+	update: compileUnlifted,
+	delete: compileUnlifted,
+};
+
 /**
  * Compiles a built statement to SQL text plus an ordered parameter list —
  * no I/O, no connection; identical input compiles byte-identically every
- * time. Literal-to-parameter lifting lands in task 2.2's `params.ts`; a
- * statement with no literal yet renders with `params: []` unchanged.
+ * time.
  */
 export const compile = (statement: CompileInput): CompileResult => {
 	const queryNode = unwrapQueryNode(statement);
-	return { sql: renderQuery(queryNode), params: [], kind: queryNode.queryKind };
+	const handler = compileHandlers[queryNode.queryKind] as (
+		node: QueryNode,
+	) => RenderedQuery;
+	const { sql, params } = handler(queryNode);
+	return { sql, params, kind: queryNode.queryKind };
 };
