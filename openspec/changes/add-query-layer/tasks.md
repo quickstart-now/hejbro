@@ -362,7 +362,7 @@ declarations for joined tables).
   `packages/query/test/driver/contract.test.ts` "a driver missing a
   capability key is a compile error (@ts-expect-error probe)"; files
   `src/driver/contract.ts`. ~10m
-- [ ] 4.2 Missing-capability error: code `driver-missing-capability`,
+- [x] 4.2 Missing-capability error: code `driver-missing-capability`,
   fields `{ capability, operation }`, thrown before any send; red test
   `packages/query/test/driver/errors.test.ts` "transaction on a
   non-transactional driver fails naming the capability"; files
