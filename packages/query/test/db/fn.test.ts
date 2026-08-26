@@ -233,30 +233,29 @@ describe("db.fn.* (task 4.9)", () => {
 		expect(typeof rows[0]?.amount).toBe("bigint");
 	});
 
-	it("falls back to a bare scalar call when the returns-table's target table isn't in the declarations record (direct branch coverage, not incidental)", async () => {
-		const { driver, sent } = recordingDriver([{ result: "42" }]);
+	it("fails fast, never a silent scalar guess, when the returns-table's target table isn't declared in this handle's own schema module (owner's explicit over implicit, task 4.9-fallback)", async () => {
+		const { driver } = recordingDriver([{ result: "42" }]);
 		// deliberately omits `posts` -- listPublished's own declared
-		// `returns: posts` table is unresolvable in this handle, so this
-		// falls back to the same scalar path a genuinely scalar-returning
-		// function would take -- explicitly aliased, and resolving to the
-		// bare value, not a rows array (no declared type to convert
-		// against, so the raw driver text passes through unconverted).
-		//
-		// **Known, documented imprecision**: `listPublished`'s own
-		// declared TReturns is `typeof posts` (a Table), so the *type*
-		// still promises `ReadonlyArray<SelectResult<typeof posts>>` here
-		// even though *this* handle's runtime fallback actually resolves
-		// to a bare string ("42") -- narrower than what the type promises
-		// only because the table it depends on wasn't declared into this
-		// particular db() call, a pre-existing runtime fallback (task
-		// 4.9) task 4.10's typing doesn't attempt to fix.
+		// `returns: posts` table is unresolvable in this handle. This used
+		// to silently fall back to an untyped scalar call (task 4.9) --
+		// exactly the "type lies" shape 4.4-wiring and the missing-
+		// "result"-key guard both already existed to rule out elsewhere
+		// (the declared type still promises ReadonlyArray<SelectResult<
+		// typeof posts>>, task 4.10, regardless of which handle calls it).
 		const handle = db({ listPublished }, driver);
 
-		const value = await handle.fn.listPublished({});
-
-		expect(sent[0]?.sql).toBe('select "app"."list_published"() as "result"');
-		expect(sent[0]?.sql).not.toContain("from");
-		expect(value).toBe("42");
+		try {
+			await handle.fn.listPublished({});
+			expect.unreachable(
+				"db.fn should have rejected the undeclared target table",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "function-target-table-undeclared");
+			expect((error as Error).message).toMatch(/Next:/);
+			expect((error as Error).message).toContain("app.posts");
+		}
+		expect(driver.execute).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
 	});
 
 	it("rejects a wrong argument count before any send (runtime defense in depth for a caller who bypassed TypeScript)", async () => {
@@ -297,23 +296,6 @@ describe("db.fn.* (task 4.9)", () => {
 		} catch (error) {
 			expect(error).toHaveProperty("code", "function-scalar-result-missing");
 			expect((error as Error).message).toMatch(/Next:/);
-		}
-	});
-
-	it('a fallback scalar call (no declared type, dispatchCall\'s unresolved-table path) still fails fast on a missing "result" key -- not silently undefined', async () => {
-		// no columnState at all for this path (found via mutation testing:
-		// convert.ts's own missing-declared-column guard only fires when a
-		// columnState IS resolved -- when it's undefined, a missing "result"
-		// key would otherwise resolve to `undefined` silently, exactly the
-		// "type lies" failure mode this guard exists to rule out).
-		const { driver } = recordingDriver([{ notResult: "42" }]);
-		const handle = db({ listPublished }, driver);
-
-		try {
-			await handle.fn.listPublished({});
-			expect.unreachable("db.fn should have rejected a missing scalar result");
-		} catch (error) {
-			expect(error).toHaveProperty("code", "function-scalar-result-missing");
 		}
 	});
 

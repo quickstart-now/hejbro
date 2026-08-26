@@ -102,36 +102,21 @@ const scalarColumnState = (typeNode: TypeNode): ColumnState => ({
 	mode: defaultNumericMode(typeNode),
 });
 
-/** `scalarCall`'s own `columnState` derivation — a guard clause instead of a ternary (house style): `undefined` in, `undefined` out, matching `dispatchCall`'s fallback ("no declared type to convert against"). */
-const scalarColumnStateFor = (
-	typeNode: TypeNode | undefined,
-): ColumnState | undefined => {
-	if (typeNode === undefined) {
-		return undefined;
-	}
-	return scalarColumnState(typeNode);
-};
-
 /**
  * The explicit `select fn(...) as "result"` plan for a scalar-returning
  * function (spec's "resolves to a value", not rows — owner's "explicit
  * SQL over implicit"): the aliased `"result"` key makes extraction
  * deterministic, never dependent on Postgres's own (dynamic, non-literal
  * — `FunctionDeclaration.functionName` is a plain `string`, never a
- * literal type) unaliased-column-naming convention. `typeNode` is
- * `undefined` when the declared return is a table this handle's own
- * declarations can't resolve (`dispatchCall`'s fallback) — there is
- * still exactly one result column, but no declared type to convert
- * against, so `columnState` stays `undefined` (the same "no declared
- * column" honesty as every other unresolved case, `convert.ts`, #311).
+ * literal type) unaliased-column-naming convention.
  */
 const scalarCall = (
 	declaration: FunctionDeclaration,
 	placeholders: string,
-	typeNode: TypeNode | undefined,
+	typeNode: TypeNode,
 ): {
 	readonly compiled: CompileResult;
-	readonly columnState: ColumnState | undefined;
+	readonly columnState: ColumnState;
 } => {
 	const ref = qualifyName(declaration.schemaName, declaration.functionName);
 	return {
@@ -140,9 +125,23 @@ const scalarCall = (
 			params: [],
 			kind: "sql",
 		},
-		columnState: scalarColumnStateFor(typeNode),
+		columnState: scalarColumnState(typeNode),
 	};
 };
+
+/** Builds and throws the `function-target-table-undeclared`-coded, enriched plain `Error` (D57) — a `function` declaration. A `returns: setofTable` function whose target table isn't in *this* handle's own declarations used to fall back to a bare, untyped scalar call (task 4.9) — an implicit guess this project consistently rejects elsewhere (never `select *`, capability checks fail closed, an undeclared role has no escape hatch); the declared return type (`ReadonlyArray<SelectResult<TTable>>`, task 4.10) would keep promising rows while the runtime silently produced a bare value, the same "type lies" shape 4.4-wiring and the missing-`"result"`-key guard both existed to rule out. Failing fast here instead names exactly what's missing and how to fix it. */
+function throwTargetTableUndeclared(
+	functionName: string,
+	schemaName: string,
+	tableName: string,
+): never {
+	throw Object.assign(
+		new Error(
+			`db.fn call to "${functionName}" declares "returns: <table>" for "${schemaName}.${tableName}", but that table isn't declared in this db() handle's own schema module. Next: add "${tableName}"'s table() declaration to the schema module passed to db(...).`,
+		),
+		{ code: "function-target-table-undeclared", schemaName, tableName },
+	);
+}
 
 /** Guards the one precondition every call shares: the caller's named-argument object carries exactly as many keys as `declaration` declares. Split out from {@link buildCall} so each function's own branch count stays low (CRAP ≤ 5). A mismatched *name* (typo, wrong key) is TypeScript's job to reject before this ever runs (task 4.10's own `@ts-expect-error` probes); this is only the runtime's last-resort count sanity check, matching the spec's "no runtime coercion" (there is no attempt here to guess which name a caller meant). */
 const assertArgCount = (
@@ -194,7 +193,7 @@ type CallDispatch =
 	| {
 			readonly callKind: "scalar";
 			readonly compiled: CompileResult;
-			readonly columnState: ColumnState | undefined;
+			readonly columnState: ColumnState;
 	  }
 	| {
 			readonly callKind: "rows";
@@ -202,7 +201,7 @@ type CallDispatch =
 			readonly plan: ReadonlyArray<ColumnPlanEntry>;
 	  };
 
-/** Dispatches by `declaration.returns.returnsKind` once the argument count is already known valid — `setofTable` needs its target table resolved from `tables` (falling back to a bare scalar call, same as an unresolvable table, if it isn't there), `scalar` calls directly, `trigger` is never callable through `db.fn` at all. Split out from {@link buildCall} for the same CRAP reason as {@link assertArgCount}. */
+/** Dispatches by `declaration.returns.returnsKind` once the argument count is already known valid — `setofTable` needs its target table resolved from `tables` (failing fast, never a silent scalar guess, if it isn't there — owner's "explicit over implicit"), `scalar` calls directly, `trigger` is never callable through `db.fn` at all. Split out from {@link buildCall} for the same CRAP reason as {@link assertArgCount}. */
 const dispatchCall = (
 	declaration: FunctionDeclaration,
 	placeholders: string,
@@ -217,16 +216,14 @@ const dispatchCall = (
 			...scalarCall(declaration, placeholders, declaration.returns.typeNode),
 		};
 	}
-	const table = findTable(
-		tables,
-		declaration.returns.schemaName,
-		declaration.returns.tableName,
-	);
+	const { schemaName, tableName } = declaration.returns;
+	const table = findTable(tables, schemaName, tableName);
 	if (table === undefined) {
-		return {
-			callKind: "scalar",
-			...scalarCall(declaration, placeholders, undefined),
-		};
+		return throwTargetTableUndeclared(
+			declaration.functionName,
+			schemaName,
+			tableName,
+		);
 	}
 	return {
 		callKind: "rows",
