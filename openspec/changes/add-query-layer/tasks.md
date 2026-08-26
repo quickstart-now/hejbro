@@ -245,10 +245,16 @@ on top of it. Settled decisions:
   `packages/query/test/types/select-result.test.ts` "field consumption
   matrix: each TMeta field the result type actually reads"; files
   `packages/query/src/types/select-result.ts`. ~10m
-- [ ] 3.11 Insert input types: required iff `notNull` without a default,
-  everything else `col?: T`; red type test
-  `packages/query/test/types/insert-input.test.ts` "defaulted column is
-  optional on insert"; files
+- [x] 3.11 Insert input types: required iff `notNull` without a default,
+  everything else `col?: T` (D8) — a nullable column's value type also
+  accepts an explicit `null`, the same direction `select-result.ts`'s
+  own read-side widening takes. A pure type utility over
+  `Table<infer TColumns>` (task 3.3's extraction pattern), not yet
+  wired into `insert()`'s actual parameter type (group 4, same
+  deferral as task 3.9/3.10); red type test
+  `packages/query/test/types/insert-input.test.ts` "field consumption
+  matrix: notNull decides required-vs-optional, hasDefault overrides
+  notNull to optional"; files
   `packages/query/src/types/insert-input.ts`. ~10m
 - [ ] 3.12 Update input types: every declared column optional, unknown
   columns rejected; red type test
