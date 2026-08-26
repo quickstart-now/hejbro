@@ -70,6 +70,13 @@ describe("compile: joins", () => {
 
 		const result = compile(statement);
 
+		// The params array alone can't catch a broken startIndex carry (its
+		// order is just concat order, independent of the numbers actually
+		// rendered) — asserting the SQL text is what pins $1/$2/$3 to their
+		// positions.
+		expect(result.sql).toBe(
+			'select "app"."posts"."id" as "id", $1 as "tag" from "app"."posts" left join "app"."comments" on ("app"."comments"."post_id" = "app"."posts"."id") and ("app"."posts"."status" = $2) where "app"."posts"."status" = $3',
+		);
 		expect(result.params).toEqual(["proj", "joined", "final"]);
 	});
 });
