@@ -1,5 +1,6 @@
-import { describe, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import type { IntervalValue } from "../../src/types/interval";
+import { parseInterval } from "../../src/types/interval";
 
 describe("IntervalValue (D4, task 3.7)", () => {
 	it("an interval column surfaces as a structured value", () => {
@@ -30,5 +31,84 @@ describe("IntervalValue (D4, task 3.7)", () => {
 		const empty: IntervalValue = {};
 		expectTypeOf(full.years).toEqualTypeOf<number | undefined>();
 		expectTypeOf(empty.microseconds).toEqualTypeOf<number | undefined>();
+	});
+});
+
+describe("parseInterval (task 3.8)", () => {
+	it("parses a full postgres-style interval (positive control)", () => {
+		expect(
+			parseInterval("1 year 2 mons 3 days 04:05:06.789123"),
+		).toEqual<IntervalValue>({
+			years: 1,
+			months: 2,
+			days: 3,
+			hours: 4,
+			minutes: 5,
+			seconds: 6,
+			microseconds: 789123,
+		});
+	});
+
+	it("parses a date-only interval", () => {
+		expect(parseInterval("3 days")).toEqual<IntervalValue>({ days: 3 });
+	});
+
+	it("parses a time-only interval, no fraction", () => {
+		expect(parseInterval("04:05:06")).toEqual<IntervalValue>({
+			hours: 4,
+			minutes: 5,
+			seconds: 6,
+		});
+	});
+
+	it("applies a single leading sign to the whole time part", () => {
+		expect(parseInterval("-1 mons +3 days -04:05:06")).toEqual<IntervalValue>({
+			months: -1,
+			days: 3,
+			hours: -4,
+			minutes: -5,
+			seconds: -6,
+		});
+	});
+
+	it("parses the explicit zero interval", () => {
+		expect(parseInterval("00:00:00")).toEqual<IntervalValue>({
+			hours: 0,
+			minutes: 0,
+			seconds: 0,
+		});
+	});
+
+	it("an unparsable interval is rejected, never half-parsed", () => {
+		// a single unrecognizable word -- no partial IntervalValue comes back,
+		// the call throws instead (the throw itself is the "never
+		// half-parsed" guarantee: there is no return value to inspect).
+		expect(() => parseInterval("banana")).toThrowError(/could not be parsed/);
+	});
+
+	it("rejects a malformed date unit (positive/negative contrast with 3 days)", () => {
+		expect(() => parseInterval("3 dayz")).toThrowError(/unknown date unit/);
+	});
+
+	it("rejects a non-integer date component instead of silently dropping it", () => {
+		expect(() => parseInterval("1.5 days")).toThrowError(
+			/doesn't start with a whole number/,
+		);
+	});
+
+	it("rejects empty input", () => {
+		expect(() => parseInterval("")).toThrowError(/could not be parsed/);
+		expect(() => parseInterval("   ")).toThrowError(/could not be parsed/);
+	});
+
+	it("throws a kebab-case-coded, enriched plain Error (not HejbroError)", () => {
+		try {
+			parseInterval("banana");
+			expect.unreachable("parseInterval should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "unparsable-interval");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
 	});
 });

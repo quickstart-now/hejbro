@@ -159,7 +159,13 @@ on top of it. Settled decisions:
 - [ ] 3.4 core numeric width modes: `bigint({ mode })` (default
   `'bigint'`, opt-in `'number'`/`'string'`) and `numeric({ mode })`
   (default `'string'`, opt-in `'number'`/`'bigint'`), mode carried in
-  `TMeta`, generated SQL unchanged; red test
+  `TMeta`, generated SQL unchanged. The mode is resolved at the factory
+  and stored — `bigint()` is `'bigint'`, never "unset with a default
+  applied downstream" — so the type and the runtime conversion can
+  never disagree. 3.15's `ArrayCarriedFlags` needs a branch for the new
+  flag and 3.15's exhaustive test a `bigint({mode:'number'}).array()`
+  case, or `array()` silently drops it — the same bug 3.15 just fixed;
+  red test
   `packages/core/test/column-builder.test.ts` "bigint defaults to
   bigint mode and accepts an opt-in mode"; files
   `packages/core/src/types/column-builder.ts`,
@@ -167,7 +173,9 @@ on top of it. Settled decisions:
 - [ ] 3.5 core `.$type<T>()` jsonb brand — a runtime identity method
   proven harmless: same `columnState`, byte-identical snapshot and SQL
   against an otherwise identical unbranded table, and no brand trace in
-  the snapshot JSON; red test
+  the snapshot JSON. Like 3.4, the brand needs its own
+  `ArrayCarriedFlags` branch and a `jsonb().$type<T>().array()` case in
+  3.15's exhaustive test; red test
   `packages/core/test/column-builder.test.ts` "$type leaves the
   declaration byte-identical"; files
   `packages/core/src/types/column-builder.ts`. ~10m
@@ -181,7 +189,7 @@ on top of it. Settled decisions:
   `packages/query/test/types/interval.test.ts` "an interval column
   surfaces as a structured value"; files
   `packages/query/src/types/interval.ts`. ~8m
-- [ ] 3.8 Pure interval parser/normalizer, rejecting unparsable input
+- [x] 3.8 Pure interval parser/normalizer, rejecting unparsable input
   with a kebab-code enriched `Error` rather than a partial value; red
   test `packages/query/test/types/interval.test.ts` "an unparsable
   interval is rejected, never half-parsed"; files
