@@ -62,6 +62,50 @@ banned by owner decision).
   compilation lifts runtime values to ordered bind parameters. The
   compiler, not call sites, owns parameter numbering, which is what
   makes `compile()` deterministic.
+- **Compiler contract** (task 2.1, owner-settled 2026-08-26). `compile()`
+  returns `{ sql, params, kind }`, `kind` being
+  `"select" | "insert" | "update" | "delete"` — readonly types, no
+  `Object.freeze`. Parameters are numbered `$1..$n` in render-appearance
+  order, never de-duplicated. Every `LiteralNode` lifts to a bind
+  parameter, with three fixed exceptions: `limit` renders inline (the
+  builder already validates a non-negative integer), a `RawSqlNode`
+  renders verbatim (user `sql.raw()` and the internal multi-row-insert
+  `default` marker), and a `timestamp` literal renders
+  `$n::timestamptz` carrying its ISO string. `null` and booleans are
+  parameterized like any other literal, and an in-list stays
+  `in ($1, $2, $3)` rather than `= any($1)`. Compilation is a lift
+  pre-pass — walking projection → from → joins → where → orderBy and
+  replacing each literal with its placeholder — followed by core's
+  `renderQuery`, so query SQL and declaration SQL come from one
+  renderer. Input is the structural union `{selectQuery}` /
+  `{insertQuery}` / `{updateQuery}` / `{deleteQuery}` / `QueryNode`; the
+  `sql` statement form joins it once task 2.6 is settled. The public
+  signature is a single `compile(statement)` with no options. A statement
+  built by the `sql` tag carries no `queryKind` to mirror, so `kind` takes
+  a fifth value, `"sql"` — an unclassified tagged-template statement —
+  and stays required and total rather than becoming optional or inferred
+  by parsing the text (owner-settled 2026-08-26, resolving where the task
+  2.1 and 2.6 decisions cross).
+- **`sql` escape hatch contract** (task 2.6, owner-settled 2026-08-26).
+  `@hejbro/query` does not define a second tagged template: its `sql` is a
+  thin wrapper that delegates the fragment form to core's tag, so fragment
+  semantics are identical by construction and core stays untouched. One
+  tag serves both uses — it returns `Expr<"unknown"> & { statementExpr }`,
+  usable anywhere an expression is and compilable as a statement, which is
+  the single branch the `Compilable` union gains. `sql.identifier(...names)`
+  quotes each part through core's identifier rule and joins them with `.`;
+  interpolating a `Table` directly is deferred. `sql.raw` stays delegated
+  and verbatim in both media, documented as the one injection point.
+  Nested fragments rely on core's structural splicing, with parameter
+  numbering following render order. Interpolation keeps core's
+  `ambiguous-literal` rejection for arrays and plain objects in v1 — a
+  query-side `param()` and jsonb branding are parked, not pre-empted here.
+  Compiling a blank statement throws `empty-sql-statement`.
+- **Security** (owner directive 2026-08-26). Injection safety is a spec
+  requirement, not an implementation detail: no runtime value reaches the
+  SQL text on any path, identifiers are always quoted through core's
+  rule, and `sql.raw()` is the single documented verbatim path — each
+  contract carried by an adversarial test, not only a happy-path one.
 - **Capability-declaring drivers.** The contract lists capabilities as
   data (interactive transactions, session state, …). The query layer
   checks declarations up front and throws the explicit

@@ -37,32 +37,54 @@ the select object projection (symmetry, not a new contract).
 
 ## 2. Compiler + sql escape hatch
 
-- [ ] 2.1 [design] `compile()` result shape and parameter numbering
+- [x] 2.1 [design] `compile()` result shape and parameter numbering
   rule (ordered params, deterministic output); red test
   `packages/query/test/compile/compile.test.ts` "same statement
   compiles byte-identical twice, no connection"; files
   `src/compile/compile.ts`. ~10m
-- [ ] 2.2 Select rendering: explicit projection, from, where via
+- [x] 2.2 Select rendering: explicit projection, from, where via
   ExprNode with literal→parameter lifting; red test
   `packages/query/test/compile/select.test.ts` "select with where
   compiles to parameterized SQL, no star"; files
   `src/compile/select.ts`, `src/compile/params.ts`. ~10m
-- [ ] 2.3 Order/limit rendering; red test
+- [x] 2.3 Order/limit rendering; red test
   `packages/query/test/compile/select.test.ts` "order and limit render
-  after where"; files `src/compile/select.ts`. ~6m
-- [ ] 2.4 Join rendering with schema-qualified explicit columns; red
+  after where"; files `src/compile/select.ts`. ~6m — **subsumed by 2.2**:
+  the named test passed on first run, because 2.2's lift walks the whole
+  render order (orderBy included) and the contract says `limit` is left
+  untouched, so there was no production code left to write. Landed as a
+  regression lock instead: the test was strengthened to put literals in
+  two different clauses, which is what makes the clause-to-clause
+  `startIndex` arithmetic observable at all.
+- [x] 2.4 Join rendering with schema-qualified explicit columns; red
   test `packages/query/test/compile/join.test.ts` "left join renders
   left join … on with qualified columns"; files
-  `src/compile/select.ts`. ~8m
-- [ ] 2.5 Insert/update/delete rendering with explicit `returning`; red
+  `src/compile/select.ts`. ~8m — **subsumed by 2.2** the same way: joins
+  are already part of the render-order lift, and core's `renderSelect`
+  owns join keywords, schema qualification, and identifier quoting.
+  Landed as a regression lock. Its identifier-escaping test builds a
+  `SelectNode` directly rather than through `table()`, because D36 bars
+  a quote from a declared name — and a hand-built node is a supported
+  input (`QueryNode` is in the `compile()` union), so the test exercises
+  a real contract, not a contrived path.
+- [x] 2.5 Insert/update/delete rendering with explicit `returning`; red
   test `packages/query/test/compile/mutation.test.ts` "insert renders
   parameterized values and explicit returning"; files
   `src/compile/mutation.ts`. ~10m
-- [ ] 2.6 [design] `sql` tagged template: statement and fragment forms,
+- [x] 2.6 [design] `sql` tagged template: statement and fragment forms,
   value interpolation → bind parameters, structural composition of
   fragments/identifiers; red test `packages/query/test/sql.test.ts`
   "interpolated value becomes a parameter, never a literal"; files
-  `src/sql.ts`. ~10m
+  `src/sql.ts`. ~10m — `sql` is a thin wrapper delegating every fragment
+  semantic to core's own tag (no second `SqlTemplateNode`/`RawSqlNode`
+  assembly); the statement form reuses the same `liftExprNode` path as
+  every other clause (proved by a mixed-clause numbering test, since
+  `params` alone can't show a reset-to-$1 regression). `CompileKind`
+  gained a fifth value, `"sql"` — an honest "uncategorized tagged-
+  template statement" marker (owner-settled, 2026-08-26), not inferred
+  from parsing the text. `compile()` checks the new `statementExpr`
+  branch before `unwrapQueryNode`, whose parameter type now structurally
+  excludes it — skipping that check is a `tsc` error, not a runtime one.
 
 ## 3. Type inference
 

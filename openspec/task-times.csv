@@ -2,3 +2,9 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-26,add-query-layer,1.1,1,6,7,0,scaffold packages/query + alias guard test
 2026-08-26,add-query-layer,1.2,1,10,12,1,left join variant incl. codec + render; waited = IR-strategy AskUserQuestion
 2026-08-26,add-query-layer,1.3,1,10,8,0,returning object projection + empty guard
+2026-08-26,add-query-layer,2.1,2,10,12,0,compile() entry point: result shape + kind, structural union, deterministic
+2026-08-26,add-query-layer,2.2,2,10,40,0,select where->params; circular dependency resolved + file split rework (~15m of the 40, core render-sql.ts precedent)
+2026-08-26,add-query-layer,2.3,2,6,5,0,subsumed by 2.2; landed as regression lock (order/limit + cross-clause numbering)
+2026-08-26,add-query-layer,2.4,2,8,12,0,subsumed by 2.2; landed as regression lock (joins + identifier quoting via hand-built QueryNode)
+2026-08-26,add-query-layer,2.5,2,10,30,0,insert/update/delete lift; compileUnlifted removed; default-marker regression + injection tests
+2026-08-26,add-query-layer,2.6,2,10,75,0,sql tag delegates to core; statementExpr branch + kind="sql" wired after owner decision; crash-pitfall restructure (Exclude-based dispatch)
