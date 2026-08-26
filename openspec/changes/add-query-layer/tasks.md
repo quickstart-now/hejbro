@@ -226,7 +226,7 @@ on top of it. Settled decisions:
   `packages/query/test/types/returning.test.ts` "returning rows are
   typed like a projection"; files
   `packages/query/src/types/returning.ts`. ~6m
-- [ ] 3.14 Delta spec alignment: drop the left-join clause and its
+- [x] 3.14 Delta spec alignment: drop the left-join clause and its
   scenario (parked as #307), scope the insert requirement to "notNull
   without a default" (generated columns parked as #308), and add the
   numeric-mode and structured-interval requirements. Carries this
