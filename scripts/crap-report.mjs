@@ -112,7 +112,10 @@ export const TARGET_PACKAGES = [
 	{
 		name: "@hejbro/query",
 		srcDir: join(REPO_ROOT, "packages/query/src"),
-		coverageJson: join(REPO_ROOT, "packages/query/coverage/coverage-final.json"),
+		coverageJson: join(
+			REPO_ROOT,
+			"packages/query/coverage/coverage-final.json",
+		),
 	},
 ];
 
