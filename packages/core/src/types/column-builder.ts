@@ -6,6 +6,16 @@ import type { LiftableFor, SqlTypeFamily } from "../expr/type-family";
 import { familyOfTypeNode } from "../expr/type-family";
 import type { TypeNode } from "./type-node";
 
+/**
+ * The visible TypeScript width `bigint({ mode })`/`numeric({ mode })`
+ * (task 3.4) resolve to, mirroring Drizzle's own surface. Resolved once,
+ * at the factory, and carried on both `ColumnState.mode` (for group 4's
+ * runtime row conversion) and `TMeta.mode` (for the compile-time-visible
+ * type) — never left "unset with a default applied downstream", so the
+ * two can never disagree about which mode a column uses.
+ */
+export type NumericMode = "bigint" | "number" | "string";
+
 /** The immutable state carried by a {@link ColumnBuilder}. */
 export type ColumnState = {
 	readonly typeNode: TypeNode;
@@ -13,6 +23,8 @@ export type ColumnState = {
 	readonly primaryKey: boolean;
 	readonly unique: boolean;
 	readonly defaultValue: ExprNode | null;
+	/** {@link NumericMode}, resolved at the factory; `null` for every column outside the `bigint`/`numeric` factories (task 3.4) — this is compile-time information about *reading* the column, not part of its declared SQL type, so it never reaches `typeNode`, generated SQL, or the snapshot. */
+	readonly mode: NumericMode | null;
 };
 
 /**
@@ -34,6 +46,8 @@ export type ColumnMeta = {
 	readonly hasDefault?: boolean;
 	/** set only by `.array()` (task 3.15): the element's own declared type name, so 3.6 can map an array through its element instead of losing it. */
 	readonly element?: TypeNode["typeName"];
+	/** set only by `bigint({mode})`/`numeric({mode})` (task 3.4) — see {@link NumericMode}. */
+	readonly mode?: NumericMode;
 };
 
 /**
@@ -98,6 +112,9 @@ type ArrayCarriedFlags<TMeta extends ColumnMeta> = (TMeta extends {
 	: unknown) &
 	(TMeta extends { readonly hasDefault: true }
 		? { readonly hasDefault: true }
+		: unknown) &
+	(TMeta extends { readonly mode: infer TMode extends NumericMode }
+		? { readonly mode: TMode }
 		: unknown);
 
 /**

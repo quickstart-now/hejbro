@@ -1,5 +1,5 @@
 import type { FamilyOfTypeNode } from "../expr/type-family";
-import type { ColumnBuilder } from "./column-builder";
+import type { ColumnBuilder, NumericMode } from "./column-builder";
 import { createColumnBuilder } from "./column-builder";
 import type { SimpleTypeName } from "./type-node";
 
@@ -25,6 +25,7 @@ const initialColumnBuilder = <TName extends SimpleTypeName>(
 		primaryKey: false,
 		unique: false,
 		defaultValue: null,
+		mode: null,
 	});
 
 const resolveOptionalNumber = (value: number | undefined): number | null => {
@@ -51,9 +52,6 @@ export const smallint = (): ColumnBuilder<
 /** `integer` column. */
 export const integer = (): ColumnBuilder<"numeric", { typeName: "integer" }> =>
 	initialColumnBuilder("integer");
-/** `bigint` column. */
-export const bigint = (): ColumnBuilder<"numeric", { typeName: "bigint" }> =>
-	initialColumnBuilder("bigint");
 /** `real` column. */
 export const real = (): ColumnBuilder<"numeric", { typeName: "real" }> =>
 	initialColumnBuilder("real");
@@ -136,6 +134,7 @@ const initialSerialColumnBuilder = <TName extends SimpleTypeName>(
 		primaryKey: false,
 		unique: false,
 		defaultValue: null,
+		mode: null,
 	});
 
 /** `serial` column — implicitly `NOT NULL` with a sequence-backed default (D66); see {@link initialSerialColumnBuilder}. */
@@ -170,6 +169,7 @@ export const varchar = (
 		primaryKey: false,
 		unique: false,
 		defaultValue: null,
+		mode: null,
 	});
 
 /** Config required by {@link char}. */
@@ -185,19 +185,53 @@ export const char = (
 		primaryKey: false,
 		unique: false,
 		defaultValue: null,
+		mode: null,
 	});
 
-/** Config accepted by {@link numeric}. */
-export type NumericConfig = {
-	readonly precision?: number;
-	readonly scale?: number;
+/** `bigint({mode})`'s default mode (task 3.4) — the one place this default is spelled out; both the generic type default below and the runtime fallback read it, so they can never drift apart. */
+const DEFAULT_BIGINT_MODE = "bigint" as const;
+
+/** Config accepted by {@link bigint}. */
+export type BigintConfig<
+	TMode extends NumericMode = typeof DEFAULT_BIGINT_MODE,
+> = {
+	/** how a `bigint` column reads back in TypeScript (D3, mirrors Drizzle) — default `'bigint'`; `'number'` throws beyond `Number.MAX_SAFE_INTEGER` (group 4) rather than losing precision, `'string'` never loses precision. */
+	readonly mode?: TMode;
 };
 
-/** `numeric` column, optionally precision/scale-bounded. */
-export const numeric = (
-	config: NumericConfig = {},
-): ColumnBuilder<"numeric", { typeName: "numeric" }> =>
-	createColumnBuilder<"numeric", { typeName: "numeric" }>({
+/** `bigint` column — see {@link BigintConfig} for `mode`. */
+export const bigint = <TMode extends NumericMode = typeof DEFAULT_BIGINT_MODE>(
+	config: BigintConfig<TMode> = {},
+): ColumnBuilder<"numeric", { typeName: "bigint" } & { mode: TMode }> =>
+	createColumnBuilder<"numeric", { typeName: "bigint" } & { mode: TMode }>({
+		typeNode: { typeName: "bigint" },
+		notNull: false,
+		primaryKey: false,
+		unique: false,
+		defaultValue: null,
+		mode: config.mode ?? DEFAULT_BIGINT_MODE,
+	});
+
+/** `numeric({mode})`'s default mode (task 3.4) — see {@link DEFAULT_BIGINT_MODE}; `numeric`'s own default differs (`'string'`, not `'bigint'`) since a `numeric` column can be fractional, where `bigint` never is. */
+const DEFAULT_NUMERIC_MODE = "string" as const;
+
+/** Config accepted by {@link numeric}. */
+export type NumericConfig<
+	TMode extends NumericMode = typeof DEFAULT_NUMERIC_MODE,
+> = {
+	readonly precision?: number;
+	readonly scale?: number;
+	/** how a `numeric` column reads back in TypeScript (D3, mirrors Drizzle) — default `'string'` (never loses precision); `'number'` throws beyond `Number.MAX_SAFE_INTEGER` (group 4) rather than losing precision, `'bigint'` truncates any fractional part (group 4). */
+	readonly mode?: TMode;
+};
+
+/** `numeric` column, optionally precision/scale-bounded; see {@link NumericConfig} for `mode`. */
+export const numeric = <
+	TMode extends NumericMode = typeof DEFAULT_NUMERIC_MODE,
+>(
+	config: NumericConfig<TMode> = {},
+): ColumnBuilder<"numeric", { typeName: "numeric" } & { mode: TMode }> =>
+	createColumnBuilder<"numeric", { typeName: "numeric" } & { mode: TMode }>({
 		typeNode: {
 			typeName: "numeric",
 			precision: resolveOptionalNumber(config.precision),
@@ -207,4 +241,5 @@ export const numeric = (
 		primaryKey: false,
 		unique: false,
 		defaultValue: null,
+		mode: config.mode ?? DEFAULT_NUMERIC_MODE,
 	});

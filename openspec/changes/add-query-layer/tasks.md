@@ -119,6 +119,13 @@ on top of it. Settled decisions:
   `packages/core/test/column-builder.test.ts:156-163`); their red/green
   gate is `pnpm check-types`, and every negative case carries either a
   one-difference positive twin or an exact `toEqualTypeOf`.
+- Carrying a fact in `ColumnMeta` proves nothing until inference reads
+  it, and "ignored field" looks exactly like "all tests green". So
+  every `ColumnMeta` field owes a **consumption** test — one that fails
+  if the inference drops it — plus composite cases where a whole
+  accumulated meta has to survive (`text().notNull().array()`,
+  `bigint({mode:'number'}).notNull()`, `jsonb().$type<T>().notNull()`,
+  `serial().primaryKey()`).
 - Left-join nullability widening is **parked as #307** — it needs
   column-source tracking inside `ColumnRef`, far beyond this change —
   and task 3.14 removes it from this change's delta spec. Generated
@@ -156,7 +163,7 @@ on top of it. Settled decisions:
   `BuilderFamily` call sites stay untouched; red test
   `packages/core/test/table-surface.test.ts` "table columns carry their
   declared meta"; files that test only. ~10m
-- [ ] 3.4 core numeric width modes: `bigint({ mode })` (default
+- [x] 3.4 core numeric width modes: `bigint({ mode })` (default
   `'bigint'`, opt-in `'number'`/`'string'`) and `numeric({ mode })`
   (default `'string'`, opt-in `'number'`/`'bigint'`), mode carried in
   `TMeta`, generated SQL unchanged. The mode is resolved at the factory

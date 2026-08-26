@@ -1,8 +1,13 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { schema } from "../src/dsl/schema";
+import { getTableMeta, table } from "../src/dsl/table";
+import { generateMigration } from "../src/engine/generate";
 import { sql } from "../src/expr/sql-template";
 import type { ColumnBuilder } from "../src/index";
+import { tableKind } from "../src/kinds/table-kind";
+import { emptySnapshot } from "../src/snapshot/snapshot";
+import * as columnBuilderFactories from "../src/types/column-builder-factories";
 import {
 	bigint,
 	bigserial,
@@ -30,12 +35,15 @@ describe("ColumnBuilder immutability", () => {
 
 	it("chains multiple modifiers into a single new state", () => {
 		const built = text().notNull().unique();
+		// task 3.4: columnState grew a mode field (null for non-numeric-mode
+		// columns) -- this is the declaration widening, not an output change.
 		expect(built.columnState).toEqual({
 			typeNode: { typeName: "text" },
 			notNull: true,
 			primaryKey: false,
 			unique: true,
 			defaultValue: null,
+			mode: null,
 		});
 	});
 });
@@ -196,8 +204,10 @@ describe("column builder declared type name (D1, R3)", () => {
 		expectTypeOf(smallint()).toEqualTypeOf<
 			ColumnBuilder<"numeric", { typeName: "smallint" }>
 		>();
+		// task 3.4: bigint()'s resolved mode (default 'bigint') is now part
+		// of its declared type name.
 		expectTypeOf(bigint()).toEqualTypeOf<
-			ColumnBuilder<"numeric", { typeName: "bigint" }>
+			ColumnBuilder<"numeric", { typeName: "bigint" } & { mode: "bigint" }>
 		>();
 		expectTypeOf(uuid()).toEqualTypeOf<
 			ColumnBuilder<"uuid", { typeName: "uuid" }>
@@ -208,8 +218,9 @@ describe("column builder declared type name (D1, R3)", () => {
 		expectTypeOf(char({ length: 1 })).toEqualTypeOf<
 			ColumnBuilder<"text", { typeName: "char" }>
 		>();
+		// task 3.4: numeric()'s resolved mode (default 'string') likewise.
 		expectTypeOf(numeric()).toEqualTypeOf<
-			ColumnBuilder<"numeric", { typeName: "numeric" }>
+			ColumnBuilder<"numeric", { typeName: "numeric" } & { mode: "string" }>
 		>();
 		expectTypeOf(appEnum.column()).toEqualTypeOf<
 			ColumnBuilder<"text", { typeName: "enum" }>
@@ -310,6 +321,17 @@ describe("every chain method keeps the meta it was chained onto (D1, task 3.15)"
 		expectTypeOf(datetimeBase.defaultNow()).toEqualTypeOf<
 			ColumnBuilder<"datetime", DatetimeBaseMeta & { hasDefault: true }>
 		>();
+
+		// task 3.4: array() must also carry the numeric mode flag, or it
+		// silently drops the same way notNull/hasDefault used to (3.15's own
+		// bug). bigint({mode}) has no notNull/hasDefault of its own here, so
+		// ArrayCarriedFlags's mode branch is the only thing under test.
+		expectTypeOf(bigint({ mode: "number" }).array()).toEqualTypeOf<
+			ColumnBuilder<
+				"array",
+				{ readonly mode: "number" } & { typeName: "array"; element: "bigint" }
+			>
+		>();
 	});
 });
 
@@ -366,6 +388,7 @@ describe("primary key and serial carry their implied not-null (D1, task 3.16)", 
 			primaryKey: false,
 			unique: false,
 			defaultValue: null,
+			mode: null,
 		});
 
 		// serial().primaryKey() combines both sources of implied notNull --
@@ -384,5 +407,135 @@ describe("primary key and serial carry their implied not-null (D1, task 3.16)", 
 		expectTypeOf(integer()).toEqualTypeOf<
 			ColumnBuilder<"numeric", { typeName: "integer" }>
 		>();
+	});
+});
+
+describe("bigint/numeric width modes (D3, task 3.4)", () => {
+	it("bigint defaults to bigint mode and accepts an opt-in mode", () => {
+		// what the type says.
+		expectTypeOf(bigint()).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "bigint" } & { mode: "bigint" }>
+		>();
+		expectTypeOf(bigint({ mode: "number" })).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "bigint" } & { mode: "number" }>
+		>();
+		expectTypeOf(bigint({ mode: "string" })).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "bigint" } & { mode: "string" }>
+		>();
+		// what actually gets stored (group 4 reads this at row-mapping time).
+		expect(bigint().columnState.mode).toBe("bigint");
+		expect(bigint({ mode: "number" }).columnState.mode).toBe("number");
+	});
+
+	it("numeric defaults to string mode and accepts an opt-in mode", () => {
+		expectTypeOf(numeric()).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "numeric" } & { mode: "string" }>
+		>();
+		expectTypeOf(numeric({ mode: "number" })).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "numeric" } & { mode: "number" }>
+		>();
+		expectTypeOf(numeric({ mode: "bigint" })).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "numeric" } & { mode: "bigint" }>
+		>();
+		expect(numeric().columnState.mode).toBe("string");
+		expect(numeric({ mode: "bigint" }).columnState.mode).toBe("bigint");
+	});
+
+	it("a non-numeric-mode column stays mode: null", () => {
+		expect(uuid().columnState.mode).toBeNull();
+		expect(text().columnState.mode).toBeNull();
+	});
+
+	// The four invariants a mode-only change must hold (C13-style contrast
+	// pair, mirrors 3.5's $type harmlessness proof): mode is compile-time
+	// information only, never part of the declared SQL type.
+	describe("mode changes nothing at runtime (harmlessness)", () => {
+		const buildPosts = (idColumn: ReturnType<typeof bigint>) =>
+			table(schema("app"), "posts", { id: idColumn });
+
+		const defaultModePosts = buildPosts(bigint());
+		const explicitModePosts = buildPosts(bigint({ mode: "number" }));
+
+		it("columnState differs only in the mode field", () => {
+			const defaultState = defaultModePosts.id.exprNode;
+			const explicitState = explicitModePosts.id.exprNode;
+			// column refs carry no mode themselves (family-only, D1 boundary
+			// on expr/ast.ts) -- the real comparison is on the declared
+			// columns' own columnState, read back off the table declaration.
+			expect(defaultState).toEqual(explicitState);
+			const [defaultColumn] = getTableMeta(defaultModePosts).columns;
+			const [explicitColumn] = getTableMeta(explicitModePosts).columns;
+			expect(defaultColumn?.columnState).toEqual({
+				...explicitColumn?.columnState,
+				mode: "bigint",
+			});
+			expect(explicitColumn?.columnState.mode).toBe("number");
+		});
+
+		it("generates byte-identical SQL", () => {
+			const defaultSql = generateMigration({
+				declarations: [schema("app"), getTableMeta(defaultModePosts)],
+				previousSnapshot: emptySnapshot,
+			}).sql;
+			const explicitSql = generateMigration({
+				declarations: [schema("app"), getTableMeta(explicitModePosts)],
+				previousSnapshot: emptySnapshot,
+			}).sql;
+			expect(explicitSql).toBe(defaultSql);
+			expect(explicitSql).toContain('"id" bigint');
+		});
+
+		it("produces a byte-identical snapshot with no mode trace", () => {
+			const defaultJson = JSON.stringify(
+				tableKind.serialize(getTableMeta(defaultModePosts)),
+			);
+			const explicitJson = JSON.stringify(
+				tableKind.serialize(getTableMeta(explicitModePosts)),
+			);
+			expect(explicitJson).toBe(defaultJson);
+			expect(explicitJson).not.toContain("mode");
+		});
+	});
+});
+
+describe("every factory's mode is accounted for (C19)", () => {
+	it("the factory name set matches a hand-maintained list", () => {
+		// self-maintaining: adding a new factory to
+		// column-builder-factories.ts without updating this list fails here
+		// first, instead of silently shipping an unreviewed mode default.
+		// Only bigint/numeric carry a NumericMode; every other factory is
+		// mode: null (checked directly for uuid/text above; bigint/numeric's
+		// own values are checked in their own describe block).
+		const knownFactoryNames = [
+			"uuid",
+			"text",
+			"boolean",
+			"smallint",
+			"integer",
+			"bigint",
+			"real",
+			"doublePrecision",
+			"date",
+			"time",
+			"timetz",
+			"timestamp",
+			"timestamptz",
+			"interval",
+			"json",
+			"jsonb",
+			"bytea",
+			"inet",
+			"cidr",
+			"macaddr",
+			"serial",
+			"smallserial",
+			"bigserial",
+			"varchar",
+			"char",
+			"numeric",
+		];
+		expect(Object.keys(columnBuilderFactories).sort()).toEqual(
+			[...knownFactoryNames].sort(),
+		);
 	});
 });

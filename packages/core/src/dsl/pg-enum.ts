@@ -29,5 +29,6 @@ export const pgEnum = (
 			primaryKey: false,
 			unique: false,
 			defaultValue: null,
+			mode: null,
 		}),
 });
