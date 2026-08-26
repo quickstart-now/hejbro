@@ -73,10 +73,28 @@ const touchTrigger = defineTrigger(
 	},
 );
 
+/**
+ * A genuinely scalar-returning `defineFunction` (`returns: {typeName:
+ * "bigint"}`, a plain `TypeNode` literal, not a table) -- previously
+ * exercised nowhere in the whole codebase (core's own test suite, this
+ * package's, or `examples/`), confirmed by a repo-wide search before
+ * writing this fixture. The body callback is empty: `db.fn`'s own SQL
+ * never renders this declaration's body (that's DDL generation, a
+ * separate concern `renderFunctionSql` owns), so there's nothing this
+ * fixture needs `ctx.return()` for.
+ */
+const countPosts = defineFunction(
+	app,
+	"count_posts",
+	{ returns: { typeName: "bigint" } },
+	() => {},
+);
+
 const appSchema = {
 	posts,
 	listPublished,
 	searchByStatus,
+	countPosts,
 	touchTriggerFn: touchTrigger.functionDeclaration,
 };
 
@@ -121,6 +139,7 @@ describe("db.fn.* (task 4.9)", () => {
 		expect(Object.keys(handle.fn)).toEqual([
 			"listPublished",
 			"searchByStatus",
+			"countPosts",
 			"touchTriggerFn",
 		]);
 	});
@@ -156,22 +175,36 @@ describe("db.fn.* (task 4.9)", () => {
 		const { driver } = recordingDriver([rawRow]);
 		const handle = db(appSchema, driver);
 
-		const rows = await requireFn(handle.fn, "listPublished")([]);
+		// `requireFn` returns the loose, per-call-varying FnCaller type
+		// (fn-types.ts, task 4.10, narrows this for the real db.fn surface) --
+		// this test exercises the raw returns-table wiring directly, so it
+		// knows (from the fixture) that this particular call resolves to a
+		// rows array, and casts accordingly rather than needing the typed
+		// wrapper.
+		const rows = (await requireFn(
+			handle.fn,
+			"listPublished",
+		)([])) as ReadonlyArray<DriverRow>;
 
 		expect(rows[0]?.amount).toBe(9007199254740993n);
 		expect(typeof rows[0]?.amount).toBe("bigint");
 	});
 
 	it("falls back to a bare scalar call when the returns-table's target table isn't in the declarations record (direct branch coverage, not incidental)", async () => {
-		const { driver, sent } = recordingDriver([rawRow]);
+		const { driver, sent } = recordingDriver([{ result: "42" }]);
 		// deliberately omits `posts` -- listPublished's own declared
-		// `returns: posts` table is unresolvable in this handle.
+		// `returns: posts` table is unresolvable in this handle, so this
+		// falls back to the same scalar path a genuinely scalar-returning
+		// function would take -- explicitly aliased, and resolving to the
+		// bare value, not a rows array (no declared type to convert
+		// against, so the raw driver text passes through unconverted).
 		const handle = db({ listPublished }, driver);
 
-		await requireFn(handle.fn, "listPublished")([]);
+		const value = await requireFn(handle.fn, "listPublished")([]);
 
-		expect(sent[0]?.sql).toBe('select "app"."list_published"()');
+		expect(sent[0]?.sql).toBe('select "app"."list_published"() as "result"');
 		expect(sent[0]?.sql).not.toContain("from");
+		expect(value).toBe("42");
 	});
 
 	it("rejects a wrong argument count before any send", async () => {
@@ -183,6 +216,32 @@ describe("db.fn.* (task 4.9)", () => {
 		);
 		expect(driver.execute).not.toHaveBeenCalled();
 		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+
+	it("a scalar-returning function resolves to the converted value itself, not a rows array (spec: 'resolves to a value')", async () => {
+		const { driver, sent } = recordingDriver([{ result: "9007199254740993" }]);
+		const handle = db(appSchema, driver);
+
+		const value = await requireFn(handle.fn, "countPosts")([]);
+
+		expect(sent[0]?.sql).toBe('select "app"."count_posts"() as "result"');
+		// the declared bigint mode is honored even though there's no real
+		// column behind this value, exactly as ScalarReturnTsType promises.
+		expect(value).toBe(9007199254740993n);
+		expect(Array.isArray(value)).toBe(false);
+	});
+
+	it('a scalar call fails fast when the driver doesn\'t return exactly one row with a "result" column', async () => {
+		const { driver } = recordingDriver([]);
+		const handle = db(appSchema, driver);
+
+		try {
+			await requireFn(handle.fn, "countPosts")([]);
+			expect.unreachable("db.fn should have rejected a missing scalar result");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "function-scalar-result-missing");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
 	});
 
 	it("rejects a call to a trigger-returning function before any send (owner's explicit SQL over implicit)", async () => {
