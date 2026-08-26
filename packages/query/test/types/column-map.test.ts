@@ -109,12 +109,17 @@ describe("column-map (D1/D3/D5, task 3.6)", () => {
 			ColumnTsType<ReturnType<typeof numeric<"bigint">>>
 		>().toEqualTypeOf<bigint>();
 
-		// date/time.
+		// date/time. Only date/timestamp/timestamptz parse to a real Date --
+		// node-postgres has no parser for time (oid 1083) / timetz (oid
+		// 1266), which come back as raw text ("12:34:56"); mapping them to
+		// Date would be a type that lies about what the runtime hands back.
 		expectTypeOf<ColumnTsType<ReturnType<typeof date>>>().toEqualTypeOf<Date>();
-		expectTypeOf<ColumnTsType<ReturnType<typeof time>>>().toEqualTypeOf<Date>();
+		expectTypeOf<
+			ColumnTsType<ReturnType<typeof time>>
+		>().toEqualTypeOf<string>();
 		expectTypeOf<
 			ColumnTsType<ReturnType<typeof timetz>>
-		>().toEqualTypeOf<Date>();
+		>().toEqualTypeOf<string>();
 		expectTypeOf<
 			ColumnTsType<ReturnType<typeof timestamp>>
 		>().toEqualTypeOf<Date>();
@@ -140,10 +145,12 @@ describe("column-map (D1/D3/D5, task 3.6)", () => {
 		const brandedJsonb = jsonb().$type<Payload>();
 		expectTypeOf<ColumnTsType<typeof brandedJsonb>>().toEqualTypeOf<Payload>();
 
-		// bytea.
+		// bytea: the platform-neutral Uint8Array, not Node's Buffer (R2) --
+		// @hejbro/query is core-grade pure, and this maps into every
+		// consumer's public result type, browser/edge included.
 		expectTypeOf<
 			ColumnTsType<ReturnType<typeof bytea>>
-		>().toEqualTypeOf<Buffer>();
+		>().toEqualTypeOf<Uint8Array>();
 	});
 
 	it("array() (task 3.15) maps through the element, mode/brand included", () => {
