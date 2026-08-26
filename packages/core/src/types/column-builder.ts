@@ -4,6 +4,7 @@ import { isExpr } from "../expr/ast";
 import { liftLiteral } from "../expr/literal";
 import type { LiftableFor, SqlTypeFamily } from "../expr/type-family";
 import { familyOfTypeNode } from "../expr/type-family";
+import type { BaseTsType } from "./ts-type-map";
 import type { TypeNode } from "./type-node";
 
 /**
@@ -170,15 +171,31 @@ export type ColumnBuilder<
 	>;
 	/**
 	 * Brands this column's TypeScript type as `T` (D5) — the way a `jsonb`
-	 * column opts out of `unknown` (task 3.6 reads `TMeta["jsonType"]`
-	 * instead of falling back). A **runtime identity method, not a
-	 * purely type-level one**: a type-only `$type` wouldn't be callable at
-	 * all (there'd be no function for `.{$type<T>()}` to resolve to), so
-	 * this returns a new builder wrapping the *exact same* `columnState` —
-	 * proven harmless (task 3.5): byte-identical snapshot/SQL and no brand
-	 * trace anywhere runtime-visible, since only `TMeta` changes.
+	 * column opts out of `unknown` (`@hejbro/query`'s `column-map.ts`
+	 * reads `TMeta["jsonType"]` instead of falling back to the base
+	 * mapping). **Narrowing only, never a lie**: `T extends
+	 * BaseTsType<TMeta>` — `T` must be a subset of the column's own base
+	 * TypeScript type (`ts-type-map.ts`, brand-agnostic by construction),
+	 * our safety difference from Drizzle's unconstrained `$type<T>()`.
+	 * `json`/`jsonb`'s base is `unknown`, which every type is a subset
+	 * of, so they stay unconstrained in practice without a special case
+	 * here — the single rule closes over every declared type name, not
+	 * just the two that motivated it. (`T = never` also satisfies the
+	 * constraint — every type is a supertype of `never` — but a
+	 * `never`-branded column is simply unusable, not unsafe, so this
+	 * corner is left open rather than special-cased away.)
+	 *
+	 * A **runtime identity method, not a purely type-level one**: a
+	 * type-only `$type` wouldn't be callable at all (there'd be no
+	 * function for `.{$type<T>()}` to resolve to), so this returns a new
+	 * builder wrapping the *exact same* `columnState` — proven harmless
+	 * (task 3.5): byte-identical snapshot/SQL and no brand trace anywhere
+	 * runtime-visible, since only `TMeta` changes.
 	 */
-	$type<T>(): ColumnBuilder<TFamily, TMeta & { jsonType: T }>;
+	$type<T extends BaseTsType<TMeta>>(): ColumnBuilder<
+		TFamily,
+		TMeta & { jsonType: T }
+	>;
 };
 
 /** Extracts the {@link SqlTypeFamily} a {@link ColumnBuilder} carries. */
@@ -281,6 +298,6 @@ export const createColumnBuilder = <
 			...columnState,
 			typeNode: { typeName: "array", element: columnState.typeNode },
 		}),
-	$type: <T>() =>
+	$type: <T extends BaseTsType<TMeta>>() =>
 		createColumnBuilder<TFamily, TMeta & { jsonType: T }>(columnState),
 });

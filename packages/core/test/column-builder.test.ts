@@ -589,6 +589,35 @@ describe(".$type<T>() jsonb brand (D5, task 3.5)", () => {
 		expect(brandedJson).not.toContain("kind");
 	});
 
+	it("$type narrows only -- it can't lie past the column's own base type (backlog 7)", () => {
+		// negative control (owner-specified): a base-`number` column can't
+		// brand as `string` -- our safety difference from Drizzle's
+		// unconstrained $type<T>().
+		// @ts-expect-error integer's base type is number, not string
+		integer().$type<string>();
+
+		// positive controls, one difference each from the negative case
+		// above (C12): a real narrowing of the column's own base type.
+		type UserId = string & { readonly __brand: "UserId" };
+		expectTypeOf(uuid().$type<UserId>()).toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" } & { jsonType: UserId }>
+		>();
+		expectTypeOf(text().$type<"draft" | "published">()).toEqualTypeOf<
+			ColumnBuilder<
+				"text",
+				{ typeName: "text" } & { jsonType: "draft" | "published" }
+			>
+		>();
+		// json/jsonb's own base is `unknown` -- every type is a subset of
+		// `unknown`, so they stay unconstrained in practice without this
+		// file (or column-builder.ts's $type signature) special-casing
+		// them; see $type's own tsdoc for the one-rule argument.
+		type Payload = { readonly kind: "widget" };
+		expectTypeOf(jsonb().$type<Payload>()).toEqualTypeOf<
+			ColumnBuilder<"json", { typeName: "jsonb" } & { jsonType: Payload }>
+		>();
+	});
+
 	it("array() carries the jsonb brand through (task 3.4/3.5 ArrayCarriedFlags pattern)", () => {
 		type Payload = { readonly kind: "widget" };
 		expectTypeOf(jsonb().$type<Payload>().array()).toEqualTypeOf<
