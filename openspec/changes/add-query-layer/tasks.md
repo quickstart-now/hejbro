@@ -378,7 +378,7 @@ declarations for joined tables).
   `packages/query/test/db/convert.test.ts` "bigint text arrives as the
   declared mode's type; a poisoned cell names its column"; files
   `src/db/convert.ts`. ~10m
-- [ ] 4.5 Execution error wrapper: `query-execution-failed`,
+- [x] 4.5 Execution error wrapper: `query-execution-failed`,
   `{ kind }`, parameterized SQL text in the message, params never,
   driver error as cause, no retry; red test
   `packages/query/test/db/errors.test.ts` "constraint violation
