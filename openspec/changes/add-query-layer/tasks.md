@@ -466,25 +466,46 @@ had explicitly parked pending this decision.
   `packages/core/test/define-function.test.ts`
   "FunctionDeclaration<TArgs, TReturns> generics (task 4.10)"; files
   `packages/core/src/dsl/define-function.ts`. ~10m
-- [ ] 4.10 `db.fn.*` typing from the declarations record (the
-  consumer half 4.10a enables — 4.10 itself stays open until this
-  lands): named-object call signature derived from `TArgs` (owner
-  decision, args-as-object) via g3's `ts-type-map`; `FnApi` keyed
-  exactly to the declarations record's function export names (a
-  nonexistent key is a compile error, owner decision ③'s static
-  pinning); return row type derived from `TReturns` (a `Table` target
-  resolves through `SelectResult<TTable>`, a scalar `TypeNode` maps
-  through core's public `BaseTsType` with a local array-shape adapter);
-  runtime still renders positional SQL in declared argument order
-  (unchanged) — the named→positional lookup must read each argument by
-  `declaration.args[].argName`, never `Object.values(args)` (object key
-  order is call-site insertion order, not declaration order); red
-  tests `packages/query/test/db/fn-types.test.ts` — five
-  `@ts-expect-error` probes (typo key, missing key, wrong type, excess
-  key on a fresh object literal, nonexistent function key) and a
-  reversed-call-order fixture asserting `params` (not the SQL text,
-  which is `$1, $2` either way) lands in declared order; files
-  `packages/query/src/db/fn-types.ts`. ~15m
+- [x] 4.10 `db.fn.*` typing from the declarations record (the
+  consumer half 4.10a enables): named-object call signature derived
+  from `TArgs` (owner decision, args-as-object) via g3's `ts-type-map`
+  (`ColumnTsType`); `TypedFnApi` keyed exactly to the declarations
+  record's function export names (a nonexistent key is a compile
+  error, owner decision ③'s static pinning) — required threading a
+  defaulted `TFunctions` type parameter through `Db`/`ScopedDb`/`db()`
+  itself (`fn-types.ts`'s own `FunctionsOf<TSchema>`), a larger surface
+  than this task's own `files:` line implied, confirmed in-scope
+  (`src/db/**`) before starting; return row type derived from
+  `TReturns` (a `Table` target resolves through `SelectResult<TTable>`,
+  a scalar `TypeNode` maps through core's public `BaseTsType` with a
+  local array-shape adapter). **4.9's own scalar contract turned out to
+  be spec-non-compliant** (`typed-function-execution` says a scalar
+  call "resolves to a value", `db.fn`'s runtime returned an unaliased
+  row array for both shapes) — fixed in the same task: scalar calls now
+  render an explicit `as "result"` alias and resolve to the bare
+  converted value, with a new `function-scalar-result-missing` fail-fast
+  guard and the first scalar-return `defineFunction` fixture/coverage
+  this codebase has had. Runtime still renders positional SQL in
+  declared argument order; the named→positional lookup reads each
+  argument by `declaration.args[].argName` (matched via `toSnakeCase`,
+  since `FunctionDeclaration.args` never preserves the original
+  camelCase key), never `Object.values(args)` (object key order is
+  call-site insertion order, not declaration order). red tests
+  `packages/query/test/db/fn-types.test.ts` — five `@ts-expect-error`
+  probes (typo key, missing key, wrong type, excess key on a fresh
+  object literal, nonexistent function key) — and
+  `packages/query/test/db/fn.test.ts`'s reversed-call-order fixture
+  asserting `params` (not the SQL text, which is `$1, $2` either way)
+  lands in declared order; files `packages/query/src/db/fn-types.ts`,
+  `src/db/fn.ts`, `src/db/db.ts`, `src/db/context.ts`. **Known,
+  documented imprecision**: `dispatchCall`'s own pre-existing
+  unresolved-table fallback (task 4.9) makes a `returns`-table function
+  resolve to a bare scalar value at runtime when that table isn't in
+  the calling handle's own declarations, while the type (derived from
+  the declaration's own `TReturns`, unaware of any specific handle's
+  scope) still promises `ReadonlyArray<SelectResult<TTable>>` —
+  documented at the one test that exercises this edge case, not fixed
+  (a runtime behavior change, out of this task's own scope). ~35m
 - [x] 4.11-mutation (owner decision (a), completing what 4.11 below
   parked) core generic type surface for the mutation builders:
   `InsertFinal`/`UpdateFinal`/`DeleteFinal` (and their

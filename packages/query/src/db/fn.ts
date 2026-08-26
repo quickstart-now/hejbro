@@ -279,11 +279,13 @@ const extractScalarValue = (
 	if (rows.length !== 1 || row === undefined || !("result" in row)) {
 		return throwScalarResultMissing(functionName);
 	}
+	// convertRows maps 1:1 over its input -- a length-1 input always
+	// produces a length-1 output, so `converted` is unconditionally
+	// defined here; `noUncheckedIndexedAccess` still requires this to be
+	// spelled as an optional access, not a real optional path (nothing
+	// left for a test to leave uncovered -- CRAP follow-up, batch C).
 	const [converted] = convertRows([row], [{ alias: "result", columnState }]);
-	if (converted === undefined) {
-		return throwScalarResultMissing(functionName);
-	}
-	return converted.result;
+	return converted?.result;
 };
 
 /**
