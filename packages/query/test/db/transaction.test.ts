@@ -47,7 +47,7 @@ describe("db().transaction (task 4.6)", () => {
 	it("commits and resolves the callback's own return value on success (positive control)", async () => {
 		const { driver, sessionExecute, commit, rollback } =
 			transactionalDriver(true);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		const result = await handle.transaction(async (tx) => {
 			await tx.execute(select(posts));
@@ -62,7 +62,7 @@ describe("db().transaction (task 4.6)", () => {
 
 	it("rolls back and rethrows the exact error when the callback throws", async () => {
 		const { driver, commit, rollback } = transactionalDriver(true);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 		const thrown = new Error("callback failed");
 
 		await expect(
@@ -77,7 +77,7 @@ describe("db().transaction (task 4.6)", () => {
 
 	it("every statement inside the callback runs on the same connection -- one session, not one per statement", async () => {
 		const { driver, sessionExecute } = transactionalDriver(true);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		await handle.transaction(async (tx) => {
 			await tx.execute(select(posts));
@@ -93,7 +93,7 @@ describe("db().transaction (task 4.6)", () => {
 
 	it("checks the capability before any send -- driver.transaction never runs without interactive-transactions", async () => {
 		const { driver } = transactionalDriver(false);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		await expect(
 			handle.transaction(async (tx) => {
@@ -107,7 +107,7 @@ describe("db().transaction (task 4.6)", () => {
 
 	it("a nested transaction() call fails fast with nested-transaction-unsupported, before any further send", async () => {
 		const { driver } = transactionalDriver(true);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		await expect(
 			handle.transaction(async () => {

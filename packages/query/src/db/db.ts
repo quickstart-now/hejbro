@@ -1,9 +1,11 @@
 import type {
 	FunctionDeclaration,
+	Role,
 	SelectLimited,
 	SelectProjection,
 	Table,
 } from "@hejbro/core";
+import { getTableMeta, isTable } from "@hejbro/core";
 import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
 import type { SelectResult } from "../types/select-result";
@@ -12,25 +14,125 @@ import type { Tx } from "./transaction";
 import { createTransactionApi } from "./transaction";
 
 /**
- * Everything a `db()` handle needs to know about the declared schema,
- * keyed the way the caller's own module already keys it (`{ tables: {
- * posts, comments } }`) — a plain shorthand-property object, the same
- * "record keyed by export name" reading owner decision ③ settles for
- * `db.fn` (task 4.9): JS can't introspect an export binding's name at
- * runtime, so the record's own keys stand in for it.
+ * A declared schema module, passed through exactly as its own exports
+ * arrive (owner decision (c′): `import * as schema from "./app.schema";
+ * db(schema, driver)`) — a flat, heterogeneous record. `db()` classifies
+ * each value by its own runtime shape (`isTable`/`declarationKind`), not
+ * by which key it was exported under or which bucket the caller sorted
+ * it into, so tables/functions/grants/RLS-bearing tables can all live in
+ * the same module and an incidental non-declaration export (a constant,
+ * a re-exported type) is simply ignored rather than rejected.
+ */
+export type Schema = Readonly<Record<string, unknown>>;
+
+/**
+ * `db()`'s only opt-in extension point (owner decision (c′)/③): role
+ * values the caller explicitly wants recognized, on top of whatever a
+ * `grant`/RLS policy already inside `schema` names. Each entry must be a
+ * branded {@link Role} (`roleName("...")`, core's public export) — a
+ * bare string here is a `tsc` error, not a silent pass-through.
  *
- * `tables` is required (every table any statement can reach — including a
- * joined table never named directly by the caller's own `select()`/
- * `returning()` call — has to be resolvable here; task 4.4's single
- * column-meta resolver depends on this being complete, not just "the
- * tables this one query happens to mention"). `functions` is optional:
- * only `db.fn.*` (task 4.9) reads it, and not every declared schema
- * exposes callable functions.
+ * **Deliberately not auto-collected from `schema`'s own string exports.**
+ * A schema module can export arbitrary strings for reasons that have
+ * nothing to do with roles (labels, enum-like constants, …); treating
+ * every string export as a role candidate would let a *typo'd* role name
+ * coincidentally match one of them and pass validation — exactly the
+ * silent, non-deterministic failure `db.as`'s "reject a typo immediately"
+ * (task 4.7, owner decision) exists to rule out. Opt-in via `roles` keeps
+ * that rejection deterministic: only a name the caller explicitly
+ * branded and listed here is ever recognized as a role through this
+ * path — if a future revision "simplifies" this to scanning `schema` for
+ * strings, that determinism is exactly what it gives up.
+ */
+export type DbOptions = {
+	readonly roles?: ReadonlyArray<Role>;
+};
+
+/**
+ * `db()`'s internal, classified view of `schema` plus `options` —
+ * computed once at construction (not recomputed per call), read by
+ * `execute()`'s column-meta resolver (task 4.4), `db.fn` (task 4.9), and
+ * `db.as`'s role whitelist (task 4.7).
  */
 export type Declarations = {
 	readonly tables: Readonly<Record<string, Table>>;
-	readonly functions?: Readonly<Record<string, FunctionDeclaration>>;
+	readonly functions: Readonly<Record<string, FunctionDeclaration>>;
+	/**
+	 * The declared-role whitelist (owner decision (c′), task 4.7's 4-way
+	 * union): every `grant`'s role, every RLS policy's roles (walked from
+	 * each declared table), `options.roles`, and `driver.contributedRoles`
+	 * — plain strings throughout. `Role`'s own brand is compile-time only;
+	 * `GrantDeclaration.role`/`PolicyDeclaration.roles` were never branded
+	 * to begin with, so a `Set<string>` is the honest common type here,
+	 * not a re-branding exercise.
+	 */
+	readonly roles: ReadonlySet<string>;
 };
+
+/**
+ * `true` when `value` is a declaration object of `kind` — every
+ * declaration in core except {@link Table} (hidden behind its own
+ * `tableMeta` symbol, `isTable` is the only way to recognize one) carries
+ * a plain, enumerable `declarationKind` string.
+ */
+const isDeclarationKind = (value: unknown, kind: string): boolean =>
+	typeof value === "object" &&
+	value !== null &&
+	"declarationKind" in value &&
+	(value as { readonly declarationKind: unknown }).declarationKind === kind;
+
+const tablesOf = (schema: Schema): Readonly<Record<string, Table>> =>
+	Object.fromEntries(
+		Object.entries(schema).filter((entry): entry is [string, Table] =>
+			isTable(entry[1]),
+		),
+	);
+
+const functionsOf = (
+	schema: Schema,
+): Readonly<Record<string, FunctionDeclaration>> =>
+	Object.fromEntries(
+		Object.entries(schema).filter(
+			(entry): entry is [string, FunctionDeclaration] =>
+				isDeclarationKind(entry[1], "function"),
+		),
+	);
+
+/** The minimal shape this module reads off a `grant(...).to(...)` result — never the full `GrantSetDeclaration` import, so this stays a structural, not nominal, dependency. */
+type GrantSetLike = {
+	readonly grants: ReadonlyArray<{ readonly role: string }>;
+};
+
+const grantRolesOf = (schema: Schema): ReadonlyArray<string> =>
+	Object.values(schema)
+		.filter((value): value is GrantSetLike =>
+			isDeclarationKind(value, "grant-set"),
+		)
+		.flatMap((grantSet) => grantSet.grants.map((grant) => grant.role));
+
+const policyRolesOf = (
+	tables: Readonly<Record<string, Table>>,
+): ReadonlyArray<string> =>
+	Object.values(tables).flatMap((table) => {
+		const rls = getTableMeta(table).rls;
+		if (rls === null) {
+			return [];
+		}
+		return rls.policies.flatMap((policy) => policy.roles);
+	});
+
+const rolesOf = (
+	schema: Schema,
+	tables: Readonly<Record<string, Table>>,
+	driver: Driver,
+	options: DbOptions | undefined,
+): ReadonlySet<string> =>
+	new Set([
+		...grantRolesOf(schema),
+		...policyRolesOf(tables),
+		...(options?.roles ?? []),
+		...(driver.contributedRoles ?? []),
+	]);
 
 /**
  * The row type `execute(statement)` resolves to (task 4.11) — dispatches
@@ -93,22 +195,9 @@ export type Db = {
 };
 
 /**
- * Builds a `db()` handle bound to `driver`. `execute` hands `driver` the
- * exact {@link CompileResult} `compile()` itself would preview for the
- * same statement — `sql`, `params`, and `kind` together, never `sql`/
- * `params` unpacked into separate arguments — so `kind` reaches the
- * driver boundary unchanged (task 4.3). A driver rejection wraps as
- * `query-execution-failed` (task 4.5, `./execute.ts`'s `executeOn`): the
- * message carries the parameterized SQL text (every value already a `$n`
- * placeholder by the time `compile()` produced it) and `kind`, the
- * driver's own error becomes `cause`, and `compiled.params` never
- * appears anywhere on the thrown error. `transaction` is assembled from
- * `./transaction.ts`'s own factory (task 4.6) so a statement run inside
- * it shares that exact same `executeOn` pipeline.
- *
- * `execute`'s own runtime body always produces the plain
- * {@link DriverRow} shape structurally (a plain object keyed by column
- * alias) — the cast to `Db["execute"]` below is {@link ExecuteResult}'s
+ * `execute`'s own runtime body always produces the plain {@link DriverRow}
+ * shape structurally (a plain object keyed by column alias) — the cast to
+ * `Db["execute"]` at the call site is {@link ExecuteResult}'s
  * compile-time-only narrowing of that same value, never a distinct
  * runtime reshape: `executeOn` (task 4.4-wiring) already converts
  * numeric-mode/`interval` cells per `declarations.tables` before this
@@ -122,10 +211,39 @@ const executeImpl = (
 	statement: CompileInput,
 ): Promise<ReadonlyArray<DriverRow>> => executeOn(driver, statement, tables);
 
-export const db = (declarations: Declarations, driver: Driver): Db => ({
-	declarations,
-	driver,
-	execute: ((statement: CompileInput) =>
-		executeImpl(driver, declarations.tables, statement)) as Db["execute"],
-	transaction: createTransactionApi(driver, declarations.tables),
-});
+/**
+ * Builds a `db()` handle from a declared `schema` module and `driver`
+ * (owner decision (c′)): `import * as schema from "./app.schema"; db(
+ * schema, driver, { roles: [appReaderRole] })`. Classifies `schema` once
+ * (tables/functions/grant-roles/policy-roles) and folds in `options.roles`
+ * and `driver.contributedRoles`, producing the {@link Declarations} every
+ * other db operation reads.
+ *
+ * `execute` hands `driver` the exact {@link CompileResult} `compile()`
+ * itself would preview for the same statement — `sql`, `params`, and
+ * `kind` together, never `sql`/`params` unpacked into separate arguments
+ * — so `kind` reaches the driver boundary unchanged (task 4.3). A driver
+ * rejection wraps as `query-execution-failed` (task 4.5, `./execute.ts`'s
+ * `executeOn`): the message carries the parameterized SQL text (every
+ * value already a `$n` placeholder by the time `compile()` produced it)
+ * and `kind`, the driver's own error becomes `cause`, and
+ * `compiled.params` never appears anywhere on the thrown error.
+ * `transaction` is assembled from `./transaction.ts`'s own factory (task
+ * 4.6) so a statement run inside it shares that exact same `executeOn`
+ * pipeline.
+ */
+export const db = (schema: Schema, driver: Driver, options?: DbOptions): Db => {
+	const tables = tablesOf(schema);
+	const declarations: Declarations = {
+		tables,
+		functions: functionsOf(schema),
+		roles: rolesOf(schema, tables, driver, options),
+	};
+	return {
+		declarations,
+		driver,
+		execute: ((statement: CompileInput) =>
+			executeImpl(driver, declarations.tables, statement)) as Db["execute"],
+		transaction: createTransactionApi(driver, declarations.tables),
+	};
+};

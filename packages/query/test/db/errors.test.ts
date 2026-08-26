@@ -29,7 +29,7 @@ describe("query-execution-failed (task 4.5)", () => {
 			"duplicate key value violates unique constraint",
 		);
 		const driver = driverThatThrows(driverError);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 		const statement = select(posts).where(eq(posts.status, MARKER));
 
 		try {
@@ -56,7 +56,7 @@ describe("query-execution-failed (task 4.5)", () => {
 
 	it("no retry -- the driver's execute runs exactly once per db.execute() call", async () => {
 		const driver = driverThatThrows(new Error("boom"));
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		await expect(handle.execute(select(posts))).rejects.toThrow();
 
@@ -65,7 +65,7 @@ describe("query-execution-failed (task 4.5)", () => {
 
 	it('kind travels with the wrapper -- not hardcoded to "select" (an insert rejects with kind "insert")', async () => {
 		const driver = driverThatThrows(new Error("boom"));
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		try {
 			await handle.execute(insert(posts).values({ status: "draft" }));

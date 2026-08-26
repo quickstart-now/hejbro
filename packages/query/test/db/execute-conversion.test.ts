@@ -40,7 +40,7 @@ const fakeDriver = (rows: ReadonlyArray<DriverRow>): Driver => ({
 describe("db().execute wires task 4.4's conversion into the real pipeline (task 4.4-wiring)", () => {
 	it("bigint text and interval text arrive converted -- not the driver's raw text", async () => {
 		const driver = fakeDriver([rawRow]);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		const rows = await handle.execute(select(posts));
 
@@ -59,7 +59,7 @@ describe("db().execute wires task 4.4's conversion into the real pipeline (task 
 
 	it("a column with no declared conversion (uuid/text) passes through the execute() path exactly as the driver gave it -- a direct assertion, not incidental coverage from a test aimed at something else (recommended, batch B follow-up)", async () => {
 		const driver = fakeDriver([rawRow]);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		const rows = await handle.execute(select(posts));
 
@@ -69,7 +69,7 @@ describe("db().execute wires task 4.4's conversion into the real pipeline (task 
 
 	it("the same conversion runs inside a transaction's tx.execute() -- not just the top-level path", async () => {
 		const driver = fakeDriver([rawRow]);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		const rows = await handle.transaction((tx) => tx.execute(select(posts)));
 
@@ -87,7 +87,7 @@ describe("db().execute wires task 4.4's conversion into the real pipeline (task 
 
 	it("a poisoned cell surfaces result-conversion-failed through db().execute() itself, not just convert.ts's own unit tests", async () => {
 		const driver = fakeDriver([{ ...rawRow, amount: "not-a-number" }]);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		try {
 			await handle.execute(select(posts));
@@ -100,7 +100,7 @@ describe("db().execute wires task 4.4's conversion into the real pipeline (task 
 
 	it("the sql escape hatch's rows pass through completely unchanged -- no declared column to convert against", async () => {
 		const driver = fakeDriver([{ one: 1 }]);
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		const rows = await handle.execute(sql`select 1 as one`);
 

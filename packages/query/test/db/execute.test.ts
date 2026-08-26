@@ -35,7 +35,7 @@ const recordingDriver = (): {
 describe("db().execute (task 4.3)", () => {
 	it("executed SQL equals previewed compile output -- sql, params, and kind all three, byte-identical (a statement that actually carries params, not the empty-array vacuous case)", async () => {
 		const { driver, received } = recordingDriver();
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 		// two distinct, order-sensitive param values -- a bare select(posts)
 		// compiles to params: [], which would let a driver.execute(sql, [])
 		// regression pass unnoticed (batch A review, probe 6).
@@ -56,7 +56,7 @@ describe("db().execute (task 4.3)", () => {
 
 	it("param order is preserved, not just param presence (a reversed-params mutant must fail this)", async () => {
 		const { driver, received } = recordingDriver();
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 		const statement = select(posts).where(
 			and(eq(posts.status, "first-value"), ne(posts.id, "second-value")),
 		);
@@ -72,7 +72,7 @@ describe("db().execute (task 4.3)", () => {
 
 	it('kind flows through unchanged for every CompileKind -- not hardcoded to "select" (g2 added a fifth value, "sql")', async () => {
 		const { driver, received } = recordingDriver();
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 
 		await handle.execute(select(posts));
 		await handle.execute(sql`select 1`);
@@ -83,7 +83,7 @@ describe("db().execute (task 4.3)", () => {
 
 	it("also accepts a bare QueryNode, exactly like compile() itself (same CompileInput contract)", async () => {
 		const { driver, received } = recordingDriver();
-		const handle = db({ tables: { posts } }, driver);
+		const handle = db({ posts }, driver);
 		const bareNode = select(posts).selectQuery;
 
 		await handle.execute(bareNode);
