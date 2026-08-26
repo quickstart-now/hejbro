@@ -443,6 +443,20 @@ had explicitly parked pending this decision.
   quoted role + parameterized set_config inside one transaction;
   adversarial role/setting strings cannot reach SQL text"; files
   `src/db/context.ts`. ~10m
+- [x] 4.9-fallback (follow-up, owner review of task 4.10's own "known,
+  documented imprecision") `dispatchCall`'s unresolved-target-table
+  branch (task 4.9) silently fell back to a bare, untyped scalar call
+  instead of failing — the same "type lies" shape 4.4-wiring and the
+  missing-`"result"`-key guard (task 4.10) both already existed to rule
+  out, and an implicit guess this project consistently rejects
+  elsewhere (never `select *`, capability checks fail closed, an
+  undeclared role has no escape hatch). Now throws
+  `function-target-table-undeclared`, naming the missing table, before
+  any statement is sent; the now-unreachable "scalar call with no
+  declared type" path is removed with it. red test
+  `packages/query/test/db/fn.test.ts` "fails fast, never a silent
+  scalar guess, when the returns-table's target table isn't declared
+  in this handle's own schema module"; files `src/db/fn.ts`. ~10m
 - [x] 4.8 Spec deltas for the settled contracts: driver-contract
   (exhaustive record + capability criteria + session-setup-hook
   requirement, `IntervalStyle` pinning scoped to the driver's own
@@ -506,15 +520,14 @@ had explicitly parked pending this decision.
   `packages/query/test/db/fn.test.ts`'s reversed-call-order fixture
   asserting `params` (not the SQL text, which is `$1, $2` either way)
   lands in declared order; files `packages/query/src/db/fn-types.ts`,
-  `src/db/fn.ts`, `src/db/db.ts`, `src/db/context.ts`. **Known,
-  documented imprecision**: `dispatchCall`'s own pre-existing
-  unresolved-table fallback (task 4.9) makes a `returns`-table function
-  resolve to a bare scalar value at runtime when that table isn't in
-  the calling handle's own declarations, while the type (derived from
-  the declaration's own `TReturns`, unaware of any specific handle's
-  scope) still promises `ReadonlyArray<SelectResult<TTable>>` —
-  documented at the one test that exercises this edge case, not fixed
-  (a runtime behavior change, out of this task's own scope). ~35m
+  `src/db/fn.ts`, `src/db/db.ts`, `src/db/context.ts`. Initially left
+  `dispatchCall`'s own pre-existing unresolved-table fallback (task
+  4.9) as a documented imprecision (a `returns`-table function
+  resolving to a bare scalar value at runtime, while the type still
+  promised `ReadonlyArray<SelectResult<TTable>>`) — owner review
+  rejected leaving it documented (the same "type lies" shape already
+  fixed twice this task), so it was closed for real in task
+  4.9-fallback below instead of staying a caveat. ~35m
 - [x] 4.11-mutation (owner decision (a), completing what 4.11 below
   parked) core generic type surface for the mutation builders:
   `InsertFinal`/`UpdateFinal`/`DeleteFinal` (and their
