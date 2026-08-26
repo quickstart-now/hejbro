@@ -10,6 +10,16 @@ const throwNumericModeOverflow = (raw: string, mode: "number"): never => {
 	);
 };
 
+/** Builds the `numeric-mode-fraction-loss`-coded, enriched plain `Error` this module throws when `'bigint'` mode would otherwise silently drop a nonzero fractional part. */
+const throwNumericModeFractionLoss = (raw: string, mode: "bigint"): never => {
+	throw Object.assign(
+		new Error(
+			`numeric text ${JSON.stringify(raw)} has a nonzero fractional part (mode ${JSON.stringify(mode)} would silently drop it). Next: use mode: 'string' (exact, the default) or mode: 'number' (exact within Number.MAX_SAFE_INTEGER), or only declare mode: 'bigint' on a column with scale 0.`,
+		),
+		{ code: "numeric-mode-fraction-loss" },
+	);
+};
+
 /** Builds the `unparsable-numeric-text`-coded, enriched plain `Error` this module throws for input `BigInt(...)` itself can't parse (defensive: real int8/numeric driver text is never malformed this way). */
 const throwUnparsableNumericText = (raw: string, mode: "bigint"): never => {
 	throw Object.assign(
@@ -21,13 +31,12 @@ const throwUnparsableNumericText = (raw: string, mode: "bigint"): never => {
 };
 
 /**
- * The text before `raw`'s first `.`, or all of `raw` if it has none —
- * `'bigint'` mode's truncation (group 4/D3): an `int8` value is already an
- * integer (no `.` ever appears), a `numeric` value's fractional part is
- * dropped, never rounded, mirroring `Math.trunc`'s own toward-zero
- * direction for the sign this produces.
+ * The text before `raw`'s first `.`, or all of `raw` if it has none. Only
+ * ever called once {@link hasNonzeroFraction} has confirmed there is
+ * nothing meaningful past the `.` to drop — this only ever strips a
+ * fraction already known to be all zeros (or absent), never a real one.
  */
-const truncatedIntegerText = (raw: string): string => {
+const integerPartText = (raw: string): string => {
 	const dotIndex = raw.indexOf(".");
 	if (dotIndex === -1) {
 		return raw;
@@ -35,15 +44,28 @@ const truncatedIntegerText = (raw: string): string => {
 	return raw.slice(0, dotIndex);
 };
 
+/** `true` when `raw` has a `.` followed by at least one non-`0` digit — an `int8` value never does (no `.` ever appears), but a `numeric` value can. */
+const hasNonzeroFraction = (raw: string): boolean => {
+	const dotIndex = raw.indexOf(".");
+	if (dotIndex === -1) {
+		return false;
+	}
+	return !/^0*$/.test(raw.slice(dotIndex + 1));
+};
+
 /**
  * Converts an `int8`/`numeric` column's raw driver text to the TS value its
  * resolved `NumericMode` (task 3.4) promises — a pure function, fail-fast
- * (D3): `'number'` throws beyond `Number.MAX_SAFE_INTEGER` rather than
- * losing precision silently, and `'bigint'` truncates toward zero rather
- * than rounding (an implicit, undocumented rounding rule would be its own
- * silent-precision surprise). `'string'` is always exact — it's the raw
- * text back, unchanged. Wiring this into a live row's actual column
- * (reading `columnState.mode` off the declaration) is group 4's task.
+ * (D3) in both directions: `'number'` throws beyond
+ * `Number.MAX_SAFE_INTEGER` rather than losing precision silently, and
+ * `'bigint'` throws on a nonzero fractional part rather than truncating it
+ * away silently — truncation drops information exactly as quietly as an
+ * overflow would, so both modes reject instead of guessing. A value that's
+ * merely *written* with a fraction but equal to an integer (`'42.000'`)
+ * still converts normally; nothing is lost there. `'string'` is always
+ * exact — it's the raw text back, unchanged. Wiring this into a live row's
+ * actual column (reading `columnState.mode` off the declaration) is group
+ * 4's task.
  */
 export const convertNumericText = (
 	raw: string,
@@ -59,8 +81,11 @@ export const convertNumericText = (
 		}
 		return value;
 	}
+	if (hasNonzeroFraction(raw)) {
+		return throwNumericModeFractionLoss(raw, mode);
+	}
 	try {
-		return BigInt(truncatedIntegerText(raw));
+		return BigInt(integerPartText(raw));
 	} catch {
 		return throwUnparsableNumericText(raw, mode);
 	}

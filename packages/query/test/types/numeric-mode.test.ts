@@ -52,9 +52,33 @@ describe("convertNumericText (D3, task 3.9)", () => {
 		);
 	});
 
-	it("'bigint' mode truncates a fractional (numeric) value toward zero, never rounds", () => {
-		expect(convertNumericText("123.9", "bigint")).toBe(123n);
-		expect(convertNumericText("-123.9", "bigint")).toBe(-123n);
-		expect(convertNumericText("123.001", "bigint")).toBe(123n);
+	it("'bigint' mode converts a value merely written with a zero fraction", () => {
+		// "42.000" and "42" are the same value -- nothing is lost, so this
+		// is the positive contrast for the negative case right below.
+		expect(convertNumericText("42.000", "bigint")).toBe(42n);
+		expect(convertNumericText("-42.0", "bigint")).toBe(-42n);
+	});
+
+	it("'bigint' mode rejects a nonzero fractional (numeric) value instead of silently truncating it", () => {
+		expect(() => convertNumericText("123.9", "bigint")).toThrowError(
+			/nonzero fractional part/,
+		);
+		expect(() => convertNumericText("-123.9", "bigint")).toThrowError(
+			/nonzero fractional part/,
+		);
+		expect(() => convertNumericText("123.001", "bigint")).toThrowError(
+			/nonzero fractional part/,
+		);
+	});
+
+	it("'bigint' fraction rejection throws a kebab-case-coded, enriched plain Error", () => {
+		try {
+			convertNumericText("123.9", "bigint");
+			expect.unreachable("convertNumericText should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "numeric-mode-fraction-loss");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
 	});
 });
