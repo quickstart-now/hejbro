@@ -47,15 +47,33 @@ export type ColumnMeta = {
  * `columnState` deep-equal assertion in this file's tests, which would
  * otherwise fail the moment this key leaked onto a real builder).
  *
- * Plain `Symbol()`, not `Symbol.for(...)` — unlike `tableMeta`, this
- * symbol's runtime identity is never compared (nothing ever reads
- * `builder[columnMetaBrand]`; it exists purely so the *type checker* sees a
- * non-recursive mention of `TMeta`). `tableMeta`'s `Symbol.for` earns its
- * keep because `isTable`/`getTableMeta` actually look the key up on real
- * objects at runtime, and two installed copies of `@hejbro/core` must agree
- * on that key to interoperate (#138). No such cross-instance runtime lookup
- * exists here, so there is nothing for a shared global-registry identity to
- * protect.
+ * Plain `Symbol()`, not `Symbol.for(...)`, and not exported — unlike
+ * `tableMeta`, neither would help here:
+ * - This symbol's runtime identity is never compared (nothing ever reads
+ *   `builder[columnMetaBrand]`; it exists purely so the *type checker* sees
+ *   a non-recursive mention of `TMeta`). `tableMeta`'s `Symbol.for` earns
+ *   its keep because `isTable`/`getTableMeta` actually look the key up on
+ *   real objects at runtime, and two installed copies of `@hejbro/core`
+ *   must agree on that key to interoperate (#138). No such cross-instance
+ *   runtime lookup exists here, so there is nothing for a shared
+ *   global-registry identity to protect.
+ * - Exporting it wouldn't fix the two-copies case either: a `unique
+ *   symbol`'s type identity is bound to *where it's declared*, not to its
+ *   runtime value, so two installed copies of `@hejbro/core` still produce
+ *   two distinct `unique symbol` types for `columnMetaBrand` even if both
+ *   are `Symbol.for(...)` and both are exported — `ColumnBuilder` from one
+ *   copy still wouldn't structurally match `ColumnBuilder` from the other.
+ *   Since exporting buys nothing, there's no reason to pay `tableMeta`'s
+ *   public-surface cost for it.
+ *
+ * Confirmed consumable from the built, non-exported form: `pnpm build
+ * --force && pnpm check-types` (workspace root, in that order — turbo's
+ * `check-types` cache key doesn't depend on `^build`, #287, so a plain
+ * `pnpm check-types` can replay a stale pass against last build's `dist`)
+ * passes for `hejbro` (cli) and both `examples/*` packages, which resolve
+ * `@hejbro/core` through its published `exports["."].types` —
+ * `./dist/index.d.ts` — not through source, so this is real downstream
+ * `.d.ts` consumption, not just successful emission.
  */
 export const columnMetaBrand: unique symbol = Symbol("hejbro:column-meta");
 
