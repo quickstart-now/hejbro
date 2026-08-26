@@ -55,6 +55,13 @@ in a declaration is valid in a query.
 - **THEN** it compiles to the same SQL text that helper renders in
   declaration contexts, with literal values lifted to bind parameters
 
+#### Scenario: A lifted timestamp keeps its type context
+- **WHEN** a condition or written value carries a timestamp literal, which
+  a declaration would render as a cast string literal
+- **THEN** the compiled SQL carries the placeholder with the same cast
+  and the parameter is the ISO-8601 string, so the value's type is fixed
+  by the statement rather than by driver-specific encoding
+
 ### Requirement: Typed sql escape hatch
 The query package SHALL provide a typed `sql` tagged template usable as
 a statement or embedded as an expression fragment. Interpolated values
@@ -83,10 +90,11 @@ doubles an embedded double quote. `sql.raw()` SHALL be the single verbatim
 path into the SQL text, and SHALL be documented as the one place a caller
 takes responsibility for what it passes.
 
-The only values rendered inline are ones that are not caller-supplied text:
-a `limit`, which the builder has already validated as a non-negative
-integer, and the internal `default` marker a multi-row insert uses for a
-missing key.
+The only *values* rendered inline are ones that are not caller-supplied
+text: a `limit`, which the builder has already validated as a
+non-negative integer, and the internal `default` marker a multi-row
+insert uses for a missing key. `sql.raw()` is not a value — it is SQL,
+and the paragraph above governs it.
 
 #### Scenario: Hostile value in a condition
 - **WHEN** a `where` condition compares a column against the string

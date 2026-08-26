@@ -47,13 +47,26 @@ the select object projection (symmetry, not a new contract).
   `packages/query/test/compile/select.test.ts` "select with where
   compiles to parameterized SQL, no star"; files
   `src/compile/select.ts`, `src/compile/params.ts`. ~10m
-- [ ] 2.3 Order/limit rendering; red test
+- [x] 2.3 Order/limit rendering; red test
   `packages/query/test/compile/select.test.ts` "order and limit render
-  after where"; files `src/compile/select.ts`. ~6m
-- [ ] 2.4 Join rendering with schema-qualified explicit columns; red
+  after where"; files `src/compile/select.ts`. ~6m — **subsumed by 2.2**:
+  the named test passed on first run, because 2.2's lift walks the whole
+  render order (orderBy included) and the contract says `limit` is left
+  untouched, so there was no production code left to write. Landed as a
+  regression lock instead: the test was strengthened to put literals in
+  two different clauses, which is what makes the clause-to-clause
+  `startIndex` arithmetic observable at all.
+- [x] 2.4 Join rendering with schema-qualified explicit columns; red
   test `packages/query/test/compile/join.test.ts` "left join renders
   left join … on with qualified columns"; files
-  `src/compile/select.ts`. ~8m
+  `src/compile/select.ts`. ~8m — **subsumed by 2.2** the same way: joins
+  are already part of the render-order lift, and core's `renderSelect`
+  owns join keywords, schema qualification, and identifier quoting.
+  Landed as a regression lock. Its identifier-escaping test builds a
+  `SelectNode` directly rather than through `table()`, because D36 bars
+  a quote from a declared name — and a hand-built node is a supported
+  input (`QueryNode` is in the `compile()` union), so the test exercises
+  a real contract, not a contrived path.
 - [ ] 2.5 Insert/update/delete rendering with explicit `returning`; red
   test `packages/query/test/compile/mutation.test.ts` "insert renders
   parameterized values and explicit returning"; files
