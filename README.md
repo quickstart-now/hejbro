@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1051](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201051-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1104](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201104-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -175,8 +175,32 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1051 functions** over the threshold, highest score 5.00 — measured at `cba0168` (2026-08-26).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1104 functions** over the threshold, highest score 5.00 — measured at `f4d57a8` (2026-08-26).
 <!-- crap:end -->
+
+<!-- ai-metrics:start -->
+**AI-native development metrics** — this project is built by AI piece
+teams under owner direction; each completed piece records its ledgers
+(`openspec/task-times.csv`, `openspec/task-tokens.csv`) and this block
+is refreshed at piece close-out by the lead (single writer). Time is
+pure processing only (owner-decision waits and coordination excluded);
+tokens are summed from the piece team's session transcripts — external
+records, never self-reported. Formulas and dimension definitions: #305.
+
+| Piece (change `add-query-layer`) | Tasks | Est → actual (pure min) | Review reworks | Output tokens | Requests | Cache hit |
+|---|---|---|---|---|---|---|
+| group 2 — compiler + sql | 6 | 54 → 174 ¹ | 1 | 881,848 | 898 | 99.0% |
+| group 3 — type inference | 16 | 154 → 124 (0.81×) | 3 | 2,178,887 | 2,506 | 99.5% |
+| group 4 — execution + drivers contract | 15 | 195 → 130 (0.67×) | 2 | 2,206,258 | 2,667 | 99.5% |
+
+Named process-cost rows are kept separate from task rows (a decision
+arriving mid-implementation, a red-first lapse, a gate widening between
+bases) — summed they would read "estimates were right"; separated they
+read "tasks were fast, process was expensive", which is the actionable
+half. Session-wide tool-call failure rate: 1.9% (includes intentional
+TDD red runs). ¹ group 2's time rows predate the pure-processing
+measurement standard and include coordination waits.
+<!-- ai-metrics:end -->
 
 ## License
 

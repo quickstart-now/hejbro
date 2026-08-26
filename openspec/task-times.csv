@@ -2,8 +2,8 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-26,add-query-layer,1.1,1,6,7,0,scaffold packages/query + alias guard test
 2026-08-26,add-query-layer,1.2,1,10,12,1,left join variant incl. codec + render; waited = IR-strategy AskUserQuestion
 2026-08-26,add-query-layer,1.3,1,10,8,0,returning object projection + empty guard
-2026-08-26,add-query-layer,2.1,2,10,12,0,compile() entry point: result shape + kind, structural union, deterministic
-2026-08-26,add-query-layer,2.2,2,10,40,0,select where->params; circular dependency resolved + file split rework (~15m of the 40, core render-sql.ts precedent)
+2026-08-26,add-query-layer,2.1,2,10,12,0,compile() entry point: result shape + kind; structural union; deterministic
+2026-08-26,add-query-layer,2.2,2,10,40,0,select where->params; circular dependency resolved + file split rework (~15m of the 40; core render-sql.ts precedent)
 2026-08-26,add-query-layer,2.3,2,6,5,0,subsumed by 2.2; landed as regression lock (order/limit + cross-clause numbering)
 2026-08-26,add-query-layer,2.4,2,8,12,0,subsumed by 2.2; landed as regression lock (joins + identifier quoting via hand-built QueryNode)
 2026-08-26,add-query-layer,2.5,2,10,30,0,insert/update/delete lift; compileUnlifted removed; default-marker regression + injection tests
@@ -28,3 +28,33 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-26,add-query-layer,3.15,3,10,7,0,chain methods preserve the accumulated meta
 2026-08-26,add-query-layer,3.16,3,10,10,0,type-level notNull mirrors materializeNotNull
 2026-08-26,add-query-layer,3.9-crap,3,,12,0,split after the gate itself widened between bases (g2 added query to crap scan) - not a team miss; differential-verified 75 combos
+2026-08-26,add-query-layer,4.0,4,8,3.5,0,scout; measured
+2026-08-26,add-query-layer,4.1,4,10,2.7,0,measured
+2026-08-26,add-query-layer,4.2,4,6,0.8,0,measured
+2026-08-26,add-query-layer,4.3,4,10,1.8,0,measured
+2026-08-26,add-query-layer,4.4,4,10,2.7,0,measured
+2026-08-26,add-query-layer,4.5,4,8,1.2,0,measured
+2026-08-26,add-query-layer,4.6,4,10,1.6,0,measured
+2026-08-26,add-query-layer,4.7,4,10,13,0,(commit-interval approx); incl. prep
+2026-08-26,add-query-layer,4.9,4,10,12,0,(commit-interval approx)
+2026-08-26,add-query-layer,4.10a,4,10,10,0,(commit-interval approx); owner scope expansion (B); core define-function type surface
+2026-08-26,add-query-layer,4.11-mutation,4,15,19,0,(commit-interval approx); owner scope expansion (a); core mutate type surface
+2026-08-26,add-query-layer,4.10,4,35,18,0,(commit-interval approx); consumer half; db.fn typing
+2026-08-26,add-query-layer,4.8,4,10,9,0,(commit-interval approx); incl. prep
+2026-08-26,add-query-layer,4.11-select,4,10,5.5,0,measured; NEW: uncovered spec requirement found by review inversion; not rework
+2026-08-26,add-query-layer,4.3-schema,4,10,6,0,(commit-interval approx); NEW: back-record of an instructed change; not rework
+2026-08-26,add-query-layer,4.4-wiring,4,15,4.3,0,measured; NEW: self-found incompletion (convert.ts had no production caller); not rework
+2026-08-26,add-query-layer,4.9-scalar,4,,9,0,(commit-interval approx); NEW: spec re-read showed scalar must resolve a value not rows; not rework
+2026-08-26,add-query-layer,4.9-fallback,4,10,6,0,(commit-interval approx); NEW: review-flagged type-lie closed by fail-fast; not rework
+2026-08-26,add-query-layer,4.3-rework,4,,1.3,0,REWORK: same-direction repair (params assertion was vacuous; fixture strengthened; no direction change)
+2026-08-26,add-query-layer,4.10-nul-rework,4,,10,0,REWORK: same-direction repair (review items: raw NUL byte made the security test file binary; db.as conversion assertion; changeset wording) (step-based estimate)
+2026-08-26,add-query-layer,4.proc-crap-split,4,,3,0,process cost: CRAP threshold split (5e2deec)
+2026-08-26,add-query-layer,4.proc-coverage-followup,4,,5,0,process cost: fallback/coverage test (503a4fd)
+2026-08-26,add-query-layer,4.proc-reviewB-followup,4,,5,0,(commit-interval approx); process cost: batch B recommendations (809e2ef)
+2026-08-26,add-query-layer,4.proc-fixture-selfcorrect,4,,2,0,(commit-interval approx); process cost: numeric-column fixture self-correction (5e19bf4)
+2026-08-26,add-query-layer,4.proc-review47-followup,4,,9,0,(commit-interval approx); process cost: 4.7 review items incl. scopedRun dedup (6356d38)
+2026-08-26,add-query-layer,4.proc-tasksmd-reopen,4,,7,0,(commit-interval approx); process cost: reopen 4.10 after scope-redefinition closure (db0252f)
+2026-08-26,add-query-layer,4.proc-crap-selfcorrect,4,,4,0,(commit-interval approx); process cost: extractScalarValue dead branch (575e9d8)
+2026-08-26,add-query-layer,4.proc-tasksmd-fallback,4,,2,0,(commit-interval approx); process cost: tasks.md 4.9-fallback record (f1fb3ea)
+2026-08-26,add-query-layer,4.prep,4,,29,0,(commit-interval approx); unassigned pre-first-commit prep (recon vs measured gap); deliberately not distributed across tasks
+2026-08-26,add-query-layer,4.review,4,,24.9,0,reviewer total: batch A 4.8 + B 6.5 + B-recheck 2.4 + C 8.9 + C-recheck 2.3
