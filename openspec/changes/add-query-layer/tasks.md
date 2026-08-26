@@ -326,40 +326,95 @@ on top of it. Settled decisions:
 
 ## 4. Driver contract + db handle
 
-- [ ] 4.1 [design] Driver contract types + capability keys (kebab-case
-  tokens: `interactive-transactions`, `session-state`, …) readable as
-  data; red test `packages/query/test/driver/contract.test.ts`
-  "capabilities are inspectable before connecting"; files
+Reworked before summoning (2026-08-26) under the post-g3 discipline:
+every [design] decision below is owner-settled IN ADVANCE — ① driver
+capabilities are an exhaustive Record (`interactive-transactions`,
+`session-state`) under three contract criteria: a mandatory
+prerequisite (e.g. bind-parameter execution) is never a capability but
+part of the driver type itself; the exhaustive record makes an
+undeclared key a compile error, so no implicit default exists; `false`
+always fails closed with the explicit error. ② Execution errors wrap
+with code `query-execution-failed`, fields `{ kind }`, the
+parameterized SQL text in the message (values are all `$n`; `params`
+NEVER appear anywhere), driver error as `cause`; conversion failures
+are `result-conversion-failed` with `{ column }` and `cause`. ③
+`db.fn` is keyed by the declaration record's export names
+(`db.fn.helloWorld(args)`). ④ Nested `transaction()` throws
+`nested-transaction-unsupported` (savepoints parked as #313);
+IntervalStyle is pinned to `'postgres'` by driver session setup
+(contract requirement here, implemented by groups 5/6). Estimates are
+calibrated on measured pure processing (g2/g3: 0.8–1.1×). Handoff
+notes from earlier groups: `const f = (): never => …` does not narrow
+control flow after the call — use `function` declarations or `return
+throwX(...)`; conversion functions and their per-column runtime meta
+(`columnState.mode`/`typeName`) are reachable via the three verified
+paths (whole-table meta, projection ColumnRefs by name, db-held
+declarations for joined tables).
+
+- [x] 4.0 Scout: wiring inventory — enumerate the three
+  meta-access paths against the real g3 code, the compile-output →
+  driver surface, and the `(): never` spots to avoid; deliverable = a
+  short inventory in the group PR body draft (no code, no test). ~8m
+- [x] 4.1 Driver contract types: exhaustive capability Record +
+  the three capability criteria in tsdoc + minimal driver interface
+  (parameterized execute + transaction primitives + session-setup hook
+  for the IntervalStyle pin); red test
+  `packages/query/test/driver/contract.test.ts` "a driver missing a
+  capability key is a compile error (@ts-expect-error probe)"; files
   `src/driver/contract.ts`. ~10m
-- [ ] 4.2 [design] Missing-capability error shape (enriched Error,
-  kebab-case code, names capability + operation, thrown before any
-  send); red test `packages/query/test/driver/errors.test.ts`
-  "transaction on a non-transactional driver fails naming the
-  capability"; files `src/driver/errors.ts`. ~8m
-- [ ] 4.3 db handle creation (declarations + driver) and execute
-  passthrough — driver receives exactly `compile()` output (fake
-  driver); red test `packages/query/test/db/execute.test.ts` "executed
-  SQL equals previewed compile output"; files `src/db/db.ts`. ~10m
-- [ ] 4.4 Callback-scoped transaction API (begin/commit, rollback on
-  throw, capability check first); red test
+- [ ] 4.2 Missing-capability error: code `driver-missing-capability`,
+  fields `{ capability, operation }`, thrown before any send; red test
+  `packages/query/test/driver/errors.test.ts` "transaction on a
+  non-transactional driver fails naming the capability"; files
+  `src/driver/errors.ts`. ~6m
+- [ ] 4.3 db handle creation (declarations record + driver) and
+  execute passthrough — driver receives exactly `compile()` output
+  (fake driver); red test `packages/query/test/db/execute.test.ts`
+  "executed SQL equals previewed compile output"; files
+  `src/db/db.ts`. ~10m
+- [ ] 4.4 Result conversion wiring: driver rows normalized per column
+  meta (numeric mode, IntervalValue) via the three access paths;
+  failure = `result-conversion-failed` `{ column }` + cause; red test
+  `packages/query/test/db/convert.test.ts` "bigint text arrives as the
+  declared mode's type; a poisoned cell names its column"; files
+  `src/db/convert.ts`. ~10m
+- [ ] 4.5 Execution error wrapper: `query-execution-failed`,
+  `{ kind }`, parameterized SQL text in the message, params never,
+  driver error as cause, no retry; red test
+  `packages/query/test/db/errors.test.ts` "constraint violation
+  rejects with cause and value-free SQL text"; files `src/db/db.ts`.
+  ~8m
+- [ ] 4.6 Callback-scoped transaction API (begin/commit, rollback on
+  throw, capability check first; nested call throws
+  `nested-transaction-unsupported` — savepoints parked #313); red test
   `packages/query/test/db/transaction.test.ts` "rolls back and
-  rethrows when the callback throws"; files `src/db/transaction.ts`.
-  ~10m
-- [ ] 4.5 `db.as(context)` generic mechanism: role + set_config list
-  applied via SET LOCAL inside the wrapping transaction; unscoped
-  handle unaffected; red test `packages/query/test/db/context.test.ts`
-  "context statements precede the query inside one transaction"; files
+  rethrows when the callback throws; nested call fails fast"; files
+  `src/db/transaction.ts`. ~10m
+- [ ] 4.7 `db.as(context)` generic mechanism: role validated against
+  declared roles and quoted with core's identifier rule (`SET LOCAL
+  ROLE` takes no bind parameters), settings applied via the
+  parameterized `select set_config($1, $2, true)` form, all inside the
+  wrapping transaction; unscoped handle unaffected; red test
+  `packages/query/test/db/context.test.ts` "context applies quoted
+  role + parameterized set_config inside one transaction; adversarial
+  role/setting strings cannot reach SQL text"; files
   `src/db/context.ts`. ~10m
-- [ ] 4.6 Database error propagation with the driver error as `cause`,
-  no retry; red test `packages/query/test/db/errors.test.ts`
-  "constraint violation rejects with cause"; files `src/db/db.ts`. ~6m
-- [ ] 4.7 `db.fn.*` runtime: parameterized invocation, explicit column
-  list for returns-table; red test
+- [ ] 4.8 Spec deltas for the settled contracts: driver-contract
+  (exhaustive record + capability criteria + session IntervalStyle
+  requirement), query-execution (error contract incl. SQL-in-message /
+  params-never, conversion behavior, nested-transaction error),
+  rls-execution-context (quoting + parameterization SHALLs); verified
+  by `openspec validate --strict`; files
+  `openspec/changes/add-query-layer/specs/{driver-contract,query-execution,rls-execution-context}/spec.md`.
+  ~10m
+- [ ] 4.9 `db.fn.*` runtime: parameterized invocation, explicit column
+  list for returns-table, composes with `db.as`; red test
   `packages/query/test/db/fn.test.ts` "returns-table call renders
   explicit columns, never star"; files `src/db/fn.ts`. ~10m
-- [ ] 4.8 `db.fn.*` typing from defineFunction declarations (args +
-  return shape; mismatches fail type-check); red type test
-  `packages/query/test/db/fn-types.test-d.ts` "wrong argument type is
+- [ ] 4.10 `db.fn.*` typing from the declarations record (export-name
+  keys; args + return shape; mismatches fail type-check with
+  @ts-expect-error probes); red test
+  `packages/query/test/db/fn-types.test.ts` "wrong argument type is
   rejected statically"; files `src/db/fn-types.ts`. ~10m
 
 ## 5. `@hejbro/pg` vanilla driver
