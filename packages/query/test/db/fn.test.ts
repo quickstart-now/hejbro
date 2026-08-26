@@ -20,7 +20,7 @@ import type {
 	DriverSession,
 } from "../../src/driver/contract";
 
-/** `noUncheckedIndexedAccess` widens every `FnApi[key]` read to `FnCaller | undefined` (a dynamically-built `Record`, not yet a per-key-typed surface -- that typing is task 4.10's job). Throws instead of a non-null assertion when the fixture itself is wrong. */
+/** Only needed where a test deliberately bypasses the typed `db.fn` surface (task 4.10) to exercise the runtime's own defense-in-depth against a caller who bypassed TypeScript -- every other test below calls through the real, precisely-typed `handle.fn.xxx(...)` directly. Throws instead of a non-null assertion when the fixture itself is wrong. */
 const requireFn = (api: FnApi, key: string): FnCaller => {
 	const fn = api[key];
 	if (fn === undefined) {
@@ -81,6 +81,17 @@ const searchByStatusAndLimit = defineFunction(
  * call time, keyed off `returnsKind` (owner's "explicit SQL over
  * implicit": db.fn never silently no-ops or coerces a trigger call into
  * something else).
+ *
+ * **Known, pre-existing type limitation** (not introduced by task 4.10):
+ * `defineTrigger`'s own `functionDeclaration` field is typed as the bare,
+ * non-generic `FunctionDeclaration` (its widest possible instantiation,
+ * `define-trigger.ts`, out of this task's file scope), so
+ * `FnCallerFor`/`FnResult` can't narrow this one specific declaration
+ * down to "never callable" the way they can for anything built directly
+ * through `defineFunction`. `db.fn.touchTriggerFn({})` therefore still
+ * type-checks (loosely) even though `fn.ts`'s own runtime guard
+ * unconditionally rejects it -- the runtime rejection below is real,
+ * only the static one is what's missing.
  */
 const touchTrigger = defineTrigger(
 	posts,
@@ -167,7 +178,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const { driver, sent } = recordingDriver([rawRow]);
 		const handle = db(appSchema, driver);
 
-		await requireFn(handle.fn, "listPublished")({});
+		await handle.fn.listPublished({});
 
 		expect(sent[0]?.sql).toBe(
 			'select "id", "status", "amount" from "app"."list_published"()',
@@ -181,7 +192,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver);
 		const marker = "published'; drop table posts --";
 
-		await requireFn(handle.fn, "searchByStatus")({ status: marker });
+		await handle.fn.searchByStatus({ status: marker });
 
 		expect(sent[0]?.sql).toBe(
 			'select "id", "status", "amount" from "app"."search_by_status"($1)',
@@ -195,10 +206,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver);
 
 		// declared order is (status, maxRows); called in the REVERSE order.
-		await requireFn(
-			handle.fn,
-			"searchByStatusAndLimit",
-		)({
+		await handle.fn.searchByStatusAndLimit({
 			maxRows: 10,
 			status: "published",
 		});
@@ -216,16 +224,10 @@ describe("db.fn.* (task 4.9)", () => {
 		const { driver } = recordingDriver([rawRow]);
 		const handle = db(appSchema, driver);
 
-		// `requireFn` returns the loose, per-call-varying FnCaller type
-		// (fn-types.ts, task 4.10, narrows this for the real db.fn surface) --
-		// this test exercises the raw returns-table wiring directly, so it
-		// knows (from the fixture) that this particular call resolves to a
-		// rows array, and casts accordingly rather than needing the typed
-		// wrapper.
-		const rows = (await requireFn(
-			handle.fn,
-			"listPublished",
-		)({})) as ReadonlyArray<DriverRow>;
+		// the typed db.fn surface (fn-types.ts, task 4.10) already resolves
+		// this to ReadonlyArray<SelectResult<typeof posts>> -- no cast
+		// needed, unlike before 4.10 landed.
+		const rows = await handle.fn.listPublished({});
 
 		expect(rows[0]?.amount).toBe(9007199254740993n);
 		expect(typeof rows[0]?.amount).toBe("bigint");
@@ -239,20 +241,33 @@ describe("db.fn.* (task 4.9)", () => {
 		// function would take -- explicitly aliased, and resolving to the
 		// bare value, not a rows array (no declared type to convert
 		// against, so the raw driver text passes through unconverted).
+		//
+		// **Known, documented imprecision**: `listPublished`'s own
+		// declared TReturns is `typeof posts` (a Table), so the *type*
+		// still promises `ReadonlyArray<SelectResult<typeof posts>>` here
+		// even though *this* handle's runtime fallback actually resolves
+		// to a bare string ("42") -- narrower than what the type promises
+		// only because the table it depends on wasn't declared into this
+		// particular db() call, a pre-existing runtime fallback (task
+		// 4.9) task 4.10's typing doesn't attempt to fix.
 		const handle = db({ listPublished }, driver);
 
-		const value = await requireFn(handle.fn, "listPublished")({});
+		const value = await handle.fn.listPublished({});
 
 		expect(sent[0]?.sql).toBe('select "app"."list_published"() as "result"');
 		expect(sent[0]?.sql).not.toContain("from");
 		expect(value).toBe("42");
 	});
 
-	it("rejects a wrong argument count before any send", async () => {
+	it("rejects a wrong argument count before any send (runtime defense in depth for a caller who bypassed TypeScript)", async () => {
 		const { driver } = recordingDriver();
 		const handle = db(appSchema, driver);
+		// deliberately bypasses the typed surface -- a missing required key
+		// is task 4.10's own compile-time job (see fn-types.test.ts); this
+		// checks the runtime still refuses if that check is ever bypassed.
+		const looseFn = handle.fn as unknown as FnApi;
 
-		await expect(requireFn(handle.fn, "searchByStatus")({})).rejects.toThrow(
+		await expect(requireFn(looseFn, "searchByStatus")({})).rejects.toThrow(
 			/argument/,
 		);
 		expect(driver.execute).not.toHaveBeenCalled();
@@ -263,7 +278,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const { driver, sent } = recordingDriver([{ result: "9007199254740993" }]);
 		const handle = db(appSchema, driver);
 
-		const value = await requireFn(handle.fn, "countPosts")({});
+		const value = await handle.fn.countPosts({});
 
 		expect(sent[0]?.sql).toBe('select "app"."count_posts"() as "result"');
 		// the declared bigint mode is honored even though there's no real
@@ -277,7 +292,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver);
 
 		try {
-			await requireFn(handle.fn, "countPosts")({});
+			await handle.fn.countPosts({});
 			expect.unreachable("db.fn should have rejected a missing scalar result");
 		} catch (error) {
 			expect(error).toHaveProperty("code", "function-scalar-result-missing");
@@ -295,7 +310,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db({ listPublished }, driver);
 
 		try {
-			await requireFn(handle.fn, "listPublished")({});
+			await handle.fn.listPublished({});
 			expect.unreachable("db.fn should have rejected a missing scalar result");
 		} catch (error) {
 			expect(error).toHaveProperty("code", "function-scalar-result-missing");
@@ -307,7 +322,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver);
 
 		try {
-			await requireFn(handle.fn, "touchTriggerFn")({});
+			await handle.fn.touchTriggerFn({});
 			expect.unreachable("db.fn should have rejected a trigger function");
 		} catch (error) {
 			expect(error).toHaveProperty("code", "function-return-kind-unsupported");
@@ -322,7 +337,7 @@ describe("db.fn.* (task 4.9)", () => {
 		const handle = db(appSchema, driver, { roles: [roleName("app_reader")] });
 
 		const scoped = handle.as({ role: roleName("app_reader") });
-		await requireFn(scoped.fn, "listPublished")({});
+		await scoped.fn.listPublished({});
 
 		expect(driver.transaction).toHaveBeenCalledTimes(1);
 		expect(driver.execute).not.toHaveBeenCalled();

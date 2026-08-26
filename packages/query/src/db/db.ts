@@ -16,8 +16,8 @@ import type { SelectResult } from "../types/select-result";
 import type { DbContext, ScopedDb } from "./context";
 import { createAsApi } from "./context";
 import { executeOn } from "./execute";
-import type { FnApi } from "./fn";
 import { createFnApi } from "./fn";
+import type { FunctionsOf, TypedFnApi } from "./fn-types";
 import type { Tx } from "./transaction";
 import { createTransactionApi } from "./transaction";
 
@@ -209,8 +209,22 @@ export type ExecuteResult<TStatement> =
  * surface** for `transaction.ts`/`context.ts`/`fn.ts` to build against —
  * whether either is re-exported on the public barrel is group 7's call
  * (task 7.1), not decided here.
+ *
+ * `TFunctions` (task 4.10) carries the schema module's own function
+ * exports, keyed and typed exactly as declared (`fn-types.ts`'s
+ * `FunctionsOf<TSchema>`) — defaulted to the widest
+ * `Record<string, FunctionDeclaration>` so every existing consumer that
+ * only cares about `Db["execute"]` (unaffected by this parameter)
+ * keeps compiling against the bare `Db` name unchanged, the same
+ * defaulted-generic pattern as every other type this group added
+ * (`FunctionDeclaration`, `InsertFinal`/`UpdateFinal`/`DeleteFinal`).
  */
-export type Db = {
+export type Db<
+	TFunctions extends Record<string, FunctionDeclaration> = Record<
+		string,
+		FunctionDeclaration
+	>,
+> = {
 	readonly declarations: Declarations;
 	readonly driver: Driver;
 	/**
@@ -237,17 +251,18 @@ export type Db = {
 	 * applies `SET LOCAL ROLE`/`set_config` inside a wrapping transaction
 	 * on the actual work, and never touches this (unscoped) handle at all.
 	 */
-	as(context: DbContext): ScopedDb;
+	as(context: DbContext): ScopedDb<TFunctions>;
 	/**
-	 * `db.fn.*` (task 4.9): one callable per declared function, keyed by
-	 * the declarations record's own export name. A `setofTable`-returning
+	 * `db.fn.*` (tasks 4.9/4.10): one callable per declared function,
+	 * keyed **exactly** to the declarations record's own export names —
+	 * a nonexistent key is a compile error (owner decision ③'s static
+	 * pinning, `fn-types.ts`'s `TypedFnApi`). A `setofTable`-returning
 	 * function renders an explicit column list (never `select *`) and
-	 * converts its rows exactly like a whole-table `select()`; a scalar
-	 * return has no declared column to convert against and passes through
-	 * raw, matching every other "no declared column" case in this
-	 * package.
+	 * resolves to typed rows, exactly like a whole-table `select()`; a
+	 * scalar-returning function resolves to the mapped scalar value
+	 * itself, not rows (typed-function-execution spec).
 	 */
-	readonly fn: FnApi;
+	readonly fn: TypedFnApi<TFunctions>;
 };
 
 /**
@@ -288,13 +303,27 @@ const executeImpl = (
  * 4.6) so a statement run inside it shares that exact same `executeOn`
  * pipeline.
  */
-export const db = (schema: Schema, driver: Driver, options?: DbOptions): Db => {
+export const db = <TSchema extends Schema>(
+	schema: TSchema,
+	driver: Driver,
+	options?: DbOptions,
+): Db<FunctionsOf<TSchema>> => {
 	const tables = tablesOf(schema);
 	const declarations: Declarations = {
 		tables,
 		functions: functionsOf(schema),
 		roles: rolesOf(schema, tables, driver, options),
 	};
+	// `functionsOf`'s own runtime return type is deliberately the widened
+	// `Record<string, FunctionDeclaration>` (a runtime classification has
+	// no reason to carry per-key literal types) -- `FunctionsOf<TSchema>`
+	// is the same values, viewed through the precise, per-key-typed
+	// compile-time filter `db.fn` (task 4.10) needs. Narrows only: every
+	// key `functionsOf` actually returns was already one `FunctionsOf`
+	// would keep, since both filter by the exact same runtime/type-level
+	// classification (`isDeclarationKind(_, "function")` vs `extends
+	// FunctionDeclaration`) applied to the same `schema` object.
+	const typedFunctions = declarations.functions as FunctionsOf<TSchema>;
 	return {
 		declarations,
 		driver,
@@ -304,7 +333,7 @@ export const db = (schema: Schema, driver: Driver, options?: DbOptions): Db => {
 		as: createAsApi(
 			driver,
 			declarations.tables,
-			declarations.functions,
+			typedFunctions,
 			declarations.roles,
 		),
 		// the unscoped db.fn runs directly on the driver -- no transaction to
@@ -313,6 +342,6 @@ export const db = (schema: Schema, driver: Driver, options?: DbOptions): Db => {
 			(send) => send(driver),
 			declarations.tables,
 			declarations.functions,
-		),
+		) as TypedFnApi<FunctionsOf<TSchema>>,
 	};
 };

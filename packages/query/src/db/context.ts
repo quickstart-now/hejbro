@@ -1,12 +1,12 @@
-import type { Role } from "@hejbro/core";
+import type { FunctionDeclaration, Role } from "@hejbro/core";
 import { quoteIdentifier } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
 import type { Driver, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
 import type { Declarations, ExecuteResult } from "./db";
 import { executeOn, sendCompiled } from "./execute";
-import type { FnApi } from "./fn";
 import { createFnApi } from "./fn";
+import type { TypedFnApi } from "./fn-types";
 import type { Tx } from "./transaction";
 
 /**
@@ -22,14 +22,26 @@ export type DbContext = {
 	readonly settings?: Readonly<Record<string, string>>;
 };
 
-/** What `db.as(context)` returns: `execute`/`transaction`/`fn`, all scoped to that context — no `.as` of its own (re-scoping a scoped handle isn't a decided shape; nesting `transaction()` calls through *this* handle is exactly as unsupported as the unscoped one, task 4.6's own guard). */
-export type ScopedDb = {
+/**
+ * What `db.as(context)` returns: `execute`/`transaction`/`fn`, all
+ * scoped to that context — no `.as` of its own (re-scoping a scoped
+ * handle isn't a decided shape; nesting `transaction()` calls through
+ * *this* handle is exactly as unsupported as the unscoped one, task
+ * 4.6's own guard). `TFunctions` mirrors `db.ts`'s own `Db<TFunctions>`
+ * (task 4.10) — defaulted the same way, for the same reason.
+ */
+export type ScopedDb<
+	TFunctions extends Record<string, FunctionDeclaration> = Record<
+		string,
+		FunctionDeclaration
+	>,
+> = {
 	execute<TStatement extends CompileInput>(
 		statement: TStatement,
 	): Promise<ExecuteResult<TStatement>>;
 	transaction<T>(callback: (tx: Tx) => Promise<T>): Promise<T>;
-	/** `db.fn.*`, scoped to this context (task 4.7 × 4.9): every call opens its own context-applied transaction, exactly like `execute`. */
-	readonly fn: FnApi;
+	/** `db.fn.*`, scoped to this context (task 4.7 × 4.9/4.10): every call opens its own context-applied transaction, exactly like `execute`. */
+	readonly fn: TypedFnApi<TFunctions>;
 };
 
 /** The declared-role list for an `undeclared-role` message: `sorted`'s comma-joined names, or an explicit "(none declared)" for the empty case (house style: no ternary, a guard clause instead). */
@@ -128,13 +140,15 @@ const applyContext = async (
  * `execute`/`transaction` (assembled separately in `db.ts`) share no
  * mutable state with this closure at all.
  */
-export const createAsApi = (
+export const createAsApi = <
+	TFunctions extends Record<string, FunctionDeclaration>,
+>(
 	driver: Driver,
 	tables: Declarations["tables"],
-	functions: Declarations["functions"],
+	functions: TFunctions,
 	declaredRoles: Declarations["roles"],
-): ((context: DbContext) => ScopedDb) => {
-	return (context: DbContext): ScopedDb => {
+): ((context: DbContext) => ScopedDb<TFunctions>) => {
+	return (context: DbContext): ScopedDb<TFunctions> => {
 		assertDeclaredRole(context.role, declaredRoles);
 		/**
 		 * Opens one fresh, context-applied transaction and runs `send` on
@@ -167,9 +181,13 @@ export const createAsApi = (
 				return callback(tx);
 			});
 		return {
-			execute: scopedExecute as ScopedDb["execute"],
+			execute: scopedExecute as ScopedDb<TFunctions>["execute"],
 			transaction: scopedTransaction,
-			fn: createFnApi((send) => scopedRun("db.as", send), tables, functions),
+			fn: createFnApi(
+				(send) => scopedRun("db.as", send),
+				tables,
+				functions,
+			) as TypedFnApi<TFunctions>,
 		};
 	};
 };
