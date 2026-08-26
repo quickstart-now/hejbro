@@ -12,11 +12,21 @@ Neon and Nile planned). MIT, built AI-natively under `quickstart-now`.
 
 ## Read first
 
+Truth lives in three layers (D87):
+
 1. `docs/specs/2026-08-19-hejbro-design.md` — approved design spec and
-   decision log (D1–D12). Decisions were made explicitly by the project
-   owner. Never silently revisit them; if blocked, surface it and ask.
-2. `docs/plans/2026-08-19-roadmap.md` — phased plan and current frontier.
-   Keep it current as work lands so any session can find the frontier.
+   decision log. **Why** things are the way they are. Decisions were made
+   explicitly by the project owner. Never silently revisit them; if
+   blocked, surface it and ask. The decision log is owner-gated and stays
+   here, outside `openspec/`.
+2. `openspec/specs/` — **what the product does now**, one capability at a
+   time, as scenario prose paired with the test suite. Specs are never
+   written retroactively: a capability gets its spec when a change first
+   touches it, so the directory grows from empty.
+3. `openspec/changes/` (+ `changes/archive/`) — **what is moving and what
+   moved**. The changes directory is the frontier and the plan of record.
+   `docs/plans/2026-08-19-roadmap.md` is the phased record of the 0.1.x
+   line and stays as history; new work is not planned there.
 
 ## Commands
 
@@ -52,9 +62,23 @@ again.
 
 ## Hard rules
 
-- **One phase at a time.** Each roadmap phase: brainstorm unknowns → written
-  implementation plan → TDD → review → PR. Never start a phase by writing
-  production code.
+- **Spec-driven changes** (D87). Work that alters an externally observable
+  contract — public API surface, generated SQL, file or wire formats, CLI
+  output or error text, documented behavior — goes through an OpenSpec
+  change: proposal → owner approval → tasks → TDD implementation →
+  review → PR → archive (artifacts under `openspec/changes/<id>/`; the
+  `/opsx` commands drive the cycle). A bug fix that restores
+  already-specified behavior, and internal refactors, follow the plain
+  cycle without a proposal. Never start a change by writing production
+  code.
+- **Tasks are sized and test-bound** (D88). `tasks.md` top-level groups
+  are parallel-safe slices (no file overlap between groups). A task is
+  estimated in pure work minutes (over 10 → split; 5 or under → merge),
+  names the failing test it starts from, and tasks that settle a contract
+  detail (signature, error shape, key order, output format, SQL text) are
+  marked `[design]` — their open decisions are settled with the owner
+  before code. Verification is the definition of done, never a task.
+  Durations land in `openspec/task-times.csv` when a group completes.
 - **Core purity is load-bearing.** If a change needs I/O in `@hejbro/core`,
   the design is being violated — stop and reconsider.
 - **The provider interface is the product.** If a preset needs a core
@@ -107,9 +131,21 @@ again.
 - Changing any decision in the spec's decision log.
 - Building anything listed under "Deferred" in the roadmap.
 
+## Provenance
+
+`blackbox/` at the repository root is the flight recorder (D89): one
+non-summarized decision record per owner-driven change — what the owner
+asked for, what the assistant answered and built, why, and the internal
+processing — content-pinned by per-file git blob SHAs. See
+`blackbox/README.md` for the conventions. Read it only when investigating
+a rule's origin; never load it during normal work. An owner-driven change
+lands its entry in the same commit or PR as the change.
+
 ## Before claiming done
 
 - [ ] `pnpm check`, `pnpm check-types`, `pnpm test` all pass — show output
 - [ ] README CRAP block refreshed (`pnpm check:crap`)
-- [ ] Roadmap updated if phase progress changed
+- [ ] OpenSpec change state current (`tasks.md` ticks; archive on
+      completion; durations in `openspec/task-times.csv`)
+- [ ] Owner-driven change carries its `blackbox/` entry in the same PR
 - [ ] PR body lists the commits to be squashed

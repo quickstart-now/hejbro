@@ -1,0 +1,27 @@
+schema: spec-driven
+
+context: |
+  Language: en
+  All artifacts must be written in en.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+rules:
+  proposal:
+    - Open decisions are settled with the project owner before approval; approval gates implementation
+    - Decision rationale goes to the design spec's owner-gated decision log (docs/specs/), not into openspec artifacts
+  tasks:
+    - Top-level groups are parallel-safe slices — no file overlap between groups
+    - Estimate pure work minutes on each task line ("~8m"); over 10 minutes → split, 5 or under → merge into a neighbor (consult openspec/task-times.csv)
+    - Every leaf task names the failing test it starts from (test file + case name) and the files it touches — no separate "Tests" group
+    - Mark tasks that settle a contract detail (signature, error shape, key order, output format, SQL text) as [design]
+    - No verification tasks ("run the suite", "confirm unchanged") — verification is the definition of done for every task
+
+operations:
+  apply:
+    guidance:
+      - Execute each task test-first (red test named on the task, minimal green, refactor)
+      - A running task that overruns its estimate is never stopped or re-split — overruns correct the next estimate
+  archive:
+    guidance:
+      - Append one line per task to openspec/task-times.csv before archiving
+      - Close the tracking issue and confirm the durations landed
