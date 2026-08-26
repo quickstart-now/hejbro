@@ -384,7 +384,7 @@ declarations for joined tables).
   `packages/query/test/db/errors.test.ts` "constraint violation
   rejects with cause and value-free SQL text"; files `src/db/db.ts`.
   ~8m
-- [ ] 4.6 Callback-scoped transaction API (begin/commit, rollback on
+- [x] 4.6 Callback-scoped transaction API (begin/commit, rollback on
   throw, capability check first; nested call throws
   `nested-transaction-unsupported` — savepoints parked #313); red test
   `packages/query/test/db/transaction.test.ts` "rolls back and

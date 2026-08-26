@@ -1,7 +1,9 @@
 import type { FunctionDeclaration, Table } from "@hejbro/core";
-import type { CompileInput, CompileResult } from "../compile/compile";
-import { compile } from "../compile/compile";
+import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
+import { executeOn } from "./execute";
+import type { Tx } from "./transaction";
+import { createTransactionApi } from "./transaction";
 
 /**
  * Everything a `db()` handle needs to know about the declared schema,
@@ -43,20 +45,16 @@ export type Db = {
 	readonly declarations: Declarations;
 	readonly driver: Driver;
 	execute(statement: CompileInput): Promise<ReadonlyArray<DriverRow>>;
+	/**
+	 * Runs `callback` inside one transaction (task 4.6): commits and
+	 * resolves the callback's own return value on success; on a thrown
+	 * error, rolls back and rethrows that exact error, unchanged. Checks
+	 * `"interactive-transactions"` before any send (task 4.2's guard), and
+	 * fails fast with `nested-transaction-unsupported` when called again
+	 * from inside an already-open callback of this same member.
+	 */
+	transaction<T>(callback: (tx: Tx) => Promise<T>): Promise<T>;
 };
-
-/** Builds and throws the `query-execution-failed`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). Never retries, never reinterprets `cause`; `compiled.params` is deliberately never read here, so it can never reach the message, an own field, or (via a later `Object.assign`) the error's own enumerable surface. */
-function throwQueryExecutionFailed(
-	compiled: CompileResult,
-	cause: unknown,
-): never {
-	throw Object.assign(
-		new Error(
-			`query execution failed for this "${compiled.kind}" statement: ${compiled.sql}. Next: inspect the underlying driver error via "cause" -- this wrapper never retries or reinterprets it.`,
-		),
-		{ code: "query-execution-failed", kind: compiled.kind, cause },
-	);
-}
 
 /**
  * Builds a `db()` handle bound to `driver`. `execute` hands `driver` the
@@ -64,21 +62,17 @@ function throwQueryExecutionFailed(
  * same statement — `sql`, `params`, and `kind` together, never `sql`/
  * `params` unpacked into separate arguments — so `kind` reaches the
  * driver boundary unchanged (task 4.3). A driver rejection wraps as
- * `query-execution-failed` (task 4.5): the message carries the
- * parameterized SQL text (every value already a `$n` placeholder by the
- * time `compile()` produced it) and `kind`, the driver's own error
- * becomes `cause`, and `compiled.params` never appears anywhere on the
- * thrown error.
+ * `query-execution-failed` (task 4.5, `./execute.ts`'s `executeOn`): the
+ * message carries the parameterized SQL text (every value already a `$n`
+ * placeholder by the time `compile()` produced it) and `kind`, the
+ * driver's own error becomes `cause`, and `compiled.params` never
+ * appears anywhere on the thrown error. `transaction` is assembled from
+ * `./transaction.ts`'s own factory (task 4.6) so a statement run inside
+ * it shares that exact same `executeOn` pipeline.
  */
 export const db = (declarations: Declarations, driver: Driver): Db => ({
 	declarations,
 	driver,
-	execute: async (statement) => {
-		const compiled = compile(statement);
-		try {
-			return await driver.execute(compiled);
-		} catch (cause) {
-			return throwQueryExecutionFailed(compiled, cause);
-		}
-	},
+	execute: (statement) => executeOn(driver, statement),
+	transaction: createTransactionApi(driver),
 });
