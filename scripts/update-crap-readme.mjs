@@ -24,6 +24,7 @@ import {
 	CRAP_THRESHOLD,
 	computeCrapReport,
 	REPO_ROOT,
+	TARGET_PACKAGES,
 } from "./crap-report.mjs";
 
 const README_PATH = join(REPO_ROOT, "README.md");
@@ -60,8 +61,10 @@ const currentShortSha = () =>
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+// Same derivation `check-crap.mjs:25` uses for its own scan-line, so the
+// README sentence can never name a different package set than the gate.
 const blockText = (scanned, violationCount, highest, sha, date) =>
-	`**Code quality gate:** every named function in \`@hejbro/core\` and \`@hejbro/supabase\` must score **CRAP ≤ ${CRAP_THRESHOLD}** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **${violationCount} of ${scanned} functions** over the threshold, highest score ${highest} — measured at \`${sha}\` (${date}).`;
+	`**Code quality gate:** every named function in ${TARGET_PACKAGES.map((pkg) => `\`${pkg.name}\``).join(", ")} must score **CRAP ≤ ${CRAP_THRESHOLD}** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **${violationCount} of ${scanned} functions** over the threshold, highest score ${highest} — measured at \`${sha}\` (${date}).`;
 
 // Matches exactly what `blockText` renders -- the read side of the one
 // place these numbers live (see the file comment above).
