@@ -1,12 +1,18 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { pgEnum } from "../src/dsl/pg-enum";
+import { schema } from "../src/dsl/schema";
 import { sql } from "../src/expr/sql-template";
 import type { ColumnBuilder } from "../src/index";
 import {
+	bigint,
 	bigserial,
 	char,
 	integer,
+	json,
+	jsonb,
 	numeric,
 	serial,
+	smallint,
 	smallserial,
 	text,
 	timestamptz,
@@ -155,10 +161,58 @@ describe("parameterized factories", () => {
 
 describe("column builder type families", () => {
 	it("factories carry their postgres type family", () => {
-		expectTypeOf(uuid()).toEqualTypeOf<ColumnBuilder<"uuid">>();
-		expectTypeOf(text().notNull()).toEqualTypeOf<ColumnBuilder<"text">>();
-		expectTypeOf(timestamptz()).toEqualTypeOf<ColumnBuilder<"datetime">>();
-		expectTypeOf(uuid().array()).toEqualTypeOf<ColumnBuilder<"array">>();
+		expectTypeOf(uuid()).toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" }>
+		>();
+		// notNull isn't visible in `TMeta` yet (that's group 3's task 3.2) —
+		// this stays pinned to the un-narrowed declared type name until then.
+		expectTypeOf(text().notNull()).toEqualTypeOf<
+			ColumnBuilder<"text", { typeName: "text" }>
+		>();
+		expectTypeOf(timestamptz()).toEqualTypeOf<
+			ColumnBuilder<"datetime", { typeName: "timestamptz" }>
+		>();
+		expectTypeOf(uuid().array()).toEqualTypeOf<
+			ColumnBuilder<"array", { typeName: "array" }>
+		>();
+	});
+});
+
+describe("column builder declared type name (D1, R3)", () => {
+	const appEnum = pgEnum(schema("app"), "post_status", ["draft", "published"]);
+
+	it("factories carry their declared type name", () => {
+		// family alone can't tell `json` and `jsonb` apart — the declared
+		// type name is the only thing that can (R3).
+		expectTypeOf(json()).toEqualTypeOf<
+			ColumnBuilder<"json", { typeName: "json" }>
+		>();
+		expectTypeOf(jsonb()).toEqualTypeOf<
+			ColumnBuilder<"json", { typeName: "jsonb" }>
+		>();
+		// family alone can't tell `smallint`/`bigint` apart either — both
+		// are `"numeric"`.
+		expectTypeOf(smallint()).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "smallint" }>
+		>();
+		expectTypeOf(bigint()).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "bigint" }>
+		>();
+		expectTypeOf(uuid()).toEqualTypeOf<
+			ColumnBuilder<"uuid", { typeName: "uuid" }>
+		>();
+		expectTypeOf(varchar()).toEqualTypeOf<
+			ColumnBuilder<"text", { typeName: "varchar" }>
+		>();
+		expectTypeOf(char({ length: 1 })).toEqualTypeOf<
+			ColumnBuilder<"text", { typeName: "char" }>
+		>();
+		expectTypeOf(numeric()).toEqualTypeOf<
+			ColumnBuilder<"numeric", { typeName: "numeric" }>
+		>();
+		expectTypeOf(appEnum.column()).toEqualTypeOf<
+			ColumnBuilder<"text", { typeName: "enum" }>
+		>();
 	});
 });
 

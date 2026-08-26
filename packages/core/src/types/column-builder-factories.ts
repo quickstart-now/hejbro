@@ -1,12 +1,25 @@
-import type { SqlTypeFamily } from "../expr/type-family";
+import type { FamilyOfTypeNode } from "../expr/type-family";
 import type { ColumnBuilder } from "./column-builder";
 import { createColumnBuilder } from "./column-builder";
 import type { SimpleTypeName } from "./type-node";
 
-const initialColumnBuilder = <TFamily extends SqlTypeFamily>(
-	typeName: SimpleTypeName,
-): ColumnBuilder<TFamily> =>
-	createColumnBuilder<TFamily>({
+/**
+ * Builds the initial (unmodified) `ColumnBuilder` for a parameterless
+ * factory. `TName` is inferred straight from the call's own `typeName`
+ * string literal (mirrors `columnRef`'s own `TNode`-inference pattern in
+ * `expr/ast.ts`) — no explicit type argument needed at any call site, so
+ * the family and the declared type name can never drift apart the way two
+ * independently hand-written type arguments could. `TFamily` is then
+ * derived from `TName` via {@link FamilyOfTypeNode}, the same mapping
+ * `familyOfTypeNode` uses at runtime.
+ */
+const initialColumnBuilder = <TName extends SimpleTypeName>(
+	typeName: TName,
+): ColumnBuilder<FamilyOfTypeNode<{ typeName: TName }>, { typeName: TName }> =>
+	createColumnBuilder<
+		FamilyOfTypeNode<{ typeName: TName }>,
+		{ typeName: TName }
+	>({
 		typeNode: { typeName },
 		notNull: false,
 		primaryKey: false,
@@ -22,81 +35,97 @@ const resolveOptionalNumber = (value: number | undefined): number | null => {
 };
 
 /** `uuid` column. */
-export const uuid = (): ColumnBuilder<"uuid"> =>
-	initialColumnBuilder<"uuid">("uuid");
+export const uuid = (): ColumnBuilder<"uuid", { typeName: "uuid" }> =>
+	initialColumnBuilder("uuid");
 /** `text` column. */
-export const text = (): ColumnBuilder<"text"> =>
-	initialColumnBuilder<"text">("text");
+export const text = (): ColumnBuilder<"text", { typeName: "text" }> =>
+	initialColumnBuilder("text");
 /** `boolean` column. */
-export const boolean = (): ColumnBuilder<"boolean"> =>
-	initialColumnBuilder<"boolean">("boolean");
+export const boolean = (): ColumnBuilder<"boolean", { typeName: "boolean" }> =>
+	initialColumnBuilder("boolean");
 /** `smallint` column. */
-export const smallint = (): ColumnBuilder<"numeric"> =>
-	initialColumnBuilder<"numeric">("smallint");
+export const smallint = (): ColumnBuilder<
+	"numeric",
+	{ typeName: "smallint" }
+> => initialColumnBuilder("smallint");
 /** `integer` column. */
-export const integer = (): ColumnBuilder<"numeric"> =>
-	initialColumnBuilder<"numeric">("integer");
+export const integer = (): ColumnBuilder<"numeric", { typeName: "integer" }> =>
+	initialColumnBuilder("integer");
 /** `bigint` column. */
-export const bigint = (): ColumnBuilder<"numeric"> =>
-	initialColumnBuilder<"numeric">("bigint");
+export const bigint = (): ColumnBuilder<"numeric", { typeName: "bigint" }> =>
+	initialColumnBuilder("bigint");
 /** `real` column. */
-export const real = (): ColumnBuilder<"numeric"> =>
-	initialColumnBuilder<"numeric">("real");
+export const real = (): ColumnBuilder<"numeric", { typeName: "real" }> =>
+	initialColumnBuilder("real");
 /** `double precision` column. */
-export const doublePrecision = (): ColumnBuilder<"numeric"> =>
-	initialColumnBuilder<"numeric">("double precision");
+export const doublePrecision = (): ColumnBuilder<
+	"numeric",
+	{ typeName: "double precision" }
+> => initialColumnBuilder("double precision");
 /** `date` column. */
-export const date = (): ColumnBuilder<"datetime"> =>
-	initialColumnBuilder<"datetime">("date");
+export const date = (): ColumnBuilder<"datetime", { typeName: "date" }> =>
+	initialColumnBuilder("date");
 /** `time` column. */
-export const time = (): ColumnBuilder<"datetime"> =>
-	initialColumnBuilder<"datetime">("time");
+export const time = (): ColumnBuilder<"datetime", { typeName: "time" }> =>
+	initialColumnBuilder("time");
 /** `time with time zone` column (short internal name `timetz`). */
-export const timetz = (): ColumnBuilder<"datetime"> =>
-	initialColumnBuilder<"datetime">("timetz");
+export const timetz = (): ColumnBuilder<"datetime", { typeName: "timetz" }> =>
+	initialColumnBuilder("timetz");
 /** `timestamp` column. */
-export const timestamp = (): ColumnBuilder<"datetime"> =>
-	initialColumnBuilder<"datetime">("timestamp");
+export const timestamp = (): ColumnBuilder<
+	"datetime",
+	{ typeName: "timestamp" }
+> => initialColumnBuilder("timestamp");
 /** `timestamp with time zone` column (short internal name `timestamptz`). */
-export const timestamptz = (): ColumnBuilder<"datetime"> =>
-	initialColumnBuilder<"datetime">("timestamptz");
+export const timestamptz = (): ColumnBuilder<
+	"datetime",
+	{ typeName: "timestamptz" }
+> => initialColumnBuilder("timestamptz");
 /** `interval` column. */
-export const interval = (): ColumnBuilder<"interval"> =>
-	initialColumnBuilder<"interval">("interval");
+export const interval = (): ColumnBuilder<
+	"interval",
+	{ typeName: "interval" }
+> => initialColumnBuilder("interval");
 /** `json` column. */
-export const json = (): ColumnBuilder<"json"> =>
-	initialColumnBuilder<"json">("json");
+export const json = (): ColumnBuilder<"json", { typeName: "json" }> =>
+	initialColumnBuilder("json");
 /** `jsonb` column. */
-export const jsonb = (): ColumnBuilder<"json"> =>
-	initialColumnBuilder<"json">("jsonb");
+export const jsonb = (): ColumnBuilder<"json", { typeName: "jsonb" }> =>
+	initialColumnBuilder("jsonb");
 /** `bytea` column. */
-export const bytea = (): ColumnBuilder<"bytea"> =>
-	initialColumnBuilder<"bytea">("bytea");
+export const bytea = (): ColumnBuilder<"bytea", { typeName: "bytea" }> =>
+	initialColumnBuilder("bytea");
 /** `inet` column. */
-export const inet = (): ColumnBuilder<"net"> =>
-	initialColumnBuilder<"net">("inet");
+export const inet = (): ColumnBuilder<"net", { typeName: "inet" }> =>
+	initialColumnBuilder("inet");
 /** `cidr` column. */
-export const cidr = (): ColumnBuilder<"net"> =>
-	initialColumnBuilder<"net">("cidr");
+export const cidr = (): ColumnBuilder<"net", { typeName: "cidr" }> =>
+	initialColumnBuilder("cidr");
 /** `macaddr` column. */
-export const macaddr = (): ColumnBuilder<"net"> =>
-	initialColumnBuilder<"net">("macaddr");
+export const macaddr = (): ColumnBuilder<"net", { typeName: "macaddr" }> =>
+	initialColumnBuilder("macaddr");
 /** `serial` column. */
-export const serial = (): ColumnBuilder<"numeric"> =>
-	initialColumnBuilder<"numeric">("serial");
+export const serial = (): ColumnBuilder<"numeric", { typeName: "serial" }> =>
+	initialColumnBuilder("serial");
 /** `smallserial` column. */
-export const smallserial = (): ColumnBuilder<"numeric"> =>
-	initialColumnBuilder<"numeric">("smallserial");
+export const smallserial = (): ColumnBuilder<
+	"numeric",
+	{ typeName: "smallserial" }
+> => initialColumnBuilder("smallserial");
 /** `bigserial` column. */
-export const bigserial = (): ColumnBuilder<"numeric"> =>
-	initialColumnBuilder<"numeric">("bigserial");
+export const bigserial = (): ColumnBuilder<
+	"numeric",
+	{ typeName: "bigserial" }
+> => initialColumnBuilder("bigserial");
 
 /** Config accepted by {@link varchar}. */
 export type VarcharConfig = { readonly length?: number };
 
 /** `varchar` column, optionally length-bounded. */
-export const varchar = (config: VarcharConfig = {}): ColumnBuilder<"text"> =>
-	createColumnBuilder<"text">({
+export const varchar = (
+	config: VarcharConfig = {},
+): ColumnBuilder<"text", { typeName: "varchar" }> =>
+	createColumnBuilder<"text", { typeName: "varchar" }>({
 		typeNode: {
 			typeName: "varchar",
 			length: resolveOptionalNumber(config.length),
@@ -111,8 +140,10 @@ export const varchar = (config: VarcharConfig = {}): ColumnBuilder<"text"> =>
 export type CharConfig = { readonly length: number };
 
 /** `char` column, always length-bounded. */
-export const char = (config: CharConfig): ColumnBuilder<"text"> =>
-	createColumnBuilder<"text">({
+export const char = (
+	config: CharConfig,
+): ColumnBuilder<"text", { typeName: "char" }> =>
+	createColumnBuilder<"text", { typeName: "char" }>({
 		typeNode: { typeName: "char", length: config.length },
 		notNull: false,
 		primaryKey: false,
@@ -127,8 +158,10 @@ export type NumericConfig = {
 };
 
 /** `numeric` column, optionally precision/scale-bounded. */
-export const numeric = (config: NumericConfig = {}): ColumnBuilder<"numeric"> =>
-	createColumnBuilder<"numeric">({
+export const numeric = (
+	config: NumericConfig = {},
+): ColumnBuilder<"numeric", { typeName: "numeric" }> =>
+	createColumnBuilder<"numeric", { typeName: "numeric" }>({
 		typeNode: {
 			typeName: "numeric",
 			precision: resolveOptionalNumber(config.precision),

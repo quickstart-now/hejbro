@@ -16,26 +16,70 @@ export type ColumnState = {
 };
 
 /**
+ * The type-level metadata a {@link ColumnBuilder} carries in its second type
+ * parameter `TMeta` (D1) — starts with just the declared type name, which a
+ * coarse {@link SqlTypeFamily} alone can't answer (`json` vs `jsonb`, R3;
+ * `smallint` vs `bigint`). Later tasks (query-layer group 3: notNull/default
+ * visibility, numeric width mode, jsonb `$type` brand) widen this same type,
+ * additively, in place.
+ */
+export type ColumnMeta = {
+	readonly typeName: TypeNode["typeName"];
+};
+
+/**
+ * Hides `ColumnBuilder`'s type-only `TMeta` marker behind a unique symbol
+ * (same technique as `tableMeta`, D15). Never assigned at runtime: every
+ * `ColumnBuilder` chain method returns `ColumnBuilder<TFamily, TMeta>`
+ * recursively, so without a non-recursive property actually mentioning
+ * `TMeta`, two builders differing only in `TMeta` would be structurally
+ * indistinguishable to TypeScript — exact type assertions
+ * (`expectTypeOf(...).toEqualTypeOf<...>()`) would pass regardless of what
+ * `TMeta` says. This optional phantom property is that non-recursive
+ * mention; `?:` keeps it off every real object literal (confirmed by every
+ * `columnState` deep-equal assertion in this file's tests, which would
+ * otherwise fail the moment this key leaked onto a real builder).
+ *
+ * Plain `Symbol()`, not `Symbol.for(...)` — unlike `tableMeta`, this
+ * symbol's runtime identity is never compared (nothing ever reads
+ * `builder[columnMetaBrand]`; it exists purely so the *type checker* sees a
+ * non-recursive mention of `TMeta`). `tableMeta`'s `Symbol.for` earns its
+ * keep because `isTable`/`getTableMeta` actually look the key up on real
+ * objects at runtime, and two installed copies of `@hejbro/core` must agree
+ * on that key to interoperate (#138). No such cross-instance runtime lookup
+ * exists here, so there is nothing for a shared global-registry identity to
+ * protect.
+ */
+export const columnMetaBrand: unique symbol = Symbol("hejbro:column-meta");
+
+/**
  * An immutable, chainable column declaration. Every modifier returns a new
  * `ColumnBuilder` — the original is never mutated. `TFamily` carries the
  * column's coarse Postgres type family (D17) so `table()` can expose typed
- * `ColumnRef`s without a second declaration.
+ * `ColumnRef`s without a second declaration; `TMeta` carries finer
+ * declaration-level metadata (D1) that a family can't express — see
+ * {@link ColumnMeta}.
  */
-export type ColumnBuilder<TFamily extends SqlTypeFamily = SqlTypeFamily> = {
+export type ColumnBuilder<
+	TFamily extends SqlTypeFamily = SqlTypeFamily,
+	TMeta extends ColumnMeta = ColumnMeta,
+> = {
 	readonly columnState: ColumnState;
-	notNull(): ColumnBuilder<TFamily>;
+	/** type-only marker, never assigned — see {@link columnMetaBrand}. */
+	readonly [columnMetaBrand]?: TMeta;
+	notNull(): ColumnBuilder<TFamily, TMeta>;
 	/** implies `notNull` when the column is materialized at serialization (Task 10), not here */
-	primaryKey(): ColumnBuilder<TFamily>;
-	unique(): ColumnBuilder<TFamily>;
+	primaryKey(): ColumnBuilder<TFamily, TMeta>;
+	unique(): ColumnBuilder<TFamily, TMeta>;
 	/** a raw scalar (auto-lifted to a literal), or an expression built with operators/`sql` (D16) */
 	default(
 		value: LiftableFor<TFamily> | Expr<TFamily> | Expr<"unknown">,
-	): ColumnBuilder<TFamily>;
+	): ColumnBuilder<TFamily, TMeta>;
 	/** uuid columns only — throws an actionable error otherwise */
-	defaultRandom(): ColumnBuilder<TFamily>;
+	defaultRandom(): ColumnBuilder<TFamily, TMeta>;
 	/** date/time-family columns only — throws an actionable error otherwise */
-	defaultNow(): ColumnBuilder<TFamily>;
-	array(): ColumnBuilder<"array">;
+	defaultNow(): ColumnBuilder<TFamily, TMeta>;
+	array(): ColumnBuilder<"array", { typeName: "array" }>;
 };
 
 /** Extracts the {@link SqlTypeFamily} a {@link ColumnBuilder} carries. */
@@ -71,17 +115,19 @@ const resolveDefaultExprNode = (
  */
 export const createColumnBuilder = <
 	TFamily extends SqlTypeFamily = SqlTypeFamily,
+	TMeta extends ColumnMeta = ColumnMeta,
 >(
 	columnState: ColumnState,
-): ColumnBuilder<TFamily> => ({
+): ColumnBuilder<TFamily, TMeta> => ({
 	columnState,
 	notNull: () =>
-		createColumnBuilder<TFamily>({ ...columnState, notNull: true }),
+		createColumnBuilder<TFamily, TMeta>({ ...columnState, notNull: true }),
 	primaryKey: () =>
-		createColumnBuilder<TFamily>({ ...columnState, primaryKey: true }),
-	unique: () => createColumnBuilder<TFamily>({ ...columnState, unique: true }),
+		createColumnBuilder<TFamily, TMeta>({ ...columnState, primaryKey: true }),
+	unique: () =>
+		createColumnBuilder<TFamily, TMeta>({ ...columnState, unique: true }),
 	default: (value) =>
-		createColumnBuilder<TFamily>({
+		createColumnBuilder<TFamily, TMeta>({
 			...columnState,
 			defaultValue: resolveDefaultExprNode(value, columnState.typeNode),
 		}),
@@ -92,7 +138,7 @@ export const createColumnBuilder = <
 				`defaultRandom() only applies to uuid columns, but this column is "${columnState.typeNode.typeName}". Next: use .default(...) or drop defaultRandom() here.`,
 			);
 		}
-		return createColumnBuilder<TFamily>({
+		return createColumnBuilder<TFamily, TMeta>({
 			...columnState,
 			defaultValue: {
 				nodeKind: "functionCall",
@@ -109,7 +155,7 @@ export const createColumnBuilder = <
 				`defaultNow() only applies to date/time columns, but this column is "${columnState.typeNode.typeName}". Next: use .default(...) instead.`,
 			);
 		}
-		return createColumnBuilder<TFamily>({
+		return createColumnBuilder<TFamily, TMeta>({
 			...columnState,
 			defaultValue: {
 				nodeKind: "functionCall",
@@ -120,7 +166,7 @@ export const createColumnBuilder = <
 		});
 	},
 	array: () =>
-		createColumnBuilder<"array">({
+		createColumnBuilder<"array", { typeName: "array" }>({
 			...columnState,
 			typeNode: { typeName: "array", element: columnState.typeNode },
 		}),
