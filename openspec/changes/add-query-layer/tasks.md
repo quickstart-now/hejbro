@@ -443,13 +443,22 @@ had explicitly parked pending this decision.
   quoted role + parameterized set_config inside one transaction;
   adversarial role/setting strings cannot reach SQL text"; files
   `src/db/context.ts`. ~10m
-- [ ] 4.8 Spec deltas for the settled contracts: driver-contract
-  (exhaustive record + capability criteria + session IntervalStyle
-  requirement), query-execution (error contract incl. SQL-in-message /
-  params-never, conversion behavior, nested-transaction error),
-  rls-execution-context (quoting + parameterization SHALLs); verified
-  by `openspec validate --strict`; files
-  `openspec/changes/add-query-layer/specs/{driver-contract,query-execution,rls-execution-context}/spec.md`.
+- [x] 4.8 Spec deltas for the settled contracts: driver-contract
+  (exhaustive record + capability criteria + session-setup-hook
+  requirement, `IntervalStyle` pinning scoped to the driver's own
+  responsibility), query-execution (nested-transaction error, SQL-in-
+  message/params-never error contract, result-conversion/fail-fast
+  behavior), rls-execution-context (the role 4-source-union whitelist,
+  quoting + parameterization SHALLs); every added sentence traces to an
+  existing test (one new probe added first, `setupSession` mandatory on
+  `Driver`, mirroring the existing `execute`-mandatory one — needed
+  before the session-setup-hook sentence could name a test); no
+  narrowing or loosening of the pre-existing group 5/6-owned
+  requirements (vanilla/preset driver, `asUser`/`asAnon` context
+  surface) in the same files; verified by `openspec validate --strict`;
+  files
+  `openspec/changes/add-query-layer/specs/{driver-contract,query-execution,rls-execution-context}/spec.md`,
+  `packages/query/test/driver/contract.test.ts`.
   ~10m
 - [x] 4.9 `db.fn.*` runtime: parameterized invocation, explicit column
   list for returns-table, composes with `db.as`; red test
