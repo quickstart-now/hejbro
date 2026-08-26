@@ -1,4 +1,4 @@
-import { schema, select, table, text, uuid } from "@hejbro/core";
+import { eq, schema, select, table, text, uuid } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { compile } from "../src/compile/compile";
 import { sql } from "../src/sql";
@@ -58,5 +58,45 @@ describe("sql escape hatch (fragment form)", () => {
 
 		expect(valueResult.sql).toBe('select $1 as "tag" from "app"."posts"');
 		expect(valueResult.params).toEqual([text]);
+	});
+
+	it("a fragment's literal and another clause's literal share one continuous sequence", () => {
+		// Proves the fragment rides the existing lift pipeline rather than a
+		// separate one of its own: a private renderer for `sql` would number
+		// from $1 again instead of continuing where the projection left off,
+		// and `params` alone can't show that — only the SQL text can.
+		const statement = select({ tag: sql`${"a"}` }, posts).where(
+			eq(posts.status, "b"),
+		);
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'select $1 as "tag" from "app"."posts" where "app"."posts"."status" = $2',
+		);
+		expect(result.params).toEqual(["a", "b"]);
+	});
+});
+
+describe("sql escape hatch (statement form)", () => {
+	it("compiles a sql template directly as a whole statement", () => {
+		const result = compile(sql`select 1`);
+
+		expect(result.sql).toBe("select 1");
+		expect(result.params).toEqual([]);
+		expect(result.kind).toBe("sql");
+	});
+
+	it("parameterizes a value interpolated into a statement-form template", () => {
+		const result = compile(sql`select ${"value"}`);
+
+		expect(result.sql).toBe("select $1");
+		expect(result.params).toEqual(["value"]);
+		expect(result.kind).toBe("sql");
+	});
+
+	it("throws empty-sql-statement for a blank statement", () => {
+		expect(() => compile(sql``)).toThrow(
+			expect.objectContaining({ code: "empty-sql-statement" }),
+		);
 	});
 });
