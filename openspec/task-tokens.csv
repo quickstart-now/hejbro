@@ -1,2 +1,3 @@
 date,change-id,group,role_sessions,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,notes
 2026-08-26,add-query-layer,2,planner+implementer+reviewer,1796,881848,198693193,2047406,measured at PR open from the three team session transcripts (898 requests); lead-session tokens not piece-attributable
+2026-08-26,add-query-layer,3,planner+implementer+reviewer,5012,2178887,987613223,5164833,measured at PR open from the three team session transcripts (2506 requests); lead-session tokens not piece-attributable

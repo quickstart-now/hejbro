@@ -321,9 +321,11 @@ export type {
 	BuilderFamily,
 	ColumnBuilder,
 	ColumnState,
+	NumericMode,
 } from "./types/column-builder";
 export { createColumnBuilder } from "./types/column-builder";
 export type {
+	BigintConfig,
 	CharConfig,
 	NumericConfig,
 	VarcharConfig,
@@ -356,5 +358,6 @@ export {
 	uuid,
 	varchar,
 } from "./types/column-builder-factories";
+export type { BaseTsType, IntervalValue } from "./types/ts-type-map";
 export type { SimpleTypeName, TypeNode } from "./types/type-node";
 export { renderTypeNode, simpleTypeNames } from "./types/type-node";

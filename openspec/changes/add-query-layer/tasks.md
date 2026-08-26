@@ -88,30 +88,241 @@ the select object projection (symmetry, not a new contract).
 
 ## 3. Type inference
 
-- [ ] 3.1 [design] Declared SQL type family → TypeScript mapping table
-  (settles the visible type per column type); red type test
-  `packages/query/test/types/column-map.test-d.ts` "each declared
-  family maps to its TS type"; files `src/types/column-map.ts`. ~10m
-- [ ] 3.2 Select result inference: projection subset + notNull
-  nullability; red type test
-  `packages/query/test/types/select-result.test-d.ts` "projection
-  drives the row type"; files `src/types/select-result.ts`. ~10m
-- [ ] 3.3 Left-join nullability widening; red type test
-  `packages/query/test/types/select-result.test-d.ts` "left-joined
-  notNull column types T | null"; files `src/types/select-result.ts`.
-  ~8m
-- [ ] 3.4 Insert/update input types (required iff notNull without
-  default/generated); red type test
-  `packages/query/test/types/insert-input.test-d.ts` "defaulted column
-  is optional on insert"; files `src/types/insert-input.ts`. ~10m
-- [ ] 3.5 [design] `$type` jsonb brand on the column DSL (additive,
-  type-level only — core runtime untouched); red type test
-  `packages/query/test/types/jsonb.test-d.ts` "unbranded jsonb is
-  unknown, branded type flows through"; files core column DSL type
-  surface + `src/types/column-map.ts`. ~10m
-- [ ] 3.6 `returning` rows reuse select inference; red type test
-  `packages/query/test/types/returning.test-d.ts` "returning rows typed
-  like a projection"; files `src/types/returning.ts`. ~6m
+Reworked after the owner settled the group's [design] decisions
+(2026-08-26, before implementation). The trigger: core's `ColumnBuilder`
+carries only a coarse `SqlTypeFamily`, so nothing in a declaration
+reaches the type level that could answer "is this column `notNull`",
+"does it have a default", "is this `json` or `jsonb`", or "how wide is
+this integer" — `packages/core/test/column-builder.test.ts:159` even
+pins `text().notNull()` as *the same type* as `text()`. Group 3
+therefore extends core's column DSL **type** surface additively (one
+second, defaulted `TMeta` parameter) and builds the query-side inference
+on top of it. Settled decisions:
+
+- Mapping is keyed by the **declared type name**, not the family — a
+  family cannot distinguish `json`/`jsonb` (which R3 requires) or
+  `bigint`/`integer`.
+- `bigint({ mode })` (default `'bigint'`) and `numeric({ mode })`
+  (default `'string'`) mirror Drizzle's surface; the mode rides in
+  `TMeta` and decides the visible type. Conversion is a pure function
+  here and **fails fast** (kebab-code enriched `Error`) rather than
+  losing precision silently; wiring it into row mapping is group 4's.
+- `interval` surfaces as a structured `IntervalValue`, not `unknown`.
+- `jsonb` opts in through `.$type<T>()`, a runtime **identity** method
+  (a purely type-level method would not be callable).
+- Insert requires a column iff it is `notNull` **without a default**;
+  generated columns do not exist in the DSL yet and are a separate
+  change. Optional insert fields are `col?: T` under
+  `exactOptionalPropertyTypes`.
+- Type tests are ordinary `test/types/*.test.ts` files using
+  `expectTypeOf` inside a runtime `it()` (repo precedent,
+  `packages/core/test/column-builder.test.ts:156-163`); their red/green
+  gate is `pnpm check-types`, and every negative case carries either a
+  one-difference positive twin or an exact `toEqualTypeOf`.
+- Carrying a fact in `ColumnMeta` proves nothing until inference reads
+  it, and "ignored field" looks exactly like "all tests green". So
+  every `ColumnMeta` field owes a **consumption** test — one that fails
+  if the inference drops it — plus composite cases where a whole
+  accumulated meta has to survive (`text().notNull().array()`,
+  `bigint({mode:'number'}).notNull()`, `jsonb().$type<T>().notNull()`,
+  `serial().primaryKey()`).
+- Left-join nullability widening is **parked as #307** — it needs
+  column-source tracking inside `ColumnRef`, far beyond this change —
+  and task 3.14 removes it from this change's delta spec. Generated
+  columns do not exist in the DSL at all and are parked as #308.
+
+- [x] 3.1 core `ColumnMeta` + `ColumnBuilder<TFamily, TMeta = ColumnMeta>`
+  with the literal declared type name threaded through
+  `createColumnBuilder`/`initialColumnBuilder`, the direct-construction
+  factories (`varchar`/`char`/`numeric`) and `pgEnum().column()`. The
+  four existing type assertions at `column-builder.test.ts:158-161` are
+  re-pinned to the narrowed meta here — threading the type name alone
+  already breaks them, before `notNull` is type-level at all — so the
+  package ends this task type-checking clean; red test
+  `packages/core/test/column-builder.test.ts` "factories carry their
+  declared type name"; files
+  `packages/core/src/types/column-builder.ts`,
+  `packages/core/src/types/column-builder-factories.ts`,
+  `packages/core/src/dsl/pg-enum.ts`. ~10m
+- [x] 3.2 core modifiers narrow the meta: `notNull()` and `default()`/
+  `defaultRandom()`/`defaultNow()` record themselves in `TMeta`, so the
+  `text().notNull()` assertion 3.1 re-pinned now separates from plain
+  `text()` — the line that used to pin them as *the same type* is the
+  proof this group's premise holds, and it is never weakened to an
+  assignability check; red test
+  `packages/core/test/column-builder.test.ts` "notNull and default are
+  visible in the builder type"; files
+  `packages/core/src/types/column-builder.ts`. ~8m
+- [x] 3.3 pin that `Table` preserves `TMeta`: `Table<TColumns>` already
+  keeps its own generic parameter, so once 3.1/3.2 narrowed the factory
+  return types the meta is recoverable from any `Table` by
+  `TTable extends Table<infer TColumns>` — no production change is
+  needed and the task's whole value is the regression pin (a later
+  edit that collapses `Table` to its refs object would silently break
+  every query-side inference). `TableColumns` and the four
+  `BuilderFamily` call sites stay untouched; red test
+  `packages/core/test/table-surface.test.ts` "table columns carry their
+  declared meta"; files that test only. ~10m
+- [x] 3.4 core numeric width modes: `bigint({ mode })` (default
+  `'bigint'`, opt-in `'number'`/`'string'`) and `numeric({ mode })`
+  (default `'string'`, opt-in `'number'`/`'bigint'`), mode carried in
+  `TMeta`, generated SQL unchanged. The mode is resolved at the factory
+  and stored — `bigint()` is `'bigint'`, never "unset with a default
+  applied downstream" — so the type and the runtime conversion can
+  never disagree. 3.15's `ArrayCarriedFlags` needs a branch for the new
+  flag and 3.15's exhaustive test a `bigint({mode:'number'}).array()`
+  case, or `array()` silently drops it — the same bug 3.15 just fixed;
+  red test
+  `packages/core/test/column-builder.test.ts` "bigint defaults to
+  bigint mode and accepts an opt-in mode"; files
+  `packages/core/src/types/column-builder.ts`,
+  `packages/core/src/types/column-builder-factories.ts`. ~10m
+- [x] 3.5 core `.$type<T>()` jsonb brand — a runtime identity method
+  proven harmless: same `columnState`, byte-identical snapshot and SQL
+  against an otherwise identical unbranded table, and no brand trace in
+  the snapshot JSON. Like 3.4, the brand needs its own
+  `ArrayCarriedFlags` branch and a `jsonb().$type<T>().array()` case in
+  3.15's exhaustive test; red test
+  `packages/core/test/column-builder.test.ts` "$type leaves the
+  declaration byte-identical"; files
+  `packages/core/src/types/column-builder.ts`. ~10m
+- [x] 3.6 Declared type name (+ mode, + element) → TypeScript mapping.
+  **Re-homed to core mid-flight** (owner, 2026-08-26): `$type` was
+  settled as *narrowing only — a brand may not lie* (the brand must be
+  a subset of the column's base type), and `$type` is declared in core,
+  which cannot import `@hejbro/query`. So the base mapping moves to
+  `packages/core/src/types/ts-type-map.ts` — **types only, zero runtime
+  symbols** — and the query-side map becomes the thin layer that
+  prefers a brand over that base. What the constraint exposed: mapping
+  a declared column to a TypeScript type is a property of the
+  declaration DSL, not of the query layer; red type test
+  `packages/query/test/types/column-map.test.ts` "each declared type
+  name maps to its TS type"; files
+  `packages/core/src/types/ts-type-map.ts`,
+  `packages/core/src/index.ts`,
+  `packages/query/src/types/column-map.ts`. ~10m
+- [x] 3.7 [design] `IntervalValue` shape — settled by the owner during
+  implementation: seven **required** fields (`years`/`months`/`days`/
+  `hours`/`minutes`/`seconds`/`microseconds`), never partial, so equal
+  intervals compare equal; `microseconds` rather than `milliseconds`
+  because Postgres prints six fractional digits and stopping at three
+  would drop them silently. No field spans the months/days/microseconds
+  axes, which is what keeps the (irreversible) months↔days boundary
+  visible. The **type** lives in core's `ts-type-map.ts` with the rest
+  of the mapping; the parser stays in `packages/query` (D94: core owns
+  the declaration vocabulary and its type surface, query owns runtime
+  conversion); red type test
+  `packages/query/test/types/interval.test.ts` "an interval column
+  surfaces as a structured value"; files
+  `packages/core/src/types/ts-type-map.ts`,
+  `packages/query/src/types/interval.ts`. ~8m
+- [x] 3.8 Pure interval parser/normalizer, rejecting unparsable input
+  with a kebab-code enriched `Error` rather than a partial value; red
+  test `packages/query/test/types/interval.test.ts` "an unparsable
+  interval is rejected, never half-parsed"; files
+  `packages/query/src/types/interval.ts`. ~10m
+- [x] 3.9 Pure numeric-mode conversions (int8/numeric text → `bigint`/
+  `number`/`string`), where `'number'` mode throws a kebab-code enriched
+  `Error` beyond `Number.MAX_SAFE_INTEGER` instead of losing precision;
+  red test `packages/query/test/types/numeric-mode.test.ts` "number mode
+  rejects a value beyond MAX_SAFE_INTEGER"; files
+  `packages/query/src/types/numeric-mode.ts`. ~10m
+- [x] 3.10 Select result inference: projection subset decides the row
+  keys, `notNull` decides nullability. Two branches matching core's own
+  `SelectProjection` union: whole-table (`select(table)`) gets full
+  per-column richness straight off `Table<infer TColumns>` (task 3.3's
+  extraction pattern); the object-projection form
+  (`select({a: expr}, table)`) gets exact keys but only a family-based
+  type widened to `| null` — `Expr`/`ColumnRef` carry no `TMeta` at all
+  (`expr/ast.ts` predates this group, same root cause as #307's parked
+  left-join nullability), and matching a projected key's *name* against
+  the table's own declared columns to borrow richness was considered and
+  rejected (owner/planner): two same-family columns (e.g. `id`/`title`)
+  are structurally indistinguishable at that point, so a name match
+  would let the type quietly lie about which column an `Expr` actually
+  reads from. Not yet wired into `select()`'s actual return type (group
+  4, same deferral as task 3.9's runtime conversion); red type test
+  `packages/query/test/types/select-result.test.ts` "field consumption
+  matrix: each TMeta field the result type actually reads"; files
+  `packages/query/src/types/select-result.ts`. ~10m
+- [x] 3.11 Insert input types: required iff `notNull` without a default,
+  everything else `col?: T` (D8) — a nullable column's value type also
+  accepts an explicit `null`, the same direction `select-result.ts`'s
+  own read-side widening takes. A pure type utility over
+  `Table<infer TColumns>` (task 3.3's extraction pattern), not yet
+  wired into `insert()`'s actual parameter type (group 4, same
+  deferral as task 3.9/3.10); red type test
+  `packages/query/test/types/insert-input.test.ts` "field consumption
+  matrix: notNull decides required-vs-optional, hasDefault overrides
+  notNull to optional"; files
+  `packages/query/src/types/insert-input.ts`. ~10m
+- [x] 3.12 Update input types: every declared column optional, unknown
+  columns rejected — `notNull`/`hasDefault` don't affect update
+  optionality (every key is `col?: T` regardless), but `notNull` still
+  forbids an explicit `null` *value* (`InsertColumnValue`, task 3.11,
+  reused unchanged). The 3.11/3.12 boundary itself is pinned as a
+  contrast pair: the identical `notNull`-without-default declaration is
+  a required insert key but an optional update key; red type test
+  `packages/query/test/types/insert-input.test.ts` "3.11/3.12 boundary
+  contrast pair: the identical declaration (notNull, no default) is
+  required on insert but optional on update"; files
+  `packages/query/src/types/insert-input.ts`. ~6m
+- [x] 3.13 `returning` rows reuse the select inference rather than
+  re-deriving it — `ReturningRow<TTable, TProjection>` calls
+  `SelectResult` (task 3.10) directly rather than repeating its
+  `notNull`-widening/family-mapping logic a second time; core's
+  `ReturningProjection` (`query/mutate.ts`) is the identical
+  `Record<string, Expr>` shape as `select()`'s own object-projection
+  branch, and no-arg `returning()` (every column, spec §5.2) is
+  `SelectResult<TTable>`'s whole-table branch. The reuse itself is
+  proven by mutation-check, not just by import: breaking
+  `SelectResult`'s `notNull` branch breaks
+  `returning.test.ts` alongside `select-result.test.ts`, not
+  `select-result.test.ts` alone — a structural type-equality assertion
+  couldn't tell reuse apart from an independent implementation that
+  happens to compute the same answer, only a shared-failure mutation
+  can; red type test `packages/query/test/types/returning.test.ts`
+  "no-arg returning() is every declared column, typed exactly like the
+  whole-table select projection"; files
+  `packages/query/src/types/returning.ts`. ~6m
+- [x] 3.14 Delta spec alignment: drop the left-join clause and its
+  scenario (parked as #307), scope the insert requirement to "notNull
+  without a default" (generated columns parked as #308), and add the
+  numeric-mode and structured-interval requirements. Carries this
+  group's single `minor` changeset too (D59: the group changes
+  `@hejbro/core`'s public type surface — mode options, the `$type`
+  brand, the widened builder types; the fixed group means naming
+  `@hejbro/core` versions all three). Registering the *new* packages in
+  `.changeset/config.json` stays task 7.3's; verified by
+  `openspec validate add-query-layer` and `pnpm changeset status`; files
+  `openspec/changes/add-query-layer/specs/query-type-inference/spec.md`,
+  one new `.changeset/*.md`. ~10m
+- [x] 3.15 core chain methods preserve the accumulated meta —
+  exhaustively, one assertion per method (`notNull`, `primaryKey`,
+  `unique`, `default`, `defaultRandom`, `defaultNow`, `array`), each
+  applied after `.notNull().default(...)` so dropping the accumulation
+  is visible. `array()` additionally records the element's declared
+  type name (3.6 maps arrays through it) and must swap `typeName`
+  rather than intersect it, since `"text" & "array"` is `never`. Found
+  during 3.2: `array()` returned a fixed meta, so
+  `text().notNull().array()` typed as nullable while its `columnState`
+  said otherwise — a class of bug, not one method's slip; red test
+  `packages/core/test/column-builder.test.ts` "every chain method keeps
+  the meta it was chained onto"; files
+  `packages/core/src/types/column-builder.ts`. ~10m
+- [x] 3.16 core type-level `notNull` mirrors `materializeNotNull`
+  (`kinds/table-kind.ts:97-105`): `primaryKey()` implies `notNull`, and
+  the `serial` family implies both `notNull` and `hasDefault` — its
+  `nextval(...)` lives on the synthesized sequence, never on
+  `columnState.defaultValue`, so the two rules have to move together or
+  `serial().primaryKey()` becomes a *required* insert field. Without
+  this, `id: uuid().primaryKey().defaultRandom()` — the dominant
+  pattern across `examples/` — infers `string | null` for a column the
+  migration emits as `NOT NULL`; red test
+  `packages/core/test/column-builder.test.ts` "primary key and serial
+  carry their implied not-null"; files
+  `packages/core/src/types/column-builder.ts`,
+  `packages/core/src/types/column-builder-factories.ts`. ~10m
 
 ## 4. Driver contract + db handle
 
