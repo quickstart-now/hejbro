@@ -86,4 +86,16 @@ export type Driver = DriverSession & {
 	 * groups 5/6 wire it into their own connection setup.
 	 */
 	setupSession(session: DriverSession): Promise<void>;
+	/**
+	 * Role names this driver/preset contributes to `db.as(context)`'s
+	 * declared-role whitelist (task 4.7, owner decision ④) — e.g.
+	 * Supabase's `anon`/`authenticated`/`service_role`, which exist
+	 * whether or not the declared schema's own `grant`/policy mentions
+	 * them. Without this, a minimal schema with no grants/policies would
+	 * lock `asUser`/`asAnon` out of their own roles — the first failure a
+	 * new Supabase user would hit. Optional and additive: most drivers
+	 * (`@hejbro/pg`) contribute none; this contract only reserves the
+	 * slot, group 6 is the first to populate it.
+	 */
+	readonly contributedRoles?: ReadonlyArray<string>;
 };
