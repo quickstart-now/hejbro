@@ -90,20 +90,27 @@ type FamilyReadType<TFamily extends SqlTypeFamily> = TFamily extends
  *   directly off the table's own `TColumns` (task 3.3's own extraction
  *   pattern, `TTable extends Table<infer TColumns>`), never through
  *   `Expr`/`ColumnRef`.
- * - **Object projection** (`select({a: expr, …}, table)`): the
- *   projected keys are exact — only those keys exist on the result, so
- *   an unprojected key is a compile error where it's accessed — but the
- *   *type* per key is only {@link FamilyReadType}, widened to `| null`.
- *   An `Expr` carries no `TMeta`, so nullability is genuinely unknown
- *   here; widening to nullable is the honest direction (an absent
+ * - **Object projection** (`select({a: expr, …}, table)`): a reduced
+ *   contract, tracked as **#311**. The projected keys are exact — only
+ *   those keys exist on the result, so an unprojected key is a compile
+ *   error where it's accessed — but the *type* per key is only
+ *   {@link FamilyReadType}, widened to `| null`. This is reduced, not
+ *   negligence: an `Expr`/`ColumnRef` (`expr/ast.ts`, predates this
+ *   group) carries only a `SqlTypeFamily`, never `TMeta` — no
+ *   `notNull`/`hasDefault`/`mode`/`element`/`$type` brand, the same root
+ *   cause #307's parked left-join nullability hit ("`ColumnRef` doesn't
+ *   remember which declared column it came from"). Widening to nullable
+ *   is the honest direction with that information missing (an absent
  *   guarantee reads as possibly-null, never as a false non-null
- *   promise) — the same direction #307's parked left-join nullability
- *   took, and deliberately *not* resolved by matching the projected key
- *   against the source table's same-named declared column: two
- *   differently-typed columns can share a family (`posts.id` and
- *   `posts.title` are both `"uuid"`-or-`"text"`-family-adjacent), so a
- *   name match proves nothing about which column an `Expr` actually
- *   reads from and would let the widened type quietly lie again.
+ *   promise) — the same direction #307 took. Matching the projected
+ *   key's *name* against the source table's same-named declared column
+ *   to borrow richness was considered and rejected: two differently-typed
+ *   columns can share a family (`posts.id` and `posts.title` are both
+ *   `"uuid"`-or-`"text"`-family-adjacent), so a name match proves nothing
+ *   about which column an `Expr` actually reads from and would let the
+ *   widened type quietly lie again. #311 tracks giving `ColumnRef` its
+ *   declaration source (or `TMeta` itself) so this branch can recover
+ *   full richness instead.
  */
 export type SelectResult<TProjection extends SelectProjection> =
 	TProjection extends Table<infer TColumns>

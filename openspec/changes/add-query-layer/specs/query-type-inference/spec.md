@@ -12,11 +12,27 @@ single source of truth and no generated files can go stale.
 The result row type of a select or `returning` clause SHALL be inferred
 from the declared column types of the projected columns, including
 nullability: a column without `notNull` SHALL type as possibly `null`.
+A projection built from arbitrary expressions rather than a whole
+declared table (an object projection, e.g. `select({a: expr}, table)`)
+SHALL still key its result exactly to the projected names, but MAY
+resolve each field's type only to its coarse SQL family widened to
+nullable, rather than the full declared-column type — expressions
+carry no link back to the declared column they read from (tracked as
+**#311**), so a narrower type there would risk misrepresenting a value
+this layer cannot actually verify.
 
 #### Scenario: Projection drives the row type
 - **WHEN** a select projects a subset of a declared table's columns
 - **THEN** the statement's result type contains exactly those column
   names with TypeScript types mapped from their declared SQL types
+
+#### Scenario: An object projection's field type is coarser than a whole-table projection's
+- **WHEN** a select's projection is built from expressions rather than
+  the whole declared table
+- **THEN** the result type keys still match exactly what was projected,
+  but each field's type reflects only its SQL family widened to
+  nullable, not the full declared-column type (mode/array
+  element/`$type` brand are not reflected)
 
 ### Requirement: Insert and update input types follow the declaration
 Insert input types SHALL require columns that are `notNull` without a
