@@ -37,12 +37,12 @@ the select object projection (symmetry, not a new contract).
 
 ## 2. Compiler + sql escape hatch
 
-- [ ] 2.1 [design] `compile()` result shape and parameter numbering
+- [x] 2.1 [design] `compile()` result shape and parameter numbering
   rule (ordered params, deterministic output); red test
   `packages/query/test/compile/compile.test.ts` "same statement
   compiles byte-identical twice, no connection"; files
   `src/compile/compile.ts`. ~10m
-- [ ] 2.2 Select rendering: explicit projection, from, where via
+- [x] 2.2 Select rendering: explicit projection, from, where via
   ExprNode with literal→parameter lifting; red test
   `packages/query/test/compile/select.test.ts` "select with where
   compiles to parameterized SQL, no star"; files

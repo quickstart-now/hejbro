@@ -61,6 +61,12 @@ a statement or embedded as an expression fragment. Interpolated values
 SHALL become bind parameters, never inlined literals; interpolated
 fragments and identifiers compose structurally.
 
+The same fragment is medium-dependent by design: written into a
+declaration it renders its interpolated values as quoted inline literals,
+because migration SQL has to stay readable and diffable; compiled as part
+of a query it lifts those same values to bind parameters. `sql.raw()` is
+verbatim in both media.
+
 #### Scenario: Escape hatch parameterizes interpolations
 - **WHEN** a `sql` template interpolates a runtime value
 - **THEN** the compiled SQL contains a parameter placeholder for it and

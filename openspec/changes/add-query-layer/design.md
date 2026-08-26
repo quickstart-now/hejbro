@@ -81,6 +81,21 @@ banned by owner decision).
   `{insertQuery}` / `{updateQuery}` / `{deleteQuery}` / `QueryNode`; the
   `sql` statement form joins it once task 2.6 is settled. The public
   signature is a single `compile(statement)` with no options.
+- **`sql` escape hatch contract** (task 2.6, owner-settled 2026-08-26).
+  `@hejbro/query` does not define a second tagged template: its `sql` is a
+  thin wrapper that delegates the fragment form to core's tag, so fragment
+  semantics are identical by construction and core stays untouched. One
+  tag serves both uses — it returns `Expr<"unknown"> & { statementExpr }`,
+  usable anywhere an expression is and compilable as a statement, which is
+  the single branch the `Compilable` union gains. `sql.identifier(...names)`
+  quotes each part through core's identifier rule and joins them with `.`;
+  interpolating a `Table` directly is deferred. `sql.raw` stays delegated
+  and verbatim in both media, documented as the one injection point.
+  Nested fragments rely on core's structural splicing, with parameter
+  numbering following render order. Interpolation keeps core's
+  `ambiguous-literal` rejection for arrays and plain objects in v1 — a
+  query-side `param()` and jsonb branding are parked, not pre-empted here.
+  Compiling a blank statement throws `empty-sql-statement`.
 - **Security** (owner directive 2026-08-26). Injection safety is a spec
   requirement, not an implementation detail: no runtime value reaches the
   SQL text on any path, identifiers are always quoted through core's
