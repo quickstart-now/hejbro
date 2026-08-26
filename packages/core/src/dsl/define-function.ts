@@ -19,8 +19,51 @@ export type FunctionReturns =
 	| { readonly returnsKind: "trigger" }
 	| TypeNode;
 
-/** A recorded `defineFunction`/`defineTrigger`-internal function declaration. */
-export type FunctionDeclaration = {
+/**
+ * Hides {@link FunctionDeclaration}'s type-only `TArgs`/`TReturns` marker
+ * behind a unique symbol (same technique as `column-builder.ts`'s
+ * `columnMetaBrand`, D15/g3 precedent). Never assigned at runtime: every
+ * `FunctionDeclaration` (`defineFunction`'s own return, and
+ * `defineTrigger`'s directly-constructed literal) only ever sets the
+ * plain runtime fields, so without this a non-recursive mention of
+ * `TArgs`/`TReturns` would exist nowhere at all — `args`/`returns` are
+ * plain, already-resolved runtime shapes (`ReadonlyArray<{argName,
+ * typeNode}>`, a `returnsKind` union) that never reference the generic
+ * parameters, not even recursively through another method the way
+ * `ColumnBuilder`'s own chain methods do. Without this anchor,
+ * `FunctionDeclaration<A>` and `FunctionDeclaration<B>` would be
+ * structurally identical for any `A`/`B` and mutually assignable —
+ * task 4.10's own `@ts-expect-error` probes would all pass regardless
+ * of whether the generic actually did anything.
+ *
+ * Plain `Symbol()`, not `Symbol.for(...)`, and not exported (D90-era
+ * default for a phantom anchor with no cross-instance runtime lookup —
+ * nothing ever reads `declaration[functionDeclarationBrand]`; exporting
+ * would only grow the public surface, and this repo's changeset scope
+ * with it, for no benefit `columnMetaBrand`'s own tsdoc didn't already
+ * rule out for the identical reason).
+ */
+const functionDeclarationBrand: unique symbol = Symbol(
+	"hejbro:function-declaration-meta",
+);
+
+/**
+ * A recorded `defineFunction`/`defineTrigger`-internal function
+ * declaration. `TArgs`/`TReturns` default to the widest shape either
+ * call site can produce, so every existing non-generic consumer
+ * (`function-kind.ts`'s `ObjectKind<FunctionDeclaration>`,
+ * `define-trigger.ts`'s directly-constructed literal, `render-body.ts`)
+ * keeps compiling unchanged against the bare `FunctionDeclaration` name
+ * — task 4.10, mirroring task 3.x's own `ColumnBuilder<TFamily, TMeta>`
+ * defaults.
+ */
+export type FunctionDeclaration<
+	TArgs extends Record<string, ColumnBuilder> = Record<string, ColumnBuilder>,
+	TReturns extends Table | TypeNode | { readonly returnsKind: "trigger" } =
+		| Table
+		| TypeNode
+		| { readonly returnsKind: "trigger" },
+> = {
 	readonly declarationKind: "function";
 	readonly schemaName: string;
 	readonly functionName: string;
@@ -39,6 +82,11 @@ export type FunctionDeclaration = {
 	readonly security: "invoker" | "definer";
 	readonly body: FunctionBody;
 	readonly declaredAt: string | null;
+	/** Type-only marker, never assigned — see {@link functionDeclarationBrand}. */
+	readonly [functionDeclarationBrand]?: {
+		readonly args: TArgs;
+		readonly returns: TReturns;
+	};
 };
 
 /** Maps a `defineFunction` `args` config to the `Expr` refs its body callback receives. */
@@ -122,7 +170,10 @@ const schemaNameOf = (owner: SchemaDeclaration | string): string => {
  * recording contexts — the two recorded trees must be structurally
  * identical, or this throws `nondeterministic-body` (spec §6.2 decision A4).
  */
-export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
+export const defineFunction = <
+	TArgs extends Record<string, ColumnBuilder>,
+	TReturns extends Table | TypeNode = Table | TypeNode,
+>(
 	/**
 	 * The declared schema (`schema("app")`), like `table`/`defineView`/`grant`.
 	 * @deprecated Passing the schema name as a string is accepted on 0.1.x
@@ -133,11 +184,11 @@ export const defineFunction = <TArgs extends Record<string, ColumnBuilder>>(
 	functionName: string,
 	config: {
 		readonly args?: TArgs;
-		readonly returns?: Table | TypeNode;
+		readonly returns?: TReturns;
 		readonly security?: "invoker" | "definer";
 	},
 	body: (ctx: BodyContext, args: ArgRefs<TArgs>) => void,
-): FunctionDeclaration => {
+): FunctionDeclaration<TArgs, TReturns> => {
 	const schemaName = schemaNameOf(owner);
 	const identity = `${schemaName}.${functionName}`;
 	const declaredAt = captureDeclarationSite();
