@@ -356,9 +356,12 @@ left implicit): `db()`'s argument shape settled as **(c′)** — a flat,
 heterogeneous schema-module record classified at runtime by
 `isTable()`/`declarationKind`, not the earlier `{tables, functions?}`
 shape (task 4.3-schema below). Task 4.10 (`db.fn.*` typing) settled as
-**(B)** — a core additive generic expansion of `FunctionDeclaration`
-itself, not the originally-scoped per-call `fn-types.ts` dispatch, and
-not parked. Mutation `.returning()` typing settled as **(a)** — the
+**(B)** — not the per-function `fn-types.ts` dispatch originally
+sketched, and not parked: `FunctionDeclaration` gains a core generic
+type surface (task 4.10a, the enabler) which `db.fn.*`'s own call
+signature (task 4.10 itself, the consumer — still open below until
+this lands) then reads through. Mutation `.returning()` typing settled
+as **(a)** — the
 same additive-generic treatment applied to `InsertFinal`/`UpdateFinal`/
 `DeleteFinal` (task 4.11-mutation below), completing what 4.11 (select)
 had explicitly parked pending this decision.
@@ -452,17 +455,36 @@ had explicitly parked pending this decision.
   list for returns-table, composes with `db.as`; red test
   `packages/query/test/db/fn.test.ts` "returns-table call renders
   explicit columns, never star"; files `src/db/fn.ts`. ~10m
-- [x] 4.10 (owner decision (B), redirected from the originally-scoped
-  per-call `fn-types.ts` dispatch) core generic type surface for
-  `defineFunction`: `FunctionDeclaration` gains a defaulted
-  `TArgs`/`TReturns` type parameter pair carrying the declared args
-  shape and return target, via a non-enumerable phantom anchor field
-  (mirrors `column-builder.ts`'s `columnMetaBrand`); additive only —
-  every existing non-generic consumer (`function-kind.ts`,
+- [x] 4.10a (owner decision (B), enabler half of 4.10 — not the whole
+  task) core generic type surface for `defineFunction`:
+  `FunctionDeclaration` gains a defaulted `TArgs`/`TReturns` type
+  parameter pair carrying the declared args shape and return target,
+  via a non-enumerable phantom anchor field (mirrors
+  `column-builder.ts`'s `columnMetaBrand`); additive only — every
+  existing non-generic consumer (`function-kind.ts`,
   `define-trigger.ts`, `render-body.ts`) compiles unchanged; red test
   `packages/core/test/define-function.test.ts`
   "FunctionDeclaration<TArgs, TReturns> generics (task 4.10)"; files
   `packages/core/src/dsl/define-function.ts`. ~10m
+- [ ] 4.10 `db.fn.*` typing from the declarations record (the
+  consumer half 4.10a enables — 4.10 itself stays open until this
+  lands): named-object call signature derived from `TArgs` (owner
+  decision, args-as-object) via g3's `ts-type-map`; `FnApi` keyed
+  exactly to the declarations record's function export names (a
+  nonexistent key is a compile error, owner decision ③'s static
+  pinning); return row type derived from `TReturns` (a `Table` target
+  resolves through `SelectResult<TTable>`, a scalar `TypeNode` maps
+  through core's public `BaseTsType` with a local array-shape adapter);
+  runtime still renders positional SQL in declared argument order
+  (unchanged) — the named→positional lookup must read each argument by
+  `declaration.args[].argName`, never `Object.values(args)` (object key
+  order is call-site insertion order, not declaration order); red
+  tests `packages/query/test/db/fn-types.test.ts` — five
+  `@ts-expect-error` probes (typo key, missing key, wrong type, excess
+  key on a fresh object literal, nonexistent function key) and a
+  reversed-call-order fixture asserting `params` (not the SQL text,
+  which is `$1, $2` either way) lands in declared order; files
+  `packages/query/src/db/fn-types.ts`. ~15m
 - [x] 4.11-mutation (owner decision (a), completing what 4.11 below
   parked) core generic type surface for the mutation builders:
   `InsertFinal`/`UpdateFinal`/`DeleteFinal` (and their
