@@ -80,7 +80,12 @@ banned by owner decision).
   renderer. Input is the structural union `{selectQuery}` /
   `{insertQuery}` / `{updateQuery}` / `{deleteQuery}` / `QueryNode`; the
   `sql` statement form joins it once task 2.6 is settled. The public
-  signature is a single `compile(statement)` with no options.
+  signature is a single `compile(statement)` with no options. A statement
+  built by the `sql` tag carries no `queryKind` to mirror, so `kind` takes
+  a fifth value, `"sql"` — an unclassified tagged-template statement —
+  and stays required and total rather than becoming optional or inferred
+  by parsing the text (owner-settled 2026-08-26, resolving where the task
+  2.1 and 2.6 decisions cross).
 - **`sql` escape hatch contract** (task 2.6, owner-settled 2026-08-26).
   `@hejbro/query` does not define a second tagged template: its `sql` is a
   thin wrapper that delegates the fragment form to core's tag, so fragment

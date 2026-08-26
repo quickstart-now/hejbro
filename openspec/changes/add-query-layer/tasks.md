@@ -67,15 +67,24 @@ the select object projection (symmetry, not a new contract).
   a quote from a declared name — and a hand-built node is a supported
   input (`QueryNode` is in the `compile()` union), so the test exercises
   a real contract, not a contrived path.
-- [ ] 2.5 Insert/update/delete rendering with explicit `returning`; red
+- [x] 2.5 Insert/update/delete rendering with explicit `returning`; red
   test `packages/query/test/compile/mutation.test.ts` "insert renders
   parameterized values and explicit returning"; files
   `src/compile/mutation.ts`. ~10m
-- [ ] 2.6 [design] `sql` tagged template: statement and fragment forms,
+- [x] 2.6 [design] `sql` tagged template: statement and fragment forms,
   value interpolation → bind parameters, structural composition of
   fragments/identifiers; red test `packages/query/test/sql.test.ts`
   "interpolated value becomes a parameter, never a literal"; files
-  `src/sql.ts`. ~10m
+  `src/sql.ts`. ~10m — `sql` is a thin wrapper delegating every fragment
+  semantic to core's own tag (no second `SqlTemplateNode`/`RawSqlNode`
+  assembly); the statement form reuses the same `liftExprNode` path as
+  every other clause (proved by a mixed-clause numbering test, since
+  `params` alone can't show a reset-to-$1 regression). `CompileKind`
+  gained a fifth value, `"sql"` — an honest "uncategorized tagged-
+  template statement" marker (owner-settled, 2026-08-26), not inferred
+  from parsing the text. `compile()` checks the new `statementExpr`
+  branch before `unwrapQueryNode`, whose parameter type now structurally
+  excludes it — skipping that check is a `tsc` error, not a runtime one.
 
 ## 3. Type inference
 
