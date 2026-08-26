@@ -48,6 +48,8 @@ export type ColumnMeta = {
 	readonly element?: TypeNode["typeName"];
 	/** set only by `bigint({mode})`/`numeric({mode})` (task 3.4) — see {@link NumericMode}. */
 	readonly mode?: NumericMode;
+	/** set only by `.$type<T>()` (D5, task 3.5) — the jsonb brand 3.6 reads instead of falling back to `unknown`. */
+	readonly jsonType?: unknown;
 };
 
 /**
@@ -115,6 +117,9 @@ type ArrayCarriedFlags<TMeta extends ColumnMeta> = (TMeta extends {
 		: unknown) &
 	(TMeta extends { readonly mode: infer TMode extends NumericMode }
 		? { readonly mode: TMode }
+		: unknown) &
+	(TMeta extends { readonly jsonType: infer TJson }
+		? { readonly jsonType: TJson }
 		: unknown);
 
 /**
@@ -163,6 +168,17 @@ export type ColumnBuilder<
 		"array",
 		ArrayCarriedFlags<TMeta> & { typeName: "array"; element: TMeta["typeName"] }
 	>;
+	/**
+	 * Brands this column's TypeScript type as `T` (D5) — the way a `jsonb`
+	 * column opts out of `unknown` (task 3.6 reads `TMeta["jsonType"]`
+	 * instead of falling back). A **runtime identity method, not a
+	 * purely type-level one**: a type-only `$type` wouldn't be callable at
+	 * all (there'd be no function for `.{$type<T>()}` to resolve to), so
+	 * this returns a new builder wrapping the *exact same* `columnState` —
+	 * proven harmless (task 3.5): byte-identical snapshot/SQL and no brand
+	 * trace anywhere runtime-visible, since only `TMeta` changes.
+	 */
+	$type<T>(): ColumnBuilder<TFamily, TMeta & { jsonType: T }>;
 };
 
 /** Extracts the {@link SqlTypeFamily} a {@link ColumnBuilder} carries. */
@@ -265,4 +281,6 @@ export const createColumnBuilder = <
 			...columnState,
 			typeNode: { typeName: "array", element: columnState.typeNode },
 		}),
+	$type: <T>() =>
+		createColumnBuilder<TFamily, TMeta & { jsonType: T }>(columnState),
 });

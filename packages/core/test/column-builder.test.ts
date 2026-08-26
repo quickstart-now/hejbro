@@ -539,3 +539,66 @@ describe("every factory's mode is accounted for (C19)", () => {
 		);
 	});
 });
+
+describe(".$type<T>() jsonb brand (D5, task 3.5)", () => {
+	it("brands the type without touching columnState", () => {
+		type Payload = { readonly kind: "widget"; readonly count: number };
+		const branded = jsonb().$type<Payload>();
+		expectTypeOf(branded).toEqualTypeOf<
+			ColumnBuilder<"json", { typeName: "jsonb" } & { jsonType: Payload }>
+		>();
+		// runtime identity: same columnState as the unbranded column.
+		expect(branded.columnState).toEqual(jsonb().columnState);
+	});
+
+	it("$type leaves the declaration byte-identical", () => {
+		type Payload = { readonly kind: "widget" };
+		const buildWidgets = (
+			payload: ReturnType<typeof jsonb>,
+		): ReturnType<typeof table> =>
+			table(schema("app"), "widgets", { id: uuid().primaryKey(), payload });
+
+		const unbranded = buildWidgets(jsonb());
+		const branded = buildWidgets(jsonb().$type<Payload>());
+
+		// columnState differs not at all -- $type carries no runtime payload.
+		const [, unbrandedPayload] = getTableMeta(unbranded).columns;
+		const [, brandedPayload] = getTableMeta(branded).columns;
+		expect(brandedPayload?.columnState).toEqual(unbrandedPayload?.columnState);
+
+		const unbrandedSql = generateMigration({
+			declarations: [schema("app"), getTableMeta(unbranded)],
+			previousSnapshot: emptySnapshot,
+		}).sql;
+		const brandedSql = generateMigration({
+			declarations: [schema("app"), getTableMeta(branded)],
+			previousSnapshot: emptySnapshot,
+		}).sql;
+		expect(brandedSql).toBe(unbrandedSql);
+		expect(brandedSql).toContain('"payload" jsonb');
+
+		const unbrandedJson = JSON.stringify(
+			tableKind.serialize(getTableMeta(unbranded)),
+		);
+		const brandedJson = JSON.stringify(
+			tableKind.serialize(getTableMeta(branded)),
+		);
+		expect(brandedJson).toBe(unbrandedJson);
+		// "kind" only ever appears in Payload's own field name, never in a
+		// snapshot key/value -- a real leak would introduce it.
+		expect(brandedJson).not.toContain("kind");
+	});
+
+	it("array() carries the jsonb brand through (task 3.4/3.5 ArrayCarriedFlags pattern)", () => {
+		type Payload = { readonly kind: "widget" };
+		expectTypeOf(jsonb().$type<Payload>().array()).toEqualTypeOf<
+			ColumnBuilder<
+				"array",
+				{ readonly jsonType: Payload } & {
+					typeName: "array";
+					element: "jsonb";
+				}
+			>
+		>();
+	});
+});

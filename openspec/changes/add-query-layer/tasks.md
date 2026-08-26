@@ -177,7 +177,7 @@ on top of it. Settled decisions:
   bigint mode and accepts an opt-in mode"; files
   `packages/core/src/types/column-builder.ts`,
   `packages/core/src/types/column-builder-factories.ts`. ~10m
-- [ ] 3.5 core `.$type<T>()` jsonb brand — a runtime identity method
+- [x] 3.5 core `.$type<T>()` jsonb brand — a runtime identity method
   proven harmless: same `columnState`, byte-identical snapshot and SQL
   against an otherwise identical unbranded table, and no brand trace in
   the snapshot JSON. Like 3.4, the brand needs its own
@@ -229,10 +229,15 @@ on top of it. Settled decisions:
 - [ ] 3.14 Delta spec alignment: drop the left-join clause and its
   scenario (parked as #307), scope the insert requirement to "notNull
   without a default" (generated columns parked as #308), and add the
-  numeric-mode and structured-interval requirements; verified by
-  `openspec validate add-query-layer`; files
-  `openspec/changes/add-query-layer/specs/query-type-inference/spec.md`.
-  ~8m
+  numeric-mode and structured-interval requirements. Carries this
+  group's single `minor` changeset too (D59: the group changes
+  `@hejbro/core`'s public type surface — mode options, the `$type`
+  brand, the widened builder types; the fixed group means naming
+  `@hejbro/core` versions all three). Registering the *new* packages in
+  `.changeset/config.json` stays task 7.3's; verified by
+  `openspec validate add-query-layer` and `pnpm changeset status`; files
+  `openspec/changes/add-query-layer/specs/query-type-inference/spec.md`,
+  one new `.changeset/*.md`. ~10m
 - [x] 3.15 core chain methods preserve the accumulated meta —
   exhaustively, one assertion per method (`notNull`, `primaryKey`,
   `unique`, `default`, `defaultRandom`, `defaultNow`, `array`), each
