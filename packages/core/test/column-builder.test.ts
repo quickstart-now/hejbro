@@ -172,8 +172,9 @@ describe("column builder type families", () => {
 		expectTypeOf(timestamptz()).toEqualTypeOf<
 			ColumnBuilder<"datetime", { typeName: "timestamptz" }>
 		>();
+		// task 3.15: array() now also records the element's declared type name.
 		expectTypeOf(uuid().array()).toEqualTypeOf<
-			ColumnBuilder<"array", { typeName: "array" }>
+			ColumnBuilder<"array", { typeName: "array"; element: "uuid" }>
 		>();
 	});
 });
@@ -252,6 +253,61 @@ describe("notNull and default are visible in the builder type (D1, task 3.2)", (
 		>();
 		expectTypeOf(text().unique()).toEqualTypeOf<
 			ColumnBuilder<"text", { typeName: "text" }>
+		>();
+	});
+});
+
+describe("every chain method keeps the meta it was chained onto (D1, task 3.15)", () => {
+	it("every chain method keeps the meta it was chained onto", () => {
+		// base already carries both flags -- each method below is applied
+		// *after* them, so a method that drops accumulation is visible.
+		type UuidBaseMeta = { typeName: "uuid" } & { notNull: true } & {
+			hasDefault: true;
+		};
+		const uuidBase = uuid()
+			.notNull()
+			.default("11111111-1111-1111-1111-111111111111");
+		expectTypeOf(uuidBase).toEqualTypeOf<ColumnBuilder<"uuid", UuidBaseMeta>>();
+
+		expectTypeOf(uuidBase.notNull()).toEqualTypeOf<
+			ColumnBuilder<"uuid", UuidBaseMeta & { notNull: true }>
+		>();
+		expectTypeOf(uuidBase.primaryKey()).toEqualTypeOf<
+			ColumnBuilder<"uuid", UuidBaseMeta>
+		>();
+		expectTypeOf(uuidBase.unique()).toEqualTypeOf<
+			ColumnBuilder<"uuid", UuidBaseMeta>
+		>();
+		expectTypeOf(
+			uuidBase.default("22222222-2222-2222-2222-222222222222"),
+		).toEqualTypeOf<
+			ColumnBuilder<"uuid", UuidBaseMeta & { hasDefault: true }>
+		>();
+		expectTypeOf(uuidBase.defaultRandom()).toEqualTypeOf<
+			ColumnBuilder<"uuid", UuidBaseMeta & { hasDefault: true }>
+		>();
+		// array() replaces typeName (never intersects it) but keeps the
+		// accumulated flags and records the element's own declared type name.
+		expectTypeOf(uuidBase.array()).toEqualTypeOf<
+			ColumnBuilder<
+				"array",
+				{ readonly notNull: true } & { readonly hasDefault: true } & {
+					typeName: "array";
+					element: "uuid";
+				}
+			>
+		>();
+
+		// defaultNow() needs a date/time-family base.
+		type DatetimeBaseMeta = { typeName: "timestamptz" } & { notNull: true } & {
+			hasDefault: true;
+		};
+		const datetimeBase = timestamptz().notNull().default(new Date(0));
+		expectTypeOf(datetimeBase).toEqualTypeOf<
+			ColumnBuilder<"datetime", DatetimeBaseMeta>
+		>();
+		expectTypeOf(datetimeBase.defaultNow()).toEqualTypeOf<
+			ColumnBuilder<"datetime", DatetimeBaseMeta & { hasDefault: true }>
 		>();
 	});
 });

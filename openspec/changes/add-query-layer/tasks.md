@@ -218,7 +218,7 @@ on top of it. Settled decisions:
   `openspec validate add-query-layer`; files
   `openspec/changes/add-query-layer/specs/query-type-inference/spec.md`.
   ~8m
-- [ ] 3.15 core chain methods preserve the accumulated meta —
+- [x] 3.15 core chain methods preserve the accumulated meta —
   exhaustively, one assertion per method (`notNull`, `primaryKey`,
   `unique`, `default`, `defaultRandom`, `defaultNow`, `array`), each
   applied after `.notNull().default(...)` so dropping the accumulation

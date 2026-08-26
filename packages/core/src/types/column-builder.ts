@@ -32,6 +32,8 @@ export type ColumnMeta = {
 	readonly typeName: TypeNode["typeName"];
 	readonly notNull?: boolean;
 	readonly hasDefault?: boolean;
+	/** set only by `.array()` (task 3.15): the element's own declared type name, so 3.6 can map an array through its element instead of losing it. */
+	readonly element?: TypeNode["typeName"];
 };
 
 /**
@@ -78,6 +80,27 @@ export type ColumnMeta = {
 export const columnMetaBrand: unique symbol = Symbol("hejbro:column-meta");
 
 /**
+ * Carries `TMeta`'s optional `true`-flags (`notNull`, `hasDefault`, …)
+ * across `.array()`'s otherwise-fresh meta, without ever indexing an
+ * optional key directly — `TMeta["notNull"]` reads as `boolean | undefined`
+ * for a generic `TMeta` (indexed access always adds `undefined` for an
+ * optional property), which fails `exactOptionalPropertyTypes` against
+ * {@link ColumnMeta}'s `notNull?: boolean`. Each branch instead contributes
+ * either the concrete literal (`{ notNull: true }`) or `unknown` (a no-op
+ * intersection member), so the result never contains an explicit
+ * `| undefined`. A later optional flag (numeric mode, jsonb `$type`) needs
+ * its own branch added here.
+ */
+type ArrayCarriedFlags<TMeta extends ColumnMeta> = (TMeta extends {
+	readonly notNull: true;
+}
+	? { readonly notNull: true }
+	: unknown) &
+	(TMeta extends { readonly hasDefault: true }
+		? { readonly hasDefault: true }
+		: unknown);
+
+/**
  * An immutable, chainable column declaration. Every modifier returns a new
  * `ColumnBuilder` — the original is never mutated. `TFamily` carries the
  * column's coarse Postgres type family (D17) so `table()` can expose typed
@@ -104,7 +127,11 @@ export type ColumnBuilder<
 	defaultRandom(): ColumnBuilder<TFamily, TMeta & { hasDefault: true }>;
 	/** date/time-family columns only — throws an actionable error otherwise */
 	defaultNow(): ColumnBuilder<TFamily, TMeta & { hasDefault: true }>;
-	array(): ColumnBuilder<"array", { typeName: "array" }>;
+	/** wraps the current type in an array — keeps everything else `.array()` was chained onto (notNull, hasDefault, …; see {@link ArrayCarriedFlags}) and records the element's own declared type name (`typeName` is *replaced*, not intersected: `"text" & "array"` would be `never`). */
+	array(): ColumnBuilder<
+		"array",
+		ArrayCarriedFlags<TMeta> & { typeName: "array"; element: TMeta["typeName"] }
+	>;
 };
 
 /** Extracts the {@link SqlTypeFamily} a {@link ColumnBuilder} carries. */
@@ -194,7 +221,13 @@ export const createColumnBuilder = <
 		});
 	},
 	array: () =>
-		createColumnBuilder<"array", { typeName: "array" }>({
+		createColumnBuilder<
+			"array",
+			ArrayCarriedFlags<TMeta> & {
+				typeName: "array";
+				element: TMeta["typeName"];
+			}
+		>({
 			...columnState,
 			typeNode: { typeName: "array", element: columnState.typeNode },
 		}),
