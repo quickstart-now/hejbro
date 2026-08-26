@@ -3,6 +3,7 @@ import { getTableMeta, isTable, toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
 import type {
 	Expr,
+	JoinKind,
 	OrderByTerm,
 	ProjectionNode,
 	SelectNode,
@@ -38,6 +39,7 @@ export type SelectJoinable<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectFiltered<TProjection> & {
 	innerJoin(joined: Table, on: Expr<"boolean">): SelectJoinable<TProjection>;
+	leftJoin(joined: Table, on: Expr<"boolean">): SelectJoinable<TProjection>;
 	where(condition: Expr<"boolean">): SelectFiltered<TProjection>;
 };
 
@@ -53,6 +55,19 @@ const resolveOrderTerm = (term: OrderTermInput): OrderByTerm => {
 	return { expr: term.by.exprNode, direction: term.direction };
 };
 
+const appendJoin = (
+	query: SelectNode,
+	joinKind: JoinKind,
+	joined: Table,
+	on: Expr<"boolean">,
+): SelectNode => ({
+	...query,
+	joins: [
+		...query.joins,
+		{ joinKind, table: tableRefOf(joined), on: on.exprNode },
+	],
+});
+
 const makeStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
 	fromTable: Table,
@@ -63,13 +78,13 @@ const makeStages = <TProjection extends SelectProjection>(
 	projectionInput,
 	innerJoin: (joined, on) =>
 		makeStages(
-			{
-				...query,
-				joins: [
-					...query.joins,
-					{ joinKind: "inner", table: tableRefOf(joined), on: on.exprNode },
-				],
-			},
+			appendJoin(query, "inner", joined, on),
+			fromTable,
+			projectionInput,
+		),
+	leftJoin: (joined, on) =>
+		makeStages(
+			appendJoin(query, "left", joined, on),
 			fromTable,
 			projectionInput,
 		),

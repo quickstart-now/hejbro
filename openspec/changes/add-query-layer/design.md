@@ -40,18 +40,23 @@ banned by owner decision).
 
 ## Decisions
 
-- **Package map.** `@hejbro/query` (new, pure): statement IR, compiler,
+- **Package map.** `@hejbro/query` (new, pure): compiler,
   driver-contract types, db handle types, generic RLS context mechanism.
   `@hejbro/pg` (new): vanilla TCP driver wrapping `pg`.
   `@hejbro/supabase`: adds its driver and `asUser`/`asAnon` context
-  surface. `@hejbro/core`: untouched at runtime; `@hejbro/query`
-  consumes its public ExprNode vocabulary.
-- **Shared expression IR, separate statement IR.** Queries reuse core
-  ExprNode for expressions so the DSL vocabulary is learned once;
-  statements (select/insert/update/delete shapes) are a new IR owned by
-  `@hejbro/query`. Boundary rule: the snapshot serializes only
-  declaration-reachable nodes, so query-only constructs can never leak
-  into snapshot format or migrations.
+  surface. `@hejbro/core`: additive-only — the v1 gaps in the existing
+  query vocabulary (left join variant, returning column selection);
+  no behavior change to existing declarations.
+- **One shared vocabulary — no second statement IR** (D94 as amended
+  during group 1, owner-settled 2026-08-26). Core already owns the
+  statement nodes (`QueryNode`: select/insert/update/delete) and the
+  `select`/`insert`/`update`/`deleteFrom` builders, because
+  declarations contain queries (view bodies, function bodies, RLS
+  `exists()`). Queries reuse that vocabulary unchanged; `@hejbro/query`
+  owns the pure compiler, type inference, and execution. Boundary rule:
+  the snapshot serializes only declaration-reachable nodes, so
+  query-only constructs can never leak into snapshot format or
+  migrations.
 - **Literal handling differs by medium.** Declaration rendering keeps
   inlining literals (migration SQL must be readable/diffable); query
   compilation lifts runtime values to ordered bind parameters. The

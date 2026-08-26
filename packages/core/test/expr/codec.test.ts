@@ -368,6 +368,35 @@ describe("expr codec — round-trip", () => {
 	// result equals left" can no longer be the shape of a passing test --
 	// the assertion below, "rejects instead of silently decoding wrong",
 	// is what a decoder that validates its input looks like.)
+	it("decodes a left join (#293 group 1: left is a real variant now)", () => {
+		const decoded = decodeExprNode({
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: { projectionKind: "constant-one" },
+				from: { schema: "app", table: "posts" },
+				joins: [
+					{
+						joinKind: "left",
+						table: { schema: "app", table: "authors" },
+						on: {
+							nodeKind: "literal",
+							literal: { literalKind: "boolean", value: true },
+						},
+					},
+				],
+				where: null,
+				orderBy: [],
+				limit: null,
+			},
+		});
+		if (decoded.nodeKind !== "exists") {
+			throw new Error("expected an exists node");
+		}
+		expect(decoded.query.joins[0]?.joinKind).toBe("left");
+	});
+
 	it("rejects an unrecognized joinKind instead of silently decoding as inner", () => {
 		const malformed = {
 			nodeKind: "exists",
@@ -378,7 +407,7 @@ describe("expr codec — round-trip", () => {
 				from: { schema: "app", table: "posts" },
 				joins: [
 					{
-						joinKind: "left",
+						joinKind: "right",
 						table: { schema: "app", table: "authors" },
 						on: {
 							nodeKind: "literal",

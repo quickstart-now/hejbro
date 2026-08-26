@@ -409,7 +409,7 @@ const renderSelectClauses = (
 	const joinsSql = query.joins
 		.map(
 			(join) =>
-				`inner join ${renderTableRef(join.table)} on ${renderExpr(join.on, scope)}`,
+				`${join.joinKind} join ${renderTableRef(join.table)} on ${renderExpr(join.on, scope)}`,
 		)
 		.join(" ");
 

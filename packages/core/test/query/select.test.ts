@@ -50,6 +50,18 @@ describe("select builder", () => {
 			'exists (select 1 from "app"."comments" inner join "app"."posts" on',
 		);
 	});
+	it("records and renders a left join", () => {
+		const query = select(posts).leftJoin(
+			comments,
+			eq(comments.postId, posts.id),
+		);
+		expect(query.selectQuery.joins).toEqual([
+			expect.objectContaining({ joinKind: "left" }),
+		]);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" left join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
+		);
+	});
 	it("renders a correlated subquery referencing the outer table", () => {
 		// the canonical rls form: comment is visible iff its post is published
 		const guard = exists(

@@ -8,6 +8,7 @@ import type {
 	ExprNode,
 	FunctionCallNode,
 	InListNode,
+	JoinKind,
 	JoinNode,
 	LiteralNode,
 	LogicalNode,
@@ -22,6 +23,7 @@ import type {
 	SqlTemplateNode,
 	TableRefNode,
 } from "./ast";
+import { joinKinds } from "./ast";
 
 /**
  * The serialization boundary between `ExprNode` (and everything reachable
@@ -600,10 +602,13 @@ const decodeProjection = (value: JsonValue): ProjectionNode => {
 	return handler(node);
 };
 
+const isJoinKind = (value: string): value is JoinKind =>
+	(joinKinds as ReadonlyArray<string>).includes(value);
+
 const decodeJoin = (value: JsonValue): JoinNode => {
 	const node = asRecord(value, "joinKind");
 	const joinKind = stringField(node, "joinKind");
-	if (joinKind !== "inner") {
+	if (!isJoinKind(joinKind)) {
 		return unknownDiscriminator("joinKind", joinKind);
 	}
 	return {
