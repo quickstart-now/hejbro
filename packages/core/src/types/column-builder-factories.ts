@@ -188,7 +188,18 @@ export const char = (
 		mode: null,
 	});
 
-/** `bigint({mode})`'s default mode (task 3.4) — the one place this default is spelled out; both the generic type default below and the runtime fallback read it, so they can never drift apart. */
+/**
+ * `bigint({mode})`'s default mode (task 3.4) — the one place this default
+ * is spelled out; the generic type default below and the runtime fallback
+ * both read it, so the two can never drift apart. **Not exported**: this
+ * module is swept by `test/column-builder.test.ts`'s "every factory's mode
+ * is accounted for (C19)" exhaustiveness check
+ * (`Object.keys(columnBuilderFactories)` against a hand-maintained factory
+ * list), and exporting a non-factory value here would pollute that
+ * inventory. `ts-type-map.ts`'s `BaseScalarTsType` has its own fallback for
+ * this same default (`typeof DEFAULT_BIGINT_MODE` can't reach across that
+ * boundary) — **if this literal ever changes, update it there too.**
+ */
 const DEFAULT_BIGINT_MODE = "bigint" as const;
 
 /** Config accepted by {@link bigint}. */
@@ -212,7 +223,13 @@ export const bigint = <TMode extends NumericMode = typeof DEFAULT_BIGINT_MODE>(
 		mode: config.mode ?? DEFAULT_BIGINT_MODE,
 	});
 
-/** `numeric({mode})`'s default mode (task 3.4) — see {@link DEFAULT_BIGINT_MODE}; `numeric`'s own default differs (`'string'`, not `'bigint'`) since a `numeric` column can be fractional, where `bigint` never is. */
+/**
+ * `numeric({mode})`'s default mode (task 3.4) — see
+ * {@link DEFAULT_BIGINT_MODE} for why this stays unexported and for
+ * `ts-type-map.ts`'s matching fallback; `numeric`'s own default differs
+ * (`'string'`, not `'bigint'`) since a `numeric` column can be fractional,
+ * where `bigint` never is.
+ */
 const DEFAULT_NUMERIC_MODE = "string" as const;
 
 /** Config accepted by {@link numeric}. */

@@ -72,6 +72,16 @@ type NumericModeTsType<TMode extends NumericMode> = TMode extends "number"
  * A flat lookup, not a distributive conditional over a naked union (D1's
  * "no distributive tricks" guidance) — every branch tests one concrete
  * `TTypeName` literal.
+ *
+ * The `'bigint'`/`'string'` fallbacks below (when `TMeta` carries no
+ * `mode`) are hand-spelled literals, not derived from
+ * `column-builder-factories.ts`'s `DEFAULT_BIGINT_MODE`/
+ * `DEFAULT_NUMERIC_MODE` — those stay unexported (they'd otherwise pollute
+ * `column-builder.test.ts`'s "every factory's mode is accounted for (C19)"
+ * exhaustiveness check, which sweeps that module's exports as the known
+ * factory list). **If either default ever changes, update it in both
+ * places** — `column-builder-factories.ts`'s `bigint()`/`numeric()` and
+ * here.
  */
 type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 	| "uuid"
