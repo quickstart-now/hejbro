@@ -372,7 +372,7 @@ declarations for joined tables).
   (fake driver); red test `packages/query/test/db/execute.test.ts`
   "executed SQL equals previewed compile output"; files
   `src/db/db.ts`. ~10m
-- [ ] 4.4 Result conversion wiring: driver rows normalized per column
+- [x] 4.4 Result conversion wiring: driver rows normalized per column
   meta (numeric mode, IntervalValue) via the three access paths;
   failure = `result-conversion-failed` `{ column }` + cause; red test
   `packages/query/test/db/convert.test.ts` "bigint text arrives as the
