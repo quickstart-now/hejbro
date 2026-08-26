@@ -1,6 +1,7 @@
 import {
 	bigint,
 	defineFunction,
+	defineTrigger,
 	eq,
 	roleName,
 	schema,
@@ -53,7 +54,31 @@ const searchByStatus = defineFunction(
 	},
 );
 
-const appSchema = { posts, listPublished, searchByStatus };
+/**
+ * `defineTrigger`'s own function declaration (`returns.returnsKind ===
+ * "trigger"`) is never meant to be called directly through SQL -- Postgres
+ * only ever invokes it by attaching it to a table trigger. Exposed under a
+ * plain export name (`touchTriggerFn`) exactly like any other function
+ * declaration, so `db()`'s classification can't tell it apart from a
+ * callable one by export name alone -- the rejection has to happen at
+ * call time, keyed off `returnsKind` (owner's "explicit SQL over
+ * implicit": db.fn never silently no-ops or coerces a trigger call into
+ * something else).
+ */
+const touchTrigger = defineTrigger(
+	posts,
+	{ name: "posts_touch", timing: "before", events: ["update"], forEach: "row" },
+	(ctx, { new: row }) => {
+		ctx.return(row);
+	},
+);
+
+const appSchema = {
+	posts,
+	listPublished,
+	searchByStatus,
+	touchTriggerFn: touchTrigger.functionDeclaration,
+};
 
 const rawRow = {
 	id: "11111111-1111-1111-1111-111111111111",
@@ -93,7 +118,11 @@ describe("db.fn.* (task 4.9)", () => {
 		const { driver } = recordingDriver();
 		const handle = db(appSchema, driver);
 
-		expect(Object.keys(handle.fn)).toEqual(["listPublished", "searchByStatus"]);
+		expect(Object.keys(handle.fn)).toEqual([
+			"listPublished",
+			"searchByStatus",
+			"touchTriggerFn",
+		]);
 	});
 
 	it("a no-arg returns-table call renders an explicit column list, never a star", async () => {
@@ -152,6 +181,21 @@ describe("db.fn.* (task 4.9)", () => {
 		await expect(requireFn(handle.fn, "searchByStatus")([])).rejects.toThrow(
 			/argument/,
 		);
+		expect(driver.execute).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+
+	it("rejects a call to a trigger-returning function before any send (owner's explicit SQL over implicit)", async () => {
+		const { driver } = recordingDriver();
+		const handle = db(appSchema, driver);
+
+		try {
+			await requireFn(handle.fn, "touchTriggerFn")([]);
+			expect.unreachable("db.fn should have rejected a trigger function");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "function-return-kind-unsupported");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
 		expect(driver.execute).not.toHaveBeenCalled();
 		expect(driver.transaction).not.toHaveBeenCalled();
 	});

@@ -1,7 +1,7 @@
 import type { Role } from "@hejbro/core";
 import { quoteIdentifier } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
-import type { Driver, DriverRow, DriverSession } from "../driver/contract";
+import type { Driver, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
 import type { Declarations, ExecuteResult } from "./db";
 import { executeOn, sendCompiled } from "./execute";
@@ -136,34 +136,40 @@ export const createAsApi = (
 ): ((context: DbContext) => ScopedDb) => {
 	return (context: DbContext): ScopedDb => {
 		assertDeclaredRole(context.role, declaredRoles);
-		/** Opens one fresh, context-applied transaction and runs `send` on it — the single primitive `execute`/`fn` (task 4.7 × 4.9) both build on, so context application can never cover one and miss the other. */
-		const scopedRun = async (
-			send: (session: DriverSession) => Promise<ReadonlyArray<DriverRow>>,
-		): Promise<ReadonlyArray<DriverRow>> => {
-			assertCapability(driver, "interactive-transactions", "db.as");
+		/**
+		 * Opens one fresh, context-applied transaction and runs `send` on
+		 * it — the single primitive `execute`/`fn`/`transaction` (task 4.7
+		 * × 4.9) all build on, so context application can never cover some
+		 * and miss another. `operation` names the caller for
+		 * `assertCapability`'s error, so folding three call sites into one
+		 * doesn't blur "which member did this" out of the missing-
+		 * capability message.
+		 */
+		const scopedRun = async <T>(
+			operation: string,
+			send: (session: DriverSession) => Promise<T>,
+		): Promise<T> => {
+			assertCapability(driver, "interactive-transactions", operation);
 			return driver.transaction(async (session) => {
 				await applyContext(session, context);
 				return send(session);
 			});
 		};
 		const scopedExecute = (statement: CompileInput): Promise<unknown> =>
-			scopedRun((session) => executeOn(session, statement, tables));
-		const scopedTransaction = async <T>(
+			scopedRun("db.as", (session) => executeOn(session, statement, tables));
+		const scopedTransaction = <T>(
 			callback: (tx: Tx) => Promise<T>,
-		): Promise<T> => {
-			assertCapability(driver, "interactive-transactions", "transaction");
-			return driver.transaction(async (session) => {
-				await applyContext(session, context);
+		): Promise<T> =>
+			scopedRun("transaction", async (session) => {
 				const tx: Tx = {
 					execute: (statement) => executeOn(session, statement, tables),
 				};
 				return callback(tx);
 			});
-		};
 		return {
 			execute: scopedExecute as ScopedDb["execute"],
 			transaction: scopedTransaction,
-			fn: createFnApi(scopedRun, tables, functions),
+			fn: createFnApi((send) => scopedRun("db.as", send), tables, functions),
 		};
 	};
 };
