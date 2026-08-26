@@ -157,14 +157,38 @@ export const columnPlanForResult = (
 	return columnPlanFromReturning(node.returning, node.table, tables);
 };
 
-const compileInputWrapperKeys = [
-	"selectQuery",
-	"insertQuery",
-	"updateQuery",
-	"deleteQuery",
-] as const;
+/** Distributes `T` over its own union members before taking `keyof` — plain `keyof (A | B)` is the *intersection* of `A`/`B`'s keys (only a key valid on every member), not their union; this is what actually produces "every key any member carries". */
+type DistributedKeys<T> = T extends unknown ? keyof T : never;
 
-type CompileInputWrapperKey = (typeof compileInputWrapperKeys)[number];
+/**
+ * The exact key union `CompileInput`'s four `*Query` wrapper members
+ * carry — derived from `CompileInput` itself (never copied by hand), so
+ * a fifth wrapper key added to `compile.ts`'s own `CompileInput` shows up
+ * here as a `tsc` error instead of a silent runtime miss (the same
+ * exhaustive-record discipline task 4.1 applied to `DriverCapabilities`).
+ * `compile/**` is out of this group's file scope, so `compile.ts`'s own
+ * private `wrapperKeys` array can't be shared directly — binding to its
+ * *type* (via the already-public `CompileInput`) is what's shared here.
+ */
+type CompileInputWrapperKey = DistributedKeys<
+	Exclude<CompileInput, QueryNode | { readonly statementExpr: ExprNode }>
+>;
+
+/**
+ * Exhaustive per {@link CompileInputWrapperKey} — a key missing here (or
+ * an excess one) is a `tsc` error at this very object literal, not a
+ * silently-stale runtime array `queryNodeOf` would search against.
+ */
+const wrapperKeyPresence: Record<CompileInputWrapperKey, true> = {
+	selectQuery: true,
+	insertQuery: true,
+	updateQuery: true,
+	deleteQuery: true,
+};
+
+const compileInputWrapperKeys = Object.keys(
+	wrapperKeyPresence,
+) as ReadonlyArray<CompileInputWrapperKey>;
 
 /**
  * Extracts the {@link QueryNode} a {@link CompileInput} carries, for
@@ -269,6 +293,41 @@ const convertCell = (
  * plan means "nothing to convert", never "rebuild this row with zero
  * keys").
  */
+/**
+ * `convertRow`'s per-entry step: fails fast with `result-conversion-failed`
+ * when `entry` names a *declared* column (`columnState !== undefined`)
+ * that the driver's row is missing entirely (planner review, batch B
+ * PASS follow-up 2) — silently reading it as `undefined` would let
+ * `SelectResult`'s promised type (e.g. a `notNull` column typed
+ * `string`) lie about a value that was never there, the same class of
+ * bug 4.4-wiring fixed for "the conversion pipeline never ran at all".
+ * The opposite direction — a raw row key with no matching plan entry —
+ * is deliberately left alone: `convertRow` only ever emits the declared
+ * shape, so an extra driver-side key is dropped, not an error.
+ */
+const convertPlannedCell = (
+	row: DriverRow,
+	entry: ColumnPlanEntry,
+): unknown => {
+	if (entry.columnState !== undefined && !(entry.alias in row)) {
+		return throwResultConversionFailed(
+			entry.alias,
+			new Error(
+				`the driver's row never included a "${entry.alias}" key at all. Next: check the statement actually selects/returns this column, and that the driver isn't silently dropping columns it doesn't recognize.`,
+			),
+		);
+	}
+	return convertCell(row[entry.alias], entry.columnState, entry.alias);
+};
+
+/**
+ * Converts every cell of one driver row per `plan` — the row-level entry
+ * point {@link convertRows} maps over. An **empty** `plan` passes `row`
+ * through completely unchanged (task 4.4-wiring: the `sql` escape hatch
+ * has no declared columns to resolve a plan against at all — an empty
+ * plan means "nothing to convert", never "rebuild this row with zero
+ * keys").
+ */
 export const convertRow = (
 	row: DriverRow,
 	plan: ReadonlyArray<ColumnPlanEntry>,
@@ -277,10 +336,7 @@ export const convertRow = (
 		return row;
 	}
 	return Object.fromEntries(
-		plan.map(({ alias, columnState }) => [
-			alias,
-			convertCell(row[alias], columnState, alias),
-		]),
+		plan.map((entry) => [entry.alias, convertPlannedCell(row, entry)]),
 	);
 };
 

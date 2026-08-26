@@ -185,6 +185,53 @@ describe("columnPlanForResult + convertRow (task 4.4)", () => {
 
 		expect(converted.amount).toBe(42n);
 	});
+
+	it("mutation returning({...}) (explicit object projection) also converts -- not just the allColumns branch (batch B PASS follow-up 1)", () => {
+		const node = insert(posts)
+			.values({ status: "draft" })
+			.returning({ total: posts.amount }).insertQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		const converted = convertRow({ total: "42" }, plan);
+
+		expect(converted.total).toBe(42n);
+	});
+
+	it("a declared column entirely missing from the driver row fails fast -- result-conversion-failed, not a silent undefined (batch B PASS follow-up 2)", () => {
+		const node = select(posts).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		try {
+			// "amount" (declared, bigint mode) is missing from this row entirely.
+			convertRow({ id: "x", status: "draft", duration: "1 day" }, plan);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "amount");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect((error as Error).message).toMatch(/Next:/);
+		}
+	});
+
+	it("a raw row key with no matching plan entry is silently dropped -- the opposite direction is fine (documented, not an error)", () => {
+		const node = select(posts).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		const converted = convertRow(
+			{
+				id: "x",
+				status: "draft",
+				amount: "1",
+				duration: "1 day",
+				unexpectedExtraColumn: "should be dropped",
+			},
+			plan,
+		);
+
+		expect(converted).not.toHaveProperty("unexpectedExtraColumn");
+	});
 });
 
 describe("columnPlanForStatement (task 4.4-wiring: the same resolver, from the CompileInput execute() actually receives)", () => {
