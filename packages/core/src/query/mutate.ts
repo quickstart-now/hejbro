@@ -1,5 +1,5 @@
 import type { Table } from "../dsl/table";
-import { getTableMeta } from "../dsl/table";
+import { getTableMeta, toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
 import type {
 	ColumnRef,
@@ -33,10 +33,13 @@ export type MutationRow<TTable extends Table> =
 			}
 		: never;
 
+/** A `returning()` projection: aliased expressions, exactly like `select({ alias: expr })` (#293 group 1). */
+export type ReturningProjection = Record<string, Expr>;
+
 export type InsertFinal = { readonly insertQuery: InsertNode };
 export type InsertReturnable = InsertFinal & {
-	/** No-arg = every column, snake_cased and explicit (spec §5.2). */
-	returning(): InsertFinal;
+	/** No-arg = every column, snake_cased and explicit (spec §5.2); an object projection = exactly those aliased expressions. */
+	returning(projection?: ReturningProjection): InsertFinal;
 };
 export type InsertConflictable<TTable extends Table> = InsertReturnable & {
 	onConflictDoNothing(
@@ -49,13 +52,17 @@ export type InsertConflictable<TTable extends Table> = InsertReturnable & {
 };
 
 export type UpdateFinal = { readonly updateQuery: UpdateNode };
-export type UpdateReturnable = UpdateFinal & { returning(): UpdateFinal };
+export type UpdateReturnable = UpdateFinal & {
+	returning(projection?: ReturningProjection): UpdateFinal;
+};
 export type UpdateFilterable = UpdateReturnable & {
 	where(condition: Expr<"boolean">): UpdateReturnable;
 };
 
 export type DeleteFinal = { readonly deleteQuery: DeleteNode };
-export type DeleteReturnable = DeleteFinal & { returning(): DeleteFinal };
+export type DeleteReturnable = DeleteFinal & {
+	returning(projection?: ReturningProjection): DeleteFinal;
+};
 export type DeleteFilterable = DeleteReturnable & {
 	where(condition: Expr<"boolean">): DeleteReturnable;
 };
@@ -98,6 +105,29 @@ const allColumnsReturning = (target: Table): ReturningNode => ({
 	returningKind: "allColumns",
 	columnNames: getTableMeta(target).columns.map((column) => column.columnName),
 });
+
+const resolveReturning = (
+	target: Table,
+	projection?: ReturningProjection,
+): ReturningNode => {
+	if (projection === undefined) {
+		return allColumnsReturning(target);
+	}
+	const entries = Object.entries(projection);
+	if (entries.length === 0) {
+		return throwHejbroError(
+			"empty-returning",
+			"returning({}) has no columns — an empty returning clause is not valid SQL. Next: pass at least one aliased expression, e.g. returning({ id: posts.id }), or call returning() with no argument for every column.",
+		);
+	}
+	return {
+		returningKind: "columns",
+		columns: entries.map(([alias, value]) => ({
+			alias: toSnakeCase(alias),
+			expr: value.exprNode,
+		})),
+	};
+};
 
 const resolveSetEntries = (
 	target: Table,
@@ -193,8 +223,11 @@ const makeInsertReturnable = (
 	target: Table,
 ): InsertReturnable => ({
 	insertQuery: node,
-	returning: () =>
-		makeInsertFinal({ ...node, returning: allColumnsReturning(target) }),
+	returning: (projection) =>
+		makeInsertFinal({
+			...node,
+			returning: resolveReturning(target, projection),
+		}),
 });
 
 const makeInsertConflictable = (
@@ -202,8 +235,11 @@ const makeInsertConflictable = (
 	target: Table,
 ): InsertConflictable<Table> => ({
 	insertQuery: node,
-	returning: () =>
-		makeInsertFinal({ ...node, returning: allColumnsReturning(target) }),
+	returning: (projection) =>
+		makeInsertFinal({
+			...node,
+			returning: resolveReturning(target, projection),
+		}),
 	onConflictDoNothing: (...targetColumns) =>
 		makeInsertReturnable(
 			{
@@ -269,8 +305,11 @@ const makeUpdateReturnable = (
 	target: Table,
 ): UpdateReturnable => ({
 	updateQuery: node,
-	returning: () =>
-		makeUpdateFinal({ ...node, returning: allColumnsReturning(target) }),
+	returning: (projection) =>
+		makeUpdateFinal({
+			...node,
+			returning: resolveReturning(target, projection),
+		}),
 });
 
 const makeUpdateFilterable = (
@@ -278,8 +317,11 @@ const makeUpdateFilterable = (
 	target: Table,
 ): UpdateFilterable => ({
 	updateQuery: node,
-	returning: () =>
-		makeUpdateFinal({ ...node, returning: allColumnsReturning(target) }),
+	returning: (projection) =>
+		makeUpdateFinal({
+			...node,
+			returning: resolveReturning(target, projection),
+		}),
 	where: (condition) =>
 		makeUpdateReturnable({ ...node, where: condition.exprNode }, target),
 });
@@ -310,8 +352,11 @@ const makeDeleteReturnable = (
 	target: Table,
 ): DeleteReturnable => ({
 	deleteQuery: node,
-	returning: () =>
-		makeDeleteFinal({ ...node, returning: allColumnsReturning(target) }),
+	returning: (projection) =>
+		makeDeleteFinal({
+			...node,
+			returning: resolveReturning(target, projection),
+		}),
 });
 
 const makeDeleteFilterable = (
@@ -319,8 +364,11 @@ const makeDeleteFilterable = (
 	target: Table,
 ): DeleteFilterable => ({
 	deleteQuery: node,
-	returning: () =>
-		makeDeleteFinal({ ...node, returning: allColumnsReturning(target) }),
+	returning: (projection) =>
+		makeDeleteFinal({
+			...node,
+			returning: resolveReturning(target, projection),
+		}),
 	where: (condition) =>
 		makeDeleteReturnable({ ...node, where: condition.exprNode }, target),
 });

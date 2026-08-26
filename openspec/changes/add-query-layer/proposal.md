@@ -13,9 +13,10 @@ query types. This change specifies the v1 query layer (tracking issue
 
 ## What Changes
 
-- New package `@hejbro/query` (pure, core-grade constraints): statement
-  IR + deterministic compiler on top of core's ExprNode vocabulary;
-  conventional query-builder surface for `select` (columns, `where`,
+- New package `@hejbro/query` (pure, core-grade constraints): a
+  deterministic compiler over core's shared query vocabulary — ExprNode
+  plus the declaration-reachable statement nodes and builders core
+  already owns (D94 as amended); conventional query-builder surface for `select` (columns, `where`,
   `order`, `limit`, inner/left join), `insert`, `update`, `delete`, with
   `returning`; explicit column lists only — never `select *` /
   `returning *`; a typed `sql` tagged-template escape hatch; pure
@@ -35,8 +36,10 @@ query types. This change specifies the v1 query layer (tracking issue
   `unknown` unless branded with an opt-in `$type`.
 - Transaction API on the `db` handle; RLS context execution requires the
   driver's transaction capability.
-- `@hejbro/core` stays unchanged in behavior and purity; boundary rule:
-  the snapshot serializes only declaration-reachable ExprNodes.
+- `@hejbro/core` changes are additive only (left join variant,
+  returning column selection on the existing query builders) with no
+  behavior change to existing declarations; boundary rule: the snapshot
+  serializes only declaration-reachable nodes.
 
 Deferred out of v1 (parked as sub-issues of #282): relational query
 layer (#298), CTE/window functions/set operations beyond the escape
@@ -77,9 +80,10 @@ touches it).
   `pg` confined to `@hejbro/pg`.
 - `@hejbro/supabase` grows a driver + context surface (uses only core's
   and query's public extension interfaces).
-- `@hejbro/core` public surface: ExprNode vocabulary is consumed by
-  `@hejbro/query`; no behavior change, purity untouched (adding any
-  runtime dependency to core stays owner-gated and is not needed).
+- `@hejbro/core` public surface: the shared query vocabulary (ExprNode
+  + QueryNode + builders) is consumed by `@hejbro/query`; additive DSL
+  surface only, purity untouched (adding any runtime dependency to core
+  stays owner-gated and is not needed).
 - Decision log: rows D91+ in `docs/specs/2026-08-19-hejbro-design.md`
   (owner-gated; the proposal PR merge is the approval).
 - Open question (recorded, not decided here): release mechanics for the

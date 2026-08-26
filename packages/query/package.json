@@ -1,0 +1,40 @@
+{
+	"name": "@hejbro/query",
+	"version": "0.0.0",
+	"description": "Typed query layer for hejbro: pure statement compiler on the schema DSL, driver contract, RLS execution context.",
+	"license": "MIT",
+	"type": "module",
+	"private": true,
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/quickstart-now/hejbro",
+		"directory": "packages/query"
+	},
+	"homepage": "https://github.com/quickstart-now/hejbro#readme",
+	"bugs": {
+		"url": "https://github.com/quickstart-now/hejbro/issues"
+	},
+	"keywords": [
+		"postgres",
+		"postgresql",
+		"query-builder",
+		"orm",
+		"typescript"
+	],
+	"engines": {
+		"node": ">=22.18.0"
+	},
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage"
+	},
+	"dependencies": {
+		"@hejbro/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@vitest/coverage-v8": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

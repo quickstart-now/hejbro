@@ -52,6 +52,40 @@ describe("mutation builders", () => {
 			'insert into "app"."posts" ("slug", "published_at") values (\'a\', now()), (\'b\', default)',
 		);
 	});
+	it("returning with an object projection lists exactly those columns", () => {
+		const query = insert(posts)
+			.values({ slug: "hello" })
+			.returning({ id: posts.id });
+		expect(query.insertQuery.returning).toEqual({
+			returningKind: "columns",
+			columns: [
+				{
+					alias: "id",
+					expr: expect.objectContaining({
+						nodeKind: "columnRef",
+						columnName: "id",
+					}),
+				},
+			],
+		});
+		expect(renderQuery(query.insertQuery)).toContain(
+			'returning "app"."posts"."id" as "id"',
+		);
+	});
+	it("snake_cases returning projection aliases on update", () => {
+		const query = update(posts)
+			.set({ slug: "x" })
+			.where(eq(posts.slug, "hello"))
+			.returning({ publishedAt: posts.publishedAt });
+		expect(renderQuery(query.updateQuery)).toContain(
+			'returning "app"."posts"."published_at" as "published_at"',
+		);
+	});
+	it("rejects an empty returning projection", () => {
+		expect(() =>
+			deleteFrom(posts).where(eq(posts.slug, "old")).returning({}),
+		).toThrowError(expect.objectContaining({ code: "empty-returning" }));
+	});
 	it("renders delete with where and returning", () => {
 		const query = deleteFrom(posts).where(eq(posts.slug, "old")).returning();
 		expect(renderQuery(query.deleteQuery)).toBe(

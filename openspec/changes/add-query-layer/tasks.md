@@ -6,30 +6,34 @@ minutes; `openspec/task-times.csv` has no history yet, so these are
 first-round estimates. A task is done when its named red test passes
 (plus `pnpm check` / `check-types` on the touched package).
 
-## 1. Statement IR (`@hejbro/query` scaffold + builders)
+## 1. Statement vocabulary (scaffold + core additive gaps)
 
-- [ ] 1.1 Scaffold `packages/query` (package.json — pure, core-grade
+Reworked after the owner settled the group's [design] decisions
+(2026-08-26, during implementation): core's existing QueryNode +
+select/insert/update/deleteFrom builders ARE the single statement
+vocabulary (D94 as amended); this group closes the two v1 gaps in that
+vocabulary instead of building a second IR. The original 1.2/1.4/1.5
+[design] decisions are settled: builder call shapes = core's existing
+surface; join variant mirrors `innerJoin`; returning selection mirrors
+the select object projection (symmetry, not a new contract).
+
+- [x] 1.1 Scaffold `packages/query` (package.json — pure, core-grade
   constraints; tsconfig; vitest config with the #131 source alias); red
-  test `packages/query/test/scaffold.test.ts` "imports a src module in
-  process". ~6m
-- [ ] 1.2 [design] Select builder entry: settle the call shape (from +
-  explicit projection) and the IR node it records; red test
-  `packages/query/test/ir/select.test.ts` "select() records explicit
-  projection"; files `src/ir/statement.ts`, `src/ir/select.ts`. ~10m
-- [ ] 1.3 `where`/`order`/`limit` on the select IR; red test
-  `packages/query/test/ir/select.test.ts` "where, order and limit land
-  in the IR"; files `src/ir/select.ts`. ~8m
-- [ ] 1.4 [design] Join IR: inner/left variants and the on-condition
-  shape; red test `packages/query/test/ir/join.test.ts` "left join
-  records target, kind and on-condition"; files `src/ir/join.ts`,
-  `src/ir/select.ts`. ~8m
-- [ ] 1.5 [design] Insert/update/delete IR with explicit `returning`
-  list; red test `packages/query/test/ir/mutation.test.ts` "returning
-  requires an explicit column list"; files `src/ir/insert.ts`,
-  `src/ir/update.ts`, `src/ir/delete.ts`. ~10m
-- [ ] 1.6 Condition slots accept core ExprNode helpers unchanged; red
-  test `packages/query/test/ir/condition.test.ts` "core eq() is a valid
-  where condition"; files `src/ir/condition.ts`. ~6m
+  test `packages/query/test/scaffold.test.ts` "resolves @hejbro/core
+  from source via the alias". ~6m
+- [x] 1.2 Left join: additive `joinKind: "left"` variant + `leftJoin()`
+  stage on the core select builder, kind-aware join rendering, codec
+  acceptance; red test `packages/core/test/query/select.test.ts`
+  "leftJoin records and renders a left join"; files
+  `packages/core/src/expr/ast.ts`, `packages/core/src/query/select.ts`,
+  `packages/core/src/expr/render-sql.ts`,
+  `packages/core/src/expr/codec.ts`. ~10m
+- [x] 1.3 Returning column selection: optional object projection on
+  `returning()` (symmetric with `select({alias: expr})`) for
+  insert/update/delete; red test
+  `packages/core/test/query/mutate.test.ts` "returning with a
+  projection lists exactly those columns"; files
+  `packages/core/src/query/mutate.ts`. ~10m
 
 ## 2. Compiler + sql escape hatch
 

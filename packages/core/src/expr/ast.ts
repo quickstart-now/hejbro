@@ -143,8 +143,11 @@ export type ProjectionNode =
 	  }
 	| { readonly projectionKind: "constantOne" };
 
+export const joinKinds = ["inner", "left"] as const;
+export type JoinKind = (typeof joinKinds)[number];
+
 export type JoinNode = {
-	readonly joinKind: "inner";
+	readonly joinKind: JoinKind;
 	readonly table: TableRefNode;
 	readonly on: ExprNode;
 };
