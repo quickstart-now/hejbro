@@ -66,6 +66,56 @@ fragments and identifiers compose structurally.
 - **THEN** the compiled SQL contains a parameter placeholder for it and
   the value appears only in the parameter list
 
+### Requirement: Injection safety
+A runtime value SHALL never reach the compiled SQL text as text. On every
+path a value can enter a statement — a builder condition, an insert's
+values, an update's `set`, a `returning` or select projection, and an
+interpolation into the `sql` tagged template — the value SHALL appear only
+in the ordered parameter list, with a placeholder in its place. Identifiers
+SHALL always be rendered through the core identifier quoting rule, which
+doubles an embedded double quote. `sql.raw()` SHALL be the single verbatim
+path into the SQL text, and SHALL be documented as the one place a caller
+takes responsibility for what it passes.
+
+The only values rendered inline are ones that are not caller-supplied text:
+a `limit`, which the builder has already validated as a non-negative
+integer, and the internal `default` marker a multi-row insert uses for a
+missing key.
+
+#### Scenario: Hostile value in a condition
+- **WHEN** a `where` condition compares a column against the string
+  `'; drop table users; --`
+- **THEN** that string does not occur anywhere in the compiled SQL text,
+  the condition renders against a placeholder, and the string appears in
+  the parameter list
+
+#### Scenario: Hostile value interpolated into the sql template
+- **WHEN** a `sql` template interpolates the same hostile string
+- **THEN** the compiled text carries a placeholder and the string is
+  reachable only through the parameter list
+
+#### Scenario: A value that looks like a placeholder
+- **WHEN** a compiled value is itself the text `$1`
+- **THEN** it changes neither the SQL text nor the numbering of any
+  parameter, and stays a value in the parameter list
+
+#### Scenario: Nested fragments compose structurally
+- **WHEN** one `sql` fragment interpolates another that itself
+  interpolates a value
+- **THEN** the inner fragment is spliced structurally rather than as
+  text, and its value becomes a parameter numbered by where it appears
+
+#### Scenario: Raw SQL is the one verbatim path
+- **WHEN** the same text is passed once through `sql.raw()` and once as
+  an interpolated value
+- **THEN** the raw text appears verbatim in the SQL while the
+  interpolated one appears only as a parameter
+
+#### Scenario: Identifiers are quoted, never concatenated
+- **WHEN** a statement renders an identifier containing a double quote
+- **THEN** the rendered identifier is quoted with that quote doubled, so
+  it cannot terminate the identifier
+
 ### Requirement: Pure and deterministic compile
 `compile()` SHALL be a pure function from a built statement to SQL text
 plus an ordered parameter list: no I/O, no connection, and identical

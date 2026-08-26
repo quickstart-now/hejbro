@@ -62,6 +62,30 @@ banned by owner decision).
   compilation lifts runtime values to ordered bind parameters. The
   compiler, not call sites, owns parameter numbering, which is what
   makes `compile()` deterministic.
+- **Compiler contract** (task 2.1, owner-settled 2026-08-26). `compile()`
+  returns `{ sql, params, kind }`, `kind` being
+  `"select" | "insert" | "update" | "delete"` — readonly types, no
+  `Object.freeze`. Parameters are numbered `$1..$n` in render-appearance
+  order, never de-duplicated. Every `LiteralNode` lifts to a bind
+  parameter, with three fixed exceptions: `limit` renders inline (the
+  builder already validates a non-negative integer), a `RawSqlNode`
+  renders verbatim (user `sql.raw()` and the internal multi-row-insert
+  `default` marker), and a `timestamp` literal renders
+  `$n::timestamptz` carrying its ISO string. `null` and booleans are
+  parameterized like any other literal, and an in-list stays
+  `in ($1, $2, $3)` rather than `= any($1)`. Compilation is a lift
+  pre-pass — walking projection → from → joins → where → orderBy and
+  replacing each literal with its placeholder — followed by core's
+  `renderQuery`, so query SQL and declaration SQL come from one
+  renderer. Input is the structural union `{selectQuery}` /
+  `{insertQuery}` / `{updateQuery}` / `{deleteQuery}` / `QueryNode`; the
+  `sql` statement form joins it once task 2.6 is settled. The public
+  signature is a single `compile(statement)` with no options.
+- **Security** (owner directive 2026-08-26). Injection safety is a spec
+  requirement, not an implementation detail: no runtime value reaches the
+  SQL text on any path, identifiers are always quoted through core's
+  rule, and `sql.raw()` is the single documented verbatim path — each
+  contract carried by an adversarial test, not only a happy-path one.
 - **Capability-declaring drivers.** The contract lists capabilities as
   data (interactive transactions, session state, …). The query layer
   checks declarations up front and throws the explicit
