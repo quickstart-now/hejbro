@@ -186,15 +186,35 @@ on top of it. Settled decisions:
   `packages/core/test/column-builder.test.ts` "$type leaves the
   declaration byte-identical"; files
   `packages/core/src/types/column-builder.ts`. ~10m
-- [x] 3.6 Declared type name (+ mode, + jsonb brand) → TypeScript
-  mapping; red type test `packages/query/test/types/column-map.test.ts`
-  "each declared type name maps to its TS type"; files
+- [x] 3.6 Declared type name (+ mode, + element) → TypeScript mapping.
+  **Re-homed to core mid-flight** (owner, 2026-08-26): `$type` was
+  settled as *narrowing only — a brand may not lie* (the brand must be
+  a subset of the column's base type), and `$type` is declared in core,
+  which cannot import `@hejbro/query`. So the base mapping moves to
+  `packages/core/src/types/ts-type-map.ts` — **types only, zero runtime
+  symbols** — and the query-side map becomes the thin layer that
+  prefers a brand over that base. What the constraint exposed: mapping
+  a declared column to a TypeScript type is a property of the
+  declaration DSL, not of the query layer; red type test
+  `packages/query/test/types/column-map.test.ts` "each declared type
+  name maps to its TS type"; files
+  `packages/core/src/types/ts-type-map.ts`,
+  `packages/core/src/index.ts`,
   `packages/query/src/types/column-map.ts`. ~10m
-- [x] 3.7 [design] `IntervalValue` shape — the field set is proposed
-  here and confirmed by the owner at PR review, with the Postgres
-  months/days/microseconds semantics recorded in tsdoc; red type test
+- [x] 3.7 [design] `IntervalValue` shape — settled by the owner during
+  implementation: seven **required** fields (`years`/`months`/`days`/
+  `hours`/`minutes`/`seconds`/`microseconds`), never partial, so equal
+  intervals compare equal; `microseconds` rather than `milliseconds`
+  because Postgres prints six fractional digits and stopping at three
+  would drop them silently. No field spans the months/days/microseconds
+  axes, which is what keeps the (irreversible) months↔days boundary
+  visible. The **type** lives in core's `ts-type-map.ts` with the rest
+  of the mapping; the parser stays in `packages/query` (D94: core owns
+  the declaration vocabulary and its type surface, query owns runtime
+  conversion); red type test
   `packages/query/test/types/interval.test.ts` "an interval column
   surfaces as a structured value"; files
+  `packages/core/src/types/ts-type-map.ts`,
   `packages/query/src/types/interval.ts`. ~8m
 - [x] 3.8 Pure interval parser/normalizer, rejecting unparsable input
   with a kebab-code enriched `Error` rather than a partial value; red
