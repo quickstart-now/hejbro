@@ -1,10 +1,4 @@
-/**
- * Mirrors core's `NumericMode` (task 3.4) by value, not by import — a
- * plain three-literal union needs no coupling to core's public surface,
- * and this file only ever receives the mode a caller already resolved
- * from a `bigint({mode})`/`numeric({mode})` declaration.
- */
-export type NumericConversionMode = "bigint" | "number" | "string";
+import type { NumericMode } from "@hejbro/core";
 
 /** Builds the `numeric-mode-overflow`-coded, enriched plain `Error` this module throws (D3's kebab-case-code convention for `@hejbro/query`, not `HejbroError` — that stays a core-only type). */
 const throwNumericModeOverflow = (raw: string, mode: "number"): never => {
@@ -53,7 +47,7 @@ const truncatedIntegerText = (raw: string): string => {
  */
 export const convertNumericText = (
 	raw: string,
-	mode: NumericConversionMode,
+	mode: NumericMode,
 ): bigint | number | string => {
 	if (mode === "string") {
 		return raw;
