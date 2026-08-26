@@ -267,10 +267,23 @@ on top of it. Settled decisions:
   contrast pair: the identical declaration (notNull, no default) is
   required on insert but optional on update"; files
   `packages/query/src/types/insert-input.ts`. ~6m
-- [ ] 3.13 `returning` rows reuse the select inference rather than
-  re-deriving it; red type test
-  `packages/query/test/types/returning.test.ts` "returning rows are
-  typed like a projection"; files
+- [x] 3.13 `returning` rows reuse the select inference rather than
+  re-deriving it — `ReturningRow<TTable, TProjection>` calls
+  `SelectResult` (task 3.10) directly rather than repeating its
+  `notNull`-widening/family-mapping logic a second time; core's
+  `ReturningProjection` (`query/mutate.ts`) is the identical
+  `Record<string, Expr>` shape as `select()`'s own object-projection
+  branch, and no-arg `returning()` (every column, spec §5.2) is
+  `SelectResult<TTable>`'s whole-table branch. The reuse itself is
+  proven by mutation-check, not just by import: breaking
+  `SelectResult`'s `notNull` branch breaks
+  `returning.test.ts` alongside `select-result.test.ts`, not
+  `select-result.test.ts` alone — a structural type-equality assertion
+  couldn't tell reuse apart from an independent implementation that
+  happens to compute the same answer, only a shared-failure mutation
+  can; red type test `packages/query/test/types/returning.test.ts`
+  "no-arg returning() is every declared column, typed exactly like the
+  whole-table select projection"; files
   `packages/query/src/types/returning.ts`. ~6m
 - [x] 3.14 Delta spec alignment: drop the left-join clause and its
   scenario (parked as #307), scope the insert requirement to "notNull
