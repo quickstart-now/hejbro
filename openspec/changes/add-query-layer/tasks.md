@@ -227,10 +227,24 @@ on top of it. Settled decisions:
   red test `packages/query/test/types/numeric-mode.test.ts` "number mode
   rejects a value beyond MAX_SAFE_INTEGER"; files
   `packages/query/src/types/numeric-mode.ts`. ~10m
-- [ ] 3.10 Select result inference: projection subset decides the row
-  keys, `notNull` decides nullability; red type test
-  `packages/query/test/types/select-result.test.ts` "projection drives
-  the row type"; files `packages/query/src/types/select-result.ts`. ~10m
+- [x] 3.10 Select result inference: projection subset decides the row
+  keys, `notNull` decides nullability. Two branches matching core's own
+  `SelectProjection` union: whole-table (`select(table)`) gets full
+  per-column richness straight off `Table<infer TColumns>` (task 3.3's
+  extraction pattern); the object-projection form
+  (`select({a: expr}, table)`) gets exact keys but only a family-based
+  type widened to `| null` — `Expr`/`ColumnRef` carry no `TMeta` at all
+  (`expr/ast.ts` predates this group, same root cause as #307's parked
+  left-join nullability), and matching a projected key's *name* against
+  the table's own declared columns to borrow richness was considered and
+  rejected (owner/planner): two same-family columns (e.g. `id`/`title`)
+  are structurally indistinguishable at that point, so a name match
+  would let the type quietly lie about which column an `Expr` actually
+  reads from. Not yet wired into `select()`'s actual return type (group
+  4, same deferral as task 3.9's runtime conversion); red type test
+  `packages/query/test/types/select-result.test.ts` "field consumption
+  matrix: each TMeta field the result type actually reads"; files
+  `packages/query/src/types/select-result.ts`. ~10m
 - [ ] 3.11 Insert input types: required iff `notNull` without a default,
   everything else `col?: T`; red type test
   `packages/query/test/types/insert-input.test.ts` "defaulted column is
