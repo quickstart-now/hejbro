@@ -1,6 +1,7 @@
 import {
 	bigint,
 	interval,
+	roleName,
 	schema,
 	select,
 	table,
@@ -83,6 +84,18 @@ describe("db().execute wires task 4.4's conversion into the real pipeline (task 
 			seconds: 6,
 			microseconds: 789123,
 		});
+	});
+
+	it("the same conversion runs through db.as(context).execute() -- not just the unscoped and transaction paths (owner review, batch C)", async () => {
+		const driver = fakeDriver([rawRow]);
+		const handle = db({ posts }, driver, { roles: [roleName("app_reader")] });
+
+		const rows = await handle
+			.as({ role: roleName("app_reader") })
+			.execute(select(posts));
+
+		expect(rows[0]?.amount).toBe(9007199254740993n);
+		expect(typeof rows[0]?.amount).toBe("bigint");
 	});
 
 	it("a poisoned cell surfaces result-conversion-failed through db().execute() itself, not just convert.ts's own unit tests", async () => {
