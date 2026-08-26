@@ -35,7 +35,10 @@ type it reads back as (`'bigint'`, `'number'`, or `'string'`), resolved
 at declaration time rather than defaulted downstream. Converting a raw
 value under `'number'` mode SHALL fail rather than silently return an
 imprecise result when the value falls outside
-`Number.MAX_SAFE_INTEGER`/`Number.MIN_SAFE_INTEGER`.
+`Number.MAX_SAFE_INTEGER`/`Number.MIN_SAFE_INTEGER`. Converting raw text
+that is not parsable decimal numeric text — including an empty or
+whitespace-only string — SHALL fail in every mode, rather than silently
+returning a value (e.g. `0`/`0n`) indistinguishable from real data.
 
 #### Scenario: Declared mode decides the result field's type
 - **WHEN** a `bigint`/`numeric` column declares an explicit mode
@@ -47,6 +50,12 @@ imprecise result when the value falls outside
   `Number.MAX_SAFE_INTEGER` (or is below `Number.MIN_SAFE_INTEGER`)
 - **THEN** reading that value SHALL throw rather than return a value that
   has silently lost precision
+
+#### Scenario: Unparsable or empty raw text is rejected in every mode
+- **WHEN** a `bigint`/`numeric` column's raw driver text is not parsable
+  decimal numeric text, including an empty or whitespace-only string
+- **THEN** reading that value SHALL throw in `'string'`, `'number'`, and
+  `'bigint'` mode alike, rather than returning `''`/`0`/`0n`
 
 ### Requirement: Interval columns surface as a structured value
 An `interval` column SHALL surface as a structured TypeScript value, not

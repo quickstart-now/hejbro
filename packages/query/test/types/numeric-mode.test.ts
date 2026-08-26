@@ -81,4 +81,50 @@ describe("convertNumericText (D3, task 3.9)", () => {
 			expect((error as Error).message).toMatch(/Next:/);
 		}
 	});
+
+	describe("unparsable/empty input is rejected before any mode branches (all three modes share this contract)", () => {
+		const unparsableInputs: ReadonlyArray<[string, string]> = [
+			["abc", "not numeric text"],
+			["", "empty string"],
+			["  ", "whitespace only"],
+		];
+		const modes: ReadonlyArray<"string" | "number" | "bigint"> = [
+			"string",
+			"number",
+			"bigint",
+		];
+
+		modes.forEach((mode) => {
+			unparsableInputs.forEach(([raw, label]) => {
+				it(`'${mode}' mode rejects ${label} (${JSON.stringify(raw)}) instead of silently returning a value`, () => {
+					expect(() => convertNumericText(raw, mode)).toThrowError(
+						/could not be converted/,
+					);
+				});
+			});
+		});
+
+		it("rejection throws a kebab-case-coded, enriched plain Error (unparsable-numeric-text)", () => {
+			try {
+				convertNumericText("", "number");
+				expect.unreachable("convertNumericText should have thrown");
+			} catch (error) {
+				expect(error).toBeInstanceOf(Error);
+				expect(error).toHaveProperty("code", "unparsable-numeric-text");
+				expect((error as Error).message).toMatch(/Next:/);
+			}
+		});
+
+		it("positive control: ordinary numeric text still converts normally in every mode (not swallowed by the new guard)", () => {
+			expect(convertNumericText("42", "string")).toBe("42");
+			expect(convertNumericText("42", "number")).toBe(42);
+			expect(convertNumericText("42", "bigint")).toBe(42n);
+			expect(convertNumericText("42.000", "string")).toBe("42.000");
+			expect(convertNumericText("42.000", "number")).toBe(42.0);
+			expect(convertNumericText("42.000", "bigint")).toBe(42n);
+			expect(convertNumericText("-7", "string")).toBe("-7");
+			expect(convertNumericText("-7", "number")).toBe(-7);
+			expect(convertNumericText("-7", "bigint")).toBe(-7n);
+		});
+	});
 });

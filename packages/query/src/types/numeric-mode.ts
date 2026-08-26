@@ -20,8 +20,8 @@ const throwNumericModeFractionLoss = (raw: string, mode: "bigint"): never => {
 	);
 };
 
-/** Builds the `unparsable-numeric-text`-coded, enriched plain `Error` this module throws for input `BigInt(...)` itself can't parse (defensive: real int8/numeric driver text is never malformed this way). */
-const throwUnparsableNumericText = (raw: string, mode: "bigint"): never => {
+/** Builds the `unparsable-numeric-text`-coded, enriched plain `Error` this module throws for input that isn't decimal numeric text at all — including empty or whitespace-only text, which would otherwise silently become `0`/`0n`, a value indistinguishable from real data (worse than `NaN`, which at least looks wrong). Shared by all three modes (checked before any mode branches). */
+const throwUnparsableNumericText = (raw: string, mode: NumericMode): never => {
 	throw Object.assign(
 		new Error(
 			`numeric text ${JSON.stringify(raw)} could not be converted for mode ${JSON.stringify(mode)}. Next: check the value came from an int8/numeric column — this conversion only accepts the driver's own decimal text.`,
@@ -29,6 +29,9 @@ const throwUnparsableNumericText = (raw: string, mode: "bigint"): never => {
 		{ code: "unparsable-numeric-text" },
 	);
 };
+
+/** `true` for text `BigInt`/`Number` can convert exactly: an optional leading `-`, at least one digit, and an optional `.` followed by at least one more digit. Empty and whitespace-only text fail this (deliberately — see {@link throwUnparsableNumericText}). */
+const NUMERIC_TEXT_PATTERN = /^-?\d+(\.\d+)?$/;
 
 /**
  * The text before `raw`'s first `.`, or all of `raw` if it has none. Only
@@ -63,14 +66,22 @@ const hasNonzeroFraction = (raw: string): boolean => {
  * overflow would, so both modes reject instead of guessing. A value that's
  * merely *written* with a fraction but equal to an integer (`'42.000'`)
  * still converts normally; nothing is lost there. `'string'` is always
- * exact — it's the raw text back, unchanged. Wiring this into a live row's
- * actual column (reading `columnState.mode` off the declaration) is group
- * 4's task.
+ * exact — it's the raw text back, unchanged. Every mode shares one
+ * upfront contract, checked before any mode-specific branch: input that
+ * isn't decimal numeric text — including empty or whitespace-only text —
+ * throws `unparsable-numeric-text` rather than silently becoming `0`/`0n`
+ * (`'string'` mode included, even though it merely returns text back —
+ * "always exact" only holds for text that was numeric to begin with).
+ * Wiring this into a live row's actual column (reading `columnState.mode`
+ * off the declaration) is group 4's task.
  */
 export const convertNumericText = (
 	raw: string,
 	mode: NumericMode,
 ): bigint | number | string => {
+	if (!NUMERIC_TEXT_PATTERN.test(raw)) {
+		return throwUnparsableNumericText(raw, mode);
+	}
 	if (mode === "string") {
 		return raw;
 	}
@@ -84,9 +95,5 @@ export const convertNumericText = (
 	if (hasNonzeroFraction(raw)) {
 		return throwNumericModeFractionLoss(raw, mode);
 	}
-	try {
-		return BigInt(integerPartText(raw));
-	} catch {
-		return throwUnparsableNumericText(raw, mode);
-	}
+	return BigInt(integerPartText(raw));
 };
