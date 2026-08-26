@@ -321,9 +321,11 @@ export type {
 	BuilderFamily,
 	ColumnBuilder,
 	ColumnState,
+	NumericMode,
 } from "./types/column-builder";
 export { createColumnBuilder } from "./types/column-builder";
 export type {
+	BigintConfig,
 	CharConfig,
 	NumericConfig,
 	VarcharConfig,
