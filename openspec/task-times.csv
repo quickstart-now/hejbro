@@ -27,3 +27,4 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-26,add-query-layer,3.14,3,10,2,0,delta spec alignment + the group changeset
 2026-08-26,add-query-layer,3.15,3,10,7,0,chain methods preserve the accumulated meta
 2026-08-26,add-query-layer,3.16,3,10,10,0,type-level notNull mirrors materializeNotNull
+2026-08-26,add-query-layer,3.9-crap,3,,12,0,split after the gate itself widened between bases (g2 added query to crap scan) - not a team miss; differential-verified 75 combos
