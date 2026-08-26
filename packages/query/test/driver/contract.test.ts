@@ -43,6 +43,20 @@ describe("Driver capability contract (owner decision ①, task 4.1)", () => {
 			setupSession: async () => {},
 		};
 	});
+
+	it("setupSession is mandatory on Driver itself (owner decision ④'s session-setup hook -- the IntervalStyle pin's contract slot)", () => {
+		// @ts-expect-error a Driver without `setupSession` is missing its mandatory session-setup hook.
+		const _missingSetupSession: Driver = {
+			capabilities: {
+				"interactive-transactions": true,
+				"session-state": true,
+			},
+			execute: async () => [],
+			transaction: async <T>(
+				callback: (session: DriverSession) => Promise<T>,
+			) => callback({ execute: async () => [] }),
+		};
+	});
 });
 
 describe("Driver.contributedRoles (task 4.7's role-contribution slot, batch C reopening reason)", () => {
