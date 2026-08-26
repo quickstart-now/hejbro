@@ -80,9 +80,11 @@ again.
   before code. Verification is the definition of done, never a task.
   Durations land in `openspec/task-times.csv` when a group completes.
 - **Core purity is load-bearing.** If a change needs I/O in `@hejbro/core`,
-  the design is being violated — stop and reconsider.
+  the design is being violated — stop and reconsider. Rule:
+  `.claude/rules/core-purity.md`.
 - **The provider interface is the product.** If a preset needs a core
-  special case, the interface is wrong — fix the interface.
+  special case, the interface is wrong — fix the interface. Rule:
+  `.claude/rules/supabase-preset.md`.
 - **All GitHub-facing text in English** (code, comments, docs, issues, PRs,
   commits).
 - TypeScript strict. Our own source: no `any`, no `let`/`var`, no
@@ -130,6 +132,35 @@ again.
 - Adding runtime dependencies to `@hejbro/core`.
 - Changing any decision in the spec's decision log.
 - Building anything listed under "Deferred" in the roadmap.
+
+## Agent tooling configuration (D90)
+
+Claude Code settings follow the large-codebases guide
+(code.claude.com/docs/en/large-codebases) **by fit-test** — adopt what
+the repository's size and shape justify, record what was reviewed and
+rejected (decided 2026-08-26):
+
+- **Adopted.** Instruction layering stays root AGENTS.md +
+  `.claude/rules/` (`core-purity.md`, `supabase-preset.md`, `naming.md`
+  — path-scoped; naming needs cross-package globs no per-directory file
+  can express). `.claude/settings.json` carries `Read` deny rules for
+  build outputs (`node_modules/`, `dist/`, `build/`, `coverage/`,
+  `.turbo/`) so stale artifacts are never read as truth.
+  `.claude/skills/roundtrip-verification/` loads on demand for
+  `examples/**` work.
+- **Reviewed and rejected.** Per-package CLAUDE.md split — single-owner
+  repo, no directory-owner model to serve; revisit if AGENTS.md outgrows
+  ~200 lines or directory owners appear. `worktree.sparsePaths` —
+  worktrees here are created manually, and a sparse checkout breaks the
+  pnpm workspace + turbo task graph. `worktree.symlinkDirectories:
+  ["node_modules"]` — pnpm's workspace symlinks would silently point a
+  worktree's `@hejbro/*` dependencies at the main checkout, breaking
+  worktree isolation. Deny rules on committed generated artifacts
+  (`examples/*/migrations/`, goldens) — those are reviewed artifacts
+  agents must read; "generated" does not mean "vendored".
+- **Personal-level, not committed.** Code intelligence (typescript-lsp)
+  is a user-level install: a public repository does not impose
+  language-server binaries on contributors.
 
 ## Provenance
 
