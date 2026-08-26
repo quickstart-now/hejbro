@@ -79,9 +79,15 @@ type NumericModeTsType<TMode extends NumericMode> = TMode extends "number"
  * `DEFAULT_NUMERIC_MODE` — those stay unexported (they'd otherwise pollute
  * `column-builder.test.ts`'s "every factory's mode is accounted for (C19)"
  * exhaustiveness check, which sweeps that module's exports as the known
- * factory list). **If either default ever changes, update it in both
- * places** — `column-builder-factories.ts`'s `bigint()`/`numeric()` and
- * here.
+ * factory list; tried exporting them, reproduced the false-positive red).
+ * **If either default ever changes, update it in both places** —
+ * `column-builder-factories.ts`'s `bigint()`/`numeric()` and here.
+ * Tracked as **#310**: once `DEFAULT_BIGINT_MODE`/`DEFAULT_NUMERIC_MODE`
+ * move to their own module (out of C19's sweep), these two fallbacks can
+ * become `typeof DEFAULT_BIGINT_MODE`/`typeof DEFAULT_NUMERIC_MODE`
+ * instead of hand-spelled literals — **not** by weakening C19's own
+ * exhaustiveness assertion, which is what caught this in the first
+ * place.
  */
 type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 	| "uuid"

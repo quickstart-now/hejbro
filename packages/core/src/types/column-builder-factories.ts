@@ -196,9 +196,17 @@ export const char = (
  * is accounted for (C19)" exhaustiveness check
  * (`Object.keys(columnBuilderFactories)` against a hand-maintained factory
  * list), and exporting a non-factory value here would pollute that
- * inventory. `ts-type-map.ts`'s `BaseScalarTsType` has its own fallback for
- * this same default (`typeof DEFAULT_BIGINT_MODE` can't reach across that
- * boundary) — **if this literal ever changes, update it there too.**
+ * inventory (tried it, reproduced the false-positive red — this isn't
+ * theoretical). `ts-type-map.ts`'s `BaseScalarTsType` has its own
+ * hand-spelled fallback for this same default (`typeof
+ * DEFAULT_BIGINT_MODE` can't reach across that boundary without the same
+ * pollution) — **if this literal ever changes, update it there too.**
+ * Tracked as **#310**: move this constant to its own module so
+ * `BaseScalarTsType` can derive it structurally, without widening C19's
+ * factory sweep to catch it. **Do not "fix" the drift risk by loosening
+ * C19's own exhaustiveness assertion instead** — that check is what
+ * caught this pollution in the first place; the fix belongs on this
+ * side of the boundary, not on C19's.
  */
 const DEFAULT_BIGINT_MODE = "bigint" as const;
 
