@@ -367,7 +367,7 @@ declarations for joined tables).
   `packages/query/test/driver/errors.test.ts` "transaction on a
   non-transactional driver fails naming the capability"; files
   `src/driver/errors.ts`. ~6m
-- [ ] 4.3 db handle creation (declarations record + driver) and
+- [x] 4.3 db handle creation (declarations record + driver) and
   execute passthrough — driver receives exactly `compile()` output
   (fake driver); red test `packages/query/test/db/execute.test.ts`
   "executed SQL equals previewed compile output"; files
