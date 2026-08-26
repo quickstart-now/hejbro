@@ -57,6 +57,16 @@ describe("db().execute wires task 4.4's conversion into the real pipeline (task 
 		});
 	});
 
+	it("a column with no declared conversion (uuid/text) passes through the execute() path exactly as the driver gave it -- a direct assertion, not incidental coverage from a test aimed at something else (recommended, batch B follow-up)", async () => {
+		const driver = fakeDriver([rawRow]);
+		const handle = db({ tables: { posts } }, driver);
+
+		const rows = await handle.execute(select(posts));
+
+		expect(rows[0]?.id).toBe("11111111-1111-1111-1111-111111111111");
+		expect(rows[0]?.status).toBe("draft");
+	});
+
 	it("the same conversion runs inside a transaction's tx.execute() -- not just the top-level path", async () => {
 		const driver = fakeDriver([rawRow]);
 		const handle = db({ tables: { posts } }, driver);
