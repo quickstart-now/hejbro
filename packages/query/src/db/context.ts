@@ -1,10 +1,12 @@
 import type { Role } from "@hejbro/core";
 import { quoteIdentifier } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
-import type { Driver, DriverSession } from "../driver/contract";
+import type { Driver, DriverRow, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
 import type { Declarations, ExecuteResult } from "./db";
 import { executeOn, sendCompiled } from "./execute";
+import type { FnApi } from "./fn";
+import { createFnApi } from "./fn";
 import type { Tx } from "./transaction";
 
 /**
@@ -20,12 +22,14 @@ export type DbContext = {
 	readonly settings?: Readonly<Record<string, string>>;
 };
 
-/** What `db.as(context)` returns: `execute`/`transaction`, both scoped to that context — no `.as` of its own (re-scoping a scoped handle isn't a decided shape; nesting `transaction()` calls through *this* handle is exactly as unsupported as the unscoped one, task 4.6's own guard). */
+/** What `db.as(context)` returns: `execute`/`transaction`/`fn`, all scoped to that context — no `.as` of its own (re-scoping a scoped handle isn't a decided shape; nesting `transaction()` calls through *this* handle is exactly as unsupported as the unscoped one, task 4.6's own guard). */
 export type ScopedDb = {
 	execute<TStatement extends CompileInput>(
 		statement: TStatement,
 	): Promise<ExecuteResult<TStatement>>;
 	transaction<T>(callback: (tx: Tx) => Promise<T>): Promise<T>;
+	/** `db.fn.*`, scoped to this context (task 4.7 × 4.9): every call opens its own context-applied transaction, exactly like `execute`. */
+	readonly fn: FnApi;
 };
 
 /** The declared-role list for an `undeclared-role` message: `sorted`'s comma-joined names, or an explicit "(none declared)" for the empty case (house style: no ternary, a guard clause instead). */
@@ -127,17 +131,23 @@ const applyContext = async (
 export const createAsApi = (
 	driver: Driver,
 	tables: Declarations["tables"],
+	functions: Declarations["functions"],
 	declaredRoles: Declarations["roles"],
 ): ((context: DbContext) => ScopedDb) => {
 	return (context: DbContext): ScopedDb => {
 		assertDeclaredRole(context.role, declaredRoles);
-		const scopedExecute = async (statement: CompileInput): Promise<unknown> => {
+		/** Opens one fresh, context-applied transaction and runs `send` on it — the single primitive `execute`/`fn` (task 4.7 × 4.9) both build on, so context application can never cover one and miss the other. */
+		const scopedRun = async (
+			send: (session: DriverSession) => Promise<ReadonlyArray<DriverRow>>,
+		): Promise<ReadonlyArray<DriverRow>> => {
 			assertCapability(driver, "interactive-transactions", "db.as");
 			return driver.transaction(async (session) => {
 				await applyContext(session, context);
-				return executeOn(session, statement, tables);
+				return send(session);
 			});
 		};
+		const scopedExecute = (statement: CompileInput): Promise<unknown> =>
+			scopedRun((session) => executeOn(session, statement, tables));
 		const scopedTransaction = async <T>(
 			callback: (tx: Tx) => Promise<T>,
 		): Promise<T> => {
@@ -153,6 +163,7 @@ export const createAsApi = (
 		return {
 			execute: scopedExecute as ScopedDb["execute"],
 			transaction: scopedTransaction,
+			fn: createFnApi(scopedRun, tables, functions),
 		};
 	};
 };

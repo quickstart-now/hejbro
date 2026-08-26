@@ -12,6 +12,8 @@ import type { SelectResult } from "../types/select-result";
 import type { DbContext, ScopedDb } from "./context";
 import { createAsApi } from "./context";
 import { executeOn } from "./execute";
+import type { FnApi } from "./fn";
+import { createFnApi } from "./fn";
 import type { Tx } from "./transaction";
 import { createTransactionApi } from "./transaction";
 
@@ -202,6 +204,16 @@ export type Db = {
 	 * on the actual work, and never touches this (unscoped) handle at all.
 	 */
 	as(context: DbContext): ScopedDb;
+	/**
+	 * `db.fn.*` (task 4.9): one callable per declared function, keyed by
+	 * the declarations record's own export name. A `setofTable`-returning
+	 * function renders an explicit column list (never `select *`) and
+	 * converts its rows exactly like a whole-table `select()`; a scalar
+	 * return has no declared column to convert against and passes through
+	 * raw, matching every other "no declared column" case in this
+	 * package.
+	 */
+	readonly fn: FnApi;
 };
 
 /**
@@ -255,6 +267,18 @@ export const db = (schema: Schema, driver: Driver, options?: DbOptions): Db => {
 		execute: ((statement: CompileInput) =>
 			executeImpl(driver, declarations.tables, statement)) as Db["execute"],
 		transaction: createTransactionApi(driver, declarations.tables),
-		as: createAsApi(driver, declarations.tables, declarations.roles),
+		as: createAsApi(
+			driver,
+			declarations.tables,
+			declarations.functions,
+			declarations.roles,
+		),
+		// the unscoped db.fn runs directly on the driver -- no transaction to
+		// open, `driver` already structurally satisfies DriverSession.
+		fn: createFnApi(
+			(send) => send(driver),
+			declarations.tables,
+			declarations.functions,
+		),
 	};
 };

@@ -30,6 +30,22 @@ const tableMatches = (
 };
 
 /**
+ * Finds the declared {@link Table} identified by `(schemaName, tableName)`
+ * in `tables` — the same SQL-identity lookup {@link resolveColumnState}
+ * uses internally, exported so `fn.ts` (task 4.9, a returns-table
+ * function call) can resolve a target table's full column list without
+ * a second, disagreeing search.
+ */
+export const findTable = (
+	tables: Declarations["tables"],
+	schemaName: string,
+	tableName: string,
+): Table | undefined =>
+	Object.values(tables).find((candidate) =>
+		tableMatches(candidate, schemaName, tableName),
+	);
+
+/**
  * The single resolver every conversion path uses (owner review judgment
  * 4, batch A/B correspondence): a whole-table select's `allColumns` list,
  * an object projection's `ColumnRefNode`, and a mutation's `returning()`
@@ -47,9 +63,7 @@ export const resolveColumnState = (
 	tableName: string,
 	columnName: string,
 ): ColumnState | undefined => {
-	const table = Object.values(tables).find((candidate) =>
-		tableMatches(candidate, schemaName, tableName),
-	);
+	const table = findTable(tables, schemaName, tableName);
 	if (table === undefined) {
 		return undefined;
 	}
