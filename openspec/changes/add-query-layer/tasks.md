@@ -416,6 +416,19 @@ declarations for joined tables).
   @ts-expect-error probes); red test
   `packages/query/test/db/fn-types.test.ts` "wrong argument type is
   rejected statically"; files `src/db/fn-types.ts`. ~10m
+- [x] 4.11 (new, batch A review, #293 group 4) `execute()`'s resolved
+  row type for `select()` (query-execution's ADDED requirement "rows
+  typed by the statement's inferred result type" had no owning task —
+  reviewer's requirement-reversal found the gap): `Db["execute"]`
+  dispatches structurally on `SelectLimited<TProjection>` to
+  `SelectResult<TProjection>` (task 3.10), everything else (bare
+  `QueryNode`, mutation stages, `sql`) keeps the plain `DriverRow`
+  shape; mutation `returning()` typing stays out of scope pending the
+  owner's `InsertFinal`/`UpdateFinal`/`DeleteFinal` genericity decision
+  (same erasure class as 4.10). red test
+  `packages/query/test/db/execute-result-type.test.ts` "a whole-table
+  select resolves the declared column types exactly"; files
+  `src/db/db.ts`. ~10m
 
 ## 5. `@hejbro/pg` vanilla driver
 

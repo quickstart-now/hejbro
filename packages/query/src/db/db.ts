@@ -1,6 +1,12 @@
-import type { FunctionDeclaration, Table } from "@hejbro/core";
+import type {
+	FunctionDeclaration,
+	SelectLimited,
+	SelectProjection,
+	Table,
+} from "@hejbro/core";
 import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
+import type { SelectResult } from "../types/select-result";
 import { executeOn } from "./execute";
 import type { Tx } from "./transaction";
 import { createTransactionApi } from "./transaction";
@@ -27,6 +33,29 @@ export type Declarations = {
 };
 
 /**
+ * The row type `execute(statement)` resolves to (task 4.11) — dispatches
+ * on `statement`'s own **structural** shape, not a name check: any
+ * `select()` builder stage (`select(table)`/`.where()`/`.orderBy()`/
+ * `.limit()`/a join all structurally extend `SelectLimited`, core's
+ * `query/select.ts`) carries `projectionInput`, so
+ * {@link SelectResult}<TProjection> (task 3.10) resolves the declared row
+ * shape — whole-table richness (numeric mode, `IntervalValue`, `notNull`)
+ * included, object-projection's own narrower, honest widening included.
+ * Everything else — a bare, already-unwrapped `QueryNode` (that
+ * builder-stage richness is gone once unwrapped), an insert/update/delete
+ * builder stage, or the `sql` escape hatch — resolves to the plain
+ * {@link DriverRow} shape, exactly as it always has: mutation's
+ * `InsertFinal`/`UpdateFinal`/`DeleteFinal` (core's `query/mutate.ts`) are
+ * non-generic today (the same erasure task 4.10 hit on `defineFunction`),
+ * so `returning()` typing is out of this task's scope pending an owner
+ * decision, not silently guessed at here.
+ */
+export type ExecuteResult<TStatement> =
+	TStatement extends SelectLimited<infer TProjection extends SelectProjection>
+		? ReadonlyArray<SelectResult<TProjection>>
+		: ReadonlyArray<DriverRow>;
+
+/**
  * A `db()` handle. `execute` is every other db operation's foundation —
  * `transaction()` (4.6), `as()` (4.7), and `fn` (4.9) each start from
  * their own factory in their own file (`transaction.ts`/`context.ts`/
@@ -44,7 +73,14 @@ export type Declarations = {
 export type Db = {
 	readonly declarations: Declarations;
 	readonly driver: Driver;
-	execute(statement: CompileInput): Promise<ReadonlyArray<DriverRow>>;
+	/**
+	 * Compiles and executes `statement`, resolving to {@link ExecuteResult}
+	 * — a `select()` builder stage resolves its declared row type (task
+	 * 4.11); everything else resolves the plain {@link DriverRow} shape.
+	 */
+	execute<TStatement extends CompileInput>(
+		statement: TStatement,
+	): Promise<ExecuteResult<TStatement>>;
 	/**
 	 * Runs `callback` inside one transaction (task 4.6): commits and
 	 * resolves the callback's own return value on success; on a thrown
@@ -69,10 +105,25 @@ export type Db = {
  * appears anywhere on the thrown error. `transaction` is assembled from
  * `./transaction.ts`'s own factory (task 4.6) so a statement run inside
  * it shares that exact same `executeOn` pipeline.
+ *
+ * `execute`'s own runtime body only ever produces the plain
+ * {@link DriverRow} shape (`executeOn` never inspects `statement` beyond
+ * what `compile()` reads) — the cast to `Db["execute"]` below is
+ * {@link ExecuteResult}'s compile-time-only narrowing of that exact same
+ * value, never a runtime reshape (numeric-mode/interval conversion is
+ * task 4.4's `db/convert.ts`, not yet wired into this pipeline — an open
+ * gap, not something this cast papers over silently). Same reasoning as
+ * `compile.ts`'s own `handler` cast (g2).
  */
+const executeImpl = (
+	driver: Driver,
+	statement: CompileInput,
+): Promise<ReadonlyArray<DriverRow>> => executeOn(driver, statement);
+
 export const db = (declarations: Declarations, driver: Driver): Db => ({
 	declarations,
 	driver,
-	execute: (statement) => executeOn(driver, statement),
+	execute: ((statement: CompileInput) =>
+		executeImpl(driver, statement)) as Db["execute"],
 	transaction: createTransactionApi(driver),
 });
