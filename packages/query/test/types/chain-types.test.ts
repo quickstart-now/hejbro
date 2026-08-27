@@ -14,6 +14,9 @@ import type {
 	UpdateChainFinal,
 } from "../../src/db/chain";
 import type { ExecuteResult } from "../../src/db/db";
+import type { Tx } from "../../src/db/transaction";
+import type { DriverRow } from "../../src/driver/contract";
+import type { SelectResult } from "../../src/types/select-result";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -97,6 +100,23 @@ describe("chain await types equal execute types for select and returning mutatio
 	it("a returning-less mutation chain (no .returning() call at all) awaits to exactly what db.execute(insert(...).values(...)) resolves -- the same documented imprecision db.ts's own ExecuteResult already carries, inherited rather than re-decided", () => {
 		expectTypeOf<Awaited<InsertChainFinal<Posts>>>().toEqualTypeOf<
 			ExecuteResult<InsertFinal<Posts>>
+		>();
+	});
+
+	it("tx.execute keeps its own pre-existing DriverRow shape -- a deliberate, tracked asymmetry (#326), not an oversight", () => {
+		// `Tx = ChainApi & { execute(...): Promise<ReadonlyArray<DriverRow>> }`
+		// (task 7.4): the chain members joined onto `Tx` via intersection
+		// resolve their declared row type exactly like every other surface
+		// above, but `execute` itself was never touched -- promoting it to
+		// `ExecuteResult<TStatement>` is group 4's own contract to revise,
+		// out of this group's file scope (#326 tracks closing the gap).
+		type TxExecuteRows = Awaited<ReturnType<Tx["execute"]>>;
+		expectTypeOf<TxExecuteRows>().toEqualTypeOf<ReadonlyArray<DriverRow>>();
+		// the same `tx`'s own chain member resolves a strictly richer type
+		// for the identical statement kind -- the asymmetry made concrete,
+		// not just "different names for the same shape".
+		expectTypeOf<TxExecuteRows>().not.toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
 		>();
 	});
 });

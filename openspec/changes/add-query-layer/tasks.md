@@ -968,7 +968,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   `@hejbro/pg`, root README query-layer section (facade import + chain
   UX example, driver install note, `compile()` preview); files
   `AGENTS.md`, `README.md`. ~8m
-- [ ] 7.13 Spec deltas: query-builder gains the chain surface
+- [x] 7.13 Spec deltas: query-builder gains the chain surface
   (thenable termination, inertness, `.compile()` preview, delegation
   to the single vocabulary), query-execution gains the three-surface
   uniformity sentence — every sentence traced to a named 7.x test; no

@@ -491,12 +491,31 @@ describe("scoped/tx chain result conversion (task 7.4 rework -- tables propagati
 	// transaction.ts's `buildTx` call, each independently survived the
 	// full package suite).
 	//
-	// Inventory update: the `tables`-propagation axis (first raised for
-	// `chain.ts`'s four internal terminals, task 7.2 rework) now has
-	// **six** call sites total, all at the same rank:
+	// Inventory update (7.13 closeout correction: this previously read
+	// "six", omitting W1 -- db.ts's own unscoped createChainApi call
+	// never got a dedicated inventory line because it was bound from
+	// task 7.1 onward, but "already bound" isn't "not a call site").
+	// The `tables`-propagation axis (first raised for `chain.ts`'s four
+	// internal terminals, task 7.2 rework) has **seven** call sites
+	// total, all at the same rank:
 	//   1-4. chain.ts's four make*FinalChain functions (task 7.2 rework)
-	//   5.   context.ts's createAsApi return -- W2 (this rework, R2)
-	//   6.   transaction.ts's buildTx -- shared by W3 and W4 (this rework, R2)
+	//   5.   db.ts's own createChainApi call, `declarations.tables` -- W1
+	//   6.   context.ts's createAsApi return -- W2 (task 7.4 rework, R2)
+	//   7.   transaction.ts's buildTx -- shared by W3 and W4 (task 7.4 rework, R2)
+	//
+	// W1 is upstream of 1-4 for the unscoped surface specifically (it's
+	// the one `tables` value db.ts hands to `createChainApi`, which
+	// chain.ts's own select/insert/update/delete builders each thread
+	// down to their own make*FinalChain independently) -- verified
+	// during the 7.13 closeout by mutating db.ts's call to `{}`: **4**
+	// tests went red at once (7.1's own select conversion test plus all
+	// three of 7.2-rework's insert/update/delete conversion tests),
+	// never just 1. That's a wider blast radius than W2/W3/W4 (each of
+	// which only breaks its own single scoped/tx conversion test above,
+	// since no scoped/tx equivalent of the insert/update/delete
+	// conversion tests exists yet) -- expected given W1 sits upstream of
+	// all four chain kinds for this one surface, not a sign the mutation
+	// missed something.
 	//
 	// Confirmed-green-for-the-right-reason (TDD order note): production
 	// code for W2/W3/W4 already existed before these three tests were

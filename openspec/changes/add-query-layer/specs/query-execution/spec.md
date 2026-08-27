@@ -89,3 +89,43 @@ column, rather than surfacing as an unconverted value or a silent
 - **WHEN** a declared column's value cannot be converted to its declared
   type, or is entirely absent from the driver's row
 - **THEN** the call rejects with an explicit error naming that column
+
+### Requirement: The chain surface is uniform across every execution surface
+The same thenable `select`/`insert`/`update`/`deleteFrom` chain entry
+points, built from one shared factory, SHALL exist with identical
+members on the unscoped db handle, the `db.as(context)` scoped handle,
+and the `tx` a `transaction()` callback receives, so applying a context
+can never cover one of these surfaces while missing another.
+
+#### Scenario: A scoped chain runs inside its context-applied transaction
+- **WHEN** a chain member is awaited on a `db.as(context)` handle
+- **THEN** the role/setting statements that context applies and the
+  chain's own statement all land on that one transaction, in that order
+
+#### Scenario: A tx chain shares the callback's one open connection
+- **WHEN** a chain member is awaited on the `tx` a `transaction()`
+  callback received
+- **THEN** its statement runs on that same held connection, never a
+  fresh one
+
+#### Scenario: tx.execute keeps its own pre-existing result shape (#326)
+- **WHEN** `tx.execute(statement)` is called on the same `tx` a chain
+  member is also available on
+- **THEN** it resolves the plain driver-row shape, not the statement's
+  inferred result type a chain member on that same `tx` would resolve —
+  promoting `execute`'s own return type to the inferred shape is a
+  separate, tracked change (#326), not part of this capability
+
+### Requirement: Row-conversion internals are not part of the public contract
+The primitives that resolve a driver row's per-column conversion plan
+(matching a returned column against its declared column state, and
+converting one raw row through that plan) are internal to the query
+package's own execution pipeline. They SHALL NOT be part of its public
+entry surface — exposing them would let a driver or preset couple to
+conversion internals that owe no compatibility promise across releases.
+
+#### Scenario: Conversion internals are absent from the public entry surface
+- **WHEN** the query package's public entry surface is inspected
+- **THEN** it exposes no export for resolving a declared column's
+  conversion state, planning a statement's or a result's per-column
+  conversion plan, or converting one raw row through such a plan
