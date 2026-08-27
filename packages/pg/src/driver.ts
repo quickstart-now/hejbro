@@ -22,18 +22,34 @@ const CAPABILITIES: DriverCapabilities = {
 /** Postgres's builtin `interval` type oid -- pg's own default parser turns it into a `PostgresInterval` object with no lossless way back to text (5.0 scout: `String()` gives `"[object Object]"`, and even `.toPostgres()` reorders/reformats fields rather than reproducing the original). */
 const INTERVAL_OID = 1186;
 
+/** Postgres's builtin `_interval` (`interval[]`) type oid (task 1.3, #320) -- pg's own default *array* parser would run the same lossy `PostgresInterval` conversion element-wise, one level up from {@link INTERVAL_OID}'s own problem. `@hejbro/query`'s own `array-text.ts` parses this raw array-literal text and converts each element via `parseInterval` instead (task 1.2). */
+const INTERVAL_ARRAY_OID = 1187;
+
+/** Postgres's builtin `_numeric` (`numeric[]`) type oid (task B2.1, #320) -- found via the postgres:17 integration proof (task 1.5): pg's own default *array* parser for this oid returns an array of already-`parseFloat`'d JS numbers (unlike scalar `numeric`, oid 1700, which pg already leaves as raw text), silently destroying the exact decimal text a `'string'`/`'bigint'`-mode `numeric[]` column needs. `bigint[]` (oid 1016) has no matching entry here -- pg's own default array parser already returns text elements for it, so no override is needed there. */
+const NUMERIC_ARRAY_OID = 1231;
+
 /**
  * The per-query `types` override every `execute`/session call sends
- * (owner decision ③). Passing `types` at all replaces the client's own
- * `TypeOverrides` wholesale rather than falling back to it (5.0 scout,
- * `pg/lib/client.js:743-744`) -- so this object has to fully implement
- * "oid 1186 is raw text, every other oid is pg's own default" itself,
- * never a blanket identity function that would also defeat pg's
- * int8/numeric/timestamptz parsing.
+ * (owner decision ③, extended by tasks 1.3/B2.1). Passing `types` at all
+ * replaces the client's own `TypeOverrides` wholesale rather than falling
+ * back to it (5.0 scout, `pg/lib/client.js:743-744`) -- so this object has
+ * to fully implement "oid 1186/1187/1231 are raw text, every other oid is
+ * pg's own default" itself, never a blanket identity function that would
+ * also defeat pg's int8/numeric/timestamptz/array parsing.
  */
 const intervalPassthroughTypes: CustomTypesConfig = {
 	getTypeParser: (oid, format) => {
-		if (oid === INTERVAL_OID) {
+		// `pg`'s own `CustomTypesConfig.getTypeParser` types `oid` as its
+		// scalar-only `TypeId` union (no array oid, including 1187/1231, is
+		// a member) -- widened to `number` here only for the comparison;
+		// the real runtime value is always a plain oid number regardless of
+		// what the (incomplete) upstream type declares.
+		const oidValue = oid as number;
+		if (
+			oidValue === INTERVAL_OID ||
+			oidValue === INTERVAL_ARRAY_OID ||
+			oidValue === NUMERIC_ARRAY_OID
+		) {
 			return (value: string): string => value;
 		}
 		return pgTypes.getTypeParser(oid, format);
@@ -105,14 +121,24 @@ const setupSession = async (session: DriverSession): Promise<void> => {
  * client as pinned before the pool ever hands the same client to two
  * concurrent callers isn't a concern this ordering trades away either --
  * a pool never does that while one checkout is in flight.
+ *
+ * `getSetupSession` is read **at checkout time**, every checkout (task
+ * 1.4, #323) -- never a `setupSession` reference captured once when this
+ * guard is built. A preset decorator that replaces `driver.setupSession`
+ * after `pgDriver()` returns (wrapping the original, e.g. to run
+ * additional session setup) has to take effect on every checkout from
+ * then on; closing over the original function reference here would make
+ * that wrapper permanently unreachable from the checkout path, silently.
  */
-const checkoutGuard = (): ((client: PoolClient) => Promise<void>) => {
+const checkoutGuard = (
+	getSetupSession: () => (session: DriverSession) => Promise<void>,
+): ((client: PoolClient) => Promise<void>) => {
 	const pinnedConnections = new WeakSet<PoolClient>();
 	return async (client) => {
 		if (pinnedConnections.has(client)) {
 			return;
 		}
-		await setupSession(makeSession(client));
+		await getSetupSession()(makeSession(client));
 		pinnedConnections.add(client);
 	};
 };
@@ -159,10 +185,20 @@ const resolvePool = (poolOrConnectionString: Pool | string): Pool => {
 	return poolOrConnectionString;
 };
 
-/** One driver shape shared by both {@link pgDriver} overloads -- built once `pool` is settled, so the instance and connection-string forms can never diverge in what they hand back. */
+/**
+ * One driver shape shared by both {@link pgDriver} overloads -- built once
+ * `pool` is settled, so the instance and connection-string forms can
+ * never diverge in what they hand back. `ensurePinned` closes over
+ * `() => driver.setupSession` (task 1.4) -- referencing the `const
+ * driver` binding before its own declaration is fine here: the arrow
+ * function is only ever *invoked* from inside `driver.execute`/
+ * `driver.transaction`, i.e. strictly after this whole function has
+ * returned `driver` fully initialized, so there is no TDZ hazard despite
+ * the textual forward reference.
+ */
 const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
-	const ensurePinned = checkoutGuard();
-	return {
+	const ensurePinned = checkoutGuard(() => driver.setupSession);
+	const driver: Driver & { readonly client: Pool } = {
 		client: pool,
 		capabilities: CAPABILITIES,
 		execute: async (compiled) => {
@@ -190,6 +226,7 @@ const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
 		},
 		setupSession,
 	};
+	return driver;
 };
 
 /**

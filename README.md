@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1136](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201136-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1151](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201151-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -211,7 +211,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1136 functions** over the threshold, highest score 5.00 — measured at `c1e2f54` (2026-08-27).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1151 functions** over the threshold, highest score 5.00 — measured at `8394eb5` (2026-08-27).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->

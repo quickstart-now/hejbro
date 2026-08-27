@@ -22,6 +22,13 @@ type CapturedQueryConfig = {
 };
 type QueryCall = string | CapturedQueryConfig;
 
+/** The oid parameter type `pg-types`'s own exported `getTypeParser` declares -- a fixed literal union of well-known *scalar* builtin oids, which doesn't include any array oid at all (1007/1187/etc). A cast, not a widening of our own driver's contract: `CustomTypesConfig.getTypeParser` (what `driver.ts` actually implements) takes a plain `number`, so this only unblocks calling `pg-types`'s own function directly as a reference-equality witness for an array oid. */
+type PgTypesTypeId = Parameters<typeof pgTypes.getTypeParser>[0];
+
+/** Casts an array oid (never a member of `pg-types`'s own scalar-only `TypeId` union) so it can still be passed to `pgTypes.getTypeParser` directly -- see {@link PgTypesTypeId}. */
+const asPgTypesTypeId = (oid: number): PgTypesTypeId =>
+	oid as unknown as PgTypesTypeId;
+
 /** The SQL text a captured `client.query` call carries, whichever of the two {@link QueryCall} shapes it was sent as. */
 const sqlTextOf = (call: QueryCall): string => {
 	if (typeof call === "string") {
@@ -275,6 +282,70 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 		// "text" internally.
 		expect(config.types.getTypeParser(1184, "binary")).toBe(
 			pgTypes.getTypeParser(1184, "binary"),
+		);
+	});
+
+	it("interval array and numeric array reach the row as raw array text while other array oids keep pg defaults (task 1.3, extended by B2.1/#320)", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		const config = calls
+			.filter((call): call is CapturedQueryConfig => typeof call !== "string")
+			.find((call) => call.text === "select 1");
+		if (config === undefined) {
+			throw new Error("the caller's own statement was never sent");
+		}
+
+		// oid 1187 (_interval, interval[]): raw Postgres array-literal text,
+		// never pg's own default array parser (which would hand back an
+		// array of PostgresInterval objects -- the same round-trip problem
+		// the scalar oid 1186 override exists for, one level up).
+		const intervalArrayRaw = '{"1 day","2 days 03:00:00"}';
+		expect(config.types.getTypeParser(1187, "text")(intervalArrayRaw)).toBe(
+			intervalArrayRaw,
+		);
+
+		// oid 1231 (_numeric, numeric[]) (B2.1, planner-approved extension):
+		// raw array-literal text too -- pg's own default array parser would
+		// otherwise hand back an array of already-`parseFloat`'d JS numbers
+		// (found via the postgres:17 integration proof, 1.5), silently
+		// destroying the exact decimal text a 'string'/'bigint'-mode
+		// numeric[] column needs. `bigint[]` (oid 1016) is deliberately left
+		// alone -- it already arrives as text elements from pg's own
+		// default parser, no override needed there.
+		const numericArrayRaw = "{123.450000,0.100000}";
+		expect(config.types.getTypeParser(1231, "text")(numericArrayRaw)).toBe(
+			numericArrayRaw,
+		);
+
+		// oid 1007 (_int4, integer[]): still delegated to pg's own default
+		// array parser -- a JS array of already-parsed numbers, not text.
+		// Without this axis, an override that answered every array oid with
+		// identity (breaking delegation for every other array type) would
+		// still pass the 1187/1231 assertions alone.
+		expect(config.types.getTypeParser(1007, "text")("{1,2,3}")).toEqual([
+			1, 2, 3,
+		]);
+
+		// oid 1016 (_int8, bigint[]): also still delegated -- pg's own
+		// default array parser already returns text elements here, so
+		// no override is needed (unlike 1231's own case just above).
+		expect(config.types.getTypeParser(1016, "text")("{1,2,3}")).toEqual([
+			"1",
+			"2",
+			"3",
+		]);
+
+		// format is forwarded for array oids too, not dropped/defaulted --
+		// the same two-argument delegation witness task 5.3 established for
+		// scalar oids.
+		const textParser = config.types.getTypeParser(1007, "text");
+		const binaryParser = config.types.getTypeParser(1007, "binary");
+		expect(binaryParser).not.toBe(textParser);
+		expect(config.types.getTypeParser(1007, "binary")).toBe(
+			pgTypes.getTypeParser(asPgTypesTypeId(1007), "binary"),
 		);
 	});
 });
@@ -617,6 +688,32 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 
 		expect(received).toEqual([
 			{ sql: "set intervalstyle to 'postgres'", params: [], kind: "sql" },
+		]);
+	});
+
+	it("a wrapped setupSession member runs at checkout -- late-binding, not the captured closure (task 1.4, #323)", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		// a preset decorator's own shape: read the current member, replace
+		// it with a wrapper that still calls through to the original.
+		const originalSetupSession = driver.setupSession;
+		const wrapperCalls: Array<unknown> = [];
+		driver.setupSession = async (session) => {
+			wrapperCalls.push(session);
+			await originalSetupSession(session);
+		};
+
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		// the checkout guard read `driver.setupSession` itself at checkout
+		// time -- if it had instead called a closure captured once at
+		// `buildDriver()` time, this wrapper would never run at all, and
+		// the pin statement would still reach the connection unwrapped.
+		expect(wrapperCalls).toHaveLength(1);
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"select 1",
 		]);
 	});
 });

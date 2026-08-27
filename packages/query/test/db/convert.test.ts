@@ -3,6 +3,7 @@ import {
 	eq,
 	insert,
 	interval,
+	numeric,
 	schema,
 	select,
 	table,
@@ -31,8 +32,15 @@ const comments = table(app, "comments", {
 	postId: uuid().notNull(),
 	postedAt: timestamptz().notNull(),
 });
+const events = table(app, "events", {
+	id: uuid().primaryKey(),
+	amounts: bigint({ mode: "bigint" }).array(),
+	durations: interval().array(),
+	tags: text().array(),
+	precisions: numeric({ mode: "string" }).array(),
+});
 
-const tables = { posts, comments };
+const tables = { posts, comments, events };
 
 describe("resolveColumnState (owner review judgment 4 -- the single resolver)", () => {
 	it("resolves a declared column by SQL identity", () => {
@@ -237,6 +245,293 @@ describe("columnPlanForResult + convertRow (task 4.4)", () => {
 		);
 
 		expect(converted).not.toHaveProperty("unexpectedExtraColumn");
+	});
+});
+
+describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conversion)", () => {
+	it("moded and interval array cells convert element-wise; a poisoned element names its column", () => {
+		const node = select(events).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		// moded (bigint) array: the driver hands back a JS array of decimal-text elements.
+		const bigintArray = convertRow(
+			{
+				id: "x",
+				amounts: ["1", "2", "3"],
+				durations: null,
+				tags: null,
+				precisions: null,
+			},
+			plan,
+		);
+		expect(bigintArray.amounts).toEqual([1n, 2n, 3n]);
+
+		// interval[]: the driver hands back raw Postgres array-literal text.
+		const intervalArray = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: '{"1 day","2 days 03:00:00"}',
+				tags: null,
+				precisions: null,
+			},
+			plan,
+		);
+		expect(intervalArray.durations).toEqual([
+			{
+				years: 0,
+				months: 0,
+				days: 1,
+				hours: 0,
+				minutes: 0,
+				seconds: 0,
+				microseconds: 0,
+			},
+			{
+				years: 0,
+				months: 0,
+				days: 2,
+				hours: 3,
+				minutes: 0,
+				seconds: 0,
+				microseconds: 0,
+			},
+		]);
+
+		// NULL elements pass through as null in both moded and interval arrays.
+		const withNulls = convertRow(
+			{
+				id: "x",
+				amounts: ["1", null, "3"],
+				durations: '{"1 day",NULL}',
+				tags: null,
+				precisions: null,
+			},
+			plan,
+		);
+		expect(withNulls.amounts).toEqual([1n, null, 3n]);
+		expect((withNulls.durations as ReadonlyArray<unknown>)[1]).toBeNull();
+
+		// an array column with no element-level conversion (text[]) passes
+		// its elements through raw, unchanged.
+		const textArray = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: null,
+				tags: ["a", "b"],
+				precisions: null,
+			},
+			plan,
+		);
+		expect(textArray.tags).toEqual(["a", "b"]);
+
+		// a poisoned element fails the whole cell, naming the column -- never
+		// a partial array.
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: ["1", "not-a-number"],
+					durations: null,
+					tags: null,
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "amounts");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unparsable-numeric-text");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
+
+		// unparsable array-literal text fails the whole cell, never a partial
+		// array -- 1.1's own contract carried through 1.2's wiring.
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: null,
+					durations: "not-array-text",
+					tags: null,
+					precisions: null,
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "durations");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unparsable-array-text");
+		}
+
+		// arrival shape is decided by the declared element type, never by
+		// sniffing raw's own runtime type: an interval[] cell that arrives as
+		// an already-parsed JS array (the shape only a non-interval element
+		// is contracted to) fails fast naming the column, rather than being
+		// silently accepted.
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: null,
+					durations: ["1 day"],
+					tags: null,
+					precisions: null,
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "durations");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			// the declared-element-type guard fired -- not an incidental
+			// TypeError a missing guard would let through unnoticed.
+			expect(cause).toHaveProperty("code", "unexpected-array-arrival-shape");
+		}
+
+		// the reverse mismatch: a moded array cell that arrives as raw text
+		// (the shape only interval[] is contracted to) also fails fast,
+		// naming the column, rather than being guessed at.
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: "{1,2,3}",
+					durations: null,
+					tags: null,
+					precisions: null,
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "amounts");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unexpected-array-arrival-shape");
+		}
+	});
+
+	it("numeric array cells convert from raw array text, exact decimal preserved (B2.2, #320)", () => {
+		const node = select(events).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		// numeric[] (like interval[], task B2.1's driver override, oid 1231):
+		// the driver hands back raw Postgres array-literal text, never pg's
+		// own default array parser -- which would have already
+		// `parseFloat`'d each element, destroying the exact decimal text a
+		// 'string'-mode numeric[] column needs (found via the postgres:17
+		// integration proof, task 1.5).
+		const numericArray = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: null,
+				tags: null,
+				precisions: "{123.450000,0.100000}",
+			},
+			plan,
+		);
+		expect(numericArray.precisions).toEqual(["123.450000", "0.100000"]);
+
+		// negative elements round-trip too (planner review, B2 follow-up ②)
+		// -- the array-text parser's unquoted-element token and
+		// convertNumericText's own decimal pattern both already allow a
+		// leading "-"; this pins that neither breaks now that numeric[]
+		// reaches them as raw array text.
+		const negativeArray = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: null,
+				tags: null,
+				precisions: "{-1.5,-0.100000}",
+			},
+			plan,
+		);
+		expect(negativeArray.precisions).toEqual(["-1.5", "-0.100000"]);
+
+		// NULL elements pass through as null here too.
+		const withNull = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: null,
+				tags: null,
+				precisions: "{123.450000,NULL}",
+			},
+			plan,
+		);
+		expect(withNull.precisions).toEqual(["123.450000", null]);
+
+		// arrival-shape mismatch fails fast here too, naming the column --
+		// a numeric[] cell that arrives as an already-parsed JS array (the
+		// shape only a non-interval/non-numeric element is contracted to).
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: null,
+					durations: null,
+					tags: null,
+					precisions: [123.45, 0.1],
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "precisions");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unexpected-array-arrival-shape");
+		}
+
+		// NaN parity (planner review, B2 follow-up ①): `NaN` is a legal
+		// Postgres `numeric` value, rendered unquoted as `NaN` by
+		// `array_out` -- the same token an unquoted `NULL` element sits
+		// right next to in `array-text.ts`'s own grammar. This pins two
+		// things at once: `NaN` is never misread as the SQL null (`null`
+		// would mean {@link array-text.ts}'s own `NULL`-token guard
+		// mis-fired), and it still fails the same way scalar `numeric`
+		// already does -- `convertNumericText`'s shared
+		// `NUMERIC_TEXT_PATTERN` (numeric-mode.ts, untouched here) never
+		// accepted `"NaN"` even before numeric[] arrived as raw array
+		// text, so this is a parity assertion, not a behavior change.
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: null,
+					durations: null,
+					tags: null,
+					precisions: "{NaN}",
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "precisions");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unparsable-numeric-text");
+		}
 	});
 });
 

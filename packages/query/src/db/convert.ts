@@ -6,10 +6,12 @@ import type {
 	ReturningNode,
 	Table,
 	TableRefNode,
+	TypeNode,
 } from "@hejbro/core";
 import { getTableMeta } from "@hejbro/core";
 import type { CompileInput } from "../compile/compile";
 import type { DriverRow } from "../driver/contract";
+import { parseArrayText } from "../types/array-text";
 import { parseInterval } from "../types/interval";
 import { convertNumericText } from "../types/numeric-mode";
 import type { Declarations } from "./db";
@@ -240,19 +242,167 @@ function throwResultConversionFailed(column: string, cause: unknown): never {
 	);
 }
 
+/** Builds the `unexpected-array-arrival-shape`-coded, enriched plain `Error` {@link rawArrayElements} throws (D3's kebab-case-code convention for `@hejbro/query`, matching `interval.ts`'s `throwUnparsableInterval`/`array-text.ts`'s `throwUnparsableArrayText`) — the arrival shape a declared array element contracts for (`expectedShape`) didn't match what the driver actually handed back (`typeof raw`). Named separately from a plain `Error` (planner review, batch A rework) so a test can assert `cause.code` and tell "the declared-type guard fired" apart from an incidental `TypeError` a missing guard would otherwise let through unnoticed. */
+const throwUnexpectedArrayArrivalShape = (
+	expectedShape: "raw array-literal text" | "a JS array",
+	elementTypeName: string,
+	raw: unknown,
+): never => {
+	throw Object.assign(
+		new Error(
+			`expected ${expectedShape} for an array column whose element type is ${JSON.stringify(elementTypeName)}, got ${typeof raw}. Next: check the driver delegates this array oid the way the declared element type contracts (task 1.3's driver-contract delta) — never coerced or guessed at here.`,
+		),
+		{ code: "unexpected-array-arrival-shape" },
+	);
+};
+
+/**
+ * Declared element types whose array column is contracted to arrive as
+ * raw Postgres array-literal text, never `pg`'s own default array
+ * parsing — `interval` (task 1.3's driver override, oid 1187) and
+ * `numeric` (task B2.1's driver override, oid 1231) each have their own
+ * driver-level override for exactly this reason (both would otherwise
+ * arrive already lossily parsed: `PostgresInterval` objects and
+ * `parseFloat`'d numbers, respectively — the postgres:17 integration
+ * proof, task 1.5, is what surfaced the `numeric` case). Every other
+ * declared element type (`bigint` included — oid 1016's own default
+ * array parser already returns text elements, no override needed) keeps
+ * `pg`'s own default array parsing, contracted to already be a JS array.
+ */
+const RAW_ARRAY_TEXT_ELEMENT_TYPE_NAMES: ReadonlyArray<TypeNode["typeName"]> = [
+	"interval",
+	"numeric",
+];
+
+/** `true` when `element`'s array column is contracted to arrive as raw array-literal text — see {@link RAW_ARRAY_TEXT_ELEMENT_TYPE_NAMES}. */
+const expectsRawArrayText = (element: TypeNode): boolean =>
+	RAW_ARRAY_TEXT_ELEMENT_TYPE_NAMES.includes(element.typeName);
+
+/** `raw`'s own element list when `element` is contracted to arrive as raw array-literal text (see {@link expectsRawArrayText}) — parsed via {@link parseArrayText}. A `raw` that isn't a string at all doesn't match that contract and is never coerced or guessed at: {@link throwUnexpectedArrayArrivalShape} throws instead. */
+const rawArrayElementsFromText = (
+	raw: unknown,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
+	if (typeof raw !== "string") {
+		return throwUnexpectedArrayArrivalShape(
+			"raw array-literal text",
+			element.typeName,
+			raw,
+		);
+	}
+	return parseArrayText(raw);
+};
+
+/** `raw`'s own element list when `element` keeps `pg`'s own default array parsing (every declared element type {@link expectsRawArrayText} answers `false` for) — `raw` itself, unchanged. A `raw` that isn't already a JS array doesn't match that contract: {@link throwUnexpectedArrayArrivalShape} throws instead of coercing or guessing. */
+const rawArrayElementsFromJsArray = (
+	raw: unknown,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
+	if (!Array.isArray(raw)) {
+		return throwUnexpectedArrayArrivalShape(
+			"a JS array",
+			element.typeName,
+			raw,
+		);
+	}
+	return raw;
+};
+
+/**
+ * `raw`'s own element list — the arrival shape is decided by `element`
+ * (the array's declared element {@link TypeNode}), **never** by sniffing
+ * `raw`'s own runtime type: the driver-contract delta fixes exactly which
+ * declared element types arrive as raw array-literal text
+ * ({@link expectsRawArrayText}) versus `pg`'s own default array parsing,
+ * and this mirrors that contract rather than guessing from whatever
+ * happened to show up.
+ *
+ * Handoff note (future drivers): both branches here are `@hejbro/pg`-
+ * specific facts, not a law of nature — a future driver (a PostgREST-
+ * style HTTP driver, say) could reasonably hand back a different arrival
+ * shape for the same declared element type. If that happens, the fix is
+ * to widen the driver contract to name that driver's own shape
+ * explicitly (and branch on which driver produced the row, the same way
+ * {@link expectsRawArrayText} branches on the declared element type
+ * today) — never to fall back to sniffing `raw`'s runtime type again,
+ * which is exactly the anti-pattern this file's own history (planner
+ * review, batch A rework) already replaced once.
+ */
+const rawArrayElements = (
+	raw: unknown,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
+	if (expectsRawArrayText(element)) {
+		return rawArrayElementsFromText(raw, element);
+	}
+	return rawArrayElementsFromJsArray(raw, element);
+};
+
+/**
+ * Converts one array element against `elementState` (the array column's
+ * `columnState` with `typeNode` swapped for its declared element type,
+ * `mode` carried through unchanged) — `null` (an unquoted `NULL` element,
+ * or the moded-array driver's own `null`) passes through unconverted, the
+ * same rule {@link convertCell} applies at the cell level. Reuses
+ * {@link convertDeclaredValue} rather than duplicating the mode/interval
+ * branches, so element and top-level scalar conversion can never disagree.
+ */
+const convertArrayElement = (
+	raw: unknown,
+	elementState: ColumnState,
+): unknown => {
+	if (raw === null) {
+		return null;
+	}
+	return convertDeclaredValue(raw, elementState);
+};
+
+/**
+ * Converts an array column's cell element-wise against `element` (its
+ * declared element {@link TypeNode}). Multi-dimensional array *text*
+ * parsing is out of scope (design.md Non-Goals) — but `element` can still
+ * literally be `"array"` at the type level (`.array().array()` is
+ * expressible via the DSL); this function doesn't special-case that away.
+ * It would simply recurse into {@link convertArrayElement}/
+ * {@link convertDeclaredValue} again, and {@link rawArrayElements}'s own
+ * arrival-shape guard would need a plausible shape for that nested
+ * element too (never coerced or guessed at) — an untested, unsupported
+ * path, not one this function actively rejects. A single poisoned element
+ * fails the whole array via {@link convertArrayElement}'s reuse of
+ * {@link convertDeclaredValue}'s own throwing branches; there is no partial
+ * result.
+ */
+const convertArrayValue = (
+	raw: unknown,
+	columnState: ColumnState,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
+	const elementState: ColumnState = { ...columnState, typeNode: element };
+	return rawArrayElements(raw, element).map((rawElement) =>
+		convertArrayElement(rawElement, elementState),
+	);
+};
+
 /**
  * The actual conversion for a cell whose declared column is already known
  * (`convertCell` has excluded `null`/no-`columnState` before this ever
- * runs) — only numeric mode and `interval` have a declared conversion at
- * this contract level (owner decision, task 4.4); every other declared
- * type is already the shape the driver hands back. Split out from
- * {@link convertCell} so each function's own branch count stays low
- * (CRAP ≤ 5).
+ * runs) — array columns route element-wise through
+ * {@link convertArrayValue}; otherwise only numeric mode and `interval`
+ * have a declared conversion at this contract level (owner decision, task
+ * 4.4); every other declared type is already the shape the driver hands
+ * back. Split out from {@link convertCell} so each function's own branch
+ * count stays low (CRAP ≤ 5). The array check comes first: an array
+ * column's own `mode` (e.g. `bigint({mode:'bigint'}).array()`) describes
+ * its *elements*, not the array value itself, so mode can never be checked
+ * before typeName here.
  */
 const convertDeclaredValue = (
 	raw: unknown,
 	columnState: ColumnState,
 ): unknown => {
+	if (columnState.typeNode.typeName === "array") {
+		return convertArrayValue(raw, columnState, columnState.typeNode.element);
+	}
 	if (columnState.mode !== null) {
 		return convertNumericText(String(raw), columnState.mode);
 	}

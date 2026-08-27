@@ -93,3 +93,13 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-27,harden-query-layer,3.2,3,8,22,0,approx; zero production lines - proving (9m) exceeded writing (8m)
 2026-08-27,harden-query-layer,3.3,3,10,68,0,approx; incl. 8m link-axis reinforcement after review + 13m A1 drift guard kept beyond the 5m skip condition
 2026-08-27,harden-query-layer,3.gates,3,,10,0,approx; five gates one pass; check:crap needs TURBO_FORCE=1 (root script does not forward --force - #336)
+2026-08-27,harden-query-layer,1.1,1,10,20,0,approx; parser + edge-case reinforcement (quoted/space/nested/dim-prefix rejection)
+2026-08-27,harden-query-layer,1.2,1,10,30,0,approx; incl. 15m correction round - declared-type dispatch replacing runtime sniffing
+2026-08-27,harden-query-layer,1.rework-a,1,,20,0,approx; batch A review rework: cause codes + rejects() reason patterns + empty-string element + tsdoc
+2026-08-27,harden-query-layer,1.3,1,8,15,0,measured; oid 1187 extension - delegation witnesses stayed green
+2026-08-27,harden-query-layer,1.4,1,8,15,0,measured; late-bound checkout hook red-first; GAP-3 witness kept as mutation evidence
+2026-08-27,harden-query-layer,1.5,1,8,30,0,measured; postgres:17 docker startup + debugging - real-DB tasks run ~4x nominal
+2026-08-27,harden-query-layer,1.m14,1,,5,0,approx; batch A condition - truncated-text partial-array hole
+2026-08-27,harden-query-layer,1.b2,1,25,52,0,measured; approved numeric[] 1231 extension (B2.1-B2.4) incl. real-DB red/green both ways
+2026-08-27,harden-query-layer,1.nan-parity,1,,20,0,measured; NaN/negative parity binding after escalation ruling
+2026-08-27,harden-query-layer,1.6,1,18,35,0,measured; spec alignment + sentence-to-test traceability table; false sentence corrected
