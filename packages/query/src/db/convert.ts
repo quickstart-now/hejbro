@@ -243,25 +243,38 @@ function throwResultConversionFailed(column: string, cause: unknown): never {
 }
 
 /**
- * `raw`'s own element list, whichever shape the driver handed back for an
- * array column (task 1.2): a moded numeric/bigint array already arrives as
- * a JS array of the driver's own text elements, while `interval[]` (no
- * driver-side array parser wired for it, task 1.3) arrives as one raw
- * Postgres array-literal text string — parsed here via
- * {@link parseArrayText}. Neither shape is ever assumed; an unrecognized
- * `raw` throws, caught by {@link convertCell}'s existing wrapper the same
- * as any other conversion failure.
+ * `raw`'s own element list — the arrival shape is decided by `element`
+ * (the array's declared element {@link TypeNode}), **never** by sniffing
+ * `raw`'s own runtime type: the driver-contract delta fixes exactly one
+ * declared type at one arrival shape apiece, and this mirrors that
+ * contract rather than guessing from whatever happened to show up.
+ * `interval[]` (task 1.3's driver override, oid 1187) is the one declared
+ * element type contracted to arrive as raw Postgres array-literal text —
+ * parsed here via {@link parseArrayText}. Every other declared element
+ * type (moded numeric/bigint, or no runtime conversion at all) keeps
+ * `pg`'s own default array parsing, contracted to already be a JS array.
+ * A `raw` that doesn't match the shape its declared element contracts is
+ * never coerced or guessed at — it throws, caught by {@link convertCell}'s
+ * existing wrapper the same as any other conversion failure.
  */
-const rawArrayElements = (raw: unknown): ReadonlyArray<unknown> => {
-	if (typeof raw === "string") {
+const rawArrayElements = (
+	raw: unknown,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
+	if (element.typeName === "interval") {
+		if (typeof raw !== "string") {
+			throw new Error(
+				`expected the driver's raw array-literal text for an interval[] column (task 1.3's driver override), got ${typeof raw}.`,
+			);
+		}
 		return parseArrayText(raw);
 	}
-	if (Array.isArray(raw)) {
-		return raw;
+	if (!Array.isArray(raw)) {
+		throw new Error(
+			`expected a JS array for this array column (pg's own default array parsing), got ${typeof raw}.`,
+		);
 	}
-	throw new Error(
-		`expected array-literal text or a JS array for an array column, got ${typeof raw}.`,
-	);
+	return raw;
 };
 
 /**
@@ -298,7 +311,7 @@ const convertArrayValue = (
 	element: TypeNode,
 ): ReadonlyArray<unknown> => {
 	const elementState: ColumnState = { ...columnState, typeNode: element };
-	return rawArrayElements(raw).map((rawElement) =>
+	return rawArrayElements(raw, element).map((rawElement) =>
 		convertArrayElement(rawElement, elementState),
 	);
 };

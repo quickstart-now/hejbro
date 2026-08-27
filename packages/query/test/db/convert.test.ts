@@ -332,6 +332,55 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 			expect(cause).toHaveProperty("code", "unparsable-numeric-text");
 			expect((error as Error).message).toMatch(/Next:/);
 		}
+
+		// unparsable array-literal text fails the whole cell, never a partial
+		// array -- 1.1's own contract carried through 1.2's wiring.
+		try {
+			convertRow(
+				{ id: "x", amounts: null, durations: "not-array-text", tags: null },
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "durations");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unparsable-array-text");
+		}
+
+		// arrival shape is decided by the declared element type, never by
+		// sniffing raw's own runtime type: an interval[] cell that arrives as
+		// an already-parsed JS array (the shape only a non-interval element
+		// is contracted to) fails fast naming the column, rather than being
+		// silently accepted.
+		try {
+			convertRow(
+				{ id: "x", amounts: null, durations: ["1 day"], tags: null },
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "durations");
+		}
+
+		// the reverse mismatch: a moded array cell that arrives as raw text
+		// (the shape only interval[] is contracted to) also fails fast,
+		// naming the column, rather than being guessed at.
+		try {
+			convertRow(
+				{ id: "x", amounts: "{1,2,3}", durations: null, tags: null },
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "amounts");
+		}
 	});
 });
 
