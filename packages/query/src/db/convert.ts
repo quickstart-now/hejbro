@@ -6,10 +6,12 @@ import type {
 	ReturningNode,
 	Table,
 	TableRefNode,
+	TypeNode,
 } from "@hejbro/core";
 import { getTableMeta } from "@hejbro/core";
 import type { CompileInput } from "../compile/compile";
 import type { DriverRow } from "../driver/contract";
+import { parseArrayText } from "../types/array-text";
 import { parseInterval } from "../types/interval";
 import { convertNumericText } from "../types/numeric-mode";
 import type { Declarations } from "./db";
@@ -241,18 +243,86 @@ function throwResultConversionFailed(column: string, cause: unknown): never {
 }
 
 /**
+ * `raw`'s own element list, whichever shape the driver handed back for an
+ * array column (task 1.2): a moded numeric/bigint array already arrives as
+ * a JS array of the driver's own text elements, while `interval[]` (no
+ * driver-side array parser wired for it, task 1.3) arrives as one raw
+ * Postgres array-literal text string — parsed here via
+ * {@link parseArrayText}. Neither shape is ever assumed; an unrecognized
+ * `raw` throws, caught by {@link convertCell}'s existing wrapper the same
+ * as any other conversion failure.
+ */
+const rawArrayElements = (raw: unknown): ReadonlyArray<unknown> => {
+	if (typeof raw === "string") {
+		return parseArrayText(raw);
+	}
+	if (Array.isArray(raw)) {
+		return raw;
+	}
+	throw new Error(
+		`expected array-literal text or a JS array for an array column, got ${typeof raw}.`,
+	);
+};
+
+/**
+ * Converts one array element against `elementState` (the array column's
+ * `columnState` with `typeNode` swapped for its declared element type,
+ * `mode` carried through unchanged) — `null` (an unquoted `NULL` element,
+ * or the moded-array driver's own `null`) passes through unconverted, the
+ * same rule {@link convertCell} applies at the cell level. Reuses
+ * {@link convertDeclaredValue} rather than duplicating the mode/interval
+ * branches, so element and top-level scalar conversion can never disagree.
+ */
+const convertArrayElement = (
+	raw: unknown,
+	elementState: ColumnState,
+): unknown => {
+	if (raw === null) {
+		return null;
+	}
+	return convertDeclaredValue(raw, elementState);
+};
+
+/**
+ * Converts an array column's cell element-wise against `element` (its
+ * declared element {@link TypeNode}) — one level of nesting only (design.md
+ * Non-Goals: multi-dimensional array text is out of scope, so `element`
+ * itself is never `"array"` here in practice). A single poisoned element
+ * fails the whole array via {@link convertArrayElement}'s reuse of
+ * {@link convertDeclaredValue}'s own throwing branches; there is no partial
+ * result.
+ */
+const convertArrayValue = (
+	raw: unknown,
+	columnState: ColumnState,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
+	const elementState: ColumnState = { ...columnState, typeNode: element };
+	return rawArrayElements(raw).map((rawElement) =>
+		convertArrayElement(rawElement, elementState),
+	);
+};
+
+/**
  * The actual conversion for a cell whose declared column is already known
  * (`convertCell` has excluded `null`/no-`columnState` before this ever
- * runs) — only numeric mode and `interval` have a declared conversion at
- * this contract level (owner decision, task 4.4); every other declared
- * type is already the shape the driver hands back. Split out from
- * {@link convertCell} so each function's own branch count stays low
- * (CRAP ≤ 5).
+ * runs) — array columns route element-wise through
+ * {@link convertArrayValue}; otherwise only numeric mode and `interval`
+ * have a declared conversion at this contract level (owner decision, task
+ * 4.4); every other declared type is already the shape the driver hands
+ * back. Split out from {@link convertCell} so each function's own branch
+ * count stays low (CRAP ≤ 5). The array check comes first: an array
+ * column's own `mode` (e.g. `bigint({mode:'bigint'}).array()`) describes
+ * its *elements*, not the array value itself, so mode can never be checked
+ * before typeName here.
  */
 const convertDeclaredValue = (
 	raw: unknown,
 	columnState: ColumnState,
 ): unknown => {
+	if (columnState.typeNode.typeName === "array") {
+		return convertArrayValue(raw, columnState, columnState.typeNode.element);
+	}
 	if (columnState.mode !== null) {
 		return convertNumericText(String(raw), columnState.mode);
 	}

@@ -31,8 +31,14 @@ const comments = table(app, "comments", {
 	postId: uuid().notNull(),
 	postedAt: timestamptz().notNull(),
 });
+const events = table(app, "events", {
+	id: uuid().primaryKey(),
+	amounts: bigint({ mode: "bigint" }).array(),
+	durations: interval().array(),
+	tags: text().array(),
+});
 
-const tables = { posts, comments };
+const tables = { posts, comments, events };
 
 describe("resolveColumnState (owner review judgment 4 -- the single resolver)", () => {
 	it("resolves a declared column by SQL identity", () => {
@@ -237,6 +243,95 @@ describe("columnPlanForResult + convertRow (task 4.4)", () => {
 		);
 
 		expect(converted).not.toHaveProperty("unexpectedExtraColumn");
+	});
+});
+
+describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conversion)", () => {
+	it("moded and interval array cells convert element-wise; a poisoned element names its column", () => {
+		const node = select(events).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		// moded (bigint) array: the driver hands back a JS array of decimal-text elements.
+		const bigintArray = convertRow(
+			{ id: "x", amounts: ["1", "2", "3"], durations: null, tags: null },
+			plan,
+		);
+		expect(bigintArray.amounts).toEqual([1n, 2n, 3n]);
+
+		// interval[]: the driver hands back raw Postgres array-literal text.
+		const intervalArray = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: '{"1 day","2 days 03:00:00"}',
+				tags: null,
+			},
+			plan,
+		);
+		expect(intervalArray.durations).toEqual([
+			{
+				years: 0,
+				months: 0,
+				days: 1,
+				hours: 0,
+				minutes: 0,
+				seconds: 0,
+				microseconds: 0,
+			},
+			{
+				years: 0,
+				months: 0,
+				days: 2,
+				hours: 3,
+				minutes: 0,
+				seconds: 0,
+				microseconds: 0,
+			},
+		]);
+
+		// NULL elements pass through as null in both moded and interval arrays.
+		const withNulls = convertRow(
+			{
+				id: "x",
+				amounts: ["1", null, "3"],
+				durations: '{"1 day",NULL}',
+				tags: null,
+			},
+			plan,
+		);
+		expect(withNulls.amounts).toEqual([1n, null, 3n]);
+		expect((withNulls.durations as ReadonlyArray<unknown>)[1]).toBeNull();
+
+		// an array column with no element-level conversion (text[]) passes
+		// its elements through raw, unchanged.
+		const textArray = convertRow(
+			{ id: "x", amounts: null, durations: null, tags: ["a", "b"] },
+			plan,
+		);
+		expect(textArray.tags).toEqual(["a", "b"]);
+
+		// a poisoned element fails the whole cell, naming the column -- never
+		// a partial array.
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: ["1", "not-a-number"],
+					durations: null,
+					tags: null,
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "amounts");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unparsable-numeric-text");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
 	});
 });
 
