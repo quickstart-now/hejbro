@@ -959,7 +959,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   `PACKAGES` (dist precheck + assertions 1a–1c), the interim
   file-wiring block is removed; the smoke passes locally end-to-end
   (`pnpm build` first); files `scripts/pack-install-smoke.sh`. ~8m
-- [ ] 7.11 Changesets wiring: fixed group becomes the five-package set,
+- [x] 7.11 Changesets wiring: fixed group becomes the five-package set,
   the `privatePackages` entry is removed, this group's `minor`
   changeset added; `pnpm exec changeset status` exits 0 and its output
   shows all five aligning on the same next version; files
