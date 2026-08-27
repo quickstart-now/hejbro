@@ -26,6 +26,17 @@ export type ColumnState = {
 	readonly defaultValue: ExprNode | null;
 	/** {@link NumericMode}, resolved at the factory; `null` for every column outside the `bigint`/`numeric` factories (task 3.4) — this is compile-time information about *reading* the column, not part of its declared SQL type, so it never reaches `typeNode`, generated SQL, or the snapshot. */
 	readonly mode: NumericMode | null;
+	/**
+	 * Set only by `.notNullElements()` (add-array-ergonomics) — absent for
+	 * every other column (mirrors `ColumnMeta`'s own optional flags, e.g.
+	 * `element?`). `table()` reads this to validate the column is actually
+	 * an `.array()` column (naming it if not) and to derive the backing
+	 * CHECK (`<column>_no_null_elements`) into the table's own checks list;
+	 * `@hejbro/query`'s element conversion reads it for the fail-fast
+	 * guard. The flag itself is never serialized (the derived check is the
+	 * serialized artifact — design decision 2).
+	 */
+	readonly notNullElements?: true;
 };
 
 /**
@@ -51,6 +62,8 @@ export type ColumnMeta = {
 	readonly mode?: NumericMode;
 	/** set only by `.$type<T>()` (D5, task 3.5) — the jsonb brand 3.6 reads instead of falling back to `unknown`. */
 	readonly jsonType?: unknown;
+	/** set only by `.array().notNullElements()` (add-array-ergonomics) — narrows the element read/write type from `T | null` to `T` (`ts-type-map.ts`'s `BaseTsType`, this file's `ColumnReadType`), backed by the CHECK `table()` derives. Never carried forward by `.array()`'s own {@link ArrayCarriedFlags} — it can only ever be set by calling `.notNullElements()` after `.array()`, never inherited from a pre-array `TMeta`. */
+	readonly notNullElements?: boolean;
 };
 
 /**
@@ -170,6 +183,32 @@ export type ColumnBuilder<
 		ArrayCarriedFlags<TMeta> & { typeName: "array"; element: TMeta["typeName"] }
 	>;
 	/**
+	 * Narrows this array column's element type from `T | null` to `T`
+	 * (add-array-ergonomics) — backed by a CHECK constraint `table()`
+	 * derives into the table's own checks list
+	 * (`<column>_no_null_elements`,
+	 * `array_position("<column>", null) is null`), so the narrowing is
+	 * never an unchecked assertion: the database enforces exactly what the
+	 * type claims. Contrast `.$type<T>()`, which is explicitly barred from
+	 * vouching for the null axis (see its own tsdoc) — this method exists
+	 * specifically because that axis needs a different, constraint-backed
+	 * mechanism.
+	 *
+	 * Type-restricted to an `.array()` column (`TFamily extends "array"`,
+	 * else the return type is `never`) — kept as well because it's cheap,
+	 * but not the sole defense (a generic `TFamily` at a call site isn't
+	 * always narrowed to a concrete literal). The real, runtime-enforced
+	 * contract lives one step later: this method itself never throws (a
+	 * bare builder has no column name yet to name in an error), it just
+	 * sets the flag unconditionally — `table()` is where a column first
+	 * gets a name, so `table()` is where misuse throws
+	 * `invalid-not-null-elements`, naming the offending column (design
+	 * decision 3).
+	 */
+	notNullElements(): TFamily extends "array"
+		? ColumnBuilder<TFamily, TMeta & { notNullElements: true }>
+		: never;
+	/**
 	 * Brands this column's TypeScript type as `T` (D5) — the way a `jsonb`
 	 * column opts out of `unknown` (`@hejbro/query`'s `column-map.ts`
 	 * reads `TMeta["jsonType"]` instead of falling back to the base
@@ -220,14 +259,17 @@ export type BuilderFamily<TBuilder> =
  * of `ReadonlyArray<Payload>`, since it never notices the array wrapping.
  * The array-shaped branch below is checked first and re-applies
  * `ReadonlyArray<>` around the carried brand — with `| null` on the
- * element (#349): the brand narrows the ELEMENT, but element nullability
+ * element (#349), except under `.notNullElements()`
+ * (add-array-ergonomics), which drops it exactly like `BaseTsType`'s own
+ * array branch does: the brand narrows the ELEMENT, but element nullability
  * is the array wrap's own axis (Postgres arrays are element-nullable,
  * always) and the `$type` constraint is checked against the *element's*
  * base before `.array()` ever wraps it, so letting the brand strip the
  * `null` here would be exactly the unchecked lie the "narrowing only"
- * guarantee exists to prevent. A non-array `TMeta` (or an array with no
- * carried brand, left to `BaseTsType`'s own array handling) falls
- * through unchanged.
+ * guarantee exists to prevent — `notNullElements` is the one axis allowed
+ * to strip it, because it is constraint-backed, not a bare assertion. A
+ * non-array `TMeta` (or an array with no carried brand, left to
+ * `BaseTsType`'s own array handling) falls through unchanged.
  */
 export type ColumnReadType<TBuilder extends ColumnBuilder> =
 	TBuilder extends ColumnBuilder<infer _TFamily, infer TMeta>
@@ -235,7 +277,9 @@ export type ColumnReadType<TBuilder extends ColumnBuilder> =
 				readonly typeName: "array";
 				readonly jsonType: infer TBrand;
 			}
-			? ReadonlyArray<TBrand | null>
+			? TMeta extends { readonly notNullElements: true }
+				? ReadonlyArray<TBrand>
+				: ReadonlyArray<TBrand | null>
 			: TMeta extends { readonly jsonType: infer TBrand }
 				? TBrand
 				: BaseTsType<TMeta>
@@ -339,4 +383,11 @@ export const createColumnBuilder = <
 		}),
 	$type: <T extends BaseTsType<TMeta>>() =>
 		createColumnBuilder<TFamily, TMeta & { jsonType: T }>(columnState),
+	notNullElements: (() =>
+		createColumnBuilder<TFamily, TMeta & { notNullElements: true }>({
+			...columnState,
+			notNullElements: true,
+		})) as () => TFamily extends "array"
+		? ColumnBuilder<TFamily, TMeta & { notNullElements: true }>
+		: never,
 });

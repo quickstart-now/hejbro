@@ -1,7 +1,8 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
-import type { ColumnRef, ExprNode } from "../expr/ast";
-import { columnRef } from "../expr/ast";
+import type { ColumnRef, Expr, ExprNode } from "../expr/ast";
+import { columnRef, expr } from "../expr/ast";
+import { isNull } from "../expr/operators";
 import { collectColumnRefs } from "../expr/render-sql";
 import { someExprNode } from "../expr/walk";
 import {
@@ -16,6 +17,7 @@ import type {
 	ColumnState,
 } from "../types/column-builder";
 import type { CheckDeclaration } from "./check";
+import { check } from "./check";
 import type { RlsDeclaration, RlsInput } from "./rls";
 import { bindRls } from "./rls";
 import type { SchemaDeclaration } from "./schema";
@@ -432,6 +434,105 @@ const validateIndexExpressions = (
 	assertNoForeignIndexExpressionColumn(owner, tableName, indexes);
 };
 
+/**
+ * The first column carrying `columnState.notNullElements` while not itself
+ * an `.array()` column, if any (add-array-ergonomics design decision 3):
+ * `.notNullElements()` on the builder never throws — a bare builder has no
+ * column name yet to name in an error — so `table()`, the first point a
+ * column actually has a name, is where misuse is caught.
+ */
+const findInvalidNotNullElementsColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.notNullElements === true &&
+			entry.columnState.typeNode.typeName !== "array",
+	);
+
+/** Rejects a `.notNullElements()` column that isn't actually an `.array()` column, naming the column (design decision 3) — see {@link findInvalidNotNullElementsColumn}. */
+const assertNotNullElementsOnArrayColumns = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findInvalidNotNullElementsColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-not-null-elements",
+		`table "${tableName}" column "${invalid.columnName}" calls .notNullElements() but is declared "${invalid.columnState.typeNode.typeName}", not an .array() column. Next: only an .array() column holds elements — call .array() before .notNullElements(), or drop .notNullElements() from "${invalid.columnName}".`,
+	);
+};
+
+/**
+ * `array_position("<schema>"."<table>"."<column>", null) is null`, as a
+ * structured expression (a `columnRef` + `functionCall` + null `literal`,
+ * wrapped in the existing `isNull` operator's `nullTest`) — never a
+ * `rawSql`/`sqlTemplate` fragment: `retarget.ts`'s rename machinery only
+ * updates a `columnRef` node's own `columnName`, so a raw-text fragment
+ * would silently go stale across a column rename while every other part
+ * of the check machinery (name, snapshot) tracks the rename correctly.
+ * `isNull`/`expr` are the same house helpers `check()`'s own callers use
+ * for every hand-written check (`check.test.ts`), so the derived check is
+ * built exactly the way a user would build it by hand.
+ */
+const notNullElementsCheckExpression = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	columnName: string,
+): Expr<"boolean"> =>
+	isNull(
+		expr("unknown", {
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "array_position",
+			args: [
+				{
+					nodeKind: "columnRef",
+					schemaName: owner.schemaName,
+					tableName,
+					columnName,
+				},
+				{ nodeKind: "literal", literal: { literalKind: "null" } },
+			],
+		}),
+	);
+
+/**
+ * `[check(...)]` for a column declared `.array().notNullElements()`, else
+ * `[]` — {@link deriveNotNullElementsChecks}'s own `flatMap` step
+ * (add-array-ergonomics design decision 1: the CHECK is derived at
+ * `table()` build time into the declaration's own checks list, so it
+ * rides the existing check machinery — diff/removal/collision detection
+ * come free). Name is owner-settled: `<column>_no_null_elements`.
+ */
+const notNullElementsCheckOrEmpty = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	entry: ColumnEntry,
+): ReadonlyArray<CheckDeclaration> => {
+	if (!entry.columnState.notNullElements) {
+		return [];
+	}
+	return [
+		check(
+			`${entry.columnName}_no_null_elements`,
+			notNullElementsCheckExpression(owner, tableName, entry.columnName),
+		),
+	];
+};
+
+/** Every `.notNullElements()` column's derived CHECK, in column declaration order — see {@link notNullElementsCheckOrEmpty}. */
+const deriveNotNullElementsChecks = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ReadonlyArray<CheckDeclaration> =>
+	columnEntries.flatMap((entry) =>
+		notNullElementsCheckOrEmpty(owner, tableName, entry),
+	);
+
 /** Rejects duplicate CHECK names, subqueries, and cross-table column refs, in that order (D50). */
 const validateChecks = (
 	owner: SchemaDeclaration,
@@ -684,6 +785,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const declaredAt = captureDeclarationSite();
 	assertSqlName(tableName, "table", null);
 	const columnEntries = buildColumnEntries(tableName, columns);
+	assertNotNullElementsOnArrayColumns(tableName, columnEntries);
 	const refsObject = buildColumnRefs<TColumns>(owner, tableName, columnEntries);
 
 	const resolvedExtras = extras?.(refsObject) ?? {};
@@ -691,7 +793,10 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const foreignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
 		resolveForeignKey(owner, tableName, input),
 	);
-	const checks = resolvedExtras.checks ?? [];
+	const checks = [
+		...(resolvedExtras.checks ?? []),
+		...deriveNotNullElementsChecks(owner, tableName, columnEntries),
+	];
 
 	const knownColumnNames = new Set(
 		columnEntries.map((entry) => entry.columnName),

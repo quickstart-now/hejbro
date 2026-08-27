@@ -141,6 +141,69 @@ describe("array", () => {
 	});
 });
 
+describe("notNullElements() (add-array-ergonomics, task 1.1)", () => {
+	it("flags columnState.notNullElements on an .array() column", () => {
+		const built = text().array().notNullElements();
+		expect(built.columnState.notNullElements).toBe(true);
+		// the flag alone -- the type node/element are otherwise untouched.
+		expect(built.columnState.typeNode).toEqual({
+			typeName: "array",
+			element: { typeName: "text" },
+		});
+	});
+
+	it("carries the flag in TMeta", () => {
+		expectTypeOf(text().array().notNullElements()).toEqualTypeOf<
+			ColumnBuilder<
+				"array",
+				{ typeName: "array"; element: "text" } & { notNullElements: true }
+			>
+		>();
+	});
+
+	it("calling notNullElements() on a non-array builder does not itself throw -- a bare builder has no column name yet to name in an error", () => {
+		// note: the type-level guard (`TFamily extends "array" ? ... : never`)
+		// resolves the *return type* to `never` here (`text()`'s `TFamily` is
+		// `"text"`), but a call whose result type is `never` still
+		// type-checks -- TS's control-flow narrowing doesn't reject the call
+		// site itself. The flag is simply carried, unconditionally, on
+		// `columnState` -- misuse is caught one step later, at `table()`,
+		// the first point a column actually has a name (design decision 3,
+		// next test below). Cast back to a concrete `ColumnBuilder` purely
+		// to inspect the (real, unconditionally set) runtime `columnState` --
+		// the cast is test-only plumbing around `never`, not part of the
+		// contract.
+		const built = text().notNullElements() as unknown as ColumnBuilder<
+			"text",
+			{ typeName: "text" } & { notNullElements: true }
+		>;
+		expect(built.columnState.notNullElements).toBe(true);
+		expect(built.columnState.typeNode).toEqual({ typeName: "text" });
+	});
+
+	it("table() throws invalid-not-null-elements, naming the offending column, when a non-array column carries the flag", () => {
+		const buildMisusedTable = () =>
+			table(schema("app"), "posts", {
+				id: uuid().primaryKey(),
+				title: text().notNullElements(),
+			});
+		expect(buildMisusedTable).toThrow();
+		try {
+			buildMisusedTable();
+			expect.unreachable("buildMisusedTable() should have thrown");
+		} catch (error) {
+			expect((error as { code: string }).code).toBe(
+				"invalid-not-null-elements",
+			);
+			// the message names the actual (snake_cased) column, not just the
+			// error code -- a message that stayed green with the column name
+			// deleted would not prove misuse is actually reported (mutation
+			// standard).
+			expect((error as { message: string }).message).toContain('"title"');
+		}
+	});
+});
+
 describe("parameterized factories", () => {
 	it("varchar defaults to no length", () => {
 		expect(varchar().columnState.typeNode).toEqual({

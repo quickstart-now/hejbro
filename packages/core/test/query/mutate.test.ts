@@ -399,3 +399,35 @@ describe('datetime write-acceptance narrowing (task 2.5, #322 -- STRICT narrows 
 		};
 	});
 });
+
+describe("notNullElements write-acceptance (add-array-ergonomics, task 1.2)", () => {
+	// `MutationValue` reuses `ColumnReadType` directly (design.md decision 2),
+	// so a `.notNullElements()` column's write type excludes `null` on the
+	// element exactly like its read type does -- no separate write-side rule.
+	const catalogItems = table(app, "catalog_items", {
+		id: uuid().primaryKey(),
+		tags: text().array().notNull(),
+		labels: text().array().notNullElements().notNull(),
+	});
+
+	it("a plain array column still accepts a null element", () => {
+		const _accepted: MutationRow<typeof catalogItems> = {
+			tags: ["a", null],
+		};
+	});
+
+	it("a notNullElements column accepts a clean array of its element type", () => {
+		const _accepted: MutationRow<typeof catalogItems> = {
+			labels: ["a", "b"],
+		};
+	});
+
+	it("a notNullElements column rejects a null element at compile time", () => {
+		const _rejected: MutationRow<typeof catalogItems> = {
+			// @ts-expect-error labels is declared .notNullElements() -- its
+			// element type excludes null on the write side too (reuses
+			// ColumnReadType, see this describe block's own note above).
+			labels: ["a", null],
+		};
+	});
+});
