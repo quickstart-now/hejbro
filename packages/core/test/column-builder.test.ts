@@ -482,6 +482,15 @@ describe("bigint/numeric width modes (D3, task 3.4)", () => {
 					readonly mode: DefaultNumericMode;
 				}>
 			>();
+			// the fallback's own resolved type, pinned concretely: severing
+			// DefaultBigintMode's `typeof` link to DEFAULT_BIGINT_MODE moves this
+			// side alone, which the consistency bond above can't see.
+			expectTypeOf<
+				BaseTsType<{ readonly typeName: "bigint" }>
+			>().toEqualTypeOf<bigint>();
+			expectTypeOf<
+				BaseTsType<{ readonly typeName: "numeric" }>
+			>().toEqualTypeOf<string>();
 		});
 	});
 
