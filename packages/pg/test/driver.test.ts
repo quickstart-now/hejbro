@@ -353,6 +353,13 @@ describe("pgDriver transaction (task 5.4)", () => {
 		);
 		const driver = pgDriver(pool);
 		const originalError = new Error("callback boom");
+		// captured before the throw: `rejects.toBe(originalError)` alone
+		// only proves reference identity -- it would still pass if
+		// something did `Object.assign(originalError, { rollbackError })`
+		// before rethrowing the same reference. Comparing own keys before
+		// and after closes that gap (owner ruling: zero new contract
+		// surface means no new field either, not just no new object).
+		const keysBeforeRollback = Reflect.ownKeys(originalError);
 
 		// the caller sees exactly the callback's own error -- never the
 		// ROLLBACK failure, never a wrapper, never a new field carrying it
@@ -362,6 +369,7 @@ describe("pgDriver transaction (task 5.4)", () => {
 				throw originalError;
 			}),
 		).rejects.toBe(originalError);
+		expect(Reflect.ownKeys(originalError)).toEqual(keysBeforeRollback);
 
 		// exactly one release() call (pg-pool's own _releaseOnce throws on
 		// a second call -- this is what a double-release mutation trips),
