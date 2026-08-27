@@ -161,9 +161,14 @@ type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
  * decides the shape, `bigint`/`numeric`'s resolved mode narrows it
  * further, and `.array()` (task 3.15) wraps the *element's* base mapping
  * (mode read off the same `TMeta`, since `ArrayCarriedFlags` already
- * hoists it there) in a `ReadonlyArray`. This maps the scalar type
- * only — nullability from `notNull` is select-result inference's job
- * (task 3.10), not this one's, and a `.$type<T>()` brand narrowing this
+ * hoists it there) in a `ReadonlyArray` — with `| null` on the element
+ * (#349): Postgres arrays are element-nullable always (no DDL can forbid
+ * it; `notNull` binds to the array itself), and the query-execution spec
+ * already promises "every `NULL` element is `null`" on arrival, so an
+ * element type without `null` was the type lying about specified
+ * behavior. Column-level nullability from `notNull` is still
+ * select-result inference's job (task 3.10), not this one's — two
+ * independent axes — and a `.$type<T>()` brand narrowing this
  * further is `@hejbro/query`'s `column-map.ts`'s job, not this one's
  * either (this file never reads `TMeta["jsonType"]`, see
  * {@link BaseScalarTsType}).
@@ -171,12 +176,10 @@ type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 export type BaseTsType<TMeta extends ColumnMeta> = TMeta extends {
 	readonly typeName: "array";
 }
-	? ReadonlyArray<
-			BaseScalarTsType<
-				TMeta extends { readonly element?: infer TElement } ? TElement : never,
-				TMeta
-			>
-		>
+	? ReadonlyArray<BaseScalarTsType<
+			TMeta extends { readonly element?: infer TElement } ? TElement : never,
+			TMeta
+		> | null>
 	: BaseScalarTsType<
 			TMeta extends { readonly typeName: infer TTypeName } ? TTypeName : never,
 			TMeta

@@ -41,12 +41,10 @@ const writeArrayText = (elements: ReadonlyArray<string | null>): string => {
 	const compiled = compile(
 		insert(holder).values({
 			id: "00000000-0000-0000-0000-000000000000",
-			// deliberate mis-assertion (#349, found by this test): the
-			// write-side array element type has no `| null` yet, while the
-			// runtime writer renders a null element as the unquoted NULL
-			// token this property must cover -- the grammar owns null
-			// elements even where the type surface still denies them.
-			tags: [...elements] as ReadonlyArray<string>,
+			// #349: the write-side element type carries `| null`, so the
+			// null-element corner flows through .values() with no assertion
+			// (this exact site carried a documented mis-assertion until then).
+			tags: [...elements],
 		}),
 	);
 	const literalText = compiled.params[1];

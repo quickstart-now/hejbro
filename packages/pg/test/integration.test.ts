@@ -344,7 +344,12 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 					duration: mixedSignDuration,
 					created: new Date("1999-12-31T23:59:59.999Z"),
 					noteText: "mixed note",
-					amounts: [-1, 0, 42],
+					// #349: a SQL null element written through the typed
+					// builder (writer renders the unquoted NULL token) and
+					// read back as `null` at the same position -- the
+					// execution spec's "every NULL element is null" sentence,
+					// witnessed against a real server.
+					amounts: [-1, null, 42],
 					precisions: ["-123.450000"],
 					approx: [-0.5],
 					durations: mixedSignDurationsArray,
@@ -428,7 +433,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			"1999-12-31T23:59:59.999Z",
 		);
 		expect(mixedRow.noteText).toBe("mixed note");
-		expect(mixedRow.amounts).toEqual([-1, 0, 42]);
+		expect(mixedRow.amounts).toEqual([-1, null, 42]);
 		expect(mixedRow.precisions).toEqual(["-123.450000"]);
 		expect(mixedRow.approx).toEqual([-0.5]);
 		expect(mixedRow.durations).toEqual(mixedSignDurationsArray);

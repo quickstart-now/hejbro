@@ -48,7 +48,10 @@ type Posts = typeof posts;
 type TextWrite = string | Expr<"text"> | Expr<"unknown">;
 type NumericNumberWrite = number | Expr<"numeric"> | Expr<"unknown">;
 type JsonWrite = Expr<"json"> | Expr<"unknown">;
-type TextArrayWrite = ReadonlyArray<string> | Expr<"array"> | Expr<"unknown">;
+type TextArrayWrite =
+	| ReadonlyArray<string | null>
+	| Expr<"array">
+	| Expr<"unknown">;
 
 /** The `sql` escape hatch value the unwritable (`json`/`jsonb`) columns use in every valid-row fixture below. */
 const payloadExpr = sql`'{"kind":"widget"}'::jsonb`;

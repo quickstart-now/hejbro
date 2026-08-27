@@ -153,21 +153,24 @@ describe("column-map (D1/D3/D5, task 3.6)", () => {
 		>().toEqualTypeOf<Uint8Array>();
 	});
 
-	it("array() (task 3.15) maps through the element, mode/brand included", () => {
+	it("array() (task 3.15) maps through the element, mode/brand included -- elements nullable (#349)", () => {
 		const textArray = text().array();
 		expectTypeOf<ColumnTsType<typeof textArray>>().toEqualTypeOf<
-			ReadonlyArray<string>
+			ReadonlyArray<string | null>
 		>();
 
 		const numberModeBigintArray = bigint<"number">().array();
 		expectTypeOf<ColumnTsType<typeof numberModeBigintArray>>().toEqualTypeOf<
-			ReadonlyArray<number>
+			ReadonlyArray<number | null>
 		>();
 
 		type Payload = { readonly kind: "widget" };
 		const brandedJsonbArray = jsonb().$type<Payload>().array();
+		// the brand narrows the ELEMENT; the null axis belongs to the array
+		// wrap itself (Postgres arrays are element-nullable, always) and is
+		// never removable by a brand (#349).
 		expectTypeOf<ColumnTsType<typeof brandedJsonbArray>>().toEqualTypeOf<
-			ReadonlyArray<Payload>
+			ReadonlyArray<Payload | null>
 		>();
 	});
 });

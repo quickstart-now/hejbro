@@ -53,10 +53,12 @@ describe("select-result (D1/D3/D5, task 3.10) -- whole-table projection", () => 
 			SelectResult<Posts>["titleRequired"]
 		>().toEqualTypeOf<string>();
 
-		// element: array() wraps the base mapping (nullable since `tags` isn't notNull).
-		expectTypeOf<
-			SelectResult<Posts>["tags"]
-		>().toEqualTypeOf<ReadonlyArray<string> | null>();
+		// element: array() wraps the base mapping (nullable since `tags` isn't
+		// notNull); elements themselves carry `| null` (#349 -- Postgres
+		// arrays are element-nullable regardless of the column's own notNull).
+		expectTypeOf<SelectResult<Posts>["tags"]>().toEqualTypeOf<ReadonlyArray<
+			string | null
+		> | null>();
 
 		// mode: bigint({mode:'number'}) reads as number, not the 'bigint' default.
 		expectTypeOf<SelectResult<Posts>["amount"]>().toEqualTypeOf<
@@ -97,7 +99,7 @@ describe("select-result (D1/D3/D5, task 3.10) -- whole-table projection", () => 
 
 	it("composite cases: accumulated TMeta arrives intact, not just one field at a time", () => {
 		expectTypeOf<SelectResult<Posts>["tagsRequired"]>().toEqualTypeOf<
-			ReadonlyArray<string>
+			ReadonlyArray<string | null>
 		>();
 		expectTypeOf<
 			SelectResult<Posts>["amountRequired"]

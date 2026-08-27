@@ -219,9 +219,15 @@ export type BuilderFamily<TBuilder> =
  * "brand wins" check would then return the bare brand (`Payload`) instead
  * of `ReadonlyArray<Payload>`, since it never notices the array wrapping.
  * The array-shaped branch below is checked first and re-applies
- * `ReadonlyArray<>` around the carried brand; a non-array `TMeta` (or an
- * array with no carried brand, left to `BaseTsType`'s own array handling)
- * falls through unchanged.
+ * `ReadonlyArray<>` around the carried brand — with `| null` on the
+ * element (#349): the brand narrows the ELEMENT, but element nullability
+ * is the array wrap's own axis (Postgres arrays are element-nullable,
+ * always) and the `$type` constraint is checked against the *element's*
+ * base before `.array()` ever wraps it, so letting the brand strip the
+ * `null` here would be exactly the unchecked lie the "narrowing only"
+ * guarantee exists to prevent. A non-array `TMeta` (or an array with no
+ * carried brand, left to `BaseTsType`'s own array handling) falls
+ * through unchanged.
  */
 export type ColumnReadType<TBuilder extends ColumnBuilder> =
 	TBuilder extends ColumnBuilder<infer _TFamily, infer TMeta>
@@ -229,7 +235,7 @@ export type ColumnReadType<TBuilder extends ColumnBuilder> =
 				readonly typeName: "array";
 				readonly jsonType: infer TBrand;
 			}
-			? ReadonlyArray<TBrand>
+			? ReadonlyArray<TBrand | null>
 			: TMeta extends { readonly jsonType: infer TBrand }
 				? TBrand
 				: BaseTsType<TMeta>
