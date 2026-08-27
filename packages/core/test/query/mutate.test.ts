@@ -150,6 +150,9 @@ describe("mutation builders", () => {
 			columns: [
 				{
 					alias: "id",
+					// the caller's verbatim projection key, carried for the query
+					// layer's row-key remap (#339); never rendered, never stored.
+					resultKey: "id",
 					expr: expect.objectContaining({
 						nodeKind: "columnRef",
 						columnName: "id",

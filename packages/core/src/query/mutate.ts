@@ -270,8 +270,12 @@ const resolveReturning = (
 	}
 	return {
 		returningKind: "columns",
+		// Same split as select()'s projection (#339): `alias` is the rendered
+		// snake label, `resultKey` the caller's verbatim TS key for row
+		// conversion -- never rendered, never stored.
 		columns: entries.map(([alias, value]) => ({
 			alias: toSnakeCase(alias),
+			resultKey: alias,
 			expr: value.exprNode,
 		})),
 	};

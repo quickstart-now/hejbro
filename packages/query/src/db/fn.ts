@@ -67,6 +67,7 @@ const setofTableCall = (
 		},
 		plan: columns.map((column) => ({
 			alias: column.columnName,
+			resultKey: column.columnKey,
 			columnState: column.columnState,
 		})),
 	};
@@ -291,7 +292,10 @@ const extractScalarValue = (
 	// defined here; `noUncheckedIndexedAccess` still requires this to be
 	// spelled as an optional access, not a real optional path (nothing
 	// left for a test to leave uncovered -- CRAP follow-up, batch C).
-	const [converted] = convertRows([row], [{ alias: "result", columnState }]);
+	const [converted] = convertRows(
+		[row],
+		[{ alias: "result", resultKey: "result", columnState }],
+	);
 	return converted?.result;
 };
 

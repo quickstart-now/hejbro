@@ -157,6 +157,8 @@ export type ProjectionNode =
 			readonly projectionKind: "columns";
 			readonly columns: ReadonlyArray<{
 				readonly alias: string;
+				/** The caller's verbatim projection key (#339) — the key the query layer keys converted result rows by. TS-side only: `alias` (snake, per medium) is what rendering emits and what the expression codec stores, so this field never reaches SQL text or a snapshot; absent on a codec-decoded node (a stored view query), where no runtime row is ever converted. */
+				readonly resultKey?: string;
 				readonly expr: ExprNode;
 			}>;
 	  }
@@ -195,6 +197,8 @@ export type ReturningNode =
 			readonly returningKind: "columns";
 			readonly columns: ReadonlyArray<{
 				readonly alias: string;
+				/** Same contract as `ProjectionNode`'s own `resultKey` (#339). */
+				readonly resultKey?: string;
 				readonly expr: ExprNode;
 			}>;
 	  };

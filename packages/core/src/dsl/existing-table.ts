@@ -31,6 +31,7 @@ export const existingTable = <TColumns extends Record<string, ColumnBuilder>>(
 		schema: owner,
 		tableName,
 		columns: columnEntries.map((entry) => ({
+			columnKey: entry.columnKey,
 			columnName: entry.columnName,
 			columnState: entry.columnState,
 		})),
