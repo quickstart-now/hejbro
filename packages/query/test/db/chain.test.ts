@@ -1,4 +1,15 @@
-import { bigint, eq, schema, select, table, text, uuid } from "@hejbro/core";
+import {
+	bigint,
+	deleteFrom,
+	eq,
+	insert,
+	schema,
+	select,
+	table,
+	text,
+	update,
+	uuid,
+} from "@hejbro/core";
 import { describe, expect, it, vi } from "vitest";
 import { compile } from "../../src/compile/compile";
 import { db } from "../../src/db/db";
@@ -126,5 +137,147 @@ describe("db().select chain (task 7.1)", () => {
 
 		// biome-ignore lint/style/useNamingConvention: same snake_case alias key as the fixture above.
 		expect(rows).toEqual([{ the_status: "published" }]);
+	});
+});
+
+describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
+	it("insert(...).values(...) with no returning() resolves exactly like db.execute of the same statement -- empty rows, one driver call, inert until awaited", async () => {
+		const driver = fakeDriver([]);
+		const handle = db({ posts }, driver);
+		const row = { id: rawRow.id, status: "draft" };
+
+		const chain = handle.insert(posts).values(row);
+		expect(driver.execute).not.toHaveBeenCalled();
+
+		const chainRows = await chain;
+		const executeRows = await handle.execute(insert(posts).values(row));
+
+		expect(chainRows).toEqual([]);
+		expect(chainRows).toEqual(executeRows);
+		expect(driver.execute).toHaveBeenCalledTimes(2);
+	});
+
+	it("insert(...).values(...).returning() delegates to core's own insert().values().returning() -- compiled SQL identical", () => {
+		const driver = fakeDriver([]);
+		const handle = db({ posts }, driver);
+		const row = { id: rawRow.id, status: "draft" };
+
+		const chainCompiled = handle
+			.insert(posts)
+			.values(row)
+			.returning()
+			.compile();
+		const coreCompiled = compile(insert(posts).values(row).returning());
+
+		expect(chainCompiled).toEqual(coreCompiled);
+	});
+
+	it("insert(...).returning(projection) forwards the explicit projection to core -- never silently widened to every column (delegation mutation: an ignored projection would drift)", () => {
+		const driver = fakeDriver([]);
+		const handle = db({ posts }, driver);
+		const row = { id: rawRow.id, status: "draft" };
+
+		const chainCompiled = handle
+			.insert(posts)
+			.values(row)
+			.returning({ insertedId: posts.id })
+			.compile();
+		const coreCompiled = compile(
+			insert(posts).values(row).returning({ insertedId: posts.id }),
+		);
+
+		expect(chainCompiled).toEqual(coreCompiled);
+		expect(chainCompiled.sql).not.toEqual(
+			compile(insert(posts).values(row).returning()).sql,
+		);
+	});
+
+	it("insert(...).values(...).onConflictDoNothing(...) delegates to core's own onConflictDoNothing()", () => {
+		const driver = fakeDriver([]);
+		const handle = db({ posts }, driver);
+		const row = { id: rawRow.id, status: "draft" };
+
+		const chainCompiled = handle
+			.insert(posts)
+			.values(row)
+			.onConflictDoNothing(posts.id)
+			.returning()
+			.compile();
+		const coreCompiled = compile(
+			insert(posts).values(row).onConflictDoNothing(posts.id).returning(),
+		);
+
+		expect(chainCompiled).toEqual(coreCompiled);
+	});
+
+	it("insert(...).values(...).onConflictDoUpdate(...) delegates to core's own onConflictDoUpdate()", () => {
+		const driver = fakeDriver([]);
+		const handle = db({ posts }, driver);
+		const row = { id: rawRow.id, status: "draft" };
+
+		const chainCompiled = handle
+			.insert(posts)
+			.values(row)
+			.onConflictDoUpdate({ target: [posts.id], set: { status: "updated" } })
+			.returning()
+			.compile();
+		const coreCompiled = compile(
+			insert(posts)
+				.values(row)
+				.onConflictDoUpdate({ target: [posts.id], set: { status: "updated" } })
+				.returning(),
+		);
+
+		expect(chainCompiled).toEqual(coreCompiled);
+	});
+
+	it("update(...).set(...) with no returning() resolves like db.execute; .where()/.returning() delegate to core", async () => {
+		const driver = fakeDriver([]);
+		const handle = db({ posts }, driver);
+
+		const noReturning = await handle.update(posts).set({ status: "archived" });
+		expect(noReturning).toEqual([]);
+
+		const chainCompiled = handle
+			.update(posts)
+			.set({ status: "archived" })
+			.where(eq(posts.status, "draft"))
+			.returning({ archivedId: posts.id })
+			.compile();
+		const coreCompiled = compile(
+			update(posts)
+				.set({ status: "archived" })
+				.where(eq(posts.status, "draft"))
+				.returning({ archivedId: posts.id }),
+		);
+
+		expect(chainCompiled).toEqual(coreCompiled);
+		expect(chainCompiled.sql).not.toEqual(
+			compile(update(posts).set({ status: "archived" }).returning()).sql,
+		);
+	});
+
+	it("deleteFrom(...) with no returning() resolves like db.execute; .where()/.returning() delegate to core", async () => {
+		const driver = fakeDriver([]);
+		const handle = db({ posts }, driver);
+
+		const noReturning = await handle.deleteFrom(posts);
+		expect(noReturning).toEqual([]);
+
+		const chainCompiled = handle
+			.deleteFrom(posts)
+			.where(eq(posts.status, "draft"))
+			.returning({ deletedId: posts.id })
+			.compile();
+		const coreCompiled = compile(
+			deleteFrom(posts)
+				.where(eq(posts.status, "draft"))
+				.returning({ deletedId: posts.id }),
+		);
+
+		expect(chainCompiled).toEqual(coreCompiled);
+		expect(chainCompiled.sql).not.toEqual(
+			compile(deleteFrom(posts).returning()).sql,
+		);
 	});
 });

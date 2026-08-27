@@ -273,6 +273,12 @@ export type Db<
 	 * on any stage never touches the driver.
 	 */
 	select: ChainApi["select"];
+	/** Thenable `insert` chain (task 7.2, group 7 decision ②) — mirrors core's `insert(target).values(rows)`. */
+	insert: ChainApi["insert"];
+	/** Thenable `update` chain (task 7.2, group 7 decision ②) — mirrors core's `update(target).set(values)`. */
+	update: ChainApi["update"];
+	/** Thenable `deleteFrom` chain (task 7.2, group 7 decision ②) — mirrors core's `deleteFrom(target)`. */
+	deleteFrom: ChainApi["deleteFrom"];
 };
 
 /**
@@ -356,6 +362,6 @@ export const db = <TSchema extends Schema>(
 		// unscoped chains run directly on the driver, exactly like the
 		// unscoped `fn` member above -- driver already structurally
 		// satisfies DriverSession, no transaction to open.
-		select: createChainApi((send) => send(driver), declarations.tables).select,
+		...createChainApi((send) => send(driver), declarations.tables),
 	};
 };
