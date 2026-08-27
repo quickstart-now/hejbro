@@ -405,8 +405,23 @@ describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => 
 	// stack trace (the same axis-isolation lesson the 7.2 rework's
 	// mutation-testing round already forced onto the mutation *chain*
 	// tests, applied here to the wiring tests too).
+	//
+	// Named per the planner/reviewer's own W1-W4 wiring-point table
+	// (measured against a pre-buildTx-refactor tree, `706fd1c`):
+	//   W1 db.ts's unscoped handle -- (send) => send(driver)
+	//   W2 context.ts's `db.as(ctx)` scoped handle -- (send) => scopedRun("db.as", send)
+	//   W3 context.ts's `db.as(ctx).transaction(cb)` tx -- (send) => send(session)
+	//   W4 transaction.ts's `db.transaction(cb)` tx -- (send) => send(session)
+	// W3/W4 no longer read as two hand-written `const tx: Tx = {...}`
+	// object literals in the current tree -- both now call the shared
+	// `transaction.ts` `buildTx(session, tables)` (task 7.4's own
+	// dedup), but the two *call sites* (context.ts's `scopedTransaction`
+	// for W3, transaction.ts's `createTransactionApi` for W4) stay
+	// exactly as distinct as before, which is what each test below
+	// removes one at a time. W1 needs no dedicated test here -- it's
+	// already exhaustively bound by every 7.1/7.2 await test.
 
-	it("scoped and tx chains run under their context/session (recorded SQL proves it) -- wiring point 2, ScopedDb's own chain", async () => {
+	it("scoped and tx chains run under their context/session (recorded SQL proves it) -- W2, ScopedDb's own chain", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver, { roles: [roleName("app_reader")] });
 
@@ -426,7 +441,7 @@ describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => 
 		expect(sentPerTransaction[0]?.[2]?.sql).toContain("posts");
 	});
 
-	it("db.as(context).transaction(cb)'s tx chain shares the one context-applied transaction -- wiring point 4", async () => {
+	it("db.as(context).transaction(cb)'s tx chain shares the one context-applied transaction -- W3", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver, { roles: [roleName("app_reader")] });
 
@@ -446,7 +461,7 @@ describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => 
 		expect(sentPerTransaction[0]?.[2]?.sql).toContain("posts");
 	});
 
-	it("a plain db.transaction(cb)'s tx chain shares its one transaction, no context to apply -- wiring point 3", async () => {
+	it("a plain db.transaction(cb)'s tx chain shares its one transaction, no context to apply -- W4", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 
