@@ -594,4 +594,29 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 			"select 2",
 		]);
 	});
+
+	it("driver.setupSession itself sends the IntervalStyle pin to the session it's given (spec: 'inside its session-setup hook ... SHALL send set intervalstyle')", async () => {
+		// invoked directly, not through execute()/transaction() -- the
+		// contract (driver-contract's own tsdoc) makes setupSession a
+		// mandatory, independently callable member, and the spec sentence
+		// is about what *it* does, not just an outcome the checkout paths
+		// happen to produce. A no-op setupSession would still leave every
+		// execute()/transaction() pin test above green, since those only
+		// ever observe it indirectly through a checkout.
+		const { pool } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+		const received: Array<unknown> = [];
+		const stubSession = {
+			execute: vi.fn(async (compiled: unknown) => {
+				received.push(compiled);
+				return [];
+			}),
+		};
+
+		await driver.setupSession(stubSession);
+
+		expect(received).toEqual([
+			{ sql: "set intervalstyle to 'postgres'", params: [], kind: "sql" },
+		]);
+	});
 });
