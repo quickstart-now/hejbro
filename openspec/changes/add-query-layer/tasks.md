@@ -955,7 +955,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   "hejbro exports db and a single dual-use sql; fragment uses of the
   old sql still type-check"; files `packages/cli/src/index.ts`,
   `packages/cli/package.json`. ~10m
-- [ ] 7.10 Smoke promotion: `@hejbro/query`/`@hejbro/pg` join
+- [x] 7.10 Smoke promotion: `@hejbro/query`/`@hejbro/pg` join
   `PACKAGES` (dist precheck + assertions 1a–1c), the interim
   file-wiring block is removed; the smoke passes locally end-to-end
   (`pnpm build` first); files `scripts/pack-install-smoke.sh`. ~8m

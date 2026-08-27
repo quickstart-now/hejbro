@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# #86 pack-install smoke: packs the three published packages
-# (@hejbro/core, hejbro, @hejbro/supabase), installs the tarballs into a
-# scratch project with plain `npm install` (no workspace, no pnpm — the
-# closest simulation of a real consumer), and runs init/generate/verify
-# there, with the Supabase preset registered so all three packages —
-# not just hejbro — actually get loaded (assertion 3). Workspace-linked
-# tests never exercise the packed `package.json`, so this is the only
-# check exercising what a real install actually produces.
+# #86 pack-install smoke: packs the five published packages
+# (@hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg --
+# @hejbro/query/@hejbro/pg promoted here in task 7.10 once 7.6/7.7 gave
+# them real dist packaging), installs the tarballs into a scratch project
+# with plain `npm install` (no workspace, no pnpm — the closest
+# simulation of a real consumer), and runs init/generate/verify there,
+# with the Supabase preset registered so more than just hejbro actually
+# gets loaded (assertion 3). Workspace-linked tests never exercise the
+# packed `package.json`, so this is the only check exercising what a real
+# install actually produces.
 #
 # What this catches, precisely (measured during review, M4-M6): a
 # missing package-level file, a missing `bin`, and a broken `exports` in
-# any of the three packages (all three are loaded by assertion 3 once
-# the Supabase preset is registered) — plus a `workspace:` string left
-# in a `devDependencies` entry. A `workspace:` in
+# any of the packages assertions 1a-1c cover — plus a `workspace:` string
+# left in a `devDependencies` entry. A `workspace:` in
 # `dependencies`/`peer`/`optionalDependencies` is actually caught
 # earlier, by `npm install` itself refusing with `EUNSUPPORTEDPROTOCOL`
 # (see below) — assertion 2 is the narrower guard for the
@@ -61,11 +62,15 @@ SCRATCH_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$PACK_DIR" "$SCRATCH_DIR"; }
 trap cleanup EXIT
 
-# name:directory pairs for the three published packages.
+# name:directory pairs for the five published packages (task 7.10:
+# @hejbro/query/@hejbro/pg promoted alongside the original three now that
+# 7.6/7.7 gave them real dist packaging).
 PACKAGES=(
   "@hejbro/core:packages/core"
   "hejbro:packages/cli"
   "@hejbro/supabase:packages/supabase"
+  "@hejbro/query:packages/query"
+  "@hejbro/pg:packages/pg"
 )
 
 for entry in "${PACKAGES[@]}"; do
@@ -78,30 +83,18 @@ for entry in "${PACKAGES[@]}"; do
   dir="${entry#*:}"
   (cd "$REPO_ROOT/$dir" && pnpm pack --pack-destination "$PACK_DIR" >/dev/null)
 done
-
-# @hejbro/query is still `private: true` (task 7.3 owns the private
-# flip, fixed-group registration, and real dist packaging), but
-# @hejbro/supabase now declares it as a runtime dependency for its
-# type surface (group 6, decision recorded in tasks.md). Without a
-# local tarball, `npm install` resolves that dependency against the
-# registry and dies with E404 — so the shippable SET is packed
-# together and wired via `file:`. Deliberately NOT added to
-# `PACKAGES`: the dist precheck and assertions 1a–1c stay scoped to
-# the three published packages until 7.3 does query's real packaging
-# and promotes it. Useful side effect: @hejbro/supabase's imports of
-# @hejbro/query are all `import type` today, so nothing below ever
-# loads query's entry at runtime — if someone adds a real runtime
-# import, assertion 3 starts resolving a source-only tarball under
-# plain node and fails loudly, guarding that discipline for free.
-(cd "$REPO_ROOT/packages/query" && pnpm pack --pack-destination "$PACK_DIR" >/dev/null)
 ls "$PACK_DIR"
 
 # Resolve each tarball's actual filename (pnpm names it from the
-# package's own name/version, not the workspace path).
+# package's own name/version, not the workspace path). `hejbro-pg-*`
+# and `hejbro-query-*` are matched before the bare `hejbro-[0-9]*`
+# pattern could ever collide with them (neither starts with a digit
+# right after `hejbro-`).
 CORE_TGZ="$(ls "$PACK_DIR"/hejbro-core-*.tgz)"
 CLI_TGZ="$(ls "$PACK_DIR"/hejbro-[0-9]*.tgz)"
 SUPABASE_TGZ="$(ls "$PACK_DIR"/hejbro-supabase-*.tgz)"
 QUERY_TGZ="$(ls "$PACK_DIR"/hejbro-query-*.tgz)"
+PG_TGZ="$(ls "$PACK_DIR"/hejbro-pg-*.tgz)"
 
 echo "== scratch project: $SCRATCH_DIR"
 cat > "$SCRATCH_DIR/package.json" <<EOF
@@ -113,7 +106,8 @@ cat > "$SCRATCH_DIR/package.json" <<EOF
     "@hejbro/core": "file:$CORE_TGZ",
     "hejbro": "file:$CLI_TGZ",
     "@hejbro/supabase": "file:$SUPABASE_TGZ",
-    "@hejbro/query": "file:$QUERY_TGZ"
+    "@hejbro/query": "file:$QUERY_TGZ",
+    "@hejbro/pg": "file:$PG_TGZ"
   }
 }
 EOF
@@ -138,6 +132,8 @@ assert_tarball_contains() {
 assert_tarball_contains "$CORE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 assert_tarball_contains "$CLI_TGZ" package.json LICENSE README.md dist/cli.js dist/cli.d.ts dist/index.js
 assert_tarball_contains "$SUPABASE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$QUERY_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$PG_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 echo "   ok"
 
 echo "== assertion 1b: every file the tarball packed exists in the install tree"
@@ -154,6 +150,8 @@ assert_tarball_files_installed() {
 assert_tarball_files_installed "$CORE_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/core"
 assert_tarball_files_installed "$CLI_TGZ" "$SCRATCH_DIR/node_modules/hejbro"
 assert_tarball_files_installed "$SUPABASE_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/supabase"
+assert_tarball_files_installed "$QUERY_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/query"
+assert_tarball_files_installed "$PG_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/pg"
 echo "   ok"
 
 echo "== assertion 1c: the installed LICENSE is real content, not a broken link"
@@ -168,6 +166,8 @@ assert_license_content() {
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/core"
 assert_license_content "$SCRATCH_DIR/node_modules/hejbro"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/supabase"
+assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/query"
+assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/pg"
 echo "   ok"
 
 echo "== assertion 2: no installed dependency string still says workspace:"
@@ -178,6 +178,8 @@ assert_no_workspace_protocol() {
 }
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/hejbro/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/supabase/package.json"
+assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/query/package.json"
+assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/pg/package.json"
 echo "   ok"
 
 echo "== assertion 3: the hejbro binary runs init/generate/verify, with @hejbro/supabase's preset registered so all three packages actually load"
@@ -255,4 +257,4 @@ GENERATED_COUNT="$(find "$SCRATCH_DIR/migrations" -maxdepth 1 -name '*.sql' | wc
 (cd "$SCRATCH_DIR" && "$BIN" verify >/dev/null) || fail "hejbro verify exited non-zero on its own output"
 echo "   ok"
 
-echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase install cleanly with npm and run init/generate/verify"
+echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg install cleanly with npm and run init/generate/verify"
