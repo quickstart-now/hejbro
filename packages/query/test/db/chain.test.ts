@@ -10,10 +10,10 @@ import {
 	update,
 	uuid,
 } from "@hejbro/core";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { compile } from "../../src/compile/compile";
 import { db } from "../../src/db/db";
-import type { Driver, DriverRow } from "../../src/driver/contract";
+import { recordingTransactionalDriver } from "./recording-driver";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -33,19 +33,11 @@ const rawRow = {
 	amount: "9007199254740993",
 };
 
-/** A driver whose `execute` is a plain `vi.fn` spy, so a test can assert it was never called before `await` (the thenable-inertness negative probe) as well as inspect its call count/arguments afterward. */
-const fakeDriver = (rows: ReadonlyArray<DriverRow>): Driver => ({
-	capabilities: { "interactive-transactions": true, "session-state": true },
-	execute: vi.fn(async () => rows),
-	transaction: vi.fn(async (callback) =>
-		callback({ execute: vi.fn(async () => rows) }),
-	),
-	setupSession: vi.fn(async () => {}),
-});
-
 describe("db().select chain (task 7.1)", () => {
 	it("await on a select chain returns converted rows; before await no driver call is made", async () => {
-		const driver = fakeDriver([rawRow]);
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [rawRow],
+		});
 		const handle = db({ posts }, driver);
 
 		const chain = handle
@@ -55,18 +47,21 @@ describe("db().select chain (task 7.1)", () => {
 			.limit(10);
 
 		// inertness (decision ③): building a chain, including every stage,
-		// never touches the driver until it is actually awaited.
-		expect(driver.execute).not.toHaveBeenCalled();
+		// never touches the driver until it is actually awaited. Unscoped
+		// chains run directly on the driver (no transaction opened), so the
+		// top-level record is what's asserted here; a scoped/tx chain's
+		// same proof (task 7.4) checks `sentPerTransaction` instead.
+		expect(topLevelSent).toHaveLength(0);
 
 		const rows = await chain;
 
-		expect(driver.execute).toHaveBeenCalledTimes(1);
+		expect(topLevelSent).toHaveLength(1);
 		expect(rows[0]?.amount).toBe(9007199254740993n);
 		expect(typeof rows[0]?.amount).toBe("bigint");
 	});
 
 	it("where() delegates to core's own select().where() -- compiled SQL is identical to the equivalent core builder chain (delegation mutation: a reimplemented where would drift)", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 
 		const chainCompiled = handle
@@ -81,7 +76,7 @@ describe("db().select chain (task 7.1)", () => {
 	});
 
 	it("orderBy() delegates to core's own select().orderBy()", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 
 		const chainCompiled = handle.select(posts).orderBy(posts.status).compile();
@@ -91,7 +86,7 @@ describe("db().select chain (task 7.1)", () => {
 	});
 
 	it("limit() delegates to core's own select().limit()", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 
 		const chainCompiled = handle.select(posts).limit(5).compile();
@@ -101,7 +96,7 @@ describe("db().select chain (task 7.1)", () => {
 	});
 
 	it("innerJoin() delegates to core's own select().innerJoin()", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts, comments }, driver);
 		const on = eq(posts.id, comments.postId);
 
@@ -115,7 +110,7 @@ describe("db().select chain (task 7.1)", () => {
 	});
 
 	it("leftJoin() delegates to core's own select().leftJoin() -- never silently collapsed into innerJoin", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts, comments }, driver);
 		const on = eq(posts.id, comments.postId);
 
@@ -129,36 +124,39 @@ describe("db().select chain (task 7.1)", () => {
 	it("select({alias: expr}, table) -- the object-projection form -- also chains and awaits", async () => {
 		// projection aliases render snake_case (D57 naming), so the driver
 		// row's own key is "the_status", not the camelCase call-site alias.
-		// biome-ignore lint/style/useNamingConvention: the_status models the real driver row key toSnakeCase(alias) produces -- the test's whole point is that alias.
-		const driver = fakeDriver([{ the_status: "published" }]);
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			// biome-ignore lint/style/useNamingConvention: the_status models the real driver row key toSnakeCase(alias) produces -- the test's whole point is that alias.
+			rows: [{ the_status: "published" }],
+		});
 		const handle = db({ posts }, driver);
 
 		const rows = await handle.select({ theStatus: posts.status }, posts);
 
 		// biome-ignore lint/style/useNamingConvention: same snake_case alias key as the fixture above.
 		expect(rows).toEqual([{ the_status: "published" }]);
+		expect(topLevelSent).toHaveLength(1);
 	});
 });
 
 describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 	it("insert(...).values(...) with no returning() resolves exactly like db.execute of the same statement -- empty rows, one driver call, inert until awaited", async () => {
-		const driver = fakeDriver([]);
+		const { driver, topLevelSent } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 		const row = { id: rawRow.id, status: "draft" };
 
 		const chain = handle.insert(posts).values(row);
-		expect(driver.execute).not.toHaveBeenCalled();
+		expect(topLevelSent).toHaveLength(0);
 
 		const chainRows = await chain;
 		const executeRows = await handle.execute(insert(posts).values(row));
 
 		expect(chainRows).toEqual([]);
 		expect(chainRows).toEqual(executeRows);
-		expect(driver.execute).toHaveBeenCalledTimes(2);
+		expect(topLevelSent).toHaveLength(2);
 	});
 
 	it("insert(...).values(...).returning() delegates to core's own insert().values().returning() -- compiled SQL identical", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 		const row = { id: rawRow.id, status: "draft" };
 
@@ -173,7 +171,7 @@ describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 	});
 
 	it("insert(...).returning(projection) forwards the explicit projection to core -- never silently widened to every column (delegation mutation: an ignored projection would drift)", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 		const row = { id: rawRow.id, status: "draft" };
 
@@ -193,7 +191,7 @@ describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 	});
 
 	it("insert(...).values(...).onConflictDoNothing(...) delegates to core's own onConflictDoNothing()", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 		const row = { id: rawRow.id, status: "draft" };
 
@@ -211,7 +209,7 @@ describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 	});
 
 	it("insert(...).values(...).onConflictDoUpdate(...) delegates to core's own onConflictDoUpdate()", () => {
-		const driver = fakeDriver([]);
+		const { driver } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 		const row = { id: rawRow.id, status: "draft" };
 
@@ -232,11 +230,12 @@ describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 	});
 
 	it("update(...).set(...) with no returning() resolves like db.execute; .where()/.returning() delegate to core", async () => {
-		const driver = fakeDriver([]);
+		const { driver, topLevelSent } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 
 		const noReturning = await handle.update(posts).set({ status: "archived" });
 		expect(noReturning).toEqual([]);
+		expect(topLevelSent).toHaveLength(1);
 
 		const chainCompiled = handle
 			.update(posts)
@@ -258,11 +257,12 @@ describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 	});
 
 	it("deleteFrom(...) with no returning() resolves like db.execute; .where()/.returning() delegate to core", async () => {
-		const driver = fakeDriver([]);
+		const { driver, topLevelSent } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver);
 
 		const noReturning = await handle.deleteFrom(posts);
 		expect(noReturning).toEqual([]);
+		expect(topLevelSent).toHaveLength(1);
 
 		const chainCompiled = handle
 			.deleteFrom(posts)
@@ -284,7 +284,8 @@ describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 
 describe("chain.compile() (task 7.3)", () => {
 	it("chain.compile() equals compile(statement) and never touches the driver", () => {
-		const driver = fakeDriver([]);
+		const { driver, topLevelSent, sentPerTransaction } =
+			recordingTransactionalDriver();
 		const handle = db({ posts, comments }, driver);
 		const on = eq(posts.id, comments.postId);
 
@@ -339,8 +340,9 @@ describe("chain.compile() (task 7.3)", () => {
 		expect(deleteChainCompiled).toEqual(deleteCoreCompiled);
 
 		// zero driver interaction (decision ③): four `.compile()` calls
-		// across every statement kind, never a single send or transaction.
-		expect(driver.execute).not.toHaveBeenCalled();
-		expect(driver.transaction).not.toHaveBeenCalled();
+		// across every statement kind, never a single top-level send or a
+		// single transaction opened.
+		expect(topLevelSent).toHaveLength(0);
+		expect(sentPerTransaction).toHaveLength(0);
 	});
 });
