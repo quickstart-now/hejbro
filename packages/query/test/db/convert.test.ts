@@ -39,8 +39,13 @@ const events = table(app, "events", {
 	tags: text().array(),
 	precisions: numeric({ mode: "string" }).array(),
 });
+const flags = table(app, "flags", {
+	id: uuid().primaryKey(),
+	labels: text().array().notNullElements(),
+	tags: text().array(),
+});
 
-const tables = { posts, comments, events };
+const tables = { posts, comments, events, flags };
 
 describe("resolveColumnState (owner review judgment 4 -- the single resolver)", () => {
 	it("resolves a declared column by SQL identity", () => {
@@ -533,6 +538,62 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 			expect(cause).toBeInstanceOf(Error);
 			expect(cause).toHaveProperty("code", "unparsable-numeric-text");
 		}
+	});
+});
+
+describe("columnPlanForResult + convertRow (task 3.1 -- .notNullElements() conversion guard)", () => {
+	it("a NULL element under notNullElements rejects naming the column; a plain array column still passes it through as null", () => {
+		const node = select(flags).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		// a plain array column (no notNullElements) keeps passing a NULL
+		// element through as null, unchanged from the pre-3.1 behavior.
+		const passthrough = convertRow(
+			{ id: "x", labels: ["a", "b"], tags: [null, "b"] },
+			plan,
+		);
+		expect(passthrough.tags).toEqual([null, "b"]);
+
+		// a NULL element under notNullElements fails fast, naming the
+		// column -- the backing CHECK should have rejected this at write
+		// time, so its arrival here means the constraint was dropped or
+		// bypassed out-of-band (design decision 4).
+		try {
+			convertRow({ id: "x", labels: ["a", null, "c"], tags: null }, plan);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "labels");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			// design decision 4: no new error code -- the existing
+			// result-conversion-failed family (asserted above) is the whole
+			// contract, so the cause carries no code of its own.
+			expect((cause as Error & { code?: unknown }).code).toBeUndefined();
+			expect((cause as Error).message).toMatch(/Next:/);
+		}
+
+		// a clean labels array (no null elements) still converts normally --
+		// text has no declared element conversion, so it passes through.
+		const clean = convertRow({ id: "x", labels: ["a", "b"], tags: null }, plan);
+		expect(clean.labels).toEqual(["a", "b"]);
+	});
+
+	it("a whole-column SQL NULL still passes through for a notNullElements column; only a NULL element is rejected", () => {
+		// .notNullElements() declares "no NULL element inside the array",
+		// never .notNull() ("this column itself can't be NULL") -- those are
+		// different axes. convertCell's own raw === null branch already
+		// passes a NULL column value through before convertDeclaredValue (and
+		// therefore convertArrayElement) ever runs, so this pins that the
+		// element-level guard never reaches up to reject the column-level
+		// NULL too.
+		const node = select(flags).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		const converted = convertRow({ id: "x", labels: null, tags: null }, plan);
+
+		expect(converted.labels).toBeNull();
 	});
 });
 

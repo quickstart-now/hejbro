@@ -53,7 +53,7 @@ measured; vitest has no typecheck, so type tasks verify through
 
 ## 3. Conversion guard (query) — after group 1 lands
 
-- [ ] 3.1 (~6m) `convertArrayValue` fails fast on a `null` element
+- [x] 3.1 (~6m) `convertArrayValue` fails fast on a `null` element
       when the column's `columnState` carries the flag
       (`result-conversion-failed`, existing family). Red:
       `packages/query/test/db/convert.test.ts` — "a NULL element under
