@@ -317,6 +317,24 @@ describe("db.fn.* (task 4.9)", () => {
 		}
 	});
 
+	it("the scalar-result guard fires when the driver returns more than one row (#315 deferred branch)", async () => {
+		// distinct from both the zero-rows case above and the result-less-row
+		// case above -- this exercises the guard's own `rows.length !== 1`
+		// branch on the "too many", not "too few", side.
+		const { driver } = recordingDriver([{ result: "1" }, { result: "2" }]);
+		const handle = db(appSchema, driver);
+
+		try {
+			await handle.fn.countPosts({});
+			expect.unreachable(
+				"db.fn should have rejected more than one row for a scalar call",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "function-scalar-result-missing");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
+	});
+
 	it("rejects a call to a trigger-returning function before any send (owner's explicit SQL over implicit)", async () => {
 		const { driver } = recordingDriver();
 		const handle = db(appSchema, driver);
