@@ -299,6 +299,24 @@ describe("db.fn.* (task 4.9)", () => {
 		}
 	});
 
+	it('the scalar-result guard fires on a result-less row (#315 deferred branch: exactly one row, but no "result" key)', async () => {
+		// distinct from the zero-rows case above: this exercises the guard's
+		// own `!("result" in row)` branch specifically -- a driver that
+		// returned exactly one row, just not the one this call promised.
+		const { driver } = recordingDriver([{ unrelated: "value" }]);
+		const handle = db(appSchema, driver);
+
+		try {
+			await handle.fn.countPosts({});
+			expect.unreachable(
+				'db.fn should have rejected a row missing the "result" column',
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "function-scalar-result-missing");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
+	});
+
 	it("rejects a call to a trigger-returning function before any send (owner's explicit SQL over implicit)", async () => {
 		const { driver } = recordingDriver();
 		const handle = db(appSchema, driver);
