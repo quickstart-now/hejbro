@@ -737,7 +737,11 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   proof is structural rather than a spot-check: it asserts every own
   key of the wrapped-*input* driver is `===` identical on the *output*,
   which a future `Driver` contract addition would carry automatically
-  and a hand-listed member enumeration would silently miss.
+  and a hand-listed member enumeration would silently miss — scoped to
+  **own enumerable** properties (object spread's own boundary; a
+  prototype-chain or non-enumerable member would not be copied, and
+  neither the decorator nor this test would catch that, reviewer note
+  on batch A review).
   `@hejbro/query` is added as a **runtime** `dependencies` entry, not
   `devDependencies` (its `Driver` type reaches this package's own
   public d.ts) — `.claude/rules/supabase-preset.md` still describes the
@@ -796,7 +800,25 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   `openspec validate add-query-layer --strict` and
   `pnpm changeset status`; files
   `openspec/changes/add-query-layer/specs/rls-execution-context/spec.md`,
-  `.claude/rules/supabase-preset.md`, one new `.changeset/*.md`. ~8m
+  `.claude/rules/supabase-preset.md`, one new `.changeset/*.md`. ~8m —
+  spec delta (claims-object surface, single-JSON-setting mapping,
+  verification-stays-with-the-app requirements added; the pre-existing
+  "Presets define the context type" requirement's `asUser(jwt)` wording
+  corrected to `asUser(claims)`), `.claude/rules/supabase-preset.md`
+  (line 8 sentence + line 9 count, four → five things, the driver
+  contribution), and the changeset file are all written and
+  `openspec validate add-query-layer --strict` passes. **Not checked
+  off**: `pnpm changeset status` (both bare and `--since=upstream/dev`)
+  fails — `"@hejbro/supabase" depends on the skipped package
+  "@hejbro/query"` — because `@hejbro/query` (`private: true`, never
+  published) sits in `@hejbro/supabase`'s runtime `dependencies` since
+  task 6.2 (`47aac29`); this predates 6.5, batch A's own gate list just
+  never ran `changeset status` (6.5 owns that check, a planning gap,
+  not an implementation one). `.changeset/config.json` (fixed-group
+  membership, first-version policy) is task 7.3's file and an
+  owner-decision point per AGENTS.md's hard-gates list — not touched
+  here. Escalated to the planner/lead; this task stays open pending
+  that decision.
 
 ## 7. Public surface, docs, release wiring
 
