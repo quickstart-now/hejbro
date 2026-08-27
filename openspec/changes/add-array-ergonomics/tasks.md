@@ -63,7 +63,7 @@ measured; vitest has no typecheck, so type tasks verify through
 
 ## 4. Real-server witness (pg integration) — after groups 1–3 land
 
-- [ ] 4.1 (~9m) Integration column
+- [x] 4.1 (~9m) Integration column
       `labels: text().array().notNullElements()`: DDL carries the
       CHECK (create table from the generated shape), a null-element
       insert is rejected by the database (CHECK violation surfaced via

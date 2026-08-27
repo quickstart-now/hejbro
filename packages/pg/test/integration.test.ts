@@ -1,6 +1,11 @@
 import { execFileSync } from "node:child_process";
 import {
+	assertNoNulls,
 	bigint,
+	emptySnapshot,
+	generateMigration,
+	getTableMeta,
+	HejbroError,
 	insert,
 	interval,
 	numeric,
@@ -14,7 +19,14 @@ import {
 } from "@hejbro/core";
 import { db } from "@hejbro/query";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+	afterAll,
+	beforeAll,
+	describe,
+	expect,
+	expectTypeOf,
+	it,
+} from "vitest";
 import { pgDriver } from "../src/driver";
 
 /**
@@ -55,6 +67,26 @@ import { pgDriver } from "../src/driver";
  * asserting the exact strings -- the repository's first recorded samples
  * of Postgres's actual output grammar (every earlier anchor was a
  * hand-written fixture; `driver.test.ts` now names its own as such).
+ *
+ * add-array-ergonomics, group 4/task 4.1: `labels` (`text().array()
+ * .notNullElements().notNull()`) extends this same real-server proof to
+ * the non-null-element array feature. Three things only a live postgres:17
+ * can show: (a) the CHECK text `create table` receives here is pinned as
+ * identical to what `generateMigration` itself emits for this exact
+ * declaration, and the server accepts a CHECK whose expression is a fully
+ * schema/table/column-qualified `array_position(...)` reference inside a
+ * table constraint -- a create-table failure here would mean the
+ * generated SQL those unit tests approved is not actually valid DDL; (b)
+ * a null array element written through the typed `insert()` builder is
+ * rejected by the *database itself* (SQLSTATE 23514, the named
+ * constraint) and surfaces through `@hejbro/query`'s
+ * `query-execution-failed` wrapper -- never a client-side check, so a
+ * constraint someone drops or renames in a future migration would still
+ * be caught by the database, not silently accepted; (c) the compile-time
+ * narrowing this feature buys (`ReadonlyArray<string>` on read, and
+ * `assertNoNulls`'s single-call narrowing of a nullable-element array) is
+ * proved against values a real server actually returned, not a
+ * hand-built fixture.
  */
 const IMAGE = process.env.HEJBRO_PG_IMAGE ?? "postgres:17";
 const CONTAINER = `hejbro-pg-integration-${process.pid}`;
@@ -123,6 +155,16 @@ const discoverHostPort = (): number => {
 	return Number(firstLine.slice(lastColon + 1));
 };
 
+/**
+ * The exact CHECK text `generateMigration` emits for `labels`'s
+ * `.notNullElements()` (pinned against the generator itself below, before
+ * `create table` ever sees it) -- the `app.posts.tags` fixture from
+ * `packages/core/test/dsl/check.test.ts:178,217`, carried over verbatim
+ * onto this file's own `g5_integration.roundtrip.labels`.
+ */
+const labelsNoNullElementsConstraint =
+	'constraint "labels_no_null_elements" check (array_position("g5_integration"."roundtrip"."labels", null) is null)';
+
 const testSchema = schema("g5_integration");
 const roundtrip = table(testSchema, "roundtrip", {
 	id: uuid().primaryKey(),
@@ -147,6 +189,9 @@ const roundtrip = table(testSchema, "roundtrip", {
 	precisions: numeric({ mode: "string" }).array().notNull(),
 	approx: numeric({ mode: "number" }).array().notNull(),
 	durations: interval().array().notNull(),
+	// add-array-ergonomics, group 4/task 4.1: the non-null-element array
+	// witness -- see this file's own top comment for what this proves.
+	labels: text().array().notNullElements().notNull(),
 });
 
 describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤, task 5.6)", () => {
@@ -199,6 +244,19 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		}
 		const driver = pgDriver(activePool);
 
+		// add-array-ergonomics, group 4/task 4.1: pin the CHECK text this
+		// `create table` is about to receive against `generateMigration`'s
+		// own output for the exact same declaration -- the raw DDL below is
+		// never produced by the migration engine (out of this group's scope
+		// entirely), so this is what keeps the two texts from silently
+		// drifting apart.
+		expect(
+			generateMigration({
+				declarations: [testSchema, getTableMeta(roundtrip)],
+				previousSnapshot: emptySnapshot,
+			}).sql,
+		).toContain(labelsNoNullElementsConstraint);
+
 		// schema/table setup is raw DDL through the driver directly, not
 		// through db() -- creating tables is the CLI/migration generator's
 		// job (out of this group's scope entirely), never db()'s.
@@ -218,7 +276,9 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 				amounts bigint[] not null,
 				precisions numeric[] not null,
 				approx numeric[] not null,
-				durations interval[] not null
+				durations interval[] not null,
+				labels text[] not null,
+				${labelsNoNullElementsConstraint}
 			)`,
 			params: [],
 			kind: "sql",
@@ -336,6 +396,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 					precisions: insertedPreciseArray,
 					approx: insertedApproxArray,
 					durations: insertedDurationsArray,
+					labels: ["alpha", "beta"],
 				},
 				{
 					id: mixedSignId,
@@ -353,12 +414,56 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 					precisions: ["-123.450000"],
 					approx: [-0.5],
 					durations: mixedSignDurationsArray,
+					// add-array-ergonomics, group 4/task 4.1: the empty-array edge
+					// -- `array_position([], null)` is `null`, so the CHECK passes
+					// trivially, and this row proves that for free.
+					labels: [],
 				},
 			]),
 		);
 
+		// add-array-ergonomics, group 4/task 4.1: a null array element written
+		// through the typed `insert()` builder is rejected by the *database*
+		// itself, not the client -- proving the CHECK created above is a real
+		// backstop, not merely accepted DDL. `as unknown as
+		// ReadonlyArray<string>` is a deliberate type escape hatch: the
+		// declared type already refuses a null element here (proved by the
+		// core package's own type tests for `.notNullElements()`), so
+		// reaching the database at all requires bypassing that type on
+		// purpose.
+		try {
+			await handle.execute(
+				insert(roundtrip).values([
+					{
+						id: "33333333-3333-3333-3333-333333333333",
+						amount: 1n,
+						precise: "0.000000",
+						duration: insertedDuration,
+						created: new Date(insertedCreated),
+						noteText: "rejected note",
+						amounts: [1],
+						precisions: ["1.000000"],
+						approx: [1],
+						durations: insertedDurationsArray,
+						labels: ["ok", null] as unknown as ReadonlyArray<string>,
+					},
+				]),
+			);
+			expect.unreachable(
+				"the database should have rejected the null array element",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "query-execution-failed");
+			expect(error).toHaveProperty("kind", "insert");
+			const cause = (error as { cause?: unknown }).cause;
+			expect(cause).toHaveProperty("code", "23514");
+			expect(cause).toHaveProperty("constraint", "labels_no_null_elements");
+		}
+
 		const rows = await handle.execute(select(roundtrip));
 
+		// the rejected insert above contributed nothing -- still exactly the
+		// two rows the first, accepted insert seeded.
 		expect(rows).toHaveLength(2);
 		const row = rows.find((candidate) => candidate.id === insertedId);
 		const mixedRow = rows.find((candidate) => candidate.id === mixedSignId);
@@ -421,6 +526,27 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// converted to structured IntervalValue elements.
 		expect(row.durations).toEqual(insertedDurationsArray);
 
+		// add-array-ergonomics, group 4/task 4.1: `.notNullElements()`
+		// narrows the declared read type itself (no `| null` in the
+		// element), proved against a real server's returned row -- element
+		// consumption (`.map`) needs no null filter or guard first.
+		expectTypeOf(row.labels).toEqualTypeOf<ReadonlyArray<string>>();
+		expect(row.labels).toEqual(["alpha", "beta"]);
+		expect(row.labels.map((label) => label.toUpperCase())).toEqual([
+			"ALPHA",
+			"BETA",
+		]);
+
+		// add-array-ergonomics, group 4/task 4.1: `assertNoNulls` applied to
+		// a nullable-element array column (`amounts`) narrows in one call,
+		// against the value a real server actually returned -- a clean
+		// array (no null elements) comes back with every element intact.
+		const safeAmounts = assertNoNulls(row.amounts);
+		expectTypeOf(safeAmounts).toEqualTypeOf<ReadonlyArray<number>>();
+		expect(safeAmounts).toHaveLength(3);
+		expect(safeAmounts).toEqual([123, 456, 789]);
+		expect(safeAmounts.map((amount) => amount + 1)).toEqual([124, 457, 790]);
+
 		// #341 (b) on the read side: the same structured values come back,
 		// every zero field `+0` -- `toEqual` distinguishes `-0`, so this
 		// asserts the parser's (D) normalization live against the server's
@@ -437,6 +563,26 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(mixedRow.precisions).toEqual(["-123.450000"]);
 		expect(mixedRow.approx).toEqual([-0.5]);
 		expect(mixedRow.durations).toEqual(mixedSignDurationsArray);
+
+		// add-array-ergonomics, group 4/task 4.1: the empty-array edge on
+		// the read side -- `array_position([], null)` is `null`, so the
+		// CHECK passed trivially at insert time, and the empty array comes
+		// back as an empty array, not `null` or a one-element array.
+		expect(mixedRow.labels).toEqual([]);
+
+		// add-array-ergonomics, group 4/task 4.1: `assertNoNulls` applied to
+		// `mixedRow.amounts` (`[-1, null, 42]`, a real server's own answer,
+		// not a hand-built fixture) throws `HejbroError("null-array-element")`
+		// naming the first null element's index -- it never silently drops
+		// it.
+		try {
+			assertNoNulls(mixedRow.amounts);
+			expect.unreachable("a null element should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(HejbroError);
+			expect((error as HejbroError).code).toBe("null-array-element");
+			expect((error as HejbroError).message).toMatch(/\bindex 1\b/);
+		}
 
 		// #341 (d): the server's own output text, captured raw (cast to
 		// `::text`, so no client-side parser ever touches it) and asserted
