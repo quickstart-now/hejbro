@@ -32,7 +32,8 @@
 	"scripts": {
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
-		"test:coverage": "vitest run --coverage"
+		"test:coverage": "vitest run --coverage",
+		"test:integration": "vitest run --config vitest.integration.config.ts"
 	},
 	"peerDependencies": {
 		"pg": "^8.23.0"
@@ -41,6 +42,7 @@
 		"@hejbro/query": "workspace:*"
 	},
 	"devDependencies": {
+		"@hejbro/core": "workspace:*",
 		"@types/pg": "^8.23.1",
 		"@vitest/coverage-v8": "catalog:",
 		"pg": "^8.23.0",

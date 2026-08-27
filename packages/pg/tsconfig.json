@@ -5,5 +5,11 @@
 		"module": "esnext",
 		"noEmit": true
 	},
-	"include": ["src", "test", "vitest.config.ts"]
+	"include": [
+		"src",
+		"test",
+		"vitest.config.ts",
+		"vitest.integration.config.ts",
+		"vitest.shared.ts"
+	]
 }
