@@ -709,12 +709,20 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   `SUPABASE_DB_URL` (default the URL above), fails loudly instead of
   starting anything, and its guidance message names `supabase start`
   plus the colima `-x vector` workaround.
-- [ ] 6.1 `asUser(claims)`/`asAnon()` context builders per the settled
+- [x] 6.1 `asUser(claims)`/`asAnon()` context builders per the settled
   shape (single `request.jwt.claims` JSON setting, fixed roles); red
   test `packages/supabase/test/context.test.ts` "asUser builds the
   authenticated role plus one JSON claims setting; asAnon builds anon";
   files `packages/supabase/src/context.ts`,
-  `packages/supabase/src/index.ts`. ~8m
+  `packages/supabase/src/index.ts`. ~8m — `sub` is required both at the
+  type level (`Claims["sub"]: string`, non-optional) and again at
+  runtime (`claims-subject-missing` kebab-code enriched `Error`, a
+  `function` declaration per the g2/g3 `(): never` handoff note) as a
+  fail-fast guard for a caller that bypasses the type; a caller-supplied
+  `role` claim is always discarded and overwritten with
+  `"authenticated"`, never trusted (lead-confirmed). Two extra tests
+  beyond the named red one lock in coverage-completing branches: the
+  role-overwrite behavior and the missing-`sub` throw.
 - [x] 6.2 `supabaseDriver(driver)` decorator: adds `contributedRoles` =
   anon/authenticated/service_role and passes every other member through
   unchanged (capabilities, execute, transaction, setupSession); adds
