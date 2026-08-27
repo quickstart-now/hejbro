@@ -281,3 +281,66 @@ describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 		);
 	});
 });
+
+describe("chain.compile() (task 7.3)", () => {
+	it("chain.compile() equals compile(statement) and never touches the driver", () => {
+		const driver = fakeDriver([]);
+		const handle = db({ posts, comments }, driver);
+		const on = eq(posts.id, comments.postId);
+
+		const selectChainCompiled = handle
+			.select(posts)
+			.innerJoin(comments, on)
+			.where(eq(posts.status, "published"))
+			.orderBy(posts.id)
+			.limit(5)
+			.compile();
+		const selectCoreCompiled = compile(
+			select(posts)
+				.innerJoin(comments, on)
+				.where(eq(posts.status, "published"))
+				.orderBy(posts.id)
+				.limit(5),
+		);
+
+		const insertChainCompiled = handle
+			.insert(posts)
+			.values({ id: rawRow.id, status: "draft" })
+			.returning({ insertedId: posts.id })
+			.compile();
+		const insertCoreCompiled = compile(
+			insert(posts)
+				.values({ id: rawRow.id, status: "draft" })
+				.returning({ insertedId: posts.id }),
+		);
+
+		const updateChainCompiled = handle
+			.update(posts)
+			.set({ status: "archived" })
+			.where(eq(posts.status, "draft"))
+			.compile();
+		const updateCoreCompiled = compile(
+			update(posts)
+				.set({ status: "archived" })
+				.where(eq(posts.status, "draft")),
+		);
+
+		const deleteChainCompiled = handle
+			.deleteFrom(posts)
+			.where(eq(posts.status, "draft"))
+			.compile();
+		const deleteCoreCompiled = compile(
+			deleteFrom(posts).where(eq(posts.status, "draft")),
+		);
+
+		expect(selectChainCompiled).toEqual(selectCoreCompiled);
+		expect(insertChainCompiled).toEqual(insertCoreCompiled);
+		expect(updateChainCompiled).toEqual(updateCoreCompiled);
+		expect(deleteChainCompiled).toEqual(deleteCoreCompiled);
+
+		// zero driver interaction (decision ③): four `.compile()` calls
+		// across every statement kind, never a single send or transaction.
+		expect(driver.execute).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+});
