@@ -108,6 +108,40 @@ const checkoutGuard = (): ((client: PoolClient) => Promise<void>) => {
 	};
 };
 
+/**
+ * Ends the transaction's one held client after the callback threw
+ * (owner ruling (b), the ROLLBACK-itself-fails question): attempts
+ * `ROLLBACK` and, if it succeeds, releases `client` back to the pool
+ * normally. If `ROLLBACK` itself throws, the connection is left in an
+ * unknown state -- returning it to the pool would let the *next*
+ * caller inherit a broken session, so it is discarded instead via
+ * `release(true)`, the same boolean-shorthand `pg-pool`'s own `_release`
+ * treats identically to an `Error` (installed `pg-pool@3.14.0`
+ * `index.js:392`: `if (err || ...)` before deciding to `_remove` rather
+ * than idle the client -- verified against the installed source, 5.0
+ * scout style). Exactly one `release()` call either way: calling it
+ * twice throws (`pg-pool`'s own `_releaseOnce` guard, same source,
+ * line 374), so this is the transaction path's single release site,
+ * never paired with a `finally`. Never throws itself and never wraps or
+ * annotates the caller's own error -- the ROLLBACK failure is
+ * deliberately unobservable to the caller (owner ruling: zero new
+ * contract surface), the caller's original error is `transaction()`'s
+ * own `throw error` right after calling this.
+ */
+const releaseAfterFailedTransaction = async (
+	client: PoolClient,
+): Promise<void> => {
+	const rolledBack = await client
+		.query("ROLLBACK")
+		.then(() => true)
+		.catch(() => false);
+	if (rolledBack) {
+		client.release();
+		return;
+	}
+	client.release(true);
+};
+
 /** Resolves either overload's argument to the one `Pool` {@link buildDriver} needs -- a string constructs and owns a fresh `Pool`, a `Pool` is used exactly as given (owner decisions ①/②). */
 const resolvePool = (poolOrConnectionString: Pool | string): Pool => {
 	if (typeof poolOrConnectionString === "string") {
@@ -138,12 +172,11 @@ const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
 				await client.query("BEGIN");
 				const result = await callback(makeSession(client));
 				await client.query("COMMIT");
+				client.release();
 				return result;
 			} catch (error) {
-				await client.query("ROLLBACK");
+				await releaseAfterFailedTransaction(client);
 				throw error;
-			} finally {
-				client.release();
 			}
 		},
 		setupSession,

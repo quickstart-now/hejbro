@@ -31,6 +31,20 @@ const sqlTextOf = (call: QueryCall): string => {
 };
 
 /**
+ * Yields past the microtask queue and one macrotask turn -- long enough
+ * for a `pool.end()` scheduled anywhere during a round-trip (e.g.
+ * `Promise.resolve().then(() => pool.end())`, not just a synchronous call)
+ * to have already run before a "never auto-closes" assertion checks for
+ * it. A bare `await driver.execute(...)` alone does not guarantee this: a
+ * close scheduled as a trailing microtask can still be pending when the
+ * `await` resolves.
+ */
+const flushAsyncWork = (): Promise<void> =>
+	new Promise((resolve) => {
+		setImmediate(resolve);
+	});
+
+/**
  * A pool whose `connect` always hands back the *same* stub client
  * (simulating the pool reusing one physical connection across checkouts)
  * and records every call that client's own `query` received, in order.
@@ -108,6 +122,7 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 		const endSpy = vi.spyOn(driver.client, "end");
 
 		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+		await flushAsyncWork();
 
 		expect(endSpy).not.toHaveBeenCalled();
 	});
@@ -126,6 +141,7 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 				throw new Error("boom");
 			}),
 		).rejects.toThrow("boom");
+		await flushAsyncWork();
 
 		expect(endSpy).not.toHaveBeenCalled();
 	});
@@ -247,6 +263,10 @@ describe("pgDriver transaction (task 5.4)", () => {
 			"ROLLBACK",
 		]);
 		expect(release).toHaveBeenCalledTimes(1);
+		// contrast pair with the ROLLBACK-itself-fails case below: an
+		// ordinary successful rollback returns the client to the pool
+		// normally (no truthy argument), never discards it.
+		expect(release).toHaveBeenCalledWith();
 	});
 
 	it("rethrows a thrown non-Error value unchanged (rethrow is not Error-specific, never normalized/wrapped)", async () => {
@@ -260,6 +280,40 @@ describe("pgDriver transaction (task 5.4)", () => {
 				throw thrown;
 			}),
 		).rejects.toBe(thrown);
+	});
+
+	it("preserves the original callback error unchanged, and discards the connection, when ROLLBACK itself fails (owner ruling (b))", async () => {
+		const release = vi.fn();
+		const rollbackError = new Error("connection reset");
+		const client = {
+			query: vi.fn(async (call: QueryCall) => {
+				if (sqlTextOf(call) === "ROLLBACK") {
+					throw rollbackError;
+				}
+				return { rows: [] };
+			}),
+			release,
+		};
+		const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
+		const driver = pgDriver(pool);
+		const originalError = new Error("callback boom");
+
+		// the caller sees exactly the callback's own error -- never the
+		// ROLLBACK failure, never a wrapper, never a new field carrying it
+		// (owner ruling: zero new contract surface).
+		await expect(
+			driver.transaction(async () => {
+				throw originalError;
+			}),
+		).rejects.toBe(originalError);
+
+		// exactly one release() call (pg-pool's own _releaseOnce throws on
+		// a second call -- this is what a double-release mutation trips),
+		// and it discards the connection (release(true), the boolean
+		// shorthand pg-pool's _release treats identically to an Error)
+		// rather than returning a possibly-broken session to the pool.
+		expect(release).toHaveBeenCalledTimes(1);
+		expect(release).toHaveBeenCalledWith(true);
 	});
 });
 
