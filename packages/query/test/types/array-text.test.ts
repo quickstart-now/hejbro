@@ -16,8 +16,20 @@ describe("parseArrayText", () => {
 		// only the reserved characters (delimiter, braces, quote, backslash)
 		// force quoting, never whitespace on its own.
 		expect(parseArrayText('{"1 day","2 days"}')).toEqual(["1 day", "2 days"]);
+		// a quoted empty string is a real array_out output (e.g. text[]'s own
+		// '' element) -- distinct from the empty *array* ("{}").
+		expect(parseArrayText('{""}')).toEqual([""]);
 
-		const rejects = (raw: string, code: string) => {
+		// `reasonPattern` pins down *which* internal guard fired, not just
+		// that some guard fired -- a weaker `code`-only assertion can't tell
+		// "the intended guard rejected this" apart from "a different guard
+		// incidentally rejected this for the wrong reason" (planner review,
+		// batch A rework: this is what let mutations IM-2/M6 survive).
+		const rejects = (
+			raw: string,
+			code: string,
+			reasonPattern: RegExp | string,
+		) => {
 			try {
 				parseArrayText(raw);
 				expect.unreachable(
@@ -27,18 +39,40 @@ describe("parseArrayText", () => {
 				expect(error).toBeInstanceOf(Error);
 				expect(error).toHaveProperty("code", code);
 				expect((error as Error).message).toMatch(/Next:/);
+				expect((error as Error).message).toMatch(reasonPattern);
 			}
 		};
 
-		rejects("1,2,3}", "unparsable-array-text");
-		rejects('{"unterminated', "unparsable-array-text");
-		rejects("{1,2,3}trailing", "unparsable-array-text");
-		rejects("{1,,3}", "unparsable-array-text");
+		rejects("1,2,3}", "unparsable-array-text", "missing opening");
+		// the opening-brace guard alone (no other guard incidentally catches
+		// this one): without it this text would silently parse as the empty
+		// array instead of throwing (planner review, batch A rework M6).
+		rejects("1}", "unparsable-array-text", "missing opening");
+		rejects(
+			'{"unterminated',
+			"unparsable-array-text",
+			"unterminated quoted element",
+		);
+		rejects(
+			"{1,2,3}trailing",
+			"unparsable-array-text",
+			"trailing content after the closing",
+		);
+		rejects("{1,,3}", "unparsable-array-text", "expected an element at index");
 		// out of scope by design (design.md Non-Goals: one level of nesting
 		// only) -- rejected whole, never partially parsed into e.g. ["{1", "2}"].
-		rejects("{{1,2},{3,4}}", "unparsable-array-text");
+		// The empty-element guard is what actually fires here (the same one
+		// "{1,,3}" hits) -- pinning the reason is what stops a mutation that
+		// merely widens the unquoted-element charset from surviving by
+		// having the *trailing-content* guard catch it instead for the
+		// wrong reason (planner review, batch A rework IM-2).
+		rejects(
+			"{{1,2},{3,4}}",
+			"unparsable-array-text",
+			"expected an element at index",
+		);
 		// a dimension-prefixed literal ("[0:1]={1,2}") is also out of scope --
 		// the leading "[" is never a valid array-literal start.
-		rejects("[0:1]={1,2}", "unparsable-array-text");
+		rejects("[0:1]={1,2}", "unparsable-array-text", "missing opening");
 	});
 });

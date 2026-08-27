@@ -242,6 +242,20 @@ function throwResultConversionFailed(column: string, cause: unknown): never {
 	);
 }
 
+/** Builds the `unexpected-array-arrival-shape`-coded, enriched plain `Error` {@link rawArrayElements} throws (D3's kebab-case-code convention for `@hejbro/query`, matching `interval.ts`'s `throwUnparsableInterval`/`array-text.ts`'s `throwUnparsableArrayText`) — the arrival shape a declared array element contracts for (`expectedShape`) didn't match what the driver actually handed back (`typeof raw`). Named separately from a plain `Error` (planner review, batch A rework) so a test can assert `cause.code` and tell "the declared-type guard fired" apart from an incidental `TypeError` a missing guard would otherwise let through unnoticed. */
+const throwUnexpectedArrayArrivalShape = (
+	expectedShape: "raw array-literal text" | "a JS array",
+	elementTypeName: string,
+	raw: unknown,
+): never => {
+	throw Object.assign(
+		new Error(
+			`expected ${expectedShape} for an array column whose element type is ${JSON.stringify(elementTypeName)}, got ${typeof raw}. Next: check the driver delegates this array oid the way the declared element type contracts (task 1.3's driver-contract delta) — never coerced or guessed at here.`,
+		),
+		{ code: "unexpected-array-arrival-shape" },
+	);
+};
+
 /**
  * `raw`'s own element list — the arrival shape is decided by `element`
  * (the array's declared element {@link TypeNode}), **never** by sniffing
@@ -254,8 +268,9 @@ function throwResultConversionFailed(column: string, cause: unknown): never {
  * type (moded numeric/bigint, or no runtime conversion at all) keeps
  * `pg`'s own default array parsing, contracted to already be a JS array.
  * A `raw` that doesn't match the shape its declared element contracts is
- * never coerced or guessed at — it throws, caught by {@link convertCell}'s
- * existing wrapper the same as any other conversion failure.
+ * never coerced or guessed at — {@link throwUnexpectedArrayArrivalShape}
+ * throws, caught by {@link convertCell}'s existing wrapper the same as any
+ * other conversion failure.
  */
 const rawArrayElements = (
 	raw: unknown,
@@ -263,15 +278,19 @@ const rawArrayElements = (
 ): ReadonlyArray<unknown> => {
 	if (element.typeName === "interval") {
 		if (typeof raw !== "string") {
-			throw new Error(
-				`expected the driver's raw array-literal text for an interval[] column (task 1.3's driver override), got ${typeof raw}.`,
+			return throwUnexpectedArrayArrivalShape(
+				"raw array-literal text",
+				element.typeName,
+				raw,
 			);
 		}
 		return parseArrayText(raw);
 	}
 	if (!Array.isArray(raw)) {
-		throw new Error(
-			`expected a JS array for this array column (pg's own default array parsing), got ${typeof raw}.`,
+		return throwUnexpectedArrayArrivalShape(
+			"a JS array",
+			element.typeName,
+			raw,
 		);
 	}
 	return raw;
@@ -298,9 +317,15 @@ const convertArrayElement = (
 
 /**
  * Converts an array column's cell element-wise against `element` (its
- * declared element {@link TypeNode}) — one level of nesting only (design.md
- * Non-Goals: multi-dimensional array text is out of scope, so `element`
- * itself is never `"array"` here in practice). A single poisoned element
+ * declared element {@link TypeNode}). Multi-dimensional array *text*
+ * parsing is out of scope (design.md Non-Goals) — but `element` can still
+ * literally be `"array"` at the type level (`.array().array()` is
+ * expressible via the DSL); this function doesn't special-case that away.
+ * It would simply recurse into {@link convertArrayElement}/
+ * {@link convertDeclaredValue} again, and {@link rawArrayElements}'s own
+ * arrival-shape guard would need a plausible shape for that nested
+ * element too (never coerced or guessed at) — an untested, unsupported
+ * path, not one this function actively rejects. A single poisoned element
  * fails the whole array via {@link convertArrayElement}'s reuse of
  * {@link convertDeclaredValue}'s own throwing branches; there is no partial
  * result.

@@ -365,6 +365,11 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 			expect(error).toBeInstanceOf(Error);
 			expect(error).toHaveProperty("code", "result-conversion-failed");
 			expect(error).toHaveProperty("column", "durations");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			// the declared-element-type guard fired -- not an incidental
+			// TypeError a missing guard would let through unnoticed.
+			expect(cause).toHaveProperty("code", "unexpected-array-arrival-shape");
 		}
 
 		// the reverse mismatch: a moded array cell that arrives as raw text
@@ -380,6 +385,9 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 			expect(error).toBeInstanceOf(Error);
 			expect(error).toHaveProperty("code", "result-conversion-failed");
 			expect(error).toHaveProperty("column", "amounts");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unexpected-array-arrival-shape");
 		}
 	});
 });
