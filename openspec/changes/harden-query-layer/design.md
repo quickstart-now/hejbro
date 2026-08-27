@@ -66,22 +66,28 @@ OpenSpec change rather than six plain-cycle fixes.
   `typeof` references — exactly the issue's recorded path; the C19
   assertion is never weakened.
 
-## Open Decisions ([design] tasks — settled with the owner before code)
+## Settled Decisions (owner round, 2026-08-27 — formerly Open)
 
-1. **Write-acceptance unions** (task 2.1): strict-only (each column
-   accepts exactly its read type: default `bigint` mode accepts
-   `bigint`, not `number`; `interval` accepts only the structured
-   value) versus convenience widening (`bigint` mode also accepts
-   safe `number`, `interval` also accepts literal text). The spec
-   delta as written assumes strict-only (the third scenario rejects
-   `number` into a `'bigint'`-mode column); widening would loosen that
-   scenario and needs the owner's call on where "type honesty" ends
-   and convenience begins.
-2. **Interval serialization canonical form** (task 2.2): the exact
-   Postgres interval literal built from the seven fields (sign
-   handling, zero-field elision vs always-full form) — settles a
-   generated-SQL-adjacent text contract, so it is owner-gated by the
-   same rule as SQL text decisions.
+1. **Write-acceptance unions = STRICT** (task 2.1): each column accepts
+   exactly its declared read type — default `bigint` mode accepts
+   `bigint` and rejects `number`; a `'string'`-mode `numeric` accepts
+   `string`; `interval` accepts only the structured value. Rationale:
+   round-trip identity holds at the type layer with zero runtime
+   validation branches, Drizzle's insert model is mode-symmetric the
+   same way, and convenience already has its first-class expression —
+   declaring the mode (`bigint({mode:'number'})`) — so widened unions
+   would duplicate that mechanism implicitly. The spec delta's reject
+   scenario stands as written.
+2. **Interval serialization = always-full IntervalStyle-postgres form**
+   (task 2.2): `"{Y} years {M} mons {D} days {±H:MM:SS.ffffff}"`, all
+   three axes always present, per-axis signs — exactly the grammar the
+   read-side parser consumes, so round-trip symmetry is visible at the
+   grammar level and serialization has zero elision branches. The
+   serialize function lives beside the parser; a pure property test
+   pins `parse(serialize(v)) = v` (the real-database read half of the
+   grammar is already proven by group 1's harness — the server parses
+   its own output grammar by construction, so no cross-group fixture
+   dependency exists).
 
 ## Risks / Trade-offs
 

@@ -88,17 +88,17 @@ the README CRAP block stay lead-owned at close.
 
 ## 2. Write-side value types (#322)
 
-- [ ] 2.1 [design] Write-acceptance unions (owner decision: strict-only
-  vs convenience widening — design.md Open Decision 1): the mutation
-  value types accept each column's declared read type per the settled
-  union; red type test
+- [ ] 2.1 [design → settled: STRICT, owner 2026-08-27] Write-acceptance
+  unions: the mutation value types accept exactly each column's
+  declared read type (design.md Settled Decision 1); red type test
   `packages/core/test/query/mutate.test.ts` "a default-mode bigint
   column accepts bigint and rejects the settled-out shapes"; files
   `packages/core/src/query/mutate.ts`. ~10m
-- [ ] 2.2 [design] Interval write serialization (owner decision:
-  canonical literal form — design.md Open Decision 2): a structured
-  interval value supplied to a mutation lifts to a bind parameter in
-  the settled Postgres interval literal form; red test
+- [ ] 2.2 [design → settled: always-full IntervalStyle-postgres form,
+  owner 2026-08-27] Interval write serialization: a structured interval
+  value lifts to a bind parameter in the always-full form (design.md
+  Settled Decision 2), with a pure property test pinning
+  parse(serialize(v)) = v; red test
   `packages/query/test/compile/mutation.test.ts` "an IntervalValue
   lifts to the canonical interval literal parameter"; files
   `packages/query/src/types/interval.ts` (serialize function),
@@ -111,8 +111,10 @@ the README CRAP block stay lead-owned at close.
   element-wise"; files `packages/query/src/compile/params.ts`. ~10m
 - [ ] 2.4 Round-trip proof: insert through the typed builder →
   select-back yields the written values in declared read shapes
-  (unit with recorded driver; the real-database half rides group 1's
-  1.5 fixture where files overlap would otherwise occur); red test
+  (unit with recorded driver plus the parse∘serialize identity property
+  — no real-database half and no cross-group fixture dependency: the
+  serializer emits the exact grammar group 1's harness already proves
+  the server round-trips); red test
   `packages/query/test/db/chain.test.ts` "typed writes round-trip
   through declared read types"; files that test only. ~8m
 - [ ] 2.5 Spec-delta alignment: the query-type-inference input-value
