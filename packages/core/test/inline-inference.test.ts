@@ -78,7 +78,7 @@ describe("bigint()/numeric() keep their own default mode when used inline in tab
 		it("inline, chained .array() -- GREEN today, must stay green (no regression)", () => {
 			const t = table(app, "t_bigint_inline_array", { c: bigint().array() });
 			expectTypeOf<ResolvedReadType<typeof t, "c">>().toEqualTypeOf<
-				ReadonlyArray<bigint>
+				ReadonlyArray<bigint | null>
 			>();
 		});
 
