@@ -12,9 +12,12 @@ import type { SelectResult } from "../../src/types/select-result";
  * (the write-acceptance side). This file is the **query frame**:
  * `SelectResult<typeof t>["c"]` adds `| null` on top of the core frame's
  * own resolved type, unless the column is `notNull` -- the two frames are
- * never interchangeable, and mixing them in one table is exactly the
- * mistake hg2's own characterization matrix made (a broken row carrying
- * `| null`, a correct row missing it, read side by side as if comparable).
+ * never interchangeable. State the frame as the type expression itself
+ * (`BaseTsType<...>` vs `SelectResult<typeof t>["c"]`), never as prose:
+ * #338's own characterization matrix measured consistently in the core
+ * frame and every row was correct, but it never said so, and two readers
+ * in a row misread it as a mixed or wrong table when they placed it next
+ * to query-frame numbers.
  *
  * One root cause (core's `bigint`/`numeric` factories), not three
  * independent bugs: a fix there must turn every assertion below green
