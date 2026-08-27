@@ -24,6 +24,10 @@ import {
 	uuid,
 	varchar,
 } from "../src/types/column-builder-factories";
+import type {
+	DefaultBigintMode,
+	DefaultNumericMode,
+} from "../src/types/numeric-mode-defaults";
 import {
 	DEFAULT_BIGINT_MODE,
 	DEFAULT_NUMERIC_MODE,
@@ -458,14 +462,25 @@ describe("bigint/numeric width modes (D3, task 3.4)", () => {
 			expect(bigint().columnState.mode).toBe(DEFAULT_BIGINT_MODE);
 			expect(numeric().columnState.mode).toBe(DEFAULT_NUMERIC_MODE);
 			// type-level: BaseTsType's no-mode fallback resolves to exactly the
-			// same type as explicitly spelling out `mode: typeof DEFAULT_*_MODE`
-			// -- proves the fallback derives structurally from the same constant,
-			// not a hand-spelled literal that merely happens to still agree.
-			expectTypeOf<BaseTsType<{ typeName: "bigint" }>>().toEqualTypeOf<
-				BaseTsType<{ typeName: "bigint"; mode: typeof DEFAULT_BIGINT_MODE }>
+			// same type as explicitly spelling out `mode: DefaultBigintMode` /
+			// `mode: DefaultNumericMode` -- proves the fallback derives
+			// structurally from the same constant, not a hand-spelled literal
+			// that merely happens to still agree. (The default *value* itself
+			// -- 'bigint'/'string' -- is already pinned by the describe block
+			// above; this is the consistency bond, not a duplicate value pin.)
+			expectTypeOf<BaseTsType<{ readonly typeName: "bigint" }>>().toEqualTypeOf<
+				BaseTsType<{
+					readonly typeName: "bigint";
+					readonly mode: DefaultBigintMode;
+				}>
 			>();
-			expectTypeOf<BaseTsType<{ typeName: "numeric" }>>().toEqualTypeOf<
-				BaseTsType<{ typeName: "numeric"; mode: typeof DEFAULT_NUMERIC_MODE }>
+			expectTypeOf<
+				BaseTsType<{ readonly typeName: "numeric" }>
+			>().toEqualTypeOf<
+				BaseTsType<{
+					readonly typeName: "numeric";
+					readonly mode: DefaultNumericMode;
+				}>
 			>();
 		});
 	});

@@ -1,7 +1,7 @@
 import type { ColumnMeta, NumericMode } from "./column-builder";
 import type {
-	DEFAULT_BIGINT_MODE,
-	DEFAULT_NUMERIC_MODE,
+	DefaultBigintMode,
+	DefaultNumericMode,
 } from "./numeric-mode-defaults";
 
 /**
@@ -77,8 +77,8 @@ type NumericModeTsType<TMode extends NumericMode> = TMode extends "number"
  * "no distributive tricks" guidance) — every branch tests one concrete
  * `TTypeName` literal.
  *
- * The `typeof DEFAULT_BIGINT_MODE`/`typeof DEFAULT_NUMERIC_MODE` fallbacks
- * below (when `TMeta` carries no `mode`) derive structurally from
+ * The {@link DefaultBigintMode}/{@link DefaultNumericMode} fallbacks below
+ * (when `TMeta` carries no `mode`) derive structurally from
  * `numeric-mode-defaults.ts`'s own constants (#310) — the same module
  * `column-builder-factories.ts`'s `bigint()`/`numeric()` read their runtime
  * default from, so the type-level fallback and the runtime default can
@@ -115,7 +115,7 @@ type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 				? NumericModeTsType<
 						TMeta extends { readonly mode: infer TMode extends NumericMode }
 							? TMode
-							: typeof DEFAULT_BIGINT_MODE
+							: DefaultBigintMode
 					>
 				: TTypeName extends "numeric"
 					? NumericModeTsType<
@@ -123,7 +123,7 @@ type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 								readonly mode: infer TMode extends NumericMode;
 							}
 								? TMode
-								: typeof DEFAULT_NUMERIC_MODE
+								: DefaultNumericMode
 						>
 					: TTypeName extends "bigserial"
 						? // not user-configurable (task 3.4 gives serial/smallserial/
