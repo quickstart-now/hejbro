@@ -74,7 +74,7 @@ fifth preset contribution (D95).
   path buried the guidance message under a second error — self-caught,
   fixed by removing the redundant end.
 
-## False-green taxonomy (five faces, all observed live this piece)
+## False-green taxonomy (five faces — symmetric for red, all observed live this piece)
 
 1. green that never ran (turbo cache replay), 2. green that collected
 nothing (`passWithNoTests` — one line flips exit 1 to 0, measured), 3.
@@ -84,8 +84,21 @@ collected the wrong thing (mergeConfig concat), 5. green from a
 mutation that was never applied (the instrument lying — g5's find,
 adopted here as the 3-step validity protocol before any "survived"
 verdict). Common pathology: a declaration diverging from the effective
-value. Two reviewer instruments carry to 7.x: `vitest list
---filesOnly` disjointness checks, and effective-config dumps.
+value. The planner's post-close reframe, adopted on request: the list
+is not green-specific — an unverified red lies exactly as much as an
+unverified green (the reviewer's own `pg` probe went red for
+`Cannot find package 'pg'`, not the intended reason; 6.4's real-stack
+M9 existed because a live database can satisfy an assertion by
+accident, so a positive result alone proves nothing). Three reviewer
+instruments carry to 7.x, each with its usage caveat recorded by the
+handover: `vitest list --filesOnly` disjointness checks (capture the
+baseline list from the pre-change tip; judge as sets — disjoint AND
+union-complete, since matching counts with swapped contents is exactly
+face four; sensitive to install state), effective-config dumps (must
+call function-form configs; always cross-check against `list` — each
+answers only half), and the alias-sentinel probe (plant a value only
+the source file has; categorically stronger than reading the config,
+revert-verified via clean `git status`).
 
 ## Verification highlights
 
