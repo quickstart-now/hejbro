@@ -3,3 +3,4 @@ date,change-id,group,role_sessions,input_tokens,output_tokens,cache_read_tokens,
 2026-08-26,add-query-layer,3,planner+implementer+reviewer,5012,2178887,987613223,5164833,measured at PR open from the three team session transcripts (2506 requests); lead-session tokens not piece-attributable
 2026-08-26,add-query-layer,4,planner+implementer+reviewer,5334,2206258,1014513008,5031214,measured at PR open from the three team session transcripts (2667 requests); lead-session tokens not piece-attributable
 2026-08-27,add-query-layer,6,planner+implementer+reviewer,1834,941124,139406221,1940670,measured at PR open from the three team session transcripts (917 requests); lead-session tokens not piece-attributable
+2026-08-27,add-query-layer,5,planner+implementer+reviewer,3040,1342057,429846957,2927846,measured at PR open from the three team session transcripts (1520 requests); lead-session tokens not piece-attributable

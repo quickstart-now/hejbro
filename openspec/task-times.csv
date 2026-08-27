@@ -65,3 +65,12 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-27,add-query-layer,6.4,6,10,35,0,measured; incl ~8m mergeConfig-concat bug reproduce+diagnose; stack wait 0; estimate lesson: wiring-proof cost was uncounted
 2026-08-27,add-query-layer,6.5,6,8,10,0,measured; config one-liner (f906efe) not separately measured (small)
 2026-08-27,add-query-layer,6.5-esc,6,,8,0,process cost: changeset-status blocker investigation + escalation writeup (structural red since 47aac29)
+2026-08-27,add-query-layer,5.0,5,6,28,0,approx (all implementer rows self-reported; implementer reclassified from measured - no timer ran); scout 18 + interval re-proof 10; coord wait ~5m excluded
+2026-08-27,add-query-layer,5.1,5,10,60,0,approx; original 15 + rework 45 - integration wiring / crap registration / alias sharing all arrived post-hoc (planning gap, not implementer cost); coord wait ~10m excluded
+2026-08-27,add-query-layer,5.2,5,6,8,0,approx; connection-string overload; coord wait ~3m excluded
+2026-08-27,add-query-layer,5.3,5,10,30,0,approx; original 15 + rework 15 (delegation witnesses incl format axis); coord wait ~15m excluded
+2026-08-27,add-query-layer,5.4,5,10,45,0,approx; original 25 + rework 20 (rollback double-failure (b) variant + release paths); coord wait ~20m excluded
+2026-08-27,add-query-layer,5.5,5,8,35,0,approx; original 20 + rework 15 (pin-failure defect + guard scope); coord wait ~15m excluded
+2026-08-27,add-query-layer,5.6,5,10,30,0,approx; real container caught the docker-port ipv6 parse bug; coord wait ~5m excluded
+2026-08-27,add-query-layer,5.7,5,8,20,0,approx; spec sentences narrowed to proven scope over several rounds; coord wait ~10m excluded
+2026-08-27,add-query-layer,5.review,5,,138,0,reviewer total measured: baseline 5 + batch(a) 18+14 + 4a65208 16 + batch(b) 22 + b1233e1 28 + 67c6991 20 + 5c94294 9 + 6d1490e 6
