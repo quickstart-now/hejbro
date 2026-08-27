@@ -596,13 +596,13 @@ real — never fixed here (`packages/query/src` is outside this group's
 file scope). `pnpm-lock.yaml` will conflict with group 6; the lead
 resolves it at rebase by regenerating.
 
-- [ ] 5.0 Scout: pin the installed `pg`'s actual behaviors the settled
+- [x] 5.0 Scout: pin the installed `pg`'s actual behaviors the settled
   design assumes — default parsers (int8/numeric → text, interval →
   object, timestamptz → Date), the per-query `types` config path, pool
   connect/checkout mechanics — and verify the moded-array gap (file an
   issue if confirmed, no fix); deliverable = a short inventory in the
   group PR body draft (no code, no test). ~6m
-- [ ] 5.1 Scaffold `packages/pg` (private like `packages/query`,
+- [x] 5.1 Scaffold `packages/pg` (private like `packages/query`,
   source-pointing exports, vitest aliases for `@hejbro/core` AND
   `@hejbro/query` per #131, turbo.json; `pg` peerDependency plus
   `pg`/`@types/pg` devDependencies) + `pgDriver(pool)` returning the
@@ -611,31 +611,31 @@ resolves it at rebase by regenerating.
   `packages/pg/package.json`, `packages/pg/tsconfig.json`,
   `packages/pg/vitest.config.ts`, `packages/pg/turbo.json`,
   `packages/pg/src/driver.ts`. ~10m
-- [ ] 5.2 Connection-string overload: `pgDriver(connectionString)`
+- [x] 5.2 Connection-string overload: `pgDriver(connectionString)`
   constructs and owns a `Pool`, exposed as `driver.client` (the
   instance form sets `client` to the caller's own pool — one surface,
   no divergence), never auto-closed; red test
   `packages/pg/test/driver.test.ts` "a connection-string driver exposes
   its own pool as client"; files `packages/pg/src/driver.ts`. ~6m
-- [ ] 5.3 Execute + per-query interval override: `execute` sends
+- [x] 5.3 Execute + per-query interval override: `execute` sends
   `{ text, values, types }` where the `types` override returns raw text
   for oid 1186 and delegates every other oid to pg's defaults; red test
   `packages/pg/test/driver.test.ts` "interval reaches the row as
   Postgres text while other types keep pg defaults" (stub pool
   asserting the query config); files `packages/pg/src/driver.ts`. ~10m
-- [ ] 5.4 Transaction: one client checkout per `transaction()`,
+- [x] 5.4 Transaction: one client checkout per `transaction()`,
   begin/commit, rollback + rethrow when the callback throws, the
   session bound to that one client (stubbed pool); red test
   `packages/pg/test/driver.test.ts` "runs a transaction's statements
   through one held client and rolls back on throw"; files
   `packages/pg/src/driver.ts`. ~10m
-- [ ] 5.5 setupSession IntervalStyle pin at checkout: WeakSet-guarded
+- [x] 5.5 setupSession IntervalStyle pin at checkout: WeakSet-guarded
   `set intervalstyle to 'postgres'` before the first caller statement
   on every new physical connection, on both the `execute` and
   `transaction` paths; red test `packages/pg/test/driver.test.ts` "a
   fresh connection is pinned before the first caller statement, once
   per connection"; files `packages/pg/src/driver.ts`. ~8m
-- [ ] 5.6 Docker-gated integration harness (postgres:17): a
+- [x] 5.6 Docker-gated integration harness (postgres:17): a
   `test:integration` script outside the default `test`, failing loudly
   with guidance when Docker is absent; proves the declared arrival
   shapes end-to-end — bigint/numeric modes, `IntervalValue` (pin +
@@ -644,7 +644,7 @@ resolves it at rebase by regenerating.
   typed rows on a real database"; files
   `packages/pg/test/integration.test.ts`, `packages/pg/package.json`.
   ~10m
-- [ ] 5.7 Spec-delta alignment (this group owns
+- [x] 5.7 Spec-delta alignment (this group owns
   `specs/driver-contract/spec.md`): the row arrival-shape requirement,
   the vanilla driver's capability values, and the session-setup pin
   wording — every added sentence tracing to a 5.x test; verified by
