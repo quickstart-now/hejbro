@@ -108,6 +108,9 @@ importers:
       '@hejbro/core':
         specifier: workspace:*
         version: link:../core
+      '@hejbro/query':
+        specifier: workspace:*
+        version: link:../query
       citty:
         specifier: ^0.2.2
         version: 0.2.2
@@ -167,6 +170,9 @@ importers:
       pg:
         specifier: ^8.23.0
         version: 8.23.0
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@5.9.3)(unrun@0.2.39)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -183,6 +189,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@5.9.3)(unrun@0.2.39)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

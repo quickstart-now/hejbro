@@ -13,6 +13,8 @@ import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
+import type { ChainApi } from "./chain";
+import { createChainApi } from "./chain";
 import type { DbContext, ScopedDb } from "./context";
 import { createAsApi } from "./context";
 import { executeOn } from "./execute";
@@ -263,6 +265,20 @@ export type Db<
 	 * itself, not rows (typed-function-execution spec).
 	 */
 	readonly fn: TypedFnApi<TFunctions>;
+	/**
+	 * Thenable `select` chain (task 7.1, group 7 decision ②): mirrors
+	 * core's own `select(table)`/`select({alias: expr}, table)` forms,
+	 * every stage delegating to the corresponding core builder stage (D94
+	 * — no second statement vocabulary). Inert until awaited; `.compile()`
+	 * on any stage never touches the driver.
+	 */
+	select: ChainApi["select"];
+	/** Thenable `insert` chain (task 7.2, group 7 decision ②) — mirrors core's `insert(target).values(rows)`. */
+	insert: ChainApi["insert"];
+	/** Thenable `update` chain (task 7.2, group 7 decision ②) — mirrors core's `update(target).set(values)`. */
+	update: ChainApi["update"];
+	/** Thenable `deleteFrom` chain (task 7.2, group 7 decision ②) — mirrors core's `deleteFrom(target)`. */
+	deleteFrom: ChainApi["deleteFrom"];
 };
 
 /**
@@ -325,6 +341,19 @@ export const db = <TSchema extends Schema>(
 	// FunctionDeclaration`) applied to the same `schema` object.
 	const typedFunctions = declarations.functions as FunctionsOf<TSchema>;
 	return {
+		// Spread first, not last (7.4 review finding): every explicit member
+		// below is this group's own established contract (task 4.x); a
+		// future `ChainApi` key colliding with one of them must never
+		// silently win over it just because object literals let a later
+		// key overwrite an earlier one -- spreading first guarantees the
+		// explicit members always take precedence, and `tsc` still catches
+		// a genuine `ChainApi` member that's missing from this object
+		// (structural excess from the spread is never a problem; silently
+		// losing an explicit member to it would be). Unscoped chains run
+		// directly on the driver, exactly like the unscoped `fn` member
+		// below -- driver already structurally satisfies DriverSession, no
+		// transaction to open.
+		...createChainApi((send) => send(driver), declarations.tables),
 		declarations,
 		driver,
 		execute: ((statement: CompileInput) =>

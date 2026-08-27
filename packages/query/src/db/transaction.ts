@@ -1,20 +1,54 @@
 import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
+import type { ChainApi } from "./chain";
+import { createChainApi } from "./chain";
 import type { Declarations } from "./db";
 import { executeOn } from "./execute";
 
 /**
- * What a `transaction()` callback receives — `execute` only. There is no
- * `.transaction` member here at all (unlike {@link Driver}/`Db`), so
- * `tx.transaction(...)` is a `tsc` error, not a runtime one; the nested
- * case this group actually has to guard against is a callback closing
- * over the *outer* `db` and calling `db.transaction(...)` again, which
- * `createTransactionApi`'s own `state` below catches at runtime.
+ * What a `transaction()` callback receives — `execute` plus the same
+ * thenable chain members every other surface carries (task 7.4, group 7
+ * decision ③: the chain surface is identical on the unscoped handle,
+ * `db.as` scope, and `tx`). There is no `.transaction` member here at all
+ * (unlike {@link Driver}/`Db`), so `tx.transaction(...)` is a `tsc` error,
+ * not a runtime one; the nested case this group actually has to guard
+ * against is a callback closing over the *outer* `db` and calling
+ * `db.transaction(...)` again, which `createTransactionApi`'s own `state`
+ * below catches at runtime.
+ *
+ * **`Tx.execute` stays untyped** (`Promise<ReadonlyArray<DriverRow>>`, not
+ * `ExecuteResult<TStatement>`) — a deliberate, out-of-scope asymmetry
+ * (task 7.5, #326): promoting `execute` to a generic return type is group
+ * 4's own contract to revise, not this group's file-scope call. A chain
+ * member (`tx.select(...)`, …) resolves its declared row type exactly like
+ * `db.execute`/`ScopedDb.execute` do; `tx.execute(select(...))` on the very
+ * same `tx` still resolves the plain `DriverRow` shape. #326 tracks
+ * closing that gap.
  */
-export type Tx = {
+export type Tx = ChainApi & {
 	execute(statement: CompileInput): Promise<ReadonlyArray<DriverRow>>;
 };
+
+/**
+ * Builds the `tx` handle a callback receives, on `session` — the one
+ * shared shape `transaction.ts`'s own `createTransactionApi` and
+ * `context.ts`'s `scopedTransaction` both hand their callbacks (task 7.4):
+ * the chain surface (`createChainApi`, tasks 7.1/7.2) parameterized by
+ * `(send) => send(session)` (the session is already open and held by the
+ * caller, so a chain member never needs to open one of its own — the same
+ * "session already in hand" shape `db.fn`'s own `run` takes when it's
+ * already inside a transaction), plus `execute`. One builder, not two
+ * hand-written `Tx` object literals that could quietly drift apart on
+ * which members they carry.
+ */
+export const buildTx = (
+	session: DriverSession,
+	tables: Declarations["tables"],
+): Tx => ({
+	...createChainApi((send) => send(session), tables),
+	execute: (statement) => executeOn(session, statement, tables),
+});
 
 /** Builds and throws the `nested-transaction-unsupported`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). */
 function throwNestedTransactionUnsupported(): never {
@@ -59,12 +93,9 @@ export const createTransactionApi = (
 		assertCapability(driver, "interactive-transactions", "transaction");
 		state.active = true;
 		try {
-			return await driver.transaction(async (session: DriverSession) => {
-				const tx: Tx = {
-					execute: (statement) => executeOn(session, statement, tables),
-				};
-				return callback(tx);
-			});
+			return await driver.transaction(async (session: DriverSession) =>
+				callback(buildTx(session, tables)),
+			);
 		} finally {
 			state.active = false;
 		}

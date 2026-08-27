@@ -140,3 +140,26 @@ input SHALL produce byte-identical output.
   connection configured
 - **THEN** it returns the SQL text and parameters, and compiling the
   same statement again returns byte-identical results
+
+### Requirement: A thenable chain surface delegates to the single statement vocabulary
+The query layer SHALL expose `select`/`insert`/`update`/`deleteFrom`
+chain entry points on a db handle whose stages (`where`/`orderBy`/
+`limit`/`innerJoin`/`leftJoin`/`returning`/`onConflictDoNothing`/
+`onConflictDoUpdate`) delegate directly to the corresponding core
+builder stage — the query layer SHALL NOT build a second statement
+vocabulary of its own. A chain SHALL remain inert, issuing no statement
+to any driver, until it is awaited; its `.compile()` method SHALL be a
+pure preview that never touches a driver.
+
+#### Scenario: A chain never sends a statement before being awaited
+- **WHEN** a chain is built through any number of stages but never
+  awaited
+- **THEN** no statement reaches any driver at any point during that
+  construction
+
+#### Scenario: A chain's compile() equals compile() of the same statement
+- **WHEN** a chain's `.compile()` is called instead of awaiting the
+  chain
+- **THEN** it returns byte-identical SQL text and parameters to calling
+  `compile()` directly on the equivalent core builder statement, and no
+  driver is touched

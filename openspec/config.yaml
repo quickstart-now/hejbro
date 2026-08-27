@@ -11,6 +11,7 @@ rules:
     - Decision rationale goes to the design spec's owner-gated decision log (docs/specs/), not into openspec artifacts
   tasks:
     - Top-level groups are parallel-safe slices — no file overlap between groups
+    - Each top-level group gets a GitHub tracking issue (sub-issue of the change's issue): filed before the group's team starts, In Progress at start, closed when the group's PR merges — tasks.md stays the execution truth; the issue is the board-visible layer, and leaf tasks are never mirrored into issues
     - Estimate pure work minutes on each task line ("~8m"); over 10 minutes → split, 5 or under → merge into a neighbor (consult openspec/task-times.csv)
     - Every leaf task names the failing test it starts from (test file + case name) and the files it touches — no separate "Tests" group
     - Mark tasks that settle a contract detail (signature, error shape, key order, output format, SQL text) as [design]

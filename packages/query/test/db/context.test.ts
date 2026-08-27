@@ -12,6 +12,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db/db";
 import type { Driver, DriverSession } from "../../src/driver/contract";
+import { recordingTransactionalDriver } from "./recording-driver";
 
 const app = schema("app");
 
@@ -36,60 +37,6 @@ const posts = table(
 const readerGrant = grant(app).usage.to("grant_reader");
 
 const appSchema = { posts, readerGrant };
-
-/** `{ contributedRoles }` when given a value, or `{}` when omitted -- avoids ever spreading an explicit `contributedRoles: undefined` (`exactOptionalPropertyTypes`); no ternary (house style), a guard clause per branch instead. */
-const contributedRolesField = (
-	contributedRoles: ReadonlyArray<string> | undefined,
-): Pick<Driver, "contributedRoles"> | Record<string, never> => {
-	if (contributedRoles === undefined) {
-		return {};
-	}
-	return { contributedRoles };
-};
-
-/** A driver that models one BEGIN/COMMIT per `driver.transaction()` call and records every statement sent on that connection, in order -- exactly what a `db.as(context)` test needs to check "role/settings applied, then the real statement, all in one transaction". */
-const recordingTransactionalDriver = (
-	options: {
-		readonly interactiveTransactions?: boolean;
-		readonly contributedRoles?: ReadonlyArray<string>;
-	} = {},
-): {
-	readonly driver: Driver;
-	readonly sentPerTransaction: Array<
-		Array<{ sql: string; params: ReadonlyArray<unknown> }>
-	>;
-	readonly topLevelSent: Array<{ sql: string; params: ReadonlyArray<unknown> }>;
-} => {
-	const sentPerTransaction: Array<
-		Array<{ sql: string; params: ReadonlyArray<unknown> }>
-	> = [];
-	const topLevelSent: Array<{ sql: string; params: ReadonlyArray<unknown> }> =
-		[];
-	const driver: Driver = {
-		capabilities: {
-			"interactive-transactions": options.interactiveTransactions ?? true,
-			"session-state": true,
-		},
-		execute: vi.fn(async (compiled) => {
-			topLevelSent.push({ sql: compiled.sql, params: compiled.params });
-			return [];
-		}),
-		transaction: vi.fn(async (callback) => {
-			const sent: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
-			sentPerTransaction.push(sent);
-			const session: DriverSession = {
-				execute: vi.fn(async (compiled) => {
-					sent.push({ sql: compiled.sql, params: compiled.params });
-					return [];
-				}),
-			};
-			return callback(session);
-		}),
-		setupSession: vi.fn(async () => {}),
-		...contributedRolesField(options.contributedRoles),
-	};
-	return { driver, sentPerTransaction, topLevelSent };
-};
 
 describe("db.as(context) -- UX scenario (2): an existing declared role (grant) works with no db() options set", () => {
 	it("applies SET LOCAL ROLE for a grant-declared role and runs the statement in the same transaction", async () => {

@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1118](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201118-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1136](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201136-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -120,13 +120,49 @@ PL/pgSQL builder compiler for functions and triggers is the novel part.
 
 | Package | Role |
 |---------|------|
-| `hejbro` | User-facing package: the DSL + CLI (`hejbro init`, `hejbro generate`, `hejbro verify`) |
+| `hejbro` | User-facing package: the DSL + query layer + CLI (`hejbro init`, `hejbro generate`, `hejbro verify`) |
 | `@hejbro/core` | Declaration model, builder DSL, compiler, snapshot & diff engine (pure) |
-| `@hejbro/supabase` | Supabase provider preset (auth helpers, storage buckets, role presets) |
+| `@hejbro/query` | Typed query layer: statement compiler, driver contract, RLS execution context, thenable chain surface |
+| `@hejbro/pg` | Vanilla node-postgres driver for `@hejbro/query` |
+| `@hejbro/supabase` | Supabase provider preset (auth helpers, storage buckets, role presets) + a `@hejbro/query` driver decorator |
 | `@hejbro/skills` | Agent skills that teach coding agents the hejbro workflow |
 
 Generic Postgres at the core; provider presets for Supabase first, with Neon
 and Nile planned on the same extension interface.
+
+## Query layer
+
+`hejbro` re-exports a typed query layer on the same declared schema: a
+db-first, thenable chain surface — inert until awaited, and identical
+across the unscoped handle, a `db.as(context)` scoped handle (RLS
+execution context), and `tx` inside `db.transaction(...)`.
+
+```bash
+pnpm add @hejbro/pg pg
+```
+
+```ts
+import { db, isNull } from "hejbro";
+import { pgDriver } from "@hejbro/pg";
+import * as schema from "./app.schema";
+
+const handle = db(schema, pgDriver(process.env.DATABASE_URL!));
+
+const active = await handle
+	.select(schema.projects)
+	.where(isNull(schema.projects.archivedAt));
+
+// pure preview — same statement, zero driver interaction.
+const { sql, params } = handle
+	.select(schema.projects)
+	.where(isNull(schema.projects.archivedAt))
+	.compile();
+```
+
+Using Supabase instead? `supabaseDriver(pgDriver(pool))` decorates the same
+driver contract with Supabase's roles, so `db.as(asUser(claims))` /
+`db.as(asAnon())` (both from `@hejbro/supabase`) pass the declared-role
+check.
 
 ## Examples
 
@@ -175,7 +211,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1118 functions** over the threshold, highest score 5.00 — measured at `317a7e5` (2026-08-27).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1136 functions** over the threshold, highest score 5.00 — measured at `c1e2f54` (2026-08-27).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->
@@ -194,6 +230,7 @@ records, never self-reported. Formulas and dimension definitions: #305.
 | group 4 — execution + drivers contract | 15 | 195 → 130 (0.67×) | 2 | 2,206,258 | 2,667 | 99.5% |
 | group 6 — supabase driver + RLS context | 6 | 46 → 91 (2.0×) ² | 0 | 941,124 | 917 | 98.6% |
 | group 5 — @hejbro/pg vanilla driver | 8 | 68 → ~256 (3.8×) ³ | 4 | 1,342,057 | 1,520 | 99.3% |
+| group 7 — public surface, chains, release wiring | 14 | 122 → ~351 (2.9×) ⁴ | 3 | 1,700,360 | 1,884 | 99.6% |
 
 Named process-cost rows are kept separate from task rows (a decision
 arriving mid-implementation, a red-first lapse, a gate widening between
@@ -210,7 +247,11 @@ self-reported approximations (reclassified from "measured" by the
 implementer's own call — no timer ran), and the overrun is dominated
 by requirements arriving across rounds: quality-gate wiring and
 test-binding standards were not pre-settled in the re-plan — recorded
-as a planning lesson, not implementer cost.
+as a planning lesson, not implementer cost. ⁴ group 7's rows are
+likewise self-reported approximations; ~100m of extra-task rework
+(separate ledger row) went mostly to mutation verification, which is
+what caught five surviving mutations, and the final three commits
+went unmeasured (gap recorded in the ledger).
 <!-- ai-metrics:end -->
 
 ## License

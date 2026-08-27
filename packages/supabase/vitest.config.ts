@@ -17,8 +17,15 @@ export default defineConfig({
 			"@hejbro/core": resolve(import.meta.dirname, "../core/src/index.ts"),
 			// #131, same reasoning as the @hejbro/core alias above: resolves
 			// straight to source so this package's tests never pass against a
-			// stale (or, since @hejbro/query is source-pointing, nonexistent)
-			// build.
+			// stale build. This alias used to be a no-op in practice --
+			// `@hejbro/query` was source-pointing (its own `exports` field
+			// pointed straight at `src/index.ts`), so there was no `dist` to
+			// go stale against. Task 7.6 flipped `@hejbro/query`'s `exports`
+			// to `dist/index.js`, which reverses that: without this alias,
+			// vitest invoked directly (outside turbo's `^build` graph) would
+			// now resolve the workspace-linked `dist` build and could pass
+			// against a stale one. #131's original intent now applies to
+			// this package for real.
 			"@hejbro/query": resolve(import.meta.dirname, "../query/src/index.ts"),
 		},
 	},

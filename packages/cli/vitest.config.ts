@@ -60,6 +60,10 @@ export default defineConfig({
 		// instead (test/support/cli-runner.ts).
 		alias: {
 			"@hejbro/core": resolve(import.meta.dirname, "../core/src/index.ts"),
+			// #131, same reasoning as the @hejbro/core alias above: resolves
+			// straight to source so this package's in-process tests never
+			// pass against a stale (or, before task 7.6, nonexistent) build.
+			"@hejbro/query": resolve(import.meta.dirname, "../query/src/index.ts"),
 		},
 	},
 });

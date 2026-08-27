@@ -55,8 +55,10 @@ again.
 | Path | Package | Constraint |
 |------|---------|------------|
 | `packages/core` | `@hejbro/core` | **PURE**: no fs, no DB, (near-)zero runtime deps |
-| `packages/cli` | `hejbro` | User-facing DSL re-exports + CLI; the only place that touches the filesystem |
-| `packages/supabase` | `@hejbro/supabase` | May only use core's public extension interface |
+| `packages/query` | `@hejbro/query` | Statement compiler, driver contract, RLS execution context, thenable chain surface — pure over core's DSL, no I/O of its own |
+| `packages/pg` | `@hejbro/pg` | Vanilla node-postgres driver implementing `@hejbro/query`'s driver contract |
+| `packages/cli` | `hejbro` | User-facing DSL + query-layer re-exports + CLI; the only place that touches the filesystem |
+| `packages/supabase` | `@hejbro/supabase` | May only use core's public extension interface (and `@hejbro/query`'s driver contract for its own driver decorator) |
 | `packages/skills` | `@hejbro/skills` | Agent skills for hejbro *users* |
 | `examples/` | — | Real declarations doubling as integration tests |
 
