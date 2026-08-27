@@ -257,6 +257,7 @@ went unmeasured (gap recorded in the ledger).
 |---|---|---|---|---|---|---|
 | group 2 — assertNoNulls utility | 1 | 7 → 30 ⁵ | 1 | 348,504 | 492 | 97.1% |
 | group 1 — declaration surface + narrowing | 3 | 24 → 45 ⁶ | 0 | 532,315 | 718 | 98.2% |
+| group 3 — NULL-element conversion guard | 1 | 6 → 30 ⁷ | 0 | 380,247 | 438 | 96.7% |
 
 ⁵ group 2's overage is four planner-imposed correction rounds (the
 literal `Next:` marker, two ordered-but-missing cases, the
@@ -268,7 +269,13 @@ rounds bought. ⁶ group 1's tasks ran back-to-back (retrospective
 split unavailable); a separate 20m process row records two contract
 round-trips on finished code — crossed lead rulings during a
 mid-piece design escalation, a coordination-layer cost the piece's
-blackbox attributes to the lead, not the implementer.
+blackbox attributes to the lead, not the implementer. ⁷ group 3's
+17m crossing-rerun process row is separate; the review verdict passed
+first try, and the two late-added assertions it demanded pre-freeze
+were both proven live by counterfactual checks (deleting either one
+lets its mutant survive) — the overage bought real guards, and the
+recorded lesson is to settle requirements before red starts by
+checking whether each gate actually sees the piece's files.
 <!-- ai-metrics:end -->
 
 ## License
