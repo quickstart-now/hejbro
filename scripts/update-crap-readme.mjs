@@ -141,8 +141,6 @@ const withBadge = replaceBetween(
 	badgeMarkdown(scanned, violationCount),
 );
 
-writeFileSync(README_PATH, withBadge);
-
 const changeVerb = () => {
 	if (numbersUnchanged) {
 		return "unchanged (numbers match)";
@@ -150,6 +148,23 @@ const changeVerb = () => {
 	return "refreshed";
 };
 
-console.log(
-	`update-crap-readme: README.md ${changeVerb()} -- ${violationCount} of ${scanned} functions over CRAP ${CRAP_THRESHOLD}, highest ${highest}, measured at ${sha} (${date}).`,
-);
+const summaryLine = (verb) =>
+	`update-crap-readme: README.md ${verb} -- ${violationCount} of ${scanned} functions over CRAP ${CRAP_THRESHOLD}, highest ${highest}, measured at ${sha} (${date}).`;
+
+// #336 (review-gate fidelity): `--check` reports what the write would do
+// without touching the tree. A verdict run at a frozen SHA must be able
+// to cite this gate without dirtying README.md as a side effect. The
+// write path stays the default -- CI's `git diff --exit-code README.md`
+// and the done-checklist refresh both rely on it.
+if (process.argv.includes("--check")) {
+	if (withBadge === readme) {
+		console.log(summaryLine("current (--check: no write needed)"));
+	} else {
+		console.log(summaryLine("STALE (--check: not written)"));
+		console.log("update-crap-readme: would-be block:");
+		console.log(blockText(scanned, violationCount, highest, sha, date));
+	}
+} else {
+	writeFileSync(README_PATH, withBadge);
+	console.log(summaryLine(changeVerb()));
+}
