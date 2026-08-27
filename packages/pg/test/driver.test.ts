@@ -3,10 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { pgDriver } from "../src/driver";
 
 /**
- * What `pgDriver`'s `execute` actually sends to a node-postgres pool --
- * `text`/`values` plus the per-query `types` override (owner decision
- * ③). Typed narrowly to exactly the shape the driver constructs, so the
- * stub below never needs a full `pg` `QueryConfig`.
+ * What `pgDriver` actually sends to a node-postgres client -- a bare SQL
+ * string (`BEGIN`/`COMMIT`/`ROLLBACK`, the IntervalStyle pin) or a
+ * structured query config (`text`/`values`/`types`, a statement routed
+ * through `makeSession`). Typed narrowly to exactly the shapes the
+ * driver constructs, so the stubs below never need a full `pg`
+ * `QueryConfig`.
  */
 type CapturedQueryConfig = {
 	readonly text: string;
@@ -18,20 +20,44 @@ type CapturedQueryConfig = {
 		) => (value: string) => unknown;
 	};
 };
+type QueryCall = string | CapturedQueryConfig;
 
-/** A stub `Pool` whose `query` records every config it was handed, never touching a real connection. */
-const recordingPool = (): {
+/** The SQL text a captured `client.query` call carries, whichever of the two {@link QueryCall} shapes it was sent as. */
+const sqlTextOf = (call: QueryCall): string => {
+	if (typeof call === "string") {
+		return call;
+	}
+	return call.text;
+};
+
+/**
+ * A pool whose `connect` always hands back the *same* stub client
+ * (simulating the pool reusing one physical connection across checkouts)
+ * and records every call that client's own `query` received, in order.
+ * Deliberately has no `query` method of its own -- if the driver ever
+ * issued a statement through `pool.query` instead of the checked-out
+ * client, that call would throw (not silently succeed against the wrong
+ * connection), catching a session-binding regression decisively rather
+ * than by inspection.
+ */
+const stubPoolWithClient = (): {
 	readonly pool: Pool;
-	readonly received: Array<CapturedQueryConfig>;
+	readonly release: ReturnType<typeof vi.fn>;
+	readonly calls: Array<QueryCall>;
 } => {
-	const received: Array<CapturedQueryConfig> = [];
-	const pool = {
-		query: vi.fn(async (config: CapturedQueryConfig) => {
-			received.push(config);
+	const calls: Array<QueryCall> = [];
+	const release = vi.fn();
+	const client = {
+		query: vi.fn(async (call: QueryCall) => {
+			calls.push(call);
 			return { rows: [] };
 		}),
+		release,
+	};
+	const pool = {
+		connect: vi.fn(async () => client),
 	} as unknown as Pool;
-	return { pool, received };
+	return { pool, release, calls };
 };
 
 describe("pgDriver(pool) (owner decision ①, task 5.1)", () => {
@@ -71,11 +97,13 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 
 	it("never auto-closes the pool across an execute round-trip (owner decision ②: pool lifetime = process lifetime, not query lifetime)", async () => {
 		const driver = pgDriver("postgres://localhost/does-not-need-to-connect");
-		// spies out the network entirely -- this proves execute() itself
-		// never calls end(), independent of whether a real database is
-		// reachable.
-		vi.spyOn(driver.client, "query").mockResolvedValue({
-			rows: [],
+		// spies out the network entirely -- execute() checks out a client
+		// (task 5.5's pin needs the real client, not pool.query()'s
+		// implicit checkout), so both `connect` and the client's own
+		// `query` are stubbed here.
+		vi.spyOn(driver.client, "connect").mockResolvedValue({
+			query: vi.fn(async () => ({ rows: [] })),
+			release: vi.fn(),
 		} as never);
 		const endSpy = vi.spyOn(driver.client, "end");
 
@@ -105,16 +133,20 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 
 describe("pgDriver execute + interval types override (owner decision ③, task 5.3)", () => {
 	it("interval reaches the row as Postgres text while other types keep pg defaults", async () => {
-		const { pool, received } = recordingPool();
+		const { pool, calls } = stubPoolWithClient();
 		const driver = pgDriver(pool);
 
 		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
 
-		const config = received.at(0);
+		// looked up by its own text, not position: task 5.5 adds a pin
+		// statement ahead of every caller statement on a fresh connection,
+		// and this test's own job is the types override, not ordering.
+		const config = calls
+			.filter((call): call is CapturedQueryConfig => typeof call !== "string")
+			.find((call) => call.text === "select 1");
 		if (config === undefined) {
-			throw new Error("pool.query was never called");
+			throw new Error("the caller's own statement was never sent");
 		}
-		expect(config.text).toBe("select 1");
 		expect(config.values).toEqual([]);
 
 		// oid 1186 (interval): raw Postgres text, never pg's own
@@ -169,45 +201,8 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 });
 
 describe("pgDriver transaction (task 5.4)", () => {
-	/** The SQL text a captured `client.query` call carries, whether it was sent as a bare string (`BEGIN`/`COMMIT`/`ROLLBACK`) or a structured query config (a statement routed through `makeSession`). */
-	const sqlTextOf = (config: string | CapturedQueryConfig): string => {
-		if (typeof config === "string") {
-			return config;
-		}
-		return config.text;
-	};
-
-	/**
-	 * A pool whose `connect` always hands back the *same* stub client and
-	 * records every SQL string that client's own `query` was sent, in
-	 * order. Deliberately has no `query` method of its own -- if
-	 * `transaction()` ever issued a statement through `pool.query` instead
-	 * of the checked-out client, that call would throw (not silently
-	 * succeed against the wrong connection), catching a session-binding
-	 * regression decisively rather than by inspection.
-	 */
-	const stubPoolWithClient = (): {
-		readonly pool: Pool;
-		readonly release: ReturnType<typeof vi.fn>;
-		readonly queries: Array<string>;
-	} => {
-		const queries: Array<string> = [];
-		const release = vi.fn();
-		const client = {
-			query: vi.fn(async (config: string | CapturedQueryConfig) => {
-				queries.push(sqlTextOf(config));
-				return { rows: [] };
-			}),
-			release,
-		};
-		const pool = {
-			connect: vi.fn(async () => client),
-		} as unknown as Pool;
-		return { pool, release, queries };
-	};
-
 	it("runs a transaction's statements through one held client and commits on success", async () => {
-		const { pool, release, queries } = stubPoolWithClient();
+		const { pool, release, calls } = stubPoolWithClient();
 		const driver = pgDriver(pool);
 
 		const result = await driver.transaction(async (session) => {
@@ -217,15 +212,22 @@ describe("pgDriver transaction (task 5.4)", () => {
 
 		expect(result).toBe("done");
 		expect(pool.connect).toHaveBeenCalledTimes(1);
-		// BEGIN and COMMIT bracket the callback's own statement, and every
-		// one of the three went through the same held client (the stub
-		// pool has no `query` of its own to have answered any of them).
-		expect(queries).toEqual(["BEGIN", "select 1", "COMMIT"]);
+		// the pin (task 5.5) fires once ahead of BEGIN on this fresh
+		// connection; BEGIN and COMMIT bracket the callback's own
+		// statement, and every one of the four went through the same held
+		// client (the stub pool has no `query` of its own to have
+		// answered any of them).
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"BEGIN",
+			"select 1",
+			"COMMIT",
+		]);
 		expect(release).toHaveBeenCalledTimes(1);
 	});
 
 	it("rolls back and rethrows the callback's own error, unchanged, when the callback throws", async () => {
-		const { pool, release, queries } = stubPoolWithClient();
+		const { pool, release, calls } = stubPoolWithClient();
 		const driver = pgDriver(pool);
 		const originalError = new Error("callback boom");
 
@@ -239,7 +241,11 @@ describe("pgDriver transaction (task 5.4)", () => {
 		// ROLLBACK alone wouldn't distinguish this from a (broken) second
 		// checkout that also happened to emit the same two strings.
 		expect(pool.connect).toHaveBeenCalledTimes(1);
-		expect(queries).toEqual(["BEGIN", "ROLLBACK"]);
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"BEGIN",
+			"ROLLBACK",
+		]);
 		expect(release).toHaveBeenCalledTimes(1);
 	});
 
@@ -254,5 +260,72 @@ describe("pgDriver transaction (task 5.4)", () => {
 				throw thrown;
 			}),
 		).rejects.toBe(thrown);
+	});
+});
+
+describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)", () => {
+	it("pins a fresh connection with the IntervalStyle setting before the first caller statement, on the execute path", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		// order, not just presence: the pin must be *before* the caller's
+		// own statement, since decision ④ exists specifically because a
+		// connect-listener-only pin would race the first statement.
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"select 1",
+		]);
+	});
+
+	it("pins a fresh connection before BEGIN, on the transaction path", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		await driver.transaction(async (session) => {
+			await session.execute({ sql: "select 1", params: [], kind: "sql" });
+			return "done";
+		});
+
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"BEGIN",
+			"select 1",
+			"COMMIT",
+		]);
+	});
+
+	it("does not re-pin a reused connection (WeakSet hit) -- second execute on the same physical client sends no second pin", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+		await driver.execute({ sql: "select 2", params: [], kind: "sql" });
+
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"select 1",
+			"select 2",
+		]);
+	});
+
+	it("shares pin state across the execute and transaction paths on the same physical connection", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+		await driver.transaction(async (session) => {
+			await session.execute({ sql: "select 2", params: [], kind: "sql" });
+			return "done";
+		});
+
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"select 1",
+			"BEGIN",
+			"select 2",
+			"COMMIT",
+		]);
 	});
 });

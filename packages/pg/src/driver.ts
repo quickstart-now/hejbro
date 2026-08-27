@@ -4,7 +4,7 @@ import type {
 	DriverCapabilities,
 	DriverSession,
 } from "@hejbro/query";
-import type { CustomTypesConfig } from "pg";
+import type { CustomTypesConfig, PoolClient } from "pg";
 import { Pool, types as pgTypes } from "pg";
 
 /**
@@ -51,8 +51,8 @@ type Queryable = Pick<Pool, "query">;
  * Wraps `queryable` (a `Pool` or a single checked-out `PoolClient`) as a
  * {@link DriverSession} -- the one place a {@link CompileResult} becomes a
  * node-postgres query config, always carrying {@link intervalPassthroughTypes}
- * (task 5.3). Checkout pinning is added by task 5.5; this is the shape it
- * builds on.
+ * (task 5.3). Checkout pinning (task 5.5, {@link checkoutGuard}) happens
+ * one level up, before a caller's statement ever reaches this function.
  */
 const makeSession = (queryable: Queryable): DriverSession => ({
 	execute: async (compiled: CompileResult) => {
@@ -65,6 +65,49 @@ const makeSession = (queryable: Queryable): DriverSession => ({
 	},
 });
 
+/**
+ * The IntervalStyle pin (owner decision ④): fixed to `'postgres'` so the
+ * arrival-shape table task 5.7 documents (interval as raw text via
+ * {@link intervalPassthroughTypes}) holds regardless of the connecting
+ * role's own `intervalstyle` default.
+ */
+const SETUP_SESSION_SQL = "set intervalstyle to 'postgres'";
+
+/**
+ * The `Driver.setupSession` member itself -- the actual session-setup
+ * statement, sent through the same {@link makeSession}/`execute` path as
+ * every other statement (task 5.5). `@hejbro/query` never calls this
+ * directly (contract.ts's own tsdoc); {@link checkoutGuard} below is this
+ * driver's own connection-acquisition code calling it, at the one moment
+ * the contract requires: before any caller statement on a fresh physical
+ * connection.
+ */
+const setupSession = async (session: DriverSession): Promise<void> => {
+	await session.execute({ sql: SETUP_SESSION_SQL, params: [], kind: "sql" });
+};
+
+/**
+ * Builds the per-driver checkout guard (owner decision ④): a `WeakSet`
+ * scoped to one {@link buildDriver} call, not module-level -- two drivers
+ * built over two different pools must never share pin state, and a
+ * client's pinned-ness is meaningless once it's returned to a pool this
+ * driver doesn't hold. Pins strictly before returning, so a caller that
+ * awaits this function's result has the pin's own statement already
+ * flushed on `client` ahead of anything it sends next (the ordering
+ * decision ④ exists for -- a connect-listener-only pin is not awaited by
+ * the pool and would race the first caller statement; 5.0 scout).
+ */
+const checkoutGuard = (): ((client: PoolClient) => Promise<void>) => {
+	const pinnedConnections = new WeakSet<PoolClient>();
+	return async (client) => {
+		if (pinnedConnections.has(client)) {
+			return;
+		}
+		pinnedConnections.add(client);
+		await setupSession(makeSession(client));
+	};
+};
+
 /** Resolves either overload's argument to the one `Pool` {@link buildDriver} needs -- a string constructs and owns a fresh `Pool`, a `Pool` is used exactly as given (owner decisions ①/②). */
 const resolvePool = (poolOrConnectionString: Pool | string): Pool => {
 	if (typeof poolOrConnectionString === "string") {
@@ -74,26 +117,38 @@ const resolvePool = (poolOrConnectionString: Pool | string): Pool => {
 };
 
 /** One driver shape shared by both {@link pgDriver} overloads -- built once `pool` is settled, so the instance and connection-string forms can never diverge in what they hand back. */
-const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => ({
-	client: pool,
-	capabilities: CAPABILITIES,
-	execute: (compiled) => makeSession(pool).execute(compiled),
-	transaction: async (callback) => {
-		const client = await pool.connect();
-		try {
-			await client.query("BEGIN");
-			const result = await callback(makeSession(client));
-			await client.query("COMMIT");
-			return result;
-		} catch (error) {
-			await client.query("ROLLBACK");
-			throw error;
-		} finally {
-			client.release();
-		}
-	},
-	setupSession: async () => {},
-});
+const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
+	const ensurePinned = checkoutGuard();
+	return {
+		client: pool,
+		capabilities: CAPABILITIES,
+		execute: async (compiled) => {
+			const client = await pool.connect();
+			try {
+				await ensurePinned(client);
+				return await makeSession(client).execute(compiled);
+			} finally {
+				client.release();
+			}
+		},
+		transaction: async (callback) => {
+			const client = await pool.connect();
+			try {
+				await ensurePinned(client);
+				await client.query("BEGIN");
+				const result = await callback(makeSession(client));
+				await client.query("COMMIT");
+				return result;
+			} catch (error) {
+				await client.query("ROLLBACK");
+				throw error;
+			} finally {
+				client.release();
+			}
+		},
+		setupSession,
+	};
+};
 
 /**
  * Instance form (owner decision ①): wraps a caller-owned `Pool` as-is --
