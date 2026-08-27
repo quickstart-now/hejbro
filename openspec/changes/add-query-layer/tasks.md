@@ -715,7 +715,7 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   authenticated role plus one JSON claims setting; asAnon builds anon";
   files `packages/supabase/src/context.ts`,
   `packages/supabase/src/index.ts`. ~8m
-- [ ] 6.2 `supabaseDriver(driver)` decorator: adds `contributedRoles` =
+- [x] 6.2 `supabaseDriver(driver)` decorator: adds `contributedRoles` =
   anon/authenticated/service_role and passes every other member through
   unchanged (capabilities, execute, transaction, setupSession); adds
   the `@hejbro/query` dependency and its #131 vitest alias to this
@@ -724,7 +724,16 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   wrapped driver member through unchanged"; files
   `packages/supabase/src/driver.ts`, `packages/supabase/src/index.ts`,
   `packages/supabase/package.json`,
-  `packages/supabase/vitest.config.ts`. ~8m
+  `packages/supabase/vitest.config.ts`. ~8m — a one-expression object
+  spread (`{ ...driver, contributedRoles: [...] }`), so the passthrough
+  proof is structural rather than a spot-check: it asserts every own
+  key of the wrapped-*input* driver is `===` identical on the *output*,
+  which a future `Driver` contract addition would carry automatically
+  and a hand-listed member enumeration would silently miss.
+  `@hejbro/query` is added as a **runtime** `dependencies` entry, not
+  `devDependencies` (its `Driver` type reaches this package's own
+  public d.ts) — `.claude/rules/supabase-preset.md` still describes the
+  pre-D95 core-only boundary; its update is task 6.5's.
 - [ ] 6.3 Task 4.7 (a′) union wiring proof: with a schema declaring
   ZERO grants/policies, `db(schema, supabaseDriver(fake))` accepts
   `.as(asAnon())` and `.as(asUser(...))` (roles arrive via the driver

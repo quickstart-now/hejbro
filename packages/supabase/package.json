@@ -41,7 +41,8 @@
 		"prepack": "pnpm build"
 	},
 	"dependencies": {
-		"@hejbro/core": "workspace:*"
+		"@hejbro/core": "workspace:*",
+		"@hejbro/query": "workspace:*"
 	},
 	"devDependencies": {
 		"@vitest/coverage-v8": "catalog:",

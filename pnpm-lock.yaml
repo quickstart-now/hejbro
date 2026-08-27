@@ -176,6 +176,9 @@ importers:
       '@hejbro/core':
         specifier: workspace:*
         version: link:../core
+      '@hejbro/query':
+        specifier: workspace:*
+        version: link:../query
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
