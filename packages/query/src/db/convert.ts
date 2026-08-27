@@ -257,35 +257,47 @@ const throwUnexpectedArrayArrivalShape = (
 };
 
 /**
- * `raw`'s own element list — the arrival shape is decided by `element`
- * (the array's declared element {@link TypeNode}), **never** by sniffing
- * `raw`'s own runtime type: the driver-contract delta fixes exactly one
- * declared type at one arrival shape apiece, and this mirrors that
- * contract rather than guessing from whatever happened to show up.
- * `interval[]` (task 1.3's driver override, oid 1187) is the one declared
- * element type contracted to arrive as raw Postgres array-literal text —
- * parsed here via {@link parseArrayText}. Every other declared element
- * type (moded numeric/bigint, or no runtime conversion at all) keeps
+ * Declared element types whose array column is contracted to arrive as
+ * raw Postgres array-literal text, never `pg`'s own default array
+ * parsing — `interval` (task 1.3's driver override, oid 1187) and
+ * `numeric` (task B2.1's driver override, oid 1231) each have their own
+ * driver-level override for exactly this reason (both would otherwise
+ * arrive already lossily parsed: `PostgresInterval` objects and
+ * `parseFloat`'d numbers, respectively — the postgres:17 integration
+ * proof, task 1.5, is what surfaced the `numeric` case). Every other
+ * declared element type (`bigint` included — oid 1016's own default
+ * array parser already returns text elements, no override needed) keeps
  * `pg`'s own default array parsing, contracted to already be a JS array.
- * A `raw` that doesn't match the shape its declared element contracts is
- * never coerced or guessed at — {@link throwUnexpectedArrayArrivalShape}
- * throws, caught by {@link convertCell}'s existing wrapper the same as any
- * other conversion failure.
  */
-const rawArrayElements = (
+const RAW_ARRAY_TEXT_ELEMENT_TYPE_NAMES: ReadonlyArray<TypeNode["typeName"]> = [
+	"interval",
+	"numeric",
+];
+
+/** `true` when `element`'s array column is contracted to arrive as raw array-literal text — see {@link RAW_ARRAY_TEXT_ELEMENT_TYPE_NAMES}. */
+const expectsRawArrayText = (element: TypeNode): boolean =>
+	RAW_ARRAY_TEXT_ELEMENT_TYPE_NAMES.includes(element.typeName);
+
+/** `raw`'s own element list when `element` is contracted to arrive as raw array-literal text (see {@link expectsRawArrayText}) — parsed via {@link parseArrayText}. A `raw` that isn't a string at all doesn't match that contract and is never coerced or guessed at: {@link throwUnexpectedArrayArrivalShape} throws instead. */
+const rawArrayElementsFromText = (
 	raw: unknown,
 	element: TypeNode,
 ): ReadonlyArray<unknown> => {
-	if (element.typeName === "interval") {
-		if (typeof raw !== "string") {
-			return throwUnexpectedArrayArrivalShape(
-				"raw array-literal text",
-				element.typeName,
-				raw,
-			);
-		}
-		return parseArrayText(raw);
+	if (typeof raw !== "string") {
+		return throwUnexpectedArrayArrivalShape(
+			"raw array-literal text",
+			element.typeName,
+			raw,
+		);
 	}
+	return parseArrayText(raw);
+};
+
+/** `raw`'s own element list when `element` keeps `pg`'s own default array parsing (every declared element type {@link expectsRawArrayText} answers `false` for) — `raw` itself, unchanged. A `raw` that isn't already a JS array doesn't match that contract: {@link throwUnexpectedArrayArrivalShape} throws instead of coercing or guessing. */
+const rawArrayElementsFromJsArray = (
+	raw: unknown,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
 	if (!Array.isArray(raw)) {
 		return throwUnexpectedArrayArrivalShape(
 			"a JS array",
@@ -294,6 +306,25 @@ const rawArrayElements = (
 		);
 	}
 	return raw;
+};
+
+/**
+ * `raw`'s own element list — the arrival shape is decided by `element`
+ * (the array's declared element {@link TypeNode}), **never** by sniffing
+ * `raw`'s own runtime type: the driver-contract delta fixes exactly which
+ * declared element types arrive as raw array-literal text
+ * ({@link expectsRawArrayText}) versus `pg`'s own default array parsing,
+ * and this mirrors that contract rather than guessing from whatever
+ * happened to show up.
+ */
+const rawArrayElements = (
+	raw: unknown,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
+	if (expectsRawArrayText(element)) {
+		return rawArrayElementsFromText(raw, element);
+	}
+	return rawArrayElementsFromJsArray(raw, element);
 };
 
 /**

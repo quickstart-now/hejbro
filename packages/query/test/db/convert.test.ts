@@ -3,6 +3,7 @@ import {
 	eq,
 	insert,
 	interval,
+	numeric,
 	schema,
 	select,
 	table,
@@ -36,6 +37,7 @@ const events = table(app, "events", {
 	amounts: bigint({ mode: "bigint" }).array(),
 	durations: interval().array(),
 	tags: text().array(),
+	precisions: numeric({ mode: "string" }).array(),
 });
 
 const tables = { posts, comments, events };
@@ -253,7 +255,13 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 
 		// moded (bigint) array: the driver hands back a JS array of decimal-text elements.
 		const bigintArray = convertRow(
-			{ id: "x", amounts: ["1", "2", "3"], durations: null, tags: null },
+			{
+				id: "x",
+				amounts: ["1", "2", "3"],
+				durations: null,
+				tags: null,
+				precisions: null,
+			},
 			plan,
 		);
 		expect(bigintArray.amounts).toEqual([1n, 2n, 3n]);
@@ -265,6 +273,7 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 				amounts: null,
 				durations: '{"1 day","2 days 03:00:00"}',
 				tags: null,
+				precisions: null,
 			},
 			plan,
 		);
@@ -296,6 +305,7 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 				amounts: ["1", null, "3"],
 				durations: '{"1 day",NULL}',
 				tags: null,
+				precisions: null,
 			},
 			plan,
 		);
@@ -305,7 +315,13 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 		// an array column with no element-level conversion (text[]) passes
 		// its elements through raw, unchanged.
 		const textArray = convertRow(
-			{ id: "x", amounts: null, durations: null, tags: ["a", "b"] },
+			{
+				id: "x",
+				amounts: null,
+				durations: null,
+				tags: ["a", "b"],
+				precisions: null,
+			},
 			plan,
 		);
 		expect(textArray.tags).toEqual(["a", "b"]);
@@ -337,7 +353,13 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 		// array -- 1.1's own contract carried through 1.2's wiring.
 		try {
 			convertRow(
-				{ id: "x", amounts: null, durations: "not-array-text", tags: null },
+				{
+					id: "x",
+					amounts: null,
+					durations: "not-array-text",
+					tags: null,
+					precisions: null,
+				},
 				plan,
 			);
 			expect.unreachable("convertRow should have thrown");
@@ -357,7 +379,13 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 		// silently accepted.
 		try {
 			convertRow(
-				{ id: "x", amounts: null, durations: ["1 day"], tags: null },
+				{
+					id: "x",
+					amounts: null,
+					durations: ["1 day"],
+					tags: null,
+					precisions: null,
+				},
 				plan,
 			);
 			expect.unreachable("convertRow should have thrown");
@@ -377,7 +405,13 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 		// naming the column, rather than being guessed at.
 		try {
 			convertRow(
-				{ id: "x", amounts: "{1,2,3}", durations: null, tags: null },
+				{
+					id: "x",
+					amounts: "{1,2,3}",
+					durations: null,
+					tags: null,
+					precisions: null,
+				},
 				plan,
 			);
 			expect.unreachable("convertRow should have thrown");
@@ -385,6 +419,66 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 			expect(error).toBeInstanceOf(Error);
 			expect(error).toHaveProperty("code", "result-conversion-failed");
 			expect(error).toHaveProperty("column", "amounts");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unexpected-array-arrival-shape");
+		}
+	});
+
+	it("numeric array cells convert from raw array text, exact decimal preserved (B2.2, #320)", () => {
+		const node = select(events).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		// numeric[] (like interval[], task B2.1's driver override, oid 1231):
+		// the driver hands back raw Postgres array-literal text, never pg's
+		// own default array parser -- which would have already
+		// `parseFloat`'d each element, destroying the exact decimal text a
+		// 'string'-mode numeric[] column needs (found via the postgres:17
+		// integration proof, task 1.5).
+		const numericArray = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: null,
+				tags: null,
+				precisions: "{123.450000,0.100000}",
+			},
+			plan,
+		);
+		expect(numericArray.precisions).toEqual(["123.450000", "0.100000"]);
+
+		// NULL elements pass through as null here too.
+		const withNull = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: null,
+				tags: null,
+				precisions: "{123.450000,NULL}",
+			},
+			plan,
+		);
+		expect(withNull.precisions).toEqual(["123.450000", null]);
+
+		// arrival-shape mismatch fails fast here too, naming the column --
+		// a numeric[] cell that arrives as an already-parsed JS array (the
+		// shape only a non-interval/non-numeric element is contracted to).
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: null,
+					durations: null,
+					tags: null,
+					precisions: [123.45, 0.1],
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "precisions");
 			const cause = (error as Error & { cause?: unknown }).cause;
 			expect(cause).toBeInstanceOf(Error);
 			expect(cause).toHaveProperty("code", "unexpected-array-arrival-shape");
