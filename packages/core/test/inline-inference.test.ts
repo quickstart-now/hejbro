@@ -81,6 +81,13 @@ describe("bigint()/numeric() keep their own default mode when used inline in tab
 				ReadonlyArray<bigint>
 			>();
 		});
+
+		it("inline, chained .primaryKey() -- GREEN today, must stay green (second chain control, alongside .notNull())", () => {
+			const t = table(app, "t_bigint_inline_primarykey", {
+				c: bigint().primaryKey(),
+			});
+			expectTypeOf<ResolvedReadType<typeof t, "c">>().toEqualTypeOf<bigint>();
+		});
 	});
 
 	describe("numeric", () => {
