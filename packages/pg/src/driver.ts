@@ -4,7 +4,7 @@ import type {
 	DriverCapabilities,
 	DriverSession,
 } from "@hejbro/query";
-import type { Pool } from "pg";
+import { Pool } from "pg";
 
 /**
  * Fixed per owner decision ①, tasks.md group 5 header -- both capabilities
@@ -42,13 +42,16 @@ const makeSession = (queryable: Queryable): DriverSession => ({
 	},
 });
 
-/**
- * The `pg` driver for `@hejbro/query` (owner decision ①): instance-based
- * factory over a caller-owned `Pool`, with nominal `pg` typing (`pg` is a
- * peerDependency; `@types/pg` supplies the types). The connection-string
- * convenience overload is task 5.2's.
- */
-export const pgDriver = (pool: Pool): Driver & { readonly client: Pool } => ({
+/** Resolves either overload's argument to the one `Pool` {@link buildDriver} needs -- a string constructs and owns a fresh `Pool`, a `Pool` is used exactly as given (owner decisions ①/②). */
+const resolvePool = (poolOrConnectionString: Pool | string): Pool => {
+	if (typeof poolOrConnectionString === "string") {
+		return new Pool({ connectionString: poolOrConnectionString });
+	}
+	return poolOrConnectionString;
+};
+
+/** One driver shape shared by both {@link pgDriver} overloads -- built once `pool` is settled, so the instance and connection-string forms can never diverge in what they hand back. */
+const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => ({
 	client: pool,
 	capabilities: CAPABILITIES,
 	execute: (compiled) => makeSession(pool).execute(compiled),
@@ -62,3 +65,24 @@ export const pgDriver = (pool: Pool): Driver & { readonly client: Pool } => ({
 	},
 	setupSession: async () => {},
 });
+
+/**
+ * Instance form (owner decision ①): wraps a caller-owned `Pool` as-is --
+ * `driver.client` is that same `pool` reference, never a copy, so there is
+ * exactly one surface regardless of which overload built the driver.
+ */
+export function pgDriver(pool: Pool): Driver & { readonly client: Pool };
+/**
+ * Connection-string form (owner decision ②): constructs and owns a new
+ * `Pool` from `connectionString`, exposed as `driver.client` -- never
+ * auto-closed (Drizzle convention: pool lifetime = process lifetime).
+ * Callers that need teardown call `driver.client.end()` themselves.
+ */
+export function pgDriver(
+	connectionString: string,
+): Driver & { readonly client: Pool };
+export function pgDriver(
+	poolOrConnectionString: Pool | string,
+): Driver & { readonly client: Pool } {
+	return buildDriver(resolvePool(poolOrConnectionString));
+}
