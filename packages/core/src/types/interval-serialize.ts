@@ -77,19 +77,14 @@ const timeAxisSign = (totalMicroseconds: number): string => {
  * (harden-query-layer #322 design.md Settled Decision 2): every axis
  * present, per-axis signs, zero elision branches. `value` is
  * {@link canonicalizeInterval canonicalized} first, so
- * `parseInterval(serializeInterval(v)) === canonicalizeInterval(v)` for
- * every domain but one: **any time axis that's negative overall with at
- * least one `0`-valued `hours`/`minutes`/`seconds`/`microseconds`
- * sub-field** — `parseInterval`'s own time-part reader multiplies every
- * one of `minutes`/`seconds`/`microseconds` by a shared `sign` read off
- * the hours token (`sign * Number(minutesToken)`, etc.), and `-1 * 0` is
- * `-0` in JS regardless of which sub-field the `0` came from. This is
- * wider than "hours canonicalizes to 0" alone (that's the special case
- * where the sign token itself, `-00`, parses back through `Number("-00")
- * === -0`) — a *nonzero* hours with a zero seconds/microseconds hits the
- * same defect. Tracked separately (owner decision (D) pending), not fixed
- * here; a fully negative time axis with every sub-field nonzero is
- * unaffected.
+ * `parseInterval(serializeInterval(v)) === canonicalizeInterval(v)` over
+ * the whole domain. (An earlier revision of this comment carved out any
+ * time axis that's negative overall with a `0`-valued sub-field —
+ * `parseInterval`'s shared-sign time reader produced `-0` there. Owner
+ * decision (D) landed with the write-side lift: every parsed field is
+ * `+0`-normalized now, and `@hejbro/query`'s `interval-serialize.test.ts`
+ * round-trip property sweeps that exact region, so the carve-out is
+ * gone; expired here per the comment-expiry convention, #342's PR.)
  *
  * The microseconds fraction is padded on the *left* (`padStart`), the
  * opposite of {@link parseInterval}'s own read-side `padEnd(6, "0")` —
