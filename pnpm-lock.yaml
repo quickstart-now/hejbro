@@ -183,6 +183,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@5.9.3)(unrun@0.2.39)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

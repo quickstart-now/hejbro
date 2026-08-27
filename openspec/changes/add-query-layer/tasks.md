@@ -927,7 +927,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   `packages/query/test/types/chain-types.test.ts` "chain await types
   equal execute types for select and returning mutations"; files
   `packages/query/src/db/chain.ts`. ~10m
-- [ ] 7.6 `@hejbro/query` real packaging: tsdown config + `build`
+- [x] 7.6 `@hejbro/query` real packaging: tsdown config + `build`
   script + `prepack`, exports flipped to dist (`types`/`import` →
   `./dist/*`), `files: ["dist"]`, LICENSE, package README,
   `private` flipped to false, version left at 0.0.0 (changesets aligns
