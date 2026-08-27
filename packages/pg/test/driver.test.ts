@@ -595,7 +595,7 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		]);
 	});
 
-	it("driver.setupSession itself sends the IntervalStyle pin to the session it's given (spec: 'inside its session-setup hook ... SHALL send set intervalstyle')", async () => {
+	it("driver.setupSession itself sends the IntervalStyle pin to the session it's given (spec: 'session-setup hook SHALL send set intervalstyle to postgres on the session it is given')", async () => {
 		// invoked directly, not through execute()/transaction() -- the
 		// contract (driver-contract's own tsdoc) makes setupSession a
 		// mandatory, independently callable member, and the spec sentence
