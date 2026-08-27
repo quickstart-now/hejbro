@@ -39,7 +39,7 @@ measured; vitest has no typecheck, so type tasks verify through
 
 ## 2. assertNoNulls (core utility + exports)
 
-- [ ] 2.1 (~7m) `assertNoNulls` implementation
+- [x] 2.1 (~7m) `assertNoNulls` implementation
       (`throwHejbroError("null-array-element", …)` naming the first
       null index), core barrel export, `hejbro` facade re-export. Red:
       new `packages/core/test/assert-no-nulls.test.ts` — clean array
