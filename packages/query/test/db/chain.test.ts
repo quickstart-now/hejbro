@@ -282,6 +282,56 @@ describe("db().insert/update/deleteFrom chains (task 7.2)", () => {
 	});
 });
 
+describe("mutation chain result conversion (task 7.2 rework -- tables propagation axis)", () => {
+	// Symmetric with 7.1's "await on a select chain returns converted
+	// rows" proof: `makeChainTerminal(run, stage, tables)` (the generic
+	// terminal 7.2's refactor introduced) has to thread `tables` through
+	// to `executeOn`'s conversion step for every one of its four call
+	// sites -- select's own (bound by the 7.1 test above) and each of
+	// insert/update/delete's `*FinalChain` (bound by the three tests
+	// below). Losing `tables` on any one of the three mutation paths
+	// (e.g. a stray `{}`) would silently drop numeric-mode/`interval`
+	// conversion for that path alone -- the other two, and the whole rest
+	// of the query package's test suite, would stay green (R1 finding:
+	// `tables: {}` on any one `make*FinalChain` survived the full
+	// package suite before these three tests existed).
+	it("insert(...).values(...).returning() converts bigint text to bigint -- not the driver's raw string", async () => {
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ posts }, driver);
+
+		const rows = await handle
+			.insert(posts)
+			.values({ id: rawRow.id, status: "draft" })
+			.returning();
+
+		expect(rows[0]?.amount).toBe(9007199254740993n);
+		expect(typeof rows[0]?.amount).toBe("bigint");
+	});
+
+	it("update(...).set(...).returning() converts bigint text to bigint -- not the driver's raw string", async () => {
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ posts }, driver);
+
+		const rows = await handle
+			.update(posts)
+			.set({ status: "archived" })
+			.returning();
+
+		expect(rows[0]?.amount).toBe(9007199254740993n);
+		expect(typeof rows[0]?.amount).toBe("bigint");
+	});
+
+	it("deleteFrom(...).returning() converts bigint text to bigint -- not the driver's raw string", async () => {
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ posts }, driver);
+
+		const rows = await handle.deleteFrom(posts).returning();
+
+		expect(rows[0]?.amount).toBe(9007199254740993n);
+		expect(typeof rows[0]?.amount).toBe("bigint");
+	});
+});
+
 describe("chain.compile() (task 7.3)", () => {
 	it("chain.compile() equals compile(statement) and never touches the driver", () => {
 		const { driver, topLevelSent, sentPerTransaction } =
