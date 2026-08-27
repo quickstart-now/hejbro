@@ -3,11 +3,14 @@ import { quoteIdentifier } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
 import type { Driver, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
+import type { ChainApi } from "./chain";
+import { createChainApi } from "./chain";
 import type { Declarations, ExecuteResult } from "./db";
 import { executeOn, sendCompiled } from "./execute";
 import { createFnApi } from "./fn";
 import type { TypedFnApi } from "./fn-types";
 import type { Tx } from "./transaction";
+import { buildTx } from "./transaction";
 
 /**
  * `db.as(context)`'s own argument: the role to run under, plus optional
@@ -24,18 +27,20 @@ export type DbContext = {
 
 /**
  * What `db.as(context)` returns: `execute`/`transaction`/`fn`, all
- * scoped to that context — no `.as` of its own (re-scoping a scoped
- * handle isn't a decided shape; nesting `transaction()` calls through
- * *this* handle is exactly as unsupported as the unscoped one, task
- * 4.6's own guard). `TFunctions` mirrors `db.ts`'s own `Db<TFunctions>`
- * (task 4.10) — defaulted the same way, for the same reason.
+ * scoped to that context, plus the same thenable chain members every
+ * other surface carries (task 7.4, group 7 decision ③) — no `.as` of its
+ * own (re-scoping a scoped handle isn't a decided shape; nesting
+ * `transaction()` calls through *this* handle is exactly as unsupported
+ * as the unscoped one, task 4.6's own guard). `TFunctions` mirrors
+ * `db.ts`'s own `Db<TFunctions>` (task 4.10) — defaulted the same way,
+ * for the same reason.
  */
 export type ScopedDb<
 	TFunctions extends Record<string, FunctionDeclaration> = Record<
 		string,
 		FunctionDeclaration
 	>,
-> = {
+> = ChainApi & {
 	execute<TStatement extends CompileInput>(
 		statement: TStatement,
 	): Promise<ExecuteResult<TStatement>>;
@@ -174,13 +179,16 @@ export const createAsApi = <
 		const scopedTransaction = <T>(
 			callback: (tx: Tx) => Promise<T>,
 		): Promise<T> =>
-			scopedRun("transaction", async (session) => {
-				const tx: Tx = {
-					execute: (statement) => executeOn(session, statement, tables),
-				};
-				return callback(tx);
-			});
+			scopedRun("transaction", async (session) =>
+				callback(buildTx(session, tables)),
+			);
 		return {
+			// spread first (same reasoning as `db.ts`'s own handle literal,
+			// task 7.4 review finding): the explicit `execute`/`transaction`/
+			// `fn` members below are this context's own established contract
+			// and must never be silently overwritten by a future `ChainApi`
+			// key collision.
+			...createChainApi((send) => scopedRun("db.as", send), tables),
 			execute: scopedExecute as ScopedDb<TFunctions>["execute"],
 			transaction: scopedTransaction,
 			fn: createFnApi(

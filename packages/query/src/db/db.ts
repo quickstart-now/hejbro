@@ -341,6 +341,19 @@ export const db = <TSchema extends Schema>(
 	// FunctionDeclaration`) applied to the same `schema` object.
 	const typedFunctions = declarations.functions as FunctionsOf<TSchema>;
 	return {
+		// Spread first, not last (7.4 review finding): every explicit member
+		// below is this group's own established contract (task 4.x); a
+		// future `ChainApi` key colliding with one of them must never
+		// silently win over it just because object literals let a later
+		// key overwrite an earlier one -- spreading first guarantees the
+		// explicit members always take precedence, and `tsc` still catches
+		// a genuine `ChainApi` member that's missing from this object
+		// (structural excess from the spread is never a problem; silently
+		// losing an explicit member to it would be). Unscoped chains run
+		// directly on the driver, exactly like the unscoped `fn` member
+		// below -- driver already structurally satisfies DriverSession, no
+		// transaction to open.
+		...createChainApi((send) => send(driver), declarations.tables),
 		declarations,
 		driver,
 		execute: ((statement: CompileInput) =>
@@ -359,9 +372,5 @@ export const db = <TSchema extends Schema>(
 			declarations.tables,
 			declarations.functions,
 		) as TypedFnApi<FunctionsOf<TSchema>>,
-		// unscoped chains run directly on the driver, exactly like the
-		// unscoped `fn` member above -- driver already structurally
-		// satisfies DriverSession, no transaction to open.
-		...createChainApi((send) => send(driver), declarations.tables),
 	};
 };

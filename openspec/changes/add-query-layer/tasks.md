@@ -912,7 +912,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   test `packages/query/test/db/chain.test.ts` "chain.compile() equals
   compile(statement) and never touches the driver"; files
   `packages/query/src/db/chain.ts`. ~6m
-- [ ] 7.4 Chain surface uniformity: the same chain members on
+- [x] 7.4 Chain surface uniformity: the same chain members on
   `db.as(context)`'s scoped handle and on `tx` inside
   `transaction()` — one shared chain factory parameterized by the
   send primitive (the `executeOn`/`scopedRun` pattern), so context

@@ -3,6 +3,7 @@ import {
 	deleteFrom,
 	eq,
 	insert,
+	roleName,
 	schema,
 	select,
 	table,
@@ -394,5 +395,54 @@ describe("chain.compile() (task 7.3)", () => {
 		// single transaction opened.
 		expect(topLevelSent).toHaveLength(0);
 		expect(sentPerTransaction).toHaveLength(0);
+	});
+});
+
+describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => {
+	it("scoped and tx chains run under their context/session (recorded SQL proves it)", async () => {
+		const { driver, sentPerTransaction } = recordingTransactionalDriver();
+		const handle = db({ posts }, driver, { roles: [roleName("app_reader")] });
+
+		// wiring point 2 -- ScopedDb's own chain: one context-applied
+		// transaction, role then setting then the chain's own SQL, all
+		// three in the *same* transaction array (not just "somewhere").
+		await handle
+			.as({ role: roleName("app_reader"), settings: { "app.claim": "v" } })
+			.select(posts);
+
+		expect(sentPerTransaction).toHaveLength(1);
+		expect(sentPerTransaction[0]).toHaveLength(3);
+		expect(sentPerTransaction[0]?.[0]?.sql).toBe('set local role "app_reader"');
+		expect(sentPerTransaction[0]?.[1]?.sql).toBe(
+			"select set_config($1, $2, true)",
+		);
+		expect(sentPerTransaction[0]?.[2]?.sql).toContain("posts");
+
+		// wiring point 4 -- the tx `db.as(context).transaction(cb)` hands
+		// its callback: context applied once, every tx.select() call
+		// afterward shares that same one transaction array.
+		await handle
+			.as({ role: roleName("app_reader") })
+			.transaction(async (tx) => {
+				await tx.select(posts);
+				await tx.select(posts);
+			});
+
+		expect(sentPerTransaction).toHaveLength(2);
+		expect(sentPerTransaction[1]).toHaveLength(3); // role + 2 selects
+		expect(sentPerTransaction[1]?.[0]?.sql).toBe('set local role "app_reader"');
+		expect(sentPerTransaction[1]?.[1]?.sql).toContain("posts");
+		expect(sentPerTransaction[1]?.[2]?.sql).toContain("posts");
+
+		// wiring point 3 -- the tx a plain (unscoped) `db.transaction(cb)`
+		// hands its callback: no context to apply, but the chain SQL still
+		// lands inside the callback's own one transaction.
+		await handle.transaction(async (tx) => {
+			await tx.select(posts);
+		});
+
+		expect(sentPerTransaction).toHaveLength(3);
+		expect(sentPerTransaction[2]).toHaveLength(1);
+		expect(sentPerTransaction[2]?.[0]?.sql).toContain("posts");
 	});
 });
