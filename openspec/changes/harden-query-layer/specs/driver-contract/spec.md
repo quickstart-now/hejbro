@@ -18,13 +18,19 @@ text (its default string conversion discards all structure, and its own
 text-rendering method reorders and reformats fields rather than
 reproducing the original). The override SHALL intercept both the
 scalar `interval` oid and the `interval` array oid; an interval array
-therefore arrives as Postgres's raw array text. Every other declared
-column type SHALL arrive in whatever shape the underlying client
-library's own defaults produce — in particular, a `bigint`/`numeric`
-array arrives as that library's default element-wise parse (an array
-of decimal text elements), which is what the query layer's element
-conversion consumes. Every oid other than the two interval oids is
-delegated to the client library's own default parser.
+therefore arrives as Postgres's raw array text. The override SHALL
+additionally intercept the `numeric` array oid, delivering Postgres's
+raw array text for it too: the client library's own default array
+parser for that oid returns already-numeric-parsed JS numbers per
+element, silently destroying the scale and precision a
+`'string'`/`'bigint'`-mode `numeric` column's declared conversion
+needs — unlike scalar `numeric`, which the client library already
+leaves as raw text, and unlike `bigint` arrays, whose own default array
+parser already returns text elements and therefore need no override.
+Every other declared column type — every array oid other than
+`interval`'s and `numeric`'s included — SHALL arrive in whatever shape
+the underlying client library's own defaults produce, `format` argument
+included; the override delegates to that default parser unchanged.
 
 #### Scenario: A single interval column arrives as raw Postgres text
 - **WHEN** a table declares a non-array `interval` column and a row
@@ -39,6 +45,15 @@ delegated to the client library's own default parser.
   Postgres's raw array text (element parsing is the query layer's
   job), never an array of pre-parsed objects
 
+#### Scenario: A numeric array column arrives as raw array text
+- **WHEN** a table declares a `numeric` array column and a row is read
+  through the driver
+- **THEN** the value handed to the query layer's conversion is
+  Postgres's raw array text (element parsing is the query layer's
+  job), never an array of already-parsed JS numbers — scale and
+  precision (e.g. trailing zeros, or digits beyond
+  `Number.MAX_SAFE_INTEGER`'s own limit) survive intact
+
 #### Scenario: bigint, numeric, and timestamptz are read back in their declared shapes through a real db() handle
 - **WHEN** a table declares a `bigint` column (default mode), a
   `numeric` column (`'string'` mode), and a `timestamptz` column, a row
@@ -50,10 +65,11 @@ delegated to the client library's own default parser.
   a `Date` instance at the stored instant
 
 #### Scenario: Other oids keep the client library's defaults
-- **WHEN** a row carries columns of types other than `interval`
-  (arrays included)
+- **WHEN** a row carries columns of types other than `interval` or
+  `numeric` (arrays included — `bigint` arrays included)
 - **THEN** each value arrives in the underlying client library's own
-  default shape for that oid — the override intercepts nothing else
+  default shape for that oid, `format` argument respected — the
+  override intercepts nothing else
 
 ### Requirement: Vanilla driver pins IntervalStyle at checkout
 `@hejbro/pg`'s driver SHALL pin a physical connection it has not

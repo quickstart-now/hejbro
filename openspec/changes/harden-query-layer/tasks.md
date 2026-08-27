@@ -23,39 +23,61 @@ the README CRAP block stay lead-owned at close.
 
 ## 1. Array conversion + driver override (#320, #323)
 
-- [ ] 1.1 Pure Postgres array-literal text parser: quoted elements,
+- [x] 1.1 Pure Postgres array-literal text parser: quoted elements,
   escaped quotes/backslashes, `NULL` elements, empty array; unparsable
   text throws a kebab-coded enriched `Error` (never a partial array);
   red test `packages/query/test/types/array-text.test.ts` "parses
   quoted, escaped, and NULL elements; rejects unparsable text whole";
   files `packages/query/src/types/array-text.ts`. ~10m
-- [ ] 1.2 Element-wise conversion wiring: `convert.ts` routes array
+- [x] 1.2 Element-wise conversion wiring: `convert.ts` routes array
   columns (declared `typeName: "array"`) through per-element
-  conversion — moded numeric/bigint arrays map the driver's text-element
-  array; `interval[]` goes raw array text → 1.1 parser → per-element
-  interval parse; `NULL` elements pass as `null`; element failure =
-  the existing `result-conversion-failed` naming the column; red test
-  `packages/query/test/db/convert.test.ts` "moded and interval array
-  cells convert element-wise; a poisoned element names its column";
-  files `packages/query/src/db/convert.ts`. ~10m
-- [ ] 1.3 `@hejbro/pg` override extends to oid 1187: interval arrays
-  arrive as raw array text (delegation for every other oid unchanged —
-  the existing two-argument delegation witnesses stay green); red test
-  `packages/pg/test/driver.test.ts` "interval array reaches the row as
-  raw array text while other array oids keep pg defaults"; files
+  conversion — the arrival shape is decided by the declared element
+  type, never by sniffing the raw value: `interval[]` and `numeric[]`
+  (see 1.3's oid 1231 extension) go raw array text → 1.1 parser →
+  per-element `parseInterval`/`convertNumericText`; every other element
+  type (`bigint` included) maps the driver's own already-parsed JS
+  array. `NULL` elements pass as `null`; an arrival-shape mismatch or an
+  unconvertible/unparsable element fails the whole cell via the
+  existing `result-conversion-failed` naming the column, never a
+  partial array; red test `packages/query/test/db/convert.test.ts`
+  "moded and interval array cells convert element-wise; a poisoned
+  element names its column" (extended by "numeric array cells convert
+  from raw array text, exact decimal preserved"); files
+  `packages/query/src/db/convert.ts`. ~10m
+- [x] 1.3 `@hejbro/pg` override extends to oid 1187, and (lead-approved
+  scope increase, found via 1.5's integration proof) oid 1231: interval
+  arrays and numeric arrays both arrive as raw array text — the latter
+  because the client library's own default `numeric[]` array parser
+  returns already-`parseFloat`'d JS numbers, silently destroying scale
+  and precision a `'string'`/`'bigint'`-mode `numeric` column needs
+  (unlike scalar `numeric`, which the client library already leaves as
+  raw text). Delegation for every other oid unchanged, `format`
+  included — the existing two-argument delegation witnesses stay green,
+  and `bigint[]` is deliberately left un-overridden (its own default
+  array parser already returns text elements); red test
+  `packages/pg/test/driver.test.ts` "interval array and numeric array
+  reach the row as raw array text while other array oids keep pg
+  defaults"; files `packages/pg/src/driver.ts`. ~8m
+- [x] 1.4 Late-bound hook at checkout (#323): the checkout guard reads
+  `driver.setupSession` itself at checkout time (not a closure captured
+  once when the guard is built), so a wrapped hook takes effect on
+  every subsequent checkout; existing pin scenarios stay
+  untouched-green. The per-driver guard scope tsdoc already promises is
+  covered by the existing `packages/pg/test/driver.test.ts` witness
+  (GAP-3) — verified as mutation evidence (a module-level-WeakSet
+  mutation fails that existing test), not a new task test, so this task
+  is scoped to late-binding alone; red test
+  `packages/pg/test/driver.test.ts` "a wrapped setupSession member runs
+  at checkout -- late-binding, not the captured closure"; files
   `packages/pg/src/driver.ts`. ~8m
-- [ ] 1.4 Late-bound hook at checkout (#323): the checkout guard calls
-  `driver.setupSession` (property, not the captured closure), so a
-  wrapped hook takes effect; the per-driver guard scope promised in
-  tsdoc gets its test; existing pin scenarios stay untouched-green;
-  red test `packages/pg/test/driver.test.ts` "a wrapped setupSession
-  member runs at checkout; guard scope is per driver value"; files
-  `packages/pg/src/driver.ts`. ~8m
-- [ ] 1.5 Integration proof on postgres:17 (existing docker harness):
-  a `bigint({mode:'number'})` array, a `numeric` array, and an
-  `interval[]` column round-trip to declared element shapes on a real
-  database; files `packages/pg/test/integration.test.ts`. ~8m
-- [ ] 1.6 Spec-delta alignment for this group's halves: the
+- [x] 1.5 Integration proof on postgres:17 (existing docker harness):
+  a `bigint({mode:'number'})` array, a `numeric({mode:'string'})` array
+  (exact decimal text, past `Number.MAX_SAFE_INTEGER`'s own
+  significant-digit limit) and a separate `numeric({mode:'number'})`
+  array witness, and an `interval[]` column round-trip to declared
+  element shapes on a real database; files
+  `packages/pg/test/integration.test.ts`. ~8m
+- [x] 1.6 Spec-delta alignment for this group's halves: the
   driver-contract arrival-shape and checkout-hook sentences and the
   query-execution element-wise sentences match what 1.1–1.5 prove —
   every sentence traced; verified by

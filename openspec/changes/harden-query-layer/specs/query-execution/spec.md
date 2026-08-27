@@ -18,7 +18,14 @@ element passes through as `null`, exactly as a `NULL` scalar does). A
 value that fails to convert — an unconvertible element included — or a
 declared column entirely absent from the driver's row, SHALL fail fast
 with an explicit error naming the column, rather than surfacing as an
-unconverted value or a silent `undefined`.
+unconverted value or a silent `undefined`. An array column's raw value
+that does not match the arrival shape its declared element type's
+driver contract promises SHALL likewise be treated as a conversion
+failure — fail fast naming the column, never guessed at or coerced
+into the expected shape. Whether the failure is an unconvertible
+element, an arrival-shape mismatch, or unparsable array-literal text,
+the column's whole value SHALL fail — never a partial array standing
+in for it.
 
 #### Scenario: Declared numeric/interval columns arrive converted
 - **WHEN** a select resolves a column declared with a numeric width mode
@@ -38,6 +45,14 @@ unconverted value or a silent `undefined`.
   cannot be converted to its declared type, or the declared column is
   entirely absent from the driver's row
 - **THEN** the call rejects with an explicit error naming that column
+
+#### Scenario: An array arrival-shape mismatch fails fast, never partially converted
+- **WHEN** an array column's raw value does not match the arrival shape
+  its declared element type's driver contract promises (for example, a
+  raw array-literal text value for an element type that is contracted
+  to arrive as an already-parsed array, or the reverse)
+- **THEN** the call rejects with an explicit error naming that column,
+  and the caller never receives a partial array for it
 
 ## RENAMED Requirements
 
