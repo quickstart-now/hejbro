@@ -18,6 +18,23 @@ describe("hejbro facade (task 7.9)", () => {
 		expect(typeof hejbro.db).toBe("function");
 	});
 
+	it("exports assertNoNulls from @hejbro/core (add-array-ergonomics, group 2), a live binding not a shadowed/renamed one", () => {
+		expect(typeof hejbro.assertNoNulls).toBe("function");
+		expect(hejbro.assertNoNulls(["a", "b"])).toEqual(["a", "b"]);
+		expect.assertions(5);
+		try {
+			hejbro.assertNoNulls(["a", null]);
+		} catch (error) {
+			expect(error).toBeInstanceOf(hejbro.HejbroError);
+			expect((error as InstanceType<typeof hejbro.HejbroError>).code).toBe(
+				"null-array-element",
+			);
+			expect(
+				(error as InstanceType<typeof hejbro.HejbroError>).message,
+			).toMatch(/\bindex 1\b/);
+		}
+	});
+
 	it("core and query's runtime export sets collide on exactly one name -- sql (the only name group 7 decision ① names as a replacement target)", () => {
 		// R2 finding: a bare "sql is exported" probe proves nothing here --
 		// `export * from "@hejbro/core"` alone already put a `sql` on this

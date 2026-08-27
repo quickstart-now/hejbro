@@ -317,6 +317,7 @@ export {
 	predropStatement,
 	statement,
 } from "./sql/statement";
+export { assertNoNulls } from "./types/assert-no-nulls";
 export type {
 	BuilderFamily,
 	ColumnBuilder,
