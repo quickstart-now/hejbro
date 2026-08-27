@@ -25,24 +25,31 @@ const INTERVAL_OID = 1186;
 /** Postgres's builtin `_interval` (`interval[]`) type oid (task 1.3, #320) -- pg's own default *array* parser would run the same lossy `PostgresInterval` conversion element-wise, one level up from {@link INTERVAL_OID}'s own problem. `@hejbro/query`'s own `array-text.ts` parses this raw array-literal text and converts each element via `parseInterval` instead (task 1.2). */
 const INTERVAL_ARRAY_OID = 1187;
 
+/** Postgres's builtin `_numeric` (`numeric[]`) type oid (task B2.1, #320) -- found via the postgres:17 integration proof (task 1.5): pg's own default *array* parser for this oid returns an array of already-`parseFloat`'d JS numbers (unlike scalar `numeric`, oid 1700, which pg already leaves as raw text), silently destroying the exact decimal text a `'string'`/`'bigint'`-mode `numeric[]` column needs. `bigint[]` (oid 1016) has no matching entry here -- pg's own default array parser already returns text elements for it, so no override is needed there. */
+const NUMERIC_ARRAY_OID = 1231;
+
 /**
  * The per-query `types` override every `execute`/session call sends
- * (owner decision ③, extended by task 1.3). Passing `types` at all
+ * (owner decision ③, extended by tasks 1.3/B2.1). Passing `types` at all
  * replaces the client's own `TypeOverrides` wholesale rather than falling
  * back to it (5.0 scout, `pg/lib/client.js:743-744`) -- so this object has
- * to fully implement "oid 1186/1187 are raw text, every other oid is pg's
- * own default" itself, never a blanket identity function that would also
- * defeat pg's int8/numeric/timestamptz/array parsing.
+ * to fully implement "oid 1186/1187/1231 are raw text, every other oid is
+ * pg's own default" itself, never a blanket identity function that would
+ * also defeat pg's int8/numeric/timestamptz/array parsing.
  */
 const intervalPassthroughTypes: CustomTypesConfig = {
 	getTypeParser: (oid, format) => {
 		// `pg`'s own `CustomTypesConfig.getTypeParser` types `oid` as its
-		// scalar-only `TypeId` union (no array oid, including 1187, is a
-		// member) -- widened to `number` here only for the comparison; the
-		// real runtime value is always a plain oid number regardless of
+		// scalar-only `TypeId` union (no array oid, including 1187/1231, is
+		// a member) -- widened to `number` here only for the comparison;
+		// the real runtime value is always a plain oid number regardless of
 		// what the (incomplete) upstream type declares.
 		const oidValue = oid as number;
-		if (oidValue === INTERVAL_OID || oidValue === INTERVAL_ARRAY_OID) {
+		if (
+			oidValue === INTERVAL_OID ||
+			oidValue === INTERVAL_ARRAY_OID ||
+			oidValue === NUMERIC_ARRAY_OID
+		) {
 			return (value: string): string => value;
 		}
 		return pgTypes.getTypeParser(oid, format);

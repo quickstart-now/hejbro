@@ -285,7 +285,7 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 		);
 	});
 
-	it("interval array reaches the row as raw array text while other array oids keep pg defaults (task 1.3)", async () => {
+	it("interval array and numeric array reach the row as raw array text while other array oids keep pg defaults (task 1.3, extended by B2.1/#320)", async () => {
 		const { pool, calls } = stubPoolWithClient();
 		const driver = pgDriver(pool);
 
@@ -307,13 +307,35 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 			intervalArrayRaw,
 		);
 
+		// oid 1231 (_numeric, numeric[]) (B2.1, planner-approved extension):
+		// raw array-literal text too -- pg's own default array parser would
+		// otherwise hand back an array of already-`parseFloat`'d JS numbers
+		// (found via the postgres:17 integration proof, 1.5), silently
+		// destroying the exact decimal text a 'string'/'bigint'-mode
+		// numeric[] column needs. `bigint[]` (oid 1016) is deliberately left
+		// alone -- it already arrives as text elements from pg's own
+		// default parser, no override needed there.
+		const numericArrayRaw = "{123.450000,0.100000}";
+		expect(config.types.getTypeParser(1231, "text")(numericArrayRaw)).toBe(
+			numericArrayRaw,
+		);
+
 		// oid 1007 (_int4, integer[]): still delegated to pg's own default
 		// array parser -- a JS array of already-parsed numbers, not text.
 		// Without this axis, an override that answered every array oid with
 		// identity (breaking delegation for every other array type) would
-		// still pass the 1187 assertion alone.
+		// still pass the 1187/1231 assertions alone.
 		expect(config.types.getTypeParser(1007, "text")("{1,2,3}")).toEqual([
 			1, 2, 3,
+		]);
+
+		// oid 1016 (_int8, bigint[]): also still delegated -- pg's own
+		// default array parser already returns text elements here, so
+		// no override is needed (unlike 1231's own case just above).
+		expect(config.types.getTypeParser(1016, "text")("{1,2,3}")).toEqual([
+			"1",
+			"2",
+			"3",
 		]);
 
 		// format is forwarded for array oids too, not dropped/defaulted --
