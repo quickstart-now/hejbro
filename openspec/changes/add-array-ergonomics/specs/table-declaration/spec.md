@@ -7,7 +7,10 @@ An array column SHALL be declarable as holding no `NULL` elements via
 `.array().notNullElements()`. Declaring it SHALL add a CHECK constraint
 to the table's generated migration, named `<column>_no_null_elements`
 (the SQL column name, snake_case) with the expression
-`array_position("<column>", null) is null` — the database enforces
+`array_position(<column>, null) is null`, the column reference
+rendered fully qualified exactly as every hand-declared check's is
+(e.g. `array_position("app"."posts"."tags", null) is null`) — the
+database enforces
 exactly what the narrowed type claims, so the narrowing is never an
 unchecked assertion. The constraint SHALL participate in
 diffing/removal exactly as a hand-declared check does: removing the
@@ -18,10 +21,11 @@ declaration time with an explicit error naming the column, never
 silently no-op.
 
 #### Scenario: Declaring notNullElements emits the backing check
-- **WHEN** a table declares `tags: text().array().notNullElements()`
+- **WHEN** a table `app.posts` declares
+  `tags: text().array().notNullElements()`
 - **THEN** the generated migration for that table contains a CHECK
   constraint named `tags_no_null_elements` with the expression
-  `array_position("tags", null) is null`
+  `array_position("app"."posts"."tags", null) is null`
 
 #### Scenario: Removing the declaration drops the check
 - **WHEN** a previously generated `notNullElements` declaration is

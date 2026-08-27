@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1185](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201185-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1190](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201190-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -211,7 +211,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1185 functions** over the threshold, highest score 5.00 — measured at `1389136` (2026-08-27).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1190 functions** over the threshold, highest score 5.00 — measured at `39a73bb` (2026-08-27).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->
@@ -256,6 +256,7 @@ went unmeasured (gap recorded in the ledger).
 | Piece (change `add-array-ergonomics`) | Tasks | Est → actual (pure min) | Review reworks | Output tokens | Requests | Cache hit |
 |---|---|---|---|---|---|---|
 | group 2 — assertNoNulls utility | 1 | 7 → 30 ⁵ | 1 | 348,504 | 492 | 97.1% |
+| group 1 — declaration surface + narrowing | 3 | 24 → 45 ⁶ | 0 | 532,315 | 718 | 98.2% |
 
 ⁵ group 2's overage is four planner-imposed correction rounds (the
 literal `Next:` marker, two ordered-but-missing cases, the
@@ -263,7 +264,11 @@ literal `Next:` marker, two ordered-but-missing cases, the
 itself ran ~7m, so the estimate was sound; review found both spec
 SHALLs previously unfalsifiable (no gate behind the narrowed return
 type; `filter(Boolean)` passed everything) and the fixes are what the
-rounds bought.
+rounds bought. ⁶ group 1's tasks ran back-to-back (retrospective
+split unavailable); a separate 20m process row records two contract
+round-trips on finished code — crossed lead rulings during a
+mid-piece design escalation, a coordination-layer cost the piece's
+blackbox attributes to the lead, not the implementer.
 <!-- ai-metrics:end -->
 
 ## License

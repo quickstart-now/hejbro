@@ -19,9 +19,11 @@ constraint-backed ergonomics Drizzle structurally cannot.
   2026-08-28 — no `$` prefix: the method emits real SQL, so it belongs
   to the schema-declaration family, not the type-only `$type` family):
   - the generated migration gains a CHECK constraint named
-    `<column>_no_null_elements` with expression
-    `array_position("<column>", null) is null` — the database then
-    enforces what the type claims;
+    `<column>_no_null_elements` whose expression is
+    `array_position(<column>, null) is null` with the column reference
+    rendered fully qualified (`"schema"."table"."column"`), exactly as
+    every emitted check renders one — the database then enforces what
+    the type claims;
   - the column's element type narrows to `T` (no `| null`) on read and
     write, honestly, because the constraint backs it;
   - calling it on a non-array column fails fast at declaration time.
