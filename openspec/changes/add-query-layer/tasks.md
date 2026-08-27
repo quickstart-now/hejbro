@@ -742,13 +742,20 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   `devDependencies` (its `Driver` type reaches this package's own
   public d.ts) — `.claude/rules/supabase-preset.md` still describes the
   pre-D95 core-only boundary; its update is task 6.5's.
-- [ ] 6.3 Task 4.7 (a′) union wiring proof: with a schema declaring
+- [x] 6.3 Task 4.7 (a′) union wiring proof: with a schema declaring
   ZERO grants/policies, `db(schema, supabaseDriver(fake))` accepts
   `.as(asAnon())` and `.as(asUser(...))` (roles arrive via the driver
   contribution) while an undeclared role is still rejected; red test
   `packages/supabase/test/driver.test.ts` "driver-contributed roles
   unlock asUser/asAnon on a grant-less schema; undeclared roles stay
-  rejected"; files that test only. ~6m
+  rejected"; files that test only. ~6m — passed on first run (pure
+  wiring proof over 6.1/6.2's already-landed code, no production
+  change), so the named test is a regression lock rather than a
+  red-to-green cycle: a plain table with no `rls`/`grant` and
+  `db(schema, supabaseDriver(fakeDriver()))` accepts both
+  `.as(asAnon())` and `.as(asUser({sub:...}))` without throwing, while
+  `.as({role: roleName("nonexistent_role")})` still throws
+  `undeclared-role`.
 - [ ] 6.4 Real-stack RLS integration (colima + `supabase start`): a
   `test:integration` script outside the default `test`, failing loudly
   with guidance when the stack is down; a declared `authUid()` policy
