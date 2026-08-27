@@ -1,5 +1,5 @@
 import { configDefaults, defineConfig } from "vitest/config";
-import { hejbroSourceAlias } from "./vitest.shared";
+import { hejbroSourceAlias } from "./vitest.shared.ts";
 
 export default defineConfig({
 	resolve: {

@@ -1,5 +1,5 @@
 import { configDefaults, defineConfig } from "vitest/config";
-import { hejbroSourceAlias } from "./vitest.shared";
+import { hejbroSourceAlias } from "./vitest.shared.ts";
 
 /**
  * The Docker-gated integration suite's own config (task 5.6, owner
