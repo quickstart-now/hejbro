@@ -1,3 +1,5 @@
+import * as core from "@hejbro/core";
+import * as query from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 /**
  * Type-only presence check for the query-layer surface the facade must
@@ -16,15 +18,37 @@ describe("hejbro facade (task 7.9)", () => {
 		expect(typeof hejbro.db).toBe("function");
 	});
 
-	it("exports exactly one sql -- the dual-use one from @hejbro/query, not core's own", () => {
-		expect(typeof hejbro.sql).toBe("function");
-		// query's dual-use `sql` carries `.identifier` (task 2.6/7.1) --
-		// core's own `sql` (packages/core/src/expr/sql-template.ts) never
-		// did. This is the one runtime-observable difference between the
-		// two candidate `sql`s, so asserting it present is the same as
-		// asserting the facade re-exports query's, not core's.
-		expect(typeof hejbro.sql.identifier).toBe("function");
-		expect(typeof hejbro.sql.raw).toBe("function");
+	it("core and query's runtime export sets collide on exactly one name -- sql (the only name group 7 decision ① names as a replacement target)", () => {
+		// R2 finding: a bare "sql is exported" probe proves nothing here --
+		// `export * from "@hejbro/core"` alone already put a `sql` on this
+		// barrel before task 7.9 touched anything, so that probe would have
+		// been green even against the untouched facade (a star-shadow
+		// false positive). The only thing worth asserting at this level is
+		// the *shape* of the collision itself: exactly one name in common,
+		// and it's the one the decision names.
+		const collidingNames = Object.keys(query).filter((name) =>
+			Object.hasOwn(core, name),
+		);
+		expect(collidingNames).toEqual(["sql"]);
+	});
+
+	it("exports the dual-use sql from @hejbro/query, not core's own -- proven by exercising a capability core's sql never had, through the facade itself", () => {
+		// Existence/typeof checks alone are exactly the star-shadow trap
+		// the test above calls out -- core's own `sql` is also a function
+		// with a `.raw` method, so those alone can't tell the two apart.
+		// `.identifier(...)` and the standalone-statement form
+		// (`compile()` reading `statementExpr`) are dual-use-only (task
+		// 2.6/7.1): core's own `SqlTag`
+		// (packages/core/src/expr/sql-template.ts) never had either. Both
+		// are exercised here *through the hejbro barrel*, not imported
+		// straight from `@hejbro/query`, so the proof is about what the
+		// facade actually shadows in, not about the underlying package.
+		const identifierExpr = hejbro.sql.identifier("app", "posts");
+		expect(identifierExpr).toBeDefined();
+
+		const compiled = hejbro.compile(hejbro.sql`select 1`);
+		expect(compiled.sql).toBe("select 1");
+		expect(compiled.kind).toBe("sql");
 	});
 
 	it("fragment uses of the old sql still type-check -- index().on(sql`...`) and check(name, sql`...`)", () => {
