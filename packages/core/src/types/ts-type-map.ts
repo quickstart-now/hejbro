@@ -166,8 +166,12 @@ type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
  * it; `notNull` binds to the array itself), and the query-execution spec
  * already promises "every `NULL` element is `null`" on arrival, so an
  * element type without `null` was the type lying about specified
- * behavior. Column-level nullability from `notNull` is still
- * select-result inference's job (task 3.10), not this one's — two
+ * behavior — except under `.notNullElements()` (add-array-ergonomics),
+ * which drops the `| null` because the declaration backs the claim with
+ * a real CHECK (`table()` derives it into the declaration's own checks
+ * list), so the type is never lying there either. Column-level
+ * nullability from `notNull` is still select-result inference's job
+ * (task 3.10), not this one's — two
  * independent axes — and a `.$type<T>()` brand narrowing this
  * further is `@hejbro/query`'s `column-map.ts`'s job, not this one's
  * either (this file never reads `TMeta["jsonType"]`, see
@@ -176,10 +180,19 @@ type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 export type BaseTsType<TMeta extends ColumnMeta> = TMeta extends {
 	readonly typeName: "array";
 }
-	? ReadonlyArray<BaseScalarTsType<
-			TMeta extends { readonly element?: infer TElement } ? TElement : never,
-			TMeta
-		> | null>
+	? TMeta extends { readonly notNullElements: true }
+		? ReadonlyArray<
+				BaseScalarTsType<
+					TMeta extends { readonly element?: infer TElement }
+						? TElement
+						: never,
+					TMeta
+				>
+			>
+		: ReadonlyArray<BaseScalarTsType<
+				TMeta extends { readonly element?: infer TElement } ? TElement : never,
+				TMeta
+			> | null>
 	: BaseScalarTsType<
 			TMeta extends { readonly typeName: infer TTypeName } ? TTypeName : never,
 			TMeta

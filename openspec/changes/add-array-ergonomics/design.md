@@ -40,8 +40,16 @@ schema-declaration family, not the type-only `$type` family), utility
 
 1. **The CHECK is derived at `table()` build time into the
    declaration's own checks list** — name `<column>_no_null_elements`,
-   expression text `array_position("<column>", null) is null` — rather
-   than at emit time or via a new snapshot node. Rationale: the
+   expression built from structured nodes (`array_position` function
+   call over a `columnRef` and a `null` literal, under an `is null`
+   test), whose rendered text is fully qualified
+   (`array_position("app"."posts"."tags", null) is null`) exactly like
+   every hand-declared check — rather than at emit time or via a new
+   snapshot node. (Settled during group 1 after a reviewer escalation:
+   the renderer always qualifies column refs, so a bare-column text is
+   unreachable via structured nodes; a raw-text fragment was rejected
+   because structured refs keep rename retargeting and the check
+   validation guards live.) Rationale: the
    snapshot then stores an ordinary check (shape untouched, no
    formatVersion question), diff/removal/drop ordering come free from
    the existing check machinery, and a collision with a hand-declared

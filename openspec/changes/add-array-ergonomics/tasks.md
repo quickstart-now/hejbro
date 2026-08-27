@@ -12,14 +12,16 @@ measured; vitest has no typecheck, so type tasks verify through
 
 ## 1. Declaration surface and type narrowing (core)
 
-- [ ] 1.1 (~8m) `TMeta`/`columnState` flag + `.notNullElements()`
+- [x] 1.1 (~8m) `TMeta`/`columnState` flag + `.notNullElements()`
       method + misuse throw. Red:
       `packages/core/test/types/column-builder.test.ts` (or the file
       that holds builder-chain tests) — "notNullElements flags the
       meta and throws `invalid-not-null-elements` on a non-array
       builder". Files: `packages/core/src/types/column-builder.ts`,
-      the builder-chain implementation file, its tests.
-- [ ] 1.2 (~7m) Read/write element narrowing under the flag. Red:
+      `packages/core/src/dsl/table.ts` (the misuse validation lives at
+      `table()`, where the column name exists), the builder-chain
+      implementation file, its tests.
+- [x] 1.2 (~7m) Read/write element narrowing under the flag. Red:
       core `test/inline-inference.test.ts` (or a new
       `not-null-elements.test.ts`) — "`text().array().notNullElements()`
       reads `ReadonlyArray<string>`, writes reject `null` elements;
@@ -27,7 +29,7 @@ measured; vitest has no typecheck, so type tasks verify through
       `packages/core/src/types/ts-type-map.ts`,
       `packages/core/src/types/column-builder.ts` (ColumnReadType),
       core type tests.
-- [ ] 1.3 (~9m) `table()` derives the CHECK
+- [x] 1.3 (~9m) `table()` derives the CHECK
       (`<column>_no_null_elements`,
       `array_position("<column>", null) is null`) into the checks
       list; duplicate-name collision fails loudly (verify the existing

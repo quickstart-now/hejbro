@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { check } from "../../src/dsl/check";
 import { schema } from "../../src/dsl/schema";
 import { getTableMeta, table } from "../../src/dsl/table";
+import { generateMigration } from "../../src/engine/generate";
 import {
 	and,
 	between,
@@ -13,6 +14,7 @@ import {
 } from "../../src/expr/operators";
 import { sql } from "../../src/expr/sql-template";
 import { exists, select } from "../../src/query/select";
+import { emptySnapshot } from "../../src/snapshot/snapshot";
 import { text, uuid } from "../../src/types/column-builder-factories";
 
 const app = schema("app");
@@ -161,6 +163,94 @@ describe("check()", () => {
 			})),
 		).toThrow(
 			/duplicate-check-name|requires unique constraint names per table/,
+		);
+	});
+});
+
+// TERMINAL contract (add-array-ergonomics task 1.3): the derived expression
+// is a structured node (columnRef + functionCall + null literal, wrapped in
+// the same nullTest `isNull()` itself builds) -- never a rawSql/sqlTemplate
+// fragment, so a column rename keeps tracking it the same way it tracks
+// every hand-written check. The renderer always fully qualifies a
+// columnRef (render-sql.ts's renderColumnRefNode), so the emitted SQL text
+// is schema.table.column-qualified -- pinned once here, for this file's
+// own `app`/`posts`/`tags` fixture, and reused by every assertion below.
+const tagsNoNullElementsSql =
+	'array_position("app"."posts"."tags", null) is null';
+
+describe(".notNullElements() derives its own backing check (add-array-ergonomics, task 1.3)", () => {
+	it("emits a CHECK named <column>_no_null_elements with the owner-settled expression", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			tags: text().array().notNullElements(),
+		});
+		expect(getTableMeta(posts).checks).toEqual([
+			{
+				declarationKind: "check",
+				checkName: "tags_no_null_elements",
+				expression: {
+					nodeKind: "nullTest",
+					negated: false,
+					operand: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "array_position",
+						args: [
+							{
+								nodeKind: "columnRef",
+								schemaName: "app",
+								tableName: "posts",
+								columnName: "tags",
+							},
+							{ nodeKind: "literal", literal: { literalKind: "null" } },
+						],
+					},
+				},
+			},
+		]);
+
+		const migration = generateMigration({
+			declarations: [app, getTableMeta(posts)],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(migration.sql).toContain(
+			`constraint "tags_no_null_elements" check (${tagsNoNullElementsSql})`,
+		);
+	});
+
+	it("collides loudly with a hand-declared check of the same name", () => {
+		expect(() =>
+			table(
+				app,
+				"posts",
+				{ id: uuid().primaryKey(), tags: text().array().notNullElements() },
+				() => ({
+					checks: [check("tags_no_null_elements", sql`true`)],
+				}),
+			),
+		).toThrow(
+			/duplicate-check-name|requires unique constraint names per table/,
+		);
+	});
+
+	it("removing the declaration drops the check, exactly like a hand-declared one", () => {
+		const before = table(app, "posts", {
+			id: uuid().primaryKey(),
+			tags: text().array().notNullElements(),
+		});
+		const after = table(app, "posts", {
+			id: uuid().primaryKey(),
+			tags: text().array(),
+		});
+		const migration = generateMigration({
+			declarations: [app, after],
+			previousSnapshot: generateMigration({
+				declarations: [app, before],
+				previousSnapshot: emptySnapshot,
+			}).snapshot,
+		});
+		expect(migration.sql).toContain(
+			'alter table "app"."posts" drop constraint "tags_no_null_elements";',
 		);
 	});
 });
