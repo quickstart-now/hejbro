@@ -474,3 +474,70 @@ describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => 
 		expect(sentPerTransaction[0]?.[0]?.sql).toContain("posts");
 	});
 });
+
+describe("scoped/tx chain result conversion (task 7.4 rework -- tables propagation axis)", () => {
+	// R2 finding: task 7.4 added two *new* `createChainApi(run, tables)`
+	// call sites -- context.ts's `createAsApi` return (W2) and
+	// transaction.ts's `buildTx` (shared by W3/W4) -- on top of the four
+	// `chain.ts`-internal ones the 7.2 rework already bound
+	// (`packages/query/src/db/chain.ts`'s four `make*FinalChain`
+	// functions). Both new call sites are the same class of axis: losing
+	// `tables` there (a stray `{}`) silently drops numeric-mode/
+	// `interval` conversion for that surface's chains alone, while the
+	// SQL-recording wiring tests above (which never inspect a resolved
+	// row's *value*, only which statements landed in which transaction)
+	// stay green -- confirmed survivable before these tests existed
+	// (`tables: {}` on context.ts's W2 `createChainApi` call, and on
+	// transaction.ts's `buildTx` call, each independently survived the
+	// full package suite).
+	//
+	// Inventory update: the `tables`-propagation axis (first raised for
+	// `chain.ts`'s four internal terminals, task 7.2 rework) now has
+	// **six** call sites total, all at the same rank:
+	//   1-4. chain.ts's four make*FinalChain functions (task 7.2 rework)
+	//   5.   context.ts's createAsApi return -- W2 (this rework, R2)
+	//   6.   transaction.ts's buildTx -- shared by W3 and W4 (this rework, R2)
+	//
+	// Confirmed-green-for-the-right-reason (TDD order note): production
+	// code for W2/W3/W4 already existed before these three tests were
+	// written (task 7.4 landed the wiring first, tasks.md-recorded as a
+	// TDD-order deviation), so writing the test could not itself go red.
+	// Each test below was instead verified the way task 7.4's own
+	// wiring-point tests were verified: build the test, confirm it's
+	// green, then mutate the exact `tables` argument at the relevant
+	// `createChainApi`/`buildTx` call site to `{}` and confirm the same
+	// test (and only that scope) goes red, then revert.
+	it("db.as(context)'s own chain converts bigint text to bigint -- not the driver's raw string (W2)", async () => {
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ posts }, driver, { roles: [roleName("app_reader")] });
+
+		const rows = await handle
+			.as({ role: roleName("app_reader") })
+			.select(posts);
+
+		expect(rows[0]?.amount).toBe(9007199254740993n);
+		expect(typeof rows[0]?.amount).toBe("bigint");
+	});
+
+	it("a plain db.transaction(cb)'s tx chain converts bigint text to bigint -- not the driver's raw string (W4)", async () => {
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ posts }, driver);
+
+		const rows = await handle.transaction(async (tx) => tx.select(posts));
+
+		expect(rows[0]?.amount).toBe(9007199254740993n);
+		expect(typeof rows[0]?.amount).toBe("bigint");
+	});
+
+	it("db.as(context).transaction(cb)'s tx chain converts bigint text to bigint -- not the driver's raw string (W3, surface-symmetry evidence)", async () => {
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ posts }, driver, { roles: [roleName("app_reader")] });
+
+		const rows = await handle
+			.as({ role: roleName("app_reader") })
+			.transaction(async (tx) => tx.select(posts));
+
+		expect(rows[0]?.amount).toBe(9007199254740993n);
+		expect(typeof rows[0]?.amount).toBe("bigint");
+	});
+});
