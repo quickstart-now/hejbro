@@ -120,13 +120,47 @@ PL/pgSQL builder compiler for functions and triggers is the novel part.
 
 | Package | Role |
 |---------|------|
-| `hejbro` | User-facing package: the DSL + CLI (`hejbro init`, `hejbro generate`, `hejbro verify`) |
+| `hejbro` | User-facing package: the DSL + query layer + CLI (`hejbro init`, `hejbro generate`, `hejbro verify`) |
 | `@hejbro/core` | Declaration model, builder DSL, compiler, snapshot & diff engine (pure) |
-| `@hejbro/supabase` | Supabase provider preset (auth helpers, storage buckets, role presets) |
+| `@hejbro/query` | Typed query layer: statement compiler, driver contract, RLS execution context, thenable chain surface |
+| `@hejbro/pg` | Vanilla node-postgres driver for `@hejbro/query` |
+| `@hejbro/supabase` | Supabase provider preset (auth helpers, storage buckets, role presets) + a `@hejbro/query` driver decorator |
 | `@hejbro/skills` | Agent skills that teach coding agents the hejbro workflow |
 
 Generic Postgres at the core; provider presets for Supabase first, with Neon
 and Nile planned on the same extension interface.
+
+## Query layer
+
+`hejbro` re-exports a typed query layer on the same declared schema: a
+db-first, thenable chain surface — inert until awaited, and identical
+across the unscoped handle, a `db.as(context)` scoped handle (RLS
+execution context), and `tx` inside `db.transaction(...)`.
+
+```bash
+pnpm add @hejbro/pg pg
+```
+
+```ts
+import { db, isNull } from "hejbro";
+import { pgDriver } from "@hejbro/pg";
+import * as schema from "./app.schema";
+
+const handle = db(schema, pgDriver(process.env.DATABASE_URL!));
+
+const active = await handle
+	.select(schema.projects)
+	.where(isNull(schema.projects.archivedAt));
+
+// pure preview — same statement, zero driver interaction.
+const { sql, params } = handle
+	.select(schema.projects)
+	.where(isNull(schema.projects.archivedAt))
+	.compile();
+```
+
+Using Supabase instead? `supabaseDriver(pgDriver(pool))` decorates the same
+driver contract with `asUser(claims)`/`asAnon()` RLS execution contexts.
 
 ## Examples
 

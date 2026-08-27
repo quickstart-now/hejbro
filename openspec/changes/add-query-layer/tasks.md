@@ -964,7 +964,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   changeset added; `pnpm exec changeset status` exits 0 and its output
   shows all five aligning on the same next version; files
   `.changeset/config.json`, one new `.changeset/*.md`. ~6m
-- [ ] 7.12 Docs: AGENTS.md repo-map rows for `@hejbro/query`/
+- [x] 7.12 Docs: AGENTS.md repo-map rows for `@hejbro/query`/
   `@hejbro/pg`, root README query-layer section (facade import + chain
   UX example, driver install note, `compile()` preview); files
   `AGENTS.md`, `README.md`. ~8m
