@@ -885,13 +885,13 @@ packaging wiring), `.changeset/config.json`, `scripts/pack-install-smoke.sh`,
 `AGENTS.md`, `README.md` (repo-map/section — the CRAP block itself
 stays lead-owned), and the query-builder/query-execution spec deltas.
 
-- [ ] 7.0 Scout: chain wiring inventory — core builder stage types
+- [x] 7.0 Scout: chain wiring inventory — core builder stage types
   (select stages, mutation stages, returning), where `executeOn`
   accepts statements, how `ExecuteResult`/`SelectResult` resolve, the
   `sql` replacement compatibility in the hejbro barrel (dual-use tag is
   a structural superset — verify against the cli re-export list); no
   code; deliverable = inventory in the group PR body draft. ~8m
-- [ ] 7.1 Thenable select chain on the unscoped handle:
+- [x] 7.1 Thenable select chain on the unscoped handle:
   `handle.select(table | projection, table)` mirrors core's two
   `select` forms; every stage (`where`/`orderBy`/`limit`/`innerJoin`/
   `leftJoin`) delegates to the corresponding core builder stage; the
@@ -900,14 +900,14 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   `packages/query/test/db/chain.test.ts` "await on a select chain
   returns converted rows; before await no driver call is made"; files
   `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`. ~10m
-- [ ] 7.2 Thenable mutation chains: `insert().values().returning()`,
+- [x] 7.2 Thenable mutation chains: `insert().values().returning()`,
   `update().set().where().returning()`, `deleteFrom().where()
   .returning()` — same delegation + inertness rules; a returning-less
   mutation resolves exactly like `db.execute` of that statement; red
   test `packages/query/test/db/chain.test.ts` "mutation chains execute
   with and without returning, inert until awaited"; files
   `packages/query/src/db/chain.ts`. ~10m
-- [ ] 7.3 `.compile()` on every chain: pure preview, byte-identical to
+- [x] 7.3 `.compile()` on every chain: pure preview, byte-identical to
   `compile()` of the equivalent statement, zero driver interaction; red
   test `packages/query/test/db/chain.test.ts` "chain.compile() equals
   compile(statement) and never touches the driver"; files
