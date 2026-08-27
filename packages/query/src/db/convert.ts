@@ -316,6 +316,17 @@ const rawArrayElementsFromJsArray = (
  * ({@link expectsRawArrayText}) versus `pg`'s own default array parsing,
  * and this mirrors that contract rather than guessing from whatever
  * happened to show up.
+ *
+ * Handoff note (future drivers): both branches here are `@hejbro/pg`-
+ * specific facts, not a law of nature — a future driver (a PostgREST-
+ * style HTTP driver, say) could reasonably hand back a different arrival
+ * shape for the same declared element type. If that happens, the fix is
+ * to widen the driver contract to name that driver's own shape
+ * explicitly (and branch on which driver produced the row, the same way
+ * {@link expectsRawArrayText} branches on the declared element type
+ * today) — never to fall back to sniffing `raw`'s runtime type again,
+ * which is exactly the anti-pattern this file's own history (planner
+ * review, batch A rework) already replaced once.
  */
 const rawArrayElements = (
 	raw: unknown,
