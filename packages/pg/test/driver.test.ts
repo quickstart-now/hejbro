@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, types as pgTypes } from "pg";
 import { describe, expect, it, vi } from "vitest";
 import { pgDriver } from "../src/driver";
 
@@ -64,9 +64,24 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 		);
 	});
 
-	it("never auto-closes the pool it constructed (owner decision ②: pool lifetime = process lifetime)", () => {
+	it("never auto-closes the pool it constructed, immediately after construction (cheap sanity check, not the full contract)", () => {
 		const driver = pgDriver("postgres://localhost/does-not-need-to-connect");
 		expect(driver.client.ended).toBe(false);
+	});
+
+	it("never auto-closes the pool across an execute round-trip (owner decision ②: pool lifetime = process lifetime, not query lifetime)", async () => {
+		const driver = pgDriver("postgres://localhost/does-not-need-to-connect");
+		// spies out the network entirely -- this proves execute() itself
+		// never calls end(), independent of whether a real database is
+		// reachable.
+		vi.spyOn(driver.client, "query").mockResolvedValue({
+			rows: [],
+		} as never);
+		const endSpy = vi.spyOn(driver.client, "end");
+
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		expect(endSpy).not.toHaveBeenCalled();
 	});
 });
 
@@ -121,5 +136,16 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 		const textParser = config.types.getTypeParser(23, "text");
 		const binaryParser = config.types.getTypeParser(23, "binary");
 		expect(binaryParser).not.toBe(textParser);
+
+		// direct witness against pg's own module, not just internal
+		// self-consistency: our override's binary-format answer for oid
+		// 1184 must be the exact same function pg-types itself hands back
+		// for ("1184", "binary") -- a `getTypeParser(oid)` (format
+		// dropped) mutant would instead always answer with the *text*
+		// parser here, since pg-types defaults a missing format to
+		// "text" internally.
+		expect(config.types.getTypeParser(1184, "binary")).toBe(
+			pgTypes.getTypeParser(1184, "binary"),
+		);
 	});
 });
