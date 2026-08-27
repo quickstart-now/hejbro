@@ -1,3 +1,4 @@
+import type { Expr } from "@hejbro/core";
 import { bigint, numeric, schema, table } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { InsertInput } from "../../src/types/insert-input";
@@ -93,8 +94,11 @@ describe("inline factory inference propagates through query's own surfaces (#338
 	describe("InsertInput -- propagation axis", () => {
 		it("inline, bare -- RED until fixed", () => {
 			const t = table(app, "t_insert_inline", { numCol: numeric() });
+			// The mode-resolution point is the raw-value arm staying exactly
+			// `string` (never the collapsed tri-union); the Expr arms are
+			// MutationValue's own (#337 wired the write-value contract).
 			expectTypeOf<InsertInput<typeof t>["numCol"]>().toEqualTypeOf<
-				string | null | undefined
+				string | Expr<"numeric"> | Expr<"unknown"> | null | undefined
 			>();
 		});
 	});

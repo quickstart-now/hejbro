@@ -1,4 +1,14 @@
-import { bigint, json, jsonb, schema, serial, table, text } from "@hejbro/core";
+import type { Expr } from "@hejbro/core";
+import {
+	bigint,
+	json,
+	jsonb,
+	schema,
+	serial,
+	sql,
+	table,
+	text,
+} from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { InsertInput, UpdateInput } from "../../src/types/insert-input";
 
@@ -26,22 +36,41 @@ const posts = table(shop, "posts", {
 
 type Posts = typeof posts;
 
-describe("insert-input (D1/D3/D8, task 3.11)", () => {
+/**
+ * Concrete expected value unions (#337): since the chains consume
+ * `InsertInput`/`UpdateInput`, the value arm is core's own
+ * `MutationValue` — the declared read type, a matching-family `Expr`,
+ * and the `sql` escape hatch (`Expr<"unknown">`); `json`/`jsonb` have
+ * no raw-value arm at all. Spelled out literally here (never via
+ * `MutationValue` itself — an assertion whose both sides route through
+ * the same symbol cannot verify that symbol).
+ */
+type TextWrite = string | Expr<"text"> | Expr<"unknown">;
+type NumericNumberWrite = number | Expr<"numeric"> | Expr<"unknown">;
+type JsonWrite = Expr<"json"> | Expr<"unknown">;
+type TextArrayWrite = ReadonlyArray<string> | Expr<"array"> | Expr<"unknown">;
+
+/** The `sql` escape hatch value the unwritable (`json`/`jsonb`) columns use in every valid-row fixture below. */
+const payloadExpr = sql`'{"kind":"widget"}'::jsonb`;
+
+describe("insert-input (D1/D3/D8, task 3.11; value arm = MutationValue since #337)", () => {
 	it("field consumption matrix: notNull decides required-vs-optional, hasDefault overrides notNull to optional", () => {
 		type Input = InsertInput<Posts>;
 
-		// notNull, no default -> required key, non-null value type.
+		// notNull, no default -> required key, no null and no undefined arm.
 		expectTypeOf<Input>()
 			.toHaveProperty("titleRequired")
-			.toEqualTypeOf<string>();
+			.toEqualTypeOf<TextWrite>();
 
 		// notNull + default -> optional key (this is the field-consumption
 		// proof for hasDefault: removing this branch would make slug
 		// required, which the spec's own scenario forbids).
-		expectTypeOf<Input["slug"]>().toEqualTypeOf<string | undefined>();
+		expectTypeOf<Input["slug"]>().toEqualTypeOf<TextWrite | undefined>();
 
 		// no notNull -> optional key, value accepts null explicitly.
-		expectTypeOf<Input["title"]>().toEqualTypeOf<string | null | undefined>();
+		expectTypeOf<Input["title"]>().toEqualTypeOf<
+			TextWrite | null | undefined
+		>();
 	});
 
 	it("required vs optional keys, checked structurally (not just per-field value types)", () => {
@@ -52,8 +81,8 @@ describe("insert-input (D1/D3/D8, task 3.11)", () => {
 		const _missingRequired: InsertInput<Posts> = {
 			tagsRequired: ["a"],
 			amountRequired: 1,
-			payloadRequired: { kind: "widget" },
-			payloadJsonRequired: { kind: "widget" },
+			payloadRequired: payloadExpr,
+			payloadJsonRequired: payloadExpr,
 		};
 
 		// An optional key may be omitted.
@@ -62,34 +91,34 @@ describe("insert-input (D1/D3/D8, task 3.11)", () => {
 			titleRequired: "t",
 			tagsRequired: ["a"],
 			amountRequired: 1,
-			payloadRequired: { kind: "widget" },
-			payloadJsonRequired: { kind: "widget" },
+			payloadRequired: payloadExpr,
+			payloadJsonRequired: payloadExpr,
 			// slug, title, id, payload all omitted -- legal.
 		};
 	});
 
-	it("json().$type<T>() brands the insert value exactly like jsonb().$type<T>() (planner addition 1)", () => {
+	it("json().$type<T>() and jsonb().$type<T>() write arms are identical: Expr only, the brand narrows reads, never raw writes (#337)", () => {
 		expectTypeOf<
 			InsertInput<Posts>["payloadJsonRequired"]
-		>().toEqualTypeOf<Payload>();
+		>().toEqualTypeOf<JsonWrite>();
+		expectTypeOf<
+			InsertInput<Posts>["payloadRequired"]
+		>().toEqualTypeOf<JsonWrite>();
 	});
 
 	it("F7 settlement (insert side): serial().primaryKey() is optional despite its implied notNull (D66 hasDefault)", () => {
 		expectTypeOf<InsertInput<Posts>["id"]>().toEqualTypeOf<
-			number | undefined
+			NumericNumberWrite | undefined
 		>();
 	});
 
 	it("composite cases: accumulated TMeta arrives intact for insert values too", () => {
-		expectTypeOf<InsertInput<Posts>["tagsRequired"]>().toEqualTypeOf<
-			ReadonlyArray<string>
-		>();
+		expectTypeOf<
+			InsertInput<Posts>["tagsRequired"]
+		>().toEqualTypeOf<TextArrayWrite>();
 		expectTypeOf<
 			InsertInput<Posts>["amountRequired"]
-		>().toEqualTypeOf<number>();
-		expectTypeOf<
-			InsertInput<Posts>["payloadRequired"]
-		>().toEqualTypeOf<Payload>();
+		>().toEqualTypeOf<NumericNumberWrite>();
 		// id (serial().primaryKey()) already covers the mode+notNull+hasDefault
 		// combination in the F7 case above.
 	});
@@ -100,8 +129,8 @@ describe("insert-input (D1/D3/D8, task 3.11)", () => {
 			titleRequired: "t",
 			tagsRequired: ["a"],
 			amountRequired: 1,
-			payloadRequired: { kind: "widget" },
-			payloadJsonRequired: { kind: "widget" },
+			payloadRequired: payloadExpr,
+			payloadJsonRequired: payloadExpr,
 			// @ts-expect-error "email" was never declared on posts.
 			email: "nope@example.com",
 		};
@@ -113,29 +142,31 @@ describe("update-input (D1/D3, task 3.12)", () => {
 		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture.
 		const empty: UpdateInput<Posts> = {};
 		expectTypeOf<UpdateInput<Posts>["titleRequired"]>().toEqualTypeOf<
-			string | undefined
+			TextWrite | undefined
 		>();
 		expectTypeOf<UpdateInput<Posts>["id"]>().toEqualTypeOf<
-			number | undefined
+			NumericNumberWrite | undefined
 		>();
 	});
 
 	it("3.11/3.12 boundary contrast pair: the identical declaration (notNull, no default) is required on insert but optional on update", () => {
-		expectTypeOf<InsertInput<Posts>["titleRequired"]>().toEqualTypeOf<string>();
+		expectTypeOf<
+			InsertInput<Posts>["titleRequired"]
+		>().toEqualTypeOf<TextWrite>();
 		expectTypeOf<UpdateInput<Posts>["titleRequired"]>().toEqualTypeOf<
-			string | undefined
+			TextWrite | undefined
 		>();
 	});
 
 	it("field consumption: mode/brand/element still shape the value type, only optionality changes", () => {
 		expectTypeOf<UpdateInput<Posts>["amountRequired"]>().toEqualTypeOf<
-			number | undefined
+			NumericNumberWrite | undefined
 		>();
 		expectTypeOf<UpdateInput<Posts>["payloadRequired"]>().toEqualTypeOf<
-			Payload | undefined
+			JsonWrite | undefined
 		>();
 		expectTypeOf<UpdateInput<Posts>["tagsRequired"]>().toEqualTypeOf<
-			ReadonlyArray<string> | undefined
+			TextArrayWrite | undefined
 		>();
 	});
 

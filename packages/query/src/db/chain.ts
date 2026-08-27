@@ -7,7 +7,6 @@ import type {
 	InsertConflictable,
 	InsertFinal,
 	InsertReturnable,
-	MutationRow,
 	OrderTermInput,
 	ReturningProjection,
 	SelectFiltered,
@@ -29,6 +28,7 @@ import {
 import type { CompileInput, CompileResult } from "../compile/compile";
 import { compile } from "../compile/compile";
 import type { DriverSession } from "../driver/contract";
+import type { InsertInput, UpdateInput } from "../types/insert-input";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
 import type { Declarations } from "./db";
@@ -222,7 +222,7 @@ export type InsertChainConflictable<TTable extends Table = Table> =
 		): InsertChainReturnable<TTable>;
 		onConflictDoUpdate(config: {
 			readonly target: ReadonlyArray<ColumnRef>;
-			readonly set: MutationRow<TTable>;
+			readonly set: UpdateInput<TTable>;
 		}): InsertChainReturnable<TTable>;
 	};
 
@@ -385,13 +385,13 @@ export type ChainApi = {
 		target: TTable,
 	): {
 		values(
-			rows: MutationRow<TTable> | ReadonlyArray<MutationRow<TTable>>,
+			rows: InsertInput<TTable> | ReadonlyArray<InsertInput<TTable>>,
 		): InsertChainConflictable<TTable>;
 	};
 	/** Starts a thenable `update` chain, mirroring core's own `update(target).set(values)`. */
 	update<TTable extends Table>(
 		target: TTable,
-	): { set(values: MutationRow<TTable>): UpdateChainFilterable<TTable> };
+	): { set(values: UpdateInput<TTable>): UpdateChainFilterable<TTable> };
 	/** Starts a thenable `deleteFrom` chain, mirroring core's own `deleteFrom(target)`. */
 	deleteFrom<TTable extends Table>(
 		target: TTable,

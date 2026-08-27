@@ -1,5 +1,4 @@
-import type { ColumnBuilder, Table } from "@hejbro/core";
-import type { ColumnTsType } from "./column-map";
+import type { ColumnBuilder, MutationValue, Table } from "@hejbro/core";
 
 /** Whether a column's `TMeta` declares `notNull: true`, structurally (mirrors `select-result.ts`'s own same-named helper and `column-map.ts`'s infer-from-`ColumnBuilder` pattern, task 3.3). */
 type IsColumnNotNull<TColumn extends ColumnBuilder> =
@@ -18,15 +17,22 @@ type IsColumnHasDefault<TColumn extends ColumnBuilder> =
 		: false;
 
 /**
- * One declared column's insert-value type: {@link ColumnTsType} (task
- * 3.6's base/brand mapping), widened to `| null` unless the column is
- * `notNull` — a nullable column legally accepts an explicit `null` write,
- * same direction as `select-result.ts`'s own read-side widening.
+ * One declared column's mutation-write value type: core's own
+ * {@link MutationValue} (harden-query-layer #322's STRICT contract — a
+ * matching `Expr`, the `sql` escape hatch, exactly the column's declared
+ * read type; `json`/`jsonb`/`bytea` columns have no raw-value arm at
+ * all), with the explicit-`null` arm stripped for a `notNull` column:
+ * an optional `notNull` column may be *omitted* (a default fills it),
+ * but never explicitly written `null`. Reusing `MutationValue` rather
+ * than the read-side `ColumnTsType` this file consumed before #337
+ * keeps exactly one write-value contract to drift against — the
+ * previous parallel shape had already fallen behind the spec (it
+ * accepted a raw `jsonb` object and no `Expr` at all).
  */
 type InsertColumnValue<TColumn extends ColumnBuilder> =
 	IsColumnNotNull<TColumn> extends true
-		? ColumnTsType<TColumn>
-		: ColumnTsType<TColumn> | null;
+		? Exclude<MutationValue<TColumn>, null>
+		: MutationValue<TColumn>;
 
 /** The declared column keys that MUST appear in an insert row: `notNull` and no default (D8/D3.11's own scope — generated columns, which would need a stronger "has no way to receive a value" rule, are parked as #308). */
 type RequiredInsertKeys<TColumns extends Record<string, ColumnBuilder>> = {
