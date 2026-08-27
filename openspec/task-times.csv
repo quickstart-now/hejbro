@@ -74,3 +74,18 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-27,add-query-layer,5.6,5,10,30,0,approx; real container caught the docker-port ipv6 parse bug; coord wait ~5m excluded
 2026-08-27,add-query-layer,5.7,5,8,20,0,approx; spec sentences narrowed to proven scope over several rounds; coord wait ~10m excluded
 2026-08-27,add-query-layer,5.review,5,,138,0,reviewer total measured: baseline 5 + batch(a) 18+14 + 4a65208 16 + batch(b) 22 + b1233e1 28 + 67c6991 20 + 5c94294 9 + 6d1490e 6
+2026-08-27,add-query-layer,7.0,7,8,12,0,approx (all g7 implementer rows self-reported; no timer ran); scout inventory
+2026-08-27,add-query-layer,7.1,7,10,40,0,approx; thenable select chain
+2026-08-27,add-query-layer,7.2,7,10,35,0,approx; mutation chains
+2026-08-27,add-query-layer,7.3,7,6,10,0,approx; compile preview (subsumed into chain terminals)
+2026-08-27,add-query-layer,7.4,7,10,50,0,approx; three-surface uniformity (4 wiring points); no-red deviation recorded separately
+2026-08-27,add-query-layer,7.5,7,10,20,0,approx; chain result types
+2026-08-27,add-query-layer,7.6,7,10,20,0,approx; query real packaging
+2026-08-27,add-query-layer,7.7,7,8,12,0,approx; pg real packaging
+2026-08-27,add-query-layer,7.8,7,8,30,0,approx; final public barrel + absence probes
+2026-08-27,add-query-layer,7.9,7,10,25,0,approx; hejbro facade + single sql
+2026-08-27,add-query-layer,7.10,7,8,35,0,approx; smoke promotion + ordered red evidence
+2026-08-27,add-query-layer,7.11,7,6,12,0,approx; five-package fixed group + privatePackages removal
+2026-08-27,add-query-layer,7.12,7,8,15,0,approx; AGENTS/README docs
+2026-08-27,add-query-layer,7.13,7,10,35,0,approx; spec deltas + close items (inventory 6->7 etc)
+2026-08-27,add-query-layer,7.rework,7,,100,0,process cost approx: R1 rework 25 + axis-split self-improvement 15 + R2 rework 20 + 7.8/7.9 reinforcement 40; bulk went to mutation verification (caught 5 surviving mutations); last 3 commits (58ab249/9f5c335/c1e2f54) unmeasured - gap noted

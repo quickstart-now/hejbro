@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1118](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201118-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1136](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201136-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -211,7 +211,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1118 functions** over the threshold, highest score 5.00 — measured at `317a7e5` (2026-08-27).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1136 functions** over the threshold, highest score 5.00 — measured at `c1e2f54` (2026-08-27).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->
@@ -230,6 +230,7 @@ records, never self-reported. Formulas and dimension definitions: #305.
 | group 4 — execution + drivers contract | 15 | 195 → 130 (0.67×) | 2 | 2,206,258 | 2,667 | 99.5% |
 | group 6 — supabase driver + RLS context | 6 | 46 → 91 (2.0×) ² | 0 | 941,124 | 917 | 98.6% |
 | group 5 — @hejbro/pg vanilla driver | 8 | 68 → ~256 (3.8×) ³ | 4 | 1,342,057 | 1,520 | 99.3% |
+| group 7 — public surface, chains, release wiring | 14 | 122 → ~351 (2.9×) ⁴ | 3 | 1,700,360 | 1,884 | 99.6% |
 
 Named process-cost rows are kept separate from task rows (a decision
 arriving mid-implementation, a red-first lapse, a gate widening between
@@ -246,7 +247,11 @@ self-reported approximations (reclassified from "measured" by the
 implementer's own call — no timer ran), and the overrun is dominated
 by requirements arriving across rounds: quality-gate wiring and
 test-binding standards were not pre-settled in the re-plan — recorded
-as a planning lesson, not implementer cost.
+as a planning lesson, not implementer cost. ⁴ group 7's rows are
+likewise self-reported approximations; ~100m of extra-task rework
+(separate ledger row) went mostly to mutation verification, which is
+what caught five surviving mutations, and the final three commits
+went unmeasured (gap recorded in the ledger).
 <!-- ai-metrics:end -->
 
 ## License
