@@ -78,6 +78,22 @@ for entry in "${PACKAGES[@]}"; do
   dir="${entry#*:}"
   (cd "$REPO_ROOT/$dir" && pnpm pack --pack-destination "$PACK_DIR" >/dev/null)
 done
+
+# @hejbro/query is still `private: true` (task 7.3 owns the private
+# flip, fixed-group registration, and real dist packaging), but
+# @hejbro/supabase now declares it as a runtime dependency for its
+# type surface (group 6, decision recorded in tasks.md). Without a
+# local tarball, `npm install` resolves that dependency against the
+# registry and dies with E404 — so the shippable SET is packed
+# together and wired via `file:`. Deliberately NOT added to
+# `PACKAGES`: the dist precheck and assertions 1a–1c stay scoped to
+# the three published packages until 7.3 does query's real packaging
+# and promotes it. Useful side effect: @hejbro/supabase's imports of
+# @hejbro/query are all `import type` today, so nothing below ever
+# loads query's entry at runtime — if someone adds a real runtime
+# import, assertion 3 starts resolving a source-only tarball under
+# plain node and fails loudly, guarding that discipline for free.
+(cd "$REPO_ROOT/packages/query" && pnpm pack --pack-destination "$PACK_DIR" >/dev/null)
 ls "$PACK_DIR"
 
 # Resolve each tarball's actual filename (pnpm names it from the
@@ -85,6 +101,7 @@ ls "$PACK_DIR"
 CORE_TGZ="$(ls "$PACK_DIR"/hejbro-core-*.tgz)"
 CLI_TGZ="$(ls "$PACK_DIR"/hejbro-[0-9]*.tgz)"
 SUPABASE_TGZ="$(ls "$PACK_DIR"/hejbro-supabase-*.tgz)"
+QUERY_TGZ="$(ls "$PACK_DIR"/hejbro-query-*.tgz)"
 
 echo "== scratch project: $SCRATCH_DIR"
 cat > "$SCRATCH_DIR/package.json" <<EOF
@@ -95,7 +112,8 @@ cat > "$SCRATCH_DIR/package.json" <<EOF
   "dependencies": {
     "@hejbro/core": "file:$CORE_TGZ",
     "hejbro": "file:$CLI_TGZ",
-    "@hejbro/supabase": "file:$SUPABASE_TGZ"
+    "@hejbro/supabase": "file:$SUPABASE_TGZ",
+    "@hejbro/query": "file:$QUERY_TGZ"
   }
 }
 EOF

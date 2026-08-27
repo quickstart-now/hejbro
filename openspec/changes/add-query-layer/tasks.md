@@ -681,19 +681,49 @@ gate asks nothing of it). File scope: `packages/supabase/**`, the
 rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
 `pnpm-lock.yaml` conflicts are the lead's to resolve at rebase.
 
-- [ ] 6.0 Scout: pin the local-stack facts the settled design assumes —
+- [x] 6.0 Scout: pin the local-stack facts the settled design assumes —
   the `supabase start` DB connection string/port, the three roles
   exist, `auth.uid()` reads `request.jwt.claims`, and
   `set local role authenticated` enforces RLS on postgres-owned
   tables; deliverable = a short inventory in the group PR body draft
-  (no code, no test). ~6m
-- [ ] 6.1 `asUser(claims)`/`asAnon()` context builders per the settled
+  (no code, no test). ~6m — run against a scratch `supabase init`
+  project outside the repo (this worktree carries no `config.toml`).
+  Confirmed DB URL matches the assumed default:
+  `postgresql://postgres:postgres@127.0.0.1:54322/postgres`. All three
+  roles (`anon`/`authenticated`/`service_role`) exist in `pg_roles`.
+  `\sf auth.uid` shows it reads `request.jwt.claims` (a legacy flat
+  `request.jwt.claim.sub` is checked first via `nullif`/`coalesce` but
+  falls through when unset) — settled design ② needs only the one JSON
+  setting, no flat key. `set local role authenticated` + `set_config`
+  on `request.jwt.claims` inside a transaction against a postgres-owned
+  table with an `owner = auth.uid()` policy showed exactly the matching
+  row, proving RLS is enforced under the role switch (owner/superuser
+  bypass does not leak through `set local role`). One design
+  consequence found: plain `supabase start` fails under colima — the
+  `vector` log-collector container tries to mount
+  `~/.colima/default/docker.sock` and colima's virtiofs rejects it
+  (`mkdir ... operation not supported`); `-x vector` (plus other
+  unneeded services) works around it locally. Rather than baking a
+  colima-specific exclude flag into a committed script, 6.4 goes with
+  detect-and-guide instead of start-the-stack (lead decision): it reads
+  `SUPABASE_DB_URL` (default the URL above), fails loudly instead of
+  starting anything, and its guidance message names `supabase start`
+  plus the colima `-x vector` workaround.
+- [x] 6.1 `asUser(claims)`/`asAnon()` context builders per the settled
   shape (single `request.jwt.claims` JSON setting, fixed roles); red
   test `packages/supabase/test/context.test.ts` "asUser builds the
   authenticated role plus one JSON claims setting; asAnon builds anon";
   files `packages/supabase/src/context.ts`,
-  `packages/supabase/src/index.ts`. ~8m
-- [ ] 6.2 `supabaseDriver(driver)` decorator: adds `contributedRoles` =
+  `packages/supabase/src/index.ts`. ~8m — `sub` is required both at the
+  type level (`Claims["sub"]: string`, non-optional) and again at
+  runtime (`claims-subject-missing` kebab-code enriched `Error`, a
+  `function` declaration per the g2/g3 `(): never` handoff note) as a
+  fail-fast guard for a caller that bypasses the type; a caller-supplied
+  `role` claim is always discarded and overwritten with
+  `"authenticated"`, never trusted (lead-confirmed). Two extra tests
+  beyond the named red one lock in coverage-completing branches: the
+  role-overwrite behavior and the missing-`sub` throw.
+- [x] 6.2 `supabaseDriver(driver)` decorator: adds `contributedRoles` =
   anon/authenticated/service_role and passes every other member through
   unchanged (capabilities, execute, transaction, setupSession); adds
   the `@hejbro/query` dependency and its #131 vitest alias to this
@@ -702,22 +732,66 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   wrapped driver member through unchanged"; files
   `packages/supabase/src/driver.ts`, `packages/supabase/src/index.ts`,
   `packages/supabase/package.json`,
-  `packages/supabase/vitest.config.ts`. ~8m
-- [ ] 6.3 Task 4.7 (a′) union wiring proof: with a schema declaring
+  `packages/supabase/vitest.config.ts`. ~8m — a one-expression object
+  spread (`{ ...driver, contributedRoles: [...] }`), so the passthrough
+  proof is structural rather than a spot-check: it asserts every own
+  key of the wrapped-*input* driver is `===` identical on the *output*,
+  which a future `Driver` contract addition would carry automatically
+  and a hand-listed member enumeration would silently miss — scoped to
+  **own enumerable** properties (object spread's own boundary; a
+  prototype-chain or non-enumerable member would not be copied, and
+  neither the decorator nor this test would catch that, reviewer note
+  on batch A review).
+  `@hejbro/query` is added as a **runtime** `dependencies` entry, not
+  `devDependencies` (its `Driver` type reaches this package's own
+  public d.ts) — `.claude/rules/supabase-preset.md` still describes the
+  pre-D95 core-only boundary; its update is task 6.5's.
+- [x] 6.3 Task 4.7 (a′) union wiring proof: with a schema declaring
   ZERO grants/policies, `db(schema, supabaseDriver(fake))` accepts
   `.as(asAnon())` and `.as(asUser(...))` (roles arrive via the driver
   contribution) while an undeclared role is still rejected; red test
   `packages/supabase/test/driver.test.ts` "driver-contributed roles
   unlock asUser/asAnon on a grant-less schema; undeclared roles stay
-  rejected"; files that test only. ~6m
-- [ ] 6.4 Real-stack RLS integration (colima + `supabase start`): a
+  rejected"; files that test only. ~6m — passed on first run (pure
+  wiring proof over 6.1/6.2's already-landed code, no production
+  change), so the named test is a regression lock rather than a
+  red-to-green cycle: a plain table with no `rls`/`grant` and
+  `db(schema, supabaseDriver(fakeDriver()))` accepts both
+  `.as(asAnon())` and `.as(asUser({sub:...}))` without throwing, while
+  `.as({role: roleName("nonexistent_role")})` still throws
+  `undeclared-role`.
+- [x] 6.4 Real-stack RLS integration (colima + `supabase start`): a
   `test:integration` script outside the default `test`, failing loudly
   with guidance when the stack is down; a declared `authUid()` policy
   filters rows per `asUser` claims' `sub`, and `asAnon` sees none; red
   test `packages/supabase/test/rls-context.integration.test.ts`
   "authUid() policy filters by claims subject through asUser"; files
-  that test + `packages/supabase/package.json`. ~10m
-- [ ] 6.5 Spec-delta alignment (this group owns
+  that test + `packages/supabase/package.json`. ~10m — detect-and-guide
+  (never starts the stack), `SUPABASE_DB_URL` defaulting to 6.0's own
+  measured URL; a fail-loud test run against a deliberately unreachable
+  URL confirmed a single clean guidance-message failure, not a silent
+  skip. Adds `vitest.integration.config.ts` (`mergeConfig`-inherits the
+  base config's #131 aliases, `include`/`exclude` explicitly replaced
+  as a plain spread *after* `mergeConfig` — a real bug caught while
+  building this: `mergeConfig` concatenates array fields rather than
+  replacing them, so passing `exclude: []` through it left the base
+  config's own integration-exclusion pattern in the merged result and
+  the "integration" run silently executed the full default unit suite
+  instead, 0 integration tests actually collected, green-looking).
+  Bidirectionally verified: default `pnpm test` collects exactly the
+  pre-6.4 count (15 files/107 tests, unchanged), `--config
+  vitest.integration.config.ts` collects and passes exactly the 3 tests
+  in the new file (alias self-check + the two RLS scenarios) against a
+  live scratch stack. `packages/supabase/vitest.config.ts` also gains
+  the two-pattern exclude (`test/**/*integration.test.ts` +
+  `test/integration/**`) and `pg`/`@types/pg` land as devDependencies
+  (not `@hejbro/pg`, which doesn't exist on this branch — group 5's own
+  scope); per the lead's hard rule, no `src/` code was added — the
+  connection guard, DDL fixture, and hand-rolled `Driver` all live
+  inside the test file, so 6.1/6.2's unit tests keep sole ownership of
+  every `src/` branch the CRAP gate scores (confirmed unchanged: 1108
+  functions scanned, 0 over budget, highest still 5.00).
+- [x] 6.5 Spec-delta alignment (this group owns
   `specs/rls-execution-context/spec.md`: the claims-object surface, the
   single-JSON-setting mapping, and the verification-stays-with-the-app
   sentence, each tracing to a 6.x test) + `.claude/rules/
@@ -726,7 +800,34 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   `openspec validate add-query-layer --strict` and
   `pnpm changeset status`; files
   `openspec/changes/add-query-layer/specs/rls-execution-context/spec.md`,
-  `.claude/rules/supabase-preset.md`, one new `.changeset/*.md`. ~8m
+  `.claude/rules/supabase-preset.md`, one new `.changeset/*.md`. ~8m —
+  spec delta (claims-object surface, single-JSON-setting mapping,
+  verification-stays-with-the-app requirements added; the pre-existing
+  "Presets define the context type" requirement's `asUser(jwt)` wording
+  corrected to `asUser(claims)`), `.claude/rules/supabase-preset.md`
+  (line 8 sentence + line 9 count, four → five things, the driver
+  contribution), and the changeset file are all written and
+  `openspec validate add-query-layer --strict` passes.
+  `pnpm changeset status` initially failed (`"@hejbro/supabase" depends
+  on the skipped package "@hejbro/query"` — `@hejbro/query` is
+  `private: true`, never published, but has sat in `@hejbro/supabase`'s
+  runtime `dependencies` since task 6.2, `47aac29`; this predates 6.5,
+  batch A's own gate list just never ran `changeset status`, a planning
+  gap not an implementation one), escalated to the planner/lead, and
+  resolved by a **lead-prescribed, one-key addition** to
+  `.changeset/config.json` — `"privatePackages": { "version": true,
+  "tag": false }` (changesets v3.0.1) — nothing else in that file
+  touched. **7.3 pre-work, lead-prescribed**: this settles gate honesty
+  only — fixed-group membership and first-version policy remain task
+  7.3's own owner decision. Side effect, recorded rather than hidden:
+  `updateInternalDependencies` now also patch-bumps every other private
+  workspace package (`cli-smoke`, `example-postgres`,
+  `example-supabase`, `preset-smoke`) alongside `@hejbro/query` in
+  `changeset status`'s output — none of them publish (`tag: false` +
+  `private: true`), so this is Version PR churn, not a release change;
+  the already-held #289 Version PR and 7.3's own final config shape
+  make it an acceptable interim state. `pnpm changeset status
+  --since=upstream/dev` now exits 0.
 
 ## 7. Public surface, docs, release wiring
 
