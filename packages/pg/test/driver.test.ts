@@ -30,6 +30,16 @@ const sqlTextOf = (call: QueryCall): string => {
 	return call.text;
 };
 
+/** Builds a `stubPoolWithClient` `failWhen` hook that fails exactly the one named statement with `failure`, succeeding otherwise -- the shape every single-statement failure-path test below needs. */
+const failOnlyOn =
+	(statementText: string, failure: Error) =>
+	(call: QueryCall): Error | undefined => {
+		if (sqlTextOf(call) === statementText) {
+			return failure;
+		}
+		return undefined;
+	};
+
 /**
  * Yields past the microtask queue and one macrotask turn -- long enough
  * for a `pool.end()` scheduled anywhere during a round-trip (e.g.
@@ -45,6 +55,42 @@ const flushAsyncWork = (): Promise<void> =>
 	});
 
 /**
+ * Builds one fresh release guard, mirroring pg-pool's own `_releaseOnce`
+ * (verified against the installed `pg-pool@3.14.0` source,
+ * `index.js:369-380`): a *new* closure is created per checkout (there,
+ * `client.release = this._releaseOnce(...)` is reassigned inside
+ * `_acquireClient` on every `connect()`), and calling *that checkout's*
+ * `release()` a second time throws -- the same message pg-pool's own
+ * guard uses. A plain `vi.fn()` stays silent no matter how many times
+ * it's called, which is exactly the axis a double-release mutation needs
+ * to be structurally caught on (the same reasoning as leaving `query` off
+ * the stub `pool` entirely to block a wrong-connection statement
+ * structurally, not just by inspection). Every checkout's calls are
+ * logged into the one shared `releaseCalls` array (args included), so a
+ * test can assert total count/arguments across however many checkouts
+ * happened without needing a fresh guard reference each time.
+ */
+const releaseCallLogger = (): {
+	readonly releaseCalls: Array<ReadonlyArray<unknown>>;
+	readonly newGuard: () => ReturnType<typeof vi.fn>;
+} => {
+	const releaseCalls: Array<ReadonlyArray<unknown>> = [];
+	const newGuard = (): ReturnType<typeof vi.fn> => {
+		const released: { current: boolean } = { current: false };
+		return vi.fn((...args: ReadonlyArray<unknown>) => {
+			if (released.current) {
+				throw new Error(
+					"Release called on client which has already been released to the pool.",
+				);
+			}
+			released.current = true;
+			releaseCalls.push(args);
+		});
+	};
+	return { releaseCalls, newGuard };
+};
+
+/**
  * A pool whose `connect` always hands back the *same* stub client
  * (simulating the pool reusing one physical connection across checkouts)
  * and records every call that client's own `query` received, in order.
@@ -53,25 +99,42 @@ const flushAsyncWork = (): Promise<void> =>
  * client, that call would throw (not silently succeed against the wrong
  * connection), catching a session-binding regression decisively rather
  * than by inspection.
+ *
+ * `failWhen`, when given, throws its return value instead of succeeding
+ * for exactly the calls it names -- the one hook every failure-path test
+ * below needs (a failed pin, a failed BEGIN, a failed caller statement),
+ * without each one hand-rolling its own client.
  */
-const stubPoolWithClient = (): {
+const stubPoolWithClient = (
+	failWhen?: (call: QueryCall) => Error | undefined,
+): {
 	readonly pool: Pool;
-	readonly release: ReturnType<typeof vi.fn>;
 	readonly calls: Array<QueryCall>;
+	readonly releaseCalls: Array<ReadonlyArray<unknown>>;
 } => {
 	const calls: Array<QueryCall> = [];
-	const release = vi.fn();
-	const client = {
+	const { releaseCalls, newGuard } = releaseCallLogger();
+	const client: {
+		query: ReturnType<typeof vi.fn>;
+		release: ReturnType<typeof vi.fn>;
+	} = {
 		query: vi.fn(async (call: QueryCall) => {
 			calls.push(call);
+			const failure = failWhen?.(call);
+			if (failure !== undefined) {
+				throw failure;
+			}
 			return { rows: [] };
 		}),
-		release,
+		release: newGuard(),
 	};
 	const pool = {
-		connect: vi.fn(async () => client),
+		connect: vi.fn(async () => {
+			client.release = newGuard();
+			return client;
+		}),
 	} as unknown as Pool;
-	return { pool, release, calls };
+	return { pool, calls, releaseCalls };
 };
 
 describe("pgDriver(pool) (owner decision ①, task 5.1)", () => {
@@ -218,7 +281,7 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 
 describe("pgDriver transaction (task 5.4)", () => {
 	it("runs a transaction's statements through one held client and commits on success", async () => {
-		const { pool, release, calls } = stubPoolWithClient();
+		const { pool, calls, releaseCalls } = stubPoolWithClient();
 		const driver = pgDriver(pool);
 
 		const result = await driver.transaction(async (session) => {
@@ -239,11 +302,12 @@ describe("pgDriver transaction (task 5.4)", () => {
 			"select 1",
 			"COMMIT",
 		]);
-		expect(release).toHaveBeenCalledTimes(1);
+		expect(releaseCalls).toHaveLength(1);
+		expect(releaseCalls[0]).toEqual([]);
 	});
 
 	it("rolls back and rethrows the callback's own error, unchanged, when the callback throws", async () => {
-		const { pool, release, calls } = stubPoolWithClient();
+		const { pool, calls, releaseCalls } = stubPoolWithClient();
 		const driver = pgDriver(pool);
 		const originalError = new Error("callback boom");
 
@@ -262,11 +326,11 @@ describe("pgDriver transaction (task 5.4)", () => {
 			"BEGIN",
 			"ROLLBACK",
 		]);
-		expect(release).toHaveBeenCalledTimes(1);
 		// contrast pair with the ROLLBACK-itself-fails case below: an
 		// ordinary successful rollback returns the client to the pool
 		// normally (no truthy argument), never discards it.
-		expect(release).toHaveBeenCalledWith();
+		expect(releaseCalls).toHaveLength(1);
+		expect(releaseCalls[0]).toEqual([]);
 	});
 
 	it("rethrows a thrown non-Error value unchanged (rethrow is not Error-specific, never normalized/wrapped)", async () => {
@@ -283,18 +347,10 @@ describe("pgDriver transaction (task 5.4)", () => {
 	});
 
 	it("preserves the original callback error unchanged, and discards the connection, when ROLLBACK itself fails (owner ruling (b))", async () => {
-		const release = vi.fn();
 		const rollbackError = new Error("connection reset");
-		const client = {
-			query: vi.fn(async (call: QueryCall) => {
-				if (sqlTextOf(call) === "ROLLBACK") {
-					throw rollbackError;
-				}
-				return { rows: [] };
-			}),
-			release,
-		};
-		const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
+		const { pool, releaseCalls } = stubPoolWithClient(
+			failOnlyOn("ROLLBACK", rollbackError),
+		);
 		const driver = pgDriver(pool);
 		const originalError = new Error("callback boom");
 
@@ -312,8 +368,79 @@ describe("pgDriver transaction (task 5.4)", () => {
 		// and it discards the connection (release(true), the boolean
 		// shorthand pg-pool's _release treats identically to an Error)
 		// rather than returning a possibly-broken session to the pool.
-		expect(release).toHaveBeenCalledTimes(1);
-		expect(release).toHaveBeenCalledWith(true);
+		expect(releaseCalls).toHaveLength(1);
+		expect(releaseCalls[0]).toEqual([true]);
+	});
+
+	it("releases without discarding when the pin itself fails before BEGIN (exit path not previously enumerated)", async () => {
+		const pinFailure = new Error("set intervalstyle failed");
+		const { pool, calls, releaseCalls } = stubPoolWithClient(
+			failOnlyOn("set intervalstyle to 'postgres'", pinFailure),
+		);
+		const driver = pgDriver(pool);
+
+		await expect(driver.transaction(async () => "unreachable")).rejects.toBe(
+			pinFailure,
+		);
+
+		// ROLLBACK on a connection where BEGIN never ran is a harmless
+		// Postgres no-op (a WARNING, not an error, per the real cluster) --
+		// releaseAfterFailedTransaction sees "ROLLBACK succeeded" and
+		// returns the client normally, not discarded. A pin failure isn't
+		// evidence the connection itself is broken (it could just as
+		// easily be a permission error), so this is the intended
+		// behavior, not a gap in the discard logic.
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"ROLLBACK",
+		]);
+		expect(releaseCalls).toHaveLength(1);
+		expect(releaseCalls[0]).toEqual([]);
+	});
+
+	it("releases without discarding when BEGIN itself fails (exit path not previously enumerated)", async () => {
+		const beginFailure = new Error("BEGIN failed");
+		const { pool, calls, releaseCalls } = stubPoolWithClient(
+			failOnlyOn("BEGIN", beginFailure),
+		);
+		const driver = pgDriver(pool);
+
+		await expect(driver.transaction(async () => "unreachable")).rejects.toBe(
+			beginFailure,
+		);
+
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"BEGIN",
+			"ROLLBACK",
+		]);
+		expect(releaseCalls).toHaveLength(1);
+		expect(releaseCalls[0]).toEqual([]);
+	});
+});
+
+describe("pgDriver execute release (task 5.4/5.5 follow-up, GAP-2: execute()'s release() had no test at all)", () => {
+	it("releases the client after a successful execute()", async () => {
+		const { pool, releaseCalls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		expect(releaseCalls).toHaveLength(1);
+	});
+
+	it("releases the client even when execute() itself fails", async () => {
+		const executeFailure = new Error("boom");
+		const { pool, releaseCalls } = stubPoolWithClient(
+			failOnlyOn("select 1", executeFailure),
+		);
+		const driver = pgDriver(pool);
+
+		await expect(
+			driver.execute({ sql: "select 1", params: [], kind: "sql" }),
+		).rejects.toBe(executeFailure);
+
+		expect(releaseCalls).toHaveLength(1);
 	});
 });
 
@@ -420,6 +547,41 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 
 		expect(calls.map(sqlTextOf)).toEqual([
 			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'",
+			"select 2",
+		]);
+	});
+
+	it("does not share pin state between two driver instances, even over the same underlying client (GAP-3: checkoutGuard's own tsdoc promises per-driver scope, but nothing exercised it)", async () => {
+		// one physical client, checked out by two *different* pgDriver()
+		// instances -- contrived (two drivers don't normally share an
+		// underlying connection), but it's the only way to make a
+		// module-level-WeakSet mutation observably differ from the
+		// per-driver-instance guard the tsdoc promises: with two distinct
+		// stub clients, either implementation pins each one once, and the
+		// axis would stay unobserved.
+		const calls: Array<QueryCall> = [];
+		const client = {
+			query: vi.fn(async (call: QueryCall) => {
+				calls.push(call);
+				return { rows: [] };
+			}),
+			release: vi.fn(),
+		};
+		const poolA = { connect: vi.fn(async () => client) } as unknown as Pool;
+		const poolB = { connect: vi.fn(async () => client) } as unknown as Pool;
+		const driverA = pgDriver(poolA);
+		const driverB = pgDriver(poolB);
+
+		await driverA.execute({ sql: "select 1", params: [], kind: "sql" });
+		await driverB.execute({ sql: "select 2", params: [], kind: "sql" });
+
+		// a module-level (shared) WeakSet would see driverB's checkout of
+		// the same client object as already pinned by driverA and skip
+		// the second pin -- per-driver scope pins independently.
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"select 1",
 			"set intervalstyle to 'postgres'",
 			"select 2",
 		]);
