@@ -203,8 +203,14 @@ export type BigintConfig<
 /** `bigint` column — see {@link BigintConfig} for `mode`. */
 export const bigint = <TMode extends NumericMode = typeof DEFAULT_BIGINT_MODE>(
 	config: BigintConfig<TMode> = {},
-): ColumnBuilder<"numeric", { typeName: "bigint" } & { mode: TMode }> =>
-	createColumnBuilder<"numeric", { typeName: "bigint" } & { mode: TMode }>({
+): ColumnBuilder<
+	"numeric",
+	{ typeName: "bigint" } & { mode: NoInfer<TMode> }
+> =>
+	createColumnBuilder<
+		"numeric",
+		{ typeName: "bigint" } & { mode: NoInfer<TMode> }
+	>({
 		typeNode: { typeName: "bigint" },
 		notNull: false,
 		primaryKey: false,
@@ -228,8 +234,14 @@ export const numeric = <
 	TMode extends NumericMode = typeof DEFAULT_NUMERIC_MODE,
 >(
 	config: NumericConfig<TMode> = {},
-): ColumnBuilder<"numeric", { typeName: "numeric" } & { mode: TMode }> =>
-	createColumnBuilder<"numeric", { typeName: "numeric" } & { mode: TMode }>({
+): ColumnBuilder<
+	"numeric",
+	{ typeName: "numeric" } & { mode: NoInfer<TMode> }
+> =>
+	createColumnBuilder<
+		"numeric",
+		{ typeName: "numeric" } & { mode: NoInfer<TMode> }
+	>({
 		typeNode: {
 			typeName: "numeric",
 			precision: resolveOptionalNumber(config.precision),
