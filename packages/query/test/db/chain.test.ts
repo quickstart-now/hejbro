@@ -399,13 +399,20 @@ describe("chain.compile() (task 7.3)", () => {
 });
 
 describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => {
-	it("scoped and tx chains run under their context/session (recorded SQL proves it)", async () => {
+	// Each wiring point gets its own test (not one test covering all
+	// three) so that removing any single point implicates exactly one
+	// named test, never leaving two others only reachable by reading a
+	// stack trace (the same axis-isolation lesson the 7.2 rework's
+	// mutation-testing round already forced onto the mutation *chain*
+	// tests, applied here to the wiring tests too).
+
+	it("scoped and tx chains run under their context/session (recorded SQL proves it) -- wiring point 2, ScopedDb's own chain", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();
 		const handle = db({ posts }, driver, { roles: [roleName("app_reader")] });
 
-		// wiring point 2 -- ScopedDb's own chain: one context-applied
-		// transaction, role then setting then the chain's own SQL, all
-		// three in the *same* transaction array (not just "somewhere").
+		// one context-applied transaction, role then setting then the
+		// chain's own SQL, all three in the *same* transaction array (not
+		// just "somewhere").
 		await handle
 			.as({ role: roleName("app_reader"), settings: { "app.claim": "v" } })
 			.select(posts);
@@ -417,10 +424,14 @@ describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => 
 			"select set_config($1, $2, true)",
 		);
 		expect(sentPerTransaction[0]?.[2]?.sql).toContain("posts");
+	});
 
-		// wiring point 4 -- the tx `db.as(context).transaction(cb)` hands
-		// its callback: context applied once, every tx.select() call
-		// afterward shares that same one transaction array.
+	it("db.as(context).transaction(cb)'s tx chain shares the one context-applied transaction -- wiring point 4", async () => {
+		const { driver, sentPerTransaction } = recordingTransactionalDriver();
+		const handle = db({ posts }, driver, { roles: [roleName("app_reader")] });
+
+		// context applied once, every tx.select() call afterward shares
+		// that same one transaction array.
 		await handle
 			.as({ role: roleName("app_reader") })
 			.transaction(async (tx) => {
@@ -428,21 +439,23 @@ describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => 
 				await tx.select(posts);
 			});
 
-		expect(sentPerTransaction).toHaveLength(2);
-		expect(sentPerTransaction[1]).toHaveLength(3); // role + 2 selects
-		expect(sentPerTransaction[1]?.[0]?.sql).toBe('set local role "app_reader"');
-		expect(sentPerTransaction[1]?.[1]?.sql).toContain("posts");
-		expect(sentPerTransaction[1]?.[2]?.sql).toContain("posts");
+		expect(sentPerTransaction).toHaveLength(1);
+		expect(sentPerTransaction[0]).toHaveLength(3); // role + 2 selects
+		expect(sentPerTransaction[0]?.[0]?.sql).toBe('set local role "app_reader"');
+		expect(sentPerTransaction[0]?.[1]?.sql).toContain("posts");
+		expect(sentPerTransaction[0]?.[2]?.sql).toContain("posts");
+	});
 
-		// wiring point 3 -- the tx a plain (unscoped) `db.transaction(cb)`
-		// hands its callback: no context to apply, but the chain SQL still
-		// lands inside the callback's own one transaction.
+	it("a plain db.transaction(cb)'s tx chain shares its one transaction, no context to apply -- wiring point 3", async () => {
+		const { driver, sentPerTransaction } = recordingTransactionalDriver();
+		const handle = db({ posts }, driver);
+
 		await handle.transaction(async (tx) => {
 			await tx.select(posts);
 		});
 
-		expect(sentPerTransaction).toHaveLength(3);
-		expect(sentPerTransaction[2]).toHaveLength(1);
-		expect(sentPerTransaction[2]?.[0]?.sql).toContain("posts");
+		expect(sentPerTransaction).toHaveLength(1);
+		expect(sentPerTransaction[0]).toHaveLength(1);
+		expect(sentPerTransaction[0]?.[0]?.sql).toContain("posts");
 	});
 });
