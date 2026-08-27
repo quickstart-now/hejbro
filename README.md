@@ -258,6 +258,7 @@ went unmeasured (gap recorded in the ledger).
 | group 2 — assertNoNulls utility | 1 | 7 → 30 ⁵ | 1 | 348,504 | 492 | 97.1% |
 | group 1 — declaration surface + narrowing | 3 | 24 → 45 ⁶ | 0 | 532,315 | 718 | 98.2% |
 | group 3 — NULL-element conversion guard | 1 | 6 → 30 ⁷ | 0 | 380,247 | 438 | 96.7% |
+| group 4 — real-server witness (pg integration) | 1 | 9 → 40 ⁸ | 0 | 209,944 | 271 | 95.1% |
 
 ⁵ group 2's overage is four planner-imposed correction rounds (the
 literal `Next:` marker, two ordered-but-missing cases, the
@@ -275,7 +276,12 @@ first try, and the two late-added assertions it demanded pre-freeze
 were both proven live by counterfactual checks (deleting either one
 lets its mutant survive) — the overage bought real guards, and the
 recorded lesson is to settle requirements before red starts by
-checking whether each gate actually sees the piece's files.
+checking whether each gate actually sees the piece's files. ⁸ group
+4's overage is context cost (weaving a new column through a ~470-line
+live-server harness) plus a separate 10m process row for a red
+reproduced post-hoc rather than red-first — recorded as a deviation,
+with the reviewer's independent mutation reproducing the exact red on
+three axes as the standing primary evidence.
 <!-- ai-metrics:end -->
 
 ## License
