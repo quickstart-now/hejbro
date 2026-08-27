@@ -4,7 +4,8 @@ import type {
 	DriverCapabilities,
 	DriverSession,
 } from "@hejbro/query";
-import { Pool } from "pg";
+import type { CustomTypesConfig } from "pg";
+import { Pool, types as pgTypes } from "pg";
 
 /**
  * Fixed per owner decision ①, tasks.md group 5 header -- both capabilities
@@ -18,6 +19,27 @@ const CAPABILITIES: DriverCapabilities = {
 	"session-state": true,
 };
 
+/** Postgres's builtin `interval` type oid -- pg's own default parser turns it into a `PostgresInterval` object with no lossless way back to text (5.0 scout: `String()` gives `"[object Object]"`, and even `.toPostgres()` reorders/reformats fields rather than reproducing the original). */
+const INTERVAL_OID = 1186;
+
+/**
+ * The per-query `types` override every `execute`/session call sends
+ * (owner decision ③). Passing `types` at all replaces the client's own
+ * `TypeOverrides` wholesale rather than falling back to it (5.0 scout,
+ * `pg/lib/client.js:743-744`) -- so this object has to fully implement
+ * "oid 1186 is raw text, every other oid is pg's own default" itself,
+ * never a blanket identity function that would also defeat pg's
+ * int8/numeric/timestamptz parsing.
+ */
+const intervalPassthroughTypes: CustomTypesConfig = {
+	getTypeParser: (oid, format) => {
+		if (oid === INTERVAL_OID) {
+			return (value: string): string => value;
+		}
+		return pgTypes.getTypeParser(oid, format);
+	},
+};
+
 /**
  * The queryable node-postgres exposes on both a `Pool` and a checked-out
  * `PoolClient` -- the minimal surface {@link makeSession} needs, kept
@@ -28,8 +50,8 @@ type Queryable = Pick<Pool, "query">;
 /**
  * Wraps `queryable` (a `Pool` or a single checked-out `PoolClient`) as a
  * {@link DriverSession} -- the one place a {@link CompileResult} becomes a
- * node-postgres query config. `types`/checkout pinning are added by later
- * tasks in this group (5.3/5.5); this is the shape every one of them
+ * node-postgres query config, always carrying {@link intervalPassthroughTypes}
+ * (task 5.3). Checkout pinning is added by task 5.5; this is the shape it
  * builds on.
  */
 const makeSession = (queryable: Queryable): DriverSession => ({
@@ -37,6 +59,7 @@ const makeSession = (queryable: Queryable): DriverSession => ({
 		const result = await queryable.query({
 			text: compiled.sql,
 			values: [...compiled.params],
+			types: intervalPassthroughTypes,
 		});
 		return result.rows;
 	},
