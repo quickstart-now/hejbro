@@ -4,5 +4,6 @@
 	"fixed": [["@hejbro/core", "hejbro", "@hejbro/supabase"]],
 	"access": "public",
 	"baseBranch": "dev",
-	"updateInternalDependencies": "patch"
+	"updateInternalDependencies": "patch",
+	"privatePackages": { "version": true, "tag": false }
 }

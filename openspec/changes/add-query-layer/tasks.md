@@ -791,7 +791,7 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   inside the test file, so 6.1/6.2's unit tests keep sole ownership of
   every `src/` branch the CRAP gate scores (confirmed unchanged: 1108
   functions scanned, 0 over budget, highest still 5.00).
-- [ ] 6.5 Spec-delta alignment (this group owns
+- [x] 6.5 Spec-delta alignment (this group owns
   `specs/rls-execution-context/spec.md`: the claims-object surface, the
   single-JSON-setting mapping, and the verification-stays-with-the-app
   sentence, each tracing to a 6.x test) + `.claude/rules/
@@ -807,18 +807,27 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   corrected to `asUser(claims)`), `.claude/rules/supabase-preset.md`
   (line 8 sentence + line 9 count, four → five things, the driver
   contribution), and the changeset file are all written and
-  `openspec validate add-query-layer --strict` passes. **Not checked
-  off**: `pnpm changeset status` (both bare and `--since=upstream/dev`)
-  fails — `"@hejbro/supabase" depends on the skipped package
-  "@hejbro/query"` — because `@hejbro/query` (`private: true`, never
-  published) sits in `@hejbro/supabase`'s runtime `dependencies` since
-  task 6.2 (`47aac29`); this predates 6.5, batch A's own gate list just
-  never ran `changeset status` (6.5 owns that check, a planning gap,
-  not an implementation one). `.changeset/config.json` (fixed-group
-  membership, first-version policy) is task 7.3's file and an
-  owner-decision point per AGENTS.md's hard-gates list — not touched
-  here. Escalated to the planner/lead; this task stays open pending
-  that decision.
+  `openspec validate add-query-layer --strict` passes.
+  `pnpm changeset status` initially failed (`"@hejbro/supabase" depends
+  on the skipped package "@hejbro/query"` — `@hejbro/query` is
+  `private: true`, never published, but has sat in `@hejbro/supabase`'s
+  runtime `dependencies` since task 6.2, `47aac29`; this predates 6.5,
+  batch A's own gate list just never ran `changeset status`, a planning
+  gap not an implementation one), escalated to the planner/lead, and
+  resolved by a **lead-prescribed, one-key addition** to
+  `.changeset/config.json` — `"privatePackages": { "version": true,
+  "tag": false }` (changesets v3.0.1) — nothing else in that file
+  touched. **7.3 pre-work, lead-prescribed**: this settles gate honesty
+  only — fixed-group membership and first-version policy remain task
+  7.3's own owner decision. Side effect, recorded rather than hidden:
+  `updateInternalDependencies` now also patch-bumps every other private
+  workspace package (`cli-smoke`, `example-postgres`,
+  `example-supabase`, `preset-smoke`) alongside `@hejbro/query` in
+  `changeset status`'s output — none of them publish (`tag: false` +
+  `private: true`), so this is Version PR churn, not a release change;
+  the already-held #289 Version PR and 7.3's own final config shape
+  make it an acceptable interim state. `pnpm changeset status
+  --since=upstream/dev` now exits 0.
 
 ## 7. Public surface, docs, release wiring
 
