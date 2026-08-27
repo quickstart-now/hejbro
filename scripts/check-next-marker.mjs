@@ -104,6 +104,11 @@ const SOURCE_ROOTS = [
 	"packages/core/src",
 	"packages/cli/src",
 	"packages/supabase/src",
+	// #361: packages/query and packages/pg are published packages with
+	// user-facing error codes; omitting them made this gate a never-fires
+	// probe for exactly the packages the query layer added.
+	"packages/query/src",
+	"packages/pg/src",
 ];
 
 /** Every file in `root` containing a throwHejbroError/hejbroError call --
@@ -111,16 +116,33 @@ const SOURCE_ROOTS = [
  * excluded explicitly, not by pattern, so a future file named similarly
  * doesn't silently skip itself. */
 const findCandidateFiles = (root) => {
-	const out = execFileSync(
-		"grep",
-		[
-			"-rl",
-			String.raw`throwHejbroError(\|hejbroError(`,
-			root,
-			"--include=*.ts",
-		],
-		{ cwd: REPO_ROOT, encoding: "utf8" },
-	).trim();
+	// #361: the second alternative catches the enriched-plain-Error idiom
+	// (`throw Object.assign(new Error(...), { code })`) that packages/query
+	// and packages/pg use instead of throwHejbroError -- without it, adding
+	// those roots would have been a no-op (a never-fires probe, the exact
+	// failure mode this script's own header warns about). grep exits 1 when
+	// a root has no match at all (pg today) -- that is "no candidates", not
+	// an error, so it must not crash the gate.
+	const grepOut = () => {
+		try {
+			return execFileSync(
+				"grep",
+				[
+					"-rl",
+					String.raw`throwHejbroError(\|hejbroError(\|Object.assign(`,
+					root,
+					"--include=*.ts",
+				],
+				{ cwd: REPO_ROOT, encoding: "utf8" },
+			).trim();
+		} catch (error) {
+			if (error.status === 1) {
+				return "";
+			}
+			throw error;
+		}
+	};
+	const out = grepOut();
 	if (out === "") {
 		return [];
 	}
@@ -209,9 +231,14 @@ const splitTopLevelArgs = (argsText) => {
  * top-level argument list via balanced-paren scanning -- robust to
  * multi-line template literals and nested calls inside the message,
  * unlike a line-oriented grep. */
-const extractCalls = (filePath, text) => {
+const extractCalls = (filePath, text, extraCallNames = []) => {
 	const calls = [];
-	const callRe = /\b(throwHejbroError|hejbroError)\s*\(/g;
+	// #361: extraCallNames carries same-file thrower helpers (the
+	// (code, message) convention, e.g. compile.ts's throwQueryError) whose
+	// own Object.assign site has a dynamic code and is therefore skipped --
+	// the original messages live at their call sites, scanned here.
+	const names = ["throwHejbroError", "hejbroError", ...extraCallNames];
+	const callRe = new RegExp(`\\b(${names.join("|")})\\s*\\(`, "g");
 	let match = callRe.exec(text);
 	while (match !== null) {
 		const closeIndex = scanBalanced(
@@ -242,6 +269,76 @@ const extractCode = (args) => {
 		return null;
 	}
 	return match[1];
+};
+
+/** #361: the enriched-plain-Error idiom packages/query and packages/pg
+ * use -- `Object.assign(new Error(<message>), { code: "...", ... })` --
+ * normalized into the same `{ filePath, lineNo, args }` shape as a
+ * throwHejbroError call, so the one validation loop below (exemptions,
+ * mixed-reachability patterns, message resolution) applies unchanged. A
+ * site whose enrichment carries no literal `code:` string (the `{ code }`
+ * shorthand inside a thrower helper, or a non-error Object.assign like
+ * sql.ts's tag composition) is skipped exactly like a dynamic-code
+ * throwHejbroError call: it is not an original message site. */
+const extractAssignSites = (filePath, text) => {
+	const sites = [];
+	const assignRe = /\bObject\.assign\s*\(/g;
+	let match = assignRe.exec(text);
+	while (match !== null) {
+		const closeIndex = scanBalanced(
+			text,
+			match.index + match[0].length,
+			"(",
+			")",
+		);
+		const argsText = text.slice(match.index + match[0].length, closeIndex - 1);
+		const args = splitTopLevelArgs(argsText);
+		const enrichment = args.slice(1).join(", ");
+		const codeMatch = /\bcode:\s*"([^"]+)"/.exec(enrichment);
+		if (codeMatch !== null) {
+			const lineNo = text.slice(0, match.index).split("\n").length;
+			const [target] = args;
+			const targetText = target ?? "";
+			const errorMatch = /^new Error\s*\(/.exec(targetText);
+			const messageArg = () => {
+				if (errorMatch === null) {
+					return targetText;
+				}
+				return targetText.slice(errorMatch[0].length).replace(/\)\s*$/, "");
+			};
+			sites.push({
+				filePath,
+				lineNo,
+				args: [`"${codeMatch[1]}"`, messageArg()],
+			});
+		}
+		match = assignRe.exec(text);
+	}
+	return sites;
+};
+
+/** #361: same-file thrower helpers wrapping the enriched-plain-Error
+ * idiom with a forwarded code -- `const throwX = (code, message) => {
+ * throw Object.assign(new Error(message), { code }); }`. Their assign
+ * site is dynamic (skipped above), so the helper NAME joins the call-site
+ * scan instead, under the same (code, message) argument convention as
+ * throwHejbroError. */
+const findLocalThrowerNames = (text) => {
+	const names = [];
+	const declRe = /\bconst ([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g;
+	let match = declRe.exec(text);
+	while (match !== null) {
+		const declText = findDeclarationText(text, match[1]);
+		if (
+			declText?.includes("Object.assign(") &&
+			declText.includes("new Error(") &&
+			!/\bcode:\s*"/.test(declText)
+		) {
+			names.push(match[1]);
+		}
+		match = declRe.exec(text);
+	}
+	return names;
 };
 
 /** Finds `const NAME = <anything>;` (a top-level or block-scoped
@@ -333,7 +430,11 @@ const problems = [];
 for (const root of SOURCE_ROOTS) {
 	for (const filePath of findCandidateFiles(root)) {
 		const fileText = readFileSync(join(REPO_ROOT, filePath), "utf8");
-		for (const call of extractCalls(filePath, fileText)) {
+		const sites = [
+			...extractCalls(filePath, fileText, findLocalThrowerNames(fileText)),
+			...extractAssignSites(filePath, fileText),
+		];
+		for (const call of sites) {
 			const code = extractCode(call.args);
 			if (code === null) {
 				// A dynamic/forwarded code -- not an original message site.

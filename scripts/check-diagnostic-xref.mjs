@@ -62,6 +62,11 @@ const SOURCE_ROOTS = [
 	"packages/core/src",
 	"packages/cli/src",
 	"packages/supabase/src",
+	// #361: packages/query and packages/pg are published packages with
+	// user-facing error codes; omitting them made this gate a never-fires
+	// probe for exactly the packages the query layer added.
+	"packages/query/src",
+	"packages/pg/src",
 ];
 
 const CODE = "[a-z][a-z0-9-]*";
