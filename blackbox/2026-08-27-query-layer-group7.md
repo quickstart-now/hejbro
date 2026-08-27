@@ -137,6 +137,30 @@ that SOMETHING is bound, not that the something is the spec.
   nature itself was recorded (the negative clause is vacuity-checked
   via TS2344; the positive clause is bound but not isolated).
 
+## Fairness note (reviewer's closing point, adopted)
+
+The findings list above must not read as "what the implementer
+missed": the five surviving mutations were unobservable IN PRINCIPLE
+while fixtures returned empty rows — no diligence inside that test
+design could see them, and one `rows: [rawRow]` fixture exposed all
+five; the `pnpm check` blocker hid behind a turbo-centric gate shape,
+a configuration blind spot, not a personal lapse. On the other side of
+the ledger: the implementer ran self-mutations every round, added
+unrequested probes (the `convertRows` bonus probe separating two
+assertions' roles), self-corrected two labels (the 7.4 "subsumed"
+correction that the whole TDD ruling stands on, and the `.raw`
+no-discrimination note), independently converged with the reviewer's
+pre-flagged findings twice (value/type asymmetry, intersection guard
+— two non-communicating parties finding the same defect is evidence
+the criteria aren't arbitrary), and on the corrected "17" figure
+re-measured to 25 and kept both numbers with their conditions. The
+slice's true shape: mutation testing made the by-design-unobservable
+observable, and both sides held their procedure. The reviewer's own
+sentence stays with the record: a judgment history earns trust only
+if the judging side's record is held to the same standard — which is
+why the planner's two coordination failures are written here, not
+hidden.
+
 ## Ledger honesty
 
 All implementer times are self-reported approximations (no timer);
