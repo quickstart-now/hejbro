@@ -1,6 +1,10 @@
 import type { FamilyOfTypeNode } from "../expr/type-family";
 import type { ColumnBuilder, NumericMode } from "./column-builder";
 import { createColumnBuilder } from "./column-builder";
+import {
+	DEFAULT_BIGINT_MODE,
+	DEFAULT_NUMERIC_MODE,
+} from "./numeric-mode-defaults";
 import type { SimpleTypeName } from "./type-node";
 
 /**
@@ -188,28 +192,6 @@ export const char = (
 		mode: null,
 	});
 
-/**
- * `bigint({mode})`'s default mode (task 3.4) — the one place this default
- * is spelled out; the generic type default below and the runtime fallback
- * both read it, so the two can never drift apart. **Not exported**: this
- * module is swept by `test/column-builder.test.ts`'s "every factory's mode
- * is accounted for (C19)" exhaustiveness check
- * (`Object.keys(columnBuilderFactories)` against a hand-maintained factory
- * list), and exporting a non-factory value here would pollute that
- * inventory (tried it, reproduced the false-positive red — this isn't
- * theoretical). `ts-type-map.ts`'s `BaseScalarTsType` has its own
- * hand-spelled fallback for this same default (`typeof
- * DEFAULT_BIGINT_MODE` can't reach across that boundary without the same
- * pollution) — **if this literal ever changes, update it there too.**
- * Tracked as **#310**: move this constant to its own module so
- * `BaseScalarTsType` can derive it structurally, without widening C19's
- * factory sweep to catch it. **Do not "fix" the drift risk by loosening
- * C19's own exhaustiveness assertion instead** — that check is what
- * caught this pollution in the first place; the fix belongs on this
- * side of the boundary, not on C19's.
- */
-const DEFAULT_BIGINT_MODE = "bigint" as const;
-
 /** Config accepted by {@link bigint}. */
 export type BigintConfig<
 	TMode extends NumericMode = typeof DEFAULT_BIGINT_MODE,
@@ -230,15 +212,6 @@ export const bigint = <TMode extends NumericMode = typeof DEFAULT_BIGINT_MODE>(
 		defaultValue: null,
 		mode: config.mode ?? DEFAULT_BIGINT_MODE,
 	});
-
-/**
- * `numeric({mode})`'s default mode (task 3.4) — see
- * {@link DEFAULT_BIGINT_MODE} for why this stays unexported and for
- * `ts-type-map.ts`'s matching fallback; `numeric`'s own default differs
- * (`'string'`, not `'bigint'`) since a `numeric` column can be fractional,
- * where `bigint` never is.
- */
-const DEFAULT_NUMERIC_MODE = "string" as const;
 
 /** Config accepted by {@link numeric}. */
 export type NumericConfig<

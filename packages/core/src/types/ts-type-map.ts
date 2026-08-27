@@ -1,4 +1,8 @@
 import type { ColumnMeta, NumericMode } from "./column-builder";
+import type {
+	DEFAULT_BIGINT_MODE,
+	DEFAULT_NUMERIC_MODE,
+} from "./numeric-mode-defaults";
 
 /**
  * The structured TypeScript value an `interval` column reads back as (D4)
@@ -73,21 +77,19 @@ type NumericModeTsType<TMode extends NumericMode> = TMode extends "number"
  * "no distributive tricks" guidance) — every branch tests one concrete
  * `TTypeName` literal.
  *
- * The `'bigint'`/`'string'` fallbacks below (when `TMeta` carries no
- * `mode`) are hand-spelled literals, not derived from
- * `column-builder-factories.ts`'s `DEFAULT_BIGINT_MODE`/
- * `DEFAULT_NUMERIC_MODE` — those stay unexported (they'd otherwise pollute
+ * The `typeof DEFAULT_BIGINT_MODE`/`typeof DEFAULT_NUMERIC_MODE` fallbacks
+ * below (when `TMeta` carries no `mode`) derive structurally from
+ * `numeric-mode-defaults.ts`'s own constants (#310) — the same module
+ * `column-builder-factories.ts`'s `bigint()`/`numeric()` read their runtime
+ * default from, so the type-level fallback and the runtime default can
+ * never drift apart. That module lives outside
+ * `column-builder-factories.ts`'s own export surface specifically so
  * `column-builder.test.ts`'s "every factory's mode is accounted for (C19)"
- * exhaustiveness check, which sweeps that module's exports as the known
- * factory list; tried exporting them, reproduced the false-positive red).
- * **If either default ever changes, update it in both places** —
- * `column-builder-factories.ts`'s `bigint()`/`numeric()` and here.
- * Tracked as **#310**: once `DEFAULT_BIGINT_MODE`/`DEFAULT_NUMERIC_MODE`
- * move to their own module (out of C19's sweep), these two fallbacks can
- * become `typeof DEFAULT_BIGINT_MODE`/`typeof DEFAULT_NUMERIC_MODE`
- * instead of hand-spelled literals — **not** by weakening C19's own
- * exhaustiveness assertion, which is what caught this in the first
- * place.
+ * exhaustiveness check (which sweeps that file's exports as the known
+ * factory list) never has to see it — **never "fix" a future drift risk by
+ * weakening C19's own exhaustiveness assertion instead**; that check is
+ * what caught the original hand-spelled-literal drift risk this comment
+ * used to describe.
  */
 type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 	| "uuid"
@@ -113,7 +115,7 @@ type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 				? NumericModeTsType<
 						TMeta extends { readonly mode: infer TMode extends NumericMode }
 							? TMode
-							: "bigint"
+							: typeof DEFAULT_BIGINT_MODE
 					>
 				: TTypeName extends "numeric"
 					? NumericModeTsType<
@@ -121,7 +123,7 @@ type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
 								readonly mode: infer TMode extends NumericMode;
 							}
 								? TMode
-								: "string"
+								: typeof DEFAULT_NUMERIC_MODE
 						>
 					: TTypeName extends "bigserial"
 						? // not user-configurable (task 3.4 gives serial/smallserial/
