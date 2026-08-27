@@ -564,38 +564,169 @@ had explicitly parked pending this decision.
 
 ## 5. `@hejbro/pg` vanilla driver
 
-- [ ] 5.1 [design] Scaffold `packages/pg` + driver factory signature
-  (connection config passthrough to `pg`) and capability declaration;
-  red test `packages/pg/test/driver.test.ts` "declares
-  interactive-transactions and session-state"; files
-  `packages/pg/package.json`, `packages/pg/src/driver.ts`. ~10m
-- [ ] 5.2 Execute + transaction implementation over the `pg` client
-  (stubbed in unit tests); red test `packages/pg/test/driver.test.ts`
-  "runs a parameterized query through one client per transaction";
-  files `packages/pg/src/driver.ts`. ~10m
-- [ ] 5.3 Docker-gated integration harness against postgres:17 (reuse
-  the examples' local-Docker convention); red test
-  `packages/pg/test/integration.test.ts` "select round-trips typed
-  rows on a real database"; files `packages/pg/test/integration.test.ts`
-  harness. ~10m
+Reworked before summoning (2026-08-27) under the post-g3 discipline:
+every [design] decision below is owner-settled IN ADVANCE. ① Factory =
+instance-based `pgDriver(pool)` with **nominal `pg` typing** (`pg` as a
+peerDependency, `@types/pg` supplying types; Drizzle-parallel surface).
+② A connection-string convenience overload `pgDriver(connectionString)`
+constructs and owns a `Pool`, exposes it as `driver.client`, and never
+auto-closes it (Drizzle convention: pool lifetime = process lifetime;
+callers that need teardown call `driver.client.end()`). ③ Row
+representation contract: rows arrive as node-postgres **default** shapes
+except `interval` (oid 1186), which must reach the conversion layer as
+raw Postgres text via a **per-query `types` override** that delegates
+every other oid to pg's defaults — the mechanism Drizzle's own
+node-postgres session uses; a global `pg.types.setTypeParser` mutation
+is rejected (silently rewrites the user's other queries). The
+arrival-shape table becomes normative driver-contract sentences (task
+5.7). ④ IntervalStyle pin: `setupSession` runs
+`set intervalstyle to 'postgres'` once per new physical connection,
+enforced at checkout with a WeakSet guard — pool `connect` listeners
+are not awaited, so a listener-only pin races the first caller
+statement. ⑤ Integration harness: Docker-gated `test:integration`
+script outside the default `pnpm test` (roundtrip.sh convention: loud
+failure with guidance when Docker is absent; local-only, never CI).
+Capabilities: `interactive-transactions` and `session-state` are both
+`true` (TCP session semantics). Prerequisite already landed with this
+rework: `@hejbro/query`'s provisional entry surface (source-pointing
+`exports` + barrel) so this package can depend on it; task 7.1 replaces
+that surface. The moded-array conversion gap
+(`bigint({mode}).array()`) is scouted in 5.0 and filed as an issue if
+real — never fixed here (`packages/query/src` is outside this group's
+file scope). `pnpm-lock.yaml` will conflict with group 6; the lead
+resolves it at rebase by regenerating.
+
+- [ ] 5.0 Scout: pin the installed `pg`'s actual behaviors the settled
+  design assumes — default parsers (int8/numeric → text, interval →
+  object, timestamptz → Date), the per-query `types` config path, pool
+  connect/checkout mechanics — and verify the moded-array gap (file an
+  issue if confirmed, no fix); deliverable = a short inventory in the
+  group PR body draft (no code, no test). ~6m
+- [ ] 5.1 Scaffold `packages/pg` (private like `packages/query`,
+  source-pointing exports, vitest aliases for `@hejbro/core` AND
+  `@hejbro/query` per #131, turbo.json; `pg` peerDependency plus
+  `pg`/`@types/pg` devDependencies) + `pgDriver(pool)` returning the
+  capability declaration; red test `packages/pg/test/driver.test.ts`
+  "declares interactive-transactions and session-state true"; files
+  `packages/pg/package.json`, `packages/pg/tsconfig.json`,
+  `packages/pg/vitest.config.ts`, `packages/pg/turbo.json`,
+  `packages/pg/src/driver.ts`. ~10m
+- [ ] 5.2 Connection-string overload: `pgDriver(connectionString)`
+  constructs and owns a `Pool`, exposed as `driver.client` (the
+  instance form sets `client` to the caller's own pool — one surface,
+  no divergence), never auto-closed; red test
+  `packages/pg/test/driver.test.ts` "a connection-string driver exposes
+  its own pool as client"; files `packages/pg/src/driver.ts`. ~6m
+- [ ] 5.3 Execute + per-query interval override: `execute` sends
+  `{ text, values, types }` where the `types` override returns raw text
+  for oid 1186 and delegates every other oid to pg's defaults; red test
+  `packages/pg/test/driver.test.ts` "interval reaches the row as
+  Postgres text while other types keep pg defaults" (stub pool
+  asserting the query config); files `packages/pg/src/driver.ts`. ~10m
+- [ ] 5.4 Transaction: one client checkout per `transaction()`,
+  begin/commit, rollback + rethrow when the callback throws, the
+  session bound to that one client (stubbed pool); red test
+  `packages/pg/test/driver.test.ts` "runs a transaction's statements
+  through one held client and rolls back on throw"; files
+  `packages/pg/src/driver.ts`. ~10m
+- [ ] 5.5 setupSession IntervalStyle pin at checkout: WeakSet-guarded
+  `set intervalstyle to 'postgres'` before the first caller statement
+  on every new physical connection, on both the `execute` and
+  `transaction` paths; red test `packages/pg/test/driver.test.ts` "a
+  fresh connection is pinned before the first caller statement, once
+  per connection"; files `packages/pg/src/driver.ts`. ~8m
+- [ ] 5.6 Docker-gated integration harness (postgres:17): a
+  `test:integration` script outside the default `test`, failing loudly
+  with guidance when Docker is absent; proves the declared arrival
+  shapes end-to-end — bigint/numeric modes, `IntervalValue` (pin +
+  override together), `Date` columns — through a real `db()` handle;
+  red test `packages/pg/test/integration.test.ts` "select round-trips
+  typed rows on a real database"; files
+  `packages/pg/test/integration.test.ts`, `packages/pg/package.json`.
+  ~10m
+- [ ] 5.7 Spec-delta alignment (this group owns
+  `specs/driver-contract/spec.md`): the row arrival-shape requirement,
+  the vanilla driver's capability values, and the session-setup pin
+  wording — every added sentence tracing to a 5.x test; verified by
+  `openspec validate add-query-layer --strict`; files
+  `openspec/changes/add-query-layer/specs/driver-contract/spec.md`.
+  ~8m
 
 ## 6. Supabase driver + RLS context surface
 
-- [ ] 6.1 [design] `asUser(jwt)` / `asAnon` context builders (role +
-  claim set_config mapping per Supabase conventions); red test
-  `packages/supabase/test/context.test.ts` "asUser builds authenticated
-  role plus JWT claim settings"; files
-  `packages/supabase/src/context.ts`. ~10m
-- [ ] 6.2 Supabase driver on the shared contract (wraps an existing
-  client path, declares its capabilities); red test
-  `packages/supabase/test/driver.test.ts` "behaves like the vanilla
-  driver for shared capabilities"; files
-  `packages/supabase/src/driver.ts`. ~10m
-- [ ] 6.3 Real-stack RLS test on the local Supabase stack (colima +
-  `supabase start` flow): declared policy filters rows per JWT subject
-  through `asUser`; red test
-  `packages/supabase/test/rls-context.integration.test.ts` "authUid()
-  policy filters by JWT subject"; files that test + harness. ~10m
+Reworked before summoning (2026-08-27) under the post-g3 discipline:
+every [design] decision below is owner-settled IN ADVANCE. ①
+Composition = **decorator**: `supabaseDriver(driver)` accepts any
+contract `Driver` and adds Supabase's contribution; it never imports
+`@hejbro/pg` (parallel-safety with group 5 by construction — the
+composed end-user UX is `supabaseDriver(pgDriver(pool))`). ② Context
+surface = claims object only: `asUser(claims)` (requires `sub`) fixes
+role `authenticated` and sets exactly one setting —
+`request.jwt.claims` = the claims JSON merged with
+`role: "authenticated"`; `asAnon()` fixes role `anon` with claims
+`{"role":"anon"}`. Verification is NEVER owned here: it stays with the
+app's auth layer (supabase-js `getClaims`, Clerk `sessionClaims`,
+Auth0 sessions, or jose against a custom JWKS), and those recipes are
+documented first-class. Raw-token surfaces were rejected with the owner
+(unverified → forged-`sub` RLS bypass; self-verified → reimplementing
+the platform's JWKS verifier inside the preset); the automation
+follow-up (claims-provider callback) is parked as #318 and the
+transaction-mode-pooler capability story as #317. ③ `contributedRoles`
+= exactly `anon`/`authenticated`/`service_role` (the existing
+`roles.ts` constants) — the fourth source of task 4.7's declared-role
+union, so a grant-less schema still unlocks `asUser`/`asAnon`. ④ This
+group carries the change's `minor` changeset: it touches published
+`@hejbro/supabase` (group 5 touches only private packages, so the D59
+gate asks nothing of it). File scope: `packages/supabase/**`, the
+rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
+`pnpm-lock.yaml` conflicts are the lead's to resolve at rebase.
+
+- [ ] 6.0 Scout: pin the local-stack facts the settled design assumes —
+  the `supabase start` DB connection string/port, the three roles
+  exist, `auth.uid()` reads `request.jwt.claims`, and
+  `set local role authenticated` enforces RLS on postgres-owned
+  tables; deliverable = a short inventory in the group PR body draft
+  (no code, no test). ~6m
+- [ ] 6.1 `asUser(claims)`/`asAnon()` context builders per the settled
+  shape (single `request.jwt.claims` JSON setting, fixed roles); red
+  test `packages/supabase/test/context.test.ts` "asUser builds the
+  authenticated role plus one JSON claims setting; asAnon builds anon";
+  files `packages/supabase/src/context.ts`,
+  `packages/supabase/src/index.ts`. ~8m
+- [ ] 6.2 `supabaseDriver(driver)` decorator: adds `contributedRoles` =
+  anon/authenticated/service_role and passes every other member through
+  unchanged (capabilities, execute, transaction, setupSession); adds
+  the `@hejbro/query` dependency and its #131 vitest alias to this
+  package; red tests `packages/supabase/test/driver.test.ts`
+  "contributes exactly the three Supabase roles" and "passes every
+  wrapped driver member through unchanged"; files
+  `packages/supabase/src/driver.ts`, `packages/supabase/src/index.ts`,
+  `packages/supabase/package.json`,
+  `packages/supabase/vitest.config.ts`. ~8m
+- [ ] 6.3 Task 4.7 (a′) union wiring proof: with a schema declaring
+  ZERO grants/policies, `db(schema, supabaseDriver(fake))` accepts
+  `.as(asAnon())` and `.as(asUser(...))` (roles arrive via the driver
+  contribution) while an undeclared role is still rejected; red test
+  `packages/supabase/test/driver.test.ts` "driver-contributed roles
+  unlock asUser/asAnon on a grant-less schema; undeclared roles stay
+  rejected"; files that test only. ~6m
+- [ ] 6.4 Real-stack RLS integration (colima + `supabase start`): a
+  `test:integration` script outside the default `test`, failing loudly
+  with guidance when the stack is down; a declared `authUid()` policy
+  filters rows per `asUser` claims' `sub`, and `asAnon` sees none; red
+  test `packages/supabase/test/rls-context.integration.test.ts`
+  "authUid() policy filters by claims subject through asUser"; files
+  that test + `packages/supabase/package.json`. ~10m
+- [ ] 6.5 Spec-delta alignment (this group owns
+  `specs/rls-execution-context/spec.md`: the claims-object surface, the
+  single-JSON-setting mapping, and the verification-stays-with-the-app
+  sentence, each tracing to a 6.x test) + `.claude/rules/
+  supabase-preset.md` gains the driver as a preset contribution (D95) +
+  this group's `minor` changeset; verified by
+  `openspec validate add-query-layer --strict` and
+  `pnpm changeset status`; files
+  `openspec/changes/add-query-layer/specs/rls-execution-context/spec.md`,
+  `.claude/rules/supabase-preset.md`, one new `.changeset/*.md`. ~8m
 
 ## 7. Public surface, docs, release wiring
 
