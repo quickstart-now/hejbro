@@ -117,6 +117,11 @@ export const TARGET_PACKAGES = [
 			"packages/query/coverage/coverage-final.json",
 		),
 	},
+	{
+		name: "@hejbro/pg",
+		srcDir: join(REPO_ROOT, "packages/pg/src"),
+		coverageJson: join(REPO_ROOT, "packages/pg/coverage/coverage-final.json"),
+	},
 ];
 
 const DECISION_LOOP_KINDS = new Set([
