@@ -103,12 +103,20 @@ text (its default string conversion discards all structure, and its own
 text-rendering method reorders and reformats fields rather than
 reproducing the original). Every other declared column type SHALL
 arrive in whatever shape the underlying client library's own defaults
-produce. This requirement does not extend to an `interval` array
+produce — the per-query override intercepts only the `interval` oid;
+every other oid is delegated to the client library's own default
+parser. This requirement does not extend to an `interval` array
 column, whose element values reach a separate parser in the underlying
 client library that this per-query override does not intercept, nor to
 a `bigint`/`numeric` column declared with a non-default mode inside an
-array — both are known, separately-tracked gaps (the array-mode gap is
-tracked as **#320**) that this driver does not paper over.
+array — both are the same class of gap (array columns have no
+result-conversion path at the layer above this driver), tracked
+together as **#320**, that this driver does not paper over. The write
+path for these same column types (an insert supplying a `bigint`/
+`numeric` mode value or an `interval` value through the typed `insert()`
+builder) is a separate, narrower gap tracked as **#322** — this
+requirement makes no claim about it, only about values already present
+in the database and read back.
 
 #### Scenario: A single interval column arrives as raw Postgres text
 - **WHEN** a table declares a non-array `interval` column and a row
@@ -116,15 +124,15 @@ tracked as **#320**) that this driver does not paper over.
 - **THEN** the value the query layer's own conversion receives is
   Postgres's raw interval text, not a pre-parsed object
 
-#### Scenario: bigint, numeric, and timestamptz round-trip through a real db() handle
+#### Scenario: bigint, numeric, and timestamptz are read back in their declared shapes through a real db() handle
 - **WHEN** a table declares a `bigint` column (default mode), a
-  `numeric` column (`'string'` mode), and a `timestamptz` column, and a
-  row is written and read back through `@hejbro/pg` and a real `db()`
-  handle against a real Postgres
+  `numeric` column (`'string'` mode), and a `timestamptz` column, a row
+  containing them exists in a real Postgres, and that row is read back
+  through `@hejbro/pg` and a real `db()` handle
 - **THEN** the `bigint` column reads back as a JS `bigint` exact beyond
   `Number.MAX_SAFE_INTEGER`, the `numeric` column reads back as the
-  exact decimal text that was written, and the `timestamptz` column
-  reads back as a `Date` instance at the written instant
+  exact decimal text stored, and the `timestamptz` column reads back as
+  a `Date` instance at the stored instant
 
 ### Requirement: Vanilla driver pins IntervalStyle at checkout
 Inside its session-setup hook, `@hejbro/pg`'s driver SHALL send `set
