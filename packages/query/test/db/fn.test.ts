@@ -3,6 +3,7 @@ import {
 	defineFunction,
 	defineTrigger,
 	eq,
+	getTableMeta,
 	integer,
 	roleName,
 	schema,
@@ -284,6 +285,38 @@ describe("db.fn.* (task 4.9)", () => {
 		// column behind this value, exactly as ScalarReturnTsType promises.
 		expect(value).toBe(9007199254740993n);
 		expect(Array.isArray(value)).toBe(false);
+	});
+
+	it("core's default bigint mode and fn.ts's own scalar-return mirror move together (#310 drift guard)", async () => {
+		// core's own resolved default mode for a bigint column that never
+		// spelled an explicit mode -- read through core's public
+		// getTableMeta, never hand-typed here, so this reflects whatever
+		// core's own default constant actually resolves to right now, not
+		// what this test assumes it resolves to.
+		const modeProbe = table(app, "mode_probe", { value: bigint() });
+		const [probeColumn] = getTableMeta(modeProbe).columns;
+		const coreDefaultMode = probeColumn?.columnState.mode;
+
+		const { driver } = recordingDriver([{ result: "9007199254740993" }]);
+		const handle = db(appSchema, driver);
+		const value = await handle.fn.countPosts({});
+
+		// fn.ts's own defaultNumericMode has no column to read a mode from
+		// for a scalar return -- it must independently agree with whatever
+		// core just resolved above. Branching the expected runtime shape on
+		// the *observed* coreDefaultMode (not a hand-typed "bigint" literal)
+		// is what makes this a real drift guard: if fn.ts's own mirror ever
+		// disagrees with core's actual default, the branch taken here still
+		// won't match the runtime value's own typeof, and this goes red --
+		// a hand-pinned literal on both sides could drift together and stay
+		// green, this can't.
+		if (coreDefaultMode === "bigint") {
+			expect(typeof value).toBe("bigint");
+		} else if (coreDefaultMode === "number") {
+			expect(typeof value).toBe("number");
+		} else {
+			expect(typeof value).toBe("string");
+		}
 	});
 
 	it('a scalar call fails fast when the driver doesn\'t return exactly one row with a "result" column', async () => {
