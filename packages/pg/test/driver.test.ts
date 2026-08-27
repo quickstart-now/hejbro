@@ -103,13 +103,23 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 		)("2020-01-01 00:00:00+00");
 		expect(timestamptzParsed).toBeInstanceOf(Date);
 
-		// oid 20 (int8): still delegated to pg's own default -- text,
-		// exactly the "no client-side parsing" shape the numeric-mode
-		// conversion layer (group 4) expects to receive.
+		// oid 20 (int8): pg's own default already returns text as-is
+		// (identity) -- not a delegation witness on its own (an override
+		// that answered every oid with identity would pass this one too),
+		// kept only to document the "no client-side parsing" shape the
+		// numeric-mode conversion layer (group 4) expects to receive.
 		const int8Parsed = config.types.getTypeParser(
 			20,
 			"text",
 		)("9007199254740993");
 		expect(int8Parsed).toBe("9007199254740993");
+
+		// format is forwarded, not dropped/defaulted: pg's own binary
+		// parser for oid 23 (int4) is a *different* function from its text
+		// parser (delegating with only `oid` would silently attach the
+		// text parser to a binary-format column).
+		const textParser = config.types.getTypeParser(23, "text");
+		const binaryParser = config.types.getTypeParser(23, "binary");
+		expect(binaryParser).not.toBe(textParser);
 	});
 });
