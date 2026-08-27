@@ -81,7 +81,13 @@ const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => ({
 	transaction: async (callback) => {
 		const client = await pool.connect();
 		try {
-			return await callback(makeSession(client));
+			await client.query("BEGIN");
+			const result = await callback(makeSession(client));
+			await client.query("COMMIT");
+			return result;
+		} catch (error) {
+			await client.query("ROLLBACK");
+			throw error;
 		} finally {
 			client.release();
 		}

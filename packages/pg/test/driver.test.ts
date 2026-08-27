@@ -149,3 +149,75 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 		);
 	});
 });
+
+describe("pgDriver transaction (task 5.4)", () => {
+	/**
+	 * A pool whose `connect` always hands back the *same* stub client and
+	 * records every SQL string that client's own `query` was sent, in
+	 * order. Deliberately has no `query` method of its own -- if
+	 * `transaction()` ever issued a statement through `pool.query` instead
+	 * of the checked-out client, that call would throw (not silently
+	 * succeed against the wrong connection), catching a session-binding
+	 * regression decisively rather than by inspection.
+	 */
+	/** The SQL text a captured `client.query` call carries, whether it was sent as a bare string (`BEGIN`/`COMMIT`/`ROLLBACK`) or a structured query config (a statement routed through `makeSession`). */
+	const sqlTextOf = (config: string | CapturedQueryConfig): string => {
+		if (typeof config === "string") {
+			return config;
+		}
+		return config.text;
+	};
+
+	const stubPoolWithClient = (): {
+		readonly pool: Pool;
+		readonly release: ReturnType<typeof vi.fn>;
+		readonly queries: Array<string>;
+	} => {
+		const queries: Array<string> = [];
+		const release = vi.fn();
+		const client = {
+			query: vi.fn(async (config: string | CapturedQueryConfig) => {
+				queries.push(sqlTextOf(config));
+				return { rows: [] };
+			}),
+			release,
+		};
+		const pool = {
+			connect: vi.fn(async () => client),
+		} as unknown as Pool;
+		return { pool, release, queries };
+	};
+
+	it("runs a transaction's statements through one held client and commits on success", async () => {
+		const { pool, release, queries } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		const result = await driver.transaction(async (session) => {
+			await session.execute({ sql: "select 1", params: [], kind: "sql" });
+			return "done";
+		});
+
+		expect(result).toBe("done");
+		expect(pool.connect).toHaveBeenCalledTimes(1);
+		// BEGIN and COMMIT bracket the callback's own statement, and every
+		// one of the three went through the same held client (the stub
+		// pool has no `query` of its own to have answered any of them).
+		expect(queries).toEqual(["BEGIN", "select 1", "COMMIT"]);
+		expect(release).toHaveBeenCalledTimes(1);
+	});
+
+	it("rolls back and rethrows the callback's own error, unchanged, when the callback throws", async () => {
+		const { pool, release, queries } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+		const originalError = new Error("callback boom");
+
+		await expect(
+			driver.transaction(async () => {
+				throw originalError;
+			}),
+		).rejects.toBe(originalError);
+
+		expect(queries).toEqual(["BEGIN", "ROLLBACK"]);
+		expect(release).toHaveBeenCalledTimes(1);
+	});
+});
