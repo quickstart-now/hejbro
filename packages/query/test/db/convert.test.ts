@@ -447,6 +447,23 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 		);
 		expect(numericArray.precisions).toEqual(["123.450000", "0.100000"]);
 
+		// negative elements round-trip too (planner review, B2 follow-up ②)
+		// -- the array-text parser's unquoted-element token and
+		// convertNumericText's own decimal pattern both already allow a
+		// leading "-"; this pins that neither breaks now that numeric[]
+		// reaches them as raw array text.
+		const negativeArray = convertRow(
+			{
+				id: "x",
+				amounts: null,
+				durations: null,
+				tags: null,
+				precisions: "{-1.5,-0.100000}",
+			},
+			plan,
+		);
+		expect(negativeArray.precisions).toEqual(["-1.5", "-0.100000"]);
+
 		// NULL elements pass through as null here too.
 		const withNull = convertRow(
 			{
@@ -482,6 +499,38 @@ describe("columnPlanForResult + convertRow (task 1.2 -- array element-wise conve
 			const cause = (error as Error & { cause?: unknown }).cause;
 			expect(cause).toBeInstanceOf(Error);
 			expect(cause).toHaveProperty("code", "unexpected-array-arrival-shape");
+		}
+
+		// NaN parity (planner review, B2 follow-up ①): `NaN` is a legal
+		// Postgres `numeric` value, rendered unquoted as `NaN` by
+		// `array_out` -- the same token an unquoted `NULL` element sits
+		// right next to in `array-text.ts`'s own grammar. This pins two
+		// things at once: `NaN` is never misread as the SQL null (`null`
+		// would mean {@link array-text.ts}'s own `NULL`-token guard
+		// mis-fired), and it still fails the same way scalar `numeric`
+		// already does -- `convertNumericText`'s shared
+		// `NUMERIC_TEXT_PATTERN` (numeric-mode.ts, untouched here) never
+		// accepted `"NaN"` even before numeric[] arrived as raw array
+		// text, so this is a parity assertion, not a behavior change.
+		try {
+			convertRow(
+				{
+					id: "x",
+					amounts: null,
+					durations: null,
+					tags: null,
+					precisions: "{NaN}",
+				},
+				plan,
+			);
+			expect.unreachable("convertRow should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			expect(error).toHaveProperty("column", "precisions");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toBeInstanceOf(Error);
+			expect(cause).toHaveProperty("code", "unparsable-numeric-text");
 		}
 	});
 });
