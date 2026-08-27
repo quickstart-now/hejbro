@@ -668,4 +668,30 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 			{ sql: "set intervalstyle to 'postgres'", params: [], kind: "sql" },
 		]);
 	});
+
+	it("a wrapped setupSession member runs at checkout -- late-binding, not the captured closure (task 1.4, #323)", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+
+		// a preset decorator's own shape: read the current member, replace
+		// it with a wrapper that still calls through to the original.
+		const originalSetupSession = driver.setupSession;
+		const wrapperCalls: Array<unknown> = [];
+		driver.setupSession = async (session) => {
+			wrapperCalls.push(session);
+			await originalSetupSession(session);
+		};
+
+		await driver.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		// the checkout guard read `driver.setupSession` itself at checkout
+		// time -- if it had instead called a closure captured once at
+		// `buildDriver()` time, this wrapper would never run at all, and
+		// the pin statement would still reach the connection unwrapped.
+		expect(wrapperCalls).toHaveLength(1);
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"select 1",
+		]);
+	});
 });

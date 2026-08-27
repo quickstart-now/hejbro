@@ -114,14 +114,24 @@ const setupSession = async (session: DriverSession): Promise<void> => {
  * client as pinned before the pool ever hands the same client to two
  * concurrent callers isn't a concern this ordering trades away either --
  * a pool never does that while one checkout is in flight.
+ *
+ * `getSetupSession` is read **at checkout time**, every checkout (task
+ * 1.4, #323) -- never a `setupSession` reference captured once when this
+ * guard is built. A preset decorator that replaces `driver.setupSession`
+ * after `pgDriver()` returns (wrapping the original, e.g. to run
+ * additional session setup) has to take effect on every checkout from
+ * then on; closing over the original function reference here would make
+ * that wrapper permanently unreachable from the checkout path, silently.
  */
-const checkoutGuard = (): ((client: PoolClient) => Promise<void>) => {
+const checkoutGuard = (
+	getSetupSession: () => (session: DriverSession) => Promise<void>,
+): ((client: PoolClient) => Promise<void>) => {
 	const pinnedConnections = new WeakSet<PoolClient>();
 	return async (client) => {
 		if (pinnedConnections.has(client)) {
 			return;
 		}
-		await setupSession(makeSession(client));
+		await getSetupSession()(makeSession(client));
 		pinnedConnections.add(client);
 	};
 };
@@ -168,10 +178,20 @@ const resolvePool = (poolOrConnectionString: Pool | string): Pool => {
 	return poolOrConnectionString;
 };
 
-/** One driver shape shared by both {@link pgDriver} overloads -- built once `pool` is settled, so the instance and connection-string forms can never diverge in what they hand back. */
+/**
+ * One driver shape shared by both {@link pgDriver} overloads -- built once
+ * `pool` is settled, so the instance and connection-string forms can
+ * never diverge in what they hand back. `ensurePinned` closes over
+ * `() => driver.setupSession` (task 1.4) -- referencing the `const
+ * driver` binding before its own declaration is fine here: the arrow
+ * function is only ever *invoked* from inside `driver.execute`/
+ * `driver.transaction`, i.e. strictly after this whole function has
+ * returned `driver` fully initialized, so there is no TDZ hazard despite
+ * the textual forward reference.
+ */
 const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
-	const ensurePinned = checkoutGuard();
-	return {
+	const ensurePinned = checkoutGuard(() => driver.setupSession);
+	const driver: Driver & { readonly client: Pool } = {
 		client: pool,
 		capabilities: CAPABILITIES,
 		execute: async (compiled) => {
@@ -199,6 +219,7 @@ const buildDriver = (pool: Pool): Driver & { readonly client: Pool } => {
 		},
 		setupSession,
 	};
+	return driver;
 };
 
 /**
