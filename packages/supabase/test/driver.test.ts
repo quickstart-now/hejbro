@@ -1,5 +1,5 @@
 import { roleName, schema, table, uuid } from "@hejbro/core";
-import type { Driver } from "@hejbro/query";
+import type { Driver, DriverSession } from "@hejbro/query";
 import { db } from "@hejbro/query";
 import { describe, expect, it, vi } from "vitest";
 import { asAnon, asUser } from "../src/context";
@@ -15,6 +15,35 @@ const fakeDriver = (): Driver => ({
 	),
 	setupSession: vi.fn(async () => {}),
 });
+
+/** A driver that models one BEGIN/COMMIT per `driver.transaction()` call and records every statement sent on that connection, in order -- mirrors `packages/query/test/db/context.test.ts`'s own `recordingTransactionalDriver`, so a `db.as(context)` test here can check exactly what `applyContext` sent, not just that it didn't throw. */
+const recordingTransactionalDriver = (): {
+	readonly driver: Driver;
+	readonly sentPerTransaction: Array<
+		Array<{ sql: string; params: ReadonlyArray<unknown> }>
+	>;
+} => {
+	const sentPerTransaction: Array<
+		Array<{ sql: string; params: ReadonlyArray<unknown> }>
+	> = [];
+	const driver: Driver = {
+		capabilities: { "interactive-transactions": true, "session-state": true },
+		execute: vi.fn(async () => []),
+		transaction: vi.fn(async (callback) => {
+			const sent: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
+			sentPerTransaction.push(sent);
+			const session: DriverSession = {
+				execute: vi.fn(async (compiled) => {
+					sent.push({ sql: compiled.sql, params: compiled.params });
+					return [];
+				}),
+			};
+			return callback(session);
+		}),
+		setupSession: vi.fn(async () => {}),
+	};
+	return { driver, sentPerTransaction };
+};
 
 describe("supabaseDriver(driver) decorator", () => {
 	it("contributes exactly the three Supabase roles", () => {
@@ -40,17 +69,41 @@ describe("supabaseDriver(driver) decorator", () => {
 });
 
 describe("task 4.7 (a') union wiring proof -- driver-contributed roles on a grant-less schema", () => {
-	it("driver-contributed roles unlock asUser/asAnon on a grant-less schema; undeclared roles stay rejected", () => {
+	it("driver-contributed roles unlock asUser/asAnon on a grant-less schema; undeclared roles stay rejected", async () => {
 		const app = schema("app");
 		const posts = table(app, "posts", { id: uuid().primaryKey() });
 		// zero grants, zero RLS policies -- the only role source here is
 		// supabaseDriver's own contributedRoles.
 		const grantlessSchema = { posts };
-		const handle = db(grantlessSchema, supabaseDriver(fakeDriver()));
+		const { driver, sentPerTransaction } = recordingTransactionalDriver();
+		const handle = db(grantlessSchema, supabaseDriver(driver));
 
-		expect(() => handle.as(asAnon())).not.toThrow();
-		expect(() => handle.as(asUser({ sub: "user-1" }))).not.toThrow();
+		// open direction: a driver-contributed role is accepted, and the
+		// context it applies actually reaches the driver -- not just "didn't
+		// throw" (6.1 x 6.2 wired together, not merely each in isolation).
+		await handle.as(asAnon()).transaction(async () => {});
+		expect(sentPerTransaction[0]).toEqual([
+			{ sql: 'set local role "anon"', params: [] },
+			{
+				sql: "select set_config($1, $2, true)",
+				params: ["request.jwt.claims", '{"role":"anon"}'],
+			},
+		]);
 
+		await handle.as(asUser({ sub: "user-1" })).transaction(async () => {});
+		expect(sentPerTransaction[1]).toEqual([
+			{ sql: 'set local role "authenticated"', params: [] },
+			{
+				sql: "select set_config($1, $2, true)",
+				params: [
+					"request.jwt.claims",
+					'{"sub":"user-1","role":"authenticated"}',
+				],
+			},
+		]);
+
+		// closed direction: the union only ever widens who is *accepted* --
+		// fail-closed for anyone not in it still holds.
 		try {
 			handle.as({ role: roleName("nonexistent_role") });
 			expect.unreachable("db.as should have thrown for an undeclared role");
