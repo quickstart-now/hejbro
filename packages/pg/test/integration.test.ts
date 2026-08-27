@@ -16,25 +16,34 @@ import { pgDriver } from "../src/driver";
 
 /**
  * Docker-gated integration harness (owner decision ⑤, task 5.6, extended
- * by task 1.5/#320) -- proves the declared arrival shapes (bigint mode,
- * numeric mode, `IntervalValue`, `Date`, and now their element-wise array
- * counterparts) round-trip through a *real* `db()` handle against a real
- * postgres:17, not a stub. Never runs under the default `pnpm test`/CI
- * (wired via `vitest.integration.config.ts` + task 5.1's exclude
- * patterns) -- local-only, `pnpm --filter @hejbro/pg test:integration`.
+ * by task 1.5/B2/#320) -- proves the declared arrival shapes (bigint
+ * mode, numeric mode, `IntervalValue`, `Date`, and now their element-wise
+ * array counterparts) round-trip through a *real* `db()` handle against a
+ * real postgres:17, not a stub. Never runs under the default `pnpm
+ * test`/CI (wired via `vitest.integration.config.ts` + task 5.1's
+ * exclude patterns) -- local-only, `pnpm --filter @hejbro/pg
+ * test:integration`.
  *
- * Task 1.5 closes the two array gaps this harness used to exclude: a
- * `bigint({mode:'number'})` array and a `numeric` array (both moded --
- * `@hejbro/pg` never overrides an array oid for them, so they arrive as
- * `pg`'s own already-parsed JS arrays, task 1.2's "moded array" branch),
- * and an `interval[]` column (oid 1187, task 1.3's driver override --
- * arrives as raw array-literal text, task 1.1's parser + task 1.2's
- * per-element `parseInterval`). Array values are seeded via the same raw
- * parameterized `driver.execute` calls as every other column here (not
- * the typed `insert()` builder -- group 2's write-side value types are a
- * separate, later scope): `pg` serializes a bound JS array parameter to
- * Postgres array-literal text itself, the same way it serializes any
- * other bound value.
+ * Task 1.5 closed the array gaps this harness used to exclude, and along
+ * the way found a real one: pg's own default array parser for `numeric[]`
+ * (oid 1231) returns an array of already-`parseFloat`'d JS numbers, not
+ * text (unlike scalar `numeric`, oid 1700, which pg already leaves as raw
+ * text) -- exactly the silent precision loss this whole change fights
+ * elsewhere. Task B2.1/B2.2 closed that gap with a driver-level oid 1231
+ * override (mirroring interval[]'s own oid 1187 override) plus a matching
+ * `convert.ts` branch, so `numeric({mode:'string'}).array()` now round-
+ * trips exact decimal text too -- proved below (`precisions`), alongside
+ * `bigint({mode:'number'}).array()` (`amounts`, pg's own default array
+ * parser already returns text elements for oid 1016, no override needed)
+ * and `interval[]` (`durations`, oid 1187). `approx` keeps a `mode:
+ * 'number'` numeric array witness too -- that mode's own contract only
+ * promises exactness within `Number.MAX_SAFE_INTEGER`, so pg's own float
+ * parse ahead of ours costs nothing further there. Array values are
+ * seeded via the same raw parameterized `driver.execute` calls as every
+ * other column here (not the typed `insert()` builder -- group 2's
+ * write-side value types are a separate, later scope): `pg` serializes a
+ * bound JS array parameter to Postgres array-literal text itself, the
+ * same way it serializes any other bound value.
  */
 const IMAGE = process.env.HEJBRO_PG_IMAGE ?? "postgres:17";
 const CONTAINER = `hejbro-pg-integration-${process.pid}`;
@@ -110,21 +119,18 @@ const roundtrip = table(testSchema, "roundtrip", {
 	precise: numeric({ mode: "string" }).notNull(),
 	duration: interval().notNull(),
 	created: timestamptz().notNull(),
-	// task 1.5/#320: element-wise array conversion, proved against a real
-	// database rather than only the recorded-driver unit tests (1.1/1.2).
-	// `precisions` is `mode: 'number'`, not 'string' -- a real finding from
-	// this integration proof: unlike scalar `numeric` (oid 1700, pg leaves
-	// it as raw text), pg's *default* array parser for `numeric[]` (oid
-	// 1231, never overridden by this group -- only 1186/1187 are) returns
-	// an array of already-`parseFloat`'d JS numbers, not text. 'string'/
-	// 'bigint' mode over a `numeric[]` column can't round-trip losslessly
-	// through the current driver as a result (flagged to the planner;
-	// possibly a future oid-1231 override, out of this task's scope).
-	// 'number' mode's own contract only promises exactness within
-	// `Number.MAX_SAFE_INTEGER` to begin with, so pg's own float parse
-	// ahead of ours costs nothing further for this proof.
+	// task 1.5/B2/#320: element-wise array conversion, proved against a
+	// real database rather than only the recorded-driver unit tests
+	// (1.1/1.2/B2.2). `precisions` is `mode: 'string'` -- exact decimal
+	// text, lossless even beyond `Number.MAX_SAFE_INTEGER` (task B2.1's
+	// oid 1231 driver override is what makes this provable at all; see
+	// this file's own top comment). `approx` is the separate `mode:
+	// 'number'` witness -- that mode's own contract only ever promised
+	// exactness within `Number.MAX_SAFE_INTEGER`, so it stays green under
+	// the same B2.1 override.
 	amounts: bigint({ mode: "number" }).array().notNull(),
-	precisions: numeric({ mode: "number" }).array().notNull(),
+	precisions: numeric({ mode: "string" }).array().notNull(),
+	approx: numeric({ mode: "number" }).array().notNull(),
 	durations: interval().array().notNull(),
 });
 
@@ -195,6 +201,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 				created timestamptz not null,
 				amounts bigint[] not null,
 				precisions numeric[] not null,
+				approx numeric[] not null,
 				durations interval[] not null
 			)`,
 			params: [],
@@ -205,7 +212,16 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		const insertedDuration = "1 year 2 mons 3 days 04:05:06.789012";
 		const insertedCreated = "2020-06-15T12:30:00.000Z";
 		const insertedAmountsArray = [123, 456, 789];
-		const insertedPreciseArray = [123.45, 0.5];
+		// exact decimal text, including one value with more significant
+		// digits than a JS double can hold exactly (`Number.MAX_SAFE_INTEGER`
+		// is 2^53-1, 16 digits) -- this is the exact spot pg's default
+		// `numeric[]` array parser used to silently zero out beyond the 9th
+		// significant digit, before task B2.1's oid 1231 override.
+		const insertedPreciseArray = [
+			"123.450000",
+			"170141183460469231731.687303715884105728",
+		];
+		const insertedApproxArray = [123.45, 0.5];
 		const insertedDurationsArray = ["1 day", "2 days 03:00:00"];
 
 		// seeded via a raw parameterized statement, not the typed insert()
@@ -218,7 +234,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// *read* side (arrival-shape conversion through a real db()
 		// handle), which is exactly what the assertions below exercise.
 		await driver.execute({
-			sql: "insert into g5_integration.roundtrip (id, amount, precise, duration, created, amounts, precisions, durations) values ($1, $2, $3, $4, $5, $6, $7, $8)",
+			sql: "insert into g5_integration.roundtrip (id, amount, precise, duration, created, amounts, precisions, approx, durations) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
 			params: [
 				insertedId,
 				"9007199254740993",
@@ -227,6 +243,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 				insertedCreated,
 				insertedAmountsArray,
 				insertedPreciseArray,
+				insertedApproxArray,
 				insertedDurationsArray,
 			],
 			kind: "sql",
@@ -277,9 +294,19 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// element-wise conversion against the declared mode.
 		expect(row.amounts).toEqual([123, 456, 789]);
 
-		// moded numeric array, mode 'number' (see the `precisions` column's
-		// own comment above for why 'string' isn't provable here yet).
-		expect(row.precisions).toEqual([123.45, 0.5]);
+		// numeric array, mode 'string' (task B2.1/B2.2): exact decimal text
+		// per element, preserved even past `Number.MAX_SAFE_INTEGER`'s own
+		// significant-digit limit -- pg's default `numeric[]` array parser
+		// would have already destroyed this via `parseFloat` before B2.1's
+		// oid 1231 override.
+		expect(row.precisions).toEqual([
+			"123.450000",
+			"170141183460469231731.687303715884105728",
+		]);
+
+		// numeric array, mode 'number' -- the separate, already-approximate
+		// witness (see the `approx` column's own comment above).
+		expect(row.approx).toEqual([123.45, 0.5]);
 
 		// interval[] (task 1.3's driver override, oid 1187 + task 1.1's
 		// array-literal text parser + task 1.2's per-element parseInterval):
