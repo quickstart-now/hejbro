@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
 import {
 	bigint,
+	insert,
 	interval,
 	numeric,
 	schema,
 	select,
+	serializeInterval,
 	table,
 	timestamptz,
 	uuid,
@@ -16,13 +18,13 @@ import { pgDriver } from "../src/driver";
 
 /**
  * Docker-gated integration harness (owner decision ⑤, task 5.6, extended
- * by task 1.5/B2/#320) -- proves the declared arrival shapes (bigint
- * mode, numeric mode, `IntervalValue`, `Date`, and now their element-wise
- * array counterparts) round-trip through a *real* `db()` handle against a
- * real postgres:17, not a stub. Never runs under the default `pnpm
- * test`/CI (wired via `vitest.integration.config.ts` + task 5.1's
- * exclude patterns) -- local-only, `pnpm --filter @hejbro/pg
- * test:integration`.
+ * by task 1.5/B2/#320, seed flipped to the typed builder by #341) --
+ * proves the declared arrival shapes (bigint mode, numeric mode,
+ * `IntervalValue`, `Date`, and their element-wise array counterparts)
+ * round-trip through a *real* `db()` handle against a real postgres:17,
+ * not a stub. Never runs under the default `pnpm test`/CI (wired via
+ * `vitest.integration.config.ts` + task 5.1's exclude patterns) --
+ * local-only, `pnpm --filter @hejbro/pg test:integration`.
  *
  * Task 1.5 closed the array gaps this harness used to exclude, and along
  * the way found a real one: pg's own default array parser for `numeric[]`
@@ -38,12 +40,20 @@ import { pgDriver } from "../src/driver";
  * and `interval[]` (`durations`, oid 1187). `approx` keeps a `mode:
  * 'number'` numeric array witness too -- that mode's own contract only
  * promises exactness within `Number.MAX_SAFE_INTEGER`, so pg's own float
- * parse ahead of ours costs nothing further there. Array values are
- * seeded via the same raw parameterized `driver.execute` calls as every
- * other column here (not the typed `insert()` builder -- group 2's
- * write-side value types are a separate, later scope): `pg` serializes a
- * bound JS array parameter to Postgres array-literal text itself, the
- * same way it serializes any other bound value.
+ * parse ahead of ours costs nothing further there.
+ *
+ * #341: rows are seeded through the typed `insert()` builder -- the raw
+ * parameterized seed this replaced cited a `MutationValue` gap the
+ * write-side lift (#345) dissolved. Seeding through the builder makes
+ * this file the real-server proof of the *write* path too: what
+ * postgres:17 accepts here is core's own serialization --
+ * `serializeInterval`'s always-full interval text (positive, negative,
+ * and mixed-sign-across-axes forms) and `serializeArrayLiteral`'s
+ * canonical `{...}` literal text, each travelling as a bind parameter.
+ * The test closes by capturing the server's *own* output text raw and
+ * asserting the exact strings -- the repository's first recorded samples
+ * of Postgres's actual output grammar (every earlier anchor was a
+ * hand-written fixture; `driver.test.ts` now names its own as such).
  */
 const IMAGE = process.env.HEJBRO_PG_IMAGE ?? "postgres:17";
 const CONTAINER = `hejbro-pg-integration-${process.pid}`;
@@ -177,7 +187,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		}
 	});
 
-	it("select round-trips typed rows on a real database", async () => {
+	it("typed insert() and select round-trip rows on a real database, and the server's raw output grammar is captured", async () => {
 		const activePool = pool.current;
 		if (activePool === undefined) {
 			throw new Error("beforeAll did not set up the pool");
@@ -208,8 +218,18 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			kind: "sql",
 		});
 
+		const handle = db({ roundtrip }, driver);
+
 		const insertedId = "11111111-1111-1111-1111-111111111111";
-		const insertedDuration = "1 year 2 mons 3 days 04:05:06.789012";
+		const insertedDuration = {
+			years: 1,
+			months: 2,
+			days: 3,
+			hours: 4,
+			minutes: 5,
+			seconds: 6,
+			microseconds: 789012,
+		};
 		const insertedCreated = "2020-06-15T12:30:00.000Z";
 		const insertedAmountsArray = [123, 456, 789];
 		// exact decimal text, including one value with more significant
@@ -222,40 +242,115 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			"170141183460469231731.687303715884105728",
 		];
 		const insertedApproxArray = [123.45, 0.5];
-		const insertedDurationsArray = ["1 day", "2 days 03:00:00"];
+		const insertedDurationsArray = [
+			{
+				years: 0,
+				months: 0,
+				days: 1,
+				hours: 0,
+				minutes: 0,
+				seconds: 0,
+				microseconds: 0,
+			},
+			{
+				years: 0,
+				months: 0,
+				days: 2,
+				hours: 3,
+				minutes: 0,
+				seconds: 0,
+				microseconds: 0,
+			},
+		];
 
-		// seeded via a raw parameterized statement, not the typed insert()
-		// builder: `insert()`'s value type (core's `MutationValue`) only
-		// accepts a plain `number` for the "numeric" family (bigint and
-		// numeric columns alike) and has no scalar-literal case for
-		// "interval" at all -- a pre-existing gap in `@hejbro/core`
-		// entirely outside this group's file scope, not something to
-		// paper over here. The behavior this task actually proves is the
-		// *read* side (arrival-shape conversion through a real db()
-		// handle), which is exactly what the assertions below exercise.
-		await driver.execute({
-			sql: "insert into g5_integration.roundtrip (id, amount, precise, duration, created, amounts, precisions, approx, durations) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-			params: [
-				insertedId,
-				"9007199254740993",
-				"123.456000",
-				insertedDuration,
-				insertedCreated,
-				insertedAmountsArray,
-				insertedPreciseArray,
-				insertedApproxArray,
-				insertedDurationsArray,
-			],
-			kind: "sql",
-		});
+		// #341 (b): negative and mixed-sign-across-axes forms -- year-month
+		// and time axes negative, day axis positive, plus negative elements
+		// inside an array literal. Postgres's three interval axes are
+		// mutually independent, and no anchor before this row ever proved
+		// the sign-carrying serializer forms against a real server (every
+		// prior one was all-positive).
+		const mixedSignId = "22222222-2222-2222-2222-222222222222";
+		const mixedSignDuration = {
+			years: -1,
+			months: -2,
+			days: 3,
+			hours: 0,
+			minutes: -5,
+			seconds: 0,
+			microseconds: 0,
+		};
+		const mixedSignDurationsArray = [
+			{
+				years: 0,
+				months: 0,
+				days: 0,
+				hours: 0,
+				minutes: -5,
+				seconds: 0,
+				microseconds: 0,
+			},
+			{
+				years: 0,
+				months: 0,
+				days: -3,
+				hours: 0,
+				minutes: 0,
+				seconds: 0,
+				microseconds: 0,
+			},
+		];
 
-		const handle = db({ roundtrip }, driver);
+		// #341 (a): the always-full text this insert actually sends, pinned
+		// here so the raw capture at the end of this test records the exact
+		// difference between hejbro's write form and the server's own print
+		// form for the very same stored values.
+		expect(serializeInterval(insertedDuration)).toBe(
+			"1 years 2 mons 3 days 04:05:06.789012",
+		);
+		expect(serializeInterval(mixedSignDuration)).toBe(
+			"-1 years -2 mons 3 days -00:05:00.000000",
+		);
+
+		// #341: seeded through the typed insert() builder -- the raw
+		// parameterized seed this replaced cited a `MutationValue` gap the
+		// write-side lift (#345) dissolved. What postgres:17 accepts here
+		// is core's own serialization: `serializeInterval` text for the
+		// interval columns, `serializeArrayLiteral`'s canonical `{...}`
+		// literal text for every array column, `bigint` as decimal text.
+		await handle.execute(
+			insert(roundtrip).values([
+				{
+					id: insertedId,
+					amount: 9007199254740993n,
+					precise: "123.456000",
+					duration: insertedDuration,
+					created: new Date(insertedCreated),
+					amounts: insertedAmountsArray,
+					precisions: insertedPreciseArray,
+					approx: insertedApproxArray,
+					durations: insertedDurationsArray,
+				},
+				{
+					id: mixedSignId,
+					amount: -42n,
+					precise: "-0.500000",
+					duration: mixedSignDuration,
+					created: new Date("1999-12-31T23:59:59.999Z"),
+					amounts: [-1, 0, 42],
+					precisions: ["-123.450000"],
+					approx: [-0.5],
+					durations: mixedSignDurationsArray,
+				},
+			]),
+		);
+
 		const rows = await handle.execute(select(roundtrip));
 
-		expect(rows).toHaveLength(1);
-		const row = rows[0];
-		if (row === undefined) {
-			throw new Error("select returned no row");
+		expect(rows).toHaveLength(2);
+		const row = rows.find((candidate) => candidate.id === insertedId);
+		const mixedRow = rows.find((candidate) => candidate.id === mixedSignId);
+		if (row === undefined || mixedRow === undefined) {
+			throw new Error("select did not return both seeded rows");
 		}
 
 		// bigint mode (default 'bigint', task 3.4/4.4): a real bigint, not
@@ -273,16 +368,10 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// override makes that moot by handing raw text straight through
 		// regardless, but the pin is still what keeps the *other* declared
 		// arrival shapes (dates, in particular) in the format this
-		// pipeline assumes).
-		expect(row.duration).toEqual({
-			years: 1,
-			months: 2,
-			days: 3,
-			hours: 4,
-			minutes: 5,
-			seconds: 6,
-			microseconds: 789012,
-		});
+		// pipeline assumes). The expected value is the seeded object
+		// itself: with the seed typed (#341), write value = read value IS
+		// the round-trip statement.
+		expect(row.duration).toEqual(insertedDuration);
 
 		// timestamptz -> a real Date, at the instant inserted.
 		expect(row.created).toBeInstanceOf(Date);
@@ -312,25 +401,54 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// array-literal text parser + task 1.2's per-element parseInterval):
 		// a real database's own array-literal text for this column,
 		// converted to structured IntervalValue elements.
-		expect(row.durations).toEqual([
-			{
-				years: 0,
-				months: 0,
-				days: 1,
-				hours: 0,
-				minutes: 0,
-				seconds: 0,
-				microseconds: 0,
-			},
-			{
-				years: 0,
-				months: 0,
-				days: 2,
-				hours: 3,
-				minutes: 0,
-				seconds: 0,
-				microseconds: 0,
-			},
-		]);
+		expect(row.durations).toEqual(insertedDurationsArray);
+
+		// #341 (b) on the read side: the same structured values come back,
+		// every zero field `+0` -- `toEqual` distinguishes `-0`, so this
+		// asserts the parser's (D) normalization live against the server's
+		// own `-00:05:00` text rather than a hand-built fixture.
+		expect(mixedRow.amount).toBe(-42n);
+		expect(mixedRow.precise).toBe("-0.500000");
+		expect(mixedRow.duration).toEqual(mixedSignDuration);
+		expect(mixedRow.created).toBeInstanceOf(Date);
+		expect((mixedRow.created as Date).toISOString()).toBe(
+			"1999-12-31T23:59:59.999Z",
+		);
+		expect(mixedRow.amounts).toEqual([-1, 0, 42]);
+		expect(mixedRow.precisions).toEqual(["-123.450000"]);
+		expect(mixedRow.approx).toEqual([-0.5]);
+		expect(mixedRow.durations).toEqual(mixedSignDurationsArray);
+
+		// #341 (d): the server's own output text, captured raw (cast to
+		// `::text`, so no client-side parser ever touches it) and asserted
+		// as exact strings -- the repository's first recorded samples of
+		// Postgres's actual output grammar. Against the always-full write
+		// forms pinned above, these record: singular unit names at 1
+		// (`1 year`), zero axes elided entirely, an explicit `+` on a
+		// positive group following a negative one, `.000000` fractions
+		// dropped, and array elements quoted per-element only when their
+		// own text contains a space (measured below: the pure time-axis
+		// element `-00:05:00` arrives unquoted next to a quoted
+		// `"-3 days"`).
+		// `parseInterval` accepting both the elided output form and our
+		// always-full input form is the "the server parses a normalized
+		// variant of its own output grammar" rationale, previously resting
+		// on Postgres knowledge alone.
+		const rawRows = (await driver.execute({
+			sql: "select id::text as id, duration::text as duration, durations::text as durations from g5_integration.roundtrip",
+			params: [],
+			kind: "sql",
+		})) as ReadonlyArray<{ id: string; duration: string; durations: string }>;
+		const rawById = new Map(rawRows.map((raw) => [raw.id, raw]));
+		expect(rawById.get(insertedId)?.duration).toBe(
+			"1 year 2 mons 3 days 04:05:06.789012",
+		);
+		expect(rawById.get(insertedId)?.durations).toBe(
+			'{"1 day","2 days 03:00:00"}',
+		);
+		expect(rawById.get(mixedSignId)?.duration).toBe(
+			"-1 years -2 mons +3 days -00:05:00",
+		);
+		expect(rawById.get(mixedSignId)?.durations).toBe('{-00:05:00,"-3 days"}');
 	});
 });
