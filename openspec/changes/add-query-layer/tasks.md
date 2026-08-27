@@ -937,7 +937,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   asserts dist entries; files `packages/query/package.json`,
   `packages/query/tsdown.config.ts`, `packages/query/turbo.json`,
   `packages/query/LICENSE`, `packages/query/README.md`. ~10m
-- [ ] 7.7 `@hejbro/pg` real packaging: same treatment; files
+- [x] 7.7 `@hejbro/pg` real packaging: same treatment; files
   `packages/pg/package.json`, `packages/pg/tsdown.config.ts`,
   `packages/pg/turbo.json`, `packages/pg/LICENSE`,
   `packages/pg/README.md`. ~8m
