@@ -22,7 +22,7 @@ export const assertNoNulls = <T>(
 	if (nullIndex !== -1) {
 		return throwHejbroError(
 			"null-array-element",
-			`array element at index ${nullIndex} is null — assertNoNulls never drops elements. Next: filter the nulls out before calling assertNoNulls, or declare the column .array().notNullElements() so the database rejects null elements.`,
+			`array element at index ${nullIndex} is null, so this array cannot be narrowed to non-null elements. Next: filter the nulls out before calling assertNoNulls, or declare the column .array().notNullElements() so the database rejects null elements at write time.`,
 		);
 	}
 	return elements as ReadonlyArray<T>;
