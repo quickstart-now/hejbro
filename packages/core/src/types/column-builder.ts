@@ -187,12 +187,12 @@ export type ColumnBuilder<
 	 * (add-array-ergonomics) — backed by a CHECK constraint `table()`
 	 * derives into the table's own checks list
 	 * (`<column>_no_null_elements`,
-	 * `array_position("<column>", null) is null`), so the narrowing is
-	 * never an unchecked assertion: the database enforces exactly what the
-	 * type claims. Contrast `.$type<T>()`, which is explicitly barred from
-	 * vouching for the null axis (see its own tsdoc) — this method exists
-	 * specifically because that axis needs a different, constraint-backed
-	 * mechanism.
+	 * `array_position("<schema>"."<table>"."<column>", null) is null`), so
+	 * the narrowing is never an unchecked assertion: the database enforces
+	 * exactly what the type claims. Contrast `.$type<T>()`, which is
+	 * explicitly barred from vouching for the null axis (see its own
+	 * tsdoc) — this method exists specifically because that axis needs a
+	 * different, constraint-backed mechanism.
 	 *
 	 * Type-restricted to an `.array()` column (`TFamily extends "array"`,
 	 * else the return type is `never`) — kept as well because it's cheap,
