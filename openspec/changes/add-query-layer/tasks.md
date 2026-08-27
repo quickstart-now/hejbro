@@ -921,7 +921,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   under their context/session (recorded SQL proves it)"; files
   `packages/query/src/db/chain.ts`, `src/db/context.ts`,
   `src/db/transaction.ts`. ~10m
-- [ ] 7.5 Chain result types: awaiting a chain resolves the same types
+- [x] 7.5 Chain result types: awaiting a chain resolves the same types
   `db.execute` resolves (`SelectResult`/`ReturningRow` reuse — proven
   by shared-failure mutation, not import alone); red type test
   `packages/query/test/types/chain-types.test.ts` "chain await types
