@@ -160,7 +160,9 @@ const { sql, params } = handle
 ```
 
 Using Supabase instead? `supabaseDriver(pgDriver(pool))` decorates the same
-driver contract with `asUser(claims)`/`asAnon()` RLS execution contexts.
+driver contract with Supabase's roles, so `db.as(asUser(claims))` /
+`db.as(asAnon())` (both from `@hejbro/supabase`) pass the declared-role
+check.
 
 ## Examples
 

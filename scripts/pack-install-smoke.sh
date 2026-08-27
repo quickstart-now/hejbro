@@ -182,7 +182,7 @@ assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/query/package.js
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/pg/package.json"
 echo "   ok"
 
-echo "== assertion 3: the hejbro binary runs init/generate/verify, with @hejbro/supabase's preset registered so all three packages actually load"
+echo "== assertion 3: the hejbro binary runs init/generate/verify, with @hejbro/supabase's preset registered so more than just hejbro actually loads (hejbro's own dist re-exports @hejbro/core and @hejbro/query, and the registered preset loads @hejbro/supabase directly)"
 BIN="$SCRATCH_DIR/node_modules/.bin/hejbro"
 [ -x "$BIN" ] || fail "no executable hejbro bin at $BIN"
 
