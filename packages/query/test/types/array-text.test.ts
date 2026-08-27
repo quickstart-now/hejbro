@@ -74,5 +74,11 @@ describe("parseArrayText", () => {
 		// a dimension-prefixed literal ("[0:1]={1,2}") is also out of scope --
 		// the leading "[" is never a valid array-literal start.
 		rejects("[0:1]={1,2}", "unparsable-array-text", "missing opening");
+		// truncated text with no closing brace at all -- a shape array_out
+		// never emits, but one a truncated wire/storage read genuinely can
+		// produce. Without this guard the parser would silently return a
+		// *partial* array (planner review, batch B condition M14) instead of
+		// rejecting the whole text, exactly what 1.1's own contract forbids.
+		rejects('{"a"', "unparsable-array-text", /expected "," or "\}"/);
 	});
 });
