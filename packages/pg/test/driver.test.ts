@@ -382,4 +382,46 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 			"COMMIT",
 		]);
 	});
+
+	it("retries the pin on the same physical connection after a failed pin attempt (owner review defect: a failed pin must never be recorded as pinned)", async () => {
+		const calls: Array<QueryCall> = [];
+		const pinFailure = new Error("set intervalstyle failed");
+		const client = {
+			query: vi.fn(async (call: QueryCall) => {
+				calls.push(call);
+				const pinAttempts = calls.filter(
+					(c) => sqlTextOf(c) === "set intervalstyle to 'postgres'",
+				).length;
+				if (
+					sqlTextOf(call) === "set intervalstyle to 'postgres'" &&
+					pinAttempts === 1
+				) {
+					throw pinFailure;
+				}
+				return { rows: [] };
+			}),
+			release: vi.fn(),
+		};
+		const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
+		const driver = pgDriver(pool);
+
+		// the first execute()'s pin attempt fails, and the whole call
+		// fails with it -- this is not the bug; the bug is what happens
+		// to the *next* call on the same physical connection.
+		await expect(
+			driver.execute({ sql: "select 1", params: [], kind: "sql" }),
+		).rejects.toBe(pinFailure);
+
+		// a second call on the same (stub) physical connection must retry
+		// the pin, not skip it -- if the failed attempt were recorded as
+		// pinned, this statement would run unpinned with no error at all,
+		// silently breaking owner decision ④.
+		await driver.execute({ sql: "select 2", params: [], kind: "sql" });
+
+		expect(calls.map(sqlTextOf)).toEqual([
+			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'",
+			"select 2",
+		]);
+	});
 });

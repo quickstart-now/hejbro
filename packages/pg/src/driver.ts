@@ -96,6 +96,15 @@ const setupSession = async (session: DriverSession): Promise<void> => {
  * flushed on `client` ahead of anything it sends next (the ordering
  * decision ④ exists for -- a connect-listener-only pin is not awaited by
  * the pool and would race the first caller statement; 5.0 scout).
+ *
+ * `pinnedConnections.add(client)` runs only *after* `setupSession`
+ * resolves (owner review defect fix) -- adding it beforehand recorded a
+ * client as pinned even when the pin statement itself threw, so a later
+ * checkout of that same physical connection would skip the pin and run
+ * the caller's own statement unpinned, with no error at all. Marking a
+ * client as pinned before the pool ever hands the same client to two
+ * concurrent callers isn't a concern this ordering trades away either --
+ * a pool never does that while one checkout is in flight.
  */
 const checkoutGuard = (): ((client: PoolClient) => Promise<void>) => {
 	const pinnedConnections = new WeakSet<PoolClient>();
@@ -103,8 +112,8 @@ const checkoutGuard = (): ((client: PoolClient) => Promise<void>) => {
 		if (pinnedConnections.has(client)) {
 			return;
 		}
-		pinnedConnections.add(client);
 		await setupSession(makeSession(client));
+		pinnedConnections.add(client);
 	};
 };
 
