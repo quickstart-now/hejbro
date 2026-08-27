@@ -18,9 +18,9 @@ describe("assertNoNulls (add-array-ergonomics, group 2)", () => {
 			expect(error).toBeInstanceOf(HejbroError);
 			expect((error as HejbroError).code).toBe("null-array-element");
 			expect((error as HejbroError).message).toMatch(/\bindex 2\b/);
-			expect((error as HejbroError).message).toContain("Next:");
-			expect((error as HejbroError).message).toContain(
-				".array().notNullElements()",
+			expect((error as HejbroError).message).toMatch(/\bNext:/);
+			expect((error as HejbroError).message).toMatch(
+				/\.array\(\)\.notNullElements\(\)/,
 			);
 		}
 	});
