@@ -8,6 +8,7 @@ import {
 	select,
 	serializeInterval,
 	table,
+	text,
 	timestamptz,
 	uuid,
 } from "@hejbro/core";
@@ -129,6 +130,10 @@ const roundtrip = table(testSchema, "roundtrip", {
 	precise: numeric({ mode: "string" }).notNull(),
 	duration: interval().notNull(),
 	created: timestamptz().notNull(),
+	// #339: a two-word declared key (SQL `note_text`) -- proves against a
+	// real server that result rows arrive keyed by the DECLARED key, not
+	// the SQL name (the query layer's row-key remap).
+	noteText: text().notNull(),
 	// task 1.5/B2/#320: element-wise array conversion, proved against a
 	// real database rather than only the recorded-driver unit tests
 	// (1.1/1.2/B2.2). `precisions` is `mode: 'string'` -- exact decimal
@@ -209,6 +214,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 				precise numeric not null,
 				duration interval not null,
 				created timestamptz not null,
+				note_text text not null,
 				amounts bigint[] not null,
 				precisions numeric[] not null,
 				approx numeric[] not null,
@@ -325,6 +331,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 					precise: "123.456000",
 					duration: insertedDuration,
 					created: new Date(insertedCreated),
+					noteText: "first note",
 					amounts: insertedAmountsArray,
 					precisions: insertedPreciseArray,
 					approx: insertedApproxArray,
@@ -336,6 +343,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 					precise: "-0.500000",
 					duration: mixedSignDuration,
 					created: new Date("1999-12-31T23:59:59.999Z"),
+					noteText: "mixed note",
 					amounts: [-1, 0, 42],
 					precisions: ["-123.450000"],
 					approx: [-0.5],
@@ -377,6 +385,11 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(row.created).toBeInstanceOf(Date);
 		expect((row.created as Date).toISOString()).toBe(insertedCreated);
 
+		// #339: the two-word column arrives under its declared key against a
+		// real server (the driver's raw row carries `note_text`).
+		expect(row.noteText).toBe("first note");
+		expect(row).not.toHaveProperty("note_text");
+
 		// moded bigint array (task 1.2's "moded array" branch): pg's own
 		// default array parser already hands back a JS array of numbers for
 		// oid 1016 (_int8) -- no driver override needed for this axis, only
@@ -414,6 +427,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect((mixedRow.created as Date).toISOString()).toBe(
 			"1999-12-31T23:59:59.999Z",
 		);
+		expect(mixedRow.noteText).toBe("mixed note");
 		expect(mixedRow.amounts).toEqual([-1, 0, 42]);
 		expect(mixedRow.precisions).toEqual(["-123.450000"]);
 		expect(mixedRow.approx).toEqual([-0.5]);

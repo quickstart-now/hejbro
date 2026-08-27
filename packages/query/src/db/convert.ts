@@ -16,9 +16,10 @@ import { parseInterval } from "../types/interval";
 import { convertNumericText } from "../types/numeric-mode";
 import type { Declarations } from "./db";
 
-/** One result column's resolved conversion state: the alias/key a driver row uses, and the declared `ColumnState` behind it -- `undefined` when no declared column backs this result column at all (a computed expression, or a table `execute()`'s caller never declared; owner review judgment 4's #311-aligned honest limitation, never filled in with a guess). */
+/** One result column's resolved conversion state: `alias` is the key the DRIVER's row uses (the SQL column name, or a projection's rendered alias), `resultKey` is the key the CONVERTED row carries -- the declared TS column key the inferred row type promises (#339; identical to `alias` except on an unaliased declared column whose TS key snake_cases differently), and `columnState` is the declared state behind it -- `undefined` when no declared column backs this result column at all (a computed expression, or a table `execute()`'s caller never declared; owner review judgment 4's #311-aligned honest limitation, never filled in with a guess). */
 export type ColumnPlanEntry = {
 	readonly alias: string;
+	readonly resultKey: string;
 	readonly columnState: ColumnState | undefined;
 };
 
@@ -64,15 +65,28 @@ export const resolveColumnState = (
 	schemaName: string,
 	tableName: string,
 	columnName: string,
-): ColumnState | undefined => {
+): ColumnState | undefined =>
+	findColumnEntry(tables, schemaName, tableName, columnName)?.columnState;
+
+/**
+ * The full declared column entry behind a SQL identity — `columnKey` (the
+ * declared TS key, #339's `resultKey` source) alongside the
+ * `columnState` {@link resolveColumnState} narrows this down to. Same
+ * lookup, one function behind both.
+ */
+const findColumnEntry = (
+	tables: Declarations["tables"],
+	schemaName: string,
+	tableName: string,
+	columnName: string,
+) => {
 	const table = findTable(tables, schemaName, tableName);
 	if (table === undefined) {
 		return undefined;
 	}
-	const column = getTableMeta(table).columns.find(
+	return getTableMeta(table).columns.find(
 		(candidate) => candidate.columnName === columnName,
 	);
-	return column?.columnState;
 };
 
 const columnStateForExpr = (
@@ -90,25 +104,49 @@ const columnStateForExpr = (
 	);
 };
 
+/**
+ * One `allColumns` plan entry — shared by the projection and returning
+ * paths (both derive from the same declared-table lookup): the driver
+ * row's key is the SQL `columnName`, the converted row's key is the
+ * declared `columnKey` (#339), and an undeclared table falls back to the
+ * SQL name with no conversion, `resolveColumnState`'s own honest
+ * limitation. Split out per the D71/#154 ratchet-5 discipline.
+ */
+const allColumnsPlanEntry = (
+	tables: Declarations["tables"],
+	ref: TableRefNode,
+	columnName: string,
+): ColumnPlanEntry => {
+	const column = findColumnEntry(
+		tables,
+		ref.schemaName,
+		ref.tableName,
+		columnName,
+	);
+	return {
+		alias: columnName,
+		resultKey: column?.columnKey ?? columnName,
+		columnState: column?.columnState,
+	};
+};
+
 const columnPlanFromProjection = (
 	projection: ProjectionNode,
 	from: TableRefNode,
 	tables: Declarations["tables"],
 ): ReadonlyArray<ColumnPlanEntry> => {
 	if (projection.projectionKind === "allColumns") {
-		return projection.columnNames.map((columnName) => ({
-			alias: columnName,
-			columnState: resolveColumnState(
-				tables,
-				from.schemaName,
-				from.tableName,
-				columnName,
-			),
-		}));
+		return projection.columnNames.map((columnName) =>
+			allColumnsPlanEntry(tables, from, columnName),
+		);
 	}
 	if (projection.projectionKind === "columns") {
-		return projection.columns.map(({ alias, expr }) => ({
+		// `resultKey` is the caller's verbatim projection key (#339); a node
+		// without one (hand-built, or codec-decoded -- stored view queries)
+		// falls back to the rendered alias, the pre-#339 behavior.
+		return projection.columns.map(({ alias, resultKey, expr }) => ({
 			alias,
+			resultKey: resultKey ?? alias,
 			columnState: columnStateForExpr(expr, tables),
 		}));
 	}
@@ -124,18 +162,13 @@ const columnPlanFromReturning = (
 	tables: Declarations["tables"],
 ): ReadonlyArray<ColumnPlanEntry> => {
 	if (returning.returningKind === "allColumns") {
-		return returning.columnNames.map((columnName) => ({
-			alias: columnName,
-			columnState: resolveColumnState(
-				tables,
-				target.schemaName,
-				target.tableName,
-				columnName,
-			),
-		}));
+		return returning.columnNames.map((columnName) =>
+			allColumnsPlanEntry(tables, target, columnName),
+		);
 	}
-	return returning.columns.map(({ alias, expr }) => ({
+	return returning.columns.map(({ alias, resultKey, expr }) => ({
 		alias,
+		resultKey: resultKey ?? alias,
 		columnState: columnStateForExpr(expr, tables),
 	}));
 };
@@ -486,7 +519,7 @@ export const convertRow = (
 		return row;
 	}
 	return Object.fromEntries(
-		plan.map((entry) => [entry.alias, convertPlannedCell(row, entry)]),
+		plan.map((entry) => [entry.resultKey, convertPlannedCell(row, entry)]),
 	);
 };
 

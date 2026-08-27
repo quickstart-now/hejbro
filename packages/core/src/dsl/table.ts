@@ -96,6 +96,8 @@ export type TableDeclaration = {
 	readonly schema: SchemaDeclaration;
 	readonly tableName: string;
 	readonly columns: ReadonlyArray<{
+		/** The declared TypeScript key — the name result rows are keyed by (#339); TS-only meta, never serialized (snapshot nodes carry `columnName`). */
+		readonly columnKey: string;
 		readonly columnName: string;
 		readonly columnState: ColumnState;
 	}>;
@@ -707,6 +709,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		schema: owner,
 		tableName,
 		columns: columnEntries.map((entry) => ({
+			columnKey: entry.columnKey,
 			columnName: entry.columnName,
 			columnState: entry.columnState,
 		})),

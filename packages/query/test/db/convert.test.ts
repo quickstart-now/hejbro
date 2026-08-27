@@ -162,8 +162,9 @@ describe("columnPlanForResult + convertRow (task 4.4)", () => {
 		expect(converted.amount).toBe(7n);
 		// timestamptz has no columnState-driven conversion at this contract
 		// level (owner decision only names numeric mode + IntervalValue) --
-		// it passes through whatever the driver already handed back.
-		expect(converted.posted_at).toBe("2026-01-01T00:00:00Z");
+		// it passes through whatever the driver already handed back, keyed
+		// by the caller's verbatim projection key (#339).
+		expect(converted.postedAt).toBe("2026-01-01T00:00:00Z");
 	});
 
 	it("a computed projection expression has no source column -- passes through raw (intentional limitation, #311)", () => {

@@ -139,8 +139,14 @@ const resolveProjection = (
 	return {
 		projectionNode: {
 			projectionKind: "columns",
+			// `alias` is what rendering emits -- snake, a result-set label in
+			// the SQL medium (and, through defineView, a view's column name).
+			// `resultKey` keeps the caller's verbatim TS key so the query
+			// layer can key converted rows by it (#339); it never reaches SQL
+			// text or a stored snapshot (the expression codec drops it).
 			columns: Object.entries(projection).map(([alias, value]) => ({
 				alias: toSnakeCase(alias),
+				resultKey: alias,
 				expr: value.exprNode,
 			})),
 		},

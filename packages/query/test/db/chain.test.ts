@@ -135,8 +135,9 @@ describe("db().select chain (task 7.1)", () => {
 
 		const rows = await handle.select({ theStatus: posts.status }, posts);
 
-		// biome-ignore lint/style/useNamingConvention: same snake_case alias key as the fixture above.
-		expect(rows).toEqual([{ the_status: "published" }]);
+		// the query layer remaps the driver's snake label back to the
+		// caller's verbatim projection key (#339).
+		expect(rows).toEqual([{ theStatus: "published" }]);
 		expect(topLevelSent).toHaveLength(1);
 	});
 });
