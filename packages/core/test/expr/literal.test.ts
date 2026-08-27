@@ -29,7 +29,12 @@ describe("liftLiteral + renderLiteral", () => {
 	});
 	// #154 ratchet-5: liftLiteral's final fallback (a JS type none of the
 	// prior typeof checks match -- undefined, function, symbol, bigint) had
-	// no test at all.
+	// no test at all. harden-query-layer #322: `bigint` stays here,
+	// unsupported by this function -- `liftLiteral` is the *declaration*-
+	// path lifter (`.default()`, comparison operators), reverted to exactly
+	// its pre-#322 baseline (see `query/column-value.test.ts` for the
+	// mutation-write-path `bigint`/`interval`/`array` lifter this project
+	// added instead, `liftColumnValue`, which never touches this function).
 	it("rejects unsupported JS types (invalid-literal)", () => {
 		expect(() => liftLiteral(undefined, "text")).toThrowError(
 			expect.objectContaining({ code: "invalid-literal" }),

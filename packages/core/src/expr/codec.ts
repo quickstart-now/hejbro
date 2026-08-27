@@ -129,15 +129,34 @@ const stringField = (node: Record<string, JsonValue>, key: string): string => {
 // --- encode: ExprNode (camelCase) -> snapshot form (kebab + D57 keys) --
 
 /**
- * One handler per {@link LiteralNode}'s `literal.literalKind`, same
- * technique used elsewhere this phase: a mapped type over the closed
- * union, so a missing entry is a compile error. Applied here for coverage,
- * not complexity (#154 ratchet-5): the former `switch`'s `default:
- * assertNever(literal)` was structurally unreachable (this union has
- * exactly these five kinds), so no test could ever reach it.
+ * `LiteralNode["literal"]["literalKind"]` minus `bigint`/`interval`/
+ * `array` — the three harden-query-layer #322 added, all mutation-write-
+ * value-only (`query/column-value.ts`'s `liftColumnValue`, the only
+ * constructor, is never on a declaration path). (F) settled that these
+ * three carry canonical *text* for the query-compile pipeline, never that
+ * they join the snapshot grammar `codec.ts` speaks — that's D87's own
+ * separate, owner-gated decision (a `HEJBRO_SNAPSHOT_VERSION` bump,
+ * `snapshot.ts`). `Exclude`-ing them from both handler maps below turns
+ * "the declaration path can't construct these kinds" (already proven,
+ * `core/test/query/snapshot-reachability.test.ts`) into "and even a
+ * hand-built node carrying one is rejected, not silently encoded" — the
+ * same class of `tsc`-enforced boundary the `LiftableFor` invariant is.
+ */
+type SnapshotLiteralKind = Exclude<
+	LiteralNode["literal"]["literalKind"],
+	"bigint" | "interval" | "array"
+>;
+
+/**
+ * One handler per {@link SnapshotLiteralKind}, same technique used
+ * elsewhere this phase: a mapped type over a closed union, so a missing
+ * entry is a compile error. Applied here for coverage, not complexity
+ * (#154 ratchet-5): the former `switch`'s `default: assertNever(literal)`
+ * was structurally unreachable (this union has exactly these five kinds),
+ * so no test could ever reach it.
  */
 type EncodeLiteralHandlers = {
-	readonly [K in LiteralNode["literal"]["literalKind"]]: (
+	readonly [K in SnapshotLiteralKind]: (
 		literal: Extract<LiteralNode["literal"], { readonly literalKind: K }>,
 	) => JsonValue;
 };
@@ -153,7 +172,25 @@ const encodeLiteralHandlers: EncodeLiteralHandlers = {
 	}),
 };
 
+/** `true` for the three query-compile-time-only kinds `SnapshotLiteralKind` excludes — narrows `literal` so the guard clause in {@link encodeLiteral} needs no cast either side of it. */
+const isNonSnapshotLiteralKind = (
+	literalKind: LiteralNode["literal"]["literalKind"],
+): literalKind is "bigint" | "interval" | "array" =>
+	literalKind === "bigint" ||
+	literalKind === "interval" ||
+	literalKind === "array";
+
+/** Builds the `non-snapshot-literal`-coded, enriched plain `Error` this module throws when asked to encode a mutation-write-only literal kind into a declaration-time snapshot — a signal for whoever trips it next, not a currently-reachable path (harden-query-layer #322 Settled Decision (F) covers the query-compile *text* form only, never a snapshot grammar extension, D87's own separate owner gate). */
+const throwNonSnapshotLiteral = (literalKind: string): never =>
+	throwHejbroError(
+		"non-snapshot-literal",
+		`literal kind "${literalKind}" is query-compile-time-only (a mutation write value) and can never appear in a declaration-time snapshot. Next: if you're seeing this, the declaration path (.default()/a comparison operator) has started constructing this literal kind — that requires a snapshot format-version bump (HEJBRO_SNAPSHOT_VERSION, snapshot.ts) approved by the project owner (D87) before it can be encoded here.`,
+	);
+
 const encodeLiteral = (literal: LiteralNode["literal"]): JsonValue => {
+	if (isNonSnapshotLiteralKind(literal.literalKind)) {
+		return throwNonSnapshotLiteral(literal.literalKind);
+	}
 	const handler = encodeLiteralHandlers[literal.literalKind] as (
 		literal: LiteralNode["literal"],
 	) => JsonValue;
@@ -497,7 +534,7 @@ export const decodeExprNode = (value: JsonValue): ExprNode => {
  * unreachable `assertNever` default) was thin.
  */
 type DecodeLiteralHandlers = {
-	readonly [K in LiteralNode["literal"]["literalKind"]]: (
+	readonly [K in SnapshotLiteralKind]: (
 		node: Record<string, JsonValue>,
 	) => Extract<LiteralNode["literal"], { readonly literalKind: K }>;
 };
@@ -516,9 +553,17 @@ const decodeLiteralHandlers: DecodeLiteralHandlers = {
 	}),
 };
 
-const isKnownLiteralKind = (
-	value: string,
-): value is LiteralNode["literal"]["literalKind"] =>
+/**
+ * `true` when `value` is a key `decodeLiteralHandlers` actually carries —
+ * a runtime membership check (`in`), not a type-level one, so excluding
+ * `bigint`/`interval`/`array` from {@link DecodeLiteralHandlers}'s keys
+ * (their `SnapshotLiteralKind` narrowing) makes this function return
+ * `false` for all three automatically: no separate exclusion list to keep
+ * in sync, and a snapshot node naming one of them falls straight through
+ * to {@link decodeLiteral}'s existing `unknownDiscriminator` rejection,
+ * the exact same path any other unrecognized `literalKind` already hits.
+ */
+const isKnownLiteralKind = (value: string): value is SnapshotLiteralKind =>
 	value in decodeLiteralHandlers;
 
 const decodeLiteral = (value: JsonValue): LiteralNode["literal"] => {

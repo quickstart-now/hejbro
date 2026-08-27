@@ -47,11 +47,16 @@ OpenSpec change rather than six plain-cycle fixes.
   numeric/bigint arrays need no text parser: pg's default already
   hands an array of decimal text elements, which map through the
   existing per-element conversion.
-- **Write-side serialization is compile-time lifting**: a structured
-  interval value supplied to a mutation lifts to a bind parameter in
-  Postgres interval literal text built from its seven fields; numeric
-  mode values lift as their own text/bigint/number forms (the client
-  library already serializes those losslessly).
+- **Write-side serialization is compile-time lifting to canonical text**:
+  a structured interval value supplied to a mutation lifts to a bind
+  parameter in Postgres interval literal text built from its seven
+  fields; a `bigint`/array mutation value lifts to its own canonical text
+  form the same way — the AST stays JSON-serializable throughout
+  (mirroring the existing `timestamp`/`isoValue` precedent), never a raw
+  `bigint`/structured value/JS array. This is `query/column-value.ts`'s
+  `liftColumnValue`, a function private to `mutate.ts`'s own three call
+  sites — the pre-existing `liftLiteral`/`liftOperand` (the declaration-
+  path lifter `.default()`/comparison operators use) is unchanged.
 - **Late binding for the hook** (#323): the checkout guard reads
   `driver.setupSession` at checkout time. The tsdoc-promised
   per-driver guard scope (g5's GAP-3 note) gets its test in the same
@@ -66,22 +71,38 @@ OpenSpec change rather than six plain-cycle fixes.
   `typeof` references — exactly the issue's recorded path; the C19
   assertion is never weakened.
 
-## Open Decisions ([design] tasks — settled with the owner before code)
+## Settled Decisions (owner round, 2026-08-27 — formerly Open)
 
-1. **Write-acceptance unions** (task 2.1): strict-only (each column
-   accepts exactly its read type: default `bigint` mode accepts
-   `bigint`, not `number`; `interval` accepts only the structured
-   value) versus convenience widening (`bigint` mode also accepts
-   safe `number`, `interval` also accepts literal text). The spec
-   delta as written assumes strict-only (the third scenario rejects
-   `number` into a `'bigint'`-mode column); widening would loosen that
-   scenario and needs the owner's call on where "type honesty" ends
-   and convenience begins.
-2. **Interval serialization canonical form** (task 2.2): the exact
-   Postgres interval literal built from the seven fields (sign
-   handling, zero-field elision vs always-full form) — settles a
-   generated-SQL-adjacent text contract, so it is owner-gated by the
-   same rule as SQL text decisions.
+1. **Write-acceptance unions = STRICT** (task 2.1): each column accepts
+   exactly its declared read type — default `bigint` mode accepts
+   `bigint` and rejects `number`; a `'string'`-mode `numeric` accepts
+   `string`; `interval` accepts only the structured value. Rationale:
+   round-trip identity holds at the type layer with zero runtime
+   validation branches, Drizzle's insert model is mode-symmetric the
+   same way, and convenience already has its first-class expression —
+   declaring the mode (`bigint({mode:'number'})`) — so widened unions
+   would duplicate that mechanism implicitly. The spec delta's reject
+   scenario stands as written.
+2. **Interval serialization = always-full IntervalStyle-postgres form**
+   (task 2.2): `"{Y} years {M} mons {D} days {±H:MM:SS.ffffff}"`, all
+   three axes always present, per-axis signs — exactly the grammar the
+   read-side parser consumes, so round-trip symmetry is visible at the
+   grammar level and serialization has zero elision branches. The
+   serialize function body lives in `@hejbro/core` (`liftColumnValue`'s
+   own AST-must-stay-JSON-serializable constraint requires it there;
+   `@hejbro/query`'s own `types/interval.ts` re-exports it, "beside the
+   parser" as an import path, mirroring `IntervalValue`'s own D94
+   precedent); a pure property test pins `parse(serialize(v)) =
+   canonicalize(v)` (axis-internal normalization only, never across an
+   axis boundary). The real-database read half of the grammar is already
+   proven by group 1's harness — the server parses a **normalized
+   variant** of its own output grammar, not byte-identically its own
+   output (Postgres's own output is singular for a magnitude of 1 and
+   elides zero axes; this project's always-full form is plural and
+   never elides), which depends on the additional fact that Postgres's
+   *input* grammar accepts both singular/plural unit forms and explicit
+   zero axes. A real-server capture of that acceptance (not just the
+   parsed structured value) lands via issue #341, not reproduced here.
 
 ## Risks / Trade-offs
 
@@ -100,7 +121,13 @@ OpenSpec change rather than six plain-cycle fixes.
 
 ## Migration Plan
 
-Additive/widening only: existing code keeps type-checking; new value
-shapes become accepted; array reads that previously threw now convert.
+**Narrowing on the write path**: mutation values now require each
+column's declared read type — a default-mode `bigint` column no longer
+accepts `number`, and a datetime column no longer accepts an ISO string
+(the declaration and comparison paths are unchanged: `LiftableFor` still
+accepts `Date | string`). Code affected either declares the matching mode
+(`bigint({mode:'number'})`) or passes the declared type. Reads are
+additive: array reads that previously threw now convert.
+
 One `minor` changeset (all three published packages move via the fixed
 group). Rollback = revert the change PRs before release.

@@ -3,6 +3,8 @@ import {
 	deleteFrom,
 	eq,
 	insert,
+	interval,
+	numeric,
 	roleName,
 	schema,
 	select,
@@ -330,6 +332,91 @@ describe("mutation chain result conversion (task 7.2 rework -- tables propagatio
 
 		expect(rows[0]?.amount).toBe(9007199254740993n);
 		expect(typeof rows[0]?.amount).toBe("bigint");
+	});
+});
+
+describe("typed mutation round-trip through declared read types (task 2.4, #322)", () => {
+	// A dedicated table, self-contained to this describe block -- no
+	// cross-group fixture dependency (tasks.md 2.4's own constraint):
+	// `tags` is a plain `text[]` column, which needs no group-1 element-
+	// wise read conversion at all (that machinery is `numeric[]`/
+	// `interval[]`-specific, #320); a `text[]` cell already arrives from
+	// any real driver as a JS string array, so `convertRow`'s existing
+	// "no declared conversion for this typeName -- pass the raw value
+	// through" branch is what a real read already does here, unchanged
+	// by this group's own work.
+	const metrics = table(app, "metrics", {
+		id: uuid().primaryKey(),
+		amount: bigint({ mode: "bigint" }),
+		score: numeric({ mode: "string" }),
+		duration: interval(),
+		tags: text().array(),
+	});
+
+	it("typed writes round-trip through declared read types", async () => {
+		const writtenDuration = {
+			years: 0,
+			months: 1,
+			days: 2,
+			hours: 3,
+			minutes: 4,
+			seconds: 5,
+			microseconds: 6,
+		};
+		// The row a real server's `returning()` would hand back for this
+		// insert -- each declared-conversion column's own canonical text
+		// (bigint decimal, the always-full interval grammar #322 Settled
+		// Decision 2 serializes to and `parseInterval` already consumes),
+		// `tags` already as the JS array a driver hands back unconverted.
+		const rawMetricsRow = {
+			id: "22222222-2222-2222-2222-222222222222",
+			amount: "9007199254740993",
+			score: "123.45",
+			duration: "0 years 1 mons 2 days 03:04:05.000006",
+			tags: ["a", "b"],
+		};
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [rawMetricsRow],
+		});
+		const handle = db({ metrics }, driver);
+
+		const rows = await handle
+			.insert(metrics)
+			.values({
+				id: rawMetricsRow.id,
+				amount: 9007199254740993n,
+				score: "123.45",
+				duration: writtenDuration,
+				tags: ["a", "b"],
+			})
+			.returning();
+
+		// Write half: the compiled bind parameters the driver actually
+		// received already carry each settled kind's own canonical text
+		// (task 2.3's `liftColumnValue`/`serializeArrayLiteral`/
+		// `serializeInterval`) -- the same grammar
+		// `packages/query/test/compile/mutation.test.ts` pins at the
+		// compile layer alone, proven here end to end through the actual
+		// chain a driver receives.
+		expect(topLevelSent[0]?.params).toEqual([
+			rawMetricsRow.id,
+			"9007199254740993",
+			"123.45",
+			"0 years 1 mons 2 days 03:04:05.000006",
+			"{a,b}",
+		]);
+
+		// Read half: `convertRow` turns that same canonical text back into
+		// the exact declared read shape each column promises -- bigint
+		// mode's own `bigint`, `'string'`-mode numeric's own `string`, the
+		// structured interval value (`parseInterval`, unchanged by this
+		// group), and `tags` passed through as the array it already is.
+		expect(rows[0]?.amount).toBe(9007199254740993n);
+		expect(typeof rows[0]?.amount).toBe("bigint");
+		expect(rows[0]?.score).toBe("123.45");
+		expect(typeof rows[0]?.score).toBe("string");
+		expect(rows[0]?.duration).toEqual(writtenDuration);
+		expect(rows[0]?.tags).toEqual(["a", "b"]);
 	});
 });
 

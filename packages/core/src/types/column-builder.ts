@@ -202,6 +202,39 @@ export type ColumnBuilder<
 export type BuilderFamily<TBuilder> =
 	TBuilder extends ColumnBuilder<infer TFamily> ? TFamily : never;
 
+/**
+ * The TypeScript type a declared column reads back as, once its
+ * `.$type<T>()` brand (if any) narrows {@link BaseTsType} (D1/D3/D5) — the
+ * single source both `@hejbro/query`'s `ColumnTsType` (select-result reads)
+ * and this package's own `MutationValue` (write-acceptance, harden-query-layer
+ * #322 Settled Decision 1) narrow through, so the brand's array-carrying
+ * rule (task 3.15's {@link ArrayCarriedFlags}) is expressed exactly once —
+ * `@hejbro/query`'s `column-map.ts` re-exports this type rather than
+ * repeating the same two conditional branches, so the two packages can
+ * never quietly drift apart on what a branded column reads back as.
+ *
+ * **Array + brand ordering.** `.array()` carries the *element's* `jsonType`
+ * brand up onto the array's own `TMeta` (so `jsonb().$type<Payload>().array()`'s
+ * `TMeta` is `{typeName: "array", jsonType: Payload, ...}`) — a plain
+ * "brand wins" check would then return the bare brand (`Payload`) instead
+ * of `ReadonlyArray<Payload>`, since it never notices the array wrapping.
+ * The array-shaped branch below is checked first and re-applies
+ * `ReadonlyArray<>` around the carried brand; a non-array `TMeta` (or an
+ * array with no carried brand, left to `BaseTsType`'s own array handling)
+ * falls through unchanged.
+ */
+export type ColumnReadType<TBuilder extends ColumnBuilder> =
+	TBuilder extends ColumnBuilder<infer _TFamily, infer TMeta>
+		? TMeta extends {
+				readonly typeName: "array";
+				readonly jsonType: infer TBrand;
+			}
+			? ReadonlyArray<TBrand>
+			: TMeta extends { readonly jsonType: infer TBrand }
+				? TBrand
+				: BaseTsType<TMeta>
+		: never;
+
 const timeLikeTypeNames = [
 	"date",
 	"time",

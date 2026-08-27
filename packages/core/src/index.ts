@@ -320,6 +320,7 @@ export {
 export type {
 	BuilderFamily,
 	ColumnBuilder,
+	ColumnReadType,
 	ColumnState,
 	NumericMode,
 } from "./types/column-builder";
@@ -358,6 +359,10 @@ export {
 	uuid,
 	varchar,
 } from "./types/column-builder-factories";
+export {
+	canonicalizeInterval,
+	serializeInterval,
+} from "./types/interval-serialize";
 export type { BaseTsType, IntervalValue } from "./types/ts-type-map";
 export type { SimpleTypeName, TypeNode } from "./types/type-node";
 export { renderTypeNode, simpleTypeNames } from "./types/type-node";

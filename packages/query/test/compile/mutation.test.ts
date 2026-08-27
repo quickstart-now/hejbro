@@ -1,7 +1,9 @@
 import {
+	bigint,
 	deleteFrom,
 	eq,
 	insert,
+	interval,
 	schema,
 	sql,
 	table,
@@ -18,6 +20,12 @@ const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	status: text().notNull(),
 	publishedAt: timestamptz(),
+});
+const metrics = table(app, "metrics", {
+	id: uuid().primaryKey(),
+	amount: bigint().notNull(),
+	duration: interval(),
+	tags: text().array(),
 });
 
 describe("compile: mutations", () => {
@@ -159,5 +167,93 @@ describe("compile: mutations", () => {
 
 		expect(result.sql).not.toContain(payload);
 		expect(result.params).toEqual(["draft", payload]);
+	});
+});
+
+describe("compile: mutations -- bigint/interval/array write values (task 2.3, #322)", () => {
+	it("lifts a bigint write value to a bare placeholder, decimal text bind parameter, losslessly past Number.MAX_SAFE_INTEGER (no cast, unlike interval)", () => {
+		// 9007199254740993n is picked deliberately: one past
+		// Number.MAX_SAFE_INTEGER, so a `number`-based lift would have
+		// silently rounded it -- the exact same value the READ side already
+		// pins against a real server (`packages/pg/test/integration.test.ts`:
+		// `expect(row.amount).toBe(9007199254740993n)`), so read and write
+		// losslessness are visibly the same value, one anchored on a real
+		// server, the other a compile-level unit (write has no real-server
+		// half of its own -- the server never round-trips a *parameter*
+		// back to us to inspect, only the row it stores, which is the read
+		// side's own proof).
+		const statement = insert(metrics).values({ amount: 9007199254740993n });
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'insert into "app"."metrics" ("amount") values ($1)',
+		);
+		expect(result.params).toEqual(["9007199254740993"]);
+	});
+
+	it("lifts a structured interval write value to a $n::interval placeholder, canonical always-full text bind parameter", () => {
+		const statement = insert(metrics).values({
+			amount: 1n,
+			duration: {
+				years: 1,
+				months: 2,
+				days: 3,
+				hours: 4,
+				minutes: 5,
+				seconds: 6,
+				microseconds: 7,
+			},
+		});
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'insert into "app"."metrics" ("amount", "duration") values ($1, $2::interval)',
+		);
+		expect(result.params).toEqual([
+			"1",
+			"1 years 2 mons 3 days 04:05:06.000007",
+		]);
+	});
+
+	it("lifts a JS array write value to a bare placeholder, canonical Postgres array literal text bind parameter", () => {
+		const statement = insert(metrics).values({
+			amount: 1n,
+			tags: ["a", "b,c"],
+		});
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'insert into "app"."metrics" ("amount", "tags") values ($1, $2)',
+		);
+		expect(result.params).toEqual(["1", '{a,"b,c"}']);
+	});
+
+	it("numbers a bigint/interval/array mix left to right, across an update's set clause too", () => {
+		const statement = update(metrics)
+			.set({
+				amount: 42n,
+				duration: {
+					years: 0,
+					months: 0,
+					days: 0,
+					hours: 0,
+					minutes: 0,
+					seconds: 0,
+					microseconds: 0,
+				},
+				tags: ["x"],
+			})
+			.where(eq(metrics.id, "11111111-1111-1111-1111-111111111111"));
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'update "app"."metrics" set "amount" = $1, "duration" = $2::interval, "tags" = $3 where "app"."metrics"."id" = $4',
+		);
+		expect(result.params).toEqual([
+			"42",
+			"0 years 0 mons 0 days 00:00:00.000000",
+			"{x}",
+			"11111111-1111-1111-1111-111111111111",
+		]);
 	});
 });
