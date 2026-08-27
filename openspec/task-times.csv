@@ -89,3 +89,7 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-27,add-query-layer,7.12,7,8,15,0,approx; AGENTS/README docs
 2026-08-27,add-query-layer,7.13,7,10,35,0,approx; spec deltas + close items (inventory 6->7 etc)
 2026-08-27,add-query-layer,7.rework,7,,100,0,process cost approx: R1 rework 25 + axis-split self-improvement 15 + R2 rework 20 + 7.8/7.9 reinforcement 40; bulk went to mutation verification (caught 5 surviving mutations); last 3 commits (58ab249/9f5c335/c1e2f54) unmeasured - gap noted
+2026-08-27,harden-query-layer,3.1,3,10,45,0,approx; tx generics via transaction.ts single choke point; type-assertion red/green measured by file-move (no vitest typecheck)
+2026-08-27,harden-query-layer,3.2,3,8,22,0,approx; zero production lines - proving (9m) exceeded writing (8m)
+2026-08-27,harden-query-layer,3.3,3,10,68,0,approx; incl. 8m link-axis reinforcement after review + 13m A1 drift guard kept beyond the 5m skip condition
+2026-08-27,harden-query-layer,3.gates,3,,10,0,approx; five gates one pass; check:crap needs TURBO_FORCE=1 (root script does not forward --force - #336)

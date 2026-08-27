@@ -270,6 +270,30 @@ describe("db.as(context) -- a failing set_config stops the chain (fail-stop, not
 	});
 });
 
+describe("db.as(context) -- the empty-declared-role-set message (#315 deferred branch)", () => {
+	it("an empty declared-role set renders the explicit none-declared message", () => {
+		// a schema with no grant, no RLS policy, and db() called with no
+		// `roles` option and no driver-contributed roles -- declaredRoles is
+		// genuinely empty, exercising declaredRolesList's own `sorted.length
+		// === 0` branch directly (every other test in this file has at least
+		// one declared role, so that branch was never reached before).
+		const bareApp = schema("bare_app");
+		const bareTable = table(bareApp, "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const { driver } = recordingTransactionalDriver();
+		const handle = db({ bareTable }, driver);
+
+		try {
+			handle.as({ role: roleName("anything") });
+			expect.unreachable("db.as should have thrown for an undeclared role");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "undeclared-role");
+			expect((error as Error).message).toContain("(none declared)");
+		}
+	});
+});
+
 describe("db.as(context) -- capability check before any send", () => {
 	it("fails with driver-missing-capability when the driver doesn't declare interactive-transactions, before any send", async () => {
 		const { driver } = recordingTransactionalDriver({

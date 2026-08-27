@@ -102,7 +102,7 @@ the README CRAP block stay lead-owned at close.
 
 ## 3. Precision debt (#326, #315, #310)
 
-- [ ] 3.1 `Tx.execute` generics (#326): `ExecuteResult<TStatement>`
+- [x] 3.1 `Tx.execute` generics (#326): `ExecuteResult<TStatement>`
   threaded through BOTH `Tx` creation sites; the documented-imprecision
   comments and the spec-delta citation of #326 from the previous change
   come out; red type test
@@ -111,14 +111,14 @@ the README CRAP block stay lead-owned at close.
   sites"; files `packages/query/src/db/transaction.ts`,
   `packages/query/src/db/context.ts`, `packages/query/src/db/db.ts`.
   ~10m
-- [ ] 3.2 Deferred-branch coverage (#315): the `fn.ts` unresolved-
+- [x] 3.2 Deferred-branch coverage (#315): the `fn.ts` unresolved-
   scalar guard and the `context.ts` empty-roles message branch each
   get the direct test the execution piece deferred; red tests
   `packages/query/test/db/fn.test.ts` "the scalar-result guard fires
   on a result-less row" and `packages/query/test/db/context.test.ts`
   "an empty declared-role set renders the explicit none-declared
   message"; files those tests only. ~8m
-- [ ] 3.3 Structurally derived default modes (#310): the default-mode
+- [x] 3.3 Structurally derived default modes (#310): the default-mode
   constants move to their own module; factories and
   `ts-type-map.ts`'s fallbacks reference them (`typeof`), the C19
   exhaustiveness assertion stays exactly as strong; red test

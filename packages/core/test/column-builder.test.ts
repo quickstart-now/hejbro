@@ -24,6 +24,15 @@ import {
 	uuid,
 	varchar,
 } from "../src/types/column-builder-factories";
+import type {
+	DefaultBigintMode,
+	DefaultNumericMode,
+} from "../src/types/numeric-mode-defaults";
+import {
+	DEFAULT_BIGINT_MODE,
+	DEFAULT_NUMERIC_MODE,
+} from "../src/types/numeric-mode-defaults";
+import type { BaseTsType } from "../src/types/ts-type-map";
 
 describe("ColumnBuilder immutability", () => {
 	it("does not mutate the original builder when chaining", () => {
@@ -444,6 +453,45 @@ describe("bigint/numeric width modes (D3, task 3.4)", () => {
 	it("a non-numeric-mode column stays mode: null", () => {
 		expect(uuid().columnState.mode).toBeNull();
 		expect(text().columnState.mode).toBeNull();
+	});
+
+	describe("default mode constants are structurally shared, not duplicated (#310)", () => {
+		it("the type-level default mode and the runtime default mode are the same constant", () => {
+			// runtime: bigint()/numeric()'s own default reads DEFAULT_BIGINT_MODE/
+			// DEFAULT_NUMERIC_MODE from the shared module.
+			expect(bigint().columnState.mode).toBe(DEFAULT_BIGINT_MODE);
+			expect(numeric().columnState.mode).toBe(DEFAULT_NUMERIC_MODE);
+			// type-level: BaseTsType's no-mode fallback resolves to exactly the
+			// same type as explicitly spelling out `mode: DefaultBigintMode` /
+			// `mode: DefaultNumericMode` -- proves the fallback derives
+			// structurally from the same constant, not a hand-spelled literal
+			// that merely happens to still agree. (The default *value* itself
+			// -- 'bigint'/'string' -- is already pinned by the describe block
+			// above; this is the consistency bond, not a duplicate value pin.)
+			expectTypeOf<BaseTsType<{ readonly typeName: "bigint" }>>().toEqualTypeOf<
+				BaseTsType<{
+					readonly typeName: "bigint";
+					readonly mode: DefaultBigintMode;
+				}>
+			>();
+			expectTypeOf<
+				BaseTsType<{ readonly typeName: "numeric" }>
+			>().toEqualTypeOf<
+				BaseTsType<{
+					readonly typeName: "numeric";
+					readonly mode: DefaultNumericMode;
+				}>
+			>();
+			// the fallback's own resolved type, pinned concretely: severing
+			// DefaultBigintMode's `typeof` link to DEFAULT_BIGINT_MODE moves this
+			// side alone, which the consistency bond above can't see.
+			expectTypeOf<
+				BaseTsType<{ readonly typeName: "bigint" }>
+			>().toEqualTypeOf<bigint>();
+			expectTypeOf<
+				BaseTsType<{ readonly typeName: "numeric" }>
+			>().toEqualTypeOf<string>();
+		});
 	});
 
 	// The four invariants a mode-only change must hold (C13-style contrast
