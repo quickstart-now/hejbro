@@ -6,6 +6,7 @@ import {
 	deleteFrom,
 	eq,
 	insert,
+	interval,
 	isNotNull,
 	jsonb,
 	now,
@@ -68,6 +69,15 @@ const documents = table(app, "documents", {
 	payload: jsonb().notNull(),
 	blob: bytea().notNull(),
 });
+// A dedicated fixture for the render-reachability regression below only --
+// `bigint`/`interval`/`array` mutation values, `.notNull()`-chained for the
+// same bare-inline-inference reason `invoices` above documents.
+const metrics = table(app, "metrics", {
+	id: uuid().primaryKey(),
+	amount: bigint({ mode: "bigint" }).notNull(),
+	duration: interval().notNull(),
+	tags: text().array().notNull(),
+});
 
 describe("mutation builders", () => {
 	it("renders the spec §5.2 update shape", () => {
@@ -85,6 +95,41 @@ describe("mutation builders", () => {
 			.onConflictDoNothing(posts.slug);
 		expect(renderQuery(query.insertQuery)).toBe(
 			'insert into "app"."posts" ("slug") values (\'hello\') on conflict ("slug") do nothing',
+		);
+	});
+	// Reviewer freeze finding: the three render handlers `literal.ts` added
+	// for `bigint`/`interval`/`array` (harden-query-layer #322 task 2.3) are
+	// reachable through nothing more than the two public exports every
+	// caller already has -- `insert().values()` (which builds the AST via
+	// `liftColumnValue`) and `renderQuery()` (which renders it inline,
+	// `expr/render-sql.ts`'s own recursive `renderExpr` -> `renderLiteral`).
+	// Not dead code behind a private module boundary; a real caller's
+	// `renderQuery(query.insertQuery)` (the exact call every other test in
+	// this file already makes) hits all three. Each kind's own exact
+	// rendering rule, pinned verbatim: `bigint` bare (no quotes), `interval`
+	// quoted plus an explicit `::interval` cast (mirrors `timestamp`'s own
+	// `::timestamptz`), `array` quoted with no cast at all (the target
+	// column resolves the parameter type the same way `params.ts`'s own
+	// bare bigint/array placeholder decision already relies on for the
+	// bind-parameter path -- this is that same decision's first-ever check
+	// on the *inline* render path).
+	it("renders bigint/interval/array mutation values inline -- the render handlers task 2.3 added are reachable through insert().values() + renderQuery(), not dead code", () => {
+		const query = insert(metrics).values({
+			id: "11111111-1111-1111-1111-111111111111",
+			amount: 9007199254740993n,
+			duration: {
+				years: 0,
+				months: 1,
+				days: 2,
+				hours: 3,
+				minutes: 4,
+				seconds: 5,
+				microseconds: 6,
+			},
+			tags: ["a", "b"],
+		});
+		expect(renderQuery(query.insertQuery)).toBe(
+			'insert into "app"."metrics" ("id", "amount", "duration", "tags") values (\'11111111-1111-1111-1111-111111111111\', 9007199254740993, \'0 years 1 mons 2 days 03:04:05.000006\'::interval, \'{a,b}\')',
 		);
 	});
 	it("fills missing multi-row keys with sql default", () => {

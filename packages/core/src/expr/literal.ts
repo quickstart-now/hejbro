@@ -155,14 +155,19 @@ const renderLiteralHandlers: RenderLiteralHandlers = {
 		`${quoteStringLiteral(literal.isoValue)}::timestamptz`,
 	// harden-query-layer #322: `liftLiteral` (this file's own lifter, the
 	// declaration-path function) never constructs `bigint`/`interval`/
-	// `array` -- only `query/column-value.ts`'s `liftColumnValue` does,
-	// and that's a mutation write value the query-compile pipeline lifts
-	// to a bind parameter (`compile/params.ts`), never rendered inline
-	// through this function. These three handlers exist only because
-	// `RenderLiteralHandlers` is exhaustive over every `literalKind`
-	// (D71/#154 ratchet-5) -- unreachable in practice, still a real,
-	// grammar-correct rendering if ever called directly on a hand-built
-	// node.
+	// `array` -- only `query/column-value.ts`'s `liftColumnValue` does, for
+	// a mutation write value. These three handlers ARE reachable, though,
+	// through nothing more than two public exports: `insert()`/`update()`
+	// build the AST via `liftColumnValue`, and `renderQuery()` (this
+	// module's own recursive `renderExpr` -> `renderLiteral` descent, not a
+	// separate bind-parameter path) renders it inline the same as any other
+	// literal -- pinned by `core/test/query/mutate.test.ts`'s own
+	// "renders bigint/interval/array mutation values inline" test. Each
+	// handler's own rendering is grammar-correct SQL text: `bigint` bare
+	// (no quotes), `interval` quoted plus an explicit `::interval` cast
+	// (mirrors `timestamp`'s own `::timestamptz` above), `array` quoted with
+	// no cast (the target column resolves the parameter's type, mirroring
+	// `compile/params.ts`'s own bare bigint/array bind-parameter decision).
 	bigint: (literal) => literal.text,
 	interval: (literal) => `${quoteStringLiteral(literal.text)}::interval`,
 	array: (literal) => quoteStringLiteral(literal.text),
