@@ -112,6 +112,22 @@ cat > "$SCRATCH_DIR/package.json" <<EOF
 }
 EOF
 
+# @hejbro/pg declares `pg` as a peerDependency; npm 7+ auto-installs an
+# unmet peer, so this install resolves `pg@8.23.0` (and its transitive
+# deps -- @hejbro/pg -> pg -> pg-pool@3.14.0 -> pg, deduped) from the
+# registry/cache rather than from the local tarballs alone. Measured
+# with this script's own five tarballs: `npm install` here adds 25
+# packages (a narrower repro packing only core/query/pg tarballs added
+# 17 -- cited only to show the count is sensitive to which tarballs are
+# in the scratch project, not as this script's own figure).
+# Accepted deliberately, not overlooked: real-consumer fidelity is this
+# script's whole purpose (its own header above), and a real consumer's
+# `npm install` fetches this exact same peer the exact same way --
+# sealing it off here would make the smoke verify a different install
+# than the one that ships. Air-gapped CI is not a current constraint
+# (GitHub Actions has registry access); if that changes, switch to a
+# vendored `pg` tarball instead of silently tolerating a new failure
+# mode here.
 echo "== npm install (plain npm — no pnpm, no workspace lookup: SCRATCH_DIR is outside the repo tree)"
 (cd "$SCRATCH_DIR" && npm install --no-audit --no-fund >/dev/null)
 
