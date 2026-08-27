@@ -12,14 +12,18 @@ single source of truth and no generated files can go stale.
 The result row type of a select or `returning` clause SHALL be inferred
 from the declared column types of the projected columns, including
 nullability: a column without `notNull` SHALL type as possibly `null`.
-A projection built from arbitrary expressions rather than a whole
-declared table (an object projection, e.g. `select({a: expr}, table)`)
-SHALL still key its result exactly to the projected names, but MAY
-resolve each field's type only to its coarse SQL family widened to
-nullable, rather than the full declared-column type — expressions
-carry no link back to the declared column they read from (tracked as
-**#311**), so a narrower type there would risk misrepresenting a value
-this layer cannot actually verify.
+An array column's element type SHALL include `| null` — Postgres arrays
+are element-nullable regardless of the column's own `notNull`, and the
+runtime delivers a `NULL` element as `null` — except a column declared
+`.notNullElements()`, whose element type SHALL be the bare element type
+(the emitted CHECK backs the claim). A projection built from arbitrary
+expressions rather than a whole declared table (an object projection,
+e.g. `select({a: expr}, table)`) SHALL still key its result exactly to
+the projected names, but MAY resolve each field's type only to its
+coarse SQL family widened to nullable, rather than the full
+declared-column type — expressions carry no link back to the declared
+column they read from (tracked as **#311**), so a narrower type there
+would risk misrepresenting a value this layer cannot actually verify.
 
 #### Scenario: Projection drives the row type
 - **WHEN** a select projects a subset of a declared table's columns
@@ -34,6 +38,12 @@ this layer cannot actually verify.
   nullable, not the full declared-column type (mode/array
   element/`$type` brand are not reflected)
 
+#### Scenario: Array element nullability follows the declaration
+- **WHEN** a table declares `tags: text().array()` and
+  `labels: text().array().notNullElements()`
+- **THEN** a whole-table select's row type reads `tags` with elements
+  typed `string | null` and `labels` with elements typed `string`
+
 ### Requirement: Insert and update input types follow the declaration
 Insert input types SHALL require columns that are `notNull` without a
 default and accept the rest as optional; update input types SHALL accept
@@ -43,7 +53,9 @@ accepted SHALL be the column's own declared read type: a
 as (`bigint`, `number`, or `string`), an `interval` column accepts the
 structured interval value, a datetime column (`date`/`timestamp`/
 `timestamptz`) accepts exactly `Date` (never a plain ISO string), and an
-array column accepts an array of its declared element type — except a
+array column accepts an array of its declared element type — elements
+including `| null` by default, and excluding it for a column declared
+`.notNullElements()` (matching the read side exactly) — except a
 `json`/`jsonb`/`bytea` column (scalar or array-of), which has no
 compile-time-lifted raw-value write path at all and accepts only an
 `Expr` (the `sql` escape hatch). A value supplied through these input
@@ -81,6 +93,12 @@ target column to resolve the parameter's type.
   `Uint8Array` to a `bytea` column (scalar or array-of either)
 - **THEN** the program fails to type-check; only `sql\`...\`` (an `Expr`)
   is accepted for either column
+
+#### Scenario: A null element is rejected only where the declaration forbids it
+- **WHEN** an insert supplies `["a", null]` to a plain `text().array()`
+  column and to a `text().array().notNullElements()` column
+- **THEN** the plain column type-checks (and stores a `NULL` element),
+  while the `notNullElements` column fails to type-check
 
 ### Requirement: Numeric width mode decides the visible type, and never loses precision silently
 A `bigint`/`numeric` column's declared mode SHALL decide the TypeScript

@@ -76,18 +76,23 @@ runtime conversion (numeric width mode, `interval`) SHALL be converted
 to that declared TypeScript shape before the caller receives it — and
 for an array column of such a type, the conversion SHALL apply to each
 element, producing an array of the declared element shape (a SQL `NULL`
-element passes through as `null`, exactly as a `NULL` scalar does). A
-value that fails to convert — an unconvertible element included — or a
-declared column entirely absent from the driver's row, SHALL fail fast
-with an explicit error naming the column, rather than surfacing as an
+element passes through as `null`, exactly as a `NULL` scalar does). For
+a column declared `.notNullElements()`, a `NULL` element arriving at
+all SHALL be treated as a conversion failure — the declared element
+type excludes `null` because a CHECK enforces it, so an arriving `NULL`
+means the constraint no longer holds (e.g. dropped out-of-band) and the
+declared type must fail loudly rather than lie silently. A value that
+fails to convert — an unconvertible element included — or a declared
+column entirely absent from the driver's row, SHALL fail fast with an
+explicit error naming the column, rather than surfacing as an
 unconverted value or a silent `undefined`. An array column's raw value
 that does not match the arrival shape its declared element type's
 driver contract promises SHALL likewise be treated as a conversion
 failure — fail fast naming the column, never guessed at or coerced
 into the expected shape. Whether the failure is an unconvertible
-element, an arrival-shape mismatch, or unparsable array-literal text,
-the column's whole value SHALL fail — never a partial array standing
-in for it.
+element, an arrival-shape mismatch, unparsable array-literal text, or a
+`NULL` element where the declaration forbids one, the column's whole
+value SHALL fail — never a partial array standing in for it.
 
 #### Scenario: Declared numeric/interval columns arrive converted
 - **WHEN** a select resolves a column declared with a numeric width mode
@@ -115,6 +120,13 @@ in for it.
   to arrive as an already-parsed array, or the reverse)
 - **THEN** the call rejects with an explicit error naming that column,
   and the caller never receives a partial array for it
+
+#### Scenario: A NULL element under notNullElements fails fast
+- **WHEN** a select resolves a `.notNullElements()` column whose raw
+  driver value contains a `NULL` element (the backing CHECK was dropped
+  or bypassed out-of-band)
+- **THEN** the call rejects with an explicit error naming that column,
+  and the caller never receives a `null` typed as the bare element type
 
 ### Requirement: Statement typing and the chain surface are uniform across every execution surface
 The same thenable `select`/`insert`/`update`/`deleteFrom` chain entry
