@@ -83,6 +83,24 @@ describe("pgDriver(connectionString) (owner decision ②, task 5.2)", () => {
 
 		expect(endSpy).not.toHaveBeenCalled();
 	});
+
+	it("never auto-closes the pool across a transaction round-trip, on either the commit or the rollback path", async () => {
+		const driver = pgDriver("postgres://localhost/does-not-need-to-connect");
+		vi.spyOn(driver.client, "connect").mockResolvedValue({
+			query: vi.fn(async () => ({ rows: [] })),
+			release: vi.fn(),
+		} as never);
+		const endSpy = vi.spyOn(driver.client, "end");
+
+		await driver.transaction(async () => "done");
+		await expect(
+			driver.transaction(async () => {
+				throw new Error("boom");
+			}),
+		).rejects.toThrow("boom");
+
+		expect(endSpy).not.toHaveBeenCalled();
+	});
 });
 
 describe("pgDriver execute + interval types override (owner decision ③, task 5.3)", () => {
@@ -151,6 +169,14 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 });
 
 describe("pgDriver transaction (task 5.4)", () => {
+	/** The SQL text a captured `client.query` call carries, whether it was sent as a bare string (`BEGIN`/`COMMIT`/`ROLLBACK`) or a structured query config (a statement routed through `makeSession`). */
+	const sqlTextOf = (config: string | CapturedQueryConfig): string => {
+		if (typeof config === "string") {
+			return config;
+		}
+		return config.text;
+	};
+
 	/**
 	 * A pool whose `connect` always hands back the *same* stub client and
 	 * records every SQL string that client's own `query` was sent, in
@@ -160,14 +186,6 @@ describe("pgDriver transaction (task 5.4)", () => {
 	 * succeed against the wrong connection), catching a session-binding
 	 * regression decisively rather than by inspection.
 	 */
-	/** The SQL text a captured `client.query` call carries, whether it was sent as a bare string (`BEGIN`/`COMMIT`/`ROLLBACK`) or a structured query config (a statement routed through `makeSession`). */
-	const sqlTextOf = (config: string | CapturedQueryConfig): string => {
-		if (typeof config === "string") {
-			return config;
-		}
-		return config.text;
-	};
-
 	const stubPoolWithClient = (): {
 		readonly pool: Pool;
 		readonly release: ReturnType<typeof vi.fn>;
@@ -217,7 +235,24 @@ describe("pgDriver transaction (task 5.4)", () => {
 			}),
 		).rejects.toBe(originalError);
 
+		// exactly one checkout for the one transaction() call -- BEGIN and
+		// ROLLBACK alone wouldn't distinguish this from a (broken) second
+		// checkout that also happened to emit the same two strings.
+		expect(pool.connect).toHaveBeenCalledTimes(1);
 		expect(queries).toEqual(["BEGIN", "ROLLBACK"]);
 		expect(release).toHaveBeenCalledTimes(1);
+	});
+
+	it("rethrows a thrown non-Error value unchanged (rethrow is not Error-specific, never normalized/wrapped)", async () => {
+		const { pool } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+		const thrown = { code: "not-an-error-instance" };
+
+		// deliberately non-Error -- proves rethrow doesn't normalize/wrap it.
+		await expect(
+			driver.transaction(async () => {
+				throw thrown;
+			}),
+		).rejects.toBe(thrown);
 	});
 });
