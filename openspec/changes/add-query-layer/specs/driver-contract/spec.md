@@ -134,9 +134,17 @@ in the database and read back.
   exact decimal text stored, and the `timestamptz` column reads back as
   a `Date` instance at the stored instant
 
+### Requirement: Vanilla driver's session-setup hook pins IntervalStyle
+`@hejbro/pg`'s driver's session-setup hook SHALL send `set intervalstyle
+to 'postgres'` on the session it is given.
+
+#### Scenario: The hook sends the pin
+- **WHEN** `@hejbro/pg`'s driver's session-setup hook is invoked,
+  directly, with a session
+- **THEN** it sends `set intervalstyle to 'postgres'` on that session
+
 ### Requirement: Vanilla driver pins IntervalStyle at checkout
-Inside its session-setup hook, `@hejbro/pg`'s driver SHALL send `set
-intervalstyle to 'postgres'` on a physical connection it has not
+`@hejbro/pg`'s driver SHALL pin a physical connection it has not
 successfully pinned before, before any caller-supplied statement runs
 on it, on both the direct-execute path and the transaction path. It
 SHALL NOT repeat the pin on a later checkout of a connection it has
