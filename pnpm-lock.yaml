@@ -108,6 +108,9 @@ importers:
       '@hejbro/core':
         specifier: workspace:*
         version: link:../core
+      '@hejbro/query':
+        specifier: workspace:*
+        version: link:../query
       citty:
         specifier: ^0.2.2
         version: 0.2.2

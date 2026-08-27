@@ -45,6 +45,7 @@
 	},
 	"dependencies": {
 		"@hejbro/core": "workspace:*",
+		"@hejbro/query": "workspace:*",
 		"citty": "^0.2.2",
 		"jiti": "^2.7.0",
 		"tinyglobby": "^0.2.17",

@@ -948,7 +948,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   exports; red test `packages/query/test/exports.test.ts` "public
   surface matches the agreed list; test-only helpers are absent";
   files `packages/query/src/index.ts`. ~8m
-- [ ] 7.9 hejbro facade: re-export `db` + query's dual-use `sql`
+- [x] 7.9 hejbro facade: re-export `db` + query's dual-use `sql`
   (replacing the core `sql` re-export — one `sql`) + the key query
   types from `@hejbro/query`; `hejbro` gains the `@hejbro/query`
   workspace dependency; red test `packages/cli/test/exports.test.ts`
