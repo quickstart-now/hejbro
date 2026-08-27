@@ -6,7 +6,13 @@
 			"outputs": ["dist/**"]
 		},
 		"check-types": {
-			"dependsOn": ["^check-types"]
+			// #287: the safe default. A dependent that type-checks against a
+			// stale @hejbro/core dist is FALSELY green (reproduced: a barrel
+			// rename in core src left dependents green against the old dist).
+			// Every current dependent package also carries this in its own
+			// turbo.json; this root default protects the next package that
+			// forgets one.
+			"dependsOn": ["^build"]
 		},
 		"test": {
 			"outputs": []
