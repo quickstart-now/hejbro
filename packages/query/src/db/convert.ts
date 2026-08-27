@@ -376,15 +376,30 @@ const rawArrayElements = (
  * `columnState` with `typeNode` swapped for its declared element type,
  * `mode` carried through unchanged) — `null` (an unquoted `NULL` element,
  * or the moded-array driver's own `null`) passes through unconverted, the
- * same rule {@link convertCell} applies at the cell level. Reuses
- * {@link convertDeclaredValue} rather than duplicating the mode/interval
- * branches, so element and top-level scalar conversion can never disagree.
+ * same rule {@link convertCell} applies at the cell level, UNLESS the array
+ * column is declared `.notNullElements()`: the spread in
+ * {@link convertArrayValue} carries `columnState.notNullElements` into
+ * `elementState` unchanged, so a `NULL` element arriving under that flag
+ * means the backing CHECK no longer holds (dropped or bypassed
+ * out-of-band, design decision 4) — this throws a plain `Error` (no new
+ * error code; {@link convertCell}'s own try/catch wraps it into the
+ * existing `result-conversion-failed` family via
+ * {@link throwResultConversionFailed}, which is the whole contract) rather
+ * than silently returning `null` typed as the bare, non-null element type.
+ * Reuses {@link convertDeclaredValue} for the non-null path rather than
+ * duplicating the mode/interval branches, so element and top-level scalar
+ * conversion can never disagree.
  */
 const convertArrayElement = (
 	raw: unknown,
 	elementState: ColumnState,
 ): unknown => {
 	if (raw === null) {
+		if (elementState.notNullElements === true) {
+			throw new Error(
+				"array element is null, but this column is declared .notNullElements(). Next: check the backing CHECK wasn't dropped or bypassed out-of-band -- a NULL element here means the constraint no longer holds.",
+			);
+		}
 		return null;
 	}
 	return convertDeclaredValue(raw, elementState);
