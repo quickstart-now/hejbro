@@ -12,6 +12,10 @@ describe("parseArrayText", () => {
 		]);
 		expect(parseArrayText("{NULL,1,NULL}")).toEqual([null, "1", null]);
 		expect(parseArrayText('{"NULL"}')).toEqual(["NULL"]);
+		// quoted elements may contain whitespace (interval[]'s own text does) --
+		// only the reserved characters (delimiter, braces, quote, backslash)
+		// force quoting, never whitespace on its own.
+		expect(parseArrayText('{"1 day","2 days"}')).toEqual(["1 day", "2 days"]);
 
 		const rejects = (raw: string, code: string) => {
 			try {
@@ -30,5 +34,11 @@ describe("parseArrayText", () => {
 		rejects('{"unterminated', "unparsable-array-text");
 		rejects("{1,2,3}trailing", "unparsable-array-text");
 		rejects("{1,,3}", "unparsable-array-text");
+		// out of scope by design (design.md Non-Goals: one level of nesting
+		// only) -- rejected whole, never partially parsed into e.g. ["{1", "2}"].
+		rejects("{{1,2},{3,4}}", "unparsable-array-text");
+		// a dimension-prefixed literal ("[0:1]={1,2}") is also out of scope --
+		// the leading "[" is never a valid array-literal start.
+		rejects("[0:1]={1,2}", "unparsable-array-text");
 	});
 });
