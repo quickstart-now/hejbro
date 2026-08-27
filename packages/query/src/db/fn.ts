@@ -73,14 +73,24 @@ const setofTableCall = (
 };
 
 /**
- * Mirrors `ts-type-map.ts`'s own hand-spelled "no mode" defaults
- * (`bigint` type -> `'bigint'` mode, `numeric` type -> `'string'` mode,
- * tracked to unify at #310) — a `defineFunction({returns: <TypeNode>})`
- * scalar return has no column declaration to carry an explicit
- * `bigint({mode})`/`numeric({mode})` choice, so this fills exactly the
- * same default the type-level `BaseTsType` mapping already assumes when
- * `TMeta.mode` is absent, keeping the runtime conversion and the
- * compile-time type in agreement.
+ * Mirrors `@hejbro/core`'s own "no mode" defaults (`bigint` type ->
+ * `'bigint'` mode, `numeric` type -> `'string'` mode, same values
+ * `ts-type-map.ts`'s `BaseScalarTsType` fallback resolves) — a
+ * `defineFunction({returns: <TypeNode>})` scalar return has no column
+ * declaration to carry an explicit `bigint({mode})`/`numeric({mode})`
+ * choice, so this fills exactly the same default the type-level
+ * `BaseTsType` mapping already assumes when `TMeta.mode` is absent,
+ * keeping the runtime conversion and the compile-time type in agreement.
+ *
+ * **Deliberately a second, hand-spelled copy, not an import** (#310):
+ * core's own default-mode constants (`numeric-mode-defaults.ts`) are
+ * intentionally *not* part of `@hejbro/core`'s public barrel — they are
+ * internal wiring between core's own factories and its own type map, not
+ * a contract this package is entitled to depend on. Unifying the two
+ * would mean widening core's public API surface for this one mirror,
+ * which this task never decided; this mirror is the boundary's own
+ * consequence, kept in sync by hand (and by `fn.test.ts`'s own drift
+ * guard) rather than by a shared import.
  */
 const defaultNumericMode = (typeNode: TypeNode): NumericMode | null => {
 	if (typeNode.typeName === "bigint") {
