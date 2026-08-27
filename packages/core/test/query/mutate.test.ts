@@ -1,13 +1,17 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { InsertFinal } from "../../src/index";
+import type { InsertFinal, MutationRow } from "../../src/index";
 import {
+	bigint,
+	bytea,
 	deleteFrom,
 	eq,
 	insert,
 	isNotNull,
+	jsonb,
 	now,
 	renderQuery,
 	schema,
+	sql,
 	table,
 	text,
 	timestamptz,
@@ -24,6 +28,45 @@ const posts = table(app, "posts", {
 const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
+});
+const invoices = table(app, "invoices", {
+	id: uuid().primaryKey(),
+	// `.notNull()` chained, not a bare `bigint()` -- a bare, unchained,
+	// inline `bigint()`/`numeric()` (no `.notNull()`, no explicit `mode`,
+	// no prior `const` binding) hits a **pre-existing TypeScript inference
+	// defect**, confirmed pre-existing (measured against the shipped,
+	// unmodified `@hejbro/query` `ColumnTsType` and the real `select()`
+	// return type `SelectResult` alike, both already widened before this
+	// group's own changes -- not a regression this group introduced):
+	// `table<TColumns>`'s own inference pass re-widens the bare call's
+	// defaulted `TMode` to the bare `NumericMode` constraint instead of
+	// keeping the literal `"bigint"`/`"string"` default, so the column's
+	// read *and* write type becomes `string | number | bigint` instead of
+	// just `bigint` -- silently accepting `number`/`string` where STRICT
+	// should reject them. Measured matrix (escalated to lead/owner, #322):
+	// bare inline (`{ c: bigint() }`, `{ c: numeric() }`) is the only
+	// broken shape; chaining any modifier (`.notNull()` here), an explicit
+	// `mode`, or binding to a `const` first all narrow correctly. The root
+	// cause lives in `bigint()`/`numeric()`'s own generic-default
+	// signature (`column-builder-factories.ts`, group 3's file, out of
+	// this group's scope) -- tracked for a cross-group fix decision, not
+	// fixed here. Chaining `.notNull()` here is real, common user syntax
+	// (matches `examples/supabase`'s own `sizeBytes: bigint().notNull()`),
+	// unaffected by the defect, so this test's own green result reflects
+	// the STRICT contract, not test-only setup a real caller wouldn't
+	// have. Deliberately NOT adding a test that pins the bare-inline shape
+	// as `string | number | bigint` -- that would fix the bug as spec.
+	amountCents: bigint().notNull(),
+});
+// `jsonb()`/`bytea()` take no config and carry no generic mode parameter
+// (unlike `bigint()`/`numeric()`), so the bare-inline inference defect
+// documented on `invoices` above structurally cannot apply here -- chained
+// anyway (`.notNull()`) to keep every fixture in this file in the same,
+// unambiguously-safe shape.
+const documents = table(app, "documents", {
+	id: uuid().primaryKey(),
+	payload: jsonb().notNull(),
+	blob: bytea().notNull(),
 });
 
 describe("mutation builders", () => {
@@ -163,5 +206,148 @@ describe("InsertFinal/UpdateFinal/DeleteFinal<TTable, TReturning> generics (task
 			.returning();
 		expect(Object.getOwnPropertySymbols(insertStage)).toHaveLength(0);
 		expect(insertStage.insertQuery.queryKind).toBe("insert");
+	});
+});
+
+describe("MutationValue write-acceptance union (task 2.1, #322 -- STRICT, design.md Settled Decision 1)", () => {
+	it("a default-mode bigint column accepts bigint and rejects the settled-out shapes", () => {
+		// This test binds `MutationRow` itself -- the type task 2.1 owns --
+		// never calling `insert()`. The runtime lift proof (a compiled
+		// statement's params array actually carrying `1n` unconverted) is
+		// task 2.3's own named test; keeping that assertion out of this one
+		// means this test's red/green tracks only what 2.1 touches, not a
+		// lift-path gap 2.2/2.3 haven't closed yet.
+
+		// accepted: the declared read type (default mode 'bigint', task 3.4)
+		// is the one shape STRICT admits.
+		const _accepted: MutationRow<typeof invoices> = { amountCents: 1n };
+
+		// @ts-expect-error a plain `number` silently loses precision past
+		// Number.MAX_SAFE_INTEGER -- exactly the failure mode 'bigint' mode
+		// exists to rule out. STRICT (design.md Settled Decision 1) never
+		// widens back to a sibling mode's shape.
+		const _rejectedNumber: MutationRow<typeof invoices> = { amountCents: 1 };
+
+		// @ts-expect-error regression guard, not new STRICT behavior: a
+		// `string` was already rejected before this change (the old
+		// family-based `LiftableFor<"numeric">` was `number`-only) -- kept so
+		// a future widening of the union fails here too.
+		const _rejectedString: MutationRow<typeof invoices> = { amountCents: "1" };
+	});
+});
+
+describe("json/jsonb + bytea write-acceptance gate (task 2.5, #322 -- design.md Settled Decision 1 group B: no compile-time-lifted raw-scalar write path)", () => {
+	it("rejects a raw scalar write but still accepts an Expr (sql`` escape hatch)", () => {
+		// accepted: `sql` \`\` always lifts to `Expr<"unknown">`, which
+		// `MutationValue`'s `Expr<"unknown">` arm accepts for every column
+		// regardless of family -- this is the one write path json/jsonb/
+		// bytea have (D18's raw-SQL escape hatch), never a raw JS value.
+		const _acceptedJson: MutationRow<typeof documents> = {
+			payload: sql`'{}'::jsonb`,
+		};
+		const _acceptedBytea: MutationRow<typeof documents> = {
+			blob: sql`'\x00'::bytea`,
+		};
+
+		// @ts-expect-error a raw JS object is never accepted for a jsonb
+		// column -- no compile-time-lifted write path exists yet (the
+		// `UnwritableFamily` gate mutate.ts's `MutationValue` applies to
+		// `json`/`bytea`); only `sql\`\`` can write one.
+		const _rejectedJson: MutationRow<typeof documents> = { payload: { a: 1 } };
+
+		// A fresh object *literal*'s rejection above could, in principle, be
+		// TS's excess-property check reacting to literal freshness rather
+		// than to the write-acceptance contract itself -- excess-property
+		// checking only fires on fresh literals, never through a variable.
+		// Routing the same value through a variable first turns that check
+		// off, so a rejection here can only come from `MutationValue`'s own
+		// raw-scalar arm being `never` for `json`/`bytea` -- the contract,
+		// not literal freshness.
+		const payloadValue: Record<string, unknown> = { a: 1 };
+		// @ts-expect-error a jsonb column takes no raw value, literal or
+		// not -- `sql\`\`` is the one escape hatch (see the accepted case
+		// above).
+		const _rawJson: MutationRow<typeof documents> = { payload: payloadValue };
+
+		const _rejectedBytea: MutationRow<typeof documents> = {
+			// @ts-expect-error same gate for `bytea` -- a raw `Uint8Array` is
+			// never accepted, only `sql\`\``.
+			blob: new Uint8Array([0]),
+		};
+	});
+});
+
+// harden-query-layer #322 task 2.3 fork-1 fix: `.array()` always sets its
+// own column's family to `"array"` (`column-builder.ts`'s own `array()`
+// return type), regardless of the wrapped element's family -- so
+// `jsonb().array()`/`bytea().array()` used to slip past the scalar
+// `UnwritableFamily` gate above entirely (their OWN family was never
+// `"json"`/`"bytea"`). `IsUnwritableColumn` (mutate.ts) now also inspects
+// the declared *element* type name for an array column.
+const documentLists = table(app, "document_lists", {
+	id: uuid().primaryKey(),
+	payloads: jsonb().array().notNull(),
+	blobs: bytea().array().notNull(),
+	tags: text().array().notNull(),
+});
+
+describe("array write-acceptance gate (task 2.3 fork 1, #322 -- json[]/bytea[] have no raw-array write path either)", () => {
+	it("jsonb[]/bytea[] reject a raw array write but still accept an Expr (sql`` escape hatch)", () => {
+		// accepted: same one escape hatch as the scalar case.
+		const _acceptedPayloads: MutationRow<typeof documentLists> = {
+			payloads: sql`'{}'::jsonb[]`,
+		};
+		const _acceptedBlobs: MutationRow<typeof documentLists> = {
+			blobs: sql`'{}'::bytea[]`,
+		};
+
+		// Routed through variables, not fresh array literals, for the same
+		// reason the scalar jsonb probe above is: excess-property checking
+		// doesn't even apply to arrays the same way, but this keeps every
+		// probe in this file to the same standard -- the rejection can only
+		// be assignability against `IsUnwritableColumn`, never a literal-
+		// shape quirk.
+		const payloadsValue: ReadonlyArray<Record<string, unknown>> = [{ a: 1 }];
+		const _rejectedPayloads: MutationRow<typeof documentLists> = {
+			// @ts-expect-error jsonb[] has no raw-array write path -- its
+			// element's own family (`json`) is `UnwritableFamily`, and
+			// `IsUnwritableColumn` now inspects the array's declared element
+			// type name, not just the array column's own family (which is
+			// always `"array"`, never `"json"`, for any `.array()` column).
+			payloads: payloadsValue,
+		};
+
+		const blobsValue: ReadonlyArray<Uint8Array> = [new Uint8Array([0])];
+		const _rejectedBlobs: MutationRow<typeof documentLists> = {
+			// @ts-expect-error same gate for `bytea[]`.
+			blobs: blobsValue,
+		};
+	});
+
+	it("a text[] column (an approved element type) accepts a plain JS array of strings", () => {
+		const _accepted: MutationRow<typeof documentLists> = {
+			tags: ["a", "b"],
+		};
+	});
+});
+
+describe('datetime write-acceptance narrowing (task 2.5, #322 -- STRICT narrows the old LiftableFor<"datetime"> = Date | string down to exactly Date)', () => {
+	it("a timestamptz column accepts Date and rejects a plain ISO string", () => {
+		// accepted: the declared read type is exactly `Date` (ts-type-map.ts's
+		// `BaseScalarTsType`, unchanged by this group -- STRICT just started
+		// tracking it faithfully instead of the old, wider family-only rule).
+		const _accepted: MutationRow<typeof posts> = {
+			publishedAt: new Date("2020-01-01T00:00:00.000Z"),
+		};
+
+		const _rejectedString: MutationRow<typeof posts> = {
+			// @ts-expect-error a plain ISO string used to type-check here before
+			// this group's change -- the old family-based
+			// `LiftableFor<"datetime"> = Date | string` accepted it. STRICT
+			// (design.md Settled Decision 1) narrows to exactly the declared
+			// read type, `Date` only; this is a corrected-narrower surface
+			// (rule 5), not new-but-unrelated behavior.
+			publishedAt: "2020-01-01T00:00:00.000Z",
+		};
 	});
 });

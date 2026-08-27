@@ -93,6 +93,51 @@ describe("parseInterval (task 3.8)", () => {
 		});
 	});
 
+	// harden-query-layer #322 owner decision (D): a negative time axis
+	// no longer leaks `-0` into any zero-valued sub-field -- confirmed
+	// wider than "hours reads as 0" alone (any of hours/minutes/seconds/
+	// microseconds can be the zero, since `sign * Number(zeroText)` is
+	// `-0` in JS regardless of which token supplied the zero). Anchored on
+	// a real postgres:17 server (`set intervalstyle to 'postgres'`;
+	// `select interval '-5 minutes'` -> `-00:05:00`), verified via the
+	// group-1 docker harness -- not an assumed grammar. This one anchor
+	// already exercises three simultaneous zero sub-fields under the
+	// shared negative sign (hours, seconds, microseconds all read `00`),
+	// which is what actually proves the fix is wider than "hours only".
+	it("normalizes -0 to 0 when the shared negative sign multiplies an already-zero hours token", () => {
+		const result = parseInterval("-00:05:00");
+		expect(Object.is(result.hours, -0)).toBe(false);
+		expect(result).toEqual<IntervalValue>({
+			years: 0,
+			months: 0,
+			days: 0,
+			hours: 0,
+			minutes: -5,
+			seconds: 0,
+			microseconds: 0,
+		});
+	});
+
+	it("normalizes -0 on seconds/microseconds too, not just hours -- a nonzero hours with a zero seconds sub-field on a negative time axis", () => {
+		// Relies on the same one-shared-sign-for-the-whole-time-part grammar
+		// the real-server anchor above already confirms ("-00:05:00"'s
+		// single leading sign covering hours/minutes/seconds/microseconds
+		// alike) -- this fixture is a plain arithmetic corollary of that
+		// same confirmed grammar (a different combination of zero/nonzero
+		// sub-fields), not a separate, still-unverified assumption.
+		const result = parseInterval("-02:30:00");
+		expect(Object.is(result.seconds, -0)).toBe(false);
+		expect(result).toEqual<IntervalValue>({
+			years: 0,
+			months: 0,
+			days: 0,
+			hours: -2,
+			minutes: -30,
+			seconds: 0,
+			microseconds: 0,
+		});
+	});
+
 	it("parses the explicit zero interval", () => {
 		expect(parseInterval("00:00:00")).toEqual<IntervalValue>({
 			years: 0,

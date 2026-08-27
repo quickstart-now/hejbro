@@ -1,4 +1,5 @@
 import type { IntervalValue } from "@hejbro/core";
+import { canonicalizeInterval, serializeInterval } from "@hejbro/core";
 
 /**
  * The TypeScript shape an `interval` column surfaces as (D4) — a
@@ -60,6 +61,20 @@ import type { IntervalValue } from "@hejbro/core";
  * computation, per this group's "no distributive tricks" guidance.
  */
 export type { IntervalValue };
+/**
+ * Re-exported for the same reason {@link IntervalValue} is (D94: core owns
+ * the declaration DSL's type surface, and now its inverse — a structured
+ * `IntervalValue` written back to Postgres interval literal text needs the
+ * exact grammar {@link parseInterval} below already consumes, so the two
+ * live beside each other in core rather than drifting into two disagreeing
+ * implementations). harden-query-layer #322 task 2.2, design.md Settled
+ * Decision 2 (always-full "postgres"-style form). This module's own test
+ * pins the `parseInterval(serializeInterval(v)) === canonicalizeInterval(v)`
+ * property; wiring `serializeInterval` into a mutation's compiled bind
+ * parameter (`compile/params.ts`) is a separate, still-parked task in this
+ * same change (pending the write-side node representation decision).
+ */
+export { canonicalizeInterval, serializeInterval };
 
 /** The zero interval — every axis `0`. `parseInterval`'s starting point before it fills in whatever the source text actually mentioned. */
 const ZERO_INTERVAL: IntervalValue = {
@@ -192,23 +207,41 @@ const signOf = (hoursToken: string): 1 | -1 => {
 	return 1;
 };
 
-/** Parses `timeToken` (already confirmed to match {@link TIME_PART}) into the `hours`/`minutes`/`seconds`/`microseconds` slice of an `IntervalValue` — the fractional-seconds group, when present, is right-padded to a full six digits before becoming `microseconds`, so `".7"` reads as `700000`µs, never `7`µs. */
+/**
+ * `+0`-normalizes a number — `-0` is numerically `=== 0` but a distinct bit
+ * pattern (`Object.is(-0, 0)` is `false`) a hand-written `{ hours: 0, … }`
+ * expectation (or `@hejbro/core`'s own `canonicalizeInterval`) never
+ * produces. Two ways a negative time axis can produce it here: the hours
+ * token itself (`Number("-00") === -0`), and `sign * Number(zeroText)` for
+ * any of minutes/seconds/microseconds whose own text is `"00"`/absent —
+ * `-1 * 0` is `-0` in JS regardless of which token supplied the zero
+ * (harden-query-layer #322 owner decision (D): confirmed wider than
+ * "hours reads as 0" alone while building task 2.2's property test).
+ */
+const plusZero = (value: number): number => {
+	if (value === 0) {
+		return 0;
+	}
+	return value;
+};
+
+/** Parses `timeToken` (already confirmed to match {@link TIME_PART}) into the `hours`/`minutes`/`seconds`/`microseconds` slice of an `IntervalValue` — the fractional-seconds group, when present, is right-padded to a full six digits before becoming `microseconds`, so `".7"` reads as `700000`µs, never `7`µs. Every field is {@link plusZero}-normalized (D). */
 const parseTimePart = (timeToken: string): Partial<IntervalValue> => {
 	// biome-ignore lint/style/noNonNullAssertion: timeToken already matched TIME_PART at the call site; these three groups are mandatory in that pattern.
 	const match = TIME_PART.exec(timeToken)!;
 	const [, hoursToken, minutesToken, secondsToken, fractionToken] = match;
 	const sign = signOf(hoursToken as string);
 	const withoutFraction: Partial<IntervalValue> = {
-		hours: Number(hoursToken),
-		minutes: sign * Number(minutesToken),
-		seconds: sign * Number(secondsToken),
+		hours: plusZero(Number(hoursToken)),
+		minutes: plusZero(sign * Number(minutesToken)),
+		seconds: plusZero(sign * Number(secondsToken)),
 	};
 	if (fractionToken === undefined) {
 		return withoutFraction;
 	}
 	return {
 		...withoutFraction,
-		microseconds: sign * Number(fractionToken.padEnd(6, "0")),
+		microseconds: plusZero(sign * Number(fractionToken.padEnd(6, "0"))),
 	};
 };
 

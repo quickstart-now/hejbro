@@ -78,13 +78,17 @@ const liftUnsupportedLiteral = (value: unknown): never =>
 /**
  * Validates and narrows a JS value into a {@link LiteralNode} renderable as
  * SQL. `family` is currently only used by callers to describe intent — the
- * runtime shape of `value` decides the literal kind. Dispatches on
- * `typeof value` to one of the `liftXLiteral` helpers above, each split
- * out to keep its own complexity under threshold (D71/#154 ratchet-5)
- * rather than one function whose own complexity the whole cascade
- * dominates -- same shape as `codec.ts`'s handler maps, but dispatching on
- * `typeof` instead of a discriminated union's own tag, since `value` here
- * is `unknown`, not already one.
+ * runtime shape of `value` decides the literal kind. A `typeof`-guarded
+ * if-chain, each branch delegating to its own `liftXLiteral` helper above
+ * so no single function's own complexity accumulates the whole cascade
+ * (D71/#154 ratchet-5) — **not** a lookup-table/handler-map dispatch the
+ * way `codec.ts`'s exhaustive `Record`s or this file's own
+ * `renderLiteralHandlers` are: `value` is `unknown` here, not already a
+ * discriminated union with a tag to index by, and a `Record<typeof-tag,
+ * …>` was tried for this function specifically (harden-query-layer #322)
+ * and reverted — the branch this function needed only briefly (`bigint`)
+ * moved to `query/column-value.ts`'s `liftColumnValue` instead, which
+ * left no motivating reason to keep the table shape here.
  */
 export const liftLiteral = (
 	value: unknown,
@@ -124,7 +128,7 @@ export const liftOperand = (
  * per `literal.literalKind`, same
  * technique as `codec.ts`'s `encodeLiteralHandlers` (#154 ratchet-5): the
  * former `switch`'s `default: assertNever(literal)` was structurally
- * unreachable (this union has exactly these five kinds), so no test could
+ * unreachable (this union has exactly these eight kinds), so no test could
  * ever reach it.
  */
 type RenderLiteralHandlers = {
@@ -149,6 +153,19 @@ const renderLiteralHandlers: RenderLiteralHandlers = {
 	null: () => "null",
 	timestamp: (literal) =>
 		`${quoteStringLiteral(literal.isoValue)}::timestamptz`,
+	// harden-query-layer #322: `liftLiteral` (this file's own lifter, the
+	// declaration-path function) never constructs `bigint`/`interval`/
+	// `array` -- only `query/column-value.ts`'s `liftColumnValue` does,
+	// and that's a mutation write value the query-compile pipeline lifts
+	// to a bind parameter (`compile/params.ts`), never rendered inline
+	// through this function. These three handlers exist only because
+	// `RenderLiteralHandlers` is exhaustive over every `literalKind`
+	// (D71/#154 ratchet-5) -- unreachable in practice, still a real,
+	// grammar-correct rendering if ever called directly on a hand-built
+	// node.
+	bigint: (literal) => literal.text,
+	interval: (literal) => `${quoteStringLiteral(literal.text)}::interval`,
+	array: (literal) => quoteStringLiteral(literal.text),
 };
 
 export const renderLiteral = (node: LiteralNode): string => {

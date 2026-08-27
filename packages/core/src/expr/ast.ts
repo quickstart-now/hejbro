@@ -2,7 +2,23 @@ import type { TypeNode } from "../types/type-node";
 import type { FamilyOfTypeNode, SqlTypeFamily } from "./type-family";
 import { familyOfTypeNode } from "./type-family";
 
-/** A literal value captured at build time, already narrowed to a renderable shape. */
+/**
+ * A literal value captured at build time, already narrowed to a renderable
+ * shape. `bigint`/`interval`/`array` (harden-query-layer #322, mutation
+ * write values only — see `query/column-value.ts`'s `liftColumnValue`, the
+ * one function that ever constructs these three) all carry a plain `text`
+ * string, never a raw `bigint`/structured `IntervalValue`/JS array: the
+ * snapshot/codec boundary (`JsonValue`, `snapshot/stable-json.ts`) is JSON
+ * values only, and text is JSON-safe by construction, mirroring the
+ * existing `timestamp`/`isoValue` precedent (a `Date` is never carried
+ * raw either) — this is also why these three kinds need no special-cased
+ * `codec.ts` encode/decode at all, unlike an earlier attempt that carried
+ * `bigint` raw and needed a `toString()`/`BigInt(...)` round trip.
+ * `liftLiteral` (this file's sibling, `expr/literal.ts`) never constructs
+ * any of these three — it's the *declaration*-path lifter (`.default()`,
+ * comparison operators), unchanged since before #322, and structurally
+ * cannot produce them.
+ */
 export type LiteralNode = {
 	readonly nodeKind: "literal";
 	readonly literal:
@@ -10,7 +26,10 @@ export type LiteralNode = {
 		| { readonly literalKind: "number"; readonly value: number }
 		| { readonly literalKind: "boolean"; readonly value: boolean }
 		| { readonly literalKind: "null" }
-		| { readonly literalKind: "timestamp"; readonly isoValue: string };
+		| { readonly literalKind: "timestamp"; readonly isoValue: string }
+		| { readonly literalKind: "bigint"; readonly text: string }
+		| { readonly literalKind: "interval"; readonly text: string }
+		| { readonly literalKind: "array"; readonly text: string };
 };
 
 export type ColumnRefNode = {

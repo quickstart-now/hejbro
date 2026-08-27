@@ -53,6 +53,19 @@ const literalPlaceholderHandlers: {
 	boolean: placeholder,
 	null: placeholder,
 	timestamp: (index) => `${placeholder(index)}::timestamptz`,
+	// harden-query-layer #322 task 2.3: bare placeholders, no cast --
+	// Postgres infers the parameter's type from the target column (an
+	// insert/update value always has one) and coerces the decimal/array-
+	// literal text to it, exactly as it already does for `number`.
+	bigint: placeholder,
+	array: placeholder,
+	// `interval` alone gets an explicit `::interval` cast (mirrors
+	// `timestamp`'s own `::timestamptz` precedent): unlike a bigint or
+	// array literal's target column, Postgres can't always infer an
+	// untyped text parameter as `interval` from context alone (e.g. inside
+	// a function call argument or a `returning` expression), so the cast
+	// is spelled out rather than left to inference.
+	interval: (index) => `${placeholder(index)}::interval`,
 };
 
 const literalValueHandlers: {
@@ -65,6 +78,17 @@ const literalValueHandlers: {
 	boolean: (literal) => literal.value,
 	null: () => null,
 	timestamp: (literal) => literal.isoValue,
+	// harden-query-layer #322 task 2.3: `bigint`/`interval`/`array` all
+	// carry a plain `text` string (`query/column-value.ts`'s
+	// `liftColumnValue`, the sole constructor of these three, always
+	// serializes to canonical text first -- see `ast.ts`'s own
+	// `LiteralNode` doc for why: the AST stays JSON-serializable,
+	// mirroring the existing `timestamp`/`isoValue` precedent). The bind
+	// parameter is that text, verbatim -- the driver/Postgres do the
+	// actual type coercion, same as every other text-typed parameter here.
+	bigint: (literal) => literal.text,
+	interval: (literal) => literal.text,
+	array: (literal) => literal.text,
 };
 
 /** Lifts one {@link LiteralNode} to a `RawSqlNode{sql:"$n"}` placeholder plus its bind value — never the reverse. */

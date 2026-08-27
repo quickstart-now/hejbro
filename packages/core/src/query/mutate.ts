@@ -12,24 +12,96 @@ import type {
 	UpdateNode,
 } from "../expr/ast";
 import { isExpr } from "../expr/ast";
-import { liftOperand } from "../expr/literal";
-import type { LiftableFor, SqlTypeFamily } from "../expr/type-family";
-import type { BuilderFamily } from "../types/column-builder";
+import type {
+	BuilderFamily,
+	ColumnBuilder,
+	ColumnReadType,
+} from "../types/column-builder";
+import { liftColumnValue } from "./column-value";
 
-/** A value accepted for one column of an insert/update row: a matching `Expr`, an `unknown`-family `Expr`, a raw JS scalar, or `null` (unlike comparisons, `null` is a legal write). */
-export type MutationValue<TFamily extends SqlTypeFamily> =
-	| Expr<TFamily>
+/**
+ * The families with no compile-time-lifted write path (harden-query-layer
+ * #322 Settled Decision 1) — `json`/`jsonb` and `bytea` stay `sql`-escape-
+ * hatch-only (D18's `sql\`...\`` remains the way to write either), so a
+ * raw scalar is never accepted for them here, brand or no brand.
+ */
+type UnwritableFamily = "json" | "bytea";
+
+/**
+ * The type NAMES whose family is {@link UnwritableFamily} — `json`/`jsonb`
+ * map to family `"json"`, `bytea` to family `"bytea"` (`expr/type-family.ts`'s
+ * `TYPE_NAME_TO_FAMILY`, unchanged).
+ *
+ * **Tried reusing the type-level `FamilyOfTypeNode` mirror here first**
+ * (`expr/type-family.ts`, the type-level mirror of the runtime
+ * `familyOfTypeNode`) and confirmed it doesn't fit: `ColumnMeta["element"]`
+ * (`column-builder.ts`, task 3.15) only ever carries the element's bare
+ * *type name* (a `TypeNode["typeName"]` string), never a full `TypeNode` —
+ * by design, so the type-level array mapping doesn't need to carry
+ * precision/scale. `FamilyOfTypeNode` needs a real `TypeNode` member to
+ * distribute over, and `Extract<TypeNode, { typeName: TElement }>`
+ * resolves to `never` for every *simple* type name (`"text"`, `"uuid"`,
+ * `"bigint"`, `"json"`, `"bytea"`, …) because `TypeNode`'s own simple-type
+ * member is keyed by the *whole* `SimpleTypeName` union, not one member
+ * per literal name (confirmed empirically: a scratch probe assigning
+ * `FamilyOfTypeNode<Extract<TypeNode, { typeName: "text" }>>` to an
+ * impossible target type-checked with zero error, because `never` is
+ * assignable to anything) — feeding that `never` back into
+ * `IsUnwritableColumn` silently marked *every* array element as
+ * unwritable, including `text[]`, which is exactly backwards. This tiny,
+ * closed three-name list (`json`/`jsonb` both map to family `json`,
+ * `bytea` to family `bytea`) is the element-typeName mirror of the
+ * `UnwritableFamily` two-*family* list already above it, not an independent
+ * type-name→family table (there is no third table to drift against; both
+ * lists trace to the exact same two Postgres types).
+ */
+type UnwritableElementTypeName = "json" | "jsonb" | "bytea";
+
+/**
+ * `true` when a column has no compile-time-lifted raw-scalar write path —
+ * either its own family is {@link UnwritableFamily} directly, or it's an
+ * `.array()` column whose declared *element* type name is one of
+ * {@link UnwritableElementTypeName} (`jsonb().array()`/`bytea().array()`:
+ * the array's own family is always `"array"`, per `.array()`'s own return
+ * type, so checking `TFamily` alone would let these two slip through —
+ * the approved element scope is "every element type with a write path,
+ * `json`/`bytea` arrays excluded" exactly like the scalar case).
+ */
+type IsUnwritableColumn<TColumn extends ColumnBuilder> =
+	TColumn extends ColumnBuilder<infer TFamily, infer TMeta>
+		? TFamily extends UnwritableFamily
+			? true
+			: TMeta extends {
+						readonly typeName: "array";
+						readonly element: infer TElement;
+					}
+				? TElement extends UnwritableElementTypeName
+					? true
+					: false
+				: false
+		: false;
+
+/**
+ * A value accepted for one column of an insert/update row: a matching
+ * `Expr`, an `unknown`-family `Expr`, exactly the column's own declared
+ * read type ({@link ColumnReadType} — STRICT, #322 Settled Decision 1:
+ * each column accepts exactly its declared read type, brand narrowed,
+ * mode narrowed, never a sibling mode's or a widened family-only shape),
+ * or `null` (unlike comparisons, `null` is a legal write). `json`/`jsonb`/
+ * `bytea` columns — scalar OR array-of — have no raw-scalar arm at all,
+ * see {@link IsUnwritableColumn}.
+ */
+export type MutationValue<TColumn extends ColumnBuilder> =
+	| Expr<BuilderFamily<TColumn>>
 	| Expr<"unknown">
-	| LiftableFor<TFamily>
+	| (IsUnwritableColumn<TColumn> extends true ? never : ColumnReadType<TColumn>)
 	| null;
 
 /** One insert/update row, keyed by the table's own TypeScript column names — every column is optional (multi-row insert fills missing keys with SQL `default`). */
 export type MutationRow<TTable extends Table> =
 	TTable extends Table<infer TColumns>
 		? {
-				readonly [K in keyof TColumns]?: MutationValue<
-					BuilderFamily<TColumns[K]>
-				>;
+				readonly [K in keyof TColumns]?: MutationValue<TColumns[K]>;
 			}
 		: never;
 
@@ -222,7 +294,7 @@ const resolveSetEntries = (
 		const column = resolveColumnRef(target, tableRef, key);
 		return {
 			columnName: column.sqlName,
-			value: liftOperand(record[key], column.family),
+			value: liftColumnValue(record[key], column.typeNode),
 		};
 	});
 };
@@ -283,7 +355,7 @@ const resolveInsertRows = (
 			if (value === undefined) {
 				return defaultValueNode;
 			}
-			return liftOperand(value, column.family);
+			return liftColumnValue(value, column.typeNode);
 		}),
 	);
 

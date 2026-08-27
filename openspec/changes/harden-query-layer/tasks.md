@@ -88,28 +88,49 @@ the README CRAP block stay lead-owned at close.
 
 ## 2. Write-side value types (#322)
 
-- [ ] 2.1 [design → settled: STRICT, owner 2026-08-27] Write-acceptance
+- [x] 2.1 [design → settled: STRICT, owner 2026-08-27] Write-acceptance
   unions: the mutation value types accept exactly each column's
   declared read type (design.md Settled Decision 1); red type test
   `packages/core/test/query/mutate.test.ts` "a default-mode bigint
   column accepts bigint and rejects the settled-out shapes"; files
   `packages/core/src/query/mutate.ts`. ~10m
-- [ ] 2.2 [design → settled: always-full IntervalStyle-postgres form,
-  owner 2026-08-27] Interval write serialization: a structured interval
-  value lifts to a bind parameter in the always-full form (design.md
-  Settled Decision 2), with a pure property test pinning
-  parse(serialize(v)) = v; red test
+- [x] 2.2 [design → settled: always-full IntervalStyle-postgres form,
+  owner 2026-08-27] Interval write **serialization + normalization
+  fulfillment**: a structured interval value canonicalizes (axis-internal
+  normalization only, never across an axis boundary) and lifts to a bind
+  parameter in the always-full form (design.md Settled Decision 2), with
+  a pure property test pinning parse(serialize(v)) = canonicalize(v);
+  scope grew from "serialize function" alone once the axis-internal
+  carry/`-0` normalization this decision requires turned out to need its
+  own canonicalizing pass, not just a formatter; red test
   `packages/query/test/compile/mutation.test.ts` "an IntervalValue
   lifts to the canonical interval literal parameter"; files
-  `packages/query/src/types/interval.ts` (serialize function),
+  `packages/core/src/types/interval-serialize.ts` (canonicalize +
+  serialize, new — the AST's own JSON-serializability constraint,
+  `expr/ast.ts`, requires the function body live where `liftColumnValue`
+  can call it without crossing into `@hejbro/query`),
+  `packages/query/src/types/interval.ts` (re-export, "beside the parser"
+  as an import path, mirroring `IntervalValue`'s own D94 precedent),
   `packages/query/src/compile/params.ts`. ~10m
-- [ ] 2.3 Numeric mode write path: `bigint` values lift/serialize
+- [x] 2.3 Numeric mode write path: `bigint` values lift/serialize
   losslessly in every mode's accepted union; array columns accept
-  element-typed arrays and lift element-wise; red test
-  `packages/query/test/compile/mutation.test.ts` "bigint and
-  string-mode numeric values lift losslessly; array values lift
-  element-wise"; files `packages/query/src/compile/params.ts`. ~10m
-- [ ] 2.4 Round-trip proof: insert through the typed builder →
+  element-typed arrays and lift element-wise (a single canonical-array-
+  literal-text bind parameter, never `array[$1,$2,…]` nor delegated to
+  the driver's own array serialization — both would either violate
+  compiler determinism or require a `driver-contract` spec sentence G1
+  owns); red test `packages/query/test/compile/mutation.test.ts` "bigint
+  and string-mode numeric values lift losslessly; array values lift
+  element-wise"; files `packages/query/src/compile/params.ts`,
+  `packages/core/src/query/column-value.ts` (new, internal-only
+  `liftColumnValue` — the sole constructor of the `bigint`/`interval`/
+  `array` literal kinds), `packages/core/src/types/array-literal-write.ts`
+  (new, the array writer), `packages/core/src/expr/ast.ts` (the three new
+  `LiteralNode` kinds, all plain `text` strings), `packages/core/src/expr/codec.ts`
+  (excludes the three new kinds from the snapshot grammar entirely —
+  `HEJBRO_SNAPSHOT_VERSION` stays single-grammar, a format-version bump is
+  a separate owner gate), `packages/core/src/query/mutate.ts` (the
+  array-of-`json`/`bytea` write gate; `liftColumnValue` wiring). ~10m
+- [x] 2.4 Round-trip proof: insert through the typed builder →
   select-back yields the written values in declared read shapes
   (unit with recorded driver plus the parse∘serialize identity property
   — no real-database half and no cross-group fixture dependency: the
@@ -117,7 +138,7 @@ the README CRAP block stay lead-owned at close.
   the server round-trips); red test
   `packages/query/test/db/chain.test.ts` "typed writes round-trip
   through declared read types"; files that test only. ~8m
-- [ ] 2.5 Spec-delta alignment: the query-type-inference input-value
+- [x] 2.5 Spec-delta alignment: the query-type-inference input-value
   sentences match the settled unions exactly (the reject scenario
   reflects the owner's 2.1 decision); verified by
   `openspec validate harden-query-layer --strict`; files
