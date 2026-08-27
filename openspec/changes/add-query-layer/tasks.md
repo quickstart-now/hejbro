@@ -681,12 +681,34 @@ gate asks nothing of it). File scope: `packages/supabase/**`, the
 rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
 `pnpm-lock.yaml` conflicts are the lead's to resolve at rebase.
 
-- [ ] 6.0 Scout: pin the local-stack facts the settled design assumes —
+- [x] 6.0 Scout: pin the local-stack facts the settled design assumes —
   the `supabase start` DB connection string/port, the three roles
   exist, `auth.uid()` reads `request.jwt.claims`, and
   `set local role authenticated` enforces RLS on postgres-owned
   tables; deliverable = a short inventory in the group PR body draft
-  (no code, no test). ~6m
+  (no code, no test). ~6m — run against a scratch `supabase init`
+  project outside the repo (this worktree carries no `config.toml`).
+  Confirmed DB URL matches the assumed default:
+  `postgresql://postgres:postgres@127.0.0.1:54322/postgres`. All three
+  roles (`anon`/`authenticated`/`service_role`) exist in `pg_roles`.
+  `\sf auth.uid` shows it reads `request.jwt.claims` (a legacy flat
+  `request.jwt.claim.sub` is checked first via `nullif`/`coalesce` but
+  falls through when unset) — settled design ② needs only the one JSON
+  setting, no flat key. `set local role authenticated` + `set_config`
+  on `request.jwt.claims` inside a transaction against a postgres-owned
+  table with an `owner = auth.uid()` policy showed exactly the matching
+  row, proving RLS is enforced under the role switch (owner/superuser
+  bypass does not leak through `set local role`). One design
+  consequence found: plain `supabase start` fails under colima — the
+  `vector` log-collector container tries to mount
+  `~/.colima/default/docker.sock` and colima's virtiofs rejects it
+  (`mkdir ... operation not supported`); `-x vector` (plus other
+  unneeded services) works around it locally. Rather than baking a
+  colima-specific exclude flag into a committed script, 6.4 goes with
+  detect-and-guide instead of start-the-stack (lead decision): it reads
+  `SUPABASE_DB_URL` (default the URL above), fails loudly instead of
+  starting anything, and its guidance message names `supabase start`
+  plus the colima `-x vector` workaround.
 - [ ] 6.1 `asUser(claims)`/`asAnon()` context builders per the settled
   shape (single `request.jwt.claims` JSON setting, fixed roles); red
   test `packages/supabase/test/context.test.ts` "asUser builds the
