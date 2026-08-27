@@ -831,16 +831,148 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
 
 ## 7. Public surface, docs, release wiring
 
-- [ ] 7.1 [design] Public entry surface: `@hejbro/query` barrel exports
-  and whether `hejbro` re-exports the query DSL; red test
-  `packages/query/test/exports.test.ts` "public surface matches the
-  agreed export list"; files `packages/query/src/index.ts` (+ `hejbro`
-  re-export file if agreed). ~8m
-- [ ] 7.2 AGENTS.md repo-map rows + root README section for the new
-  packages; verified by `pnpm check` and the README drift conventions;
-  files `AGENTS.md`, `README.md`. ~8m
-- [ ] 7.3 [design] Register the new packages with changesets and add
-  this change's `minor` changeset — fixed-group membership and first
-  version settled with the owner at this task (design.md open
-  question); verified by `pnpm changeset status`; files
-  `.changeset/config.json`, `.changeset/*.md`. ~6m
+Reworked before summoning (2026-08-27) with every [design] decision
+owner-settled IN ADVANCE, plus — the g5 lesson — the gate wiring and
+test-binding standards pre-settled in this header rather than arriving
+as rework. Settled decisions: ① **hejbro facade (A)**: the `hejbro`
+package re-exports the query layer's user surface — `db`, the chain
+entry points, and `@hejbro/query`'s dual-use `sql` (which REPLACES the
+current core-`sql` re-export; it delegates to the same core tag, so
+existing fragment uses are unaffected — "one `sql` in the hejbro
+barrel") — drivers stay in their own packages. ② **db-first chain
+included in this group**: `handle.select(...)`, `handle.insert(...)`,
+`handle.update(...)`, `handle.deleteFrom(...)` mirror core's builder
+stages and are the promoted default UX; `db.execute` remains the
+documented low-level primitive. ③ **Chain termination = thenable**
+(Drizzle-form): a chain is completely inert until awaited (build only,
+no I/O); `.compile()` on every chain returns the pure `CompileResult`
+(byte-identical to `compile(statement)`, no driver call) — the AX
+preview stays first-class; the chain surface is IDENTICAL on the three
+execution surfaces (unscoped handle, `db.as` scoped handle, `tx`) via
+one shared factory; chains delegate to core's builders — no second
+statement vocabulary (D94). ④ **Release wiring**: `@hejbro/query` and
+`@hejbro/pg` get real packaging (tsdown build, dist-pointing exports,
+`files: [dist]`, LICENSE, README, `prepack`) and flip `private: false`;
+BOTH join the changeset **fixed group (five packages total)** — the
+next release aligns everything at 0.2.0 (npm reality measured
+2026-08-27: no 0.2.0 was ever published or burned for any package;
+`@hejbro/query`/`@hejbro/pg` are E404 on the registry); the interim
+`privatePackages` config entry is REMOVED (the invalid tree it worked
+around disappears when query publishes); the pack-install smoke
+promotes query/pg into `PACKAGES` (full 1a–1c assertions) and drops
+the interim file-wiring block; landing this group lifts the #289
+release hold (comment on #289 — lead does it at close).
+
+Gate wiring & binding standards (pre-settled, violations are rework):
+per-package `turbo.json` `check-types: {dependsOn: ["^build"]}` is
+already present in query/pg/supabase/cli (verified 2026-08-27) — the
+dist flip therefore type-checks against fresh builds; the #131 vitest
+aliases in pg/supabase keep tests on source after the flip (verify,
+don't assume); every chain stage owes a **delegation mutation** (break
+the delegation to core's builder → the stage's test goes red — the
+C1 lesson: pin every axis, not one); thenable inertness owes a
+negative probe (no driver call before await); the test-only conversion
+exports (`resolveColumnState`/`columnPlanForResult`/`convertRow`/
+`ColumnPlanEntry`) owe an absence probe in the barrel test; every
+spec-delta sentence traces to a named test; all gate runs use
+`TURBO_CACHE_DIR="$PWD/.turbo/cache-<tag>"` + `--force` and cite
+`Cached: 0`; review targets are single SHAs ("this SHA is the sole
+judgment target"); mutation verdicts pass the 3-step validity protocol
+before any "survived" call. This group carries one `minor` changeset
+(the facade changes published `hejbro`). File scope: `packages/query/**`,
+`packages/pg/**` (packaging files only), `packages/cli/**` (facade +
+packaging wiring), `.changeset/config.json`, `scripts/pack-install-smoke.sh`,
+`AGENTS.md`, `README.md` (repo-map/section — the CRAP block itself
+stays lead-owned), and the query-builder/query-execution spec deltas.
+
+- [ ] 7.0 Scout: chain wiring inventory — core builder stage types
+  (select stages, mutation stages, returning), where `executeOn`
+  accepts statements, how `ExecuteResult`/`SelectResult` resolve, the
+  `sql` replacement compatibility in the hejbro barrel (dual-use tag is
+  a structural superset — verify against the cli re-export list); no
+  code; deliverable = inventory in the group PR body draft. ~8m
+- [ ] 7.1 Thenable select chain on the unscoped handle:
+  `handle.select(table | projection, table)` mirrors core's two
+  `select` forms; every stage (`where`/`orderBy`/`limit`/`innerJoin`/
+  `leftJoin`) delegates to the corresponding core builder stage; the
+  chain is inert until awaited, then runs the shared execute pipeline
+  (row conversion included); red test
+  `packages/query/test/db/chain.test.ts` "await on a select chain
+  returns converted rows; before await no driver call is made"; files
+  `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`. ~10m
+- [ ] 7.2 Thenable mutation chains: `insert().values().returning()`,
+  `update().set().where().returning()`, `deleteFrom().where()
+  .returning()` — same delegation + inertness rules; a returning-less
+  mutation resolves exactly like `db.execute` of that statement; red
+  test `packages/query/test/db/chain.test.ts` "mutation chains execute
+  with and without returning, inert until awaited"; files
+  `packages/query/src/db/chain.ts`. ~10m
+- [ ] 7.3 `.compile()` on every chain: pure preview, byte-identical to
+  `compile()` of the equivalent statement, zero driver interaction; red
+  test `packages/query/test/db/chain.test.ts` "chain.compile() equals
+  compile(statement) and never touches the driver"; files
+  `packages/query/src/db/chain.ts`. ~6m
+- [ ] 7.4 Chain surface uniformity: the same chain members on
+  `db.as(context)`'s scoped handle and on `tx` inside
+  `transaction()` — one shared chain factory parameterized by the
+  send primitive (the `executeOn`/`scopedRun` pattern), so context
+  application can never cover one surface and miss another; red test
+  `packages/query/test/db/chain.test.ts` "scoped and tx chains run
+  under their context/session (recorded SQL proves it)"; files
+  `packages/query/src/db/chain.ts`, `src/db/context.ts`,
+  `src/db/transaction.ts`. ~10m
+- [ ] 7.5 Chain result types: awaiting a chain resolves the same types
+  `db.execute` resolves (`SelectResult`/`ReturningRow` reuse — proven
+  by shared-failure mutation, not import alone); red type test
+  `packages/query/test/types/chain-types.test.ts` "chain await types
+  equal execute types for select and returning mutations"; files
+  `packages/query/src/db/chain.ts`. ~10m
+- [ ] 7.6 `@hejbro/query` real packaging: tsdown config + `build`
+  script + `prepack`, exports flipped to dist (`types`/`import` →
+  `./dist/*`), `files: ["dist"]`, LICENSE, package README,
+  `private` flipped to false, version left at 0.0.0 (changesets aligns
+  at release); per-package turbo build outputs wired; red proof: the
+  pack-install smoke (task 7.10) fails before this lands and passes
+  after — locally a `pnpm build` + `pnpm pack` tarball listing
+  asserts dist entries; files `packages/query/package.json`,
+  `packages/query/tsdown.config.ts`, `packages/query/turbo.json`,
+  `packages/query/LICENSE`, `packages/query/README.md`. ~10m
+- [ ] 7.7 `@hejbro/pg` real packaging: same treatment; files
+  `packages/pg/package.json`, `packages/pg/tsdown.config.ts`,
+  `packages/pg/turbo.json`, `packages/pg/LICENSE`,
+  `packages/pg/README.md`. ~8m
+- [ ] 7.8 `@hejbro/query` final public barrel (settles the provisional
+  surface): the agreed export list — `db`, chain types, `compile`,
+  `sql`, driver-contract types, `DbContext`/`ScopedDb`/`Tx`, result
+  types — plus the absence probe for the four test-only conversion
+  exports; red test `packages/query/test/exports.test.ts` "public
+  surface matches the agreed list; test-only helpers are absent";
+  files `packages/query/src/index.ts`. ~8m
+- [ ] 7.9 hejbro facade: re-export `db` + query's dual-use `sql`
+  (replacing the core `sql` re-export — one `sql`) + the key query
+  types from `@hejbro/query`; `hejbro` gains the `@hejbro/query`
+  workspace dependency; red test `packages/cli/test/exports.test.ts`
+  "hejbro exports db and a single dual-use sql; fragment uses of the
+  old sql still type-check"; files `packages/cli/src/index.ts`,
+  `packages/cli/package.json`. ~10m
+- [ ] 7.10 Smoke promotion: `@hejbro/query`/`@hejbro/pg` join
+  `PACKAGES` (dist precheck + assertions 1a–1c), the interim
+  file-wiring block is removed; the smoke passes locally end-to-end
+  (`pnpm build` first); files `scripts/pack-install-smoke.sh`. ~8m
+- [ ] 7.11 Changesets wiring: fixed group becomes the five-package set,
+  the `privatePackages` entry is removed, this group's `minor`
+  changeset added; `pnpm exec changeset status` exits 0 and its output
+  shows all five aligning on the same next version; files
+  `.changeset/config.json`, one new `.changeset/*.md`. ~6m
+- [ ] 7.12 Docs: AGENTS.md repo-map rows for `@hejbro/query`/
+  `@hejbro/pg`, root README query-layer section (facade import + chain
+  UX example, driver install note, `compile()` preview); files
+  `AGENTS.md`, `README.md`. ~8m
+- [ ] 7.13 Spec deltas: query-builder gains the chain surface
+  (thenable termination, inertness, `.compile()` preview, delegation
+  to the single vocabulary), query-execution gains the three-surface
+  uniformity sentence — every sentence traced to a named 7.x test; no
+  loosening of group 5/6-owned sentences; verified by
+  `openspec validate add-query-layer --strict`; files
+  `openspec/changes/add-query-layer/specs/{query-builder,query-execution}/spec.md`.
+  ~10m
