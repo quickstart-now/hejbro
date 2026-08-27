@@ -38,6 +38,7 @@
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
+		"test:integration": "vitest run --config vitest.integration.config.ts",
 		"prepack": "pnpm build"
 	},
 	"dependencies": {
@@ -45,7 +46,9 @@
 		"@hejbro/query": "workspace:*"
 	},
 	"devDependencies": {
+		"@types/pg": "^8.23.1",
 		"@vitest/coverage-v8": "catalog:",
+		"pg": "^8.23.0",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

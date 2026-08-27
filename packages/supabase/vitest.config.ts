@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
 	// #131: resolves `@hejbro/core` straight to its public entry point in
@@ -24,6 +24,21 @@ export default defineConfig({
 	},
 	test: {
 		include: ["test/**/*.test.ts"],
+		// Task 6.4 (real-stack RLS integration) lives outside the default
+		// `pnpm test`/CI gate -- it needs a live `supabase start` stack and
+		// stays local-only (roundtrip.sh convention, group 5 header). Two
+		// patterns, not one: the suffix form catches a same-directory file
+		// named `*.integration.test.ts` (6.4's own
+		// `rls-context.integration.test.ts`), the directory form catches a
+		// future `test/integration/**` layout -- a suite that grows into a
+		// directory must not silently rejoin the default gate. Spreads
+		// `configDefaults.exclude` rather than replacing it, so vitest's own
+		// defaults (`node_modules`, etc.) aren't lost.
+		exclude: [
+			...configDefaults.exclude,
+			"test/**/*integration.test.ts",
+			"test/integration/**",
+		],
 		coverage: {
 			provider: "v8",
 			reporter: ["json", "text"],

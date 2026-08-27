@@ -756,13 +756,37 @@ rls-execution-context delta spec, and `.claude/rules/supabase-preset.md`;
   `.as(asAnon())` and `.as(asUser({sub:...}))` without throwing, while
   `.as({role: roleName("nonexistent_role")})` still throws
   `undeclared-role`.
-- [ ] 6.4 Real-stack RLS integration (colima + `supabase start`): a
+- [x] 6.4 Real-stack RLS integration (colima + `supabase start`): a
   `test:integration` script outside the default `test`, failing loudly
   with guidance when the stack is down; a declared `authUid()` policy
   filters rows per `asUser` claims' `sub`, and `asAnon` sees none; red
   test `packages/supabase/test/rls-context.integration.test.ts`
   "authUid() policy filters by claims subject through asUser"; files
-  that test + `packages/supabase/package.json`. ~10m
+  that test + `packages/supabase/package.json`. ~10m — detect-and-guide
+  (never starts the stack), `SUPABASE_DB_URL` defaulting to 6.0's own
+  measured URL; a fail-loud test run against a deliberately unreachable
+  URL confirmed a single clean guidance-message failure, not a silent
+  skip. Adds `vitest.integration.config.ts` (`mergeConfig`-inherits the
+  base config's #131 aliases, `include`/`exclude` explicitly replaced
+  as a plain spread *after* `mergeConfig` — a real bug caught while
+  building this: `mergeConfig` concatenates array fields rather than
+  replacing them, so passing `exclude: []` through it left the base
+  config's own integration-exclusion pattern in the merged result and
+  the "integration" run silently executed the full default unit suite
+  instead, 0 integration tests actually collected, green-looking).
+  Bidirectionally verified: default `pnpm test` collects exactly the
+  pre-6.4 count (15 files/107 tests, unchanged), `--config
+  vitest.integration.config.ts` collects and passes exactly the 3 tests
+  in the new file (alias self-check + the two RLS scenarios) against a
+  live scratch stack. `packages/supabase/vitest.config.ts` also gains
+  the two-pattern exclude (`test/**/*integration.test.ts` +
+  `test/integration/**`) and `pg`/`@types/pg` land as devDependencies
+  (not `@hejbro/pg`, which doesn't exist on this branch — group 5's own
+  scope); per the lead's hard rule, no `src/` code was added — the
+  connection guard, DDL fixture, and hand-rolled `Driver` all live
+  inside the test file, so 6.1/6.2's unit tests keep sole ownership of
+  every `src/` branch the CRAP gate scores (confirmed unchanged: 1108
+  functions scanned, 0 over budget, highest still 5.00).
 - [ ] 6.5 Spec-delta alignment (this group owns
   `specs/rls-execution-context/spec.md`: the claims-object surface, the
   single-JSON-setting mapping, and the verification-stays-with-the-app
