@@ -11,7 +11,6 @@ import { describe, expectTypeOf, it } from "vitest";
 import type { CompileInput } from "../../src/compile/compile";
 import type { ScopedDb } from "../../src/db/context";
 import type { Db } from "../../src/db/db";
-import type { Tx } from "../../src/db/transaction";
 import type { SelectResult } from "../../src/types/select-result";
 
 const app = schema("app");
@@ -116,41 +115,100 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 	});
 });
 
-/** Same instantiation-expression technique as {@link dbExecute} above, applied to `Tx["execute"]` directly. */
-declare const txExecute: Tx["execute"];
-type TxRows<TStatement extends CompileInput> = Awaited<
-	ReturnType<typeof txExecute<TStatement>>
+/**
+ * Extracts the `tx` type a `transaction()`-shaped member's own callback
+ * receives -- generic over *which* member (`Db["transaction"]` vs.
+ * `ScopedDb["transaction"]`), so the same helper drives both creation
+ * sites below from each site's own real, public signature. Deliberately
+ * never compares against the `Tx` alias directly: that would only prove
+ * both sites produce *something typed `Tx`*, not that `tx.execute` itself
+ * resolves statements the way `db.execute` does -- the per-statement
+ * `ExecuteRows<S>` comparisons below are the real proof.
+ *
+ * A plain `infer`-conditional, not `Parameters<Parameters<T>[0]>[0]`:
+ * `Parameters<T>`'s own ambient constraint is `T extends (...args: any) =>
+ * any`, which would force this house-rule-`any`-free file to spell `any`
+ * itself just to satisfy it. This shape mirrors `Db["transaction"]`/
+ * `ScopedDb["transaction"]`'s own real signature
+ * (`<T>(callback: (tx) => Promise<T>) => Promise<T>`) exactly, without it.
+ */
+type TxOf<TTransaction> = TTransaction extends (
+	callback: (tx: infer TTx) => Promise<unknown>,
+) => Promise<unknown>
+	? TTx
+	: never;
+
+/**
+ * A type-only handle on the unscoped creation site's own `tx.execute`
+ * (`createTransactionApi`/`buildTx`, `transaction.ts`) -- same
+ * instantiation-expression technique as {@link dbExecute} above.
+ */
+declare const unscopedTxExecute: TxOf<Db["transaction"]>["execute"];
+type UnscopedTxRows<TStatement extends CompileInput> = Awaited<
+	ReturnType<typeof unscopedTxExecute<TStatement>>
 >;
 
 /**
- * `Db["transaction"]`'s own callback parameter -- the unscoped creation
- * site (`createTransactionApi`/`buildTx`, `transaction.ts`).
+ * A type-only handle on the scoped creation site's own `tx.execute`
+ * (`scopedTransaction`/`buildTx`, `context.ts`).
  */
-declare const dbTransaction: Db["transaction"];
-type UnscopedTx = Parameters<Parameters<typeof dbTransaction>[0]>[0];
+declare const scopedTxExecute: TxOf<ScopedDb["transaction"]>["execute"];
+type ScopedTxRows<TStatement extends CompileInput> = Awaited<
+	ReturnType<typeof scopedTxExecute<TStatement>>
+>;
 
-/**
- * `ScopedDb["transaction"]`'s own callback parameter -- the scoped
- * creation site (`scopedTransaction`/`buildTx`, `context.ts`).
- */
-declare const scopedTransaction: ScopedDb["transaction"];
-type ScopedTx = Parameters<Parameters<typeof scopedTransaction>[0]>[0];
-
-describe("Tx.execute's resolved row type (task 3.1, #326)", () => {
-	it("tx.execute resolves the same declared row type db.execute resolves for the same statement", () => {
+describe("tx.execute resolves the same types db.execute resolves, at both creation sites (task 3.1, #326)", () => {
+	it("unscoped db.transaction's tx.execute: a whole-table select resolves exactly what db.execute resolves", () => {
 		type Stage = SelectLimited<Posts>;
 
-		expectTypeOf<TxRows<Stage>>().toEqualTypeOf<ExecuteRows<Stage>>();
-		expectTypeOf<TxRows<Stage>>().toEqualTypeOf<
+		expectTypeOf<UnscopedTxRows<Stage>>().toEqualTypeOf<ExecuteRows<Stage>>();
+		expectTypeOf<UnscopedTxRows<Stage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
 		>();
 	});
 
-	it("db.transaction's own callback receives this same generic Tx (unscoped creation site)", () => {
-		expectTypeOf<UnscopedTx>().toEqualTypeOf<Tx>();
+	it("unscoped db.transaction's tx.execute: an object projection resolves exactly what db.execute resolves", () => {
+		type Stage = SelectLimited<{ readonly total: Posts["amount"] }>;
+
+		expectTypeOf<UnscopedTxRows<Stage>>().toEqualTypeOf<ExecuteRows<Stage>>();
 	});
 
-	it("db.as(context).transaction's own callback receives this same generic Tx (scoped creation site)", () => {
-		expectTypeOf<ScopedTx>().toEqualTypeOf<Tx>();
+	it("unscoped db.transaction's tx.execute: insert().returning(projection) resolves exactly what db.execute resolves", () => {
+		type Stage = InsertFinal<Posts, { readonly total: Posts["amount"] }>;
+
+		expectTypeOf<UnscopedTxRows<Stage>>().toEqualTypeOf<ExecuteRows<Stage>>();
+	});
+
+	it("unscoped db.transaction's tx.execute: a bare QueryNode keeps the plain DriverRow shape, same as db.execute", () => {
+		expectTypeOf<UnscopedTxRows<QueryNode>>().toEqualTypeOf<
+			ExecuteRows<QueryNode>
+		>();
+	});
+
+	it("scoped db.as(context).transaction's tx.execute: a whole-table select resolves exactly what db.execute resolves", () => {
+		type Stage = SelectLimited<Posts>;
+
+		expectTypeOf<ScopedTxRows<Stage>>().toEqualTypeOf<ExecuteRows<Stage>>();
+		expectTypeOf<ScopedTxRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("scoped db.as(context).transaction's tx.execute: an object projection resolves exactly what db.execute resolves", () => {
+		type Stage = SelectLimited<{ readonly total: Posts["amount"] }>;
+
+		expectTypeOf<ScopedTxRows<Stage>>().toEqualTypeOf<ExecuteRows<Stage>>();
+	});
+
+	it("scoped db.as(context).transaction's tx.execute: insert().returning(projection) resolves exactly what db.execute resolves", () => {
+		type Stage = InsertFinal<Posts, { readonly total: Posts["amount"] }>;
+
+		expectTypeOf<ScopedTxRows<Stage>>().toEqualTypeOf<ExecuteRows<Stage>>();
+	});
+
+	it("scoped db.as(context).transaction's tx.execute: a bare QueryNode keeps the plain DriverRow shape, same as db.execute", () => {
+		expectTypeOf<ScopedTxRows<QueryNode>>().toEqualTypeOf<
+			ExecuteRows<QueryNode>
+		>();
 	});
 });
