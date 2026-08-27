@@ -941,7 +941,7 @@ stays lead-owned), and the query-builder/query-execution spec deltas.
   `packages/pg/package.json`, `packages/pg/tsdown.config.ts`,
   `packages/pg/turbo.json`, `packages/pg/LICENSE`,
   `packages/pg/README.md`. ~8m
-- [ ] 7.8 `@hejbro/query` final public barrel (settles the provisional
+- [x] 7.8 `@hejbro/query` final public barrel (settles the provisional
   surface): the agreed export list — `db`, chain types, `compile`,
   `sql`, driver-contract types, `DbContext`/`ScopedDb`/`Tx`, result
   types — plus the absence probe for the four test-only conversion
