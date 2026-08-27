@@ -235,13 +235,16 @@ describe("pgDriver execute + interval types override (owner decision ③, task 5
 		}
 		expect(config.values).toEqual([]);
 
-		// oid 1186 (interval): raw Postgres text, never pg's own
-		// PostgresInterval object -- 5.0 scout proved that object can't
-		// round-trip back to text (String() -> "[object Object]",
-		// .toPostgres() reorders/reformats fields).
-		const intervalRaw = "1 year 2 mons 3 days 04:05:06.789012";
-		expect(config.types.getTypeParser(1186, "text")(intervalRaw)).toBe(
-			intervalRaw,
+		// oid 1186 (interval): interval text must pass through untouched,
+		// never as pg's own PostgresInterval object -- 5.0 scout proved
+		// that object can't round-trip back to text (String() ->
+		// "[object Object]", .toPostgres() reorders/reformats fields). The
+		// value is a hand-written fixture in the shape of the server's
+		// output grammar, not captured server output -- the real capture
+		// lives in integration.test.ts's raw-grammar assertions (#341).
+		const intervalFixture = "1 year 2 mons 3 days 04:05:06.789012";
+		expect(config.types.getTypeParser(1186, "text")(intervalFixture)).toBe(
+			intervalFixture,
 		);
 
 		// oid 1184 (timestamptz): still delegated to pg's own default --
