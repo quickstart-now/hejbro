@@ -38,3 +38,38 @@ unconverted value or a silent `undefined`.
   cannot be converted to its declared type, or the declared column is
   entirely absent from the driver's row
 - **THEN** the call rejects with an explicit error naming that column
+
+## RENAMED Requirements
+
+- FROM: `### Requirement: The chain surface is uniform across every execution surface`
+- TO: `### Requirement: Statement typing and the chain surface are uniform across every execution surface`
+
+### Requirement: Statement typing and the chain surface are uniform across every execution surface
+The same thenable `select`/`insert`/`update`/`deleteFrom` chain entry
+points, built from one shared factory, SHALL exist with identical
+members on the unscoped db handle, the `db.as(context)` scoped handle,
+and the `tx` a `transaction()` callback receives — and every one of
+those surfaces SHALL resolve a statement's inferred result types
+identically, `execute` included. Applying a context can never cover
+one of these surfaces while missing another, and no surface
+under-promises the types the others resolve. (Renamed from "The chain
+surface is uniform…": the requirement broadened — with #326 closed,
+uniformity covers `execute`'s own typing, not only the chain members.)
+
+#### Scenario: A scoped chain runs inside its context-applied transaction
+- **WHEN** a chain member is awaited on a `db.as(context)` handle
+- **THEN** the role/setting statements that context applies and the
+  chain's own statement all land on that one transaction, in that order
+
+#### Scenario: A tx chain shares the callback's one open connection
+- **WHEN** a chain member is awaited on the `tx` a `transaction()`
+  callback received
+- **THEN** its statement runs on that same held connection, never a
+  fresh one
+
+#### Scenario: tx.execute resolves the same inferred types as every other surface
+- **WHEN** `tx.execute(statement)` is called on the same `tx` a chain
+  member is also available on
+- **THEN** it resolves the statement's inferred result type — the same
+  type `db.execute` and the chain member resolve — at both `tx`
+  creation sites (the previously tracked #326 asymmetry is closed)
