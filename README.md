@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1104](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201104-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1108](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201108-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -175,7 +175,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1104 functions** over the threshold, highest score 5.00 — measured at `f4d57a8` (2026-08-26).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1108 functions** over the threshold, highest score 5.00 — measured at `f906efe` (2026-08-27).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->
@@ -192,6 +192,7 @@ records, never self-reported. Formulas and dimension definitions: #305.
 | group 2 — compiler + sql | 6 | 54 → 174 ¹ | 1 | 881,848 | 898 | 99.0% |
 | group 3 — type inference | 16 | 154 → 124 (0.81×) | 3 | 2,178,887 | 2,506 | 99.5% |
 | group 4 — execution + drivers contract | 15 | 195 → 130 (0.67×) | 2 | 2,206,258 | 2,667 | 99.5% |
+| group 6 — supabase driver + RLS context | 6 | 46 → 91 (2.0×) ² | 0 | 941,124 | 917 | 98.6% |
 
 Named process-cost rows are kept separate from task rows (a decision
 arriving mid-implementation, a red-first lapse, a gate widening between
@@ -199,7 +200,11 @@ bases) — summed they would read "estimates were right"; separated they
 read "tasks were fast, process was expensive", which is the actionable
 half. Session-wide tool-call failure rate: 1.9% (includes intentional
 TDD red runs). ¹ group 2's time rows predate the pure-processing
-measurement standard and include coordination waits.
+measurement standard and include coordination waits. ² group 6's
+overrun is deliberate strengthening (extra assertions later proven live
+by review mutations) plus proving the integration wiring actually
+works — scope the estimates had not counted, not estimation error;
+the split is in the ledger notes.
 <!-- ai-metrics:end -->
 
 ## License

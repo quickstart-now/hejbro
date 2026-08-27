@@ -58,3 +58,10 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-26,add-query-layer,4.proc-tasksmd-fallback,4,,2,0,(commit-interval approx); process cost: tasks.md 4.9-fallback record (f1fb3ea)
 2026-08-26,add-query-layer,4.prep,4,,29,0,(commit-interval approx); unassigned pre-first-commit prep (recon vs measured gap); deliberately not distributed across tasks
 2026-08-26,add-query-layer,4.review,4,,24.9,0,reviewer total: batch A 4.8 + B 6.5 + B-recheck 2.4 + C 8.9 + C-recheck 2.3
+2026-08-27,add-query-layer,6.0,6,6,6,0,measured; env friction 8m separate (colima supabase-start failure analysis 3m + stack boot wait 5m)
+2026-08-27,add-query-layer,6.2,6,8,9,0,measured; decorator + contributed roles
+2026-08-27,add-query-layer,6.1,6,8,18,0,measured; 12 initial + 6 strengthening (string assertions + type probes) - scope addition proven live by review mutations M7
+2026-08-27,add-query-layer,6.3,6,6,13,0,measured; 5 initial + 8 strengthening (recording driver + actual SQL capture) - M1/M2/M5 now kill it
+2026-08-27,add-query-layer,6.4,6,10,35,0,measured; incl ~8m mergeConfig-concat bug reproduce+diagnose; stack wait 0; estimate lesson: wiring-proof cost was uncounted
+2026-08-27,add-query-layer,6.5,6,8,10,0,measured; config one-liner (f906efe) not separately measured (small)
+2026-08-27,add-query-layer,6.5-esc,6,,8,0,process cost: changeset-status blocker investigation + escalation writeup (structural red since 47aac29)
