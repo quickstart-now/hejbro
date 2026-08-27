@@ -7,6 +7,7 @@ import type {
 } from "@hejbro/core";
 import { bigint, interval, schema, table, text, uuid } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
+import type { CompileInput } from "../../src/compile/compile";
 import type {
 	DeleteChainFinal,
 	InsertChainFinal,
@@ -15,8 +16,6 @@ import type {
 } from "../../src/db/chain";
 import type { ExecuteResult } from "../../src/db/db";
 import type { Tx } from "../../src/db/transaction";
-import type { DriverRow } from "../../src/driver/contract";
-import type { SelectResult } from "../../src/types/select-result";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -27,6 +26,12 @@ const posts = table(app, "posts", {
 });
 
 type Posts = typeof posts;
+
+/** A type-only handle on `Tx["execute"]`'s own generic signature (task 3.1) -- never assigned, never called at runtime, same technique `execute-result-type.test.ts` uses for `Db["execute"]`. */
+declare const txExecute: Tx["execute"];
+type TxRows<TStatement extends CompileInput> = Awaited<
+	ReturnType<typeof txExecute<TStatement>>
+>;
 
 /**
  * Every assertion here compares `Awaited<SomeChainType>` against
@@ -103,20 +108,15 @@ describe("chain await types equal execute types for select and returning mutatio
 		>();
 	});
 
-	it("tx.execute keeps its own pre-existing DriverRow shape -- a deliberate, tracked asymmetry (#326), not an oversight", () => {
-		// `Tx = ChainApi & { execute(...): Promise<ReadonlyArray<DriverRow>> }`
-		// (task 7.4): the chain members joined onto `Tx` via intersection
-		// resolve their declared row type exactly like every other surface
-		// above, but `execute` itself was never touched -- promoting it to
-		// `ExecuteResult<TStatement>` is group 4's own contract to revise,
-		// out of this group's file scope (#326 tracks closing the gap).
-		type TxExecuteRows = Awaited<ReturnType<Tx["execute"]>>;
-		expectTypeOf<TxExecuteRows>().toEqualTypeOf<ReadonlyArray<DriverRow>>();
-		// the same `tx`'s own chain member resolves a strictly richer type
-		// for the identical statement kind -- the asymmetry made concrete,
-		// not just "different names for the same shape".
-		expectTypeOf<TxExecuteRows>().not.toEqualTypeOf<
-			ReadonlyArray<SelectResult<Posts>>
+	it("tx.execute resolves ExecuteResult<TStatement>, exactly like db.execute (task 3.1, #326)", () => {
+		// `Tx = ChainApi & { execute<TStatement extends CompileInput>(statement:
+		// TStatement): Promise<ExecuteResult<TStatement>> }` (task 3.1): the
+		// asymmetry #326 tracked (tx.execute staying the plain DriverRow shape
+		// while the same tx's own chain members resolved a richer type) is
+		// closed -- tx.execute now resolves the identical declared row type
+		// db.execute resolves for the identical statement kind.
+		expectTypeOf<TxRows<SelectLimited<Posts>>>().toEqualTypeOf<
+			ExecuteResult<SelectLimited<Posts>>
 		>();
 	});
 });

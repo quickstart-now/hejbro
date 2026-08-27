@@ -9,7 +9,9 @@ import type {
 import { bigint, interval, schema, table, text, uuid } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { CompileInput } from "../../src/compile/compile";
+import type { ScopedDb } from "../../src/db/context";
 import type { Db } from "../../src/db/db";
+import type { Tx } from "../../src/db/transaction";
 import type { SelectResult } from "../../src/types/select-result";
 
 const app = schema("app");
@@ -111,5 +113,44 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 		expectTypeOf<ExecuteRows<DeleteStage>[number]>().toEqualTypeOf<{
 			readonly id: string | null;
 		}>();
+	});
+});
+
+/** Same instantiation-expression technique as {@link dbExecute} above, applied to `Tx["execute"]` directly. */
+declare const txExecute: Tx["execute"];
+type TxRows<TStatement extends CompileInput> = Awaited<
+	ReturnType<typeof txExecute<TStatement>>
+>;
+
+/**
+ * `Db["transaction"]`'s own callback parameter -- the unscoped creation
+ * site (`createTransactionApi`/`buildTx`, `transaction.ts`).
+ */
+declare const dbTransaction: Db["transaction"];
+type UnscopedTx = Parameters<Parameters<typeof dbTransaction>[0]>[0];
+
+/**
+ * `ScopedDb["transaction"]`'s own callback parameter -- the scoped
+ * creation site (`scopedTransaction`/`buildTx`, `context.ts`).
+ */
+declare const scopedTransaction: ScopedDb["transaction"];
+type ScopedTx = Parameters<Parameters<typeof scopedTransaction>[0]>[0];
+
+describe("Tx.execute's resolved row type (task 3.1, #326)", () => {
+	it("tx.execute resolves the same declared row type db.execute resolves for the same statement", () => {
+		type Stage = SelectLimited<Posts>;
+
+		expectTypeOf<TxRows<Stage>>().toEqualTypeOf<ExecuteRows<Stage>>();
+		expectTypeOf<TxRows<Stage>>().toEqualTypeOf<
+			ReadonlyArray<SelectResult<Posts>>
+		>();
+	});
+
+	it("db.transaction's own callback receives this same generic Tx (unscoped creation site)", () => {
+		expectTypeOf<UnscopedTx>().toEqualTypeOf<Tx>();
+	});
+
+	it("db.as(context).transaction's own callback receives this same generic Tx (scoped creation site)", () => {
+		expectTypeOf<ScopedTx>().toEqualTypeOf<Tx>();
 	});
 });

@@ -1,9 +1,9 @@
 import type { CompileInput } from "../compile/compile";
-import type { Driver, DriverRow, DriverSession } from "../driver/contract";
+import type { Driver, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
 import type { ChainApi } from "./chain";
 import { createChainApi } from "./chain";
-import type { Declarations } from "./db";
+import type { Declarations, ExecuteResult } from "./db";
 import { executeOn } from "./execute";
 
 /**
@@ -17,17 +17,20 @@ import { executeOn } from "./execute";
  * `db.transaction(...)` again, which `createTransactionApi`'s own `state`
  * below catches at runtime.
  *
- * **`Tx.execute` stays untyped** (`Promise<ReadonlyArray<DriverRow>>`, not
- * `ExecuteResult<TStatement>`) — a deliberate, out-of-scope asymmetry
- * (task 7.5, #326): promoting `execute` to a generic return type is group
- * 4's own contract to revise, not this group's file-scope call. A chain
- * member (`tx.select(...)`, …) resolves its declared row type exactly like
- * `db.execute`/`ScopedDb.execute` do; `tx.execute(select(...))` on the very
- * same `tx` still resolves the plain `DriverRow` shape. #326 tracks
- * closing that gap.
+ * `execute` resolves {@link ExecuteResult}`<TStatement>` — exactly the same
+ * generic signature `Db["execute"]`/`ScopedDb["execute"]` carry (task 3.1,
+ * #326): a `tx.select(...)` chain member and `tx.execute(select(...))` on
+ * the very same `tx` now resolve the identical declared row type, whether
+ * `tx` came from the unscoped `db.transaction` (`createTransactionApi`
+ * below) or the scoped `db.as(context).transaction` (`context.ts`'s
+ * `scopedTransaction`) — both build this same `Tx` via {@link buildTx}, so
+ * there is exactly one place this generic signature is honored, not two
+ * that could drift apart.
  */
 export type Tx = ChainApi & {
-	execute(statement: CompileInput): Promise<ReadonlyArray<DriverRow>>;
+	execute<TStatement extends CompileInput>(
+		statement: TStatement,
+	): Promise<ExecuteResult<TStatement>>;
 };
 
 /**
@@ -47,7 +50,12 @@ export const buildTx = (
 	tables: Declarations["tables"],
 ): Tx => ({
 	...createChainApi((send) => send(session), tables),
-	execute: (statement) => executeOn(session, statement, tables),
+	// executeOn's own runtime return is always the plain DriverRow shape --
+	// this cast is ExecuteResult's compile-time-only narrowing of that same
+	// value, never a distinct runtime reshape (same reasoning as db.ts's own
+	// `executeImpl` cast).
+	execute: ((statement: CompileInput) =>
+		executeOn(session, statement, tables)) as Tx["execute"],
 });
 
 /** Builds and throws the `nested-transaction-unsupported`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). */
