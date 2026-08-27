@@ -13,6 +13,8 @@ import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
+import type { ChainApi } from "./chain";
+import { createChainApi } from "./chain";
 import type { DbContext, ScopedDb } from "./context";
 import { createAsApi } from "./context";
 import { executeOn } from "./execute";
@@ -263,6 +265,14 @@ export type Db<
 	 * itself, not rows (typed-function-execution spec).
 	 */
 	readonly fn: TypedFnApi<TFunctions>;
+	/**
+	 * Thenable `select` chain (task 7.1, group 7 decision ②): mirrors
+	 * core's own `select(table)`/`select({alias: expr}, table)` forms,
+	 * every stage delegating to the corresponding core builder stage (D94
+	 * — no second statement vocabulary). Inert until awaited; `.compile()`
+	 * on any stage never touches the driver.
+	 */
+	select: ChainApi["select"];
 };
 
 /**
@@ -343,5 +353,9 @@ export const db = <TSchema extends Schema>(
 			declarations.tables,
 			declarations.functions,
 		) as TypedFnApi<FunctionsOf<TSchema>>,
+		// unscoped chains run directly on the driver, exactly like the
+		// unscoped `fn` member above -- driver already structurally
+		// satisfies DriverSession, no transaction to open.
+		select: createChainApi((send) => send(driver), declarations.tables).select,
 	};
 };
