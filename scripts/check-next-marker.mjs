@@ -36,12 +36,18 @@
 //   assertNever fallthrough) -- these throw from closures with no
 //   `declaration`/user-input path in, so there's nothing a user could
 //   have done differently.
-// Any message that contains "internal hejbro bug" or starts with
-// "unreachable" is exempted generically too (self-describing by the
-// message's own admission) -- see MESSAGE_SELF_DESCRIBES_INTERNAL below,
-// for codes whose reasoning lives in the message text rather than the
-// code name.
+// There is deliberately NO generic message-text exemption (#288): a
+// substring like "internal hejbro bug" in a message waved the site
+// through no matter what its code was, so a user-reachable diagnostic
+// could hide behind the phrase. Every exemption is structural -- a code
+// in EXEMPT_CODES, or a code-scoped message-shape pattern below for
+// codes thrown from both user-facing and internal sites.
+// - "empty-if-statement": render-body.ts's no-branches guard -- the
+//   plpgsql if builder cannot produce a branchless statement, so the
+//   only path in is a hand-built malformed node (internal invariant;
+//   single site, classified for #288).
 const EXEMPT_CODES = new Set([
+	"empty-if-statement",
 	"invalid-kind-change",
 	"invalid-table-identity",
 	"invalid-view-projection",
@@ -51,19 +57,9 @@ const EXEMPT_CODES = new Set([
 
 /** Strips a single leading quote character (`"`, `'`, or `` ` ``) so an
  * inline string/template literal's text compares the same as a resolved
- * helper's plain text -- both `MESSAGE_SELF_DESCRIBES_INTERNAL` and the
- * mixed-reachability patterns below match against the message's own
- * wording, not its quoting. */
+ * helper's plain text -- the mixed-reachability patterns below match
+ * against the message's own wording, not its quoting. */
 const stripLeadingQuote = (text) => text.replace(/^["'`]/, "");
-
-/** A message that says outright it's an internal-only guard -- "internal
- * hejbro bug" (schema-kind's unsupported-operation, snapshot.ts's second
- * unowned-declaration site) or starts with "unreachable" (the internal
- * duplicate-identity site). Checked on the RESOLVED message text, not the
- * raw call-site args. */
-const MESSAGE_SELF_DESCRIBES_INTERNAL = (messageText) =>
-	/internal hejbro bug/.test(messageText) ||
-	/^unreachable\b/.test(stripLeadingQuote(messageText));
 
 // Two codes are thrown from both a user-facing site and an internal one;
 // distinguished by message shape (stable across edits), not line number:
@@ -75,9 +71,20 @@ const MESSAGE_SELF_DESCRIBES_INTERNAL = (messageText) =>
 // - "duplicate-identity": buildSnapshot's real duplicate-key case is
 //   user-facing; findDuplicateKey's "no first occurrence" branch is a
 //   pure invariant guard (its own message says "unreachable").
+// - "unowned-declaration": buildSnapshot's zero-owners case is
+//   user-facing (an unregistered preset kind; carries Next:); the
+//   second site fires only after the same declaration already matched
+//   during grouping -- a pure invariant guard (#288 classification).
+// - "unsupported-operation": schema-kind's emit-alter guard is
+//   unreachable in practice (schema diff never produces an alter); the
+//   code name is generic, so it is deliberately NOT in EXEMPT_CODES --
+//   a future user-facing "unsupported-operation" still owes a Next:.
 const MIXED_REACHABILITY_INTERNAL_PATTERNS = {
 	"unknown-kind-dependency": /^change references unregistered kind /,
 	"duplicate-identity": /^unreachable\b/,
+	"unowned-declaration":
+		/^declaration at index \$\{[^}]*\} matched no kind|^declaration at index \d+ matched no kind/,
+	"unsupported-operation": /^schema kind never alters/,
 };
 
 /** Tests a mixed-reachability code's pattern against the message with its
@@ -341,9 +348,6 @@ for (const root of SOURCE_ROOTS) {
 				mixedPattern !== undefined &&
 				matchesInternalPattern(mixedPattern, messageText)
 			) {
-				continue;
-			}
-			if (MESSAGE_SELF_DESCRIBES_INTERNAL(messageText)) {
 				continue;
 			}
 			if (!/Next:/.test(messageText)) {
