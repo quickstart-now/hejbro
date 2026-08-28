@@ -50,10 +50,9 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 - [x] 2.2 (~10m) [design] Renderer: correlated emit —
       `coalesce((select json_agg(json_build_object(...)) ...),
       '[]'::json)` / single-object form, text casts on at-risk columns
-      (bigint, string-mode numeric, datetimes, interval, bytea),
+      (bigint, numeric (every mode — revive normalizes per mode), datetimes, interval, bytea),
       reusing the outer-scope hook; exact SQL text settled here by
-      golden. Red: `packages/core/test/expr/render-sql.test.ts` (or
-      sibling) — "a nested projection renders the correlated aggregate
+      golden. Red: `packages/core/test/query/select.test.ts` — "a nested projection renders the correlated aggregate
       with casts". Files: `packages/core/src/expr/render-sql.ts`, that
       test.
 - [x] 2.3 (~8m) Codec round-trip for the new node (a view body can
@@ -104,6 +103,13 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 4. Real-server witness (pg integration) — after groups 1–3
 
+- [ ] 4.0 (docs, with the archive PR) `skills/hejbro` gains the
+      nested-read surface (`jsonArrayFrom`/`jsonObjectFrom`, `related()`,
+      `.references()` already landed with group 1) — query-layer
+      reference section + cheatsheet; deferred to archive per the
+      generated-columns precedent so the documented behavior (revive)
+      exists when documented. The changeset already names the base
+      surface.
 - [ ] 4.1 (~10m) Docker PG17 witness: a parent+children+forward read
       via `related()` — nested values arrive revived (the 2^53 bigint
       witness), empty collection `[]`, missing forward `null`, and the

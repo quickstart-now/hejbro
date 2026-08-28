@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
+import type { ColumnBuilder } from "../../src/index";
 import {
 	and,
 	bigint,
+	bytea,
+	date,
 	eq,
 	exists,
+	interval,
 	isNotNull,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	numeric,
 	renderExpr,
 	renderSelect,
 	schema,
@@ -145,7 +150,7 @@ describe("select-as-expression rendering (add-relational-reads task 2.2)", () =>
 		);
 	});
 
-	it("renders a single row via row_to_json and casts at-risk columns to text", () => {
+	it("renders a single row via row_to_json, casting only the json-number-precision types (F1)", () => {
 		const query = select(
 			{
 				id: posts.id,
@@ -162,7 +167,7 @@ describe("select-as-expression rendering (add-relational-reads task 2.2)", () =>
 			posts,
 		);
 		expect(renderSelect(query.selectQuery)).toBe(
-			'select "app"."posts"."id" as "id", (select row_to_json("agg") from (select "app"."metrics"."view_count"::text as "view_count", "app"."metrics"."recorded_at"::text as "recorded_at" from "app"."metrics" where "app"."metrics"."post_id" = "app"."posts"."id" order by "app"."metrics"."recorded_at" desc limit 1) as "agg") as "latest" from "app"."posts"',
+			'select "app"."posts"."id" as "id", (select row_to_json("agg") from (select "app"."metrics"."view_count"::text as "view_count", "app"."metrics"."recorded_at" as "recorded_at" from "app"."metrics" where "app"."metrics"."post_id" = "app"."posts"."id" order by "app"."metrics"."recorded_at" desc limit 1) as "agg") as "latest" from "app"."posts"',
 		);
 	});
 
@@ -182,5 +187,49 @@ describe("select-as-expression rendering (add-relational-reads task 2.2)", () =>
 		expect(() => renderSelect(query.selectQuery)).toThrowError(
 			/foreign-column-ref|enclosing query/,
 		);
+	});
+});
+
+describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
+	it("expands a whole-table subselect with casts applied (F2)", () => {
+		const ledger = table(app, "ledger", {
+			id: uuid().primaryKey(),
+			amount: bigint().notNull(),
+			postedAt: timestamptz().notNull(),
+		});
+		const query = select(
+			{ id: posts.id, entries: jsonArrayFrom(select(ledger)) },
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "app"."posts"."id" as "id", (select coalesce(json_agg("agg"), \'[]\'::json) from (select "app"."ledger"."id" as "id", "app"."ledger"."amount"::text as "amount", "app"."ledger"."posted_at" as "posted_at" from "app"."ledger") as "agg") as "entries" from "app"."posts"',
+		);
+	});
+
+	it("casts exactly the json-number-precision types, arrays included (F1/F6)", () => {
+		const cases: ReadonlyArray<readonly [string, ColumnBuilder, boolean]> = [
+			["bigint", bigint(), true],
+			["numeric", numeric(), true],
+			["bigint array", bigint().array(), true],
+			["timestamptz", timestamptz(), false],
+			["date", date(), false],
+			["interval", interval(), false],
+			["bytea", bytea(), false],
+			["text", text(), false],
+		];
+		for (const [label, builder, expectCast] of cases) {
+			const probe = table(app, `probe_${label.replaceAll(" ", "_")}`, {
+				id: uuid().primaryKey(),
+				value: builder as never,
+			});
+			const rendered = renderSelect(
+				select({ id: posts.id, nested: jsonObjectFrom(select(probe)) }, posts)
+					.selectQuery,
+			);
+			expect(rendered.includes("::text"), label).toBe(expectCast);
+			if (label === "bigint array") {
+				expect(rendered).toContain("::text[]");
+			}
+		}
 	});
 });

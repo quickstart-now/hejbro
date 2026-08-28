@@ -6,9 +6,11 @@ import {
 	NODE_KIND_TO_SNAPSHOT,
 	PROJECTION_KIND_TO_SNAPSHOT,
 } from "../../src/expr/codec";
+import { retargetExprNode } from "../../src/expr/retarget";
 import {
 	eq,
 	jsonArrayFrom,
+	jsonObjectFrom,
 	schema,
 	select,
 	table,
@@ -493,5 +495,71 @@ describe("select-as-expression codec round-trip (add-relational-reads task 2.3)"
 		};
 		const withoutResultKeys = JSON.parse(JSON.stringify(node, dropResultKey));
 		expect(decodeExprNode(encoded as never)).toEqual(withoutResultKeys);
+	});
+});
+
+describe("select-as-expression retarget and both modes (group 2 review F3/F4)", () => {
+	const app = schema("app");
+	const comments = table(app, "comments", {
+		id: uuid().primaryKey(),
+		postId: uuid().notNull(),
+	});
+	const posts = table(app, "posts", { id: uuid().primaryKey() });
+
+	it("retargets the embedded query on a table rename, and returns the same reference when unrelated (F3)", () => {
+		const node = jsonArrayFrom(
+			select({ id: comments.id }, comments).where(
+				eq(comments.postId, posts.id),
+			),
+		).exprNode;
+		const renamed = retargetExprNode(node, {
+			oldSchema: "app",
+			oldTable: "comments",
+			newSchema: "app",
+			newTable: "remarks",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(JSON.stringify(renamed)).toContain('"remarks"');
+		expect(JSON.stringify(renamed)).not.toContain('"comments"');
+		const untouched = retargetExprNode(node, {
+			oldSchema: "app",
+			oldTable: "elsewhere",
+			newSchema: "app",
+			newTable: "nowhere",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(untouched).toBe(node);
+	});
+
+	it("round-trips both modes and refuses an unknown one loudly (F4)", () => {
+		const modes = [
+			[jsonArrayFrom, '"json-array"'],
+			[jsonObjectFrom, '"json-object"'],
+		] as const;
+		for (const [build, kebab] of modes) {
+			const node = build(select({ id: comments.id }, comments)).exprNode;
+			const encoded = encodeExprNode(node);
+			expect(JSON.stringify(encoded)).toContain(kebab);
+			const dropResultKey = (key: string, value: unknown): unknown => {
+				if (key === "resultKey") {
+					return undefined;
+				}
+				return value;
+			};
+			expect(decodeExprNode(encoded as never)).toEqual(
+				JSON.parse(JSON.stringify(node, dropResultKey)),
+			);
+		}
+		const corrupted = JSON.parse(
+			JSON.stringify(
+				encodeExprNode(
+					jsonArrayFrom(select({ id: comments.id }, comments)).exprNode,
+				),
+			),
+		);
+		corrupted.mode = "json-mystery";
+		expect(() => decodeExprNode(corrupted)).toThrowError(/json-mystery|mode/);
 	});
 });

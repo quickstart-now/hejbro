@@ -692,7 +692,7 @@ const renderSelectExprNode = (
 	node: SelectExprNode,
 	outerScope: OuterScope,
 ): string => {
-	const inner = renderSelect(node.query, [...(outerScope ?? [])]);
+	const inner = renderSelect(node.query, outerScope);
 	if (node.mode === "jsonArray") {
 		return `(select coalesce(json_agg("agg"), '[]'::json) from (${inner}) as "agg")`;
 	}

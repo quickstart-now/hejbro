@@ -182,15 +182,21 @@ export const select = <TProjection extends SelectProjection>(
 	);
 };
 
-/** Type names whose values do not survive a JSON round-trip untouched — `bigint`/`numeric` collapse to a lossy JSON number, temporal and `interval` values to strings with no revivable contract, `bytea` to escaped text (D102, cast+revive). */
+/**
+ * Type names whose values do not survive a JSON round-trip untouched —
+ * exactly the JSON-number precision problem: `bigint`/`numeric` collapse
+ * to a lossy JSON number past 2^53, so they cast to text (D102,
+ * cast+revive; F1 owner ruling at group 2 review). Nothing else is cast:
+ * temporal values JSON-encode as ISO-8601 regardless of the session's
+ * `DateStyle` (measured — a text cast would instead FOLLOW `DateStyle`
+ * and lose that stability), `interval` is deterministic because the
+ * driver pins `intervalstyle` at session setup, and `bytea` rides the
+ * driver's `bytea_output` pin (a text cast obeys the same GUC, buying
+ * nothing).
+ */
 const JSON_AT_RISK_TYPE_NAMES: ReadonlySet<string> = new Set([
 	"bigint",
 	"numeric",
-	"timestamp",
-	"timestamptz",
-	"date",
-	"interval",
-	"bytea",
 ]);
 
 const jsonSafeCastSuffix = (typeNode: TypeNode): string | null => {
@@ -260,18 +266,50 @@ const castColumnIfAtRisk = (
  * node has no column types). Only direct column refs are cast — a
  * computed expression's JSON shape is its author's own contract. The
  * types come from the chain's own `projectionInput` (the built refs
- * carry their `typeNode`); a whole-`Table` subselect keeps its bare
- * `allColumns` projection uncast — nest an object projection (or the
- * `related()` sugar, which always builds one) for at-risk columns.
+ * carry their `typeNode`); a whole-`Table` subselect expands into the
+ * equivalent aliased projection so its casts apply too (F2).
  */
+/** Expands a whole-`Table` subselect into an explicit aliased projection with the F1 casts applied — the builder knows every column's type here (the table meta), so the most common nested-read form must not be the one that silently loses precision (F2 owner ruling at group 2 review). */
+const expandTableProjection = (
+	query: SelectNode,
+	projectionInput: Table,
+): SelectNode => {
+	const meta = getTableMeta(projectionInput);
+	const columns = meta.columns.map((column) => {
+		const ref: ExprNode = {
+			nodeKind: "columnRef",
+			schemaName: meta.schema.schemaName,
+			tableName: meta.tableName,
+			columnName: column.columnName,
+		};
+		const suffix = jsonSafeCastSuffix(column.columnState.typeNode);
+		if (suffix === null) {
+			return {
+				alias: column.columnName,
+				resultKey: column.columnKey,
+				expr: ref,
+			};
+		}
+		return {
+			alias: column.columnName,
+			resultKey: column.columnKey,
+			expr: castExprNode(ref, suffix),
+		};
+	});
+	return {
+		...query,
+		projection: { projectionKind: "columns", columns },
+	};
+};
+
 const withJsonSafeCasts = (
 	query: SelectNode,
 	projectionInput: SelectProjection,
 ): SelectNode => {
-	if (
-		query.projection.projectionKind !== "columns" ||
-		isTable(projectionInput)
-	) {
+	if (isTable(projectionInput)) {
+		return expandTableProjection(query, projectionInput);
+	}
+	if (query.projection.projectionKind !== "columns") {
 		return query;
 	}
 	const originalColumns = query.projection.columns;
@@ -304,7 +342,7 @@ const buildSelectExpr =
 			),
 		});
 
-/** Wraps a subselect into a projection expression compiling to a correlated `coalesce((select json_agg("agg") from (…) as "agg"), '[]'::json)` — the nested-collection primitive (D102). The subselect's `where`/`orderBy`/`limit` and its own nested reads carry through; empty arrives as `[]`, never SQL null. */
+/** Wraps a subselect into a projection expression compiling to a correlated `(select coalesce(json_agg("agg"), '[]'::json) from (…) as "agg")` — the nested-collection primitive (D102). The subselect's `where`/`orderBy`/`limit` and its own nested reads carry through; empty arrives as `[]`, never SQL null. */
 export const jsonArrayFrom = buildSelectExpr("jsonArray");
 /** Wraps a subselect into a correlated `(select row_to_json("agg") from (…) as "agg")` — the single-nested-row primitive (D102). No row arrives as SQL null; more than one row is Postgres's own loud error (add `limit 1` with an order for a deterministic pick). */
 export const jsonObjectFrom = buildSelectExpr("jsonObject");

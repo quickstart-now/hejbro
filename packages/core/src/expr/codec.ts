@@ -500,7 +500,9 @@ const decodeSelectExprNode = (
 	node: Record<string, JsonValue>,
 ): SelectExprNode => ({
 	nodeKind: "selectExpr",
-	mode: SELECT_EXPR_MODE_FROM_SNAPSHOT[node.mode as string] ?? "jsonArray",
+	mode:
+		SELECT_EXPR_MODE_FROM_SNAPSHOT[node.mode as string] ??
+		unknownDiscriminator("mode", JSON.stringify(node.mode)),
 	query: decodeSelectNode(node.query as JsonValue),
 });
 

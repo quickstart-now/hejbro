@@ -5,7 +5,7 @@ import { getTableMeta, table } from "../../src/dsl/table";
 import { eq, isNotNull } from "../../src/expr/operators";
 import { sql } from "../../src/expr/sql-template";
 import { tableKind } from "../../src/kinds/table-kind";
-import { exists, select } from "../../src/query/select";
+import { exists, jsonArrayFrom, select } from "../../src/query/select";
 import { stableJson } from "../../src/snapshot/stable-json";
 import {
 	text,
@@ -236,6 +236,66 @@ describe("binding rls to a table", () => {
 								exists(
 									select(comments).where(eq(otherTable.flag, comments.id)),
 								),
+							),
+					}),
+				}),
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "rls-policy-foreign-column" }),
+		);
+	});
+});
+
+describe("nested reads inside policy expressions (add-relational-reads group 2 review F5)", () => {
+	const app = schema("app");
+	const comments = table(app, "comments", {
+		id: uuid().primaryKey(),
+		postId: uuid().notNull(),
+	});
+	const others = table(app, "others", { id: uuid().primaryKey() });
+
+	it("a nested read referencing its own subselect table and the policy's table is legal", () => {
+		const built = table(
+			app,
+			"posts_nested_ok",
+			{ id: uuid().primaryKey().defaultRandom() },
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("nested_ok")
+						.for("select")
+						.to("anon")
+						.using(
+							sql`${jsonArrayFrom(
+								select({ id: comments.id }, comments).where(
+									eq(comments.postId, t.id),
+								),
+							)} is not null`,
+						),
+				}),
+			}),
+		);
+		expect(getTableMeta(built).rls).not.toBeNull();
+	});
+
+	it("a nested read referencing a third table fails with rls-policy-foreign-column", () => {
+		expect(() =>
+			table(
+				app,
+				"posts_nested_bad",
+				{ id: uuid().primaryKey().defaultRandom() },
+				(t) => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("nested_bad")
+							.for("select")
+							.to("anon")
+							.using(
+								sql`${jsonArrayFrom(
+									select({ id: comments.id }, comments).where(
+										eq(others.id, t.id),
+									),
+								)} is not null`,
 							),
 					}),
 				}),

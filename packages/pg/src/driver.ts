@@ -85,9 +85,13 @@ const makeSession = (queryable: Queryable): DriverSession => ({
  * The IntervalStyle pin (owner decision ④): fixed to `'postgres'` so the
  * arrival-shape table task 5.7 documents (interval as raw text via
  * {@link intervalPassthroughTypes}) holds regardless of the connecting
- * role's own `intervalstyle` default.
+ * role's own `intervalstyle` default. The bytea_output pin (F1 owner
+ * ruling, add-relational-reads group 2) is the same move for the same
+ * reason: a nested read's `bytea` value JSON-encodes per this GUC, so
+ * pinning `'hex'` is what makes the arrival shape deterministic.
  */
-const SETUP_SESSION_SQL = "set intervalstyle to 'postgres'";
+const SETUP_SESSION_SQL =
+	"set intervalstyle to 'postgres'; set bytea_output to 'hex'";
 
 /**
  * The `Driver.setupSession` member itself -- the actual session-setup

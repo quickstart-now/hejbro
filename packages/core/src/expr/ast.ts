@@ -129,8 +129,8 @@ export type ExistsNode = {
 /**
  * A select statement embedded as a scalar expression (add-relational-reads,
  * D102) — the nested-read primitive. `mode` picks the aggregation:
- * `jsonArray` renders `coalesce((select json_agg("agg") from (…) as
- * "agg"), '[]'::json)`, `jsonObject` renders `(select row_to_json("agg")
+ * `jsonArray` renders `(select coalesce(json_agg("agg"), '[]'::json)
+ * from (…) as "agg")`, `jsonObject` renders `(select row_to_json("agg")
  * from (…) as "agg")`. Unlike {@link ExistsNode}, the embedded query's
  * projection is the point and is never rewritten.
  */
