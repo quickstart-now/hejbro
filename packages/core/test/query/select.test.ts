@@ -278,19 +278,21 @@ describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
 		);
 	});
 
-	it("a whole-set orderBy referencing a non-left table keeps the foreign-column diagnostic", () => {
+	it("a whole-set orderBy outside the output columns is rejected by name", () => {
+		// output-name semantics (the group-4 real-server correction): the
+		// guard is MEMBERSHIP IN THE LEFT BRANCH'S OUTPUT LIST -- a ref
+		// whose name is not an output column is rejected whatever table it
+		// came from ("post_id" is not among posts' outputs).
 		const combined: SetOpNode = {
 			queryKind: "setOp",
 			operator: "union",
 			all: false,
 			left: activeQuery.selectQuery,
 			right: archivedQuery.selectQuery,
-			orderBy: [{ expr: comments.id.exprNode, direction: "asc" }],
+			orderBy: [{ expr: comments.postId.exprNode, direction: "asc" }],
 			limit: null,
 		};
-		expect(() => renderSetOp(combined)).toThrowError(
-			/foreign-column-ref|enclosing/,
-		);
+		expect(() => renderSetOp(combined)).toThrowError(/output/);
 	});
 });
 
@@ -321,5 +323,35 @@ describe("set-op combinators (add-set-operations task 2.1)", () => {
 		expect(typeof active.intersect).toBe("function");
 		expect(typeof active.intersectAll).toBe("function");
 		expect(typeof active.except).toBe("function");
+	});
+});
+
+describe("set-op order-by output-column guard (review F1)", () => {
+	const active = select(posts).where(eq(posts.status, "active"));
+	const archived = select(posts).where(eq(posts.status, "archived"));
+
+	it("rejects a non-projected column and an alias-hidden source ref", () => {
+		const narrowLeft = select({ id: posts.id }, posts);
+		const narrowRight = select({ id: comments.id }, comments);
+		const nonProjected: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: narrowLeft.selectQuery,
+			right: narrowRight.selectQuery,
+			orderBy: [{ expr: posts.status.exprNode, direction: "asc" }],
+			limit: null,
+		};
+		expect(() => renderSetOp(nonProjected)).toThrowError(/output/);
+
+		const aliased = select({ headline: posts.status }, posts)
+			.union(select({ headline: comments.id }, comments))
+			// the SOURCE ref renders "status", but the output column is
+			// "headline" -- Postgres rejects it, so we do first.
+			.orderBy(posts.status);
+		expect(() => renderSetOp(aliased.setOpQuery)).toThrowError(/output/);
+		// ordering by a projected whole-table column stays legal
+		const legal = active.union(archived).orderBy(posts.status);
+		expect(renderSetOp(legal.setOpQuery)).toContain('order by "status" asc');
 	});
 });

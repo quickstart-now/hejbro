@@ -618,3 +618,19 @@ describe("set-op codec round-trip (add-set-operations task 1.3)", () => {
 		expect(() => decodeSelectNode(encoded)).toThrowError(/set-op|queryKind/);
 	});
 });
+
+describe("set-op codec guards (review F6)", () => {
+	it("an unknown operator in a stored set-op is refused loudly", () => {
+		const app2 = schema("app");
+		const posts2 = table(app2, "posts2", { id: uuid().primaryKey() });
+		const corrupted = JSON.parse(
+			JSON.stringify(
+				encodeQueryNode(select(posts2).union(select(posts2)).setOpQuery),
+			),
+		);
+		corrupted.operator = "symmetric-difference";
+		expect(() => decodeQueryNode(corrupted)).toThrowError(
+			/symmetric-difference|operator/,
+		);
+	});
+});

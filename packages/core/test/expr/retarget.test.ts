@@ -480,3 +480,37 @@ describe("set-op retarget (add-set-operations task 1.4)", () => {
 		expect(untouched).toBe(base);
 	});
 });
+
+describe("set-op right-branch rename (review F5)", () => {
+	it("a rename touching only the right branch retargets it", () => {
+		const leaf = (tableName: string): SelectNode => ({
+			queryKind: "select",
+			projection: { projectionKind: "allColumns", columnNames: ["id"] },
+			from: { schemaName: "app", tableName },
+			joins: [],
+			where: null,
+			orderBy: [],
+			limit: null,
+		});
+		const node: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: leaf("keepers"),
+			right: leaf("movers"),
+			orderBy: [],
+			limit: null,
+		};
+		const renamed = retargetSetOpNode(node, {
+			oldSchema: "app",
+			oldTable: "movers",
+			newSchema: "app",
+			newTable: "settlers",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(renamed).not.toBe(node);
+		expect(JSON.stringify(renamed.right)).toContain('"settlers"');
+		expect(JSON.stringify(renamed.left)).toContain('"keepers"');
+	});
+});

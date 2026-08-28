@@ -47,6 +47,24 @@ describe("viewSecurityInvokerValidator", () => {
 		expect(result.warnings[0]?.message).toContain('"app"."posts"');
 	});
 
+	it("warns when only a set-op's RIGHT branch reads an rls-protected table (review F2)", () => {
+		const view = defineView(
+			app,
+			"combined_view",
+			select(comments).union(select(posts)),
+		);
+		const result = generateMigration({
+			declarations: [app, posts, comments, usageGrant, view],
+			previousSnapshot: emptySnapshot,
+			validators: [viewSecurityInvokerValidator],
+		});
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]?.code).toBe(
+			"view-over-rls-without-security-invoker",
+		);
+		expect(result.warnings[0]?.message).toContain('"app"."posts"');
+	});
+
 	it("does not warn when securityInvoker: true is passed", () => {
 		const view = defineView(app, "recent_posts", select(posts), {
 			securityInvoker: true,

@@ -61,3 +61,27 @@ describe("chain set-op combinators (add-set-operations task 3.3)", () => {
 		expect(typeof bad).toBe("function");
 	});
 });
+
+describe("left-branch conversion and codec/retarget gaps (review F4-F6)", () => {
+	it("rows convert per the LEFT branch's declarations when modes differ (F4)", async () => {
+		const leftLedger = table(app, "left_ledger", {
+			id: uuid().primaryKey(),
+			amount: bigint({ mode: "number" }).notNull(),
+		});
+		const rightLedger = table(app, "right_ledger", {
+			id: uuid().primaryKey(),
+			amount: bigint().notNull(),
+		});
+		const raw = [{ id: "0b0e5b3e-0000-4000-8000-000000000001", amount: "123" }];
+		const { driver } = recordingTransactionalDriver({ rows: raw });
+		const handle = db({ app, leftLedger, rightLedger }, driver);
+		const rows = await handle
+			.select(leftLedger)
+			.unionAll(handle.select(rightLedger));
+		// the LEFT branch declares mode "number" -- the arrival is a plain
+		// number, never the right branch's bigint (the review-F4 mutant
+		// flips the plan to the right branch and must die here).
+		expect(rows[0]?.amount).toBe(123);
+		expect(typeof rows[0]?.amount).toBe("number");
+	});
+});

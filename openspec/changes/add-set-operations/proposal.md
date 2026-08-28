@@ -56,7 +56,9 @@ None.
   walk/retarget/scope arms + builder combinators + view-kind/
   column-order left-branch resolution), `packages/query` (compile
   handlers, column plans, chain combinators, result typing),
-  `packages/pg` integration witness, `skills/hejbro`.
+  `packages/supabase` (the view RLS validator walks BOTH branches —
+  either branch's bypass is a bypass), `packages/pg` integration
+  witness, `skills/hejbro`.
 - **Breaking**: none — additive throughout; `formatVersion` stays 7.
 - **Decision log**: adds D103 (the five settled decisions and the
   #299 decomposition; D4/D5-class forks for window and CTE are parked

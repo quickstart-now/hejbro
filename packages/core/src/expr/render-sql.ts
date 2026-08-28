@@ -587,14 +587,20 @@ const renderSetOpBranch = (
 	return renderSelect(branch, outerScope);
 };
 
-/** The scope a set-op's WHOLE-SET `order by` resolves against: the LEFT branch's own from/joins (recursing through nested set-ops to the leftmost select) — Postgres resolves set-op ordering against output columns, which the left branch names (D103; stricter-than-Postgres honest subset, the `sql` hatch covers positional/alias forms). */
-const leftBranchScope = (
+/** The leftmost select's OUTPUT column names — what Postgres resolves a set-op's whole-set `order by` against (measured live, group 4: a table-qualified or non-output reference is an ERROR there, so the guard checks membership in THIS list, never a table scope). */
+const leftBranchOutputColumns = (
 	branch: SelectNode | SetOpNode,
-): ReadonlyArray<TableRefNode> => {
+): ReadonlyArray<string> => {
 	if (branch.queryKind === "setOp") {
-		return leftBranchScope(branch.left);
+		return leftBranchOutputColumns(branch.left);
 	}
-	return [branch.from, ...branch.joins.map((join) => join.table)];
+	if (branch.projection.projectionKind === "allColumns") {
+		return branch.projection.columnNames;
+	}
+	if (branch.projection.projectionKind === "columns") {
+		return branch.projection.columns.map((column) => column.alias);
+	}
+	return [];
 };
 
 /** A set-op's whole-set `order by` renders OUTPUT column names, never qualified refs — Postgres resolves set-op ordering against the combined output and REJECTS a table-qualified reference there (measured live, group 4). The scope check above already pinned each term to a left-branch column; here only its bare SQL name is emitted. A non-column term is a loud error — the honest v1 subset (D103), the `sql` hatch covers the rest. */
@@ -626,13 +632,16 @@ export const renderSetOp = (
 	node: SetOpNode,
 	outerScope?: ReadonlyArray<TableRefNode>,
 ): string => {
-	const leftScope = leftBranchScope(node.left);
-	const scope = [...leftScope, ...(outerScope ?? [])];
-	const orderRefs = node.orderBy.flatMap((term) =>
-		collectColumnRefs(term.expr),
-	);
-	const subject = leftScope[0] ?? { schemaName: "", tableName: "" };
-	assertInScope(scope, orderRefs, "order a set operation by", subject);
+	const outputColumns = leftBranchOutputColumns(node.left);
+	const badTerm = node.orderBy
+		.flatMap((term) => collectColumnRefs(term.expr))
+		.find((ref) => !outputColumns.includes(ref.columnName));
+	if (badTerm !== undefined) {
+		throwHejbroError(
+			"invalid-set-op-order",
+			`a set operation's order by references "${badTerm.columnName}", which is not one of the combined output's columns (${outputColumns.map((name) => `"${name}"`).join(", ")}) — Postgres resolves set-op ordering against the output list only. Next: order by a projected left-branch column (by its output name), or write the statement with sql\`\`.`,
+		);
+	}
 	const clauses = [
 		renderSetOpBranch(node.left, outerScope),
 		setOpKeyword(node),

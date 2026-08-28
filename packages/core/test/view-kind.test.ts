@@ -501,9 +501,12 @@ describe("set-operation view bodies (add-set-operations task 2.2)", () => {
 		id: uuid().primaryKey(),
 		name: text().notNull(),
 	});
+	// the RIGHT branch's second column is deliberately named differently
+	// (review F3): the view's declared columns must come from the LEFT
+	// branch, and identical branch names could never tell the two apart.
 	const archivedUsers = table(app, "archived_users", {
 		id: uuid().primaryKey(),
-		name: text().notNull(),
+		title: text().notNull(),
 	});
 
 	it("a union view round-trips and lists the left branch's columns", () => {
@@ -518,8 +521,12 @@ describe("set-operation view bodies (add-set-operations task 2.2)", () => {
 		});
 		expect(result.errors).toEqual([]);
 		expect(result.sql).toContain(
-			'create or replace view "app"."all_users_view" as select "id", "name" from "app"."active_users" union select "id", "name" from "app"."archived_users";',
+			'create or replace view "app"."all_users_view" as select "id", "name" from "app"."active_users" union select "id", "title" from "app"."archived_users";',
 		);
+		const viewSnapshot = Object.entries(result.snapshot.objects).find(([key]) =>
+			key.startsWith("view:"),
+		)?.[1] as { columns: ReadonlyArray<string> };
+		expect(viewSnapshot.columns).toEqual(["id", "name"]);
 		// re-generating from the same declarations against the produced
 		// snapshot is a no-op -- the codec round-trip holds structurally.
 		const second = generateMigration({
