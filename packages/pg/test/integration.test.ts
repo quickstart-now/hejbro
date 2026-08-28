@@ -1126,8 +1126,14 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(bare?.author).toBeNull();
 		expect(withAuthor?.author?.name).toBe("mo");
 		expect(withAuthor?.relComments).toHaveLength(3);
+		const compareBigints = (a: bigint, b: bigint): number => {
+			if (a < b) {
+				return -1;
+			}
+			return 1;
+		};
 		const byCount = [...(withAuthor?.relComments ?? [])].sort((a, b) =>
-			a.viewCount < b.viewCount ? -1 : 1,
+			compareBigints(a.viewCount, b.viewCount),
 		);
 		const first = byCount[0];
 		const biggest = byCount[2];
@@ -1160,7 +1166,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		const scopedWith = scoped[1];
 		const scopedCounts = [...(scopedWith?.relComments ?? [])]
 			.map((comment) => comment.viewCount)
-			.sort((a, b) => (a < b ? -1 : 1));
+			.sort(compareBigints);
 		// the >=100 comment is filtered BY THE DATABASE inside the single
 		// related statement -- nested rows ride the same rls the context
 		// grants, never a second unscoped query.
