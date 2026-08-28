@@ -124,6 +124,9 @@ const renderStatementHandlers: RenderStatementHandlers = {
 	returnQuery: (statement, depth, _identity, _declaredAt, columnOrder) => [
 		`${indent(depth)}return query ${renderQuery(applyColumnOrderToQuery(statement.query, columnOrder))};`,
 	],
+	returnExpr: (statement, depth) => [
+		`${indent(depth)}return ${renderExpr(statement.expr)};`,
+	],
 	if: renderIfLines,
 	forEach: (statement, depth, identity, declaredAt, columnOrder) => {
 		const headerLine = `${indent(depth)}for ${statement.loopName} in ${renderSelect(applyColumnOrderToSelect(statement.query, columnOrder))} loop`;

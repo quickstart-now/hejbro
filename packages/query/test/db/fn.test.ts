@@ -8,6 +8,7 @@ import {
 	roleName,
 	schema,
 	select,
+	sql,
 	table,
 	text,
 	uuid,
@@ -107,16 +108,18 @@ const touchTrigger = defineTrigger(
  * "bigint"}`, a plain `TypeNode` literal, not a table) -- previously
  * exercised nowhere in the whole codebase (core's own test suite, this
  * package's, or `examples/`), confirmed by a repo-wide search before
- * writing this fixture. The body callback is empty: `db.fn`'s own SQL
- * never renders this declaration's body (that's DDL generation, a
- * separate concern `renderFunctionSql` owns), so there's nothing this
- * fixture needs `ctx.return()` for.
+ * writing this fixture. The body is the smallest real scalar body: a
+ * scalar-returning declaration must return an expression (#424), and
+ * `db.fn`'s own SQL never renders it anyway (that's DDL generation, a
+ * separate concern `renderFunctionSql` owns).
  */
 const countPosts = defineFunction(
 	app,
 	"count_posts",
 	{ returns: { typeName: "bigint" } },
-	() => {},
+	(ctx) => {
+		ctx.return(sql`(select count(*) from "app"."posts")`);
+	},
 );
 
 const appSchema = {
