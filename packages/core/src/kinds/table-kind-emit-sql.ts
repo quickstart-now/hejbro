@@ -13,6 +13,7 @@ import type {
 import {
 	checkExpression,
 	columnDefault,
+	columnGenerated,
 	columnNotNull,
 	columnPrimaryKey,
 	columnUniqueName,
@@ -62,6 +63,25 @@ const defaultClause = (value: string | null): ReadonlyArray<string> => {
 };
 
 /**
+ * Renders `generated always as (<expression>) stored` for a
+ * `.generatedAlwaysAs(...)` column, or `[]` for a plain one (D100, design
+ * decision 4) — `<expression>` is the declared `sql` fragment's own text
+ * verbatim (`columnGenerated`, decode + `renderExpr`, the same accessor
+ * path {@link defaultClause}'s `columnDefault` uses), never re-derived or
+ * re-parenthesized beyond the grammar's own required wrap. Mutually
+ * exclusive with `defaultClause` on any real column (`table()`'s guard 3,
+ * `dsl/table.ts`), so their relative order here is never observed on a
+ * single column.
+ */
+const generatedClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
+	const expression = columnGenerated(column);
+	if (expression === null) {
+		return [];
+	}
+	return [`generated always as (${expression}) stored`];
+};
+
+/**
  * Renders `constraint "<name>" unique` (#24/D68) — named explicitly
  * (rather than a bare `unique` and letting Postgres pick its own default
  * name) so the identifier actually created always matches
@@ -82,7 +102,8 @@ const uniqueClause = (column: ColumnSnapshot): ReadonlyArray<string> => {
 
 /**
  * Renders one column's full definition clause (name, type, not null,
- * default, unique). `overrideDefault` (D74), when given, replaces
+ * default, generated, unique — D100 adds `generated`, see
+ * {@link generatedClause}). `overrideDefault` (D74), when given, replaces
  * `columnDefault(column)` as the default's SQL text — used for a
  * serial-family column added to an *existing* table (#23): its default
  * lives in a sibling `sequence` change, never `ColumnSnapshot.default`
@@ -98,6 +119,7 @@ export const renderColumnDefinition = (
 		renderTypeNode(column.typeNode),
 		...notNullClause(column),
 		...defaultClause(overrideDefault ?? columnDefault(column)),
+		...generatedClause(column),
 		...uniqueClause(column),
 	].join(" ");
 

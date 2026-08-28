@@ -1,0 +1,39 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 6,
+	"objects": {
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.widgets": {
+			"columns": [
+				{
+					"name": "price",
+					"typeNode": {
+						"precision": null,
+						"scale": null,
+						"typeName": "numeric"
+					}
+				},
+				{
+					"name": "qty",
+					"typeNode": {
+						"typeName": "integer"
+					}
+				},
+				{
+					"name": "total",
+					"typeNode": {
+						"precision": null,
+						"scale": null,
+						"typeName": "numeric"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "widgets",
+			"schema": "app"
+		}
+	}
+}

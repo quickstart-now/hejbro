@@ -34,6 +34,7 @@ import type { ColumnSnapshot, TableSnapshot } from "./table-snapshot";
 import {
 	asTableSnapshot,
 	columnDefault,
+	columnGenerated,
 	columnNotNull,
 	columnPrimaryKey,
 	columnUnique,
@@ -232,6 +233,84 @@ const defaultAlterStatements = (
 	];
 };
 
+/**
+ * `true` when both `previous`/`next` declare a stored generated expression
+ * and its rendered text differs (design decision 4) — a plain column, or a
+ * column newly becoming generated (the held plain→generated transition,
+ * a lead decision pending), is never this case: both sides must already be
+ * generated. Text-compared via {@link columnGenerated} (decode + render),
+ * mirroring how `defaultChanged` already compares `columnDefault`'s
+ * rendered text rather than the raw encoded node.
+ */
+const generatedExpressionChanged = (
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): boolean => {
+	const previousGenerated = columnGenerated(previous);
+	const nextGenerated = columnGenerated(next);
+	return (
+		previousGenerated !== null &&
+		nextGenerated !== null &&
+		previousGenerated !== nextGenerated
+	);
+};
+
+/**
+ * `true` when `previous` was a stored generated column and `next` is a
+ * plain one — design decision 4's generated-present→absent case, the
+ * in-place `drop expression` path (PG13+ grammar). The held plain→generated
+ * direction (`previousGenerated === null && nextGenerated !== null`) is
+ * deliberately not named as its own predicate here — it isn't checked
+ * anywhere in this file yet (lead decision pending).
+ */
+const generatedRemoved = (
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): boolean =>
+	columnGenerated(previous) !== null && columnGenerated(next) === null;
+
+/**
+ * Design decision 4: an expression change is a full column rebuild —
+ * Postgres has no in-place `alter column ... set expression` (that grammar
+ * is PG18-only, a documented non-goal), so this drops the column and
+ * re-adds it with its NEXT definition, verbatim via
+ * {@link renderColumnDefinition} — which already renders every other
+ * clause (not null, default, unique), so a simultaneous change to any of
+ * those rides along for free instead of needing its own case here. No
+ * destructive-change confirmation: the expression still derives the data,
+ * design decision 4's own distinction from the (held) plain→generated
+ * transition.
+ */
+const generatedRebuildStatements = (
+	schema: string,
+	tableName: string,
+	entry: { readonly key: string; readonly next: ColumnSnapshot },
+): ReadonlyArray<SqlStatement> => [
+	statement(
+		`alter table ${qualifyName(schema, tableName)} drop column ${quoteIdentifier(entry.key)};`,
+	),
+	statement(
+		`alter table ${qualifyName(schema, tableName)} add column ${renderColumnDefinition(entry.next)};`,
+	),
+];
+
+/** Design decision 4: generated present→absent drops the stored expression in place (PG13+ grammar) — the column keeps its physical position and its last-computed value, and simply stops recomputing from this point forward. */
+const generatedDropExpressionStatements = (
+	schema: string,
+	tableName: string,
+	key: string,
+	changed: boolean,
+): ReadonlyArray<SqlStatement> => {
+	if (!changed) {
+		return [];
+	}
+	return [
+		statement(
+			`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} drop expression;`,
+		),
+	];
+};
+
 const alterColumnStatements = (
 	schema: string,
 	tableName: string,
@@ -241,6 +320,10 @@ const alterColumnStatements = (
 		readonly next: ColumnSnapshot;
 	},
 ): ReadonlyArray<SqlStatement> => {
+	if (generatedExpressionChanged(entry.previous, entry.next)) {
+		return generatedRebuildStatements(schema, tableName, entry);
+	}
+
 	const typeChanged = !sameJson(entry.previous.typeNode, entry.next.typeNode);
 	const notNullChanged =
 		columnNotNull(entry.previous) !== columnNotNull(entry.next);
@@ -292,6 +375,12 @@ const alterColumnStatements = (
 			entry.key,
 			defaultChanged,
 			columnDefault(entry.next),
+		),
+		...generatedDropExpressionStatements(
+			schema,
+			tableName,
+			entry.key,
+			generatedRemoved(entry.previous, entry.next),
 		),
 	];
 };
