@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1190](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201190-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1199](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201199-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -211,7 +211,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1190 functions** over the threshold, highest score 5.00 — measured at `39a73bb` (2026-08-27).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1199 functions** over the threshold, highest score 5.00 — measured at `f0b1d1c` (2026-08-28).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->
@@ -282,6 +282,18 @@ live-server harness) plus a separate 10m process row for a red
 reproduced post-hoc rather than red-first — recorded as a deviation,
 with the reviewer's independent mutation reproducing the exact red on
 three axes as the standing primary evidence.
+
+| Piece (change `add-generated-columns`) | Tasks | Est → actual (pure min) | Review reworks | Output tokens | Requests | Cache hit |
+|---|---|---|---|---|---|---|
+| group 1 — declaration surface | 2 | 17 → 27 ⁹ | 1 | 490,457 | 551 | 97.2% |
+
+⁹ group 1's overage is contract growth mid-piece (a fourth guard read
+straight out of the approved spec delta, serial near-miss cases, a
+paired-assertion rule), plus a separate 15m stamp-drift process row:
+the first implementation ran against the initial brief and three later
+stamps never reached it — caught pre-review by the probe-pinned
+diagnostic-code count, and answered with a standing corrective
+(re-read the latest contract immediately before the final gate run).
 <!-- ai-metrics:end -->
 
 ## License

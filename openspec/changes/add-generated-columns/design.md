@@ -50,10 +50,12 @@ exclusion; create+runtime real-server witness.
    `columnState` gains optional `generated` (the fragment's ExprNode)
    and `identity` ({ kind, options }) — optional fields so no
    constructor outside the setters is touched (the g1 lesson).
-   `.generatedAlwaysAsIdentity()` implies notNull the way serial does
-   (D66 mirror: identity columns are NOT NULL by Postgres rule) and
-   both identity kinds imply `hasDefault` for the optionality math —
-   but ALWAYS-family classification supersedes it on the write side.
+   BOTH identity kinds imply notNull the way serial does (D66 mirror:
+   every identity column is NOT NULL by Postgres rule — by-default
+   included, so its read type is non-nullable too; wording tightened
+   at group 1 close, the original sentence read as always-only) and
+   both imply `hasDefault` for the optionality math — but
+   ALWAYS-family classification supersedes it on the write side.
 2. **Validation at `table()`** (the column name exists there):
    identity on a non-integer type, generated combined with
    `.default()`, generated combined with identity — each throws a

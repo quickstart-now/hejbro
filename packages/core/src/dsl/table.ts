@@ -466,6 +466,146 @@ const assertNotNullElementsOnArrayColumns = (
 };
 
 /**
+ * The only type names `.generatedAlwaysAsIdentity()`/
+ * `.generatedByDefaultAsIdentity()` are valid on (D100) — the explicit
+ * enumeration, never `familyOfTypeNode`/`SqlTypeFamily`: `"numeric"` also
+ * covers `real`/`double precision`/`numeric` and the whole `serial` family,
+ * so a family-keyed guard would silently admit all of them, let a
+ * wrong-type identity column reach group 2's snapshot/emit, and generate
+ * incorrect SQL — not merely mistype. `serial`/`smallserial`/`bigserial`
+ * are excluded on purpose: a serial column already carries a
+ * sequence-backed `nextval()` default (D66), so an identity on top is the
+ * same identity-plus-default conflict guard 4 (`invalid-identity-default`)
+ * rejects when it arrives via `.default()` — this enumeration is that rule
+ * expressed at the type name level, not a list to "simplify" back into a
+ * family check. Mirrors `ColumnBuilder`'s own type-level
+ * `TMeta["typeName"] extends "smallint" | "integer" | "bigint"` guard, as
+ * the runtime backstop a generic `TMeta` at a call site can't always be
+ * narrowed enough for (same two-layer defense `notNullElements` uses).
+ */
+const identityEligibleTypeNames = new Set(["smallint", "integer", "bigint"]);
+
+/** The first column declaring an identity outside {@link identityEligibleTypeNames}, if any (design decision 2, guard 1). */
+const findInvalidIdentityTypeColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.identity !== undefined &&
+			!identityEligibleTypeNames.has(entry.columnState.typeNode.typeName),
+	);
+
+/** Rejects an identity method declared on a column outside the integer enumeration, naming the column (design decision 2, guard 1 — checked first: a wrong column type is reported ahead of any clash it also happens to be part of, see {@link validateGeneratedAndIdentityColumns}). */
+const assertIdentityColumnType = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findInvalidIdentityTypeColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-identity-column",
+		`table "${tableName}" column "${invalid.columnName}" declares an identity column but is declared "${invalid.columnState.typeNode.typeName}", not an integer column. Next: declare "${invalid.columnName}" as smallint, integer, or bigint, or drop the identity declaration from "${invalid.columnName}".`,
+	);
+};
+
+/** The first column combining `.generatedAlwaysAs()` with an identity method, if any (design decision 2, guard 2) -- Postgres allows only one `GENERATED` clause per column. */
+const findGeneratedWithIdentityColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.generated !== undefined &&
+			entry.columnState.identity !== undefined,
+	);
+
+/** Rejects `.generatedAlwaysAs()` combined with an identity method, naming the column (design decision 2, guard 2), regardless of chaining order. */
+const assertGeneratedHasNoIdentity = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findGeneratedWithIdentityColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-generated-identity",
+		`table "${tableName}" column "${invalid.columnName}" declares both .generatedAlwaysAs() and an identity method — Postgres allows only one GENERATED clause per column. Next: pick one — a stored expression (.generatedAlwaysAs()) or an identity (.generatedAlwaysAsIdentity()/.generatedByDefaultAsIdentity()) — and drop the other from "${invalid.columnName}".`,
+	);
+};
+
+/** The first column combining `.generatedAlwaysAs()` with `.default()`, if any (design decision 2, guard 3) -- Postgres rejects a `DEFAULT` clause on a generated column outright. */
+const findGeneratedWithDefaultColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.generated !== undefined &&
+			entry.columnState.defaultValue !== null,
+	);
+
+/** Rejects `.generatedAlwaysAs()` combined with `.default()`, naming the column (design decision 2, guard 3). */
+const assertGeneratedHasNoDefault = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findGeneratedWithDefaultColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-generated-default",
+		`table "${tableName}" column "${invalid.columnName}" combines .generatedAlwaysAs() with .default() — Postgres rejects a default on a generated column. Next: drop .default() from "${invalid.columnName}" (the expression already supplies its value on every write), or drop .generatedAlwaysAs() if you meant a plain defaulted column.`,
+	);
+};
+
+/** The first column combining an identity method with `.default()`, if any (design decision 2, guard 4) -- Postgres allows either an identity or a default on a column, never both. */
+const findIdentityWithDefaultColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.identity !== undefined &&
+			entry.columnState.defaultValue !== null,
+	);
+
+/** Rejects an identity method combined with `.default()`, naming the column (design decision 2, guard 4). */
+const assertIdentityHasNoDefault = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = findIdentityWithDefaultColumn(columnEntries);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-identity-default",
+		`table "${tableName}" column "${invalid.columnName}" combines an identity declaration with .default() — Postgres allows either an identity or a default, not both. Next: drop .default() from "${invalid.columnName}" if you meant the identity's own sequence to supply the value, or drop the identity declaration and keep .default().`,
+	);
+};
+
+/**
+ * Runs every generated/identity misuse guard, in the exact order design
+ * decision 2 fixes (D100): wrong column type first (guard 1), then the
+ * two-mechanisms clash (guard 2), then each mechanism against `.default()`
+ * in turn (guards 3, 4). This order is itself part of the contract — a
+ * column can violate two guards at once (e.g. an identity declared on a
+ * non-integer column that also carries a `.default()`), and the FIRST
+ * guard in this sequence is the one whose code the caller sees; pinned by
+ * `generated-columns.test.ts`'s own precedence test.
+ */
+const validateGeneratedAndIdentityColumns = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	assertIdentityColumnType(tableName, columnEntries);
+	assertGeneratedHasNoIdentity(tableName, columnEntries);
+	assertGeneratedHasNoDefault(tableName, columnEntries);
+	assertIdentityHasNoDefault(tableName, columnEntries);
+};
+
+/**
  * `array_position("<schema>"."<table>"."<column>", null) is null`, as a
  * structured expression (a `columnRef` + `functionCall` + null `literal`,
  * wrapped in the existing `isNull` operator's `nullTest`) — never a
@@ -786,6 +926,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	assertSqlName(tableName, "table", null);
 	const columnEntries = buildColumnEntries(tableName, columns);
 	assertNotNullElementsOnArrayColumns(tableName, columnEntries);
+	validateGeneratedAndIdentityColumns(tableName, columnEntries);
 	const refsObject = buildColumnRefs<TColumns>(owner, tableName, columnEntries);
 
 	const resolvedExtras = extras?.(refsObject) ?? {};

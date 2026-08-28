@@ -16,6 +16,7 @@ import {
 	json,
 	jsonb,
 	numeric,
+	real,
 	serial,
 	smallint,
 	smallserial,
@@ -201,6 +202,159 @@ describe("notNullElements() (add-array-ergonomics, task 1.1)", () => {
 			// standard).
 			expect((error as { message: string }).message).toContain('"title"');
 		}
+	});
+});
+
+describe("generatedAlwaysAs (add-generated-columns, task 1.1)", () => {
+	it("records the fragment's node on columnState.generated", () => {
+		const built = numeric().generatedAlwaysAs(sql`price * quantity`);
+		expect(built.columnState.generated).toEqual({
+			nodeKind: "sqlTemplate",
+			chunks: [{ chunkKind: "text", text: "price * quantity" }],
+		});
+	});
+
+	it("never touches columnState.defaultValue -- the two are mutually exclusive", () => {
+		const built = integer().generatedAlwaysAs(sql`1 + 1`);
+		expect(built.columnState.defaultValue).toBeNull();
+	});
+
+	it("does not mutate the original builder", () => {
+		const base = numeric();
+		const built = base.generatedAlwaysAs(sql`1`);
+		expect(base.columnState.generated).toBeUndefined();
+		expect(built.columnState.generated).toBeDefined();
+	});
+
+	it("carries generated: true in TMeta", () => {
+		expectTypeOf(numeric().generatedAlwaysAs(sql`1`)).toEqualTypeOf<
+			ColumnBuilder<
+				"numeric",
+				{ typeName: "numeric" } & { mode: "string" } & { generated: true }
+			>
+		>();
+	});
+
+	it(".array() carries the generated flag through (ArrayCarriedFlags)", () => {
+		expectTypeOf(integer().generatedAlwaysAs(sql`1`).array()).toEqualTypeOf<
+			ColumnBuilder<
+				"array",
+				{ readonly generated: true } & {
+					typeName: "array";
+					element: "integer";
+				}
+			>
+		>();
+	});
+});
+
+describe("generatedAlwaysAsIdentity / generatedByDefaultAsIdentity (add-generated-columns, task 1.1)", () => {
+	it("records the identity kind with empty options by default", () => {
+		expect(integer().generatedAlwaysAsIdentity().columnState.identity).toEqual({
+			kind: "always",
+			options: {},
+		});
+		expect(
+			bigint().generatedByDefaultAsIdentity().columnState.identity,
+		).toEqual({
+			kind: "byDefault",
+			options: {},
+		});
+	});
+
+	it("records explicit sequence options verbatim", () => {
+		const built = bigint().generatedByDefaultAsIdentity({
+			startWith: 1000,
+			increment: 2,
+			minValue: 1,
+			maxValue: 9999,
+			cache: 10,
+			cycle: true,
+		});
+		expect(built.columnState.identity).toEqual({
+			kind: "byDefault",
+			options: {
+				startWith: 1000,
+				increment: 2,
+				minValue: 1,
+				maxValue: 9999,
+				cache: 10,
+				cycle: true,
+			},
+		});
+	});
+
+	it("does not mutate the original builder, and leaves columnState.notNull/defaultValue untouched (D66 mirror -- see the TMeta assertion below for the divergence)", () => {
+		const base = integer();
+		const built = base.generatedAlwaysAsIdentity();
+		expect(base.columnState.identity).toBeUndefined();
+		expect(built.columnState.identity).toBeDefined();
+		expect(built.columnState.notNull).toBe(false);
+		expect(built.columnState.defaultValue).toBeNull();
+	});
+
+	it("carries identity kind, notNull, and hasDefault in TMeta (camelCase kind, D57) -- columnState.notNull/defaultValue stay untouched (previous test)", () => {
+		expectTypeOf(integer().generatedAlwaysAsIdentity()).toEqualTypeOf<
+			ColumnBuilder<
+				"numeric",
+				{ typeName: "integer" } & {
+					identity: "always";
+					notNull: true;
+					hasDefault: true;
+				}
+			>
+		>();
+		expectTypeOf(smallint().generatedByDefaultAsIdentity()).toEqualTypeOf<
+			ColumnBuilder<
+				"numeric",
+				{ typeName: "smallint" } & {
+					identity: "byDefault";
+					notNull: true;
+					hasDefault: true;
+				}
+			>
+		>();
+	});
+
+	describe("identity methods are integer-family-only at the type level (keyed on typeName, not TFamily)", () => {
+		// text is a different family entirely (proves the least -- it would
+		// pass even under a mis-keyed family check). real/numeric/serial all
+		// share TFamily "numeric" with smallint/integer/bigint -- these three
+		// are the near-misses that actually exercise the typeName
+		// enumeration: a guard mis-keyed on TFamily would wrongly resolve
+		// these to a real ColumnBuilder instead of never. The matching
+		// runtime throw for each of these three lives in
+		// generated-columns.test.ts (a type assertion alone can't catch a
+		// broken *runtime* guard, and vice versa -- both sites are checked
+		// independently).
+		it("generatedAlwaysAsIdentity resolves to never off the enumeration", () => {
+			expectTypeOf(text().generatedAlwaysAsIdentity()).toBeNever();
+			expectTypeOf(real().generatedAlwaysAsIdentity()).toBeNever();
+			expectTypeOf(numeric().generatedAlwaysAsIdentity()).toBeNever();
+			expectTypeOf(serial().generatedAlwaysAsIdentity()).toBeNever();
+		});
+
+		it("generatedByDefaultAsIdentity resolves to never off the enumeration", () => {
+			expectTypeOf(text().generatedByDefaultAsIdentity()).toBeNever();
+			expectTypeOf(real().generatedByDefaultAsIdentity()).toBeNever();
+			expectTypeOf(numeric().generatedByDefaultAsIdentity()).toBeNever();
+			expectTypeOf(serial().generatedByDefaultAsIdentity()).toBeNever();
+		});
+	});
+
+	it("calling an identity method on a non-integer builder does not itself throw -- table() is where misuse is caught (design decision 2, generated-columns.test.ts)", () => {
+		// mirrors notNullElements' own "never-typed call still runs" note.
+		// The cast is test-only plumbing around `never` (property access on a
+		// `never`-typed expression is itself a compile error, confirmed
+		// against this exact call shape -- unlike a bare `never` VALUE sitting
+		// in an object literal, which is allowed because `never` is
+		// assignable everywhere), not part of the contract.
+		const built =
+			real().generatedAlwaysAsIdentity() as unknown as ColumnBuilder<
+				"numeric",
+				{ typeName: "real" } & { identity: "always" }
+			>;
+		expect(built.columnState.identity).toEqual({ kind: "always", options: {} });
 	});
 });
 
