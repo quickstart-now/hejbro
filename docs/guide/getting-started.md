@@ -109,20 +109,32 @@ verify: 5 checks passed (1 migrations, snapshot sha256:bd905e603caa…)
 
 ## Snapshot format stability
 
-The snapshot file (`hejbro.snapshot.json`) is a derived artifact: it
-regenerates from your declarations, which are the truth. That gives the
-format-version policy (D101) two standing guarantees:
+The snapshot file (`hejbro.snapshot.json`) carries a `formatVersion`, and
+that version is **not** something hejbro migrates for you. Pre-1.0 there
+is no format-migration path at all, and a version mismatch in either
+direction stops the command (D101):
 
-- **A format bump never rewrites your migrations.** When hejbro's
-  snapshot format moves (its `formatVersion` field), the next
-  `hejbro generate` rewrites the snapshot only; a committed migration
-  chain pinned by verify banners updates its tip banner and nothing
-  else.
-- **Version asymmetry always fails loudly.** An older hejbro refuses a
-  newer snapshot with an explicit upgrade diagnostic; a newer hejbro
-  regenerates an older snapshot silently and correctly. There is no
-  `snapshot upgrade` command, because there is nothing to migrate.
+- **A newer hejbro refuses an older snapshot**, with guidance rather than
+  a rewrite. The snapshot and the migrations directory are a matched pair
+  — their hashes chain together — so regenerating one without the other
+  breaks the chain. The diagnostic tells you the two real options: pin
+  hejbro to the version that wrote the snapshot (check your lockfile)
+  and carry on, or deliberately reset *both* — delete the migrations
+  directory and the snapshot, run `hejbro init` and `hejbro generate` —
+  which only makes sense if you can also recreate the database, since
+  the regenerated chain starts from empty with no relationship to what is
+  already applied.
+- **An older hejbro refuses a newer snapshot**, telling you to upgrade.
+- **Deleting just the snapshot does not work.** With prior migrations
+  present, `hejbro generate` refuses to run
+  (`error[snapshot-lost]`); working around that with `hejbro init`
+  produces a chain `hejbro verify` then rejects.
 
-Pre-1.0, the version may bump whenever the snapshot's shape grows.
+There is no `snapshot upgrade` command yet. Adding one is tracked as
+[#413](https://github.com/quickstart-now/hejbro/issues/413), and until it
+exists a format bump is a real cost you pay by hand.
+
+Pre-1.0, the version may bump whenever the snapshot's shape grows, and it
+has: `hejbro@0.1.1` shipped version 5, and the 0.2.0 line moved it again.
 From 1.0, a bump is at most a minor-version event, documented in the
-changelog.
+changelog — and by then it will have an upgrade path.
