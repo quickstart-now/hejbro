@@ -1,7 +1,7 @@
 -- hejbro migration
 -- + table app.task_tags [new]
--- parent-snapshot: sha256:faa32666d414a8c6bd6bd8256650b264717bbcc6da7b169d8d6760008f3974e0
--- snapshot: sha256:cfc7d992c274fd00785a3c65ca161b983f3e93ea075f02f2ad4e17e21932fb08
+-- parent-snapshot: sha256:5a435954c1ab476479edfb018a39f99a462c7fbeb0c618728512d13d0b5d53f2
+-- snapshot: sha256:4ac9a1ec44291a7ded022df202921df38801b3d45d98cc3e623dfd4181c89761
 
 create table "app"."task_tags" (
 	"task_id" uuid not null,

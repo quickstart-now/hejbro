@@ -5,8 +5,8 @@
 -- + policy app.task_schedules.task_schedules_read_all [new]
 -- + policy app.task_schedules.task_schedules_write_all [new]
 -- ~ view app.open_tasks [view columns changed; recreating]
--- parent-snapshot: sha256:7dfd006793ae545f597bddc60988a615a5464345cf0cd0256f9da231f0f516b1
--- snapshot: sha256:faa32666d414a8c6bd6bd8256650b264717bbcc6da7b169d8d6760008f3974e0
+-- parent-snapshot: sha256:d81673f3b0abb5dd3faa513657217dbab7176d99186cdd9702a578d4e0151176
+-- snapshot: sha256:5a435954c1ab476479edfb018a39f99a462c7fbeb0c618728512d13d0b5d53f2
 
 drop view if exists "app"."open_tasks";
 
