@@ -158,6 +158,17 @@ describe("select-result -- object projection (task 3.10)", () => {
 		}>();
 	});
 
+	it("a projected enum column reads as its declared values (#422 x #311)", () => {
+		// The two changes were developed independently: #311 recovers the
+		// declaring column through the origin brand, #422 puts the enum's
+		// values on that column's meta. Composed, a projected enum keeps its
+		// literal union instead of collapsing to the "text" family's string.
+		type Proj = SelectResult<{ readonly s: typeof posts.status }>;
+		expectTypeOf<Proj>().toEqualTypeOf<{
+			readonly s: "draft" | "published" | null;
+		}>();
+	});
+
 	it("nullability stays widened until #307 -- a left join can null any projected column", () => {
 		// The one axis a projection still cannot know: the projection type is
 		// fixed at select() time, before .leftJoin() is chained, so a
