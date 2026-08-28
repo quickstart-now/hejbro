@@ -9,6 +9,7 @@ import type {
 	ProjectionNode,
 	SelectNode,
 	TableRefNode,
+	SetOpNode,
 } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import type { TypeNode } from "../types/type-node";
@@ -20,13 +21,42 @@ export type OrderTermInput =
 	| Expr
 	| { readonly by: Expr; readonly direction: "asc" | "desc" };
 
+/** A combined set-operation stage (add-set-operations, D103): carries the recursive node, whole-set `orderBy`/`limit`, and further combinators — so `(a union b) except c` chains naturally. */
+export type SetOpStage<TProjection extends SelectProjection = SelectProjection> = {
+	readonly setOpQuery: SetOpNode;
+	readonly projectionInput: TProjection;
+	union(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	unionAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	intersect(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	intersectAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	except(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	exceptAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	orderBy(...terms: ReadonlyArray<OrderTermInput>): SetOpStage<TProjection>;
+	limit(count: number): SetOpStage<TProjection>;
+};
+
+/** What a combinator accepts as its other side: any select stage, or a prior combination. */
+export type SetOpBranch<TProjection extends SelectProjection = SelectProjection> =
+	| SelectLimited<TProjection>
+	| SetOpStage<TProjection>;
+
+/** The six combinators every select stage carries (and every {@link SetOpStage} carries again). */
+export type SetOpCombinators<TProjection extends SelectProjection> = {
+	union(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	unionAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	intersect(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	intersectAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	except(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	exceptAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+};
+
 export type SelectLimited<
 	TProjection extends SelectProjection = SelectProjection,
 > = {
 	readonly selectQuery: SelectNode;
 	readonly fromTable: Table;
 	readonly projectionInput: TProjection;
-};
+} & SetOpCombinators<TProjection>;
 export type SelectOrdered<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectLimited<TProjection> & {
@@ -70,6 +100,69 @@ const appendJoin = (
 	],
 });
 
+const branchNode = (
+	branch: SetOpBranch,
+): SelectNode | SetOpNode => {
+	if ("setOpQuery" in branch) {
+		return branch.setOpQuery;
+	}
+	return branch.selectQuery;
+};
+
+const combineSetOp = <TProjection extends SelectProjection>(
+	left: SelectNode | SetOpNode,
+	operator: SetOpNode["operator"],
+	all: boolean,
+	other: SetOpBranch<TProjection>,
+	projectionInput: TProjection,
+): SetOpStage<TProjection> =>
+	makeSetOpStage(
+		{
+			queryKind: "setOp",
+			operator,
+			all,
+			left,
+			right: branchNode(other),
+			orderBy: [],
+			limit: null,
+		},
+		projectionInput,
+	);
+
+/** The runtime combinator set over `left` — shared by every select stage and by {@link makeSetOpStage} itself (further chaining re-combines the whole node). */
+const setOpCombinators = <TProjection extends SelectProjection>(
+	left: () => SelectNode | SetOpNode,
+	projectionInput: TProjection,
+): SetOpCombinators<TProjection> => ({
+	union: (other) =>
+		combineSetOp(left(), "union", false, other, projectionInput),
+	unionAll: (other) =>
+		combineSetOp(left(), "union", true, other, projectionInput),
+	intersect: (other) =>
+		combineSetOp(left(), "intersect", false, other, projectionInput),
+	intersectAll: (other) =>
+		combineSetOp(left(), "intersect", true, other, projectionInput),
+	except: (other) =>
+		combineSetOp(left(), "except", false, other, projectionInput),
+	exceptAll: (other) =>
+		combineSetOp(left(), "except", true, other, projectionInput),
+});
+
+const makeSetOpStage = <TProjection extends SelectProjection>(
+	node: SetOpNode,
+	projectionInput: TProjection,
+): SetOpStage<TProjection> => ({
+	setOpQuery: node,
+	projectionInput,
+	...setOpCombinators(() => node, projectionInput),
+	orderBy: (...terms) =>
+		makeSetOpStage(
+			{ ...node, orderBy: [...node.orderBy, ...terms.map(resolveOrderTerm)] },
+			projectionInput,
+		),
+	limit: (count) => makeSetOpStage({ ...node, limit: count }, projectionInput),
+});
+
 const makeStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
 	fromTable: Table,
@@ -78,6 +171,7 @@ const makeStages = <TProjection extends SelectProjection>(
 	selectQuery: query,
 	fromTable,
 	projectionInput,
+	...setOpCombinators(() => query, projectionInput),
 	innerJoin: (joined, on) =>
 		makeStages(
 			appendJoin(query, "inner", joined, on),

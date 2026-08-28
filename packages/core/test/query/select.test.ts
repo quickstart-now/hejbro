@@ -293,3 +293,33 @@ describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
 		);
 	});
 });
+
+describe("set-op combinators (add-set-operations task 2.1)", () => {
+	it("union/unionAll/intersect/except combinators build the recursive node", () => {
+		const active = select(posts).where(eq(posts.status, "active"));
+		const archived = select(posts).where(eq(posts.status, "archived"));
+		const drafts = select(posts).where(eq(posts.status, "draft"));
+
+		const combined = active.union(archived).exceptAll(drafts);
+		expect(combined.setOpQuery.operator).toBe("except");
+		expect(combined.setOpQuery.all).toBe(true);
+		const inner = combined.setOpQuery.left;
+		expect(inner.queryKind).toBe("setOp");
+		expect((inner as SetOpNode).operator).toBe("union");
+		expect((inner as SetOpNode).all).toBe(false);
+
+		const ordered = combined
+			.orderBy({ by: posts.id, direction: "desc" })
+			.limit(2);
+		expect(ordered.setOpQuery.limit).toBe(2);
+		expect(renderSetOp(ordered.setOpQuery)).toContain(
+			'order by "app"."posts"."id" desc limit 2',
+		);
+
+		// all six exist
+		expect(typeof active.unionAll).toBe("function");
+		expect(typeof active.intersect).toBe("function");
+		expect(typeof active.intersectAll).toBe("function");
+		expect(typeof active.except).toBe("function");
+	});
+});
