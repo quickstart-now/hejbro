@@ -106,3 +106,23 @@ verify: 5 checks passed (1 migrations, snapshot sha256:bd905e603caa…)
 
 - [Renames](renames.md) — what happens when `generate` can't tell a rename from an unrelated drop+add.
 - [CI](ci.md) — wiring `hejbro verify` into GitHub Actions.
+
+## Snapshot format stability
+
+The snapshot file (`hejbro.snapshot.json`) is a derived artifact: it
+regenerates from your declarations, which are the truth. That gives the
+format-version policy (D101) two standing guarantees:
+
+- **A format bump never rewrites your migrations.** When hejbro's
+  snapshot format moves (its `formatVersion` field), the next
+  `hejbro generate` rewrites the snapshot only; a committed migration
+  chain pinned by verify banners updates its tip banner and nothing
+  else.
+- **Version asymmetry always fails loudly.** An older hejbro refuses a
+  newer snapshot with an explicit upgrade diagnostic; a newer hejbro
+  regenerates an older snapshot silently and correctly. There is no
+  `snapshot upgrade` command, because there is nothing to migrate.
+
+Pre-1.0, the version may bump whenever the snapshot's shape grows.
+From 1.0, a bump is at most a minor-version event, documented in the
+changelog.
