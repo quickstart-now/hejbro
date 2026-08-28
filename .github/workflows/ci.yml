@@ -104,6 +104,20 @@ jobs:
             echo "error[check-crap-readme]: README's CRAP block is stale. Next: run pnpm check:crap and commit README.md" >&2
             exit 1
           fi
+      # #305: same construction as the CRAP block above, for the task-time
+      # badges rendered from openspec/task-times.csv (the D88 ledger).
+      # Runs AFTER the CRAP diff step so a stale block attributes to the
+      # right gate: the CRAP step has already proven README clean, so any
+      # diff after check:tasktime is the badge block's own.
+      - run: pnpm check:tasktime
+        if: matrix.node-version == 24
+      - name: README task-time badges are current
+        if: matrix.node-version == 24
+        run: |
+          if ! git diff --exit-code -- README.md; then
+            echo "error[check-tasktime-readme]: README's task-time badges are stale. Next: run pnpm check:tasktime and commit README.md" >&2
+            exit 1
+          fi
       # #180: not "trust this branch" -- the question this step asks
       # ("does every package this branch changed relative to dev have an
       # accompanying pending changeset?") does not apply on a
