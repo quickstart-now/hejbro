@@ -97,9 +97,18 @@ array and still runs — `await handle.update(posts).set({ status:
 vocabulary doesn't cover — usable in a projection, as an insert/update
 value, or compiled standalone as its own statement (it types as
 `Expr<"unknown">`, which every column's write type accepts alongside its
-own declared read type; a `.where()`/`.innerJoin()`/`.leftJoin()`
-condition is the one place that still needs `Expr<"boolean">` from a
-typed operator like `eq`). Importing `sql` from the
+own declared read type).
+
+**Where `sql` can stand in for a condition differs by medium.** In a
+*declaration*, a condition position — `check(name, expression)`, an RLS
+policy's `using`/`withCheck`, an index's `.on(sql\`...\`)`/`.where(...)`
+— accepts `Expr<"boolean"> | Expr<"unknown">`, so a `sql` fragment works
+there (see `dsl-cheatsheet.md`). In a *query*, the chain's own
+`.where()`/`.innerJoin()`/`.leftJoin()` still require `Expr<"boolean">`
+specifically — a `sql` fragment does not type-check there; build a query
+condition with a typed operator (`eq`, `gt`, `inArray`, `between`, …)
+instead, and reserve `sql` for a projection, an insert/update value, or a
+standalone statement (tracked as #386). Importing `sql` from the
 `hejbro` facade gets you the query-capable one: the facade re-exports
 `@hejbro/core` and `@hejbro/query` wholesale, and `@hejbro/query`'s own
 `sql` is exported a second time right after, so it — not core's
@@ -370,8 +379,11 @@ concrete next step.
   `deleteFrom`), `packages/query/src/sql.ts` (`sql`, `sql.raw`,
   `sql.identifier`), `packages/core/src/query/mutate.ts`
   (`MutationValue`'s `Expr<"unknown">` arm — every column's write type
-  accepts a `sql` fragment) and `packages/core/src/query/select.ts`
-  (`where`/`innerJoin`/`leftJoin` requiring `Expr<"boolean">`),
+  accepts a `sql` fragment), `packages/core/src/query/select.ts`
+  (`where`/`innerJoin`/`leftJoin` requiring `Expr<"boolean">`), and
+  `packages/core/src/dsl/check.ts` (`check`'s own
+  `Expr<"boolean"> | Expr<"unknown">` — the declaration-side contrast,
+  #386),
   `packages/query/src/db/execute.ts` (`query-execution-failed`, params
   never read), `packages/query/src/db/db.ts` (`db()`, the role union),
   `packages/query/src/db/context.ts` (`db.as`, `DbContext`, the role
