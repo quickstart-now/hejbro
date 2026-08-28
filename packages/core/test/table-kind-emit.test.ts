@@ -1215,7 +1215,9 @@ describe("column-level references emit identically to extras (add-relational-rea
 				if (viaColumn) {
 					return table(owner, "pets", {
 						id: uuid().primaryKey(),
-						ownerId: uuid().notNull().references(() => users.id),
+						ownerId: uuid()
+							.notNull()
+							.references(() => users.id),
 					});
 				}
 				return table(

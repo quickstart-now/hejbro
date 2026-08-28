@@ -63,6 +63,17 @@ export const orders = table(app, "orders", {
   Generated→plain emits `drop expression`; changing the expression
   rebuilds the column, which moves it to the end of the table.
 
+## Foreign keys
+
+A plain single-column foreign key is declared on the column:
+`ownerId: uuid().notNull().references(() => users.id)` — one declaration
+feeds both the generated DDL and the query layer's relation types. The
+target must share the column's type family, and the thunk defers
+evaluation (import-order safety). Self-referencing foreign keys,
+composite (multi-column) ones, and `onDelete`/`onUpdate` actions are
+declared in `extras.foreignKeys` instead; declaring the same column
+through both paths fails at declaration time.
+
 ## CHECK constraints
 
 `check(name, expr)` goes in a table's `extras.checks` array. The expression

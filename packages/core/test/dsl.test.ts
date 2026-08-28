@@ -184,7 +184,9 @@ describe("column-level references fold into foreign keys (add-relational-reads t
 	it("produces the extras-equivalent foreign key declaration", () => {
 		const viaColumn = table(app, "pets_via_column", {
 			id: uuid().primaryKey(),
-			ownerId: uuid().notNull().references(() => users.id),
+			ownerId: uuid()
+				.notNull()
+				.references(() => users.id),
 		});
 		const viaExtras = table(
 			app,
@@ -220,7 +222,9 @@ describe("column-level references fold into foreign keys (add-relational-reads t
 				"pets_double",
 				{
 					id: uuid().primaryKey(),
-					ownerId: uuid().notNull().references(() => users.id),
+					ownerId: uuid()
+						.notNull()
+						.references(() => users.id),
 				},
 				(t) => ({
 					foreignKeys: [

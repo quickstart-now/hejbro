@@ -6,21 +6,21 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 1. Column-level foreign keys (core declaration surface)
 
-- [ ] 1.1 (~8m) `.references(() => target.column)` builder: records
+- [x] 1.1 (~8m) `.references(() => target.column)` builder: records
       the edge in `TMeta` (target table identity + column key) and on
       the column state. Red:
       `packages/core/test/column-builder.test.ts` — "references
       records the target edge at the type level and in the
       declaration". Files: `packages/core/src/types/column-builder.ts`,
       that test.
-- [ ] 1.2 (~8m) [design] `table()` folds column-level references into
+- [x] 1.2 (~8m) [design] `table()` folds column-level references into
       the same `ForeignKeyDeclaration` the extras path builds, and
       declaring both over one column fails loudly (error code and
       message settled here). Red: `packages/core/test/dsl.test.ts` —
       "a column-level reference produces the extras-equivalent foreign
       key; both forms over one column throw". Files:
       `packages/core/src/dsl/table.ts`, that test.
-- [ ] 1.3 (~6m) Same-DDL witness: identical create-table output and
+- [x] 1.3 (~6m) Same-DDL witness: identical create-table output and
       snapshot content for the two declaration forms. Red:
       `packages/core/test/table-kind-emit.test.ts` — "column-level and
       extras foreign keys emit identically". Files: that test only.

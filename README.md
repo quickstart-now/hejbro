@@ -1,13 +1,13 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1229](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201229-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1231](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201231-brightgreen)](#status)
 <!-- crap-badge:end -->
 <!-- tasktime-badges:start -->
-[![tasks · 97 done](https://img.shields.io/badge/tasks-97%20done-blue)](openspec/task-times.csv)
+[![tasks · 100 done](https://img.shields.io/badge/tasks-100%20done-blue)](openspec/task-times.csv)
 [![avg task · 22m](https://img.shields.io/badge/avg%20task-22m-blue)](openspec/task-times.csv)
-[![estimate · 2.26x](https://img.shields.io/badge/estimate-2.26x-blue)](openspec/task-times.csv)
-[![overhead · 33%](https://img.shields.io/badge/overhead-33%25-blue)](openspec/task-times.csv)
+[![estimate · 2.25x](https://img.shields.io/badge/estimate-2.25x-blue)](openspec/task-times.csv)
+[![overhead · 32%](https://img.shields.io/badge/overhead-32%25-blue)](openspec/task-times.csv)
 <!-- tasktime-badges:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -217,7 +217,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1229 functions** over the threshold, highest score 5.00 — measured at `f63cee6` (2026-08-28).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1231 functions** over the threshold, highest score 5.00 — measured at `a209048` (2026-08-28).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->

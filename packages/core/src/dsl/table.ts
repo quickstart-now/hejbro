@@ -912,34 +912,39 @@ const resolveRls = (
 	return bindRls(owner.schemaName, tableName, rlsInput);
 };
 
-/** The first column declared through both foreign-key paths, if any (add-relational-reads guard) — `.references()` on the column AND membership in an `extras` foreign key would silently double-emit the constraint. */
-const findDoublyDeclaredReferenceColumn = (
+/** Rejects a column declared through both foreign-key paths (add-relational-reads guard) — without it the clash would still throw, but only later and name-centrically (`duplicate-foreign-key-name`); this guard fires earlier and names the COLUMN, which is what the user actually wrote twice. */
+const assertNoDoublyDeclaredReference = (
+	tableName: string,
 	columnEntries: ReadonlyArray<ColumnEntry>,
 	extrasForeignKeys: ReadonlyArray<ForeignKeyDeclaration>,
-): ColumnEntry | undefined =>
-	columnEntries.find(
+): void => {
+	const doublyDeclared = columnEntries.find(
 		(entry) =>
 			entry.columnState.references !== undefined &&
 			extrasForeignKeys.some((foreignKey) =>
 				foreignKey.columns.includes(entry.columnName),
 			),
 	);
+	if (doublyDeclared === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-duplicate-foreign-key",
+		`table "${tableName}" column "${doublyDeclared.columnName}" declares .references() and is also named in an extras foreign key — the constraint would emit twice. Next: keep exactly one of the two declarations for "${doublyDeclared.columnName}".`,
+	);
+};
 
-/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup. */
+/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. */
 const foldColumnReferences = (
 	columnEntries: ReadonlyArray<ColumnEntry>,
 ): ReadonlyArray<ForeignKeyDeclaration> =>
-	columnEntries
-		.filter((entry) => entry.columnState.references !== undefined)
-		.map((entry) => {
-			const target = entry.columnState.references?.();
-			if (target === undefined) {
-				return throwHejbroError(
-					"invalid-duplicate-foreign-key",
-					`table column "${entry.columnName}" has a references() thunk that returned nothing. Next: return a built table's column, e.g. .references(() => users.id).`,
-				);
-			}
-			return {
+	columnEntries.flatMap((entry) => {
+		const target = entry.columnState.references?.();
+		if (target === undefined) {
+			return [];
+		}
+		return [
+			{
 				columns: [entry.columnName],
 				references: {
 					schemaName: target.exprNode.schemaName,
@@ -948,8 +953,9 @@ const foldColumnReferences = (
 				},
 				onDelete: null,
 				onUpdate: null,
-			};
-		});
+			},
+		];
+	});
 
 /**
  * Declares a table under `owner`. Column keys are camelCase in TypeScript
@@ -975,16 +981,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const extrasForeignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
 		resolveForeignKey(owner, tableName, input),
 	);
-	const doublyDeclared = findDoublyDeclaredReferenceColumn(
-		columnEntries,
-		extrasForeignKeys,
-	);
-	if (doublyDeclared !== undefined) {
-		throwHejbroError(
-			"invalid-duplicate-foreign-key",
-			`table "${tableName}" column "${doublyDeclared.columnName}" declares .references() and is also named in an extras foreign key — the constraint would emit twice. Next: keep exactly one of the two declarations for "${doublyDeclared.columnName}".`,
-		);
-	}
+	assertNoDoublyDeclaredReference(tableName, columnEntries, extrasForeignKeys);
 	const foreignKeys = [
 		...foldColumnReferences(columnEntries),
 		...extrasForeignKeys,

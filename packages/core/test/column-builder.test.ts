@@ -904,17 +904,17 @@ describe("column-level references (add-relational-reads task 1.1)", () => {
 	// Extracts the `references` edge from a builder's phantom TMeta -- the
 	// only observation channel for a type-level claim (tsc enforces it;
 	// expectTypeOf is a runtime no-op).
-	type EdgeOf<TBuilder> = TBuilder extends ColumnBuilder<
-		infer _TFamily,
-		infer TMeta
-	>
-		? TMeta extends { references: infer TEdge }
-			? TEdge
-			: never
-		: never;
+	type EdgeOf<TBuilder> =
+		TBuilder extends ColumnBuilder<infer _TFamily, infer TMeta>
+			? TMeta extends { references: infer TEdge }
+				? TEdge
+				: never
+			: never;
 
 	it("records the deferred target on columnState and the edge in TMeta", () => {
-		const withRef = uuid().notNull().references(() => users.id);
+		const withRef = uuid()
+			.notNull()
+			.references(() => users.id);
 
 		// runtime: the thunk is stored deferred -- table() evaluates it, the
 		// builder itself never does (import-order safety, the thunk pattern).
@@ -926,7 +926,7 @@ describe("column-level references (add-relational-reads task 1.1)", () => {
 		expectTypeOf<
 			keyof EdgeOf<typeof withRef>["columns"]
 		>().toEqualTypeOf<"id">();
-		expectTypeOf<EdgeOf<typeof uuid>>().toBeNever();
+		expectTypeOf<EdgeOf<ReturnType<typeof uuid>>>().toBeNever();
 	});
 
 	it("rejects a target whose type family differs from the column's", () => {

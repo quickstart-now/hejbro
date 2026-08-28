@@ -383,6 +383,27 @@ export type ColumnBuilder<
 			>
 		: never;
 	/**
+	 * Declares this column a foreign key to another table's column
+	 * (add-relational-reads, D102) — `.references(() => users.id)`. One
+	 * declaration feeds both the DDL (`table()` folds it into the same
+	 * `ForeignKeyDeclaration` the `extras` path builds) and the type layer
+	 * (the edge lands in `TMeta`, where the query layer derives relations
+	 * from it). The thunk defers evaluation for import-order safety. The
+	 * target must share this column's type family — Postgres would reject
+	 * a mismatch at apply time, so the declaration fails to type-check
+	 * instead. Self-referencing and composite foreign keys, and
+	 * `onDelete`/`onUpdate` actions, stay on the `extras` path.
+	 */
+	references<
+		TTargetColumns extends Record<string, ColumnBuilder>,
+		TTargetKey extends keyof TTargetColumns & string,
+	>(
+		target: () => ColumnRef<TFamily> & OriginBrand<TTargetColumns, TTargetKey>,
+	): ColumnBuilder<
+		TFamily,
+		TMeta & { references: { columns: TTargetColumns; key: TTargetKey } }
+	>;
+	/**
 	 * Brands this column's TypeScript type as `T` (D5) — the way a `jsonb`
 	 * column opts out of `unknown` (`@hejbro/query`'s `column-map.ts`
 	 * reads `TMeta["jsonType"]` instead of falling back to the base
@@ -405,27 +426,6 @@ export type ColumnBuilder<
 	 * (task 3.5): byte-identical snapshot/SQL and no brand trace anywhere
 	 * runtime-visible, since only `TMeta` changes.
 	 */
-	/**
-	 * Declares this column a foreign key to another table's column
-	 * (add-relational-reads, D102) — `.references(() => users.id)`. One
-	 * declaration feeds both the DDL (`table()` folds it into the same
-	 * `ForeignKeyDeclaration` the `extras` path builds) and the type layer
-	 * (the edge lands in `TMeta`, where the query layer derives relations
-	 * from it). The thunk defers evaluation for import-order safety. The
-	 * target must share this column's type family — Postgres would reject
-	 * a mismatch at apply time, so the declaration fails to type-check
-	 * instead. Self-referencing and composite foreign keys, and
-	 * `onDelete`/`onUpdate` actions, stay on the `extras` path.
-	 */
-	references<
-		TTargetColumns extends Record<string, ColumnBuilder>,
-		TTargetKey extends keyof TTargetColumns & string,
-	>(
-		target: () => ColumnRef<TFamily> & OriginBrand<TTargetColumns, TTargetKey>,
-	): ColumnBuilder<
-		TFamily,
-		TMeta & { references: { columns: TTargetColumns; key: TTargetKey } }
-	>;
 	$type<T extends BaseTsType<TMeta>>(): ColumnBuilder<
 		TFamily,
 		TMeta & { jsonType: T }
@@ -503,11 +503,6 @@ const resolveDefaultExprNode = (
 };
 
 /**
- * Builds a {@link ColumnBuilder} bound to `columnState`. Every chained
- * method calls this factory again with a shallow-updated state, so builders
- * are effectively immutable value objects.
- */
-/**
  * Phantom origin brand `TableColumns` stamps on every built table's column
  * refs (add-relational-reads) — the owning column map and column key at
  * the type level only. Optional and never assigned at runtime (the
@@ -528,6 +523,11 @@ export type OriginBrand<
 	};
 };
 
+/**
+ * Builds a {@link ColumnBuilder} bound to `columnState`. Every chained
+ * method calls this factory again with a shallow-updated state, so builders
+ * are effectively immutable value objects.
+ */
 export const createColumnBuilder = <
 	TFamily extends SqlTypeFamily = SqlTypeFamily,
 	TMeta extends ColumnMeta = ColumnMeta,
