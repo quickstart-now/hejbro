@@ -37,6 +37,61 @@ export type ColumnState = {
 	 * serialized artifact — design decision 2).
 	 */
 	readonly notNullElements?: true;
+	/**
+	 * Set only by `.generatedAlwaysAs(expression)` (add-generated-columns) —
+	 * the stored computed column's own expression, as the fragment's
+	 * `ExprNode` (the `sql`-tag path, same as `defaultValue`'s expression
+	 * arm). Mutually exclusive with both `defaultValue` (non-`null`) and
+	 * `identity` (set) — Postgres allows only one `GENERATED`/`DEFAULT`
+	 * clause per column; `table()` is where that combination is rejected
+	 * (design decision 2), since a bare builder has no column name yet to
+	 * name in an error.
+	 */
+	readonly generated?: ExprNode;
+	/**
+	 * Set only by `.generatedAlwaysAsIdentity()`/
+	 * `.generatedByDefaultAsIdentity()` (add-generated-columns) — see
+	 * {@link IdentityState}. Mutually exclusive with `generated` (set), for
+	 * the same reason.
+	 */
+	readonly identity?: IdentityState;
+};
+
+/**
+ * Sequence options accepted by `.generatedAlwaysAsIdentity()`/
+ * `.generatedByDefaultAsIdentity()` (D100) — Postgres's own identity
+ * sequence options, spelled camelCase to match the rest of the DSL surface.
+ * `restart` is deliberately absent: a declarative snapshot carries no live
+ * sequence position to restart from (design decision 4's own "out of
+ * scope" note).
+ */
+export type IdentityOptions = {
+	readonly startWith?: number;
+	readonly increment?: number;
+	readonly minValue?: number;
+	readonly maxValue?: number;
+	readonly cache?: number;
+	readonly cycle?: boolean;
+};
+
+/**
+ * The two identity kinds Postgres supports, spelled camelCase (D57 —
+ * TypeScript-only union) for both `ColumnMeta.identity` and
+ * `ColumnState.identity.kind`. The snapshot's own kebab-case token
+ * (`"by-default"`, D57 — a token that reaches a generated artifact) is
+ * group 2's own encoding step; this group never writes it.
+ */
+export type IdentityKind = "always" | "byDefault";
+
+/**
+ * `columnState.identity`'s own shape: the kind plus exactly the options the
+ * declaration set — an option the declaration never mentioned is absent
+ * from `options`, not filled in with a value, so it is never diffed against
+ * Postgres's own default (declaration-is-truth, design decision "Risks").
+ */
+export type IdentityState = {
+	readonly kind: IdentityKind;
+	readonly options: IdentityOptions;
 };
 
 /**
@@ -64,6 +119,31 @@ export type ColumnMeta = {
 	readonly jsonType?: unknown;
 	/** set only by `.array().notNullElements()` (add-array-ergonomics) — narrows the element read/write type from `T | null` to `T` (`ts-type-map.ts`'s `BaseTsType`, this file's `ColumnReadType`), backed by the CHECK `table()` derives. Never carried forward by `.array()`'s own {@link ArrayCarriedFlags} — it can only ever be set by calling `.notNullElements()` after `.array()`, never inherited from a pre-array `TMeta`. */
 	readonly notNullElements?: boolean;
+	/**
+	 * set only by `.generatedAlwaysAs()` (add-generated-columns) — the
+	 * ALWAYS-family write-exclusion flag `@hejbro/query`'s insert-input
+	 * classification reads directly (design decision 5). Never implies
+	 * `notNull`/`hasDefault` on its own: a stored generated column's
+	 * nullability follows the declaration's own `.notNull()` chaining
+	 * exactly like a plain column, unlike identity below. `boolean`, not a
+	 * bare `true` literal, mirroring `notNull?`/`hasDefault?`/
+	 * `notNullElements?` above (task 3.2/add-array-ergonomics) — a chain
+	 * method's return type still narrows this to the literal `true` via
+	 * intersection (`TMeta & { generated: true }`), the same pattern every
+	 * other flag here uses.
+	 */
+	readonly generated?: boolean;
+	/**
+	 * set only by `.generatedAlwaysAsIdentity()`/
+	 * `.generatedByDefaultAsIdentity()` (add-generated-columns) — see
+	 * {@link IdentityKind}. Both kinds additionally set `notNull`/
+	 * `hasDefault` in `TMeta` (design decision 1: Postgres always treats an
+	 * identity column as `NOT NULL` with a sequence-backed value,
+	 * regardless of kind); `"always"` is further ALWAYS-family
+	 * (write-excluded), while `"byDefault"` behaves like any other
+	 * defaulted column on the write side.
+	 */
+	readonly identity?: IdentityKind;
 };
 
 /**
@@ -120,6 +200,16 @@ export const columnMetaBrand: unique symbol = Symbol("hejbro:column-meta");
  * intersection member), so the result never contains an explicit
  * `| undefined`. A later optional flag (numeric mode, jsonb `$type`) needs
  * its own branch added here.
+ *
+ * `generated` (add-generated-columns) gets a branch below for the same
+ * reason every other flag does — `.array()`'s `columnState` spread already
+ * carries `generated` through at runtime regardless, so the type must not
+ * silently disagree. `identity` deliberately does NOT get one:
+ * an identity array column can never survive `table()` (its `typeNode` is
+ * `"array"`, never `"smallint"`/`"integer"`/`"bigint"`, so guard 1 —
+ * `invalid-identity-column` — always rejects it), so carrying the flag
+ * through `.array()` would only let a value that can never exist reach a
+ * type position, for no reader benefit.
  */
 type ArrayCarriedFlags<TMeta extends ColumnMeta> = (TMeta extends {
 	readonly notNull: true;
@@ -134,6 +224,9 @@ type ArrayCarriedFlags<TMeta extends ColumnMeta> = (TMeta extends {
 		: unknown) &
 	(TMeta extends { readonly jsonType: infer TJson }
 		? { readonly jsonType: TJson }
+		: unknown) &
+	(TMeta extends { readonly generated: true }
+		? { readonly generated: true }
 		: unknown);
 
 /**
@@ -207,6 +300,70 @@ export type ColumnBuilder<
 	 */
 	notNullElements(): TFamily extends "array"
 		? ColumnBuilder<TFamily, TMeta & { notNullElements: true }>
+		: never;
+	/**
+	 * Declares this column a stored computed column (D100): `expression` is
+	 * a `sql` fragment naming sibling columns by their SQL names (the RLS
+	 * predicate precedent, {@link Expr}) — structured refs cannot exist
+	 * inside the column map itself, and Postgres computes and stores the
+	 * result on every write. Combining this with `.default()` or an
+	 * identity method is rejected at `table()` (design decision 2), not
+	 * here — this method itself never throws, mirroring
+	 * {@link notNullElements}'s own "no name to blame yet" reasoning.
+	 */
+	generatedAlwaysAs(
+		expression: Expr<TFamily> | Expr<"unknown">,
+	): ColumnBuilder<TFamily, TMeta & { generated: true }>;
+	/**
+	 * Declares this column `generated always as identity` (D100) — the
+	 * SQL-standard successor to `serial`. Valid only on the explicit
+	 * enumeration `"smallint" | "integer" | "bigint"` — keyed on
+	 * `TMeta["typeName"]`, never on `SqlTypeFamily`/`familyOfTypeNode`:
+	 * `TFamily`'s own `"numeric"` also covers `real`/`double precision`/
+	 * `numeric` AND the whole `serial` family, so a family-level guard
+	 * would wrongly admit all of them. `serial`/`smallserial`/`bigserial`
+	 * are excluded on purpose, not by omission: a serial column already
+	 * carries a sequence-backed `nextval()` default (D66), so stacking an
+	 * identity on top is the same identity-plus-default conflict
+	 * `invalid-identity-default` (design decision 2, guard 4) rejects when
+	 * it arrives via `.default()` instead — the enumeration is that same
+	 * rule, expressed at the type level, and must not be "simplified" back
+	 * into a family check.
+	 *
+	 * Type-restricted the same way as {@link notNullElements} (`never` when
+	 * `TMeta["typeName"]` isn't one of the three — a generic `TMeta` at a
+	 * call site isn't always narrowed to a concrete literal, so `table()`
+	 * carries the real, runtime-enforced guard, `invalid-identity-column`,
+	 * design decision 2, keyed on the identical enumeration). Implies
+	 * `notNull`/`hasDefault` in `TMeta` (Postgres treats every identity
+	 * column as `NOT NULL` regardless of kind); an ALWAYS identity is
+	 * additionally write-excluded (design decision 5).
+	 */
+	generatedAlwaysAsIdentity(
+		options?: IdentityOptions,
+	): TMeta["typeName"] extends "smallint" | "integer" | "bigint"
+		? ColumnBuilder<
+				TFamily,
+				TMeta & { identity: "always"; notNull: true; hasDefault: true }
+			>
+		: never;
+	/**
+	 * Declares this column `generated by default as identity` (D100) — like
+	 * {@link generatedAlwaysAsIdentity} (see its own tsdoc for the integer
+	 * enumeration and why `serial` is excluded on purpose), but the
+	 * sequence only supplies a value when the insert omits one
+	 * (`OVERRIDING SYSTEM VALUE` is a documented non-goal), so it stays
+	 * writable and optional on the insert side (design decision 5) even
+	 * though `TMeta` still carries the same implied `notNull`/`hasDefault`
+	 * (Postgres's `NOT NULL` rule applies to both identity kinds alike).
+	 */
+	generatedByDefaultAsIdentity(
+		options?: IdentityOptions,
+	): TMeta["typeName"] extends "smallint" | "integer" | "bigint"
+		? ColumnBuilder<
+				TFamily,
+				TMeta & { identity: "byDefault"; notNull: true; hasDefault: true }
+			>
 		: never;
 	/**
 	 * Brands this column's TypeScript type as `T` (D5) — the way a `jsonb`
@@ -389,5 +546,40 @@ export const createColumnBuilder = <
 			notNullElements: true,
 		})) as () => TFamily extends "array"
 		? ColumnBuilder<TFamily, TMeta & { notNullElements: true }>
+		: never,
+	generatedAlwaysAs: (expression) =>
+		createColumnBuilder<TFamily, TMeta & { generated: true }>({
+			...columnState,
+			generated: expression.exprNode,
+		}),
+	generatedAlwaysAsIdentity: ((options: IdentityOptions = {}) =>
+		createColumnBuilder<
+			TFamily,
+			TMeta & { identity: "always"; notNull: true; hasDefault: true }
+		>({
+			...columnState,
+			identity: { kind: "always", options },
+		})) as (
+		options?: IdentityOptions,
+	) => TMeta["typeName"] extends "smallint" | "integer" | "bigint"
+		? ColumnBuilder<
+				TFamily,
+				TMeta & { identity: "always"; notNull: true; hasDefault: true }
+			>
+		: never,
+	generatedByDefaultAsIdentity: ((options: IdentityOptions = {}) =>
+		createColumnBuilder<
+			TFamily,
+			TMeta & { identity: "byDefault"; notNull: true; hasDefault: true }
+		>({
+			...columnState,
+			identity: { kind: "byDefault", options },
+		})) as (
+		options?: IdentityOptions,
+	) => TMeta["typeName"] extends "smallint" | "integer" | "bigint"
+		? ColumnBuilder<
+				TFamily,
+				TMeta & { identity: "byDefault"; notNull: true; hasDefault: true }
+			>
 		: never,
 });
