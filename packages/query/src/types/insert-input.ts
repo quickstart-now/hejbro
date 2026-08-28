@@ -128,27 +128,16 @@ export type InsertInput<TTable extends Table> =
  * the same {@link AlwaysGeneratedKeys} exclusion `InsertInput` uses.
  *
  * The trailing `& Record<never, never>` is load-bearing, not decorative:
- * confirmed by an isolated repro against this exact shape, `@hejbro/query`'s
- * own chain wiring (#351, `db/chain.ts`, outside this task's file scope)
- * assigns an `UpdateInput<TTable>` value into core's `MutationRow<TTable>`
- * parameter, and for a *single* generic mapped type whose key domain is a
- * derived subset of `keyof TColumns` rather than the literal thing itself,
- * TypeScript's generic mapped-type assignability check does not take the
- * shortcut it takes for {@link InsertInput}'s own two-mapped-type
- * *intersection* shape (`RequiredInsertKeys`/`OptionalInsertKeys`,
- * unaffected by this same exclusion) — without the fix, `db/chain.ts`
- * stops type-checking generically. Intersecting with the contentless
- * `Record<never, never>` (no properties at all, since it maps over
- * `never`) restores that shortcut without reintroducing a real key for an
- * excluded column: the rejected alternative was giving each excluded
- * column its own `key?: never` property (still a key, still visible to
- * completion, still an excess-property mismatch rather than an
- * unknown-key error) — `Record<never, never>` adds nothing observable, so
- * `keyof UpdateInput<TTable>` still excludes every ALWAYS-family column
- * exactly like {@link InsertInput}'s own key sets do. A pure type utility
- * over `Table<infer TColumns>` (task 3.3's extraction pattern), not yet
- * wired into `update()`'s actual parameter type (group 4's job, same
- * deferral as {@link InsertInput}).
+ * remove it and `UpdateInput<TTable>` stops assigning into core's
+ * `MutationRow<TTable>` parameter at `@hejbro/query`'s own chain wiring
+ * (#351, `db/chain.ts`, outside this task's file scope) — a single mapped
+ * type over a derived key subset doesn't get the generic-assignability
+ * pass {@link InsertInput}'s two-mapped-type intersection shape gets. It
+ * adds no properties (`Record<never, never>` maps over `never`), so the
+ * exclusion above still holds unchanged. A pure type utility over
+ * `Table<infer TColumns>` (task 3.3's extraction pattern), not yet wired
+ * into `update()`'s actual parameter type (group 4's job, same deferral
+ * as {@link InsertInput}).
  */
 export type UpdateInput<TTable extends Table> =
 	TTable extends Table<infer TColumns>
