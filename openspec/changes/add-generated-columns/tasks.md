@@ -72,7 +72,7 @@ group 4 sized accordingly).
 
 ## 4. Real-server witness (pg integration) — after groups 1–3
 
-- [ ] 4.1 (~15m) Integration columns: one identity, one generated.
+- [x] 4.1 (~15m) Integration columns: one identity, one generated.
       Red: extend `packages/pg/test/integration.test.ts` — "the
       created table carries the generated grammar (create succeeds =
       PG17 accepts it), identity values arrive assigned, the computed

@@ -7,11 +7,13 @@ import {
 	getTableMeta,
 	HejbroError,
 	insert,
+	integer,
 	interval,
 	numeric,
 	schema,
 	select,
 	serializeInterval,
+	sql,
 	table,
 	text,
 	timestamptz,
@@ -165,6 +167,38 @@ const discoverHostPort = (): number => {
 const labelsNoNullElementsConstraint =
 	'constraint "labels_no_null_elements" check (array_position("g5_integration"."roundtrip"."labels", null) is null)';
 
+/**
+ * `seq`'s exact create-table clause -- core's own `generateMigration`
+ * output for a bare `bigint().generatedAlwaysAsIdentity()` column,
+ * eye-verified against the generator (never derived from it at runtime:
+ * a runtime-sliced value re-fed into `.toContain` below would always
+ * pass, proving nothing) and copied here as a literal, exactly
+ * `labelsNoNullElementsConstraint`'s own discipline above. The raw
+ * `create table` this test executes below splices this same constant in,
+ * so a drift between the two can only ever be caught by the `.toContain`
+ * assertion, never hidden by re-deriving one side from the other.
+ */
+const seqIdentityColumnSql =
+	'"seq" bigint not null generated always as identity';
+
+/**
+ * `doubled`'s exact create-table clause -- core's own `generateMigration`
+ * output for `bigint().generatedAlwaysAs(sql\`amount * 2\`)`, eye-verified
+ * and pinned the same way as {@link seqIdentityColumnSql}.
+ */
+const doubledGeneratedColumnSql =
+	'"doubled" bigint generated always as (amount * 2) stored';
+
+/**
+ * The bare `add generated always as identity` phrase -- the same grammar
+ * {@link seqIdentityColumnSql} ends in, reused by the ordering-rule
+ * witness's own `alter column ... add ...` statements below. Core's
+ * `table-kind-emit.ts` emits this exact text for an identity-add
+ * transition (see
+ * `packages/core/test/golden/cases/identity-column-lifecycle/expected/step-1.sql`).
+ */
+const identityAddPhrase = "add generated always as identity";
+
 const testSchema = schema("g5_integration");
 const roundtrip = table(testSchema, "roundtrip", {
 	id: uuid().primaryKey(),
@@ -192,7 +226,63 @@ const roundtrip = table(testSchema, "roundtrip", {
 	// add-array-ergonomics, group 4/task 4.1: the non-null-element array
 	// witness -- see this file's own top comment for what this proves.
 	labels: text().array().notNullElements().notNull(),
+	// add-generated-columns, group 4/task 4.1
+	seq: bigint().generatedAlwaysAsIdentity(),
+	doubled: bigint().generatedAlwaysAs(sql`amount * 2`),
 });
+
+/**
+ * The ordering-rule witness's own two table shapes (task 4.1's "witness
+ * two ordering rules" addendum) -- `count` starts plain and nullable,
+ * then gains a bare `generated always as identity`. `id` exists only so
+ * the table is well-formed; only `count`'s own transition is under test.
+ */
+const lifecyclePlain = table(testSchema, "lifecycle", {
+	id: integer().primaryKey(),
+	count: integer(),
+});
+const lifecycleIdentity = table(testSchema, "lifecycle", {
+	id: integer().primaryKey(),
+	count: integer().generatedAlwaysAsIdentity(),
+});
+
+/**
+ * Chained snapshots (each step's `previousSnapshot` is the prior step's
+ * own `.snapshot`, mirroring `identity-column-lifecycle`'s golden case
+ * shape) -- `lifecycleBase`'s `.sql` is never executed (the real table
+ * below is created by hand, identically); only its `.snapshot` feeds the
+ * next diff. `lifecycleWithIdentity`/`lifecycleWithoutIdentity` are the
+ * two alter transitions the `it` below actually witnesses live.
+ */
+const lifecycleBase = generateMigration({
+	declarations: [testSchema, getTableMeta(lifecyclePlain)],
+	previousSnapshot: emptySnapshot,
+});
+const lifecycleWithIdentity = generateMigration({
+	declarations: [testSchema, getTableMeta(lifecycleIdentity)],
+	previousSnapshot: lifecycleBase.snapshot,
+});
+const lifecycleWithoutIdentity = generateMigration({
+	declarations: [testSchema, getTableMeta(lifecyclePlain)],
+	previousSnapshot: lifecycleWithIdentity.snapshot,
+});
+
+/**
+ * The four alter statements `generateMigration` derives for the two
+ * transitions above -- hand-written literals (never sliced from the
+ * generator's own output at runtime; the same discipline
+ * {@link seqIdentityColumnSql} documents), pinned by `.toContain` in the
+ * `it` below before either is ever sent to Postgres. `lifecycleAddIdentity`
+ * reuses {@link identityAddPhrase}, the same grammar
+ * {@link seqIdentityColumnSql} ends in.
+ */
+const lifecycleSetNotNull =
+	'alter table "g5_integration"."lifecycle" alter column "count" set not null;';
+const lifecycleAddIdentity = `alter table "g5_integration"."lifecycle" alter column "count" ${identityAddPhrase};`;
+const lifecycleDropIdentity =
+	'alter table "g5_integration"."lifecycle" alter column "count" drop identity;';
+const lifecycleDropNotNull =
+	'alter table "g5_integration"."lifecycle" alter column "count" drop not null;';
 
 describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤, task 5.6)", () => {
 	const pool: { current: Pool | undefined } = { current: undefined };
@@ -249,13 +339,15 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// own output for the exact same declaration -- the raw DDL below is
 		// never produced by the migration engine (out of this group's scope
 		// entirely), so this is what keeps the two texts from silently
-		// drifting apart.
-		expect(
-			generateMigration({
-				declarations: [testSchema, getTableMeta(roundtrip)],
-				previousSnapshot: emptySnapshot,
-			}).sql,
-		).toContain(labelsNoNullElementsConstraint);
+		// drifting apart. add-generated-columns, group 4/task 4.1 reuses the
+		// same `generateMigration` call for `seq`/`doubled`'s own clauses.
+		const roundtripMigrationSql = generateMigration({
+			declarations: [testSchema, getTableMeta(roundtrip)],
+			previousSnapshot: emptySnapshot,
+		}).sql;
+		expect(roundtripMigrationSql).toContain(labelsNoNullElementsConstraint);
+		expect(roundtripMigrationSql).toContain(seqIdentityColumnSql);
+		expect(roundtripMigrationSql).toContain(doubledGeneratedColumnSql);
 
 		// schema/table setup is raw DDL through the driver directly, not
 		// through db() -- creating tables is the CLI/migration generator's
@@ -278,6 +370,8 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 				approx numeric[] not null,
 				durations interval[] not null,
 				labels text[] not null,
+				${seqIdentityColumnSql},
+				${doubledGeneratedColumnSql},
 				${labelsNoNullElementsConstraint}
 			)`,
 			params: [],
@@ -460,6 +554,119 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			expect(cause).toHaveProperty("constraint", "labels_no_null_elements");
 		}
 
+		// add-generated-columns, group 4/task 4.1: `seq` (generated always as
+		// identity) has no key at all on `InsertInput` (D100 decision 5) --
+		// core's own raw `insert()` (`MutationRow`, used everywhere else in
+		// this file) leaves every column optional and does NOT enforce this
+		// exclusion (#390), so this proof goes through the query package's
+		// chain entry point instead (`handle.insert(...)`, `InsertInput`-typed,
+		// `chain-mutation-input.test.ts`'s #351 wiring) -- the only place the
+		// type layer actually refuses this key. `as never` is the deliberate
+		// cast escape: reaching the database at all requires bypassing that
+		// refusal on purpose, exactly like the labels case above.
+		try {
+			await handle.insert(roundtrip).values([
+				{
+					id: "44444444-4444-4444-4444-444444444444",
+					amount: 1n,
+					precise: "0.000000",
+					duration: insertedDuration,
+					created: new Date(insertedCreated),
+					noteText: "rejected note",
+					amounts: [1],
+					precisions: ["1.000000"],
+					approx: [1],
+					durations: insertedDurationsArray,
+					labels: [],
+					seq: 1n,
+				},
+			] as never);
+			expect.unreachable(
+				"the database should have rejected the explicit identity write",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "query-execution-failed");
+			expect(error).toHaveProperty("kind", "insert");
+			const cause = (error as { cause?: unknown }).cause;
+			expect(cause).toHaveProperty("code", "428C9");
+		}
+
+		// add-generated-columns, group 4/task 4.1: the same proof for
+		// `doubled` (stored generated) -- Postgres refuses a client-supplied
+		// value for either ALWAYS-family kind alike (measured, not assumed).
+		// Same #390 gap: core's raw `insert()` would not have refused this
+		// key either, so this goes through the chain entry point too.
+		try {
+			await handle.insert(roundtrip).values([
+				{
+					id: "55555555-5555-5555-5555-555555555555",
+					amount: 1n,
+					precise: "0.000000",
+					duration: insertedDuration,
+					created: new Date(insertedCreated),
+					noteText: "rejected note",
+					amounts: [1],
+					precisions: ["1.000000"],
+					approx: [1],
+					durations: insertedDurationsArray,
+					labels: [],
+					doubled: 2n,
+				},
+			] as never);
+			expect.unreachable(
+				"the database should have rejected the explicit generated-column write",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "query-execution-failed");
+			expect(error).toHaveProperty("kind", "insert");
+			const cause = (error as { cause?: unknown }).cause;
+			expect(cause).toHaveProperty("code", "428C9");
+		}
+
+		// add-generated-columns, group 4/task 4.1: the type-level rejection
+		// itself, pinned separately from the two runtime proofs above --
+		// each statement is only ever built, never awaited, so it never
+		// reaches the driver (a chain is inert until awaited, `chain.ts`'s
+		// own contract). `sql` keeps the value arm itself error-free so the
+		// directive consumes exactly the "does not exist" diagnostic.
+		const identityWriteTypeRejected = handle.insert(roundtrip).values([
+			{
+				id: "66666666-6666-6666-6666-666666666666",
+				amount: 1n,
+				precise: "0.000000",
+				duration: insertedDuration,
+				created: new Date(insertedCreated),
+				noteText: "never sent",
+				amounts: [1],
+				precisions: ["1.000000"],
+				approx: [1],
+				durations: insertedDurationsArray,
+				labels: [],
+				// @ts-expect-error seq is ALWAYS-family (generated always as identity, D100 decision 5) -- no key exists on InsertInput to supply.
+				seq: sql`1`,
+			},
+		]);
+		expect(identityWriteTypeRejected).toBeDefined();
+
+		const generatedWriteTypeRejected = handle.insert(roundtrip).values([
+			{
+				id: "77777777-7777-7777-7777-777777777777",
+				amount: 1n,
+				precise: "0.000000",
+				duration: insertedDuration,
+				created: new Date(insertedCreated),
+				noteText: "never sent",
+				amounts: [1],
+				precisions: ["1.000000"],
+				approx: [1],
+				durations: insertedDurationsArray,
+				labels: [],
+				// @ts-expect-error doubled is ALWAYS-family (stored generated, D100 decision 5) -- no key exists on InsertInput to supply.
+				doubled: sql`2`,
+			},
+		]);
+		expect(generatedWriteTypeRejected).toBeDefined();
+
 		const rows = await handle.execute(select(roundtrip));
 
 		// the rejected insert above contributed nothing -- still exactly the
@@ -570,6 +777,18 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// back as an empty array, not `null` or a one-element array.
 		expect(mixedRow.labels).toEqual([]);
 
+		// add-generated-columns, group 4/task 4.1: identity values arrive
+		// assigned -- the seed insert above is this sequence's first touch,
+		// so insertion order fixes the assigned values deterministically
+		// (`row` seeded first, `mixedRow` second).
+		expect(row.seq).toBe(1n);
+		expect(mixedRow.seq).toBe(2n);
+
+		// the computed column arrives computed: `amount * 2`, including past
+		// `Number.MAX_SAFE_INTEGER` (bigint mode never loses precision).
+		expect(row.doubled).toBe(18014398509481986n);
+		expect(mixedRow.doubled).toBe(-84n);
+
 		// add-array-ergonomics, group 4/task 4.1: `assertNoNulls` applied to
 		// `mixedRow.amounts` (`[-1, null, 42]`, a real server's own answer,
 		// not a hand-built fixture) throws `HejbroError("null-array-element")`
@@ -615,5 +834,102 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			"-1 years -2 mons +3 days -00:05:00",
 		);
 		expect(rawById.get(mixedSignId)?.durations).toBe('{-00:05:00,"-3 days"}');
+	});
+
+	it("identity ordering rules (add-generated-columns, group 4/task 4.1): the exact statements generateMigration derives, measured live in both directions against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+
+		// group 2 derived two ordering rules from Postgres semantics but
+		// could not measure them without a live server (task 4.1's own
+		// addendum) -- pin the four statements against generateMigration's
+		// own chained-snapshot derivation before either is ever sent to
+		// Postgres. A wrong derivation here would break a real migration at
+		// apply time, not just this test.
+		expect(lifecycleWithIdentity.sql).toContain(lifecycleSetNotNull);
+		expect(lifecycleWithIdentity.sql).toContain(lifecycleAddIdentity);
+		expect(
+			lifecycleWithIdentity.sql.indexOf(lifecycleSetNotNull) <
+				lifecycleWithIdentity.sql.indexOf(lifecycleAddIdentity),
+		).toBe(true);
+		expect(lifecycleWithoutIdentity.sql).toContain(lifecycleDropIdentity);
+		expect(lifecycleWithoutIdentity.sql).toContain(lifecycleDropNotNull);
+		expect(
+			lifecycleWithoutIdentity.sql.indexOf(lifecycleDropIdentity) <
+				lifecycleWithoutIdentity.sql.indexOf(lifecycleDropNotNull),
+		).toBe(true);
+
+		// `g5_integration` already exists (created by the first `it` above,
+		// same describe/`beforeAll` pool, run first by vitest's declaration
+		// order) -- this scratch table lives in it, untouched by the
+		// `roundtrip` fixture. Created plain, matching `lifecyclePlain`
+		// exactly (the `.sql` this shape would itself generate is never
+		// executed -- only its `.snapshot`, above, feeds the chain).
+		await driver.execute({
+			sql: "create table g5_integration.lifecycle (id integer primary key, count integer)",
+			params: [],
+			kind: "sql",
+		});
+
+		// rule 1, reversed: adding identity before `set not null` is
+		// rejected -- the exact same pinned string the derived-order
+		// execution below uses, just run first against a column that isn't
+		// NOT NULL yet.
+		try {
+			await driver.execute({
+				sql: lifecycleAddIdentity,
+				params: [],
+				kind: "sql",
+			});
+			expect.unreachable(
+				"postgres should reject adding identity before NOT NULL",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "55000");
+			expect((error as { message?: string }).message).toMatch(
+				/must be declared NOT NULL before identity can be added/,
+			);
+		}
+
+		// rule 1, derived order: succeeds.
+		await driver.execute({ sql: lifecycleSetNotNull, params: [], kind: "sql" });
+		await driver.execute({
+			sql: lifecycleAddIdentity,
+			params: [],
+			kind: "sql",
+		});
+
+		// rule 2, reversed: dropping `not null` before `drop identity` is
+		// rejected.
+		try {
+			await driver.execute({
+				sql: lifecycleDropNotNull,
+				params: [],
+				kind: "sql",
+			});
+			expect.unreachable(
+				"postgres should reject dropping NOT NULL on an identity column",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "42601");
+			expect((error as { message?: string }).message).toMatch(
+				/is an identity column/,
+			);
+		}
+
+		// rule 2, derived order: succeeds.
+		await driver.execute({
+			sql: lifecycleDropIdentity,
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: lifecycleDropNotNull,
+			params: [],
+			kind: "sql",
+		});
 	});
 });
