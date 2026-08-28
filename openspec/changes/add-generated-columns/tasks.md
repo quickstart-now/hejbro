@@ -13,7 +13,7 @@ group 4 sized accordingly).
 
 ## 1. Declaration surface (core builders + table())
 
-- [ ] 1.1 (~9m) Builder trio + `TMeta`/`columnState` state. Red:
+- [x] 1.1 (~9m) Builder trio + `TMeta`/`columnState` state. Red:
       `packages/core/test/column-builder.test.ts` — "the three
       generated methods flag meta and columnState (identity kind and
       options recorded; generated records the fragment's node);
@@ -21,7 +21,7 @@ group 4 sized accordingly).
       Files: `packages/core/src/types/column-builder.ts`,
       `packages/core/src/types/column-builder-factories.ts` (if the
       chain implementation lives there), their tests.
-- [ ] 1.2 (~8m) `table()` misuse validation + implied flags. Red:
+- [x] 1.2 (~8m) `table()` misuse validation + implied flags. Red:
       `packages/core/test/not-null-elements.test.ts`-style new
       `packages/core/test/generated-columns.test.ts` — "identity on a
       non-integer column, generated+default, and generated+identity
