@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { defineFunction } from "../src/dsl/define-function";
+import { existingTable } from "../src/dsl/existing-table";
 import { pgEnum } from "../src/dsl/pg-enum";
 import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
 import { eq, literal, now } from "../src/expr/operators";
+import { sql } from "../src/expr/sql-template";
 import { createDefaultRegistry } from "../src/kind/registry";
 import type { TableSnapshot } from "../src/kinds/table-snapshot";
 import { update } from "../src/query/mutate";
@@ -761,5 +763,58 @@ describe("generateMigration", () => {
 			expect(sequenceDropIndex).toBeGreaterThan(-1);
 			expect(policyDropIndex).toBeLessThan(sequenceDropIndex);
 		});
+	});
+});
+
+describe("raw table declarations expand like whole tables (#408)", () => {
+	it("a TableDeclaration input emits rls, policies, and serial sequences too", () => {
+		const app = schema("gen408");
+		const guarded = table(
+			app,
+			"guarded",
+			{
+				id: serial().primaryKey(),
+				viewCount: integer().notNull(),
+			},
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("read_low")
+						.for("select")
+						.to("r408")
+						.using(sql`${t.viewCount} < 100`),
+				}),
+			}),
+		);
+		const viaTable = generateMigration({
+			declarations: [app, guarded],
+			previousSnapshot: emptySnapshot,
+		});
+		const viaMeta = generateMigration({
+			declarations: [app, getTableMeta(guarded)],
+			previousSnapshot: emptySnapshot,
+		});
+		// the two supported input forms must be EQUIVALENT -- before #408
+		// the raw declaration silently dropped rls/policies/sequences.
+		expect(viaMeta.sql).toBe(viaTable.sql);
+		expect(JSON.stringify(viaMeta.snapshot)).toBe(
+			JSON.stringify(viaTable.snapshot),
+		);
+		expect(viaMeta.warnings).toEqual(viaTable.warnings);
+		expect(viaMeta.sql).toContain("enable row level security");
+		expect(viaMeta.sql).toContain('create policy "read_low"');
+	});
+
+	it("an existingTable meta is rejected through the raw path too", () => {
+		const app = schema("gen408b");
+		const ref = existingTable("gen408b", "elsewhere", { id: uuid() });
+		expect(() =>
+			generateMigration({
+				declarations: [app, getTableMeta(ref)],
+				previousSnapshot: emptySnapshot,
+			}),
+		).toThrowError(
+			expect.objectContaining({ code: "existing-table-declared" }),
+		);
 	});
 });
