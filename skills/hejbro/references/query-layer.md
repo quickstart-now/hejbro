@@ -83,7 +83,18 @@ const deleted = await handle
 	.deleteFrom(posts)
 	.where(eq(posts.status, "draft"))
 	.returning({ deletedId: posts.id });
+
+// .innerJoin()/.leftJoin() take the joined table and an equality
+// condition, same as core's own select(...).innerJoin(...).
+const withComments = await handle
+	.select(posts)
+	.innerJoin(comments, eq(posts.id, comments.postId));
 ```
+
+An insert chain also has `.onConflictDoNothing(...target columns)` and
+`.onConflictDoUpdate({ target: [...], set: {...} })`, mirroring core's
+own `insert(...).onConflictDoNothing()`/`.onConflictDoUpdate()` stages —
+an upsert is still an `insert` chain, not a separate entry point.
 
 A `returning()` (and a function's own returned-row projection) is under
 the same rule as `select` — always an explicit column list, never
@@ -167,7 +178,10 @@ type: a `bigint`/`numeric` column accepts whatever its mode reads back as
 structured `IntervalValue`, a `date`/`timestamp`/`timestamptz` column
 accepts exactly `Date` (never a plain ISO string), and a `json`/`jsonb`/
 `bytea` column accepts only an `Expr` (the `sql` escape hatch) — there is
-no compile-time-lifted raw-value write path for those three.
+no compile-time-lifted raw-value write path for those three. On the read
+side, a `jsonb` column surfaces as `unknown` unless its declaration opts
+into a `.$type<T>()` brand — a branded `T` flows through both the result
+type and the insert/update input type unchanged, on both sides at once.
 
 ```ts prelude=query-handle
 import type { IntervalValue } from "hejbro";
@@ -205,7 +219,11 @@ declaration, and a missing/extra/mis-typed argument is a compile error,
 never a runtime coercion. A scalar-returning function resolves to the
 mapped scalar value; a table-returning function resolves to typed rows,
 with the rendered SQL listing the returned columns explicitly (the same
-never-`select *` rule as any other statement).
+never-`select *` rule as any other statement). `db.fn` composes with a
+context: `db.as(context).fn.*` is the same typed surface, and each call
+runs inside that context's own transaction — the role and settings apply
+before the function's own invocation, exactly like any other statement
+on a scoped handle.
 
 ```ts
 import { pgDriver } from "@hejbro/pg";
@@ -355,7 +373,7 @@ concrete next step.
 |---|---|
 | `query-execution-failed` | The driver rejected an executed statement (e.g. a constraint violation) — the message carries the parameterized SQL text; the statement's parameter *values* never appear on the error, not in the message, not as a field, not via its string or JSON form. |
 | `result-conversion-failed` | A returned column's value couldn't convert to its declared type (an unconvertible/missing column, an array arrival-shape mismatch, or a `NULL` element under `.notNullElements()`). |
-| `driver-missing-capability` | An operation (a transaction, a `db.as` context) needs a capability the active driver doesn't declare `true` — a capability explicitly declared `false` fails exactly like an undeclared one, never attempted. |
+| `driver-missing-capability` | An operation (a transaction, a `db.as` context) needs a capability the active driver doesn't declare `true` — a capability explicitly declared `false` fails exactly like an undeclared one, never attempted. The capability set itself is fixed and exhaustive: a driver's own declaration must name every one of them, and omitting one, or naming one outside the set, fails to type-check rather than defaulting silently — this is a compile-time guarantee, checked before this runtime error's own path is ever reached. |
 | `nested-transaction-unsupported` | `transaction()` was called again from inside its own already-open callback. |
 | `undeclared-role` | `db.as({ role, ... })`'s role isn't in the declared whitelist. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |

@@ -95,7 +95,14 @@ objects fails on whichever object landed before the original failure
 (e.g. `relation "..." already exists`), unless the apply tool wrapped the
 whole file in a transaction that already rolled everything in it back.
 Whether that's the case is entirely the apply tool's own behavior, not
-something hejbro controls or reports.
+something hejbro controls or reports. This isn't uniform across every
+statement in a migration file, though: a function or a view is always
+rendered `create or replace` (`packages/core/src/plpgsql/render-body.ts`,
+`packages/core/src/kinds/view-kind.ts`), so re-running one of those
+statements alone is idempotent — a straight retry fails first on a
+`create table` (or a bare `create schema`/`create index`, which carry no
+guard either), before it ever reaches a function or view statement later
+in the same file.
 
 ### Forward, not backward
 
