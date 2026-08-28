@@ -1,4 +1,13 @@
-import { bigint, jsonb, schema, sql, table, text, uuid } from "@hejbro/core";
+import {
+	bigint,
+	integer,
+	jsonb,
+	schema,
+	sql,
+	table,
+	text,
+	uuid,
+} from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { ChainApi } from "../../src/db/chain";
 import type { InsertInput, UpdateInput } from "../../src/types/insert-input";
@@ -43,6 +52,21 @@ declare const startedUpdate: ReturnType<typeof chains.update<Orders>>;
 
 const ID = "00000000-0000-0000-0000-000000000000";
 const PAYLOAD_EXPR = sql`'{"kind":"widget"}'::jsonb`;
+
+/**
+ * Generated-family probe fixture (task 3.1, D100 decision 5) -- a
+ * separate table and handle so `orders`/`startedInsert` above (#337's own
+ * pin) stay untouched. Confirms the #351 chain wiring inherits
+ * `InsertInput`'s ALWAYS-family exclusion, not just the standalone type.
+ */
+const events = table(app, "events", {
+	label: text().notNull(),
+	sequenceId: integer().generatedAlwaysAsIdentity(),
+});
+
+type Events = typeof events;
+
+declare const startedGenInsert: ReturnType<typeof chains.insert<Events>>;
 
 describe("chain .values() consumes InsertInput (#337)", () => {
 	it("the parameter type IS InsertInput, not a parallel shape", () => {
@@ -175,5 +199,21 @@ describe("chain .set() and onConflictDoUpdate set consume UpdateInput (#337)", (
 					},
 				});
 		expectTypeOf(rejected).toBeFunction();
+	});
+});
+
+describe("chain .values() inherits InsertInput's ALWAYS-family exclusion (task 3.1, D100 decision 5, #351 wiring)", () => {
+	it("rejects supplying an ALWAYS-family key, accepts omitting it", () => {
+		const rejected = () =>
+			startedGenInsert.values({
+				label: "first",
+				// @ts-expect-error sequenceId is ALWAYS-family (generated always as identity) -- no key exists on the chain input either.
+				sequenceId: 1,
+			});
+		const accepted = () =>
+			// sequenceId omitted -- there is no key to supply, Postgres computes it.
+			startedGenInsert.values({ label: "first" });
+		expectTypeOf(rejected).toBeFunction();
+		expectTypeOf(accepted).toBeFunction();
 	});
 });
