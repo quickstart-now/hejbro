@@ -15,6 +15,8 @@ SQL follow that physical order (reordering existing columns in TypeScript
 changes nothing).
 
 ```ts
+import { schema, table, uuid } from "hejbro";
+
 export const app = schema("app");
 export const posts = table(app, "posts", { id: uuid().primaryKey() });
 ```

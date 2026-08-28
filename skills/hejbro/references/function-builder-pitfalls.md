@@ -13,9 +13,23 @@ commonly — real JavaScript `if`/`for`/`while` inside a body all diverge
 between the two runs and throw `nondeterministic-body`.
 
 ```ts
-ctx.if(isNull(row.parentId), () => {
-	ctx.return(row);
+import { defineTrigger, isNull, schema, table, uuid } from "hejbro";
+
+const app = schema("app");
+const comments = table(app, "comments", {
+	id: uuid().primaryKey(),
+	parentId: uuid(),
 });
+
+defineTrigger(
+	comments,
+	{ name: "comments_single_depth", timing: "before", events: ["insert"], forEach: "row" },
+	(ctx, { new: row }) => {
+		ctx.if(isNull(row.parentId), () => {
+			ctx.return(row);
+		});
+	},
+);
 ```
 
 Never write `if (someCondition) { ... }` with a real JS condition inside a

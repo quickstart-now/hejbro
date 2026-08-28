@@ -9,7 +9,16 @@ Register the preset in `hejbro.config.ts`, not by hand in application
 code:
 
 ```ts
-presets: [supabasePreset],
+import { supabasePreset } from "@hejbro/supabase";
+import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/app.schema.ts"],
+	migrationsDir: "migrations",
+	snapshotPath: "hejbro.snapshot.json",
+	prefixStrategy: "index",
+	presets: [supabasePreset],
+});
 ```
 
 See `examples/supabase/hejbro.config.ts`.

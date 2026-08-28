@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { markdownFiles } from "./markdown-files";
 
 // Task 28 acceptance: every repo path the hejbro skill's SKILL.md/reference
 // docs cite must actually exist on disk — a stale path is a broken pointer
@@ -9,26 +10,16 @@ import { describe, expect, it } from "vitest";
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 const SKILLS_DIR = join(REPO_ROOT, "skills", "hejbro");
 
-/** Recursively lists every `.md` file under `dir`. */
-const markdownFiles = (dir: string): ReadonlyArray<string> =>
-	readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-		const full = join(dir, entry.name);
-		if (entry.isDirectory()) {
-			return markdownFiles(full);
-		}
-		if (entry.name.endsWith(".md")) {
-			return [full];
-		}
-		return [];
-	});
-
 // The reference docs cite paths as backticked code (` `examples/…` `) —
 // this repo's own style — plus, for any future markdown-link form, the
 // usual `[text](path)`. Both are scoped to the repo's own top-level
 // directories so inline code with an unrelated slash never matches.
-const BACKTICK_PATH = /`((?:examples|packages|docs|skills)\/[^`\s]+)`/g;
+// `openspec` is included because the query-layer/brownfield-adoption docs
+// cite `openspec/specs/<capability>/spec.md` as their grounding.
+const BACKTICK_PATH =
+	/`((?:examples|packages|docs|skills|openspec)\/[^`\s]+)`/g;
 const MARKDOWN_LINK_PATH =
-	/\]\(((?:examples|packages|docs|skills)\/[^)\s]+)\)/g;
+	/\]\(((?:examples|packages|docs|skills|openspec)\/[^)\s]+)\)/g;
 
 const collectPaths = (text: string): ReadonlyArray<string> => [
 	...[...text.matchAll(BACKTICK_PATH)].map((match) => match[1] as string),
