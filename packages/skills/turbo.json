@@ -3,7 +3,15 @@
 	"extends": ["//"],
 	"tasks": {
 		"test": {
-			"dependsOn": []
+			"dependsOn": [],
+			// This package's test reads the skill documents themselves
+			// (`snippet-compile.test.ts` type-checks every ```ts fence under
+			// skills/hejbro/), and they live OUTSIDE the package. Without this
+			// input turbo hashes only packages/skills/**, so editing a skill
+			// document leaves the cache key unchanged and `pnpm test` replays a
+			// stale PASS over broken snippets — green locally, red in CI, which
+			// is how it was found (#430).
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/skills/**"]
 		}
 	}
 }
