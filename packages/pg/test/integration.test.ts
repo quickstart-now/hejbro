@@ -7,6 +7,7 @@ import {
 	getTableMeta,
 	HejbroError,
 	insert,
+	integer,
 	interval,
 	numeric,
 	schema,
@@ -229,6 +230,59 @@ const roundtrip = table(testSchema, "roundtrip", {
 	seq: bigint().generatedAlwaysAsIdentity(),
 	doubled: bigint().generatedAlwaysAs(sql`amount * 2`),
 });
+
+/**
+ * The ordering-rule witness's own two table shapes (task 4.1's "witness
+ * two ordering rules" addendum) -- `count` starts plain and nullable,
+ * then gains a bare `generated always as identity`. `id` exists only so
+ * the table is well-formed; only `count`'s own transition is under test.
+ */
+const lifecyclePlain = table(testSchema, "lifecycle", {
+	id: integer().primaryKey(),
+	count: integer(),
+});
+const lifecycleIdentity = table(testSchema, "lifecycle", {
+	id: integer().primaryKey(),
+	count: integer().generatedAlwaysAsIdentity(),
+});
+
+/**
+ * Chained snapshots (each step's `previousSnapshot` is the prior step's
+ * own `.snapshot`, mirroring `identity-column-lifecycle`'s golden case
+ * shape) -- `lifecycleBase`'s `.sql` is never executed (the real table
+ * below is created by hand, identically); only its `.snapshot` feeds the
+ * next diff. `lifecycleWithIdentity`/`lifecycleWithoutIdentity` are the
+ * two alter transitions the `it` below actually witnesses live.
+ */
+const lifecycleBase = generateMigration({
+	declarations: [testSchema, getTableMeta(lifecyclePlain)],
+	previousSnapshot: emptySnapshot,
+});
+const lifecycleWithIdentity = generateMigration({
+	declarations: [testSchema, getTableMeta(lifecycleIdentity)],
+	previousSnapshot: lifecycleBase.snapshot,
+});
+const lifecycleWithoutIdentity = generateMigration({
+	declarations: [testSchema, getTableMeta(lifecyclePlain)],
+	previousSnapshot: lifecycleWithIdentity.snapshot,
+});
+
+/**
+ * The four alter statements `generateMigration` derives for the two
+ * transitions above -- hand-written literals (never sliced from the
+ * generator's own output at runtime; the same discipline
+ * {@link seqIdentityColumnSql} documents), pinned by `.toContain` in the
+ * `it` below before either is ever sent to Postgres. `lifecycleAddIdentity`
+ * reuses {@link identityAddPhrase}, the same grammar
+ * {@link seqIdentityColumnSql} ends in.
+ */
+const lifecycleSetNotNull =
+	'alter table "g5_integration"."lifecycle" alter column "count" set not null;';
+const lifecycleAddIdentity = `alter table "g5_integration"."lifecycle" alter column "count" ${identityAddPhrase};`;
+const lifecycleDropIdentity =
+	'alter table "g5_integration"."lifecycle" alter column "count" drop identity;';
+const lifecycleDropNotNull =
+	'alter table "g5_integration"."lifecycle" alter column "count" drop not null;';
 
 describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤, task 5.6)", () => {
 	const pool: { current: Pool | undefined } = { current: undefined };
@@ -782,29 +836,51 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(rawById.get(mixedSignId)?.durations).toBe('{-00:05:00,"-3 days"}');
 	});
 
-	it("identity ordering rules (add-generated-columns, group 4/task 4.1): live alter, both directions measured against a real postgres:17", async () => {
+	it("identity ordering rules (add-generated-columns, group 4/task 4.1): the exact statements generateMigration derives, measured live in both directions against a real postgres:17", async () => {
 		const activePool = pool.current;
 		if (activePool === undefined) {
 			throw new Error("beforeAll did not set up the pool");
 		}
 		const driver = pgDriver(activePool);
 
+		// group 2 derived two ordering rules from Postgres semantics but
+		// could not measure them without a live server (task 4.1's own
+		// addendum) -- pin the four statements against generateMigration's
+		// own chained-snapshot derivation before either is ever sent to
+		// Postgres. A wrong derivation here would break a real migration at
+		// apply time, not just this test.
+		expect(lifecycleWithIdentity.sql).toContain(lifecycleSetNotNull);
+		expect(lifecycleWithIdentity.sql).toContain(lifecycleAddIdentity);
+		expect(
+			lifecycleWithIdentity.sql.indexOf(lifecycleSetNotNull) <
+				lifecycleWithIdentity.sql.indexOf(lifecycleAddIdentity),
+		).toBe(true);
+		expect(lifecycleWithoutIdentity.sql).toContain(lifecycleDropIdentity);
+		expect(lifecycleWithoutIdentity.sql).toContain(lifecycleDropNotNull);
+		expect(
+			lifecycleWithoutIdentity.sql.indexOf(lifecycleDropIdentity) <
+				lifecycleWithoutIdentity.sql.indexOf(lifecycleDropNotNull),
+		).toBe(true);
+
 		// `g5_integration` already exists (created by the first `it` above,
 		// same describe/`beforeAll` pool, run first by vitest's declaration
 		// order) -- this scratch table lives in it, untouched by the
-		// `roundtrip` fixture.
+		// `roundtrip` fixture. Created plain, matching `lifecyclePlain`
+		// exactly (the `.sql` this shape would itself generate is never
+		// executed -- only its `.snapshot`, above, feeds the chain).
 		await driver.execute({
-			sql: "create table g5_integration.ordering_probe (id integer primary key, c integer)",
+			sql: "create table g5_integration.lifecycle (id integer primary key, count integer)",
 			params: [],
 			kind: "sql",
 		});
 
-		// rule 1: adding identity to an existing column requires the column
-		// to already be NOT NULL. Reversed order first (measured to fail),
-		// then the derived order (measured to succeed).
+		// rule 1, reversed: adding identity before `set not null` is
+		// rejected -- the exact same pinned string the derived-order
+		// execution below uses, just run first against a column that isn't
+		// NOT NULL yet.
 		try {
 			await driver.execute({
-				sql: `alter table "g5_integration"."ordering_probe" alter column "c" ${identityAddPhrase};`,
+				sql: lifecycleAddIdentity,
 				params: [],
 				kind: "sql",
 			});
@@ -818,23 +894,19 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			);
 		}
 
+		// rule 1, derived order: succeeds.
+		await driver.execute({ sql: lifecycleSetNotNull, params: [], kind: "sql" });
 		await driver.execute({
-			sql: 'alter table "g5_integration"."ordering_probe" alter column "c" set not null;',
-			params: [],
-			kind: "sql",
-		});
-		await driver.execute({
-			sql: `alter table "g5_integration"."ordering_probe" alter column "c" ${identityAddPhrase};`,
+			sql: lifecycleAddIdentity,
 			params: [],
 			kind: "sql",
 		});
 
-		// rule 2: dropping NOT NULL on an identity column is rejected;
-		// `drop identity` must come first. Reversed order first (measured to
-		// fail), then the derived order (measured to succeed).
+		// rule 2, reversed: dropping `not null` before `drop identity` is
+		// rejected.
 		try {
 			await driver.execute({
-				sql: 'alter table "g5_integration"."ordering_probe" alter column "c" drop not null;',
+				sql: lifecycleDropNotNull,
 				params: [],
 				kind: "sql",
 			});
@@ -848,13 +920,14 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			);
 		}
 
+		// rule 2, derived order: succeeds.
 		await driver.execute({
-			sql: 'alter table "g5_integration"."ordering_probe" alter column "c" drop identity;',
+			sql: lifecycleDropIdentity,
 			params: [],
 			kind: "sql",
 		});
 		await driver.execute({
-			sql: 'alter table "g5_integration"."ordering_probe" alter column "c" drop not null;',
+			sql: lifecycleDropNotNull,
 			params: [],
 			kind: "sql",
 		});
