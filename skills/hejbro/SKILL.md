@@ -1,11 +1,16 @@
 ---
 name: hejbro
-description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — or when generating/verifying migrations, or when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()).
-version: 0.1.0
+description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — when generating/verifying migrations, when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()), when writing typed queries against a declared schema (db(), the select/insert/update/deleteFrom chain, db.fn), when running a query under an RLS execution context (db.as, asUser/asAnon), or when adopting hejbro into an existing (brownfield) database.
+version: 0.2.0
 license: MIT
 ---
 
 # hejbro
+
+hejbro is two things built on one declaration: **declare → migration**
+(tables, RLS, functions/triggers, grants, views compile to deterministic
+SQL) and **declare → typed queries** (the same declarations drive a typed
+`db()` handle — no generated types, no second schema to keep in sync).
 
 1. Declare only — never hand-edit `migrations/*.sql` or `hejbro.snapshot.json`; regenerate with `hejbro generate`.
 2. Inside `defineFunction`/`defineTrigger` bodies, never use real JS `if`/`for`/`while` — use `ctx.if()`/`ctx.forEach()`. The body callback runs twice at declaration time (a determinism guard); anything that isn't pure DSL recording throws `nondeterministic-body`.
@@ -14,6 +19,8 @@ license: MIT
 5. Presets (e.g. `@hejbro/supabase`) go in `hejbro.config.ts`'s `presets` array — never register kinds by hand in application code.
 6. CHECK constraints, partial/ordered indexes, and self-referencing foreign keys are all declared inline on `table(...)`'s extras — see the cheatsheet, not the query builder.
 7. `hejbro verify` re-derives the migration chain from checked-out files only (no live DB) — run it in CI. The local Docker round-trip (`pnpm roundtrip`) is the deeper, pre-merge check.
+8. `db(schema, driver)` builds a typed handle straight from the same declarations — `select`/`insert`/`update`/`deleteFrom` chains stay inert until awaited, and `.compile()` never touches a driver.
+9. `db.as(context)` runs statements under an explicit role/session context (RLS); a role outside the declared whitelist fails immediately, before anything reaches the database.
 
 ## References
 
@@ -23,3 +30,5 @@ license: MIT
 | `references/function-builder-pitfalls.md` | Writing a `defineFunction`/`defineTrigger` body, or debugging a `nondeterministic-body` error |
 | `references/generate-verify-workflow.md` | Running `generate`/`verify`, reading the banner, resolving an ambiguous rename, reading a warning |
 | `references/supabase-preset.md` | Using `@hejbro/supabase` — roles, auth helpers, storage buckets, preset warnings |
+| `references/query-layer.md` | Building a `db()` handle, chaining queries, calling `db.fn`, running under an RLS execution context, transactions, or query-layer errors |
+| `references/brownfield-adoption.md` | Adopting hejbro into an existing (already-populated) database |
