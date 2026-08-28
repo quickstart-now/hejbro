@@ -193,6 +193,19 @@ export type OrderByTerm = {
 	readonly direction: "asc" | "desc";
 };
 
+/**
+ * `select distinct` / `select distinct on (...)` (#437). `on` is
+ * Postgres-only and has no portable equivalent — the idiomatic way to
+ * take one row per group — so it is first-class here rather than pushed
+ * to the `sql` escape hatch.
+ */
+export type DistinctNode =
+	| { readonly distinctKind: "all" }
+	| {
+			readonly distinctKind: "on";
+			readonly columns: ReadonlyArray<ExprNode>;
+	  };
+
 export type SelectNode = {
 	readonly queryKind: "select";
 	readonly projection: ProjectionNode;
@@ -201,6 +214,8 @@ export type SelectNode = {
 	readonly where: ExprNode | null;
 	readonly orderBy: ReadonlyArray<OrderByTerm>;
 	readonly limit: number | null;
+	readonly offset: number | null;
+	readonly distinct: DistinctNode | null;
 };
 
 export type ReturningNode =
@@ -273,6 +288,7 @@ export type SetOpNode = {
 	readonly right: SelectNode | SetOpNode;
 	readonly orderBy: ReadonlyArray<OrderByTerm>;
 	readonly limit: number | null;
+	readonly offset: number | null;
 };
 
 export type QueryNode =

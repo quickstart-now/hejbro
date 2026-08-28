@@ -26,8 +26,8 @@
 -- + grant app.default-table-privileges.app_writer [new]
 -- + grant app.schema-usage.app_reader [new]
 -- + grant app.schema-usage.app_writer [new]
--- parent-snapshot: sha256:2f733c694c259ae11b47b87bee94f97bdc9d26b28168cd5e7eebb32cd25c061c
--- snapshot: sha256:501a4ef4194351d75b84cc1daf6b35822751834322ccf0f1b1d03e53db1bd53d
+-- parent-snapshot: sha256:d369ef9ab960e03f29326874197ae3d23281b0b38fa322e6e8d0b9ac9030eedb
+-- snapshot: sha256:fe7323b8bdadeedacc86ee0de52026a180a029faa394d44208fa3afed83a4987
 
 create schema "app";
 

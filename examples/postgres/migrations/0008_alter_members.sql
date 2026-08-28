@@ -3,8 +3,8 @@
 -- ~ table app.members [index "members_email_lower_idx" added]
 -- ~ table app.tasks [column "metadata" added, index "tasks_metadata_idx" added]
 -- ~ view app.open_tasks [view changed]
--- parent-snapshot: sha256:b297df52a651aa02e2ada09a35f652651af5be5261e17851056c5e901ffccde6
--- snapshot: sha256:aafa748bf3cd54fe41fbc536214488f1b7203f5cf97fde15335440288209dbfe
+-- parent-snapshot: sha256:5419679621a99bf56750b19a50b0d5f6d06be613df8474ae6d30eed64b3c2216
+-- snapshot: sha256:3b7be8f9a007dff76bb426122a24038e9778cca71316caaf09fb26f7fde5c581
 
 create index "members_email_lower_idx" on "app"."members" ((lower("app"."members"."email")));
 

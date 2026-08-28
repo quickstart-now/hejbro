@@ -5,6 +5,7 @@ import type {
 	ColumnRefNode,
 	ComparisonNode,
 	DeleteNode,
+	DistinctNode,
 	ExistsNode,
 	ExprNode,
 	FunctionCallNode,
@@ -292,6 +293,30 @@ const limitClause = (limit: number | null): string => {
 	return `limit ${limit}`;
 };
 
+const offsetClause = (offset: number | null): string => {
+	if (offset === null) {
+		return "";
+	}
+	return `offset ${offset}`;
+};
+
+/** `distinct` / `distinct on (...)` — rendered between `select` and the projection, where SQL puts it. */
+const distinctKeyword = (
+	distinct: DistinctNode | null,
+	scope: OuterScope,
+): string => {
+	if (distinct === null) {
+		return "select";
+	}
+	if (distinct.distinctKind === "all") {
+		return "select distinct";
+	}
+	const columns = distinct.columns
+		.map((column) => renderExpr(column, scope))
+		.join(", ");
+	return `select distinct on (${columns})`;
+};
+
 const collectProjectionRefs = (
 	projection: ProjectionNode,
 ): ReadonlyArray<ColumnRefNode> => {
@@ -417,13 +442,14 @@ const renderSelectClauses = (
 		.join(" ");
 
 	const clauses = [
-		`select ${renderProjection(query.projection, scope)}`,
+		`${distinctKeyword(query.distinct, scope)} ${renderProjection(query.projection, scope)}`,
 		clauseAfterProjection ?? "",
 		`from ${renderTableRef(query.from)}`,
 		joinsSql,
 		whereClause(query.where, scope),
 		orderByClause(query.orderBy, scope),
 		limitClause(query.limit),
+		offsetClause(query.offset),
 	].filter((clause) => clause !== "");
 
 	return clauses.join(" ");
@@ -648,6 +674,7 @@ export const renderSetOp = (
 		renderSetOpBranch(node.right, outerScope),
 		setOpOrderByClause(node.orderBy),
 		limitClause(node.limit),
+		offsetClause(node.offset),
 	].filter((clause) => clause !== "");
 	return clauses.join(" ");
 };

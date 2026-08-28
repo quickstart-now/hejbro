@@ -60,10 +60,20 @@ export type SelectLimited<
 	readonly fromTable: Table;
 	readonly projectionInput: TProjection;
 } & SetOpCombinators<TProjection>;
+export type SelectOffsetted<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectLimited<TProjection>;
 export type SelectOrdered<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectLimited<TProjection> & {
-	limit(count: number): SelectLimited<TProjection>;
+	limit(count: number): SelectLimitedThenOffset<TProjection>;
+	/** `offset` without a `limit` is legal SQL and useful on its own. */
+	offset(count: number): SelectOffsetted<TProjection>;
+};
+export type SelectLimitedThenOffset<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectLimited<TProjection> & {
+	offset(count: number): SelectOffsetted<TProjection>;
 };
 export type SelectFiltered<
 	TProjection extends SelectProjection = SelectProjection,
@@ -76,6 +86,18 @@ export type SelectJoinable<
 	innerJoin(joined: Table, on: Condition): SelectJoinable<TProjection>;
 	leftJoin(joined: Table, on: Condition): SelectJoinable<TProjection>;
 	where(condition: Condition): SelectFiltered<TProjection>;
+};
+/**
+ * What `select()` itself returns: a joinable stage that can still take
+ * `distinct`. SQL puts `distinct` between `select` and the projection, so
+ * the chain does too — it is available first and exactly once, and every
+ * later stage is a plain {@link SelectJoinable}.
+ */
+export type SelectDistinctable<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectJoinable<TProjection> & {
+	distinct(): SelectJoinable<TProjection>;
+	distinctOn(...columns: ReadonlyArray<Expr>): SelectJoinable<TProjection>;
 };
 
 const tableRefOf = (target: Table): TableRefNode => {
@@ -127,6 +149,7 @@ const combineSetOp = <TProjection extends SelectProjection>(
 			right: branchNode(other),
 			orderBy: [],
 			limit: null,
+			offset: null,
 		},
 		projectionInput,
 	);
@@ -165,6 +188,16 @@ const makeSetOpStage = <TProjection extends SelectProjection>(
 	limit: (count) => makeSetOpStage({ ...node, limit: count }, projectionInput),
 });
 
+/** `limit`/`offset` take the same non-negative integer and render inline, never as a bind parameter — one validator, so the two can never drift on what they accept. */
+const assertRowCount = (count: number, clause: "limit" | "offset"): void => {
+	if (!Number.isInteger(count) || count < 0) {
+		throwHejbroError(
+			`invalid-${clause}`,
+			`${clause}(${count}) must be a non-negative integer. Next: pass a non-negative integer, e.g. ${clause}(10).`,
+		);
+	}
+};
+
 const makeStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
 	fromTable: Table,
@@ -199,13 +232,51 @@ const makeStages = <TProjection extends SelectProjection>(
 			projectionInput,
 		),
 	limit: (count) => {
-		if (!Number.isInteger(count) || count < 0) {
+		assertRowCount(count, "limit");
+		return makeStages({ ...query, limit: count }, fromTable, projectionInput);
+	},
+	offset: (count) => {
+		assertRowCount(count, "offset");
+		return makeStages({ ...query, offset: count }, fromTable, projectionInput);
+	},
+});
+
+/**
+ * What `select()` returns — {@link makeStages} plus the two `distinct`
+ * members, which every later stage drops (SQL allows `distinct` only
+ * between `select` and the projection, so the chain allows it exactly
+ * once, first).
+ */
+const makeDistinctableStages = <TProjection extends SelectProjection>(
+	query: SelectNode,
+	fromTable: Table,
+	projectionInput: TProjection,
+): SelectDistinctable<TProjection> => ({
+	...makeStages(query, fromTable, projectionInput),
+	distinct: () =>
+		makeStages(
+			{ ...query, distinct: { distinctKind: "all" } },
+			fromTable,
+			projectionInput,
+		),
+	distinctOn: (...columns) => {
+		if (columns.length === 0) {
 			return throwHejbroError(
-				"invalid-limit",
-				`limit(${count}) must be a non-negative integer. Next: pass a non-negative integer, e.g. limit(10).`,
+				"empty-distinct-on",
+				"distinctOn() needs at least one column. Next: pass the columns one row per group is taken for, e.g. distinctOn(posts.authorId), and order by those columns first.",
 			);
 		}
-		return makeStages({ ...query, limit: count }, fromTable, projectionInput);
+		return makeStages(
+			{
+				...query,
+				distinct: {
+					distinctKind: "on",
+					columns: columns.map((column) => column.exprNode),
+				},
+			},
+			fromTable,
+			projectionInput,
+		);
 	},
 });
 
@@ -261,9 +332,9 @@ const resolveProjection = (
 export const select = <TProjection extends SelectProjection>(
 	projection: TProjection,
 	from?: Table,
-): SelectJoinable<TProjection> => {
+): SelectDistinctable<TProjection> => {
 	const { projectionNode, fromTable } = resolveProjection(projection, from);
-	return makeStages(
+	return makeDistinctableStages(
 		{
 			queryKind: "select",
 			projection: projectionNode,
@@ -272,6 +343,8 @@ export const select = <TProjection extends SelectProjection>(
 			where: null,
 			orderBy: [],
 			limit: null,
+			offset: null,
+			distinct: null,
 		},
 		fromTable,
 		projection,

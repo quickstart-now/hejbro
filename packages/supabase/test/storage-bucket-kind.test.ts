@@ -565,7 +565,7 @@ describe("storageBucketKind.requiredKeys (D79, #159)", () => {
 
 	it("accepts a fully-populated node (negative control)", () => {
 		const raw = JSON.stringify({
-			formatVersion: 7,
+			formatVersion: 8,
 			dialect: "postgres",
 			objects: { "supabase-storage-bucket:avatars": { name: "avatars" } },
 		});
@@ -576,7 +576,7 @@ describe("storageBucketKind.requiredKeys (D79, #159)", () => {
 
 	it("rejects a node missing name, by name", () => {
 		const raw = JSON.stringify({
-			formatVersion: 7,
+			formatVersion: 8,
 			dialect: "postgres",
 			objects: { "supabase-storage-bucket:avatars": {} },
 		});

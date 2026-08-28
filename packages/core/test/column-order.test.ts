@@ -286,6 +286,8 @@ describe("applyColumnOrderTo*", () => {
 		where: null,
 		orderBy: [],
 		limit: null,
+		offset: null,
+		distinct: null,
 	} as const;
 
 	it("recurses into both set-op branches, keeping identity when nothing moves (add-set-operations)", () => {
@@ -297,6 +299,7 @@ describe("applyColumnOrderTo*", () => {
 			right: select,
 			orderBy: [],
 			limit: null,
+			offset: null,
 		} as const;
 		const reordered = applyColumnOrderToQuery(setOp, oracle);
 		expect(reordered).not.toBe(setOp);

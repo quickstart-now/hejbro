@@ -44,13 +44,21 @@ import { stableJson } from "./stable-json";
  * snapshot's foreign keys are recorded in canonical,
  * declaration-form-independent order — an older reader must refuse
  * rather than mis-diff over the uncanonical order. v6 was never
- * released (0.1.1 shipped v5).
+ * released (0.1.1 shipped v5). Bumped to `8` for #437: a view body's
+ * `SelectNode` gains `offset` and `distinct`, so a v7 reader would
+ * silently diff a paginated or de-duplicated view as if it were neither.
+ * Still pre-publication — 0.1.1 shipped v5 and 0.2.0 has not shipped, so
+ * whatever version 0.2.0 lands on is the first one any user sees, and a
+ * pre-release field addition costs nothing externally. Any further
+ * pre-release `SelectNode` growth (#416's `groupBy`/`having`) should
+ * extend 8 in place rather than bump again; the first addition AFTER
+ * 0.2.0 ships is the one that pays the real price (#413).
  */
-export const HEJBRO_SNAPSHOT_VERSION = 7;
+export const HEJBRO_SNAPSHOT_VERSION = 8;
 
 /** A deterministic, flat representation of every declared database object. */
 export type Snapshot = {
-	readonly formatVersion: 7;
+	readonly formatVersion: 8;
 	readonly dialect: "postgres";
 	/** keyed by `${kind}:${identity}` */
 	readonly objects: { readonly [kindAndIdentity: string]: JsonValue };

@@ -283,9 +283,12 @@ export { deleteFrom, insert, update } from "./query/mutate";
 export type {
 	NestedReadMarker,
 	OrderTermInput,
+	SelectDistinctable,
 	SelectFiltered,
 	SelectJoinable,
 	SelectLimited,
+	SelectLimitedThenOffset,
+	SelectOffsetted,
 	SelectOrdered,
 	SelectProjection,
 	SetOpBranch,

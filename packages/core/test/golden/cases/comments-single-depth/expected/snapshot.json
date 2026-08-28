@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 7,
+	"formatVersion": 8,
 	"objects": {
 		"function:app.comments_enforce_single_depth": {
 			"args": [],

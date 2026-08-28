@@ -260,6 +260,8 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 					},
 				],
 				limit: 1,
+				offset: null,
+				distinct: null,
 			},
 		};
 		const retargeted = retargetExprNode(node, tableRenameTarget);
@@ -302,6 +304,8 @@ describe("retargetSelectNode (#157 item 96: same identity-preservation disciplin
 		where: whereClause,
 		orderBy: [],
 		limit: null,
+		offset: null,
+		distinct: null,
 	});
 
 	it.each(REACHABLE_NODE_KINDS)(
@@ -376,6 +380,8 @@ describe('retargetSelectNode with a "columns" projection (defineView\'s own colu
 		where: null,
 		orderBy: [],
 		limit: null,
+		offset: null,
+		distinct: null,
 	});
 
 	it("retargets the matching column's own expr, leaving an unrelated column entry's reference untouched", () => {
@@ -446,6 +452,8 @@ describe("set-op retarget (add-set-operations task 1.4)", () => {
 				where: null,
 				orderBy: [],
 				limit: null,
+				offset: null,
+				distinct: null,
 			},
 			right: {
 				queryKind: "select",
@@ -455,9 +463,12 @@ describe("set-op retarget (add-set-operations task 1.4)", () => {
 				where: null,
 				orderBy: [],
 				limit: null,
+				offset: null,
+				distinct: null,
 			},
 			orderBy: [],
 			limit: null,
+			offset: null,
 		};
 		const renamed = retargetSetOpNode(base, {
 			oldSchema: "app",
@@ -491,6 +502,8 @@ describe("set-op right-branch rename (review F5)", () => {
 			where: null,
 			orderBy: [],
 			limit: null,
+			offset: null,
+			distinct: null,
 		});
 		const node: SetOpNode = {
 			queryKind: "setOp",
@@ -500,6 +513,7 @@ describe("set-op right-branch rename (review F5)", () => {
 			right: leaf("movers"),
 			orderBy: [],
 			limit: null,
+			offset: null,
 		};
 		const renamed = retargetSetOpNode(node, {
 			oldSchema: "app",

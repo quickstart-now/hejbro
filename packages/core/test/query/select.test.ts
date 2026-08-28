@@ -41,6 +41,39 @@ describe("select builder", () => {
 			'select "id", "status", "published_at" from "app"."posts"',
 		);
 	});
+	it("renders offset after limit", () => {
+		const query = select(posts)
+			.orderBy({ by: posts.publishedAt, direction: "desc" })
+			.limit(10)
+			.offset(20);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."published_at" desc limit 10 offset 20',
+		);
+	});
+	it("renders offset without a limit", () => {
+		const query = select(posts).offset(5);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" offset 5',
+		);
+	});
+	it("rejects a negative or fractional offset", () => {
+		expect(() => select(posts).offset(-1)).toThrow(/non-negative integer/);
+		expect(() => select(posts).offset(1.5)).toThrow(/non-negative integer/);
+	});
+	it("renders distinct and distinct on", () => {
+		expect(renderSelect(select(posts).distinct().selectQuery)).toBe(
+			'select distinct "id", "status", "published_at" from "app"."posts"',
+		);
+		const perStatus = select(posts)
+			.distinctOn(posts.status)
+			.orderBy(posts.status, { by: posts.publishedAt, direction: "desc" });
+		expect(renderSelect(perStatus.selectQuery)).toBe(
+			'select distinct on ("app"."posts"."status") "id", "status", "published_at" from "app"."posts" order by "app"."posts"."status" asc, "app"."posts"."published_at" desc',
+		);
+	});
+	it("rejects distinct on with no columns", () => {
+		expect(() => select(posts).distinctOn()).toThrow(/at least one column/);
+	});
 	it("accepts a sql fragment as a where condition", () => {
 		// #386: the declaration medium's condition positions (check(), a
 		// partial index, an RLS policy) already take Expr<"unknown">; a
@@ -281,6 +314,7 @@ describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
 			right: archivedQuery.selectQuery,
 			orderBy: [],
 			limit: null,
+			offset: null,
 		};
 		expect(renderSetOp(combined)).toBe(
 			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\'',
@@ -296,6 +330,7 @@ describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
 			right: archivedQuery.selectQuery,
 			orderBy: [],
 			limit: null,
+			offset: null,
 		};
 		const outer: SetOpNode = {
 			queryKind: "setOp",
@@ -305,6 +340,7 @@ describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
 			right: select(posts).selectQuery,
 			orderBy: [{ expr: posts.id.exprNode, direction: "asc" }],
 			limit: 3,
+			offset: null,
 		};
 		expect(renderSetOp(outer)).toBe(
 			'(select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union all select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\') except select "id", "status", "published_at" from "app"."posts" order by "id" asc limit 3',
@@ -324,6 +360,7 @@ describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
 			right: archivedQuery.selectQuery,
 			orderBy: [{ expr: comments.postId.exprNode, direction: "asc" }],
 			limit: null,
+			offset: null,
 		};
 		expect(() => renderSetOp(combined)).toThrowError(/output/);
 	});
@@ -374,6 +411,7 @@ describe("set-op order-by output-column guard (review F1)", () => {
 			right: narrowRight.selectQuery,
 			orderBy: [{ expr: posts.status.exprNode, direction: "asc" }],
 			limit: null,
+			offset: null,
 		};
 		expect(() => renderSetOp(nonProjected)).toThrowError(/output/);
 

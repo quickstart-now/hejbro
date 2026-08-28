@@ -15,6 +15,8 @@ const existsOverWhere = (inner: ExprNode): ExprNode => ({
 		where: inner,
 		orderBy: [],
 		limit: null,
+		offset: null,
+		distinct: null,
 	},
 });
 
@@ -35,6 +37,8 @@ const existsOverJoin = (inner: ExprNode): ExprNode => ({
 		where: null,
 		orderBy: [],
 		limit: null,
+		offset: null,
+		distinct: null,
 	},
 });
 
@@ -49,6 +53,8 @@ const existsOverOrderBy = (inner: ExprNode): ExprNode => ({
 		where: null,
 		orderBy: [{ expr: inner, direction: "asc" }],
 		limit: null,
+		offset: null,
+		distinct: null,
 	},
 });
 
