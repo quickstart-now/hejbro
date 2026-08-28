@@ -11,6 +11,7 @@ import {
 	isNotNull,
 	jsonb,
 	now,
+	pgEnum,
 	renderQuery,
 	schema,
 	sql,
@@ -30,6 +31,11 @@ const posts = table(app, "posts", {
 const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
 	postId: uuid().notNull(),
+});
+const articleStatus = pgEnum(app, "article_status", ["draft", "published"]);
+const articles = table(app, "articles", {
+	id: uuid().primaryKey(),
+	status: articleStatus.column().notNull(),
 });
 const invoices = table(app, "invoices", {
 	id: uuid().primaryKey(),
@@ -282,6 +288,21 @@ describe("MutationValue write-acceptance union (task 2.1, #322 -- STRICT, design
 		// family-based `LiftableFor<"numeric">` was `number`-only) -- kept so
 		// a future widening of the union fails here too.
 		const _rejectedString: MutationRow<typeof invoices> = { amountCents: "1" };
+	});
+});
+
+describe("enum write-acceptance (#422 -- the declared values are the write type)", () => {
+	it("accepts a declared value and rejects any other string", () => {
+		const _accepted: MutationRow<typeof articles> = { status: "draft" };
+
+		// @ts-expect-error the whole defect: before #422 `pgEnum` was not
+		// generic over its values, so the column typed as bare `string` and
+		// this compiled -- the database rejected it at runtime instead.
+		const _rejected: MutationRow<typeof articles> = { status: "archived" };
+
+		// @ts-expect-error a value that merely resembles one of the declared
+		// values is not one of them.
+		const _rejectedCase: MutationRow<typeof articles> = { status: "Draft" };
 	});
 });
 

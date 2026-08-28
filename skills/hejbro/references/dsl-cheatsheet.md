@@ -32,6 +32,25 @@ and its chainable modifiers (`.notNull()`, `.primaryKey()`, `.unique()`,
 `.generatedByDefaultAsIdentity()`) are self-describing exports — see
 `packages/core/src/types/column-builder-factories.ts`.
 
+## Enums
+
+```ts
+import { pgEnum, schema, table, uuid } from "hejbro";
+
+const shop = schema("shop");
+const articleStatus = pgEnum(shop, "article_status", ["draft", "published"]);
+
+export const articles = table(shop, "articles", {
+	id: uuid().primaryKey(),
+	status: articleStatus.column().notNull(),
+});
+```
+
+The declared values are the column's TypeScript type, both directions:
+`status` reads back as `"draft" | "published"` and only those two
+literals type-check as a write. Nothing to restate — no
+`.$type<"draft" | "published">()` on top of the declaration (#422).
+
 ## Generated columns
 
 ```ts

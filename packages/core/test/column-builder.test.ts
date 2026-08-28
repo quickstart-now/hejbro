@@ -448,8 +448,13 @@ describe("column builder declared type name (D1, R3)", () => {
 		expectTypeOf(numeric()).toEqualTypeOf<
 			ColumnBuilder<"numeric", { typeName: "numeric" } & { mode: "string" }>
 		>();
+		// #422: the declared values ride along on TMeta, so the column reads
+		// and writes as its own values rather than bare `string`.
 		expectTypeOf(appEnum.column()).toEqualTypeOf<
-			ColumnBuilder<"text", { typeName: "enum" }>
+			ColumnBuilder<
+				"text",
+				{ typeName: "enum"; enumValues: "draft" | "published" }
+			>
 		>();
 	});
 });

@@ -87,9 +87,13 @@ describe("select-result (D1/D3/D5, task 3.10) -- whole-table projection", () => 
 		>();
 	});
 
-	it("enum column consumption (planner addition 4): pgEnum().column() reads as string", () => {
+	it("enum column consumption (#422): pgEnum().column() reads as its declared values", () => {
+		// Was `string | null` (planner addition 4, add-query-layer): pgEnum
+		// took `ReadonlyArray<string>` and was not generic, so the values
+		// sitting at the call site never reached the type system and every
+		// string type-checked as a status. #422 carries them through.
 		expectTypeOf<SelectResult<Posts>["status"]>().toEqualTypeOf<
-			string | null
+			"draft" | "published" | null
 		>();
 	});
 
@@ -151,6 +155,17 @@ describe("select-result -- object projection (task 3.10)", () => {
 		type TagsProj = SelectResult<{ readonly t: typeof posts.tags }>;
 		expectTypeOf<TagsProj>().toEqualTypeOf<{
 			readonly t: ReadonlyArray<string | null> | null;
+		}>();
+	});
+
+	it("a projected enum column reads as its declared values (#422 x #311)", () => {
+		// The two changes were developed independently: #311 recovers the
+		// declaring column through the origin brand, #422 puts the enum's
+		// values on that column's meta. Composed, a projected enum keeps its
+		// literal union instead of collapsing to the "text" family's string.
+		type Proj = SelectResult<{ readonly s: typeof posts.status }>;
+		expectTypeOf<Proj>().toEqualTypeOf<{
+			readonly s: "draft" | "published" | null;
 		}>();
 	});
 
