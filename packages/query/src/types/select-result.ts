@@ -118,9 +118,7 @@ export type SelectResult<TProjection extends SelectProjection> =
 		? { readonly [K in keyof TColumns]: SelectColumnResult<TColumns[K]> }
 		: TProjection extends Record<string, Expr>
 			? {
-					readonly [K in keyof TProjection]: NestedOrExprResult<
-						TProjection[K]
-					>;
+					readonly [K in keyof TProjection]: NestedOrExprResult<TProjection[K]>;
 				}
 			: never;
 
@@ -133,15 +131,13 @@ export type SelectResult<TProjection extends SelectProjection> =
  * grandchildren compose for free. Everything else keeps the flat
  * family-widened fallback (#311's known gap, unchanged here).
  */
-type NestedOrExprResult<TValue> = TValue extends NestedReadMarker<
-	infer TMode,
-	infer TSub
->
-	? [TMode] extends ["jsonArray"]
-		? ReadonlyArray<SelectResult<TSub>>
-		: [TMode] extends ["jsonObject"]
-			? SelectResult<TSub> | null
-			: ReadonlyArray<SelectResult<TSub>> | SelectResult<TSub> | null
-	: TValue extends Expr<infer TFamily>
-		? FamilyReadType<TFamily> | null
-		: never;
+type NestedOrExprResult<TValue> =
+	TValue extends NestedReadMarker<infer TMode, infer TSub>
+		? [TMode] extends ["jsonArray"]
+			? ReadonlyArray<SelectResult<TSub>>
+			: [TMode] extends ["jsonObject"]
+				? SelectResult<TSub> | null
+				: ReadonlyArray<SelectResult<TSub>> | SelectResult<TSub> | null
+		: TValue extends Expr<infer TFamily>
+			? FamilyReadType<TFamily> | null
+			: never;
