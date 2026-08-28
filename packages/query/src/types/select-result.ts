@@ -1,5 +1,6 @@
 import type {
 	ColumnBuilder,
+	columnOriginBrand,
 	Expr,
 	IntervalValue,
 	NestedReadMarker,
@@ -138,6 +139,52 @@ type NestedOrExprResult<TValue> =
 			: [TMode] extends ["jsonObject"]
 				? SelectResult<TSub> | null
 				: ReadonlyArray<SelectResult<TSub>> | SelectResult<TSub> | null
-		: TValue extends Expr<infer TFamily>
-			? FamilyReadType<TFamily> | null
-			: never;
+		: ProjectedColumnResult<TValue>;
+
+/**
+ * The declared column a projected value came from, recovered through the
+ * origin brand `TableColumns` stamps on every built table's column refs
+ * (`columnOriginBrand`, add-relational-reads) — the same edge
+ * `.references()` reads. `never` for anything else: a computed `Expr`, a
+ * `sql` fragment, a hand-built `columnRef()`.
+ *
+ * The brand is optional, so every type structurally satisfies the outer
+ * `extends` — `TOrigin` infers as `unknown` when the property is absent,
+ * and `NonNullable` strips the `| undefined` an actual brand carries.
+ */
+type OriginColumn<TValue> = TValue extends {
+	readonly [columnOriginBrand]?: infer TOrigin;
+}
+	? NonNullable<TOrigin> extends {
+			readonly columns: infer TColumns;
+			readonly key: infer TKey;
+		}
+		? TKey extends keyof TColumns
+			? TColumns[TKey] extends ColumnBuilder
+				? TColumns[TKey]
+				: never
+			: never
+		: never
+	: never;
+
+/**
+ * One object-projection field's type (#311). A projected *declared
+ * column* resolves to its own declared read type — numeric mode, array
+ * element, the `$type` brand, the whole {@link ColumnTsType} mapping —
+ * instead of the family-wide union {@link FamilyReadType} had to use
+ * when a `ColumnRef` was assumed to carry nothing but its family.
+ *
+ * **Nullability stays widened**, deliberately, for both arms. A
+ * projection's type is fixed at `select()` time, before `.leftJoin()`
+ * is chained onto it, so a `notNull` column projected out of a
+ * left-joined table really can arrive `null` and this layer cannot yet
+ * see which tables were left-joined (#307). Recovering the declared
+ * *type* is sound on its own; recovering the declared *nullability*
+ * without that information would make this the first type in the
+ * package that lies.
+ */
+type ProjectedColumnResult<TValue> = [OriginColumn<TValue>] extends [never]
+	? TValue extends Expr<infer TFamily>
+		? FamilyReadType<TFamily> | null
+		: never
+	: ColumnTsType<OriginColumn<TValue>> | null;
