@@ -48,11 +48,12 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
       `packages/core/src/expr/ast.ts`,
       `packages/core/src/query/select.ts`, that test.
 - [x] 2.2 (~10m) [design] Renderer: correlated emit —
-      `coalesce((select json_agg(json_build_object(...)) ...),
-      '[]'::json)` / single-object form, text casts on at-risk columns
-      (bigint, numeric (every mode — revive normalizes per mode), datetimes, interval, bytea),
-      reusing the outer-scope hook; exact SQL text settled here by
-      golden. Red: `packages/core/test/query/select.test.ts` — "a nested projection renders the correlated aggregate
+      `(select coalesce(json_agg("agg"), '[]'::json) from (…) as
+      "agg")` / `row_to_json` single-object form, text casts on the
+      JSON-number-precision types only (bigint, numeric — every mode,
+      revive normalizes; the F1 owner ruling removed the
+      temporal/bytea casts), reusing the outer-scope hook; exact SQL
+      text settled here by golden. Red: `packages/core/test/query/select.test.ts` — "a nested projection renders the correlated aggregate
       with casts". Files: `packages/core/src/expr/render-sql.ts`, that
       test.
 - [x] 2.3 (~8m) Codec round-trip for the new node (a view body can
