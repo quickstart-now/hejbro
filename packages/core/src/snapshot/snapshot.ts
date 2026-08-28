@@ -40,6 +40,11 @@ import { stableJson } from "./stable-json";
  * older reader must refuse a v6 snapshot loudly (the D73 diagnostic)
  * rather than silently diffing with those two fields ignored. Still
  * pre-publication, so no shim beyond the existing detection branch above.
+ * Bumped to `7` for add-relational-reads (D102 amendment): a table
+ * snapshot's foreign keys are recorded in canonical,
+ * declaration-form-independent order — an older reader must refuse
+ * rather than mis-diff over the uncanonical order. v6 was never
+ * released (0.1.1 shipped v5).
  */
 export const HEJBRO_SNAPSHOT_VERSION = 7;
 

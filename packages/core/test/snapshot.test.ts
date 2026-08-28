@@ -23,7 +23,7 @@ const app = schema("app");
 const registry = createDefaultRegistry();
 
 describe("emptySnapshot", () => {
-	it("has version 6, postgres dialect, and no objects", () => {
+	it("has version 7, postgres dialect, and no objects", () => {
 		expect(emptySnapshot).toEqual({
 			formatVersion: 7,
 			dialect: "postgres",
@@ -31,7 +31,7 @@ describe("emptySnapshot", () => {
 		});
 	});
 
-	it("renders with the v6 version marker (D100)", () => {
+	it("renders with the v7 version marker (D102 amendment)", () => {
 		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 7`);
 	});
 });
