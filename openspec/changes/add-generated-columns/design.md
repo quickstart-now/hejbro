@@ -75,10 +75,22 @@ exclusion; create+runtime real-server witness.
    kind change → `set generated always | by default`; option change →
    one `set <option>` statement per changed option (restart is out of
    scope — declarative snapshots carry no live sequence position);
-   generated absent→present on an existing column → drop+add WITH the
-   D32 confirmation (stored data destroyed); expression change →
-   drop+add WITHOUT it (data derivable); generated present→absent →
-   `drop expression` (in-place, PG13+ grammar).
+   generated absent→present on an existing column → a loud
+   `unsupported-column-alter` guard with a two-step `Next:` remedy
+   (amended at group 2 close: the D32 confirmation keys on dropped
+   names via set difference, which this name-preserving transition can
+   never reach — measured by all three team members independently;
+   the guard is the file's own established pattern and the explicit
+   two-step user action is more intentional than a confirmable
+   auto-drop); expression change → drop+add without confirmation
+   (data derivable — and unreachable by the confirmation mechanism
+   for the same name-preserving reason, so contract and consequence
+   agree); generated present→absent → `drop expression` (in-place,
+   PG13+ grammar). Identity option rendering follows one canonical
+   fixed order (startWith → increment → minValue → maxValue → cache →
+   cycle) regardless of declaration order — deterministic output; an
+   explicit `cycle: false` renders `no cycle`, an undeclared option
+   renders nothing.
 5. **Typing.** `insert-input.ts` gains an excluded-keys arm: ALWAYS
    family keys are `Exclude`d from both key unions (absent, not
    `never`-valued — the owner rejected the noisy alternative);
@@ -104,8 +116,11 @@ exclusion; create+runtime real-server witness.
   anywhere), so snapshot-vs-snapshot comparison keeps text pins
   stable. The declaration's own fragment text is the identity.
 - The v6 bump forces a one-time snapshot rewrite for every project on
-  next generate; migration files are untouched, so the blast radius is
-  a version-field diff.
+  next generate; migration BODIES are untouched, but a committed chain
+  pinned by verify banners also updates its tip banner's snapshot hash
+  (measured during group 2's sweep — the earlier "version-field diff
+  only" wording was optimistic), so the blast radius is the snapshot
+  file plus the tip banner.
 - Identity option diffs compare declared options only: an option the
   declaration never set is not diffed against Postgres defaults
   (declaration-is-truth, consistent with how column defaults diff).

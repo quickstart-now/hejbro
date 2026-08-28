@@ -1,7 +1,7 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1199](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201199-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1229](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201229-brightgreen)](#status)
 <!-- crap-badge:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -211,7 +211,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1199 functions** over the threshold, highest score 5.00 — measured at `f0b1d1c` (2026-08-28).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1229 functions** over the threshold, highest score 5.00 — measured at `f63cee6` (2026-08-28).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->
@@ -287,6 +287,7 @@ three axes as the standing primary evidence.
 |---|---|---|---|---|---|---|
 | group 1 — declaration surface | 2 | 17 → 27 ⁹ | 1 | 490,457 | 551 | 97.2% |
 | group 3 — write-side typing | 1 | 8 → 25 ¹⁰ | 1 | 524,661 | 567 | 97.5% |
+| group 2 — snapshot v6, emit, diff | 4 | 33 → 215 ¹¹ | 0 | 1,101,074 | 1,442 | 99.4% |
 
 ⁹ group 1's overage is contract growth mid-piece (a fourth guard read
 straight out of the approved spec delta, serial near-miss cases, a
@@ -300,6 +301,15 @@ evidence rounds (mutant-kill verification, turbo-routed re-submission
 after a bare-tsc false-positive warning) plus a comment-only commit
 applying the comment-budget rule that landed mid-piece — carried to
 the new SHA constructively by blob comparison, no re-verdict.
+¹¹ group 2 ran four review rounds, all PASS with zero rework verdicts;
+the overage is the v6 bump's real blast radius (11 goldens,
+cross-package fixture holds, an eight-file sweep with tip-banner hash
+recomputation) plus six contract gaps surfaced and settled mid-piece —
+including the silent plain→generated no-op the reviewer caught by
+driving built code, converted to a loud guard. A separate 110m process
+row records the coordination cost, including one lead escalation lost
+to a session-text send path and one post-freeze amend (both now
+standing rules).
 
 **Defect leakage** — every behavior defect discovered after its
 introducing change merged carries the `escaped-defect` label
