@@ -23,7 +23,7 @@ const expectSingleChange = (changes: ReadonlyArray<KindChange>): KindChange => {
 };
 
 /** Two diff paths (D100): an expression change (drop+add, no confirmation — the data is derivable) and generated→plain (`drop expression`, in place). plain→generated is absent from this file. */
-describe("generated (computed) columns — diff/emit (add-generated-columns, task 2.4)", () => {
+describe("generated (computed) columns — diff/emit", () => {
 	it("an expression change renders drop+add for that column, unconditionally (no destructive-confirmation marker exists on a KindChange/SqlStatement)", () => {
 		const before = table(app, "widgets", {
 			price: numeric(),

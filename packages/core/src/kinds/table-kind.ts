@@ -88,22 +88,20 @@ export const deriveUniqueName = (
 ): string => `${tableName}_${columnName}_key`;
 
 /**
- * `primaryKey` implies `notNull` once a column is materialized into a
- * snapshot -- and so does a `serial`/`smallserial`/`bigserial` type (#23/
- * D66): confirmed against a real Postgres (`pg_dump` on a table declaring
- * `bigserial`/`smallserial` columns with neither `.primaryKey()` nor
- * `.notNull()` chained still showed `NOT NULL` on both) that the
- * pseudo-type sugar itself carries the constraint, independent of
- * primary-key status. None of the three serial factories set `notNull` on
- * their own construction, so without this, a bare `serial()` column would
- * materialize as nullable -- a column a real Postgres would never let
- * exist.
+ * `primaryKey`, a `serial`/`smallserial`/`bigserial` type (#23/D66,
+ * confirmed against `pg_dump`), and an identity (D100 — both kinds alike)
+ * all imply `notNull` once a column is materialized into a snapshot, even
+ * when the declaration itself never called `.notNull()`.
  */
 const materializeNotNull = (columnState: ColumnState): boolean => {
 	if (columnState.primaryKey) {
 		return true;
 	}
 	if (isSerialTypeNode(columnState.typeNode)) {
+		return true;
+	}
+	// Every identity column is NOT NULL by Postgres rule, both kinds alike.
+	if (columnState.identity !== undefined) {
 		return true;
 	}
 	return columnState.notNull;

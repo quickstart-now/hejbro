@@ -20,7 +20,7 @@ const expectSingleChange = (changes: ReadonlyArray<KindChange>): KindChange => {
 };
 
 /** create-table emit for a stored computed column (D100) -- identity's own emit is untouched here. */
-describe("generated (computed) columns — create emit (add-generated-columns, task 2.2-a)", () => {
+describe("generated (computed) columns — create emit", () => {
 	it("renders `generated always as (<expression>) stored` with the declared fragment verbatim", () => {
 		const widgets = table(app, "widgets", {
 			price: numeric(),

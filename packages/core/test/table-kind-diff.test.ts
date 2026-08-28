@@ -694,9 +694,9 @@ describe("SC-004 regression: table-indexes still serializes byte-identical (#284
 	});
 });
 
-// add-generated-columns task 2.1 (D100): snapshot format version 6 records
-// the generated/identity family as compact optional column fields.
-describe("generated/identity columns — snapshot v6 (add-generated-columns, task 2.1)", () => {
+// Snapshot format version 6 records the generated/identity family as
+// compact optional column fields (D100).
+describe("generated/identity columns — snapshot v6", () => {
 	it("HEJBRO_SNAPSHOT_VERSION is 6, opening the format for the generated/identity fields", () => {
 		expect(HEJBRO_SNAPSHOT_VERSION).toBe(6);
 	});
@@ -733,21 +733,20 @@ describe("generated/identity columns — snapshot v6 (add-generated-columns, tas
 		);
 	});
 
-	it("an identity column's compact notNull is absent -- the emitted GENERATED ... AS IDENTITY grammar enforces NOT NULL, not this flag", () => {
+	it("an identity column's compact notNull is true, both identity kinds alike -- every identity column is NOT NULL by Postgres rule", () => {
 		const widgets = table(app, "widgets", {
 			id: integer().generatedAlwaysAsIdentity(),
+			seq: bigint().generatedByDefaultAsIdentity(),
 		});
 		const snapshot = asTableSnapshot(
 			tableKind.serialize(getTableMeta(widgets)),
 		);
-		const [idColumn] = snapshot.columns;
-		if (idColumn === undefined) {
-			throw new Error("expected an id column");
+		const [idColumn, seqColumn] = snapshot.columns;
+		if (idColumn === undefined || seqColumn === undefined) {
+			throw new Error("expected two columns");
 		}
-		expect(idColumn.notNull).toBeUndefined();
-		// stable: re-diffing the same serialized snapshot against itself
-		// produces no change, the same "has no changes when unchanged"
-		// guarantee every other compact field already carries.
+		expect(idColumn.notNull).toBe(true);
+		expect(seqColumn.notNull).toBe(true);
 		expect(tableKind.diff(snapshot, snapshot, "app.widgets")).toEqual([]);
 	});
 

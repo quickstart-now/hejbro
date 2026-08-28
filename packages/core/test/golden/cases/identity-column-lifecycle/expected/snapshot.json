@@ -1,0 +1,44 @@
+{
+	"dialect": "postgres",
+	"formatVersion": 6,
+	"objects": {
+		"schema:app": {
+			"name": "app"
+		},
+		"table:app.widgets": {
+			"columns": [
+				{
+					"identity": {
+						"kind": "always"
+					},
+					"name": "id",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "integer"
+					}
+				},
+				{
+					"identity": {
+						"kind": "by-default",
+						"startWith": 1000
+					},
+					"name": "seq",
+					"notNull": true,
+					"typeNode": {
+						"typeName": "bigint"
+					}
+				},
+				{
+					"name": "label",
+					"typeNode": {
+						"typeName": "text"
+					}
+				}
+			],
+			"foreignKeys": [],
+			"indexes": [],
+			"name": "widgets",
+			"schema": "app"
+		}
+	}
+}
