@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ExprNode } from "../../src/expr/ast";
+import type { ExprNode, SetOpNode } from "../../src/expr/ast";
 import {
 	decodeExprNode,
 	decodeQueryNode,
@@ -9,7 +9,6 @@ import {
 	NODE_KIND_TO_SNAPSHOT,
 	PROJECTION_KIND_TO_SNAPSHOT,
 } from "../../src/expr/codec";
-import type { SetOpNode } from "../../src/expr/ast";
 import { retargetExprNode } from "../../src/expr/retarget";
 import {
 	eq,

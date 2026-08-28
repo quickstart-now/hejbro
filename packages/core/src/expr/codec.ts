@@ -20,10 +20,10 @@ import type {
 	RawSqlNode,
 	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
-	SetOpNode,
 } from "./ast";
 import { joinKinds } from "./ast";
 
@@ -730,7 +730,11 @@ export const encodeSetOpNode = (node: SetOpNode): JsonValue => ({
 export const decodeSetOpNode = (value: JsonValue): SetOpNode => {
 	const node = asRecord(value, "queryKind");
 	const operator = stringField(node, "operator");
-	if (operator !== "union" && operator !== "intersect" && operator !== "except") {
+	if (
+		operator !== "union" &&
+		operator !== "intersect" &&
+		operator !== "except"
+	) {
 		return unknownDiscriminator("operator", operator);
 	}
 	return {

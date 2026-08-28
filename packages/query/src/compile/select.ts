@@ -1,6 +1,6 @@
-import type { SelectNode } from "@hejbro/core";
-import { renderSelect } from "@hejbro/core";
-import { liftSelectNode } from "./params";
+import type { SelectNode, SetOpNode } from "@hejbro/core";
+import { renderSelect, renderSetOp } from "@hejbro/core";
+import { liftSelectNode, liftSetOpNode } from "./params";
 
 /** A rendered `SelectNode`: SQL text plus the bind parameters its literals lifted to. */
 export type CompiledSelect = {
@@ -18,4 +18,10 @@ export type CompiledSelect = {
 export const compileSelect = (node: SelectNode): CompiledSelect => {
 	const lifted = liftSelectNode(node, 1);
 	return { sql: renderSelect(lifted.node), params: lifted.params };
+};
+
+/** Compiles a {@link SetOpNode} the same way — lift both branches and the whole-set orderBy, render the substituted node through core's own `renderSetOp` (add-set-operations). */
+export const compileSetOp = (node: SetOpNode): CompiledSelect => {
+	const lifted = liftSetOpNode(node, 1);
+	return { sql: renderSetOp(lifted.node), params: lifted.params };
 };

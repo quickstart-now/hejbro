@@ -6,7 +6,7 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 1. The SetOpNode and its core propagation
 
-- [ ] 1.1 (~8m) [design] `SetOpNode` variant on `QueryNode` (field
+- [x] 1.1 (~8m) [design] `SetOpNode` variant on `QueryNode` (field
       names + kebab discriminators settled here: `queryKind:
       "setOp"`/snapshot `"set-op"`, `operator` values verbatim SQL
       keywords). Red: `packages/core/test/query/select.test.ts` — "a
@@ -14,19 +14,19 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
       (drives the node + renderer together). Files:
       `packages/core/src/expr/ast.ts`,
       `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 1.2 (~8m) [design] Renderer completion: nested branches
+- [x] 1.2 (~8m) [design] Renderer completion: nested branches
       parenthesized, `all` keyword, whole-set `order by`/`limit`
       after the last branch, orderBy scope = left branch (golden
       settles the exact text). Red: same test file — "nesting
       parenthesizes and whole-set order/limit trail the set". Files:
       `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 1.3 (~8m) Codec: encode/decode entries for the new queryKind
+- [x] 1.3 (~8m) Codec: encode/decode entries for the new queryKind
       (kebab map + round-trip), and the callers that REQUIRE a plain
       select (plpgsql select-into path, decode guard) reject a set-op
       loudly. Red: `packages/core/test/expr/codec.test.ts` — "a set-op
       statement survives encode/decode". Files:
       `packages/core/src/expr/codec.ts`, that test.
-- [ ] 1.4 (~6m) Walk/retarget/scope arms + `reachable-kinds`/naming
+- [x] 1.4 (~6m) Walk/retarget/scope arms + `reachable-kinds`/naming
       fixture producer (a view carrying a union) so the D70
       completeness assertion sees the new vocabulary. Red:
       `packages/core/test/naming-conventions.test.ts` completeness

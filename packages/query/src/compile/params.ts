@@ -16,6 +16,7 @@ import type {
 	SelectNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
+	SetOpNode,
 } from "@hejbro/core";
 
 // This file stays one module on purpose, past the ~300-line guideline:
@@ -429,6 +430,38 @@ const liftOrderBy = (
  * (owner-settled, 2026-08-26). Exported for `liftExistsNode` above and for
  * `select.ts`'s `compileSelect`.
  */
+/** Lifts a set-operation statement: left branch, then right, then the whole-set orderBy — matching the operator's own render order so `$n` numbering follows the SQL text (add-set-operations). */
+export const liftSetOpNode = (
+	node: SetOpNode,
+	startIndex: number,
+): Lifted<SetOpNode> => {
+	const left = liftQueryBranch(node.left, startIndex);
+	const right = liftQueryBranch(node.right, startIndex + left.params.length);
+	const orderBy = liftOrderBy(
+		node.orderBy,
+		startIndex + left.params.length + right.params.length,
+	);
+	return {
+		node: {
+			...node,
+			left: left.node,
+			right: right.node,
+			orderBy: orderBy.node,
+		},
+		params: [...left.params, ...right.params, ...orderBy.params],
+	};
+};
+
+const liftQueryBranch = (
+	branch: SelectNode | SetOpNode,
+	startIndex: number,
+): Lifted<SelectNode | SetOpNode> => {
+	if (branch.queryKind === "setOp") {
+		return liftSetOpNode(branch, startIndex);
+	}
+	return liftSelectNode(branch, startIndex);
+};
+
 export const liftSelectNode = (
 	node: SelectNode,
 	startIndex: number,

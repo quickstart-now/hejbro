@@ -22,11 +22,11 @@ import type {
 	ReturningNode,
 	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
 	UpdateNode,
-	SetOpNode,
 } from "./ast";
 import { renderLiteral } from "./literal";
 
