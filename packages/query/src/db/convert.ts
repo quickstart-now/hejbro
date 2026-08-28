@@ -21,6 +21,17 @@ export type ColumnPlanEntry = {
 	readonly alias: string;
 	readonly resultKey: string;
 	readonly columnState: ColumnState | undefined;
+	/**
+	 * Present when this cell is a nested read (a `selectExpr` projection,
+	 * D102 task 3.4): the child rows' own plan, built recursively — so
+	 * grandchildren revive for free — plus the arrival mode. The cell's
+	 * own `columnState` stays `undefined` (there is no declared column
+	 * for the aggregate itself).
+	 */
+	readonly nested?: {
+		readonly mode: "jsonArray" | "jsonObject";
+		readonly entries: ReadonlyArray<ColumnPlanEntry>;
+	};
 };
 
 const tableMatches = (
@@ -144,11 +155,28 @@ const columnPlanFromProjection = (
 		// `resultKey` is the caller's verbatim projection key (#339); a node
 		// without one (hand-built, or codec-decoded -- stored view queries)
 		// falls back to the rendered alias, the pre-#339 behavior.
-		return projection.columns.map(({ alias, resultKey, expr }) => ({
-			alias,
-			resultKey: resultKey ?? alias,
-			columnState: columnStateForExpr(expr, tables),
-		}));
+		return projection.columns.map(({ alias, resultKey, expr }) => {
+			if (expr.nodeKind === "selectExpr") {
+				return {
+					alias,
+					resultKey: resultKey ?? alias,
+					columnState: undefined,
+					nested: {
+						mode: expr.mode,
+						entries: columnPlanFromProjection(
+							expr.query.projection,
+							expr.query.from,
+							tables,
+						),
+					},
+				};
+			}
+			return {
+				alias,
+				resultKey: resultKey ?? alias,
+				columnState: columnStateForExpr(uncast(expr), tables),
+			};
+		});
 	}
 	// "constantOne" -- the exists()/notExists() subquery projection; never
 	// reaches execute() as a top-level statement, so there is no result
@@ -503,6 +531,120 @@ const convertCell = (
  * is deliberately left alone: `convertRow` only ever emits the declared
  * shape, so an extra driver-side key is dropped, not an error.
  */
+/**
+ * Sees through the F1 cast wrapper (`sqlTemplate` of exactly
+ * `[columnRef, "::text" | "::text[]"]`, baked by `jsonArrayFrom`/
+ * `jsonObjectFrom` at build time) so a cast column still resolves its
+ * declared state — without this, exactly the columns the cast protects
+ * (bigint/numeric) would arrive as unrevived text.
+ */
+const uncast = (expr: ExprNode): ExprNode => {
+	if (expr.nodeKind !== "sqlTemplate" || expr.chunks.length !== 2) {
+		return expr;
+	}
+	const [first, second] = expr.chunks;
+	if (
+		first?.chunkKind === "expr" &&
+		first.expr.nodeKind === "columnRef" &&
+		second?.chunkKind === "text" &&
+		(second.text === "::text" || second.text === "::text[]")
+	) {
+		return first.expr;
+	}
+	return expr;
+};
+
+/** `"\\x0102ff"` (the driver-pinned hex form) → bytes — pure, no Buffer dependency (the declared read type is `Uint8Array`). */
+const hexToBytes = (raw: string): Uint8Array => {
+	const hex = raw.startsWith("\\x") ? raw.slice(2) : raw;
+	const pairs = hex.match(/.{2}/g) ?? [];
+	return Uint8Array.from(pairs.map((pair) => Number.parseInt(pair, 16)));
+};
+
+const JSON_DATETIME_TYPE_NAMES: ReadonlySet<string> = new Set([
+	"timestamp",
+	"timestamptz",
+	"date",
+]);
+
+/**
+ * Revives one nested SCALAR from its JSON arrival shape (D102 F1
+ * contract): datetimes arrive as ISO-8601 strings (a top-level read gets
+ * a `Date` from the driver's own parser, which never sees this value),
+ * `bytea` as the pinned hex form — everything else arrives in the same
+ * shape the driver hands a top-level cell, so the ordinary declared
+ * conversion applies unchanged.
+ */
+const reviveNestedScalar = (raw: unknown, columnState: ColumnState): unknown => {
+	const typeName = columnState.typeNode.typeName;
+	if (JSON_DATETIME_TYPE_NAMES.has(typeName)) {
+		return new Date(String(raw));
+	}
+	if (typeName === "bytea") {
+		return hexToBytes(String(raw));
+	}
+	if (typeName === "array") {
+		const element = columnState.typeNode;
+		if (element.typeName !== "array") {
+			return raw;
+		}
+		const elementState: ColumnState = {
+			...columnState,
+			typeNode: element.element,
+		};
+		return (raw as ReadonlyArray<unknown>).map((entry) => {
+			if (entry === null) {
+				return null;
+			}
+			return reviveNestedScalar(entry, elementState);
+		});
+	}
+	return convertDeclaredValue(raw, columnState);
+};
+
+/** Revives one nested child row through its own plan (recursing into grandchildren via {@link convertNestedCell}). */
+const reviveNestedRow = (
+	raw: Record<string, unknown>,
+	entries: ReadonlyArray<ColumnPlanEntry>,
+): Record<string, unknown> =>
+	Object.fromEntries(
+		entries.map((entry) => [entry.resultKey, convertNestedCell(raw, entry)]),
+	);
+
+const convertNestedCell = (
+	raw: Record<string, unknown>,
+	entry: ColumnPlanEntry,
+): unknown => {
+	const value = raw[entry.alias];
+	if (entry.nested !== undefined) {
+		return reviveNestedContainer(value, entry.nested);
+	}
+	if (value === null || value === undefined || entry.columnState === undefined) {
+		return value;
+	}
+	try {
+		return reviveNestedScalar(value, entry.columnState);
+	} catch (cause) {
+		return throwResultConversionFailed(entry.alias, cause);
+	}
+};
+
+/** The container step: a collection maps every child row, a single read is `Row | null`. */
+const reviveNestedContainer = (
+	value: unknown,
+	nested: NonNullable<ColumnPlanEntry["nested"]>,
+): unknown => {
+	if (nested.mode === "jsonArray") {
+		return (value as ReadonlyArray<Record<string, unknown>>).map((child) =>
+			reviveNestedRow(child, nested.entries),
+		);
+	}
+	if (value === null) {
+		return null;
+	}
+	return reviveNestedRow(value as Record<string, unknown>, nested.entries);
+};
+
 const convertPlannedCell = (
 	row: DriverRow,
 	entry: ColumnPlanEntry,
@@ -514,6 +656,9 @@ const convertPlannedCell = (
 				`the driver's row never included a "${entry.alias}" key at all. Next: check the statement actually selects/returns this column, and that the driver isn't silently dropping columns it doesn't recognize.`,
 			),
 		);
+	}
+	if (entry.nested !== undefined) {
+		return reviveNestedContainer(row[entry.alias], entry.nested);
 	}
 	return convertCell(row[entry.alias], entry.columnState, entry.alias);
 };
