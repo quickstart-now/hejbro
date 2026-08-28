@@ -4,6 +4,7 @@ import {
 	eq,
 	interval,
 	jsonArrayFrom,
+	jsonObjectFrom,
 	numeric,
 	schema,
 	select,
@@ -67,7 +68,7 @@ describe("nested revive (add-relational-reads task 3.4)", () => {
 		expect(comment?.postId).toBe("0b0e5b3e-0000-4000-8000-000000000001");
 	});
 
-	it("empty collection stays [], missing single row stays null, and a grandchild revives", async () => {
+	it("empty collection stays [], missing single row stays null", async () => {
 		const authors = table(app, "authors", {
 			id: uuid().primaryKey(),
 			joinedAt: timestamptz().notNull(),
@@ -219,5 +220,53 @@ describe("nested revive edges (crap-coverage: null cells, failures, uncast passt
 		);
 		const counts = rows[0]?.counts as ReadonlyArray<{ n: unknown }>;
 		expect(counts[0]?.n).toBe(7);
+	});
+});
+
+describe("grandchild revive (g3 review F4 -- kills the nested-plan recursion mutant)", () => {
+	it("a depth-2 nested value revives to its declared type", async () => {
+		const raw = {
+			id: "0b0e5b3e-0000-4000-8000-000000000001",
+			threads: [
+				{
+					id: "0b0e5b3e-0000-4000-8000-000000000007",
+					parent: {
+						id: "0b0e5b3e-0000-4000-8000-000000000001",
+						title: "hello",
+						// biome-ignore lint/style/useNamingConvention: models the real json child key (the derived table snake alias).
+						view_total: "9007199254740993",
+					},
+				},
+			],
+		};
+		const totals = table(app, "totals", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+			viewTotal: bigint().notNull(),
+		});
+		const { driver } = recordingTransactionalDriver({ rows: [raw] });
+		const handle = db({ app, posts, comments, totals }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				threads: jsonArrayFrom(
+					select(
+						{
+							id: comments.id,
+							parent: jsonObjectFrom(
+								select(totals).where(eq(totals.id, posts.id)),
+							),
+						},
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		const threads = rows[0]?.threads as ReadonlyArray<{
+			parent: { viewTotal: bigint } | null;
+		}>;
+		const grandchild = threads[0]?.parent;
+		expect(grandchild?.viewTotal).toBe(9007199254740993n);
 	});
 });

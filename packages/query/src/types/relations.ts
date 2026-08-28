@@ -85,12 +85,20 @@ type RelationsOf<TSchema, TTable> =
 		? ForwardRelations<TColumns> & ReverseRelations<TSchema, TColumns>
 		: never;
 
-/** The derivable relation keys — `related()`'s key domain (autocomplete = exactly these). */
-export type RelationKeysOf<TSchema, TTable> = keyof RelationsOf<
-	TSchema,
-	TTable
-> &
-	string;
+/** Keys whose derivation is ambiguous (spec: collisions "SHALL fail to type-check", never guess) — a forward and reverse edge stripping to the same key, or a derived key shadowing one of the table's own projected columns (using it would silently drop the parent column from the row, the F2 finding). */
+type CollidingRelationKeys<TSchema, TTable> =
+	TTable extends Table<infer TColumns>
+		?
+				| (keyof ForwardRelations<TColumns> &
+						keyof ReverseRelations<TSchema, TColumns>)
+				| (keyof RelationsOf<TSchema, TTable> & keyof TColumns)
+		: never;
+
+/** The derivable relation keys — `related()`'s key domain (autocomplete = exactly these); colliding keys are excluded outright. */
+export type RelationKeysOf<TSchema, TTable> = Exclude<
+	keyof RelationsOf<TSchema, TTable> & string,
+	CollidingRelationKeys<TSchema, TTable>
+>;
 
 /** A rich row over a plain column map — the same shape a whole-table select resolves. */
 type RowOfColumns<TColumns extends Record<string, ColumnBuilder>> = {

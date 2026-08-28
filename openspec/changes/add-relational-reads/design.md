@@ -103,6 +103,29 @@ snapshot on the next generate", but the implemented behavior is the
 loud pin-or-reset diagnostic — the mismatch is filed as its own
 issue and did not carry into this decision's rationale.
 
+## Group 3 notes (settled at group 3 review)
+
+- **Reverse-edge matching is structural** at the type level: two tables
+  with identical column maps would both match. The runtime derivation
+  matches by declared identity and throws `unknown-relation` for an
+  underivable key, so the false positive surfaces as a loud runtime
+  error, never a silent wrong read. (`relations.ts` documents this and
+  points here.)
+- **Collisions are excluded on both axes** (the spec's "SHALL fail to
+  type-check, never guess" made literal): a forward/reverse key clash
+  or a derived key shadowing a projected column is excluded from
+  `RelationKeysOf` (type error at the call site) AND rejected at
+  runtime (`ambiguous-relation`) — the runtime guard is the JS-caller
+  and structural-edge backstop, because a silently merged projection
+  would DROP the shadowed parent column (measured at review).
+- **`date` revives as local midnight** — `new Date("YYYY-MM-DD")` is
+  UTC midnight per the ES spec, which lands on the previous calendar
+  day in negative-offset zones while the driver's own top-level parse
+  is local midnight; measured live at review under `TZ=Asia/Seoul`.
+- **`related()` types its row explicitly** (`SelectResult<parent> &
+  RelatedResult<…>`) instead of through the object-projection typing,
+  which would degrade parent columns to the #311 family fallback.
+
 ## What this change does NOT touch
 
 - D15 (`Table` shape) and D52 (snapshot FK targets stay resolved

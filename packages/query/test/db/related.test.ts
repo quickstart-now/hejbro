@@ -131,3 +131,56 @@ describe("related() under an rls context (task 3.5)", () => {
 		expect(dataStatements[0]?.sql).toContain("json_agg");
 	});
 });
+
+describe("collision and mixed-unknown rejection (g3 review F2/F3)", () => {
+	const clashApp = schema("clash");
+	const users2 = table(clashApp, "users2", { id: uuid().primaryKey() });
+	const posts2 = table(clashApp, "posts2", {
+		id: uuid().primaryKey(),
+		author: text().notNull(),
+		authorId: uuid()
+			.notNull()
+			.references(() => users2.id),
+	});
+
+	it("a mixed spec with an unknown key fails to type-check", () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = db({ app, users, posts, comments }, driver);
+		const mixed = () =>
+			handle
+				.select(posts)
+				// @ts-expect-error bogus is not a derivable relation, even mixed with a valid key
+				.related({ comments: true, bogus: true });
+		expect(mixed).toThrowError();
+	});
+
+	it("a colliding key is rejected on both axes -- never a silently dropped parent column", () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = db({ clashApp, users2, posts2 }, driver);
+		const collide = () =>
+			handle
+				.select(posts2)
+				// @ts-expect-error "author" collides with posts2's own column
+				.related({ author: true });
+		expect(collide).toThrowError();
+		try {
+			collide();
+			expect.unreachable("collide() should have thrown");
+		} catch (error) {
+			expect((error as { code: string }).code).toBe("ambiguous-relation");
+		}
+	});
+});
+
+describe("related() inside transactions (g3 review F5)", () => {
+	it("both directions type and compile inside db.transaction", async () => {
+		const { driver } = recordingTransactionalDriver({ rows: [] });
+		const handle = db({ app, users, posts, comments }, driver);
+		await handle.transaction(async (tx) => {
+			const forward = tx.select(posts).related({ author: true }).compile();
+			const reverse = tx.select(posts).related({ comments: true }).compile();
+			expect(forward.sql).toContain("row_to_json");
+			expect(reverse.sql).toContain("json_agg");
+		});
+	});
+});

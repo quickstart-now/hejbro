@@ -30,7 +30,11 @@ import type { CompileInput, CompileResult } from "../compile/compile";
 import { compile } from "../compile/compile";
 import type { DriverSession } from "../driver/contract";
 import type { InsertInput, UpdateInput } from "../types/insert-input";
-import type { RelatedResult, RelatedSpec } from "../types/relations";
+import type {
+	RelatedResult,
+	RelatedSpec,
+	RelationKeysOf,
+} from "../types/relations";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
 import type { Declarations } from "./db";
@@ -426,7 +430,12 @@ const makeRelatedChain = <TRow>(
 /** The `related()` member a whole-`Table` select chain gains — see {@link SelectChainRelated}. */
 export type RelatedCapable<TSchema, TTable extends Table> = {
 	related<TSpec extends RelatedSpec<TSchema, TTable>>(
-		spec: TSpec,
+		// The intersection forces every key OUTSIDE the derivable set to
+		// `never`, so a misspelled key fails to type-check even when mixed
+		// with valid ones (the F3 finding: generic constraint checking
+		// alone lets excess literal keys through).
+		spec: TSpec &
+			Record<Exclude<keyof TSpec, RelationKeysOf<TSchema, TTable>>, never>,
 	): SelectChainRelated<
 		SelectResult<TTable> & RelatedResult<TSchema, TTable, TSpec>
 	>;

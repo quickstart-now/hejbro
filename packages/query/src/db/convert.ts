@@ -602,8 +602,31 @@ const hexToBytes = (raw: string): Uint8Array => {
 const JSON_DATETIME_TYPE_NAMES: ReadonlySet<string> = new Set([
 	"timestamp",
 	"timestamptz",
-	"date",
 ]);
+
+/**
+ * `"YYYY-MM-DD"` → LOCAL midnight, matching what the driver's own parser
+ * gives a top-level `date` read (g3 review F1, real-server measured):
+ * `new Date("YYYY-MM-DD")` is UTC midnight per the ES spec, which lands
+ * the value on the PREVIOUS calendar day in any negative-offset zone —
+ * the same column must never read a different instant nested vs
+ * top-level. Appending `T00:00:00` (no zone) makes the parse local.
+ */
+const parseLocalDate = (raw: string): Date => {
+	const parsed = new Date(`${raw}T00:00:00`);
+	if (Number.isNaN(parsed.getTime())) {
+		throw new Error(`"${raw}" is not a YYYY-MM-DD date value`);
+	}
+	return parsed;
+};
+
+const parseNestedTimestamp = (raw: string): Date => {
+	const parsed = new Date(raw);
+	if (Number.isNaN(parsed.getTime())) {
+		throw new Error(`"${raw}" is not an ISO-8601 datetime value`);
+	}
+	return parsed;
+};
 
 /**
  * Revives one nested SCALAR from its JSON arrival shape (D102 F1
@@ -633,7 +656,10 @@ const reviveNestedScalar = (
 ): unknown => {
 	const typeNode = columnState.typeNode;
 	if (JSON_DATETIME_TYPE_NAMES.has(typeNode.typeName)) {
-		return new Date(String(raw));
+		return parseNestedTimestamp(String(raw));
+	}
+	if (typeNode.typeName === "date") {
+		return parseLocalDate(String(raw));
 	}
 	if (typeNode.typeName === "bytea") {
 		return hexToBytes(String(raw));

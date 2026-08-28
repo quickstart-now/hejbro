@@ -246,7 +246,7 @@ export type Db<
 	 * fails fast with `nested-transaction-unsupported` when called again
 	 * from inside an already-open callback of this same member.
 	 */
-	transaction<T>(callback: (tx: Tx) => Promise<T>): Promise<T>;
+	transaction<T>(callback: (tx: Tx<TSchema>) => Promise<T>): Promise<T>;
 	/**
 	 * Scopes every statement in the returned {@link ScopedDb} to `context`
 	 * (task 4.7): validates `context.role` against the declared-role

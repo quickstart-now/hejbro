@@ -146,12 +146,30 @@ const deriveOne = (
 };
 
 /** The full object projection `related(spec)` compiles: every parent column ref, then one nested read per requested key — exactly the explicit formulation. */
+/** Rejects a relation key that would shadow one of the parent's own columns — merging would silently DROP that column from the compiled projection (last-wins), the exact quiet wrongness the type layer also excludes (F2). The runtime guard is the JS-caller/structural-edge backstop. */
+const assertNoColumnShadow = (
+	parentMeta: TableDeclaration,
+	spec: Readonly<Record<string, true>>,
+): void => {
+	const shadowed = Object.keys(spec).find((key) =>
+		parentMeta.columns.some((column) => column.columnKey === key),
+	);
+	if (shadowed === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"ambiguous-relation",
+		`relation key "${shadowed}" collides with "${parentMeta.tableName}"'s own column "${shadowed}" — merging them would silently drop the column from the result. Next: read that relation explicitly with jsonArrayFrom()/jsonObjectFrom() under a different projection key.`,
+	);
+};
+
 export const buildRelatedProjection = (
 	parent: Table,
 	spec: Readonly<Record<string, true>>,
 	tables: Readonly<Record<string, Table>>,
 ): Record<string, Expr> => {
 	const parentMeta = getTableMeta(parent);
+	assertNoColumnShadow(parentMeta, spec);
 	const parentRefs = parentMeta.columns.map((column) => [
 		column.columnKey,
 		(parent as unknown as Record<string, Expr>)[column.columnKey],

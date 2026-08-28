@@ -85,14 +85,14 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
       `packages/query/src/types/relations.ts`, that test.
 - [x] 3.3 (~8m) `related()` chain method: runtime derivation from the
       declared `ForeignKeyDeclaration`s producing exactly the explicit
-      form's statements. Red: `packages/query/test/related.test.ts` —
+      form's statements. Red: `packages/query/test/db/related.test.ts` —
       "related({...}).compile() equals the explicit
       jsonArrayFrom/jsonObjectFrom formulation". Files:
       `packages/query/src/db/chain.ts`, that test.
 - [x] 3.4 (~10m) Nested column plans and revive: the plan becomes a
       tree; `convertRow` parses the JSON cell and revives each nested
       value by declared type, recursing for grandchildren. Red:
-      `packages/query/test/nested-revive.test.ts` (fake driver) — "a
+      `packages/query/test/db/nested-revive.test.ts` (fake driver) — "a
       bigint past 2^53 revives intact from a nested payload". Files:
       `packages/query/src/db/convert.ts`, that test.
 - [x] 3.5 (~6m) Arrival shapes and the one-statement invariant: empty

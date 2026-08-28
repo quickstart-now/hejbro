@@ -62,3 +62,23 @@ describe("relation key derivation (add-relational-reads task 3.2)", () => {
 		>();
 	});
 });
+
+describe("collisions and unknown keys fail to type-check (g3 review F2/F3)", () => {
+	const clashApp = schema("clash");
+	const users2 = table(clashApp, "users2", { id: uuid().primaryKey() });
+	const posts2 = table(clashApp, "posts2", {
+		id: uuid().primaryKey(),
+		// the derived forward key "author" collides with this projected column
+		author: text().notNull(),
+		authorId: uuid()
+			.notNull()
+			.references(() => users2.id),
+	});
+	const declarations2 = { clashApp, users2, posts2 };
+
+	it("a key colliding with a projected column name is not derivable", () => {
+		expectTypeOf<
+			RelationKeysOf<typeof declarations2, typeof posts2>
+		>().toBeNever();
+	});
+});

@@ -45,7 +45,7 @@ export type ScopedDb<
 	execute<TStatement extends CompileInput>(
 		statement: TStatement,
 	): Promise<ExecuteResult<TStatement>>;
-	transaction<T>(callback: (tx: Tx) => Promise<T>): Promise<T>;
+	transaction<T>(callback: (tx: Tx<TSchema>) => Promise<T>): Promise<T>;
 	/** `db.fn.*`, scoped to this context (task 4.7 × 4.9/4.10): every call opens its own context-applied transaction, exactly like `execute`. */
 	readonly fn: TypedFnApi<TFunctions>;
 };
