@@ -80,7 +80,7 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
       row counts, whole-set order/limit, and one RLS-scoped set-op
       (one statement under the context). Red: extend
       `packages/pg/test/integration.test.ts`. Files: that file only.
-- [ ] 4.0 (docs, with the archive PR) `skills/hejbro` query-layer
+- [x] 4.0 (docs, with the archive PR) `skills/hejbro` query-layer
       reference gains the set-operations section (compiled snippets;
       the "not supported" line shrinks) — archive-PR timing per the
       relational-reads precedent.
