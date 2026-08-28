@@ -86,6 +86,23 @@ nested value by its column's declared type, recurse for
 grandchildren. No new conversion logic: the per-type converters are
 the existing ones.
 
+## D1 — canonical foreign-key order (settled at group 1 review)
+
+The group 1 reviewer measured a wedge: foreign-key order depended on
+the declaration form (column-level first, then extras), so converting
+a foreign key between forms was a diff no-op (identity is name-keyed)
+whose snapshot bytes still moved — `hejbro verify`'s byte-exact
+rebuild then failed with no `generate` path out. Owner ruling:
+foreign keys sort by a canonical form-independent key (local columns,
+then target identity) at `table()` build, and the snapshot format
+bumps 6→7. v6 was never released (0.1.1 shipped v5), so no released
+user crosses the bump; the repo's own goldens and example chains were
+regenerated in the same commit. A correction recorded with the
+ruling: D101's row promises "a newer hejbro regenerates an older
+snapshot on the next generate", but the implemented behavior is the
+loud pin-or-reset diagnostic — the mismatch is filed as its own
+issue and did not carry into this decision's rationale.
+
 ## What this change does NOT touch
 
 - D15 (`Table` shape) and D52 (snapshot FK targets stay resolved

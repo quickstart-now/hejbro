@@ -42,6 +42,12 @@ declaration, ever.
   the same TypeScript type nested or top-level, with zero silent loss.
 - Empty collections arrive as `[]` (never `null`); a missing forward
   row arrives as `null`.
+- **Canonical foreign-key order (D1)**: a table's foreign keys emit and
+  snapshot sorted by a form-independent key, so mixing or converting
+  declaration forms never reorders DDL or snapshot bytes — without
+  this, converting an extras foreign key to `.references()` produced a
+  diff no-op whose snapshot still differed, wedging `hejbro verify`
+  with no `generate` path out. Snapshot `formatVersion` bumps to 7.
 
 ## Capabilities
 
@@ -61,6 +67,9 @@ None — every piece lands in an existing capability.
 - `query-execution`: nested revive — values inside JSON payloads arrive
   as their declared read types; the casts that make it possible are
   visible in `compile()`.
+- `snapshot-format`: `formatVersion` 6→7 — foreign keys record in one
+  canonical, declaration-form-independent order (D1, settled at group 1
+  review; v6 was never released, so no released user crosses the bump).
 
 ## Impact
 

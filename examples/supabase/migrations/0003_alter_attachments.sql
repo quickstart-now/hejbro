@@ -1,7 +1,7 @@
 -- hejbro migration
 -- ~ table app.attachments [foreign key "attachments_profile_id_fk" changed]
--- parent-snapshot: sha256:e48de0b944372a973375ce40cfa46c751b529cd40fa66a0b516824b8b6b3a5c9
--- snapshot: sha256:87309be8bdd2bcc0a65b58d3a1656cdeba17b42c953d1d0be55d81bde28ac7ce
+-- parent-snapshot: sha256:42d872ac31f507e3556d0ce803ab6288f75e9eb44e3ab6ba9faaba60718ac1f9
+-- snapshot: sha256:f15fa5cebc9e6e01847b0e0a37acaa408a8aad8b6f42ee7f0118e1f17a0a1dcd
 
 alter table "app"."attachments" drop constraint "attachments_profile_id_fk";
 

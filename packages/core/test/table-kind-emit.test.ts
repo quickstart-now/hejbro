@@ -150,7 +150,7 @@ describe("tableKind.emit — create re-issues standing schema-wide grants (#121/
 	});
 
 	const snapshotWith = (objects: Record<string, unknown>): Snapshot => ({
-		formatVersion: 6,
+		formatVersion: 7,
 		dialect: "postgres",
 		objects: objects as Snapshot["objects"],
 	});
@@ -1246,6 +1246,68 @@ describe("column-level references emit identically to extras (add-relational-rea
 		expect(viaColumn.sql).toContain('references "app"."users" ("id")');
 		expect(JSON.stringify(viaColumn.snapshot)).toBe(
 			JSON.stringify(viaExtras.snapshot),
+		);
+	});
+
+	it("a mixed-form table emits in the same canonical order as all-extras (D1)", () => {
+		const buildMixed = (mixed: boolean) => {
+			const owner = schema("app");
+			const users = table(owner, "users", { id: uuid().primaryKey() });
+			const orgs = table(owner, "orgs", { id: uuid().primaryKey() });
+			const pets = (() => {
+				if (mixed) {
+					return table(
+						owner,
+						"pets",
+						{
+							id: uuid().primaryKey(),
+							ownerId: uuid()
+								.notNull()
+								.references(() => users.id),
+							orgId: uuid().notNull(),
+						},
+						(t) => ({
+							foreignKeys: [
+								{ columns: [t.orgId], references: { columns: [orgs.id] } },
+							],
+						}),
+					);
+				}
+				return table(
+					owner,
+					"pets",
+					{
+						id: uuid().primaryKey(),
+						ownerId: uuid().notNull(),
+						orgId: uuid().notNull(),
+					},
+					(t) => ({
+						foreignKeys: [
+							{ columns: [t.orgId], references: { columns: [orgs.id] } },
+							{ columns: [t.ownerId], references: { columns: [users.id] } },
+						],
+					}),
+				);
+			})();
+			return [
+				owner,
+				getTableMeta(users),
+				getTableMeta(orgs),
+				getTableMeta(pets),
+			];
+		};
+
+		const mixed = generateMigration({
+			declarations: buildMixed(true),
+			previousSnapshot: emptySnapshot,
+		});
+		const allExtras = generateMigration({
+			declarations: buildMixed(false),
+			previousSnapshot: emptySnapshot,
+		});
+		expect(mixed.sql).toBe(allExtras.sql);
+		expect(JSON.stringify(mixed.snapshot)).toBe(
+			JSON.stringify(allExtras.snapshot),
 		);
 	});
 });

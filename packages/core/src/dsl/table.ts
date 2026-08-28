@@ -912,6 +912,30 @@ const resolveRls = (
 	return bindRls(owner.schemaName, tableName, rlsInput);
 };
 
+/** The canonical, declaration-form-independent sort key for one foreign key (D1, add-relational-reads): local columns then target identity — so a table's foreign-key order never depends on WHICH declaration form wrote it, and converting a form is snapshot-invariant. */
+const foreignKeySortKey = (foreignKey: ForeignKeyDeclaration): string =>
+	[
+		foreignKey.columns.join("\u001f"),
+		foreignKey.references.schemaName,
+		foreignKey.references.tableName,
+		foreignKey.references.columns.join("\u001f"),
+	].join("\u001f");
+
+const compareForeignKeys = (
+	a: ForeignKeyDeclaration,
+	b: ForeignKeyDeclaration,
+): number => {
+	const keyA = foreignKeySortKey(a);
+	const keyB = foreignKeySortKey(b);
+	if (keyA < keyB) {
+		return -1;
+	}
+	if (keyA > keyB) {
+		return 1;
+	}
+	return 0;
+};
+
 /** Rejects a column declared through both foreign-key paths (add-relational-reads guard) — without it the clash would still throw, but only later and name-centrically (`duplicate-foreign-key-name`); this guard fires earlier and names the COLUMN, which is what the user actually wrote twice. */
 const assertNoDoublyDeclaredReference = (
 	tableName: string,
@@ -985,7 +1009,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const foreignKeys = [
 		...foldColumnReferences(columnEntries),
 		...extrasForeignKeys,
-	];
+	].sort(compareForeignKeys);
 	const checks = [
 		...(resolvedExtras.checks ?? []),
 		...deriveNotNullElementsChecks(owner, tableName, columnEntries),

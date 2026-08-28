@@ -41,11 +41,11 @@ import { stableJson } from "./stable-json";
  * rather than silently diffing with those two fields ignored. Still
  * pre-publication, so no shim beyond the existing detection branch above.
  */
-export const HEJBRO_SNAPSHOT_VERSION = 6;
+export const HEJBRO_SNAPSHOT_VERSION = 7;
 
 /** A deterministic, flat representation of every declared database object. */
 export type Snapshot = {
-	readonly formatVersion: 6;
+	readonly formatVersion: 7;
 	readonly dialect: "postgres";
 	/** keyed by `${kind}:${identity}` */
 	readonly objects: { readonly [kindAndIdentity: string]: JsonValue };

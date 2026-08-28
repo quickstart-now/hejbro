@@ -25,6 +25,16 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
       `packages/core/test/table-kind-emit.test.ts` — "column-level and
       extras foreign keys emit identically". Files: that test only.
 
+- [x] 1.4 (added at group 1 review — D1 owner ruling) Canonical
+      foreign-key order: a table's foreign keys sort by a
+      declaration-form-independent key (local columns, then target
+      identity), so mixing or converting declaration forms is
+      snapshot-invariant; snapshot `formatVersion` bumps 6→7 (v6 was
+      never released — 0.1.1 shipped v5). Red:
+      `packages/core/test/table-kind-emit.test.ts` — "a mixed-form
+      table emits in the same canonical order as all-extras (D1)".
+      Includes the golden/example/fixture v7 sweep.
+
 ## 2. Select-as-expression node and base helpers (core IR)
 
 - [ ] 2.1 (~10m) [design] New `ExprNode` variant embedding a

@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 6,
+	"formatVersion": 7,
 	"objects": {
 		"policy:app.posts.posts_read_published": {
 			"command": "select",
