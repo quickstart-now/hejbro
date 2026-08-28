@@ -181,3 +181,7 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-29,nested-transactions,1.2,1,6,6,0,"rollback path; the test asserts toBe(boom) (identity, not shape) and that the OUTER transaction still commits -- the second half is the actual claim"
 2026-08-29,nested-transactions,1.3,1,8,7,0,"live postgres:17 witness; verified load-bearing by asserting the discarded row IS present -> real server returned ['after','kept'] and failed it. a fixture driver cannot make this claim at all"
 2026-08-29,nested-transactions,1.4,1,5,5,0,"db-handle re-entry message rewritten (it pointed at #313 as 'not supported yet'); query-layer reference documents nesting"
+2026-08-28,narrow-enum-columns,1.1,1,8,7,0,"pgEnum generic with a const type parameter + EnumValues constraint; EnumDeclaration<TValues> defaulted so HejbroDeclaration and the supabase validators' bare narrowing keep working untouched"
+2026-08-28,narrow-enum-columns,1.2,1,6,5,0,"BaseScalarTsType splits enum out of the string group; absent enumValues falls back to string, never never -- widening to today's type rather than one no value satisfies"
+2026-08-28,narrow-enum-columns,1.3,1,6,4,0,write-side proof via two @ts-expect-error directives (unused directives are themselves errors -- the guard cannot pass while the narrowing is absent)
+2026-08-28,narrow-enum-columns,1.4,1,5,6,0,"dsl-cheatsheet gained an enum section it never had (the surface was undocumented, not merely stale) + changeset"
