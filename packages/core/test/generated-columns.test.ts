@@ -233,7 +233,13 @@ describe("generated/identity misuse at table() (add-generated-columns, task 1.2)
 		expect(column?.columnState.defaultValue).toBeNull();
 	});
 
-	it("happy path: a valid identity column, a valid by-default identity column, and a valid generated column all build without throwing", () => {
+	it("happy path (positive control): a valid identity column, a valid by-default identity column (with options), and a valid generated column all build without throwing, and guard 4 does not fire on either identity column", () => {
+		// R11: guard 4 keys on columnState.defaultValue !== null at runtime
+		// (TMeta doesn't exist at runtime) -- if the identity setters ever
+		// started writing columnState.defaultValue to express the implied
+		// hasDefault, every identity column would trip guard 4 and this table
+		// would throw. The four misuse tests above only prove throwing
+		// happens; only this positive control would catch that regression.
 		const built = table(schema("app"), "widgets", {
 			id: integer().generatedAlwaysAsIdentity(),
 			seq: smallint().generatedByDefaultAsIdentity({ startWith: 1 }),
@@ -241,5 +247,11 @@ describe("generated/identity misuse at table() (add-generated-columns, task 1.2)
 			label: text(),
 		});
 		expect(built).toBeTruthy();
+
+		const [idColumn, seqColumn] = getTableMeta(built).columns;
+		expect(idColumn?.columnState.defaultValue).toBeNull();
+		expect(idColumn?.columnState.notNull).toBe(false);
+		expect(seqColumn?.columnState.defaultValue).toBeNull();
+		expect(seqColumn?.columnState.notNull).toBe(false);
 	});
 });
