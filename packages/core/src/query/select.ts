@@ -328,11 +328,31 @@ const withJsonSafeCasts = (
 	return { ...query, projection: { ...query.projection, columns } };
 };
 
+/**
+ * Phantom marker `jsonArrayFrom`/`jsonObjectFrom` stamp on their returned
+ * expression (add-relational-reads group 3) — carries the embedded
+ * subselect's projection TYPE and mode so the query layer can compute the
+ * nested row type. Optional and never assigned at runtime (the
+ * `columnMetaBrand` precedent).
+ */
+export const nestedReadBrand: unique symbol = Symbol("hejbro:nested-read");
+
+/** The marker's shape — see {@link nestedReadBrand}. */
+export type NestedReadMarker<
+	TMode extends "jsonArray" | "jsonObject",
+	TProjection extends SelectProjection,
+> = {
+	readonly [nestedReadBrand]?: {
+		readonly mode: TMode;
+		readonly projection: TProjection;
+	};
+};
+
 const buildSelectExpr =
-	(mode: "jsonArray" | "jsonObject") =>
+	<TMode extends "jsonArray" | "jsonObject">(mode: TMode) =>
 	<TProjection extends SelectProjection>(
 		subselect: SelectLimited<TProjection>,
-	): Expr<"json"> =>
+	): Expr<"json"> & NestedReadMarker<TMode, TProjection> =>
 		expr("json", {
 			nodeKind: "selectExpr",
 			mode,

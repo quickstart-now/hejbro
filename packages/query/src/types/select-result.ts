@@ -2,6 +2,7 @@ import type {
 	ColumnBuilder,
 	Expr,
 	IntervalValue,
+	NestedReadMarker,
 	SelectProjection,
 	SqlTypeFamily,
 	Table,
@@ -117,10 +118,26 @@ export type SelectResult<TProjection extends SelectProjection> =
 		? { readonly [K in keyof TColumns]: SelectColumnResult<TColumns[K]> }
 		: TProjection extends Record<string, Expr>
 			? {
-					readonly [K in keyof TProjection]: TProjection[K] extends Expr<
-						infer TFamily
-					>
-						? FamilyReadType<TFamily> | null
-						: never;
+					readonly [K in keyof TProjection]: NestedOrExprResult<TProjection[K]>;
 				}
+			: never;
+
+/**
+ * One object-projection value's result type: a nested read
+ * (`jsonArrayFrom`/`jsonObjectFrom`, recognized by its phantom
+ * {@link NestedReadMarker}) resolves through {@link SelectResult}
+ * RECURSIVELY — so a nested row's columns carry exactly the declared
+ * read types a top-level select would (D102 cast+revive), and
+ * grandchildren compose for free. Everything else keeps the flat
+ * family-widened fallback (#311's known gap, unchanged here).
+ */
+type NestedOrExprResult<TValue> =
+	TValue extends NestedReadMarker<infer TMode, infer TSub>
+		? [TMode] extends ["jsonArray"]
+			? ReadonlyArray<SelectResult<TSub>>
+			: [TMode] extends ["jsonObject"]
+				? SelectResult<TSub> | null
+				: ReadonlyArray<SelectResult<TSub>> | SelectResult<TSub> | null
+		: TValue extends Expr<infer TFamily>
+			? FamilyReadType<TFamily> | null
 			: never;

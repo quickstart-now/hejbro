@@ -1,12 +1,12 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1253](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201253-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1280](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201280-brightgreen)](#status)
 <!-- crap-badge:end -->
 <!-- tasktime-badges:start -->
-[![tasks · 104 done](https://img.shields.io/badge/tasks-104%20done-blue)](openspec/task-times.csv)
+[![tasks · 109 done](https://img.shields.io/badge/tasks-109%20done-blue)](openspec/task-times.csv)
 [![avg task · 21m](https://img.shields.io/badge/avg%20task-21m-blue)](openspec/task-times.csv)
-[![estimate · 2.22x](https://img.shields.io/badge/estimate-2.22x-blue)](openspec/task-times.csv)
+[![estimate · 2.21x](https://img.shields.io/badge/estimate-2.21x-blue)](openspec/task-times.csv)
 [![overhead · 35%](https://img.shields.io/badge/overhead-35%25-blue)](openspec/task-times.csv)
 <!-- tasktime-badges:end -->
 
@@ -217,7 +217,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1253 functions** over the threshold, highest score 5.00 — measured at `37ce121` (2026-08-28).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1280 functions** over the threshold, highest score 5.00 — measured at `57124c1` (2026-08-28).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->

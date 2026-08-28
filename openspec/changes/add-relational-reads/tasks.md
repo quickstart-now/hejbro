@@ -70,32 +70,32 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 3. Query layer: nested types, related(), revive — after groups 1–2
 
-- [ ] 3.1 (~10m) Nested result typing: a `jsonArrayFrom` key types
+- [x] 3.1 (~10m) Nested result typing: a `jsonArrayFrom` key types
       `ReadonlyArray<Row>`, `jsonObjectFrom` types `Row | null`, and
       every nested column's type equals its top-level declared read
       type. Red: `packages/query/test/types/nested-read.test.ts` —
       "nested and top-level types agree column by column". Files:
       `packages/query/src/types/select-result.ts` (+ a new nested-read
       type module), that test.
-- [ ] 3.2 (~10m) Relation-key derivation at the type level: reverse
+- [x] 3.2 (~10m) Relation-key derivation at the type level: reverse
       keys from the schema map, forward keys by the trailing-`Id`
       strip, collisions and unknown keys resolve to `never`. Red:
       same test file — "related keys derive exactly owner and
       comments; a misspelled key fails". Files: a new
       `packages/query/src/types/relations.ts`, that test.
-- [ ] 3.3 (~8m) `related()` chain method: runtime derivation from the
+- [x] 3.3 (~8m) `related()` chain method: runtime derivation from the
       declared `ForeignKeyDeclaration`s producing exactly the explicit
-      form's statements. Red: `packages/query/test/related.test.ts` —
+      form's statements. Red: `packages/query/test/db/related.test.ts` —
       "related({...}).compile() equals the explicit
       jsonArrayFrom/jsonObjectFrom formulation". Files:
       `packages/query/src/db/chain.ts`, that test.
-- [ ] 3.4 (~10m) Nested column plans and revive: the plan becomes a
+- [x] 3.4 (~10m) Nested column plans and revive: the plan becomes a
       tree; `convertRow` parses the JSON cell and revives each nested
       value by declared type, recursing for grandchildren. Red:
-      `packages/query/test/nested-revive.test.ts` (fake driver) — "a
+      `packages/query/test/db/nested-revive.test.ts` (fake driver) — "a
       bigint past 2^53 revives intact from a nested payload". Files:
       `packages/query/src/db/convert.ts`, that test.
-- [ ] 3.5 (~6m) Arrival shapes and the one-statement invariant: empty
+- [x] 3.5 (~6m) Arrival shapes and the one-statement invariant: empty
       collection `[]`, missing forward row `null`, and a
       `db.as(ctx).select(...).related(...)` read compiles to exactly
       one statement. Red: same test file — "empty and missing arrivals;

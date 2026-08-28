@@ -27,7 +27,7 @@ import { executeOn } from "./execute";
  * there is exactly one place this generic signature is honored, not two
  * that could drift apart.
  */
-export type Tx = ChainApi & {
+export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
 	execute<TStatement extends CompileInput>(
 		statement: TStatement,
 	): Promise<ExecuteResult<TStatement>>;

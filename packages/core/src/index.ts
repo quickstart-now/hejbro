@@ -274,6 +274,7 @@ export type {
 } from "./query/mutate";
 export { deleteFrom, insert, update } from "./query/mutate";
 export type {
+	NestedReadMarker,
 	OrderTermInput,
 	SelectFiltered,
 	SelectJoinable,
@@ -285,6 +286,7 @@ export {
 	exists,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	nestedReadBrand,
 	notExists,
 	select,
 } from "./query/select";

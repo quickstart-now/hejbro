@@ -226,6 +226,7 @@ export type Db<
 		string,
 		FunctionDeclaration
 	>,
+	TSchema = Record<string, unknown>,
 > = {
 	readonly declarations: Declarations;
 	readonly driver: Driver;
@@ -245,7 +246,7 @@ export type Db<
 	 * fails fast with `nested-transaction-unsupported` when called again
 	 * from inside an already-open callback of this same member.
 	 */
-	transaction<T>(callback: (tx: Tx) => Promise<T>): Promise<T>;
+	transaction<T>(callback: (tx: Tx<TSchema>) => Promise<T>): Promise<T>;
 	/**
 	 * Scopes every statement in the returned {@link ScopedDb} to `context`
 	 * (task 4.7): validates `context.role` against the declared-role
@@ -253,7 +254,7 @@ export type Db<
 	 * applies `SET LOCAL ROLE`/`set_config` inside a wrapping transaction
 	 * on the actual work, and never touches this (unscoped) handle at all.
 	 */
-	as(context: DbContext): ScopedDb<TFunctions>;
+	as(context: DbContext): ScopedDb<TFunctions, TSchema>;
 	/**
 	 * `db.fn.*` (tasks 4.9/4.10): one callable per declared function,
 	 * keyed **exactly** to the declarations record's own export names —
@@ -272,7 +273,7 @@ export type Db<
 	 * — no second statement vocabulary). Inert until awaited; `.compile()`
 	 * on any stage never touches the driver.
 	 */
-	select: ChainApi["select"];
+	select: ChainApi<TSchema>["select"];
 	/** Thenable `insert` chain (task 7.2, group 7 decision ②) — mirrors core's `insert(target).values(rows)`. */
 	insert: ChainApi["insert"];
 	/** Thenable `update` chain (task 7.2, group 7 decision ②) — mirrors core's `update(target).set(values)`. */
@@ -323,7 +324,7 @@ export const db = <TSchema extends Schema>(
 	schema: TSchema,
 	driver: Driver,
 	options?: DbOptions,
-): Db<FunctionsOf<TSchema>> => {
+): Db<FunctionsOf<TSchema>, TSchema> => {
 	const tables = tablesOf(schema);
 	const declarations: Declarations = {
 		tables,
@@ -359,7 +360,7 @@ export const db = <TSchema extends Schema>(
 		execute: ((statement: CompileInput) =>
 			executeImpl(driver, declarations.tables, statement)) as Db["execute"],
 		transaction: createTransactionApi(driver, declarations.tables),
-		as: createAsApi(
+		as: createAsApi<FunctionsOf<TSchema>, TSchema>(
 			driver,
 			declarations.tables,
 			typedFunctions,
