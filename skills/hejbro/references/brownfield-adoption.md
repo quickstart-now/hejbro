@@ -25,19 +25,28 @@ where hejbro inspects your database for you.
    column-for-column, in the tables' actual physical column order (the
    cheatsheet's column-order rule applies here too — hejbro's snapshot
    follows declaration order on a brand-new table).
-2. Run `hejbro generate`. Because the checked-in snapshot starts empty,
-   this first migration is a full `create table`/`create index`/… for
-   every declared object — the same output `generate` would produce for
-   a table that didn't exist yet.
-3. That first migration is a **baseline record of what's now declared**,
-   not something to run against the already-populated database — running
-   `create table` against a table that already exists fails (`relation
-   "..." already exists`). Whatever apply pipeline the project already
-   uses needs its own way to record that this migration is already
-   reflected in the live database, without executing it. hejbro doesn't
-   provide or prescribe that mechanism; it isn't part of D12's scope.
+2. Run **`hejbro baseline`** (not `generate`). Because the checked-in
+   snapshot starts empty, this first migration is a full `create
+   table`/`create index`/… for every declared object — the same SQL
+   `generate` would produce for objects that didn't exist yet — and
+   `baseline` marks it in its own banner:
+
+   ```
+   -- baseline: these objects already exist — register this migration as applied, do not run it
+   ```
+
+3. **Register that file as applied in your apply pipeline without running
+   it.** Running it against the already-populated database fails on the
+   first statement (`relation "..." already exists`), and "already
+   exists" is a confusing way to learn the file was never meant to be
+   run — which is why the marker and the command's own report say so
+   before you get there. hejbro does not apply migrations (D12), so
+   recording "applied" is your pipeline's mechanism, whatever it is.
 4. From that point on, every further `hejbro generate` behaves exactly as
-   it does in a greenfield project.
+   it does in a greenfield project, emitting only what changed.
+   `hejbro baseline` refuses to run a second time
+   (`error[baseline-not-first]`) — a baseline is by definition the first
+   migration of an adopted database.
 
 ## Checking a declaration against the real schema
 
@@ -83,8 +92,12 @@ checked-out files — they confirm the migration history and snapshot stay
 internally consistent with each other, and say nothing about whether the
 live database has drifted from what's declared (a manual schema change
 made directly against the database, for instance, is invisible to
-`verify`). A dedicated brownfield adoption path — baseline registration
-or introspection-assisted seeding — is tracked as #385.
+`verify`). `hejbro baseline` (above) covers the
+registration half of #385. The other half — introspection-assisted
+seeding, where hejbro reads a live schema or a dump and writes starter
+declarations for you — does not exist: step 1 is still yours to write,
+and step "Checking a declaration against the real schema" above is still
+how you confirm you got it right.
 
 ## Where this is enforced
 
