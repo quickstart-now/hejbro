@@ -51,7 +51,8 @@ export const orders = table(app, "orders", {
   combination Postgres itself rejects). Both identity kinds imply
   `NOT NULL` — the column reads back non-nullable.
 - ALWAYS-family columns (stored generated and always-identity) do not
-  appear in the query layer's insert/update input types; a by-default
+  appear in any insert/update input type — the query chain's and core's
+  raw builders' alike; a by-default
   identity can be supplied or omitted like any defaulted column. The
   database enforces the same rule at runtime (SQLSTATE `428C9`).
 - Combining generated/identity with `.default(...)`, with each other, or

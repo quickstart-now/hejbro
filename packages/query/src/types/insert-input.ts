@@ -87,8 +87,8 @@ type OptionalInsertKeys<TColumns extends Record<string, ColumnBuilder>> =
  * extraction pattern), not yet wired into `insert()`'s actual parameter
  * type (that wiring, like task 3.9's numeric-mode conversion and task
  * 3.10's `select()` return type, is group 4's job; core's own
- * `MutationRow<TTable>` still types every column as optional and
- * family-only — this file doesn't touch it).
+ * `MutationRow<TTable>` also drops ALWAYS-family keys since #390, but
+ * stays family-only on values — this file doesn't touch it).
  *
  * A column is a **required** key only when it's `notNull` *and* has no
  * default (`RequiredInsertKeys`) — Postgres itself would reject an
