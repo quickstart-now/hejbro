@@ -4,6 +4,7 @@ import {
 	integer,
 	schema,
 	select,
+	sql,
 	table,
 	text,
 	uuid,
@@ -35,7 +36,9 @@ const countPosts = defineFunction(
 	app,
 	"count_posts",
 	{ returns: { typeName: "bigint" } },
-	() => {},
+	(ctx) => {
+		ctx.return(sql`(select count(*) from "app"."posts")`);
+	},
 );
 
 const appSchema = { posts, searchByStatus, countPosts };

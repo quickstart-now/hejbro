@@ -200,8 +200,11 @@ export const defineFunction = <
 		config.args,
 	);
 
-	const functionBody = recordBodyWithGuard(identity, declaredAt, (ctx) =>
-		body(ctx, refs),
+	const functionBody = recordBodyWithGuard(
+		identity,
+		declaredAt,
+		returns.returnsKind,
+		(ctx) => body(ctx, refs),
 	);
 
 	return {

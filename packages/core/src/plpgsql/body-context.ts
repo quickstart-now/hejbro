@@ -93,7 +93,7 @@ export type BodyContext = {
 	) => RowColumns<TProjection>;
 	readonly if: (condition: Expr<"boolean">, thenBranch: () => void) => IfChain;
 	readonly raise: (message: string, ...args: ReadonlyArray<RaiseArg>) => void;
-	readonly return: (value: TriggerRow<Table> | ReturnableQuery) => void;
+	readonly return: (value: TriggerRow<Table> | ReturnableQuery | Expr) => void;
 	readonly forEach: <TProjection extends RowProjection>(
 		query: SelectLimited<TProjection>,
 		body: (row: RowColumns<TProjection>) => void,
@@ -140,9 +140,22 @@ type IfStatementDraft = {
  * locals before this split — only the capture mechanism changed, from
  * lexical scope to an explicit parameter every function here takes first.
  */
+/**
+ * What the enclosing declaration said it returns — threaded in from
+ * `defineFunction`/`defineTrigger` so `ctx.return()` can reject a shape
+ * Postgres would reject (#424). Without it the recorder sees only the
+ * value, and `return query` in a scalar function compiled silently and
+ * failed at apply time with "cannot use RETURN QUERY in a non-SETOF
+ * function".
+ */
+export type ReturnKind = "trigger" | "setofTable" | "scalar";
+
 type RecordingState = {
 	readonly identity: string;
 	readonly declaredAt: string | null;
+	readonly returnKind: ReturnKind;
+	/** set the moment any return statement is recorded, at any nesting depth — a scalar function that never sets it has no way to produce its value. */
+	readonly returned: { current: boolean };
 	readonly declarations: Array<PlpgsqlVarDeclaration>;
 	readonly declaredNames: Set<string>;
 	readonly frames: Array<Array<BodyStatement>>;
@@ -358,10 +371,47 @@ const recordReturnQuery = (
 	return false;
 };
 
+/** `true` for a plain expression — anything carrying a `family`/`exprNode` pair that isn't one of the four query shapes or a trigger row. */
+const isReturnableExpr = (
+	value: TriggerRow<Table> | ReturnableQuery | Expr,
+): value is Expr => isExpr(value);
+
+/** Names the shape the declaration's own `returns` actually wants, so the error says what to write instead of only what was wrong. */
+const expectedReturnShape = (returnKind: ReturnKind): string => {
+	if (returnKind === "trigger") {
+		return "a trigger row (ctx.new/ctx.old)";
+	}
+	return "a query";
+};
+
+/** Records `return <expr>;`, which only a scalar-returning declaration can carry. */
+const recordReturnExpr = (state: RecordingState, value: Expr): void => {
+	if (state.returnKind !== "scalar") {
+		throwHejbroError(
+			"scalar-return-in-non-scalar-function",
+			`ctx.return() in ${state.identity} received a scalar expression, but this declaration does not return a scalar type. Next: return ${expectedReturnShape(state.returnKind)} instead, or declare a scalar "returns" type.`,
+			state.declaredAt,
+		);
+	}
+	pushStatement(state, { stmtKind: "returnExpr", expr: value.exprNode });
+};
+
 const recordReturn = (
 	state: RecordingState,
-	value: TriggerRow<Table> | ReturnableQuery,
+	value: TriggerRow<Table> | ReturnableQuery | Expr,
 ): void => {
+	state.returned.current = true;
+	if (isReturnableExpr(value)) {
+		recordReturnExpr(state, value);
+		return;
+	}
+	if (state.returnKind === "scalar") {
+		throwHejbroError(
+			"scalar-return-expects-expression",
+			`ctx.return() in ${state.identity} received a query or trigger row, but this declaration returns a scalar type. Postgres rejects "return query" in a non-SETOF function at create time. Next: return an expression (a column ref, an argument ref, or a sql\`…\` fragment), or declare "returns" as a table for a setof function.`,
+			state.declaredAt,
+		);
+	}
 	if (isTriggerRow(value)) {
 		pushStatement(state, {
 			stmtKind: "returnRef",
@@ -437,10 +487,13 @@ const recordForEach = <TProjection extends RowProjection>(
 export const createRecordingContext = (
 	identity: string,
 	declaredAt: string | null,
+	returnKind: ReturnKind,
 ): { readonly ctx: BodyContext; readonly finish: () => FunctionBody } => {
 	const state: RecordingState = {
 		identity,
 		declaredAt,
+		returnKind,
+		returned: { current: false },
 		declarations: [],
 		declaredNames: new Set(),
 		frames: [[]],
@@ -457,10 +510,19 @@ export const createRecordingContext = (
 		forEach: (query, body, name) => recordForEach(state, query, body, name),
 	};
 
-	const finish = (): FunctionBody => ({
-		declarations: [...state.declarations],
-		statements: popFrame(state),
-	});
+	const finish = (): FunctionBody => {
+		if (returnKind === "scalar" && !state.returned.current) {
+			throwHejbroError(
+				"scalar-return-missing",
+				`function "${identity}" returns a scalar type but its body never calls ctx.return(). Postgres accepts the CREATE and then raises "control reached end of function without RETURN" on the first call. Next: return an expression from the body.`,
+				declaredAt,
+			);
+		}
+		return {
+			declarations: [...state.declarations],
+			statements: popFrame(state),
+		};
+	};
 
 	return { ctx, finish };
 };
@@ -479,13 +541,14 @@ const nondeterministicBodyMessage = (identity: string): string =>
 export const recordBodyWithGuard = (
 	identity: string,
 	declaredAt: string | null,
+	returnKind: ReturnKind,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
-	const first = createRecordingContext(identity, declaredAt);
+	const first = createRecordingContext(identity, declaredAt, returnKind);
 	run(first.ctx);
 	const firstBody = first.finish();
 
-	const second = createRecordingContext(identity, declaredAt);
+	const second = createRecordingContext(identity, declaredAt, returnKind);
 	run(second.ctx);
 	const secondBody = second.finish();
 

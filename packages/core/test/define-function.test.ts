@@ -2,10 +2,13 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ColumnBuilder, FunctionDeclaration } from "../src/index";
 import {
 	defineFunction,
+	defineTrigger,
 	eq,
 	functionKind,
+	renderFunctionSql,
 	schema,
 	select,
+	sql,
 	table,
 	text,
 	uuid,
@@ -102,5 +105,101 @@ describe("FunctionDeclaration<TArgs, TReturns> generics (task 4.10)", () => {
 		expect(bare.args).toEqual([
 			{ argName: "status", typeNode: { typeName: "text" } },
 		]);
+	});
+});
+
+/** The `code` of the HejbroError `run` throws — the codes are the stable contract, the prose is not. */
+const codeOf = (run: () => unknown): string => {
+	try {
+		run();
+	} catch (error) {
+		return (error as { code: string }).code;
+	}
+	return "(did not throw)";
+};
+
+describe("scalar-returning functions (#424)", () => {
+	it("returns a scalar expression", () => {
+		const fn = defineFunction(
+			app,
+			"post_count",
+			{ returns: { typeName: "integer" } },
+			(ctx) => {
+				ctx.return(sql`(select count(*) from "app"."posts")`);
+			},
+		);
+		expect(renderFunctionSql(fn)).toContain(
+			'return (select count(*) from "app"."posts");',
+		);
+		expect(renderFunctionSql(fn)).toContain("returns integer");
+	});
+
+	it("returns an argument reference", () => {
+		const fn = defineFunction(
+			app,
+			"echo_status",
+			{ args: { status: text() }, returns: { typeName: "text" } },
+			(ctx, args) => {
+				ctx.return(args.status);
+			},
+		);
+		expect(renderFunctionSql(fn)).toContain("return status;");
+	});
+
+	it("rejects a query return -- Postgres refuses RETURN QUERY in a non-SETOF function", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"bad_count",
+					{ returns: { typeName: "integer" } },
+					(ctx) => {
+						ctx.return(select(posts));
+					},
+				),
+			),
+		).toBe("scalar-return-expects-expression");
+	});
+
+	it("rejects a body that never returns", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"silent",
+					{ returns: { typeName: "integer" } },
+					() => {},
+				),
+			),
+		).toBe("scalar-return-missing");
+	});
+
+	it("rejects a scalar expression from a setof function", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(app, "wrong_way", { returns: posts }, (ctx) => {
+					ctx.return(sql`1`);
+				}),
+			),
+		).toBe("scalar-return-in-non-scalar-function");
+	});
+
+	it("rejects a scalar expression from a trigger body", () => {
+		expect(
+			codeOf(() =>
+				defineTrigger(
+					posts,
+					{
+						name: "bad_trigger",
+						timing: "before",
+						events: ["insert"],
+						forEach: "row",
+					},
+					(ctx) => {
+						ctx.return(sql`1`);
+					},
+				),
+			),
+		).toBe("scalar-return-in-non-scalar-function");
 	});
 });
