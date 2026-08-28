@@ -13,6 +13,7 @@ import type {
 	ProjectionNode,
 	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
@@ -403,6 +404,33 @@ export const retargetSelectNode = (
 		return query;
 	}
 	return { ...query, projection, from, joins, where, orderBy };
+};
+
+/** Retargets a set-operation statement's branches (add-set-operations) — the same identity invariant: the exact same reference comes back when neither branch changed. */
+export const retargetSetOpNode = (
+	node: SetOpNode,
+	target: RenameTarget,
+): SetOpNode => {
+	const left = retargetQueryBranch(node.left, target);
+	const right = retargetQueryBranch(node.right, target);
+	const orderBy = node.orderBy.map((term) => retargetOrderByTerm(term, target));
+	const orderByUnchanged = orderBy.every(
+		(term, index) => term === node.orderBy[index],
+	);
+	if (left === node.left && right === node.right && orderByUnchanged) {
+		return node;
+	}
+	return { ...node, left, right, orderBy };
+};
+
+const retargetQueryBranch = (
+	branch: SelectNode | SetOpNode,
+	target: RenameTarget,
+): SelectNode | SetOpNode => {
+	if (branch.queryKind === "setOp") {
+		return retargetSetOpNode(branch, target);
+	}
+	return retargetSelectNode(branch, target);
 };
 
 const retargetExists = (node: ExistsNode, target: RenameTarget): ExprNode => {

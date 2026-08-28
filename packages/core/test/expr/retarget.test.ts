@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { ExprNode, SelectNode } from "../../src/expr/ast";
+import type { ExprNode, SelectNode, SetOpNode } from "../../src/expr/ast";
 import type { RenameTarget } from "../../src/expr/retarget";
-import { retargetExprNode, retargetSelectNode } from "../../src/expr/retarget";
+import {
+	retargetExprNode,
+	retargetSelectNode,
+	retargetSetOpNode,
+} from "../../src/expr/retarget";
 import { buildUnrelatedCase, REACHABLE_NODE_KINDS } from "./reachable-kinds";
 
 const tableRenameTarget: RenameTarget = {
@@ -425,5 +429,88 @@ describe('retargetSelectNode with a "columns" projection (defineView\'s own colu
 		]);
 		const retargeted = retargetSelectNode(query, columnRenameTarget);
 		expect(retargeted).toBe(query);
+	});
+});
+
+describe("set-op retarget (add-set-operations task 1.4)", () => {
+	it("retargets both branches and returns the same reference when unrelated", () => {
+		const base: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: {
+				queryKind: "select",
+				projection: { projectionKind: "allColumns", columnNames: ["id"] },
+				from: { schemaName: "app", tableName: "posts" },
+				joins: [],
+				where: null,
+				orderBy: [],
+				limit: null,
+			},
+			right: {
+				queryKind: "select",
+				projection: { projectionKind: "allColumns", columnNames: ["id"] },
+				from: { schemaName: "app", tableName: "others" },
+				joins: [],
+				where: null,
+				orderBy: [],
+				limit: null,
+			},
+			orderBy: [],
+			limit: null,
+		};
+		const renamed = retargetSetOpNode(base, {
+			oldSchema: "app",
+			oldTable: "posts",
+			newSchema: "app",
+			newTable: "entries",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(JSON.stringify(renamed)).toContain('"entries"');
+		expect(JSON.stringify(renamed)).not.toContain('"posts"');
+		const untouched = retargetSetOpNode(base, {
+			oldSchema: "app",
+			oldTable: "elsewhere",
+			newSchema: "app",
+			newTable: "nowhere",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(untouched).toBe(base);
+	});
+});
+
+describe("set-op right-branch rename (review F5)", () => {
+	it("a rename touching only the right branch retargets it", () => {
+		const leaf = (tableName: string): SelectNode => ({
+			queryKind: "select",
+			projection: { projectionKind: "allColumns", columnNames: ["id"] },
+			from: { schemaName: "app", tableName },
+			joins: [],
+			where: null,
+			orderBy: [],
+			limit: null,
+		});
+		const node: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: leaf("keepers"),
+			right: leaf("movers"),
+			orderBy: [],
+			limit: null,
+		};
+		const renamed = retargetSetOpNode(node, {
+			oldSchema: "app",
+			oldTable: "movers",
+			newSchema: "app",
+			newTable: "settlers",
+			oldColumn: null,
+			newColumn: null,
+		});
+		expect(renamed).not.toBe(node);
+		expect(JSON.stringify(renamed.right)).toContain('"settlers"');
+		expect(JSON.stringify(renamed.left)).toContain('"keepers"');
 	});
 });

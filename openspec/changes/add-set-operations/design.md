@@ -57,11 +57,13 @@ query; no plpgsql surface work.
 
 `renderSetOp`: render each branch (parenthesized when itself a
 set-op — associativity stays explicit), join with the operator
-keyword (+ ` all`), then whole-set `order by`/`limit`. The whole-set
-`orderBy` scope is the LEFT branch's from/joins (Postgres resolves
-set-op `order by` against output column names; we render qualified
-refs, so the honest v1 rule is: `orderBy` terms must reference left-
-branch columns — the existing scope machinery enforces it for free).
+keyword (+ ` all`), then whole-set `order by`/`limit`. CORRECTED at
+group 4 against the real server: Postgres resolves set-op `order by`
+against the OUTPUT column list and REJECTS qualified references there
+— so the renderer emits bare output column names, and the guard is
+membership in the leftmost select's output list (`invalid-set-op-order`
+otherwise; a non-column term is rejected the same way — the honest v1
+subset, the `sql` hatch covers positional/alias forms).
 
 ### Builder and chain
 
@@ -96,10 +98,10 @@ via a queryKind dispatch; `projectionColumns(setOp)` recurses into
 
 ## Risks
 
-- The whole-set `orderBy` output-name resolution rule (left-branch
-  scope) is stricter than Postgres (which also accepts positional and
-  output-alias references) — honest subset, documented in the skill;
-  the `sql` hatch covers the rest (D93).
+- The whole-set `orderBy` accepts only left-branch OUTPUT columns by
+  name — stricter than Postgres (which also accepts positional
+  references) — honest subset, documented in the skill; the `sql`
+  hatch covers the rest (D93).
 - `decodeSelectNode`'s callers that REQUIRE a plain select (plpgsql
   select-into, the column-order oracle's table case) keep their
   narrow expectations — each gets an explicit loud rejection rather

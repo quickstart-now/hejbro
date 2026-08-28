@@ -288,6 +288,36 @@ describe("applyColumnOrderTo*", () => {
 		limit: null,
 	} as const;
 
+	it("recurses into both set-op branches, keeping identity when nothing moves (add-set-operations)", () => {
+		const setOp = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: select,
+			right: select,
+			orderBy: [],
+			limit: null,
+		} as const;
+		const reordered = applyColumnOrderToQuery(setOp, oracle);
+		expect(reordered).not.toBe(setOp);
+		expect((reordered as typeof setOp).left.projection).toEqual({
+			projectionKind: "allColumns",
+			columnNames: ["id", "title", "archived_at", "description"],
+		});
+		// branches over a table the oracle doesn't know stay untouched --
+		// and the set-op node itself keeps reference identity.
+		const unknownSelect = {
+			...select,
+			from: { schemaName: "app", tableName: "unknown" },
+		} as const;
+		const inertSetOp = {
+			...setOp,
+			left: unknownSelect,
+			right: unknownSelect,
+		} as const;
+		expect(applyColumnOrderToQuery(inertSetOp, oracle)).toBe(inertSetOp);
+	});
+
 	it("re-orders an allColumns projection by the oracle", () => {
 		expect(applyColumnOrderToSelect(select, oracle).projection).toEqual({
 			projectionKind: "allColumns",

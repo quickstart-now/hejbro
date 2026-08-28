@@ -140,6 +140,7 @@ export type {
 	ReturningNode,
 	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
@@ -151,7 +152,11 @@ export {
 	expr,
 	isExpr,
 } from "./expr/ast";
-export { decodeExprNode } from "./expr/codec";
+export {
+	decodeExprNode,
+	decodeQueryNode,
+	encodeQueryNode,
+} from "./expr/codec";
 export { liftLiteral, liftOperand, renderLiteral } from "./expr/literal";
 export {
 	and,
@@ -186,6 +191,7 @@ export {
 	renderQuery,
 	renderSelect,
 	renderSelectInto,
+	renderSetOp,
 	renderTableRef,
 	renderUpdate,
 } from "./expr/render-sql";
@@ -281,6 +287,8 @@ export type {
 	SelectLimited,
 	SelectOrdered,
 	SelectProjection,
+	SetOpBranch,
+	SetOpStage,
 } from "./query/select";
 export {
 	exists,
@@ -288,6 +296,7 @@ export {
 	jsonObjectFrom,
 	nestedReadBrand,
 	notExists,
+	resolveOrderTerm,
 	select,
 } from "./query/select";
 export type { ColumnOrderOracle } from "./snapshot/column-order";

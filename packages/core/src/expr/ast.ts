@@ -258,7 +258,29 @@ export type DeleteNode = {
 	readonly returning: ReturningNode | null;
 };
 
-export type QueryNode = SelectNode | InsertNode | UpdateNode | DeleteNode;
+/**
+ * A set-operation statement (add-set-operations, D103) — `union`/
+ * `intersect`/`except` over two branches, each a select or (recursively)
+ * another set operation, so `(a union b) except c` is the node shape
+ * itself. `orderBy`/`limit` here govern the WHOLE set — SQL's own
+ * placement — never a branch (a branch carries its own).
+ */
+export type SetOpNode = {
+	readonly queryKind: "setOp";
+	readonly operator: "union" | "intersect" | "except";
+	readonly all: boolean;
+	readonly left: SelectNode | SetOpNode;
+	readonly right: SelectNode | SetOpNode;
+	readonly orderBy: ReadonlyArray<OrderByTerm>;
+	readonly limit: number | null;
+};
+
+export type QueryNode =
+	| SelectNode
+	| InsertNode
+	| UpdateNode
+	| DeleteNode
+	| SetOpNode;
 
 // --- the user-facing wrapper ---
 

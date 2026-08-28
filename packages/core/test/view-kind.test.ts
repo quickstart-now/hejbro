@@ -494,3 +494,47 @@ describe("view recreate ordering through generateMigration", () => {
 		]);
 	});
 });
+
+describe("set-operation view bodies (add-set-operations task 2.2)", () => {
+	const app = schema("app");
+	const activeUsers = table(app, "active_users", {
+		id: uuid().primaryKey(),
+		name: text().notNull(),
+	});
+	// the RIGHT branch's second column is deliberately named differently
+	// (review F3): the view's declared columns must come from the LEFT
+	// branch, and identical branch names could never tell the two apart.
+	const archivedUsers = table(app, "archived_users", {
+		id: uuid().primaryKey(),
+		title: text().notNull(),
+	});
+
+	it("a union view round-trips and lists the left branch's columns", () => {
+		const unionView = defineView(
+			app,
+			"all_users_view",
+			select(activeUsers).union(select(archivedUsers)),
+		);
+		const result = generateMigration({
+			declarations: [app, activeUsers, archivedUsers, unionView],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(result.errors).toEqual([]);
+		expect(result.sql).toContain(
+			'create or replace view "app"."all_users_view" as select "id", "name" from "app"."active_users" union select "id", "title" from "app"."archived_users";',
+		);
+		const viewSnapshot = Object.entries(result.snapshot.objects).find(([key]) =>
+			key.startsWith("view:"),
+		)?.[1] as { columns: ReadonlyArray<string> };
+		expect(viewSnapshot.columns).toEqual(["id", "name"]);
+		// re-generating from the same declarations against the produced
+		// snapshot is a no-op -- the codec round-trip holds structurally.
+		const second = generateMigration({
+			declarations: [app, activeUsers, archivedUsers, unionView],
+			previousSnapshot: result.snapshot,
+		});
+		expect(second.sql).toBe("");
+		const stored = JSON.stringify(result.snapshot);
+		expect(stored).toContain('"set-op"');
+	});
+});

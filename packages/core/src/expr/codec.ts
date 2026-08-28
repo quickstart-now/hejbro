@@ -20,6 +20,7 @@ import type {
 	RawSqlNode,
 	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
@@ -713,6 +714,56 @@ const decodeWhere = (where: JsonValue): ExprNode | null => {
 		return null;
 	}
 	return decodeExprNode(where);
+};
+
+/** `SetOpNode.operator` values are verbatim SQL keywords and already kebab-safe; only the `queryKind` discriminator needs the camel↔kebab map (`setOp` ↔ `set-op`, D57/D70). */
+export const encodeSetOpNode = (node: SetOpNode): JsonValue => ({
+	queryKind: "set-op",
+	operator: node.operator,
+	all: node.all,
+	left: encodeQueryNode(node.left),
+	right: encodeQueryNode(node.right),
+	orderBy: node.orderBy.map(encodeOrderByTerm),
+	limit: node.limit,
+});
+
+export const decodeSetOpNode = (value: JsonValue): SetOpNode => {
+	const node = asRecord(value, "queryKind");
+	const operator = stringField(node, "operator");
+	if (
+		operator !== "union" &&
+		operator !== "intersect" &&
+		operator !== "except"
+	) {
+		return unknownDiscriminator("operator", operator);
+	}
+	return {
+		queryKind: "setOp",
+		operator,
+		all: node.all as boolean,
+		left: decodeQueryNode(node.left as JsonValue),
+		right: decodeQueryNode(node.right as JsonValue),
+		orderBy: (node.orderBy as ReadonlyArray<JsonValue>).map(decodeOrderByTerm),
+		limit: node.limit as number | null,
+	};
+};
+
+/** Encodes the snapshot-reachable QUERY subset — a select or a set operation (D94 boundary rule: mutations never reach a snapshot, so they have no snapshot form). */
+export const encodeQueryNode = (node: SelectNode | SetOpNode): JsonValue => {
+	if (node.queryKind === "setOp") {
+		return encodeSetOpNode(node);
+	}
+	return encodeSelectNode(node);
+};
+
+/** The decoding counterpart to {@link encodeQueryNode} — dispatches on the stored `queryKind`. */
+export const decodeQueryNode = (value: JsonValue): SelectNode | SetOpNode => {
+	const node = asRecord(value, "queryKind");
+	const queryKind = stringField(node, "queryKind");
+	if (queryKind === "set-op") {
+		return decodeSetOpNode(value);
+	}
+	return decodeSelectNode(value);
 };
 
 /** Decodes a whole {@link SelectNode} from its snapshot form — the counterpart to {@link encodeSelectNode}, equally reusable for a top-level query (#157) as for `exists()`'s nested one. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ColumnBuilder } from "../../src/index";
+import type { ColumnBuilder, SetOpNode } from "../../src/index";
 import {
 	and,
 	bigint,
@@ -14,6 +14,7 @@ import {
 	numeric,
 	renderExpr,
 	renderSelect,
+	renderSetOp,
 	schema,
 	select,
 	table,
@@ -231,5 +232,126 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 				expect(rendered).toContain("::text[]");
 			}
 		}
+	});
+});
+
+describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
+	const activeQuery = select(posts).where(eq(posts.status, "active"));
+	const archivedQuery = select(posts).where(eq(posts.status, "archived"));
+
+	it("a set-op node renders the two branches joined by the operator", () => {
+		const combined: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: activeQuery.selectQuery,
+			right: archivedQuery.selectQuery,
+			orderBy: [],
+			limit: null,
+		};
+		expect(renderSetOp(combined)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\'',
+		);
+	});
+
+	it("nesting parenthesizes and whole-set order/limit trail the set", () => {
+		const inner: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: true,
+			left: activeQuery.selectQuery,
+			right: archivedQuery.selectQuery,
+			orderBy: [],
+			limit: null,
+		};
+		const outer: SetOpNode = {
+			queryKind: "setOp",
+			operator: "except",
+			all: false,
+			left: inner,
+			right: select(posts).selectQuery,
+			orderBy: [{ expr: posts.id.exprNode, direction: "asc" }],
+			limit: 3,
+		};
+		expect(renderSetOp(outer)).toBe(
+			'(select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union all select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\') except select "id", "status", "published_at" from "app"."posts" order by "id" asc limit 3',
+		);
+	});
+
+	it("a whole-set orderBy outside the output columns is rejected by name", () => {
+		// output-name semantics (the group-4 real-server correction): the
+		// guard is MEMBERSHIP IN THE LEFT BRANCH'S OUTPUT LIST -- a ref
+		// whose name is not an output column is rejected whatever table it
+		// came from ("post_id" is not among posts' outputs).
+		const combined: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: activeQuery.selectQuery,
+			right: archivedQuery.selectQuery,
+			orderBy: [{ expr: comments.postId.exprNode, direction: "asc" }],
+			limit: null,
+		};
+		expect(() => renderSetOp(combined)).toThrowError(/output/);
+	});
+});
+
+describe("set-op combinators (add-set-operations task 2.1)", () => {
+	it("union/unionAll/intersect/except combinators build the recursive node", () => {
+		const active = select(posts).where(eq(posts.status, "active"));
+		const archived = select(posts).where(eq(posts.status, "archived"));
+		const drafts = select(posts).where(eq(posts.status, "draft"));
+
+		const combined = active.union(archived).exceptAll(drafts);
+		expect(combined.setOpQuery.operator).toBe("except");
+		expect(combined.setOpQuery.all).toBe(true);
+		const inner = combined.setOpQuery.left;
+		expect(inner.queryKind).toBe("setOp");
+		expect((inner as SetOpNode).operator).toBe("union");
+		expect((inner as SetOpNode).all).toBe(false);
+
+		const ordered = combined
+			.orderBy({ by: posts.id, direction: "desc" })
+			.limit(2);
+		expect(ordered.setOpQuery.limit).toBe(2);
+		expect(renderSetOp(ordered.setOpQuery)).toContain(
+			'order by "id" desc limit 2',
+		);
+
+		// all six exist
+		expect(typeof active.unionAll).toBe("function");
+		expect(typeof active.intersect).toBe("function");
+		expect(typeof active.intersectAll).toBe("function");
+		expect(typeof active.except).toBe("function");
+	});
+});
+
+describe("set-op order-by output-column guard (review F1)", () => {
+	const active = select(posts).where(eq(posts.status, "active"));
+	const archived = select(posts).where(eq(posts.status, "archived"));
+
+	it("rejects a non-projected column and an alias-hidden source ref", () => {
+		const narrowLeft = select({ id: posts.id }, posts);
+		const narrowRight = select({ id: comments.id }, comments);
+		const nonProjected: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: narrowLeft.selectQuery,
+			right: narrowRight.selectQuery,
+			orderBy: [{ expr: posts.status.exprNode, direction: "asc" }],
+			limit: null,
+		};
+		expect(() => renderSetOp(nonProjected)).toThrowError(/output/);
+
+		const aliased = select({ headline: posts.status }, posts)
+			.union(select({ headline: comments.id }, comments))
+			// the SOURCE ref renders "status", but the output column is
+			// "headline" -- Postgres rejects it, so we do first.
+			.orderBy(posts.status);
+		expect(() => renderSetOp(aliased.setOpQuery)).toThrowError(/output/);
+		// ordering by a projected whole-table column stays legal
+		const legal = active.union(archived).orderBy(posts.status);
+		expect(renderSetOp(legal.setOpQuery)).toContain('order by "status" asc');
 	});
 });

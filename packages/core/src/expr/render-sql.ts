@@ -22,6 +22,7 @@ import type {
 	ReturningNode,
 	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
@@ -575,11 +576,88 @@ type RenderQueryHandlers = {
 	) => string;
 };
 
+/** A branch renders parenthesized when it is itself a set operation — associativity stays explicit in the emitted text, never implied. */
+const renderSetOpBranch = (
+	branch: SelectNode | SetOpNode,
+	outerScope?: ReadonlyArray<TableRefNode>,
+): string => {
+	if (branch.queryKind === "setOp") {
+		return `(${renderSetOp(branch, outerScope)})`;
+	}
+	return renderSelect(branch, outerScope);
+};
+
+/** The leftmost select's OUTPUT column names — what Postgres resolves a set-op's whole-set `order by` against (measured live, group 4: a table-qualified or non-output reference is an ERROR there, so the guard checks membership in THIS list, never a table scope). */
+const leftBranchOutputColumns = (
+	branch: SelectNode | SetOpNode,
+): ReadonlyArray<string> => {
+	if (branch.queryKind === "setOp") {
+		return leftBranchOutputColumns(branch.left);
+	}
+	if (branch.projection.projectionKind === "allColumns") {
+		return branch.projection.columnNames;
+	}
+	if (branch.projection.projectionKind === "columns") {
+		return branch.projection.columns.map((column) => column.alias);
+	}
+	return [];
+};
+
+/** A set-op's whole-set `order by` renders OUTPUT column names, never qualified refs — Postgres resolves set-op ordering against the combined output and REJECTS a table-qualified reference there (measured live, group 4). The scope check above already pinned each term to a left-branch column; here only its bare SQL name is emitted. A non-column term is a loud error — the honest v1 subset (D103), the `sql` hatch covers the rest. */
+const setOpOrderByClause = (orderBy: ReadonlyArray<OrderByTerm>): string => {
+	if (orderBy.length === 0) {
+		return "";
+	}
+	const rendered = orderBy.map((term) => {
+		if (term.expr.nodeKind !== "columnRef") {
+			return throwHejbroError(
+				"invalid-set-op-order",
+				"a set operation's order by accepts only plain column references (the combined output's own columns). Next: order by a left-branch column, or write the statement with sql``.",
+			);
+		}
+		return `"${term.expr.columnName}" ${term.direction}`;
+	});
+	return `order by ${rendered.join(", ")}`;
+};
+
+const setOpKeyword = (node: SetOpNode): string => {
+	if (node.all) {
+		return `${node.operator} all`;
+	}
+	return node.operator;
+};
+
+/** Renders a {@link SetOpNode}: both branches, the operator keyword, then the whole-set `order by`/`limit` (add-set-operations, D103). */
+export const renderSetOp = (
+	node: SetOpNode,
+	outerScope?: ReadonlyArray<TableRefNode>,
+): string => {
+	const outputColumns = leftBranchOutputColumns(node.left);
+	const badTerm = node.orderBy
+		.flatMap((term) => collectColumnRefs(term.expr))
+		.find((ref) => !outputColumns.includes(ref.columnName));
+	if (badTerm !== undefined) {
+		throwHejbroError(
+			"invalid-set-op-order",
+			`a set operation's order by references "${badTerm.columnName}", which is not one of the combined output's columns (${outputColumns.map((name) => `"${name}"`).join(", ")}) — Postgres resolves set-op ordering against the output list only. Next: order by a projected left-branch column (by its output name), or write the statement with sql\`\`.`,
+		);
+	}
+	const clauses = [
+		renderSetOpBranch(node.left, outerScope),
+		setOpKeyword(node),
+		renderSetOpBranch(node.right, outerScope),
+		setOpOrderByClause(node.orderBy),
+		limitClause(node.limit),
+	].filter((clause) => clause !== "");
+	return clauses.join(" ");
+};
+
 const renderQueryHandlers: RenderQueryHandlers = {
 	select: renderSelect,
 	insert: renderInsert,
 	update: renderUpdate,
 	delete: renderDelete,
+	setOp: renderSetOp,
 };
 
 /** Dispatches a {@link QueryNode} to its renderer by `queryKind`. */

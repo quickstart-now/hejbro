@@ -4,12 +4,13 @@ import type {
 	InsertNode,
 	QueryNode,
 	SelectNode,
+	SetOpNode,
 	UpdateNode,
 } from "@hejbro/core";
 import { renderExpr } from "@hejbro/core";
 import { compileDelete, compileInsert, compileUpdate } from "./mutation";
 import { liftExprNode } from "./params";
-import { compileSelect } from "./select";
+import { compileSelect, compileSetOp } from "./select";
 
 /**
  * `compile()`'s input: any stage of a `select`/`insert`/`update`/
@@ -21,6 +22,7 @@ import { compileSelect } from "./select";
  */
 export type CompileInput =
 	| { readonly selectQuery: SelectNode }
+	| { readonly setOpQuery: SetOpNode }
 	| { readonly insertQuery: InsertNode }
 	| { readonly updateQuery: UpdateNode }
 	| { readonly deleteQuery: DeleteNode }
@@ -34,7 +36,13 @@ export type CompileInput =
  * template statement" marker, not a misclassification — `` sql`select 1` ``
  * is `"sql"`, never guessed at as `"select"` by parsing its text.
  */
-export type CompileKind = "select" | "insert" | "update" | "delete" | "sql";
+export type CompileKind =
+	| "select"
+	| "insert"
+	| "update"
+	| "delete"
+	| "setOp"
+	| "sql";
 
 /**
  * Pure compile result: rendered SQL text plus its ordered bind parameters.
@@ -49,6 +57,7 @@ export type CompileResult = {
 
 const wrapperKeys = [
 	"selectQuery",
+	"setOpQuery",
 	"insertQuery",
 	"updateQuery",
 	"deleteQuery",
@@ -121,6 +130,7 @@ const compileHandlers: {
 	insert: compileInsert,
 	update: compileUpdate,
 	delete: compileDelete,
+	setOp: compileSetOp,
 };
 
 /**

@@ -228,6 +228,11 @@ export const columnPlanForResult = (
 	if (node.queryKind === "select") {
 		return columnPlanFromProjection(node.projection, node.from, tables);
 	}
+	if (node.queryKind === "setOp") {
+		// a set-op's rows convert per the LEFT branch (D103 -- SQL's own
+		// naming rule; the leftmost select is what names the output).
+		return columnPlanForResult(node.left, tables);
+	}
 	if (node.returning === null) {
 		return [];
 	}
@@ -258,6 +263,7 @@ type CompileInputWrapperKey = DistributedKeys<
  */
 const wrapperKeyPresence: Record<CompileInputWrapperKey, true> = {
 	selectQuery: true,
+	setOpQuery: true,
 	insertQuery: true,
 	updateQuery: true,
 	deleteQuery: true,
