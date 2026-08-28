@@ -14,9 +14,9 @@ import type {
 	ProjectionNode,
 	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
-	SetOpNode,
 } from "@hejbro/core";
 
 // This file stays one module on purpose, past the ~300-line guideline:

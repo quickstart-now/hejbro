@@ -285,10 +285,10 @@ export type {
 	SelectFiltered,
 	SelectJoinable,
 	SelectLimited,
-	SetOpBranch,
-	SetOpStage,
 	SelectOrdered,
 	SelectProjection,
+	SetOpBranch,
+	SetOpStage,
 } from "./query/select";
 export {
 	exists,

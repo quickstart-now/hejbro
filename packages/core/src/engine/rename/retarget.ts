@@ -1,11 +1,16 @@
+import type { SelectNode, SetOpNode } from "../../expr/ast";
 import {
 	decodeExprNode,
-	decodeSelectNode,
+	decodeQueryNode,
 	encodeExprNode,
-	encodeSelectNode,
+	encodeQueryNode,
 } from "../../expr/codec";
 import type { RenameTarget } from "../../expr/retarget";
-import { retargetExprNode, retargetSelectNode } from "../../expr/retarget";
+import {
+	retargetExprNode,
+	retargetSelectNode,
+	retargetSetOpNode,
+} from "../../expr/retarget";
 import type { KindChange } from "../../kind/object-kind";
 import type { PolicySnapshot } from "../../kinds/policy-kind";
 import type { RlsSnapshot } from "../../kinds/rls-kind";
@@ -34,7 +39,7 @@ import {
 } from "../../kinds/table-snapshot";
 import type { TriggerSnapshot } from "../../kinds/trigger-kind";
 import type { ViewSnapshot } from "../../kinds/view-kind";
-import { projectionColumns } from "../../kinds/view-kind";
+import { projectionColumns, viewQueryColumns } from "../../kinds/view-kind";
 import type { JsonValue } from "../../snapshot/stable-json";
 import { compareKeys } from "../../sort";
 import {
@@ -52,6 +57,17 @@ import {
 	TRIGGER_PREFIX,
 	VIEW_PREFIX,
 } from "./snapshot-sets";
+
+/** A view query is a select or a set operation since add-set-operations — retarget dispatches on the stored kind. */
+const retargetViewQuery = (
+	query: SelectNode | SetOpNode,
+	target: RenameTarget,
+): SelectNode | SetOpNode => {
+	if (query.queryKind === "setOp") {
+		return retargetSetOpNode(query, target);
+	}
+	return retargetSelectNode(query, target);
+};
 
 export type RewriteState = {
 	readonly objects: ObjectsRecord;
@@ -475,15 +491,15 @@ export const retargetViewFields = (
 	viewSnapshot: ViewSnapshot,
 	target: RenameTarget,
 ): ViewSnapshot | null => {
-	const decoded = decodeSelectNode(viewSnapshot.query);
-	const retargeted = retargetSelectNode(decoded, target);
+	const decoded = decodeQueryNode(viewSnapshot.query);
+	const retargeted = retargetViewQuery(decoded, target);
 	if (retargeted === decoded) {
 		return null;
 	}
 	return {
 		...viewSnapshot,
-		columns: projectionColumns(retargeted.projection),
-		query: encodeSelectNode(retargeted),
+		columns: viewQueryColumns(retargeted),
+		query: encodeQueryNode(retargeted),
 	};
 };
 

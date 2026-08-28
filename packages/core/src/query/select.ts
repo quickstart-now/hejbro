@@ -8,8 +8,8 @@ import type {
 	OrderByTerm,
 	ProjectionNode,
 	SelectNode,
-	TableRefNode,
 	SetOpNode,
+	TableRefNode,
 } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import type { TypeNode } from "../types/type-node";
@@ -22,7 +22,9 @@ export type OrderTermInput =
 	| { readonly by: Expr; readonly direction: "asc" | "desc" };
 
 /** A combined set-operation stage (add-set-operations, D103): carries the recursive node, whole-set `orderBy`/`limit`, and further combinators — so `(a union b) except c` chains naturally. */
-export type SetOpStage<TProjection extends SelectProjection = SelectProjection> = {
+export type SetOpStage<
+	TProjection extends SelectProjection = SelectProjection,
+> = {
 	readonly setOpQuery: SetOpNode;
 	readonly projectionInput: TProjection;
 	union(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
@@ -36,9 +38,9 @@ export type SetOpStage<TProjection extends SelectProjection = SelectProjection> 
 };
 
 /** What a combinator accepts as its other side: any select stage, or a prior combination. */
-export type SetOpBranch<TProjection extends SelectProjection = SelectProjection> =
-	| SelectLimited<TProjection>
-	| SetOpStage<TProjection>;
+export type SetOpBranch<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectLimited<TProjection> | SetOpStage<TProjection>;
 
 /** The six combinators every select stage carries (and every {@link SetOpStage} carries again). */
 export type SetOpCombinators<TProjection extends SelectProjection> = {
@@ -100,9 +102,7 @@ const appendJoin = (
 	],
 });
 
-const branchNode = (
-	branch: SetOpBranch,
-): SelectNode | SetOpNode => {
+const branchNode = (branch: SetOpBranch): SelectNode | SetOpNode => {
 	if ("setOpQuery" in branch) {
 		return branch.setOpQuery;
 	}

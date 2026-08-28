@@ -370,6 +370,14 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 	// declaration-reachable producer of the `selectExpr` node -- without
 	// one here, the completeness assertion below would flag `select-expr`
 	// as vocabulary the fixture never reached.
+	// add-set-operations: a union view is the declaration-reachable
+	// producer of the set-op node -- its "set-op"/operator discriminators
+	// must appear in the walked snapshot for the D70 kebab rule.
+	const combinedPricesView = defineView(
+		app,
+		"combined_prices_view",
+		select(posts).union(select(posts)),
+	);
 	const postsWithCommentsView = defineView(
 		app,
 		"posts_with_comments_view",
@@ -393,6 +401,7 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			posts,
 			comments,
 			allPricesView,
+			combinedPricesView,
 			postsWithCommentsView,
 			priceSummaryView,
 		],

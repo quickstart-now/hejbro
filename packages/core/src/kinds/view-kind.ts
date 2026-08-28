@@ -1,11 +1,12 @@
 import type { ViewDeclaration } from "../dsl/define-view";
 import { assertNever, throwHejbroError } from "../error";
-import type { ProjectionNode } from "../expr/ast";
-import { decodeSelectNode, encodeSelectNode } from "../expr/codec";
-import { renderSelect } from "../expr/render-sql";
+import type { ProjectionNode, SelectNode, SetOpNode } from "../expr/ast";
+import { decodeQueryNode, encodeQueryNode } from "../expr/codec";
+import { renderQuery } from "../expr/render-sql";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import { dispatchEmit } from "../kind/emit-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
+import type { ColumnOrderOracle } from "../snapshot/column-order";
 import {
 	applyColumnOrderToSelect,
 	noColumnOrder,
@@ -41,7 +42,7 @@ export type ViewSnapshot = {
 
 /** `snapshot.query` decoded and rendered back to SQL text. */
 export const viewSelectSql = (snapshot: ViewSnapshot): string =>
-	renderSelect(decodeSelectNode(snapshot.query));
+	renderQuery(decodeQueryNode(snapshot.query));
 
 /** `snapshot.securityInvoker`, defaulting to `false` when absent (compact snapshot). */
 export const viewSecurityInvoker = (snapshot: ViewSnapshot): boolean =>
@@ -76,6 +77,39 @@ const VIEW_RECREATE_NOTE = "view columns changed; recreating";
  * `columnNames` (via `retargetProjection`), and `columns` must follow it,
  * or the D27 prefix-rule diff compares a stale name against the new one.
  */
+/** The leftmost select of a view query — a set-operation's output columns are its LEFT branch's, SQL's own naming rule (D103). */
+const leftmostSelect = (query: SelectNode | SetOpNode): SelectNode => {
+	if (query.queryKind === "setOp") {
+		return leftmostSelect(query.left);
+	}
+	return query;
+};
+
+/** A view query's declared column list — a plain select's projection, or the left branch's through a set operation. */
+export const viewQueryColumns = (
+	query: SelectNode | SetOpNode,
+): ReadonlyArray<string> => projectionColumns(leftmostSelect(query).projection);
+
+/** D81 column order over a view query — each set-op leaf reorders against its own `from` (the same rule `applyColumnOrderToQuery` applies). */
+const applyColumnOrderToViewQuery = (
+	query: SelectNode | SetOpNode,
+	columnOrder: ColumnOrderOracle,
+): SelectNode | SetOpNode => {
+	if (query.queryKind === "setOp") {
+		const left = applyColumnOrderToViewQuery(query.left, columnOrder);
+		const right = applyColumnOrderToViewQuery(query.right, columnOrder);
+		if (left === query.left && right === query.right) {
+			return query;
+		}
+		return {
+			...query,
+			left: left as typeof query.left,
+			right: right as typeof query.right,
+		};
+	}
+	return applyColumnOrderToSelect(query, columnOrder);
+};
+
 export const projectionColumns = (
 	projection: ProjectionNode,
 ): ReadonlyArray<string> => {
@@ -188,15 +222,15 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 	owns: (declaration): declaration is ViewDeclaration =>
 		declaration.declarationKind === "view",
 	serialize: (declaration, context) => {
-		const query = applyColumnOrderToSelect(
+		const query = applyColumnOrderToViewQuery(
 			declaration.query,
 			context?.columnOrder ?? noColumnOrder,
 		);
 		const snapshot: ViewSnapshot = {
 			schema: declaration.schema.schemaName,
 			name: declaration.viewName,
-			columns: projectionColumns(query.projection),
-			query: encodeSelectNode(query),
+			columns: viewQueryColumns(query),
+			query: encodeQueryNode(query),
 			...securityInvokerField(declaration.securityInvoker),
 		};
 		return snapshot;

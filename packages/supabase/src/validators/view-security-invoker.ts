@@ -1,6 +1,7 @@
 import type {
 	HejbroDeclaration,
 	SelectNode,
+	SetOpNode,
 	TableRefNode,
 	Validator,
 } from "@hejbro/core";
@@ -25,11 +26,15 @@ const rlsProtectedTables = (
 			.map((rls) => `${rls.schemaName}.${rls.tableName}`),
 	);
 
-/** Every table a view's query touches: its `from` plus each `inner join`'s target, in that order. */
-const referencedTables = (query: SelectNode): ReadonlyArray<TableRefNode> => [
-	query.from,
-	...query.joins.map((join) => join.table),
-];
+/** Every table a view's query touches: each leaf select's `from` plus join targets — BOTH branches of a set operation (an RLS bypass through either branch is equally a bypass, add-set-operations). */
+const referencedTables = (
+	query: SelectNode | SetOpNode,
+): ReadonlyArray<TableRefNode> => {
+	if (query.queryKind === "setOp") {
+		return [...referencedTables(query.left), ...referencedTables(query.right)];
+	}
+	return [query.from, ...query.joins.map((join) => join.table)];
+};
 
 /**
  * Warns when a `defineView` reads an RLS-protected table (its `from` or

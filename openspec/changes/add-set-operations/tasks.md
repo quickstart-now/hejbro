@@ -37,13 +37,13 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 2. Core builder, views, column order — after group 1
 
-- [ ] 2.1 (~8m) The six combinators on the core select stages + the
+- [x] 2.1 (~8m) The six combinators on the core select stages + the
       post-combination `SetOpStage` (`orderBy`/`limit`). Red:
       `packages/core/test/query/select.test.ts` — "union/unionAll/
       intersect/except combinators build the recursive node". Files:
       `packages/core/src/query/select.ts`, that test,
       `packages/core/src/index.ts` (exports).
-- [ ] 2.2 (~8m) Views: `defineView` accepts a set-op stage,
+- [x] 2.2 (~8m) Views: `defineView` accepts a set-op stage,
       `view-kind` serializes it, `projectionColumns` resolves the
       LEFT branch, D81 column-order oracle likewise. Red:
       `packages/core/test/view-lifecycle` golden (or view-kind test) —
