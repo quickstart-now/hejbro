@@ -198,3 +198,10 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-29,add-offset-and-distinct,1.5,1,7,6,0,"view round-trip test -- the bump's own justification, stated as a test rather than a claim in the proposal"
 2026-08-29,add-offset-and-distinct,1.6,1,8,7,0,"live postgres:17 witness; distinct on verified load-bearing by asserting the pre-ordering row (server returned a2/b3/c9, the wrong assertion failed)"
 2026-08-29,add-offset-and-distinct,1.7,1,6,5,0,skill query-layer gains both with the distinct-on/order-by pairing stated
+2026-08-29,write-json-and-bytea,1.1,1,8,9,0,"two literal kinds + lifts; the json node carries typeName because a json column rendered through ::jsonb would silently acquire jsonb key reordering -- found while writing the renderer, not after"
+2026-08-29,write-json-and-bytea,1.2,1,5,3,0,"gate opened for the two scalar families; arrays of them stay closed (own escaping rules). the red was type-level only -- liftColumnValue already lifted these fine at runtime"
+2026-08-29,write-json-and-bytea,1.3,1,5,3,0,both kinds join the codec's non-snapshot set so the existing loud failure covers them by construction
+2026-08-29,write-json-and-bytea,1.4,1,6,5,0,"bind handlers: json bare (target column decides json vs jsonb), bytea with an explicit cast for interval's reason; first comment written was wrong about json and corrected"
+2026-08-29,write-json-and-bytea,1.5,1,6,6,0,"two type tests inverted from 'Expr only' to the brand-narrows-writes contract; one @ts-expect-error became unused, which is itself an error -- the tests were load-bearing"
+2026-08-29,write-json-and-bytea,1.6,1,8,8,0,"live postgres:17 round trip for branded jsonb + json + Uint8Array; load-bearing check by changing one byte. also caught a literal backslash-n written into the test file by the append script"
+2026-08-29,write-json-and-bytea,1.7,1,6,7,0,"skill paragraph replaced; first example used the shared prelude which has NO jsonb column -- an example that would not have shown the feature, replaced with a self-contained one"
