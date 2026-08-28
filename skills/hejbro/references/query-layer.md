@@ -155,6 +155,34 @@ relation key that collides with a projected column, mixes in a typo,
 or matches nothing fails to type-check — and the runtime throws
 `ambiguous-relation`/`unknown-relation` rather than guessing.
 
+## Set operations
+
+`.union()`, `.unionAll()`, `.intersect()`, `.intersectAll()`,
+`.except()`, and `.exceptAll()` combine selects into one statement —
+nesting composes, and `orderBy`/`limit` called AFTER a combination
+govern the whole set (rendered as bare output column names, Postgres's
+own set-op rule; ordering by anything outside the left branch's output
+columns fails loudly):
+
+```ts prelude=query-handle
+import { eq } from "hejbro";
+
+const drafts = handle.select(posts).where(eq(posts.status, "draft"));
+const published = handle
+	.select(posts)
+	.where(eq(posts.status, "published"));
+const rows = await drafts.union(published).orderBy(posts.status).limit(10);
+// rows: the deduplicated combined set; .unionAll keeps duplicates
+```
+
+Branches must be row-compatible — mismatched key sets fail to
+type-check (the database would reject the statement). The result types
+as the LEFT branch's keys with per-column unions (a column nullable in
+either branch is nullable in the result), and rows arrive converted
+per the left branch's declarations. A set-operation query is also a
+valid view body (`defineView` accepts it; the view's columns come from
+the left branch).
+
 ## The `sql` escape hatch and injection safety
 
 `sql` is the typed tagged-template escape hatch for anything the builder
@@ -404,11 +432,8 @@ const result = await handle.transaction(async (tx) => {
 These read naturally as query-builder features but aren't there yet —
 use the `sql` escape hatch, or wait for the tracked issue:
 
-- A relational query API in the Drizzle `db.query.posts.findMany({ with:
-  {...} })` style (#298) — build the join with `select`/`.innerJoin()`/
-  `.leftJoin()` instead.
-- CTEs, window functions, and set operations (`UNION`/`INTERSECT`/
-  `EXCEPT`) outside the `sql` escape hatch (#299) — write them with `sql`.
+- CTEs and window functions outside the `sql` escape hatch (#417, #416)
+  — write them with `sql` until those land.
 - `@hejbro/neon` and `@hejbro/nile` presets (#300, #301) — only
   `@hejbro/pg` (vanilla) and `@hejbro/supabase` exist today.
 - A startup assertion that the connected database matches the checked-out
