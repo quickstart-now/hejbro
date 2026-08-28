@@ -200,11 +200,16 @@ and a delete's `.where()`, and `related()`'s `.where()`. So a predicate
 the typed operators can't build — `lower(email) = $1`, a regex match, an
 arbitrary function call — goes straight in, no cast:
 
-```ts
-await db.select(users).where(sql`lower(${users.email}) = ${email}`);
-await db.select(users).where(
-  and(eq(users.active, true), sql`char_length(${users.name}) > ${3}`),
-);
+```ts prelude=query-handle
+import { and, eq, sql } from "hejbro";
+
+const drafts = await handle
+	.select(posts)
+	.where(sql`lower(${posts.status}) = ${"draft"}`);
+
+const shortDrafts = await handle
+	.select(posts)
+	.where(and(eq(posts.status, "draft"), sql`char_length(${posts.status}) > ${3}`));
 ```
 
 Interpolations become bind parameters exactly as they do anywhere else.
@@ -234,10 +239,8 @@ marker a multi-row insert uses for a missing key.
 import { sql } from "hejbro";
 
 // sql fragments type as Expr<"unknown"> — usable in a projection (an
-// object-projection field, like here) or as a whole standalone statement;
-// a `.where()`/`.innerJoin()`/`.leftJoin()` condition still needs
-// Expr<"boolean">, so build those with the typed operators (eq, gt, …)
-// instead — sql is for what those operators don't cover.
+// object-projection field, like here), as a condition, or as a whole
+// standalone statement.
 const withLowerStatus = await handle.select(
 	{ id: posts.id, lowerStatus: sql`lower(${posts.status})` },
 	posts,
