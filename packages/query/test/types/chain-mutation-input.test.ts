@@ -132,13 +132,23 @@ describe("chain .values() consumes InsertInput (#337)", () => {
 		expectTypeOf(accepted).toBeFunction();
 	});
 
-	it("rejects a raw value on an unwritable (jsonb) column", () => {
+	it("accepts a raw value on a jsonb column, and still rejects one that isn't the brand (#425)", () => {
+		const accepted = () =>
+			startedInsert.values({
+				id: ID,
+				label: "first",
+				payload: { kind: "widget" },
+				amount: 1n,
+			});
+		expectTypeOf(accepted).toBeFunction();
+
 		const rejected = () =>
 			startedInsert.values({
 				id: ID,
 				label: "first",
-				// @ts-expect-error jsonb has no raw-value write path -- Expr only
-				payload: { kind: "widget" },
+				// @ts-expect-error the brand narrows the write as well as the
+				// read -- "gadget" is not one of the declared kinds.
+				payload: { kind: "gadget" },
 				amount: 1n,
 			});
 		expectTypeOf(rejected).toBeFunction();

@@ -171,6 +171,14 @@ const renderLiteralHandlers: RenderLiteralHandlers = {
 	bigint: (literal) => literal.text,
 	interval: (literal) => `${quoteStringLiteral(literal.text)}::interval`,
 	array: (literal) => quoteStringLiteral(literal.text),
+	// #425: json carries WHICH of the two types it was declared as, so a
+	// `json` column is never rendered through a `::jsonb` cast (which would
+	// apply jsonb's key reordering and duplicate-stripping to a column
+	// whose point is that it does not do that). `bytea` renders Postgres
+	// hex format, quoted; `standard_conforming_strings` is on by default,
+	// so the backslash is literal.
+	json: (literal) => `${quoteStringLiteral(literal.text)}::${literal.typeName}`,
+	bytea: (literal) => `${quoteStringLiteral(literal.text)}::bytea`,
 };
 
 export const renderLiteral = (node: LiteralNode): string => {

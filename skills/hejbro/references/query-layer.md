@@ -290,13 +290,40 @@ optional. Every column's accepted *value* type is its own declared read
 type: a `bigint`/`numeric` column accepts whatever its mode reads back as
 (`bigint`, `number`, or `string`), an `interval` column accepts a
 structured `IntervalValue`, a `date`/`timestamp`/`timestamptz` column
-accepts exactly `Date` (never a plain ISO string), and a `json`/`jsonb`/
-`bytea` column accepts only an `Expr` (the `sql` escape hatch) — there is
-no compile-time-lifted raw-value write path for those three. On the read
-side, a `jsonb` column surfaces as `unknown` unless its declaration opts
-into a `.$type<T>()` brand — the branded `T` flows through the **result**
-type; the write side stays `Expr`-only, so the brand never appears on
-the insert/update input type.
+accepts exactly `Date` (never a plain ISO string), a `json`/`jsonb` column
+accepts any JSON-serializable value (hejbro serializes it; the declared
+type decides between `json` and `jsonb`), and a `bytea` column accepts a
+`Uint8Array` (hex-encoded for you — never a string, whose encoding would
+have to be guessed). On the read side, a `jsonb` column surfaces as
+`unknown` unless its declaration opts into a `.$type<T>()` brand — and
+since the write type is the read type, the brand narrows **both**: a
+branded column accepts its own `T` and nothing else.
+
+```ts
+import { bytea, db, jsonb, schema, table, uuid } from "hejbro";
+import { pgDriver } from "@hejbro/pg";
+
+const shop = schema("shop");
+const docs = table(shop, "docs", {
+	id: uuid().primaryKey(),
+	settings: jsonb().$type<{ readonly theme: string }>().notNull(),
+	blob: bytea().notNull(),
+});
+const store = db({ docs }, pgDriver(process.env.DATABASE_URL ?? ""));
+
+// no JSON.stringify, no ::jsonb cast, no hex encoding written by hand —
+// and `{ theme: 1 }` would not type-check, because the brand narrows the
+// write exactly as it narrows the read.
+await store.insert(docs).values({
+	id: crypto.randomUUID(),
+	settings: { theme: "dark" },
+	blob: new Uint8Array([0, 255]),
+});
+```
+
+An array of `json`/`jsonb`/`bytea` is still `Expr`-only — those element
+types need their own array-literal escaping rules, so `sql` remains the
+way to write one.
 
 ```ts prelude=query-handle
 import type { IntervalValue } from "hejbro";

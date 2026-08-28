@@ -322,44 +322,42 @@ describe("enum write-acceptance (#422 -- the declared values are the write type)
 	});
 });
 
-describe("json/jsonb + bytea write-acceptance gate (task 2.5, #322 -- design.md Settled Decision 1 group B: no compile-time-lifted raw-scalar write path)", () => {
-	it("rejects a raw scalar write but still accepts an Expr (sql`` escape hatch)", () => {
-		// accepted: `sql` \`\` always lifts to `Expr<"unknown">`, which
-		// `MutationValue`'s `Expr<"unknown">` arm accepts for every column
-		// regardless of family -- this is the one write path json/jsonb/
-		// bytea have (D18's raw-SQL escape hatch), never a raw JS value.
-		const _acceptedJson: MutationRow<typeof documents> = {
+describe("json/jsonb + bytea raw writes (#425 -- the declaration says which type, so the value can be lifted)", () => {
+	it("accepts a raw JSON value and a Uint8Array, alongside the sql escape hatch", () => {
+		// The escape hatch still works, unchanged.
+		const _acceptedJsonExpr: MutationRow<typeof documents> = {
 			payload: sql`'{}'::jsonb`,
 		};
-		const _acceptedBytea: MutationRow<typeof documents> = {
+		const _acceptedByteaExpr: MutationRow<typeof documents> = {
 			blob: sql`'\x00'::bytea`,
 		};
 
-		// @ts-expect-error a raw JS object is never accepted for a jsonb
-		// column -- no compile-time-lifted write path exists yet (the
-		// `UnwritableFamily` gate mutate.ts's `MutationValue` applies to
-		// `json`/`bytea`); only `sql\`\`` can write one.
-		const _rejectedJson: MutationRow<typeof documents> = { payload: { a: 1 } };
-
-		// A fresh object *literal*'s rejection above could, in principle, be
-		// TS's excess-property check reacting to literal freshness rather
-		// than to the write-acceptance contract itself -- excess-property
-		// checking only fires on fresh literals, never through a variable.
-		// Routing the same value through a variable first turns that check
-		// off, so a rejection here can only come from `MutationValue`'s own
-		// raw-scalar arm being `never` for `json`/`bytea` -- the contract,
-		// not literal freshness.
+		// And a raw value now works too: reading already revives a branded
+		// jsonb column as its brand, and writing is the mirror. The column's
+		// own declared type is what resolves the array-vs-jsonb ambiguity
+		// that `liftLiteral` cannot resolve from a bare value.
+		const _acceptedJson: MutationRow<typeof documents> = { payload: { a: 1 } };
 		const payloadValue: Record<string, unknown> = { a: 1 };
-		// @ts-expect-error a jsonb column takes no raw value, literal or
-		// not -- `sql\`\`` is the one escape hatch (see the accepted case
-		// above).
 		const _rawJson: MutationRow<typeof documents> = { payload: payloadValue };
-
-		const _rejectedBytea: MutationRow<typeof documents> = {
-			// @ts-expect-error same gate for `bytea` -- a raw `Uint8Array` is
-			// never accepted, only `sql\`\``.
-			blob: new Uint8Array([0]),
+		const _acceptedBytea: MutationRow<typeof documents> = {
+			blob: new Uint8Array([0, 255]),
 		};
+	});
+
+	it("renders a json value as its serialized text with the declared cast", () => {
+		const query = insert(documents)
+			.values({ payload: { theme: "dark" }, blob: new Uint8Array([0, 255]) })
+			.returning({ id: documents.id });
+		const sqlText = renderQuery(query.insertQuery);
+		expect(sqlText).toContain(`'{"theme":"dark"}'::jsonb`);
+		expect(sqlText).toContain("'\\x00ff'::bytea");
+	});
+
+	it("a bytea column still refuses a plain array or string", () => {
+		// @ts-expect-error bytea takes bytes, not a number array.
+		const _rejectedArray: MutationRow<typeof documents> = { blob: [0, 255] };
+		// @ts-expect-error nor a string -- an encoding would have to be guessed.
+		const _rejectedString: MutationRow<typeof documents> = { blob: "00ff" };
 	});
 });
 

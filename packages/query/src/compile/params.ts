@@ -68,6 +68,14 @@ const literalPlaceholderHandlers: {
 	// a function call argument or a `returning` expression), so the cast
 	// is spelled out rather than left to inference.
 	interval: (index) => `${placeholder(index)}::interval`,
+	// #425: `json` is bare, like `bigint`/`array` above -- a write value
+	// always has a target column, and that column is what decides between
+	// `json` and `jsonb`, which no cast written here could know. `bytea`
+	// spells its cast out for `interval`'s reason: an untyped text
+	// parameter is not coerced to bytea by context alone everywhere a
+	// write value can appear.
+	json: placeholder,
+	bytea: (index) => `${placeholder(index)}::bytea`,
 };
 
 const literalValueHandlers: {
@@ -91,6 +99,8 @@ const literalValueHandlers: {
 	bigint: (literal) => literal.text,
 	interval: (literal) => literal.text,
 	array: (literal) => literal.text,
+	json: (literal) => literal.text,
+	bytea: (literal) => literal.text,
 };
 
 /** Lifts one {@link LiteralNode} to a `RawSqlNode{sql:"$n"}` placeholder plus its bind value — never the reverse. */

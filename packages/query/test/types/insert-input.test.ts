@@ -73,7 +73,10 @@ type GenColumns = typeof genColumns;
  */
 type TextWrite = string | Expr<"text"> | Expr<"unknown">;
 type NumericNumberWrite = number | Expr<"numeric"> | Expr<"unknown">;
-type JsonWrite = Expr<"json"> | Expr<"unknown">;
+// #425: a branded json/jsonb column accepts its brand as a raw write, the
+// mirror of the brand narrowing its read. Before #425 this was the two
+// `Expr` arms alone -- the escape hatch was the only write path.
+type JsonWrite<T> = T | Expr<"json"> | Expr<"unknown">;
 type TextArrayWrite =
 	| ReadonlyArray<string | null>
 	| Expr<"array">
@@ -126,13 +129,13 @@ describe("insert-input (D1/D3/D8, task 3.11; value arm = MutationValue since #33
 		};
 	});
 
-	it("json().$type<T>() and jsonb().$type<T>() write arms are identical: Expr only, the brand narrows reads, never raw writes (#337)", () => {
-		expectTypeOf<
-			InsertInput<Posts>["payloadJsonRequired"]
-		>().toEqualTypeOf<JsonWrite>();
-		expectTypeOf<
-			InsertInput<Posts>["payloadRequired"]
-		>().toEqualTypeOf<JsonWrite>();
+	it("json().$type<T>() and jsonb().$type<T>() write arms are identical, and the brand is now writable too (#337, #425)", () => {
+		expectTypeOf<InsertInput<Posts>["payloadJsonRequired"]>().toEqualTypeOf<
+			JsonWrite<Payload>
+		>();
+		expectTypeOf<InsertInput<Posts>["payloadRequired"]>().toEqualTypeOf<
+			JsonWrite<Payload>
+		>();
 	});
 
 	it("F7 settlement (insert side): serial().primaryKey() is optional despite its implied notNull (D66 hasDefault)", () => {
@@ -192,7 +195,7 @@ describe("update-input (D1/D3, task 3.12)", () => {
 			NumericNumberWrite | undefined
 		>();
 		expectTypeOf<UpdateInput<Posts>["payloadRequired"]>().toEqualTypeOf<
-			JsonWrite | undefined
+			JsonWrite<Payload> | undefined
 		>();
 		expectTypeOf<UpdateInput<Posts>["tagsRequired"]>().toEqualTypeOf<
 			TextArrayWrite | undefined
