@@ -6,6 +6,7 @@ import {
 	deleteFrom,
 	eq,
 	insert,
+	integer,
 	interval,
 	isNotNull,
 	jsonb,
@@ -429,5 +430,40 @@ describe("notNullElements write-acceptance (add-array-ergonomics, task 1.2)", ()
 			// ColumnReadType, see this describe block's own note above).
 			labels: ["a", null],
 		};
+	});
+});
+
+describe("always-family keys are absent from MutationRow (#390 -- the input-types requirement covers core's raw builders too)", () => {
+	const orders = table(app, "orders", {
+		id: integer().generatedAlwaysAsIdentity(),
+		// `.notNull()`-chained for the bare-inline-inference reason the
+		// `invoices` fixture documents.
+		amount: bigint().notNull(),
+		doubled: bigint().generatedAlwaysAs(sql`amount * 2`),
+		seq: bigint().generatedByDefaultAsIdentity(),
+	});
+
+	it("stored generated and always-identity carry no key; by-default identity stays writable", () => {
+		// accepted: the by-default identity column is an ordinary defaulted
+		// column (supply or omit), and the plain column writes as usual.
+		const _accepted: MutationRow<typeof orders> = { amount: 1n, seq: 2n };
+		const _acceptedOmitting: MutationRow<typeof orders> = { amount: 1n };
+
+		// Both directives' value arm is sql`1` (`Expr<"unknown">`, valid for
+		// every column) so each is consumed by the unknown-KEY error alone,
+		// never a value error (the dead-directive trap, #381).
+
+		// @ts-expect-error a stored generated column has no key at all
+		const _rejectedGenerated: MutationRow<typeof orders> = { doubled: sql`1` };
+
+		// @ts-expect-error a `generated always as identity` column has no key at all
+		const _rejectedIdentity: MutationRow<typeof orders> = { id: sql`1` };
+
+		// The keyof pin is the sole guardian of "absent, not never-valued"
+		// (D100 decision 5): a `key?: never` mutant silences both directives
+		// above (consumed by value errors) and dies only here.
+		expectTypeOf<keyof MutationRow<typeof orders>>().toEqualTypeOf<
+			"amount" | "seq"
+		>();
 	});
 });
