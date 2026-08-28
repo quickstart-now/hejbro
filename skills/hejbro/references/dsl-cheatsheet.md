@@ -35,10 +35,14 @@ and its chainable modifiers (`.notNull()`, `.primaryKey()`, `.unique()`,
 ## Enums
 
 ```ts
-const postStatus = pgEnum(app, "post_status", ["draft", "published"]);
+import { pgEnum, schema, table, uuid } from "hejbro";
 
-const posts = table(app, "posts", {
-  status: postStatus.column().notNull(),
+const shop = schema("shop");
+const articleStatus = pgEnum(shop, "article_status", ["draft", "published"]);
+
+export const articles = table(shop, "articles", {
+	id: uuid().primaryKey(),
+	status: articleStatus.column().notNull(),
 });
 ```
 
