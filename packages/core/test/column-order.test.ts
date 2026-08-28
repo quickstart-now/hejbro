@@ -284,6 +284,8 @@ describe("applyColumnOrderTo*", () => {
 		from: ref,
 		joins: [],
 		where: null,
+		groupBy: [],
+		having: null,
 		orderBy: [],
 		limit: null,
 		offset: null,

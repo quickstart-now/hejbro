@@ -3,17 +3,20 @@ import {
 	assertNoNulls,
 	bigint,
 	bytea,
+	count,
 	date,
 	emptySnapshot,
 	eq,
 	generateMigration,
 	getTableMeta,
+	gt,
 	HejbroError,
 	insert,
 	integer,
 	interval,
 	json,
 	jsonb,
+	max,
 	numeric,
 	rls,
 	roleName,
@@ -1530,5 +1533,54 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			.where(eq(docs.id, "55555555-5555-5555-5555-555555555555"));
 		const [updated] = await handle.select(docs);
 		expect(updated?.settings).toEqual({ theme: "light", tags: [] });
+	});
+
+	it("aggregates and grouping (#416): count arrives as bigint and having filters groups, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.agg_sales (
+				id uuid primary key,
+				region text not null,
+				amount bigint not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const sales = table(testSchema, "agg_sales", {
+			id: uuid().primaryKey(),
+			region: text().notNull(),
+			amount: bigint({ mode: "bigint" }).notNull(),
+		});
+		const handle = db({ sales }, driver);
+		await handle.insert(sales).values([
+			{ id: "60000000-0000-0000-0000-000000000001", region: "eu", amount: 10n },
+			{ id: "60000000-0000-0000-0000-000000000002", region: "eu", amount: 20n },
+			{ id: "60000000-0000-0000-0000-000000000003", region: "us", amount: 5n },
+		]);
+
+		const grouped = await handle
+			.select(
+				{ region: sales.region, orders: count(), biggest: max(sales.amount) },
+				sales,
+			)
+			.groupBy(sales.region)
+			.having(gt(count(), 1))
+			.orderBy(sales.region);
+
+		// exactly the group `having` kept.
+		expect(grouped.length).toBe(1);
+		const [row] = grouped;
+		expect(row?.region).toBe("eu");
+		// count is int8 and node-postgres hands int8 back as text -- this is
+		// the assertion that the bigint the TYPE promises is the value that
+		// actually arrives, not a string that looks like one.
+		expect(row?.orders).toBe(2n);
+		expect(typeof row?.orders).toBe("bigint");
+		// max carries the argument's own declared mode through.
+		expect(row?.biggest).toBe(20n);
 	});
 });

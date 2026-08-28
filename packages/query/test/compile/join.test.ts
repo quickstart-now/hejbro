@@ -51,6 +51,8 @@ describe("compile: joins", () => {
 			from: { schemaName: "app", tableName: 'we"ird' },
 			joins: [],
 			where: null,
+			groupBy: [],
+			having: null,
 			orderBy: [],
 			limit: null,
 			offset: null,

@@ -226,6 +226,9 @@ export type SelectNode = {
 	readonly from: TableRefNode;
 	readonly joins: ReadonlyArray<JoinNode>;
 	readonly where: ExprNode | null;
+	readonly groupBy: ReadonlyArray<ExprNode>;
+	/** `having` filters GROUPS, after aggregation — `where` filters rows before it. Postgres rejects a `having` without a `group by` only when the expression isn't aggregate-shaped, so this node allows the pair independently and lets the server decide. */
+	readonly having: ExprNode | null;
 	readonly orderBy: ReadonlyArray<OrderByTerm>;
 	readonly limit: number | null;
 	readonly offset: number | null;

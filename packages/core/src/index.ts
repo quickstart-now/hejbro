@@ -112,6 +112,16 @@ export {
 	hejbroError,
 	throwHejbroError,
 } from "./error";
+export type { ReadAs } from "./expr/aggregate";
+export {
+	avg,
+	count,
+	countWhere,
+	max,
+	min,
+	readAsBrand,
+	sum,
+} from "./expr/aggregate";
 export type {
 	BetweenNode,
 	ColumnRef,
@@ -285,6 +295,8 @@ export type {
 	OrderTermInput,
 	SelectDistinctable,
 	SelectFiltered,
+	SelectGrouped,
+	SelectHaving,
 	SelectJoinable,
 	SelectLimited,
 	SelectLimitedThenOffset,

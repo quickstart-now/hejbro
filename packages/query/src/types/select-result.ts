@@ -4,6 +4,7 @@ import type {
 	Expr,
 	IntervalValue,
 	NestedReadMarker,
+	readAsBrand,
 	SelectProjection,
 	SqlTypeFamily,
 	Table,
@@ -184,7 +185,25 @@ type OriginColumn<TValue> = TValue extends {
  * package that lies.
  */
 type ProjectedColumnResult<TValue> = [OriginColumn<TValue>] extends [never]
-	? TValue extends Expr<infer TFamily>
-		? FamilyReadType<TFamily> | null
-		: never
+	? [ReadAsType<TValue>] extends [never]
+		? TValue extends Expr<infer TFamily>
+			? FamilyReadType<TFamily> | null
+			: never
+		: ReadAsType<TValue> | null
 	: ColumnTsType<OriginColumn<TValue>> | null;
+
+/**
+ * The read type an expression declares for itself (#416's `count`), or
+ * `never` when it declares none. Read exactly like {@link OriginColumn}:
+ * the brand is optional, so `NonNullable` is what separates "carries one"
+ * from "does not".
+ *
+ * Ordered AFTER the origin brand above, and it never competes with it —
+ * a declared column is more precise than any self-declared type, and an
+ * aggregate over one produces a new expression that carries no origin.
+ */
+type ReadAsType<TValue> = TValue extends { readonly [readAsBrand]?: infer T }
+	? NonNullable<T> extends never
+		? never
+		: NonNullable<T>
+	: never;

@@ -2,15 +2,21 @@ import { describe, expect, it } from "vitest";
 import type { ColumnBuilder, SetOpNode } from "../../src/index";
 import {
 	and,
+	avg,
 	bigint,
 	bytea,
+	count,
+	countWhere,
 	date,
 	eq,
 	exists,
+	gt,
 	interval,
 	isNotNull,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	max,
+	min,
 	numeric,
 	renderExpr,
 	renderSelect,
@@ -18,6 +24,7 @@ import {
 	schema,
 	select,
 	sql,
+	sum,
 	table,
 	text,
 	timestamptz,
@@ -424,5 +431,49 @@ describe("set-op order-by output-column guard (review F1)", () => {
 		// ordering by a projected whole-table column stays legal
 		const legal = active.union(archived).orderBy(posts.status);
 		expect(renderSetOp(legal.setOpQuery)).toContain('order by "status" asc');
+	});
+});
+
+describe("aggregates and grouping (#416)", () => {
+	it("renders count, count(expr), min/max, sum and avg", () => {
+		const query = select(
+			{
+				status: posts.status,
+				total: count(),
+				published: countWhere(posts.publishedAt),
+				earliest: min(posts.publishedAt),
+				latest: max(posts.publishedAt),
+			},
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "app"."posts"."status" as "status", count(*) as "total", count("app"."posts"."published_at") as "published", min("app"."posts"."published_at") as "earliest", max("app"."posts"."published_at") as "latest" from "app"."posts"',
+		);
+	});
+
+	it("renders group by and having in SQL's own order", () => {
+		const query = select({ status: posts.status, total: count() }, posts)
+			.where(isNotNull(posts.publishedAt))
+			.groupBy(posts.status)
+			.having(gt(count(), 1))
+			.orderBy(posts.status)
+			.limit(5);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "app"."posts"."status" as "status", count(*) as "total" from "app"."posts" where "app"."posts"."published_at" is not null group by "app"."posts"."status" having count(*) > 1 order by "app"."posts"."status" asc limit 5',
+		);
+	});
+
+	it("sum and avg render, and stay at the numeric family's widest honest type", () => {
+		const query = select(
+			{ total: sum(posts.publishedAt), mean: avg(posts.publishedAt) },
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select sum("app"."posts"."published_at") as "total", avg("app"."posts"."published_at") as "mean" from "app"."posts"',
+		);
+	});
+
+	it("rejects an empty group by", () => {
+		expect(() => select(posts).groupBy()).toThrow(/at least one expression/);
 	});
 });

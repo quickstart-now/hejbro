@@ -90,6 +90,8 @@
 					"schema": "app",
 					"table": "projects"
 				},
+				"groupBy": [],
+				"having": null,
 				"joins": [],
 				"limit": null,
 				"offset": null,

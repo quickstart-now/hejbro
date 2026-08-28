@@ -1,6 +1,7 @@
 import type {
 	ColumnState,
 	ExprNode,
+	FunctionCallNode,
 	ProjectionNode,
 	QueryNode,
 	ReturningNode,
@@ -101,12 +102,63 @@ const findColumnEntry = (
 	);
 };
 
+/**
+ * `count` is `int8` whatever it counted, and node-postgres hands an
+ * `int8` back as text — so a projected `count()` needs the same
+ * conversion a declared `bigint({mode:"bigint"})` column gets, or the
+ * type (#416's `ReadAs<bigint>` brand) would be describing a string.
+ */
+const COUNT_STATE: ColumnState = {
+	typeNode: { typeName: "bigint" },
+	notNull: false,
+	primaryKey: false,
+	unique: false,
+	defaultValue: null,
+	mode: "bigint",
+};
+
+/** `min`/`max` return their argument's own type, so they convert as their argument does — the type layer says the same thing (`min` returns the argument's `Expr` unchanged). `sum`/`avg` are deliberately absent: Postgres promotes their result by the argument's exact type, and guessing one conversion for all of them would be the lie the family-widened type avoids. */
+const PASSTHROUGH_AGGREGATES = ["min", "max"];
+
+/** `true` only for the builder's own unqualified aggregates. A SCHEMA-qualified call is a declared function (`db.fn`), which may legitimately be named `count` in someone's schema and must not be converted as one. */
+const isBuilderAggregate = (expr: ExprNode): expr is FunctionCallNode =>
+	expr.nodeKind === "functionCall" && expr.schemaName === null;
+
+/** The conversion state a passthrough aggregate borrows from its own argument. */
+const passthroughArgumentState = (
+	expr: FunctionCallNode,
+	tables: Declarations["tables"],
+): ColumnState | undefined => {
+	const [argument] = expr.args;
+	if (argument === undefined) {
+		return undefined;
+	}
+	return columnStateForExpr(argument, tables);
+};
+
+/** The conversion state for a projected aggregate, or `undefined` when this isn't one. */
+const aggregateColumnState = (
+	expr: ExprNode,
+	tables: Declarations["tables"],
+): ColumnState | undefined => {
+	if (!isBuilderAggregate(expr)) {
+		return undefined;
+	}
+	if (expr.functionName === "count") {
+		return COUNT_STATE;
+	}
+	if (!PASSTHROUGH_AGGREGATES.includes(expr.functionName)) {
+		return undefined;
+	}
+	return passthroughArgumentState(expr, tables);
+};
+
 const columnStateForExpr = (
 	expr: ExprNode,
 	tables: Declarations["tables"],
 ): ColumnState | undefined => {
 	if (expr.nodeKind !== "columnRef") {
-		return undefined;
+		return aggregateColumnState(expr, tables);
 	}
 	return resolveColumnState(
 		tables,

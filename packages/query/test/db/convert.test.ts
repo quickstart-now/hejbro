@@ -1,11 +1,17 @@
+import type { Expr } from "@hejbro/core";
 import {
 	bigint,
+	count,
 	eq,
+	expr,
 	insert,
 	interval,
+	max,
+	min,
 	numeric,
 	schema,
 	select,
+	sum,
 	table,
 	text,
 	timestamptz,
@@ -637,5 +643,68 @@ describe("columnPlanForStatement (task 4.4-wiring: the same resolver, from the C
 		const statement = insert(posts).values({ status: "draft" });
 
 		expect(columnPlanForStatement(statement, tables)).toEqual([]);
+	});
+});
+
+describe("aggregate conversion (#416)", () => {
+	it("count converts to bigint, whatever the driver hands back", () => {
+		const node = select({ total: count() }, posts).selectQuery;
+		const converted = convertRow(
+			{ total: "42" },
+			columnPlanForResult(node, tables),
+		);
+		expect(converted.total).toBe(42n);
+		expect(typeof converted.total).toBe("bigint");
+	});
+
+	it("min and max convert as their argument's declared column does", () => {
+		const node = select(
+			{ biggest: max(posts.amount), smallest: min(posts.amount) },
+			posts,
+		).selectQuery;
+		const converted = convertRow(
+			{ biggest: "20", smallest: "1" },
+			columnPlanForResult(node, tables),
+		);
+		expect(converted.biggest).toBe(20n);
+		expect(converted.smallest).toBe(1n);
+	});
+
+	it("sum and avg are left alone -- Postgres promotes them by the argument's exact type", () => {
+		const node = select({ total: sum(posts.amount) }, posts).selectQuery;
+		const converted = convertRow(
+			{ total: "30" },
+			columnPlanForResult(node, tables),
+		);
+		// unconverted: the driver's own value, which is the honest thing to
+		// hand back when no single result type is right.
+		expect(converted.total).toBe("30");
+	});
+
+	it("a schema-qualified function of the same name is not an aggregate", () => {
+		// db.fn calls a DECLARED function, which may legitimately be named
+		// "count" in someone's schema -- only the unqualified builder
+		// aggregate gets aggregate conversion.
+		const qualifiedCount: Expr<"numeric"> = expr("numeric", {
+			nodeKind: "functionCall",
+			schemaName: "app",
+			functionName: "count",
+			args: [],
+		});
+		const node = select({ total: qualifiedCount }, posts).selectQuery;
+		const converted = convertRow(
+			{ total: "7" },
+			columnPlanForResult(node, tables),
+		);
+		expect(converted.total).toBe("7");
+	});
+
+	it("a non-aggregate expression converts as before", () => {
+		const node = select({ label: posts.status }, posts).selectQuery;
+		const converted = convertRow(
+			{ label: "draft" },
+			columnPlanForResult(node, tables),
+		);
+		expect(converted.label).toBe("draft");
 	});
 });
