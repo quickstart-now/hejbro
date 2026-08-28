@@ -281,12 +281,14 @@ export type {
 	SelectOrdered,
 	SelectProjection,
 } from "./query/select";
+export type { NestedReadMarker } from "./query/select";
 export {
 	exists,
 	jsonArrayFrom,
 	jsonObjectFrom,
 	notExists,
 	select,
+	nestedReadBrand,
 } from "./query/select";
 export type { ColumnOrderOracle } from "./snapshot/column-order";
 export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
