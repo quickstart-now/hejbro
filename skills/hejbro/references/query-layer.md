@@ -417,14 +417,19 @@ through `tx` on one held connection inside `begin`/`commit`, committing on
 a normal return and rolling back — with the thrown error propagating
 unchanged — when the callback throws. `tx` carries the same
 `select`/`insert`/`update`/`deleteFrom`/`fn` surface, resolving the exact
-same inferred types, as any other handle. Calling `transaction()` again
-from inside an already-open callback of that same member fails fast with
-`nested-transaction-unsupported` **before any further statement is sent —
-the call is rejected, never silently flattened into the outer transaction
-and never opened as a second, unrelated one.** Savepoints are not
-supported (#313); there is no nested-transaction workaround today beyond
-issuing every statement through the one `tx` the outer callback already
-received.
+same inferred types, as any other handle. **Nest on `tx`, not on the handle.** `tx.transaction(async (nested) =>
+{ ... })` brackets its callback with a `savepoint`, releases it on a
+normal return and rolls back to it — rethrowing the error unchanged — on
+a throw, all on the same connection. A rolled-back nested transaction
+does *not* abort the transaction containing it, so the outer callback can
+catch the error and keep issuing statements that still commit.
+
+Calling `transaction()` on the **handle** from inside an already-open
+callback of that same member still fails fast with
+`nested-transaction-unsupported` **before any further statement is sent**
+— that call would take a second connection out of the pool rather than
+nest, so it is rejected rather than silently flattened into the outer
+transaction or opened as a second, unrelated one.
 
 ```ts prelude=query-handle
 const result = await handle.transaction(async (tx) => {
@@ -433,6 +438,16 @@ const result = await handle.transaction(async (tx) => {
 		.values({ id: crypto.randomUUID(), status: "draft" })
 		.returning();
 	await tx.insert(comments).values({ id: crypto.randomUUID(), postId: post.id });
+
+	// nested: this one may fail without taking the post insert with it
+	await tx
+		.transaction(async (nested) => {
+			await nested
+				.insert(comments)
+				.values({ id: crypto.randomUUID(), postId: post.id });
+		})
+		.catch(() => undefined);
+
 	return post;
 });
 ```
@@ -463,7 +478,8 @@ concrete next step.
 | `query-execution-failed` | The driver rejected an executed statement (e.g. a constraint violation) — the message carries the parameterized SQL text; the statement's parameter *values* never appear on the error, not in the message, not as a field, not via its string or JSON form. |
 | `result-conversion-failed` | A returned column's value couldn't convert to its declared type (an unconvertible/missing column, an array arrival-shape mismatch, or a `NULL` element under `.notNullElements()`). |
 | `driver-missing-capability` | An operation (a transaction, a `db.as` context) needs a capability the active driver doesn't declare `true` — a capability explicitly declared `false` fails exactly like an undeclared one, never attempted. The capability set itself is fixed and exhaustive: a driver's own declaration must name every one of them, and omitting one, or naming one outside the set, fails to type-check rather than defaulting silently — this is a compile-time guarantee, checked before this runtime error's own path is ever reached. |
-| `nested-transaction-unsupported` | `transaction()` was called again from inside its own already-open callback. |
+| `nested-transaction-unsupported` | The db handle's `transaction()` was called again from inside its own already-open callback — nest with `tx.transaction(...)` instead. |
+| `savepoint-rollback-failed` | Rolling back to a nested transaction's savepoint itself failed; the rollback failure is on `cause` and the callback's own error on `callbackError`. |
 | `undeclared-role` | `db.as({ role, ... })`'s role isn't in the declared whitelist. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |
 
