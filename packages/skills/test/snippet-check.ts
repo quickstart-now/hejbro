@@ -29,7 +29,8 @@ const compilerOptions: ts.CompilerOptions = {
 
 export type SnippetDirectives = {
 	readonly prelude?: string;
-	readonly expectError: boolean;
+	/** The TS diagnostic code (e.g. `"2322"`) `expect-error=<code>` names — undefined when the block carries no `expect-error=` directive at all. A bare `expect-error` with no code is rejected at parse time (see `isKnownDirectiveToken`): *any* diagnostic passing as "the mistake" would let an unrelated failure (a typo'd import) masquerade as the documented one. */
+	readonly expectErrorCode?: string;
 	readonly noCheck?: string;
 };
 
@@ -57,9 +58,9 @@ export type AllowlistEntry = {
 const FENCE_RE =
 	/^```ts(?:[ \t]+(\S.*?))?[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*\r?$/gm;
 
-/** Splits a fence's directive text (e.g. `prelude=demo expect-error`) into the three recognized tokens. An unrecognized token fails loudly rather than being silently ignored — a typo'd directive must never pass through the gate unnoticed. */
+/** Splits a fence's directive text (e.g. `prelude=demo expect-error=2322`) into the three recognized tokens. An unrecognized token fails loudly rather than being silently ignored — a typo'd directive (a bare `expect-error` with no `=<code>` included, per TERMINAL v1.5) must never pass through the gate unnoticed. */
 const isKnownDirectiveToken = (token: string): boolean =>
-	token === "expect-error" ||
+	token.startsWith("expect-error=") ||
 	token.startsWith("prelude=") ||
 	token.startsWith("no-check=");
 
@@ -70,13 +71,14 @@ const tokenValue = (
 ): string | undefined =>
 	tokens.find((token) => token.startsWith(key))?.slice(key.length);
 
-/** `prelude`/`noCheck` as a spreadable partial — only the directives actually present in `tokens`, so `parseDirectives` needs one spread, not a branch per optional field. */
+/** `prelude`/`expectErrorCode`/`noCheck` as a spreadable partial — only the directives actually present in `tokens`, so `parseDirectives` needs one spread, not a branch per optional field. */
 const optionalDirectiveFields = (
 	tokens: ReadonlyArray<string>,
-): Partial<Pick<SnippetDirectives, "prelude" | "noCheck">> =>
+): Partial<SnippetDirectives> =>
 	Object.fromEntries(
 		[
 			["prelude", tokenValue(tokens, "prelude=")],
+			["expectErrorCode", tokenValue(tokens, "expect-error=")],
 			["noCheck", tokenValue(tokens, "no-check=")],
 		].filter((entry): entry is [string, string] => entry[1] !== undefined),
 	);
@@ -90,14 +92,42 @@ const parseDirectives = (
 	const unknown = tokens.find((token) => !isKnownDirectiveToken(token));
 	if (unknown !== undefined) {
 		throw new Error(
-			`${docPath}:${fenceLine}: unknown snippet directive "${unknown}" — expected "prelude=<name>", "expect-error", or "no-check=<reason-slug>"`,
+			`${docPath}:${fenceLine}: unknown snippet directive "${unknown}" — expected "prelude=<name>", "expect-error=<ts-diagnostic-code>", or "no-check=<reason-slug>" (a bare "expect-error" with no code is rejected — name the exact TS code the block must raise)`,
 		);
 	}
-	return {
-		expectError: tokens.includes("expect-error"),
-		...optionalDirectiveFields(tokens),
-	};
+	return optionalDirectiveFields(tokens);
 };
+
+/** An opening fence line: three backticks then the language token (no leading space allowed before the backticks, matching CommonMark's own fenced-code-block rule). */
+const OPEN_FENCE_RE = /^```(\S+)/gm;
+
+/** `true` when `token` reads as an attempt to label a TypeScript example — `typescript`, `tsx`, `TS`, `ts-check`, … (case-insensitive) — but isn't the exact literal `ts` this harness type-checks (TERMINAL v1.5: closes the fence-label bypass). A prefix-only rule (`/^ts/i`) would also catch unrelated tags like `tsql`; matching the known synonyms plus a `ts-`/`ts_` prefix avoids that false positive. */
+const isMislabeledTsFence = (token: string): boolean => {
+	if (token === "ts") {
+		return false;
+	}
+	const lower = token.toLowerCase();
+	return (
+		lower === "ts" ||
+		lower === "typescript" ||
+		lower === "tsx" ||
+		lower.startsWith("ts-") ||
+		lower.startsWith("ts_")
+	);
+};
+
+/** Scans `text` for a fenced block whose language token looks like TypeScript but isn't exactly ` ```ts ` — the one label `extractSnippets`'s `FENCE_RE` actually type-checks. A `sql`/`bash`/bare-``` fence is untouched; this only flags an author's typo/synonym that would otherwise silently skip the gate. */
+export const findMislabeledFences = (
+	text: string,
+	docPath: string,
+): ReadonlyArray<Violation> =>
+	[...text.matchAll(OPEN_FENCE_RE)]
+		.filter((match) => isMislabeledTsFence(match[1] ?? ""))
+		.map((match) => ({
+			docPath,
+			line: text.slice(0, match.index ?? 0).split("\n").length,
+			message: `fence labeled \`\`\`${match[1]} looks like TypeScript but is never type-checked — use \`\`\`ts so the snippet is type-checked.`,
+		}));
 
 /** Extracts every ` ```ts ` fenced block from `text` (a markdown doc's own content), `docPath` used only to attribute directive-parse errors and later diagnostics back to the source file. */
 export const extractSnippets = (
@@ -276,12 +306,35 @@ const checkAllowlist = (
 	];
 };
 
+/** Describes an `expect-error=<code>` block's mismatch — either it raised nothing at all, or it raised diagnostics none of which carry the expected code (TERMINAL v1.5: a bare "any diagnostic" match would let an unrelated failure, e.g. a typo'd import, masquerade as the documented mistake). */
+const describeObservedCodes = (
+	observedCodes: ReadonlyArray<number>,
+): string => {
+	if (observedCodes.length === 0) {
+		return "none (compiled cleanly)";
+	}
+	return observedCodes.join(", ");
+};
+
+const expectErrorViolation = (
+	unit: Unit,
+	expectedCode: string,
+	observedCodes: ReadonlyArray<number>,
+): Violation => {
+	const observed = describeObservedCodes(observedCodes);
+	return {
+		docPath: unit.snippet.docPath,
+		line: unit.snippet.fenceLine,
+		message: `expect-error="${expectedCode}" expected TS${expectedCode}, but observed: ${observed}`,
+	};
+};
+
 /**
  * Type-checks every checkable snippet (every one without `no-check=`) in a
  * single `ts.Program`, then reduces the result to a flat violation list:
  * - a no-token snippet reports every diagnostic raised against it
- * - an `expect-error` snippet reports a violation only when it raised *no*
- *   diagnostic at all (it was supposed to fail and didn't)
+ * - an `expect-error=<code>` snippet reports a violation unless at least one
+ *   of its diagnostics carries exactly that TS code
  * - a `no-check=` snippet is never compiled; it is checked against
  *   `allowlist` instead
  */
@@ -310,18 +363,15 @@ export const checkSnippets = (
 
 	const compileViolations = units.flatMap((unit) => {
 		const fileDiagnostics = diagnosticsByFile.get(unit.fileName) ?? [];
-		if (unit.snippet.expectError) {
-			if (fileDiagnostics.length > 0) {
+		const expectedCode = unit.snippet.expectErrorCode;
+		if (expectedCode !== undefined) {
+			const observedCodes = fileDiagnostics.map(
+				(diagnostic) => diagnostic.code,
+			);
+			if (observedCodes.includes(Number(expectedCode))) {
 				return [];
 			}
-			return [
-				{
-					docPath: unit.snippet.docPath,
-					line: unit.snippet.fenceLine,
-					message:
-						"expect-error block compiled cleanly — no type error was raised, so this snippet no longer demonstrates a mistake",
-				},
-			];
+			return [expectErrorViolation(unit, expectedCode, observedCodes)];
 		}
 		return fileDiagnostics.map((diagnostic) =>
 			diagnosticToViolation(diagnostic, unit),

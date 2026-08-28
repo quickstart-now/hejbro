@@ -12,9 +12,21 @@ and lives outside `skills/hejbro/` precisely so the real gate
 const n: number = "not a number";
 ```
 
-## An expect-error block that actually compiles cleanly must be reported
+## An expect-error=<code> block matching the actual diagnostic must pass
 
-```ts expect-error
+```ts expect-error=2322
+const n: number = "not a number";
+```
+
+## An expect-error=<code> block that raises a DIFFERENT code must be reported
+
+```ts expect-error=9999
+const n: number = "not a number";
+```
+
+## An expect-error=<code> block that compiles cleanly must be reported
+
+```ts expect-error=2322
 const n: number = 1;
 ```
 

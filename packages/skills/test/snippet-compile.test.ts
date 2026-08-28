@@ -3,7 +3,12 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { markdownFiles } from "./markdown-files";
 import type { AllowlistEntry } from "./snippet-check";
-import { checkSnippets, extractSnippets, REPO_ROOT } from "./snippet-check";
+import {
+	checkSnippets,
+	extractSnippets,
+	findMislabeledFences,
+	REPO_ROOT,
+} from "./snippet-check";
 
 /**
  * TDD/red-proof gate for every ` ```ts ` code block under `skills/hejbro/`
@@ -18,7 +23,7 @@ import { checkSnippets, extractSnippets, REPO_ROOT } from "./snippet-check";
  * the code body itself (the body must stay exactly what an agent would
  * paste):
  *
- *     ```ts [prelude=<name>] [expect-error] [no-check=<reason-slug>]
+ *     ```ts [prelude=<name>] [expect-error=<ts-diagnostic-code>] [no-check=<reason-slug>]
  *
  * - No token: the block must type-check on its own — including its own
  *   imports; nothing is implicitly in scope.
@@ -28,10 +33,15 @@ import { checkSnippets, extractSnippets, REPO_ROOT } from "./snippet-check";
  *   would otherwise have to re-declare every time. A diagnostic inside the
  *   prelude portion is attributed back to the prelude fixture file, not
  *   the doc.
- * - `expect-error`: the block must FAIL to type-check — for a doc's own
- *   "don't write it this way" example. A clean compile here is itself a
- *   violation (the example stopped demonstrating the mistake it's there
- *   to show).
+ * - `expect-error=<code>`: the block must raise a diagnostic carrying that
+ *   exact TS code (e.g. `expect-error=2339`) — for a doc's own "don't
+ *   write it this way" example. A bare `expect-error` with no code is
+ *   rejected as an unknown directive: without a code, *any* diagnostic
+ *   passes, so a snippet that fails for an unrelated reason (a typo'd
+ *   import) could masquerade as demonstrating the documented mistake. A
+ *   clean compile, or a compile that fails with a different code, is
+ *   itself a violation naming the expected code and what was actually
+ *   observed.
  * - `no-check=<reason-slug>`: the block is never type-checked at all. This
  *   is a last resort, not a way to silence a real drift — it only passes
  *   when `{ doc, slug }` is listed verbatim in `NO_CHECK_ALLOWLIST` below,
@@ -40,27 +50,43 @@ import { checkSnippets, extractSnippets, REPO_ROOT } from "./snippet-check";
  *
  * A fence tagged anything other than `ts` (```` ```json ````, a bare
  * ```` ``` ````, …) is never a compile target — see the migration-banner
- * example in generate-verify-workflow.md.
+ * example in generate-verify-workflow.md. A fence that *looks* like
+ * TypeScript but isn't spelled exactly ` ```ts ` (```` ```typescript ````,
+ * ```` ```tsx ````, …) is a separate violation (`findMislabeledFences`
+ * below) rather than silently skipped — that mislabeling is indistinguishable
+ * from an author trying to bypass the gate.
  */
 
 const SKILLS_DIR = join(REPO_ROOT, "skills", "hejbro");
 
-// Empty by design (T5 point 8): every existing snippet type-checks as
-// written. Add an entry here only when a snippet genuinely cannot be
-// type-checked in isolation — never to paper over a snippet that's simply
-// wrong (fix the doc instead).
+// Empty by design (T5 point 8, capped at 1 by TERMINAL v1.1): every
+// existing snippet type-checks as written. Add an entry here only when a
+// snippet genuinely cannot be type-checked in isolation, with the
+// TS-inexpressible reason recorded in both the slug and a comment here —
+// never to paper over a snippet that's simply wrong (fix the doc instead).
 const NO_CHECK_ALLOWLIST: ReadonlyArray<AllowlistEntry> = [];
 
+const skillsMarkdownFiles = () =>
+	markdownFiles(SKILLS_DIR).map((file) => ({
+		file,
+		docPath: relative(REPO_ROOT, file),
+		text: readFileSync(file, "utf8"),
+	}));
+
 const violationsForSkillsDocs = () => {
-	const files = markdownFiles(SKILLS_DIR);
-	const snippets = files.flatMap((file) =>
-		extractSnippets(readFileSync(file, "utf8"), relative(REPO_ROOT, file)),
+	const docs = skillsMarkdownFiles();
+	const snippets = docs.flatMap((doc) =>
+		extractSnippets(doc.text, doc.docPath),
 	);
-	return { snippets, violations: checkSnippets(snippets, NO_CHECK_ALLOWLIST) };
+	const fenceViolations = docs.flatMap((doc) =>
+		findMislabeledFences(doc.text, doc.docPath),
+	);
+	const compileViolations = checkSnippets(snippets, NO_CHECK_ALLOWLIST);
+	return { snippets, violations: [...fenceViolations, ...compileViolations] };
 };
 
 describe("hejbro skill's ts snippets type-check against real source", () => {
-	it("every ```ts block under skills/hejbro/ compiles cleanly (or fails exactly where expect-error/no-check say it should)", () => {
+	it("every ```ts block under skills/hejbro/ compiles cleanly (or fails exactly where expect-error/no-check say it should), and no fence mislabels a ts example", () => {
 		const { snippets, violations } = violationsForSkillsDocs();
 
 		// Vacuous-pass guard (same lesson as links.test.ts): a regex/parser
