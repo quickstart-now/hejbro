@@ -40,7 +40,8 @@ export type ScopedDb<
 		string,
 		FunctionDeclaration
 	>,
-> = ChainApi & {
+	TSchema = Record<string, unknown>,
+> = ChainApi<TSchema> & {
 	execute<TStatement extends CompileInput>(
 		statement: TStatement,
 	): Promise<ExecuteResult<TStatement>>;
@@ -147,13 +148,14 @@ const applyContext = async (
  */
 export const createAsApi = <
 	TFunctions extends Record<string, FunctionDeclaration>,
+	TSchema = Record<string, unknown>,
 >(
 	driver: Driver,
 	tables: Declarations["tables"],
 	functions: TFunctions,
 	declaredRoles: Declarations["roles"],
-): ((context: DbContext) => ScopedDb<TFunctions>) => {
-	return (context: DbContext): ScopedDb<TFunctions> => {
+): ((context: DbContext) => ScopedDb<TFunctions, TSchema>) => {
+	return (context: DbContext): ScopedDb<TFunctions, TSchema> => {
 		assertDeclaredRole(context.role, declaredRoles);
 		/**
 		 * Opens one fresh, context-applied transaction and runs `send` on

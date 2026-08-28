@@ -2,6 +2,7 @@ import {
 	eq,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	roleName,
 	schema,
 	select,
 	table,
@@ -103,5 +104,30 @@ describe("related() chain method (add-relational-reads task 3.3)", () => {
 		} catch (error) {
 			expect((error as { code: string }).code).toBe("unknown-relation");
 		}
+	});
+});
+
+describe("related() under an rls context (task 3.5)", () => {
+	it("a scoped related read compiles to exactly one statement", async () => {
+		const { driver, topLevelSent, sentPerTransaction } =
+			recordingTransactionalDriver({ rows: [] });
+		const handle = db({ app, users, posts, comments }, driver, {
+			roles: [roleName("viewer")],
+		});
+		await handle
+			.as({ role: roleName("viewer") })
+			.select(posts)
+			.related({ comments: true });
+
+		// one wrapping transaction; inside it: SET LOCAL ROLE + the single
+		// related statement -- never a second data statement (no client-side
+		// stitching, D102).
+		expect(topLevelSent.length).toBe(0);
+		const dataStatements = sentPerTransaction
+			.flat()
+			.filter((statement) => statement.sql.startsWith("select "))
+			.filter((statement) => !statement.sql.includes("set_config"));
+		expect(dataStatements).toHaveLength(1);
+		expect(dataStatements[0]?.sql).toContain("json_agg");
 	});
 });

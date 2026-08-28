@@ -4,6 +4,7 @@ import type {
 	ProjectionNode,
 	QueryNode,
 	ReturningNode,
+	SqlTemplateChunk,
 	Table,
 	TableRefNode,
 	TypeNode,
@@ -141,6 +142,38 @@ const allColumnsPlanEntry = (
 	};
 };
 
+/** One object-projection column's plan entry — a `selectExpr` cell gets its recursive nested plan, everything else resolves its (cast-unwrapped) declared state. */
+const projectionPlanEntry = (
+	column: {
+		readonly alias: string;
+		readonly resultKey?: string;
+		readonly expr: ExprNode;
+	},
+	tables: Declarations["tables"],
+): ColumnPlanEntry => {
+	const { alias, resultKey, expr } = column;
+	if (expr.nodeKind === "selectExpr") {
+		return {
+			alias,
+			resultKey: resultKey ?? alias,
+			columnState: undefined,
+			nested: {
+				mode: expr.mode,
+				entries: columnPlanFromProjection(
+					expr.query.projection,
+					expr.query.from,
+					tables,
+				),
+			},
+		};
+	}
+	return {
+		alias,
+		resultKey: resultKey ?? alias,
+		columnState: columnStateForExpr(uncast(expr), tables),
+	};
+};
+
 const columnPlanFromProjection = (
 	projection: ProjectionNode,
 	from: TableRefNode,
@@ -155,28 +188,9 @@ const columnPlanFromProjection = (
 		// `resultKey` is the caller's verbatim projection key (#339); a node
 		// without one (hand-built, or codec-decoded -- stored view queries)
 		// falls back to the rendered alias, the pre-#339 behavior.
-		return projection.columns.map(({ alias, resultKey, expr }) => {
-			if (expr.nodeKind === "selectExpr") {
-				return {
-					alias,
-					resultKey: resultKey ?? alias,
-					columnState: undefined,
-					nested: {
-						mode: expr.mode,
-						entries: columnPlanFromProjection(
-							expr.query.projection,
-							expr.query.from,
-							tables,
-						),
-					},
-				};
-			}
-			return {
-				alias,
-				resultKey: resultKey ?? alias,
-				columnState: columnStateForExpr(uncast(expr), tables),
-			};
-		});
+		return projection.columns.map((column) =>
+			projectionPlanEntry(column, tables),
+		);
 	}
 	// "constantOne" -- the exists()/notExists() subquery projection; never
 	// reaches execute() as a top-level statement, so there is no result
@@ -538,25 +552,49 @@ const convertCell = (
  * declared state — without this, exactly the columns the cast protects
  * (bigint/numeric) would arrive as unrevived text.
  */
-const uncast = (expr: ExprNode): ExprNode => {
+const isCastSuffixChunk = (chunk: SqlTemplateChunk | undefined): boolean =>
+	chunk?.chunkKind === "text" &&
+	(chunk.text === "::text" || chunk.text === "::text[]");
+
+const castInnerRef = (
+	chunk: SqlTemplateChunk | undefined,
+): ExprNode | undefined => {
+	if (chunk?.chunkKind === "expr" && chunk.expr.nodeKind === "columnRef") {
+		return chunk.expr;
+	}
+	return undefined;
+};
+
+/** The two-chunk `[ref, suffix]` inner ref, else `undefined` — only `jsonArrayFrom`/`jsonObjectFrom`'s own cast builder produces this exact shape (a `sql\`\`` template always leads with a text chunk), so the suffix check is a cheap shape confirmation, not a reachable DSL path. */
+const castInnerRefIfSuffixed = (
+	first: SqlTemplateChunk | undefined,
+	second: SqlTemplateChunk | undefined,
+): ExprNode | undefined => {
+	if (!isCastSuffixChunk(second)) {
+		return undefined;
+	}
+	return castInnerRef(first);
+};
+
+const castTarget = (expr: ExprNode): ExprNode | undefined => {
 	if (expr.nodeKind !== "sqlTemplate" || expr.chunks.length !== 2) {
-		return expr;
+		return undefined;
 	}
-	const [first, second] = expr.chunks;
-	if (
-		first?.chunkKind === "expr" &&
-		first.expr.nodeKind === "columnRef" &&
-		second?.chunkKind === "text" &&
-		(second.text === "::text" || second.text === "::text[]")
-	) {
-		return first.expr;
+	return castInnerRefIfSuffixed(expr.chunks[0], expr.chunks[1]);
+};
+
+const uncast = (expr: ExprNode): ExprNode => castTarget(expr) ?? expr;
+
+const stripHexPrefix = (raw: string): string => {
+	if (raw.startsWith("\\x")) {
+		return raw.slice(2);
 	}
-	return expr;
+	return raw;
 };
 
 /** `"\\x0102ff"` (the driver-pinned hex form) → bytes — pure, no Buffer dependency (the declared read type is `Uint8Array`). */
 const hexToBytes = (raw: string): Uint8Array => {
-	const hex = raw.startsWith("\\x") ? raw.slice(2) : raw;
+	const hex = stripHexPrefix(raw);
 	const pairs = hex.match(/.{2}/g) ?? [];
 	return Uint8Array.from(pairs.map((pair) => Number.parseInt(pair, 16)));
 };
@@ -575,29 +613,33 @@ const JSON_DATETIME_TYPE_NAMES: ReadonlySet<string> = new Set([
  * shape the driver hands a top-level cell, so the ordinary declared
  * conversion applies unchanged.
  */
-const reviveNestedScalar = (raw: unknown, columnState: ColumnState): unknown => {
-	const typeName = columnState.typeNode.typeName;
-	if (JSON_DATETIME_TYPE_NAMES.has(typeName)) {
+const reviveNestedArray = (
+	raw: unknown,
+	columnState: ColumnState,
+	element: TypeNode,
+): ReadonlyArray<unknown> => {
+	const elementState: ColumnState = { ...columnState, typeNode: element };
+	return (raw as ReadonlyArray<unknown>).map((entry) => {
+		if (entry === null) {
+			return null;
+		}
+		return reviveNestedScalar(entry, elementState);
+	});
+};
+
+const reviveNestedScalar = (
+	raw: unknown,
+	columnState: ColumnState,
+): unknown => {
+	const typeNode = columnState.typeNode;
+	if (JSON_DATETIME_TYPE_NAMES.has(typeNode.typeName)) {
 		return new Date(String(raw));
 	}
-	if (typeName === "bytea") {
+	if (typeNode.typeName === "bytea") {
 		return hexToBytes(String(raw));
 	}
-	if (typeName === "array") {
-		const element = columnState.typeNode;
-		if (element.typeName !== "array") {
-			return raw;
-		}
-		const elementState: ColumnState = {
-			...columnState,
-			typeNode: element.element,
-		};
-		return (raw as ReadonlyArray<unknown>).map((entry) => {
-			if (entry === null) {
-				return null;
-			}
-			return reviveNestedScalar(entry, elementState);
-		});
+	if (typeNode.typeName === "array") {
+		return reviveNestedArray(raw, columnState, typeNode.element);
 	}
 	return convertDeclaredValue(raw, columnState);
 };
@@ -619,13 +661,25 @@ const convertNestedCell = (
 	if (entry.nested !== undefined) {
 		return reviveNestedContainer(value, entry.nested);
 	}
-	if (value === null || value === undefined || entry.columnState === undefined) {
+	if (entry.columnState === undefined) {
+		return value;
+	}
+	return reviveNestedScalarOrThrow(value, entry.columnState, entry.alias);
+};
+
+/** `null`/missing pass straight through (a SQL NULL is never the wrong shape); everything else revives or fails loudly. */
+const reviveNestedScalarOrThrow = (
+	value: unknown,
+	columnState: ColumnState,
+	alias: string,
+): unknown => {
+	if (value === null || value === undefined) {
 		return value;
 	}
 	try {
-		return reviveNestedScalar(value, entry.columnState);
+		return reviveNestedScalar(value, columnState);
 	} catch (cause) {
-		return throwResultConversionFailed(entry.alias, cause);
+		return throwResultConversionFailed(alias, cause);
 	}
 };
 

@@ -254,7 +254,7 @@ export type Db<
 	 * applies `SET LOCAL ROLE`/`set_config` inside a wrapping transaction
 	 * on the actual work, and never touches this (unscoped) handle at all.
 	 */
-	as(context: DbContext): ScopedDb<TFunctions>;
+	as(context: DbContext): ScopedDb<TFunctions, TSchema>;
 	/**
 	 * `db.fn.*` (tasks 4.9/4.10): one callable per declared function,
 	 * keyed **exactly** to the declarations record's own export names —
@@ -360,7 +360,7 @@ export const db = <TSchema extends Schema>(
 		execute: ((statement: CompileInput) =>
 			executeImpl(driver, declarations.tables, statement)) as Db["execute"],
 		transaction: createTransactionApi(driver, declarations.tables),
-		as: createAsApi(
+		as: createAsApi<FunctionsOf<TSchema>, TSchema>(
 			driver,
 			declarations.tables,
 			typedFunctions,
