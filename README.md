@@ -300,6 +300,20 @@ evidence rounds (mutant-kill verification, turbo-routed re-submission
 after a bare-tsc false-positive warning) plus a comment-only commit
 applying the comment-budget rule that landed mid-piece — carried to
 the new SHA constructively by blob comparison, no re-verdict.
+
+**Defect leakage** — every behavior defect discovered after its
+introducing change merged carries the `escaped-defect` label
+(deliberate in-flight deferrals excluded); this table is the rollup,
+refreshed at change close-out by the lead. "Found by" names the
+activity that caught it — the number that tells whether each
+verification layer earns its cost.
+
+| Introducing change | Escaped | Issues | Found by |
+|---|---|---|---|
+| add-query-layer | 8 | #315 #320 #322 #323 #326 #337 #338 #339 | harden reconnaissance (5), examples work (1), piece review (1), integration work (1) |
+| phase8 tooling | 2 | #336 #361 | gate-fidelity baseline (1), piece boundary-signal audit (1) |
+| harden-query-layer | 1 | #349 | property-test authoring |
+| add-array-ergonomics | 0 | — | — |
 <!-- ai-metrics:end -->
 
 ## License
