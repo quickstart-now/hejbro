@@ -18,6 +18,7 @@ import type {
 	PlpgsqlRefNode,
 	ProjectionNode,
 	RawSqlNode,
+	SelectExprNode,
 	SelectNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
@@ -75,6 +76,7 @@ export const NODE_KIND_TO_SNAPSHOT: Readonly<
 	sqlTemplate: "sql-template",
 	rawSql: "raw-sql",
 	exists: "exists",
+	selectExpr: "select-expr",
 };
 
 const NODE_KIND_FROM_SNAPSHOT: Readonly<Record<string, ExprNode["nodeKind"]>> =
@@ -270,6 +272,29 @@ const encodeRawSql = (node: RawSqlNode): JsonValue => ({
 	sql: node.sql,
 });
 
+/** `mode` values serialize kebab-case like every discriminator (D57/D70). */
+const SELECT_EXPR_MODE_TO_SNAPSHOT: Readonly<
+	Record<SelectExprNode["mode"], string>
+> = {
+	jsonArray: "json-array",
+	jsonObject: "json-object",
+};
+
+const SELECT_EXPR_MODE_FROM_SNAPSHOT: Readonly<
+	Record<string, SelectExprNode["mode"]>
+> = Object.fromEntries(
+	Object.entries(SELECT_EXPR_MODE_TO_SNAPSHOT).map(([camel, kebab]) => [
+		kebab,
+		camel as SelectExprNode["mode"],
+	]),
+);
+
+const encodeSelectExprNode = (node: SelectExprNode): JsonValue => ({
+	nodeKind: NODE_KIND_TO_SNAPSHOT.selectExpr,
+	mode: SELECT_EXPR_MODE_TO_SNAPSHOT[node.mode],
+	query: encodeSelectNode(node.query),
+});
+
 const encodeExists = (node: ExistsNode): JsonValue => ({
 	nodeKind: NODE_KIND_TO_SNAPSHOT.exists,
 	negated: node.negated,
@@ -314,6 +339,7 @@ const encodeExprNodeHandlers: EncodeExprNodeHandlers = {
 	sqlTemplate: encodeSqlTemplate,
 	rawSql: encodeRawSql,
 	exists: encodeExists,
+	selectExpr: encodeSelectExprNode,
 };
 
 /** @internal exported for {@link decodeExprNode}'s exhaustive-map symmetry and for tests. */
@@ -470,6 +496,14 @@ const decodeRawSqlNode = (node: Record<string, JsonValue>): RawSqlNode => ({
 	sql: stringField(node, "sql"),
 });
 
+const decodeSelectExprNode = (
+	node: Record<string, JsonValue>,
+): SelectExprNode => ({
+	nodeKind: "selectExpr",
+	mode: SELECT_EXPR_MODE_FROM_SNAPSHOT[node.mode as string] ?? "jsonArray",
+	query: decodeSelectNode(node.query as JsonValue),
+});
+
 const decodeExistsNode = (node: Record<string, JsonValue>): ExistsNode => ({
 	nodeKind: "exists",
 	negated: node.negated as boolean,
@@ -506,6 +540,7 @@ const decodeExprNodeHandlers: DecodeExprNodeHandlers = {
 	sqlTemplate: decodeSqlTemplateNode,
 	rawSql: decodeRawSqlNode,
 	exists: decodeExistsNode,
+	selectExpr: decodeSelectExprNode,
 };
 
 export const decodeExprNode = (value: JsonValue): ExprNode => {

@@ -3,6 +3,7 @@ import { getTableMeta, isTable, toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
 import type {
 	Expr,
+	ExprNode,
 	JoinKind,
 	OrderByTerm,
 	ProjectionNode,
@@ -10,6 +11,7 @@ import type {
 	TableRefNode,
 } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
+import type { TypeNode } from "../types/type-node";
 
 /** A `select()` projection: the whole table (deterministic column list), or an object of aliased expressions. */
 export type SelectProjection = Table | Record<string, Expr>;
@@ -179,6 +181,133 @@ export const select = <TProjection extends SelectProjection>(
 		projection,
 	);
 };
+
+/** Type names whose values do not survive a JSON round-trip untouched — `bigint`/`numeric` collapse to a lossy JSON number, temporal and `interval` values to strings with no revivable contract, `bytea` to escaped text (D102, cast+revive). */
+const JSON_AT_RISK_TYPE_NAMES: ReadonlySet<string> = new Set([
+	"bigint",
+	"numeric",
+	"timestamp",
+	"timestamptz",
+	"date",
+	"interval",
+	"bytea",
+]);
+
+const jsonSafeCastSuffix = (typeNode: TypeNode): string | null => {
+	if (typeNode.typeName === "array") {
+		if (JSON_AT_RISK_TYPE_NAMES.has(typeNode.element.typeName)) {
+			return "::text[]";
+		}
+		return null;
+	}
+	if (JSON_AT_RISK_TYPE_NAMES.has(typeNode.typeName)) {
+		return "::text";
+	}
+	return null;
+};
+
+const castExprNode = (expr: ExprNode, suffix: string): ExprNode => ({
+	nodeKind: "sqlTemplate",
+	chunks: [
+		{ chunkKind: "expr", expr },
+		{ chunkKind: "text", text: suffix },
+	],
+});
+
+/** The chain's original projection value for one rendered column, or `undefined` when the column carries no `resultKey` (a decoded node) or the input has no such key. */
+const inputValueFor = (
+	projectionInput: Record<string, unknown>,
+	resultKey: string | undefined,
+): unknown => {
+	if (resultKey === undefined) {
+		return undefined;
+	}
+	return projectionInput[resultKey];
+};
+
+const castColumnIfAtRisk = (
+	column: {
+		readonly alias: string;
+		readonly resultKey?: string;
+		readonly expr: ExprNode;
+	},
+	inputValue: unknown,
+): {
+	readonly alias: string;
+	readonly resultKey?: string;
+	readonly expr: ExprNode;
+} => {
+	if (column.expr.nodeKind !== "columnRef") {
+		return column;
+	}
+	const typeNode = (inputValue as { readonly typeNode?: TypeNode } | undefined)
+		?.typeNode;
+	if (typeNode === undefined) {
+		return column;
+	}
+	const suffix = jsonSafeCastSuffix(typeNode);
+	if (suffix === null) {
+		return column;
+	}
+	return { ...column, expr: castExprNode(column.expr, suffix) };
+};
+
+/**
+ * Bakes the D102 cast+revive casts into an embedded subselect's
+ * projection AT BUILD TIME — the node itself carries the casts, so the
+ * compiled SQL, the snapshot codec round-trip, and rename retargeting
+ * all see the same statement (a render-time cast could not: the stored
+ * node has no column types). Only direct column refs are cast — a
+ * computed expression's JSON shape is its author's own contract. The
+ * types come from the chain's own `projectionInput` (the built refs
+ * carry their `typeNode`); a whole-`Table` subselect keeps its bare
+ * `allColumns` projection uncast — nest an object projection (or the
+ * `related()` sugar, which always builds one) for at-risk columns.
+ */
+const withJsonSafeCasts = (
+	query: SelectNode,
+	projectionInput: SelectProjection,
+): SelectNode => {
+	if (
+		query.projection.projectionKind !== "columns" ||
+		isTable(projectionInput)
+	) {
+		return query;
+	}
+	const originalColumns = query.projection.columns;
+	const columns = originalColumns.map((column) =>
+		castColumnIfAtRisk(
+			column,
+			inputValueFor(projectionInput, column.resultKey),
+		),
+	);
+	const anyCast = columns.some(
+		(column, index) => column !== originalColumns[index],
+	);
+	if (!anyCast) {
+		return query;
+	}
+	return { ...query, projection: { ...query.projection, columns } };
+};
+
+const buildSelectExpr =
+	(mode: "jsonArray" | "jsonObject") =>
+	<TProjection extends SelectProjection>(
+		subselect: SelectLimited<TProjection>,
+	): Expr<"json"> =>
+		expr("json", {
+			nodeKind: "selectExpr",
+			mode,
+			query: withJsonSafeCasts(
+				subselect.selectQuery,
+				subselect.projectionInput,
+			),
+		});
+
+/** Wraps a subselect into a projection expression compiling to a correlated `coalesce((select json_agg("agg") from (…) as "agg"), '[]'::json)` — the nested-collection primitive (D102). The subselect's `where`/`orderBy`/`limit` and its own nested reads carry through; empty arrives as `[]`, never SQL null. */
+export const jsonArrayFrom = buildSelectExpr("jsonArray");
+/** Wraps a subselect into a correlated `(select row_to_json("agg") from (…) as "agg")` — the single-nested-row primitive (D102). No row arrives as SQL null; more than one row is Postgres's own loud error (add `limit 1` with an order for a deterministic pick). */
+export const jsonObjectFrom = buildSelectExpr("jsonObject");
 
 const buildExists =
 	(negated: boolean) =>

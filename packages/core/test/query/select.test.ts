@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
 	and,
+	bigint,
 	eq,
 	exists,
 	isNotNull,
+	jsonArrayFrom,
+	jsonObjectFrom,
 	renderExpr,
 	renderSelect,
 	schema,
@@ -86,6 +89,98 @@ describe("select builder", () => {
 		const query = select(posts).where(isNotNull(comments.postId));
 		expect(() => renderSelect(query.selectQuery)).toThrowError(
 			/foreign-column-ref|join that table/,
+		);
+	});
+});
+
+describe("jsonArrayFrom/jsonObjectFrom wrap a subselect into an expression (add-relational-reads task 2.1)", () => {
+	it("wraps the subselect as a select-as-expression node, projection intact", () => {
+		const sub = select(
+			{ id: comments.id, postId: comments.postId },
+			comments,
+		).where(eq(comments.postId, posts.id));
+
+		const collection = jsonArrayFrom(sub);
+		expect(collection.family).toBe("json");
+		expect(collection.exprNode.nodeKind).toBe("selectExpr");
+		const collectionNode = collection.exprNode as {
+			mode: string;
+			query: { projection: { projectionKind: string } };
+		};
+		expect(collectionNode.mode).toBe("jsonArray");
+		// unlike exists(), the projection is the point -- it must survive
+		// exactly as built, never rewritten to constantOne.
+		expect(collectionNode.query).toBe(sub.selectQuery);
+		expect(collectionNode.query.projection.projectionKind).not.toBe(
+			"constantOne",
+		);
+
+		const single = jsonObjectFrom(sub);
+		expect((single.exprNode as { mode: string }).mode).toBe("jsonObject");
+	});
+});
+
+describe("select-as-expression rendering (add-relational-reads task 2.2)", () => {
+	const metrics = table(app, "metrics", {
+		id: uuid().primaryKey(),
+		postId: uuid().notNull(),
+		viewCount: bigint().notNull(),
+		recordedAt: timestamptz().notNull(),
+	});
+
+	it("renders a collection as a correlated aggregate over a derived table", () => {
+		const query = select(
+			{
+				id: posts.id,
+				comments: jsonArrayFrom(
+					select({ id: comments.id, postId: comments.postId }, comments)
+						.where(eq(comments.postId, posts.id))
+						.orderBy(comments.id),
+				),
+			},
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "app"."posts"."id" as "id", (select coalesce(json_agg("agg"), \'[]\'::json) from (select "app"."comments"."id" as "id", "app"."comments"."post_id" as "post_id" from "app"."comments" where "app"."comments"."post_id" = "app"."posts"."id" order by "app"."comments"."id" asc) as "agg") as "comments" from "app"."posts"',
+		);
+	});
+
+	it("renders a single row via row_to_json and casts at-risk columns to text", () => {
+		const query = select(
+			{
+				id: posts.id,
+				latest: jsonObjectFrom(
+					select(
+						{ viewCount: metrics.viewCount, recordedAt: metrics.recordedAt },
+						metrics,
+					)
+						.where(eq(metrics.postId, posts.id))
+						.orderBy({ by: metrics.recordedAt, direction: "desc" })
+						.limit(1),
+				),
+			},
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "app"."posts"."id" as "id", (select row_to_json("agg") from (select "app"."metrics"."view_count"::text as "view_count", "app"."metrics"."recorded_at"::text as "recorded_at" from "app"."metrics" where "app"."metrics"."post_id" = "app"."posts"."id" order by "app"."metrics"."recorded_at" desc limit 1) as "agg") as "latest" from "app"."posts"',
+		);
+	});
+
+	it("keeps the foreign-column diagnostic for a ref outside every scope (task 2.4)", () => {
+		const others = table(app, "others", { id: uuid().primaryKey() });
+		const query = select(
+			{
+				id: posts.id,
+				bad: jsonArrayFrom(
+					select({ id: comments.id }, comments).where(
+						eq(comments.postId, others.id),
+					),
+				),
+			},
+			posts,
+		);
+		expect(() => renderSelect(query.selectQuery)).toThrowError(
+			/foreign-column-ref|enclosing query/,
 		);
 	});
 });

@@ -4,6 +4,7 @@ import type {
 	ExprNode,
 	FunctionCallNode,
 	PolicyDeclaration,
+	SelectExprNode,
 	SelectNode,
 	Validator,
 } from "@hejbro/core";
@@ -77,6 +78,25 @@ const childrenOfExists = (node: ExistsNode): ReadonlyArray<ExprNode> => [
 	...node.query.orderBy.map((term) => term.expr),
 ];
 
+/** A nested read's children — unlike `exists()`, its projection carries real expressions (never `constantOne`), and an uncached `auth.uid()` inside one is exactly as costly, so the projection is walked too. */
+const projectionExprsOf = (
+	query: SelectExprNode["query"],
+): ReadonlyArray<ExprNode> => {
+	if (query.projection.projectionKind !== "columns") {
+		return [];
+	}
+	return query.projection.columns.map((column) => column.expr);
+};
+
+const childrenOfSelectExpr = (
+	node: SelectExprNode,
+): ReadonlyArray<ExprNode> => [
+	...projectionExprsOf(node.query),
+	...whereClauseOf(node.query),
+	...node.query.joins.map((join) => join.on),
+	...node.query.orderBy.map((term) => term.expr),
+];
+
 /**
  * One handler per {@link ExprNode} `nodeKind`, receiving the node narrowed
  * to that exact variant — same technique core's own `someExprNodeHandlers`
@@ -114,6 +134,7 @@ const childrenOfHandlers: ChildrenOfHandlers = {
 			.filter((chunk) => chunk.chunkKind === "expr")
 			.map((chunk) => chunk.expr),
 	exists: childrenOfExists,
+	selectExpr: childrenOfSelectExpr,
 };
 
 /**

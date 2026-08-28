@@ -6,6 +6,14 @@ import {
 	NODE_KIND_TO_SNAPSHOT,
 	PROJECTION_KIND_TO_SNAPSHOT,
 } from "../../src/expr/codec";
+import {
+	eq,
+	jsonArrayFrom,
+	schema,
+	select,
+	table,
+	uuid,
+} from "../../src/index";
 
 const KEBAB_CASE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -456,5 +464,34 @@ describe("expr codec — round-trip", () => {
 		expect(() => decodeExprNode(malformed)).toThrowError(
 			expect.objectContaining({ code: "malformed-snapshot-node" }),
 		);
+	});
+});
+
+describe("select-as-expression codec round-trip (add-relational-reads task 2.3)", () => {
+	it("the node survives encode/decode with kebab discriminators", () => {
+		const app = schema("app");
+		const comments = table(app, "comments", {
+			id: uuid().primaryKey(),
+			postId: uuid().notNull(),
+		});
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const node = jsonArrayFrom(
+			select({ id: comments.id }, comments).where(
+				eq(comments.postId, posts.id),
+			),
+		).exprNode;
+		const encoded = encodeExprNode(node);
+		expect(JSON.stringify(encoded)).toContain('"select-expr"');
+		expect(JSON.stringify(encoded)).toContain('"json-array"');
+		// `resultKey` is TS-side only and documented absent on a decoded
+		// node (the ProjectionNode contract) -- compare modulo that field.
+		const dropResultKey = (key: string, value: unknown): unknown => {
+			if (key === "resultKey") {
+				return undefined;
+			}
+			return value;
+		};
+		const withoutResultKeys = JSON.parse(JSON.stringify(node, dropResultKey));
+		expect(decodeExprNode(encoded as never)).toEqual(withoutResultKeys);
 	});
 });
