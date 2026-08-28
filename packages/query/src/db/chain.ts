@@ -428,7 +428,16 @@ const makeRelatedChain = <TRow>(
 });
 
 /** The `related()` member a whole-`Table` select chain gains — see {@link SelectChainRelated}. */
-export type RelatedCapable<TSchema, TTable extends Table> = {
+export type RelatedCapable<TSchema, TTable extends Table> = [
+	RelationKeysOf<TSchema, TTable>,
+] extends [never]
+	? // a table with no derivable relations has no `.related` AT ALL (the
+		// spec's last clause, closed at group 3 delta review R2) — absence
+		// beats a callable that could only ever take `{}`.
+		unknown
+	: RelatedCapableMembers<TSchema, TTable>;
+
+type RelatedCapableMembers<TSchema, TTable extends Table> = {
 	related<TSpec extends RelatedSpec<TSchema, TTable>>(
 		// The intersection forces every key OUTSIDE the derivable set to
 		// `never`, so a misspelled key fails to type-check even when mixed

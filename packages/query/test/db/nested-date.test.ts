@@ -3,6 +3,9 @@
 // negative-offset zone where the wrong parse lands on the PREVIOUS day.
 process.env.TZ = "America/New_York";
 
+// ⚠ process.env.TZ is PROCESS-GLOBAL and leaks into files sharing this
+// worker — any future TZ-sensitive test must pin its own TZ the same way.
+
 import { date as dateColumn, schema, table, uuid } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { db } from "../../src/db/db";

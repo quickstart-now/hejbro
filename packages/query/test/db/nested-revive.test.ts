@@ -1,6 +1,7 @@
 import {
 	bigint,
 	bytea,
+	date as dateColumn,
 	eq,
 	interval,
 	jsonArrayFrom,
@@ -195,6 +196,47 @@ describe("nested revive edges (crap-coverage: null cells, failures, uncast passt
 			db({ app, posts, comments, metrics2 }, bad.driver)
 				.select(posts)
 				.related({ metrics2: true }),
+		).rejects.toMatchObject({ code: "result-conversion-failed" });
+	});
+
+	it("malformed nested date and datetime values fail loudly too (R1)", async () => {
+		const stamps = table(app, "stamps", {
+			id: uuid().primaryKey(),
+			postId: uuid()
+				.notNull()
+				.references(() => posts.id),
+			day: dateColumn(),
+			at: timestamptz(),
+		});
+		const buildRow = (patch: Record<string, unknown>) => ({
+			id: "0b0e5b3e-0000-4000-8000-000000000001",
+			title: "hello",
+			stamps: [
+				{
+					id: "0b0e5b3e-0000-4000-8000-000000000008",
+					// biome-ignore lint/style/useNamingConvention: models the real json child key (the derived table snake alias).
+					post_id: "0b0e5b3e-0000-4000-8000-000000000001",
+					day: "2026-08-28",
+					at: "2026-08-28T09:00:00+00:00",
+					...patch,
+				},
+			],
+		});
+		const badDay = recordingTransactionalDriver({
+			rows: [buildRow({ day: "not-a-date" })],
+		});
+		await expect(
+			db({ app, posts, comments, stamps }, badDay.driver)
+				.select(posts)
+				.related({ stamps: true }),
+		).rejects.toMatchObject({ code: "result-conversion-failed" });
+		const badAt = recordingTransactionalDriver({
+			rows: [buildRow({ at: "not-a-datetime" })],
+		});
+		await expect(
+			db({ app, posts, comments, stamps }, badAt.driver)
+				.select(posts)
+				.related({ stamps: true }),
 		).rejects.toMatchObject({ code: "result-conversion-failed" });
 	});
 
