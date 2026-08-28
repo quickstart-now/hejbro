@@ -1155,6 +1155,9 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		const topRows = await handle
 			.select(relComments)
 			.where(eq(relComments.id, "cccccccc-0000-4000-8000-000000000001"));
+		// instanceOf first: without it the same-instant assertion passes
+		// VACUOUSLY when neither side arrived at all (review N1).
+		expect(first?.postedOn).toBeInstanceOf(Date);
 		expect(first?.postedOn?.getTime()).toBe(topRows[0]?.postedOn?.getTime());
 
 		// --- scoped read: nested rows obey the context's policy --------
