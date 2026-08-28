@@ -75,7 +75,7 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 4. Real-server witness — after groups 1–3
 
-- [ ] 4.1 (~8m) Docker PG17: union/unionAll/except live — converted
+- [x] 4.1 (~8m) Docker PG17: union/unionAll/except live — converted
       arrivals (bigint/interval per the left branch), dedup vs `all`
       row counts, whole-set order/limit, and one RLS-scoped set-op
       (one statement under the context). Red: extend

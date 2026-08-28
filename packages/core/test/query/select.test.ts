@@ -274,7 +274,7 @@ describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
 			limit: 3,
 		};
 		expect(renderSetOp(outer)).toBe(
-			'(select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union all select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\') except select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."id" asc limit 3',
+			'(select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union all select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\') except select "id", "status", "published_at" from "app"."posts" order by "id" asc limit 3',
 		);
 	});
 
@@ -313,7 +313,7 @@ describe("set-op combinators (add-set-operations task 2.1)", () => {
 			.limit(2);
 		expect(ordered.setOpQuery.limit).toBe(2);
 		expect(renderSetOp(ordered.setOpQuery)).toContain(
-			'order by "app"."posts"."id" desc limit 2',
+			'order by "id" desc limit 2',
 		);
 
 		// all six exist

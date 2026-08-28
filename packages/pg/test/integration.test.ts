@@ -1175,4 +1175,143 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// grants, never a second unscoped query.
 		expect(scopedCounts).toEqual([5n, 7n]);
 	});
+	it("set operations (add-set-operations, group 4/task 4.1): union/unionAll/except live, converted arrivals, and one rls-scoped set-op", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.so_a (
+				id uuid primary key,
+				label text not null,
+				amount bigint not null,
+				spent interval not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: `create table g5_integration.so_b (
+				id uuid primary key,
+				label text not null,
+				amount bigint not null,
+				spent interval not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const soA = table(testSchema, "so_a", {
+			id: uuid().primaryKey(),
+			label: text().notNull(),
+			amount: bigint().notNull(),
+			spent: interval().notNull(),
+		});
+		const soB = table(testSchema, "so_b", {
+			id: uuid().primaryKey(),
+			label: text().notNull(),
+			amount: bigint().notNull(),
+			spent: interval().notNull(),
+		});
+		const handle = db({ soA, soB }, driver);
+		const spent = {
+			years: 0,
+			months: 0,
+			days: 1,
+			hours: 2,
+			minutes: 0,
+			seconds: 0,
+			microseconds: 0,
+		};
+		const big = 9007199254740993n;
+		await handle.insert(soA).values([
+			{
+				id: "dddddddd-0000-4000-8000-000000000001",
+				label: "both",
+				amount: big,
+				spent,
+			},
+			{
+				id: "dddddddd-0000-4000-8000-000000000002",
+				label: "only_a",
+				amount: 1n,
+				spent,
+			},
+		]);
+		await handle.insert(soB).values([
+			// same VALUES as so_a's first row (id differs -- dedup is by the
+			// whole row, so these two do NOT collapse; label+amount+spent do)
+			{
+				id: "dddddddd-0000-4000-8000-000000000003",
+				label: "both",
+				amount: big,
+				spent,
+			},
+			{
+				id: "dddddddd-0000-4000-8000-000000000004",
+				label: "only_b",
+				amount: 2n,
+				spent,
+			},
+		]);
+
+		// distinct-vs-all row counts over a shared-shape projection
+		const shared = (t: typeof soA) =>
+			handle.select({ label: t.label, amount: t.amount, spent: t.spent }, t);
+		const distinctRows = await shared(soA).union(shared(soB));
+		const allRows = await shared(soA).unionAll(shared(soB));
+		expect(allRows).toHaveLength(4);
+		expect(distinctRows).toHaveLength(3);
+
+		// converted arrivals through the set-op (left-branch plan): bigint
+		// stays bigint past 2^53, interval arrives structured
+		const bigRow = distinctRows.find((row) => row.label === "both");
+		expect(bigRow?.amount).toBe(big);
+		expect(bigRow?.spent).toMatchObject({ days: 1, hours: 2 });
+
+		// except + whole-set order/limit
+		const onlyA = await shared(soA)
+			.except(shared(soB))
+			.orderBy(soA.label)
+			.limit(5);
+		expect(onlyA).toHaveLength(1);
+		expect(onlyA[0]?.label).toBe("only_a");
+
+		// rls-scoped set-op: one statement under the context
+		await driver.execute({
+			sql: "create role so_viewer",
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: "grant usage on schema g5_integration to so_viewer; grant select on all tables in schema g5_integration to so_viewer",
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: 'alter table "g5_integration"."so_a" enable row level security',
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: `create policy so_viewer_read on "g5_integration"."so_a" for select to so_viewer using (label <> 'only_a')`,
+			params: [],
+			kind: "sql",
+		});
+		const scopedHandle = db({ soA, soB }, driver, {
+			roles: [roleName("so_viewer")],
+		});
+		const scoped = await scopedHandle
+			.as({ role: roleName("so_viewer") })
+			.select({ label: soA.label }, soA)
+			.unionAll(scopedHandle.select({ label: soB.label }, soB));
+		// so_a contributes only its policy-visible row ("both"); so_b (rls
+		// off) contributes both of its rows -- the policy filtered INSIDE
+		// the single set-op statement.
+		expect(scoped.map((row) => row.label).sort()).toEqual([
+			"both",
+			"both",
+			"only_b",
+		]);
+	});
 });
