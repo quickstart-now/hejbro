@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 7,
+	"formatVersion": 8,
 	"objects": {
 		"function:app.comments_enforce_single_depth": {
 			"args": [],
@@ -280,12 +280,14 @@
 				"negated": false,
 				"nodeKind": "exists",
 				"query": {
+					"distinct": null,
 					"from": {
 						"schema": "app",
 						"table": "projects"
 					},
 					"joins": [],
 					"limit": null,
+					"offset": null,
 					"orderBy": [],
 					"projection": {
 						"projectionKind": "constant-one"
@@ -1119,12 +1121,14 @@
 			],
 			"name": "open_tasks",
 			"query": {
+				"distinct": null,
 				"from": {
 					"schema": "app",
 					"table": "tasks"
 				},
 				"joins": [],
 				"limit": null,
+				"offset": null,
 				"orderBy": [],
 				"projection": {
 					"columns": [

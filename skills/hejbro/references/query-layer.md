@@ -57,7 +57,17 @@ const published = await handle
 	.select(posts)
 	.where(eq(posts.status, "published"))
 	.orderBy(posts.id)
-	.limit(10);
+	.limit(10)
+	.offset(20);
+
+// distinct comes first, where SQL puts it — between `select` and the
+// projection — so it is available on the first stage and exactly once.
+// `distinctOn` is Postgres's own: one row per group, and WHICH row is
+// decided by the order by, whose leading terms must be those columns.
+const latestPerStatus = await handle
+	.select(posts)
+	.distinctOn(posts.status)
+	.orderBy(posts.status, { by: posts.publishedAt, direction: "desc" });
 
 // .compile() is a pure preview — it never touches the driver, and the
 // chain itself sends nothing until it is actually awaited. What a driver
