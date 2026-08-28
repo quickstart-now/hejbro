@@ -55,19 +55,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sourceRoots } from "./source-roots.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const SOURCE_ROOTS = [
-	"packages/core/src",
-	"packages/cli/src",
-	"packages/supabase/src",
-	// #361: packages/query and packages/pg are published packages with
-	// user-facing error codes; omitting them made this gate a never-fires
-	// probe for exactly the packages the query layer added.
-	"packages/query/src",
-	"packages/pg/src",
-];
+// #372: derived from the workspace, never enumerated -- see
+// scripts/source-roots.mjs for why (the #361 class, killed at the root).
+const SOURCE_ROOTS = sourceRoots();
 
 const CODE = "[a-z][a-z0-9-]*";
 

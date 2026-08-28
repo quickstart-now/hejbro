@@ -89,6 +89,10 @@ again.
   `.claude/rules/supabase-preset.md`.
 - **All GitHub-facing text in English** (code, comments, docs, issues, PRs,
   commits).
+- **Comments state the constraint only.** A comment records what the code
+  cannot show (the "why", the invariant, the trap); measurement
+  narratives, derivations, and process history go to the PR body or
+  `blackbox/` (D89) — never multi-screen comment blocks.
 - TypeScript strict. Our own source: no `any`, no `let`/`var`, no
   `for`/`while`, no ternary. *Generated SQL output* and the *user-facing DSL
   design* are governed by the spec, not by these style rules.
@@ -177,6 +181,9 @@ lands its entry in the same commit or PR as the change.
 ## Before claiming done
 
 - [ ] `pnpm check`, `pnpm check-types`, `pnpm test` all pass — show output
+- [ ] Public API surface changed → `skills/hejbro` updated in the same PR
+      (the skill documents the surface; a stale skill is a broken user
+      contract, not a docs nit)
 - [ ] README CRAP block refreshed (`pnpm check:crap`)
 - [ ] OpenSpec change state current (`tasks.md` ticks; archive on
       completion; durations in `openspec/task-times.csv`)
