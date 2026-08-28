@@ -15,6 +15,7 @@ import type {
 	BuilderFamily,
 	ColumnBuilder,
 	ColumnState,
+	OriginBrand,
 } from "../types/column-builder";
 import type { CheckDeclaration } from "./check";
 import { check } from "./check";
@@ -135,7 +136,8 @@ export const tableMeta: unique symbol = Symbol.for("hejbro:table-meta");
 
 /** Maps a table's column builders to the typed {@link ColumnRef}s exposed at the top level of the built {@link Table}. */
 export type TableColumns<TColumns extends Record<string, ColumnBuilder>> = {
-	readonly [K in keyof TColumns]: ColumnRef<BuilderFamily<TColumns[K]>>;
+	readonly [K in keyof TColumns]: ColumnRef<BuilderFamily<TColumns[K]>> &
+		OriginBrand<TColumns, K>;
 };
 
 /** A drizzle-style table object (D15): columns as top-level typed refs, declaration metadata hidden behind {@link tableMeta}. */
