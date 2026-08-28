@@ -15,6 +15,7 @@ import {
 	parseSnapshot,
 	renderSnapshot,
 	requiredKeysByKind,
+	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { Diagnostic } from "../diagnostics";
@@ -343,10 +344,80 @@ const warningStderr = (
  * `previousCount` injected here, never inside core) and overwrite the
  * snapshot, printing a success block that mirrors the banner.
  */
+/**
+ * What this run is for. `"baseline"` is the brownfield adoption path
+ * (#385): the same pipeline, but it refuses to run over an existing chain,
+ * marks the emitted migration as already-applied, and reports the adoption
+ * steps instead of the usual one-liner. One pipeline, not a second copy —
+ * a baseline IS a first migration, and everything about how it is built,
+ * hashed and chained has to stay identical or `verify` would reject it.
+ */
+export type GenerateMode = "generate" | "baseline";
+
+/** Names what makes this project ineligible for a baseline, for the error's own message. */
+const baselineBlockerText = (
+	migrationCount: number,
+	migrationsDir: string,
+	previousSnapshotIsEmpty: boolean,
+): string => {
+	if (previousSnapshotIsEmpty) {
+		return `found ${migrationCount} migration(s) in "${migrationsDir}"`;
+	}
+	if (migrationCount === 0) {
+		return "the snapshot already records declared objects";
+	}
+	return `found ${migrationCount} migration(s) in "${migrationsDir}" and a snapshot that already records declared objects`;
+};
+
+/** `hejbro baseline` refuses unless the project is at its `init` state: a baseline IS a first migration, and there is nothing to baseline against a chain that already exists. */
+const assertBaselineIsFirst = (
+	migrationCount: number,
+	previousSnapshotIsEmpty: boolean,
+	migrationsDir: string,
+): void => {
+	if (migrationCount === 0 && previousSnapshotIsEmpty) {
+		return;
+	}
+	throwHejbroError(
+		"baseline-not-first",
+		`baseline only runs on a project with no migrations yet — ${baselineBlockerText(migrationCount, migrationsDir, previousSnapshotIsEmpty)}. Next: a baseline is the FIRST migration of a database hejbro is adopting. To record a change to an already-adopted project, run "hejbro generate" instead.`,
+	);
+};
+
+/**
+ * The report's opening lines. A baseline's differ because the next step
+ * differs and getting it wrong is expensive: running a baseline migration
+ * against the database it describes fails on the first `create`, and
+ * "already exists" is a confusing way to learn that the file was never
+ * meant to be run.
+ */
+const reportHead = (
+	mode: GenerateMode,
+	declarationCount: number,
+	migrationRelativePath: string,
+): ReadonlyArray<string> => {
+	if (mode === "baseline") {
+		return [
+			"hejbro baseline",
+			`loaded ${declarationCount} declarations`,
+			`wrote ${migrationRelativePath}`,
+			"",
+			"This migration describes objects your database already has.",
+			`Next: register ${migrationRelativePath} as APPLIED in your apply tool without running it, then confirm your declarations really match the live schema (a two-path pg_dump comparison is the check hejbro's own examples use). From here on, \`hejbro generate\` emits only what changes.`,
+		];
+	}
+	return [
+		"hejbro generate",
+		`loaded ${declarationCount} declarations`,
+		`wrote ${migrationRelativePath}`,
+	];
+};
+
 export const runGenerate = async (
 	cwd: string,
 	argv: ReadonlyArray<string>,
 	now: () => Date = () => new Date(),
+	mode: GenerateMode = "generate",
 ): Promise<GenerateResult> => {
 	// Normalized once, here, before anything else sees it: flag-value
 	// collection below and the rerun-command suggestion (buildDiagnostics
@@ -381,6 +452,13 @@ export const runGenerate = async (
 			);
 			const validators = configValidators(config);
 
+			if (mode === "baseline") {
+				assertBaselineIsFirst(
+					listMigrationFiles(join(cwd, config.migrationsDir)).length,
+					Object.keys(previousSnapshot.objects).length === 0,
+					config.migrationsDir,
+				);
+			}
 			const firstPass = generateMigration({
 				declarations,
 				previousSnapshot,
@@ -415,6 +493,7 @@ export const runGenerate = async (
 				confirmedDrops,
 				bannerHashes: { parent: parentHash, current: currentHash },
 				hejbroVersion: CLI_VERSION,
+				baseline: mode === "baseline",
 				registry,
 				validators,
 			});
@@ -440,9 +519,7 @@ export const runGenerate = async (
 			return {
 				exitCode: 0,
 				stdout: [
-					"hejbro generate",
-					`loaded ${declarations.length} declarations`,
-					`wrote ${migrationRelativePath}`,
+					...reportHead(mode, declarations.length, migrationRelativePath),
 					...warningSummaryLines(finalPass.warnings),
 					banner ?? "",
 				],
@@ -477,6 +554,31 @@ export const generateCommand = defineCommand({
 	args: GENERATE_ARGS,
 	run: async (ctx) => {
 		const result = await runGenerate(process.cwd(), ctx.rawArgs);
+		result.stdout.map((line) => console.log(line));
+		if (result.stderr !== null) {
+			console.error(result.stderr);
+		}
+		process.exitCode = result.exitCode;
+	},
+});
+
+const BASELINE_DESCRIPTION =
+	"Adopt an existing database: write the first migration as a baseline (already applied) plus its snapshot";
+
+/** The `hejbro baseline` citty subcommand — {@link runGenerate} in `"baseline"` mode (#385). */
+export const baselineCommand = defineCommand({
+	meta: {
+		name: "baseline",
+		description: BASELINE_DESCRIPTION,
+	},
+	args: GENERATE_ARGS,
+	run: async (ctx) => {
+		const result = await runGenerate(
+			process.cwd(),
+			ctx.rawArgs,
+			() => new Date(),
+			"baseline",
+		);
 		result.stdout.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);

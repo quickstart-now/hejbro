@@ -134,6 +134,8 @@ type GenerateMigrationOptions = {
 	readonly bannerHashes?: BannerHashes;
 	/** the banner's `-- hejbro: <version>` line (#229) — the CLI reads its own `package.json` for this string; core only receives it and renders it verbatim. */
 	readonly hejbroVersion?: string;
+	/** marks the emitted migration a brownfield baseline (#385): the objects it describes already exist, so it is registered as applied rather than run. Core only renders the marker; deciding when it is legal is the CLI's job. */
+	readonly baseline?: boolean;
 	/** preset-supplied pure checks run over the built snapshot + normalized declarations (D37); error severity joins `errors` and short-circuits like rename errors. */
 	readonly validators?: ReadonlyArray<Validator>;
 };
@@ -363,6 +365,7 @@ export const generateMigration = (
 			[...plan.renameChanges, ...changes],
 			options.bannerHashes,
 			options.hejbroVersion,
+			options.baseline,
 		),
 		...plan.renameStatements,
 		...predropStatements.map((entry) => entry.statement.sql),

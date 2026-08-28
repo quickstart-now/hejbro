@@ -176,6 +176,8 @@ export type BannerHashes = {
 	readonly current: string;
 };
 
+const BASELINE_LINE =
+	"-- baseline: these objects already exist — register this migration as applied, do not run it";
 const PARENT_SNAPSHOT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
 const VERSION_PREFIX = "-- hejbro: ";
@@ -196,14 +198,26 @@ const versionLines = (version: string | undefined): ReadonlyArray<string> => {
 	return [`${VERSION_PREFIX}${version}`];
 };
 
+/** The `-- baseline:` line, when this migration describes objects a brownfield database already has (#385). One line, directly under the version line, so it is the first thing anyone reading the file sees. */
+const baselineLines = (
+	baseline: boolean | undefined,
+): ReadonlyArray<string> => {
+	if (baseline !== true) {
+		return [];
+	}
+	return [BASELINE_LINE];
+};
+
 export const renderBanner = (
 	changes: ReadonlyArray<KindChange>,
 	hashes?: BannerHashes,
 	version?: string,
+	baseline?: boolean,
 ): string => {
 	const lines = [
 		"-- hejbro migration",
 		...versionLines(version),
+		...baselineLines(baseline),
 		...changes.map((change) => renderBannerLine(change)),
 	];
 	if (hashes === undefined) {
