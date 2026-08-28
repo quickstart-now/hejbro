@@ -9,16 +9,19 @@ fails loudly instead of silently.
 
 ## Requirements
 
-### Requirement: Snapshot format version 6 records the generated family
-Snapshot files SHALL carry `formatVersion: 6`. A column snapshot SHALL
+### Requirement: Snapshot format version 7 records the generated family and canonical foreign-key order
+Snapshot files SHALL carry `formatVersion: 7`. A column snapshot SHALL
 record a stored generated column's expression (as the encoded
 expression fragment) and an identity column's kind and any explicit
 sequence options, as optional fields absent on ordinary columns — the
-compact-snapshot convention. A hejbro that reads snapshots of an older
-format than its own SHALL regenerate them on the next generate without
-changing any migration file; a hejbro older than the snapshot it reads
-SHALL fail with the existing newer-format diagnostic rather than
-silently ignoring fields it does not know.
+compact-snapshot convention. A table snapshot's foreign keys SHALL be
+recorded in the canonical declaration-form-independent order (local
+columns, then target identity), so the bytes never depend on WHICH
+declaration form wrote an edge. A hejbro older than the snapshot it
+reads SHALL fail with the existing newer-format diagnostic; a hejbro
+newer than the snapshot it reads SHALL fail with the existing
+older-format diagnostic and its pin-or-reset guidance rather than
+silently ignoring or misreading fields.
 
 #### Scenario: The generated family survives a snapshot round-trip
 - **WHEN** a table declaring generated and identity columns is
@@ -26,8 +29,14 @@ silently ignoring fields it does not know.
 - **THEN** the diff against the unchanged declarations is empty — the
   expression text, identity kind, and explicit options all round-trip
 
-#### Scenario: An older reader refuses a version-6 snapshot loudly
-- **WHEN** a hejbro whose snapshot format is older than 6 reads a
-  version-6 snapshot
+#### Scenario: An older reader refuses a version-7 snapshot loudly
+- **WHEN** a hejbro whose snapshot format is older than 7 reads a
+  version-7 snapshot
 - **THEN** it fails with the newer-format diagnostic naming the
-  version mismatch, never a diff computed with the new fields ignored
+  version mismatch, never a diff computed with the new ordering
+  assumed
+
+#### Scenario: A version-6 snapshot is refused as older, loudly
+- **WHEN** this build reads a version-6 snapshot
+- **THEN** it fails with the older-format diagnostic and its
+  pin-or-reset guidance, never a mis-diff over the uncanonical order
