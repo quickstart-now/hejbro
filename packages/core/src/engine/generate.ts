@@ -73,6 +73,10 @@ const synthesizeSequenceDeclarations = (
 	});
 
 /** {@link resolveDeclarations}'s table case — the table itself, its synthesized sequences, and (if declared) its RLS block and policies. Takes the DECLARATION, not the `Table`, so both supported input forms route through the same expansion (#408: a raw `TableDeclaration` used to skip it, silently dropping rls/policies/sequences and the existing-table guard). */
+/** A raw table declaration (never a built `Table` — the `!isTable` leg keeps this predicate sound on its own, independent of `resolveDeclarations`'s branch order). */
+const isTableDeclaration = (input: HejbroInput): input is TableDeclaration =>
+	!isTable(input) && input.declarationKind === "table";
+
 const resolveTableDeclarations = (
 	meta: TableDeclaration,
 ): ReadonlyArray<HejbroDeclaration> => {
@@ -100,9 +104,6 @@ const resolveTableDeclarations = (
  * `serial`-family columns similarly expands into one `SequenceDeclaration`
  * per such column (#23/D66) — see {@link resolveTableDeclarations}.
  */
-const isTableDeclaration = (input: HejbroInput): input is TableDeclaration =>
-	!isTable(input) && input.declarationKind === "table";
-
 const resolveDeclarations = (
 	input: HejbroInput,
 ): ReadonlyArray<HejbroDeclaration> => {

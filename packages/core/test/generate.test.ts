@@ -789,16 +789,20 @@ describe("raw table declarations expand like whole tables (#408)", () => {
 		const viaTable = generateMigration({
 			declarations: [app, guarded],
 			previousSnapshot: emptySnapshot,
-		}).sql;
+		});
 		const viaMeta = generateMigration({
 			declarations: [app, getTableMeta(guarded)],
 			previousSnapshot: emptySnapshot,
-		}).sql;
+		});
 		// the two supported input forms must be EQUIVALENT -- before #408
 		// the raw declaration silently dropped rls/policies/sequences.
-		expect(viaMeta).toBe(viaTable);
-		expect(viaMeta).toContain("enable row level security");
-		expect(viaMeta).toContain('create policy "read_low"');
+		expect(viaMeta.sql).toBe(viaTable.sql);
+		expect(JSON.stringify(viaMeta.snapshot)).toBe(
+			JSON.stringify(viaTable.snapshot),
+		);
+		expect(viaMeta.warnings).toEqual(viaTable.warnings);
+		expect(viaMeta.sql).toContain("enable row level security");
+		expect(viaMeta.sql).toContain('create policy "read_low"');
 	});
 
 	it("an existingTable meta is rejected through the raw path too", () => {
