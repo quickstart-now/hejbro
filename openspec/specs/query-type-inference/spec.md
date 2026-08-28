@@ -163,7 +163,9 @@ TypeScript type, and a `T` that is not SHALL fail to type-check rather
 than silently taking effect. A `json`/`jsonb` column SHALL surface as
 `unknown` in query types unless the declaration opts in to a `$type`
 brand, in which case the branded TypeScript type SHALL flow through
-results and inputs unchanged.
+result types unchanged. The write side is not widened by the brand: a
+`json`/`jsonb` column, branded or not, accepts only an `Expr` (see the
+insert/update input-types requirement).
 
 #### Scenario: Opt-in brand flows through
 - **WHEN** a `jsonb` column declares a `$type` brand and is projected
