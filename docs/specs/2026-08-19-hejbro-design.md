@@ -45,6 +45,153 @@ Every decision below was made explicitly by the project owner during design.
 Do not silently revisit them; if implementation reveals a blocker, surface it
 and ask.
 
+### Index (non-normative)
+
+Hand-maintained. The full rows below stay the truth; a status here
+reflects only what the rows themselves record. `retired` marks a number
+that no longer has a row (D82/D83 arrived with the spec-kit adoption,
+#285, and left with its revert, #292).
+
+| # | One line | Status |
+|---|----------|--------|
+| D1 | Standalone tool, not a Drizzle companion/wrapper | active |
+| D2 | Function bodies: pure TS DSL compiled to plpgsql | active |
+| D3 | v1 ships both the compiler and the schema/diff engine | active |
+| D4 | Compile mechanism: builder DSL with execution tracing | active |
+| D5 | Generic Postgres core + provider presets | active |
+| D6 | Snapshot-based diff, no DB connection | active |
+| D7 | v1 object scope: the full set (RLS, views, grants, preset objects) | active |
+| D8 | Repo: `quickstart-now/hejbro` | active |
+| D9 | License: MIT | active |
+| D10 | Name: hejbro | active |
+| D11 | "AI native" = the development process; user skills ship as a feature | active |
+| D12 | Applying migrations is out of scope for v1 | active |
+| D13 | tsdown, ESM-only output, Node >= 22 | amended 2026-08-19 |
+| D14 | Supabase-style timestamp migration filenames, configurable prefix | active |
+| D15 | `table()` returns a drizzle-style object, metadata behind a symbol | active |
+| D16 | `ColumnDefault` replaced by the expression AST; snapshot v2 | active |
+| D17 | Expressions carry a phantom type by Postgres type family | active |
+| D18 | `sql` renders interpolated non-expression values as quoted literals | active |
+| D19 | Phase 2 query-builder scope: expanded standard-clause set | active |
+| D20 | `plpgsqlRef` node under a dual quoting policy | active |
+| D21 | Row reads declare one scalar local per projected column | active |
+| D22 | Determinism guard runs the body twice, compares structurally | active |
+| D23 | Functions `create or replace` only on an identical structured signature | active |
+| D24 | Function snapshots store `bodySql` alongside `bodyHash` | active |
+| D25 | RLS modeled as two object kinds: `rls` and `policy` | active |
+| D26 | Policy DSL is a type-state chain | active |
+| D27 | `defineView` with neutral `securityInvoker`; snapshot stores SQL + columns | active |
+| D28 | Grant identity = (schema, grantKind, role), three grantKinds | active |
+| D29 | Declaration/config loader = jiti only | active |
+| D30 | `defineConfig()` + zod validation (CLI-only dependency) | reopened by D55 |
+| D31 | CLI framework = citty | active |
+| D32 | Renames resolved non-interactively via `--rename` flags | active |
+| D33 | Single committed snapshot file; banners carry the chain | amended by D67 |
+| D34 | Consistency command is `hejbro verify` (`check` stays reserved) | active |
+| D35 | `hejbro init` scaffolds exactly three artifacts | active |
+| D36 | Final SQL names validated at declaration time | active |
+| D37 | Preset validation channel: `validators` array + `warnings` result | active |
+| D38 | Reserved-schema protection is a hard error | active |
+| D39 | View/security-invoker warning judges from original declarations | active |
+| D40 | Exposed-table-without-RLS warning gated on anon/authenticated grants | active |
+| D41 | `existingTable()` is a core primitive | active |
+| D42 | Storage buckets: the first row-data object kind | active |
+| D43 | Branded `Role` type + `roleName()` | active |
+| D44 | Phase 6 acceptance = reduced example ported from production | active |
+| D45 | `authUid()` renders plain `auth.uid()`, no initPlan wrapping | active |
+| D46 | Table-kind completeness absorbed into Phase 7 | active |
+| D47 | Phase 7 sub-issue triage | active |
+| D48 | Round-trip = two-path dump comparison | active |
+| D49 | The round-trip runs locally via Docker, not in CI | active |
+| D50 | CHECK constraints via `checks: [check(name, expr)]` | active |
+| D51 | Partial indexes, index ordering, FK `on update`; snapshot v3 | active |
+| D52 | Self-referencing FKs use the callback's own column refs | active |
+| D53 | Examples named by database, generic content | active |
+| D54 | `@hejbro/skills` ships as a repo-distributed agent skill | active |
+| D55 | D30 reopened: config `presets` field, pure `Preset` data type | active |
+| D56 | README is the landing page; docs live as markdown | active |
+| D57 | Naming unification: snapshot vocabulary, kebab artifact tokens | active |
+| D58 | `engines: node >=22.18.0` + CI Node 22 matrix | active |
+| D59 | Changesets; fixed lockstep group; one changeset per PR | active |
+| D60 | First published version 0.1.0; no pre-1.0 stability document | active |
+| D61 | Phase 8 ships the maximum set before publishing | active |
+| D62 | `@hejbro/skills` gets no npm channel; `private: true` | active |
+| D63 | Publishing is automated from GitHub Actions | active |
+| D64 | GitHub Pages docs site out of Phase 8 | active |
+| D65 | 0.1.0 is not a deadline; the format goes where it belongs first | active |
+| D66 | `serial` modeled properly as a `sequence` object kind | active |
+| D67 | Expressions stored as structured snapshot nodes (amends D33) | active |
+| D68 | Snapshot v5: structured expressions + PK/unique names | active |
+| D69 | Supabase preset verified against the real image before publishing | active |
+| D70 | Expression nodes serialize by D57's rules (discriminator rule) | active |
+| D71 | CRAP gate wired at 10, ratcheted to 5, pre-0.1.0 | active |
+| D72 | View queries stored as structured `SelectNode` | active |
+| D73 | `formatVersion` tracks field shape, not vocabulary | active |
+| D74 | `ObjectKind.emit` receives the diff's sibling changes | active |
+| D75 | Dependent kinds drop bare on alter/drop; `if exists` on create only | active |
+| D76 | Clause context stays out of core's extension interface | active |
+| D77 | Migration banner gains an optional `-- hejbro: <version>` line | active |
+| D78 | `ObjectKind.emit` also receives the full next snapshot | active |
+| D79 | `ObjectKind.requiredKeys`; `parseSnapshot` second argument | active |
+| D80 | Post-release stabilization is dogfood-driven, dogfood external | active |
+| D81 | Snapshot column order is the table's physical order | active |
+| D82 | (number retired) spec-kit adoption row, removed with the #292 revert | retired |
+| D83 | (number retired) spec-kit adoption row, removed with the #292 revert | retired |
+| D84 | Index-completeness fields are additive compact; version stays 5 | active |
+| D85 | Access methods are a closed list; unknown fails at declaration | active |
+| D86 | Expression indexes require an explicit name | active |
+| D87 | OpenSpec is the spec layer; truth lives in three layers | active |
+| D88 | Task and team discipline for OpenSpec changes | active |
+| D89 | Blackbox provenance records live at the repository root | active |
+| D90 | Agent tooling configuration by fit-test | active |
+| D91 | hejbro extends into a Postgres/serverless TS ORM as one product | active |
+| D92 | Query surface: SQL-transparent query builder | active |
+| D93 | Differentiators first; minimal CRUD core; typed `sql` escape hatch | active |
+| D94 | One shared query vocabulary; statement nodes stay in core | amended 2026-08-26 |
+| D95 | Execution via a capability-declaring driver contract | active |
+| D96 | RLS execution context: generic mechanism in `@hejbro/query` | active |
+| D97 | Query types by type-level inference; no code generation | active |
+| D98 | v1 cut (A) for `@hejbro/query` | active |
+| D99 | Array element honesty + `notNullElements` CHECK | amended at add-array-ergonomics close |
+| D100 | Generated-family trio with options; snapshot v6 | amended at add-generated-columns group 2 close |
+| D101 | Snapshot format stability policy (pre-1.0) | active |
+
+### Currently-effective invariants (non-normative summary)
+
+The standing rules a session most often needs, each owned by its row:
+
+- Declarations are the single source of truth; the diff is
+  snapshot-based and never reads a live database (D6); applying
+  migrations belongs to the user's pipeline (D12).
+- One committed snapshot file; migration banners carry the chain
+  (D33, amended by D67); snapshot column order is physical order (D81).
+- `formatVersion` tracks field shape only — new kinds never bump it
+  (D73); pre-1.0 bumps follow D101's two standing guarantees.
+- Interpolated non-expression values always render as quoted literals
+  (D18); serialized discriminators are kebab-case (D57, D70).
+- There is one statement IR: core owns `ExprNode`/`QueryNode`;
+  `@hejbro/query` owns compilation, inference, and execution
+  (D94, D95); query types are inferred, never generated (D97).
+- Renames are non-interactive `--rename` flags (D32), retargeted
+  structurally through snapshot expression nodes (D67).
+- Published packages version in lockstep via Changesets (D59) on a
+  Node >= 22.18 floor (D58); releases run from GitHub Actions behind
+  the owner's merge (D63).
+- From Phase 10 on, truth lives in three layers and the change
+  directory is the plan of record (D87).
+
+### Row conventions (prospective)
+
+A new row records the decision, the alternatives, and the rationale's
+essentials — enough to stop a future session from re-litigating it.
+Long narratives (measurement logs, derivations, process history) go to
+the PR body or `blackbox/` (D89) and are linked from the row, not
+inlined. When a later decision amends or reopens an earlier one, the
+earlier row gains the marker in place and this index's status column
+follows it.
+
+### The log
+
 | # | Decision | Alternatives considered | Rationale |
 |---|----------|------------------------|-----------|
 | D1 | **Standalone tool**, not a Drizzle companion/wrapper | Drizzle companion (manage only "the rest"); drizzle-kit wrapper | Full freedom over the declaration model; no coupling to drizzle-kit internals |
@@ -134,7 +281,8 @@ and ask.
 | D87 | **OpenSpec is the spec layer from Phase 10 on, and truth lives in three layers**: `openspec/specs/` = what the product does now (scenario prose, the test suite's pair; never written retroactively — a capability gets its spec when a change first touches it, so the directory grows from empty); this decision log = why it is that way (owner-gated, stays outside `openspec/`); `openspec/changes/` + `changes/archive/` = what is moving and what moved — the changes directory is the frontier and the plan of record, replacing the roadmap document removed with the Spec Kit revert (#292). A change is opened only for work that alters an externally observable contract (public API surface, generated SQL, file or wire formats, CLI output or error text, documented behavior); a bug fix restoring already-specified behavior and internal refactors follow the plain cycle without a proposal. The pilot change is the ORM-direction spec (#293) (decided 2026-08-26, post-revert process session; owner-approved) | keep GitHub Spec Kit (adopted at `85f3600`, reverted in full by #292 — D82/D83 permanently retired); no spec layer at all (plan documents as the record); write specs for every existing capability at adoption | The owner's direction after the Spec Kit pilot was one fused cycle, not two parallel process systems (a "what" layer beside the superpowers "how" layer); fusing on top of Spec Kit's fixed artifact set proved heavier than adopting OpenSpec, whose minimal skeleton (propose → approve → implement → archive) absorbs the house TDD and decision practices instead of competing with them. With no spec layer, behavior truth lives only in the test suite and each session re-derives intent; specs written retroactively would be derived from code, inverting the direction of authority |
 | D88 | **Task and team discipline for OpenSpec changes**: `tasks.md` top-level groups are parallel-safe slices with no file overlap; a task carries its estimate in pure work minutes on the task line (over 10 → split; 5 or under → merged into a neighbor), names the failing test it starts from (test file + case name), and tasks that settle a contract detail (a signature, an error shape, key order, an output format, SQL text) are marked `[design]` and get their open decisions settled with the owner before code; verification ("run the suite", "confirm unchanged") is the definition of done, never a task; a running task that overruns is never stopped or re-split — overruns correct the next estimate through `openspec/task-times.csv` (`date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes`). Per-piece token usage lands in `openspec/task-tokens.csv` (`date,change-id,group,role_sessions,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,notes`), one row per completed group, summed from the piece team's session transcripts — exact because a piece is one session per role; lead-session work is interleaved and stays out of the token ledger (amended 2026-08-26, owner-directed: efficiency is recorded alongside time; the exclusion of owner-decision wait time stays structural via `waited_user_min`). Ledger discipline (amended 2026-08-26, owner-directed, after the first two pieces): `actual_min` is pure processing time only — agent idle, review round-trips, message crossings, and owner-decision waits are all excluded (the last via its own column; the rest at most a note); process costs (a decision arriving mid-implementation, a discipline lapse) get their own named rows next to the task rows, never folded in — summed they read "the estimate was right", separated they read "the tasks were fast and the process was expensive", and only the second is actionable; and both shared ledgers plus the README metric block are written only by the lead's close-out commit at PR time, from team-reported figures — one writer, so piece branches can never conflict on them. Implementation teams are piece-scoped — one `tasks.md` group per team — and stateless: all coordination state lives in files (checkboxes, commits, the change directory), so any team can be dissolved and a fresh session resumes from the files with zero loss (decided 2026-08-26; owner-approved) | a flat task list sized by feel; a "Tests" group after the implementation groups; verification checklist items; a single long-lived team holding state in conversation | The Spec Kit pilot produced a 67-task list for one medium feature — per-task coordination outweighed the sub-5-minute items it tracked; a trailing "Tests" group is test-after by construction; and state held in a conversation dies with the session, while file-only state is what makes parallel pieces and session-crossing resumption safe |
 | D89 | **Blackbox provenance records live at the repository root**: `blackbox/` holds one non-summarized decision record per owner-driven change — every owner input as an English rewrite (complete in content, natural in form), the assistant's actual responses, the decision rationale, and the internal processing — opening with `Refs:` lines that pin each changed file by git blob SHA (`git hash-object`), and landing in the same commit or PR as the change it records; the directory is read only for provenance questions, never during normal work (decided 2026-08-26; owner-approved) | rely on the git log and PR descriptions (squash merges compress the exchange away; commit SHAs die under history rewrites while blob SHAs are content-addressed and survive them); keep the record outside the repository in session memory (invisible to contributors and other machines) | This decision log records *what* was decided and the final rationale; the blackbox records the exchange that produced it, so a future session audits a rule's origin instead of re-litigating it. Blob-SHA pinning is the only anchor that survives the repository's own squash-merge workflow |
-| D90 | **Agent tooling configuration follows the Claude Code large-codebases guide by fit-test** — adopt what the repository's size and shape justify, record what was reviewed and rejected. Adopted: root AGENTS.md + path-scoped `.claude/rules/` as the instruction layering (the guide's "all conventions in one place" column); committed `Read` deny rules for build outputs (`node_modules/`, `dist/`, `build/`, `coverage/`, `.turbo/`); one on-demand runbook skill (`roundtrip-verification`, `paths: examples/**`). Rejected with recorded reasons: per-package CLAUDE.md split (naming rules need cross-package globs; no directory-owner model; revisit at ~200 AGENTS.md lines or when directory owners appear), `worktree.sparsePaths` (manual worktrees; sparse checkout breaks the pnpm workspace + turbo graph), `worktree.symlinkDirectories` for `node_modules` (pnpm workspace symlinks would point a worktree's `@hejbro/*` deps at the main checkout — silent isolation break), and deny rules on committed generated artifacts (migrations and goldens are reviewed artifacts agents must read). Code intelligence (typescript-lsp) is a user-level install, never a committed project setting for a public repository (decided 2026-08-26; owner-settled in five recorded decisions) | apply the guide wholesale (sparse worktrees + symlinked node_modules + per-package CLAUDE.md regardless of fit); ignore the guide as sized for larger repositories | The guide presents itself as a layered menu ("apply whichever fit your repository"); at 442 tracked files with a single owner, the wins are deny rules and on-demand runbooks, while the scale features actively conflict with pnpm workspaces and the manual-worktree convention. Recording the rejections with reasons is what keeps a future session from re-proposing them without new evidence || D91 | **hejbro extends into a PostgreSQL/serverless-specialized TypeScript ORM/query builder as one product: the schema DSL is the single source of truth for migrations AND query types, and the query runtime lives in new packages while `@hejbro/core` stays the pure declaration/migration kernel** (decided 2026-08-26, ORM pivot brainstorm; owner-approved) | a separate ORM product/repository beside hejbro; staying a migrations-only tool; exporting types into an existing ORM (Kysely/Drizzle) instead of owning a query layer | The declarations already hold everything query typing needs — a second product would carry a second copy of the schema truth and drift from it, while a type-export bridge would hand the differentiators (typed function execution, RLS context, platform presets) to a surface hejbro does not control |
+| D90 | **Agent tooling configuration follows the Claude Code large-codebases guide by fit-test** — adopt what the repository's size and shape justify, record what was reviewed and rejected. Adopted: root AGENTS.md + path-scoped `.claude/rules/` as the instruction layering (the guide's "all conventions in one place" column); committed `Read` deny rules for build outputs (`node_modules/`, `dist/`, `build/`, `coverage/`, `.turbo/`); one on-demand runbook skill (`roundtrip-verification`, `paths: examples/**`). Rejected with recorded reasons: per-package CLAUDE.md split (naming rules need cross-package globs; no directory-owner model; revisit at ~200 AGENTS.md lines or when directory owners appear), `worktree.sparsePaths` (manual worktrees; sparse checkout breaks the pnpm workspace + turbo graph), `worktree.symlinkDirectories` for `node_modules` (pnpm workspace symlinks would point a worktree's `@hejbro/*` deps at the main checkout — silent isolation break), and deny rules on committed generated artifacts (migrations and goldens are reviewed artifacts agents must read). Code intelligence (typescript-lsp) is a user-level install, never a committed project setting for a public repository (decided 2026-08-26; owner-settled in five recorded decisions) | apply the guide wholesale (sparse worktrees + symlinked node_modules + per-package CLAUDE.md regardless of fit); ignore the guide as sized for larger repositories | The guide presents itself as a layered menu ("apply whichever fit your repository"); at 442 tracked files with a single owner, the wins are deny rules and on-demand runbooks, while the scale features actively conflict with pnpm workspaces and the manual-worktree convention. Recording the rejections with reasons is what keeps a future session from re-proposing them without new evidence |
+| D91 | **hejbro extends into a PostgreSQL/serverless-specialized TypeScript ORM/query builder as one product: the schema DSL is the single source of truth for migrations AND query types, and the query runtime lives in new packages while `@hejbro/core` stays the pure declaration/migration kernel** (decided 2026-08-26, ORM pivot brainstorm; owner-approved) | a separate ORM product/repository beside hejbro; staying a migrations-only tool; exporting types into an existing ORM (Kysely/Drizzle) instead of owning a query layer | The declarations already hold everything query typing needs — a second product would carry a second copy of the schema truth and drift from it, while a type-export bridge would hand the differentiators (typed function execution, RLS context, platform presets) to a surface hejbro does not control |
 | D92 | **The query surface is a SQL-transparent query builder: conventional (Drizzle/Kysely-shaped) for commodity queries, invented syntax only where hejbro differentiates (RLS execution context, typed function execution, platform extensions); `compile()` is pure and previews exact SQL plus parameters; a relational query layer is positioned as an optional layer on top, never the base** (decided 2026-08-26, ORM pivot brainstorm; owner-approved) | a fully novel API; a relational-first (Prisma-shaped) base API; string-first querying with types bolted on | The conventional shape makes the commodity majority instantly readable to users arriving from existing builders, and SQL transparency keeps the product's reviewability premise — a query's SQL is verifiable without a database; the differentiators are the reason to switch, so invention is spent only there |
 | D93 | **v1 ships differentiators first with a minimal CRUD core and a first-class typed `sql` escape hatch; the commodity surface expands dogfood-driven — a gap in the builder is bridged by the escape hatch, never a blocker** (a Kysely type-export bridge was not chosen but remains a possible cheap add-on later) (decided 2026-08-26, ORM pivot brainstorm; owner-approved) | commodity parity with existing builders before differentiating; the Kysely bridge as the primary strategy | Parity-first postpones the reason the product exists and burns the window on commodity work; the escape hatch keeps every un-modeled query expressible from day one, so the surface can grow from real demand (the D80 dogfood loop) instead of speculation |
 | D94 | **Core's ExprNode and its declaration-reachable statement nodes (`QueryNode`: select/insert/update/delete, with the `select`/`insert`/`update`/`deleteFrom` builders) are the single shared query vocabulary — no second statement IR anywhere; `@hejbro/query` owns the pure compiler (literal→bind-parameter lifting), type inference, and execution, while the statement nodes and builders stay in core, where declarations already need them (view bodies, function bodies, RLS `exists()`); v1 vocabulary gaps (left join variant, returning column selection) are closed additively in core; boundary rule: the snapshot serializes only declaration-reachable nodes; the preset extension surface stays single** (decided 2026-08-26, ORM pivot brainstorm; amended 2026-08-26 during `add-query-layer` group 1, owner-settled: the original wording placed "the statement IR" in `@hejbro/query`, written before the implementation inventory showed core already owns the statement nodes and builders — a second IR would duplicate the exact vocabulary this decision exists to unify) | a separate query-package statement IR with core's `QueryNode` kept declaration-only (two `select()` surfaces, conversion layers, the vocabulary learned twice); moving the statement nodes out of core (inverts the dependency direction — impossible without breaking core's purity or its public surface) | One vocabulary means a statement or expression learned in declarations works unchanged in queries and preset extensions carry over for free; the boundary rule keeps query-only constructs out of the snapshot format, so the query layer can evolve without touching migration compatibility, and core stays the pure kernel it is |
