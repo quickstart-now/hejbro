@@ -118,6 +118,7 @@ export type {
 	ColumnRefNode,
 	ComparisonNode,
 	ComparisonOperator,
+	Condition,
 	DeleteNode,
 	ExistsNode,
 	Expr,

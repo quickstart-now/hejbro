@@ -1,5 +1,5 @@
 import { throwHejbroError } from "../error";
-import type { ComparisonOperator, Expr, ExprNode } from "./ast";
+import type { ComparisonOperator, Condition, Expr, ExprNode } from "./ast";
 import { expr } from "./ast";
 import { liftOperand } from "./literal";
 import type { LiftableFor, SqlTypeFamily } from "./type-family";
@@ -78,7 +78,7 @@ export const isNotNull = (operand: Expr): Expr<"boolean"> =>
 
 const logical =
 	(operator: "and" | "or") =>
-	(...conditions: ReadonlyArray<Expr<"boolean">>): Expr<"boolean"> => {
+	(...conditions: ReadonlyArray<Condition>): Expr<"boolean"> => {
 		if (conditions.length === 0) {
 			return throwHejbroError(
 				"empty-logical-expression",
@@ -95,7 +95,7 @@ const logical =
 export const and = logical("and");
 export const or = logical("or");
 
-export const not = (condition: Expr<"boolean">): Expr<"boolean"> =>
+export const not = (condition: Condition): Expr<"boolean"> =>
 	expr("boolean", { nodeKind: "not", operand: condition.exprNode });
 
 const inList =

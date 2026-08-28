@@ -1,9 +1,9 @@
 import type {
 	ColumnRef,
+	Condition,
 	DeleteFilterable,
 	DeleteFinal,
 	DeleteReturnable,
-	Expr,
 	InsertConflictable,
 	InsertFinal,
 	InsertReturnable,
@@ -91,15 +91,9 @@ export type SelectChainFiltered<
 export type SelectChainJoinable<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectChainFiltered<TProjection> & {
-	innerJoin(
-		joined: Table,
-		on: Expr<"boolean">,
-	): SelectChainJoinable<TProjection>;
-	leftJoin(
-		joined: Table,
-		on: Expr<"boolean">,
-	): SelectChainJoinable<TProjection>;
-	where(condition: Expr<"boolean">): SelectChainFiltered<TProjection>;
+	innerJoin(joined: Table, on: Condition): SelectChainJoinable<TProjection>;
+	leftJoin(joined: Table, on: Condition): SelectChainJoinable<TProjection>;
+	where(condition: Condition): SelectChainFiltered<TProjection>;
 };
 
 /** Any core builder stage `compile()`/`executeOn` already accept — every select/insert/update/delete stage structurally matches one of `CompileInput`'s `*Query` wrapper shapes. */
@@ -335,7 +329,7 @@ export type UpdateChainReturnable<TTable extends Table = Table> =
 
 export type UpdateChainFilterable<TTable extends Table = Table> =
 	UpdateChainReturnable<TTable> & {
-		where(condition: Expr<"boolean">): UpdateChainReturnable<TTable>;
+		where(condition: Condition): UpdateChainReturnable<TTable>;
 	};
 
 export type DeleteChainFinal<
@@ -352,7 +346,7 @@ export type DeleteChainReturnable<TTable extends Table = Table> =
 
 export type DeleteChainFilterable<TTable extends Table = Table> =
 	DeleteChainReturnable<TTable> & {
-		where(condition: Expr<"boolean">): DeleteChainReturnable<TTable>;
+		where(condition: Condition): DeleteChainReturnable<TTable>;
 	};
 
 const makeInsertFinalChain = <
@@ -531,7 +525,7 @@ export type SelectChainRelatedOrdered<TRow> =
 	};
 
 export type SelectChainRelated<TRow> = SelectChainRelatedOrdered<TRow> & {
-	where(condition: Expr<"boolean">): SelectChainRelatedFiltered<TRow>;
+	where(condition: Condition): SelectChainRelatedFiltered<TRow>;
 	orderBy(
 		...terms: ReadonlyArray<OrderTermInput>
 	): SelectChainRelatedOrdered<TRow>;

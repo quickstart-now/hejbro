@@ -290,6 +290,17 @@ export type Expr<TFamily extends SqlTypeFamily = SqlTypeFamily> = {
 	readonly exprNode: ExprNode;
 };
 
+/**
+ * What every condition position accepts. `sql` templates produce
+ * `Expr<"unknown">` because a template's family cannot be narrowed at
+ * compile time, so a position that admitted only `Expr<"boolean">` would
+ * shut the escape hatch out of it. `check()` (D50), partial-index
+ * `.where()` (D51) and RLS policies (#113) each adopted this union; the
+ * query-side condition positions are its fourth application, not a new
+ * design (#386).
+ */
+export type Condition = Expr<"boolean"> | Expr<"unknown">;
+
 /** A reference to one declared column — the leaf every expression starts from. */
 export type ColumnRef<TFamily extends SqlTypeFamily = SqlTypeFamily> =
 	Expr<TFamily> & {

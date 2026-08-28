@@ -187,20 +187,35 @@ the left branch).
 
 `sql` is the typed tagged-template escape hatch for anything the builder
 vocabulary doesn't cover — usable in a projection, as an insert/update
-value, or compiled standalone as its own statement (it types as
-`Expr<"unknown">`, which every column's write type accepts alongside its
-own declared read type).
+value, as a condition, or compiled standalone as its own statement (it
+types as `Expr<"unknown">`, which every column's write type accepts
+alongside its own declared read type).
 
-**Where `sql` can stand in for a condition differs by medium.** In a
-*declaration*, a condition position — `check(name, expression)`, an RLS
-policy's `using`/`withCheck`, an index's `.on(sql\`...\`)`/`.where(...)`
-— accepts `Expr<"boolean"> | Expr<"unknown">`, so a `sql` fragment works
-there (see `dsl-cheatsheet.md`). In a *query*, the chain's own
-`.where()`/`.innerJoin()`/`.leftJoin()` still require `Expr<"boolean">`
-specifically — a `sql` fragment does not type-check there; build a query
-condition with a typed operator (`eq`, `gt`, `inArray`, `between`, …)
-instead, and reserve `sql` for a projection, an insert/update value, or a
-standalone statement (tracked as #386). Importing `sql` from the
+**A `sql` fragment is a condition in both media.** Every condition
+position takes `Expr<"boolean"> | Expr<"unknown">` — in a *declaration*
+`check(name, expression)`, an RLS policy's `using`/`withCheck`, an
+index's `.on(sql\`...\`)`/`.where(...)` (see `dsl-cheatsheet.md`); in a
+*query* the chain's `.where()`/`.innerJoin()`/`.leftJoin()`, an update's
+and a delete's `.where()`, and `related()`'s `.where()`. So a predicate
+the typed operators can't build — `lower(email) = $1`, a regex match, an
+arbitrary function call — goes straight in, no cast:
+
+```ts prelude=query-handle
+import { and, eq, sql } from "hejbro";
+
+const drafts = await handle
+	.select(posts)
+	.where(sql`lower(${posts.status}) = ${"draft"}`);
+
+const shortDrafts = await handle
+	.select(posts)
+	.where(and(eq(posts.status, "draft"), sql`char_length(${posts.status}) > ${3}`));
+```
+
+Interpolations become bind parameters exactly as they do anywhere else.
+Prefer a typed operator (`eq`, `gt`, `inArray`, `between`, …) when one
+expresses the predicate — it keeps the family checked — and reach for
+`sql` when none does. Importing `sql` from the
 `hejbro` facade gets you the query-capable one: the facade re-exports
 `@hejbro/core` and `@hejbro/query` wholesale, and `@hejbro/query`'s own
 `sql` is exported a second time right after, so it — not core's
@@ -224,10 +239,8 @@ marker a multi-row insert uses for a missing key.
 import { sql } from "hejbro";
 
 // sql fragments type as Expr<"unknown"> — usable in a projection (an
-// object-projection field, like here) or as a whole standalone statement;
-// a `.where()`/`.innerJoin()`/`.leftJoin()` condition still needs
-// Expr<"boolean">, so build those with the typed operators (eq, gt, …)
-// instead — sql is for what those operators don't cover.
+// object-projection field, like here), as a condition, or as a whole
+// standalone statement.
 const withLowerStatus = await handle.select(
 	{ id: posts.id, lowerStatus: sql`lower(${posts.status})` },
 	posts,
@@ -502,11 +515,11 @@ concrete next step.
   `deleteFrom`), `packages/query/src/sql.ts` (`sql`, `sql.raw`,
   `sql.identifier`), `packages/core/src/query/mutate.ts`
   (`MutationValue`'s `Expr<"unknown">` arm — every column's write type
-  accepts a `sql` fragment), `packages/core/src/query/select.ts`
-  (`where`/`innerJoin`/`leftJoin` requiring `Expr<"boolean">`), and
-  `packages/core/src/dsl/check.ts` (`check`'s own
-  `Expr<"boolean"> | Expr<"unknown">` — the declaration-side contrast,
-  #386),
+  accepts a `sql` fragment), `packages/core/src/expr/ast.ts`
+  (`Condition` — the `Expr<"boolean"> | Expr<"unknown">` union every
+  condition position takes, in both media), `packages/core/src/query/
+  select.ts` and `packages/core/src/dsl/check.ts` (two of its
+  application sites),
   `packages/query/src/db/execute.ts` (`query-execution-failed`, params
   never read), `packages/query/src/db/db.ts` (`db()`, the role union),
   `packages/query/src/db/context.ts` (`db.as`, `DbContext`, the role

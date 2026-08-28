@@ -2,6 +2,7 @@ import type { Table } from "../dsl/table";
 import { getTableMeta, isTable, toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
 import type {
+	Condition,
 	Expr,
 	ExprNode,
 	JoinKind,
@@ -72,9 +73,9 @@ export type SelectFiltered<
 export type SelectJoinable<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectFiltered<TProjection> & {
-	innerJoin(joined: Table, on: Expr<"boolean">): SelectJoinable<TProjection>;
-	leftJoin(joined: Table, on: Expr<"boolean">): SelectJoinable<TProjection>;
-	where(condition: Expr<"boolean">): SelectFiltered<TProjection>;
+	innerJoin(joined: Table, on: Condition): SelectJoinable<TProjection>;
+	leftJoin(joined: Table, on: Condition): SelectJoinable<TProjection>;
+	where(condition: Condition): SelectFiltered<TProjection>;
 };
 
 const tableRefOf = (target: Table): TableRefNode => {
@@ -94,7 +95,7 @@ const appendJoin = (
 	query: SelectNode,
 	joinKind: JoinKind,
 	joined: Table,
-	on: Expr<"boolean">,
+	on: Condition,
 ): SelectNode => ({
 	...query,
 	joins: [
