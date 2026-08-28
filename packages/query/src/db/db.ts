@@ -226,6 +226,7 @@ export type Db<
 		string,
 		FunctionDeclaration
 	>,
+	TSchema = Record<string, unknown>,
 > = {
 	readonly declarations: Declarations;
 	readonly driver: Driver;
@@ -272,7 +273,7 @@ export type Db<
 	 * — no second statement vocabulary). Inert until awaited; `.compile()`
 	 * on any stage never touches the driver.
 	 */
-	select: ChainApi["select"];
+	select: ChainApi<TSchema>["select"];
 	/** Thenable `insert` chain (task 7.2, group 7 decision ②) — mirrors core's `insert(target).values(rows)`. */
 	insert: ChainApi["insert"];
 	/** Thenable `update` chain (task 7.2, group 7 decision ②) — mirrors core's `update(target).set(values)`. */
@@ -323,7 +324,7 @@ export const db = <TSchema extends Schema>(
 	schema: TSchema,
 	driver: Driver,
 	options?: DbOptions,
-): Db<FunctionsOf<TSchema>> => {
+): Db<FunctionsOf<TSchema>, TSchema> => {
 	const tables = tablesOf(schema);
 	const declarations: Declarations = {
 		tables,

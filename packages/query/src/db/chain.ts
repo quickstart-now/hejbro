@@ -24,15 +24,18 @@ import {
 	insert as coreInsert,
 	select as coreSelect,
 	update as coreUpdate,
+	isTable,
 } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
 import { compile } from "../compile/compile";
 import type { DriverSession } from "../driver/contract";
 import type { InsertInput, UpdateInput } from "../types/insert-input";
+import type { RelatedResult, RelatedSpec } from "../types/relations";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
 import type { Declarations } from "./db";
 import { executeOn } from "./execute";
+import { buildRelatedProjection } from "./related";
 
 /**
  * Runs `send` against whichever session this chain's owning surface (the
@@ -362,7 +365,74 @@ const makeDeleteFilterableChain = <TTable extends Table>(
  * shared factory parameterized by `run`, so the chain surface is
  * structurally identical on all three (group 7 header, decision ③).
  */
-export type ChainApi = {
+/**
+ * The chain family `related()` returns (D102 sugar, task 3.3) — typed by
+ * the MERGED row directly (`SelectResult<parent> & RelatedResult<…>`),
+ * not by a projection: routing the rebuilt object projection through the
+ * generic projection typing would degrade the parent's columns to the
+ * family-widened fallback (#311), and the whole point of the sugar is
+ * that nothing degrades. Runtime delegates to the same core stages as
+ * every other chain level.
+ */
+export type SelectChainRelatedLimited<TRow> = ChainTerminal<TRow>;
+
+export type SelectChainRelatedOrdered<TRow> =
+	SelectChainRelatedLimited<TRow> & {
+		limit(count: number): SelectChainRelatedLimited<TRow>;
+	};
+
+export type SelectChainRelated<TRow> = SelectChainRelatedOrdered<TRow> & {
+	where(condition: Expr<"boolean">): SelectChainRelatedFiltered<TRow>;
+	orderBy(
+		...terms: ReadonlyArray<OrderTermInput>
+	): SelectChainRelatedOrdered<TRow>;
+};
+
+export type SelectChainRelatedFiltered<TRow> =
+	SelectChainRelatedOrdered<TRow> & {
+		orderBy(
+			...terms: ReadonlyArray<OrderTermInput>
+		): SelectChainRelatedOrdered<TRow>;
+	};
+
+const makeRelatedOrdered = <TRow>(
+	run: ChainRun,
+	stage: SelectFiltered<SelectProjection> | SelectOrdered<SelectProjection>,
+	tables: Declarations["tables"],
+): SelectChainRelatedOrdered<TRow> => ({
+	...makeChainTerminal<TRow>(run, stage, tables),
+	limit: (count) => makeChainTerminal<TRow>(run, stage.limit(count), tables),
+});
+
+const makeRelatedChain = <TRow>(
+	run: ChainRun,
+	stage: SelectJoinable<SelectProjection>,
+	tables: Declarations["tables"],
+): SelectChainRelated<TRow> => ({
+	...makeRelatedOrdered<TRow>(run, stage, tables),
+	where: (condition) => ({
+		...makeRelatedOrdered<TRow>(run, stage.where(condition), tables),
+		orderBy: (...terms) =>
+			makeRelatedOrdered<TRow>(
+				run,
+				stage.where(condition).orderBy(...terms),
+				tables,
+			),
+	}),
+	orderBy: (...terms) =>
+		makeRelatedOrdered<TRow>(run, stage.orderBy(...terms), tables),
+});
+
+/** The `related()` member a whole-`Table` select chain gains — see {@link SelectChainRelated}. */
+export type RelatedCapable<TSchema, TTable extends Table> = {
+	related<TSpec extends RelatedSpec<TSchema, TTable>>(
+		spec: TSpec,
+	): SelectChainRelated<
+		SelectResult<TTable> & RelatedResult<TSchema, TTable, TSpec>
+	>;
+};
+
+export type ChainApi<TSchema = Record<string, unknown>> = {
 	/**
 	 * Starts a thenable `select` chain, mirroring core's own two call
 	 * forms (`query/select.ts`): `select(table)` projects every declared
@@ -374,7 +444,10 @@ export type ChainApi = {
 	select<TProjection extends SelectProjection>(
 		projection: TProjection,
 		from?: Table,
-	): SelectChainJoinable<TProjection>;
+	): SelectChainJoinable<TProjection> &
+		(TProjection extends Table
+			? RelatedCapable<TSchema, TProjection>
+			: unknown);
 	/**
 	 * Starts a thenable `insert` chain, mirroring core's own
 	 * `insert(target).values(rows)` (`query/mutate.ts`). Awaiting without
@@ -402,8 +475,24 @@ export const createChainApi = (
 	run: ChainRun,
 	tables: Declarations["tables"],
 ): ChainApi => ({
-	select: (projection, from) =>
-		makeJoinableChain(run, coreSelect(projection, from), tables),
+	select: ((projection: SelectProjection, from?: Table) => {
+		const base = makeJoinableChain(run, coreSelect(projection, from), tables);
+		if (!isTable(projection)) {
+			return base;
+		}
+		return {
+			...base,
+			related: (spec: Readonly<Record<string, true>>) =>
+				makeRelatedChain(
+					run,
+					coreSelect(
+						buildRelatedProjection(projection, spec, tables),
+						projection,
+					),
+					tables,
+				),
+		};
+	}) as ChainApi["select"],
 	insert: (target) => ({
 		values: (rows) =>
 			makeInsertConflictableChain(run, coreInsert(target).values(rows), tables),
