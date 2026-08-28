@@ -88,11 +88,9 @@ describe("generated (computed) columns — diff/emit", () => {
 	});
 
 	// A drop+add rebuild physically re-appends the column at the end of a
-	// real Postgres table, but `column-order.ts`'s oracle decides position
-	// from name membership alone (present in both parent and declared sets
-	// = keep the old position), so it can't distinguish a rebuild from an
-	// untouched survivor. This test pins that gap; it does not close it.
-	it("[gap, not fixed] the column-order oracle keeps a rebuilt column in its old position, not the physical end a real ADD COLUMN lands on", () => {
+	// real Postgres table -- the column-order oracle must reflect that,
+	// not the column's pre-rebuild position.
+	it("the column-order oracle moves a rebuilt column to the end, matching a real Postgres table's own physical order", () => {
 		const declareStep = (expression: ReturnType<typeof sql>) =>
 			table(app, "widgets", {
 				a: numeric(),
@@ -121,18 +119,14 @@ describe("generated (computed) columns — diff/emit", () => {
 			throw new Error("expected table:app.widgets in step2's snapshot");
 		}
 		const widgetsAfterRebuild = asTableSnapshot(widgetsAfterRebuildNode);
-		// A real Postgres table now has `total` LAST (a, b, total); this
-		// snapshot keeps it in its old middle position instead. Column
-		// reordering alone never produces a diff, so nothing else surfaces
-		// this mismatch -- it only matters where D81's oracle output is
-		// actually read (`select *`/`returning *`).
 		expect(widgetsAfterRebuild.columns.map((c) => c.name)).toEqual([
 			"a",
-			"total",
 			"b",
+			"total",
 		]);
 
-		// A third, no-op generate run confirms the mismatch is silent.
+		// A third, unchanged generate run stays a no-op and keeps the order
+		// stable -- `total` is no longer rebuilding, so it stays put.
 		const step3 = generateMigration({
 			declarations: [app, declareStep(sql`a * 2`)],
 			previousSnapshot: step2.snapshot,
