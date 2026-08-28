@@ -1,5 +1,5 @@
 import { throwHejbroError } from "../error";
-import type { Expr, ExprNode } from "../expr/ast";
+import type { ColumnRef, Expr, ExprNode } from "../expr/ast";
 import { isExpr } from "../expr/ast";
 import { liftLiteral } from "../expr/literal";
 import type { LiftableFor, SqlTypeFamily } from "../expr/type-family";
@@ -55,6 +55,13 @@ export type ColumnState = {
 	 * the same reason.
 	 */
 	readonly identity?: IdentityState;
+	/**
+	 * Set only by `.references()` (add-relational-reads) — the deferred
+	 * target thunk, stored unevaluated for import-order safety; `table()`
+	 * is the single evaluation point (a bare builder has no column name
+	 * yet to build a `ForeignKeyDeclaration` from).
+	 */
+	readonly references?: () => ColumnRef;
 };
 
 /**
@@ -144,6 +151,16 @@ export type ColumnMeta = {
 	 * defaulted column on the write side.
 	 */
 	readonly identity?: IdentityKind;
+	/**
+	 * set only by `.references()` (add-relational-reads, D102) — the
+	 * foreign-key edge at the type level: the target table's column map
+	 * and the referenced column key. The query layer derives relations
+	 * from it; nothing runtime-visible reads it.
+	 */
+	readonly references?: {
+		readonly columns: Record<string, ColumnBuilder>;
+		readonly key: string;
+	};
 };
 
 /**
@@ -366,6 +383,27 @@ export type ColumnBuilder<
 			>
 		: never;
 	/**
+	 * Declares this column a foreign key to another table's column
+	 * (add-relational-reads, D102) — `.references(() => users.id)`. One
+	 * declaration feeds both the DDL (`table()` folds it into the same
+	 * `ForeignKeyDeclaration` the `extras` path builds) and the type layer
+	 * (the edge lands in `TMeta`, where the query layer derives relations
+	 * from it). The thunk defers evaluation for import-order safety. The
+	 * target must share this column's type family — Postgres would reject
+	 * a mismatch at apply time, so the declaration fails to type-check
+	 * instead. Self-referencing and composite foreign keys, and
+	 * `onDelete`/`onUpdate` actions, stay on the `extras` path.
+	 */
+	references<
+		TTargetColumns extends Record<string, ColumnBuilder>,
+		TTargetKey extends keyof TTargetColumns & string,
+	>(
+		target: () => ColumnRef<TFamily> & OriginBrand<TTargetColumns, TTargetKey>,
+	): ColumnBuilder<
+		TFamily,
+		TMeta & { references: { columns: TTargetColumns; key: TTargetKey } }
+	>;
+	/**
 	 * Brands this column's TypeScript type as `T` (D5) — the way a `jsonb`
 	 * column opts out of `unknown` (`@hejbro/query`'s `column-map.ts`
 	 * reads `TMeta["jsonType"]` instead of falling back to the base
@@ -465,6 +503,27 @@ const resolveDefaultExprNode = (
 };
 
 /**
+ * Phantom origin brand `TableColumns` stamps on every built table's column
+ * refs (add-relational-reads) — the owning column map and column key at
+ * the type level only. Optional and never assigned at runtime (the
+ * `columnMetaBrand` precedent, same reasons); `.references()` infers its
+ * target edge from it, which is also why a hand-built bare `columnRef()`
+ * carries no useful edge there.
+ */
+export const columnOriginBrand: unique symbol = Symbol("hejbro:column-origin");
+
+/** The brand's shape — see {@link columnOriginBrand}. */
+export type OriginBrand<
+	TColumns extends Record<string, ColumnBuilder>,
+	TKey extends keyof TColumns,
+> = {
+	readonly [columnOriginBrand]?: {
+		readonly columns: TColumns;
+		readonly key: TKey;
+	};
+};
+
+/**
  * Builds a {@link ColumnBuilder} bound to `columnState`. Every chained
  * method calls this factory again with a shallow-updated state, so builders
  * are effectively immutable value objects.
@@ -488,6 +547,8 @@ export const createColumnBuilder = <
 		}),
 	unique: () =>
 		createColumnBuilder<TFamily, TMeta>({ ...columnState, unique: true }),
+	references: (target) =>
+		createColumnBuilder({ ...columnState, references: target }),
 	default: (value) =>
 		createColumnBuilder<TFamily, TMeta & { hasDefault: true }>({
 			...columnState,

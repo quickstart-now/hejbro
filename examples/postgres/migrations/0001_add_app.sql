@@ -26,8 +26,8 @@
 -- + grant app.default-table-privileges.app_writer [new]
 -- + grant app.schema-usage.app_reader [new]
 -- + grant app.schema-usage.app_writer [new]
--- parent-snapshot: sha256:d379e9576f63f1d63d29561b7366135984e883890a8efcb780b4e53648a77c7c
--- snapshot: sha256:baef89083332405915919c78109c40015b75eef8dd51a8a28dc2d1c47af6f2cf
+-- parent-snapshot: sha256:2f733c694c259ae11b47b87bee94f97bdc9d26b28168cd5e7eebb32cd25c061c
+-- snapshot: sha256:501a4ef4194351d75b84cc1daf6b35822751834322ccf0f1b1d03e53db1bd53d
 
 create schema "app";
 
@@ -156,9 +156,9 @@ grant usage on schema "app" to "app_reader";
 
 grant usage on schema "app" to "app_writer";
 
-alter table "app"."comments" add constraint "comments_task_id_fk" foreign key ("task_id") references "app"."tasks" ("id") on delete cascade;
-
 alter table "app"."comments" add constraint "comments_parent_id_fk" foreign key ("parent_id") references "app"."comments" ("id") on delete cascade;
+
+alter table "app"."comments" add constraint "comments_task_id_fk" foreign key ("task_id") references "app"."tasks" ("id") on delete cascade;
 
 alter table "app"."projects" add constraint "projects_owner_id_fk" foreign key ("owner_id") references "app"."members" ("id");
 

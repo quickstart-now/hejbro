@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 6,
+	"formatVersion": 7,
 	"objects": {
 		"function:app.comments_enforce_single_depth": {
 			"args": [],
@@ -443,17 +443,6 @@
 			"foreignKeys": [
 				{
 					"columns": [
-						"task_id"
-					],
-					"name": "comments_task_id_fk",
-					"onDelete": "cascade",
-					"referencesColumns": [
-						"id"
-					],
-					"referencesTable": "app.tasks"
-				},
-				{
-					"columns": [
 						"parent_id"
 					],
 					"name": "comments_parent_id_fk",
@@ -462,6 +451,17 @@
 						"id"
 					],
 					"referencesTable": "app.comments"
+				},
+				{
+					"columns": [
+						"task_id"
+					],
+					"name": "comments_task_id_fk",
+					"onDelete": "cascade",
+					"referencesColumns": [
+						"id"
+					],
+					"referencesTable": "app.tasks"
 				}
 			],
 			"indexes": [],

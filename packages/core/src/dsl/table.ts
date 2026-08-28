@@ -15,6 +15,7 @@ import type {
 	BuilderFamily,
 	ColumnBuilder,
 	ColumnState,
+	OriginBrand,
 } from "../types/column-builder";
 import type { CheckDeclaration } from "./check";
 import { check } from "./check";
@@ -135,7 +136,8 @@ export const tableMeta: unique symbol = Symbol.for("hejbro:table-meta");
 
 /** Maps a table's column builders to the typed {@link ColumnRef}s exposed at the top level of the built {@link Table}. */
 export type TableColumns<TColumns extends Record<string, ColumnBuilder>> = {
-	readonly [K in keyof TColumns]: ColumnRef<BuilderFamily<TColumns[K]>>;
+	readonly [K in keyof TColumns]: ColumnRef<BuilderFamily<TColumns[K]>> &
+		OriginBrand<TColumns, K>;
 };
 
 /** A drizzle-style table object (D15): columns as top-level typed refs, declaration metadata hidden behind {@link tableMeta}. */
@@ -910,6 +912,75 @@ const resolveRls = (
 	return bindRls(owner.schemaName, tableName, rlsInput);
 };
 
+/** The canonical, declaration-form-independent sort key for one foreign key (D1, add-relational-reads): local columns then target identity — so a table's foreign-key order never depends on WHICH declaration form wrote it, and converting a form is snapshot-invariant. */
+const foreignKeySortKey = (foreignKey: ForeignKeyDeclaration): string =>
+	[
+		foreignKey.columns.join("\u001f"),
+		foreignKey.references.schemaName,
+		foreignKey.references.tableName,
+		foreignKey.references.columns.join("\u001f"),
+	].join("\u001f");
+
+const compareForeignKeys = (
+	a: ForeignKeyDeclaration,
+	b: ForeignKeyDeclaration,
+): number => {
+	const keyA = foreignKeySortKey(a);
+	const keyB = foreignKeySortKey(b);
+	if (keyA < keyB) {
+		return -1;
+	}
+	if (keyA > keyB) {
+		return 1;
+	}
+	return 0;
+};
+
+/** Rejects a column declared through both foreign-key paths (add-relational-reads guard) — without it the clash would still throw, but only later and name-centrically (`duplicate-foreign-key-name`); this guard fires earlier and names the COLUMN, which is what the user actually wrote twice. */
+const assertNoDoublyDeclaredReference = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+	extrasForeignKeys: ReadonlyArray<ForeignKeyDeclaration>,
+): void => {
+	const doublyDeclared = columnEntries.find(
+		(entry) =>
+			entry.columnState.references !== undefined &&
+			extrasForeignKeys.some((foreignKey) =>
+				foreignKey.columns.includes(entry.columnName),
+			),
+	);
+	if (doublyDeclared === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"invalid-duplicate-foreign-key",
+		`table "${tableName}" column "${doublyDeclared.columnName}" declares .references() and is also named in an extras foreign key — the constraint would emit twice. Next: keep exactly one of the two declarations for "${doublyDeclared.columnName}".`,
+	);
+};
+
+/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. */
+const foldColumnReferences = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ReadonlyArray<ForeignKeyDeclaration> =>
+	columnEntries.flatMap((entry) => {
+		const target = entry.columnState.references?.();
+		if (target === undefined) {
+			return [];
+		}
+		return [
+			{
+				columns: [entry.columnName],
+				references: {
+					schemaName: target.exprNode.schemaName,
+					tableName: target.exprNode.tableName,
+					columns: [target.exprNode.columnName],
+				},
+				onDelete: null,
+				onUpdate: null,
+			},
+		];
+	});
+
 /**
  * Declares a table under `owner`. Column keys are camelCase in TypeScript
  * and snake_cased in the generated SQL. `extras` receives this table's own
@@ -931,9 +1002,14 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 
 	const resolvedExtras = extras?.(refsObject) ?? {};
 	const indexes = (resolvedExtras.indexes ?? []).map(resolveIndex);
-	const foreignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
+	const extrasForeignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
 		resolveForeignKey(owner, tableName, input),
 	);
+	assertNoDoublyDeclaredReference(tableName, columnEntries, extrasForeignKeys);
+	const foreignKeys = [
+		...foldColumnReferences(columnEntries),
+		...extrasForeignKeys,
+	].sort(compareForeignKeys);
 	const checks = [
 		...(resolvedExtras.checks ?? []),
 		...deriveNotNullElementsChecks(owner, tableName, columnEntries),

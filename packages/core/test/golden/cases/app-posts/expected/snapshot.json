@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 6,
+	"formatVersion": 7,
 	"objects": {
 		"enum:app.post_status": {
 			"name": "post_status",

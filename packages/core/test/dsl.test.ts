@@ -176,3 +176,70 @@ describe("table() — auxiliary types", () => {
 		});
 	});
 });
+
+describe("column-level references fold into foreign keys (add-relational-reads task 1.2)", () => {
+	const app = schema("app");
+	const users = table(app, "users", { id: uuid().primaryKey() });
+
+	it("produces the extras-equivalent foreign key declaration", () => {
+		const viaColumn = table(app, "pets_via_column", {
+			id: uuid().primaryKey(),
+			ownerId: uuid()
+				.notNull()
+				.references(() => users.id),
+		});
+		const viaExtras = table(
+			app,
+			"pets_via_extras",
+			{ id: uuid().primaryKey(), ownerId: uuid().notNull() },
+			(t) => ({
+				foreignKeys: [
+					{ columns: [t.ownerId], references: { columns: [users.id] } },
+				],
+			}),
+		);
+		expect(getTableMeta(viaColumn).foreignKeys).toEqual(
+			getTableMeta(viaExtras).foreignKeys,
+		);
+		expect(getTableMeta(viaColumn).foreignKeys).toEqual([
+			{
+				columns: ["owner_id"],
+				references: {
+					schemaName: "app",
+					tableName: "users",
+					columns: ["id"],
+				},
+				onDelete: null,
+				onUpdate: null,
+			},
+		]);
+	});
+
+	it("rejects a column declared through both paths, naming the column", () => {
+		const buildDoublyDeclared = () =>
+			table(
+				app,
+				"pets_double",
+				{
+					id: uuid().primaryKey(),
+					ownerId: uuid()
+						.notNull()
+						.references(() => users.id),
+				},
+				(t) => ({
+					foreignKeys: [
+						{ columns: [t.ownerId], references: { columns: [users.id] } },
+					],
+				}),
+			);
+		expect(buildDoublyDeclared).toThrowError(/owner_id/);
+		try {
+			buildDoublyDeclared();
+			expect.unreachable("buildDoublyDeclared() should have thrown");
+		} catch (error) {
+			expect((error as { code: string }).code).toBe(
+				"invalid-duplicate-foreign-key",
+			);
+		}
+	});
+});

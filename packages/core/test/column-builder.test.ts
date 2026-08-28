@@ -896,3 +896,44 @@ describe(".$type<T>() jsonb brand (D5, task 3.5)", () => {
 		>();
 	});
 });
+
+describe("column-level references (add-relational-reads task 1.1)", () => {
+	const app = schema("app");
+	const users = table(app, "users", { id: uuid().primaryKey() });
+
+	// Extracts the `references` edge from a builder's phantom TMeta -- the
+	// only observation channel for a type-level claim (tsc enforces it;
+	// expectTypeOf is a runtime no-op).
+	type EdgeOf<TBuilder> =
+		TBuilder extends ColumnBuilder<infer _TFamily, infer TMeta>
+			? TMeta extends { references: infer TEdge }
+				? TEdge
+				: never
+			: never;
+
+	it("records the deferred target on columnState and the edge in TMeta", () => {
+		const withRef = uuid()
+			.notNull()
+			.references(() => users.id);
+
+		// runtime: the thunk is stored deferred -- table() evaluates it, the
+		// builder itself never does (import-order safety, the thunk pattern).
+		expect(withRef.columnState.references).toBeTypeOf("function");
+		expect(uuid().columnState.references).toBeUndefined();
+
+		// type: the edge carries the target's column map and column key.
+		expectTypeOf<EdgeOf<typeof withRef>["key"]>().toEqualTypeOf<"id">();
+		expectTypeOf<
+			keyof EdgeOf<typeof withRef>["columns"]
+		>().toEqualTypeOf<"id">();
+		expectTypeOf<EdgeOf<ReturnType<typeof uuid>>>().toBeNever();
+	});
+
+	it("rejects a target whose type family differs from the column's", () => {
+		// @ts-expect-error a text column cannot reference a uuid column --
+		// Postgres would reject the FK at apply time, so the declaration
+		// fails loudly instead (the value arm is a real ref, so this
+		// directive is consumed by the family mismatch alone).
+		text().references(() => users.id);
+	});
+});

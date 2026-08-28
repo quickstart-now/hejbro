@@ -96,7 +96,7 @@ export default defineConfig({
 `;
 
 const EMPTY_SNAPSHOT_SOURCE =
-	'{\n\t"dialect": "postgres",\n\t"formatVersion": 6,\n\t"objects": {}\n}\n';
+	'{\n\t"dialect": "postgres",\n\t"formatVersion": 7,\n\t"objects": {}\n}\n';
 
 const BUCKET_SCHEMA = `import { storageBucket } from "@hejbro/supabase";
 

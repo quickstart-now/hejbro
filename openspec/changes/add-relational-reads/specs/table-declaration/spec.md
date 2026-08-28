@@ -17,7 +17,11 @@ foreign keys, and `onDelete`/`onUpdate` actions SHALL remain on the
 declaration needing them uses `extras`. Declaring `.references()` and
 an `extras` foreign key over the same column SHALL fail at declaration
 time with an explicit error naming the column, never a silent
-double-emit.
+double-emit. A table's foreign keys SHALL emit and snapshot in one
+canonical, declaration-form-independent order (sorted by local
+columns, then target identity) — so mixing the two forms in one
+table, or converting a foreign key from one form to the other,
+changes neither the generated DDL nor the snapshot.
 
 #### Scenario: A column-level reference emits the same DDL as extras
 - **WHEN** a table declares `ownerId: uuid().notNull().references(()
@@ -30,6 +34,12 @@ double-emit.
 - **WHEN** a column declares `.references(() => users.id)`
 - **THEN** the resulting table type records the edge (target table and
   column), and the query layer's relation derivation can read it
+
+#### Scenario: A mixed-form table emits in canonical order
+- **WHEN** one table declares one foreign key through `.references()`
+  and another through `extras`, and an otherwise-identical table
+  declares both through `extras`
+- **THEN** both generate identical DDL and identical snapshot content
 
 #### Scenario: Duplicate declaration over one column fails loudly
 - **WHEN** a column declares `.references(...)` and the same column is

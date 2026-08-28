@@ -42,7 +42,7 @@ describe("runInit", () => {
 	it("writes the empty snapshot via renderSnapshot(emptySnapshot)", async () => {
 		runInit(cwd);
 		const content = await readFile(snapshotPath(), "utf8");
-		expect(content).toContain('"formatVersion": 6');
+		expect(content).toContain('"formatVersion": 7');
 		expect(content).toContain('"objects": {}');
 	});
 

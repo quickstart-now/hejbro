@@ -17,7 +17,7 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 3. Read the migration's banner comment before merging — it lists every object added/changed/dropped, in order.
 4. `hejbro generate` never guesses at renames: an ambiguous drop+add exits 1 with the exact `--rename`/`--confirm-drop` command to rerun.
 5. Presets (e.g. `@hejbro/supabase`) go in `hejbro.config.ts`'s `presets` array — never register kinds by hand in application code.
-6. CHECK constraints, partial/ordered indexes, and self-referencing foreign keys are all declared inline on `table(...)`'s extras — see the cheatsheet, not the query builder.
+6. A plain foreign key is declared on the column itself — `.references(() => users.id)`. CHECK constraints, partial/ordered indexes, and the foreign keys `.references()` cannot express (self-referencing, composite, `onDelete`/`onUpdate` actions) are declared inline on `table(...)`'s extras — see the cheatsheet, not the query builder.
 7. `hejbro verify` re-derives the migration chain from checked-out files only (no live DB) — run it in CI. The local Docker round-trip (`pnpm roundtrip`) is the deeper, pre-merge check.
 8. `db(schema, driver)` builds a typed handle straight from the same declarations — `select`/`insert`/`update`/`deleteFrom` chains stay inert until awaited, and `.compile()` never touches a driver.
 9. `db.as(context)` runs statements under an explicit role/session context (RLS); a role outside the declared whitelist fails immediately, before anything reaches the database.
