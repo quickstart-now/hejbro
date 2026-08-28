@@ -460,7 +460,7 @@ export const projects = table(app, "projects", {
 			const result = await runCli(cwd, ["restore", "1"]);
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout).toContain(
-				"note: migration 1 was generated under an older snapshot format (v4; this build is v5)",
+				"note: migration 1 was generated under an older snapshot format (v4; this build is v6)",
 			);
 			expect(result.stdout).toContain(
 				"the post-restore snapshot-reproduction check can't run across a format change",

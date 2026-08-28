@@ -89,9 +89,10 @@ export const deriveUniqueName = (
 
 /**
  * `primaryKey`, a `serial`/`smallserial`/`bigserial` type (#23/D66,
- * confirmed against `pg_dump`), and an identity (D100 — both kinds alike)
- * all imply `notNull` once a column is materialized into a snapshot, even
- * when the declaration itself never called `.notNull()`.
+ * confirmed against `pg_dump`), and an identity (D100, not yet
+ * witnessed — group 4; both kinds alike) all imply `notNull` once a
+ * column is materialized into a snapshot, even when the declaration
+ * itself never called `.notNull()`.
  */
 const materializeNotNull = (columnState: ColumnState): boolean => {
 	if (columnState.primaryKey) {
