@@ -1,9 +1,11 @@
 import {
 	bigint,
+	bytea,
 	deleteFrom,
 	eq,
 	insert,
 	interval,
+	jsonb,
 	schema,
 	sql,
 	table,
@@ -255,5 +257,42 @@ describe("compile: mutations -- bigint/interval/array write values (task 2.3, #3
 			"{x}",
 			"11111111-1111-1111-1111-111111111111",
 		]);
+	});
+});
+
+describe("compile: json and bytea write values (#425)", () => {
+	const docs = table(app, "docs", {
+		id: uuid().primaryKey(),
+		payload: jsonb().$type<{ readonly theme: string }>().notNull(),
+		blob: bytea().notNull(),
+	});
+
+	it("serializes a json value and hex-encodes bytes, both as bind parameters", () => {
+		const statement = insert(docs).values({
+			id: "11111111-1111-1111-1111-111111111111",
+			payload: { theme: "dark" },
+			blob: new Uint8Array([0, 255, 16]),
+		});
+		const result = compile(statement);
+
+		// json rides as a bare placeholder -- the target column decides
+		// between json and jsonb, which no cast written here could know.
+		// bytea spells its cast out.
+		expect(result.sql).toContain("$2, $3::bytea");
+		expect(result.params[1]).toBe('{"theme":"dark"}');
+		expect(result.params[2]).toBe("\\x00ff10");
+		// the value never reaches the SQL text.
+		expect(result.sql).not.toContain("dark");
+	});
+
+	it("an adversarial string inside a json value stays a parameter", () => {
+		const hostile = "'; drop table docs; --";
+		const result = compile(
+			update(docs)
+				.set({ payload: { theme: hostile } })
+				.where(eq(docs.id, "x")),
+		);
+		expect(result.sql).not.toContain("drop table");
+		expect(result.params[0]).toBe(JSON.stringify({ theme: hostile }));
 	});
 });

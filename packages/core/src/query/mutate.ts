@@ -21,14 +21,6 @@ import type {
 import { liftColumnValue } from "./column-value";
 
 /**
- * The families with no compile-time-lifted write path (harden-query-layer
- * #322 Settled Decision 1) — `json`/`jsonb` and `bytea` stay `sql`-escape-
- * hatch-only (D18's `sql\`...\`` remains the way to write either), so a
- * raw scalar is never accepted for them here, brand or no brand.
- */
-type UnwritableFamily = "json" | "bytea";
-
-/**
  * The type NAMES whose family is {@link UnwritableFamily} — `json`/`jsonb`
  * map to family `"json"`, `bytea` to family `"bytea"` (`expr/type-family.ts`'s
  * `TYPE_NAME_TO_FAMILY`, unchanged).
@@ -69,17 +61,15 @@ type UnwritableElementTypeName = "json" | "jsonb" | "bytea";
  * `json`/`bytea` arrays excluded" exactly like the scalar case).
  */
 type IsUnwritableColumn<TColumn extends ColumnBuilder> =
-	TColumn extends ColumnBuilder<infer TFamily, infer TMeta>
-		? TFamily extends UnwritableFamily
-			? true
-			: TMeta extends {
-						readonly typeName: "array";
-						readonly element: infer TElement;
-					}
-				? TElement extends UnwritableElementTypeName
-					? true
-					: false
+	TColumn extends ColumnBuilder<infer _TFamily, infer TMeta>
+		? TMeta extends {
+				readonly typeName: "array";
+				readonly element: infer TElement;
+			}
+			? TElement extends UnwritableElementTypeName
+				? true
 				: false
+			: false
 		: false;
 
 /**

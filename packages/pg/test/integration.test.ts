@@ -12,6 +12,8 @@ import {
 	insert,
 	integer,
 	interval,
+	json,
+	jsonb,
 	numeric,
 	rls,
 	roleName,
@@ -1471,5 +1473,62 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			.distinct()
 			.orderBy(events.stream);
 		expect(streams.map((row) => row.stream)).toEqual(["a", "b", "c"]);
+	});
+
+	it("json and bytea raw writes (#425): what was written comes back, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.jb_docs (
+				id uuid primary key,
+				settings jsonb not null,
+				doc json not null,
+				blob bytea not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		type Settings = {
+			readonly theme: string;
+			readonly tags: ReadonlyArray<string>;
+		};
+		const docs = table(testSchema, "jb_docs", {
+			id: uuid().primaryKey(),
+			settings: jsonb().$type<Settings>().notNull(),
+			doc: json().$type<{ readonly a: number }>().notNull(),
+			blob: bytea().notNull(),
+		});
+		const handle = db({ docs }, driver);
+
+		const settings: Settings = { theme: "dark", tags: ["a", "b"] };
+		const bytes = new Uint8Array([0, 255, 16, 127]);
+		await handle.insert(docs).values({
+			id: "55555555-5555-5555-5555-555555555555",
+			settings,
+			doc: { a: 1 },
+			blob: bytes,
+		});
+
+		const [row] = await handle.select(docs);
+		if (row === undefined) {
+			throw new Error("the inserted row did not come back");
+		}
+		// the branded read type is what the write accepted, and the value is
+		// the same one -- no manual JSON.stringify, no ::jsonb cast written
+		// by the caller.
+		expect(row.settings).toEqual(settings);
+		expect(row.doc).toEqual({ a: 1 });
+		expect(Array.from(row.blob)).toEqual([0, 255, 16, 127]);
+
+		// a jsonb update replaces the document wholesale, like any value.
+		await handle
+			.update(docs)
+			.set({ settings: { theme: "light", tags: [] } })
+			.where(eq(docs.id, "55555555-5555-5555-5555-555555555555"));
+		const [updated] = await handle.select(docs);
+		expect(updated?.settings).toEqual({ theme: "light", tags: [] });
 	});
 });

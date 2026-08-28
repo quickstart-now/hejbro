@@ -29,7 +29,21 @@ export type LiteralNode = {
 		| { readonly literalKind: "timestamp"; readonly isoValue: string }
 		| { readonly literalKind: "bigint"; readonly text: string }
 		| { readonly literalKind: "interval"; readonly text: string }
-		| { readonly literalKind: "array"; readonly text: string };
+		| { readonly literalKind: "array"; readonly text: string }
+		/**
+		 * A written `json`/`jsonb` value, already serialized (#425). Carries
+		 * WHICH of the two it was declared as: rendering a `json` column's
+		 * value with a `::jsonb` cast would silently apply jsonb's own key
+		 * reordering and duplicate-stripping to a column whose whole point
+		 * is that it does not do that.
+		 */
+		| {
+				readonly literalKind: "json";
+				readonly text: string;
+				readonly typeName: "json" | "jsonb";
+		  }
+		/** A written `bytea` value as Postgres hex format (`\x…`) (#425). */
+		| { readonly literalKind: "bytea"; readonly text: string };
 };
 
 export type ColumnRefNode = {

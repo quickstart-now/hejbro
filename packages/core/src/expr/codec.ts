@@ -148,7 +148,7 @@ const stringField = (node: Record<string, JsonValue>, key: string): string => {
  */
 type SnapshotLiteralKind = Exclude<
 	LiteralNode["literal"]["literalKind"],
-	"bigint" | "interval" | "array"
+	"bigint" | "interval" | "array" | "json" | "bytea"
 >;
 
 /**
@@ -179,10 +179,12 @@ const encodeLiteralHandlers: EncodeLiteralHandlers = {
 /** `true` for the three query-compile-time-only kinds `SnapshotLiteralKind` excludes — narrows `literal` so the guard clause in {@link encodeLiteral} needs no cast either side of it. */
 const isNonSnapshotLiteralKind = (
 	literalKind: LiteralNode["literal"]["literalKind"],
-): literalKind is "bigint" | "interval" | "array" =>
+): literalKind is "bigint" | "interval" | "array" | "json" | "bytea" =>
 	literalKind === "bigint" ||
 	literalKind === "interval" ||
-	literalKind === "array";
+	literalKind === "array" ||
+	literalKind === "json" ||
+	literalKind === "bytea";
 
 /** Builds the `non-snapshot-literal`-coded, enriched plain `Error` this module throws when asked to encode a mutation-write-only literal kind into a declaration-time snapshot — a signal for whoever trips it next, not a currently-reachable path (harden-query-layer #322 Settled Decision (F) covers the query-compile *text* form only, never a snapshot grammar extension, D87's own separate owner gate). */
 const throwNonSnapshotLiteral = (literalKind: string): never =>
