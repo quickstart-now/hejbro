@@ -9,13 +9,18 @@ import { bigint, interval, schema, table, text, uuid } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { CompileInput } from "../../src/compile/compile";
 import type {
+	DeleteChainFilterable,
 	DeleteChainFinal,
 	InsertChainFinal,
+	SelectChainJoinable,
 	SelectChainLimited,
+	SelectChainRelated,
+	UpdateChainFilterable,
 	UpdateChainFinal,
 } from "../../src/db/chain";
 import type { ExecuteResult } from "../../src/db/db";
 import type { Tx } from "../../src/db/transaction";
+import type { SqlExpr } from "../../src/sql";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -117,6 +122,42 @@ describe("chain await types equal execute types for select and returning mutatio
 		// db.execute resolves for the identical statement kind.
 		expectTypeOf<TxRows<SelectLimited<Posts>>>().toEqualTypeOf<
 			ExecuteResult<SelectLimited<Posts>>
+		>();
+	});
+});
+
+/**
+ * #386: a `sql` fragment is `Expr<"unknown">`, so before the `Condition`
+ * union reached the chain every one of these positions rejected it — the
+ * escape hatch D93 designates as the answer for everything the typed
+ * operators cannot express had no way into a condition. These are
+ * type-only assertions: the runtime path was always able to carry the
+ * fragment, only the parameter types refused it.
+ */
+describe("sql fragments are conditions everywhere the chain takes one (#386)", () => {
+	it("type-checks in select where, join on, update where and delete where", () => {
+		// Assignability, in the direction that matters: a fragment goes INTO
+		// each condition parameter. Reverse it and every line passes
+		// vacuously. Type-only throughout — `toBeCallableWith` would
+		// evaluate its argument at runtime, and there is no fragment to
+		// build here.
+		expectTypeOf<SqlExpr>().toExtend<
+			Parameters<SelectChainJoinable<Posts>["where"]>[0]
+		>();
+		expectTypeOf<SqlExpr>().toExtend<
+			Parameters<SelectChainJoinable<Posts>["innerJoin"]>[1]
+		>();
+		expectTypeOf<SqlExpr>().toExtend<
+			Parameters<SelectChainJoinable<Posts>["leftJoin"]>[1]
+		>();
+		expectTypeOf<SqlExpr>().toExtend<
+			Parameters<UpdateChainFilterable<Posts>["where"]>[0]
+		>();
+		expectTypeOf<SqlExpr>().toExtend<
+			Parameters<DeleteChainFilterable<Posts>["where"]>[0]
+		>();
+		expectTypeOf<SqlExpr>().toExtend<
+			Parameters<SelectChainRelated<{ id: string }>["where"]>[0]
 		>();
 	});
 });

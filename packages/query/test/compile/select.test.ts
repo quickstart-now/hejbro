@@ -1,4 +1,5 @@
 import {
+	and,
 	coalesce,
 	eq,
 	schema,
@@ -6,10 +7,12 @@ import {
 	table,
 	text,
 	timestamptz,
+	update,
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { compile } from "../../src/compile/compile";
+import { sql } from "../../src/sql";
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -84,5 +87,46 @@ describe("compile: select with where", () => {
 			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = $1 order by coalesce("app"."posts"."published_at", $2::timestamptz) desc',
 		);
 		expect(result.params).toEqual(["published", "2020-01-01T00:00:00.000Z"]);
+	});
+});
+
+describe("compile: a sql fragment as a condition (#386)", () => {
+	it("parameterizes a fragment condition's interpolations", () => {
+		const statement = select(posts).where(
+			sql`lower(${posts.status}) = ${"published"}`,
+		);
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where lower("app"."posts"."status") = $1',
+		);
+		expect(result.sql).not.toContain("'published'");
+		expect(result.params).toEqual(["published"]);
+	});
+
+	it("composes a fragment with an operator-built condition in written order", () => {
+		const statement = select(posts).where(
+			and(
+				eq(posts.status, "published"),
+				sql`char_length(${posts.status}) > ${3}`,
+			),
+		);
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where ("app"."posts"."status" = $1) and char_length("app"."posts"."status") > $2',
+		);
+		expect(result.params).toEqual(["published", 3]);
+	});
+
+	it("filters an update through a fragment condition", () => {
+		const statement = update(posts)
+			.set({ status: "archived" })
+			.where(sql`lower(${posts.status}) = ${"published"}`)
+			.returning({ id: posts.id });
+		const result = compile(statement);
+
+		expect(result.sql).toContain('where lower("app"."posts"."status") = $2');
+		expect(result.params).toEqual(["archived", "published"]);
 	});
 });

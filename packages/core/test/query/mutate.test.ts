@@ -96,6 +96,22 @@ describe("mutation builders", () => {
 			'update "app"."posts" set "published_at" = now() where "app"."posts"."slug" = \'hello\' returning "id", "slug", "published_at"',
 		);
 	});
+	it("accepts a sql fragment as an update or delete condition", () => {
+		// #386: the same Condition union the declaration medium uses.
+		const updated = update(posts)
+			.set({ publishedAt: now() })
+			.where(sql`lower(${posts.slug}) = ${"hello"}`)
+			.returning();
+		expect(renderQuery(updated.updateQuery)).toContain(
+			'where lower("app"."posts"."slug") = \'hello\'',
+		);
+		const deleted = deleteFrom(posts)
+			.where(sql`char_length(${posts.slug}) > ${3}`)
+			.returning();
+		expect(renderQuery(deleted.deleteQuery)).toContain(
+			'where char_length("app"."posts"."slug") > 3',
+		);
+	});
 	it("renders insert with on conflict do nothing", () => {
 		const query = insert(posts)
 			.values({ slug: "hello" })

@@ -3,6 +3,7 @@ import { getTableMeta, toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
 import type {
 	ColumnRef,
+	Condition,
 	DeleteNode,
 	Expr,
 	ExprNode,
@@ -214,7 +215,7 @@ export type UpdateReturnable<TTable extends Table = Table> =
 	};
 export type UpdateFilterable<TTable extends Table = Table> =
 	UpdateReturnable<TTable> & {
-		where(condition: Expr<"boolean">): UpdateReturnable<TTable>;
+		where(condition: Condition): UpdateReturnable<TTable>;
 	};
 
 export type DeleteFinal<
@@ -233,7 +234,7 @@ export type DeleteReturnable<TTable extends Table = Table> =
 	};
 export type DeleteFilterable<TTable extends Table = Table> =
 	DeleteReturnable<TTable> & {
-		where(condition: Expr<"boolean">): DeleteReturnable<TTable>;
+		where(condition: Condition): DeleteReturnable<TTable>;
 	};
 
 /**
@@ -525,7 +526,7 @@ const makeUpdateFilterable = <TTable extends Table>(
 				...node,
 				returning: resolveReturning(target, projection),
 			}),
-		where: (condition: Expr<"boolean">) =>
+		where: (condition: Condition) =>
 			makeUpdateReturnable({ ...node, where: condition.exprNode }, target),
 	};
 	return stage as UpdateFilterable<TTable>;
@@ -582,7 +583,7 @@ const makeDeleteFilterable = <TTable extends Table>(
 				...node,
 				returning: resolveReturning(target, projection),
 			}),
-		where: (condition: Expr<"boolean">) =>
+		where: (condition: Condition) =>
 			makeDeleteReturnable({ ...node, where: condition.exprNode }, target),
 	};
 	return stage as DeleteFilterable<TTable>;

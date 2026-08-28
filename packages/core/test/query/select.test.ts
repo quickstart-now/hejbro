@@ -17,6 +17,7 @@ import {
 	renderSetOp,
 	schema,
 	select,
+	sql,
 	table,
 	text,
 	timestamptz,
@@ -38,6 +39,38 @@ describe("select builder", () => {
 	it("renders a whole-table select with explicit columns", () => {
 		expect(renderSelect(select(posts).selectQuery)).toBe(
 			'select "id", "status", "published_at" from "app"."posts"',
+		);
+	});
+	it("accepts a sql fragment as a where condition", () => {
+		// #386: the declaration medium's condition positions (check(), a
+		// partial index, an RLS policy) already take Expr<"unknown">; a
+		// query's condition positions take the same union, so a predicate
+		// the typed operators cannot build needs no cast.
+		const query = select(posts).where(
+			sql`lower(${posts.status}) = ${"published"}`,
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where lower("app"."posts"."status") = \'published\'',
+		);
+	});
+	it("accepts a sql fragment as a join condition", () => {
+		const query = select(posts).innerJoin(
+			comments,
+			sql`${comments.postId} = ${posts.id}`,
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" inner join "app"."comments" on "app"."comments"."post_id" = "app"."posts"."id"',
+		);
+	});
+	it("composes a sql fragment with an operator-built condition", () => {
+		const query = select(posts).where(
+			and(
+				eq(posts.status, "published"),
+				sql`char_length(${posts.status}) > ${3}`,
+			),
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where ("app"."posts"."status" = \'published\') and char_length("app"."posts"."status") > 3',
 		);
 	});
 	it("renders where / order by / limit in type-state order", () => {
