@@ -1,10 +1,11 @@
-import type { CompileInput } from "../compile/compile";
+import { quoteIdentifier } from "@hejbro/core";
+import type { CompileInput, CompileResult } from "../compile/compile";
 import type { Driver, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
 import type { ChainApi } from "./chain";
 import { createChainApi } from "./chain";
 import type { Declarations, ExecuteResult } from "./db";
-import { executeOn } from "./execute";
+import { executeOn, sendCompiled } from "./execute";
 
 /**
  * What a `transaction()` callback receives — `execute` plus the same
@@ -31,6 +32,21 @@ export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
 	execute<TStatement extends CompileInput>(
 		statement: TStatement,
 	): Promise<ExecuteResult<TStatement>>;
+	/**
+	 * A nested transaction on the same connection, bracketed by a
+	 * `SAVEPOINT` (#313): the callback's own statements are released into
+	 * the enclosing transaction on normal return and rolled back to the
+	 * savepoint on a thrown error, which is rethrown unchanged. Rolling
+	 * back a savepoint does not abort the transaction containing it, so
+	 * the outer callback can catch and carry on.
+	 *
+	 * This is the supported way to nest. Reaching back to the *outer
+	 * handle's* `db.transaction(...)` from inside a callback still fails
+	 * with `nested-transaction-unsupported` — that would take a second
+	 * connection out of the pool, which is a different thing entirely and
+	 * a deadlock waiting to happen, not a nesting of this transaction.
+	 */
+	transaction<T>(callback: (tx: Tx<TSchema>) => Promise<T>): Promise<T>;
 };
 
 /**
@@ -45,9 +61,68 @@ export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
  * hand-written `Tx` object literals that could quietly drift apart on
  * which members they carry.
  */
+/**
+ * The savepoint counter one transaction's whole `tx` tree shares —
+ * monotonic, never per-depth. Depth-keyed names would reuse a name after
+ * a sibling rolled back to it (`ROLLBACK TO` keeps the savepoint alive),
+ * leaving two live savepoints with one name; a counter cannot.
+ */
+export type SavepointCounter = { next: number };
+
+/** Savepoint names are generated here and never caller-supplied, so quoting is belt-and-braces rather than the only defense (contrast `SET LOCAL ROLE` in `context.ts`). */
+const savepointStatement = (verb: string, name: string): CompileResult => ({
+	sql: `${verb} ${quoteIdentifier(name)}`,
+	params: [],
+	kind: "sql",
+});
+
+/** Rethrows the callback's own error after rolling back to `name`; a failing rollback means the connection itself is in trouble, so it surfaces as its own error rather than being swallowed — with the callback's error kept on the side so neither fact is lost. */
+async function rollbackToSavepoint(
+	session: DriverSession,
+	name: string,
+	callbackError: unknown,
+): Promise<never> {
+	try {
+		await sendCompiled(
+			session,
+			savepointStatement("rollback to savepoint", name),
+		);
+	} catch (rollbackError) {
+		throw Object.assign(
+			new Error(
+				`rolling back to savepoint "${name}" failed after the nested transaction callback threw. Next: inspect "cause" for the rollback failure and "callbackError" for what the callback threw -- the connection is likely no longer usable, and the enclosing transaction will roll back.`,
+			),
+			{
+				code: "savepoint-rollback-failed",
+				cause: rollbackError,
+				callbackError,
+			},
+		);
+	}
+	throw callbackError;
+}
+
+/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw. */
+const createSavepointApi = (
+	session: DriverSession,
+	tables: Declarations["tables"],
+	counter: SavepointCounter,
+): Tx["transaction"] =>
+	(async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
+		const name = `hejbro_sp_${counter.next}`;
+		counter.next += 1;
+		await sendCompiled(session, savepointStatement("savepoint", name));
+		const result = await callback(buildTx(session, tables, counter)).catch(
+			(error: unknown) => rollbackToSavepoint(session, name, error),
+		);
+		await sendCompiled(session, savepointStatement("release savepoint", name));
+		return result;
+	}) as Tx["transaction"];
+
 export const buildTx = (
 	session: DriverSession,
 	tables: Declarations["tables"],
+	counter: SavepointCounter = { next: 1 },
 ): Tx => ({
 	...createChainApi((send) => send(session), tables),
 	// executeOn's own runtime return is always the plain DriverRow shape --
@@ -56,13 +131,14 @@ export const buildTx = (
 	// `executeImpl` cast).
 	execute: ((statement: CompileInput) =>
 		executeOn(session, statement, tables)) as Tx["execute"],
+	transaction: createSavepointApi(session, tables, counter),
 });
 
 /** Builds and throws the `nested-transaction-unsupported`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). */
 function throwNestedTransactionUnsupported(): never {
 	throw Object.assign(
 		new Error(
-			'transaction() was called again from inside an already-open transaction callback. Next: savepoints aren\'t supported yet (#313) -- issue every statement for this transaction through the one "tx" handle the outer callback already received, instead of calling transaction() a second time.',
+			'transaction() was called again on the db handle from inside an already-open transaction callback -- that would take a second connection out of the pool, not nest. Next: call transaction() on the "tx" handle the outer callback received, which nests on the same connection with a savepoint.',
 		),
 		{ code: "nested-transaction-unsupported" },
 	);

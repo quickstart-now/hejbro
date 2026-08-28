@@ -1314,4 +1314,82 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			"only_b",
 		]);
 	});
+
+	it("savepoints (#313): a rolled-back nested transaction keeps the outer one alive, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.sp_rows (
+				id uuid primary key,
+				label text not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const spRows = table(testSchema, "sp_rows", {
+			id: uuid().primaryKey(),
+			label: text().notNull(),
+		});
+		const handle = db({ spRows }, driver);
+		const boom = new Error("inner failed");
+
+		// The claim a fixture driver cannot make: the server itself keeps
+		// the outer transaction usable after the inner one rolls back, and
+		// commits exactly the rows outside the rolled-back savepoint.
+		const caught = await handle.transaction(async (tx) => {
+			await tx
+				.insert(spRows)
+				.values({ id: "11111111-1111-1111-1111-111111111111", label: "kept" })
+				.returning({ id: spRows.id });
+
+			const inner = await tx
+				.transaction(async (nested) => {
+					await nested
+						.insert(spRows)
+						.values({
+							id: "22222222-2222-2222-2222-222222222222",
+							label: "discarded",
+						})
+						.returning({ id: spRows.id });
+					throw boom;
+				})
+				.catch((error: unknown) => error);
+
+			// the outer transaction is NOT aborted -- this statement would
+			// fail with "current transaction is aborted" if the rollback had
+			// taken the whole transaction down instead of just the savepoint.
+			await tx
+				.insert(spRows)
+				.values({ id: "33333333-3333-3333-3333-333333333333", label: "after" })
+				.returning({ id: spRows.id });
+			return inner;
+		});
+
+		expect(caught).toBe(boom);
+		const committed = await handle.select(spRows);
+		expect(committed.map((row) => row.label).sort()).toEqual(["after", "kept"]);
+
+		// a nested transaction that returns normally releases into the outer
+		// one, so its rows commit with everything else.
+		await handle.transaction(async (tx) => {
+			await tx.transaction(async (nested) => {
+				await nested
+					.insert(spRows)
+					.values({
+						id: "44444444-4444-4444-4444-444444444444",
+						label: "released",
+					})
+					.returning({ id: spRows.id });
+			});
+		});
+		const withReleased = await handle.select(spRows);
+		expect(withReleased.map((row) => row.label).sort()).toEqual([
+			"after",
+			"kept",
+			"released",
+		]);
+	});
 });
