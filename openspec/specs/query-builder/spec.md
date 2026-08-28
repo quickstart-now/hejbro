@@ -47,7 +47,13 @@ list; the rendered SQL SHALL never contain `returning *`.
 ### Requirement: Condition expressions reuse the declaration vocabulary
 Query conditions SHALL be built from the same expression helpers the
 schema DSL uses (the core ExprNode vocabulary), so an expression valid
-in a declaration is valid in a query.
+in a declaration is valid in a query. Every condition position — select
+`where`, join `on`, update `where`, delete `where`, and the `related()`
+chain's `where` — SHALL accept the same `Expr<"boolean"> |
+Expr<"unknown">` union the declaration-side condition positions accept
+(`check()`, partial-index `.where()`, RLS policy `using`/`withCheck`),
+so a `sql` fragment, whose family cannot be narrowed at compile time,
+needs no cast to be used as a condition.
 
 #### Scenario: Declaration helper used in a query filter
 - **WHEN** a `where` condition is built with an existing expression
@@ -62,11 +68,29 @@ in a declaration is valid in a query.
   and the parameter is the ISO-8601 string, so the value's type is fixed
   by the statement rather than by driver-specific encoding
 
+#### Scenario: A sql fragment is a condition wherever a declaration accepts one
+- **WHEN** a `sql` fragment expressing a predicate the typed operators
+  cannot build (a function call over a column compared to a value) is
+  passed to a select `where`, a join `on`, or an update or delete
+  `where`
+- **THEN** it type-checks without a cast and compiles into the
+  statement's condition position with its interpolated values as bind
+  parameters
+
+#### Scenario: A fragment condition composes with typed operators
+- **WHEN** a `sql` fragment is combined with an operator-built condition
+  through `and`/`or`
+- **THEN** the combination type-checks and compiles as one condition
+  tree, in the order written
+
 ### Requirement: Typed sql escape hatch
 The query package SHALL provide a typed `sql` tagged template usable as
 a statement or embedded as an expression fragment. Interpolated values
 SHALL become bind parameters, never inlined literals; interpolated
-fragments and identifiers compose structurally.
+fragments and identifiers compose structurally. A fragment SHALL be
+usable in every position a statement admits an expression — projection,
+written value, and condition alike — so the escape hatch has no position
+it cannot reach.
 
 The same fragment is medium-dependent by design: written into a
 declaration it renders its interpolated values as quoted inline literals,
@@ -257,3 +281,78 @@ LEFT branch, SQL's own naming rule.
   snapshotted and read back
 - **THEN** the diff against the unchanged declaration is empty and the
   view's column list equals the left branch's
+
+### Requirement: Selects paginate and de-duplicate
+A select SHALL support `offset`, `distinct`, and `distinct on (...)`.
+
+`offset` SHALL be available after `limit` and on its own (a bare `offset`
+is legal SQL), SHALL accept only a non-negative integer, and SHALL render
+inline after `limit` — never as a bind parameter, the same rule `limit`
+already follows, so the compiled statement stays reviewable. A set
+operation SHALL carry a whole-set `offset` exactly as it already carries a
+whole-set `limit`.
+
+`distinct` and `distinctOn` SHALL be available only on the stage `select`
+itself returns and exactly once, matching SQL's own placement between
+`select` and the projection. `distinctOn` SHALL require at least one
+column and SHALL render its columns before the projection; which row of
+each group survives is decided by the statement's `order by`, as Postgres
+defines it.
+
+#### Scenario: A page is taken by the database
+- **WHEN** a select chains `limit` then `offset`
+- **THEN** the compiled SQL ends `limit <n> offset <m>` with both values
+  inline and no parameters added, and the database returns exactly that
+  page
+
+#### Scenario: An offset without a limit compiles
+- **WHEN** a select chains `offset` without `limit`
+- **THEN** the compiled SQL carries the `offset` clause alone
+
+#### Scenario: A negative or fractional row count is refused
+- **WHEN** `limit` or `offset` is called with a negative or fractional
+  number
+- **THEN** the call fails immediately, naming the clause and the
+  non-negative-integer rule
+
+#### Scenario: distinct on takes one row per group
+- **WHEN** a select applies `distinctOn` over a column and orders by that
+  column followed by a descending tiebreaker
+- **THEN** the compiled SQL renders `select distinct on (<column>)` before
+  the projection, and the database returns one row per group — the one the
+  ordering puts first
+
+#### Scenario: distinct is settable once, first
+- **WHEN** a chain has already joined, filtered, or ordered
+- **THEN** `distinct`/`distinctOn` are not available on that stage, so a
+  placement SQL would reject cannot be written
+
+### Requirement: Selects aggregate and group
+The builder SHALL provide the aggregate vocabulary — `count()`,
+`countWhere(expr)`, `min`, `max`, `sum`, `avg` — and the `groupBy` and
+`having` stages.
+
+`groupBy` SHALL be available after `where` and SHALL require at least one
+expression. `having` SHALL be available only after `groupBy`, and
+`orderBy`/`limit`/`offset` SHALL still follow it: the chain admits
+exactly SQL's own clause order, so a placement Postgres would reject is
+not expressible.
+
+Aggregates SHALL render as Postgres's own function names, with
+`count()` rendering `count(*)`.
+
+#### Scenario: Grouping with a group filter
+- **WHEN** a select projects a column and `count()`, filters rows with
+  `where`, groups by that column, filters groups with `having`, then
+  orders and limits
+- **THEN** the compiled SQL carries `where`, `group by`, `having`,
+  `order by` and `limit` in that order, and the database returns only the
+  groups `having` kept
+
+#### Scenario: An empty group by is refused
+- **WHEN** `groupBy()` is called with no expressions
+- **THEN** it fails immediately, naming what to pass
+
+#### Scenario: having is unavailable without grouping
+- **WHEN** a chain has not called `groupBy`
+- **THEN** `having` is not on that stage
