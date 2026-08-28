@@ -9,7 +9,7 @@
 			"columns": [
 				{
 					"identity": {
-						"kind": "always"
+						"kind": "by-default"
 					},
 					"name": "id",
 					"notNull": true,
@@ -32,6 +32,12 @@
 					"name": "label",
 					"typeNode": {
 						"typeName": "text"
+					}
+				},
+				{
+					"name": "count",
+					"typeNode": {
+						"typeName": "integer"
 					}
 				}
 			],
