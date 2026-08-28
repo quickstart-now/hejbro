@@ -187,5 +187,9 @@ lands its entry in the same commit or PR as the change.
 - [ ] README CRAP block refreshed (`pnpm check:crap`)
 - [ ] OpenSpec change state current (`tasks.md` ticks; archive on
       completion; durations in `openspec/task-times.csv`)
+- [ ] Wrote `openspec/task-times.csv` rows → README task-time badges
+      refreshed too (`pnpm check:tasktime`). CI enforces this on one
+      matrix leg only, so it surfaces as a single-leg failure long
+      after the change looks green locally
 - [ ] Owner-driven change carries its `blackbox/` entry in the same PR
 - [ ] PR body lists the commits to be squashed
