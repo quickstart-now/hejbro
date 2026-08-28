@@ -5,6 +5,7 @@ import type {
 	QueryNode,
 	SelectNode,
 	UpdateNode,
+	SetOpNode,
 } from "@hejbro/core";
 import { renderExpr } from "@hejbro/core";
 import { compileDelete, compileInsert, compileUpdate } from "./mutation";
@@ -21,6 +22,7 @@ import { compileSelect, compileSetOp } from "./select";
  */
 export type CompileInput =
 	| { readonly selectQuery: SelectNode }
+	| { readonly setOpQuery: SetOpNode }
 	| { readonly insertQuery: InsertNode }
 	| { readonly updateQuery: UpdateNode }
 	| { readonly deleteQuery: DeleteNode }
@@ -55,6 +57,7 @@ export type CompileResult = {
 
 const wrapperKeys = [
 	"selectQuery",
+	"setOpQuery",
 	"insertQuery",
 	"updateQuery",
 	"deleteQuery",

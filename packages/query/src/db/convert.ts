@@ -263,6 +263,7 @@ type CompileInputWrapperKey = DistributedKeys<
  */
 const wrapperKeyPresence: Record<CompileInputWrapperKey, true> = {
 	selectQuery: true,
+	setOpQuery: true,
 	insertQuery: true,
 	updateQuery: true,
 	deleteQuery: true,
