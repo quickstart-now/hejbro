@@ -4,7 +4,7 @@
 -- + rls app.attachment_blobs [new]
 -- + policy app.attachment_blobs.attachment_blobs_read_own [new]
 -- parent-snapshot: sha256:87309be8bdd2bcc0a65b58d3a1656cdeba17b42c953d1d0be55d81bde28ac7ce
--- snapshot: sha256:fbe8eef90aa5dce40dcdb1f8a3714a262a315ddd3bbe4fcfa787b1bed41c1b6b
+-- snapshot: sha256:826f7b74c4952340575fa2d2e04e437859e79ebf440db2ed99651dd479bbfacc
 
 create table "app"."attachment_blobs" (
 	"attachment_id" uuid not null,

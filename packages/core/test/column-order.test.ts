@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getTableMeta } from "../src/dsl/table";
-import { emptySnapshot, schema, table, text } from "../src/index";
+import { encodeExprNode } from "../src/expr/codec";
+import { emptySnapshot, numeric, schema, sql, table, text } from "../src/index";
 import {
 	applyColumnOrderToQuery,
 	applyColumnOrderToSelect,
@@ -166,6 +167,104 @@ describe("computeColumnOrder", () => {
 	it("returns null for a table it knows nothing about", () => {
 		const oracle = computeColumnOrder([app], emptySnapshot, []);
 		expect(oracle({ schemaName: "auth", tableName: "users" })).toBeNull();
+	});
+});
+
+// D100: an expression-change rebuild is a real `drop column` + `add column`
+// on Postgres, which physically re-appends the column at the end of the
+// table -- the oracle must route that column through the newcomer branch,
+// not its pre-rebuild position.
+describe("computeColumnOrder — expression-change rebuild (D100)", () => {
+	const generatedField = (generated: string | undefined) => {
+		if (generated === undefined) {
+			return {};
+		}
+		return { generated: encodeExprNode(sql.raw(generated).exprNode) };
+	};
+
+	const numericColumn = (generated?: string) => ({
+		typeNode: { typeName: "numeric", precision: null, scale: null },
+		...generatedField(generated),
+	});
+
+	const parentWithGenerated = (
+		columns: ReadonlyArray<{
+			readonly name: string;
+			readonly generated?: string;
+		}>,
+	): Snapshot => ({
+		...emptySnapshot,
+		objects: {
+			"table:app.projects": {
+				schema: "app",
+				name: "projects",
+				columns: columns.map(({ name, generated }) => ({
+					name,
+					...numericColumn(generated),
+				})),
+				indexes: [],
+				foreignKeys: [],
+			},
+		},
+	});
+
+	const totalColumn = (expression: string | null) => {
+		if (expression === null) {
+			return numeric();
+		}
+		return numeric().generatedAlwaysAs(sql.raw(expression));
+	};
+
+	const declaredNumeric = (spec: {
+		readonly a: true;
+		readonly total: string | null;
+		readonly b: true;
+	}) =>
+		getTableMeta(
+			table(app, "projects", {
+				a: numeric(),
+				total: totalColumn(spec.total),
+				b: numeric(),
+			}),
+		);
+
+	it("moves a rebuilt column (same name, changed expression) to the end", () => {
+		const oracle = computeColumnOrder(
+			[app, declaredNumeric({ a: true, total: "a * 2", b: true })],
+			parentWithGenerated([
+				{ name: "a" },
+				{ name: "total", generated: "a" },
+				{ name: "b" },
+			]),
+			[],
+		);
+		expect(oracle(ref)).toEqual(["a", "b", "total"]);
+	});
+
+	it("keeps an unchanged generated column in place", () => {
+		const oracle = computeColumnOrder(
+			[app, declaredNumeric({ a: true, total: "a", b: true })],
+			parentWithGenerated([
+				{ name: "a" },
+				{ name: "total", generated: "a" },
+				{ name: "b" },
+			]),
+			[],
+		);
+		expect(oracle(ref)).toEqual(["a", "total", "b"]);
+	});
+
+	it("keeps a generated-to-plain transition in place -- drop expression is in-place, not a rebuild", () => {
+		const oracle = computeColumnOrder(
+			[app, declaredNumeric({ a: true, total: null, b: true })],
+			parentWithGenerated([
+				{ name: "a" },
+				{ name: "total", generated: "a" },
+				{ name: "b" },
+			]),
+			[],
+		);
+		expect(oracle(ref)).toEqual(["a", "total", "b"]);
 	});
 });
 

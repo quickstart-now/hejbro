@@ -29,6 +29,18 @@ import type { TypeNode } from "../types/type-node";
  * already committed to a user's database. UNIQUE *emission* stays
  * column-level and unimplemented in this wave (`table-kind-emit.ts`'s
  * `unsupported-column-alter` guard) — only the name is recorded here.
+ *
+ * `generated` (add-generated-columns, D100) is a stored computed column's
+ * own expression, encoded the same way `default` is (the expression
+ * codec) — present only on a `.generatedAlwaysAs(...)` column, read via
+ * {@link columnGenerated}. `identity` records an identity column's kind
+ * and any options its declaration set explicitly (design decision 3:
+ * declaration-is-truth, never diffed against a Postgres default the
+ * declaration never mentioned) — read via {@link columnIdentity}.
+ * `generated`/`identity` are mutually exclusive on a real column
+ * (`table()`'s own guard, `dsl/table.ts`), but this type doesn't encode
+ * that itself — the same way `default`/`unique` aren't mutually
+ * exclusive at this type's level either.
  */
 export type ColumnSnapshot = {
 	readonly name: string;
@@ -38,6 +50,29 @@ export type ColumnSnapshot = {
 	readonly unique?: true;
 	readonly uniqueName?: string;
 	readonly default?: JsonValue;
+	readonly generated?: JsonValue;
+	readonly identity?: IdentitySnapshot;
+};
+
+/**
+ * An identity column's kind and any sequence options its declaration set
+ * explicitly (D100) — {@link ColumnSnapshot.identity}'s own shape. `kind`
+ * is kebab-case (`"by-default"`, not `"byDefault"`) per D57: it
+ * materializes into this artifact, unlike `IdentityKind`
+ * (`types/column-builder.ts`), the camelCase TypeScript-only union it's
+ * encoded from. The option fields stay camelCase (`startWith`, …) —
+ * D57's kebab rule targets *tokens*, not field names; every other
+ * snapshot field name in this file (`typeNode`, `uniqueName`,
+ * `primaryKeyName`, …) is camelCase too.
+ */
+export type IdentitySnapshot = {
+	readonly kind: "always" | "by-default";
+	readonly startWith?: number;
+	readonly increment?: number;
+	readonly minValue?: number;
+	readonly maxValue?: number;
+	readonly cache?: number;
+	readonly cycle?: boolean;
 };
 
 /** `column.notNull`, defaulting to `false` when absent (compact snapshot). */
@@ -63,6 +98,19 @@ export const columnDefault = (column: ColumnSnapshot): string | null => {
 	}
 	return renderExpr(decodeExprNode(column.default));
 };
+
+/** `column.generated` decoded and rendered back to SQL text, defaulting to `null` when absent (compact snapshot) — mirrors {@link columnDefault} (D100). */
+export const columnGenerated = (column: ColumnSnapshot): string | null => {
+	if (column.generated === undefined) {
+		return null;
+	}
+	return renderExpr(decodeExprNode(column.generated));
+};
+
+/** `column.identity`, defaulting to `null` when absent (compact snapshot, D100). */
+export const columnIdentity = (
+	column: ColumnSnapshot,
+): IdentitySnapshot | null => column.identity ?? null;
 
 /**
  * One column of an index as materialized in a table snapshot (D51/R8):

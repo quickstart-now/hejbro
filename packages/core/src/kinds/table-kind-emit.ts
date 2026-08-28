@@ -28,12 +28,22 @@ import {
 	createIndexSql,
 	createTableSql,
 	dropConstraintSql,
+	IDENTITY_KIND_KEYWORD,
+	IDENTITY_OPTION_KEYS,
 	renderColumnDefinition,
+	renderIdentityOptionToken,
+	renderIdentityPhrase,
 } from "./table-kind-emit-sql";
-import type { ColumnSnapshot, TableSnapshot } from "./table-snapshot";
+import type {
+	ColumnSnapshot,
+	IdentitySnapshot,
+	TableSnapshot,
+} from "./table-snapshot";
 import {
 	asTableSnapshot,
 	columnDefault,
+	columnGenerated,
+	columnIdentity,
 	columnNotNull,
 	columnPrimaryKey,
 	columnUnique,
@@ -232,6 +242,197 @@ const defaultAlterStatements = (
 	];
 };
 
+/**
+ * `true` only when both `previous`/`next` already declare a stored
+ * generated expression and its rendered text differs — a plain column, or
+ * a column newly becoming generated, is never this case. Text-compared via
+ * {@link columnGenerated} (decode + render), mirroring how `defaultChanged`
+ * already compares `columnDefault`'s rendered text rather than the raw
+ * encoded node.
+ */
+const generatedExpressionChanged = (
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): boolean => {
+	const previousGenerated = columnGenerated(previous);
+	const nextGenerated = columnGenerated(next);
+	return (
+		previousGenerated !== null &&
+		nextGenerated !== null &&
+		previousGenerated !== nextGenerated
+	);
+};
+
+/** `true` when `previous` was a stored generated column and `next` is a plain one — the in-place `drop expression` path (PG13+ grammar). */
+const generatedRemoved = (
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): boolean =>
+	columnGenerated(previous) !== null && columnGenerated(next) === null;
+
+/**
+ * An expression change is a full column rebuild — Postgres has no in-place
+ * `alter column ... set expression` (PG18-only grammar, a documented
+ * non-goal), so this drops the column and re-adds it with its NEXT
+ * definition, verbatim via {@link renderColumnDefinition} — which already
+ * renders every other clause (not null, default, unique), so a
+ * simultaneous change to any of those rides along for free. No
+ * destructive-change confirmation: the expression still derives the data.
+ */
+const generatedRebuildStatements = (
+	schema: string,
+	tableName: string,
+	entry: { readonly key: string; readonly next: ColumnSnapshot },
+): ReadonlyArray<SqlStatement> => [
+	statement(
+		`alter table ${qualifyName(schema, tableName)} drop column ${quoteIdentifier(entry.key)};`,
+	),
+	statement(
+		`alter table ${qualifyName(schema, tableName)} add column ${renderColumnDefinition(entry.next)};`,
+	),
+];
+
+/** Design decision 4: generated present→absent drops the stored expression in place (PG13+ grammar) — the column keeps its physical position and its last-computed value, and simply stops recomputing from this point forward. */
+const generatedDropExpressionStatements = (
+	schema: string,
+	tableName: string,
+	key: string,
+	changed: boolean,
+): ReadonlyArray<SqlStatement> => {
+	if (!changed) {
+		return [];
+	}
+	return [
+		statement(
+			`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} drop expression;`,
+		),
+	];
+};
+
+/** `true` when `previous` was a plain column and `next` is generated -- Postgres has no in-place alter for this transition. */
+const generatedAdded = (
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): boolean =>
+	columnGenerated(previous) === null && columnGenerated(next) !== null;
+
+/** `true` when `previous` had no identity and `next` does -- `add generated ... as identity`. */
+const identityAdded = (
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): boolean =>
+	columnIdentity(previous) === null && columnIdentity(next) !== null;
+
+/** `true` when `previous` had an identity and `next` doesn't -- `drop identity`. */
+const identityRemoved = (
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): boolean =>
+	columnIdentity(previous) !== null && columnIdentity(next) === null;
+
+/** The next identity's kind when it differs from the previous one (both present), else `null`. */
+const identityKindChangedTo = (
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): IdentitySnapshot["kind"] | null => {
+	const previousIdentity = columnIdentity(previous);
+	const nextIdentity = columnIdentity(next);
+	if (
+		previousIdentity === null ||
+		nextIdentity === null ||
+		previousIdentity.kind === nextIdentity.kind
+	) {
+		return null;
+	}
+	return nextIdentity.kind;
+};
+
+/** `alter column ... add <phrase>` -- Postgres requires the column already NOT NULL, so this must run after `set not null` (`alterColumnStatements`' own array order). */
+const identityAddStatement = (
+	schema: string,
+	tableName: string,
+	key: string,
+	added: boolean,
+	next: ColumnSnapshot,
+): ReadonlyArray<SqlStatement> => {
+	const identity = columnIdentity(next);
+	if (!added || identity === null) {
+		return [];
+	}
+	return [
+		statement(
+			`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} add ${renderIdentityPhrase(identity)};`,
+		),
+	];
+};
+
+/** `alter column ... drop identity` -- Postgres rejects `drop not null` on an identity column, so this must run before `drop not null` (`alterColumnStatements`' own array order). */
+const identityDropStatement = (
+	schema: string,
+	tableName: string,
+	key: string,
+	removed: boolean,
+): ReadonlyArray<SqlStatement> => {
+	if (!removed) {
+		return [];
+	}
+	return [
+		statement(
+			`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} drop identity;`,
+		),
+	];
+};
+
+/** `alter column ... set generated <keyword>` for an existing identity switching kind -- notNull is unaffected (both kinds already imply it). */
+const identityKindChangeStatement = (
+	schema: string,
+	tableName: string,
+	key: string,
+	changedTo: IdentitySnapshot["kind"] | null,
+): ReadonlyArray<SqlStatement> => {
+	if (changedTo === null) {
+		return [];
+	}
+	return [
+		statement(
+			`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} set generated ${IDENTITY_KIND_KEYWORD[changedTo]};`,
+		),
+	];
+};
+
+/**
+ * `alter column ... set <token>` per identity option that gained a value
+ * or changed one, in canonical order (D100/E6) — `[]` on either side
+ * lacking identity (add/remove/newly-generated already cover those). An
+ * option the next declaration no longer sets renders nothing (design
+ * decision 3: declaration-is-truth, never a reset toward a Postgres
+ * default the declaration didn't ask for).
+ */
+const identityOptionChangeStatements = (
+	schema: string,
+	tableName: string,
+	key: string,
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): ReadonlyArray<SqlStatement> => {
+	const previousIdentity = columnIdentity(previous);
+	const nextIdentity = columnIdentity(next);
+	if (previousIdentity === null || nextIdentity === null) {
+		return [];
+	}
+	return IDENTITY_OPTION_KEYS.flatMap((optionKey) => {
+		const nextValue = nextIdentity[optionKey];
+		if (nextValue === undefined || nextValue === previousIdentity[optionKey]) {
+			return [];
+		}
+		return [
+			statement(
+				`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} set ${renderIdentityOptionToken(optionKey, nextValue)};`,
+			),
+		];
+	});
+};
+
 const alterColumnStatements = (
 	schema: string,
 	tableName: string,
@@ -241,6 +442,16 @@ const alterColumnStatements = (
 		readonly next: ColumnSnapshot;
 	},
 ): ReadonlyArray<SqlStatement> => {
+	if (generatedExpressionChanged(entry.previous, entry.next)) {
+		return generatedRebuildStatements(schema, tableName, entry);
+	}
+	if (generatedAdded(entry.previous, entry.next)) {
+		return throwHejbroError(
+			"unsupported-column-alter",
+			`column "${entry.key}" on table "${tableName}" changed from a plain column to a generated one — Postgres has no in-place alter for this transition. Next: run generate once to drop "${entry.key}" from the declaration, then declare it generated and run generate again to re-add it.`,
+		);
+	}
+
 	const typeChanged = !sameJson(entry.previous.typeNode, entry.next.typeNode);
 	const notNullChanged =
 		columnNotNull(entry.previous) !== columnNotNull(entry.next);
@@ -279,6 +490,14 @@ const alterColumnStatements = (
 			typeChanged,
 			entry.next.typeNode,
 		),
+		// drop identity before dropping not null (Postgres rejects `drop not
+		// null` on an identity column) -- see identityDropStatement's own doc.
+		...identityDropStatement(
+			schema,
+			tableName,
+			entry.key,
+			identityRemoved(entry.previous, entry.next),
+		),
 		...notNullAlterStatements(
 			schema,
 			tableName,
@@ -286,12 +505,40 @@ const alterColumnStatements = (
 			notNullChanged,
 			columnNotNull(entry.next),
 		),
+		// add identity after setting not null (Postgres rejects adding
+		// identity to a nullable column) -- see identityAddStatement's own doc.
+		...identityAddStatement(
+			schema,
+			tableName,
+			entry.key,
+			identityAdded(entry.previous, entry.next),
+			entry.next,
+		),
+		...identityKindChangeStatement(
+			schema,
+			tableName,
+			entry.key,
+			identityKindChangedTo(entry.previous, entry.next),
+		),
+		...identityOptionChangeStatements(
+			schema,
+			tableName,
+			entry.key,
+			entry.previous,
+			entry.next,
+		),
 		...defaultAlterStatements(
 			schema,
 			tableName,
 			entry.key,
 			defaultChanged,
 			columnDefault(entry.next),
+		),
+		...generatedDropExpressionStatements(
+			schema,
+			tableName,
+			entry.key,
+			generatedRemoved(entry.previous, entry.next),
 		),
 	];
 };

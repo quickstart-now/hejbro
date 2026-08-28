@@ -12,7 +12,11 @@ import type { KeyedDiff } from "../kind/diff-helpers";
 import { createOrDropDiff, diffByKey } from "../kind/diff-helpers";
 import type { ObjectKind, SerializeContext } from "../kind/object-kind";
 import type { JsonValue } from "../snapshot/stable-json";
-import type { ColumnState } from "../types/column-builder";
+import type {
+	ColumnState,
+	IdentityKind,
+	IdentityState,
+} from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
 import { isSerialTypeNode, serialBaseType } from "../types/type-node";
 import { emitTableSql } from "./table-kind-emit";
@@ -20,6 +24,7 @@ import type {
 	CheckSnapshot,
 	ColumnSnapshot,
 	ForeignKeySnapshot,
+	IdentitySnapshot,
 	IndexColumnSnapshot,
 	IndexSnapshot,
 	TableSnapshot,
@@ -83,22 +88,21 @@ export const deriveUniqueName = (
 ): string => `${tableName}_${columnName}_key`;
 
 /**
- * `primaryKey` implies `notNull` once a column is materialized into a
- * snapshot -- and so does a `serial`/`smallserial`/`bigserial` type (#23/
- * D66): confirmed against a real Postgres (`pg_dump` on a table declaring
- * `bigserial`/`smallserial` columns with neither `.primaryKey()` nor
- * `.notNull()` chained still showed `NOT NULL` on both) that the
- * pseudo-type sugar itself carries the constraint, independent of
- * primary-key status. None of the three serial factories set `notNull` on
- * their own construction, so without this, a bare `serial()` column would
- * materialize as nullable -- a column a real Postgres would never let
- * exist.
+ * `primaryKey`, a `serial`/`smallserial`/`bigserial` type (#23/D66,
+ * confirmed against `pg_dump`), and an identity (D100, not yet
+ * witnessed — group 4; both kinds alike) all imply `notNull` once a
+ * column is materialized into a snapshot, even when the declaration
+ * itself never called `.notNull()`.
  */
 const materializeNotNull = (columnState: ColumnState): boolean => {
 	if (columnState.primaryKey) {
 		return true;
 	}
 	if (isSerialTypeNode(columnState.typeNode)) {
+		return true;
+	}
+	// Every identity column is NOT NULL by Postgres rule, both kinds alike.
+	if (columnState.identity !== undefined) {
 		return true;
 	}
 	return columnState.notNull;
@@ -165,6 +169,29 @@ const encodeColumnDefaultExpr = (
 	return encodeExprNode(columnState.defaultValue);
 };
 
+/** Encodes a `.generatedAlwaysAs(...)` column's own expression into its snapshot form (D100), mirroring {@link encodeColumnDefaultExpr} — `null` when the column isn't generated. */
+const encodeColumnGeneratedExpr = (
+	columnState: ColumnState,
+): JsonValue | null => {
+	if (columnState.generated === undefined) {
+		return null;
+	}
+	return encodeExprNode(columnState.generated);
+};
+
+/**
+ * `columnState.identity.kind`'s camelCase→kebab map for the snapshot
+ * boundary (D57/D100) — table-kind-local, mirroring `expr/codec.ts`'s
+ * `NODE_KIND_TO_SNAPSHOT` precedent (`"all-columns"`), since this token
+ * has nothing to do with the expression codec.
+ */
+const IDENTITY_KIND_TO_SNAPSHOT: Readonly<
+	Record<IdentityKind, IdentitySnapshot["kind"]>
+> = {
+	always: "always",
+	byDefault: "by-default",
+};
+
 /** `{ notNull: true }` when the column is not-null, else `{}` — the compact-snapshot building block (Task 3 audit / D33): a `false`-default field is never recorded. */
 const notNullField = (value: boolean): Pick<ColumnSnapshot, "notNull"> => {
 	if (!value) {
@@ -211,6 +238,39 @@ const defaultField = (
 		return {};
 	}
 	return { default: value };
+};
+
+/** `{ generated: <node> }` when the column is a stored computed column, else `{}` (compact snapshot, D100) — mirrors {@link defaultField}. */
+const generatedField = (
+	value: JsonValue | null,
+): Pick<ColumnSnapshot, "generated"> => {
+	if (value === null) {
+		return {};
+	}
+	return { generated: value };
+};
+
+/**
+ * `{ identity: { kind, ...options } }` when the column declares an
+ * identity, else `{}` (compact snapshot, D100). `options` is spread
+ * as-is: `columnState.identity.options` already carries exactly the keys
+ * the declaration set (`IdentityOptions`' own optional fields, built by
+ * the `generatedAlwaysAsIdentity`/`generatedByDefaultAsIdentity`
+ * factories) — declaration-is-truth, never filled in with a Postgres
+ * default the declaration never mentioned (design decision 3).
+ */
+const identityField = (
+	identity: IdentityState | undefined,
+): Pick<ColumnSnapshot, "identity"> => {
+	if (identity === undefined) {
+		return {};
+	}
+	return {
+		identity: {
+			kind: IDENTITY_KIND_TO_SNAPSHOT[identity.kind],
+			...identity.options,
+		},
+	};
 };
 
 /** @see notNullField */
@@ -324,6 +384,8 @@ const serializeColumns = (
 				entry.columnState.unique,
 			),
 			...defaultField(encodeColumnDefaultExpr(entry.columnState)),
+			...generatedField(encodeColumnGeneratedExpr(entry.columnState)),
+			...identityField(entry.columnState.identity),
 		})),
 		context?.columnOrder({
 			schemaName: declaration.schema.schemaName,

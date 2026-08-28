@@ -128,3 +128,8 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-28,add-generated-columns,3.1,3,8,25,0,excluded-keys classification (red 5 / impl 8 / mutant-kill verification 7 / gates 5 -- implementation itself within estimate); +15m evidence re-collection and +8m comment-trim recorded as process rows below
 2026-08-28,add-generated-columns,gc3-evidence-recollect,3,0,15,0,process cost: turbo-routed evidence re-submission after the bare-tsc false-positive warning and one stale-brief crossing
 2026-08-28,add-generated-columns,gc3-comment-trim,3,0,8,0,process cost: comment-only commit applying the just-landed comment-budget rule (#380) -- measurement lines moved to the PR body; carried constructively by blob/shasum comparison, no re-verdict
+2026-08-28,add-generated-columns,2.1,2,8,40,0,snapshot v6 + fixture sweep; overrun = the bump's real blast (11 goldens + cross-package holds) not estimation error
+2026-08-28,add-generated-columns,2.2,2,8,60,0,create emit both halves (computed 2.2-a with 2.4; identity 2.2-b with E3=A materialization) incl. new goldens
+2026-08-28,add-generated-columns,2.3,2,9,25,0,identity diff alters + live-table golden; E2 guard landed with it (silent no-op -> loud unsupported-column-alter)
+2026-08-28,add-generated-columns,2.4,2,8,90,0,generated diff paths + E5 column-order rebuild oracle + E6 six-option renderer + E1 eight-file v6 sweep (verify exit 0 both examples) + followups
+2026-08-28,add-generated-columns,gc2-process,2,0,110,0,process cost: six contract gaps (E1-E6) surfaced and settled mid-piece incl. one lost lead escalation (session-text send path) and one post-freeze amend (rule issued: always a follow-up commit); review 4 rounds all PASS

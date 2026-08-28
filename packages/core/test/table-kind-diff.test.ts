@@ -24,6 +24,8 @@ import type {
 import {
 	asTableSnapshot,
 	checkExpression,
+	columnGenerated,
+	columnIdentity,
 	indexColumnExpression,
 	indexColumnOpclass,
 	indexMethod,
@@ -34,11 +36,14 @@ import {
 	buildSnapshot,
 	emptySnapshot,
 	HEJBRO_SNAPSHOT_VERSION,
+	parseSnapshot,
 	renderSnapshot,
 } from "../src/snapshot/snapshot";
 import {
+	bigint,
 	bigserial,
 	integer,
+	numeric,
 	serial,
 	smallserial,
 	text,
@@ -614,8 +619,8 @@ describe("createDefaultRegistry", () => {
 // directly against hand-built snapshot fixtures, the same way indexWhere's
 // own tests do for `where`.
 describe("index snapshot accessors — Foundational types (#284)", () => {
-	it("HEJBRO_SNAPSHOT_VERSION stays 5 — this feature is a compact addition, not a format bump (D84)", () => {
-		expect(HEJBRO_SNAPSHOT_VERSION).toBe(5);
+	it("HEJBRO_SNAPSHOT_VERSION is 6", () => {
+		expect(HEJBRO_SNAPSHOT_VERSION).toBe(6);
 	});
 
 	it("indexMethod defaults to btree when absent, and reads a recorded method", () => {
@@ -686,5 +691,103 @@ describe("SC-004 regression: table-indexes still serializes byte-identical (#284
 			"utf8",
 		);
 		expect(rendered).toBe(expected);
+	});
+});
+
+// Snapshot format version 6 records the generated/identity family as
+// compact optional column fields (D100).
+describe("generated/identity columns — snapshot v6", () => {
+	it("HEJBRO_SNAPSHOT_VERSION is 6, opening the format for the generated/identity fields", () => {
+		expect(HEJBRO_SNAPSHOT_VERSION).toBe(6);
+	});
+
+	it("serializes a generated expression as an encoded fragment, and an identity's kind kebab-cased with only its declared options", () => {
+		const widgets = table(app, "widgets", {
+			id: integer().generatedAlwaysAsIdentity(),
+			seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
+			total: numeric().generatedAlwaysAs(sql`price * qty`),
+		});
+		const snapshot = asTableSnapshot(
+			tableKind.serialize(getTableMeta(widgets)),
+		);
+		const [idColumn, seqColumn, totalColumn] = snapshot.columns;
+		if (
+			idColumn === undefined ||
+			seqColumn === undefined ||
+			totalColumn === undefined
+		) {
+			throw new Error("expected three columns");
+		}
+
+		expect(columnIdentity(idColumn)).toEqual({ kind: "always" });
+		expect(columnIdentity(seqColumn)).toEqual({
+			kind: "by-default",
+			startWith: 1000,
+		});
+		expect(columnGenerated(totalColumn)).toBe("price * qty");
+
+		// declaration-is-truth (design decision 3): an option the declaration
+		// never mentioned is absent, never filled in with a Postgres default.
+		expect(Object.hasOwn(columnIdentity(seqColumn) ?? {}, "increment")).toBe(
+			false,
+		);
+	});
+
+	it("an identity column's compact notNull is true, both identity kinds alike -- every identity column is NOT NULL by Postgres rule", () => {
+		const widgets = table(app, "widgets", {
+			id: integer().generatedAlwaysAsIdentity(),
+			seq: bigint().generatedByDefaultAsIdentity(),
+		});
+		const snapshot = asTableSnapshot(
+			tableKind.serialize(getTableMeta(widgets)),
+		);
+		const [idColumn, seqColumn] = snapshot.columns;
+		if (idColumn === undefined || seqColumn === undefined) {
+			throw new Error("expected two columns");
+		}
+		expect(idColumn.notNull).toBe(true);
+		expect(seqColumn.notNull).toBe(true);
+		expect(tableKind.diff(snapshot, snapshot, "app.widgets")).toEqual([]);
+	});
+
+	it("round-trips a generated expression, an identity kind, and explicit identity options through render/parse with an empty diff, reading formatVersion 6 back", () => {
+		const widgets = table(app, "widgets", {
+			id: integer().generatedAlwaysAsIdentity(),
+			seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
+			total: numeric().generatedAlwaysAs(sql`price * qty`),
+		});
+		const declared = tableKind.serialize(getTableMeta(widgets));
+		const snapshot = buildSnapshot(
+			[app, getTableMeta(widgets)],
+			createDefaultRegistry(),
+			emptySnapshot,
+		);
+
+		const parsed = parseSnapshot(renderSnapshot(snapshot));
+		expect(parsed.formatVersion).toBe(6);
+
+		const roundTrippedNode = parsed.objects["table:app.widgets"];
+		if (roundTrippedNode === undefined) {
+			throw new Error(
+				"expected table:app.widgets in the round-tripped snapshot",
+			);
+		}
+		const roundTripped = asTableSnapshot(roundTrippedNode);
+		expect(tableKind.diff(declared, roundTripped, "app.widgets")).toEqual([]);
+
+		const [idColumn, seqColumn, totalColumn] = roundTripped.columns;
+		if (
+			idColumn === undefined ||
+			seqColumn === undefined ||
+			totalColumn === undefined
+		) {
+			throw new Error("expected three columns");
+		}
+		expect(columnIdentity(idColumn)).toEqual({ kind: "always" });
+		expect(columnIdentity(seqColumn)).toEqual({
+			kind: "by-default",
+			startWith: 1000,
+		});
+		expect(columnGenerated(totalColumn)).toBe("price * qty");
 	});
 });

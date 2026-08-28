@@ -22,9 +22,16 @@ dropping, re-kinding, and re-optioning an identity are `alter column`
 statements — and drop+add column for the two transitions Postgres
 cannot alter in place with universal grammar: a generated expression
 change, and converting an existing plain column to a generated one.
-The plain→generated conversion destroys stored data and SHALL route
-through the destructive-change confirmation; a generated column's own
-drop+add SHALL NOT, because its data is derivable by construction.
+Converting an existing plain column to a generated one SHALL fail
+fast with an explicit error directing the two-step path (drop the
+column in one generate, re-add it as generated in the next) — the
+existing confirmation mechanism keys on dropped NAMES, which this
+transition never produces, so a loud guard with an explicit user
+action is the honest contract (amended at group 2 close from the
+original confirmation-gated wording; the guard reuses the
+`unsupported-column-alter` diagnostic). A generated column's own
+drop+add (an expression change) carries no confirmation, because its
+data is derivable by construction.
 
 #### Scenario: Declaring the three variants emits the full grammar
 - **WHEN** a table declares `total: numeric().generatedAlwaysAs(sql`
@@ -49,6 +56,13 @@ drop+add SHALL NOT, because its data is derivable by construction.
 - **THEN** the migration drops and re-adds that column with the new
   expression (its data is recomputed), without the destructive-change
   confirmation
+
+#### Scenario: A plain column cannot silently become generated
+- **WHEN** an existing plain column's declaration gains
+  `.generatedAlwaysAs(...)`
+- **THEN** generation fails with an explicit error naming the column
+  and directing the two-step path — never an empty migration that
+  leaves the database silently missing the expression
 
 #### Scenario: Misuse fails at declaration time naming the column
 - **WHEN** an identity method is called on a non-integer column, or a

@@ -33,14 +33,19 @@ import { stableJson } from "./stable-json";
  * recorded in the snapshot), which land in this wave's later PRs
  * (`phase8-expr-nodes`, `phase8-constraint-names`) — this PR only moves
  * the version marker itself so those PRs' shape changes don't each need
- * their own bump. Pre-publication, no shim beyond the one detection
- * branch above.
+ * their own bump. Bumped to `6` for add-generated-columns (D100): a
+ * column snapshot node gains optional `generated` (a stored computed
+ * column's own expression, encoded like `default`) and `identity` (an
+ * identity column's kind and any explicit sequence options) fields — an
+ * older reader must refuse a v6 snapshot loudly (the D73 diagnostic)
+ * rather than silently diffing with those two fields ignored. Still
+ * pre-publication, so no shim beyond the existing detection branch above.
  */
-export const HEJBRO_SNAPSHOT_VERSION = 5;
+export const HEJBRO_SNAPSHOT_VERSION = 6;
 
 /** A deterministic, flat representation of every declared database object. */
 export type Snapshot = {
-	readonly formatVersion: 5;
+	readonly formatVersion: 6;
 	readonly dialect: "postgres";
 	/** keyed by `${kind}:${identity}` */
 	readonly objects: { readonly [kindAndIdentity: string]: JsonValue };
