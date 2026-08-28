@@ -1,4 +1,11 @@
-import type { ColumnRefNode, ExistsNode, ExprNode, TableRefNode } from "./ast";
+import type {
+	ColumnRefNode,
+	ExistsNode,
+	ExprNode,
+	SelectExprNode,
+	SelectNode,
+	TableRefNode,
+} from "./ast";
 
 /**
  * The expressions an `exists()` node's own subquery can itself contain:
@@ -16,6 +23,30 @@ const whereExprOrEmpty = (where: ExprNode | null): ReadonlyArray<ExprNode> => {
 		return [];
 	}
 	return [where];
+};
+
+/** A projection's own expressions — only the `columns` kind carries any. */
+const projectionChildExprs = (
+	projection: SelectNode["projection"],
+): ReadonlyArray<ExprNode> => {
+	if (projection.projectionKind !== "columns") {
+		return [];
+	}
+	return projection.columns.map((column) => column.expr);
+};
+
+/** Every child expression of an embedded select — unlike {@link existsChildExprs}, the projection is included: a `selectExpr`'s projection is the point, never a rewritten `constantOne`. */
+export const selectExprChildExprs = (
+	node: SelectExprNode,
+): ReadonlyArray<ExprNode> => {
+	const { query } = node;
+	const projectionExprs = projectionChildExprs(query.projection);
+	return [
+		...projectionExprs,
+		...whereExprOrEmpty(query.where),
+		...query.joins.map((join) => join.on),
+		...query.orderBy.map((term) => term.expr),
+	];
 };
 
 export const existsChildExprs = (node: ExistsNode): ReadonlyArray<ExprNode> => {
@@ -58,6 +89,7 @@ const someExprNodeHandlers: SomeExprNodeHandlers = {
 	literal: () => false,
 	rawSql: () => false,
 	exists: () => false,
+	selectExpr: () => false,
 	plpgsqlRef: () => false,
 	columnRef: () => false,
 	comparison: (node, predicate) =>
@@ -162,6 +194,10 @@ const someDeepExprNodeHandlers: SomeExprNodeHandlers = {
 		),
 	exists: (node, predicate) =>
 		existsChildExprs(node).some((child) => someDeepExprNode(child, predicate)),
+	selectExpr: (node, predicate) =>
+		selectExprChildExprs(node).some((child) =>
+			someDeepExprNode(child, predicate),
+		),
 };
 
 /**
@@ -262,6 +298,14 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
 			...scope,
 		];
 		return firstScopeViolation(existsChildExprs(node), extendedScope);
+	},
+	selectExpr: (node, scope) => {
+		const extendedScope = [
+			node.query.from,
+			...node.query.joins.map((join) => join.table),
+			...scope,
+		];
+		return firstScopeViolation(selectExprChildExprs(node), extendedScope);
 	},
 };
 

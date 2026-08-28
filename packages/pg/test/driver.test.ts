@@ -371,7 +371,7 @@ describe("pgDriver transaction (task 5.4)", () => {
 		// client (the stub pool has no `query` of its own to have
 		// answered any of them).
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"BEGIN",
 			"select 1",
 			"COMMIT",
@@ -396,7 +396,7 @@ describe("pgDriver transaction (task 5.4)", () => {
 		// checkout that also happened to emit the same two strings.
 		expect(pool.connect).toHaveBeenCalledTimes(1);
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"BEGIN",
 			"ROLLBACK",
 		]);
@@ -457,7 +457,10 @@ describe("pgDriver transaction (task 5.4)", () => {
 	it("releases without discarding when the pin itself fails before BEGIN (exit path not previously enumerated)", async () => {
 		const pinFailure = new Error("set intervalstyle failed");
 		const { pool, calls, releaseCalls } = stubPoolWithClient(
-			failOnlyOn("set intervalstyle to 'postgres'", pinFailure),
+			failOnlyOn(
+				"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+				pinFailure,
+			),
 		);
 		const driver = pgDriver(pool);
 
@@ -473,7 +476,7 @@ describe("pgDriver transaction (task 5.4)", () => {
 		// easily be a permission error), so this is the intended
 		// behavior, not a gap in the discard logic.
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"ROLLBACK",
 		]);
 		expect(releaseCalls).toHaveLength(1);
@@ -492,7 +495,7 @@ describe("pgDriver transaction (task 5.4)", () => {
 		);
 
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"BEGIN",
 			"ROLLBACK",
 		]);
@@ -537,7 +540,7 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		// own statement, since decision ④ exists specifically because a
 		// connect-listener-only pin would race the first statement.
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"select 1",
 		]);
 	});
@@ -552,7 +555,7 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		});
 
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"BEGIN",
 			"select 1",
 			"COMMIT",
@@ -567,7 +570,7 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		await driver.execute({ sql: "select 2", params: [], kind: "sql" });
 
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"select 1",
 			"select 2",
 		]);
@@ -584,7 +587,7 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		});
 
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"select 1",
 			"BEGIN",
 			"select 2",
@@ -599,10 +602,13 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 			query: vi.fn(async (call: QueryCall) => {
 				calls.push(call);
 				const pinAttempts = calls.filter(
-					(c) => sqlTextOf(c) === "set intervalstyle to 'postgres'",
+					(c) =>
+						sqlTextOf(c) ===
+						"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 				).length;
 				if (
-					sqlTextOf(call) === "set intervalstyle to 'postgres'" &&
+					sqlTextOf(call) ===
+						"set intervalstyle to 'postgres'; set bytea_output to 'hex'" &&
 					pinAttempts === 1
 				) {
 					throw pinFailure;
@@ -628,8 +634,8 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		await driver.execute({ sql: "select 2", params: [], kind: "sql" });
 
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"select 2",
 		]);
 	});
@@ -662,9 +668,9 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		// the same client object as already pinned by driverA and skip
 		// the second pin -- per-driver scope pins independently.
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"select 1",
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"select 2",
 		]);
 	});
@@ -690,7 +696,11 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		await driver.setupSession(stubSession);
 
 		expect(received).toEqual([
-			{ sql: "set intervalstyle to 'postgres'", params: [], kind: "sql" },
+			{
+				sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+				params: [],
+				kind: "sql",
+			},
 		]);
 	});
 
@@ -715,7 +725,7 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 		// the pin statement would still reach the connection unwrapped.
 		expect(wrapperCalls).toHaveLength(1);
 		expect(calls.map(sqlTextOf)).toEqual([
-			"set intervalstyle to 'postgres'",
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"select 1",
 		]);
 	});

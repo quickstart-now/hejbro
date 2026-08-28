@@ -208,6 +208,23 @@ export const buildUnrelatedCase = (kind: ExprNode["nodeKind"]): ExprNode => {
 					limit: null,
 				},
 			};
+		case "selectExpr":
+			return {
+				nodeKind: "selectExpr",
+				mode: "jsonArray",
+				query: {
+					queryKind: "select",
+					projection: {
+						projectionKind: "columns",
+						columns: [{ alias: "id", expr: unrelatedLiteral }],
+					},
+					from: { schemaName: "app", tableName: "posts" },
+					joins: [],
+					where: null,
+					orderBy: [],
+					limit: null,
+				},
+			};
 		default:
 			return assertNever(kind);
 	}

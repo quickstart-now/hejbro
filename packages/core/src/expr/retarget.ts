@@ -11,6 +11,7 @@ import type {
 	NullTestNode,
 	OrderByTerm,
 	ProjectionNode,
+	SelectExprNode,
 	SelectNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
@@ -412,6 +413,17 @@ const retargetExists = (node: ExistsNode, target: RenameTarget): ExprNode => {
 	return { ...node, query };
 };
 
+const retargetSelectExpr = (
+	node: SelectExprNode,
+	target: RenameTarget,
+): ExprNode => {
+	const query = retargetSelectNode(node.query, target);
+	if (query === node.query) {
+		return node;
+	}
+	return { ...node, query };
+};
+
 /**
  * One handler per {@link ExprNode} `nodeKind` for {@link retargetExprNode}
  * — a mapped type over the full `nodeKind` union, not a hand-written list,
@@ -443,6 +455,7 @@ const retargetExprNodeHandlers: RetargetExprNodeHandlers = {
 	functionCall: retargetFunctionCall,
 	sqlTemplate: retargetSqlTemplate,
 	exists: retargetExists,
+	selectExpr: retargetSelectExpr,
 };
 
 /** Walks every `ExprNode` reachable from `node` (including into an `exists()`'s own `SelectNode`) rewriting `ColumnRefNode`/`TableRefNode` matches for `target`. Returns `node` unchanged (same reference) when nothing matched, so a caller can cheaply check `retargeted !== node` to decide whether re-encoding is needed. */

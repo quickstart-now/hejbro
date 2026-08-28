@@ -3,6 +3,7 @@ import { getTableMeta, isTable, toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
 import type {
 	Expr,
+	ExprNode,
 	JoinKind,
 	OrderByTerm,
 	ProjectionNode,
@@ -10,6 +11,7 @@ import type {
 	TableRefNode,
 } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
+import type { TypeNode } from "../types/type-node";
 
 /** A `select()` projection: the whole table (deterministic column list), or an object of aliased expressions. */
 export type SelectProjection = Table | Record<string, Expr>;
@@ -179,6 +181,171 @@ export const select = <TProjection extends SelectProjection>(
 		projection,
 	);
 };
+
+/**
+ * Type names whose values do not survive a JSON round-trip untouched —
+ * exactly the JSON-number precision problem: `bigint`/`numeric` collapse
+ * to a lossy JSON number past 2^53, so they cast to text (D102,
+ * cast+revive; F1 owner ruling at group 2 review). Nothing else is cast:
+ * temporal values JSON-encode as ISO-8601 regardless of the session's
+ * `DateStyle` (measured — a text cast would instead FOLLOW `DateStyle`
+ * and lose that stability), `interval` is deterministic because the
+ * driver pins `intervalstyle` at session setup, and `bytea` rides the
+ * driver's `bytea_output` pin (a text cast obeys the same GUC, buying
+ * nothing).
+ */
+const JSON_AT_RISK_TYPE_NAMES: ReadonlySet<string> = new Set([
+	"bigint",
+	"numeric",
+]);
+
+const jsonSafeCastSuffix = (typeNode: TypeNode): string | null => {
+	if (typeNode.typeName === "array") {
+		if (JSON_AT_RISK_TYPE_NAMES.has(typeNode.element.typeName)) {
+			return "::text[]";
+		}
+		return null;
+	}
+	if (JSON_AT_RISK_TYPE_NAMES.has(typeNode.typeName)) {
+		return "::text";
+	}
+	return null;
+};
+
+const castExprNode = (expr: ExprNode, suffix: string): ExprNode => ({
+	nodeKind: "sqlTemplate",
+	chunks: [
+		{ chunkKind: "expr", expr },
+		{ chunkKind: "text", text: suffix },
+	],
+});
+
+/** The chain's original projection value for one rendered column, or `undefined` when the column carries no `resultKey` (a decoded node) or the input has no such key. */
+const inputValueFor = (
+	projectionInput: Record<string, unknown>,
+	resultKey: string | undefined,
+): unknown => {
+	if (resultKey === undefined) {
+		return undefined;
+	}
+	return projectionInput[resultKey];
+};
+
+const castColumnIfAtRisk = (
+	column: {
+		readonly alias: string;
+		readonly resultKey?: string;
+		readonly expr: ExprNode;
+	},
+	inputValue: unknown,
+): {
+	readonly alias: string;
+	readonly resultKey?: string;
+	readonly expr: ExprNode;
+} => {
+	if (column.expr.nodeKind !== "columnRef") {
+		return column;
+	}
+	const typeNode = (inputValue as { readonly typeNode?: TypeNode } | undefined)
+		?.typeNode;
+	if (typeNode === undefined) {
+		return column;
+	}
+	const suffix = jsonSafeCastSuffix(typeNode);
+	if (suffix === null) {
+		return column;
+	}
+	return { ...column, expr: castExprNode(column.expr, suffix) };
+};
+
+/**
+ * Bakes the D102 cast+revive casts into an embedded subselect's
+ * projection AT BUILD TIME — the node itself carries the casts, so the
+ * compiled SQL, the snapshot codec round-trip, and rename retargeting
+ * all see the same statement (a render-time cast could not: the stored
+ * node has no column types). Only direct column refs are cast — a
+ * computed expression's JSON shape is its author's own contract. The
+ * types come from the chain's own `projectionInput` (the built refs
+ * carry their `typeNode`); a whole-`Table` subselect expands into the
+ * equivalent aliased projection so its casts apply too (F2).
+ */
+/** Expands a whole-`Table` subselect into an explicit aliased projection with the F1 casts applied — the builder knows every column's type here (the table meta), so the most common nested-read form must not be the one that silently loses precision (F2 owner ruling at group 2 review). */
+const expandTableProjection = (
+	query: SelectNode,
+	projectionInput: Table,
+): SelectNode => {
+	const meta = getTableMeta(projectionInput);
+	const columns = meta.columns.map((column) => {
+		const ref: ExprNode = {
+			nodeKind: "columnRef",
+			schemaName: meta.schema.schemaName,
+			tableName: meta.tableName,
+			columnName: column.columnName,
+		};
+		const suffix = jsonSafeCastSuffix(column.columnState.typeNode);
+		if (suffix === null) {
+			return {
+				alias: column.columnName,
+				resultKey: column.columnKey,
+				expr: ref,
+			};
+		}
+		return {
+			alias: column.columnName,
+			resultKey: column.columnKey,
+			expr: castExprNode(ref, suffix),
+		};
+	});
+	return {
+		...query,
+		projection: { projectionKind: "columns", columns },
+	};
+};
+
+const withJsonSafeCasts = (
+	query: SelectNode,
+	projectionInput: SelectProjection,
+): SelectNode => {
+	if (isTable(projectionInput)) {
+		return expandTableProjection(query, projectionInput);
+	}
+	if (query.projection.projectionKind !== "columns") {
+		return query;
+	}
+	const originalColumns = query.projection.columns;
+	const columns = originalColumns.map((column) =>
+		castColumnIfAtRisk(
+			column,
+			inputValueFor(projectionInput, column.resultKey),
+		),
+	);
+	const anyCast = columns.some(
+		(column, index) => column !== originalColumns[index],
+	);
+	if (!anyCast) {
+		return query;
+	}
+	return { ...query, projection: { ...query.projection, columns } };
+};
+
+const buildSelectExpr =
+	(mode: "jsonArray" | "jsonObject") =>
+	<TProjection extends SelectProjection>(
+		subselect: SelectLimited<TProjection>,
+	): Expr<"json"> =>
+		expr("json", {
+			nodeKind: "selectExpr",
+			mode,
+			query: withJsonSafeCasts(
+				subselect.selectQuery,
+				subselect.projectionInput,
+			),
+		});
+
+/** Wraps a subselect into a projection expression compiling to a correlated `(select coalesce(json_agg("agg"), '[]'::json) from (…) as "agg")` — the nested-collection primitive (D102). The subselect's `where`/`orderBy`/`limit` and its own nested reads carry through; empty arrives as `[]`, never SQL null. */
+export const jsonArrayFrom = buildSelectExpr("jsonArray");
+/** Wraps a subselect into a correlated `(select row_to_json("agg") from (…) as "agg")` — the single-nested-row primitive (D102). No row arrives as SQL null; more than one row is Postgres's own loud error (add `limit 1` with an order for a deterministic pick). */
+export const jsonObjectFrom = buildSelectExpr("jsonObject");
 
 const buildExists =
 	(negated: boolean) =>

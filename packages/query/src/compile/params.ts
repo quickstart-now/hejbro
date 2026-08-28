@@ -12,6 +12,7 @@ import type {
 	NullTestNode,
 	OrderByTerm,
 	ProjectionNode,
+	SelectExprNode,
 	SelectNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
@@ -276,6 +277,14 @@ const liftExistsNode = (
 	return { node: { ...node, query: lifted.node }, params: lifted.params };
 };
 
+const liftSelectExprNode = (
+	node: SelectExprNode,
+	startIndex: number,
+): Lifted<ExprNode> => {
+	const lifted = liftSelectNode(node.query, startIndex);
+	return { node: { ...node, query: lifted.node }, params: lifted.params };
+};
+
 // One handler per `ExprNode["nodeKind"]` — a mapped type over the full
 // union, so a missing handler is a `tsc` error (same technique as core's
 // `renderExprHandlers`). Every handler is O(1) branch-free, keeping its
@@ -300,6 +309,7 @@ const exprLiftHandlers: {
 	sqlTemplate: liftSqlTemplateNode,
 	rawSql: liftUnchangedNode,
 	exists: liftExistsNode,
+	selectExpr: liftSelectExprNode,
 };
 
 /** Lifts every {@link LiteralNode} inside `node` to a `$n` bind parameter, dispatching by `nodeKind`. */

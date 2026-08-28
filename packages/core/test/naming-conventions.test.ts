@@ -25,6 +25,7 @@ import {
 	integer,
 	isNotNull,
 	isNull,
+	jsonArrayFrom,
 	migrationPrefixStrategies,
 	not,
 	rls,
@@ -365,6 +366,25 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 		"price_summary_view",
 		select({ id: posts.id, price: posts.price }, posts),
 	);
+	// add-relational-reads: a view carrying a nested read is the
+	// declaration-reachable producer of the `selectExpr` node -- without
+	// one here, the completeness assertion below would flag `select-expr`
+	// as vocabulary the fixture never reached.
+	const postsWithCommentsView = defineView(
+		app,
+		"posts_with_comments_view",
+		select(
+			{
+				id: posts.id,
+				comments: jsonArrayFrom(
+					select({ id: comments.id }, comments).where(
+						eq(comments.postId, posts.id),
+					),
+				),
+			},
+			posts,
+		),
+	);
 
 	const result = generateMigration({
 		declarations: [
@@ -373,6 +393,7 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			posts,
 			comments,
 			allPricesView,
+			postsWithCommentsView,
 			priceSummaryView,
 		],
 		previousSnapshot: emptySnapshot,

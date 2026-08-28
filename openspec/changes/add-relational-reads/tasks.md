@@ -37,7 +37,7 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 2. Select-as-expression node and base helpers (core IR)
 
-- [ ] 2.1 (~10m) [design] New `ExprNode` variant embedding a
+- [x] 2.1 (~10m) [design] New `ExprNode` variant embedding a
       `SelectNode` as a scalar expression with an aggregation mode
       (json array / json object), plus `jsonArrayFrom`/`jsonObjectFrom`
       wrapping the existing core select builder (node field names and
@@ -47,22 +47,22 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
       a subselect into a projection expression". Files:
       `packages/core/src/expr/ast.ts`,
       `packages/core/src/query/select.ts`, that test.
-- [ ] 2.2 (~10m) [design] Renderer: correlated emit —
-      `coalesce((select json_agg(json_build_object(...)) ...),
-      '[]'::json)` / single-object form, text casts on at-risk columns
-      (bigint, string-mode numeric, datetimes, interval, bytea),
-      reusing the outer-scope hook; exact SQL text settled here by
-      golden. Red: `packages/core/test/expr/render-sql.test.ts` (or
-      sibling) — "a nested projection renders the correlated aggregate
+- [x] 2.2 (~10m) [design] Renderer: correlated emit —
+      `(select coalesce(json_agg("agg"), '[]'::json) from (…) as
+      "agg")` / `row_to_json` single-object form, text casts on the
+      JSON-number-precision types only (bigint, numeric — every mode,
+      revive normalizes; the F1 owner ruling removed the
+      temporal/bytea casts), reusing the outer-scope hook; exact SQL
+      text settled here by golden. Red: `packages/core/test/query/select.test.ts` — "a nested projection renders the correlated aggregate
       with casts". Files: `packages/core/src/expr/render-sql.ts`, that
       test.
-- [ ] 2.3 (~8m) Codec round-trip for the new node (a view body can
+- [x] 2.3 (~8m) Codec round-trip for the new node (a view body can
       carry it, so it is declaration-reachable; vocabulary only, no
       formatVersion bump — D73). Red:
       `packages/core/test/expr/codec.test.ts` — "the
       select-as-expression node survives encode/decode/retarget".
       Files: `packages/core/src/expr/codec.ts`, that test.
-- [ ] 2.4 (~6m) A reference resolvable in neither the subselect's nor
+- [x] 2.4 (~6m) A reference resolvable in neither the subselect's nor
       any enclosing scope keeps failing with the existing
       foreign-column diagnostic. Red: same render-sql test file —
       "an out-of-scope reference inside a subselect fails with
@@ -104,6 +104,13 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 4. Real-server witness (pg integration) — after groups 1–3
 
+- [ ] 4.0 (docs, with the archive PR) `skills/hejbro` gains the
+      nested-read surface (`jsonArrayFrom`/`jsonObjectFrom`, `related()`,
+      `.references()` already landed with group 1) — query-layer
+      reference section + cheatsheet; deferred to archive per the
+      generated-columns precedent so the documented behavior (revive)
+      exists when documented. The changeset already names the base
+      surface.
 - [ ] 4.1 (~10m) Docker PG17 witness: a parent+children+forward read
       via `related()` — nested values arrive revived (the 2^53 bigint
       witness), empty collection `[]`, missing forward `null`, and the

@@ -138,6 +138,7 @@ export type {
 	QueryNode,
 	RawSqlNode,
 	ReturningNode,
+	SelectExprNode,
 	SelectNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
@@ -280,7 +281,13 @@ export type {
 	SelectOrdered,
 	SelectProjection,
 } from "./query/select";
-export { exists, notExists, select } from "./query/select";
+export {
+	exists,
+	jsonArrayFrom,
+	jsonObjectFrom,
+	notExists,
+	select,
+} from "./query/select";
 export type { ColumnOrderOracle } from "./snapshot/column-order";
 export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
 export type { Snapshot } from "./snapshot/snapshot";

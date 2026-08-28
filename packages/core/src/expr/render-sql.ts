@@ -20,6 +20,7 @@ import type {
 	QueryNode,
 	RawSqlNode,
 	ReturningNode,
+	SelectExprNode,
 	SelectNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
@@ -127,6 +128,7 @@ const collectColumnRefsHandlers: CollectColumnRefsHandlers = {
 	literal: () => [],
 	rawSql: () => [],
 	exists: () => [],
+	selectExpr: () => [],
 	plpgsqlRef: () => [],
 	columnRef: (node) => [node],
 	comparison: (node) => [
@@ -686,6 +688,17 @@ const renderExistsNode = (node: ExistsNode, outerScope: OuterScope): string => {
 	return `${keyword} (${renderSelect(node.query, outerScope)})`;
 };
 
+const renderSelectExprNode = (
+	node: SelectExprNode,
+	outerScope: OuterScope,
+): string => {
+	const inner = renderSelect(node.query, outerScope);
+	if (node.mode === "jsonArray") {
+		return `(select coalesce(json_agg("agg"), '[]'::json) from (${inner}) as "agg")`;
+	}
+	return `(select row_to_json("agg") from (${inner}) as "agg")`;
+};
+
 /**
  * One handler per {@link ExprNode} `nodeKind` for {@link renderExpr} — a
  * mapped type over the full `nodeKind` union, not a hand-written list, so
@@ -714,6 +727,7 @@ const renderExprHandlers: RenderExprHandlers = {
 	sqlTemplate: renderSqlTemplateNode,
 	rawSql: renderRawSqlNode,
 	exists: renderExistsNode,
+	selectExpr: renderSelectExprNode,
 };
 
 export const renderExpr = (
