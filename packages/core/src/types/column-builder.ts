@@ -124,6 +124,8 @@ export type ColumnMeta = {
 	readonly mode?: NumericMode;
 	/** set only by `.$type<T>()` (D5, task 3.5) — the jsonb brand 3.6 reads instead of falling back to `unknown`. */
 	readonly jsonType?: unknown;
+	/** set only by `pgEnum(...).column()` (#422) — the declared values as a literal union, so an enum column reads and writes as its own values instead of bare `string`. Absent (and the type falls back to `string`) only for a declaration that genuinely has no literal values to carry. */
+	readonly enumValues?: string;
 	/** set only by `.array().notNullElements()` (add-array-ergonomics) — narrows the element read/write type from `T | null` to `T` (`ts-type-map.ts`'s `BaseTsType`, this file's `ColumnReadType`), backed by the CHECK `table()` derives. Never carried forward by `.array()`'s own {@link ArrayCarriedFlags} — it can only ever be set by calling `.notNullElements()` after `.array()`, never inherited from a pre-array `TMeta`. */
 	readonly notNullElements?: boolean;
 	/**

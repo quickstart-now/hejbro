@@ -87,9 +87,13 @@ describe("select-result (D1/D3/D5, task 3.10) -- whole-table projection", () => 
 		>();
 	});
 
-	it("enum column consumption (planner addition 4): pgEnum().column() reads as string", () => {
+	it("enum column consumption (#422): pgEnum().column() reads as its declared values", () => {
+		// Was `string | null` (planner addition 4, add-query-layer): pgEnum
+		// took `ReadonlyArray<string>` and was not generic, so the values
+		// sitting at the call site never reached the type system and every
+		// string type-checked as a status. #422 carries them through.
 		expectTypeOf<SelectResult<Posts>["status"]>().toEqualTypeOf<
-			string | null
+			"draft" | "published" | null
 		>();
 	});
 

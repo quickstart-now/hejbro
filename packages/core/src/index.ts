@@ -35,7 +35,7 @@ export type {
 	IndexColumnInput,
 } from "./dsl/index-builder";
 export { asc, desc, index, op } from "./dsl/index-builder";
-export type { EnumDeclaration } from "./dsl/pg-enum";
+export type { EnumDeclaration, EnumValues } from "./dsl/pg-enum";
 export { pgEnum } from "./dsl/pg-enum";
 export type {
 	PolicyCommand,

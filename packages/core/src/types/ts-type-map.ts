@@ -91,69 +91,80 @@ type NumericModeTsType<TMode extends NumericMode> = TMode extends "number"
  * what caught the original hand-spelled-literal drift risk this comment
  * used to describe.
  */
-type BaseScalarTsType<TTypeName, TMeta extends ColumnMeta> = TTypeName extends
-	| "uuid"
-	| "text"
-	| "varchar"
-	| "char"
-	| "enum"
-	| "inet"
-	| "cidr"
-	| "macaddr"
-	? string
-	: TTypeName extends "boolean"
-		? boolean
-		: TTypeName extends
-					| "smallint"
-					| "integer"
-					| "real"
-					| "double precision"
-					| "serial"
-					| "smallserial"
-			? number
-			: TTypeName extends "bigint"
-				? NumericModeTsType<
-						TMeta extends { readonly mode: infer TMode extends NumericMode }
-							? TMode
-							: DefaultBigintMode
-					>
-				: TTypeName extends "numeric"
+type BaseScalarTsType<
+	TTypeName,
+	TMeta extends ColumnMeta,
+> = TTypeName extends "enum"
+	? // #422: `pgEnum` carries its declared values onto the column's meta,
+		// so the union is right there to be read. A declaration with no
+		// values recorded falls back to `string` rather than `never` --
+		// widening to the type the column used to have, never narrowing to
+		// one no value can satisfy.
+		TMeta extends { readonly enumValues: infer TValues extends string }
+		? TValues
+		: string
+	: TTypeName extends
+				| "uuid"
+				| "text"
+				| "varchar"
+				| "char"
+				| "inet"
+				| "cidr"
+				| "macaddr"
+		? string
+		: TTypeName extends "boolean"
+			? boolean
+			: TTypeName extends
+						| "smallint"
+						| "integer"
+						| "real"
+						| "double precision"
+						| "serial"
+						| "smallserial"
+				? number
+				: TTypeName extends "bigint"
 					? NumericModeTsType<
-							TMeta extends {
-								readonly mode: infer TMode extends NumericMode;
-							}
+							TMeta extends { readonly mode: infer TMode extends NumericMode }
 								? TMode
-								: DefaultNumericMode
+								: DefaultBigintMode
 						>
-					: TTypeName extends "bigserial"
-						? // not user-configurable (task 3.4 gives serial/smallserial/
-							// bigserial no mode field, D66) -- 'bigint' is the one mode
-							// that can never silently lose precision for a 64-bit value,
-							// so that's the fixed (not defaulted-then-overridable) choice.
-							bigint
-						: TTypeName extends "date" | "timestamp" | "timestamptz"
-							? Date
-							: // node-postgres has no parser for time (oid 1083) / timetz
-								// (oid 1266) -- they come back as raw text (e.g.
-								// "12:34:56"), never a Date. Mapping them to Date would be a
-								// type that lies about what the runtime hands back.
-								TTypeName extends "time" | "timetz"
-								? string
-								: TTypeName extends "interval"
-									? IntervalValue
-									: TTypeName extends "json" | "jsonb"
-										? unknown
-										: TTypeName extends "bytea"
-											? // Uint8Array, not Node's Buffer: this maps into every
-												// consumer's public result type, browser/edge
-												// included. Buffer extends Uint8Array, so a Node
-												// driver returning an actual Buffer still satisfies
-												// this contract.
-												Uint8Array
-											: // "array" (a nested array's own inner element, task
-												// 3.15's own known gap: only one level of `element` is
-												// ever recorded) or an unrecognized type name.
-												unknown;
+					: TTypeName extends "numeric"
+						? NumericModeTsType<
+								TMeta extends {
+									readonly mode: infer TMode extends NumericMode;
+								}
+									? TMode
+									: DefaultNumericMode
+							>
+						: TTypeName extends "bigserial"
+							? // not user-configurable (task 3.4 gives serial/smallserial/
+								// bigserial no mode field, D66) -- 'bigint' is the one mode
+								// that can never silently lose precision for a 64-bit value,
+								// so that's the fixed (not defaulted-then-overridable) choice.
+								bigint
+							: TTypeName extends "date" | "timestamp" | "timestamptz"
+								? Date
+								: // node-postgres has no parser for time (oid 1083) / timetz
+									// (oid 1266) -- they come back as raw text (e.g.
+									// "12:34:56"), never a Date. Mapping them to Date would be a
+									// type that lies about what the runtime hands back.
+									TTypeName extends "time" | "timetz"
+									? string
+									: TTypeName extends "interval"
+										? IntervalValue
+										: TTypeName extends "json" | "jsonb"
+											? unknown
+											: TTypeName extends "bytea"
+												? // Uint8Array, not Node's Buffer: this maps into every
+													// consumer's public result type, browser/edge
+													// included. Buffer extends Uint8Array, so a Node
+													// driver returning an actual Buffer still satisfies
+													// this contract.
+													Uint8Array
+												: // "array" (a nested array's own inner element, task
+													// 3.15's own known gap: only one level of `element` is
+													// ever recorded) or an unrecognized type name.
+													unknown;
 
 /**
  * The *base* TypeScript type a declared column reads back as, before any
