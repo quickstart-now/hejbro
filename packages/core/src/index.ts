@@ -274,6 +274,7 @@ export type {
 } from "./query/mutate";
 export { deleteFrom, insert, update } from "./query/mutate";
 export type {
+	NestedReadMarker,
 	OrderTermInput,
 	SelectFiltered,
 	SelectJoinable,
@@ -281,14 +282,13 @@ export type {
 	SelectOrdered,
 	SelectProjection,
 } from "./query/select";
-export type { NestedReadMarker } from "./query/select";
 export {
 	exists,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	nestedReadBrand,
 	notExists,
 	select,
-	nestedReadBrand,
 } from "./query/select";
 export type { ColumnOrderOracle } from "./snapshot/column-order";
 export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
