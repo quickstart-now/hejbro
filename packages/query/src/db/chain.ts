@@ -12,6 +12,8 @@ import type {
 	ReturningProjection,
 	SelectDistinctable,
 	SelectFiltered,
+	SelectGrouped,
+	SelectHaving,
 	SelectJoinable,
 	SelectLimited,
 	SelectNode,
@@ -90,12 +92,29 @@ export type SelectChainLimitedThenOffset<
 	offset(count: number): SelectChainLimited<TProjection>;
 };
 
+/** After `having`: `order by`/`limit`/`offset` still follow, `group by` and a second `having` do not. */
+export type SelectChainHaving<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectChainOrdered<TProjection> & {
+	orderBy(
+		...terms: ReadonlyArray<OrderTermInput>
+	): SelectChainOrdered<TProjection>;
+};
+
+export type SelectChainGrouped<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectChainHaving<TProjection> & {
+	/** Filters GROUPS, after aggregation — `where` filters rows before it. */
+	having(condition: Condition): SelectChainHaving<TProjection>;
+};
+
 export type SelectChainFiltered<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectChainOrdered<TProjection> & {
 	orderBy(
 		...terms: ReadonlyArray<OrderTermInput>
 	): SelectChainOrdered<TProjection>;
+	groupBy(...terms: ReadonlyArray<Expr>): SelectChainGrouped<TProjection>;
 };
 
 export type SelectChainJoinable<
@@ -292,6 +311,26 @@ const makeFilteredChain = <TProjection extends SelectProjection>(
 ): SelectChainFiltered<TProjection> => ({
 	...makeOrderedChain(run, stage, tables),
 	orderBy: (...terms) => makeOrderedChain(run, stage.orderBy(...terms), tables),
+	groupBy: (...terms) => makeGroupedChain(run, stage.groupBy(...terms), tables),
+});
+
+const makeHavingChain = <TProjection extends SelectProjection>(
+	run: ChainRun,
+	stage: SelectHaving<TProjection>,
+	tables: Declarations["tables"],
+): SelectChainHaving<TProjection> => ({
+	...makeOrderedChain(run, stage, tables),
+	orderBy: (...terms) => makeOrderedChain(run, stage.orderBy(...terms), tables),
+});
+
+const makeGroupedChain = <TProjection extends SelectProjection>(
+	run: ChainRun,
+	stage: SelectGrouped<TProjection>,
+	tables: Declarations["tables"],
+): SelectChainGrouped<TProjection> => ({
+	...makeOrderedChain(run, stage, tables),
+	orderBy: (...terms) => makeOrderedChain(run, stage.orderBy(...terms), tables),
+	having: (condition) => makeHavingChain(run, stage.having(condition), tables),
 });
 
 const makeJoinableChain = <TProjection extends SelectProjection>(

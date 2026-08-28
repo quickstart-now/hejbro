@@ -75,10 +75,23 @@ export type SelectLimitedThenOffset<
 > = SelectLimited<TProjection> & {
 	offset(count: number): SelectOffsetted<TProjection>;
 };
+/** After `having`: `order by`/`limit`/`offset` still follow, `group by` and a second `having` do not. */
+export type SelectHaving<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectOrdered<TProjection> & {
+	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectOrdered<TProjection>;
+};
+export type SelectGrouped<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectHaving<TProjection> & {
+	/** Filters GROUPS, after aggregation — `where` filters rows before it. */
+	having(condition: Condition): SelectHaving<TProjection>;
+};
 export type SelectFiltered<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectOrdered<TProjection> & {
 	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectOrdered<TProjection>;
+	groupBy(...terms: ReadonlyArray<Expr>): SelectGrouped<TProjection>;
 };
 export type SelectJoinable<
 	TProjection extends SelectProjection = SelectProjection,
@@ -202,7 +215,11 @@ const makeStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
 	fromTable: Table,
 	projectionInput: TProjection,
-): SelectJoinable<TProjection> => ({
+	// Every stage member exists on the one object `makeStages` builds; the
+	// STAGE TYPES are what hide the ones SQL wouldn't allow next. The
+	// intersection here is what lets `groupBy` return a grouped stage
+	// without a second builder that would have to stay in sync.
+): SelectJoinable<TProjection> & SelectGrouped<TProjection> => ({
 	selectQuery: query,
 	fromTable,
 	projectionInput,
@@ -228,6 +245,25 @@ const makeStages = <TProjection extends SelectProjection>(
 	orderBy: (...terms) =>
 		makeStages(
 			{ ...query, orderBy: terms.map(resolveOrderTerm) },
+			fromTable,
+			projectionInput,
+		),
+	groupBy: (...terms) => {
+		if (terms.length === 0) {
+			return throwHejbroError(
+				"empty-group-by",
+				"groupBy() needs at least one expression. Next: pass the columns the aggregate is grouped by, e.g. groupBy(posts.authorId).",
+			);
+		}
+		return makeStages(
+			{ ...query, groupBy: terms.map((term) => term.exprNode) },
+			fromTable,
+			projectionInput,
+		);
+	},
+	having: (condition: Condition) =>
+		makeStages(
+			{ ...query, having: condition.exprNode },
 			fromTable,
 			projectionInput,
 		),
@@ -341,6 +377,8 @@ export const select = <TProjection extends SelectProjection>(
 			from: tableRefOf(fromTable),
 			joins: [],
 			where: null,
+			groupBy: [],
+			having: null,
 			orderBy: [],
 			limit: null,
 			offset: null,

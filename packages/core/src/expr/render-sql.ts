@@ -293,6 +293,23 @@ const limitClause = (limit: number | null): string => {
 	return `limit ${limit}`;
 };
 
+const groupByClause = (
+	groupBy: ReadonlyArray<ExprNode>,
+	scope: OuterScope,
+): string => {
+	if (groupBy.length === 0) {
+		return "";
+	}
+	return `group by ${groupBy.map((term) => renderExpr(term, scope)).join(", ")}`;
+};
+
+const havingClause = (having: ExprNode | null, scope: OuterScope): string => {
+	if (having === null) {
+		return "";
+	}
+	return `having ${renderExpr(having, scope)}`;
+};
+
 const offsetClause = (offset: number | null): string => {
 	if (offset === null) {
 		return "";
@@ -447,6 +464,8 @@ const renderSelectClauses = (
 		`from ${renderTableRef(query.from)}`,
 		joinsSql,
 		whereClause(query.where, scope),
+		groupByClause(query.groupBy, scope),
+		havingClause(query.having, scope),
 		orderByClause(query.orderBy, scope),
 		limitClause(query.limit),
 		offsetClause(query.offset),

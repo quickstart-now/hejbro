@@ -1,11 +1,14 @@
 import type { Expr } from "@hejbro/core";
 import {
 	bigint,
+	type count,
 	json,
 	jsonb,
+	type max,
 	pgEnum,
 	schema,
 	serial,
+	type sum,
 	table,
 	type tableMeta,
 	text,
@@ -183,6 +186,33 @@ describe("select-result -- object projection (task 3.10)", () => {
 		type Proj = SelectResult<{ readonly n: Expr<"numeric"> }>;
 		expectTypeOf<Proj>().toEqualTypeOf<{
 			readonly n: number | bigint | string | null;
+		}>();
+	});
+});
+
+describe("aggregate result types (#416)", () => {
+	it("count reads as bigint, not the numeric family's union", () => {
+		type Proj = SelectResult<{ readonly total: ReturnType<typeof count> }>;
+		expectTypeOf<Proj>().toEqualTypeOf<{ readonly total: bigint | null }>();
+	});
+
+	it("min and max keep the argument's own declared type", () => {
+		type Proj = SelectResult<{
+			readonly biggest: ReturnType<typeof max<typeof posts.amount>>;
+		}>;
+		// posts.amount is bigint({ mode: "number" }) -- the aggregate carries
+		// the column's origin through, so this is the declared read type, not
+		// the family union.
+		expectTypeOf<Proj>().toEqualTypeOf<{ readonly biggest: number | null }>();
+	});
+
+	it("sum and avg stay at the family's widest honest type", () => {
+		// Postgres promotes sum/avg by the argument's exact type (sum(int4) is
+		// int8, sum(int8) is numeric, avg(int) is numeric), so one declared
+		// result type would be wrong for most inputs.
+		type Proj = SelectResult<{ readonly total: ReturnType<typeof sum> }>;
+		expectTypeOf<Proj>().toEqualTypeOf<{
+			readonly total: number | bigint | string | null;
 		}>();
 	});
 });

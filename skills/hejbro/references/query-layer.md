@@ -502,13 +502,42 @@ const result = await handle.transaction(async (tx) => {
 });
 ```
 
+## Aggregates and grouping
+
+`count()`, `countWhere(expr)`, `min`, `max`, `sum` and `avg`, with
+`groupBy`/`having` in SQL's own clause order (`where` filters rows,
+`having` filters groups):
+
+```ts prelude=query-handle
+import { count, gt, max } from "hejbro";
+
+const perStatus = await handle
+	.select({ status: posts.status, orders: count(), biggest: max(posts.amount) }, posts)
+	.groupBy(posts.status)
+	.having(gt(count(), 1))
+	.orderBy(posts.status)
+	.limit(10);
+```
+
+What each reads back as:
+
+| aggregate | type | why |
+|---|---|---|
+| `count()` / `countWhere(x)` | `bigint` | Postgres's `count` is `int8` whatever it counted, and hejbro converts it — the value really is a `bigint`, not the text the driver hands back |
+| `min(x)` / `max(x)` | `x`'s own declared type | they return their argument's type, so a `bigint({mode:"number"})` column stays `number` |
+| `sum(x)` / `avg(x)` | `number \| bigint \| string` | Postgres promotes these by the argument's *exact* type (`sum(int4)` is `int8`, `sum(int8)` is `numeric`, `avg(int)` is `numeric`, `avg(float8)` is `float8`), so one declared result type would be wrong for most inputs. Narrow it yourself with a cast in a `sql` fragment when you need to |
+
+`having` is available only after `groupBy`, and `groupBy` only after
+`where` — the chain allows what SQL allows, in the order SQL allows it.
+
 ## Not supported in this version
 
 These read naturally as query-builder features but aren't there yet —
 use the `sql` escape hatch, or wait for the tracked issue:
 
-- CTEs and window functions outside the `sql` escape hatch (#417, #416)
-  — write them with `sql` until those land.
+- CTEs (#417) and window functions — `over(...)` (#416) — outside the
+  `sql` escape hatch. Aggregates and `group by`/`having` DO exist; see
+  below.
 - `@hejbro/neon` and `@hejbro/nile` presets (#300, #301) — only
   `@hejbro/pg` (vanilla) and `@hejbro/supabase` exist today.
 - A startup assertion that the connected database matches the checked-out

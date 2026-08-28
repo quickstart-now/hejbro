@@ -72,6 +72,8 @@
 								"schema": "app",
 								"table": "posts"
 							},
+							"groupBy": [],
+							"having": null,
 							"joins": [],
 							"limit": null,
 							"offset": null,
@@ -158,6 +160,8 @@
 						"schema": "app",
 						"table": "posts"
 					},
+					"groupBy": [],
+					"having": null,
 					"joins": [],
 					"limit": null,
 					"offset": null,

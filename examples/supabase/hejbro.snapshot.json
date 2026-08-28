@@ -63,6 +63,8 @@
 						"schema": "app",
 						"table": "attachments"
 					},
+					"groupBy": [],
+					"having": null,
 					"joins": [
 						{
 							"joinKind": "inner",
@@ -151,6 +153,8 @@
 						"schema": "app",
 						"table": "profiles"
 					},
+					"groupBy": [],
+					"having": null,
 					"joins": [],
 					"limit": null,
 					"offset": null,
@@ -492,6 +496,8 @@
 					"schema": "app",
 					"table": "profiles"
 				},
+				"groupBy": [],
+				"having": null,
 				"joins": [],
 				"limit": null,
 				"offset": null,

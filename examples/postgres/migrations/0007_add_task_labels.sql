@@ -4,8 +4,8 @@
 -- + rls app.task_labels [new]
 -- + policy app.task_labels.task_labels_read_all [new]
 -- + policy app.task_labels.task_labels_write_all [new]
--- parent-snapshot: sha256:9921dbfb1a4510b6e445d93fe644c1b56a16cce7c886633db7c9d79dac09f43e
--- snapshot: sha256:5419679621a99bf56750b19a50b0d5f6d06be613df8474ae6d30eed64b3c2216
+-- parent-snapshot: sha256:ae787cd5c618628c49cefa555f95e53be583460f309e47ee1776f2fa8ac9d6ce
+-- snapshot: sha256:22797d90405a12af7a8436bd80cc6ce64e3e6fe15389d6a32e2645ba085f59c4
 
 create table "app"."task_labels" (
 	"id" uuid not null default gen_random_uuid(),
