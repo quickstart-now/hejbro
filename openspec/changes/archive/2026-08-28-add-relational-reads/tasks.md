@@ -104,7 +104,7 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 4. Real-server witness (pg integration) — after groups 1–3
 
-- [ ] 4.0 (docs, with the archive PR) `skills/hejbro` gains the
+- [x] 4.0 (docs, with the archive PR) `skills/hejbro` gains the
       nested-read surface (`jsonArrayFrom`/`jsonObjectFrom`, `related()`,
       `.references()` already landed with group 1) — query-layer
       reference section + cheatsheet; deferred to archive per the

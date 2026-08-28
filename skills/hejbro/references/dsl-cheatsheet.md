@@ -72,7 +72,9 @@ target must share the column's type family, and the thunk defers
 evaluation (import-order safety). Self-referencing foreign keys,
 composite (multi-column) ones, and `onDelete`/`onUpdate` actions are
 declared in `extras.foreignKeys` instead; declaring the same column
-through both paths fails at declaration time.
+through both paths fails at declaration time. The same edges power the
+query layer's nested reads (`related()` — see the query-layer
+reference); nothing is declared twice.
 
 ## CHECK constraints
 

@@ -102,6 +102,59 @@ the same rule as `select` — always an explicit column list, never
 array and still runs — `await handle.update(posts).set({ status:
 "archived" })` executes the update, it just has no rows to hand back.
 
+## Relational reads (nested rows)
+
+Two layers, one truth: the foreign keys the schema already declares.
+There is no separate relations declaration anywhere.
+
+The sugar — `related()` derives nested reads from `.references()`
+edges. A reverse key is the referencing table's name in your `db()`
+schema map (`comments`); a forward key is the FK column's TypeScript
+name minus its `Id` tail (`postId` → `post`). v1 takes `true` per key,
+direct relations only:
+
+```ts prelude=query-handle
+const rows = await handle.select(posts).related({ comments: true });
+// rows[0].comments: ReadonlyArray<{ id: string; postId: string; body: string | null }>
+// an empty collection arrives as [], never null
+const fromChild = await handle.select(comments).related({ post: true });
+// fromChild[0].post: the full posts row, or null
+```
+
+The base layer — the same reads written explicitly, for anything the
+sugar doesn't shape (filtered children, computed nested columns,
+grandchildren). `jsonArrayFrom(subselect)` is a collection,
+`jsonObjectFrom(subselect)` a single row; the subselect is the
+ordinary `select()` builder and may reference the enclosing query's
+columns:
+
+```ts prelude=query-handle
+import { eq, jsonArrayFrom, select } from "hejbro";
+
+const posts2 = await handle.select(
+	{
+		id: posts.id,
+		comments: jsonArrayFrom(
+			select({ id: comments.id, body: comments.body }, comments)
+				.where(eq(comments.postId, posts.id))
+				.orderBy(comments.id),
+		),
+	},
+	posts,
+);
+```
+
+Everything compiles to one statement — a correlated subquery visible
+in `compile()`, casts included — and runs as one statement under an
+RLS context (nested rows obey the context's policies; the database
+filters them inside the same read). Values arrive revived: a nested
+`bigint` is a `bigint` (text-cast in SQL so precision survives the
+JSON round trip), datetimes arrive as `Date` (`date` at local
+midnight), `interval` and `bytea` ride the driver's session pins. A
+relation key that collides with a projected column, mixes in a typo,
+or matches nothing fails to type-check — and the runtime throws
+`ambiguous-relation`/`unknown-relation` rather than guessing.
+
 ## The `sql` escape hatch and injection safety
 
 `sql` is the typed tagged-template escape hatch for anything the builder

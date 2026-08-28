@@ -24,7 +24,10 @@ export const posts = table(app, "posts", {
 
 export const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
-	postId: uuid().notNull(),
+	postId: uuid()
+		.notNull()
+		.references(() => posts.id),
+	body: text(),
 });
 
 export const driver = pgDriver(
