@@ -246,10 +246,20 @@ element type — the emitted CHECK backs that promise, and if it's ever
 dropped out-of-band a `NULL` element arriving at read time is a fail-fast
 `result-conversion-failed`, never a silent lie (the raw `NULL` is never
 handed back as a bare-typed `null`). An object projection
-(`select({ alias: expr }, table)`) still keys the result exactly to the
-projected names, but each field's type is only its coarse SQL family
-widened to nullable — an expression carries no link back to a declared
-column (tracked as #311).
+(`select({ alias: expr }, table)`) keys the result exactly to the
+projected names, and a projected *declared column* keeps its declared
+type — numeric mode, array element, the `$type` brand and all
+(`select({ total: posts.amount }, posts)` reads `total` as `bigint`,
+not the family-wide `number | bigint | string`). A field built from
+anything else — a `sql` fragment, a computed expression — still resolves
+to its coarse SQL family, which is all such a value carries.
+
+Every object-projection field is nullable, including one from a
+`.notNull()` column. The projection's type is fixed at `select()` time,
+before `.leftJoin()` can be chained onto it, so a left join really can
+null any of them and this layer cannot yet see which tables were
+left-joined (tracked as #307). Whole-table selects and `returning()`
+without a projection are unaffected — they carry declared nullability.
 
 Insert input types require every `notNull`-without-default column and
 accept the rest as optional; update input types accept any column as
