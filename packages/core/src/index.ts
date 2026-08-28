@@ -152,7 +152,11 @@ export {
 	expr,
 	isExpr,
 } from "./expr/ast";
-export { decodeExprNode } from "./expr/codec";
+export {
+	decodeExprNode,
+	decodeQueryNode,
+	encodeQueryNode,
+} from "./expr/codec";
 export { liftLiteral, liftOperand, renderLiteral } from "./expr/literal";
 export {
 	and,

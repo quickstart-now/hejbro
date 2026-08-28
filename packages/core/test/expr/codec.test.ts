@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { ExprNode } from "../../src/expr/ast";
 import {
 	decodeExprNode,
+	decodeQueryNode,
+	decodeSelectNode,
 	encodeExprNode,
+	encodeQueryNode,
 	NODE_KIND_TO_SNAPSHOT,
 	PROJECTION_KIND_TO_SNAPSHOT,
 } from "../../src/expr/codec";
+import type { SetOpNode } from "../../src/expr/ast";
 import { retargetExprNode } from "../../src/expr/retarget";
 import {
 	eq,
@@ -561,5 +565,57 @@ describe("select-as-expression retarget and both modes (group 2 review F3/F4)", 
 		);
 		corrupted.mode = "json-mystery";
 		expect(() => decodeExprNode(corrupted)).toThrowError(/json-mystery|mode/);
+	});
+});
+
+describe("set-op codec round-trip (add-set-operations task 1.3)", () => {
+	const app = schema("app");
+	const posts = table(app, "posts", { id: uuid().primaryKey() });
+	const others = table(app, "others", { id: uuid().primaryKey() });
+
+	it("a set-op statement survives encode/decode with kebab discriminators", () => {
+		const node: SetOpNode = {
+			queryKind: "setOp",
+			operator: "except",
+			all: true,
+			left: {
+				queryKind: "setOp",
+				operator: "union",
+				all: false,
+				left: select(posts).selectQuery,
+				right: select(others).selectQuery,
+				orderBy: [],
+				limit: null,
+			},
+			right: select(posts).selectQuery,
+			orderBy: [{ expr: posts.id.exprNode, direction: "asc" }],
+			limit: 5,
+		};
+		const encoded = encodeQueryNode(node);
+		expect(JSON.stringify(encoded)).toContain('"set-op"');
+		expect(JSON.stringify(encoded)).not.toContain('"setOp"');
+		expect(decodeQueryNode(encoded)).toEqual(
+			JSON.parse(
+				JSON.stringify(node, (key, value) => {
+					if (key === "resultKey") {
+						return undefined;
+					}
+					return value;
+				}),
+			),
+		);
+	});
+
+	it("the plain-select decoder rejects a set-op loudly", () => {
+		const encoded = encodeQueryNode({
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: select(posts).selectQuery,
+			right: select(others).selectQuery,
+			orderBy: [],
+			limit: null,
+		});
+		expect(() => decodeSelectNode(encoded)).toThrowError(/set-op|queryKind/);
 	});
 });
