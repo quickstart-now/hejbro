@@ -12,6 +12,7 @@ import {
 	schema,
 	select,
 	serializeInterval,
+	sql,
 	table,
 	text,
 	timestamptz,
@@ -165,6 +166,38 @@ const discoverHostPort = (): number => {
 const labelsNoNullElementsConstraint =
 	'constraint "labels_no_null_elements" check (array_position("g5_integration"."roundtrip"."labels", null) is null)';
 
+/**
+ * `seq`'s exact create-table clause -- core's own `generateMigration`
+ * output for a bare `bigint().generatedAlwaysAsIdentity()` column,
+ * eye-verified against the generator (never derived from it at runtime:
+ * a runtime-sliced value re-fed into `.toContain` below would always
+ * pass, proving nothing) and copied here as a literal, exactly
+ * `labelsNoNullElementsConstraint`'s own discipline above. The raw
+ * `create table` this test executes below splices this same constant in,
+ * so a drift between the two can only ever be caught by the `.toContain`
+ * assertion, never hidden by re-deriving one side from the other.
+ */
+const seqIdentityColumnSql =
+	'"seq" bigint not null generated always as identity';
+
+/**
+ * `doubled`'s exact create-table clause -- core's own `generateMigration`
+ * output for `bigint().generatedAlwaysAs(sql\`amount * 2\`)`, eye-verified
+ * and pinned the same way as {@link seqIdentityColumnSql}.
+ */
+const doubledGeneratedColumnSql =
+	'"doubled" bigint generated always as (amount * 2) stored';
+
+/**
+ * The bare `add generated always as identity` phrase -- the same grammar
+ * {@link seqIdentityColumnSql} ends in, reused by the ordering-rule
+ * witness's own `alter column ... add ...` statements below. Core's
+ * `table-kind-emit.ts` emits this exact text for an identity-add
+ * transition (see
+ * `packages/core/test/golden/cases/identity-column-lifecycle/expected/step-1.sql`).
+ */
+const identityAddPhrase = "add generated always as identity";
+
 const testSchema = schema("g5_integration");
 const roundtrip = table(testSchema, "roundtrip", {
 	id: uuid().primaryKey(),
@@ -192,6 +225,9 @@ const roundtrip = table(testSchema, "roundtrip", {
 	// add-array-ergonomics, group 4/task 4.1: the non-null-element array
 	// witness -- see this file's own top comment for what this proves.
 	labels: text().array().notNullElements().notNull(),
+	// add-generated-columns, group 4/task 4.1
+	seq: bigint().generatedAlwaysAsIdentity(),
+	doubled: bigint().generatedAlwaysAs(sql`amount * 2`),
 });
 
 describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤, task 5.6)", () => {
@@ -249,13 +285,15 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// own output for the exact same declaration -- the raw DDL below is
 		// never produced by the migration engine (out of this group's scope
 		// entirely), so this is what keeps the two texts from silently
-		// drifting apart.
-		expect(
-			generateMigration({
-				declarations: [testSchema, getTableMeta(roundtrip)],
-				previousSnapshot: emptySnapshot,
-			}).sql,
-		).toContain(labelsNoNullElementsConstraint);
+		// drifting apart. add-generated-columns, group 4/task 4.1 reuses the
+		// same `generateMigration` call for `seq`/`doubled`'s own clauses.
+		const roundtripMigrationSql = generateMigration({
+			declarations: [testSchema, getTableMeta(roundtrip)],
+			previousSnapshot: emptySnapshot,
+		}).sql;
+		expect(roundtripMigrationSql).toContain(labelsNoNullElementsConstraint);
+		expect(roundtripMigrationSql).toContain(seqIdentityColumnSql);
+		expect(roundtripMigrationSql).toContain(doubledGeneratedColumnSql);
 
 		// schema/table setup is raw DDL through the driver directly, not
 		// through db() -- creating tables is the CLI/migration generator's
@@ -278,6 +316,8 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 				approx numeric[] not null,
 				durations interval[] not null,
 				labels text[] not null,
+				${seqIdentityColumnSql},
+				${doubledGeneratedColumnSql},
 				${labelsNoNullElementsConstraint}
 			)`,
 			params: [],
@@ -460,6 +500,117 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			expect(cause).toHaveProperty("constraint", "labels_no_null_elements");
 		}
 
+		// add-generated-columns, group 4/task 4.1: `seq` (generated always as
+		// identity) has no key at all on `InsertInput` (D100 decision 5) --
+		// core's own raw `insert()` (`MutationRow`, used everywhere else in
+		// this file) leaves every column optional and does NOT enforce this
+		// exclusion, so this proof goes through the query package's chain
+		// entry point instead (`handle.insert(...)`, `InsertInput`-typed,
+		// `chain-mutation-input.test.ts`'s #351 wiring) -- the only place the
+		// type layer actually refuses this key. `as never` is the deliberate
+		// cast escape: reaching the database at all requires bypassing that
+		// refusal on purpose, exactly like the labels case above.
+		try {
+			await handle.insert(roundtrip).values([
+				{
+					id: "44444444-4444-4444-4444-444444444444",
+					amount: 1n,
+					precise: "0.000000",
+					duration: insertedDuration,
+					created: new Date(insertedCreated),
+					noteText: "rejected note",
+					amounts: [1],
+					precisions: ["1.000000"],
+					approx: [1],
+					durations: insertedDurationsArray,
+					labels: [],
+					seq: 1n,
+				},
+			] as never);
+			expect.unreachable(
+				"the database should have rejected the explicit identity write",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "query-execution-failed");
+			expect(error).toHaveProperty("kind", "insert");
+			const cause = (error as { cause?: unknown }).cause;
+			expect(cause).toHaveProperty("code", "428C9");
+		}
+
+		// add-generated-columns, group 4/task 4.1: the same proof for
+		// `doubled` (stored generated) -- Postgres refuses a client-supplied
+		// value for either ALWAYS-family kind alike (measured, not assumed).
+		try {
+			await handle.insert(roundtrip).values([
+				{
+					id: "55555555-5555-5555-5555-555555555555",
+					amount: 1n,
+					precise: "0.000000",
+					duration: insertedDuration,
+					created: new Date(insertedCreated),
+					noteText: "rejected note",
+					amounts: [1],
+					precisions: ["1.000000"],
+					approx: [1],
+					durations: insertedDurationsArray,
+					labels: [],
+					doubled: 2n,
+				},
+			] as never);
+			expect.unreachable(
+				"the database should have rejected the explicit generated-column write",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "query-execution-failed");
+			expect(error).toHaveProperty("kind", "insert");
+			const cause = (error as { cause?: unknown }).cause;
+			expect(cause).toHaveProperty("code", "428C9");
+		}
+
+		// add-generated-columns, group 4/task 4.1: the type-level rejection
+		// itself, pinned separately from the two runtime proofs above --
+		// each statement is only ever built, never awaited, so it never
+		// reaches the driver (a chain is inert until awaited, `chain.ts`'s
+		// own contract). `sql` keeps the value arm itself error-free so the
+		// directive consumes exactly the "does not exist" diagnostic.
+		const identityWriteTypeRejected = handle.insert(roundtrip).values([
+			{
+				id: "66666666-6666-6666-6666-666666666666",
+				amount: 1n,
+				precise: "0.000000",
+				duration: insertedDuration,
+				created: new Date(insertedCreated),
+				noteText: "never sent",
+				amounts: [1],
+				precisions: ["1.000000"],
+				approx: [1],
+				durations: insertedDurationsArray,
+				labels: [],
+				// @ts-expect-error seq is ALWAYS-family (generated always as identity, D100 decision 5) -- no key exists on InsertInput to supply.
+				seq: sql`1`,
+			},
+		]);
+		expect(identityWriteTypeRejected).toBeDefined();
+
+		const generatedWriteTypeRejected = handle.insert(roundtrip).values([
+			{
+				id: "77777777-7777-7777-7777-777777777777",
+				amount: 1n,
+				precise: "0.000000",
+				duration: insertedDuration,
+				created: new Date(insertedCreated),
+				noteText: "never sent",
+				amounts: [1],
+				precisions: ["1.000000"],
+				approx: [1],
+				durations: insertedDurationsArray,
+				labels: [],
+				// @ts-expect-error doubled is ALWAYS-family (stored generated, D100 decision 5) -- no key exists on InsertInput to supply.
+				doubled: sql`2`,
+			},
+		]);
+		expect(generatedWriteTypeRejected).toBeDefined();
+
 		const rows = await handle.execute(select(roundtrip));
 
 		// the rejected insert above contributed nothing -- still exactly the
@@ -570,6 +721,18 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// back as an empty array, not `null` or a one-element array.
 		expect(mixedRow.labels).toEqual([]);
 
+		// add-generated-columns, group 4/task 4.1: identity values arrive
+		// assigned -- the seed insert above is this sequence's first touch,
+		// so insertion order fixes the assigned values deterministically
+		// (`row` seeded first, `mixedRow` second).
+		expect(row.seq).toBe(1n);
+		expect(mixedRow.seq).toBe(2n);
+
+		// the computed column arrives computed: `amount * 2`, including past
+		// `Number.MAX_SAFE_INTEGER` (bigint mode never loses precision).
+		expect(row.doubled).toBe(18014398509481986n);
+		expect(mixedRow.doubled).toBe(-84n);
+
 		// add-array-ergonomics, group 4/task 4.1: `assertNoNulls` applied to
 		// `mixedRow.amounts` (`[-1, null, 42]`, a real server's own answer,
 		// not a hand-built fixture) throws `HejbroError("null-array-element")`
@@ -615,5 +778,83 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			"-1 years -2 mons +3 days -00:05:00",
 		);
 		expect(rawById.get(mixedSignId)?.durations).toBe('{-00:05:00,"-3 days"}');
+	});
+
+	it("identity ordering rules (add-generated-columns, group 4/task 4.1): live alter, both directions measured against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+
+		// `g5_integration` already exists (created by the first `it` above,
+		// same describe/`beforeAll` pool, run first by vitest's declaration
+		// order) -- this scratch table lives in it, untouched by the
+		// `roundtrip` fixture.
+		await driver.execute({
+			sql: "create table g5_integration.ordering_probe (id integer primary key, c integer)",
+			params: [],
+			kind: "sql",
+		});
+
+		// rule 1: adding identity to an existing column requires the column
+		// to already be NOT NULL. Reversed order first (measured to fail),
+		// then the derived order (measured to succeed).
+		try {
+			await driver.execute({
+				sql: `alter table "g5_integration"."ordering_probe" alter column "c" ${identityAddPhrase};`,
+				params: [],
+				kind: "sql",
+			});
+			expect.unreachable(
+				"postgres should reject adding identity before NOT NULL",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "55000");
+			expect((error as { message?: string }).message).toMatch(
+				/must be declared NOT NULL before identity can be added/,
+			);
+		}
+
+		await driver.execute({
+			sql: 'alter table "g5_integration"."ordering_probe" alter column "c" set not null;',
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: `alter table "g5_integration"."ordering_probe" alter column "c" ${identityAddPhrase};`,
+			params: [],
+			kind: "sql",
+		});
+
+		// rule 2: dropping NOT NULL on an identity column is rejected;
+		// `drop identity` must come first. Reversed order first (measured to
+		// fail), then the derived order (measured to succeed).
+		try {
+			await driver.execute({
+				sql: 'alter table "g5_integration"."ordering_probe" alter column "c" drop not null;',
+				params: [],
+				kind: "sql",
+			});
+			expect.unreachable(
+				"postgres should reject dropping NOT NULL on an identity column",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "42601");
+			expect((error as { message?: string }).message).toMatch(
+				/is an identity column/,
+			);
+		}
+
+		await driver.execute({
+			sql: 'alter table "g5_integration"."ordering_probe" alter column "c" drop identity;',
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: 'alter table "g5_integration"."ordering_probe" alter column "c" drop not null;',
+			params: [],
+			kind: "sql",
+		});
 	});
 });
