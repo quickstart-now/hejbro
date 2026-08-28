@@ -234,13 +234,12 @@ const defaultAlterStatements = (
 };
 
 /**
- * `true` when both `previous`/`next` declare a stored generated expression
- * and its rendered text differs (design decision 4) — a plain column, or a
- * column newly becoming generated (the held plain→generated transition,
- * a lead decision pending), is never this case: both sides must already be
- * generated. Text-compared via {@link columnGenerated} (decode + render),
- * mirroring how `defaultChanged` already compares `columnDefault`'s
- * rendered text rather than the raw encoded node.
+ * `true` only when both `previous`/`next` already declare a stored
+ * generated expression and its rendered text differs — a plain column, or
+ * a column newly becoming generated, is never this case. Text-compared via
+ * {@link columnGenerated} (decode + render), mirroring how `defaultChanged`
+ * already compares `columnDefault`'s rendered text rather than the raw
+ * encoded node.
  */
 const generatedExpressionChanged = (
 	previous: ColumnSnapshot,
@@ -255,14 +254,7 @@ const generatedExpressionChanged = (
 	);
 };
 
-/**
- * `true` when `previous` was a stored generated column and `next` is a
- * plain one — design decision 4's generated-present→absent case, the
- * in-place `drop expression` path (PG13+ grammar). The held plain→generated
- * direction (`previousGenerated === null && nextGenerated !== null`) is
- * deliberately not named as its own predicate here — it isn't checked
- * anywhere in this file yet (lead decision pending).
- */
+/** `true` when `previous` was a stored generated column and `next` is a plain one — the in-place `drop expression` path (PG13+ grammar). */
 const generatedRemoved = (
 	previous: ColumnSnapshot,
 	next: ColumnSnapshot,
@@ -270,16 +262,13 @@ const generatedRemoved = (
 	columnGenerated(previous) !== null && columnGenerated(next) === null;
 
 /**
- * Design decision 4: an expression change is a full column rebuild —
- * Postgres has no in-place `alter column ... set expression` (that grammar
- * is PG18-only, a documented non-goal), so this drops the column and
- * re-adds it with its NEXT definition, verbatim via
- * {@link renderColumnDefinition} — which already renders every other
- * clause (not null, default, unique), so a simultaneous change to any of
- * those rides along for free instead of needing its own case here. No
- * destructive-change confirmation: the expression still derives the data,
- * design decision 4's own distinction from the (held) plain→generated
- * transition.
+ * An expression change is a full column rebuild — Postgres has no in-place
+ * `alter column ... set expression` (PG18-only grammar, a documented
+ * non-goal), so this drops the column and re-adds it with its NEXT
+ * definition, verbatim via {@link renderColumnDefinition} — which already
+ * renders every other clause (not null, default, unique), so a
+ * simultaneous change to any of those rides along for free. No
+ * destructive-change confirmation: the expression still derives the data.
  */
 const generatedRebuildStatements = (
 	schema: string,

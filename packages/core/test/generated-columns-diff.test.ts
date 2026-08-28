@@ -22,14 +22,7 @@ const expectSingleChange = (changes: ReadonlyArray<KindChange>): KindChange => {
 	return change;
 };
 
-/**
- * add-generated-columns task 2.4 (D100, design decision 4) — the two diff
- * paths unlocked so far: an expression change (drop+add, no destructive
- * confirmation — the data is derivable) and generated→plain (`drop
- * expression`, in place). plain→generated is a lead-held decision (the
- * destructive-confirmation routing question) and is deliberately absent
- * from this file — neither tested nor implemented.
- */
+/** Two diff paths (D100): an expression change (drop+add, no confirmation — the data is derivable) and generated→plain (`drop expression`, in place). plain→generated is absent from this file. */
 describe("generated (computed) columns — diff/emit (add-generated-columns, task 2.4)", () => {
 	it("an expression change renders drop+add for that column, unconditionally (no destructive-confirmation marker exists on a KindChange/SqlStatement)", () => {
 		const before = table(app, "widgets", {
@@ -94,19 +87,12 @@ describe("generated (computed) columns — diff/emit (add-generated-columns, tas
 		]);
 	});
 
-	// The planner's own open question: an expression-change rebuild is a
-	// real `drop column` + `add column` on Postgres, which physically
-	// re-appends the column at the end of the table -- but
-	// `snapshot/column-order.ts`'s oracle (`physicalOrder`) only ever asks
-	// "is this column NAME present in both the parent and the declared
-	// set?" to decide whether it keeps its old position. A same-name
-	// rebuild answers "yes" to that question, so the oracle keeps the
-	// rebuilt column in its OLD (middle) position for the next snapshot,
-	// never learning that the real database physically moved it to the
-	// end. This test pins that CURRENT (unfixed) behavior -- it documents
-	// the gap, it does not close it. Escalated instead of fixed, per
-	// instruction.
-	it("[gap, not fixed] the column-order oracle keeps a rebuilt column in its old position after an expression-change rebuild, not the physical end position a real ADD COLUMN would land on", () => {
+	// A drop+add rebuild physically re-appends the column at the end of a
+	// real Postgres table, but `column-order.ts`'s oracle decides position
+	// from name membership alone (present in both parent and declared sets
+	// = keep the old position), so it can't distinguish a rebuild from an
+	// untouched survivor. This test pins that gap; it does not close it.
+	it("[gap, not fixed] the column-order oracle keeps a rebuilt column in its old position, not the physical end a real ADD COLUMN lands on", () => {
 		const declareStep = (expression: ReturnType<typeof sql>) =>
 			table(app, "widgets", {
 				a: numeric(),
@@ -135,24 +121,18 @@ describe("generated (computed) columns — diff/emit (add-generated-columns, tas
 			throw new Error("expected table:app.widgets in step2's snapshot");
 		}
 		const widgetsAfterRebuild = asTableSnapshot(widgetsAfterRebuildNode);
-		// Current oracle behavior: `total` (same name, present in both the
-		// parent and the declared set) keeps its ORIGINAL middle position --
-		// the oracle has no way to know this specific "changed" entry was a
-		// physical rebuild, not an untouched survivor. A real Postgres table
-		// after this migration actually has `total` LAST (a, b, total), not
-		// (a, total, b) -- this snapshot's own column order silently
-		// disagrees with the live database from this point on (D81's own
-		// purpose -- `select *`/`returning *` ordering -- is the axis this
-		// would surface on, not the ordinary diff, since column reordering
-		// alone never produces a diff by itself).
+		// A real Postgres table now has `total` LAST (a, b, total); this
+		// snapshot keeps it in its old middle position instead. Column
+		// reordering alone never produces a diff, so nothing else surfaces
+		// this mismatch -- it only matters where D81's oracle output is
+		// actually read (`select *`/`returning *`).
 		expect(widgetsAfterRebuild.columns.map((c) => c.name)).toEqual([
 			"a",
 			"total",
 			"b",
 		]);
 
-		// A third, no-op generate run confirms the mismatch is silent: the
-		// stale order produces no diff/warning of its own.
+		// A third, no-op generate run confirms the mismatch is silent.
 		const step3 = generateMigration({
 			declarations: [app, declareStep(sql`a * 2`)],
 			previousSnapshot: step2.snapshot,

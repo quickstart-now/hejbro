@@ -19,13 +19,7 @@ const expectSingleChange = (changes: ReadonlyArray<KindChange>): KindChange => {
 	return change;
 };
 
-/**
- * add-generated-columns task 2.2-a (D100, design decision 4): create-table
- * emit for a stored computed column only -- identity's own emit is a
- * separate, held task (lead decision pending on the notNull materialize
- * question). `renderColumnDefinition` (`table-kind-emit-sql.ts`) is the
- * only file this task touches.
- */
+/** create-table emit for a stored computed column (D100) -- identity's own emit is untouched here. */
 describe("generated (computed) columns — create emit (add-generated-columns, task 2.2-a)", () => {
 	it("renders `generated always as (<expression>) stored` with the declared fragment verbatim", () => {
 		const widgets = table(app, "widgets", {

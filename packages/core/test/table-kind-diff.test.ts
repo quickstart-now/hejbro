@@ -619,7 +619,7 @@ describe("createDefaultRegistry", () => {
 // directly against hand-built snapshot fixtures, the same way indexWhere's
 // own tests do for `where`.
 describe("index snapshot accessors — Foundational types (#284)", () => {
-	it("HEJBRO_SNAPSHOT_VERSION was unaffected by this feature — index method/opclass is a compact addition, not a format bump (D84); a later, unrelated feature (add-generated-columns, D100) has since moved the constant to 6", () => {
+	it("HEJBRO_SNAPSHOT_VERSION is 6", () => {
 		expect(HEJBRO_SNAPSHOT_VERSION).toBe(6);
 	});
 
@@ -733,7 +733,7 @@ describe("generated/identity columns — snapshot v6 (add-generated-columns, tas
 		);
 	});
 
-	it("materializes an identity column's compact notNull as absent -- the emitted GENERATED ... AS IDENTITY grammar enforces NOT NULL, not this flag (design decision 1's notNull/hasDefault implication is a TMeta/read-type-only mirror of D66's serial precedent -- gc1 pinned columnState.notNull staying untouched, table 2.2 renders the grammar itself)", () => {
+	it("an identity column's compact notNull is absent -- the emitted GENERATED ... AS IDENTITY grammar enforces NOT NULL, not this flag", () => {
 		const widgets = table(app, "widgets", {
 			id: integer().generatedAlwaysAsIdentity(),
 		});
@@ -775,5 +775,20 @@ describe("generated/identity columns — snapshot v6 (add-generated-columns, tas
 		}
 		const roundTripped = asTableSnapshot(roundTrippedNode);
 		expect(tableKind.diff(declared, roundTripped, "app.widgets")).toEqual([]);
+
+		const [idColumn, seqColumn, totalColumn] = roundTripped.columns;
+		if (
+			idColumn === undefined ||
+			seqColumn === undefined ||
+			totalColumn === undefined
+		) {
+			throw new Error("expected three columns");
+		}
+		expect(columnIdentity(idColumn)).toEqual({ kind: "always" });
+		expect(columnIdentity(seqColumn)).toEqual({
+			kind: "by-default",
+			startWith: 1000,
+		});
+		expect(columnGenerated(totalColumn)).toBe("price * qty");
 	});
 });
