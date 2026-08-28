@@ -910,6 +910,45 @@ const resolveRls = (
 	return bindRls(owner.schemaName, tableName, rlsInput);
 };
 
+/** The first column declared through both foreign-key paths, if any (add-relational-reads guard) — `.references()` on the column AND membership in an `extras` foreign key would silently double-emit the constraint. */
+const findDoublyDeclaredReferenceColumn = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+	extrasForeignKeys: ReadonlyArray<ForeignKeyDeclaration>,
+): ColumnEntry | undefined =>
+	columnEntries.find(
+		(entry) =>
+			entry.columnState.references !== undefined &&
+			extrasForeignKeys.some((foreignKey) =>
+				foreignKey.columns.includes(entry.columnName),
+			),
+	);
+
+/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup. */
+const foldColumnReferences = (
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): ReadonlyArray<ForeignKeyDeclaration> =>
+	columnEntries
+		.filter((entry) => entry.columnState.references !== undefined)
+		.map((entry) => {
+			const target = entry.columnState.references?.();
+			if (target === undefined) {
+				return throwHejbroError(
+					"invalid-duplicate-foreign-key",
+					`table column "${entry.columnName}" has a references() thunk that returned nothing. Next: return a built table's column, e.g. .references(() => users.id).`,
+				);
+			}
+			return {
+				columns: [entry.columnName],
+				references: {
+					schemaName: target.exprNode.schemaName,
+					tableName: target.exprNode.tableName,
+					columns: [target.exprNode.columnName],
+				},
+				onDelete: null,
+				onUpdate: null,
+			};
+		});
+
 /**
  * Declares a table under `owner`. Column keys are camelCase in TypeScript
  * and snake_cased in the generated SQL. `extras` receives this table's own
@@ -931,9 +970,23 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 
 	const resolvedExtras = extras?.(refsObject) ?? {};
 	const indexes = (resolvedExtras.indexes ?? []).map(resolveIndex);
-	const foreignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
+	const extrasForeignKeys = (resolvedExtras.foreignKeys ?? []).map((input) =>
 		resolveForeignKey(owner, tableName, input),
 	);
+	const doublyDeclared = findDoublyDeclaredReferenceColumn(
+		columnEntries,
+		extrasForeignKeys,
+	);
+	if (doublyDeclared !== undefined) {
+		throwHejbroError(
+			"invalid-duplicate-foreign-key",
+			`table "${tableName}" column "${doublyDeclared.columnName}" declares .references() and is also named in an extras foreign key — the constraint would emit twice. Next: keep exactly one of the two declarations for "${doublyDeclared.columnName}".`,
+		);
+	}
+	const foreignKeys = [
+		...foldColumnReferences(columnEntries),
+		...extrasForeignKeys,
+	];
 	const checks = [
 		...(resolvedExtras.checks ?? []),
 		...deriveNotNullElementsChecks(owner, tableName, columnEntries),

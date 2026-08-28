@@ -3,6 +3,7 @@ import { check } from "../src/dsl/check";
 import { desc, index, op } from "../src/dsl/index-builder";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import { generateMigration } from "../src/engine/generate";
 import { inArray, isNotNull } from "../src/expr/operators";
 import { sql } from "../src/expr/sql-template";
 import type { KindChange } from "../src/kind/object-kind";
@@ -10,6 +11,7 @@ import type { GrantSnapshot } from "../src/kinds/grant-kind";
 import { tableKind } from "../src/kinds/table-kind";
 import { asTableSnapshot, columnDefault } from "../src/kinds/table-snapshot";
 import type { Snapshot } from "../src/snapshot/snapshot";
+import { emptySnapshot } from "../src/snapshot/snapshot";
 import {
 	integer,
 	text,
@@ -1201,5 +1203,47 @@ describe("tableKind.emit — sibling sequence coordination (D74/#23)", () => {
 				stage: "main",
 			},
 		]);
+	});
+});
+
+describe("column-level references emit identically to extras (add-relational-reads task 1.3)", () => {
+	it("both declaration forms produce byte-identical migration sql and snapshot", () => {
+		const buildDeclarations = (viaColumn: boolean) => {
+			const owner = schema("app");
+			const users = table(owner, "users", { id: uuid().primaryKey() });
+			const pets = (() => {
+				if (viaColumn) {
+					return table(owner, "pets", {
+						id: uuid().primaryKey(),
+						ownerId: uuid().notNull().references(() => users.id),
+					});
+				}
+				return table(
+					owner,
+					"pets",
+					{ id: uuid().primaryKey(), ownerId: uuid().notNull() },
+					(t) => ({
+						foreignKeys: [
+							{ columns: [t.ownerId], references: { columns: [users.id] } },
+						],
+					}),
+				);
+			})();
+			return [owner, getTableMeta(users), getTableMeta(pets)];
+		};
+
+		const viaColumn = generateMigration({
+			declarations: buildDeclarations(true),
+			previousSnapshot: emptySnapshot,
+		});
+		const viaExtras = generateMigration({
+			declarations: buildDeclarations(false),
+			previousSnapshot: emptySnapshot,
+		});
+		expect(viaColumn.sql).toBe(viaExtras.sql);
+		expect(viaColumn.sql).toContain('references "app"."users" ("id")');
+		expect(JSON.stringify(viaColumn.snapshot)).toBe(
+			JSON.stringify(viaExtras.snapshot),
+		);
 	});
 });
