@@ -23,16 +23,16 @@ const app = schema("app");
 const registry = createDefaultRegistry();
 
 describe("emptySnapshot", () => {
-	it("has version 5, postgres dialect, and no objects", () => {
+	it("has version 6, postgres dialect, and no objects", () => {
 		expect(emptySnapshot).toEqual({
-			formatVersion: 5,
+			formatVersion: 6,
 			dialect: "postgres",
 			objects: {},
 		});
 	});
 
-	it("renders with the v5 version marker (D68)", () => {
-		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 5`);
+	it("renders with the v6 version marker (D100)", () => {
+		expect(renderSnapshot(emptySnapshot)).toContain(`"formatVersion": 6`);
 	});
 });
 
@@ -187,7 +187,7 @@ describe("renderSnapshot / parseSnapshot", () => {
 		);
 	});
 
-	it("rejects a v4 snapshot (the immediately prior format) as older, not misparsed as current (D68)", () => {
+	it("rejects a v4 snapshot as older, not misparsed as current (D68) — no longer the immediately prior format after D100's v6 bump, but still older", () => {
 		const raw = JSON.stringify({
 			formatVersion: 4,
 			dialect: "postgres",
@@ -198,6 +198,22 @@ describe("renderSnapshot / parseSnapshot", () => {
 				code: "unsupported-snapshot-version",
 				message: expect.stringContaining(
 					"snapshot version 4 is older than this build supports",
+				),
+			}),
+		);
+	});
+
+	it("rejects a v5 snapshot (the immediately prior format) as older, not misparsed as current (D100)", () => {
+		const raw = JSON.stringify({
+			formatVersion: 5,
+			dialect: "postgres",
+			objects: {},
+		});
+		expect(() => parseSnapshot(raw)).toThrowError(
+			expect.objectContaining({
+				code: "unsupported-snapshot-version",
+				message: expect.stringContaining(
+					"snapshot version 5 is older than this build supports",
 				),
 			}),
 		);
@@ -229,7 +245,7 @@ describe("renderSnapshot / parseSnapshot", () => {
 	});
 
 	it("rejects a snapshot with a missing objects map", () => {
-		const raw = JSON.stringify({ formatVersion: 5, dialect: "postgres" });
+		const raw = JSON.stringify({ formatVersion: 6, dialect: "postgres" });
 		expect(() => parseSnapshot(raw)).toThrowError(/objects/i);
 	});
 
@@ -247,7 +263,7 @@ describe("renderSnapshot / parseSnapshot", () => {
 		["a number", 42],
 	])("rejects a snapshot entry that is %s, not an object", (_label, value) => {
 		const raw = JSON.stringify({
-			formatVersion: 5,
+			formatVersion: 6,
 			dialect: "postgres",
 			objects: { "table:app.posts": value },
 		});
@@ -379,7 +395,7 @@ describe("parseSnapshot requiredKeys (D79, #159)", () => {
 		node: Record<string, unknown>,
 	): string =>
 		JSON.stringify({
-			formatVersion: 5,
+			formatVersion: 6,
 			dialect: "postgres",
 			objects: { [`${kind}:fixture`]: node },
 		});
