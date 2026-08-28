@@ -10,3 +10,4 @@ date,change-id,group,role_sessions,input_tokens,output_tokens,cache_read_tokens,
 2026-08-28,add-array-ergonomics,3,planner+implementer+reviewer,876,380247,37795410,1297911,measured at PR open from the three team session transcripts (438 requests); lead-session tokens not piece-attributable
 2026-08-28,add-array-ergonomics,4,planner+implementer+reviewer,542,209944,16232000,833377,measured at PR open from the three team session transcripts (271 requests); lead-session tokens not piece-attributable
 2026-08-28,add-generated-columns,1,planner+implementer+reviewer,1102,490457,72700150,2070023,measured at PR open from the three team session transcripts (551 requests); lead-session tokens not piece-attributable
+2026-08-28,add-generated-columns,3,planner+implementer+reviewer,1134,524661,73671973,1904579,measured at PR open from the three team session transcripts (567 requests); lead-session tokens not piece-attributable
