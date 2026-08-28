@@ -111,7 +111,7 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
       generated-columns precedent so the documented behavior (revive)
       exists when documented. The changeset already names the base
       surface.
-- [ ] 4.1 (~10m) Docker PG17 witness: a parent+children+forward read
+- [x] 4.1 (~10m) Docker PG17 witness: a parent+children+forward read
       via `related()` — nested values arrive revived (the 2^53 bigint
       witness), empty collection `[]`, missing forward `null`, and the
       RLS-context path executes it as one statement whose nested rows
