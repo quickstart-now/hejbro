@@ -27,12 +27,12 @@ export type SetOpStage<
 > = {
 	readonly setOpQuery: SetOpNode;
 	readonly projectionInput: TProjection;
-	union(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	unionAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	intersect(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	intersectAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	except(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	exceptAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	union(other: SetOpBranch): SetOpStage<TProjection>;
+	unionAll(other: SetOpBranch): SetOpStage<TProjection>;
+	intersect(other: SetOpBranch): SetOpStage<TProjection>;
+	intersectAll(other: SetOpBranch): SetOpStage<TProjection>;
+	except(other: SetOpBranch): SetOpStage<TProjection>;
+	exceptAll(other: SetOpBranch): SetOpStage<TProjection>;
 	orderBy(...terms: ReadonlyArray<OrderTermInput>): SetOpStage<TProjection>;
 	limit(count: number): SetOpStage<TProjection>;
 };
@@ -44,12 +44,12 @@ export type SetOpBranch<
 
 /** The six combinators every select stage carries (and every {@link SetOpStage} carries again). */
 export type SetOpCombinators<TProjection extends SelectProjection> = {
-	union(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	unionAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	intersect(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	intersectAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	except(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
-	exceptAll(other: SetOpBranch<TProjection>): SetOpStage<TProjection>;
+	union(other: SetOpBranch): SetOpStage<TProjection>;
+	unionAll(other: SetOpBranch): SetOpStage<TProjection>;
+	intersect(other: SetOpBranch): SetOpStage<TProjection>;
+	intersectAll(other: SetOpBranch): SetOpStage<TProjection>;
+	except(other: SetOpBranch): SetOpStage<TProjection>;
+	exceptAll(other: SetOpBranch): SetOpStage<TProjection>;
 };
 
 export type SelectLimited<
@@ -82,7 +82,8 @@ const tableRefOf = (target: Table): TableRefNode => {
 	return { schemaName: meta.schema.schemaName, tableName: meta.tableName };
 };
 
-const resolveOrderTerm = (term: OrderTermInput): OrderByTerm => {
+/** Exported for `@hejbro/query`'s chain set-op stage (add-set-operations) — the one shared order-term resolver, never a second copy. */
+export const resolveOrderTerm = (term: OrderTermInput): OrderByTerm => {
 	if (isExpr(term)) {
 		return { expr: term.exprNode, direction: "asc" };
 	}
@@ -113,7 +114,7 @@ const combineSetOp = <TProjection extends SelectProjection>(
 	left: SelectNode | SetOpNode,
 	operator: SetOpNode["operator"],
 	all: boolean,
-	other: SetOpBranch<TProjection>,
+	other: SetOpBranch,
 	projectionInput: TProjection,
 ): SetOpStage<TProjection> =>
 	makeSetOpStage(

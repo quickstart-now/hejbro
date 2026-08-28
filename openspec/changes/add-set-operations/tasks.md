@@ -54,19 +54,19 @@ group 4 after 1–3. Estimates are pure work minutes (D88).
 
 ## 3. Query layer — after groups 1–2
 
-- [ ] 3.1 (~6m) Compile handlers + `columnPlanForStatement` (left
+- [x] 3.1 (~6m) Compile handlers + `columnPlanForStatement` (left
       branch) + `CompileInput` acceptance. Red:
       `packages/query/test/compile/` — "a set-op statement compiles
       with lifted params from both branches". Files:
       `packages/query/src/compile/{compile,params}.ts`, that test.
-- [ ] 3.2 (~8m) [design] `SetOpResult` typing (key-set gate, left
+- [x] 3.2 (~8m) [design] `SetOpResult` typing (key-set gate, left
       keys, per-key union, nullability OR — exact rejection shape
       settled here, the `related()` never-poison precedent). Red:
       `packages/query/test/types/set-op.test.ts` — "identical shapes
       pass through; mismatched keys fail to type-check; nullability
       widens". Files: a new `packages/query/src/types/set-op.ts`,
       that test.
-- [ ] 3.3 (~8m) Chain combinators + thenable set-op stage wired
+- [x] 3.3 (~8m) Chain combinators + thenable set-op stage wired
       through `ChainApi` (both ladders), `compile()` parity with the
       core builder. Red: `packages/query/test/db/set-op.test.ts` —
       "chain union compiles byte-identically to the core builder

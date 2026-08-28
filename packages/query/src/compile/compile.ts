@@ -4,8 +4,8 @@ import type {
 	InsertNode,
 	QueryNode,
 	SelectNode,
-	UpdateNode,
 	SetOpNode,
+	UpdateNode,
 } from "@hejbro/core";
 import { renderExpr } from "@hejbro/core";
 import { compileDelete, compileInsert, compileUpdate } from "./mutation";

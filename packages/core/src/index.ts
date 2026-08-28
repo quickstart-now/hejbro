@@ -296,6 +296,7 @@ export {
 	jsonObjectFrom,
 	nestedReadBrand,
 	notExists,
+	resolveOrderTerm,
 	select,
 } from "./query/select";
 export type { ColumnOrderOracle } from "./snapshot/column-order";

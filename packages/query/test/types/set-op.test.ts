@@ -1,7 +1,7 @@
 import { bigint, schema, table, text, uuid } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
-import type { SetOpResult } from "../../src/types/set-op";
 import type { SelectResult } from "../../src/types/select-result";
+import type { SetOpResult } from "../../src/types/set-op";
 
 const app = schema("app");
 const activeUsers = table(app, "active_users", {
@@ -31,7 +31,9 @@ describe("set-op result typing (add-set-operations task 3.2)", () => {
 		expectTypeOf<SetOpResult<Active, Archived>["score"]>().toEqualTypeOf<
 			bigint | null
 		>();
-		expectTypeOf<SetOpResult<Active, Archived>["name"]>().toEqualTypeOf<string>();
+		expectTypeOf<
+			SetOpResult<Active, Archived>["name"]
+		>().toEqualTypeOf<string>();
 		// mismatched key sets: never (the combinator's parameter side uses
 		// this to poison the call -- DB would reject the statement)
 		expectTypeOf<SetOpResult<Active, Posts>>().toBeNever();

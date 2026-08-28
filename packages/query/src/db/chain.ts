@@ -12,8 +12,10 @@ import type {
 	SelectFiltered,
 	SelectJoinable,
 	SelectLimited,
+	SelectNode,
 	SelectOrdered,
 	SelectProjection,
+	SetOpNode,
 	Table,
 	UpdateFilterable,
 	UpdateFinal,
@@ -25,6 +27,7 @@ import {
 	select as coreSelect,
 	update as coreUpdate,
 	isTable,
+	resolveOrderTerm,
 } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
 import { compile } from "../compile/compile";
@@ -37,6 +40,7 @@ import type {
 } from "../types/relations";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
+import type { SetOpResult } from "../types/set-op";
 import type { Declarations } from "./db";
 import { executeOn } from "./execute";
 import { buildRelatedProjection } from "./related";
@@ -66,7 +70,9 @@ export type SelectChainLimited<
 	TProjection extends SelectProjection = SelectProjection,
 > = PromiseLike<ReadonlyArray<SelectResult<TProjection>>> & {
 	compile(): CompileResult;
-};
+	/** The underlying statement — runtime surface a combinator on ANOTHER chain reads to take this side as a branch. */
+	readonly selectQuery: SelectNode;
+} & SetOpChainCombinators<SelectResult<TProjection>>;
 
 export type SelectChainOrdered<
 	TProjection extends SelectProjection = SelectProjection,
@@ -163,12 +169,94 @@ const makeChainTerminal = <TRow>(
 	then: makeChainThen<TRow>(run, stage, tables),
 });
 
+/** The statement behind any chain branch a combinator accepts — a select stage wrapper or a prior set-op chain stage. */
+const chainBranchNode = (branch: unknown): SelectNode | SetOpNode => {
+	const record = branch as {
+		readonly selectQuery?: SelectNode;
+		readonly setOpQuery?: SetOpNode;
+	};
+	if (record.setOpQuery !== undefined) {
+		return record.setOpQuery;
+	}
+	if (record.selectQuery !== undefined) {
+		return record.selectQuery;
+	}
+	return throwQueryChainError();
+};
+
+const throwQueryChainError = (): never => {
+	const error = new Error(
+		"a set-op combinator's other side carries no statement. Next: pass a select chain stage or a prior combination.",
+	);
+	throw Object.assign(error, { code: "invalid-set-op-branch" });
+};
+
+const makeSetOpChain = <TRow>(
+	run: ChainRun,
+	node: SetOpNode,
+	tables: Declarations["tables"],
+): SelectChainSetOp<TRow> => ({
+	setOpQuery: node,
+	...makeChainTerminal<TRow>(run, { setOpQuery: node }, tables),
+	...chainSetOpCombinators<TRow>(run, () => node, tables),
+	orderBy: (...terms) =>
+		makeSetOpChain<TRow>(
+			run,
+			{ ...node, orderBy: [...node.orderBy, ...terms.map(resolveOrderTerm)] },
+			tables,
+		),
+	limit: (count) =>
+		makeSetOpChain<TRow>(run, { ...node, limit: count }, tables),
+});
+
+const chainSetOpCombinators = <TRow>(
+	run: ChainRun,
+	left: () => SelectNode | SetOpNode,
+	tables: Declarations["tables"],
+): SetOpChainCombinators<TRow> => {
+	const combine = <TOther>(
+		operator: SetOpNode["operator"],
+		all: boolean,
+		other: SetOpChainBranch<TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>> =>
+		makeSetOpChain<SetOpResult<TRow, TOther>>(
+			run,
+			{
+				queryKind: "setOp",
+				operator,
+				all,
+				left: left(),
+				right: chainBranchNode(other),
+				orderBy: [],
+				limit: null,
+			},
+			tables,
+		);
+	return {
+		union: (other) => combine("union", false, other),
+		unionAll: (other) => combine("union", true, other),
+		intersect: (other) => combine("intersect", false, other),
+		intersectAll: (other) => combine("intersect", true, other),
+		except: (other) => combine("except", false, other),
+		exceptAll: (other) => combine("except", true, other),
+	};
+};
+
 const makeLimitedChain = <TProjection extends SelectProjection>(
 	run: ChainRun,
 	stage: SelectLimited<TProjection>,
 	tables: Declarations["tables"],
-): SelectChainLimited<TProjection> =>
-	makeChainTerminal<SelectResult<TProjection>>(run, stage, tables);
+): SelectChainLimited<TProjection> => ({
+	// the underlying statement rides along (runtime-only surface) so a
+	// set-op combinator on ANOTHER chain can read this side as a branch.
+	selectQuery: stage.selectQuery,
+	...makeChainTerminal<SelectResult<TProjection>>(run, stage, tables),
+	...chainSetOpCombinators<SelectResult<TProjection>>(
+		run,
+		() => stage.selectQuery,
+		tables,
+	),
+});
 
 const makeOrderedChain = <TProjection extends SelectProjection>(
 	run: ChainRun,
@@ -378,6 +466,63 @@ const makeDeleteFilterableChain = <TTable extends Table>(
  * that nothing degrades. Runtime delegates to the same core stages as
  * every other chain level.
  */
+/** The thenable set-op stage (add-set-operations, D103): further combinators, whole-set orderBy/limit, `compile()` parity with the core builder, and the awaited row = {@link SetOpResult} over the two branches. */
+/** Poisons a combinator call whose branches are not row-compatible — `SetOpResult` resolving `never` turns the PARAMETER to `never`, so the mismatch errors at the call site (the database would reject the statement; D103 decision 4). */
+type CompatibleBranch<TRow, TOther> = [SetOpResult<TRow, TOther>] extends [
+	never,
+]
+	? never
+	: unknown;
+
+export type SelectChainSetOp<TRow> = ChainTerminal<TRow> & {
+	readonly setOpQuery: SetOpNode;
+	union<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	unionAll<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	intersect<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	intersectAll<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	except<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	exceptAll<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectChainSetOp<TRow>;
+	limit(count: number): SelectChainSetOp<TRow>;
+};
+
+/** What a chain combinator accepts as its other side: any select chain stage (whole-table or object projection) or a prior chain combination — anything carrying the underlying statement. */
+export type SetOpChainBranch<TRow> = PromiseLike<ReadonlyArray<TRow>>;
+
+/** The six combinators every select chain stage carries (add-set-operations) — typed by the RESULT rows, so a branch-shape mismatch resolves `SetOpResult` to `never` and poisons the call. */
+export type SetOpChainCombinators<TRow> = {
+	union<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	unionAll<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	intersect<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	intersectAll<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	except<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+	exceptAll<TOther>(
+		other: SetOpChainBranch<TOther> & CompatibleBranch<TRow, TOther>,
+	): SelectChainSetOp<SetOpResult<TRow, TOther>>;
+};
+
 export type SelectChainRelatedLimited<TRow> = ChainTerminal<TRow>;
 
 export type SelectChainRelatedOrdered<TRow> =

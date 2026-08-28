@@ -15,6 +15,7 @@ type SameKeys<TLeft, TRight> = [keyof TLeft] extends [keyof TRight]
 		: false
 	: false;
 
-export type SetOpResult<TLeft, TRight> = SameKeys<TLeft, TRight> extends true
-	? { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
-	: never;
+export type SetOpResult<TLeft, TRight> =
+	SameKeys<TLeft, TRight> extends true
+		? { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
+		: never;
