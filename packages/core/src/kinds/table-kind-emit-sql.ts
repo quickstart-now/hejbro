@@ -1,5 +1,5 @@
 import type { ForeignKeyAction } from "../dsl/table";
-import { assertNever, throwHejbroError } from "../error";
+import { throwHejbroError } from "../error";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import { renderTypeNode } from "../types/type-node";
 import type {
@@ -103,38 +103,46 @@ export const IDENTITY_OPTION_KEYS: ReadonlyArray<
 	keyof Omit<IdentitySnapshot, "kind">
 > = ["startWith", "increment", "minValue", "maxValue", "cache", "cycle"];
 
+/** The five numeric identity option keys' own SQL tokens (D100/E6) — every key but `cycle`, which is boolean-valued and rendered separately below. */
+const IDENTITY_NUMBER_OPTION_TOKEN: Readonly<
+	Record<
+		Exclude<keyof Omit<IdentitySnapshot, "kind">, "cycle">,
+		(value: number) => string
+	>
+> = {
+	startWith: (value) => `start with ${value}`,
+	increment: (value) => `increment by ${value}`,
+	minValue: (value) => `minvalue ${value}`,
+	maxValue: (value) => `maxvalue ${value}`,
+	cache: (value) => `cache ${value}`,
+};
+
+/** `cycle`'s own SQL token — `false` renders `no cycle` explicitly (D100/E6). */
+const identityCycleToken = (value: boolean): string => {
+	if (value) {
+		return "cycle";
+	}
+	return "no cycle";
+};
+
 /**
  * One SQL token per identity option key (D100/E6) — Postgres's own
- * `identity_option`/`sequence_option` keywords, lower-cased. `cycle`'s
- * `false` renders `no cycle` explicitly; an absent key renders nothing
- * (declaration-is-truth, design decision 3). Exported so
- * `table-kind-emit.ts`'s `identityOptionChangeStatements` (2.3, `set
- * <token>`) reuses the identical tokens this file's own create path
- * renders.
+ * `identity_option`/`sequence_option` keywords, lower-cased. An absent
+ * key renders nothing (declaration-is-truth, design decision 3).
+ * Exported so `table-kind-emit.ts`'s `identityOptionChangeStatements`
+ * (2.3, `set <token>`) reuses the identical tokens this file's own create
+ * path renders. `value`'s cast is safe by construction: every caller
+ * pairs a key with `identity[key]`'s own value, and only `cycle` is ever
+ * boolean-valued (checked first).
  */
 export const renderIdentityOptionToken = (
 	key: keyof Omit<IdentitySnapshot, "kind">,
 	value: number | boolean,
 ): string => {
-	switch (key) {
-		case "startWith":
-			return `start with ${value}`;
-		case "increment":
-			return `increment by ${value}`;
-		case "minValue":
-			return `minvalue ${value}`;
-		case "maxValue":
-			return `maxvalue ${value}`;
-		case "cache":
-			return `cache ${value}`;
-		case "cycle":
-			if (value) {
-				return "cycle";
-			}
-			return "no cycle";
-		default:
-			return assertNever(key);
+	if (key === "cycle") {
+		return identityCycleToken(value as boolean);
 	}
+	return IDENTITY_NUMBER_OPTION_TOKEN[key](value as number);
 };
 
 /** Every declared option's own token, in canonical order (D100/E6) — `[]` when none are declared. */
