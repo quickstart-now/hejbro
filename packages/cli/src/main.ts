@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { generateCommand } from "./commands/generate";
+import { baselineCommand, generateCommand } from "./commands/generate";
 import { historyCommand } from "./commands/history";
 import { initCommand } from "./commands/init";
 import { restoreCommand } from "./commands/restore";
@@ -26,6 +26,7 @@ export const main = defineCommand({
 	},
 	subCommands: {
 		init: initCommand,
+		baseline: baselineCommand,
 		generate: generateCommand,
 		verify: verifyCommand,
 		history: historyCommand,

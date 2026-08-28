@@ -80,6 +80,21 @@ describe("renderBanner", () => {
 		);
 	});
 
+	it("marks a baseline directly under the version line (#385)", () => {
+		expect(renderBanner([createChange], undefined, "0.2.0", true)).toBe(
+			"-- hejbro migration\n-- hejbro: 0.2.0\n-- baseline: these objects already exist — register this migration as applied, do not run it\n-- + table app.posts [new]",
+		);
+	});
+
+	it("omits the baseline line for an ordinary migration", () => {
+		expect(
+			renderBanner([createChange], undefined, "0.2.0", false),
+		).not.toContain("-- baseline:");
+		expect(renderBanner([createChange], undefined, "0.2.0")).not.toContain(
+			"-- baseline:",
+		);
+	});
+
 	it("renders a drop's notes in its banner label, alongside the dropped marker, when present", () => {
 		const dropWithNotes: KindChange = {
 			kind: "supabase-storage-bucket",
