@@ -286,6 +286,7 @@ three axes as the standing primary evidence.
 | Piece (change `add-generated-columns`) | Tasks | Est → actual (pure min) | Review reworks | Output tokens | Requests | Cache hit |
 |---|---|---|---|---|---|---|
 | group 1 — declaration surface | 2 | 17 → 27 ⁹ | 1 | 490,457 | 551 | 97.2% |
+| group 3 — write-side typing | 1 | 8 → 25 ¹⁰ | 1 | 524,661 | 567 | 97.5% |
 
 ⁹ group 1's overage is contract growth mid-piece (a fourth guard read
 straight out of the approved spec delta, serial near-miss cases, a
@@ -294,6 +295,11 @@ the first implementation ran against the initial brief and three later
 stamps never reached it — caught pre-review by the probe-pinned
 diagnostic-code count, and answered with a standing corrective
 (re-read the latest contract immediately before the final gate run).
+¹⁰ group 3's implementation ran within estimate; the overage is
+evidence rounds (mutant-kill verification, turbo-routed re-submission
+after a bare-tsc false-positive warning) plus a comment-only commit
+applying the comment-budget rule that landed mid-piece — carried to
+the new SHA constructively by blob comparison, no re-verdict.
 <!-- ai-metrics:end -->
 
 ## License

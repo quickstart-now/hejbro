@@ -60,7 +60,7 @@ group 4 sized accordingly).
 
 ## 3. Write-side typing (query) — after group 1, parallel with 2
 
-- [ ] 3.1 (~8m) Excluded-keys classification in
+- [x] 3.1 (~8m) Excluded-keys classification in
       `InsertInput`/`UpdateInput`. Red:
       `packages/query/test/types/insert-input.test.ts` — "an ALWAYS
       column's key is absent from both input types
