@@ -19,7 +19,12 @@
 				},
 				{
 					"identity": {
+						"cache": 10,
+						"cycle": true,
+						"increment": 2,
 						"kind": "by-default",
+						"maxValue": 1000000,
+						"minValue": 1,
 						"startWith": 1000
 					},
 					"name": "seq",

@@ -1,5 +1,5 @@
 import type { ForeignKeyAction } from "../dsl/table";
-import { throwHejbroError } from "../error";
+import { assertNever, throwHejbroError } from "../error";
 import { qualifyName, quoteIdentifier } from "../sql/identifier";
 import { renderTypeNode } from "../types/type-node";
 import type {
@@ -98,21 +98,71 @@ export const IDENTITY_KIND_KEYWORD: Readonly<
 	"by-default": "by default",
 };
 
+/** `IdentitySnapshot`'s own option keys (D100/E6), in canonical output order — deterministic, not declaration order. */
+export const IDENTITY_OPTION_KEYS: ReadonlyArray<
+	keyof Omit<IdentitySnapshot, "kind">
+> = ["startWith", "increment", "minValue", "maxValue", "cache", "cycle"];
+
 /**
- * An identity's full phrase: its kind's clause, plus `(start with N)` when
- * declared. Only `startWith` renders today — the other five
- * `IdentityOptions` keys have no confirmed SQL token yet (D100); a
- * declaration setting one is not yet representable in emitted SQL.
- * Exported so `table-kind-emit.ts`'s `identityAddStatement` (`alter
- * column ... add <phrase>`) reuses the identical text this file's own
- * create path renders.
+ * One SQL token per identity option key (D100/E6) — Postgres's own
+ * `identity_option`/`sequence_option` keywords, lower-cased. `cycle`'s
+ * `false` renders `no cycle` explicitly; an absent key renders nothing
+ * (declaration-is-truth, design decision 3). Exported so
+ * `table-kind-emit.ts`'s `identityOptionChangeStatements` (2.3, `set
+ * <token>`) reuses the identical tokens this file's own create path
+ * renders.
+ */
+export const renderIdentityOptionToken = (
+	key: keyof Omit<IdentitySnapshot, "kind">,
+	value: number | boolean,
+): string => {
+	switch (key) {
+		case "startWith":
+			return `start with ${value}`;
+		case "increment":
+			return `increment by ${value}`;
+		case "minValue":
+			return `minvalue ${value}`;
+		case "maxValue":
+			return `maxvalue ${value}`;
+		case "cache":
+			return `cache ${value}`;
+		case "cycle":
+			if (value) {
+				return "cycle";
+			}
+			return "no cycle";
+		default:
+			return assertNever(key);
+	}
+};
+
+/** Every declared option's own token, in canonical order (D100/E6) — `[]` when none are declared. */
+export const identityOptionTokens = (
+	identity: IdentitySnapshot,
+): ReadonlyArray<string> =>
+	IDENTITY_OPTION_KEYS.flatMap((key) => {
+		const value = identity[key];
+		if (value === undefined) {
+			return [];
+		}
+		return [renderIdentityOptionToken(key, value)];
+	});
+
+/**
+ * An identity's full phrase: its kind's clause, plus `(<option tokens>)`
+ * when at least one option is declared — space-separated, no parens at
+ * all when none are. Exported so `table-kind-emit.ts`'s
+ * `identityAddStatement` (`alter column ... add <phrase>`) reuses the
+ * identical text this file's own create path renders.
  */
 export const renderIdentityPhrase = (identity: IdentitySnapshot): string => {
 	const phrase = IDENTITY_KIND_CLAUSE[identity.kind];
-	if (identity.startWith === undefined) {
+	const tokens = identityOptionTokens(identity);
+	if (tokens.length === 0) {
 		return phrase;
 	}
-	return `${phrase} (start with ${identity.startWith})`;
+	return `${phrase} (${tokens.join(" ")})`;
 };
 
 /** Renders an identity column's own clause (create path), or `[]` for a non-identity column. */

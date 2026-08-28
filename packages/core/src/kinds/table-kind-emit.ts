@@ -29,7 +29,9 @@ import {
 	createTableSql,
 	dropConstraintSql,
 	IDENTITY_KIND_KEYWORD,
+	IDENTITY_OPTION_KEYS,
 	renderColumnDefinition,
+	renderIdentityOptionToken,
 	renderIdentityPhrase,
 } from "./table-kind-emit-sql";
 import type {
@@ -398,6 +400,39 @@ const identityKindChangeStatement = (
 	];
 };
 
+/**
+ * `alter column ... set <token>` per identity option that gained a value
+ * or changed one, in canonical order (D100/E6) — `[]` on either side
+ * lacking identity (add/remove/newly-generated already cover those). An
+ * option the next declaration no longer sets renders nothing (design
+ * decision 3: declaration-is-truth, never a reset toward a Postgres
+ * default the declaration didn't ask for).
+ */
+const identityOptionChangeStatements = (
+	schema: string,
+	tableName: string,
+	key: string,
+	previous: ColumnSnapshot,
+	next: ColumnSnapshot,
+): ReadonlyArray<SqlStatement> => {
+	const previousIdentity = columnIdentity(previous);
+	const nextIdentity = columnIdentity(next);
+	if (previousIdentity === null || nextIdentity === null) {
+		return [];
+	}
+	return IDENTITY_OPTION_KEYS.flatMap((optionKey) => {
+		const nextValue = nextIdentity[optionKey];
+		if (nextValue === undefined || nextValue === previousIdentity[optionKey]) {
+			return [];
+		}
+		return [
+			statement(
+				`alter table ${qualifyName(schema, tableName)} alter column ${quoteIdentifier(key)} set ${renderIdentityOptionToken(optionKey, nextValue)};`,
+			),
+		];
+	});
+};
+
 const alterColumnStatements = (
 	schema: string,
 	tableName: string,
@@ -484,6 +519,13 @@ const alterColumnStatements = (
 			tableName,
 			entry.key,
 			identityKindChangedTo(entry.previous, entry.next),
+		),
+		...identityOptionChangeStatements(
+			schema,
+			tableName,
+			entry.key,
+			entry.previous,
+			entry.next,
 		),
 		...defaultAlterStatements(
 			schema,

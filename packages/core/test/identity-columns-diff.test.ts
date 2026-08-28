@@ -99,6 +99,69 @@ describe("identity columns — diff/emit", () => {
 		]);
 	});
 
+	it("an option newly declared on an existing identity: `set <token>`", () => {
+		const before = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity(),
+		});
+		const after = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity({ cache: 5 }),
+		});
+		expect(emitSql(before, after)).toEqual([
+			'alter table "app"."widgets" alter column "seq" set cache 5;',
+		]);
+	});
+
+	it("a changed option value: `set <token>` with the new value", () => {
+		const before = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
+		});
+		const after = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity({ startWith: 2000 }),
+		});
+		expect(emitSql(before, after)).toEqual([
+			'alter table "app"."widgets" alter column "seq" set start with 2000;',
+		]);
+	});
+
+	it("cycle flipped true -> false: `set no cycle`", () => {
+		const before = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity({ cycle: true }),
+		});
+		const after = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity({ cycle: false }),
+		});
+		expect(emitSql(before, after)).toEqual([
+			'alter table "app"."widgets" alter column "seq" set no cycle;',
+		]);
+	});
+
+	it("an option dropped from the declaration renders no statement (declaration-is-truth, never a reset)", () => {
+		const before = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity({ cache: 5 }),
+		});
+		const after = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity(),
+		});
+		expect(emitSql(before, after)).toEqual([]);
+	});
+
+	it("several options changed at once render one `set` statement each, in canonical order", () => {
+		const before = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
+		});
+		const after = table(app, "widgets", {
+			seq: bigint().generatedByDefaultAsIdentity({
+				startWith: 1000,
+				cache: 5,
+				increment: 2,
+			}),
+		});
+		expect(emitSql(before, after)).toEqual([
+			'alter table "app"."widgets" alter column "seq" set increment by 2;',
+			'alter table "app"."widgets" alter column "seq" set cache 5;',
+		]);
+	});
+
 	it("a plain column becoming generated is rejected, naming the column with a two-generate-run remedy", () => {
 		const before = table(app, "widgets", { total: text() });
 		const after = table(app, "widgets", {

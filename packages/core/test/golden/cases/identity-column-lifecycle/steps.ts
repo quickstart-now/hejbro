@@ -3,12 +3,20 @@ import { bigint, integer, table, text } from "../../../../src/index";
 import { app } from "./declarations";
 
 // Step 0: from empty -- a bare `generated always as identity` and a `by
-// default` identity with its one confirmed option (`start with`), plus a
-// plain column (`count`) the later steps add/drop identity on.
+// default` identity declaring every option (canonical order, space
+// separated, regardless of declaration order here), plus a plain column
+// (`count`) the later steps add/drop identity on.
 
 const withIdentities = table(app, "widgets", {
 	id: integer().generatedAlwaysAsIdentity(),
-	seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
+	seq: bigint().generatedByDefaultAsIdentity({
+		cycle: true,
+		cache: 10,
+		maxValue: 1000000,
+		minValue: 1,
+		increment: 2,
+		startWith: 1000,
+	}),
 	label: text(),
 	count: integer(),
 });
@@ -20,7 +28,14 @@ const fromEmpty: ReadonlyArray<HejbroInput> = [app, withIdentities];
 
 const countIdentityAdded = table(app, "widgets", {
 	id: integer().generatedAlwaysAsIdentity(),
-	seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
+	seq: bigint().generatedByDefaultAsIdentity({
+		cycle: true,
+		cache: 10,
+		maxValue: 1000000,
+		minValue: 1,
+		increment: 2,
+		startWith: 1000,
+	}),
 	label: text(),
 	count: integer().generatedAlwaysAsIdentity(),
 });
@@ -32,7 +47,14 @@ const identityAdded: ReadonlyArray<HejbroInput> = [app, countIdentityAdded];
 
 const idReKinded = table(app, "widgets", {
 	id: integer().generatedByDefaultAsIdentity(),
-	seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
+	seq: bigint().generatedByDefaultAsIdentity({
+		cycle: true,
+		cache: 10,
+		maxValue: 1000000,
+		minValue: 1,
+		increment: 2,
+		startWith: 1000,
+	}),
 	label: text(),
 	count: integer().generatedAlwaysAsIdentity(),
 });
@@ -44,7 +66,14 @@ const reKinded: ReadonlyArray<HejbroInput> = [app, idReKinded];
 
 const countIdentityDropped = table(app, "widgets", {
 	id: integer().generatedByDefaultAsIdentity(),
-	seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
+	seq: bigint().generatedByDefaultAsIdentity({
+		cycle: true,
+		cache: 10,
+		maxValue: 1000000,
+		minValue: 1,
+		increment: 2,
+		startWith: 1000,
+	}),
 	label: text(),
 	count: integer(),
 });
