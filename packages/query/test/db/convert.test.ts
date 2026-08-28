@@ -78,6 +78,21 @@ describe("columnPlanForResult + convertRow (task 4.4)", () => {
 		expect(typeof converted.amount).toBe("bigint");
 	});
 
+	it("an object projection converts by the declared column too -- the runtime the #311 types now match", () => {
+		// This is the soundness witness for #311: the narrowed projection
+		// type claims `bigint`, and the conversion path has always resolved
+		// an object projection's ColumnRefNode back to its declared column
+		// state. The old family-widened type was wider than what actually
+		// arrives, not a hedge against a looser runtime.
+		const node = select({ total: posts.amount }, posts).selectQuery;
+		const plan = columnPlanForResult(node, tables);
+
+		const converted = convertRow({ total: "123" }, plan);
+
+		expect(converted.total).toBe(123n);
+		expect(typeof converted.total).toBe("bigint");
+	});
+
 	it("interval text arrives as a structured IntervalValue", () => {
 		const node = select(posts).selectQuery;
 		const plan = columnPlanForResult(node, tables);

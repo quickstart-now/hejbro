@@ -63,8 +63,11 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 		type Stage = SelectLimited<{ readonly total: Posts["amount"] }>;
 		type Row = ExecuteRows<Stage>[number];
 
+		// #311: a projected declared column keeps its declared type (mode
+		// 'bigint' here), not the family-wide union. Nullability still
+		// widens -- a left join can null any projected column (#307).
 		expectTypeOf<Row>().toEqualTypeOf<{
-			readonly total: bigint | number | string | null;
+			readonly total: bigint | null;
 		}>();
 		// @ts-expect-error "status" was never projected -- not a key of Row.
 		type _Rejected = Row["status"];
@@ -90,8 +93,11 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 		type Stage = InsertFinal<Posts, { readonly total: Posts["amount"] }>;
 		type Row = ExecuteRows<Stage>[number];
 
+		// #311: a projected declared column keeps its declared type (mode
+		// 'bigint' here), not the family-wide union. Nullability still
+		// widens -- a left join can null any projected column (#307).
 		expectTypeOf<Row>().toEqualTypeOf<{
-			readonly total: bigint | number | string | null;
+			readonly total: bigint | null;
 		}>();
 		// @ts-expect-error "status" was never projected -- not a key of Row.
 		type _Rejected = Row["status"];

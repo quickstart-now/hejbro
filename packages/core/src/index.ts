@@ -342,8 +342,12 @@ export type {
 	ColumnReadType,
 	ColumnState,
 	NumericMode,
+	OriginBrand,
 } from "./types/column-builder";
-export { createColumnBuilder } from "./types/column-builder";
+export {
+	columnOriginBrand,
+	createColumnBuilder,
+} from "./types/column-builder";
 export type {
 	BigintConfig,
 	CharConfig,

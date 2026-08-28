@@ -1,3 +1,4 @@
+import type { Expr } from "@hejbro/core";
 import {
 	bigint,
 	json,
@@ -133,17 +134,40 @@ describe("select-result -- object projection (task 3.10)", () => {
 		expectTypeOf<Proj>().toEqualTypeOf<{ readonly t: string | null }>();
 	});
 
-	it("family-only fallback: mode/brand/element are not visible through an Expr", () => {
+	it("a projected table column keeps its declared type (#311)", () => {
+		// Was the family-only fallback: "numeric" covers every mode, so a
+		// mode-'number' bigint read back as number|bigint|string. The origin
+		// brand TableColumns already stamps on every column ref carries the
+		// declaring column map and key, so the declared type is recoverable
+		// without a name match.
 		type AmountProj = SelectResult<{ readonly a: typeof posts.amountRequired }>;
-		// family "numeric" covers every mode -- widest honest type, not just 'number'.
-		expectTypeOf<AmountProj>().toEqualTypeOf<{
-			readonly a: number | bigint | string | null;
-		}>();
+		expectTypeOf<AmountProj>().toEqualTypeOf<{ readonly a: number | null }>();
 
 		type PayloadProj = SelectResult<{
 			readonly p: typeof posts.payloadRequired;
 		}>;
-		// family "json" carries no brand -- unknown, even though the source column is branded.
-		expectTypeOf<PayloadProj>().toEqualTypeOf<{ readonly p: unknown | null }>();
+		expectTypeOf<PayloadProj>().toEqualTypeOf<{ readonly p: Payload | null }>();
+
+		type TagsProj = SelectResult<{ readonly t: typeof posts.tags }>;
+		expectTypeOf<TagsProj>().toEqualTypeOf<{
+			readonly t: ReadonlyArray<string | null> | null;
+		}>();
+	});
+
+	it("nullability stays widened until #307 -- a left join can null any projected column", () => {
+		// The one axis a projection still cannot know: the projection type is
+		// fixed at select() time, before .leftJoin() is chained, so a
+		// notNull-sourced column must still read as nullable. Narrowing this
+		// without tracking left-joined tables would be the first type in this
+		// package to lie.
+		type Proj = SelectResult<{ readonly t: typeof posts.titleRequired }>;
+		expectTypeOf<Proj>().toEqualTypeOf<{ readonly t: string | null }>();
+	});
+
+	it("a non-column expression still falls back to its family", () => {
+		type Proj = SelectResult<{ readonly n: Expr<"numeric"> }>;
+		expectTypeOf<Proj>().toEqualTypeOf<{
+			readonly n: number | bigint | string | null;
+		}>();
 	});
 });
