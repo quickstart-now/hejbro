@@ -27,8 +27,40 @@ See a full example: `examples/postgres/src/app.schema.ts`.
 
 Every column factory (`uuid()`, `text()`, `integer()`, `timestamptz()`, …)
 and its chainable modifiers (`.notNull()`, `.primaryKey()`, `.unique()`,
-`.default(...)`, `.defaultRandom()`, `.defaultNow()`) are self-describing
-exports — see `packages/core/src/types/column-builder-factories.ts`.
+`.default(...)`, `.defaultRandom()`, `.defaultNow()`,
+`.generatedAlwaysAs(...)`, `.generatedAlwaysAsIdentity()`,
+`.generatedByDefaultAsIdentity()`) are self-describing exports — see
+`packages/core/src/types/column-builder-factories.ts`.
+
+## Generated columns
+
+```ts
+import { bigint, integer, schema, sql, table } from "hejbro";
+
+export const app = schema("app");
+export const orders = table(app, "orders", {
+  id: integer().generatedAlwaysAsIdentity(),
+  amount: bigint().notNull(),
+  doubled: bigint().generatedAlwaysAs(sql`amount * 2`),
+  seq: bigint().generatedByDefaultAsIdentity(),
+});
+```
+
+- Identity is for integer-family column types only, and `serial()` is not
+  identity-eligible (its `nextval` default is the identity + default
+  combination Postgres itself rejects). Both identity kinds imply
+  `NOT NULL` — the column reads back non-nullable.
+- ALWAYS-family columns (stored generated and always-identity) do not
+  appear in the query layer's insert/update input types; a by-default
+  identity can be supplied or omitted like any defaulted column. The
+  database enforces the same rule at runtime (SQLSTATE `428C9`).
+- Combining generated/identity with `.default(...)`, with each other, or
+  with a non-eligible type fails loudly at declaration time.
+- Converting an existing plain column to a generated one is not a silent
+  rewrite: migration generation stops with `unsupported-column-alter` and
+  a two-step remedy (drop the column, then re-add it as generated).
+  Generated→plain emits `drop expression`; changing the expression
+  rebuilds the column, which moves it to the end of the table.
 
 ## CHECK constraints
 
