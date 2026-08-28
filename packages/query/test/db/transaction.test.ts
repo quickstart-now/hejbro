@@ -105,6 +105,85 @@ describe("db().transaction (task 4.6)", () => {
 		expect(driver.execute).not.toHaveBeenCalled();
 	});
 
+	it("tx.transaction() brackets its callback with a savepoint and releases it", async () => {
+		const { driver, sessionExecute } = transactionalDriver(true);
+		const handle = db({ posts }, driver);
+
+		await handle.transaction(async (tx) => {
+			await tx.execute(select(posts));
+			await tx.transaction(async (inner) => {
+				await inner.execute(select(posts));
+			});
+			await tx.execute(select(posts));
+		});
+
+		const sql = sessionExecute.mock.calls.map(
+			(call) => (call[0] as { sql: string }).sql,
+		);
+		expect(sql[0]).toContain("select");
+		expect(sql[1]).toBe('savepoint "hejbro_sp_1"');
+		expect(sql[2]).toContain("select");
+		expect(sql[3]).toBe('release savepoint "hejbro_sp_1"');
+		expect(sql[4]).toContain("select");
+		// one driver transaction, one connection -- the savepoint is not a
+		// second BEGIN.
+		expect(driver.transaction).toHaveBeenCalledTimes(1);
+	});
+
+	it("a throwing nested callback rolls back to its savepoint and rethrows unchanged", async () => {
+		const { driver, sessionExecute, commit, rollback } =
+			transactionalDriver(true);
+		const handle = db({ posts }, driver);
+		const boom = new Error("inner failed");
+
+		const outcome = await handle.transaction(async (tx) => {
+			const caught = await tx
+				.transaction(async () => {
+					throw boom;
+				})
+				.catch((error: unknown) => error);
+			await tx.execute(select(posts));
+			return caught;
+		});
+
+		// the callback's own error, not wrapped or reinterpreted.
+		expect(outcome).toBe(boom);
+		const sql = sessionExecute.mock.calls.map(
+			(call) => (call[0] as { sql: string }).sql,
+		);
+		expect(sql[0]).toBe('savepoint "hejbro_sp_1"');
+		expect(sql[1]).toBe('rollback to savepoint "hejbro_sp_1"');
+		expect(sql[2]).toContain("select");
+		// the OUTER transaction still commits -- a rolled-back savepoint
+		// does not abort the transaction that contains it.
+		expect(commit).toHaveBeenCalledTimes(1);
+		expect(rollback).not.toHaveBeenCalled();
+	});
+
+	it("sibling and deeper savepoints get distinct names within one transaction", async () => {
+		const { driver, sessionExecute } = transactionalDriver(true);
+		const handle = db({ posts }, driver);
+
+		await handle.transaction(async (tx) => {
+			await tx.transaction(async (inner) => {
+				await inner.transaction(async () => {});
+			});
+			await tx.transaction(async () => {});
+		});
+
+		const sql = sessionExecute.mock.calls.map(
+			(call) => (call[0] as { sql: string }).sql,
+		);
+		expect(sql).toEqual([
+			'savepoint "hejbro_sp_1"',
+			'savepoint "hejbro_sp_2"',
+			'release savepoint "hejbro_sp_2"',
+			'release savepoint "hejbro_sp_1"',
+			'savepoint "hejbro_sp_3"',
+			'release savepoint "hejbro_sp_3"',
+		]);
+	});
+
 	it("a nested transaction() call fails fast with nested-transaction-unsupported, before any further send", async () => {
 		const { driver } = transactionalDriver(true);
 		const handle = db({ posts }, driver);
