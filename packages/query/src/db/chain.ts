@@ -4,11 +4,13 @@ import type {
 	DeleteFilterable,
 	DeleteFinal,
 	DeleteReturnable,
+	Expr,
 	InsertConflictable,
 	InsertFinal,
 	InsertReturnable,
 	OrderTermInput,
 	ReturningProjection,
+	SelectDistinctable,
 	SelectFiltered,
 	SelectJoinable,
 	SelectLimited,
@@ -77,7 +79,15 @@ export type SelectChainLimited<
 export type SelectChainOrdered<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectChainLimited<TProjection> & {
-	limit(count: number): SelectChainLimited<TProjection>;
+	limit(count: number): SelectChainLimitedThenOffset<TProjection>;
+	/** `offset` without a `limit` is legal SQL and useful on its own. */
+	offset(count: number): SelectChainLimited<TProjection>;
+};
+
+export type SelectChainLimitedThenOffset<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectChainLimited<TProjection> & {
+	offset(count: number): SelectChainLimited<TProjection>;
 };
 
 export type SelectChainFiltered<
@@ -94,6 +104,14 @@ export type SelectChainJoinable<
 	innerJoin(joined: Table, on: Condition): SelectChainJoinable<TProjection>;
 	leftJoin(joined: Table, on: Condition): SelectChainJoinable<TProjection>;
 	where(condition: Condition): SelectChainFiltered<TProjection>;
+};
+
+/** What `db.select(...)` returns: joinable, and still able to take `distinct` — which SQL allows only between `select` and the projection, so the chain allows it first and exactly once (#437). */
+export type SelectChainDistinctable<
+	TProjection extends SelectProjection = SelectProjection,
+> = SelectChainJoinable<TProjection> & {
+	distinct(): SelectChainJoinable<TProjection>;
+	distinctOn(...columns: ReadonlyArray<Expr>): SelectChainJoinable<TProjection>;
 };
 
 /** Any core builder stage `compile()`/`executeOn` already accept — every select/insert/update/delete stage structurally matches one of `CompileInput`'s `*Query` wrapper shapes. */
@@ -223,6 +241,7 @@ const chainSetOpCombinators = <TRow>(
 				right: chainBranchNode(other),
 				orderBy: [],
 				limit: null,
+				offset: null,
 			},
 			tables,
 		);
@@ -258,7 +277,12 @@ const makeOrderedChain = <TProjection extends SelectProjection>(
 	tables: Declarations["tables"],
 ): SelectChainOrdered<TProjection> => ({
 	...makeLimitedChain(run, stage, tables),
-	limit: (count) => makeLimitedChain(run, stage.limit(count), tables),
+	limit: (count) => ({
+		...makeLimitedChain(run, stage.limit(count), tables),
+		offset: (offsetCount: number) =>
+			makeLimitedChain(run, stage.limit(count).offset(offsetCount), tables),
+	}),
+	offset: (count) => makeLimitedChain(run, stage.offset(count), tables),
 });
 
 const makeFilteredChain = <TProjection extends SelectProjection>(
@@ -281,6 +305,17 @@ const makeJoinableChain = <TProjection extends SelectProjection>(
 	leftJoin: (joined, on) =>
 		makeJoinableChain(run, stage.leftJoin(joined, on), tables),
 	where: (condition) => makeFilteredChain(run, stage.where(condition), tables),
+});
+
+const makeDistinctableChain = <TProjection extends SelectProjection>(
+	run: ChainRun,
+	stage: SelectDistinctable<TProjection>,
+	tables: Declarations["tables"],
+): SelectChainDistinctable<TProjection> => ({
+	...makeJoinableChain(run, stage, tables),
+	distinct: () => makeJoinableChain(run, stage.distinct(), tables),
+	distinctOn: (...columns) =>
+		makeJoinableChain(run, stage.distinctOn(...columns), tables),
 });
 
 /**
@@ -601,7 +636,7 @@ export type ChainApi<TSchema = Record<string, unknown>> = {
 	select<TProjection extends SelectProjection>(
 		projection: TProjection,
 		from?: Table,
-	): SelectChainJoinable<TProjection> &
+	): SelectChainDistinctable<TProjection> &
 		(TProjection extends Table
 			? RelatedCapable<TSchema, TProjection>
 			: unknown);
@@ -633,7 +668,11 @@ export const createChainApi = (
 	tables: Declarations["tables"],
 ): ChainApi => ({
 	select: ((projection: SelectProjection, from?: Table) => {
-		const base = makeJoinableChain(run, coreSelect(projection, from), tables);
+		const base = makeDistinctableChain(
+			run,
+			coreSelect(projection, from),
+			tables,
+		);
 		if (!isTable(projection)) {
 			return base;
 		}

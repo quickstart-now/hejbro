@@ -1392,4 +1392,84 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			"released",
 		]);
 	});
+
+	it("offset and distinct on (#437): pagination and one row per group, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.dd_events (
+				id uuid primary key,
+				stream text not null,
+				seq bigint not null,
+				label text not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const events = table(testSchema, "dd_events", {
+			id: uuid().primaryKey(),
+			stream: text().notNull(),
+			seq: bigint({ mode: "bigint" }).notNull(),
+			label: text().notNull(),
+		});
+		const handle = db({ events }, driver);
+		await handle.insert(events).values([
+			{
+				id: "10000000-0000-0000-0000-000000000001",
+				stream: "a",
+				seq: 1n,
+				label: "a1",
+			},
+			{
+				id: "10000000-0000-0000-0000-000000000002",
+				stream: "a",
+				seq: 2n,
+				label: "a2",
+			},
+			{
+				id: "10000000-0000-0000-0000-000000000003",
+				stream: "b",
+				seq: 1n,
+				label: "b1",
+			},
+			{
+				id: "10000000-0000-0000-0000-000000000004",
+				stream: "b",
+				seq: 3n,
+				label: "b3",
+			},
+			{
+				id: "10000000-0000-0000-0000-000000000005",
+				stream: "c",
+				seq: 9n,
+				label: "c9",
+			},
+		]);
+
+		// pagination: the server, not the client, skips the first two rows.
+		const page = await handle
+			.select({ label: events.label }, events)
+			.orderBy(events.label)
+			.limit(2)
+			.offset(2);
+		expect(page.map((row) => row.label)).toEqual(["b1", "b3"]);
+
+		// distinct on: one row per stream, and WHICH row is decided by the
+		// order by -- the Postgres-specific semantics a fixture cannot prove.
+		const latestPerStream = await handle
+			.select({ stream: events.stream, label: events.label }, events)
+			.distinctOn(events.stream)
+			.orderBy(events.stream, { by: events.seq, direction: "desc" });
+		expect(latestPerStream.map((row) => row.label)).toEqual(["a2", "b3", "c9"]);
+
+		// plain distinct collapses duplicates the projection creates.
+		const streams = await handle
+			.select({ stream: events.stream }, events)
+			.distinct()
+			.orderBy(events.stream);
+		expect(streams.map((row) => row.stream)).toEqual(["a", "b", "c"]);
+	});
 });

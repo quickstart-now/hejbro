@@ -53,6 +53,8 @@ describe("compile: joins", () => {
 			where: null,
 			orderBy: [],
 			limit: null,
+			offset: null,
+			distinct: null,
 		};
 
 		const result = compile(node);

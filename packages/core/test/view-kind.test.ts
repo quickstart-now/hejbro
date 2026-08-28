@@ -39,6 +39,42 @@ describe("viewKind.serialize", () => {
 		);
 	});
 
+	it("a view body's offset and distinct on survive the snapshot round-trip (#437)", () => {
+		// The reason the format moved to 8: these clauses reach the snapshot
+		// through a view body, so a reader that ignored them would diff a
+		// paginated or de-duplicated view as if it were neither.
+		const view = defineView(
+			app,
+			"latest_per_status",
+			select(posts)
+				.distinctOn(posts.status)
+				.orderBy(posts.status, { by: posts.publishedAt, direction: "desc" })
+				.limit(50)
+				.offset(10),
+		);
+		const snapshot = viewKind.serialize(view) as ViewSnapshot;
+		expect(viewSelectSql(snapshot)).toBe(
+			'select distinct on ("app"."posts"."status") "id", "status", "published_at" from "app"."posts" order by "app"."posts"."status" asc, "app"."posts"."published_at" desc limit 50 offset 10',
+		);
+
+		// and the round trip through a real snapshot diffs to nothing: the
+		// clauses come back out of the snapshot exactly as they went in.
+		const declarations = [posts, view];
+		const first = generateMigration({
+			declarations,
+			previousSnapshot: emptySnapshot,
+			registry,
+		});
+		expect(first.errors).toEqual([]);
+		const second = generateMigration({
+			declarations,
+			previousSnapshot: first.snapshot,
+			registry,
+		});
+		expect(second.errors).toEqual([]);
+		expect(second.sql).toBe("");
+	});
+
 	it("derives columns from an object projection, in alias order", () => {
 		const view = defineView(
 			app,

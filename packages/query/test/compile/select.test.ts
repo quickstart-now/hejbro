@@ -130,3 +130,26 @@ describe("compile: a sql fragment as a condition (#386)", () => {
 		expect(result.params).toEqual(["archived", "published"]);
 	});
 });
+
+describe("compile: offset and distinct (#437)", () => {
+	it("paginates with limit and offset, both rendered inline", () => {
+		const statement = select(posts).limit(10).offset(20);
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'select "id", "status", "published_at" from "app"."posts" limit 10 offset 20',
+		);
+		// a row count is not a value: it renders inline so the statement text
+		// stays reviewable, exactly as `limit` already did.
+		expect(result.params).toEqual([]);
+	});
+
+	it("compiles distinct and distinct on", () => {
+		expect(compile(select(posts).distinct()).sql).toBe(
+			'select distinct "id", "status", "published_at" from "app"."posts"',
+		);
+		expect(compile(select(posts).distinctOn(posts.status)).sql).toBe(
+			'select distinct on ("app"."posts"."status") "id", "status", "published_at" from "app"."posts"',
+		);
+	});
+});

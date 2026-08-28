@@ -619,8 +619,8 @@ describe("createDefaultRegistry", () => {
 // directly against hand-built snapshot fixtures, the same way indexWhere's
 // own tests do for `where`.
 describe("index snapshot accessors — Foundational types (#284)", () => {
-	it("HEJBRO_SNAPSHOT_VERSION is 7", () => {
-		expect(HEJBRO_SNAPSHOT_VERSION).toBe(7);
+	it("HEJBRO_SNAPSHOT_VERSION is 8", () => {
+		expect(HEJBRO_SNAPSHOT_VERSION).toBe(8);
 	});
 
 	it("indexMethod defaults to btree when absent, and reads a recorded method", () => {
@@ -697,8 +697,8 @@ describe("SC-004 regression: table-indexes still serializes byte-identical (#284
 // Snapshot format version 6 records the generated/identity family as
 // compact optional column fields (D100).
 describe("generated/identity columns — snapshot v6", () => {
-	it("HEJBRO_SNAPSHOT_VERSION is 7 — D1's canonical foreign-key order bump; the generated/identity fields arrived at 6", () => {
-		expect(HEJBRO_SNAPSHOT_VERSION).toBe(7);
+	it("HEJBRO_SNAPSHOT_VERSION is 8 — #437's offset/distinct bump; canonical foreign-key order arrived at 7, generated/identity at 6", () => {
+		expect(HEJBRO_SNAPSHOT_VERSION).toBe(8);
 	});
 
 	it("serializes a generated expression as an encoded fragment, and an identity's kind kebab-cased with only its declared options", () => {
@@ -750,7 +750,7 @@ describe("generated/identity columns — snapshot v6", () => {
 		expect(tableKind.diff(snapshot, snapshot, "app.widgets")).toEqual([]);
 	});
 
-	it("round-trips a generated expression, an identity kind, and explicit identity options through render/parse with an empty diff, reading formatVersion 7 back", () => {
+	it("round-trips a generated expression, an identity kind, and explicit identity options through render/parse with an empty diff, reading formatVersion 8 back", () => {
 		const widgets = table(app, "widgets", {
 			id: integer().generatedAlwaysAsIdentity(),
 			seq: bigint().generatedByDefaultAsIdentity({ startWith: 1000 }),
@@ -764,7 +764,7 @@ describe("generated/identity columns — snapshot v6", () => {
 		);
 
 		const parsed = parseSnapshot(renderSnapshot(snapshot));
-		expect(parsed.formatVersion).toBe(7);
+		expect(parsed.formatVersion).toBe(8);
 
 		const roundTrippedNode = parsed.objects["table:app.widgets"];
 		if (roundTrippedNode === undefined) {

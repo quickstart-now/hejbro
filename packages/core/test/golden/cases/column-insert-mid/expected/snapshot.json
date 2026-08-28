@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 7,
+	"formatVersion": 8,
 	"objects": {
 		"function:app.archive_project": {
 			"args": [
@@ -85,12 +85,14 @@
 			],
 			"name": "projects_v",
 			"query": {
+				"distinct": null,
 				"from": {
 					"schema": "app",
 					"table": "projects"
 				},
 				"joins": [],
 				"limit": null,
+				"offset": null,
 				"orderBy": [],
 				"projection": {
 					"columns": [

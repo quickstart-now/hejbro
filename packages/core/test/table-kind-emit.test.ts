@@ -150,7 +150,7 @@ describe("tableKind.emit — create re-issues standing schema-wide grants (#121/
 	});
 
 	const snapshotWith = (objects: Record<string, unknown>): Snapshot => ({
-		formatVersion: 7,
+		formatVersion: 8,
 		dialect: "postgres",
 		objects: objects as Snapshot["objects"],
 	});

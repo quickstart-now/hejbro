@@ -1,6 +1,6 @@
 {
 	"dialect": "postgres",
-	"formatVersion": 7,
+	"formatVersion": 8,
 	"objects": {
 		"grant:app.all-tables-privileges.anon": {
 			"grantKind": "all-tables-privileges",

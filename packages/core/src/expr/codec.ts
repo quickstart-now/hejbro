@@ -4,6 +4,7 @@ import type {
 	BetweenNode,
 	ColumnRefNode,
 	ComparisonNode,
+	DistinctNode,
 	ExistsNode,
 	ExprNode,
 	FunctionCallNode,
@@ -402,6 +403,44 @@ const encodeWhere = (where: ExprNode | null): JsonValue => {
  * unchanged for a top-level query, not just one nested inside an
  * `ExistsNode`.
  */
+/**
+ * `distinct` is `null` on almost every select, so it encodes as `null`
+ * rather than an always-present wrapper object. The key itself is always
+ * written: a v8 snapshot missing it was hand-edited, and `asRecord`'s own
+ * loud failure is the right answer there — never a silent `null` that
+ * would diff a `distinct` view as if it had none.
+ */
+const encodeDistinct = (distinct: DistinctNode | null): JsonValue => {
+	if (distinct === null) {
+		return null;
+	}
+	if (distinct.distinctKind === "all") {
+		return { distinctKind: "all" };
+	}
+	return {
+		distinctKind: "on",
+		columns: distinct.columns.map(encodeExprNode),
+	};
+};
+
+const decodeDistinct = (value: JsonValue): DistinctNode | null => {
+	if (value === null) {
+		return null;
+	}
+	const node = asRecord(value, "distinctKind");
+	const distinctKind = stringField(node, "distinctKind");
+	if (distinctKind === "all") {
+		return { distinctKind: "all" };
+	}
+	if (distinctKind !== "on") {
+		return unknownDiscriminator("distinctKind", distinctKind);
+	}
+	return {
+		distinctKind: "on",
+		columns: (node.columns as ReadonlyArray<JsonValue>).map(decodeExprNode),
+	};
+};
+
 export const encodeSelectNode = (node: SelectNode): JsonValue => ({
 	queryKind: node.queryKind,
 	projection: encodeProjection(node.projection),
@@ -410,6 +449,8 @@ export const encodeSelectNode = (node: SelectNode): JsonValue => ({
 	where: encodeWhere(node.where),
 	orderBy: node.orderBy.map(encodeOrderByTerm),
 	limit: node.limit,
+	offset: node.offset,
+	distinct: encodeDistinct(node.distinct),
 });
 
 // --- decode: snapshot form -> ExprNode (camelCase) ----------------------
@@ -725,6 +766,7 @@ export const encodeSetOpNode = (node: SetOpNode): JsonValue => ({
 	right: encodeQueryNode(node.right),
 	orderBy: node.orderBy.map(encodeOrderByTerm),
 	limit: node.limit,
+	offset: node.offset,
 });
 
 export const decodeSetOpNode = (value: JsonValue): SetOpNode => {
@@ -745,6 +787,7 @@ export const decodeSetOpNode = (value: JsonValue): SetOpNode => {
 		right: decodeQueryNode(node.right as JsonValue),
 		orderBy: (node.orderBy as ReadonlyArray<JsonValue>).map(decodeOrderByTerm),
 		limit: node.limit as number | null,
+		offset: node.offset as number | null,
 	};
 };
 
@@ -781,5 +824,7 @@ export const decodeSelectNode = (value: JsonValue): SelectNode => {
 		where: decodeWhere(node.where as JsonValue),
 		orderBy: (node.orderBy as ReadonlyArray<JsonValue>).map(decodeOrderByTerm),
 		limit: node.limit as number | null,
+		offset: node.offset as number | null,
+		distinct: decodeDistinct(node.distinct as JsonValue),
 	};
 };

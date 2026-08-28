@@ -6,6 +6,7 @@ import {
 	decodeSelectNode,
 	encodeExprNode,
 	encodeQueryNode,
+	encodeSelectNode,
 	NODE_KIND_TO_SNAPSHOT,
 	PROJECTION_KIND_TO_SNAPSHOT,
 } from "../../src/expr/codec";
@@ -17,6 +18,7 @@ import {
 	schema,
 	select,
 	table,
+	text,
 	uuid,
 } from "../../src/index";
 
@@ -263,6 +265,8 @@ describe("expr codec — round-trip", () => {
 						},
 					],
 					limit: 1,
+					offset: null,
+					distinct: null,
 				},
 			},
 		],
@@ -279,6 +283,8 @@ describe("expr codec — round-trip", () => {
 					where: null,
 					orderBy: [],
 					limit: null,
+					offset: null,
+					distinct: null,
 				},
 			},
 		],
@@ -402,6 +408,8 @@ describe("expr codec — round-trip", () => {
 				where: null,
 				orderBy: [],
 				limit: null,
+				offset: null,
+				distinct: null,
 			},
 		});
 		if (decoded.nodeKind !== "exists") {
@@ -431,6 +439,8 @@ describe("expr codec — round-trip", () => {
 				where: null,
 				orderBy: [],
 				limit: null,
+				offset: null,
+				distinct: null,
 			},
 		};
 		expect(() => decodeExprNode(malformed)).toThrowError(
@@ -450,6 +460,8 @@ describe("expr codec — round-trip", () => {
 				where: null,
 				orderBy: [],
 				limit: null,
+				offset: null,
+				distinct: null,
 			},
 		};
 		expect(() => decodeExprNode(malformed)).toThrowError(
@@ -585,10 +597,12 @@ describe("set-op codec round-trip (add-set-operations task 1.3)", () => {
 				right: select(others).selectQuery,
 				orderBy: [],
 				limit: null,
+				offset: null,
 			},
 			right: select(posts).selectQuery,
 			orderBy: [{ expr: posts.id.exprNode, direction: "asc" }],
 			limit: 5,
+			offset: null,
 		};
 		const encoded = encodeQueryNode(node);
 		expect(JSON.stringify(encoded)).toContain('"set-op"');
@@ -614,6 +628,7 @@ describe("set-op codec round-trip (add-set-operations task 1.3)", () => {
 			right: select(others).selectQuery,
 			orderBy: [],
 			limit: null,
+			offset: null,
 		});
 		expect(() => decodeSelectNode(encoded)).toThrowError(/set-op|queryKind/);
 	});
@@ -632,5 +647,47 @@ describe("set-op codec guards (review F6)", () => {
 		expect(() => decodeQueryNode(corrupted)).toThrowError(
 			/symmetric-difference|operator/,
 		);
+	});
+});
+
+describe("distinct codec round-trip and guards (#437)", () => {
+	const app3 = schema("app");
+	const posts3 = table(app3, "posts3", {
+		id: uuid().primaryKey(),
+		status: text().notNull(),
+	});
+
+	it("round-trips distinct, distinct on, and the absent case", () => {
+		const plain = select(posts3).distinct().selectQuery;
+		expect(decodeSelectNode(encodeSelectNode(plain))).toEqual(plain);
+
+		const on = select(posts3)
+			.distinctOn(posts3.status)
+			.limit(5)
+			.offset(2).selectQuery;
+		const revived = decodeSelectNode(encodeSelectNode(on));
+		expect(revived).toEqual(on);
+		expect(revived.offset).toBe(2);
+
+		const absent = select(posts3).selectQuery;
+		expect(decodeSelectNode(encodeSelectNode(absent)).distinct).toBeNull();
+	});
+
+	it("an unknown distinctKind is refused loudly", () => {
+		const corrupted = JSON.parse(
+			JSON.stringify(encodeSelectNode(select(posts3).distinct().selectQuery)),
+		);
+		corrupted.distinct.distinctKind = "on-steroids";
+		expect(() => decodeSelectNode(corrupted)).toThrowError(
+			/on-steroids|distinctKind/,
+		);
+	});
+
+	it("a hand-edited snapshot that dropped the distinct key fails loudly, never silently as 'no distinct'", () => {
+		const corrupted = JSON.parse(
+			JSON.stringify(encodeSelectNode(select(posts3).distinct().selectQuery)),
+		);
+		corrupted.distinct = undefined;
+		expect(() => decodeSelectNode(corrupted)).toThrowError();
 	});
 });

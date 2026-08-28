@@ -206,6 +206,8 @@ export const buildUnrelatedCase = (kind: ExprNode["nodeKind"]): ExprNode => {
 					where: null,
 					orderBy: [],
 					limit: null,
+					offset: null,
+					distinct: null,
 				},
 			};
 		case "selectExpr":
@@ -223,6 +225,8 @@ export const buildUnrelatedCase = (kind: ExprNode["nodeKind"]): ExprNode => {
 					where: null,
 					orderBy: [],
 					limit: null,
+					offset: null,
+					distinct: null,
 				},
 			};
 		default:
