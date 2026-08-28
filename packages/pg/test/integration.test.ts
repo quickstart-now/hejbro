@@ -2,7 +2,10 @@ import { execFileSync } from "node:child_process";
 import {
 	assertNoNulls,
 	bigint,
+	bytea,
+	date,
 	emptySnapshot,
+	eq,
 	generateMigration,
 	getTableMeta,
 	HejbroError,
@@ -10,6 +13,8 @@ import {
 	integer,
 	interval,
 	numeric,
+	rls,
+	roleName,
 	schema,
 	select,
 	serializeInterval,
@@ -283,6 +288,58 @@ const lifecycleDropIdentity =
 	'alter table "g5_integration"."lifecycle" alter column "count" drop identity;';
 const lifecycleDropNotNull =
 	'alter table "g5_integration"."lifecycle" alter column "count" drop not null;';
+
+/**
+ * add-relational-reads, group 4/task 4.1: the relational-read witness's
+ * own three tables. `authorId` is nullable on purpose (the missing
+ * forward row must arrive `null`), and `rel_comments` carries one column
+ * per arrival-contract axis the F1 ruling fixed (bigint text, timestamptz
+ * ISO, date local-midnight, interval via the driver pin, bytea via the
+ * hex pin, bigint[] element-wise) plus row-level security so the scoped
+ * read can prove nested rows obey the context's policies.
+ */
+const relAuthors = table(testSchema, "rel_authors", {
+	id: uuid().primaryKey(),
+	name: text().notNull(),
+});
+const relPosts = table(testSchema, "rel_posts", {
+	id: uuid().primaryKey(),
+	title: text().notNull(),
+	authorId: uuid().references(() => relAuthors.id),
+});
+const relComments = table(
+	testSchema,
+	"rel_comments",
+	{
+		id: uuid().primaryKey(),
+		postId: uuid()
+			.notNull()
+			.references(() => relPosts.id),
+		viewCount: bigint().notNull(),
+		postedOn: date(),
+		postedAt: timestamptz().notNull(),
+		spent: interval().notNull(),
+		payload: bytea(),
+		tags: bigint().array().notNull(),
+	},
+	(t) => ({
+		rls: rls.enabled({
+			read: rls
+				.policy("g4_viewer_read")
+				.for("select")
+				.to("g4_viewer")
+				.using(sql`${t.viewCount} < 100`),
+		}),
+	}),
+);
+
+// Tables passed WHOLE (not via getTableMeta): generate's rls/policy
+// expansion is the Table branch's own -- a raw TableDeclaration skips
+// it, which is exactly the drift the policy pin below would then miss.
+const relMigration = generateMigration({
+	declarations: [testSchema, relAuthors, relPosts, relComments],
+	previousSnapshot: emptySnapshot,
+}).sql;
 
 describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤, task 5.6)", () => {
 	const pool: { current: Pool | undefined } = { current: undefined };
@@ -931,5 +988,191 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			params: [],
 			kind: "sql",
 		});
+	});
+	it("relational reads (add-relational-reads, group 4/task 4.1): related() against a real postgres:17 -- revive, shapes, and rls-scoped nested rows", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+
+		// The FK clauses and the policy the raw DDL below receives are
+		// pinned as core's own emit output (the one-shared-constant rule):
+		// the raw DDL is never produced by the migration engine here, so
+		// these pins are what keep the two texts from drifting apart.
+		const postFkClause =
+			'constraint "rel_posts_author_id_fk" foreign key ("author_id") references "g5_integration"."rel_authors" ("id")';
+		const commentFkClause =
+			'constraint "rel_comments_post_id_fk" foreign key ("post_id") references "g5_integration"."rel_posts" ("id")';
+		const policySql =
+			'create policy "g4_viewer_read" on "g5_integration"."rel_comments" for select to "g4_viewer" using ("g5_integration"."rel_comments"."view_count" < 100);';
+		expect(relMigration).toContain(postFkClause);
+		expect(relMigration).toContain(commentFkClause);
+		expect(relMigration).toContain(policySql);
+		expect(relMigration).toContain(
+			'alter table "g5_integration"."rel_comments" enable row level security',
+		);
+
+		await driver.execute({
+			sql: `create table g5_integration.rel_authors (
+				id uuid primary key,
+				name text not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: `create table g5_integration.rel_posts (
+				id uuid primary key,
+				title text not null,
+				author_id uuid,
+				${postFkClause}
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: `create table g5_integration.rel_comments (
+				id uuid primary key,
+				post_id uuid not null,
+				view_count bigint not null,
+				posted_on date,
+				posted_at timestamptz not null,
+				spent interval not null,
+				payload bytea,
+				tags bigint[] not null,
+				${commentFkClause}
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: "create role g4_viewer",
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: 'alter table "g5_integration"."rel_comments" enable row level security',
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({ sql: policySql, params: [], kind: "sql" });
+		await driver.execute({
+			sql: "grant usage on schema g5_integration to g4_viewer; grant select on all tables in schema g5_integration to g4_viewer",
+			params: [],
+			kind: "sql",
+		});
+
+		const handle = db({ relAuthors, relPosts, relComments }, driver);
+
+		const authorId = "aaaaaaaa-0000-4000-8000-000000000001";
+		const postWithId = "bbbbbbbb-0000-4000-8000-000000000001";
+		const postBareId = "bbbbbbbb-0000-4000-8000-000000000002";
+		await handle.insert(relAuthors).values({ id: authorId, name: "mo" });
+		await handle.insert(relPosts).values([
+			{ id: postWithId, title: "with", authorId },
+			{ id: postBareId, title: "bare" },
+		]);
+		const bigCount = 9007199254740993n;
+		const postedOn = new Date(2026, 7, 28);
+		const postedAt = new Date("2026-08-28T09:00:00.000Z");
+		const spent = {
+			years: 0,
+			months: 0,
+			days: 1,
+			hours: 2,
+			minutes: 3,
+			seconds: 4,
+			microseconds: 0,
+		};
+		await handle.insert(relComments).values([
+			{
+				id: "cccccccc-0000-4000-8000-000000000001",
+				postId: postWithId,
+				viewCount: 5n,
+				postedOn,
+				postedAt,
+				spent,
+				payload: sql`'\\x0102ff'::bytea`,
+				tags: [1n, bigCount],
+			},
+			{
+				id: "cccccccc-0000-4000-8000-000000000002",
+				postId: postWithId,
+				viewCount: 7n,
+				postedAt,
+				spent,
+				tags: [2n],
+			},
+			{
+				id: "cccccccc-0000-4000-8000-000000000003",
+				postId: postWithId,
+				viewCount: bigCount,
+				postedAt,
+				spent,
+				tags: [3n],
+			},
+		]);
+
+		// --- unscoped related read: shapes and full revive -------------
+		const posts = await handle
+			.select(relPosts)
+			.related({ relComments: true, author: true })
+			.orderBy(relPosts.title);
+		expect(posts).toHaveLength(2);
+		const bare = posts[0];
+		const withAuthor = posts[1];
+		expect(bare?.relComments).toEqual([]);
+		expect(bare?.author).toBeNull();
+		expect(withAuthor?.author?.name).toBe("mo");
+		expect(withAuthor?.relComments).toHaveLength(3);
+		const compareBigints = (a: bigint, b: bigint): number => {
+			if (a < b) {
+				return -1;
+			}
+			return 1;
+		};
+		const byCount = [...(withAuthor?.relComments ?? [])].sort((a, b) =>
+			compareBigints(a.viewCount, b.viewCount),
+		);
+		const first = byCount[0];
+		const biggest = byCount[2];
+		expect(first?.viewCount).toBe(5n);
+		expect(biggest?.viewCount).toBe(bigCount);
+		expect(first?.postedAt.getTime()).toBe(postedAt.getTime());
+		expect(first?.spent).toMatchObject({
+			days: 1,
+			hours: 2,
+			minutes: 3,
+			seconds: 4,
+		});
+		expect(first?.payload).toEqual(new Uint8Array([1, 2, 255]));
+		expect(first?.tags).toEqual([1n, bigCount]);
+
+		// the F1 contract in its TZ-independent form: the SAME column read
+		// top-level and nested resolves the SAME instant, whatever zone
+		// this machine runs in.
+		const topRows = await handle
+			.select(relComments)
+			.where(eq(relComments.id, "cccccccc-0000-4000-8000-000000000001"));
+		// instanceOf first: without it the same-instant assertion passes
+		// VACUOUSLY when neither side arrived at all (review N1).
+		expect(first?.postedOn).toBeInstanceOf(Date);
+		expect(first?.postedOn?.getTime()).toBe(topRows[0]?.postedOn?.getTime());
+
+		// --- scoped read: nested rows obey the context's policy --------
+		const scoped = await handle
+			.as({ role: roleName("g4_viewer") })
+			.select(relPosts)
+			.related({ relComments: true })
+			.orderBy(relPosts.title);
+		const scopedWith = scoped[1];
+		const scopedCounts = [...(scopedWith?.relComments ?? [])]
+			.map((comment) => comment.viewCount)
+			.sort(compareBigints);
+		// the >=100 comment is filtered BY THE DATABASE inside the single
+		// related statement -- nested rows ride the same rls the context
+		// grants, never a second unscoped query.
+		expect(scopedCounts).toEqual([5n, 7n]);
 	});
 });
