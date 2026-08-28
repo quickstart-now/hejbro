@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ColumnBuilder } from "../../src/index";
+import type { ColumnBuilder, SetOpNode } from "../../src/index";
 import {
 	and,
 	bigint,
@@ -14,6 +14,7 @@ import {
 	numeric,
 	renderExpr,
 	renderSelect,
+	renderSetOp,
 	schema,
 	select,
 	table,
@@ -231,5 +232,64 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 				expect(rendered).toContain("::text[]");
 			}
 		}
+	});
+});
+
+describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
+	const activeQuery = select(posts).where(eq(posts.status, "active"));
+	const archivedQuery = select(posts).where(eq(posts.status, "archived"));
+
+	it("a set-op node renders the two branches joined by the operator", () => {
+		const combined: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: activeQuery.selectQuery,
+			right: archivedQuery.selectQuery,
+			orderBy: [],
+			limit: null,
+		};
+		expect(renderSetOp(combined)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\'',
+		);
+	});
+
+	it("nesting parenthesizes and whole-set order/limit trail the set", () => {
+		const inner: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: true,
+			left: activeQuery.selectQuery,
+			right: archivedQuery.selectQuery,
+			orderBy: [],
+			limit: null,
+		};
+		const outer: SetOpNode = {
+			queryKind: "setOp",
+			operator: "except",
+			all: false,
+			left: inner,
+			right: select(posts).selectQuery,
+			orderBy: [{ expr: posts.id.exprNode, direction: "asc" }],
+			limit: 3,
+		};
+		expect(renderSetOp(outer)).toBe(
+			'(select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union all select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\') except select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."id" asc limit 3',
+		);
+	});
+
+	it("a whole-set orderBy referencing a non-left table keeps the foreign-column diagnostic", () => {
+		const combined: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: activeQuery.selectQuery,
+			right: archivedQuery.selectQuery,
+			orderBy: [{ expr: comments.id.exprNode, direction: "asc" }],
+			limit: null,
+		};
+		expect(() => renderSetOp(combined)).toThrowError(
+			/foreign-column-ref|enclosing/,
+		);
 	});
 });

@@ -140,6 +140,7 @@ export type {
 	ReturningNode,
 	SelectExprNode,
 	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
@@ -186,6 +187,7 @@ export {
 	renderQuery,
 	renderSelect,
 	renderSelectInto,
+	renderSetOp,
 	renderTableRef,
 	renderUpdate,
 } from "./expr/render-sql";

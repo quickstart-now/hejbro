@@ -220,6 +220,22 @@ export const applyColumnOrderToQuery = (
 	if (node.queryKind === "select") {
 		return applyColumnOrderToSelect(node, columnOrder);
 	}
+	if (node.queryKind === "setOp") {
+		// D81 resolves a set-op via its branches: each leaf select reorders
+		// against its own `from` (the left branch is what names the output,
+		// D103, but a right branch's own physical order matters to ITS
+		// rendering too).
+		const left = applyColumnOrderToQuery(node.left, columnOrder);
+		const right = applyColumnOrderToQuery(node.right, columnOrder);
+		if (left === node.left && right === node.right) {
+			return node;
+		}
+		return {
+			...node,
+			left: left as typeof node.left,
+			right: right as typeof node.right,
+		};
+	}
 	const returning = orderedReturning(node.returning, node.table, columnOrder);
 	if (returning === node.returning) {
 		return node;

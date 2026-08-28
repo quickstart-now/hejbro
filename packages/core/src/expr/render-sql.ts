@@ -26,6 +26,7 @@ import type {
 	SqlTemplateNode,
 	TableRefNode,
 	UpdateNode,
+	SetOpNode,
 } from "./ast";
 import { renderLiteral } from "./literal";
 
@@ -575,11 +576,62 @@ type RenderQueryHandlers = {
 	) => string;
 };
 
+/** A branch renders parenthesized when it is itself a set operation — associativity stays explicit in the emitted text, never implied. */
+const renderSetOpBranch = (
+	branch: SelectNode | SetOpNode,
+	outerScope?: ReadonlyArray<TableRefNode>,
+): string => {
+	if (branch.queryKind === "setOp") {
+		return `(${renderSetOp(branch, outerScope)})`;
+	}
+	return renderSelect(branch, outerScope);
+};
+
+/** The scope a set-op's WHOLE-SET `order by` resolves against: the LEFT branch's own from/joins (recursing through nested set-ops to the leftmost select) — Postgres resolves set-op ordering against output columns, which the left branch names (D103; stricter-than-Postgres honest subset, the `sql` hatch covers positional/alias forms). */
+const leftBranchScope = (
+	branch: SelectNode | SetOpNode,
+): ReadonlyArray<TableRefNode> => {
+	if (branch.queryKind === "setOp") {
+		return leftBranchScope(branch.left);
+	}
+	return [branch.from, ...branch.joins.map((join) => join.table)];
+};
+
+const setOpKeyword = (node: SetOpNode): string => {
+	if (node.all) {
+		return `${node.operator} all`;
+	}
+	return node.operator;
+};
+
+/** Renders a {@link SetOpNode}: both branches, the operator keyword, then the whole-set `order by`/`limit` (add-set-operations, D103). */
+export const renderSetOp = (
+	node: SetOpNode,
+	outerScope?: ReadonlyArray<TableRefNode>,
+): string => {
+	const leftScope = leftBranchScope(node.left);
+	const scope = [...leftScope, ...(outerScope ?? [])];
+	const orderRefs = node.orderBy.flatMap((term) =>
+		collectColumnRefs(term.expr),
+	);
+	const subject = leftScope[0] ?? { schemaName: "", tableName: "" };
+	assertInScope(scope, orderRefs, "order a set operation by", subject);
+	const clauses = [
+		renderSetOpBranch(node.left, outerScope),
+		setOpKeyword(node),
+		renderSetOpBranch(node.right, outerScope),
+		orderByClause(node.orderBy, scope),
+		limitClause(node.limit),
+	].filter((clause) => clause !== "");
+	return clauses.join(" ");
+};
+
 const renderQueryHandlers: RenderQueryHandlers = {
 	select: renderSelect,
 	insert: renderInsert,
 	update: renderUpdate,
 	delete: renderDelete,
+	setOp: renderSetOp,
 };
 
 /** Dispatches a {@link QueryNode} to its renderer by `queryKind`. */
