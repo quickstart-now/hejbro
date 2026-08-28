@@ -120,29 +120,21 @@ describe("generated/identity misuse at table() (add-generated-columns, task 1.2)
 	});
 
 	it("precedence: a column violating guard 1 and guard 4 at once reports guard 1's code (wrong type is checked before the default clash)", () => {
-		// real() is outside the integer enumeration, so
-		// .generatedAlwaysAsIdentity() resolves to `never` here (correctly --
-		// see column-builder.test.ts) -- and property access on a
-		// `never`-typed expression is itself a compile error (confirmed
-		// against this exact call shape), so `.default(...)` can't be chained
-		// directly. The cast is test-only plumbing to reach a column that is
-		// both guard-1-invalid (identity on a non-integer type) AND
-		// guard-4-invalid (identity + .default()) at once, mirroring
-		// notNullElements' own `as unknown as ColumnBuilder` precedent -- it
-		// does not change what table() sees at runtime (the real, unconditionally
-		// set columnState.identity is still there).
-		const invalidIdentityColumn =
-			real().generatedAlwaysAsIdentity() as unknown as ColumnBuilder<
-				"numeric",
-				{ typeName: "real" } & { identity: "always" }
-			>;
 		const buildMisusedTable = () =>
 			table(schema("app"), "widgets", {
 				id: uuid().primaryKey(),
-				// real() is outside the integer enumeration (guard 1) AND ends up
-				// with both `identity` and a `.default()` set (guard 4) -- guard 1
-				// must win, per the fixed 1->2->3->4 order.
-				count: invalidIdentityColumn.default(1),
+				// .default(1) runs first, on a plain (non-never) real() builder --
+				// LiftableFor<"numeric"> accepts the number. .generatedAlwaysAsIdentity()
+				// comes last, so its `never` return type (real() is outside the
+				// integer enumeration) is only ever produced in *value* position
+				// here (assignable to ColumnBuilder in the object literal below),
+				// never chained onto -- no cast needed, unlike the reverse
+				// ordering (chaining .default() onto an already-`never` identity
+				// call is itself a compile error; confirmed via tsc). The built
+				// column ends up with BOTH `identity` (guard 1: wrong type) AND a
+				// non-null `defaultValue` (guard 4: identity + default) set on
+				// columnState -- guard 1 must win, per the fixed 1->2->3->4 order.
+				count: real().default(1).generatedAlwaysAsIdentity(),
 			});
 		expect(buildMisusedTable).toThrow();
 		try {
@@ -150,6 +142,9 @@ describe("generated/identity misuse at table() (add-generated-columns, task 1.2)
 			expect.unreachable("buildMisusedTable() should have thrown");
 		} catch (error) {
 			expect((error as { code: string }).code).toBe("invalid-identity-column");
+			expect((error as { message: string }).message).toContain('"widgets"');
+			expect((error as { message: string }).message).toContain('"count"');
+			expect((error as { message: string }).message).toContain("Next:");
 		}
 	});
 
