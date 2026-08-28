@@ -42,3 +42,8 @@ This package's own tests gate the skill's docs, not hejbro itself:
     must raise (e.g. `expect-error=2322`).
   - `no-check=<slug>` — a reason slug, excluded from type-checking and
     checked instead against the `NO_CHECK_ALLOWLIST` constant.
+
+  `test/snippet-check.ts`'s `findMislabeledFences` also flags a fence
+  labeled ` ```typescript `/` ```tsx ` (ts-like but not exactly ` ```ts `)
+  under `skills/hejbro/`, so a mislabeled fence can't bypass the
+  type-check gate silently.
