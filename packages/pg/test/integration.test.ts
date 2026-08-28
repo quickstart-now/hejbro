@@ -504,8 +504,8 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// identity) has no key at all on `InsertInput` (D100 decision 5) --
 		// core's own raw `insert()` (`MutationRow`, used everywhere else in
 		// this file) leaves every column optional and does NOT enforce this
-		// exclusion, so this proof goes through the query package's chain
-		// entry point instead (`handle.insert(...)`, `InsertInput`-typed,
+		// exclusion (#390), so this proof goes through the query package's
+		// chain entry point instead (`handle.insert(...)`, `InsertInput`-typed,
 		// `chain-mutation-input.test.ts`'s #351 wiring) -- the only place the
 		// type layer actually refuses this key. `as never` is the deliberate
 		// cast escape: reaching the database at all requires bypassing that
@@ -540,6 +540,8 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// add-generated-columns, group 4/task 4.1: the same proof for
 		// `doubled` (stored generated) -- Postgres refuses a client-supplied
 		// value for either ALWAYS-family kind alike (measured, not assumed).
+		// Same #390 gap: core's raw `insert()` would not have refused this
+		// key either, so this goes through the chain entry point too.
 		try {
 			await handle.insert(roundtrip).values([
 				{
