@@ -3,6 +3,7 @@ import {
 	defineFunction,
 	defineTrigger,
 	eq,
+	insert,
 	isNotNull,
 	isNull,
 	schema,
@@ -439,5 +440,29 @@ describe("body-context recording", () => {
 				ctx.return(row);
 			}),
 		).toThrowError(/isn't a plain column reference/);
+	});
+
+	it("an executed insert with returning is refused", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.execute(
+					insert(comments).values({ postId: row.postId }).returning(),
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/ctx\.execute\(\).*returning/);
+	});
+
+	it("an executed insert without returning is recorded as an execute statement", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				ctx.execute(insert(comments).values({ postId: row.postId }));
+				ctx.return(row);
+			},
+		);
+		const [executeStmt] = declaration.functionDeclaration.body.statements;
+		expect(executeStmt?.stmtKind).toBe("execute");
 	});
 });

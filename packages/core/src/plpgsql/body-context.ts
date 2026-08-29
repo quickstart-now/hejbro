@@ -385,6 +385,29 @@ const recordReturnQuery = (
 };
 
 /**
+ * Refuses a mutation `QueryNode` that carries `.returning()` — plpgsql's
+ * `perform`/bare-statement form has no `into` clause to receive rows a
+ * `returning()` produces, and Postgres rejects a statement that returns
+ * rows without one (#426). `"returning" in query` is `false` for a
+ * `SelectNode` (a select is never refused here; a select never carries
+ * `.returning()` to begin with), so this only ever fires for the three
+ * mutation kinds.
+ */
+const assertExecuteHasNoReturning = (
+	state: RecordingState,
+	query: QueryNode,
+): void => {
+	if (!("returning" in query) || query.returning === null) {
+		return;
+	}
+	throwHejbroError(
+		"execute-expects-no-returning",
+		`ctx.execute() in ${state.identity} received a ${query.queryKind} that ends in .returning() — plpgsql's PERFORM/bare statement form has no INTO clause to receive the returned rows, and Postgres rejects a statement that returns rows without one. Next: drop the .returning() call to run this ${query.queryKind} for its effect, or pass it to ctx.return(...) instead of ctx.execute() when its rows are the function's result.`,
+		state.declaredAt,
+	);
+};
+
+/**
  * `ctx.execute(...)` (#426): records a select/insert/update/delete
  * builder as a statement run for its side effect. `value` matching none
  * of `ReturnableQuery`'s four shapes is structurally unreachable for a
@@ -402,6 +425,7 @@ const recordExecute = (state: RecordingState, value: ReturnableQuery): void => {
 		);
 		return;
 	}
+	assertExecuteHasNoReturning(state, query);
 	pushStatement(state, { stmtKind: "execute", query });
 };
 
