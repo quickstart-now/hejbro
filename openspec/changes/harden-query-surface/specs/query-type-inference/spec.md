@@ -56,6 +56,32 @@ requirement does not elide or otherwise address — out of scope here,
 recorded so it is a stated boundary rather than a silently dropped case
 that resurfaces the next time a recursive CTE carries a branded column.
 
+A second axis, the recursive term's declared TYPE (as opposed to whether
+it is nullable), is measured to be **directional** and is not caught.
+Group 1 measured the identical type pair with the anchor/recursive-term
+sides reversed: `numeric` anchor + `bigint` recursive term is accepted
+and resolves to `numeric` (M3b-i); `bigint` anchor + `numeric` recursive
+term — the same pair, reversed — is refused with `42804` (M3b-ii). Same
+two types, opposite verdicts depending on which side is the anchor: the
+failure condition is "the recursive term's resolved type differs from
+the anchor's", not "the two declared types differ", and Postgres's own
+implicit-cast resolution decides it, not a symmetric equality test. This
+is not expressible as a build-time TypeScript check without reproducing
+that resolution table: this package's own `SqlTypeFamily` collapses
+`smallint`/`integer`/`bigint`/`real`/`double precision`/`numeric`/the
+`serial` family into one family, `"numeric"` — the same family both
+M3b-i's and M3b-ii's branches share, so nothing at the family level (the
+coarsest type information a `keyof`-based compatibility check has
+access to) can tell the accepted pair from the refused one. A same-
+family type divergence on a shared key — including the exact M3b-ii
+shape — therefore still type-checks today and can fail on the server
+instead of at build time. Tracked at #489, which this requirement
+narrows without closing: the key-SET axis is checked at build time
+(refused when it disagrees) and the nullability axis is deliberately
+elided (accepted on purpose, its own residue stated above); this
+declared-type axis is neither — it is simply not reachable by a
+`keyof`-based check, and is left open rather than claimed closed.
+
 #### Scenario: The recursive term sees the anchor's columns
 - **WHEN** a recursive term is written inside the callback that receives
   the CTE's own reference
@@ -80,3 +106,12 @@ that resurfaces the next time a recursive CTE carries a branded column.
 - **THEN** it type-checks, and the CTE's declared row type is the
   anchor's non-null type — even though a null value from the recursive
   term can genuinely reach the result rows (measured, #500)
+
+#### Scenario: A same-family type divergence between anchor and recursive term is not caught
+- **WHEN** the anchor and the recursive term project the same key with
+  two different declared types that share one `SqlTypeFamily` (e.g.
+  `numeric` and `bigint`, both family `"numeric"`)
+- **THEN** it type-checks regardless of which side is the anchor —
+  Postgres's own directional resolution (accepting one order, refusing
+  the reversed order with `42804`, measured) is not reproduced here
+  (#489)

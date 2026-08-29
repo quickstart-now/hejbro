@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
+	bigint,
 	count,
 	eq,
 	integer,
@@ -442,6 +443,51 @@ describe("a recursive term's nullability is not the reason to refuse it (#489, g
 					),
 			);
 			return select({ id: r.id, v: r.v }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+});
+
+// harden-query-surface group 6.2 (#489), outcome 1 -- NO source change.
+// The key question (does the rule key on the type PAIR or on the
+// ANCHOR?) is already answered by group 1: M3b-i (numeric anchor +
+// bigint recursive term) is accepted and resolves to numeric; M3b-ii,
+// the identical pair reversed, is refused with 42804. A directional
+// rule is therefore correct in principle, but not expressible as a
+// build-time TS check without reproducing Postgres's own numeric
+// promotion table: this package's SqlTypeFamily collapses every
+// integer/real/numeric/serial type into one family, "numeric" -- the
+// same family both M3b-i's and M3b-ii's branches share, so nothing at
+// the family level (the coarsest information a keyof-based check has)
+// can tell the accepted pair from the refused one. Reported here, not
+// silently: this outcome closes the key-SET axis (already checked) and
+// states the type axis as a residual gap in the query-type-inference
+// spec delta, rather than building a narrower rule that would need the
+// same promotion table by another name.
+describe("a same-family type divergence between anchor and recursive term is not caught (#489, group 6.2 outcome 1)", () => {
+	it("a recursive term whose column type differs from the anchor's (same family) still compiles -- the residual gap this outcome documents, not closes", () => {
+		// M3b-i's own shape (group 1, measured accepted on postgres:17):
+		// numeric anchor + bigint recursive term, same key, same
+		// SqlTypeFamily ("numeric"), different declared hejbro type.
+		const numBig = table(app, "num_big", {
+			id: integer().primaryKey(),
+			parent: integer(),
+			amount: numeric({ mode: "number" }),
+			bigAmount: bigint(),
+		});
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: numBig.id, amount: numBig.amount }, numBig).where(
+					isNull(numBig.parent),
+				),
+				(self) =>
+					select({ id: self.id, amount: numBig.bigAmount }, self).innerJoin(
+						numBig,
+						eq(self.id, numBig.parent),
+					),
+			);
+			return select({ id: r.id, amount: r.amount }, r);
 		});
 		expect(stage.withQuery.recursive).toBe(true);
 	});

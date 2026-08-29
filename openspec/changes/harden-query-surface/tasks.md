@@ -790,7 +790,7 @@ by reading the code, and it holds whatever the server says.
       the correction is the reason group 1 observes `pg_typeof` at all.
       Files: `.changeset/*.md`, `openspec/task-times.csv`, `README.md`,
       `blackbox/*`.
-- [ ] 7.5 (~8m) File **two** follow-up issues through
+- [ ] 7.5 (~10m) File **three** follow-up issues through
       `~/.claude/skills/managing-hejbro-issues/issue.sh` (type, label,
       assignee, parent and board enforced — never a bare `gh issue
       create`, which orphans them).
@@ -799,7 +799,7 @@ by reading the code, and it holds whatever the server says.
       (lead-directed). By the owner's standing definition, 0.2.0 ships
       when every `#282` sub-issue is closed, so hanging a new capability
       and a spec audit off `#282` would let this slice **widen the 0.2.0
-      gate by its own hand**. Both issue bodies carry the line:
+      gate by its own hand**. Every issue body carries the line:
       *"parented under the post-release umbrella to avoid inflating the
       0.2.0 gate; the owner may re-parent on return."*
       1. A real `FILTER (WHERE …)` aggregate — the capability #469
@@ -822,6 +822,23 @@ by reading the code, and it holds whatever the server says.
          is what that regex matched, a **lower bound**, not the true
          count of such claims. Auditing them here would be plain scope
          creep — recording the population is not.
+      3. **Reject set-operation branches whose column families differ.**
+         Found while settling 6.2: `SetOpResult` does not compare
+         families at all, so a `text` branch against a `numeric` branch
+         type-checks and then fails on the server. Unlike the order gap
+         (group 8) the server **does** catch this, loudly, so it is a
+         *late failure worth moving earlier* rather than silent
+         corruption — which is why it is filed instead of built here.
+         The body carries three things: (i) the divergence is currently
+         unguarded; (ii) the **false-positive risk** — `unknown` is a
+         family, so a naive cross-family rule would reject a `text`
+         anchor against a `sql`-escape-hatch recursive term, which
+         Postgres accepts; (iii) the measurements a rule needs first —
+         which family pairs Postgres actually refuses to unify, and how
+         `unknown` behaves. **Not** this issue: #489's own residue is
+         the *directional same-family* case, which the family system
+         cannot express at all (every numeric SQL type shares one
+         family); that stays in 6.2's spec delta.
       Files: none in-tree.
 - [ ] 7.6 (~6m) Boundary check before the PR:
       `git diff --name-only dev...HEAD` (three-dot) names nothing under
