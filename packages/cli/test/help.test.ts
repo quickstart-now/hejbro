@@ -45,6 +45,15 @@ describe("hejbro --help", () => {
 		expect(result.stdout).toContain("generate");
 	});
 
+	it("lists check among the commands", async () => {
+		const result = await runHelp(cwd, ["--help"]);
+		const commands = result.stdout.split("COMMANDS")[1] ?? "";
+		const checkRow = commands
+			.split("\n")
+			.filter((line) => line.trimStart().startsWith("check"));
+		expect(checkRow).toHaveLength(1);
+	});
+
 	it("renders each subcommand on one line in COMMANDS", async () => {
 		const result = await runHelp(cwd, ["--help"]);
 		const commands = result.stdout.split("COMMANDS")[1] ?? "";
