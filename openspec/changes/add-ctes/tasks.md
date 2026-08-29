@@ -888,7 +888,7 @@ route it through the lead rather than absorbing it.
       *non*-additions too — the output column alias list was excluded to
       keep one source of truth for a row's key names. Goes in the PR body
       and the merge declaration.
-- [ ] 7.8 (~5m) **The retraction, written down.** This task was going to
+- [x] 7.8 (~5m) **The retraction, written down.** This task was going to
       be a probe recipe for #476 — until the defect it described failed to
       reproduce and the issue was closed. What is worth recording is not
       the defect but the shape of the mistake, in `design.md`:
@@ -905,7 +905,7 @@ route it through the lead rather than absorbing it.
       tell, **fine**. Someone will otherwise read the retracted claim in
       the git history and re-file it.
 
-- [ ] 7.6 (~10m) The `blackbox/` entry (D89) — an owner-driven change
+- [x] 7.6 (~10m) The `blackbox/` entry (D89) — an owner-driven change
       carries one in the same PR: what was asked, what was built, why, and
       the internal processing, with per-file git blob SHA pins per
       `blackbox/README.md`. Include what went wrong on the way; a record
