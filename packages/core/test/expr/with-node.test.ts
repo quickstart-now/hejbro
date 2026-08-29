@@ -132,7 +132,11 @@ describe("FromNode rendering (task 1.2)", () => {
 			offset: null,
 			distinct: null,
 		};
-		expect(renderQuery(node)).toBe(
+		// task 1.3c: a CTE reference is only ever valid where some enclosing
+		// WITH declares it visible -- renderWith is what supplies that in
+		// practice; here it's simulated directly since this test isolates
+		// rendering, not the WITH wiring (that's with-scope.test.ts's job).
+		expect(renderQuery(node, [{ cteName: "recent_orders" }])).toBe(
 			'select "recent_orders"."id" as "id" from "recent_orders"',
 		);
 	});
@@ -187,7 +191,8 @@ describe("Join to a CTE reference (task 1.2b)", () => {
 			offset: null,
 			distinct: null,
 		};
-		expect(renderQuery(node)).toBe(
+		// task 1.3c: simulated visibility, same reasoning as the 1.2 test above.
+		expect(renderQuery(node, [{ cteName: "ranked" }])).toBe(
 			'select "app"."orders"."id" as "id" from "app"."orders" inner join "ranked" on "app"."orders"."id" = "ranked"."order_id"',
 		);
 	});

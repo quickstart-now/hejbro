@@ -109,6 +109,20 @@ not be dropped.
       CTE reference inside an exists subquery is refused when undeclared,
       and accepted when it names an earlier entry". Files:
       `packages/core/src/expr/render-sql.ts`, that test.
+- [ ] 1.3c (~4m) A CTE reference rendered with **no enclosing `WITH` at
+      all** is refused. 1.3b's check skips when the render carries no
+      outer scope, which is right for an ordinary bare select and wrong
+      for one whose from-source is a CTE reference: nothing declares it,
+      so the rendered SQL names a relation that does not exist. Reachable
+      from group 3 onward, where a caller holds a reference object and can
+      use it outside the statement that declared it. Gate the skip on
+      **"are there CTE references to check"** rather than on the presence
+      of an outer scope; the existing bare-select tests use table
+      references and stay green either way. The code is `undeclared-cte`
+      unchanged — declared nowhere is exactly what this is. Red:
+      `packages/core/test/expr/with-scope.test.ts` — "a select rendered
+      outside any WITH refuses a CTE from-source". Files:
+      `packages/core/src/expr/render-sql.ts`, that test.
 - [ ] 1.4 (~8m) [design] Entry visibility within the list. The manual:
       "Without `RECURSIVE`, `WITH` queries can only reference sibling
       `WITH` queries that are earlier in the `WITH` list." Scope for entry

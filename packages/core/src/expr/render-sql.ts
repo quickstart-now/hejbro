@@ -768,11 +768,16 @@ const recursiveKeyword = (recursive: boolean): string => {
 
 /**
  * Throws `undeclared-cte` when `targets` names a CTE that is not among
- * `outerScope`'s own CTE markers — `undefined` (no enclosing `WITH` at
- * all, e.g. a bare hand-built node rendered directly) skips the check
- * entirely, which is what keeps a standalone CTE-sourced select (task
- * 1.2's own red test) rendering unqualified with no `WITH` in sight.
- * `renderWith` is the only producer of a *defined* scope carrying CTE
+ * `outerScope`'s own CTE markers. The skip is gated on "are there any CTE
+ * targets to check" (task 1.3c), not on whether `outerScope` is defined:
+ * a from/join list with no CTE reference at all never reads `outerScope`,
+ * which is what keeps every existing table-only render — bare or
+ * correlated — unaffected; a CTE reference with an `undefined` or
+ * CTE-marker-less `outerScope` means literally nothing is visible, which
+ * is exactly `undeclared-cte`'s own case, not a reason to look away
+ * (rendering that select stand-alone would otherwise name a relation no
+ * `WITH` ever declares, passing here only to fail on the server with no
+ * diagnostic). `renderWith` is the only producer of a scope carrying CTE
  * markers, and every render call already threads `outerScope` down
  * through `exists()`/`selectExpr()` (`renderExistsNode`/
  * `renderSelectExprNode` pass it straight through to their own nested
@@ -782,26 +787,30 @@ const recursiveKeyword = (recursive: boolean): string => {
  * traversal: a single code covers task 1.3 (a name the statement never
  * declares at all), task 1.4 (a name it declares, but not yet visible
  * from here — `renderWith` narrows `outerScope`'s markers to the earlier
- * entries only when rendering an entry), and a target inside a nested
- * `exists()`/`selectExpr()` subquery, which the pre-nested-subquery
- * version of this check could not reach. Not `foreign-column-ref`'s
- * family: that family names a *column* mismatched against a resolved
- * table; this is a from/join target naming a relation that either does
- * not exist or is not visible yet, which needs its own
- * available-sources listing, not a "join that table" suggestion that
- * does not apply to a CTE.
+ * entries only when rendering an entry), task 1.3b (a target inside a
+ * nested `exists()`/`selectExpr()` subquery), and task 1.3c (a CTE
+ * reference rendered with no enclosing `WITH` in sight at all — a
+ * reference object escaping the statement that declared it, reachable
+ * once group 3 hands one out). Not `foreign-column-ref`'s family: that
+ * family names a *column* mismatched against a resolved table; this is a
+ * from/join target naming a relation that either does not exist or is
+ * not visible yet, which needs its own available-sources listing, not a
+ * "join that table" suggestion that does not apply to a CTE.
  */
 const assertCtesVisible = (
 	outerScope: ReadonlyArray<FromNode> | undefined,
 	targets: ReadonlyArray<FromNode>,
 ): void => {
-	if (outerScope === undefined) {
+	const cteTargets = targets.filter(isCteRef);
+	if (cteTargets.length === 0) {
 		return;
 	}
-	const visibleNames = outerScope.filter(isCteRef).map((ref) => ref.cteName);
-	const undeclaredRef = targets
+	const visibleNames = (outerScope ?? [])
 		.filter(isCteRef)
-		.find((ref) => !visibleNames.includes(ref.cteName));
+		.map((ref) => ref.cteName);
+	const undeclaredRef = cteTargets.find(
+		(ref) => !visibleNames.includes(ref.cteName),
+	);
 	if (undeclaredRef === undefined) {
 		return;
 	}

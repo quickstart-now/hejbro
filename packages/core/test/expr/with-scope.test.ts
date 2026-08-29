@@ -215,3 +215,41 @@ describe("Visibility reaches a nested subquery's own from/join (task 1.3 follow-
 		);
 	});
 });
+
+describe("A CTE reference escaping its WITH is refused (task 1.3c)", () => {
+	it("a select rendered outside any WITH refuses a CTE from-source", () => {
+		const node: SelectNode = {
+			...recentOrders,
+			from: { cteName: "recent_orders" },
+		};
+		expect(() => renderQuery(node)).toThrow(
+			expect.objectContaining({
+				code: "undeclared-cte",
+				message: expect.stringContaining("recent_orders"),
+			}),
+		);
+	});
+
+	it("a select rendered outside any WITH refuses a CTE join target", () => {
+		const node: SelectNode = {
+			...recentOrders,
+			joins: [
+				{
+					joinKind: "inner",
+					table: { cteName: "recent_orders" },
+					on: {
+						nodeKind: "literal",
+						literal: { literalKind: "boolean", value: true },
+					},
+				},
+			],
+		};
+		expect(() => renderQuery(node)).toThrow(
+			expect.objectContaining({ code: "undeclared-cte" }),
+		);
+	});
+
+	it("a select rendered outside any WITH still accepts a table from-source (no CTE targets, no check)", () => {
+		expect(() => renderQuery(recentOrders)).not.toThrow();
+	});
+});
