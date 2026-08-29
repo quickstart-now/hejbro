@@ -1,3 +1,4 @@
+import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { Pool, types as pgTypes } from "pg";
 import { describe, expect, it, vi } from "vitest";
 import { pgDriver } from "../src/driver";
@@ -728,5 +729,34 @@ describe("pgDriver setupSession IntervalStyle pin (owner decision ④, task 5.5)
 			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
 			"select 1",
 		]);
+	});
+});
+
+describe("pgDriver conforms to the driver contract (#481, task 1.7)", () => {
+	it("conforms to the driver contract", async () => {
+		// session-state:true (owner decision (1), group 5 header): the
+		// obligation this driver declares is that its setup hook delivers
+		// the settings -- invoked directly, mirroring this file's own
+		// "driver.setupSession itself sends the IntervalStyle pin" test
+		// above, which is exactly what the kit needs recorded.
+		const { pool } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+		const recorded: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
+		const recordingSession = {
+			execute: vi.fn(
+				async (compiled: { sql: string; params: ReadonlyArray<unknown> }) => {
+					recorded.push({ sql: compiled.sql, params: compiled.params });
+					return [];
+				},
+			),
+		};
+
+		await driver.setupSession(recordingSession);
+
+		expect(() =>
+			assertSessionStateConformance(driver.capabilities, {
+				recordedForSetupSession: recorded,
+			}),
+		).not.toThrow();
 	});
 });
