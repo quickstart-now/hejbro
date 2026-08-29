@@ -1,9 +1,15 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { HejbroInput, Snapshot } from "@hejbro/core";
+import type {
+	HejbroDeclaration,
+	HejbroInput,
+	ObjectKind,
+	Snapshot,
+} from "@hejbro/core";
 import {
 	check,
+	createKindRegistry,
 	defineTrigger,
 	emptySnapshot,
 	generateMigration,
@@ -21,6 +27,7 @@ import {
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import { compareCatalog } from "../src/check/compare";
+import { EMPTY_INVENTORY, renderCheckReport } from "../src/commands/check";
 
 const app = schema("app");
 
@@ -515,6 +522,53 @@ describe("compareCatalog / 2.5 table sub-object existence", () => {
 		expect(findings).toHaveLength(1);
 		expect(findings[0]?.identity).toBe(`app.posts.${pkName}`);
 		expect(findings[0]?.error.code).toBe("check-object-missing");
+	});
+});
+
+describe("a kind that declares itself uncomparable (#482, task 2.3)", () => {
+	const uncatalogableKind: ObjectKind<HejbroDeclaration> = {
+		kind: "toy-uncatalogable",
+		dependsOn: [],
+		owns: (d): d is HejbroDeclaration =>
+			d.declarationKind === "toy-uncatalogable",
+		serialize: () => ({}),
+		identify: () => "widget",
+		diff: () => [],
+		emit: () => [],
+		noCatalogObjectReason: "toy objects have no catalog counterpart.",
+	};
+
+	const registryWithUncatalogableKind = () => {
+		const registry = createKindRegistry();
+		registry.register(uncatalogableKind);
+		return registry;
+	};
+
+	const uncatalogableSnapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: { "toy-uncatalogable:widget": {} },
+	};
+
+	it("is stated in the coverage boundary and does not change the exit code", () => {
+		const registry = registryWithUncatalogableKind();
+		const findings = compareCatalog(
+			uncatalogableSnapshot,
+			emptyCatalog(),
+			registry,
+		);
+
+		// no finding at all -- never counted as a difference just because
+		// it was never compared, and never even a `check-not-compared`
+		// entry: this kind states, by design, that it has no catalog
+		// object, not that this particular run failed to compare one.
+		expect(findings).toEqual([]);
+
+		const report = renderCheckReport(findings, EMPTY_INVENTORY, registry);
+		expect(report.exitCode).toBe(0);
+		expect(report.stdout.join("\n")).toContain(
+			"toy objects have no catalog counterpart.",
+		);
 	});
 });
 

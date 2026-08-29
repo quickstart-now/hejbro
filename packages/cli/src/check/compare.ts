@@ -1,5 +1,13 @@
-import type { HejbroError, JsonValue, Snapshot, TypeNode } from "@hejbro/core";
+import type {
+	HejbroError,
+	JsonValue,
+	KindRegistry,
+	RegisteredObjectKind,
+	Snapshot,
+	TypeNode,
+} from "@hejbro/core";
 import {
+	createDefaultRegistry,
 	decodeExprNode,
 	hejbroError,
 	renderExpr,
@@ -683,9 +691,6 @@ const compareGrant = (
 	);
 };
 
-/** No catalog object backs a Supabase storage bucket (a row the Storage API service owns, not this database's own migrations) -- same reasoning as scripts/verify-supabase-image.sh's skip_storage_kind. */
-const compareStorageBucket = (): ReadonlyArray<Finding> => [];
-
 type Comparator = (
 	identity: string,
 	node: JsonValue,
@@ -719,20 +724,35 @@ const KIND_COMPARATORS: Readonly<Record<string, Comparator>> = {
 		compareTableScopedExistence(identity, node, "trigger", catalog.triggers),
 	rls: compareRls,
 	grant: compareGrant,
-	"supabase-storage-bucket": compareStorageBucket,
 };
 
 const kindOfKey = (key: string): string => key.slice(0, key.indexOf(":"));
 const identityOfKey = (key: string): string => key.slice(key.indexOf(":") + 1);
+
+/** Every registered kind, by name -- built once per `compareCatalog` call, never per entry, so a large declaration set doesn't re-derive this on every object. */
+type KindLookup = ReadonlyMap<string, RegisteredObjectKind>;
+
+const kindLookupOf = (registry: KindRegistry): KindLookup =>
+	new Map(registry.list().map((kind) => [kind.kind, kind]));
 
 const compareEntry = (
 	key: string,
 	node: JsonValue,
 	catalog: Catalog,
 	snapshot: Snapshot,
+	kinds: KindLookup,
 ): ReadonlyArray<Finding> => {
 	const kind = kindOfKey(key);
 	const identity = identityOfKey(key);
+	// #482: a kind that declares it has no catalog object, ever, is
+	// compared against nothing -- `check` states this in its own
+	// coverage-boundary section (renderCheckReport) instead, and this is
+	// not a `Finding` at all: not a difference, and not a
+	// `check-not-compared` either (that code names a comparison that
+	// *should* have run and could not; this kind states none ever could).
+	if (kinds.get(kind)?.noCatalogObjectReason !== undefined) {
+		return [];
+	}
 	const comparator = KIND_COMPARATORS[kind];
 	if (comparator === undefined) {
 		return [
@@ -751,11 +771,15 @@ const compareEntry = (
  * object by object -- pure, no I/O (group 1's `readCatalog` already ran).
  * Refuses an empty declaration set outright (spec: "every comparison
  * would be vacuous, which is never a real pass") rather than reporting a
- * vacuous "no differences".
+ * vacuous "no differences". `registry` (#482, task 2.3) is optional and
+ * additive, the same pattern as `ObjectKind`'s own optional members --
+ * defaults to the core-only registry, so a caller (test or otherwise)
+ * that never registers a preset kind sees no behavior change.
  */
 export const compareCatalog = (
 	snapshot: Snapshot,
 	catalog: Catalog,
+	registry: KindRegistry = createDefaultRegistry(),
 ): ReadonlyArray<Finding> => {
 	const entries = Object.entries(snapshot.objects);
 	if (entries.length === 0) {
@@ -764,7 +788,8 @@ export const compareCatalog = (
 			"hejbro check received a declaration set with 0 declared objects -- every comparison would be vacuous, which is never a real pass. Next: confirm the entry pattern in hejbro.config.ts matches real declaration files that export table()/schema()/... declarations.",
 		);
 	}
+	const kinds = kindLookupOf(registry);
 	return entries.flatMap(([key, node]) =>
-		compareEntry(key, node, catalog, snapshot),
+		compareEntry(key, node, catalog, snapshot, kinds),
 	);
 };
