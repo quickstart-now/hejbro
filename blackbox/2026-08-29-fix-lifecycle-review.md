@@ -5,7 +5,7 @@ Refs:
 - openspec/changes/fix-lifecycle-review/specs/cli-commands/spec.md @ blob 58d1eea4cc4c09267c87c5b74e3290852fb5b7c1
 - openspec/changes/fix-lifecycle-review/specs/plpgsql-function-bodies/spec.md @ blob 3bdc14caada0b0f6872f926edb23c145cbe5182e
 - packages/query/src/db/transaction.ts @ blob ba3a9c4d719126bcff612f263fcd708c235b4ffa
-- packages/cli/src/commands/generate.ts @ blob 799d52d9931560c6888677233f5aea6cd378bd75
+- packages/cli/src/commands/generate.ts @ blob ac82350e71a30fc9d6f00289668aa40758a90809
 - packages/core/src/sql/migration-file.ts @ blob d642455d5871e259f232d2bb5701de5bf04b2741
 - packages/core/src/plpgsql/body-context.ts @ blob d67fab6d063c765ea2609692f4b8768e61b3d9f6
 
@@ -156,7 +156,11 @@ pairing-constraint comment carried over from review) → `17ee487`
 `7d52216` (5.3/5.4, plus the CRAP-gate complexity split R4 forced) →
 `7ad1bf1` (2.4/4.2, review-prose constraints landed as comments) →
 `2c88abc` (2.4's two comments sharpened to the reviewer's own judging
-criteria).
+criteria) → `ac26b94` (R-j's operand-order match to the delta's own
+sentence, plus this record's B7/R-i corrections) → `c7709c1` (changeset
+bumped `patch` → `minor`, a lead decision: the grade is judged by the
+consumer-facing surface alone, `parseBannerBaseline` being a genuinely
+new API rather than a restored one, never by what motivated the fix).
 
 Red observed directly for every task from `9c66223` on: the
 implementation was reverted via `git stash` (source only, tests kept)
