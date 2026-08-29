@@ -315,6 +315,13 @@ describe("db().transaction (task 4.6)", () => {
 
 		expect(outcome).toHaveProperty("code", "savepoint-release-failed");
 		expect(outcome).toHaveProperty("cause");
+		// pinned by what the cause's own message names, not merely "a cause
+		// exists" -- confirms `cause` is really the RELEASE failure (the
+		// spec's own "carrying the release failure as cause"), not some
+		// other statement's error swept in by accident.
+		expect(
+			(outcome as { cause?: { message?: string } }).cause?.message,
+		).toContain('release savepoint "hejbro_sp_1"');
 		const sql = sessionExecute.mock.calls.map(
 			(call) => (call[0] as { sql: string }).sql,
 		);
@@ -356,6 +363,14 @@ describe("db().transaction (task 4.6)", () => {
 			.catch((error: unknown) => error);
 
 		expect(outcome).toHaveProperty("code", "savepoint-release-failed");
+		// the error identity is pinned to the FIRST release failure (the one
+		// that triggered recovery), not whatever the best-effort second
+		// attempt did -- here the second attempt SUCCEEDS, so if `cause`
+		// had drifted to "whatever the recovery release last saw" it would
+		// have no failure to report at all.
+		expect(
+			(outcome as { cause?: { message?: string } }).cause?.message,
+		).toContain('release savepoint "hejbro_sp_1"');
 		const sql = sessionExecute.mock.calls.map(
 			(call) => (call[0] as { sql: string }).sql,
 		);
