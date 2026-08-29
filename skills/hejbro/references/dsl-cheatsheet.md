@@ -84,16 +84,60 @@ export const orders = table(app, "orders", {
 
 ## Foreign keys
 
-A plain single-column foreign key is declared on the column:
-`ownerId: uuid().notNull().references(() => users.id)` — one declaration
-feeds both the generated DDL and the query layer's relation types. The
-target must share the column's type family, and the thunk defers
-evaluation (import-order safety). Self-referencing foreign keys,
-composite (multi-column) ones, and `onDelete`/`onUpdate` actions are
-declared in `extras.foreignKeys` instead; declaring the same column
-through both paths fails at declaration time. The same edges power the
-query layer's nested reads (`related()` — see the query-layer
-reference); nothing is declared twice.
+Two entry points declare a foreign key — both are legitimate, and
+declaring the same column through both fails at declaration time:
+
+| Use when | Form | Covers |
+|---|---|---|
+| A single local column, referencing one other table | Column-level `.references()` | Also feeds the query layer's relation types (`related()` — see the query-layer reference) in the same declaration; nothing is declared twice |
+| Composite (multi-column), self-referencing, or `onDelete`/`onUpdate` | `extras.foreignKeys` | Everything the column-level form can't express |
+
+**Column-level**: `ownerId: uuid().notNull().references(() => users.id)`
+— one declaration feeds both the generated DDL and the query layer's
+relation types. The target must share the column's type family, and the
+thunk defers evaluation (import-order safety).
+
+**`extras.foreignKeys`**: an array of `{ columns, references: { table?,
+columns }, onDelete?, onUpdate? }` — `columns` names this table's own
+local column(s); `references.table` is optional, derived from the
+referenced columns' own refs when omitted, which is how a
+self-referencing foreign key needs no extra syntax:
+
+```ts
+import { schema, table, uuid } from "hejbro";
+
+const app = schema("app");
+const tasks = table(app, "tasks", { id: uuid().primaryKey() });
+
+export const comments = table(
+	app,
+	"comments",
+	{
+		id: uuid().primaryKey(),
+		taskId: uuid().notNull(),
+		parentId: uuid(),
+	},
+	(t) => ({
+		foreignKeys: [
+			{
+				columns: [t.taskId],
+				references: { table: tasks, columns: [tasks.id] },
+				onDelete: "cascade",
+			},
+			// Self-referencing (D52): `table` omitted, derived from the
+			// referenced column's own ref.
+			{
+				columns: [t.parentId],
+				references: { columns: [t.id] },
+				onDelete: "cascade",
+			},
+		],
+	}),
+);
+```
+
+See `packages/core/src/dsl/table.ts` (`resolveReferenceTarget`) and the
+task/comment foreign keys in `examples/postgres/src/app.schema.ts`.
 
 ## CHECK constraints
 
@@ -141,15 +185,6 @@ See `packages/core/src/dsl/index-builder.ts`, the full guide at
 `docs/guide/indexes.md`, the partial ordered index in
 `examples/postgres/src/steps/step-3.schema.ts`, and the GIN / operator
 class / expression indexes in `examples/postgres/src/app.schema.ts`.
-
-## Foreign keys
-
-`references: { columns: [t.id] }` — the referenced table is derived from
-the columns' own refs, so `table` is optional and self-referencing FKs
-need no extra syntax. `onDelete`/`onUpdate` are separate options. See
-`packages/core/src/dsl/table.ts` (`resolveReferenceTarget`) and the
-self-referencing `comments.parent_id` FK in
-`examples/postgres/src/app.schema.ts`.
 
 ## RLS
 
