@@ -39,10 +39,12 @@ branches" — that sentence was wrong in a code comment and in the spec
 delta, both fixed; the decision log was the third place it could have
 landed, and the only one no later review would have caught.
 
-Measured facts this change is built on, kept here rather than in a
-conversation so the tests in groups 6 and 7 have a source to check
-themselves against. The approved D105 wording lands in this file too, when
-group 7 writes it (task 7.5).
+---
+
+The rest of this file is the measured facts the change is built on, kept
+here rather than in a conversation so the tests have a source to check
+themselves against — and so the row above could be written from them
+rather than from a draft.
 
 ## The `Omit`-over-a-generic retraction
 

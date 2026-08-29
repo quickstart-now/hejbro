@@ -843,7 +843,7 @@ route it through the lead rather than absorbing it.
       edit: it re-exports core with `export *`.
 - [x] 7.4 (~6m) Changeset (D59, `minor`), `openspec/task-times.csv` rows
       from **measured** durations, README task-time and CRAP badges.
-- [ ] 7.5 (~8m) The D105 rows in `docs/specs/2026-08-19-hejbro-design.md`.
+- [x] 7.5 (~8m) The D105 rows in `docs/specs/2026-08-19-hejbro-design.md`.
       **Write the wording from scratch, from the confirmed facts — do not
       patch the drafts** (owner rule on spec loops, 2026-08-29). This
       change's D105 material has been corrected three times: the type
