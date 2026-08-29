@@ -378,24 +378,23 @@ settle. Files: `packages/skills/turbo.json`,
 
 ## Verification
 
-- The gate list is never hand-enumerated from memory or from this file's
-  own prior revisions — read `.github/workflows/ci.yml` fresh each time
-  and run exactly what it runs, for the reason below. As of this
-  revision that's: `pnpm check`, `pnpm check-types`, `pnpm test`,
-  `pnpm build`, `pnpm smoke:pack-install`, `pnpm check:crap` (+ `git diff
-  --exit-code -- README.md`, since the script rewrites README from its
-  own result rather than merely reporting), `pnpm check:tasktime` (same
-  README-diff check), `pnpm changeset status`, `pnpm check:first-
-  release-version`, `pnpm check:next-marker`, `pnpm check:diagnostic-
-  xref` — all pass, output in the PR body.
-- This change's own release-gate history is why the rule above exists:
-  three separate hand-enumerated gate lists were each wrong in turn
-  (a 6-item list missing `check:next-marker` entirely; a `package.json`
-  `check:*` sweep that both missed non-`check:`-prefixed CI steps like
-  `pnpm build`/`smoke:pack-install`/`changeset status` AND wrongly
-  included `check:pnpm-publish-tool`, which isn't in PR CI at all). CI
-  caught what the hand-enumerated set didn't: `baseline-flag-not-
-  applicable`'s message already had a correct `Next:` clause, but a
+- The gate list is never hand-enumerated, here or anywhere else — every
+  name gets stale the moment `.github/workflows/ci.yml` changes. Run
+  exactly what that file runs, read fresh each time, plus
+  `pnpm --filter @hejbro/pg test:integration` (local-only; not in CI).
+- `check:crap`/`check:tasktime` are not exit-code gates: each rewrites
+  `README.md` from its own result, and CI's real verdict is
+  `git diff --exit-code -- README.md` run immediately after. A clean
+  exit with a dirty `README.md` is exactly the failure shape a
+  hand-enumerated "run these commands" list would miss.
+- This change's own release-gate history is why the two rules above
+  exist: three separate hand-enumerated gate lists were each wrong in
+  turn (a 6-item list missing `check:next-marker` entirely; a
+  `package.json` `check:*` sweep that both missed non-`check:`-prefixed
+  CI steps like `pnpm build`/`smoke:pack-install`/`changeset status` AND
+  wrongly included `check:pnpm-publish-tool`, which isn't in PR CI at
+  all). CI caught what the hand-enumerated set didn't: `baseline-flag-
+  not-applicable`'s message already had a correct `Next:` clause, but a
   comma inside a multi-line comment sitting *between* the call's two
   arguments split `check:next-marker`'s text-based (not AST) argument
   scan wrong, so it validated a truncated fragment of that comment
