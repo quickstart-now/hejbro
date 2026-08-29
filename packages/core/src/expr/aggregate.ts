@@ -72,13 +72,20 @@ const aggregate = (
 	};
 };
 
-/** `count(*)` — the number of rows in the group. Always `bigint`: Postgres's `count` is `int8` regardless of what it counted. */
-export const count = (): Expr<"numeric"> & ReadAs<bigint> =>
-	expr("numeric", aggregate("count", [{ nodeKind: "rawSql", sql: "*" }]));
-
-/** `count(<expr>)` — rows where the expression is not null. */
-export const countWhere = (operand: Expr): Expr<"numeric"> & ReadAs<bigint> =>
-	expr("numeric", aggregate("count", [operand.exprNode]));
+/**
+ * `count()` — the number of rows in the group — or `count(<expr>)` — rows
+ * where `<expr>` is not null (Postgres's own `count(x)` semantics, #469:
+ * the invented name this file used to carry for the argumented form
+ * borrowed `FILTER`'s meaning instead — removed rather than renamed,
+ * since this file's own rule is that all five aggregate names carry
+ * Postgres's own names verbatim). Always `bigint`: Postgres's `count` is
+ * `int8` regardless of what it counted, argumented or not.
+ */
+export const count = (operand?: Expr): Expr<"numeric"> & ReadAs<bigint> =>
+	expr(
+		"numeric",
+		aggregate("count", [operand?.exprNode ?? { nodeKind: "rawSql", sql: "*" }]),
+	);
 
 /**
  * `min`/`max`'s return type: the argument's own read type (`family`,

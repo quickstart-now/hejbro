@@ -6,7 +6,6 @@ import {
 	bigint,
 	bytea,
 	count,
-	countWhere,
 	date,
 	eq,
 	exists,
@@ -515,7 +514,7 @@ describe("aggregates and grouping (#416)", () => {
 			{
 				status: posts.status,
 				total: count(),
-				published: countWhere(posts.publishedAt),
+				published: count(posts.publishedAt),
 				earliest: min(posts.publishedAt),
 				latest: max(posts.publishedAt),
 			},
@@ -567,5 +566,24 @@ describe("aggregates and grouping (#416)", () => {
 		// its exprNode is a functionCall, not a real column reference, so
 		// index()/a foreign-key column list must stop accepting it.
 		const _atRisk: ColumnRef = max(posts.publishedAt);
+	});
+});
+
+describe("countWhere is removed (#469)", () => {
+	it("count(expr) renders count(<expr>)", () => {
+		const query = select({ published: count(posts.publishedAt) }, posts);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select count("app"."posts"."published_at") as "published" from "app"."posts"',
+		);
+	});
+
+	it("countWhere is not exported (a type-level red)", () => {
+		// @ts-expect-error countWhere was removed, not renamed -- the
+		// surviving spelling is the argumented count(operand)
+		// (aggregate.ts's own rule: all five aggregate names carry
+		// Postgres's own names verbatim, no invented ones). Actual error
+		// with the directive removed: TS2694 "Namespace '\"…/src/index\"'
+		// has no exported member 'countWhere'."
+		type _Removed = typeof import("../../src/index").countWhere;
 	});
 });

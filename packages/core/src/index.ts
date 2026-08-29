@@ -114,15 +114,7 @@ export {
 	throwHejbroError,
 } from "./error";
 export type { Aggregated, ReadAs } from "./expr/aggregate";
-export {
-	avg,
-	count,
-	countWhere,
-	max,
-	min,
-	readAsBrand,
-	sum,
-} from "./expr/aggregate";
+export { avg, count, max, min, readAsBrand, sum } from "./expr/aggregate";
 export type {
 	BetweenNode,
 	ColumnRef,
