@@ -30,8 +30,20 @@ export const comments = table(app, "comments", {
 	body: text(),
 });
 
+// Self-referencing, for the CTE section's own recursive example -- none of
+// posts/comments above is a tree, and a recursive CTE genuinely needs one.
+// `parentId` carries no `.references()` -- a self-FK's callback closes over
+// this very binding mid-initialization, which TS cannot type without an
+// explicit annotation; design.md's own probe fixture (`t(id, parent, v)`)
+// has no FK here either, for the same reason.
+export const categories = table(app, "categories", {
+	id: uuid().primaryKey(),
+	parentId: uuid(),
+	name: text().notNull(),
+});
+
 export const driver = pgDriver(
 	process.env.DATABASE_URL ?? "postgres://localhost:5432/app",
 );
 
-export const handle = db({ posts, comments }, driver);
+export const handle = db({ posts, comments, categories }, driver);

@@ -773,7 +773,7 @@ route it through the lead rather than absorbing it.
       test:integration` — `pnpm test` excludes this file and would report
       green having run none of it. Files:
       `packages/pg/test/integration.test.ts`.
-- [ ] 7.2 (~8m, docs) `skills/hejbro/references/query-layer.md`: a CTE
+- [x] 7.2 (~8m, docs) `skills/hejbro/references/query-layer.md`: a CTE
       section, and the "not supported" line updated — that line names CTEs
       by issue number, and this change closes it. Do not describe
       behaviour the witness did not exercise; a "verified live" badge
