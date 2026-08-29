@@ -21,7 +21,7 @@ Refs:
 # add-check-schema — `hejbro check` (#442)
 
 Piece record for the whole `add-check-schema` change, built by the cs
-team (planner sonnet / implementer opus / reviewer) in worktree
+team (planner opus / implementer sonnet / reviewer opus) in worktree
 `check-schema` off dev `8f7d3d1`.
 
 ## Owner input
