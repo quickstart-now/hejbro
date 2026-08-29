@@ -326,10 +326,23 @@ discipline").
       pins per `blackbox/README.md`. The owner-interaction context is
       quoted verbatim in Korean (the team did not hold it; the lead
       supplied it); the surrounding record is English. Include what this
-      change got wrong on the way — the planner's two mis-instructions,
-      the field-vs-node cost claim that had to be re-measured, and the
-      walk-arm coverage blocker — since a record that only lists what
-      worked is not a flight recorder.
+      change got wrong on the way — a record that only lists what worked
+      is not a flight recorder:
+      the planner's two mis-instructions (the deep-walker proof routed
+      through a validator that scopes policies out; stripping `family`
+      from the brand when the operators read it at runtime); the
+      field-vs-node cost claim that flattered its own conclusion and had
+      to be re-measured after review caught it; the walk-arm coverage
+      blocker — this change fell into the trap it exists to document,
+      one registry over from where it was looking; the task wording that
+      was narrower than the work three times; and the rebase false
+      alarm — the planner read working-tree files mid-replay and called
+      it data loss, when the branch ref already pointed at the replayed
+      commits. That last one is worth keeping for its shape, not its
+      outcome: the diagnosis was wrong and cost nothing, because the
+      response was freeze-first and forbid destructive operations. The
+      standing correction is to check the ref and the object store, not
+      only the files.
 
 ## Verification
 
