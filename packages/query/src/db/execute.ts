@@ -4,14 +4,25 @@ import type { DriverRow, DriverSession } from "../driver/contract";
 import { columnPlanForStatement, convertRows } from "./convert";
 import type { Declarations } from "./db";
 
-/** Builds and throws the `query-execution-failed`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). Never retries, never reinterprets `cause`; `compiled.params` is deliberately never read here, so it can never reach the message, an own field, or (via a later `Object.assign`) the error's own enumerable surface. */
+/** The driver's own reason, extracted for the wrapper's message. Text the database echoed into its message is carried verbatim, never scrubbed — this layer only guarantees it writes no parameter value itself (the spec's value guarantee is scoped to this layer's own writes). */
+function describeCause(cause: unknown): string {
+	if (cause instanceof Error && cause.message !== "") {
+		return cause.message;
+	}
+	if (typeof cause === "string" && cause !== "") {
+		return cause;
+	}
+	return "(the driver rejected with a non-error value or no message)";
+}
+
+/** Builds and throws the `query-execution-failed`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). Never retries, never reinterprets `cause`; `compiled.params` is deliberately never read here, so it can never reach the message, an own field, or (via a later `Object.assign`) the error's own enumerable surface. The driver's reason leads the message — the SQL can be arbitrarily long, and default views truncate (#427). */
 function throwQueryExecutionFailed(
 	compiled: CompileResult,
 	cause: unknown,
 ): never {
 	throw Object.assign(
 		new Error(
-			`query execution failed for this "${compiled.kind}" statement: ${compiled.sql}. Next: inspect the underlying driver error via "cause" -- this wrapper never retries or reinterprets it.`,
+			`query execution failed for this "${compiled.kind}" statement: ${describeCause(cause)}. Statement: ${compiled.sql}. Next: the driver's full error (fields like "detail" and "hint" included) is on "cause" -- this wrapper never retries or reinterprets it.`,
 		),
 		{ code: "query-execution-failed", kind: compiled.kind, cause },
 	);

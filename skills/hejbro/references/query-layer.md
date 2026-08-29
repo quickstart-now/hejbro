@@ -762,7 +762,7 @@ concrete next step.
 
 | `code` | When |
 |---|---|
-| `query-execution-failed` | The driver rejected an executed statement (e.g. a constraint violation) — the message carries the parameterized SQL text; the statement's parameter *values* never appear on the error, not in the message, not as a field, not via its string or JSON form. |
+| `query-execution-failed` | The driver rejected an executed statement (e.g. a constraint violation) — the message leads with the driver's own message (a cause with no usable message is named as such), followed by the parameterized SQL text. The query layer itself never writes the statement's parameter *values* onto the error — the SQL stays parameterized; text the database echoes inside its own error message or fields is the database's report, carried faithfully. |
 | `result-conversion-failed` | A returned column's value couldn't convert to its declared type (an unconvertible/missing column, an array arrival-shape mismatch, or a `NULL` element under `.notNullElements()`). |
 | `driver-missing-capability` | An operation (a transaction, a `db.as` context) needs a capability the active driver doesn't declare `true` — a capability explicitly declared `false` fails exactly like an undeclared one, never attempted. The capability set itself is fixed and exhaustive: a driver's own declaration must name every one of them, and omitting one, or naming one outside the set, fails to type-check rather than defaulting silently — this is a compile-time guarantee, checked before this runtime error's own path is ever reached. |
 | `nested-transaction-unsupported` | The db handle's `transaction()` was called again from inside its own already-open callback — nest with `tx.transaction(...)` instead. |
