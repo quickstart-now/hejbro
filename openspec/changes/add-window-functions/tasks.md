@@ -285,7 +285,7 @@ discipline").
 
 ## 5. Live witness and the paperwork — after groups 1–4
 
-- [ ] 5.1 (~10m) Docker postgres:17: `row_number` restarting at 1 in each
+- [x] 5.1 (~10m) Docker postgres:17: `row_number` restarting at 1 in each
       partition (assert the value sequence — a row count is unchanged even
       if the window degenerates to a constant, so it proves nothing), a
       windowed `sum` running total, and `lag` returning null at a
