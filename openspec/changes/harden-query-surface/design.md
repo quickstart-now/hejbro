@@ -116,11 +116,21 @@ what already exists, and **how the name sits against its siblings**.
   barrel's export list is *not* asserted as a whole anywhere: the tests
   check named exports individually (`packages/cli/test/exports.test.ts`)
   and check that this one name is gone. So a **removal** is caught and
-  an **unintended addition is not**. Stated because the draft of this
-  section claimed an exact-set assertion that does not exist — the claim
-  was written from what such a section ought to contain rather than from
-  the repository, which is the exact failure this change spent its
-  length correcting elsewhere.
+  an **unintended addition is not**.
+
+  Stated because the draft of this section claimed an exact-set
+  assertion that does not exist. The full causal chain, since only the
+  last link was originally recorded: the phrase entered as a **material
+  supplied for this section**, carried over from a parallel slice whose
+  `entry.test.ts` really does assert set equality — relayed without
+  checking whether this repository had the same device. The draft then
+  consumed that material faithfully, writing what the section ought to
+  contain rather than what the tree holds, and a `grep` of the actual
+  test files is what caught it. **An unverified item in a list of
+  materials propagates exactly like an unverified number**, and the
+  correction belongs at the relay, not only at the consumer. Whether the
+  barrel should gain such a pin is recorded against the standing
+  barrel-surface issue rather than built here.
 - **Type-only import block** — `tsc` carries the type axis, so the
   narrowings below are checked rather than described.
 - **0.1.1-era snapshot decode test** — `OrderByTerm` is a released

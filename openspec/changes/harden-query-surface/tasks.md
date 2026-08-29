@@ -22,12 +22,12 @@ closing slot runs them. This file is the slice's only progress record,
 so a tick that means two different things at two places would make it
 useless.
 
-Current state: groups 1, 2, 3, 4, 8, group 5 through 5.3, group 6
-through 6.2, and 7.1/7.2/7.3/7.5 are ticked — written, reviewed and
-passed. Still open: **5.4 and 6.3**, which are written but
-`(execution pending)` until the closing slot runs them; **7.4 and 7.6**,
-complete but awaiting their verdict; and **7.7/7.8/7.9**, the closing
-slot and the wrap-up.
+Current state: everything is ticked except **7.8** (assemble the
+merge-request declaration) and **7.9** (the wrap-up), which are the last
+two steps. 5.4 and 6.3 carried `(execution pending)` until the closing
+slot ran them; they now read `(executed in 7.7)`, and the distinction
+between "written" and "run" stayed visible in this file for the whole
+time it was true.
 
 Two groups came back *needs work* and were repaired before ticking:
 group 3 (its D103 left-branch guarantee had regressed from
@@ -354,7 +354,7 @@ barrel).
       written without a nulls field" and "an order term with no explicit
       placement round-trips without gaining a key". Files:
       `packages/core/src/expr/codec.ts`, that test.
-- [ ] 5.4 **(execution pending)** (~6m) Live witness: the rendered
+- [x] 5.4 **(executed in 7.7)** (~6m) Live witness: the rendered
       `nulls first`/`nulls last` executes against a real `postgres:17`
       and orders that way, in a plain select and in a window `over(...)`.
       This is the difference between "the golden string matches" and
@@ -528,7 +528,7 @@ by reading the code, and it holds whatever the server says.
       strip the "legal on both" claim from its comment, which is the
       part no longer supported. Files: as enumerated above, plus that
       test.
-- [ ] 6.3 **(execution pending)** (~7m) **Premise changed — this task was
+- [x] 6.3 **(executed in 7.7)** (~7m) **Premise changed — this task was
       rewritten after 6.1 and 6.2 landed.** It originally read "live
       witness for whichever cases 6.2's rule claims to refuse", which
       assumed 6.2 would produce a *refusing* rule. It did not: 6.1
@@ -809,7 +809,7 @@ by reading the code, and it holds whatever the server says.
       delegation, by the lead session; to be surfaced to the owner on
       return)". Following #414's own amendment of D101. No new row.
       Files: that file.
-- [ ] 7.4 (~8m) One `.changeset/*.md`, `minor` — the grade is set by the
+- [x] 7.4 (~8m) One `.changeset/*.md`, `minor` — the grade is set by the
       addition to a *released* surface (`orderBy`'s vocabulary,
       `OrderByTerm.nulls`), not by the removal of the unreleased
       `countWhere`, and its body says so. `openspec/task-times.csv` rows
@@ -922,13 +922,13 @@ by reading the code, and it holds whatever the server says.
          it would make an honest "here is what we did not narrow, and
          why" read as less honest.
       Files: none in-tree.
-- [ ] 7.6 (~6m) Boundary check before the PR:
+- [x] 7.6 (~6m) Boundary check before the PR:
       `git diff --name-only dev...HEAD` (three-dot) names nothing under
       `packages/neon`, `packages/skills`, `scripts/crap-report.mjs`,
       `scripts/pack-install-smoke.sh`, `.changeset/config.json`, or
       `.github/workflows/ci.yml` — the parallel team's slice. A hit here
       is reported, never resolved by editing their file.
-- [ ] 7.7 (~8m) **The closing Docker slot** — one run. **No signal is
+- [x] 7.7 (~8m) **The closing Docker slot** — one run. **No signal is
       needed any more**: the server has no other users (the parallel
       team disbanded and the lead's own measurements finished), so this
       runs as soon as 7.6 passes. The scheduling constraint that shaped
