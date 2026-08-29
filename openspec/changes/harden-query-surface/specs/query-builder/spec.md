@@ -22,24 +22,44 @@ Branch compatibility divides between two mechanisms (harden-query-surface,
 groups 3 and 8), each covering what the other cannot see. A key SET
 mismatch is caught by the type layer (`SetOpResult` resolving to
 `never`, group 3); a genuine TYPE divergence between two branches'
-same-named column is caught by the server itself (`UNION types uuid
-and text cannot be matched`, measured). Neither catches a branch pair
-whose keys match in SET but not in ORDER: `keyof` has no order, so the
-type layer cannot see it, and Postgres matches set-operation branches
-by POSITION, not by name, so a matching-set, different-order pair is
-legal SQL to the server too — and silently corrupts data instead of
-erroring (measured on postgres:17: unioning `{email, city}` against
-`{city, email}` returns rows with the `email` output column holding a
-city value and the `city` column holding an email, the exact review
-finding that added group 8 mid-flight). A build-time guard — not a
-type-level one, for the same `keyof`-has-no-order reason — SHALL
-refuse this case before either branch reaches the server, naming both
-branches' own key order and the first position at which they
-disagree. This guard SHALL apply at every construction site a set
-operation can be built from, not only the core builder: the query
-package's own chain surface builds its `union()` family independently
-(it does not route through the core builder), so it carries the same
-guard rather than inheriting core's for free.
+same-named column is caught by the server itself (`42804`, "UNION
+types uuid and text cannot be matched" — measured, SQLSTATE captured).
+Neither catches a branch pair whose keys match in SET but not in
+ORDER: `keyof` has no order, so the type layer cannot see it, and
+Postgres matches set-operation branches by POSITION, not by name, so a
+matching-set, different-order pair is legal SQL to the server too —
+and silently corrupts data instead of erroring (measured on
+postgres:17.11: unioning `{email, city}` against `{city, email}`
+returns rows with the `email` output column holding a city value and
+the `city` column holding an email, reproduced in both a bare `select`
+and a `create view`, the exact review finding that added group 8
+mid-flight). `except` and `intersect` corrupt the same way, not only
+`union` — `except` is the worst of the three: a position-mismatched
+comparison can still return one plausible-looking row, so nothing
+about the result signals that the wrong columns were compared. A
+build-time guard — not a type-level one, for the same
+`keyof`-has-no-order reason — SHALL refuse this case before either
+branch reaches the server, naming both branches' own key order and the
+first position at which they disagree. This guard SHALL apply at
+every construction site a set operation can be built from: the core
+builder, the query package's own chain surface (which builds its
+`union()` family independently, never routing through the core
+builder), and a recursive CTE's anchor/recursive-term pair (grammatically
+`anchor UNION [ALL] recursive-term`, Postgres) — the recursive-term
+type rule (`query-type-inference`, the recursive-term requirement) is
+itself `SameKeys`-based like every other type-level check in this
+change and so cannot see order either, and reads as the SAME rule
+applied to the same construct, not a plain-union special case with an
+unstated recursive-CTE exception. A snapshot decoded from disk is
+OUTSIDE this guard's reach — decoding a `SetOpNode` is deliberately
+lenient by an earlier, standing decision (absence in a stored node is
+read as history, not as invalid input), and a construction-time guard
+cannot run on a path that never constructs the node — one input to
+that path (a hand-edited snapshot file) is a genuinely reachable
+surface, and is addressed one layer up: `hejbro verify` hashes the
+parsed-and-re-rendered snapshot against its recorded value and reports
+a reordered set-op branch as a mismatch, when the user runs that
+command.
 
 #### Scenario: Union of two selects renders one statement
 - **WHEN** `select(activeUsers).union(select(archivedUsers))` compiles
@@ -69,3 +89,21 @@ guard rather than inheriting core's for free.
 - **THEN** the combinator call fails at build time, naming both
   branches' own key order and the first position at which they
   disagree, before either branch ever reaches the server
+
+#### Scenario: A recursive CTE's anchor and recursive term are held to the same order rule
+- **WHEN** `asRecursive`'s anchor and recursive term project the same
+  key set in a different order
+- **THEN** the call fails at build time the same way a plain union's
+  branches would, naming both orders and the first disagreeing
+  position — the recursive-term type rule alone does not catch this
+  (it is `SameKeys`-based and cannot see order), so this guard is what
+  does
+
+#### Scenario: A hand-assembled set-op node bypasses the guard, and a decoded snapshot is not itself re-validated
+- **WHEN** a `SetOpNode` is constructed directly (never through a
+  combinator) or decoded from a stored snapshot
+- **THEN** this guard, which runs only at combinator construction time,
+  does not re-check it; a reordered branch reaching a view this way is
+  a decode-path concern, not this guard's — a hand-edited snapshot is
+  the one realistic way to reach it, and `hejbro verify` reports it as
+  a hash mismatch when run

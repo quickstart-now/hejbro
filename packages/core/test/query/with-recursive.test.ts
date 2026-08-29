@@ -63,20 +63,52 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 	});
 
 	it("a recursive term missing one of the anchor's keys is refused", () => {
-		withCte((w) => {
-			w.asRecursive(
-				"r",
-				select({ id: t.id, v: t.v }, t).where(isNull(t.parent)),
-				// @ts-expect-error the recursive term's own projection ({id}
-				// only) is missing the anchor's `v` key -- SetOpResult (task
-				// 6.5) resolves key-set mismatches to `never`, poisoning the
-				// whole callback parameter, so this fails to compile, not
-				// just to run.
-				(self) =>
-					select({ id: t.id }, self).innerJoin(t, eq(self.id, t.parent)),
-			);
-			return select(t);
-		});
+		// `@ts-expect-error` only suppresses the compile error -- the JS
+		// still runs, and group 8's runtime guard (assertSameSetOpKeyOrder,
+		// wired into buildRecursiveEntryQuery) also refuses a key-set
+		// mismatch as a degenerate case of an order mismatch, so this now
+		// throws for real too; wrapped in toThrow() so that second,
+		// independent refusal doesn't fail the test with an uncaught
+		// exception.
+		expect(() =>
+			withCte((w) => {
+				w.asRecursive(
+					"r",
+					select({ id: t.id, v: t.v }, t).where(isNull(t.parent)),
+					// @ts-expect-error the recursive term's own projection ({id}
+					// only) is missing the anchor's `v` key -- SetOpResult (task
+					// 6.5) resolves key-set mismatches to `never`, poisoning the
+					// whole callback parameter, so this fails to compile, not
+					// just to run.
+					(self) =>
+						select({ id: t.id }, self).innerJoin(t, eq(self.id, t.parent)),
+				);
+				return select(t);
+			}),
+		).toThrow();
+	});
+
+	it("a recursive term listing the anchor's keys in a different order is refused (#487, second half — group 8)", () => {
+		// same key SET ({id, v}) as the anchor, declared in the OPPOSITE
+		// order -- CompatibleRecursiveTerm (SameKeys-based, like every
+		// other type-level check in this slice) cannot see order, so this
+		// type-checks; buildRecursiveEntryQuery's own call to
+		// assertSameSetOpKeyOrder is what refuses it, at build time,
+		// before the anchor UNION recursive-term ever reaches the server.
+		expect(() =>
+			withCte((w) => {
+				w.asRecursive(
+					"r",
+					select({ id: t.id, v: t.v }, t).where(isNull(t.parent)),
+					(self) =>
+						select({ v: self.v, id: self.id }, self).innerJoin(
+							t,
+							eq(self.id, t.parent),
+						),
+				);
+				return select(t);
+			}),
+		).toThrow(/set-op-key-order-mismatch|left: \(id, v\), right: \(v, id\)/);
 	});
 
 	it("a field computed differently on each side is accepted and reads back as the anchor's type", () => {

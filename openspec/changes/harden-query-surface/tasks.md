@@ -572,10 +572,58 @@ by reading the code, and it holds whatever the server says.
       binary is machine-global (`/usr/local/bin/openspec`), **not** a
       repo dependency, so it is absent from `node_modules` and
       `npx openspec@latest` does not resolve it; calling it any other
-      way looks like "the tool is missing". The lead ran it against the
-      in-progress tree (valid, exit 0), which is a snapshot of that
-      moment only: this task re-runs it on the **final** tree, since
-      that is what the PR carries. Files: those delta files.
+      way looks like "the tool is missing".
+
+      **The final run belongs to the reviewer, on the final SHA in an
+      isolated worktree** — not to whoever happens to be at a keyboard.
+      Two early runs already passed (the lead's, and the reviewer's with
+      a positive control: `openspec validate no-such-change --strict`
+      → exit 1), and neither is the gate. They validated (a) a tree
+      carrying **only the `query-builder` delta**, while this task adds
+      `table-declaration` (ADDED — scenario-shape requirements are the
+      strictest), `query-type-inference` and `snapshot-format`, and
+      (b) the **working directory**, not a commit. "The PR is valid" is
+      a claim about a committed tree with every delta present, so that
+      is the run that counts. Read the early passes as "the format is
+      not already broken", nothing more.
+
+      **Validate one delta at a time, not all four at the end.** Tell
+      the reviewer as each delta is written and they run it then. Four
+      new deltas validated in one shot produce overlapping failures and
+      the cause has to be separated afterwards; one at a time means a
+      failure has exactly one candidate. Same logic as group 8's
+      per-site mutations.
+
+      **Shape to follow for the ADDED delta** (`table-declaration` is
+      this change's only one, and ADDED is where `--strict` is
+      strictest). Extracted from an archived delta that **did** pass —
+      `archive/2026-08-27-add-query-layer/specs/*/spec.md`:
+      ```markdown
+      # Delta: <capability-name>
+
+      ## Purpose
+      <a paragraph on why this delta exists>
+
+      ## ADDED Requirements
+
+      ### Requirement: <a statement, not a noun phrase>
+      <SHALL prose>
+
+      #### Scenario: <name>
+      - **WHEN** <condition>
+      - **THEN** <observable outcome>
+      ```
+      Every `### Requirement:` carries at least one `#### Scenario:` —
+      that is the constraint `--strict` appears to enforce most often.
+      A `## Purpose` section is present in the archived ADDED delta;
+      whether it is required or merely conventional is **not
+      established**. Nor is the title form: this change's existing
+      `query-builder` delta opens `# query-builder (delta)` rather than
+      `# Delta: query-builder` and validates clean, so that part is
+      loose. This block is **"what passing deltas look like", reverse-
+      engineered from one example — not a reading of what `--strict`
+      checks.** It exists to make the first attempt likely, not to
+      substitute for the run. Files: those delta files.
 - [ ] 7.2 (~8m) `skills/hejbro`: the ordering vocabulary section says
       one thing where it used to say two, the aggregate section drops
       `countWhere`, and the index section gains **#464's rule** — an
@@ -622,6 +670,38 @@ by reading the code, and it holds whatever the server says.
       `countWhere`, and its body says so. `openspec/task-times.csv` rows
       for every group, README task-time badges (`pnpm check:tasktime`)
       and the CRAP block (`pnpm check:crap`), and the `blackbox/` entry.
+
+      **Run `check:crap` forced** (`TURBO_FORCE=1`, or after
+      `pnpm build --force`). Measured in review at `34c16c9`: unforced
+      it **fails** at `hejbro#test:coverage` (`5 cached, 10 total`),
+      forced it **passes** (`0 cached`, exit 0) on the identical tree.
+      The mechanism is the one AGENTS.md already documents — a replayed
+      build log leaves `dist` unwritten and the CLI subprocess tests'
+      freshness check trips. **This failure points the opposite way from
+      the one we normally guard**: the usual cache hazard is a stale
+      *pass*, and this is a stale *failure*, so the instinct "the cache
+      lied to me, the code is fine" does not fire. Meeting it cold at
+      7.4 invites chasing a CRAP regression that does not exist — if
+      `hejbro#test:coverage` fails here, suspect stale `dist` first.
+
+      **`check:crap` writes to the working tree — it is not a read-only
+      gate.** `update-crap-readme` edits `README.md` in place, so its
+      `"README.md unchanged (numbers match)"` line does **not** mean "no
+      update was needed"; it means "a previous run already wrote it, so
+      it matches now". Measured in review at `34c16c9`: the committed
+      README says `0 of 1485 functions … measured at e28c9a3` while the
+      tree yields **1486** functions at `34c16c9`, so the block *does*
+      move — groups 2–4 added functions. **The README CRAP diff is
+      produced by running the script and belongs in this task's commit**;
+      it is never hand-edited. Two consequences: run it where an
+      unexpected `M README.md` is acceptable (a shared worktree will
+      silently acquire one), and check `git status` afterwards, because
+      the gate's own output does not tell you it wrote a file.
+
+      Both gates passed at `34c16c9` (exit 0, zero violations), and
+      `check:tasktime` is genuinely read-only. Groups 5, 6 and 8 add
+      code after that measurement, so this task re-runs both rather than
+      citing them.
       The blackbox entry records the **decision path**: the five issues
       came from an owner-requested UX/DX audit and two prior changes'
       parked boundaries; D103's amendment, `countWhere`'s removal (over

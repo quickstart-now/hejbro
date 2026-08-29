@@ -333,7 +333,6 @@ export type {
 	SetOpStage,
 } from "./query/select";
 export {
-	assertSameSetOpKeyOrder,
 	exists,
 	jsonArrayFrom,
 	jsonObjectFrom,
@@ -342,6 +341,7 @@ export {
 	resolveOrderTerm,
 	select,
 } from "./query/select";
+export { assertSameSetOpKeyOrder } from "./query/set-op-key-order";
 export type {
 	CteBuilder,
 	CteEntryOptions,

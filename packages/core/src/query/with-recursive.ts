@@ -1,4 +1,5 @@
 import type { SelectNode, SetOpNode } from "../expr/ast";
+import { assertSameSetOpKeyOrder } from "./set-op-key-order";
 import type { CteEntryOptions } from "./with";
 
 /**
@@ -34,18 +35,31 @@ export type RecursiveCteEntryOptions = CteEntryOptions & {
  * populate one). Lead-approved direction, 2026-08-29: maximise
  * unrepresentability over a build-time check for a shape this builder can
  * simply never construct.
+ *
+ * `assertSameSetOpKeyOrder` (#487, second half — harden-query-surface
+ * group 8): this is a THIRD construction site for the same `queryKind:
+ * "setOp"` shape `combineSetOp` (`query/select.ts`) and `@hejbro/query`'s
+ * chain `combine` build, and it passes through neither of them, so it
+ * needs its own call to the same guard — `CompatibleRecursiveTerm`
+ * (`query/with.ts`) is `SameKeys`-based like every other type-level
+ * check and cannot see key ORDER, only the SET, so an anchor and a
+ * recursive term whose keys match in set but not in order compiled
+ * clean before this call was added.
  */
 export const buildRecursiveEntryQuery = (
 	anchor: SelectNode | SetOpNode,
 	recursiveTerm: SelectNode | SetOpNode,
 	all: boolean,
-): SetOpNode => ({
-	queryKind: "setOp",
-	operator: "union",
-	all,
-	left: anchor,
-	right: recursiveTerm,
-	orderBy: [],
-	limit: null,
-	offset: null,
-});
+): SetOpNode => {
+	assertSameSetOpKeyOrder(anchor, recursiveTerm);
+	return {
+		queryKind: "setOp",
+		operator: "union",
+		all,
+		left: anchor,
+		right: recursiveTerm,
+		orderBy: [],
+		limit: null,
+		offset: null,
+	};
+};
