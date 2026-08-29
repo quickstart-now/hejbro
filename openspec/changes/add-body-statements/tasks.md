@@ -201,7 +201,7 @@ Two rules apply to every task here and are not repeated per line:
       select consumed as an expression is not reported".
       Files: `plpgsql/recording-session.ts`, `plpgsql/body-context.ts`,
       `packages/core/src/dsl/define-view.ts`, that test.
-- [ ] 1.7 (~6m) `ctx.if` and `elseIf` take `Condition` instead of
+- [x] 1.7 (~6m) `ctx.if` and `elseIf` take `Condition` instead of
       `Expr<"boolean">`, the widening #386 left for whichever change
       reached the body first.
       Red: `packages/core/test/plpgsql/body-context.test.ts` — "a sql

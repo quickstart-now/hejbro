@@ -8,6 +8,7 @@ import {
 	isNull,
 	schema,
 	select,
+	sql,
 	table,
 	uuid,
 } from "../../src/index";
@@ -473,5 +474,24 @@ describe("body-context recording", () => {
 				ctx.execute(row);
 			}),
 		).toThrowError(/isn't a select, insert, update or delete builder/);
+	});
+
+	it("a sql fragment is a body condition", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				ctx
+					.if(sql`${row.postId} is not null`, () => {
+						ctx.raise("has a post");
+					})
+					.elseIf(sql`${row.id} is not null`, () => {
+						ctx.raise("has an id");
+					});
+				ctx.return(row);
+			},
+		);
+		const [ifStmt] = declaration.functionDeclaration.body.statements;
+		expect(ifStmt?.stmtKind).toBe("if");
 	});
 });

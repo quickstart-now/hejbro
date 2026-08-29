@@ -1,7 +1,7 @@
 import type { Table } from "../dsl/table";
 import { toSnakeCase } from "../dsl/table";
 import { assertNever, throwHejbroError } from "../error";
-import type { ColumnRef, Expr, QueryNode } from "../expr/ast";
+import type { ColumnRef, Condition, Expr, QueryNode } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
 import type { DeleteFinal, InsertFinal, UpdateFinal } from "../query/mutate";
@@ -43,7 +43,7 @@ export type RowColumns<TProjection extends RowProjection> =
 
 /** The chain returned by `ctx.if()` — `elseIf`/`else` are fixed for this phase (decision A10). */
 export type IfChain = {
-	readonly elseIf: (condition: Expr<"boolean">, branch: () => void) => IfChain;
+	readonly elseIf: (condition: Condition, branch: () => void) => IfChain;
 	readonly else: (branch: () => void) => void;
 };
 
@@ -96,7 +96,7 @@ export type BodyContext = {
 		query: SelectLimited<TProjection>,
 		name?: string,
 	) => RowColumns<TProjection>;
-	readonly if: (condition: Expr<"boolean">, thenBranch: () => void) => IfChain;
+	readonly if: (condition: Condition, thenBranch: () => void) => IfChain;
 	readonly raise: (message: string, ...args: ReadonlyArray<RaiseArg>) => void;
 	readonly return: (value: TriggerRow<Table> | ReturnableQuery | Expr) => void;
 	/** Runs a statement for its side effect (#426) — a select renders `perform`, a mutation renders as-is. */
@@ -303,7 +303,7 @@ const makeIfChain = (
 
 const recordIf = (
 	state: RecordingState,
-	condition: Expr<"boolean">,
+	condition: Condition,
 	thenBranch: () => void,
 ): IfChain => {
 	state.frames.push([]);
