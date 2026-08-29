@@ -14,6 +14,7 @@ import type {
 } from "../expr/ast";
 import { expr, resolveOrderTerm } from "../expr/ast";
 import { someExprNode } from "../expr/walk";
+import { markConsumed, noteBuilder } from "../plpgsql/recording-session";
 import type { TypeNode } from "../types/type-node";
 
 /** A `select()` projection: the whole table (deterministic column list), or an object of aliased expressions. */
@@ -153,20 +154,22 @@ const combineSetOp = <TProjection extends SelectProjection>(
 	all: boolean,
 	other: SetOpBranch,
 	projectionInput: TProjection,
-): SetOpStage<TProjection> =>
-	makeSetOpStage(
-		{
-			queryKind: "setOp",
-			operator,
-			all,
-			left,
-			right: branchNode(other),
-			orderBy: [],
-			limit: null,
-			offset: null,
-		},
-		projectionInput,
-	);
+): SetOpStage<TProjection> => {
+	const right = branchNode(other);
+	const node: SetOpNode = {
+		queryKind: "setOp",
+		operator,
+		all,
+		left,
+		right,
+		orderBy: [],
+		limit: null,
+		offset: null,
+	};
+	noteBuilder(node, left);
+	markConsumed(right);
+	return makeSetOpStage(node, projectionInput);
+};
 
 /** The runtime combinator set over `left` — shared by every select stage and by {@link makeSetOpStage} itself (further chaining re-combines the whole node). */
 const setOpCombinators = <TProjection extends SelectProjection>(
@@ -190,17 +193,28 @@ const setOpCombinators = <TProjection extends SelectProjection>(
 const makeSetOpStage = <TProjection extends SelectProjection>(
 	node: SetOpNode,
 	projectionInput: TProjection,
-): SetOpStage<TProjection> => ({
-	setOpQuery: node,
-	projectionInput,
-	...setOpCombinators(() => node, projectionInput),
-	orderBy: (...terms) =>
-		makeSetOpStage(
-			{ ...node, orderBy: [...node.orderBy, ...terms.map(resolveOrderTerm)] },
-			projectionInput,
-		),
-	limit: (count) => makeSetOpStage({ ...node, limit: count }, projectionInput),
-});
+): SetOpStage<TProjection> => {
+	// Same pairing as `makeStages`'s own `derive` (#423): `orderBy`/`limit`
+	// each build the next `SetOpNode` via `{ ...node, … }` and recurse
+	// through this same function, so the produced/superseded node must be
+	// registered here too, not just at the combinator that first built `node`.
+	const derive = (next: SetOpNode) => {
+		noteBuilder(next, node);
+		return makeSetOpStage(next, projectionInput);
+	};
+	noteBuilder(node, null);
+	return {
+		setOpQuery: node,
+		projectionInput,
+		...setOpCombinators(() => node, projectionInput),
+		orderBy: (...terms) =>
+			derive({
+				...node,
+				orderBy: [...node.orderBy, ...terms.map(resolveOrderTerm)],
+			}),
+		limit: (count) => derive({ ...node, limit: count }),
+	};
+};
 
 /** `limit`/`offset` take the same non-negative integer and render inline, never as a bind parameter — one validator, so the two can never drift on what they accept. */
 const assertRowCount = (count: number, clause: "limit" | "offset"): void => {
@@ -245,71 +259,56 @@ const makeStages = <TProjection extends SelectProjection>(
 	// STAGE TYPES are what hide the ones SQL wouldn't allow next. The
 	// intersection here is what lets `groupBy` return a grouped stage
 	// without a second builder that would have to stay in sync.
-): SelectJoinable<TProjection> & SelectGrouped<TProjection> => ({
-	selectQuery: query,
-	fromTable,
-	projectionInput,
-	...setOpCombinators(() => query, projectionInput),
-	innerJoin: (joined, on) =>
-		makeStages(
-			appendJoin(query, "inner", joined, on),
-			fromTable,
-			projectionInput,
-		),
-	leftJoin: (joined, on) =>
-		makeStages(
-			appendJoin(query, "left", joined, on),
-			fromTable,
-			projectionInput,
-		),
-	where: (condition) => {
-		assertNoWindowFunction("where", [condition.exprNode]);
-		return makeStages(
-			{ ...query, where: condition.exprNode },
-			fromTable,
-			projectionInput,
-		);
-	},
-	orderBy: (...terms) =>
-		makeStages(
-			{ ...query, orderBy: terms.map(resolveOrderTerm) },
-			fromTable,
-			projectionInput,
-		),
-	groupBy: (...terms) => {
-		if (terms.length === 0) {
-			return throwHejbroError(
-				"empty-group-by",
-				"groupBy() needs at least one expression. Next: pass the columns the aggregate is grouped by, e.g. groupBy(posts.authorId).",
+): SelectJoinable<TProjection> & SelectGrouped<TProjection> => {
+	// Every transition below builds its next `SelectNode` via `{ ...query,
+	// … }` and recurses through this same `derive` — the one place that
+	// pairs "this new node was produced" with "the node it was spread from
+	// is superseded" (#423), so a transition added later inherits it
+	// automatically instead of needing its own registration call.
+	const derive = (next: SelectNode) => {
+		noteBuilder(next, query);
+		return makeStages(next, fromTable, projectionInput);
+	};
+	return {
+		selectQuery: query,
+		fromTable,
+		projectionInput,
+		...setOpCombinators(() => query, projectionInput),
+		innerJoin: (joined, on) => derive(appendJoin(query, "inner", joined, on)),
+		leftJoin: (joined, on) => derive(appendJoin(query, "left", joined, on)),
+		where: (condition) => {
+			assertNoWindowFunction("where", [condition.exprNode]);
+			return derive({ ...query, where: condition.exprNode });
+		},
+		orderBy: (...terms) =>
+			derive({ ...query, orderBy: terms.map(resolveOrderTerm) }),
+		groupBy: (...terms) => {
+			if (terms.length === 0) {
+				return throwHejbroError(
+					"empty-group-by",
+					"groupBy() needs at least one expression. Next: pass the columns the aggregate is grouped by, e.g. groupBy(posts.authorId).",
+				);
+			}
+			assertNoWindowFunction(
+				"group by",
+				terms.map((term) => term.exprNode),
 			);
-		}
-		assertNoWindowFunction(
-			"group by",
-			terms.map((term) => term.exprNode),
-		);
-		return makeStages(
-			{ ...query, groupBy: terms.map((term) => term.exprNode) },
-			fromTable,
-			projectionInput,
-		);
-	},
-	having: (condition: Condition) => {
-		assertNoWindowFunction("having", [condition.exprNode]);
-		return makeStages(
-			{ ...query, having: condition.exprNode },
-			fromTable,
-			projectionInput,
-		);
-	},
-	limit: (count) => {
-		assertRowCount(count, "limit");
-		return makeStages({ ...query, limit: count }, fromTable, projectionInput);
-	},
-	offset: (count) => {
-		assertRowCount(count, "offset");
-		return makeStages({ ...query, offset: count }, fromTable, projectionInput);
-	},
-});
+			return derive({ ...query, groupBy: terms.map((term) => term.exprNode) });
+		},
+		having: (condition: Condition) => {
+			assertNoWindowFunction("having", [condition.exprNode]);
+			return derive({ ...query, having: condition.exprNode });
+		},
+		limit: (count) => {
+			assertRowCount(count, "limit");
+			return derive({ ...query, limit: count });
+		},
+		offset: (count) => {
+			assertRowCount(count, "offset");
+			return derive({ ...query, offset: count });
+		},
+	};
+};
 
 /**
  * What `select()` returns — {@link makeStages} plus the two `distinct`
@@ -321,34 +320,34 @@ const makeDistinctableStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
 	fromTable: Table,
 	projectionInput: TProjection,
-): SelectDistinctable<TProjection> => ({
-	...makeStages(query, fromTable, projectionInput),
-	distinct: () =>
-		makeStages(
-			{ ...query, distinct: { distinctKind: "all" } },
-			fromTable,
-			projectionInput,
-		),
-	distinctOn: (...columns) => {
-		if (columns.length === 0) {
-			return throwHejbroError(
-				"empty-distinct-on",
-				"distinctOn() needs at least one column. Next: pass the columns one row per group is taken for, e.g. distinctOn(posts.authorId), and order by those columns first.",
-			);
-		}
-		return makeStages(
-			{
+): SelectDistinctable<TProjection> => {
+	// Same pairing as `makeStages`'s own `derive` (#423): `distinct`/
+	// `distinctOn` are each a transition off `query`, not off whatever
+	// `makeStages` builds from it, so this stage gets its own.
+	const derive = (next: SelectNode) => {
+		noteBuilder(next, query);
+		return makeStages(next, fromTable, projectionInput);
+	};
+	return {
+		...makeStages(query, fromTable, projectionInput),
+		distinct: () => derive({ ...query, distinct: { distinctKind: "all" } }),
+		distinctOn: (...columns) => {
+			if (columns.length === 0) {
+				return throwHejbroError(
+					"empty-distinct-on",
+					"distinctOn() needs at least one column. Next: pass the columns one row per group is taken for, e.g. distinctOn(posts.authorId), and order by those columns first.",
+				);
+			}
+			return derive({
 				...query,
 				distinct: {
 					distinctKind: "on",
 					columns: columns.map((column) => column.exprNode),
 				},
-			},
-			fromTable,
-			projectionInput,
-		);
-	},
-});
+			});
+		},
+	};
+};
 
 type ResolvedProjection = {
 	readonly projectionNode: ProjectionNode;
@@ -404,23 +403,21 @@ export const select = <TProjection extends SelectProjection>(
 	from?: Table,
 ): SelectDistinctable<TProjection> => {
 	const { projectionNode, fromTable } = resolveProjection(projection, from);
-	return makeDistinctableStages(
-		{
-			queryKind: "select",
-			projection: projectionNode,
-			from: tableRefOf(fromTable),
-			joins: [],
-			where: null,
-			groupBy: [],
-			having: null,
-			orderBy: [],
-			limit: null,
-			offset: null,
-			distinct: null,
-		},
-		fromTable,
-		projection,
-	);
+	const query: SelectNode = {
+		queryKind: "select",
+		projection: projectionNode,
+		from: tableRefOf(fromTable),
+		joins: [],
+		where: null,
+		groupBy: [],
+		having: null,
+		orderBy: [],
+		limit: null,
+		offset: null,
+		distinct: null,
+	};
+	noteBuilder(query, null);
+	return makeDistinctableStages(query, fromTable, projection);
 };
 
 /**
@@ -673,8 +670,9 @@ const buildSelectExpr =
 	<TMode extends "jsonArray" | "jsonObject">(mode: TMode) =>
 	<TProjection extends SelectProjection>(
 		subselect: SelectLimited<TProjection>,
-	): Expr<"json"> & NestedReadMarker<TMode, TProjection> =>
-		expr("json", {
+	): Expr<"json"> & NestedReadMarker<TMode, TProjection> => {
+		markConsumed(subselect.selectQuery);
+		return expr("json", {
 			nodeKind: "selectExpr",
 			mode,
 			query: withJsonSafeCasts(
@@ -682,6 +680,7 @@ const buildSelectExpr =
 				subselect.projectionInput,
 			),
 		});
+	};
 
 /** Wraps a subselect into a projection expression compiling to a correlated `(select coalesce(json_agg("agg"), '[]'::json) from (…) as "agg")` — the nested-collection primitive (D102). The subselect's `where`/`orderBy`/`limit` and its own nested reads carry through; empty arrives as `[]`, never SQL null. */
 export const jsonArrayFrom = buildSelectExpr("jsonArray");
@@ -690,8 +689,9 @@ export const jsonObjectFrom = buildSelectExpr("jsonObject");
 
 const buildExists =
 	(negated: boolean) =>
-	(query: SelectLimited): Expr<"boolean"> =>
-		expr("boolean", {
+	(query: SelectLimited): Expr<"boolean"> => {
+		markConsumed(query.selectQuery);
+		return expr("boolean", {
 			nodeKind: "exists",
 			negated,
 			query: {
@@ -699,6 +699,7 @@ const buildExists =
 				projection: { projectionKind: "constantOne" },
 			},
 		});
+	};
 
 /** `exists (select 1 from … where …)` — replaces the subquery's projection with the `select 1` idiom regardless of what it selected. */
 export const exists = buildExists(false);

@@ -13,6 +13,7 @@ import type {
 	UpdateNode,
 } from "../expr/ast";
 import { isExpr } from "../expr/ast";
+import { noteBuilder } from "../plpgsql/recording-session";
 import type {
 	BuilderFamily,
 	ColumnBuilder,
@@ -399,10 +400,14 @@ const makeInsertReturnable = <TTable extends Table>(
 	node: InsertNode,
 	target: TTable,
 ): InsertReturnable<TTable> => {
+	const derive = (next: InsertNode) => {
+		noteBuilder(next, node);
+		return makeInsertFinal(next);
+	};
 	const stage = {
 		insertQuery: node,
 		returning: (projection?: ReturningProjection) =>
-			makeInsertFinal({
+			derive({
 				...node,
 				returning: resolveReturning(target, projection),
 			}),
@@ -414,42 +419,44 @@ const makeInsertConflictable = <TTable extends Table>(
 	node: InsertNode,
 	target: TTable,
 ): InsertConflictable<TTable> => {
+	const deriveFinal = (next: InsertNode) => {
+		noteBuilder(next, node);
+		return makeInsertFinal(next);
+	};
+	const deriveReturnable = (next: InsertNode) => {
+		noteBuilder(next, node);
+		return makeInsertReturnable(next, target);
+	};
 	const stage = {
 		insertQuery: node,
 		returning: (projection?: ReturningProjection) =>
-			makeInsertFinal({
+			deriveFinal({
 				...node,
 				returning: resolveReturning(target, projection),
 			}),
 		onConflictDoNothing: (...targetColumns: ReadonlyArray<ColumnRef>) =>
-			makeInsertReturnable(
-				{
-					...node,
-					onConflict: {
-						targetColumns: targetColumns.map((column) => column.sqlName),
-						action: { actionKind: "nothing" },
-					},
+			deriveReturnable({
+				...node,
+				onConflict: {
+					targetColumns: targetColumns.map((column) => column.sqlName),
+					action: { actionKind: "nothing" },
 				},
-				target,
-			),
+			}),
 		onConflictDoUpdate: (config: {
 			readonly target: ReadonlyArray<ColumnRef>;
 			readonly set: MutationRow<TTable>;
 		}) => {
 			const tableRef = resolveTableRef(target);
-			return makeInsertReturnable(
-				{
-					...node,
-					onConflict: {
-						targetColumns: config.target.map((column) => column.sqlName),
-						action: {
-							actionKind: "update",
-							set: resolveSetEntries(target, tableRef, config.set),
-						},
+			return deriveReturnable({
+				...node,
+				onConflict: {
+					targetColumns: config.target.map((column) => column.sqlName),
+					action: {
+						actionKind: "update",
+						set: resolveSetEntries(target, tableRef, config.set),
 					},
 				},
-				target,
-			);
+			});
 		},
 	};
 	return stage as InsertConflictable<TTable>;
@@ -478,6 +485,7 @@ export const insert = <TTable extends Table>(
 			onConflict: null,
 			returning: null,
 		};
+		noteBuilder(node, null);
 		return makeInsertConflictable(node, target);
 	},
 });
@@ -494,10 +502,14 @@ const makeUpdateReturnable = <TTable extends Table>(
 	node: UpdateNode,
 	target: TTable,
 ): UpdateReturnable<TTable> => {
+	const derive = (next: UpdateNode) => {
+		noteBuilder(next, node);
+		return makeUpdateFinal(next);
+	};
 	const stage = {
 		updateQuery: node,
 		returning: (projection?: ReturningProjection) =>
-			makeUpdateFinal({
+			derive({
 				...node,
 				returning: resolveReturning(target, projection),
 			}),
@@ -509,15 +521,23 @@ const makeUpdateFilterable = <TTable extends Table>(
 	node: UpdateNode,
 	target: TTable,
 ): UpdateFilterable<TTable> => {
+	const deriveFinal = (next: UpdateNode) => {
+		noteBuilder(next, node);
+		return makeUpdateFinal(next);
+	};
+	const deriveReturnable = (next: UpdateNode) => {
+		noteBuilder(next, node);
+		return makeUpdateReturnable(next, target);
+	};
 	const stage = {
 		updateQuery: node,
 		returning: (projection?: ReturningProjection) =>
-			makeUpdateFinal({
+			deriveFinal({
 				...node,
 				returning: resolveReturning(target, projection),
 			}),
 		where: (condition: Condition) =>
-			makeUpdateReturnable({ ...node, where: condition.exprNode }, target),
+			deriveReturnable({ ...node, where: condition.exprNode }),
 	};
 	return stage as UpdateFilterable<TTable>;
 };
@@ -535,6 +555,7 @@ export const update = <TTable extends Table>(
 			where: null,
 			returning: null,
 		};
+		noteBuilder(node, null);
 		return makeUpdateFilterable(node, target);
 	},
 });
@@ -551,10 +572,14 @@ const makeDeleteReturnable = <TTable extends Table>(
 	node: DeleteNode,
 	target: TTable,
 ): DeleteReturnable<TTable> => {
+	const derive = (next: DeleteNode) => {
+		noteBuilder(next, node);
+		return makeDeleteFinal(next);
+	};
 	const stage = {
 		deleteQuery: node,
 		returning: (projection?: ReturningProjection) =>
-			makeDeleteFinal({
+			derive({
 				...node,
 				returning: resolveReturning(target, projection),
 			}),
@@ -566,15 +591,23 @@ const makeDeleteFilterable = <TTable extends Table>(
 	node: DeleteNode,
 	target: TTable,
 ): DeleteFilterable<TTable> => {
+	const deriveFinal = (next: DeleteNode) => {
+		noteBuilder(next, node);
+		return makeDeleteFinal(next);
+	};
+	const deriveReturnable = (next: DeleteNode) => {
+		noteBuilder(next, node);
+		return makeDeleteReturnable(next, target);
+	};
 	const stage = {
 		deleteQuery: node,
 		returning: (projection?: ReturningProjection) =>
-			makeDeleteFinal({
+			deriveFinal({
 				...node,
 				returning: resolveReturning(target, projection),
 			}),
 		where: (condition: Condition) =>
-			makeDeleteReturnable({ ...node, where: condition.exprNode }, target),
+			deriveReturnable({ ...node, where: condition.exprNode }),
 	};
 	return stage as DeleteFilterable<TTable>;
 };
@@ -590,5 +623,6 @@ export const deleteFrom = <TTable extends Table>(
 		where: null,
 		returning: null,
 	};
+	noteBuilder(node, null);
 	return makeDeleteFilterable(node, target);
 };
