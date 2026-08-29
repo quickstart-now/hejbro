@@ -28,9 +28,19 @@ database that actually exists. Folding them together would make one
 failure mean two unrelated things.
 
 `check` SHALL compare, per declared object: existence by identity, and
-for a column its type, its `notNull`, and its default. It SHALL exit
-non-zero when any declared object is missing or differs, and zero when
-none do.
+for a column its type, its `notNull`, and its default.
+
+Its exit code SHALL distinguish three answers, because "the database
+disagrees with you" and "I could not find out" are different facts and a
+caller automating this needs to tell them apart: **zero** when everything
+compared agreed, **one** when any declared object is missing or differs,
+and **two** when the run could not answer — anything reported as not
+compared, or a declaration set that was empty. Two is never silence: the
+report still names each object it could not compare and why.
+
+A run that could not compare something SHALL NOT exit zero. A checker
+that answers "no differences" when it never looked is the failure this
+command exists to end.
 
 Where a column differs on more than one of those axes, `check` SHALL
 report all of them from one run. Reporting only the first would make the
@@ -253,6 +263,15 @@ commands that never connect.
 When the driver is absent, `check` SHALL fail with a hejbro-coded
 diagnostic naming the package to install — never a raw module-resolution
 error.
+
+Failing to reach the database SHALL be its own failure, distinct from
+failing to read its catalog, and SHALL carry the reason the driver gave.
+A wrong port or a typo in a URL is the first failure most users will
+meet, and answering it with "confirm the connected role can read
+pg_catalog" sends them to inspect privileges on a database they never
+reached. The reason SHALL survive the driver's own error shape: a driver
+may report a connection failure as an aggregate whose own message is
+empty, and an empty reason is not a reason.
 
 `check` SHALL NOT require any driver capability. Every statement it
 issues is a plain read that a driver must already support to be a driver

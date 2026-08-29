@@ -124,6 +124,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@hejbro/pg':
+        specifier: workspace:*
+        version: link:../pg
       '@hejbro/supabase':
         specifier: workspace:*
         version: link:../supabase

@@ -64,13 +64,28 @@ const COVERAGE_BOUNDARY_LINES: ReadonlyArray<string> = [
 	"check's reads are not a single snapshot: opening no transaction is what keeps this command free of any driver capability, and a schema changing while check runs can produce a torn report.",
 ];
 
+/**
+ * Three answers, not two (4.5, spec Req1) -- "the database disagrees"
+ * and "I could not find out" are different facts, and collapsing them
+ * would let a read-only CI role's every "could not compare" read as a
+ * real drift, or worse, get silently absorbed into a passing build.
+ * `0` every declared object was compared and agreed; `1` at least one
+ * genuinely differs or is missing (the stronger fact, so it wins even
+ * when some other object also could not be compared); `2` nothing
+ * disagreed, but at least one declared object could not be compared, or
+ * the declaration set itself was empty -- never silence, and never `0`.
+ */
 export type CheckReport = {
-	readonly exitCode: 0 | 1;
+	readonly exitCode: 0 | 1 | 2;
 	readonly stdout: ReadonlyArray<string>;
 	readonly stderr: string | null;
 };
 
-const EMPTY_INVENTORY: Inventory = { unmanagedTables: [], extensions: [] };
+/** Exported so a test can build one explicitly (4.5, o2) -- `renderCheckReport` no longer defaults this away. */
+export const EMPTY_INVENTORY: Inventory = {
+	unmanagedTables: [],
+	extensions: [],
+};
 
 /** `[]` when there is nothing to report -- an empty run says nothing extra, rather than printing an empty "unmanaged tables:" header every time. */
 const extensionsLines = (
@@ -97,17 +112,61 @@ const inventoryLines = (inventory: Inventory): ReadonlyArray<string> => [
 	...extensionsLines(inventory.extensions),
 ];
 
+const NOT_COMPARED_CODE = "check-not-compared";
+
+const isNotComparedFinding = (finding: Finding): boolean =>
+	finding.error.code === NOT_COMPARED_CODE;
+
+/** `1` when at least one finding is a genuine disagreement (the stronger fact, so it wins even alongside a not-compared finding); `2` only when every finding is `check-not-compared`. */
+const nonEmptyFindingsExitCode = (disagreementCount: number): 1 | 2 => {
+	if (disagreementCount > 0) {
+		return 1;
+	}
+	return 2;
+};
+
+/** `""` when nothing was left uncompared -- appended to the `1` summary only when both kinds of finding are present, so a pure disagreement report reads exactly as it did before 4.5. */
+const notComparedNote = (notComparedCount: number): string => {
+	if (notComparedCount === 0) {
+		return "";
+	}
+	return ` (${notComparedCount} more could not be compared -- see above)`;
+};
+
+/**
+ * `1`'s summary names the disagreement count, plus a note if some other
+ * object was also left uncompared (never silently absorbed into the
+ * disagreement count, and never allowed to flip the exit code away from
+ * `1` -- a real difference is the stronger fact). `2`'s summary is a
+ * different sentence, not the same one with a different number: this run
+ * did not find drift, it failed to find out, and says so, naming that
+ * the per-object diagnostics above already say what would make the
+ * comparison possible (`check-not-compared`'s own `Next:` clause).
+ */
+const summaryLine = (
+	exitCode: 1 | 2,
+	disagreementCount: number,
+	notComparedCount: number,
+): string => {
+	if (exitCode === 1) {
+		return `check: ${disagreementCount} finding(s)${notComparedNote(notComparedCount)} — fix the differences above and rerun \`hejbro check\`.`;
+	}
+	return `check: could not answer -- ${notComparedCount} declared object(s) could not be compared. Next: see the diagnostic(s) above for what would make the comparison possible, then rerun \`hejbro check\`.`;
+};
+
 /**
  * `findings[] -> CheckReport`, a pure function (no I/O) so the report's
  * own shape -- exit codes, the coverage-boundary statement, the "never a
  * diff" rule, the inventory section -- runs entirely in CI with no
  * database (`runCheck` is the only caller that ever does I/O; group 6
- * proves the real findings a live server produces). `inventory` defaults
- * to empty so every pre-5.1 call site (and test) keeps working unchanged.
+ * proves the real findings a live server produces). `inventory` is
+ * required (4.5, o2): a defaulted one is exactly how 4.4's own gap
+ * happened -- an omission no test can notice, because the default keeps
+ * every existing call site green.
  */
 export const renderCheckReport = (
 	findings: ReadonlyArray<Finding>,
-	inventory: Inventory = EMPTY_INVENTORY,
+	inventory: Inventory,
 ): CheckReport => {
 	const inventoryFooter = inventoryLines(inventory);
 	if (findings.length === 0) {
@@ -121,15 +180,18 @@ export const renderCheckReport = (
 			stderr: null,
 		};
 	}
+	const notComparedCount = findings.filter(isNotComparedFinding).length;
+	const disagreementCount = findings.length - notComparedCount;
+	const exitCode = nonEmptyFindingsExitCode(disagreementCount);
 	const diagnostics = findings.map((finding) =>
 		fromHejbroError(finding.error, finding.identity),
 	);
 	return {
-		exitCode: 1,
+		exitCode,
 		stdout: [...COVERAGE_BOUNDARY_LINES, ...inventoryFooter],
 		stderr: renderDiagnostics(
 			diagnostics,
-			`check: ${findings.length} finding(s) — fix the differences above and rerun \`hejbro check\`.`,
+			summaryLine(exitCode, disagreementCount, notComparedCount),
 		),
 	};
 };
@@ -219,6 +281,14 @@ const identityFromMessage = (message: string, fallback: string): string => {
 
 const FALLBACK_IDENTITY = "hejbro check";
 
+/** The one precondition failure that answers "could not answer" (4.5) rather than "config/entry/connection/driver/catalog-read is broken": a declaration set with 0 objects makes every comparison vacuous, which is the same "I could not find out" fact `check-not-compared` reports per-object -- never a `1`, which would read as a real disagreement nothing here ever compared. */
+const PRECONDITION_EXIT_CODE_BY_CODE: Readonly<Record<string, 1 | 2>> = {
+	"check-declarations-empty": 2,
+};
+
+const preconditionExitCode = (code: string): 1 | 2 =>
+	PRECONDITION_EXIT_CODE_BY_CODE[code] ?? 1;
+
 /**
  * A precondition failure (config/entry/connection/driver/catalog-read) --
  * before any comparison ran, so it is its own early exit, never folded
@@ -234,7 +304,7 @@ const preconditionErrorReport = (error: unknown): CheckReport => {
 		identityFromMessage(checkError.message, FALLBACK_IDENTITY),
 	);
 	return {
-		exitCode: 1,
+		exitCode: preconditionExitCode(checkError.code),
 		stdout: [],
 		stderr: renderDiagnostics([diagnostic], null),
 	};

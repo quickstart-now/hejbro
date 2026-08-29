@@ -17,6 +17,7 @@ import type { Finding } from "../src/check/compare";
 import type { Inventory } from "../src/check/inventory";
 import {
 	compareCheckAgainstCatalog,
+	EMPTY_INVENTORY,
 	renderCheckReport,
 } from "../src/commands/check";
 import {
@@ -45,7 +46,7 @@ const typeDiffersFinding: Finding = {
 
 describe("renderCheckReport / 4.2 report and exit codes", () => {
 	it("exits non-zero and names the object when a column type differs", () => {
-		const report = renderCheckReport([typeDiffersFinding]);
+		const report = renderCheckReport([typeDiffersFinding], EMPTY_INVENTORY);
 
 		expect(report.exitCode).toBe(1);
 		expect(report.stderr).toContain("app.posts.title");
@@ -53,7 +54,7 @@ describe("renderCheckReport / 4.2 report and exit codes", () => {
 	});
 
 	it("exits zero when everything agrees", () => {
-		const report = renderCheckReport([]);
+		const report = renderCheckReport([], EMPTY_INVENTORY);
 
 		expect(report.exitCode).toBe(0);
 		expect(report.stderr).toBeNull();
@@ -63,7 +64,10 @@ describe("renderCheckReport / 4.2 report and exit codes", () => {
 		// A report can carry object identity *and* still dump a diff -- this
 		// is the assertion that would fail if it did; every other test here
 		// would still pass regardless.
-		const report = renderCheckReport([missingTableFinding, typeDiffersFinding]);
+		const report = renderCheckReport(
+			[missingTableFinding, typeDiffersFinding],
+			EMPTY_INVENTORY,
+		);
 		const wholeReport = [...report.stdout, report.stderr ?? ""].join("\n");
 
 		expect(wholeReport).not.toContain("@@");
@@ -72,23 +76,73 @@ describe("renderCheckReport / 4.2 report and exit codes", () => {
 	});
 });
 
+const notComparedFinding: Finding = {
+	identity: "app.posts.posts_status_valid",
+	error: hejbroError(
+		"check-not-compared",
+		'declared check constraint "app.posts.posts_status_valid" could not be compared: the connected role could not run EXPLAIN. Next: confirm the connected role can run EXPLAIN against this table, then rerun `hejbro check`.',
+	),
+};
+
+describe("renderCheckReport / 4.5 the exit code answers three questions", () => {
+	it("exits 0 when everything agreed", () => {
+		const report = renderCheckReport([], EMPTY_INVENTORY);
+
+		expect(report.exitCode).toBe(0);
+	});
+
+	it("exits 1 when the database disagrees", () => {
+		const report = renderCheckReport([typeDiffersFinding], EMPTY_INVENTORY);
+
+		expect(report.exitCode).toBe(1);
+	});
+
+	it("exits 2 when an object could not be compared", () => {
+		const report = renderCheckReport([notComparedFinding], EMPTY_INVENTORY);
+
+		expect(report.exitCode).toBe(2);
+		expect(report.stderr).toContain("could not");
+	});
+
+	it("exits 1, not 2, when a disagreement and a not-compared finding coexist -- the stronger fact wins", () => {
+		const report = renderCheckReport(
+			[typeDiffersFinding, notComparedFinding],
+			EMPTY_INVENTORY,
+		);
+
+		expect(report.exitCode).toBe(1);
+		// The summary still says some objects could not be compared, even
+		// though the exit code reads as a real disagreement (cs-planner's
+		// own decision: never silently absorb a not-compared finding into
+		// the disagreement count without saying so).
+		expect(report.stderr).toContain("could not be compared");
+	});
+
+	it("2's own diagnostics never claim a disagreement", () => {
+		const report = renderCheckReport([notComparedFinding], EMPTY_INVENTORY);
+		const wholeReport = [...report.stdout, report.stderr ?? ""].join("\n");
+
+		expect(wholeReport).not.toContain("disagrees");
+	});
+});
+
 describe("renderCheckReport / 4.3 coverage boundary", () => {
 	it("states what it does not compare even when it finds no differences", () => {
-		const report = renderCheckReport([]);
+		const report = renderCheckReport([], EMPTY_INVENTORY);
 		const stdoutText = report.stdout.join("\n");
 
 		expect(stdoutText).toContain("view bodies");
 	});
 
 	it("states what it does not compare when it does find differences", () => {
-		const report = renderCheckReport([typeDiffersFinding]);
+		const report = renderCheckReport([typeDiffersFinding], EMPTY_INVENTORY);
 		const stdoutText = report.stdout.join("\n");
 
 		expect(stdoutText).toContain("view bodies");
 	});
 
 	it("says its reads are not a single snapshot", () => {
-		const report = renderCheckReport([]);
+		const report = renderCheckReport([], EMPTY_INVENTORY);
 		const stdoutText = report.stdout.join("\n").toLowerCase();
 
 		expect(stdoutText).toContain("not a single snapshot");
@@ -445,6 +499,25 @@ export const posts = table(app, "posts", {
 		return env;
 	};
 
+	// Group 6 (task 6.1) adds @hejbro/pg as this package's own devDependency
+	// for its live-witness suite -- which makes it resolvable from this
+	// very fixture for the first time (Node resolves the dynamic import
+	// relative to dist/cli.js's own location, not this fixture's node_
+	// modules, so the fixture's own symlinks were never what made it
+	// unresolvable). Measured: with @hejbro/pg's dist built, `--url=...`
+	// now reaches a real connection attempt against the literal
+	// "nonexistent-host" from the URL ("check-catalog-unreadable",
+	// `getaddrinfo ENOTFOUND nonexistent-host") instead of
+	// "check-driver-missing" -- and *either* outcome only happens because
+	// --url reached connection resolution, so both are accepted here.
+	// Whether @hejbro/pg's dist happens to be built when this test runs
+	// (unbuilt in a fresh CI checkout before its own build step, but not
+	// guaranteed to stay that way) is exactly the kind of environment
+	// dependency this assertion must not lean on.
+	const reachedConnectionResolution = (stderr: string): boolean =>
+		stderr.includes("check-driver-missing") ||
+		stderr.includes("nonexistent-host");
+
 	it("accepts --url=<value>, not only the space form", async () => {
 		const result = await runCli(
 			cwd,
@@ -453,8 +526,8 @@ export const posts = table(app, "posts", {
 		);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("check-driver-missing");
 		expect(result.stderr).not.toContain("check-connection-missing");
+		expect(reachedConnectionResolution(result.stderr)).toBe(true);
 	});
 
 	it("--url <value> (space form) still works after adding equals-form support (regression guard)", async () => {
@@ -465,6 +538,6 @@ export const posts = table(app, "posts", {
 		);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("check-driver-missing");
+		expect(reachedConnectionResolution(result.stderr)).toBe(true);
 	});
 });

@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { Catalog } from "./catalog";
 import type { Finding } from "./compare";
 import { differsFinding } from "./compare";
+import { describeDriverError } from "./error-message";
 
 /**
  * `exprTexts` is `null` for a failure before either side was ever
@@ -64,13 +65,6 @@ type ConstraintMetadataOutcome =
 	| { readonly kind: "not-found" }
 	| { readonly kind: "error"; readonly reason: string };
 
-const messageOf = (error: unknown): string => {
-	if (error instanceof Error) {
-		return error.message;
-	}
-	return String(error);
-};
-
 /**
  * The catalog side of a check constraint, from `pg_constraint.conbin`
  * through `pg_get_expr` (task 3.4) -- `conbin` yields the bare expression,
@@ -113,7 +107,7 @@ const fetchConstraintMetadata = async (
 			convalidated: parsed.convalidated,
 		};
 	} catch (error) {
-		return { kind: "error", reason: messageOf(error) };
+		return { kind: "error", reason: describeDriverError(error) };
 	}
 };
 
@@ -203,7 +197,7 @@ const probeBothExpressions = async (
 		// Neither side was rendered -- the server's own error message is the
 		// reason, never split into a "which side failed" guess (Postgres's
 		// message usually names the offending column/function itself).
-		return { ok: false, reason: messageOf(error) };
+		return { ok: false, reason: describeDriverError(error) };
 	}
 };
 

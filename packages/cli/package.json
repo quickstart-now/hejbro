@@ -41,6 +41,7 @@
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
+		"test:integration": "vitest run --config vitest.integration.config.ts",
 		"prepack": "pnpm build"
 	},
 	"dependencies": {
@@ -52,6 +53,7 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
+		"@hejbro/pg": "workspace:*",
 		"@hejbro/supabase": "workspace:*",
 		"@vitest/coverage-v8": "catalog:",
 		"tsdown": "catalog:",

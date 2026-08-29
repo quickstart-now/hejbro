@@ -1,5 +1,6 @@
 import { throwHejbroError } from "@hejbro/core";
-import type { Driver } from "@hejbro/query";
+import type { Driver, DriverSession } from "@hejbro/query";
+import { describeDriverError } from "./error-message";
 
 /** The subset of `process.env` this module reads -- caller-supplied so `resolveConnectionString` stays a pure function under test. */
 export type ConnectionEnv = Readonly<Record<string, string | undefined>>;
@@ -94,12 +95,44 @@ export const connectForCheck = async (
 	return pgDriver(connectionString);
 };
 
+const CONNECTIVITY_PROBE = {
+	sql: "select 1",
+	params: [],
+	kind: "sql" as const,
+};
+
 /**
- * Opens a connection, runs `body`, and closes the connection afterward --
- * on the success path and on a rejection alike, since a caller that only
- * closes on success leaves the pool open exactly when there was
- * something to report. This is the only place `check` opens a
- * connection, so it is the only place that needs to close one.
+ * One trivial read before any catalog read (1.5) -- "can I talk to this
+ * database at all?" answered directly, rather than inferred after the
+ * fact from which catalog read failed and how. A wrong port, a wrong
+ * password, and a nonexistent database name all fail here the same way:
+ * this SHALL NOT classify by the driver's own error code (a code taxonomy
+ * is guesswork about a specific driver's behavior; asking the database
+ * directly is not) -- any failure of this one read is
+ * `check-connection-failed`. Anything failing *after* this succeeds is
+ * `readCatalog`'s own `check-catalog-unreadable` instead: the two codes
+ * are mutually exclusive by construction, never by inspecting the error.
+ */
+export const assertConnected = async (
+	session: DriverSession,
+): Promise<void> => {
+	try {
+		await session.execute(CONNECTIVITY_PROBE);
+	} catch (error) {
+		throwHejbroError(
+			"check-connection-failed",
+			`hejbro check could not connect to the database: ${describeDriverError(error)}. Next: confirm --url/DATABASE_URL is correct and the database is reachable, then rerun \`hejbro check\`.`,
+		);
+	}
+};
+
+/**
+ * Opens a connection, confirms it actually works (1.5's connectivity
+ * probe), runs `body`, and closes the connection afterward -- on the
+ * success path and on a rejection alike, since a caller that only closes
+ * on success leaves the pool open exactly when there was something to
+ * report. This is the only place `check` opens a connection, so it is
+ * the only place that needs to close one.
  */
 export const withCheckConnection = async <T>(
 	url: string | undefined,
@@ -109,6 +142,7 @@ export const withCheckConnection = async <T>(
 ): Promise<T> => {
 	const driver = await connectForCheck(url, env, importer);
 	try {
+		await assertConnected(driver);
 		return await body(driver);
 	} finally {
 		await driver.client.end();

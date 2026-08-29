@@ -1,7 +1,8 @@
-import type { DriverCapabilities } from "@hejbro/query";
-import { describe, expect, it } from "vitest";
+import type { DriverCapabilities, DriverSession } from "@hejbro/query";
+import { describe, expect, it, vi } from "vitest";
 import type { CheckDriverConnection } from "../src/check/driver";
 import {
+	assertConnected,
 	CHECK_DRIVER_PACKAGE,
 	loadCheckDriver,
 	resolveConnectionString,
@@ -71,10 +72,13 @@ describe("loadCheckDriver", () => {
 });
 
 describe("withCheckConnection / N2 pool teardown", () => {
-	// A driver-shaped fake with a spied `client.end()` -- no real I/O, and
-	// `execute`/`transaction`/`setupSession` are never called by these
-	// tests, so they throw if reached (a bug elsewhere calling them would
-	// surface here, not silently pass).
+	// A driver-shaped fake with a spied `client.end()` -- no real I/O.
+	// `execute` succeeds unconditionally: 1.5's own `assertConnected` now
+	// legitimately calls it once (the connectivity probe) before `body`
+	// ever runs, so these tests exist to prove teardown, not to police
+	// which methods get called. `transaction`/`setupSession` are still
+	// never called by these tests, so they throw if reached (a bug
+	// elsewhere calling them would surface here, not silently pass).
 	const fakeCapabilities: DriverCapabilities = {
 		"interactive-transactions": false,
 		"session-state": false,
@@ -82,9 +86,7 @@ describe("withCheckConnection / N2 pool teardown", () => {
 	const buildFakeImporter = (ends: number[]) => {
 		const connection: CheckDriverConnection = {
 			capabilities: fakeCapabilities,
-			execute: async () => {
-				throw new Error("execute should not be called by this test");
-			},
+			execute: async () => [],
 			transaction: async () => {
 				throw new Error("transaction should not be called by this test");
 			},
@@ -128,5 +130,81 @@ describe("withCheckConnection / N2 pool teardown", () => {
 			),
 		).rejects.toThrow("catalog read failed");
 		expect(ends).toHaveLength(1);
+	});
+});
+
+describe("assertConnected / 1.5 connection failures", () => {
+	it("reports a refused connection with the driver's own reason, not an empty one", async () => {
+		// node-postgres's own real shape for a host that resolves to more
+		// than one address and refuses on all of them (measured: connecting
+		// to "localhost" with nothing listening) -- an AggregateError whose
+		// own `message` is "", with the real per-attempt reasons only in
+		// `.errors[]`.
+		const refused = Object.assign(
+			new AggregateError(
+				[
+					Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:55499"), {
+						code: "ECONNREFUSED",
+					}),
+					Object.assign(new Error("connect ECONNREFUSED ::1:55499"), {
+						code: "ECONNREFUSED",
+					}),
+				],
+				"",
+			),
+			{ code: "ECONNREFUSED" },
+		);
+		const session: DriverSession = {
+			execute: async () => {
+				throw refused;
+			},
+		};
+
+		await expect(assertConnected(session)).rejects.toEqual(
+			expect.objectContaining({
+				code: "check-connection-failed",
+				message: expect.stringContaining("ECONNREFUSED 127.0.0.1:55499"),
+			}),
+		);
+	});
+
+	it("distinguishes an unreachable database from an unreadable catalog", async () => {
+		// Case A: the connectivity probe itself fails (every call to
+		// `execute` fails the same way, standing in for a server nothing is
+		// listening on) -- always `check-connection-failed`, and a caller
+		// composed the way `withCheckConnection` composes it (probe first,
+		// `body` only afterward) never reaches `body`.
+		const unreachableSession: DriverSession = {
+			execute: async () => {
+				throw new Error("connect ECONNREFUSED 127.0.0.1:1");
+			},
+		};
+		const catalogRead = vi.fn(async () => "catalog rows");
+
+		await expect(
+			assertConnected(unreachableSession).then(catalogRead),
+		).rejects.toEqual(
+			expect.objectContaining({ code: "check-connection-failed" }),
+		);
+		expect(catalogRead).not.toHaveBeenCalled();
+
+		// Case B: the connectivity probe succeeds (this session answers
+		// "select 1" fine) -- assertConnected itself never throws, so a
+		// *later* catalog-read failure keeps whatever code it already
+		// carries (readCatalog's own `check-catalog-unreadable`, simulated
+		// here), never reclassified by this function.
+		const reachableSession: DriverSession = { execute: async () => [] };
+		const laterCatalogFailure = vi.fn(async () => {
+			throw Object.assign(new Error("permission denied"), {
+				code: "check-catalog-unreadable",
+			});
+		});
+
+		await expect(assertConnected(reachableSession)).resolves.toBeUndefined();
+		await expect(
+			assertConnected(reachableSession).then(laterCatalogFailure),
+		).rejects.toEqual(
+			expect.objectContaining({ code: "check-catalog-unreadable" }),
+		);
 	});
 });

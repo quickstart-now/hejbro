@@ -69,6 +69,27 @@ and goes through the driver.
       explicit grants", "fails with a coded error when a catalog read is
       refused". Files: `packages/cli/src/check/catalog.ts`, that test.
 
+- [x] 1.5 (~8m) Not reaching the database is its own failure, with the
+      driver's own reason attached. Measured on a real server: a wrong
+      port produces `error[check-catalog-unreadable] … could not read
+      the database catalog: .` — an empty reason, and advice about
+      `pg_catalog` privileges on a database that was never reached.
+      node-postgres reports a refused connection as an `AggregateError`
+      whose own `message` is empty and whose causes sit in `errors[]`,
+      so the message extractor must flatten that (and fall back to the
+      error's `code` or its string form rather than emit nothing).
+      Connectivity gets its own code, `check-connection-failed`,
+      established by one trivial read before the catalog reads begin —
+      classifying driver error codes after the fact is guesswork, asking
+      "can I talk to this database at all?" is not. Red:
+      `packages/cli/test/check-driver.test.ts` — "reports a refused
+      connection with the driver's own reason, not an empty one",
+      "distinguishes an unreachable database from an unreadable
+      catalog". Files: `packages/cli/src/check/driver.ts`,
+      `packages/cli/src/check/catalog.ts`,
+      `packages/cli/src/check/expression.ts` (the same extractor), those
+      tests.
+
 ## 2. The comparison, as a pure function
 
 Catalog rows in, findings out. No I/O in this file — that is what lets
@@ -84,7 +105,8 @@ the whole comparison run in CI with no database (the CI has none: no
       `check-object-missing`, `check-object-differs`,
       `check-not-compared`, `check-constraint-not-enforced`,
       `check-declarations-empty`, `check-connection-missing`,
-      `check-driver-missing`, `check-catalog-unreadable` (raised in 1.4,
+      `check-driver-missing`, `check-catalog-unreadable`,
+      `check-connection-failed` (the last two are raised in 1.4 and 1.5,
       but owned here — the whole point of one owner is that a code born
       elsewhere still gets its shape from this list). Inventory lines
       (5.1) carry no code — they
@@ -284,6 +306,24 @@ Postgres rewrites expressions on write.
       check constraint, not only the tables around them". Files:
       `packages/cli/src/commands/check.ts`, that test.
 
+- [x] 4.5 (~9m) The exit code answers three questions, not two: `0`
+      agreed, `1` the database disagrees, `2` the run could not answer
+      (anything not compared, or an empty declaration set). A team running
+      this in CI as a read-only role would otherwise get a red build
+      indistinguishable from real drift — and collapsing the two the
+      other way, into green, is the silent pass this whole change exists
+      to prevent. The precedent is in the script this work ported from:
+      `check-declared-vs-catalog.mjs` already exits 2 for "refusing to
+      report 0 gaps" and 1 for real ones. The report SHALL say which
+      answer it gave and, for `2`, what would make the comparison
+      possible. Also make `renderCheckReport`'s inventory argument
+      **required**: a defaulted one leaves the 4.4 failure available to
+      the next caller, and the inventory is the one section whose absence
+      no test can notice. Red: `packages/cli/test/check-command.test.ts`
+      — "exits 2 when an object could not be compared", "exits 1 when the
+      database disagrees", "exits 0 when everything agreed". Files:
+      `packages/cli/src/commands/check.ts`, that test.
+
 ## 5. Unmanaged inventory
 
 - [x] 5.1 (~8m) [design] Tables inside the declared schemas that no declaration
@@ -311,19 +351,32 @@ one. This group is the other half: proof that the fixtures describe a
 real server. It runs locally, gated on Docker, in the same
 split-config shape `packages/pg` already uses.
 
-- [ ] 6.1 (~9m) The Docker-gated suite and its config split, so the
+- [x] 6.1 (~9m) The Docker-gated suite and its config split, so the
       default `pnpm test` run stays free of skipped tests. This group is
       what makes a driver resolvable in this package for the first time,
       which is exactly what could silently disarm the "driver is missing"
       test in 1.2 — that test must still be able to fail **with**
       `@hejbro/pg` installed, or it has stopped testing anything. Confirm
-      it, do not assume it. Red:
+      it, do not assume it. The witnesses come in both forms, because
+      each proves something the other cannot. **In-process** for the
+      facts that live inside the run — how many check constraints were
+      actually compared, that the pinned catalog queries went out
+      verbatim, that a limited role produced identical findings — none of
+      which a report's text is obliged to expose. **A spawned CLI** for
+      the contract that exists only in a process: the three-way exit
+      code, and argv reaching the command at all, which is precisely what
+      `--url=` slipped through. Spawning needs `@hejbro/pg` resolvable
+      from this package — measured: a spawned CLI in this monorepo fails
+      with `check-driver-missing` without it, because
+      `import("@hejbro/pg")` resolves from the CLI's own location and
+      only a user's install has it above them. A devDependency here is
+      the honest fix; a symlink is not. Red:
       `packages/cli/test/check-live.integration.test.ts` — "connects to a
       real postgres and reads its catalog". Files: that test,
       `packages/cli/vitest.config.ts`,
       `packages/cli/vitest.integration.config.ts`,
       `packages/cli/package.json`.
-- [ ] 6.2 (~7m) The zero-false-positive witness: `examples/postgres`'s
+- [x] 6.2 (~7m) The zero-false-positive witness: `examples/postgres`'s
       committed chain applied to a real server, and `check` against the
       same declarations reports **no** differences — the claim the whole
       expression design rests on, asserted against the server rather than
@@ -341,13 +394,13 @@ split-config shape `packages/pg` already uses.
       "reports no differences for the example's own declarations",
       "compares every check constraint the example declares". Files:
       that test.
-- [ ] 6.3 (~6m) The true-difference witness: alter one column's type on
+- [x] 6.3 (~6m) The true-difference witness: alter one column's type on
       the live server and `check` reports exactly that object and exits
       non-zero. Verified load-bearing by asserting the *unaltered* column
       first and watching it fail. Red: same file — "reports the altered
       column, and only it, against a real server". Files: that test.
 
-- [ ] 6.4 (~7m) The same database, asked by a role that may only read,
+- [x] 6.4 (~7m) The same database, asked by a role that may only read,
       answers the same. A unit test can only assert the *text* of a
       catalog query; that it is genuinely role-independent is a claim
       about a server, so it is settled against one: connect as a limited
@@ -403,8 +456,31 @@ split-config shape `packages/pg` already uses.
       until `acldefault` was added), and the order that found it — the
       implementer asking "where would this signal even come from?"
       *before* building the plumbing, which is what exposed the wrong
-      data source underneath. Files:
-      `blackbox/2026-08-29-add-check-schema.md`.
+      data source underneath.
+
+      Three more, all of them things the finished code cannot say about
+      itself:
+      - **Unit tests here fix a shape; only the live witness fixes a
+        meaning.** It happened four times — the catalog query text, the
+        probe form, the two `Output` entries, the grant source — and
+        each time a mutation that kept the text and broke the meaning
+        passed (`acldefault('r')` → `('s')` is the clearest). The
+        convention that came out of it: a test whose name claims a
+        semantic property must either prove it or say where it is
+        proved.
+      - **A comparison nobody calls is worse than one that is missing.**
+        The expression comparison sat fully built and unreachable for a
+        group and a half; every test passed and the report simply said
+        nothing, which reads as agreement. The task list had named the
+        pieces and not the wiring.
+      - **The repository predicted its own defect.** `flags.ts` states
+        that a fifth value-taking flag which skips its list "silently
+        keeps requiring the space form"; `--url` was the fifth, and
+        `hejbro check --url=…` answered that no `--url` was given — with
+        `DATABASE_URL` set, it would have checked a different database
+        and been confident about it. The warning was three years of
+        commits away from the code that ignored it.
+      Files: `blackbox/2026-08-29-add-check-schema.md`.
 
 ## Verification
 

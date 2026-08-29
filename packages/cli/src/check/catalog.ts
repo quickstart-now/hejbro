@@ -1,6 +1,7 @@
 import { throwHejbroError } from "@hejbro/core";
 import type { DriverRow, DriverSession } from "@hejbro/query";
 import { z } from "zod";
+import { describeDriverError } from "./error-message";
 
 const schemaRow = z.object({ schema: z.string() });
 export type SchemaRow = z.infer<typeof schemaRow>;
@@ -316,14 +317,6 @@ const readCatalogRows = async (session: DriverSession): Promise<Catalog> => {
 	};
 };
 
-/** True for a plain `Error`-like value with a `message`, the shape every read failure this function must not lose (a coded driver error, a plain network error, or a zod validation error alike) -- narrower than `instanceof Error` would need to be, but every real case reaching here already has this shape. */
-const messageOf = (error: unknown): string => {
-	if (error instanceof Error) {
-		return error.message;
-	}
-	return String(error);
-};
-
 /**
  * Reads the whole catalog inventory this command's comparison (group 2)
  * needs, as independent, parameterless read-only statements run
@@ -339,7 +332,7 @@ export const readCatalog = async (session: DriverSession): Promise<Catalog> => {
 	} catch (error) {
 		return throwHejbroError(
 			"check-catalog-unreadable",
-			`hejbro check could not read the database catalog: ${messageOf(error)}. Next: confirm the connected role can read pg_catalog (the standard grant for any login role), and that --url/DATABASE_URL points at a reachable database.`,
+			`hejbro check could not read the database catalog: ${describeDriverError(error)}. Next: confirm the connected role can read pg_catalog (the standard grant for any login role).`,
 		);
 	}
 };
