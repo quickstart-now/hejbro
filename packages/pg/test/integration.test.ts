@@ -7,6 +7,7 @@ import {
 	count,
 	cumeDist,
 	date,
+	desc,
 	emptySnapshot,
 	eq,
 	generateMigration,
@@ -2366,5 +2367,67 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		} finally {
 			await shortPool.end();
 		}
+	});
+
+	/**
+	 * harden-query-surface group 5.4 (#470) -- execution pending, run in
+	 * 7.7's closing slot alongside 6.3 and the suite's own gate (lead-
+	 * approved batching, one Docker slot instead of three). Group 1.4
+	 * already measured `nulls first`/`nulls last` legal in all three
+	 * positions on postgres:17 (a plain select, a window `over(...)`,
+	 * and a set-op whole-set order); this is the difference between
+	 * "the golden string matches" (group 5.2's own unit tests) and "the
+	 * server actually orders the rows that way" when hejbro's own
+	 * `asc()`/`desc()` render the clause. `v` is nullable and one seeded
+	 * row leaves it null on purpose -- the only way to observe where
+	 * nulls actually land, as opposed to merely that the clause parses.
+	 */
+	it("nulls first/last render and the server orders rows that way, in a plain select and in a window over(...), live against a real postgres:17 (group 5.4, #470)", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.ord_nulls (
+				id uuid primary key,
+				v integer
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const ordNulls = table(testSchema, "ord_nulls", {
+			id: uuid().primaryKey(),
+			v: integer(),
+		});
+		const handle = db({ ordNulls }, driver);
+		await handle.insert(ordNulls).values([
+			{ id: "eeeeeeee-0000-4000-8000-000000000001", v: 1 },
+			{ id: "eeeeeeee-0000-4000-8000-000000000002", v: null },
+			{ id: "eeeeeeee-0000-4000-8000-000000000003", v: 2 },
+		]);
+
+		// plain select: desc nulls first -- the null-valued row leads.
+		const selectOrdered = await handle
+			.select(ordNulls)
+			.orderBy(desc(ordNulls.v, { nulls: "first" }));
+		expect(selectOrdered.map((row) => row.v)).toEqual([null, 2, 1]);
+
+		// window over(...): desc nulls last -- row_number() confirms the
+		// null-valued row is ranked AFTER both non-null rows, not just that
+		// it appears last in this particular result set's happenstance order.
+		const windowed = await handle.select(
+			{
+				v: ordNulls.v,
+				rn: over(rowNumber(), {
+					orderBy: [desc(ordNulls.v, { nulls: "last" })],
+				}),
+			},
+			ordNulls,
+		);
+		const byRank = [...windowed]
+			.sort((a, b) => Number(a.rn) - Number(b.rn))
+			.map((row) => row.v);
+		expect(byRank).toEqual([2, 1, null]);
 	});
 });

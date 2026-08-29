@@ -641,8 +641,21 @@ by reading the code, and it holds whatever the server says.
       checks.** It exists to make the first attempt likely, not to
       substitute for the run. Files: those delta files.
 - [ ] 7.2 (~8m) `skills/hejbro`: the ordering vocabulary section says
-      one thing where it used to say two, the aggregate section drops
-      `countWhere`, and the index section gains **#464's rule** — an
+      one thing where it used to say two — concretely **three
+      statements**, identified once group 5 landed: (a) a query's
+      `orderBy` accepts `asc`/`desc`, (b) a query can specify a `nulls`
+      placement, (c) `WindowSpec.orderBy` takes the same vocabulary.
+      **This one is not optional the way `IndexColumnOrigin` was**:
+      `dsl-cheatsheet.md:108,126-127` already documents
+      `.on(asc(col), desc(col, { nulls: "last" }))`, and #470's whole
+      complaint was that the same spelling failed on the query side. It
+      now works, so a user meets the change. The new type names
+      (`OrderedTerm`, `NullsPlacement`) still stay out, on the same
+      reasoning as `IndexColumnOrigin` — users receive those, they do
+      not write them.
+
+      The aggregate section drops `countWhere`, and the index section
+      gains **#464's rule** — an
       index column must belong to the table declaring it, with the
       `foreign-column-ref` error that now enforces it. Document the
       *rule and the error*, which is what a user meets; naming the
