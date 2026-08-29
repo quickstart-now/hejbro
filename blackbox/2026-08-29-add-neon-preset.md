@@ -350,6 +350,36 @@ the repository would have said anything had the copied path been the one
 that moved. When the copies do diverge, this record says when they had
 not yet.
 
+## The instruments failed twice
+
+Both times the reviewer's own tooling produced a confident wrong answer,
+and both times it was caught because the answer was implausible — not
+because a check caught it.
+
+A mutant reported as *surviving* had never been applied: the `sed`
+pattern's indentation did not match the source, the substitution silently
+did nothing, and the suite passed for the ordinary reason. Reporting that
+would have filed a defect that did not exist. The fix was a guard that
+fails when a substitution changes nothing, so "the mutant survived" can
+only be said after "the mutant was applied" is true.
+
+Verifying the pinned blobs, a first run reported **all forty-one missing**.
+The cause was the harness, not the tree: `git` was not on the path inside
+the loop's subshell, and the fallback that wrote `MISSING` on failure did
+not distinguish exit 127 (no such command) from exit 128 (no such path).
+A tool that was never running looked exactly like content that was never
+there. Reporting it would have held the merge on a false finding. The
+rewrite reads the tree once, with no subshell.
+
+The second failure is the same shape as an instrument trap circulated
+from another piece — a command that returns empty when it cannot parse
+its argument, indistinguishable from a true negative — except this one
+was self-inflicted by a fallback written for convenience. What caught
+both was that the result was impossible: a change touching one file
+cannot invalidate forty-one pins. **Surprise is the signal to doubt the
+instrument before the data.** No checklist here would have found either;
+they were found by knowing what the answer had to look like.
+
 ## Final state
 
 Rebased onto `dev` at `f2e7781`, which had moved three commits past the
