@@ -12,6 +12,7 @@ import {
 	table,
 	text,
 	uuid,
+	varchar,
 } from "../src/index";
 
 const app = schema("app");
@@ -105,6 +106,46 @@ describe("FunctionDeclaration<TArgs, TReturns> generics (task 4.10)", () => {
 		expect(bare.args).toEqual([
 			{ argName: "status", typeNode: { typeName: "text" } },
 		]);
+	});
+});
+
+describe("returns as a column builder (#433)", () => {
+	it("a parameterized type declared as a builder keeps its detail", () => {
+		const fn = defineFunction(
+			app,
+			"short_status",
+			{ returns: varchar({ length: 10 }) },
+			(ctx) => {
+				ctx.return(sql`'ok'`);
+			},
+		);
+		expect(renderFunctionSql(fn)).toContain("returns varchar(10)");
+	});
+
+	it("keeps the builder's own type on the phantom generic, not a node reconstructed from TMeta", () => {
+		const fn = defineFunction(
+			app,
+			"short_status_typed",
+			{ returns: varchar({ length: 10 }) },
+			(ctx) => {
+				ctx.return(sql`'ok'`);
+			},
+		);
+		type Returns =
+			typeof fn extends FunctionDeclaration<infer _A, infer R> ? R : never;
+		expectTypeOf<Returns>().toEqualTypeOf<ReturnType<typeof varchar>>();
+	});
+
+	it("a type node stays a valid return declaration (the builder form is additive)", () => {
+		const fn = defineFunction(
+			app,
+			"legacy_style",
+			{ returns: { typeName: "integer" } },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		expect(renderFunctionSql(fn)).toContain("returns integer");
 	});
 });
 

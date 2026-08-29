@@ -2,12 +2,15 @@ import {
 	defineFunction,
 	eq,
 	integer,
+	jsonb,
+	pgEnum,
 	schema,
 	select,
 	sql,
 	table,
 	text,
 	uuid,
+	varchar,
 } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import { db } from "../../src/db/db";
@@ -20,6 +23,40 @@ const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	status: text().notNull(),
 });
+
+const postStatus = pgEnum(app, "post_status", ["draft", "published"]);
+
+type Payload = { readonly count: number };
+
+/** A builder-declared scalar return (#433) — carries its own length, not just a bare `varchar` type node. */
+const shortLabel = defineFunction(
+	app,
+	"short_label",
+	{ returns: varchar({ length: 10 }) },
+	(ctx) => {
+		ctx.return(sql`'ok'`);
+	},
+);
+
+/** A builder-declared enum return — the same enum a column would read as. */
+const currentStatus = defineFunction(
+	app,
+	"current_status",
+	{ returns: postStatus.column() },
+	(ctx) => {
+		ctx.return(sql`'draft'`);
+	},
+);
+
+/** A builder-declared `$type`-branded `jsonb` return. */
+const currentPayload = defineFunction(
+	app,
+	"current_payload",
+	{ returns: jsonb().$type<Payload>() },
+	(ctx) => {
+		ctx.return(sql`'{}'::jsonb`);
+	},
+);
 
 /** Two arguments of different families/types, named-object call convention (owner decision, task 4.10) -- `maxRows`, not `limit`, since `limit` collides with a plpgsql reserved word (fn.test.ts's own fixture hit this first). */
 const searchByStatus = defineFunction(
@@ -41,7 +78,21 @@ const countPosts = defineFunction(
 	},
 );
 
-const appSchema = { posts, searchByStatus, countPosts };
+/** A table carrying the same enum column `currentStatus` returns -- the scalar-path agreement case needs a real column read through `select`, not another `returns`-derived type (which would just restate the claim under test). */
+const articles = table(app, "articles", {
+	id: uuid().primaryKey(),
+	status: postStatus.column().notNull(),
+});
+
+const appSchema = {
+	posts,
+	articles,
+	searchByStatus,
+	countPosts,
+	shortLabel,
+	currentStatus,
+	currentPayload,
+};
 
 /**
  * A minimal, inert `Driver` stub -- every test in this file is a
@@ -129,5 +180,28 @@ describe("db.fn.* named-argument call signature (task 4.10)", () => {
 		// @ts-expect-error a scalar result is never an array -- there is no
 		// numeric index to read.
 		type _NotAnArray = Result[0];
+	});
+});
+
+describe("returns as a column builder resolves through ColumnReadType (#433)", () => {
+	it("a parameterized type (varchar length) survives into the call's result type", () => {
+		type Result = Awaited<ReturnType<typeof handle.fn.shortLabel>>;
+		expectTypeOf<Result>().toEqualTypeOf<string>();
+	});
+
+	it("an enum return resolves to its own literal union, not a bare string", () => {
+		type Result = Awaited<ReturnType<typeof handle.fn.currentStatus>>;
+		expectTypeOf<Result>().toEqualTypeOf<"draft" | "published">();
+	});
+
+	it("the same enum read through select() and through a returns-builder function agree exactly -- the claim this task exists to pin (a table-returning case would only restate SelectResult, already proven above)", () => {
+		type ColumnRead = SelectResult<typeof articles>["status"];
+		type FnResult = Awaited<ReturnType<typeof handle.fn.currentStatus>>;
+		expectTypeOf<ColumnRead>().toEqualTypeOf<FnResult>();
+	});
+
+	it("a $type-branded jsonb return keeps its brand, not unknown", () => {
+		type Result = Awaited<ReturnType<typeof handle.fn.currentPayload>>;
+		expectTypeOf<Result>().toEqualTypeOf<Payload>();
 	});
 });

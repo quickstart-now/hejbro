@@ -236,7 +236,7 @@ Two rules apply to every task here and are not repeated per line:
 
 ## 2. The declaration's return surface
 
-- [ ] 2.1 (~7m) [design] `returns` accepts a column builder:
+- [x] 2.1 (~7m) [design] `returns` accepts a column builder:
       `resolveFunctionReturns` branches on a runtime discriminator
       (`"columnState" in value` — no `isColumnBuilder` exists in the
       codebase today) and stores `columnState.typeNode`, while `TReturns`
@@ -245,7 +245,7 @@ Two rules apply to every task here and are not repeated per line:
       Red: `packages/core/test/define-function.test.ts` — "a
       parameterized type declared as a builder keeps its detail".
       Files: `packages/core/src/dsl/define-function.ts`, that test.
-- [ ] 2.2 (~8m) [design] `FnResult` resolves a builder-declared return
+- [x] 2.2 (~8m) [design] `FnResult` resolves a builder-declared return
       through `ColumnReadType<TReturns>` — the same type `args` already
       resolves through, so the two positions agree by construction.
       Not `ScalarReturnTsType`/`TypeNodeMeta`: those take a `TypeNode`,
@@ -304,6 +304,24 @@ Two rules apply to every task here and are not repeated per line:
       planner; this task is pinning it — `git hash-object` for every file
       the entry names, at final state, since the pin records the recorded
       state and not an earlier draft.
+      The entry carries a **surface delta** section: every symbol this
+      change adds to the user-facing API, with one line of justification
+      each — could an existing primitive express it, and is the name
+      symmetric with its siblings. The count matters as much as the
+      list: this change adds exactly one `BodyContext` member (6 → 7),
+      widens two existing parameters, adds no top-level export, and the
+      one member it adds took a single verb where the database has two
+      spellings (`perform` for a select, plain for a mutation) —
+      the split is a rendering detail decided by the statement's kind,
+      not a distinction the user should have to learn.
+      The section closes with **what was deliberately not added**: the
+      second verb just named; an `INTO` target invented for a returning
+      mutation (the declaration never asked for that variable); a
+      `perform`-style call of a declared function, which is an expression
+      and needs a cross-declaration reference design; set operations
+      admitted into `ctx.execute`, where the honest answer is that no
+      body statement carries one; and a shared `isColumnBuilder`
+      predicate, kept local because only this change needs it.
       Files: `blackbox/2026-08-29-add-body-statements.md`.
 - [ ] 2.6 (~6m) A `returns` builder carrying `notNullElements()` is
       refused. That flag narrows an array's element type to exclude

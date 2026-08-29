@@ -13,11 +13,12 @@ import type { SchemaDeclaration } from "./schema";
 import type { Table } from "./table";
 import { getTableMeta, isTable, toSnakeCase } from "./table";
 
-/** What a function can declare it returns — a table (`returns setof …`), the trigger sentinel (defineTrigger-only), or a scalar type. */
+/** What a function can declare it returns — a table (`returns setof …`), the trigger sentinel (defineTrigger-only), or a scalar type, written as a raw `TypeNode` or a column builder (#433 — the same form `args` already accepts). */
 export type FunctionReturns =
 	| Table
 	| { readonly returnsKind: "trigger" }
-	| TypeNode;
+	| TypeNode
+	| ColumnBuilder;
 
 /**
  * Hides {@link FunctionDeclaration}'s type-only `TArgs`/`TReturns` marker
@@ -59,9 +60,14 @@ const functionDeclarationBrand: unique symbol = Symbol(
  */
 export type FunctionDeclaration<
 	TArgs extends Record<string, ColumnBuilder> = Record<string, ColumnBuilder>,
-	TReturns extends Table | TypeNode | { readonly returnsKind: "trigger" } =
+	TReturns extends
 		| Table
 		| TypeNode
+		| ColumnBuilder
+		| { readonly returnsKind: "trigger" } =
+		| Table
+		| TypeNode
+		| ColumnBuilder
 		| { readonly returnsKind: "trigger" },
 > = {
 	readonly declarationKind: "function";
@@ -94,15 +100,19 @@ export type ArgRefs<TArgs extends Record<string, ColumnBuilder>> = {
 	readonly [K in keyof TArgs]: Expr<BuilderFamily<TArgs[K]>>;
 };
 
+/** `true` for a column builder — the same runtime discriminator `resolveArgs` relies on implicitly (no `isColumnBuilder` exists elsewhere in the codebase; `columnState` is the one field every `ColumnBuilder` instantiation carries and a `Table`/`TypeNode` never does). */
+const isColumnBuilder = (value: object): value is ColumnBuilder =>
+	"columnState" in value;
+
 const resolveFunctionReturns = (
 	identity: string,
 	declaredAt: string | null,
-	returns: Table | TypeNode | undefined,
+	returns: Table | TypeNode | ColumnBuilder | undefined,
 ): FunctionDeclaration["returns"] => {
 	if (returns === undefined) {
 		return throwHejbroError(
 			"missing-function-returns",
-			`defineFunction() "${identity}" requires a "returns" config. Next: pass a table (for "returns setof …") or a TypeNode (for a scalar return).`,
+			`defineFunction() "${identity}" requires a "returns" config. Next: pass a table (for "returns setof …"), a column builder, or a TypeNode (for a scalar return).`,
 			declaredAt,
 		);
 	}
@@ -113,6 +123,9 @@ const resolveFunctionReturns = (
 			schemaName: meta.schema.schemaName,
 			tableName: meta.tableName,
 		};
+	}
+	if (isColumnBuilder(returns)) {
+		return { returnsKind: "scalar", typeNode: returns.columnState.typeNode };
 	}
 	return { returnsKind: "scalar", typeNode: returns };
 };
@@ -172,7 +185,10 @@ const schemaNameOf = (owner: SchemaDeclaration | string): string => {
  */
 export const defineFunction = <
 	TArgs extends Record<string, ColumnBuilder>,
-	TReturns extends Table | TypeNode = Table | TypeNode,
+	TReturns extends Table | TypeNode | ColumnBuilder =
+		| Table
+		| TypeNode
+		| ColumnBuilder,
 >(
 	/**
 	 * The declared schema (`schema("app")`), like `table`/`defineView`/`grant`.
