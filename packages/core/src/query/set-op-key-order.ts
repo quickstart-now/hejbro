@@ -120,15 +120,23 @@ const findKeyOrderMismatch = (
  * A fourth mangled-diagnosis case was considered and ruled out (review):
  * `leftBranchOutputColumns` returns `[]` for a `constantOne` projection
  * (`select 1`, always empty output columns), which would compare as a
- * key-SET mismatch against any non-empty branch. Not reachable through
- * the public builder: `select()` only ever produces `allColumns`/
- * `columns` projections (`query/select.ts`); `constantOne` is built
- * exclusively by `exists()`/`notExists()` (`buildExists`), which return
+ * key-SET mismatch against any non-empty branch. Two production sites,
+ * both closed, for different reasons — naming both, not just the one
+ * a public-API search finds first (Rule 12: an unreachability claim
+ * names every input surface it is claiming closed, not only the
+ * convenient one). `query/select.ts`'s `buildExists` (`exists()`/
+ * `notExists()`) is the only public-builder producer, and it returns
  * `Expr<"boolean">`, never a chainable `SelectLimited`/`SetOpStage` a
- * combinator could take as `other`. Only a hand-assembled `SelectNode`
- * could carry `constantOne` into this guard — the same input class
- * (decoded snapshot, hand-built IR) this guard is already documented as
- * defensive against, not a fifth one.
+ * combinator could take as `other` — `select()` itself only ever
+ * produces `allColumns`/`columns`. `expr/codec.ts`'s decoder also
+ * produces `constantOne` (decoding a stored snapshot), a real second
+ * site — but that is the decode path, already out of this guard's
+ * reach for its own separate, already-documented reason (deliberately
+ * lenient decoding, plus `hejbro verify`'s hash-chain layer one level
+ * up), not because `constantOne` itself is unreachable there. Only a
+ * hand-assembled `SelectNode` bypassing both of these could carry
+ * `constantOne` into this guard directly — the same input class this
+ * guard already documents itself as defensive against, not a fifth one.
  */
 export const assertSameSetOpKeyOrder = (
 	left: SelectNode | SetOpNode,
