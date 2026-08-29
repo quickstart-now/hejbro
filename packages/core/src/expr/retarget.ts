@@ -106,6 +106,8 @@ const retargetedColumnName = (
  * function's own complexity stays low without folding this question's
  * two comparisons into it.
  */
+// A CTE column ref (`schemaName === null`) can never match: `RenameTarget.
+// oldSchema` is `string`, never `null` — load-bearing for add-ctes 2.4.
 const matchesOldTarget = (
 	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
 	target: RenameTarget,
@@ -505,11 +507,19 @@ const retargetWithEntry = (
 /**
  * Retargets a whole {@link WithNode} (add-ctes, task 2.2's positive
  * descent arm) — every entry's own query and the body, same identity
- * invariant as {@link retargetExprNode}. Proves task 2.3's own claim:
- * the registry forces this handler to be *written*, and this is what
- * makes it *descend* (`with: (node) => node` would compile and pass the
- * reference-identity loop without ever reaching a column inside a CTE
- * body).
+ * invariant as {@link retargetExprNode}. Unlike {@link
+ * retargetSelectNode}'s siblings, nothing here forces this handler to
+ * exist: this file has no `queryKind`-keyed registry (`render-sql.ts`'s
+ * `RenderQueryHandlers` has no counterpart here), and `REACHABLE_NODE_KINDS`
+ * is an `ExprNode` list that does not contain `with`. Task 2.3's dedicated
+ * test is the *only* thing standing between this function and a silent
+ * `with: (node) => node` regression, until task 4.3 wires
+ * `retargetViewQuery` to it and 4.5 puts `with` into the reachable-kinds
+ * fixture.
+ *
+ * Not yet called from production code (add-ctes group 2 stopgap) — task
+ * 4.3's own wiring call to make, same deferral shape as {@link
+ * encodeWithNode} in `codec.ts`.
  */
 export const retargetWithNode = (
 	node: WithNode,

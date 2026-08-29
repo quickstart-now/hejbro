@@ -16,6 +16,16 @@ descend.** `with: (node) => node` compiles and passes a
 reference-identity loop. Tasks 2.3 and 2.4 exist because of this and must
 not be dropped.
 
+**And for `retarget.ts` even that overstates it** (found at group 2
+review). There is no mapped-type registry over `queryKind` there — unlike
+`render-sql.ts`'s `RenderQueryHandlers` — and `REACHABLE_NODE_KINDS` is a
+list of `ExprNode` kinds that does not contain `with`. So today **nothing
+forces `retargetWithNode` to exist at all**, and 2.3's dedicated test is
+not a supplement to a registry: it is the only defence there is. That
+changes when 4.3 wires `retargetViewQuery` to it and 4.5 puts `with` into
+the reachable-kinds fixture. Until then, deleting that test removes the
+last thing standing between this node and a silent regression.
+
 ## 1. The WithNode, the from union, and their rendering
 
 - [x] 1.1 (~9m) [design] `WithNode` as a `QueryNode` variant, plus its
@@ -251,14 +261,47 @@ sequenced; whichever reaches `dev` second rebases. The regions differ (a
 factory body versus the `with()` entry point), so a conflict is unlikely
 rather than impossible.
 
-- [ ] 3.1 (~10m) [design] `with()` as a statement root and the CTE
-      reference it hands back. Settled here: the signature (how entries are
-      named and how the body stage is reached), and what the reference
-      exposes — one column per **projected** field, keyed by that field's
-      key. Red: `packages/core/test/query/with.test.ts` — "a statement
-      declares a named query and selects from it". Files:
+- [ ] 3.1 (~10m) [design] `withCte()` as a statement root and the CTE
+      reference it hands back. **The name is settled (lead, 2026-08-29)**:
+      core's standalone export is `withCte`, the chain's method stays
+      `with` (5.4). `with` cannot be a standalone export at all — it is a
+      JS reserved word (`TS1389` on declaration, `TS1003` on a bare named
+      import), and `deleteFrom` is the same escape for the same reason.
+      D102 reserved a **chain method** named `with`, which is a property
+      name and therefore legal; this task's earlier wording widened that
+      reservation to a surface D102 never spoke about.
+      **The shape is settled too (lead, 2026-08-29): a callback.**
+      `withCte((w) => { const ranked = w.as("ranked", …); return
+      select(…).from(ranked); })`. Chosen over a declarative entry array
+      because a reference is then an ordinary local: `select()` needs no
+      further signature work beyond 3.3, and **Postgres's earlier-siblings
+      rule holds by construction** — you can only pass a reference you
+      already hold, so a forward reference is unrepresentable rather than
+      rejected. Group 6's two-stage callback extends the same object
+      (`w.asRecursive(name, anchor, (self) => term)`). The accumulator
+      inside `w` is push-only into a local const, the shape
+      `plpgsql/body-context.ts` already uses; a `w` smuggled out of its
+      callback is the same class as a smuggled reference and is caught by
+      1.3c. Still settled here: what the reference exposes — one column
+      per **projected** field, keyed by that field's key. Red:
+      `packages/core/test/query/with.test.ts` — "a statement declares a
+      named query and selects from it". Files:
       `packages/core/src/query/with.ts` (new), that test.
-- [ ] 3.2 (~8m) [design] The named row environment at the type level: a
+- [ ] 3.2 (~8m) [design] The named row environment at the type level.
+      **Settled (lead, 2026-08-29)**: a projected field's reference is
+      `Omit<TValue, "exprNode"> & { exprNode: ColumnRefNode }`. Two
+      consequences, both load-bearing and both worth stating in the D105
+      row: every type-level brand the projected value carried (`ReadAs`,
+      the column-origin brand) is **preserved for free**, so no brand
+      recovery logic is written; and the reference has **no `typeNode`**,
+      so it is structurally not a `ColumnRef` and cannot reach a foreign
+      key target or an index `.on(...)` **at the type level** — which
+      demotes 1.2c/1.2d's runtime guards to a second line and promotes the
+      first to unrepresentable, the ordering this change argues for in
+      D105, realised on the user-facing surface. The premise was verified
+      before the design: every comparison and filter operator reads only
+      `.exprNode` and `.family` from its operand, and `.typeNode` is
+      required only at declaration sites. Then: a
       computed field keeps its read brand outside the CTE (an
       `over(rowNumber(), …) as rn` is a `bigint` there, not `unknown`),
       and a column the CTE does **not** project is not reachable even
@@ -271,8 +314,12 @@ rather than impossible.
       the builder can express what group 1 can render. Red: same file —
       "select(…, cteRef) builds a select whose from is the reference".
       Files: `packages/core/src/query/select.ts`, that test.
-- [ ] 3.4 (~6m) The `materialized` hint on the builder surface, both
-      values and the absent case. Red: same file — "an entry declares
+- [ ] 3.4 (~6m) [design] The `materialized` hint on the builder surface,
+      both values and the absent case. **Where it goes is this task's to
+      settle** — `w.as(name, query, options?)` reads naturally now that
+      3.1's shape is fixed, but decide it rather than inherit it, and
+      remember 6.5: a `not materialized` hint on a **recursive** entry is
+      accepted, because Postgres ignores it there rather than erroring. Red: same file — "an entry declares
       materialized, not materialized, or neither". Files:
       `packages/core/src/query/with.ts`, that test.
 
@@ -299,6 +346,19 @@ rather than impossible.
       `packages/core/test/engine/rename-with.test.ts` — "a rename rewrites
       a column referenced only inside a stored view's CTE body". Files:
       `packages/core/src/engine/rename/retarget.ts`, that test.
+- [ ] 4.5 (~7m, was 2.5) A `reachable-kinds` producer — a view whose body
+      declares a CTE — so D70's completeness assertion sees the new
+      vocabulary. **Runs after 4.1**, which is what makes such a view
+      constructible at all. The producer lives in the in-memory fixture,
+      **not** in `test/golden/cases/`: the goldens stay unchanged (see
+      Verification). Also confirm here what group 1 deferred on the
+      strength of this task: `encodeQueryNode` deliberately does not take
+      a `WithNode`, classified as a documented boundary rather than a stub
+      **because this assertion was expected to force the question**. If it
+      does not go red for that boundary, the classification was wrong and
+      the boundary needs its own marker. Red:
+      `packages/core/test/naming-conventions.test.ts` completeness. Files:
+      `packages/core/test/expr/reachable-kinds.ts`, that test.
 - [ ] 4.4 (~8m) The Supabase preset's `view-security-invoker` validator,
       which the `FromNode` union makes stop compiling until it answers.
       **Both halves of the answer carry a test**, because the proposal
@@ -341,7 +401,11 @@ route it through the lead rather than absorbing it.
       Red: `packages/query/test/db/with.test.ts` — "a field needing
       conversion arrives converted through a with wrapper". Files:
       `packages/query/src/db/convert.ts`, that test.
-- [ ] 5.4 (~9m) [design] The chain's own `with()`. Settled here: that it
+- [ ] 5.4 (~9m) [design] The chain's own `with()` — **this one keeps the
+      bare name**: a chain method is a property, so the reserved word is
+      legal there, and D102 reserved exactly this slot. The asymmetry with
+      core's `withCte` is deliberate and gets one line in the skill, so
+      the next reader does not rediscover it. Settled here: that it
       takes the core-built list rather than growing a parallel builder, so
       **group 6 adds no chain surface of its own** — if that turns out
       wrong, say so before writing group 6 rather than adding a second
