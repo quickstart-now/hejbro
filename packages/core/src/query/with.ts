@@ -1,5 +1,6 @@
 import type { Table } from "../dsl/table";
 import { isTable, toSnakeCase } from "../dsl/table";
+import { throwHejbroError } from "../error";
 import type {
 	ColumnRef,
 	ColumnRefNode,
@@ -234,6 +235,41 @@ const buildCteRowEnvironment = <TProjection extends SelectProjection>(
 };
 
 /**
+ * Rejects a second `w.as(name, ...)` for a name already declared (add-ctes,
+ * task 3.6) — Postgres refuses this outright (`42712`), and unlike a plain
+ * syntax error, the failure mode without this guard is worse than a build
+ * error: `with "dup" as (...), "dup" as (...)` would render, and the
+ * *second* declaration silently shadows the first, so the query a caller
+ * reads is not the one Postgres runs.
+ */
+const assertNoDuplicateCteName = (
+	entries: ReadonlyArray<WithEntryNode>,
+	name: string,
+): void => {
+	if (entries.some((entry) => entry.name === name)) {
+		throwHejbroError(
+			"duplicate-cte-name",
+			`withCte() declares two entries named "${name}" — Postgres refuses this (42712), and the second declaration would otherwise silently shadow the first inside the rendered statement. Next: give each entry its own name.`,
+		);
+	}
+};
+
+/**
+ * Rejects a `withCte()` call whose callback never declares an entry
+ * (add-ctes, task 3.6) — `with  select ...` (an empty entry list) is not
+ * valid SQL; Postgres's own grammar requires at least one `<name> AS
+ * (<query>)` after `WITH`.
+ */
+const assertNonEmptyCteList = (entries: ReadonlyArray<WithEntryNode>): void => {
+	if (entries.length === 0) {
+		throwHejbroError(
+			"empty-with-list",
+			'withCte() declared no entries at all -- "with select ..." is not valid SQL. Next: call w.as(...) at least once before returning the body.',
+		);
+	}
+};
+
+/**
  * Starts a `WITH` statement (add-ctes, task 3.1). `build` receives a
  * {@link CteBuilder} whose `as(name, query)` both records the entry and
  * hands back the row environment to reference it by — declared entirely
@@ -258,6 +294,7 @@ export const withCte = <TProjection extends SelectProjection>(
 	const entries: WithEntryNode[] = [];
 	const w: CteBuilder = {
 		as: (name, query, options) => {
+			assertNoDuplicateCteName(entries, name);
 			entries.push({
 				name,
 				query: bodyQueryNode(query),
@@ -267,6 +304,7 @@ export const withCte = <TProjection extends SelectProjection>(
 		},
 	};
 	const body = build(w);
+	assertNonEmptyCteList(entries);
 	return {
 		withQuery: {
 			queryKind: "with",

@@ -435,7 +435,7 @@ rather than impossible.
       — "an index expression naming a CTE column names the CTE, not
       `null`". Files: that guard's home, that test.
 
-- [ ] 3.6 (~7m) Two diagnostics the builder can give and currently does
+- [x] 3.6 (~7m) Two diagnostics the builder can give and currently does
       not (group 3 review). Both are the failure class 1.3c exists to
       close — a statement that builds cleanly and fails on the server:
       (a) **a duplicate entry name.** `w.as("dup", …)` twice renders
@@ -644,7 +644,12 @@ route it through the lead rather than absorbing it.
       the CTE-body literal test in 5.2 proves the numbering, and this
       proves the server agrees. Two more the documentation could not
       settle, so the server does: a `not materialized` hint on a recursive
-      entry is **accepted and ignored**, not an error (6.5's premise), and
+      entry is **accepted and ignored**, not an error (6.5's premise); the
+      two shapes 3.6 refuses at build time (a duplicate entry name, an
+      empty `WITH`) are refused by the server too — the first was
+      measured at `42712`, the second **was not measured at all** and is
+      the one place this change wrote a diagnostic from a rendering it
+      only read, so it gets its own line here; and
       a window function inside a recursive term is accepted — the two
       claims 6.5 rests on that no committed test would otherwise exercise
       against a real server. **Every recursive case carries a depth guard
@@ -750,6 +755,24 @@ route it through the lead rather than absorbing it.
       one that differs in kind — the `typeNode` strip, which corrected a
       claim the planner had **already reported upward**, so a false
       sentence was on its way into the D105 row rather than into code.
+      **The one that got furthest before it was caught.** A "measured"
+      type-system defect — `Omit` dropping brands through a generic — was
+      reported up, believed, and acted on: the lead swept the repo, found
+      two more sites of the same shape, and filed them. Independent review
+      then failed to reproduce it four ways, including the only test that
+      matters (revert to `Omit`, run the gates — all green). Root cause: a
+      **stale `packages/core/dist/index.d.ts`**. The staleness was
+      correctly diagnosed mid-investigation, but the two findings made
+      *before* that diagnosis were never re-derived from a clean build.
+      The standing rule this earns: **a stale-artifact diagnosis
+      invalidates every measurement taken before it — re-run them, do not
+      reason about which ones were affected.** Two more: the regression
+      tests added for the "defect" instantiated the type with concrete
+      arguments, so they passed under both forms and pinned nothing —
+      **a pin that stays green when you restore the bug is not a pin**;
+      and the amplification path (implementer → planner → lead → issue →
+      memory) had no verification step at any hop, each trusting the one
+      before.
       **What the process caught that review would not have.** 1.6's
       regression surfaced while writing the red test for an unrelated
       review finding: `select b.id from a` with `b` declared but unjoined

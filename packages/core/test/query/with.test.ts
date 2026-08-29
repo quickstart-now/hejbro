@@ -158,3 +158,28 @@ describe("the materialized hint (add-ctes task 3.4)", () => {
 		expect(rendered).toContain('"neither" as (');
 	});
 });
+
+describe("two diagnostics the builder gives before Postgres ever sees the statement (add-ctes task 3.6)", () => {
+	it("a duplicate entry name is refused", () => {
+		expect(() =>
+			withCte((w) => {
+				w.as("dup", select(posts));
+				const second = w.as("dup", select(posts));
+				return select({ id: second.id }, second);
+			}),
+		).toThrow(
+			expect.objectContaining({
+				code: "duplicate-cte-name",
+				message: expect.stringContaining('"dup"'),
+			}),
+		);
+	});
+
+	it("a with list with no entries is refused", () => {
+		expect(() => withCte(() => select(posts))).toThrow(
+			expect.objectContaining({
+				code: "empty-with-list",
+			}),
+		);
+	});
+});
