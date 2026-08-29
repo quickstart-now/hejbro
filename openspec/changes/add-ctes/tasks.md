@@ -809,7 +809,7 @@ route it through the lead rather than absorbing it.
       its final version is on `dev` and this change meets it at the last
       rebase like any other file. `packages/cli/src/index.ts` needs no
       edit: it re-exports core with `export *`.
-- [ ] 7.4 (~6m) Changeset (D59, `minor`), `openspec/task-times.csv` rows
+- [x] 7.4 (~6m) Changeset (D59, `minor`), `openspec/task-times.csv` rows
       from **measured** durations, README task-time and CRAP badges.
 - [ ] 7.5 (~8m) The D105 rows in `docs/specs/2026-08-19-hejbro-design.md`.
       **Write the wording from scratch, from the confirmed facts — do not
