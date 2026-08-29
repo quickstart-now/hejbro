@@ -97,20 +97,43 @@ holds one row, so `row_number()` restarts. A test asserting only the row
 *count* cannot tell "accepted and evaluated" from "accepted and ignored";
 assert the values.
 
+## The output column alias list is not a premise of recursion
+
+Every recursive probe was first written as `with recursive r(id, v) as
+(…)`, which left "does recursion require the alias list this change puts
+out of scope?" as an unmeasured premise sitting between two approved
+decisions. Measured: it does not.
+
+```sql
+with recursive r as (
+  select id, v from t where parent is null
+  union all
+  select t.id, t.v + r.v from t join r on t.parent = r.id
+) select * from r order by id;   -- 10, 30, 60
+```
+
+The names come from the anchor term's output, and the recursive term
+resolves `r.v` against them — the running total proves the resolution is
+real rather than positional. An anchor projecting explicit aliases
+(`select t.id as node, t.v as val …`) names the CTE's columns `node` and
+`val`, which is exactly the shape this builder emits: an object projection
+always renders `expr as "alias"`. So the alias list is a convenience this
+surface never needs.
+
+The one shape where it would matter is unreachable from here: an anchor
+column that is an unnamed expression (`select id, v * 2 …`) is named
+`?column?` by Postgres — no error, just a useless name. This builder
+cannot produce it, because an object projection always aliases and a
+whole-table projection carries the column's own name.
+
 ### Carried caveats
 
-- The aggregate case was measured with a `group by` in the same query.
-  `group by` alone is accepted (measured separately), so the rejection is
-  the aggregate's — but the pin is cleaner without the confound.
-  Re-measure without it when writing the test.
-- Only `t left join r` was measured. The reverse (`r left join t`, the
-  self-reference on the non-nullable side) is **unmeasured**; the message
-  suggests it may be legal, which is a reason not to assert either way
-  until it is measured.
-- Every recursive probe spelled the output column alias list (`r(id, v)`).
-  Whether a recursive CTE works **without** one is unmeasured, and this
-  change puts the alias list out of scope — so that is a premise the
-  witness must establish, not assume.
+- The `42P19` aggregate pin must avoid the `42803` shadow described
+  above; use the `select 1, sum(…)` form.
+- Deliberately unmeasured, and to stay that way: `SEARCH`/`CYCLE`,
+  nesting beyond one level, and the alias list's interaction with the
+  materialization hints. All three are out of scope, so measuring them
+  would produce facts with no home.
 
 ## Why the join widening is cheap
 
@@ -125,3 +148,14 @@ assignable to a widened union.
 
 Measured on `34be0bd`. Every figure here is re-measured on the implemented
 branch before it is quoted in a decision-log row (task 7.5).
+
+**The implementation saw a different marginal count, and both numbers are
+right.** Widening `JoinNode.table` *after* `from` was already a union and
+its stopgaps were in place opened **6** sites across **5** files, not 4
+across 4 — the probe measured both widenings in one step, so sites that
+the probe attributed to `from` (`walk.ts`'s two join-scope spots among
+them) fall to the join in a sequenced implementation. The claim the
+decision rests on is unaffected and was confirmed: **no new file opens.**
+Whichever number a decision-log row quotes, it names the baseline it was
+measured against, because "+4" and "+6" are answers to two different
+questions.

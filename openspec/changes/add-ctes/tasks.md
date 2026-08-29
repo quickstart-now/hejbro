@@ -80,8 +80,8 @@ not be dropped.
       index on a bare name with no owner. Guard the CTE case only (a null
       schema), with 1.2c's error family. The **general** weakness behind
       it — that any other table's column passes the same way, CTEs
-      aside — is pre-existing, is not this change's to fix, and is
-      reported for its own issue. A guard that covers three of four
+      aside — is pre-existing, is not this change's to fix, and is filed
+      as **#464**. A guard that covers three of four
       declaration sites is the shape a reviewer is right to reject. Red:
       `packages/core/test/dsl/cte-column-ref.test.ts` — "an index column
       list refuses a CTE column reference". Files:
@@ -94,6 +94,21 @@ not be dropped.
       CTE. Red: `packages/core/test/expr/with-scope.test.ts` — "a column
       of an undeclared CTE is refused, naming the statement's available
       sources". Files: `packages/core/src/expr/render-sql.ts`, that test.
+- [ ] 1.3b (~9m) The same rule one level down: a CTE reference inside a
+      **nested subquery** is checked against the declared entries too.
+      1.3 validates the body's and each entry's own from/join targets, and
+      scope checking does not cover the gap — it answers "does this column
+      belong to an available source", not "does this name exist". A
+      subquery's columns resolve happily against its own `from`, so
+      `exists (select 1 from z …)` with `z` declared nowhere builds
+      cleanly and fails on the server, which is precisely what 1.4 exists
+      to prevent one level up. Not a new traversal: the declared-name set
+      rides the render recursion the way `outerScope` already does, and
+      `renderFromNode` checks a CTE reference against it where it already
+      renders one. Red: `packages/core/test/expr/with-scope.test.ts` — "a
+      CTE reference inside an exists subquery is refused when undeclared,
+      and accepted when it names an earlier entry". Files:
+      `packages/core/src/expr/render-sql.ts`, that test.
 - [ ] 1.4 (~8m) [design] Entry visibility within the list. The manual:
       "Without `RECURSIVE`, `WITH` queries can only reference sibling
       `WITH` queries that are earlier in the `WITH` list." Scope for entry
@@ -154,6 +169,14 @@ not be dropped.
       `packages/core/test/expr/reachable-kinds.ts`, that test.
 
 ## 3. The builder surface — after groups 1–2
+
+**Cross-team boundary.** `packages/core/src/query/select.ts` (task 3.3) is
+shared: the fn team holds a narrow exception on it for #423 — one import
+and one registration call at each of six factory sites, no logic. Signal
+the lead when this group starts and when it lands, so the two edits are
+sequenced; whichever reaches `dev` second rebases. The regions differ (a
+factory body versus the `with()` entry point), so a conflict is unlikely
+rather than impossible.
 
 - [ ] 3.1 (~10m) [design] `with()` as a statement root and the CTE
       reference it hands back. Settled here: the signature (how entries are
@@ -222,6 +245,11 @@ not be dropped.
 
 ## 5. The query layer — after group 3
 
+**Cross-team boundary.** `packages/query/src/db/fn.ts` and
+`db/fn-types.ts` belong to the fn team (#433). They are outside this
+group's file list; if an edit here starts to spread into either, stop and
+route it through the lead rather than absorbing it.
+
 - [ ] 5.1 (~7m) `compileHandlers`' arm and what `CompileKind` says for a
       statement wrapped in a `WITH` — the kind is the **body's**, since
       that is what determines how rows are read. Red:
@@ -253,7 +281,13 @@ not be dropped.
 - [ ] 6.1 (~10m) [design] `withRecursive` and the two-stage callback: the
       anchor term fixes the row type, and the recursive term is written
       inside a callback receiving a reference typed from it. Settled here:
-      the callback's shape and where `union all` is spelled. **If this
+      the callback's shape and where `union all` is spelled.
+      **Precondition found in group 1**: 1.4's visibility rule says an
+      entry cannot see itself, and it does not except `recursive: true` —
+      deliberately, since the manual sentence it implements is scoped to
+      "Without `RECURSIVE`". So this task must widen that check before a
+      self-reference can be written at all; a recursive entry sees the
+      earlier entries **and itself**. **If this
       cannot be typed without degrading inference or error messages, stop
       and report** — the proposal commits to renegotiating scope rather
       than narrowing quietly. Red:
