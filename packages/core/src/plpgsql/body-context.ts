@@ -618,7 +618,7 @@ const unusedBuilderNextClause = (queries: ReadonlyArray<QueryNode>): string => {
 		);
 	}
 	clauses.push(
-		"if a builder was made ahead of a choice, construct it only inside the branch that's kept (e.g. ctx.return(condition ? update(t) : deleteFrom(t)) instead of building both first)",
+		"or, if it was one of several built ahead of a choice, construct it only inside the branch you keep",
 	);
 	return clauses.join("; ");
 };
