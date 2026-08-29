@@ -22,10 +22,12 @@ closing slot runs them. This file is the slice's only progress record,
 so a tick that means two different things at two places would make it
 useless.
 
-Current state: groups 1, 2, 3, 4 and 8 are ticked — written, reviewed
-and passed. Group 5 is ticked through 5.3; **5.4 stays unticked because
-it has not been executed**, which is the whole point of the convention.
-Groups 6 and 7 are not started.
+Current state: groups 1, 2, 3, 4, 8, group 5 through 5.3, group 6
+through 6.2, and 7.1/7.2/7.3/7.5 are ticked — written, reviewed and
+passed. Still open: **5.4 and 6.3**, which are written but
+`(execution pending)` until the closing slot runs them; **7.4 and 7.6**,
+complete but awaiting their verdict; and **7.7/7.8/7.9**, the closing
+slot and the wrap-up.
 
 Two groups came back *needs work* and were repaired before ticking:
 group 3 (its D103 left-branch guarantee had regressed from
@@ -397,7 +399,7 @@ measurement exists, never before, so the measurement cannot be read as
 confirming a rule already chosen. **6.1 is not blocked**: it was found
 by reading the code, and it holds whatever the server says.
 
-- [ ] 6.1 (~9m) [design] **Settle the null fork first**, because it
+- [x] 6.1 (~9m) [design] **Settle the null fork first**, because it
       decides the *shape* of the comparison 6.2 then fills in. Found in
       review: `SetOpResult` is a plain mapped type and nullability rides
       inside the value type (1.3), so a rule tightened to "same types"
@@ -475,7 +477,7 @@ by reading the code, and it holds whatever the server says.
       must still be green after 6.2, so it is written now, before the
       rule that could break it. Files: as enumerated per outcome, plus
       that test.
-- [ ] 6.2 (~9m) [design] Write the rule the group-1 measurements
+- [x] 6.2 (~9m) [design] Write the rule the group-1 measurements
       support, and no more, in the shape 6.1 settled.
 
       **The key question is already answered — start from it, do not
@@ -565,7 +567,7 @@ by reading the code, and it holds whatever the server says.
 
 ## 7. Release hygiene
 
-- [ ] 7.1 (~9m) Spec deltas under
+- [x] 7.1 (~9m) Spec deltas under
       `openspec/changes/harden-query-surface/specs/`: `table-declaration`
       (ADDED — a declaration's stored column reference belongs to the
       declaring table), `query-type-inference` (set-op compatibility now
@@ -739,7 +741,7 @@ by reading the code, and it holds whatever the server says.
       describe its own corrected body more accurately — fails with
       *"MODIFIED … omits scenario(s) the current spec still has"*. Fix
       the body; keep the title. Files: those delta files.
-- [ ] 7.2 (~8m) `skills/hejbro`: the ordering vocabulary section says
+- [x] 7.2 (~8m) `skills/hejbro`: the ordering vocabulary section says
       one thing where it used to say two — concretely **three
       statements**, identified once group 5 landed: (a) a query's
       `orderBy` accepts `asc`/`desc`, (b) a query can specify a `nulls`
@@ -801,7 +803,7 @@ by reading the code, and it holds whatever the server says.
       see — **type-system claims, not server-legality claims** — so
       correcting the spec does not make them stale. No edit needed.
       Files: `skills/hejbro/**`.
-- [ ] 7.3 (~6m) D103's note in
+- [x] 7.3 (~6m) D103's note in
       `docs/specs/2026-08-19-hejbro-design.md`, verbatim: "(amended
       2026-08-29 by harden-query-surface, under the owner's standing
       delegation, by the lead session; to be surfaced to the owner on
@@ -855,7 +857,7 @@ by reading the code, and it holds whatever the server says.
       the correction is the reason group 1 observes `pg_typeof` at all.
       Files: `.changeset/*.md`, `openspec/task-times.csv`, `README.md`,
       `blackbox/*`.
-- [ ] 7.5 (~10m) File **three** follow-up issues through
+- [x] 7.5 (~10m) File **three** follow-up issues through
       `~/.claude/skills/managing-hejbro-issues/issue.sh` (type, label,
       assignee, parent and board enforced — never a bare `gh issue
       create`, which orphans them).
