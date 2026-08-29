@@ -323,7 +323,7 @@ Two rules apply to every task here and are not repeated per line:
       body statement carries one; and a shared `isColumnBuilder`
       predicate, kept local because only this change needs it.
       Files: `blackbox/2026-08-29-add-body-statements.md`.
-- [ ] 2.6 (~6m) A `returns` builder carrying `notNullElements()` is
+- [x] 2.6 (~6m) A `returns` builder carrying `notNullElements()` is
       refused. That flag narrows an array's element type to exclude
       `null`, and on a column it is backed by the CHECK `table()` derives
       — a function's `returns` derives no such check, so honoring it in

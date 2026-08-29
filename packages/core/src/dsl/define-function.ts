@@ -134,6 +134,13 @@ const resolveFunctionReturns = (
 		};
 	}
 	if (isColumnBuilder(returns)) {
+		if (returns.columnState.notNullElements === true) {
+			return throwHejbroError(
+				"returns-not-null-elements-unsupported",
+				`defineFunction() "${identity}" declares "returns" with .notNullElements(), but a returns clause derives no constraint the way a column's backing CHECK does — Postgres would still be free to return an array with a null element, so the flag would promise something nothing enforces. Next: drop .notNullElements() from the "returns" builder; the same builder stays legitimate as an arg or a table column.`,
+				declaredAt,
+			);
+		}
 		return {
 			returnsKind: "scalar",
 			typeNode: returns.columnState.typeNode,

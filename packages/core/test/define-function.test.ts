@@ -244,3 +244,65 @@ describe("scalar-returning functions (#424)", () => {
 		).toBe("scalar-return-in-non-scalar-function");
 	});
 });
+
+describe("a returns builder with notNullElements is refused (#433)", () => {
+	it("rejects notNullElements at a returns position", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"tag_list",
+					{ returns: text().array().notNullElements() },
+					(ctx) => {
+						ctx.return(sql`array[]::text[]`);
+					},
+				),
+			),
+		).toBe("returns-not-null-elements-unsupported");
+	});
+
+	it("names why dropping the flag loses nothing", () => {
+		expect(() =>
+			defineFunction(
+				app,
+				"tag_list_2",
+				{ returns: text().array().notNullElements() },
+				(ctx) => {
+					ctx.return(sql`array[]::text[]`);
+				},
+			),
+		).toThrowError(
+			/returns clause derives no constraint.*Next:.*drop \.notNullElements\(\)/s,
+		);
+	});
+
+	it("a plain array return (no notNullElements) is unaffected", () => {
+		const fn = defineFunction(
+			app,
+			"tag_list_3",
+			{ returns: text().array() },
+			(ctx) => {
+				ctx.return(sql`array[]::text[]`);
+			},
+		);
+		expect(renderFunctionSql(fn)).toContain("returns text[]");
+	});
+
+	it("notNullElements is still legitimate as an argument or a column -- the refusal fires only at a returns position", () => {
+		const fn = defineFunction(
+			app,
+			"tag_filter",
+			{ args: { tags: text().array().notNullElements() }, returns: posts },
+			(ctx) => {
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.args[0]?.argName).toBe("tags");
+
+		const tableWithArray = table(app, "articles", {
+			id: uuid().primaryKey(),
+			tags: text().array().notNullElements(),
+		});
+		expect(tableWithArray.tags).toBeDefined();
+	});
+});
