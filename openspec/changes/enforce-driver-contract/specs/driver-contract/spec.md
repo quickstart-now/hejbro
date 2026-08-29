@@ -29,9 +29,16 @@ choice the caller makes independently of it, and SHALL NOT use observed
 behavior to infer, normalize, or correct the declaration itself — reading
 the declaration to select an obligation is required; changing it from
 what is observed is forbidden. This verification is repo-internal; it is
-not part of any package's published surface. Exposing it as a public
-export is additive and is deferred until a driver author outside this
-repository needs it — deferring does not modify this requirement.
+not part of any package's published surface, and a package that consumes
+it internally SHALL wire the two resolution paths that need it
+separately — a test runner's own module aliasing for the specifier at
+test time, and the consuming package's own type-checker path mapping to
+the same single file for type-checking, since a type-checker follows a
+package's published `exports` map rather than a test runner's aliasing
+and would not otherwise see an internal-only module. Exposing this
+verification as a public export is additive and is deferred until a
+driver author outside this repository needs it — deferring does not
+modify this requirement.
 
 #### Scenario: A driver that fails its declared tier's obligation is caught
 - **WHEN** a driver's actual behavior does not carry out the obligation
