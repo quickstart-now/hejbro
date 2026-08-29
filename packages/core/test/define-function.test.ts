@@ -12,6 +12,7 @@ import {
 	table,
 	text,
 	uuid,
+	varchar,
 } from "../src/index";
 
 const app = schema("app");
@@ -108,6 +109,46 @@ describe("FunctionDeclaration<TArgs, TReturns> generics (task 4.10)", () => {
 	});
 });
 
+describe("returns as a column builder (#433)", () => {
+	it("a parameterized type declared as a builder keeps its detail", () => {
+		const fn = defineFunction(
+			app,
+			"short_status",
+			{ returns: varchar({ length: 10 }) },
+			(ctx) => {
+				ctx.return(sql`'ok'`);
+			},
+		);
+		expect(renderFunctionSql(fn)).toContain("returns varchar(10)");
+	});
+
+	it("keeps the builder's own type on the phantom generic, not a node reconstructed from TMeta", () => {
+		const fn = defineFunction(
+			app,
+			"short_status_typed",
+			{ returns: varchar({ length: 10 }) },
+			(ctx) => {
+				ctx.return(sql`'ok'`);
+			},
+		);
+		type Returns =
+			typeof fn extends FunctionDeclaration<infer _A, infer R> ? R : never;
+		expectTypeOf<Returns>().toEqualTypeOf<ReturnType<typeof varchar>>();
+	});
+
+	it("a type node stays a valid return declaration (the builder form is additive)", () => {
+		const fn = defineFunction(
+			app,
+			"legacy_style",
+			{ returns: { typeName: "integer" } },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		expect(renderFunctionSql(fn)).toContain("returns integer");
+	});
+});
+
 /** The `code` of the HejbroError `run` throws — the codes are the stable contract, the prose is not. */
 const codeOf = (run: () => unknown): string => {
 	try {
@@ -201,5 +242,67 @@ describe("scalar-returning functions (#424)", () => {
 				),
 			),
 		).toBe("scalar-return-in-non-scalar-function");
+	});
+});
+
+describe("a returns builder with notNullElements is refused (#433)", () => {
+	it("rejects notNullElements at a returns position", () => {
+		expect(
+			codeOf(() =>
+				defineFunction(
+					app,
+					"tag_list",
+					{ returns: text().array().notNullElements() },
+					(ctx) => {
+						ctx.return(sql`array[]::text[]`);
+					},
+				),
+			),
+		).toBe("returns-not-null-elements-unsupported");
+	});
+
+	it("names why dropping the flag loses nothing", () => {
+		expect(() =>
+			defineFunction(
+				app,
+				"tag_list_2",
+				{ returns: text().array().notNullElements() },
+				(ctx) => {
+					ctx.return(sql`array[]::text[]`);
+				},
+			),
+		).toThrowError(
+			/returns clause derives no constraint.*Next:.*drop \.notNullElements\(\)/s,
+		);
+	});
+
+	it("a plain array return (no notNullElements) is unaffected", () => {
+		const fn = defineFunction(
+			app,
+			"tag_list_3",
+			{ returns: text().array() },
+			(ctx) => {
+				ctx.return(sql`array[]::text[]`);
+			},
+		);
+		expect(renderFunctionSql(fn)).toContain("returns text[]");
+	});
+
+	it("notNullElements is still legitimate as an argument or a column -- the refusal fires only at a returns position", () => {
+		const fn = defineFunction(
+			app,
+			"tag_filter",
+			{ args: { tags: text().array().notNullElements() }, returns: posts },
+			(ctx) => {
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.args[0]?.argName).toBe("tags");
+
+		const tableWithArray = table(app, "articles", {
+			id: uuid().primaryKey(),
+			tags: text().array().notNullElements(),
+		});
+		expect(tableWithArray.tags).toBeDefined();
 	});
 });

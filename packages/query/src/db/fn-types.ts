@@ -1,6 +1,7 @@
 import type {
 	BaseTsType,
 	ColumnBuilder,
+	ColumnReadType,
 	FunctionDeclaration,
 	Table,
 	TypeNode,
@@ -61,25 +62,45 @@ export type FnArgsInput<TArgs extends Record<string, ColumnBuilder>> = {
 
 /**
  * The value/row type one `db.fn.*` call resolves to, derived from the
- * declaration's own `TReturns` (task 4.10): a `Table` target resolves
- * through g3's `SelectResult<TTable>` (the exact mechanism a whole-table
- * `select()`/mutation `.returning()` already use, task 4.11/4.11-mutation
- * — one shared row-shape mechanism, not a fourth independently-typed
- * copy); a scalar `TypeNode` resolves to {@link ScalarReturnTsType} alone
- * (spec: "resolves to a value", not rows — `fn.ts`'s own runtime match
- * this exactly since its scalar-value fix, same task); the trigger
- * sentinel resolves to `never` — `db.fn` can never call one (`fn.ts`'s
- * own `function-return-kind-unsupported` runtime guard is the same
- * rejection enforced at the type level here, wherever `TReturns` is
- * precise enough to say so).
+ * declaration's own `TReturns` (task 4.10, widened #433): a `Table`
+ * target resolves through g3's `SelectResult<TTable>` (the exact
+ * mechanism a whole-table `select()`/mutation `.returning()` already use,
+ * task 4.11/4.11-mutation — one shared row-shape mechanism, not a fourth
+ * independently-typed copy); a builder-declared scalar return resolves
+ * through {@link ColumnReadType} — the exact same type `args` already
+ * resolves every declared column through, so the two positions agree by
+ * construction and nothing the builder carries (`jsonType`, `enumValues`,
+ * an array's element type) is lost the way a `TypeNode`-only mapping
+ * would lose it; a raw `TypeNode` return (still accepted, additive)
+ * resolves through {@link ScalarReturnTsType} alone (spec: "resolves to a
+ * value", not rows — `fn.ts`'s own runtime match this exactly since its
+ * scalar-value fix, same task); the trigger sentinel resolves to `never`
+ * — `db.fn` can never call one (`fn.ts`'s own
+ * `function-return-kind-unsupported` runtime guard is the same rejection
+ * enforced at the type level here, wherever `TReturns` is precise enough
+ * to say so).
+ *
+ * The `TReturns extends Table` arm is checked before the `ColumnBuilder`
+ * arm deliberately: the two are structurally disjoint (a `Table`'s own
+ * columns are keyed by name, a `ColumnBuilder` carries `columnState`
+ * directly), so order between them doesn't change which one a given
+ * `TReturns` matches — kept in the same order the requirement itself
+ * lists them (table, then the two scalar forms) for readability, not
+ * because a mismatch is possible.
  */
 export type FnResult<
-	TReturns extends Table | TypeNode | { readonly returnsKind: "trigger" },
+	TReturns extends
+		| Table
+		| TypeNode
+		| ColumnBuilder
+		| { readonly returnsKind: "trigger" },
 > = TReturns extends Table
 	? ReadonlyArray<SelectResult<TReturns>>
-	: TReturns extends TypeNode
-		? ScalarReturnTsType<TReturns>
-		: never;
+	: TReturns extends ColumnBuilder
+		? ColumnReadType<TReturns>
+		: TReturns extends TypeNode
+			? ScalarReturnTsType<TReturns>
+			: never;
 
 /**
  * One `db.fn.*` callable's exact signature, derived from its own

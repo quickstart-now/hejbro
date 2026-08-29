@@ -13,7 +13,7 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 `db()` handle — no generated types, no second schema to keep in sync).
 
 1. Declare only — never hand-edit `migrations/*.sql` or `hejbro.snapshot.json`; regenerate with `hejbro generate`.
-2. Inside `defineFunction`/`defineTrigger` bodies, never use real JS `if`/`for`/`while` — use `ctx.if()`/`ctx.forEach()`. The body callback runs twice at declaration time (a determinism guard); anything that isn't pure DSL recording throws `nondeterministic-body`.
+2. Inside `defineFunction`/`defineTrigger` bodies, never use real JS `if`/`for`/`while` — use `ctx.if()`/`ctx.forEach()`. The body callback runs twice at declaration time (a determinism guard); anything that isn't pure DSL recording throws `nondeterministic-body`. Run a statement for its side effect with `ctx.execute(...)`; a builder made inside a body and never passed to a consumer (`ctx.execute`, `ctx.return`, `ctx.row`/`ctx.rowOrNull`/`ctx.forEach`, …) fails the declaration with `statement-builder-unused`.
 3. Read the migration's banner comment before merging — it lists every object added/changed/dropped, in order.
 4. `hejbro generate` never guesses at renames: an ambiguous drop+add exits 1 with the exact `--rename`/`--confirm-drop` command to rerun.
 5. Presets (e.g. `@hejbro/supabase`) go in `hejbro.config.ts`'s `presets` array — never register kinds by hand in application code.

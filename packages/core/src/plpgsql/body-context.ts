@@ -1,7 +1,7 @@
 import type { Table } from "../dsl/table";
 import { toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
-import type { ColumnRef, Expr } from "../expr/ast";
+import type { ColumnRef, Condition, Expr, QueryNode } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
 import type { DeleteFinal, InsertFinal, UpdateFinal } from "../query/mutate";
@@ -14,6 +14,11 @@ import type {
 	IfBranch,
 	PlpgsqlVarDeclaration,
 } from "./body-ast";
+import {
+	closeRecordingSession,
+	markConsumed,
+	openRecordingSession,
+} from "./recording-session";
 import { assertValidLocalName } from "./reserved";
 
 /** A value `ctx.raise()` accepts for one `%` placeholder. */
@@ -38,7 +43,7 @@ export type RowColumns<TProjection extends RowProjection> =
 
 /** The chain returned by `ctx.if()` — `elseIf`/`else` are fixed for this phase (decision A10). */
 export type IfChain = {
-	readonly elseIf: (condition: Expr<"boolean">, branch: () => void) => IfChain;
+	readonly elseIf: (condition: Condition, branch: () => void) => IfChain;
 	readonly else: (branch: () => void) => void;
 };
 
@@ -91,9 +96,11 @@ export type BodyContext = {
 		query: SelectLimited<TProjection>,
 		name?: string,
 	) => RowColumns<TProjection>;
-	readonly if: (condition: Expr<"boolean">, thenBranch: () => void) => IfChain;
+	readonly if: (condition: Condition, thenBranch: () => void) => IfChain;
 	readonly raise: (message: string, ...args: ReadonlyArray<RaiseArg>) => void;
 	readonly return: (value: TriggerRow<Table> | ReturnableQuery | Expr) => void;
+	/** Runs a statement for its side effect (#426) — a select renders `perform`, a mutation renders as-is. */
+	readonly execute: (statement: ReturnableQuery) => void;
 	readonly forEach: <TProjection extends RowProjection>(
 		query: SelectLimited<TProjection>,
 		body: (row: RowColumns<TProjection>) => void,
@@ -227,6 +234,7 @@ const recordRow =
 		query: SelectLimited<TProjection>,
 		name?: string,
 	): RowColumns<TProjection> => {
+		markConsumed(query.selectQuery);
 		state.rowCounter.current += 1;
 		const rowName = name ?? `row_${state.rowCounter.current}`;
 		const entries = resolveRowEntries(state, query.projectionInput);
@@ -295,7 +303,7 @@ const makeIfChain = (
 
 const recordIf = (
 	state: RecordingState,
-	condition: Expr<"boolean">,
+	condition: Condition,
 	thenBranch: () => void,
 ): IfChain => {
 	state.frames.push([]);
@@ -337,38 +345,80 @@ const isTriggerRow = (value: unknown): value is TriggerRow<Table> =>
 	typeof value === "object" && value !== null && triggerRowMeta in value;
 
 /**
- * {@link recordReturn}'s `ReturnableQuery` half — split out to keep both
- * halves' own complexity under threshold (D71/#154 ratchet-5). Returns
- * `true` once it has pushed a `returnQuery` statement, `false` if `value`
- * matched none of the four query shapes — structurally unreachable for a
- * type-correct caller (`ReturnableQuery`'s own four members each carry
- * exactly one of these keys), the same class of gap a `switch`'s
- * `default: assertNever(...)` leaves elsewhere in this codebase, kept
- * here as a real runtime `false` (not a throw) so {@link recordReturn}
- * — not this function — decides what "no query shape matched" means for
- * its own caller.
+ * Extracts the `QueryNode` a {@link ReturnableQuery} value carries, by
+ * which of its four own fields is present — shared by {@link
+ * recordReturnShape} and {@link recordExecute} so the same four-way
+ * dispatch isn't repeated. Returns `null` only for a value matching none
+ * of the four shapes — structurally unreachable for a type-correct
+ * caller (`ReturnableQuery`'s own four members each carry exactly one of
+ * these keys), the same class of gap a `switch`'s `default:
+ * assertNever(...)` leaves elsewhere in this codebase, kept here as a
+ * real `null` (not a throw) so each caller decides what "no shape
+ * matched" means for itself.
  */
-const recordReturnQuery = (
-	state: RecordingState,
-	value: ReturnableQuery,
-): boolean => {
+const returnableQueryNode = (value: ReturnableQuery): QueryNode | null => {
 	if ("selectQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.selectQuery });
-		return true;
+		return value.selectQuery;
 	}
 	if ("insertQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.insertQuery });
-		return true;
+		return value.insertQuery;
 	}
 	if ("updateQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.updateQuery });
-		return true;
+		return value.updateQuery;
 	}
 	if ("deleteQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.deleteQuery });
-		return true;
+		return value.deleteQuery;
 	}
-	return false;
+	return null;
+};
+
+/**
+ * Refuses a mutation `QueryNode` that carries `.returning()` — plpgsql's
+ * `perform`/bare-statement form has no `into` clause to receive rows a
+ * `returning()` produces, and Postgres rejects a statement that returns
+ * rows without one (#426). `"returning" in query` is `false` for a
+ * `SelectNode` (a select is never refused here; a select never carries
+ * `.returning()` to begin with), so this only ever fires for the three
+ * mutation kinds.
+ */
+const assertExecuteHasNoReturning = (
+	state: RecordingState,
+	query: QueryNode,
+): void => {
+	if (!("returning" in query) || query.returning === null) {
+		return;
+	}
+	throwHejbroError(
+		"execute-expects-no-returning",
+		`ctx.execute() in ${state.identity} received ${describeQueryKind(query)} that ends in .returning() — plpgsql's PERFORM/bare statement form has no INTO clause to receive the returned rows, and Postgres rejects a statement that returns rows without one. Next: drop the .returning() call to run this ${query.queryKind} for its effect, or pass it to ctx.return(...) instead of ctx.execute() when its rows are the function's result.`,
+		state.declaredAt,
+	);
+};
+
+/**
+ * `ctx.execute(...)` (#426): records a select/insert/update/delete
+ * builder as a statement run for its side effect. `returnableQueryNode`
+ * returning `null` is reachable only by a caller that ignores `ReturnableQuery`
+ * (raw JS, or a `ts-expect-error`/`as any` escape) — the same class of
+ * gap `recordReturnShape` leaves its own `unsupported-return-value` to
+ * name, so this states its own user-facing diagnostic here rather than
+ * hiding behind the exempt `"unreachable"` code (#288 would flag that:
+ * `unreachable` skips `check:next-marker`, and this site is reachable
+ * once the type system is bypassed).
+ */
+const recordExecute = (state: RecordingState, value: ReturnableQuery): void => {
+	const query = returnableQueryNode(value);
+	if (query === null) {
+		throwHejbroError(
+			"execute-expects-statement",
+			`ctx.execute() in ${state.identity} received a value that isn't a select, insert, update or delete builder. Next: pass a select, insert, update or delete builder to ctx.execute() instead.`,
+			state.declaredAt,
+		);
+		return;
+	}
+	assertExecuteHasNoReturning(state, query);
+	markConsumed(query);
+	pushStatement(state, { stmtKind: "execute", query });
 };
 
 /** `true` for a plain expression — anything carrying a `family`/`exprNode` pair that isn't one of the four query shapes or a trigger row. */
@@ -405,6 +455,35 @@ function throwScalarReturnExpectsExpression(state: RecordingState): never {
 	);
 }
 
+/** {@link recordReturnShape}'s non-trigger-row half — split out to keep each function's own branching under the CRAP gate (#154 ratchet-5) now that the trigger-vs-query check (#426/1.10) adds one more branch. */
+const recordReturnQueryShape = (
+	state: RecordingState,
+	value: ReturnableQuery,
+): void => {
+	if (state.returnKind === "scalar") {
+		throwScalarReturnExpectsExpression(state);
+	}
+	const query = returnableQueryNode(value);
+	if (query === null) {
+		throwHejbroError(
+			"unsupported-return-value",
+			`ctx.return() in ${state.identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
+			state.declaredAt,
+		);
+		return;
+	}
+	if (state.returnKind === "trigger") {
+		throwHejbroError(
+			"trigger-return-expects-row",
+			`ctx.return() in ${state.identity} received a query, but a trigger body must return a trigger row (new/old). Postgres rejects "return query" inside a returns trigger function at create time. Next: run the statement with ctx.execute(...), then return the trigger row with ctx.return(new) (or old).`,
+			state.declaredAt,
+		);
+		return;
+	}
+	markConsumed(query);
+	pushStatement(state, { stmtKind: "returnQuery", query });
+};
+
 /** {@link recordReturn}'s non-expression dispatch: a trigger row or a query, exhaustively -- split out so each function's own branching stays under the CRAP gate (#154) once the brand check (#445/R4) is added. */
 const recordReturnShape = (
 	state: RecordingState,
@@ -420,17 +499,7 @@ const recordReturnShape = (
 		});
 		return;
 	}
-	if (state.returnKind === "scalar") {
-		throwScalarReturnExpectsExpression(state);
-	}
-	if (recordReturnQuery(state, value)) {
-		return;
-	}
-	throwHejbroError(
-		"unsupported-return-value",
-		`ctx.return() in ${state.identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
-		state.declaredAt,
-	);
+	recordReturnQueryShape(state, value);
 };
 
 const recordReturn = (
@@ -459,6 +528,7 @@ const recordForEach = <TProjection extends RowProjection>(
 	body: (row: RowColumns<TProjection>) => void,
 	name?: string,
 ): void => {
+	markConsumed(query.selectQuery);
 	state.loopCounter.current += 1;
 	const loopName = name ?? `loop_${state.loopCounter.current}`;
 	registerLocalName(state, loopName);
@@ -488,6 +558,90 @@ const recordForEach = <TProjection extends RowProjection>(
 };
 
 /**
+ * One human-readable name per {@link QueryNode} kind — {@link
+ * unusedBuilderMessage}'s own listing, never render-facing (that's
+ * `renderExecutedStatement`'s job). A mapped type over the closed union
+ * (same technique as `render-body.ts`'s own handler maps, #154
+ * ratchet-5) rather than a `switch`'s `default: assertNever(...)`: the
+ * union has exactly five kinds, so that default is structurally
+ * unreachable and no test could ever cover it — a lookup object has no
+ * such branch to leave uncovered.
+ */
+const queryKindNames: { readonly [K in QueryNode["queryKind"]]: string } = {
+	select: "a select",
+	insert: "an insert",
+	update: "an update",
+	delete: "a delete",
+	setOp: "a set operation",
+};
+
+const describeQueryKind = (query: QueryNode): string =>
+	queryKindNames[query.queryKind];
+
+/**
+ * {@link unusedBuilderMessage}'s `Next:` clause — a select/insert/update/
+ * delete has two working forms (`ctx.execute`, or a consumer that uses its
+ * rows); a set operation has neither, since no body statement accepts one
+ * yet (#423) — pointing at `ctx.execute` for it would send the user to a
+ * call that rejects it (spec: "A failure names a form the body actually
+ * accepts"). Both clauses can apply at once, since one declaration can
+ * leave both kinds unconsumed.
+ */
+const unusedBuilderNextClause = (queries: ReadonlyArray<QueryNode>): string => {
+	const clauses: Array<string> = [];
+	if (queries.some((query) => query.queryKind !== "setOp")) {
+		clauses.push(
+			"run it for its effect with ctx.execute(...), or pass it to ctx.return(...)/ctx.row(...)/ctx.rowOrNull(...)/ctx.forEach(...) when its rows are the result",
+		);
+	}
+	if (queries.some((query) => query.queryKind === "setOp")) {
+		clauses.push(
+			"a body has no statement that carries a set operation on its own — combine it into a select, insert, update or delete first",
+		);
+	}
+	clauses.push(
+		"or, if it was one of several built ahead of a choice, construct it only inside the branch you keep",
+	);
+	return clauses.join("; ");
+};
+
+/** `"statement"`/`"statements"` — the count is user-facing text (#423), not a template that reads fine either way. */
+const pluralizeStatement = (count: number): string => {
+	if (count === 1) {
+		return "statement";
+	}
+	return "statements";
+};
+
+/** `"trigger"` when `returnKind` says so, `"function"` otherwise — the noun {@link unusedBuilderMessage} names the declaration by. */
+const declarationNoun = (returnKind: ReturnKind): string => {
+	if (returnKind === "trigger") {
+		return "trigger";
+	}
+	return "function";
+};
+
+/**
+ * `statement-builder-unused`'s message (#423): names every builder a body
+ * made and never consumed, in the order it was made (`closeRecordingSession`'s
+ * own order — a `Map`'s insertion order, deterministic for a given
+ * recording so the determinism guard (D22) sees the same message from
+ * both runs). Calls the declaration `"trigger"` rather than `"function"`
+ * when `returnKind` says so — the user wrote `defineTrigger`, and
+ * `returnKind` already distinguishes the two without asking the caller
+ * for anything new.
+ */
+const unusedBuilderMessage = (
+	identity: string,
+	returnKind: ReturnKind,
+	queries: ReadonlyArray<QueryNode>,
+): string => {
+	const kinds = queries.map(describeQueryKind).join(", ");
+	const noun = declarationNoun(returnKind);
+	return `${noun} "${identity}" built ${queries.length} ${pluralizeStatement(queries.length)} it never used (${kinds}). Next: ${unusedBuilderNextClause(queries)}.`;
+};
+
+/**
  * Builds the recording {@link BodyContext} for one `defineFunction`/
  * `defineTrigger` call: every `ctx.*` call appends to (or reads back) a
  * frame stack of {@link BodyStatement}s. `finish()` reads the finished tree
@@ -513,6 +667,7 @@ export const createRecordingContext = (
 	declaredAt: string | null,
 	returnKind: ReturnKind,
 ): { readonly ctx: BodyContext; readonly finish: () => FunctionBody } => {
+	openRecordingSession();
 	const state: RecordingState = {
 		identity,
 		declaredAt,
@@ -531,10 +686,26 @@ export const createRecordingContext = (
 		if: (condition, thenBranch) => recordIf(state, condition, thenBranch),
 		raise: (message, ...args) => recordRaise(state, message, args),
 		return: (value) => recordReturn(state, value),
+		execute: (statement) => recordExecute(state, statement),
 		forEach: (query, body, name) => recordForEach(state, query, body, name),
 	};
 
 	const finish = (): FunctionBody => {
+		// Closed first, unconditionally: the checks below still have to run,
+		// but a thrown diagnostic must not leave this declaration's session
+		// open for the next one to inherit (#426).
+		const unconsumed = closeRecordingSession();
+		// Checked before `scalar-return-missing`: a body that both leaves a
+		// builder unused AND never returns has lost written code, which is
+		// the more surprising failure — a missing return is visible just by
+		// reading the same body, an unused builder is not (#423).
+		if (unconsumed.length > 0) {
+			throwHejbroError(
+				"statement-builder-unused",
+				unusedBuilderMessage(identity, returnKind, unconsumed),
+				declaredAt,
+			);
+		}
 		if (returnKind === "scalar" && !state.returned.current) {
 			throwHejbroError(
 				"scalar-return-missing",
@@ -556,6 +727,35 @@ const nondeterministicBodyMessage = (identity: string): string =>
 	`function "${identity}" produced two different recorded ASTs when its body ran twice at build time — the body must be pure and deterministic (no real if/for/while, Date.now(), Math.random(), or reads of mutable outer state). Next: replace real branching with ctx.if(), and non-deterministic values with the DSL's own now()/genRandomUuid() helpers.`;
 
 /**
+ * Runs one recording of `run` against a fresh context, guaranteeing the
+ * recording session {@link createRecordingContext} opened is closed even
+ * if `run` throws (#426) — a session a failed declaration leaves open
+ * would make the *next* declaration inherit its builders, reporting (or
+ * silently swallowing) an unrelated file's mistake. On success `finish()`
+ * itself closes the session; `run` throwing means `finish()` never runs,
+ * so the `catch` force-closes it here before re-throwing.
+ */
+const recordOnce = (
+	identity: string,
+	declaredAt: string | null,
+	returnKind: ReturnKind,
+	run: (ctx: BodyContext) => void,
+): FunctionBody => {
+	const { ctx, finish } = createRecordingContext(
+		identity,
+		declaredAt,
+		returnKind,
+	);
+	try {
+		run(ctx);
+	} catch (error) {
+		closeRecordingSession();
+		throw error;
+	}
+	return finish();
+};
+
+/**
  * Runs `run` against two fresh recording contexts and compares the two
  * recorded {@link FunctionBody} trees structurally (`stableJson`) — the
  * determinism guard `defineFunction`/`defineTrigger` wrap their body
@@ -568,13 +768,8 @@ export const recordBodyWithGuard = (
 	returnKind: ReturnKind,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
-	const first = createRecordingContext(identity, declaredAt, returnKind);
-	run(first.ctx);
-	const firstBody = first.finish();
-
-	const second = createRecordingContext(identity, declaredAt, returnKind);
-	run(second.ctx);
-	const secondBody = second.finish();
+	const firstBody = recordOnce(identity, declaredAt, returnKind, run);
+	const secondBody = recordOnce(identity, declaredAt, returnKind, run);
 
 	if (stableJson(firstBody) !== stableJson(secondBody)) {
 		throwHejbroError(

@@ -7,17 +7,22 @@ import type { FunctionBody } from "../plpgsql/body-ast";
 import type { BodyContext } from "../plpgsql/body-context";
 import { recordBodyWithGuard } from "../plpgsql/body-context";
 import { assertValidLocalName } from "../plpgsql/reserved";
-import type { BuilderFamily, ColumnBuilder } from "../types/column-builder";
+import type {
+	BuilderFamily,
+	ColumnBuilder,
+	NumericMode,
+} from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
 import type { SchemaDeclaration } from "./schema";
 import type { Table } from "./table";
 import { getTableMeta, isTable, toSnakeCase } from "./table";
 
-/** What a function can declare it returns — a table (`returns setof …`), the trigger sentinel (defineTrigger-only), or a scalar type. */
+/** What a function can declare it returns — a table (`returns setof …`), the trigger sentinel (defineTrigger-only), or a scalar type, written as a raw `TypeNode` or a column builder (#433 — the same form `args` already accepts). */
 export type FunctionReturns =
 	| Table
 	| { readonly returnsKind: "trigger" }
-	| TypeNode;
+	| TypeNode
+	| ColumnBuilder;
 
 /**
  * Hides {@link FunctionDeclaration}'s type-only `TArgs`/`TReturns` marker
@@ -59,9 +64,14 @@ const functionDeclarationBrand: unique symbol = Symbol(
  */
 export type FunctionDeclaration<
 	TArgs extends Record<string, ColumnBuilder> = Record<string, ColumnBuilder>,
-	TReturns extends Table | TypeNode | { readonly returnsKind: "trigger" } =
+	TReturns extends
 		| Table
 		| TypeNode
+		| ColumnBuilder
+		| { readonly returnsKind: "trigger" } =
+		| Table
+		| TypeNode
+		| ColumnBuilder
 		| { readonly returnsKind: "trigger" },
 > = {
 	readonly declarationKind: "function";
@@ -78,7 +88,12 @@ export type FunctionDeclaration<
 				readonly schemaName: string;
 				readonly tableName: string;
 		  }
-		| { readonly returnsKind: "scalar"; readonly typeNode: TypeNode };
+		| {
+				readonly returnsKind: "scalar";
+				readonly typeNode: TypeNode;
+				/** The declared numeric mode (#433) — `null` for a raw `TypeNode` return, which carries no mode of its own; `db.fn`'s conversion reads this instead of re-deriving a default from `typeNode` alone, so a builder-declared `bigint({ mode: "number" })` return arrives as `number`, not `bigint`. */
+				readonly mode: NumericMode | null;
+		  };
 	readonly security: "invoker" | "definer";
 	readonly body: FunctionBody;
 	readonly declaredAt: string | null;
@@ -94,15 +109,39 @@ export type ArgRefs<TArgs extends Record<string, ColumnBuilder>> = {
 	readonly [K in keyof TArgs]: Expr<BuilderFamily<TArgs[K]>>;
 };
 
+/** `true` for a column builder — the same runtime discriminator `resolveArgs` relies on implicitly (no `isColumnBuilder` exists elsewhere in the codebase; `columnState` is the one field every `ColumnBuilder` instantiation carries and a `Table`/`TypeNode` never does). */
+const isColumnBuilder = (value: object): value is ColumnBuilder =>
+	"columnState" in value;
+
+/** {@link resolveFunctionReturns}'s builder-scalar half — split out to keep the caller's own branch count under the CRAP gate (#154 ratchet-5) now that a builder return also has its own rejection to check. */
+const resolveScalarBuilderReturns = (
+	identity: string,
+	declaredAt: string | null,
+	returns: ColumnBuilder,
+): FunctionDeclaration["returns"] => {
+	if (returns.columnState.notNullElements === true) {
+		return throwHejbroError(
+			"returns-not-null-elements-unsupported",
+			`defineFunction() "${identity}" declares "returns" with .notNullElements(), but a returns clause derives no constraint the way a column's backing CHECK does — Postgres would still be free to return an array with a null element, so the flag would promise something nothing enforces. Next: drop .notNullElements() from the "returns" builder; the same builder stays legitimate as an arg or a table column.`,
+			declaredAt,
+		);
+	}
+	return {
+		returnsKind: "scalar",
+		typeNode: returns.columnState.typeNode,
+		mode: returns.columnState.mode,
+	};
+};
+
 const resolveFunctionReturns = (
 	identity: string,
 	declaredAt: string | null,
-	returns: Table | TypeNode | undefined,
+	returns: Table | TypeNode | ColumnBuilder | undefined,
 ): FunctionDeclaration["returns"] => {
 	if (returns === undefined) {
 		return throwHejbroError(
 			"missing-function-returns",
-			`defineFunction() "${identity}" requires a "returns" config. Next: pass a table (for "returns setof …") or a TypeNode (for a scalar return).`,
+			`defineFunction() "${identity}" requires a "returns" config. Next: pass a table (for "returns setof …"), a column builder, or a TypeNode (for a scalar return).`,
 			declaredAt,
 		);
 	}
@@ -114,7 +153,10 @@ const resolveFunctionReturns = (
 			tableName: meta.tableName,
 		};
 	}
-	return { returnsKind: "scalar", typeNode: returns };
+	if (isColumnBuilder(returns)) {
+		return resolveScalarBuilderReturns(identity, declaredAt, returns);
+	}
+	return { returnsKind: "scalar", typeNode: returns, mode: null };
 };
 
 type ResolvedArgs<TArgs extends Record<string, ColumnBuilder>> = {
@@ -172,7 +214,10 @@ const schemaNameOf = (owner: SchemaDeclaration | string): string => {
  */
 export const defineFunction = <
 	TArgs extends Record<string, ColumnBuilder>,
-	TReturns extends Table | TypeNode = Table | TypeNode,
+	TReturns extends Table | TypeNode | ColumnBuilder =
+		| Table
+		| TypeNode
+		| ColumnBuilder,
 >(
 	/**
 	 * The declared schema (`schema("app")`), like `table`/`defineView`/`grant`.

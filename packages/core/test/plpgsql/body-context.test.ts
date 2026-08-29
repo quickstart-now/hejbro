@@ -3,10 +3,12 @@ import {
 	defineFunction,
 	defineTrigger,
 	eq,
+	insert,
 	isNotNull,
 	isNull,
 	schema,
 	select,
+	sql,
 	table,
 	uuid,
 } from "../../src/index";
@@ -439,5 +441,67 @@ describe("body-context recording", () => {
 				ctx.return(row);
 			}),
 		).toThrowError(/isn't a plain column reference/);
+	});
+
+	it("an executed insert with returning is refused", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.execute(
+					insert(comments).values({ postId: row.postId }).returning(),
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(/ctx\.execute\(\).*returning/);
+	});
+
+	it("an executed insert without returning is recorded as an execute statement", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				ctx.execute(insert(comments).values({ postId: row.postId }));
+				ctx.return(row);
+			},
+		);
+		const [executeStmt] = declaration.functionDeclaration.body.statements;
+		expect(executeStmt?.stmtKind).toBe("execute");
+	});
+
+	it("ctx.execute() of a value that isn't a statement builder throws execute-expects-statement", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				// @ts-expect-error — a trigger row isn't a valid ctx.execute() argument
+				ctx.execute(row);
+			}),
+		).toThrowError(/isn't a select, insert, update or delete builder/);
+	});
+
+	it("a sql fragment is a body condition", () => {
+		const declaration = defineTrigger(
+			comments,
+			triggerConfig,
+			(ctx, { new: row }) => {
+				ctx
+					.if(sql`${row.postId} is not null`, () => {
+						ctx.raise("has a post");
+					})
+					.elseIf(sql`${row.id} is not null`, () => {
+						ctx.raise("has an id");
+					});
+				ctx.return(row);
+			},
+		);
+		const [ifStmt] = declaration.functionDeclaration.body.statements;
+		expect(ifStmt?.stmtKind).toBe("if");
+	});
+
+	it("a query returned from a trigger body is refused", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.return(select(comments).where(eq(comments.id, row.id)));
+			}),
+		).toThrowError(
+			/must return a trigger row.*Next: run the statement with ctx\.execute/,
+		);
 	});
 });

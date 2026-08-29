@@ -176,3 +176,39 @@ owner's. See `packages/core/src/dsl/define-view.ts`.
 `packages/core/src/dsl/define-function.ts` /
 `packages/core/src/dsl/define-trigger.ts` — body-writing rules are their
 own page: `function-builder-pitfalls.md`.
+
+`returns` accepts a column builder wherever it accepts a raw type node,
+the same form `args` already takes — write `returns: varchar({ length:
+10 })` instead of `returns: { typeName: "varchar", length: 10 }` when the
+type carries detail (a length, an enum, a `$type` brand): the builder's
+own type is what `db.fn`'s call result resolves through, so nothing it
+carries is lost. A `notNullElements()` array can't be declared as a
+`returns` type — a returns clause derives no backing CHECK the way a
+table column does, so the flag would promise something nothing enforces.
+
+```ts
+import { defineFunction, schema, sql, table, uuid, varchar } from "hejbro";
+
+const shop = schema("shop");
+const orders = table(shop, "orders", { id: uuid().primaryKey() });
+
+// returns: a raw type node still works ...
+defineFunction(
+	shop,
+	"order_count",
+	{ returns: { typeName: "bigint" } },
+	(ctx) => {
+		ctx.return(sql`(select count(${orders.id}) from "shop"."orders")`);
+	},
+);
+
+// ... or a column builder, when the type needs its own detail.
+defineFunction(
+	shop,
+	"order_status",
+	{ returns: varchar({ length: 10 }) },
+	(ctx) => {
+		ctx.return(sql`'open'`);
+	},
+);
+```
