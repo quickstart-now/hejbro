@@ -33,7 +33,7 @@ away — these pairs are *not* parallel-safe):
 | Group set | Shared file | Resolution |
 |-----------|-------------|------------|
 | 2 & 5 | `packages/core/src/dsl/index-builder.ts` | 5 follows 2 |
-| **2 & 4 & 5** | `packages/core/src/index.ts` (barrel) | strict order 2 → 4 → 5 |
+| **2 & 4 & 8 & 5** | `packages/core/src/index.ts` (barrel) | strict order 2 → 4 → 8 → 5 |
 | **3 & 8 & 6** | `packages/core/src/query/select.ts` | 3 → 8, and 6.2 after 8 if it needs a shared helper |
 | 5 & 6 | `packages/pg/test/integration.test.ts` | 6 follows 5 |
 
@@ -568,8 +568,14 @@ by reading the code, and it holds whatever the server says.
       item-by-item comparison — not a new rule.
       `orderBy`'s accepted vocabulary and nulls placement),
       `snapshot-format` (the additive-compact `nulls`). Verify with
-      `openspec validate harden-query-surface --strict`. Files: those
-      delta files.
+      **bare** `openspec validate harden-query-surface --strict` — the
+      binary is machine-global (`/usr/local/bin/openspec`), **not** a
+      repo dependency, so it is absent from `node_modules` and
+      `npx openspec@latest` does not resolve it; calling it any other
+      way looks like "the tool is missing". The lead ran it against the
+      in-progress tree (valid, exit 0), which is a snapshot of that
+      moment only: this task re-runs it on the **final** tree, since
+      that is what the PR carries. Files: those delta files.
 - [ ] 7.2 (~8m) `skills/hejbro`: the ordering vocabulary section says
       one thing where it used to say two, the aggregate section drops
       `countWhere`, and the index section gains **#464's rule** — an
@@ -826,9 +832,10 @@ I/O — it reads two projection objects).
       exposure count (no released version wrote set-op snapshots; no
       committed snapshot contains one) as supporting evidence, **not**
       as the reason. A hand-edited snapshot is the one real input
-      surface, and `hejbro verify`'s banner hash chain already reports
-      it. That is a boundary stated under Rule 46, not a gap left
-      implied.
+      surface; `hejbro verify` detects it **when the user runs that
+      command**, which is the honest form of the claim — nothing invokes
+      `verify` automatically. That is a boundary stated under Rule 46,
+      not a gap left implied.
       Files: the `query-builder` delta under this change.
 
 ## Verification

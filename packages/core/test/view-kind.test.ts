@@ -3,11 +3,13 @@ import { defineView } from "../src/dsl/define-view";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
+import type { SetOpNode } from "../src/expr/ast";
 import { expr } from "../src/expr/ast";
 import { eq, isNotNull } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
 import type { ViewSnapshot } from "../src/kinds/view-kind";
 import { viewKind, viewSelectSql } from "../src/kinds/view-kind";
+import type { SetOpStage } from "../src/query/select";
 import { select } from "../src/query/select";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
 import { text, timestamptz, uuid } from "../src/types/column-builder-factories";
@@ -632,5 +634,51 @@ describe("set-operation view bodies (add-set-operations task 2.2)", () => {
 		expect(second.sql).toBe("");
 		const stored = JSON.stringify(result.snapshot);
 		expect(stored).toContain('"set-op"');
+	});
+
+	it("the view's declared columns come from the LEFT branch's IR node, even when construction bypasses the typed union() builder", () => {
+		// #487 (group 3) and harden-query-surface group 8 both gate the
+		// TYPED union() builder -- a hand-assembled SetOpNode (the shape a
+		// snapshot decode, or any other code building the IR directly,
+		// produces) never goes through either gate. This is the property
+		// the test above stopped proving once a mismatched-name branch
+		// pair stopped compiling through the builder (review, #487): the
+		// view's declared columns still have to come from the LEFT
+		// branch's IR, not "the left branch, but only when the builder
+		// happened to construct the node".
+		//
+		// PG server-measured (harden-query-surface group 8's own review,
+		// postgres:17.11): a view created from `select a.email, a.city
+		// from a union select b.city, b.email from b` names its columns
+		// "email, city" -- the LEFT branch's, even though the RIGHT
+		// branch's own first column is literally "city". "Left branch
+		// wins" is the server's real behavior this rule states, not
+		// merely hejbro's own convention.
+		const titledUsers = table(app, "titled_users", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+		});
+		const handBuiltNode: SetOpNode = {
+			queryKind: "setOp",
+			operator: "union",
+			all: false,
+			left: select(activeUsers).selectQuery,
+			right: select(titledUsers).selectQuery,
+			orderBy: [],
+			limit: null,
+			offset: null,
+		};
+		const unionView = defineView(app, "hand_built_union_view", {
+			setOpQuery: handBuiltNode,
+		} as SetOpStage);
+		const result = generateMigration({
+			declarations: [app, activeUsers, titledUsers, unionView],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(result.errors).toEqual([]);
+		const viewSnapshot = Object.entries(result.snapshot.objects).find(([key]) =>
+			key.startsWith("view:"),
+		)?.[1] as { columns: ReadonlyArray<string> };
+		expect(viewSnapshot.columns).toEqual(["id", "name"]);
 	});
 });
