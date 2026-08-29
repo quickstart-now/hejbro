@@ -63,17 +63,15 @@ SCRATCH_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$PACK_DIR" "$SCRATCH_DIR"; }
 trap cleanup EXIT
 
-# name:directory pairs for the five published packages (task 7.10:
-# @hejbro/query/@hejbro/pg promoted alongside the original three now that
-# 7.6/7.7 gave them real dist packaging).
-PACKAGES=(
-  "@hejbro/core:packages/core"
-  "hejbro:packages/cli"
-  "@hejbro/supabase:packages/supabase"
-  "@hejbro/query:packages/query"
-  "@hejbro/pg:packages/pg"
-  "@hejbro/neon:packages/neon"
+# name:directory pairs for every published package, derived from the
+# workspace (#484) -- a hand-maintained list left a new package out of
+# the smoke while the gate stayed green; derivation makes additions
+# automatic and there is nothing here to forget.
+PACKAGES=()
+while IFS= read -r pair; do PACKAGES+=("$pair"); done < <(
+  node -e 'import(process.argv[1]).then(m => console.log(m.publishedPackages().map(p => p.name + ":" + p.dir).join("\n")))' "$REPO_ROOT/scripts/workspace-packages.mjs"
 )
+[ "${#PACKAGES[@]}" -gt 0 ] || { echo "error[pack-install-smoke]: derived package list is empty -- workspace-packages.mjs failed" >&2; exit 2; }
 
 for entry in "${PACKAGES[@]}"; do
   dir="${entry#*:}"

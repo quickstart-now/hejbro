@@ -217,7 +217,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg`, `@hejbro/neon` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1518 functions** over the threshold, highest score 5.00 — measured at `d549cc0` (2026-08-29).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/neon`, `@hejbro/pg`, `@hejbro/query`, `@hejbro/supabase` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1518 functions** over the threshold, highest score 5.00 — measured at `d549cc0` (2026-08-29).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->

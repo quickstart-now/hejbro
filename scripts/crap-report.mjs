@@ -13,17 +13,23 @@
 // threshold itself to 5, same phase, before 0.1.0 (#154's plan, D71).
 //
 // Deliberately package-scoped, not file-allowlisted: `hejbro` (the CLI) is
-// excluded by never being in TARGET_PACKAGES below, not by excluding
-// specific files from a list. `packages/cli/src/commands` measures ~7.6%
-// in-process statement coverage, but those commands are exercised
-// end-to-end through a spawned child process by examples/cli-smoke and
+// excluded by name below, not by excluding specific files from a list.
+// `packages/cli/src/commands` measures ~7.6% in-process statement
+// coverage, but those commands are exercised end-to-end through a spawned
+// child process by examples/cli-smoke and
 // examples/{postgres,supabase}/test/cli.test.ts -- in-process V8 coverage
 // cannot observe a child process, so that number is a measurement
 // artifact, not a real coverage gap. Gating on it would mean rewriting
 // working end-to-end tests as in-process unit tests, which adds tests
-// without adding verification. A package-level scope (this list) can't
-// silently grow the way a per-file exemption list would -- there is
-// nothing here to add to.
+// without adding verification.
+//
+// The target set itself is derived from the workspace (#484): a
+// hand-maintained list fails in the *other* direction -- a new published
+// package is silently unmeasured while the gate stays green (observed
+// with a planted CRAP-30 defect in @hejbro/neon that scanned clean until
+// the old list was edited). Derivation makes additions automatic; the
+// exclusion map below is the only hand-written part, and every entry
+// carries its reason.
 //
 // Complexity is computed with the classic McCabe formula: 1 (base) + 1 per
 // `if`, + 1 per non-default `case` label, + 1 per `&&`/`||`/`??`, + 1 per
@@ -87,6 +93,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { publishedPackages } from "./workspace-packages.mjs";
 
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const CRAP_THRESHOLD = 5;
@@ -95,39 +102,22 @@ export const CRAP_THRESHOLD = 5;
 // is now live at CRAP_THRESHOLD = 5 (phase8-crap-ratchet-5).
 export const EXIT_NONZERO_ON_VIOLATION = true;
 
-export const TARGET_PACKAGES = [
-	{
-		name: "@hejbro/core",
-		srcDir: join(REPO_ROOT, "packages/core/src"),
-		coverageJson: join(REPO_ROOT, "packages/core/coverage/coverage-final.json"),
-	},
-	{
-		name: "@hejbro/supabase",
-		srcDir: join(REPO_ROOT, "packages/supabase/src"),
-		coverageJson: join(
-			REPO_ROOT,
-			"packages/supabase/coverage/coverage-final.json",
-		),
-	},
-	{
-		name: "@hejbro/query",
-		srcDir: join(REPO_ROOT, "packages/query/src"),
-		coverageJson: join(
-			REPO_ROOT,
-			"packages/query/coverage/coverage-final.json",
-		),
-	},
-	{
-		name: "@hejbro/pg",
-		srcDir: join(REPO_ROOT, "packages/pg/src"),
-		coverageJson: join(REPO_ROOT, "packages/pg/coverage/coverage-final.json"),
-	},
-	{
-		name: "@hejbro/neon",
-		srcDir: join(REPO_ROOT, "packages/neon/src"),
-		coverageJson: join(REPO_ROOT, "packages/neon/coverage/coverage-final.json"),
-	},
-];
+// Excluded from CRAP by package name; the value is the reason (kept
+// machine-adjacent so a future removal has to delete the reason with it).
+const EXCLUDED_FROM_CRAP = new Map([
+	[
+		"hejbro",
+		"child-process coverage artifact -- commands are exercised end-to-end via examples/cli-smoke, invisible to in-process V8 coverage",
+	],
+]);
+
+export const TARGET_PACKAGES = publishedPackages()
+	.filter(({ name }) => !EXCLUDED_FROM_CRAP.has(name))
+	.map(({ name, dir }) => ({
+		name,
+		srcDir: join(REPO_ROOT, dir, "src"),
+		coverageJson: join(REPO_ROOT, dir, "coverage/coverage-final.json"),
+	}));
 
 const DECISION_LOOP_KINDS = new Set([
 	ts.SyntaxKind.ForStatement,
