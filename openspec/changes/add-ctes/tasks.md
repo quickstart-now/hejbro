@@ -194,7 +194,7 @@ not be dropped.
 
 ## 2. Serialization and traversal — after group 1
 
-- [ ] 2.1 (~9m) Codec: the `with` token in the query-kind mapping plus
+- [x] 2.1 (~9m) Codec: the `with` token in the query-kind mapping plus
       encode/decode handlers, round-tripping entry order, the `recursive`
       flag, each entry's `materialized` hint, and a nested body — plus a
       CTE reference in **both** positions it can occupy, `from` and a
@@ -230,13 +230,16 @@ not be dropped.
       rewrite a same-named CTE reference or its columns. Prose in the
       proposal is not the form this claim ships in. Red: same file — "a
       table rename leaves a same-named CTE alone". Files: that test only.
-- [ ] 2.5 (~7m) A `reachable-kinds` producer — a view whose body declares
-      a CTE — so D70's completeness assertion sees the new vocabulary. The
-      producer lives in the in-memory fixture, **not** in
-      `test/golden/cases/`: the goldens stay unchanged (see Verification).
-      Red: `packages/core/test/naming-conventions.test.ts` completeness,
-      red the moment the discriminator exists unproduced. Files:
-      `packages/core/test/expr/reachable-kinds.ts`, that test.
+- [~] 2.5 **moved to 4.5** — mis-sequenced here. The producer this task
+      asks for is *a view whose body declares a CTE*, and `defineView`
+      cannot accept one until 4.1 widens `ViewDeclaration.query`. The
+      three ways out were: widen that type from group 2 (breaks 4.1's file
+      ownership), cast around it in the fixture (defeats the fixture's
+      whole point — it exists to prove the *type* accepts the value), or
+      move the task. Moved. The window-function precedent that made this
+      look possible is not the same shape: there, the hand-built node sat
+      *inside* a `SelectNode`'s projection, and the view's own `query`
+      field never changed type.
 
 ## 3. The builder surface — after groups 1–2
 
