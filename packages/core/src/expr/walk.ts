@@ -3,60 +3,40 @@ import type {
 	ExistsNode,
 	ExprNode,
 	SelectExprNode,
-	SelectNode,
 	TableRefNode,
 } from "./ast";
+import { selectChildExprs } from "./select-children";
 
 /**
- * The expressions an `exists()` node's own subquery can itself contain:
- * its `where`, every join's `on`, and every `orderBy` term's `expr` —
- * exactly the fields a correlated reference or a nested `exists()` can
- * appear in (the subquery's `projection` is always `constantOne`, D70,
- * so there is no path through the public DSL for a real expression to
- * reach it — see {@link someDeepExprNode}'s own doc comment). Shared by
- * {@link someDeepExprNode}'s `exists` handler and `dsl/rls.ts`'s
- * declaration-time scope walk (#160), so the two walkers can't drift
- * apart on what "descending into `exists`" means.
+ * Every child expression of an embedded select, `groupBy`/`having`/
+ * `distinct on` included (#444) — unlike {@link existsChildExprs}, this
+ * also carries the projection: a `selectExpr`'s projection is the point,
+ * never a rewritten `constantOne`, so {@link selectChildExprs} (which
+ * always includes it) is exactly the right shape here, with nothing to
+ * subtract.
  */
-const whereExprOrEmpty = (where: ExprNode | null): ReadonlyArray<ExprNode> => {
-	if (where === null) {
-		return [];
-	}
-	return [where];
-};
-
-/** A projection's own expressions — only the `columns` kind carries any. */
-const projectionChildExprs = (
-	projection: SelectNode["projection"],
-): ReadonlyArray<ExprNode> => {
-	if (projection.projectionKind !== "columns") {
-		return [];
-	}
-	return projection.columns.map((column) => column.expr);
-};
-
-/** Every child expression of an embedded select — unlike {@link existsChildExprs}, the projection is included: a `selectExpr`'s projection is the point, never a rewritten `constantOne`. */
 export const selectExprChildExprs = (
 	node: SelectExprNode,
-): ReadonlyArray<ExprNode> => {
-	const { query } = node;
-	const projectionExprs = projectionChildExprs(query.projection);
-	return [
-		...projectionExprs,
-		...whereExprOrEmpty(query.where),
-		...query.joins.map((join) => join.on),
-		...query.orderBy.map((term) => term.expr),
-	];
-};
+): ReadonlyArray<ExprNode> => selectChildExprs(node.query);
 
-export const existsChildExprs = (node: ExistsNode): ReadonlyArray<ExprNode> => {
-	const { query } = node;
-	return [
-		...whereExprOrEmpty(query.where),
-		...query.joins.map((join) => join.on),
-		...query.orderBy.map((term) => term.expr),
-	];
-};
+/**
+ * The expressions an `exists()` node's own subquery can itself contain,
+ * `groupBy`/`having`/`distinct on` included (#444) — everything {@link
+ * selectChildExprs} collects EXCEPT the projection: `buildExists` (D70)
+ * always overwrites an `exists()` subquery's projection with the fixed
+ * `constantOne` shape before an `ExistsNode` exists at all, so there is
+ * no path through the public DSL for a real expression to reach it —
+ * that invariant is what lets this function reuse {@link
+ * selectExprChildExprs}'s own list wholesale rather than re-deriving
+ * "every clause but projection" by hand: `constantOne` contributes zero
+ * expressions to {@link selectChildExprs} either way, so including it
+ * changes nothing here. Shared by {@link someDeepExprNode}'s `exists`
+ * handler and `dsl/rls.ts`'s declaration-time scope walk (#160), so the
+ * two walkers can't drift apart on what "descending into `exists`"
+ * means.
+ */
+export const existsChildExprs = (node: ExistsNode): ReadonlyArray<ExprNode> =>
+	selectChildExprs(node.query);
 
 /**
  * One handler per {@link ExprNode} `nodeKind`, receiving the node narrowed

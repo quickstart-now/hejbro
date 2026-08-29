@@ -244,6 +244,46 @@ describe("binding rls to a table", () => {
 			expect.objectContaining({ code: "rls-policy-foreign-column" }),
 		);
 	});
+
+	// #444 F5: a groupBy inside exists()'s own subquery used to be invisible
+	// to findExprScopeViolation (walk.ts's existsChildExprs missed the two
+	// fields #443 added), so a foreign reference there reached declaration
+	// time unrejected -- the same shape the test above proves for `where`.
+	it("rejects a policy whose exists() groups by a table outside scope", () => {
+		const comments = table(app, "comments_fc3", {
+			id: uuid().primaryKey().defaultRandom(),
+			postId: uuid().notNull(),
+		});
+		const otherTable = table(app, "other_table_fc3", {
+			id: uuid().primaryKey().defaultRandom(),
+			flag: uuid().notNull(),
+		});
+
+		expect(() =>
+			table(
+				app,
+				"posts_fc3",
+				{ id: uuid().primaryKey().defaultRandom() },
+				() => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("bad_group_by")
+							.for("select")
+							.to("anon")
+							.using(
+								exists(
+									select(comments)
+										.where(eq(comments.id, comments.id))
+										.groupBy(otherTable.flag),
+								),
+							),
+					}),
+				}),
+			),
+		).toThrowError(
+			expect.objectContaining({ code: "rls-policy-foreign-column" }),
+		);
+	});
 });
 
 describe("nested reads inside policy expressions (add-relational-reads group 2 review F5)", () => {

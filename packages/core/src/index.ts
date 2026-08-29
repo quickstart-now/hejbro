@@ -206,6 +206,12 @@ export {
 	renderTableRef,
 	renderUpdate,
 } from "./expr/render-sql";
+export type { ClauseTraversal } from "./expr/select-children";
+export {
+	replaceSelectChildExprs,
+	SELECT_CLAUSE_TRAVERSALS,
+	selectChildExprs,
+} from "./expr/select-children";
 export type { SqlInterpolation } from "./expr/sql-template";
 export { sql } from "./expr/sql-template";
 export type {

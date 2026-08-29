@@ -144,6 +144,51 @@ describe("someDeepExprNode (#141: exists()-descending sibling of someExprNode)",
 		expect(someExprNode(node, isExists)).toBe(true);
 	});
 
+	// #444 F5a: existsChildExprs/selectExprChildExprs used to hand-list
+	// where/joins.on/orderBy only, missing the two fields #443 added.
+	it("descends into an exists() subquery's having and groupBy", () => {
+		const existsOverGroupBy = (inner: ExprNode): ExprNode => ({
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: { projectionKind: "constantOne" },
+				from: { schemaName: "app", tableName: "profiles" },
+				joins: [],
+				where: null,
+				groupBy: [inner],
+				having: null,
+				orderBy: [],
+				limit: null,
+				offset: null,
+				distinct: null,
+			},
+		});
+		const existsOverHaving = (inner: ExprNode): ExprNode => ({
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: { projectionKind: "constantOne" },
+				from: { schemaName: "app", tableName: "profiles" },
+				joins: [],
+				where: null,
+				groupBy: [],
+				having: inner,
+				orderBy: [],
+				limit: null,
+				offset: null,
+				distinct: null,
+			},
+		});
+		expect(
+			someDeepExprNode(existsOverGroupBy(rawSqlCall("marker")), isMarker),
+		).toBe(true);
+		expect(
+			someDeepExprNode(existsOverHaving(rawSqlCall("marker")), isMarker),
+		).toBe(true);
+	});
+
 	// The remaining ExprNode kinds each get their own case so every branch
 	// of someDeepExprNodeHandlers is exercised, not just the ones the
 	// exists()-descent tests above already touch (comparison, logical).
