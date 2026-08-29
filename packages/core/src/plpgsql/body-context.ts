@@ -14,6 +14,10 @@ import type {
 	IfBranch,
 	PlpgsqlVarDeclaration,
 } from "./body-ast";
+import {
+	closeRecordingSession,
+	openRecordingSession,
+} from "./recording-session";
 import { assertValidLocalName } from "./reserved";
 
 /** A value `ctx.raise()` accepts for one `%` placeholder. */
@@ -574,6 +578,7 @@ export const createRecordingContext = (
 	declaredAt: string | null,
 	returnKind: ReturnKind,
 ): { readonly ctx: BodyContext; readonly finish: () => FunctionBody } => {
+	openRecordingSession();
 	const state: RecordingState = {
 		identity,
 		declaredAt,
@@ -597,6 +602,10 @@ export const createRecordingContext = (
 	};
 
 	const finish = (): FunctionBody => {
+		// Closed first, unconditionally: `scalar-return-missing` below still
+		// has to fire, but a thrown diagnostic must not leave this
+		// declaration's session open for the next one to inherit (#426).
+		closeRecordingSession();
 		if (returnKind === "scalar" && !state.returned.current) {
 			throwHejbroError(
 				"scalar-return-missing",
@@ -618,6 +627,35 @@ const nondeterministicBodyMessage = (identity: string): string =>
 	`function "${identity}" produced two different recorded ASTs when its body ran twice at build time — the body must be pure and deterministic (no real if/for/while, Date.now(), Math.random(), or reads of mutable outer state). Next: replace real branching with ctx.if(), and non-deterministic values with the DSL's own now()/genRandomUuid() helpers.`;
 
 /**
+ * Runs one recording of `run` against a fresh context, guaranteeing the
+ * recording session {@link createRecordingContext} opened is closed even
+ * if `run` throws (#426) — a session a failed declaration leaves open
+ * would make the *next* declaration inherit its builders, reporting (or
+ * silently swallowing) an unrelated file's mistake. On success `finish()`
+ * itself closes the session; `run` throwing means `finish()` never runs,
+ * so the `catch` force-closes it here before re-throwing.
+ */
+const recordOnce = (
+	identity: string,
+	declaredAt: string | null,
+	returnKind: ReturnKind,
+	run: (ctx: BodyContext) => void,
+): FunctionBody => {
+	const { ctx, finish } = createRecordingContext(
+		identity,
+		declaredAt,
+		returnKind,
+	);
+	try {
+		run(ctx);
+	} catch (error) {
+		closeRecordingSession();
+		throw error;
+	}
+	return finish();
+};
+
+/**
  * Runs `run` against two fresh recording contexts and compares the two
  * recorded {@link FunctionBody} trees structurally (`stableJson`) — the
  * determinism guard `defineFunction`/`defineTrigger` wrap their body
@@ -630,13 +668,8 @@ export const recordBodyWithGuard = (
 	returnKind: ReturnKind,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
-	const first = createRecordingContext(identity, declaredAt, returnKind);
-	run(first.ctx);
-	const firstBody = first.finish();
-
-	const second = createRecordingContext(identity, declaredAt, returnKind);
-	run(second.ctx);
-	const secondBody = second.finish();
+	const firstBody = recordOnce(identity, declaredAt, returnKind, run);
+	const secondBody = recordOnce(identity, declaredAt, returnKind, run);
 
 	if (stableJson(firstBody) !== stableJson(secondBody)) {
 		throwHejbroError(

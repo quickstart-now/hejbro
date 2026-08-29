@@ -55,7 +55,7 @@ Two rules apply to every task here and are not repeated per line:
       Red: `packages/core/test/plpgsql/body-context.test.ts` — "an
       executed insert with returning is refused".
       Files: `plpgsql/body-context.ts`, that test, the xref reference.
-- [ ] 1.3 (~9m) [design] `plpgsql/recording-session.ts`: a session opened
+- [x] 1.3 (~9m) [design] `plpgsql/recording-session.ts`: a session opened
       by `createRecordingContext` and closed by `finish()`, holding the
       whole mechanism — the sites in `query/*` only call into it. One
       call shape covers creation and supersession together
@@ -67,8 +67,18 @@ Two rules apply to every task here and are not repeated per line:
       tree at `finish()`: reachability alone would need no instrumented
       consumers, but a chain's stages are spread copies (a parent node is
       never the node in the tree) and `buildExists` rewrites its
-      subquery's projection, so measure both before choosing. The session
-      must be inert when none is open, must close even when the body
+      subquery's projection, so measure both before choosing.
+      **Settled by measurement: explicit registration, for creation and
+      consumption both.** Reachability yields false positives — the kind
+      that break working declarations — in every case but one: 19
+      spread-copy sites across the two files with no
+      return-the-same-reference shortcut anywhere, so no chain stage is
+      ever the node in the tree; `buildExists` copies; `defineView` never
+      enters the body's tree at all; and the json aggregates keep the
+      reference or copy it *depending on the selected column's type*, so
+      the same body would pass or fail by what it selects. A hybrid does
+      not rescue it, since all of those are consumption.
+      The session must be inert when none is open, must close even when the body
       callback throws (a session left open makes the *next* declaration
       inherit the previous one's builders and fail in an unrelated file),
       and must live on the frame stack `RecordingState` already keeps
