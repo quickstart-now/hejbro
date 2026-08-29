@@ -22,12 +22,13 @@ closing slot runs them. This file is the slice's only progress record,
 so a tick that means two different things at two places would make it
 useless.
 
-Current state: everything is ticked except **7.8** (assemble the
-merge-request declaration) and **7.9** (the wrap-up), which are the last
-two steps. 5.4 and 6.3 carried `(execution pending)` until the closing
-slot ran them; they now read `(executed in 7.7)`, and the distinction
-between "written" and "run" stayed visible in this file for the whole
-time it was true.
+Current state: every task is ticked. 5.4 and 6.3 carried
+`(execution pending)` until the closing slot ran them; they now read
+`(executed in 7.7)`, and the distinction between "written" and "run"
+stayed visible in this file for the whole time it was true. 7.9 ran
+before 7.8 (this commit) precisely because 7.9 is the last task that
+edits this file — running it after 7.8 would have invalidated the
+declaration's own frozen SHA with 7.9's own edit.
 
 Two groups came back *needs work* and were repaired before ticking:
 group 3 (its D103 left-branch guarantee had regressed from
@@ -1005,7 +1006,7 @@ by reading the code, and it holds whatever the server says.
       failure, and the slice's overall pass is withheld until green.
       Files: none — this task runs a command and records its output.
 
-- [ ] 7.8 (~9m) **Assemble the merge-request declaration.** Added late,
+- [x] 7.8 (~9m) **Assemble the merge-request declaration.** Added late,
       then corrected twice: it first read "open the PR", which is not the
       team's step — **PR creation belongs to the lead**, who verifies the
       declaration (SHA equals the remote head, base is current `dev`,
@@ -1043,12 +1044,24 @@ by reading the code, and it holds whatever the server says.
       **Not in the body**: lead rule numbers, and anything a reader
       cannot resolve from the repository. Same rule the archived
       artifacts follow.
-- [ ] 7.9 (~5m) After the closing slot passes, **tick 5.4 and 6.3** —
+- [x] 7.9 (~5m) After the closing slot passes, **tick 5.4 and 6.3** —
       they are the only boxes deliberately left open, and forgetting
       them would leave the slice's own progress record claiming two
       tasks were never finished. Then confirm `tasks.md`, `design.md`,
       `measurements.md` and every delta are committed, since this file
       is the last thing edited and is therefore the likeliest to drift.
+
+      **Ran before 7.8, not after** — this task edits `tasks.md` itself
+      (these two ticks), so running it after 7.8 would invalidate the
+      declaration's frozen SHA with its own edit. This tick and 7.8's
+      own are the last file edit this slice makes; the blackbox Refs
+      pin for `tasks.md` is recomputed against this exact staged
+      content in the same commit, so the pin and the file agree from
+      the moment either is committed. Confirmed: `design.md`,
+      `measurements.md`, and all four spec deltas are committed (`git
+      status` clean before this commit); the task-times decision (no
+      rows, absence recorded rather than invented) stands in
+      `design.md`'s "Task durations" section.
 
 ## 8. Branch column order is checked at build time (#487, second half)
 
