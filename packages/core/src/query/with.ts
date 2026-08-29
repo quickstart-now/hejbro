@@ -150,9 +150,19 @@ export type CteEntryOptions = {
  * union-compatible with the anchor" is the exact question `SetOpResult`
  * already answers. A missing/extra key still resolves to `never` (task 6.2's
  * own pin, kept); a key present on both sides but computed differently
- * (e.g. a window function or `distinct` in the recursive term) now type-
- * checks, with the result column typed as the union of both — same as any
- * other `union`.
+ * (e.g. a window function or `distinct` in the recursive term) now
+ * type-checks.
+ *
+ * Only the *compatibility check* is shared with a plain union — the
+ * *result type* is not: `SetOpResult`'s own union-of-both-branches typing
+ * is used here purely to decide `never`-or-not, and is discarded rather
+ * than propagated into `asRecursive`'s own return type ({@link CteReference}
+ * `<TProjection>`, the anchor's type — see `asRecursive`'s own docstring).
+ * That split matches Postgres: an ordinary `union` widens a mismatched
+ * column type (`int` and `bigint` resolve to `bigint`), but a recursive
+ * CTE refuses to (measured, `42804`, "column N has type integer in
+ * non-recursive term but type bigint overall") — its row type is always
+ * the anchor's, not a union.
  */
 type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
 	SetOpResult<TProjection, TRecursiveProjection>,

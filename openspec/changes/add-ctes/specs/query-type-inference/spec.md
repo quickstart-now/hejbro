@@ -30,9 +30,14 @@ anchor term's projection. A recursive term whose projection does not match
 the anchor's SHALL NOT type-check, matching Postgres's requirement that
 both branches of the union agree.
 
-"Match" here means **the same key set**, and a column's type is the union
-of the two branches' — the same rule a set operation already uses, because
-a recursive CTE *is* an anchor and a recursive term joined by `UNION`.
+"Match" here means **the same key set** — the compatibility test a set
+operation already applies, because a recursive CTE *is* an anchor and a
+recursive term joined by `UNION`. The **CTE's own column types come from
+the anchor**, not from a union of the two branches: a plain union widens
+(`int` and `bigint` resolve to `bigint`), but a recursive CTE refuses to
+(`42804`, "column N has type integer in non-recursive term but type
+bigint overall"). So the compatibility *test* is shared; the resulting
+row type is the anchor's.
 Requiring the two projections to be identical would be stricter than that
 rule and would reject the constructs Postgres accepts in a recursive term:
 a field the anchor reads straight from a column and the recursive term
@@ -60,5 +65,6 @@ D103 settled and belongs to its own change.
 #### Scenario: A field computed differently on each side is accepted
 - **WHEN** the anchor projects a column directly and the recursive term
   projects the same key through a window function
-- **THEN** it type-checks, and the field's type is the union of the two —
-  the rule a set operation already applies to its branches
+- **THEN** it type-checks, and the field reads back as the **anchor's**
+  type — how the recursive term computes it is not part of the CTE's row
+  type

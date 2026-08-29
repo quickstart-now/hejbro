@@ -865,11 +865,19 @@ const cteMarkers = (
  * 6.1): without `recursive`, only the earlier entries (task 1.4); with it,
  * the earlier entries **and this one** — `node.recursive` is the list's own
  * flag (task 6.4, Postgres's own grammar), so it widens visibility for
- * every entry, not just the ones that actually self-reference. A later
- * sibling stays invisible either way: this builder's own `w.as`/
- * `w.asRecursive` only ever hand out references to entries already
- * declared, so mutual forward-reference between siblings is
- * unrepresentable, not merely unguarded.
+ * every entry, not just the ones that actually self-reference.
+ *
+ * A later sibling stays invisible either way, even when `recursive` is
+ * true — and here this builder IS stricter than Postgres (measured, group
+ * 6 review): a `RECURSIVE` list lets any entry reference any other, not
+ * only itself, so a genuinely mutual pair of recursive siblings is legal
+ * SQL this surface cannot spell. That is accepted, not overlooked: it
+ * follows from the two-stage callback's own shape, the same root cause
+ * that already makes a plain (non-recursive) forward reference
+ * unrepresentable — `w.as`/`w.asRecursive` only ever hand back a
+ * reference to an entry already bound by a JS `const`, so there is no
+ * position in the callback where a not-yet-declared sibling's reference
+ * could be obtained at all, recursive or not.
  */
 const visibleEntryNames = (
 	declaredNames: ReadonlyArray<string>,

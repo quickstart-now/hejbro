@@ -386,27 +386,42 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		containerStarted.current = true;
 		waitUntilReady();
 		const port = discoverHostPort();
+		// add-ctes, task 7.1: a client-level default (not `alter database`),
+		// so it applies to every connection this pool ever hands out --
+		// including the one the ALTER statement itself would have run on,
+		// which stays at its own session default regardless of what the
+		// ALTER changes for connections opened later (measured: `alter
+		// database ... set statement_timeout` does not retroactively apply
+		// to the session that ran it). Today's recursive fixtures are trees
+		// (termination is a property of the data, not the query), but
+		// Postgres accepts a self-reference on `r left join t`'s
+		// non-nullable side and that construct does not terminate on its
+		// own (design.md) -- an unguarded witness would hang CI instead of
+		// failing it the moment a future fixture grows a cycle.
 		pool.current = new Pool({
 			host: "localhost",
 			port,
 			user: "postgres",
 			password: "postgres",
 			database: "postgres",
+			// biome-ignore lint/style/useNamingConvention: node-postgres's own PoolConfig key -- not ours to rename.
+			statement_timeout: 5_000,
 		});
-		// add-ctes, task 7.1: a database-level default, not a per-query one --
-		// every NEW connection this pool opens from here on inherits it, so
-		// every recursive test below is guarded without repeating the SET at
-		// each call site. Today's recursive fixtures are trees (termination
-		// is a property of the data, not the query), but Postgres accepts a
-		// self-reference on `r left join t`'s non-nullable side and that
-		// construct does not terminate on its own (design.md) -- an
-		// unguarded witness would hang CI instead of failing it the moment a
-		// future fixture grows a cycle.
-		await pgDriver(pool.current).execute({
-			sql: "alter database postgres set statement_timeout = '5s'",
+		// The guard proves itself here rather than only in a comment --
+		// every connection this pool hands out reports the same value back.
+		const guardCheck = (await pgDriver(pool.current).execute({
+			sql: "show statement_timeout",
 			params: [],
 			kind: "sql",
-		});
+		})) as ReadonlyArray<{
+			// biome-ignore lint/style/useNamingConvention: this is postgres's own `show` output column name, not ours to rename.
+			statement_timeout: string;
+		}>;
+		if (guardCheck[0]?.statement_timeout !== "5s") {
+			throw new Error(
+				`statement_timeout guard did not take effect on the pool -- show statement_timeout returned ${JSON.stringify(guardCheck[0])}, expected "5s". Next: check the Pool config's statement_timeout option is still honored by the installed pg version.`,
+			);
+		}
 	}, 60_000);
 
 	afterAll(async () => {
@@ -2160,12 +2175,19 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(stillThere).toHaveLength(3);
 
 		// The two shapes 3.6 refuses at build time are refused by the
-		// server too (measured at group 3 review) -- exercised here via raw
-		// SQL, since the builder's own guards make both unreachable through
+		// server too (first measured at group 3 review, independently
+		// re-measured at group 7) -- exercised here via raw SQL, since the
+		// builder's own guards make both unreachable through
 		// `withCte()`/`w.as()`. Sent through `driver.execute()` directly
 		// (not `handle.execute()`), so the raw pg error surfaces
 		// unwrapped -- `query-execution-failed` is `@hejbro/query`'s own
-		// wrapper (`db/execute.ts`), never the driver's.
+		// wrapper (`db/execute.ts`), never the driver's. The two diagnostics
+		// differ in kind, not just code: `42712` is a SEMANTIC check with a
+		// stable message, asserted in full; `42601` is a PARSER error whose
+		// message follows whatever token comes next (`with select 1` reads
+		// differently from `with a as () select 1`), so only the SQLSTATE is
+		// asserted for it -- an empty `WITH` is text Postgres cannot even
+		// parse, not a statement it runs and rejects.
 		try {
 			await driver.execute({
 				sql: 'with "dup" as (select 1), "dup" as (select 2) select 1',
@@ -2175,6 +2197,9 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			expect.unreachable("a duplicate CTE name should have been refused");
 		} catch (error) {
 			expect(error).toHaveProperty("code", "42712");
+			expect((error as { message?: string }).message).toMatch(
+				/WITH query name "dup" specified more than once/,
+			);
 		}
 		try {
 			await driver.execute({
@@ -2257,5 +2282,28 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			return select({ id: r.id, v: r.v }, r).orderBy(r.id);
 		});
 		expect(windowed.map((row) => Number(row.v))).toEqual([10, 1, 1]);
+
+		// A second, independent guard layer, not a substitute for the
+		// pool-level statement_timeout above: a self-reference on `r left
+		// join t`'s non-nullable side is accepted by Postgres and does not
+		// terminate on its own (design.md), since the LEFT JOIN yields a
+		// row every iteration even once the tree runs out of real children.
+		// An explicit depth column plus its own `where` guard bounds this
+		// regardless of any timeout -- the exact recipe design.md's own
+		// boundary note measures (6 rows at `d < 5`).
+		const depthGuarded = await handle.with((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: cteTree.id, v: cteTree.v, d: sql`0` }, cteTree).where(
+					isNull(cteTree.parent),
+				),
+				(self) =>
+					select({ id: cteTree.id, v: cteTree.v, d: sql`${self.d} + 1` }, self)
+						.leftJoin(cteTree, eq(self.id, cteTree.parent))
+						.where(sql`${self.d} < 5`),
+			);
+			return select({ id: r.id }, r);
+		});
+		expect(depthGuarded).toHaveLength(6);
 	});
 });

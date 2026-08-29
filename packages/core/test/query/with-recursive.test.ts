@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
 	count,
 	eq,
@@ -11,7 +11,6 @@ import {
 	schema,
 	select,
 	sql,
-	sum,
 	table,
 	withCte,
 } from "../../src/index";
@@ -80,7 +79,7 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 		});
 	});
 
-	it("a field computed differently on each side is accepted and types as the union", () => {
+	it("a field computed differently on each side is accepted and reads back as the anchor's type", () => {
 		const stage = withCte((w) => {
 			const r = w.asRecursive(
 				"r",
@@ -88,7 +87,14 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 				// `v` is a real column on the anchor side and a window
 				// function on the recursive side -- same key, different
 				// computation, exactly the shape SameKeys (task 6.5) admits
-				// and an exact-identity rule (the first draft) refused.
+				// and an exact-identity rule (the first draft) refused. Only
+				// the COMPATIBILITY check is shared with a plain union --
+				// `r.v` below still reads as the anchor's own numeric column
+				// type, never a union with the window function's own type
+				// (Postgres itself refuses a recursive CTE that widens a
+				// column's type across the anchor/recursive-term boundary,
+				// `42804` -- a plain union does widen, a recursive CTE does
+				// not, so this builder can't type it as a union either).
 				(self) =>
 					select(
 						{ id: t.id, v: over(rowNumber(), { orderBy: [t.id] }) },
@@ -100,6 +106,24 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 		expect(stage.withQuery.recursive).toBe(true);
 		const sql = renderQuery(stage.withQuery);
 		expect(sql).toContain("row_number() over (order by");
+
+		// The type-level proof: a recursive CTE built from this exact
+		// anchor exposes the SAME `v` type an ordinary, non-recursive entry
+		// built from that anchor ALONE would -- untouched by the recursive
+		// term's own type. If `r.v` were instead a union with the recursive
+		// term's own type (SetOpResult's own shape, discarded rather than
+		// propagated -- see CompatibleRecursiveTerm's docstring), this
+		// would not hold.
+		const anchorOnly = withCte((w) => {
+			const p = w.as(
+				"p",
+				select({ id: t.id, v: t.v }, t).where(isNull(t.parent)),
+			);
+			return select({ id: p.id, v: p.v }, p);
+		});
+		expectTypeOf(stage.projectionInput.v).toEqualTypeOf(
+			anchorOnly.projectionInput.v,
+		);
 	});
 });
 
@@ -284,6 +308,14 @@ describe("the accept list (add-ctes task 6.5)", () => {
 		// projection), so this is unaffected either way. `sql` is the raw
 		// escape hatch (no scalar-subquery builder exists on this surface),
 		// matching `collectColumnRefs`'s own shallow `exists` boundary.
+		//
+		// The subquery MUST carry its own `from` (design.md's own accepted
+		// form: `(select sum(v) from t t2)`) -- review measured that a
+		// FROM-less subquery whose only aggregate argument is an outer
+		// reference doesn't read as a scalar subquery to Postgres at all;
+		// the aggregate binds to the OUTER level (the recursive term
+		// itself), which is exactly the `42803`-shadowed case design.md's
+		// third boundary note warns about, not the case this test names.
 		const stage = withCte((w) => {
 			const r = w.asRecursive(
 				"r",
@@ -292,7 +324,7 @@ describe("the accept list (add-ctes task 6.5)", () => {
 					select(
 						{
 							id: t.id,
-							v: sql`(select ${sum(t.v)} where ${t.id} = ${self.id})`,
+							v: sql`(select sum(v) from app.t as t2)`,
 						},
 						self,
 					).innerJoin(t, eq(self.id, t.parent)),

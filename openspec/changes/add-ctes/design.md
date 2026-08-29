@@ -135,6 +135,65 @@ whole-table projection carries the column's own name.
   materialization hints. All three are out of scope, so measuring them
   would produce facts with no home.
 
+## The two build-time diagnostics, and what the server actually does
+
+`duplicate-cte-name` and `empty-with-list` were both measured on
+postgres:17 — first by review when the gaps were found, then
+independently during group 7 preparation. The two agree, and they behave
+differently enough that a witness must treat them differently.
+
+| SQL | SQLSTATE | Message |
+|---|---|---|
+| `with a as (select 1 as x), a as (select 2 as x) select * from a;` | `42712` | `WITH query name "a" specified more than once` (same under `recursive`) |
+| `with select 1;` | `42601` | `syntax error at or near "select"` |
+| `with a as () select * from a;` | `42601` | `syntax error at or near ")"` |
+
+`42712` is a semantic check and its message is stable — assert both.
+`42601` is a **parser** error and its message follows the next token —
+assert the SQLSTATE only.
+
+That parser detail also sharpens what `empty-with-list` is for. An empty
+`WITH` is not a statement Postgres runs and rejects; it is text Postgres
+cannot parse. So the diagnostic's justification is not "refuse first what
+the server would refuse" but **"never emit text the server could not even
+parse"**.
+
+## The enforcement figures, measured after implementation
+
+These are the numbers D105 quotes. They were taken on the implemented
+tree, after `pnpm build --force`, through source-alias probes that never
+read `dist` — the measurement method matters here, because this change
+already retracted one "measured" claim that had been taken against a
+stale `.d.ts`.
+
+Method is D104's: add a dummy member and count what stops compiling.
+
+| Probe | src errors | test churn |
+|---|---|---|
+| **F1** — a third member on `FromNode` (a new kind of row source) | **13** | 0 |
+| **F2** — a new `QueryNode` variant (a new kind of statement) | **10** | 0 |
+| **B1** — the rejected `SelectNode` field, required | **3** | 42 |
+| **B2** — the rejected `SelectNode` field, optional | **0** | 0 |
+
+F1's 13 are `render-sql` ×5, `walk` ×2, `retarget` ×2, `column-order`,
+`codec`, `convert`, and the Supabase RLS validator — the last one being
+the security axis this change argued the union for. F2's 10 match the
+pre-implementation figure for the variant exactly. B1's 3 are still all
+"you left a key out of an object literal", with **zero** traversal sites
+among them; its fixture churn grew from 28 to 42 as the change added
+tests that build `SelectNode` literals. The rejection argument is
+stronger after implementation than before it.
+
+**Do not quote the pre-implementation 18 / 22 here.** Those measured a
+different thing — what it cost to *widen* `from` (and `JoinNode.table`)
+while every consumer still assumed `TableRefNode`, i.e. the transition —
+whereas F1 measures the standing enforcement the shape now provides.
+A narrow-back probe (restoring the old types) is **not** a substitute
+either: consumers now accept `FromNode`, so passing them the narrower
+`TableRefNode` is contravariantly safe and most sites keep compiling.
+It counts only the places that *construct or discriminate* a CTE
+reference, and reading it as "this shape forced N sites" is wrong.
+
 ## Why the join widening is cheap
 
 Widening `SelectNode.from` alone stops **18** call sites compiling across
