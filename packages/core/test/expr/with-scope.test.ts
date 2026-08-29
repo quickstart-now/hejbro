@@ -85,3 +85,62 @@ describe("WITH scope (task 1.3)", () => {
 		expect(() => renderQuery(node)).not.toThrow();
 	});
 });
+
+describe("Entry visibility within the list (task 1.4)", () => {
+	it("an entry may reference an earlier entry", () => {
+		const topCustomers: SelectNode = {
+			...recentOrders,
+			from: { cteName: "recent_orders" },
+		};
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{ name: "recent_orders", query: recentOrders, materialized: null },
+				{ name: "top_customers", query: topCustomers, materialized: null },
+			],
+			recursive: false,
+			body: recentOrders,
+		};
+		expect(() => renderQuery(node)).not.toThrow();
+	});
+
+	it("a node referencing a later entry is refused", () => {
+		const earlyEntry: SelectNode = {
+			...recentOrders,
+			from: { cteName: "top_customers" },
+		};
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{ name: "recent_orders", query: earlyEntry, materialized: null },
+				{ name: "top_customers", query: recentOrders, materialized: null },
+			],
+			recursive: false,
+			body: recentOrders,
+		};
+		expect(() => renderQuery(node)).toThrow(
+			expect.objectContaining({
+				code: "undeclared-cte",
+				message: expect.stringContaining("top_customers"),
+			}),
+		);
+	});
+
+	it("an entry cannot reference itself (non-recursive)", () => {
+		const selfReferencing: SelectNode = {
+			...recentOrders,
+			from: { cteName: "recent_orders" },
+		};
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{ name: "recent_orders", query: selfReferencing, materialized: null },
+			],
+			recursive: false,
+			body: recentOrders,
+		};
+		expect(() => renderQuery(node)).toThrow(
+			expect.objectContaining({ code: "undeclared-cte" }),
+		);
+	});
+});

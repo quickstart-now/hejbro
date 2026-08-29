@@ -784,28 +784,65 @@ const cteRefsIn = (
 };
 
 /**
- * Throws `undeclared-cte` when a from/join target names a CTE outside
- * `declaredNames` — the enclosing `WITH` list is the whole set of
- * available names (task 1.3; task 1.4 narrows this per entry to "earlier
- * entries only"). A dedicated code, not `foreign-column-ref`'s family:
- * that family names a *column* mismatched against a resolved table: this
- * is a from/join target naming a relation that was never declared at
- * all, which needs its own available-sources listing, not a "join that
+ * One from/join target's visibility check: the CTE names it is allowed to
+ * name, and the refs it actually names. Without `RECURSIVE`, entry *n*
+ * sees only the entries before it (task 1.4) — forward reference is
+ * unrepresentable by the builder (each entry is handed only the earlier
+ * references), so this guards the artifact path (a hand-assembled or
+ * decoded node), not the builder path. The body sees every entry, since
+ * it is written after the whole list.
+ */
+type CteVisibilityCheck = {
+	readonly visibleNames: ReadonlyArray<string>;
+	readonly refs: ReadonlyArray<CteRefNode>;
+};
+
+const cteVisibilityChecks = (
+	node: WithNode,
+): ReadonlyArray<CteVisibilityCheck> => {
+	const declaredNames = node.ctes.map((entry) => entry.name);
+	const entryChecks = node.ctes.map((entry, index) => ({
+		visibleNames: declaredNames.slice(0, index),
+		refs: cteRefsIn(entry.query),
+	}));
+	return [
+		...entryChecks,
+		{ visibleNames: declaredNames, refs: cteRefsIn(node.body) },
+	];
+};
+
+/**
+ * Throws `undeclared-cte` on the first from/join target naming a CTE
+ * outside its own check's `visibleNames` — a single code covers both task
+ * 1.3 (a name the statement never declares at all) and task 1.4 (a name
+ * it declares, but not yet visible from here): from the referencing
+ * site's own vantage point both are simply "not among the names visible
+ * here", and `visibleNames` already reflects which case it is. A
+ * dedicated code, not `foreign-column-ref`'s family: that family names a
+ * *column* mismatched against a resolved table; this is a from/join
+ * target naming a relation that either does not exist or is not visible
+ * yet, which needs its own available-sources listing, not a "join that
  * table" suggestion that does not apply to a CTE.
  */
-const assertDeclaredCtes = (
-	declaredNames: ReadonlyArray<string>,
-	refs: ReadonlyArray<CteRefNode>,
+const assertCteVisibility = (
+	checks: ReadonlyArray<CteVisibilityCheck>,
 ): void => {
-	const declared = new Set(declaredNames);
-	const undeclaredRef = refs.find((ref) => !declared.has(ref.cteName));
-	if (undeclaredRef === undefined) {
+	const violation = checks
+		.flatMap((check) =>
+			check.refs
+				.filter((ref) => !check.visibleNames.includes(ref.cteName))
+				.map((ref) => ({ ref, visibleNames: check.visibleNames })),
+		)
+		.at(0);
+	if (violation === undefined) {
 		return;
 	}
-	const available = declaredNames.map((name) => `"${name}"`).join(", ");
+	const available = violation.visibleNames
+		.map((name) => `"${name}"`)
+		.join(", ");
 	throwHejbroError(
 		"undeclared-cte",
-		`with statement references "${undeclaredRef.cteName}", which it does not declare — declared: ${available || "(none)"}. Next: add "${undeclaredRef.cteName}" to the with() list, or reference one of the declared CTEs instead.`,
+		`with statement references "${violation.ref.cteName}", which is not declared and visible here — visible: ${available || "(none)"}. Next: add "${violation.ref.cteName}" to the with() list ahead of this reference, or reference one of the visible CTEs instead.`,
 	);
 };
 
@@ -814,11 +851,7 @@ export const renderWith = (
 	node: WithNode,
 	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
-	const declaredNames = node.ctes.map((entry) => entry.name);
-	assertDeclaredCtes(declaredNames, [
-		...node.ctes.flatMap((entry) => cteRefsIn(entry.query)),
-		...cteRefsIn(node.body),
-	]);
+	assertCteVisibility(cteVisibilityChecks(node));
 	const entriesSql = node.ctes
 		.map((entry) => renderWithEntry(entry, outerScope))
 		.join(", ");
