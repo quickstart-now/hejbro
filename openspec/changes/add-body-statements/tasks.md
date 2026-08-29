@@ -287,7 +287,7 @@ Two rules apply to every task here and are not repeated per line:
       as number arrives as number".
       Files: `packages/core/src/dsl/define-function.ts`,
       `packages/query/src/db/fn.ts`, that test.
-- [ ] 2.4 (~7m) `SKILL.md` and `dsl-cheatsheet.md`'s `defineFunction`
+- [x] 2.4 (~7m) `SKILL.md` and `dsl-cheatsheet.md`'s `defineFunction`
       surface show the builder form; the changeset (D59, `minor` — the
       five published packages move together); task-time rows for both
       groups and the README badges they feed.

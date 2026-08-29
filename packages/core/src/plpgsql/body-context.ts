@@ -1,6 +1,6 @@
 import type { Table } from "../dsl/table";
 import { toSnakeCase } from "../dsl/table";
-import { assertNever, throwHejbroError } from "../error";
+import { throwHejbroError } from "../error";
 import type { ColumnRef, Condition, Expr, QueryNode } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
@@ -455,21 +455,11 @@ function throwScalarReturnExpectsExpression(state: RecordingState): never {
 	);
 }
 
-/** {@link recordReturn}'s non-expression dispatch: a trigger row or a query, exhaustively -- split out so each function's own branching stays under the CRAP gate (#154) once the brand check (#445/R4) is added. */
-const recordReturnShape = (
+/** {@link recordReturnShape}'s non-trigger-row half — split out to keep each function's own branching under the CRAP gate (#154 ratchet-5) now that the trigger-vs-query check (#426/1.10) adds one more branch. */
+const recordReturnQueryShape = (
 	state: RecordingState,
-	value: TriggerRow<Table> | ReturnableQuery,
+	value: ReturnableQuery,
 ): void => {
-	if (isTriggerRow(value)) {
-		if (state.returnKind === "scalar") {
-			throwScalarReturnExpectsExpression(state);
-		}
-		pushStatement(state, {
-			stmtKind: "returnRef",
-			refName: value[triggerRowMeta],
-		});
-		return;
-	}
 	if (state.returnKind === "scalar") {
 		throwScalarReturnExpectsExpression(state);
 	}
@@ -492,6 +482,24 @@ const recordReturnShape = (
 	}
 	markConsumed(query);
 	pushStatement(state, { stmtKind: "returnQuery", query });
+};
+
+/** {@link recordReturn}'s non-expression dispatch: a trigger row or a query, exhaustively -- split out so each function's own branching stays under the CRAP gate (#154) once the brand check (#445/R4) is added. */
+const recordReturnShape = (
+	state: RecordingState,
+	value: TriggerRow<Table> | ReturnableQuery,
+): void => {
+	if (isTriggerRow(value)) {
+		if (state.returnKind === "scalar") {
+			throwScalarReturnExpectsExpression(state);
+		}
+		pushStatement(state, {
+			stmtKind: "returnRef",
+			refName: value[triggerRowMeta],
+		});
+		return;
+	}
+	recordReturnQueryShape(state, value);
 };
 
 const recordReturn = (
@@ -570,23 +578,26 @@ const recordForEach = <TProjection extends RowProjection>(
  * explicit `state` parameter instead of closures reading it lexically —
  * not the recording behavior itself.
  */
-/** One human-readable name per {@link QueryNode} kind — {@link unusedBuilderMessage}'s own listing, never render-facing (that's `renderExecutedStatement`'s job). */
-const describeQueryKind = (query: QueryNode): string => {
-	switch (query.queryKind) {
-		case "select":
-			return "a select";
-		case "insert":
-			return "an insert";
-		case "update":
-			return "an update";
-		case "delete":
-			return "a delete";
-		case "setOp":
-			return "a set operation";
-		default:
-			return assertNever(query);
-	}
+/**
+ * One human-readable name per {@link QueryNode} kind — {@link
+ * unusedBuilderMessage}'s own listing, never render-facing (that's
+ * `renderExecutedStatement`'s job). A mapped type over the closed union
+ * (same technique as `render-body.ts`'s own handler maps, #154
+ * ratchet-5) rather than a `switch`'s `default: assertNever(...)`: the
+ * union has exactly five kinds, so that default is structurally
+ * unreachable and no test could ever cover it — a lookup object has no
+ * such branch to leave uncovered.
+ */
+const queryKindNames: { readonly [K in QueryNode["queryKind"]]: string } = {
+	select: "a select",
+	insert: "an insert",
+	update: "an update",
+	delete: "a delete",
+	setOp: "a set operation",
 };
+
+const describeQueryKind = (query: QueryNode): string =>
+	queryKindNames[query.queryKind];
 
 /**
  * {@link unusedBuilderMessage}'s `Next:` clause — a select/insert/update/

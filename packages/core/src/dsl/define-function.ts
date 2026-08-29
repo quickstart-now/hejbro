@@ -113,6 +113,26 @@ export type ArgRefs<TArgs extends Record<string, ColumnBuilder>> = {
 const isColumnBuilder = (value: object): value is ColumnBuilder =>
 	"columnState" in value;
 
+/** {@link resolveFunctionReturns}'s builder-scalar half — split out to keep the caller's own branch count under the CRAP gate (#154 ratchet-5) now that a builder return also has its own rejection to check. */
+const resolveScalarBuilderReturns = (
+	identity: string,
+	declaredAt: string | null,
+	returns: ColumnBuilder,
+): FunctionDeclaration["returns"] => {
+	if (returns.columnState.notNullElements === true) {
+		return throwHejbroError(
+			"returns-not-null-elements-unsupported",
+			`defineFunction() "${identity}" declares "returns" with .notNullElements(), but a returns clause derives no constraint the way a column's backing CHECK does — Postgres would still be free to return an array with a null element, so the flag would promise something nothing enforces. Next: drop .notNullElements() from the "returns" builder; the same builder stays legitimate as an arg or a table column.`,
+			declaredAt,
+		);
+	}
+	return {
+		returnsKind: "scalar",
+		typeNode: returns.columnState.typeNode,
+		mode: returns.columnState.mode,
+	};
+};
+
 const resolveFunctionReturns = (
 	identity: string,
 	declaredAt: string | null,
@@ -134,18 +154,7 @@ const resolveFunctionReturns = (
 		};
 	}
 	if (isColumnBuilder(returns)) {
-		if (returns.columnState.notNullElements === true) {
-			return throwHejbroError(
-				"returns-not-null-elements-unsupported",
-				`defineFunction() "${identity}" declares "returns" with .notNullElements(), but a returns clause derives no constraint the way a column's backing CHECK does — Postgres would still be free to return an array with a null element, so the flag would promise something nothing enforces. Next: drop .notNullElements() from the "returns" builder; the same builder stays legitimate as an arg or a table column.`,
-				declaredAt,
-			);
-		}
-		return {
-			returnsKind: "scalar",
-			typeNode: returns.columnState.typeNode,
-			mode: returns.columnState.mode,
-		};
+		return resolveScalarBuilderReturns(identity, declaredAt, returns);
 	}
 	return { returnsKind: "scalar", typeNode: returns, mode: null };
 };

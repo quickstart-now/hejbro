@@ -80,8 +80,10 @@ already fixed once for this function's schema argument (#269).
   (`defaultNumericMode`) because the declaration never carried one. With
   a builder as `returns` that becomes a visible defect — a
   `bigint({ mode: "number" })` return would type as `number` and arrive
-  as `bigint` — so the declaration carries `mode` (and `jsonType`) and
-  the conversion reads it.
+  as `bigint` — so the declaration carries `mode`, and the conversion
+  reads it, falling back to the derived default when a type node was
+  declared instead. Only `mode` is carried: `$type`'s brand never reaches
+  runtime, so storing it would be a field nothing reads.
 - **No snapshot change.** A function's snapshot stores `bodySql` +
   `bodyHash`, not the statement tree, and its `returns` is the rendered
   clause text, so a new `stmtKind` and a new in-memory declaration field

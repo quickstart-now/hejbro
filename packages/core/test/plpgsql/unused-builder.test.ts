@@ -213,6 +213,16 @@ describe("statement-builder-unused", () => {
 		).toThrowError(/built 2 statements it never used \(an insert, a select\)/);
 	});
 
+	it("names an unused update and an unused delete by their own kind, not a generic label", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				update(comments).set({ postId: row.postId });
+				deleteFrom(comments);
+				ctx.return(row);
+			}),
+		).toThrowError(/built 2 statements it never used \(an update, a delete\)/);
+	});
+
 	it("a set operation left unused is not told to use ctx.execute, which cannot carry one", () => {
 		expect(() =>
 			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
