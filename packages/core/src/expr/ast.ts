@@ -378,3 +378,28 @@ export const columnRef = <TNode extends TypeNode>(
 
 export const isExpr = (value: unknown): value is Expr =>
 	typeof value === "object" && value !== null && "exprNode" in value;
+
+/**
+ * What accepts an order term everywhere one is needed: a select's own
+ * `orderBy()` (`query/select.ts`, re-exported from there for its own
+ * callers) and a window's `over()` spec (`expr/window.ts`) — a bare
+ * ascending `Expr`, or `{ by, direction }` for an explicit direction.
+ * Lives here, not in `query/`, because `query/` depends on `expr/`
+ * throughout this package and never the reverse — `expr/window.ts`
+ * duplicated this shape locally at first (D104 group 2) rather than
+ * invert that; promoted here in group 3 once a second real consumer
+ * existed, closing the drift risk a hand-kept duplicate carries (the
+ * exact shape `reachable-kinds.ts` already consolidated once for
+ * `retarget.test.ts`/`naming-conventions.test.ts`'s own node-kind lists).
+ */
+export type OrderTermInput =
+	| Expr
+	| { readonly by: Expr; readonly direction: "asc" | "desc" };
+
+/** Resolves an {@link OrderTermInput} to a stored {@link OrderByTerm} — a bare `Expr` orders ascending. */
+export const resolveOrderTerm = (term: OrderTermInput): OrderByTerm => {
+	if (isExpr(term)) {
+		return { expr: term.exprNode, direction: "asc" };
+	}
+	return { expr: term.by.exprNode, direction: term.direction };
+};

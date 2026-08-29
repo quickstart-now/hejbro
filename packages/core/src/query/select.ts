@@ -6,21 +6,30 @@ import type {
 	Expr,
 	ExprNode,
 	JoinKind,
-	OrderByTerm,
+	OrderTermInput,
 	ProjectionNode,
 	SelectNode,
 	SetOpNode,
 	TableRefNode,
 } from "../expr/ast";
-import { expr, isExpr } from "../expr/ast";
+import { expr, resolveOrderTerm } from "../expr/ast";
+import { someExprNode } from "../expr/walk";
 import type { TypeNode } from "../types/type-node";
 
 /** A `select()` projection: the whole table (deterministic column list), or an object of aliased expressions. */
 export type SelectProjection = Table | Record<string, Expr>;
 
-export type OrderTermInput =
-	| Expr
-	| { readonly by: Expr; readonly direction: "asc" | "desc" };
+/**
+ * Re-exported for backward compatibility (and for `@hejbro/query`'s chain
+ * set-op stage, which imports both from here) — the type and its resolver
+ * now live in `expr/ast.ts` (group 3, D104): `expr/window.ts` needed the
+ * exact same order-term shape for `over()`'s spec, and `expr/` cannot
+ * depend on `query/` (the reverse holds throughout this package), so a
+ * second real consumer promoted the shared shape up rather than adding a
+ * second hand-kept duplicate.
+ */
+export type { OrderTermInput };
+export { resolveOrderTerm };
 
 /** A combined set-operation stage (add-set-operations, D103): carries the recursive node, whole-set `orderBy`/`limit`, and further combinators — so `(a union b) except c` chains naturally. */
 export type SetOpStage<
@@ -118,14 +127,6 @@ const tableRefOf = (target: Table): TableRefNode => {
 	return { schemaName: meta.schema.schemaName, tableName: meta.tableName };
 };
 
-/** Exported for `@hejbro/query`'s chain set-op stage (add-set-operations) — the one shared order-term resolver, never a second copy. */
-export const resolveOrderTerm = (term: OrderTermInput): OrderByTerm => {
-	if (isExpr(term)) {
-		return { expr: term.exprNode, direction: "asc" };
-	}
-	return { expr: term.by.exprNode, direction: term.direction };
-};
-
 const appendJoin = (
 	query: SelectNode,
 	joinKind: JoinKind,
@@ -211,6 +212,31 @@ const assertRowCount = (count: number, clause: "limit" | "offset"): void => {
 	}
 };
 
+const isWindowNode = (node: ExprNode): boolean => node.nodeKind === "window";
+
+/**
+ * Rejects `where()`/`groupBy()`/`having()` arguments containing a window
+ * function (D104) — Postgres evaluates window functions after all three
+ * clauses run, so their result isn't available there yet (`42P20`). Uses
+ * the SHALLOW `someExprNode` (the `exists`-rejection precedent,
+ * `dsl/table.ts`'s `validateChecks`): a window function inside an
+ * `exists()` subquery's own select list is a different, legal query, not
+ * this one's clause. `distinctOn` deliberately has no such guard —
+ * Postgres accepts a window function there (measured on postgres:17;
+ * `distinct on` counts as part of the select list).
+ */
+const assertNoWindowFunction = (
+	clause: "where" | "group by" | "having",
+	exprs: ReadonlyArray<ExprNode>,
+): void => {
+	if (exprs.some((node) => someExprNode(node, isWindowNode))) {
+		throwHejbroError(
+			"window-function-not-allowed",
+			`a ${clause} clause cannot reference a window function — Postgres evaluates window functions after ${clause} runs, so its result isn't available there yet. Next: move the window function into the select list instead, or filter on it from an outer query.`,
+		);
+	}
+};
+
 const makeStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
 	fromTable: Table,
@@ -236,12 +262,14 @@ const makeStages = <TProjection extends SelectProjection>(
 			fromTable,
 			projectionInput,
 		),
-	where: (condition) =>
-		makeStages(
+	where: (condition) => {
+		assertNoWindowFunction("where", [condition.exprNode]);
+		return makeStages(
 			{ ...query, where: condition.exprNode },
 			fromTable,
 			projectionInput,
-		),
+		);
+	},
 	orderBy: (...terms) =>
 		makeStages(
 			{ ...query, orderBy: terms.map(resolveOrderTerm) },
@@ -255,18 +283,24 @@ const makeStages = <TProjection extends SelectProjection>(
 				"groupBy() needs at least one expression. Next: pass the columns the aggregate is grouped by, e.g. groupBy(posts.authorId).",
 			);
 		}
+		assertNoWindowFunction(
+			"group by",
+			terms.map((term) => term.exprNode),
+		);
 		return makeStages(
 			{ ...query, groupBy: terms.map((term) => term.exprNode) },
 			fromTable,
 			projectionInput,
 		);
 	},
-	having: (condition: Condition) =>
-		makeStages(
+	having: (condition: Condition) => {
+		assertNoWindowFunction("having", [condition.exprNode]);
+		return makeStages(
 			{ ...query, having: condition.exprNode },
 			fromTable,
 			projectionInput,
-		),
+		);
+	},
 	limit: (count) => {
 		assertRowCount(count, "limit");
 		return makeStages({ ...query, limit: count }, fromTable, projectionInput);

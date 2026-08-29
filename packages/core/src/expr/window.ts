@@ -4,10 +4,10 @@ import type {
 	Expr,
 	ExprNode,
 	FunctionCallNode,
-	OrderByTerm,
+	OrderTermInput,
 	WindowNode,
 } from "./ast";
-import { isExpr } from "./ast";
+import { resolveOrderTerm } from "./ast";
 import { liftLiteral } from "./literal";
 
 /**
@@ -200,29 +200,15 @@ export const nthValue = <TExpr extends Expr>(
 	]);
 
 /**
- * `over()`'s window specification — `partitionBy`/`orderBy` (D104). A
- * bare-`Expr`-or-`{by, direction}` order term, the exact shape
- * `query/select.ts`'s own `OrderTermInput`/`resolveOrderTerm` already
- * use for a select's own `orderBy()` — duplicated here (not imported)
- * because `expr/` never depends on `query/` today (the reverse is true
- * throughout this package), and this shape is four lines; a shared home
- * for both is a refactor for whenever `query/` actually needs this
- * module, not a reason to invert the dependency now.
+ * `over()`'s window specification — `partitionBy`/`orderBy` (D104), using
+ * the same {@link OrderTermInput} shape (and its {@link resolveOrderTerm}
+ * resolver) a select's own `orderBy()` uses — promoted to `expr/ast.ts`
+ * in group 3 once this module became a second real consumer, closing a
+ * hand-kept duplicate this file originally carried locally.
  */
-export type WindowOrderTerm =
-	| Expr
-	| { readonly by: Expr; readonly direction: "asc" | "desc" };
-
 export type WindowSpec = {
 	readonly partitionBy?: ReadonlyArray<Expr>;
-	readonly orderBy?: ReadonlyArray<WindowOrderTerm>;
-};
-
-const resolveWindowOrderTerm = (term: WindowOrderTerm): OrderByTerm => {
-	if (isExpr(term)) {
-		return { expr: term.exprNode, direction: "asc" };
-	}
-	return { expr: term.by.exprNode, direction: term.direction };
+	readonly orderBy?: ReadonlyArray<OrderTermInput>;
 };
 
 const buildWindowNode = (
@@ -232,7 +218,7 @@ const buildWindowNode = (
 	nodeKind: "window",
 	fn,
 	partitionBy: (spec.partitionBy ?? []).map((column) => column.exprNode),
-	orderBy: (spec.orderBy ?? []).map(resolveWindowOrderTerm),
+	orderBy: (spec.orderBy ?? []).map(resolveOrderTerm),
 });
 
 /**

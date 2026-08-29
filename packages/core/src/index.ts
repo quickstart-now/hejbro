@@ -226,11 +226,7 @@ export {
 	selectExprChildExprs,
 	someDeepExprNode,
 } from "./expr/walk";
-export type {
-	WindowFunctionCall,
-	WindowOrderTerm,
-	WindowSpec,
-} from "./expr/window";
+export type { WindowFunctionCall, WindowSpec } from "./expr/window";
 export {
 	cumeDist,
 	denseRank,

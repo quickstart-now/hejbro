@@ -132,7 +132,23 @@ discipline").
 
 ## 3. Placement rejection — after group 2
 
-- [ ] 3.1 (~8m) [design] `where()`/`groupBy()`/`having()` reject an
+- [x] 3.0 (~7m) Retire the order-term duplication group 2 introduced.
+      `expr/window.ts`'s `WindowOrderTerm`/`resolveWindowOrderTerm` are a
+      byte-for-byte copy of `query/select.ts`'s
+      `OrderTermInput`/`resolveOrderTerm` (identifiers aside). The
+      dependency argument for copying is sound — `expr/` must not import
+      from `query/` — but promotion is the third option it missed:
+      `OrderByTerm` already lives in `expr/ast.ts`, so moving the input
+      type and its resolver down into `expr/` and re-exporting from
+      `query/select.ts` keeps the direction and removes the copy. Drift
+      here is user-visible and silent: give `OrderTermInput` a `nulls`
+      option later and window `orderBy` quietly lacks it with nothing
+      turning red. Do this in the same pass as 3.1 — both touch
+      `query/select.ts`. Red: existing order-by tests on both sides stay
+      green through the move; add nothing. Files:
+      `packages/core/src/expr/{window,ast}.ts`,
+      `packages/core/src/query/select.ts`.
+- [x] 3.1 (~8m) [design] `where()`/`groupBy()`/`having()` reject an
       argument containing a window function, via the existing
       `someExprNode` (the `exists` rejection is the precedent) — no new
       walker. Settled here: the shallow variant is correct (a window
@@ -142,7 +158,7 @@ discipline").
       accepts it. Red: `packages/core/test/query/window-placement.test.ts`
       — "where, group by and having refuse a window function; distinct on
       accepts one". Files: `packages/core/src/query/select.ts`, that test.
-- [ ] 3.2 (~6m) [design] The reverse nesting: an aggregate whose argument
+- [x] 3.2 (~6m) [design] The reverse nesting: an aggregate whose argument
       contains a window function is refused. Settled here: its own error
       code (`windowed-aggregate-argument`) and message, kept separate from
       3.1's — Postgres refuses this with a different class than the
@@ -188,7 +204,11 @@ discipline").
       `ntile`/`percentRank`/`cumeDist` need no brand (they arrive as JS
       numbers); the value functions pass their argument's type through.
       Settled here: whether the existing brand reaches through `over()`
-      unchanged or needs threading. Red:
+      unchanged or needs threading. Group 2's surface makes the `family`
+      side already work, but that is a different axis — pin
+      `ReadAs<bigint>` **surviving `over()`** at the type level, since a
+      regression in the union-parameter form would show up exactly there
+      and nothing currently holds it. Red:
       `packages/query/test/types/window.test.ts` — "rowNumber reads as
       bigint; ntile reads as number; lag keeps its argument's type".
       Files: `packages/query/src/types/select-result.ts` (if threading is

@@ -1,5 +1,7 @@
+import { throwHejbroError } from "../error";
 import type { Expr, ExprNode } from "./ast";
 import { expr } from "./ast";
+import { someExprNode } from "./walk";
 
 /**
  * A phantom read-type brand (#416). An expression normally resolves to
@@ -19,6 +21,32 @@ export const readAsBrand: unique symbol = Symbol("hejbro:read-as");
 export type ReadAs<T> = { readonly [readAsBrand]?: T };
 
 /**
+ * Rejects an aggregate argument containing a window function (D104) —
+ * Postgres's own separate rule (`42803`, "aggregate function calls
+ * cannot contain window function calls"), a different class from
+ * `window-function-not-allowed`'s placement rule (`42P20`), so it gets
+ * its own code rather than collapsing two rules into one. The type
+ * system already blocks a bare window-only call here (it has no
+ * `exprNode`); this catches the shape that DOES type-check —
+ * `over(rank(), spec)` returns a real `Expr`, so `sum(over(rank(), …))`
+ * compiles and needs its own runtime check, same as `where`/`having`
+ * needed one for the same reason. The forward nesting (a window
+ * function's own argument containing another window function) needs no
+ * check at all: `WindowNode.fn: FunctionCallNode` makes it
+ * unrepresentable, not merely rejected.
+ */
+const assertNoWindowedArgument = (args: ReadonlyArray<ExprNode>): void => {
+	if (
+		args.some((arg) => someExprNode(arg, (node) => node.nodeKind === "window"))
+	) {
+		throwHejbroError(
+			"windowed-aggregate-argument",
+			"an aggregate's argument cannot contain a window function — Postgres evaluates window functions after aggregation runs, so its result isn't available to the aggregate yet. Next: wrap the aggregate itself in over(...) instead (e.g. over(sum(t.amount), spec)), or restructure with a subquery.",
+		);
+	}
+};
+
+/**
  * The aggregate vocabulary. Postgres's own names, rendered verbatim —
  * these are SQL keywords, not hejbro-authored tokens (D57).
  *
@@ -34,12 +62,15 @@ export type ReadAs<T> = { readonly [readAsBrand]?: T };
 const aggregate = (
 	functionName: string,
 	args: ReadonlyArray<ExprNode>,
-): ExprNode => ({
-	nodeKind: "functionCall",
-	schemaName: null,
-	functionName,
-	args,
-});
+): ExprNode => {
+	assertNoWindowedArgument(args);
+	return {
+		nodeKind: "functionCall",
+		schemaName: null,
+		functionName,
+		args,
+	};
+};
 
 /** `count(*)` — the number of rows in the group. Always `bigint`: Postgres's `count` is `int8` regardless of what it counted. */
 export const count = (): Expr<"numeric"> & ReadAs<bigint> =>
