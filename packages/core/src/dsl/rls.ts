@@ -288,6 +288,11 @@ const assertOwnColumnsOnly = (
 			// add-ctes task 1.2c family (task 1.5(a) review): a CTE column
 			// reference reaching a policy expression -- a CTE is
 			// statement-local and never a table an RLS policy can name.
+			// Task 3.2: NOT closed by the type layer -- `.using`/
+			// `.withCheck` accept a plain `Condition`, which a withCte()
+			// reference-built comparison satisfies without a typeNode. This
+			// stays the first (and only) line, same reasoning as the index
+			// predicate guard in `dsl/table.ts`.
 			throwHejbroError(
 				"rls-policy-foreign-column",
 				`policy "${policy.policyName}" on "${schemaName}.${tableName}" references a column of the CTE "${foreignRef.tableName}" — a CTE is statement-local and does not exist where a policy expression evaluates. Next: reference "${schemaName}.${tableName}"'s own columns, or reach another table through exists().`,

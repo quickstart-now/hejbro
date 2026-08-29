@@ -5,6 +5,7 @@ import type {
 	Condition,
 	Expr,
 	ExprNode,
+	FromNode,
 	JoinKind,
 	OrderTermInput,
 	ProjectionNode,
@@ -16,6 +17,11 @@ import { expr, resolveOrderTerm } from "../expr/ast";
 import { someExprNode } from "../expr/walk";
 import { markConsumed, noteBuilder } from "../plpgsql/recording-session";
 import type { TypeNode } from "../types/type-node";
+import type { CteReference } from "./with";
+import { cteRowMeta, isCteReference } from "./with";
+
+/** A `select()` from-source: a declared table, or a `withCte()` reference (add-ctes, task 3.3). */
+export type FromSource = Table | CteReference;
 
 /** A `select()` projection: the whole table (deterministic column list), or an object of aliased expressions. */
 export type SelectProjection = Table | Record<string, Expr>;
@@ -67,7 +73,7 @@ export type SelectLimited<
 	TProjection extends SelectProjection = SelectProjection,
 > = {
 	readonly selectQuery: SelectNode;
-	readonly fromTable: Table;
+	readonly fromTable: FromSource;
 	readonly projectionInput: TProjection;
 } & SetOpCombinators<TProjection>;
 export type SelectOffsetted<
@@ -126,6 +132,14 @@ export type SelectDistinctable<
 const tableRefOf = (target: Table): TableRefNode => {
 	const meta = getTableMeta(target);
 	return { schemaName: meta.schema.schemaName, tableName: meta.tableName };
+};
+
+/** A `from`-source's own `FromNode` (add-ctes, task 3.3) — a table renders qualified, a `withCte()` reference renders bare by its declared name (its own `cteRowMeta` brand, not a lookup). */
+const fromNodeOf = (source: FromSource): FromNode => {
+	if (isCteReference(source)) {
+		return { cteName: source[cteRowMeta].cteName };
+	}
+	return tableRefOf(source);
 };
 
 const appendJoin = (
@@ -253,7 +267,7 @@ const assertNoWindowFunction = (
 
 const makeStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
-	fromTable: Table,
+	fromTable: FromSource,
 	projectionInput: TProjection,
 	// Every stage member exists on the one object `makeStages` builds; the
 	// STAGE TYPES are what hide the ones SQL wouldn't allow next. The
@@ -318,7 +332,7 @@ const makeStages = <TProjection extends SelectProjection>(
  */
 const makeDistinctableStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
-	fromTable: Table,
+	fromTable: FromSource,
 	projectionInput: TProjection,
 ): SelectDistinctable<TProjection> => {
 	// Same pairing as `makeStages`'s own `derive` (#423): `distinct`/
@@ -351,12 +365,12 @@ const makeDistinctableStages = <TProjection extends SelectProjection>(
 
 type ResolvedProjection = {
 	readonly projectionNode: ProjectionNode;
-	readonly fromTable: Table;
+	readonly fromTable: FromSource;
 };
 
 const resolveProjection = (
 	projection: SelectProjection,
-	from: Table | undefined,
+	from: FromSource | undefined,
 ): ResolvedProjection => {
 	if (isTable(projection)) {
 		const meta = getTableMeta(projection);
@@ -400,13 +414,13 @@ const resolveProjection = (
  */
 export const select = <TProjection extends SelectProjection>(
 	projection: TProjection,
-	from?: Table,
+	from?: FromSource,
 ): SelectDistinctable<TProjection> => {
 	const { projectionNode, fromTable } = resolveProjection(projection, from);
 	const query: SelectNode = {
 		queryKind: "select",
 		projection: projectionNode,
-		from: tableRefOf(fromTable),
+		from: fromNodeOf(fromTable),
 		joins: [],
 		where: null,
 		groupBy: [],

@@ -868,6 +868,13 @@ const throwIndexPredicateForeignColumnRef = (
 		// predicate -- a CTE does not exist at index-creation time
 		// (it is statement-local to a query, not a schema object), so
 		// naming it here is meaningless, not merely out of scope.
+		// Task 3.2: unlike the FK-target guards below, this one is NOT
+		// closed by the type layer -- `.where()` accepts a plain
+		// `Expr<"boolean">` (`comparison()` only needs `.exprNode`/
+		// `.family`), which a withCte() reference still satisfies without
+		// its typeNode. A leaked reference reaches this guard through
+		// completely ordinary typed usage, no cast required -- this stays
+		// the first (and only) line.
 		return throwHejbroError(
 			"index-predicate-foreign-column-ref",
 			`index "${foreign.name}"'s where predicate on table "${tableName}" references a column of the CTE "${foreign.ref.tableName}" — a CTE is statement-local and does not exist at index-creation time. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
@@ -1004,6 +1011,10 @@ const resolveReferenceTarget = (
 		// itself -- a CTE has no schema, so it cannot be what a foreign key
 		// points at (D94's boundary: a CTE is statement-local, never a
 		// schema object a constraint can name).
+		// Task 3.2: withCte()'s reference is structurally not a ColumnRef
+		// (no typeNode), so no builder can reach this branch any more --
+		// that is the first line. This is the second, for an artifact
+		// path (a decoded snapshot, a hand-assembled node).
 		return throwHejbroError(
 			"foreign-column-ref",
 			`table "${tableName}" declares a foreign key whose references.columns names "${first.exprNode.tableName}.${first.exprNode.columnName}", a column of a CTE — a foreign key's target must be a declared table's own column. Next: reference a declared table's column instead.`,
@@ -1042,6 +1053,10 @@ const resolveForeignKey = (
 			// add-ctes task 1.2c: a CTE column reaching a local FK column
 			// position (D105 -- "reachable but silent" is the exact failure
 			// this refusal exists to name instead of).
+			// Task 3.2: withCte()'s reference is structurally not a
+			// ColumnRef (no typeNode), so no builder can reach this branch
+			// any more -- that is the first line. This is the second, for
+			// an artifact path (a decoded snapshot, a hand-assembled node).
 			return throwHejbroError(
 				"foreign-column-ref",
 				`table "${tableName}" received a column of the CTE "${foreignRef.exprNode.tableName}" as a foreign key's local column — a CTE is statement-local and cannot back a table's foreign key. Next: pass one of "${tableName}"'s own columns instead.`,
@@ -1133,6 +1148,10 @@ const foldColumnReferences = (
 			// reference target, the D102 twin of resolveReferenceTarget's
 			// guard above -- a CTE column reaching here is refused the same
 			// way, not half-encoded into a target that has no schema.
+			// Task 3.2: withCte()'s reference is structurally not a
+			// ColumnRef (no typeNode), so no builder can reach this branch
+			// any more -- that is the first line. This is the second, for
+			// an artifact path (a decoded snapshot, a hand-assembled node).
 			return throwHejbroError(
 				"foreign-column-ref",
 				`table "${tableName}" column "${entry.columnName}" declares .references() pointing at "${target.exprNode.tableName}.${target.exprNode.columnName}", a column of a CTE — a foreign key's target must be a declared table's own column. Next: reference a declared table's column instead.`,

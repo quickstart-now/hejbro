@@ -321,6 +321,7 @@ export type {
 } from "./query/mutate";
 export { deleteFrom, insert, update } from "./query/mutate";
 export type {
+	FromSource,
 	NestedReadMarker,
 	OrderTermInput,
 	SelectDistinctable,
@@ -345,6 +346,16 @@ export {
 	resolveOrderTerm,
 	select,
 } from "./query/select";
+export type {
+	CteBuilder,
+	CteEntryOptions,
+	CteFieldRef,
+	CteReference,
+	CteRowEnvironment,
+	CteRowMeta,
+	WithStage,
+} from "./query/with";
+export { cteRowMeta, isCteReference, withCte } from "./query/with";
 export type { ColumnOrderOracle } from "./snapshot/column-order";
 export { computeColumnOrder, noColumnOrder } from "./snapshot/column-order";
 export type { Snapshot } from "./snapshot/snapshot";

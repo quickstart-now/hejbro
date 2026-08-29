@@ -26,6 +26,15 @@ changes when 4.3 wires `retargetViewQuery` to it and 4.5 puts `with` into
 the reachable-kinds fixture. Until then, deleting that test removes the
 last thing standing between this node and a silent regression.
 
+**Every new public symbol carries a one-line justification** (owner
+directive, 2026-08-29, via the UX/DX audit): why it cannot be expressed by
+composing what already exists, and how its name is symmetric with its
+siblings. This applies to exports and to chain methods, and it is recorded
+where the symbol is added — reconstructing it later at task 7.7 is how a
+surface grows by accident. `hejbro`'s barrel re-exports core with
+`export *`, so a core export is a user-facing symbol whether or not it was
+meant as one.
+
 ## 1. The WithNode, the from union, and their rendering
 
 - [x] 1.1 (~9m) [design] `WithNode` as a `QueryNode` variant, plus its
@@ -261,7 +270,7 @@ sequenced; whichever reaches `dev` second rebases. The regions differ (a
 factory body versus the `with()` entry point), so a conflict is unlikely
 rather than impossible.
 
-- [ ] 3.1 (~10m) [design] `withCte()` as a statement root and the CTE
+- [x] 3.1 (~10m) [design] `withCte()` as a statement root and the CTE
       reference it hands back. **The name is settled (lead, 2026-08-29)**:
       core's standalone export is `withCte`, the chain's method stays
       `with` (5.4). `with` cannot be a standalone export at all — it is a
@@ -287,9 +296,22 @@ rather than impossible.
       `packages/core/test/query/with.test.ts` — "a statement declares a
       named query and selects from it". Files:
       `packages/core/src/query/with.ts` (new), that test.
-- [ ] 3.2 (~8m) [design] The named row environment at the type level.
+- [x] 3.2 (~8m) [design] The named row environment at the type level.
       **Settled (lead, 2026-08-29)**: a projected field's reference is
-      `Omit<TValue, "exprNode"> & { exprNode: ColumnRefNode }`. Two
+      `Omit<TValue, "exprNode"> & { exprNode: ColumnRefNode }` — **and
+      `typeNode`/`sqlName` come off too**, uniformly, whatever the
+      projection's shape. Taken literally the `Omit` above only weakens a
+      *computed* field, because a whole-table or pass-through projection
+      starts from a real `ColumnRef` and keeps its `typeNode`; that would
+      make "a CTE reference cannot reach a declaration site" true of some
+      fields and false of others — a rule that leaks is the shape this
+      change argues against. Those two fields buy a CTE reference nothing
+      on the query side (operators read `exprNode`/`family`), and what
+      they buy on the declaration side is exactly what must not happen.
+      Condition on this: confirm the read types of a whole-table CTE
+      projection are unchanged by the strip — if `SelectResult` turns out
+      to lean on `typeNode` for those, the cost is real and the uniform
+      rule is renegotiated rather than paid silently. Two
       consequences, both load-bearing and both worth stating in the D105
       row: every type-level brand the projected value carried (`ReadAs`,
       the column-origin brand) is **preserved for free**, so no brand
@@ -301,7 +323,16 @@ rather than impossible.
       D105, realised on the user-facing surface. The premise was verified
       before the design: every comparison and filter operator reads only
       `.exprNode` and `.family` from its operand, and `.typeNode` is
-      required only at declaration sites. Then: a
+      required only at declaration sites.
+      **One consequence to mark in the code** (review, group 2): once the
+      type layer closes the builder path, 1.2c/1.2d's runtime guards
+      become unreachable from any builder — their tests already
+      hand-assemble a null-schema reference. That is the intended
+      ordering, but what it leaves behind reads like dead code: a guard no
+      caller can reach, kept alive by a hand-built test. Leave one line at
+      each guard saying the type layer is the first line and this is the
+      **artifact path's** second (a decoded snapshot, a hand-assembled
+      node), so the next reader deletes neither. Then: a
       computed field keeps its read brand outside the CTE (an
       `over(rowNumber(), …) as rn` is a `bigint` there, not `unknown`),
       and a column the CTE does **not** project is not reachable even
@@ -310,11 +341,17 @@ rather than impossible.
       file — "a projected window alias is filterable outside the CTE" and
       "an unprojected source column is not reachable". Files:
       `packages/core/src/query/with.ts`, that test.
-- [ ] 3.3 (~6m) `select()` accepts a CTE reference as its from-source, so
-      the builder can express what group 1 can render. Red: same file —
+- [x] 3.3 (~6m) `select()` accepts a CTE reference as its from-source, so
+      the builder can express what group 1 can render. **Lands in the same
+      commit as 3.1** (times and ticks stay separate): 3.1's red test says
+      "declares a named query and **selects from it**", and until `from`
+      is widened that test does not merely fail — it fails to type-check,
+      taking `check-types` with it. The weaker test that compiles (using
+      the reference only in `where`) is refused by 1.3/1.6's scope guard,
+      correctly, so there is no honest intermediate state. Red: same file —
       "select(…, cteRef) builds a select whose from is the reference".
       Files: `packages/core/src/query/select.ts`, that test.
-- [ ] 3.4 (~6m) [design] The `materialized` hint on the builder surface,
+- [x] 3.4 (~6m) [design] The `materialized` hint on the builder surface,
       both values and the absent case. **Where it goes is this task's to
       settle** — `w.as(name, query, options?)` reads naturally now that
       3.1's shape is fixed, but decide it rather than inherit it, and
@@ -539,10 +576,11 @@ route it through the lead rather than absorbing it.
       pass `FromNode[]`, but they cannot name that parameter's type.
       Export it or narrow the public wrappers — decide, do not inherit.
       Then the published-surface assertion block in
-      `packages/cli/test/exports.test.ts`. **Signal the lead immediately
-      before starting this task** — that file is inside another team's
-      slice and the lead sequences it. `packages/cli/src/index.ts` needs
-      no edit: it re-exports core with `export *`.
+      `packages/cli/test/exports.test.ts`. **No longer gated** — the team
+      that held that file finished and dissolved (lead, 2026-08-29), so
+      its final version is on `dev` and this change meets it at the last
+      rebase like any other file. `packages/cli/src/index.ts` needs no
+      edit: it re-exports core with `export *`.
 - [ ] 7.4 (~6m) Changeset (D59, `minor`), `openspec/task-times.csv` rows
       from **measured** durations, README task-time and CRAP badges.
 - [ ] 7.5 (~8m) The D105 rows in `docs/specs/2026-08-19-hejbro-design.md`.
@@ -553,6 +591,30 @@ route it through the lead rather than absorbing it.
       **stop and request re-approval** rather than editing the approved
       text. Summary-table row and decision-log row go in **one commit**,
       as D103 and D104 did.
+- [ ] 7.7 (~6m) The **surface delta**, in the standard five-part form
+      (lead, 2026-08-29): ① each added symbol with its "not expressible by
+      composing what exists" + "name symmetric with its siblings"
+      argument; ② widened parameters classified **separately** — those are
+      asymmetry removed, not surface added (`from`/`JoinNode.table`
+      accepting a CTE reference, `ColumnRefNode.schemaName` going
+      nullable); ③ the count of new top-level exports backed by a
+      machine check (`exports.test.ts`), not by hand; ④ new diagnostic
+      codes with whether each follows an existing naming family
+      (`undeclared-cte` took its own; the declaration-site guards joined
+      `foreign-column-ref`'s — say **why one change went both ways**, at
+      the entry itself); ⑤ one sentence of overall judgement on
+      consistency-for-surface; ⑥ the **deliberate non-additions** and
+      their reasons.
+      The justifications are **collected, not invented here** — each was
+      recorded where the symbol landed (standing note above). This change
+      adds more symbols than most, so ① carries real weight: `withCte`
+      (reserved word forces the name; the callback shape removed a second
+      change to `select()`'s signature), `w.as`, the chain's `with`, and
+      group 1's node types, which reach users through `hejbro`'s
+      `export *` whether or not they were meant to. Note the deliberate
+      *non*-additions too — the output column alias list was excluded to
+      keep one source of truth for a row's key names. Goes in the PR body
+      and the merge declaration.
 - [ ] 7.6 (~10m) The `blackbox/` entry (D89) — an owner-driven change
       carries one in the same PR: what was asked, what was built, why, and
       the internal processing, with per-file git blob SHA pins per
@@ -561,7 +623,37 @@ route it through the lead rather than absorbing it.
       the planner's own mis-instruction to quote the design log's D5 when
       the parked D5 is #299's internal number (caught by the lead before
       any work was based on it), and the fact that the filed fork read as
-      one question but was two.
+      one question but was two. The running list, kept here so it is
+      collected rather than reconstructed:
+      **Planner errors.** The D5 mix-up. A handoff sent at a stale SHA
+      twice, the second time making the reviewer report a defect
+      (unticked checkboxes) that was already fixed — the cost of sending
+      a correction while messages crossed, closed by confirming "no more
+      commits + clean status" before fixing a SHA. A claim in this file's
+      own header — "the registry forces this handler" — that was false
+      for `retarget.ts` and was copied from here into a source comment;
+      both had to be fixed, and fixing only the source would have let the
+      next task spread it again. Task 6.1's file list omitting the file
+      its own precondition lives in. Task 2.5 placed in group 2 on a
+      surface resemblance to add-window-functions, where the hand-built
+      node sat *inside* a `SelectNode` and the view's own field never
+      changed type — **the lesson is that a resemblance is not a
+      precedent unless the layer that changes is the same one**. Stub
+      totals miscounted twice by hand, fixed by taking the count from the
+      list's own length.
+      **Caught before code, seven times.** Two files outside any group's
+      list; a test 1.3c would have broken; 2.5's sequencing; the reserved
+      word `with`; a red test that could not compile without 3.3; and the
+      one that differs in kind — the `typeNode` strip, which corrected a
+      claim the planner had **already reported upward**, so a false
+      sentence was on its way into the D105 row rather than into code.
+      **What the process caught that review would not have.** 1.6's
+      regression surfaced while writing the red test for an unrelated
+      review finding: `select b.id from a` with `b` declared but unjoined
+      had been passing since 1.3b, because one channel was answering two
+      questions. And the `cli` failures that took six exchanges before
+      anyone ran the documented remedy — the lesson there is that "it
+      fails the same way every time" is an observation, not a diagnosis.
 
 ## Verification
 
