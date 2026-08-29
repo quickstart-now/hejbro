@@ -158,7 +158,8 @@ got it right.
   (the three-way exit code, the coverage-boundary statement, the
   inventory section), `packages/cli/src/check/catalog.ts` (the read-only
   catalog queries), `packages/cli/src/check/driver.ts` (`--url`/
-  `DATABASE_URL` resolution, the `@hejbro/pg` peer).
+  `DATABASE_URL` resolution, `@hejbro/pg` declared as no dependency
+  kind at all).
 - Gates: every path cited above is checked by
   `packages/skills/test/links.test.ts`; the `ts` block on this page is
   type-checked against this repo's real source by

@@ -12,11 +12,11 @@ Refs:
 - packages/cli/src/flags.ts @ blob 44f6f48fafb03c48f8623573af5c4e42e643d683
 - packages/cli/test/check-command.test.ts @ blob c8142a2ae88d53b01508ebc401a53f7e262a5ea0
 - packages/cli/test/check-live.integration.test.ts @ blob 7407a342d4e15e119ddd8f1aa4ad7c8e387969fa
-- skills/hejbro/references/brownfield-adoption.md @ blob e47737b34e70526b8c9fb823ae0f5c2b11cb5f79
+- skills/hejbro/references/brownfield-adoption.md @ blob d450f59e637b51dd7e64d1efb698b8e232847b57
 - skills/hejbro/SKILL.md @ blob f0360abf42aba67548c03ab3148642fcd8a4f498
 - .changeset/add-check-schema.md @ blob 712d49d19cee9f502924292f1534691a47c9a375
-- openspec/task-times.csv @ blob 657ea529798d60040fabd5c8b9fea969bdc27862
-- README.md @ blob 120000966e61ffc1828d6e4c2205e9bb8b090c66
+- openspec/task-times.csv @ blob ddc19d75fa9a4a2f3c5f02140c1de71f302b6287
+- README.md @ blob 0d5835211c6a7e42c13151bcab22cd3244c9e210
 
 # add-check-schema — `hejbro check` (#442)
 

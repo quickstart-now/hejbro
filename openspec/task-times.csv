@@ -285,5 +285,5 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-29,add-check-schema,6.4,6,7,15,0,"owner-implicit-grant (relacl NULL) + mixed-case role fixture; pin-vs-reality check via a driver execute() spy, confirmed live via a mutated-pin red showing the real wire text"
 2026-08-29,add-check-schema,7.1,7,7,9,0,"brownfield-adoption.md: check section rewritten, live-database opening paragraph corrected, code citations added"
 2026-08-29,add-check-schema,7.2,7,5,3,0,"SKILL.md rule 7: one sentence added, rule 7 text and references table otherwise untouched"
-2026-08-29,add-check-schema,7.3,7,6,11,0,"changeset (minor, fixed group of 5), 26 task-times.csv rows, README task-time badges regenerated (check:crap already matched, no diff)"
+2026-08-29,add-check-schema,7.3,7,6,11,0,"changeset (minor, fixed group of 5), 28 task-times.csv rows, README task-time badges regenerated (check:crap already matched, no diff)"
 2026-08-29,add-check-schema,7.4,7,7,16,0,"blackbox entry: fetched #442's real issue text via gh api rather than reconstructing it from memory; five process observations recorded (grant same-mistake-opposite-direction, the order that found it, pin-vs-meaning repeated four times, 4.4's unreached wiring, flags.ts predicting --url=)"
