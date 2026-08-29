@@ -127,6 +127,11 @@ unscoped.
   preset supplies no alternative path that would apply the context
   another way
 
+## RENAMED Requirements
+
+- FROM: `### Requirement: Token verification stays with the application`
+- TO: `### Requirement: Token verification never happens in the preset, and where it does happen decides the surface`
+
 ### Requirement: Token verification never happens in the preset, and where it does happen decides the surface
 A preset SHALL NOT verify or decode a raw token itself. Verification
 SHALL happen somewhere, and which surface a preset may offer follows from

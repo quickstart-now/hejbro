@@ -126,7 +126,27 @@ setting is ever written).
 - **THEN** the context's `settings` contain exactly the key
   `request.jwt.claims` and no other key, and its value is a JSON string
 
-### Requirement: Token verification stays with the application
+### Requirement: Context execution requires transactions
+Executing under a context on a driver without the interactive-
+transaction capability SHALL fail with the explicit missing-capability
+error before any statement is sent — never by falling back to a
+connection-level setting, and never by executing the caller's statements
+unscoped.
+
+#### Scenario: Context on a non-transactional driver
+- **WHEN** `db.as(context)` executes on a driver lacking interactive
+  transactions
+- **THEN** the call fails naming the missing capability and nothing
+  reaches the database
+
+#### Scenario: A preset's one-shot driver refuses a context
+- **WHEN** `db.as(context)` is used on a provider preset's driver built
+  for a connection path that declares interactive transactions `false`
+- **THEN** the call fails with the same missing-capability error, and the
+  preset supplies no alternative path that would apply the context
+  another way
+
+### Requirement: Token verification never happens in the preset, and where it does happen decides the surface
 The Supabase preset SHALL NOT verify or decode a raw token itself. The
 claims object `asUser(claims)` accepts SHALL be the caller's own
 already-verified claims (for example supabase-js `getClaims`, Clerk
@@ -141,13 +161,107 @@ forged subject.
   `asUser(claims)`; the preset provides no function that accepts a raw
   JWT string
 
-### Requirement: Context execution requires transactions
-Executing under a context on a driver without the interactive-
-transaction capability SHALL fail with the explicit missing-capability
-error before any statement is sent.
+### Requirement: The Neon preset fixes the authentication mode at construction
+Neon's session extension resolves identity from one of two settings
+depending on how the database is configured: a claims object, or a raw
+JWT it verifies itself. The two are mutually exclusive — when the
+database verifies a token itself, the claims setting is ignored entirely.
+The preset SHALL take the mode once, when its auth surface is
+constructed, and SHALL expose only the builders that mode can use, so
+that a single codebase cannot mix them. The mode SHALL NOT be discovered
+by querying the database: that is a probe, and the surface is fixed as
+data before any connection exists, exactly as a driver's capabilities
+are. Every builder SHALL carry its value as a transaction-local session
+setting through the generic mechanism, adding no platform-specific step
+to it.
 
-#### Scenario: Context on a non-transactional driver
-- **WHEN** `db.as(context)` executes on a driver lacking interactive
-  transactions
-- **THEN** the call fails naming the missing capability and nothing
-  reaches the database
+Where the mode is not statically known to the type layer, the
+constructed surface SHALL expose neither mode's builders until the mode
+is narrowed — failing closed at compile time — rather than exposing
+both.
+
+The claims-mode builder `asUser(claims)` SHALL accept an arbitrary claims object that requires a
+`sub` claim identifying the subject — enforced both as a compile-time
+type constraint and as a fail-fast runtime check for a caller that
+bypasses the type — SHALL fix the role to `authenticated`, and SHALL
+discard any caller-supplied `role` claim. The raw-JWT builder SHALL name
+the token in its own name, accept the token as an opaque string, fix the
+role to `authenticated`, and SHALL NOT decode, inspect, or validate the
+token. `asAnonymous()` SHALL fix the role to `anonymous` — Neon's own
+role name, which differs from Supabase's — with no subject requirement
+and no other setting.
+
+#### Scenario: A Neon user context names Neon's roles
+- **WHEN** a context is built with `asUser(claims)`
+- **THEN** the applied role is `authenticated` and the claims reach the
+  database as a transaction-local setting, never inlined into statement
+  text
+
+#### Scenario: A missing subject fails fast
+- **WHEN** `asUser(claims)` is called with a claims object lacking `sub`
+- **THEN** the call fails immediately with an explicit error, rather than
+  producing a context under which the platform's `auth.uid()` would
+  silently return NULL
+
+#### Scenario: The raw-JWT builder passes the token through untouched
+- **WHEN** a context is built with the raw-JWT builder
+- **THEN** the applied role is `authenticated`, the token reaches the
+  database as a transaction-local setting exactly as given, and the
+  preset performs no decoding or signature check of its own
+
+#### Scenario: One codebase cannot mix the two modes
+- **WHEN** an auth surface constructed for one mode is asked for the
+  other mode's builder
+- **THEN** the program fails to type-check, because that builder is not
+  part of the surface that mode produces
+
+#### Scenario: An unnarrowed mode exposes neither builder
+- **WHEN** the auth surface is constructed from a mode value the type
+  layer has not narrowed to one of the two modes
+- **THEN** neither mode's builder is accessible until the value is
+  narrowed, rather than both becoming accessible
+
+#### Scenario: The anonymous builder uses Neon's role name
+- **WHEN** a context is built with `asAnonymous()`
+- **THEN** the applied role is `anonymous`, and no identity setting is
+  applied
+
+### Requirement: The preset states what it cannot detect about the database
+The preset SHALL NOT read database state to discover which authentication
+mode the database is configured for: that is a probe, and the mechanism
+applies a context without asking the database anything first. Fixing the
+mode at construction therefore removes mixing, not mismatch — the
+declared mode can still be the wrong one for that database, and nothing
+in the type layer or at run time can say so. The preset's documentation
+SHALL state the failure this produces, **in both of its halves**: a
+context applies a role and an identity setting, and a wrong mode
+disables only the identity half. Policies keyed on the identity function
+therefore deny, but policies keyed only on the role — `to authenticated
+using (true)` and its relatives, the ordinary way to write "any signed-in
+user" — still admit, and the request then runs as a generic
+authenticated user with no identity ever resolved. The documentation
+SHALL warn about that second case and SHALL give the reader a way to
+reach the cause from the symptom. It SHALL also state that a token's
+validity is checked by the database when identity is first read, not
+when the context is applied.
+
+#### Scenario: A mismatched context denies where identity is the key
+- **WHEN** a context built for one authentication mode is applied to a
+  database configured for the other, and a policy is keyed on the
+  identity function
+- **THEN** the identity function returns NULL under that context and the
+  policy denies access
+
+#### Scenario: A mismatched context still admits where the role is the key
+- **WHEN** the same mismatched context is applied and a policy is keyed
+  only on the role
+- **THEN** the policy admits, because the role half of the context
+  applied normally — the request runs with no identity, which the
+  preset's documentation warns about rather than prevents
+
+#### Scenario: An invalid token surfaces at first use
+- **WHEN** a context carrying a malformed or unverifiable token is
+  applied
+- **THEN** applying the context succeeds and the failure surfaces when
+  the database first resolves identity, which the preset documents rather
+  than masks
