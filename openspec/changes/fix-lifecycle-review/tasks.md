@@ -344,7 +344,7 @@ settle. Files: `packages/skills/turbo.json`,
       becomes the five-package fixed group `.changeset/config.json`
       actually declares. Verified by the snippet-compile test plus
       review, not by a new test.
-- [ ] 5.3 (~7m) `blackbox/2026-08-29-fix-lifecycle-review.md` (D89): the
+- [x] 5.3 (~7m) `blackbox/2026-08-29-fix-lifecycle-review.md` (D89): the
       decision path, not a summary of the diff — the findings originate
       in an adversarial review of the day's own merges, and the four
       contract decisions (D1, D2, R2, R5) were settled by the lead under
@@ -359,7 +359,7 @@ settle. Files: `packages/skills/turbo.json`,
       worktree cache contaminating isolated review gates), #449 (a
       nested transaction racing a plain statement, scoped out here).
       Lands in this same PR.
-- [ ] 5.4 (~5m) Release chore: one `patch` changeset (D59 — the five
+- [x] 5.4 (~5m) Release chore: one `patch` changeset (D59 — the five
       fixed-group packages move together, so one changeset is both
       necessary and sufficient), `openspec/task-times.csv` rows for
       groups 1–5, README task-time badges (`pnpm check:tasktime`) and

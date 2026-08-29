@@ -405,16 +405,11 @@ function throwScalarReturnExpectsExpression(state: RecordingState): never {
 	);
 }
 
-const recordReturn = (
+/** {@link recordReturn}'s non-expression dispatch: a trigger row or a query, exhaustively -- split out so each function's own branching stays under the CRAP gate (#154) once the brand check (#445/R4) is added. */
+const recordReturnShape = (
 	state: RecordingState,
-	value: TriggerRow<Table> | ReturnableQuery | Expr,
+	value: TriggerRow<Table> | ReturnableQuery,
 ): void => {
-	state.returned.current = true;
-	// #445/R4: the trigger-row brand is checked before isReturnableExpr's
-	// duck-type (`"exprNode" in value`) -- a table with a column literally
-	// named `exprNode` gives its trigger row that same property, which
-	// would otherwise misroute `ctx.return(ctx.new)` down the expression
-	// path for that table only.
 	if (isTriggerRow(value)) {
 		if (state.returnKind === "scalar") {
 			throwScalarReturnExpectsExpression(state);
@@ -423,10 +418,6 @@ const recordReturn = (
 			stmtKind: "returnRef",
 			refName: value[triggerRowMeta],
 		});
-		return;
-	}
-	if (isReturnableExpr(value)) {
-		recordReturnExpr(state, value);
 		return;
 	}
 	if (state.returnKind === "scalar") {
@@ -440,6 +431,24 @@ const recordReturn = (
 		`ctx.return() in ${state.identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
 		state.declaredAt,
 	);
+};
+
+const recordReturn = (
+	state: RecordingState,
+	value: TriggerRow<Table> | ReturnableQuery | Expr,
+): void => {
+	state.returned.current = true;
+	// #445/R4: the trigger-row brand (checked inside recordReturnShape) is
+	// consulted before isReturnableExpr's duck-type (`"exprNode" in
+	// value`) ever gets the deciding vote -- a table with a column
+	// literally named `exprNode` gives its trigger row that same
+	// property, which would otherwise misroute `ctx.return(ctx.new)` down
+	// the expression path for that table only.
+	if (isReturnableExpr(value) && !isTriggerRow(value)) {
+		recordReturnExpr(state, value);
+		return;
+	}
+	recordReturnShape(state, value as TriggerRow<Table> | ReturnableQuery);
 };
 
 const recordForEach = <TProjection extends RowProjection>(
