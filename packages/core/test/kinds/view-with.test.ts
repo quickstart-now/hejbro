@@ -63,7 +63,7 @@ describe("column order reaches through a CTE-declaring view's WITH wrapper (add-
 		return null;
 	};
 
-	it("column order applies to the body; the entry's own whole-table projection is left alone (only the wrapper unwraps, never ctes)", () => {
+	it("column order applies to both the body and every entry's own whole-table projection (add-ctes task 4.2b) -- an entry's body is a plain select over a real table, with a physical order of its own, unlike a CTE reference", () => {
 		const view = defineView(
 			app,
 			"posts_with_ranked",
@@ -80,10 +80,16 @@ describe("column order reaches through a CTE-declaring view's WITH wrapper (add-
 				columnNames: ["status", "id"],
 			},
 		});
-		expect(reordered.ctes).toBe(asWithNode(view.query).ctes);
+		expect(reordered.ctes[0]?.query).toMatchObject({
+			projection: {
+				projectionKind: "allColumns",
+				columnNames: ["status", "id"],
+			},
+		});
+		expect(reordered.ctes).not.toBe(asWithNode(view.query).ctes);
 	});
 
-	it("a CTE reference as the body's from-source is left alone", () => {
+	it("a CTE reference as the body's from-source is left alone, even though the entry behind it still reorders", () => {
 		const view = defineView(
 			app,
 			"ranked_only",
@@ -92,9 +98,33 @@ describe("column order reaches through a CTE-declaring view's WITH wrapper (add-
 				return select({ id: ranked.id }, ranked);
 			}),
 		);
+		const reordered = asWithNode(applyColumnOrderToQuery(view.query, oracle));
 		// an object projection is never allColumns -- nothing for the
-		// oracle to touch, so the body keeps reference identity too.
-		expect(applyColumnOrderToQuery(view.query, oracle)).toBe(view.query);
+		// oracle to touch, so the body keeps reference identity...
+		expect(reordered.body).toBe(asWithNode(view.query).body);
+		// ...but the entry behind the reference is a plain select(posts),
+		// which does reorder (task 4.2b), so the node as a whole still
+		// changes.
+		expect(reordered).not.toBe(view.query);
+		expect(reordered.ctes[0]?.query).toMatchObject({
+			projection: {
+				projectionKind: "allColumns",
+				columnNames: ["status", "id"],
+			},
+		});
+	});
+
+	it("nothing changes when the oracle already agrees with declaration order everywhere -- both the wrapper and every entry keep reference identity", () => {
+		const inertOracle: ColumnOrderOracle = () => null;
+		const view = defineView(
+			app,
+			"posts_with_ranked_inert",
+			withCte((w) => {
+				w.as("ranked", select(posts));
+				return select(posts);
+			}),
+		);
+		expect(applyColumnOrderToQuery(view.query, inertOracle)).toBe(view.query);
 	});
 
 	it("viewKind.serialize applies the same reorder through view-kind.ts's own wrapper-unwrapping path (not just column-order.ts's)", () => {

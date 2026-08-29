@@ -359,7 +359,7 @@ describe("applyColumnOrderTo*", () => {
 		});
 	});
 
-	it("column order applies to a CTE-declaring statement's body, add-ctes task 4.2", () => {
+	it("column order applies to both a CTE-declaring statement's body and every entry's own query (add-ctes task 4.2/4.2b)", () => {
 		const withNode = {
 			queryKind: "with",
 			ctes: [{ name: "recent", query: select, materialized: null }],
@@ -372,17 +372,25 @@ describe("applyColumnOrderTo*", () => {
 			projectionKind: "allColumns",
 			columnNames: ["id", "title", "archived_at", "description"],
 		});
-		// an entry's own query is a computed result, not a stored object --
-		// left untouched, same as `ctes` never being visited at all.
-		expect((reordered as typeof withNode).ctes).toBe(withNode.ctes);
+		// an entry's own query is a plain select over a real table, with
+		// exactly the same physical order as any other one (task 4.2b) --
+		// not left untouched the way a CTE *reference* correctly is.
+		expect((reordered as typeof withNode).ctes[0].query.projection).toEqual({
+			projectionKind: "allColumns",
+			columnNames: ["id", "title", "archived_at", "description"],
+		});
 	});
 
-	it("a WithNode over an unknown-table body keeps reference identity", () => {
+	it("a WithNode over an unknown-table body AND unknown-table entries keeps reference identity", () => {
+		const unknownSelect = {
+			...select,
+			from: { schemaName: "app", tableName: "unknown" },
+		} as const;
 		const withNode = {
 			queryKind: "with",
-			ctes: [{ name: "recent", query: select, materialized: null }],
+			ctes: [{ name: "recent", query: unknownSelect, materialized: null }],
 			recursive: false,
-			body: { ...select, from: { schemaName: "app", tableName: "unknown" } },
+			body: unknownSelect,
 		} as const;
 		expect(applyColumnOrderToQuery(withNode, oracle)).toBe(withNode);
 	});

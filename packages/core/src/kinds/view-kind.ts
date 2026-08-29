@@ -4,6 +4,7 @@ import type {
 	ProjectionNode,
 	SelectNode,
 	SetOpNode,
+	WithEntryNode,
 	WithNode,
 } from "../expr/ast";
 import {
@@ -143,23 +144,54 @@ export const viewQueryColumns = (
 	query: SelectNode | SetOpNode | WithNode,
 ): ReadonlyArray<string> => projectionColumns(leftmostSelect(query).projection);
 
+/** `original` itself when a `.map` pass changed nothing across every element, else the freshly mapped array (mirrors `snapshot/column-order.ts`'s own copy, not shared across files on purpose: a different traversal over the same node shape). */
+const arrayWithIdentityPreserved = <T>(
+	mapped: ReadonlyArray<T>,
+	original: ReadonlyArray<T>,
+): ReadonlyArray<T> => {
+	if (mapped.every((item, index) => item === original[index])) {
+		return original;
+	}
+	return mapped;
+};
+
+/** One `WITH` entry's own query reordered against its own `from` -- an entry's body is an ordinary select over a real table (or another entry), with exactly the physical order any other select has (add-ctes, task 4.2b). */
+const applyColumnOrderToViewWithEntry = (
+	entry: WithEntryNode,
+	columnOrder: ColumnOrderOracle,
+): WithEntryNode => {
+	const query = applyColumnOrderToViewQuery(entry.query, columnOrder);
+	if (query === entry.query) {
+		return entry;
+	}
+	return { ...entry, query: query as typeof entry.query };
+};
+
 /**
- * A `WITH` statement's own physical order lives in its body (add-ctes,
- * task 4.2), same rule `column-order.ts`'s own `applyColumnOrderToQuery`
- * applies -- an entry is a computed query result, not a stored object
- * with a physical order of its own, so only the wrapper unwraps here.
- * Split out (D71/#154 ratchet-5) to keep `applyColumnOrderToViewQuery`'s
- * own complexity from accumulating a third branch's worth.
+ * A `WITH` statement's own physical order reaches both its body and every
+ * entry's own query (add-ctes, task 4.2b) -- only a CTE *reference* has
+ * no physical order (handled by `column-order.ts`'s own `orderedProjection`
+ * `cteName` branch); an entry's *body* is a plain select over real tables
+ * and reorders exactly like any other one, the same way `retargetWithNode`
+ * already recurses into `ctes` for a rename. Split out (D71/#154
+ * ratchet-5) to keep `applyColumnOrderToViewQuery`'s own complexity from
+ * accumulating a third branch's worth.
  */
 const applyColumnOrderToViewWith = (
 	query: WithNode,
 	columnOrder: ColumnOrderOracle,
 ): WithNode => {
+	const ctes = arrayWithIdentityPreserved(
+		query.ctes.map((entry) =>
+			applyColumnOrderToViewWithEntry(entry, columnOrder),
+		),
+		query.ctes,
+	);
 	const body = applyColumnOrderToViewQuery(query.body, columnOrder);
-	if (body === query.body) {
+	if (ctes === query.ctes && body === query.body) {
 		return query;
 	}
-	return { ...query, body: body as typeof query.body };
+	return { ...query, ctes, body: body as typeof query.body };
 };
 
 /** D81 over a set operation: each leaf select reorders against its own `from`. Split out (D71/#154 ratchet-5), same reasoning as {@link applyColumnOrderToViewWith}. */

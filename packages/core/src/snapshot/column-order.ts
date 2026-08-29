@@ -13,6 +13,7 @@ import type {
 	SelectNode,
 	SetOpNode,
 	TableRefNode,
+	WithEntryNode,
 	WithNode,
 } from "../expr/ast";
 import { renderExpr } from "../expr/render-sql";
@@ -240,22 +241,52 @@ const applyColumnOrderToSetOp = (
 	};
 };
 
+/** `original` itself when a `.map` pass changed nothing across every element, else the freshly mapped array -- `.map` always allocates, even when every entry comes back unchanged (mirrors `expr/retarget.ts`'s own `arrayWithIdentityPreserved`, not shared across files on purpose: a column-order pass and a rename pass are different traversals over the same node shape). */
+const arrayWithIdentityPreserved = <T>(
+	mapped: ReadonlyArray<T>,
+	original: ReadonlyArray<T>,
+): ReadonlyArray<T> => {
+	if (mapped.every((item, index) => item === original[index])) {
+		return original;
+	}
+	return mapped;
+};
+
+/** One `WITH` entry's own query reordered against its own `from` -- an entry's body is an ordinary select over a real table (or another entry), with exactly the physical order any other select has (add-ctes, task 4.2b: entries were wrongly treated as computed results with no physical order of their own, the same status a CTE *reference* correctly has, but an entry's *body* does not). */
+const applyColumnOrderToWithEntry = (
+	entry: WithEntryNode,
+	columnOrder: ColumnOrderOracle,
+): WithEntryNode => {
+	const query = applyColumnOrderToQuery(entry.query, columnOrder);
+	if (query === entry.query) {
+		return entry;
+	}
+	return { ...entry, query: query as typeof entry.query };
+};
+
 /**
- * A `WITH` statement's own physical order lives in its body (add-ctes,
- * task 4.2) -- an entry is a computed query result, not a stored object
- * with a physical column order of its own, so only the wrapper is
- * unwrapped here, never `ctes`. Split out (D71/#154 ratchet-5), same
- * reasoning as {@link applyColumnOrderToSetOp}.
+ * A `WITH` statement's own physical order reaches both its body and every
+ * entry's own query (add-ctes, task 4.2b) -- only a CTE *reference* (a
+ * `from`/join naming one by its bare name) has no physical order, handled
+ * separately by `orderedProjection`'s own `cteName` branch; an entry's
+ * *body* is a plain select over real tables and reorders exactly like any
+ * other one, the same way `retargetWithNode` already recurses into
+ * `ctes` for a rename. Split out (D71/#154 ratchet-5), same reasoning as
+ * {@link applyColumnOrderToSetOp}.
  */
 const applyColumnOrderToWith = (
 	node: WithNode,
 	columnOrder: ColumnOrderOracle,
 ): WithNode => {
+	const ctes = arrayWithIdentityPreserved(
+		node.ctes.map((entry) => applyColumnOrderToWithEntry(entry, columnOrder)),
+		node.ctes,
+	);
 	const body = applyColumnOrderToQuery(node.body, columnOrder);
-	if (body === node.body) {
+	if (ctes === node.ctes && body === node.body) {
 		return node;
 	}
-	return { ...node, body: body as typeof node.body };
+	return { ...node, ctes, body: body as typeof node.body };
 };
 
 export const applyColumnOrderToQuery = (

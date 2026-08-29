@@ -21,10 +21,13 @@ review). There is no mapped-type registry over `queryKind` there — unlike
 `render-sql.ts`'s `RenderQueryHandlers` — and `REACHABLE_NODE_KINDS` is a
 list of `ExprNode` kinds that does not contain `with`. So today **nothing
 forces `retargetWithNode` to exist at all**, and 2.3's dedicated test is
-not a supplement to a registry: it is the only defence there is. That
-changes when 4.3 wires `retargetViewQuery` to it and 4.5 puts `with` into
-the reachable-kinds fixture. Until then, deleting that test removes the
-last thing standing between this node and a silent regression.
+not a supplement to a registry: it is the only defence there is.
+**And it stays that way — this was expected to change at 4.5 and does
+not.** `REACHABLE_NODE_KINDS` is `ExprNode` vocabulary; a `queryKind` is
+not in it and will not be added, so no registry will ever force this
+node's handler to exist or to descend. 4.3 gave it a production caller,
+which is a different thing. Deleting that test removes the only thing
+standing between this node and a silent regression, permanently.
 
 **Every new public symbol carries a one-line justification** (owner
 directive, 2026-08-29, via the UX/DX audit): why it cannot be expressed by
@@ -469,6 +472,26 @@ rather than impossible.
       applies to a CTE-declaring view's body, and a CTE reference is left
       alone". Files: `packages/core/src/snapshot/column-order.ts`, that
       test.
+- [x] 4.2b (~7m) Column order reaches a `WITH`'s **entries**, not only its
+      body (group 4 review). The first pass unwrapped the wrapper and
+      recursed into `body` alone, reasoning that an entry is a computed
+      result rather than a stored object. Two things were conflated: a CTE
+      *reference* has no physical order — true, and
+      `orderedProjection`'s `cteName` branch already handles it — but an
+      entry's *body* is an ordinary select over real stored tables, and
+      those do. Measured: the same `select(posts)` serialized
+      `["id","title","body"]` as a bare select and as a WITH body, and
+      `["body","id","title"]` as an entry. **One view, two orderings,
+      both stored.** Two arguments settle it: the owner's rule that a
+      rendered column list is a reviewable contract (never `select *`)
+      makes a list frozen at declaration time drift from its sibling as
+      the table changes; and 4.3's `retargetWithNode` **does** recurse
+      into `ctes` to rewrite renamed columns — one slice treating entries
+      as stored in one pass and computed in the other is the tell. Red:
+      `packages/core/test/kinds/view-with.test.ts` — the existing entry
+      assertion pins the wrong order and inverts here. Files:
+      `packages/core/src/snapshot/column-order.ts`,
+      `packages/core/src/kinds/view-kind.ts`, that test.
 - [x] 4.3 (~7m) The rename engine's view path (`retargetViewQuery`)
       descends through a `WITH`. This is a different registry from 2.3's
       and gets its own red test for the same reason 2.3 exists. Red:
@@ -485,7 +508,18 @@ rather than impossible.
       a `WithNode`, classified as a documented boundary rather than a stub
       **because this assertion was expected to force the question**. If it
       does not go red for that boundary, the classification was wrong and
-      the boundary needs its own marker. Red:
+      the boundary needs its own marker.
+      **Outcome: no red — and the stated reason was wrong while the
+      conclusion held.** `queryKind` is not in
+      `NODE_KIND_TO_SNAPSHOT`/`PROJECTION_KIND_TO_SNAPSHOT` at all; those
+      registries cover `ExprNode` and `ProjectionNode` vocabulary, so the
+      D70 completeness assertion was never going to ask about a query
+      kind. The boundary is fine, but not for the reason it was cleared
+      on. What actually resolved it is 4.1: views serialize through a
+      local `encodeViewQueryNode` that dispatches to `encodeWithNode`, so
+      `encodeQueryNode` staying narrow is now a **standing design with two
+      dispatchers**, not a deferral — and that is what needs saying in the
+      code, since a reader will otherwise ask why there are two. Red:
       `packages/core/test/naming-conventions.test.ts` completeness. Files:
       `packages/core/test/expr/reachable-kinds.ts`, that test.
 - [x] 4.4 (~8m) The Supabase preset's `view-security-invoker` validator,

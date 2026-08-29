@@ -510,15 +510,16 @@ const retargetWithEntry = (
  * invariant as {@link retargetExprNode}. Called from production code since
  * task 4.3 (`engine/rename/retarget.ts`'s own `retargetViewQuery`, a
  * stored view's rename path). Unlike {@link retargetSelectNode}'s
- * siblings, nothing here yet *forces* this handler to exist: this file has
- * no `queryKind`-keyed registry (`render-sql.ts`'s `RenderQueryHandlers`
- * has no counterpart here), and `REACHABLE_NODE_KINDS` is an `ExprNode`
- * list that does not contain `with` until task 4.5 adds a producer for it.
- * Until then, task 2.3's dedicated test is still what a silent
- * `with: (node) => node` regression would have to slip past first — a real
- * caller now depends on this function returning something other than
- * `node`, but that dependency isn't wired into the completeness check
- * that would fail loudly if the descent broke.
+ * siblings, no registry forces this handler to exist, and none ever will:
+ * this file has no `queryKind`-keyed registry (`render-sql.ts`'s
+ * `RenderQueryHandlers` has no counterpart here), and `REACHABLE_NODE_KINDS`
+ * is an `ExprNode` vocabulary — `QueryNode.queryKind` was never a member of
+ * it and task 4.5 confirmed that stays true (a `WithNode` reaching a
+ * stored view adds a producer for kinds already listed, never a new map
+ * entry). Task 2.3's dedicated test is therefore the permanent, only
+ * defence here — a real caller now depends on this function returning
+ * something other than `node`, but that dependency is not wired into any
+ * completeness check that would fail loudly if the descent broke.
  */
 export const retargetWithNode = (
 	node: WithNode,
