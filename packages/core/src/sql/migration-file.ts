@@ -176,8 +176,9 @@ export type BannerHashes = {
 	readonly current: string;
 };
 
-const BASELINE_LINE =
-	"-- baseline: these objects already exist — register this migration as applied, do not run it";
+/** The machine-readable half of the baseline marker -- everything up to and including the colon. {@link parseBannerBaseline} matches on this alone, never the full {@link BASELINE_LINE}: the guidance prose after the colon is for humans and may reword, and a parser keyed to the whole sentence would silently start reporting `false` for every already-written migration the moment that prose changed -- exactly backwards for a marker whose only job is telling an apply tool not to run a migration. */
+const BASELINE_PREFIX = "-- baseline:";
+const BASELINE_LINE = `${BASELINE_PREFIX} these objects already exist — register this migration as applied, do not run it`;
 const PARENT_SNAPSHOT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
 const VERSION_PREFIX = "-- hejbro: ";
@@ -276,13 +277,14 @@ export const parseBannerVersion = (fileContent: string): string | null => {
  * deciding whether to run a migration or register it as already applied,
  * so absence is a meaningful answer, not a missing value (`T | null`, the
  * shape {@link parseBannerHashes}/{@link parseBannerVersion} use, would be
- * wrong here: there is no third state). Reads by {@link BASELINE_LINE}'s
- * own known prefix only, so an unrelated banner line is never mistaken
- * for it, and an older hejbro reading a newer file's other unknown lines
- * stays unaffected.
+ * wrong here: there is no third state). Reads by {@link BASELINE_PREFIX}
+ * only, never the full {@link BASELINE_LINE} — see that constant's own
+ * comment for why matching the human-facing prose too would be wrong.
+ * Unrelated banner lines are never mistaken for it, and an older hejbro
+ * reading a newer file's other unknown lines stays unaffected.
  */
 export const parseBannerBaseline = (fileContent: string): boolean =>
-	fileContent.split("\n").some((line) => line.startsWith(BASELINE_LINE));
+	fileContent.split("\n").some((line) => line.startsWith(BASELINE_PREFIX));
 
 const changeVerb = (operation: ChangeOperation): string => {
 	switch (operation) {

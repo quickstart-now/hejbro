@@ -97,6 +97,12 @@ The parser SHALL read the marker by its own known prefix only, leaving
 unknown banner lines ignored, so an older hejbro reading a newer file
 stays unaffected.
 
+The machine contract is the `-- baseline:` prefix; the guidance that
+follows the colon is prose for humans and MAY change. A parser that
+matched the whole line would return `false` for every migration written
+before such a wording change — and a `false` here tells an apply tool to
+*run* a migration that must only be registered.
+
 #### Scenario: A baseline migration is identified by its marker
 - **WHEN** a tool parses a migration file written by `hejbro baseline`
 - **THEN** the exported parser reports the marker as present, and reports

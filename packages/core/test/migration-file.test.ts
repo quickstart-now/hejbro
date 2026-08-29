@@ -268,6 +268,17 @@ describe("parseBannerBaseline (#445/R5)", () => {
 		const sql = "-- hejbro migration\n-- ~ table app.posts [baseline notes]";
 		expect(parseBannerBaseline(sql)).toBe(false);
 	});
+
+	it("still reports true for a differently-worded baseline line -- the prefix is the contract, not the guidance prose", () => {
+		// simulates an already-written migration whose prose predates a
+		// future wording change: matching the whole rendered sentence
+		// (instead of just the "-- baseline:" prefix) would silently
+		// report `false` here, telling an apply tool to RUN a migration
+		// that must only ever be registered.
+		const sql =
+			"-- hejbro migration\n-- baseline: an earlier wording of this same guidance\n-- + table app.posts [new]";
+		expect(parseBannerBaseline(sql)).toBe(true);
+	});
 });
 
 describe("renderMigrationPrefix", () => {
