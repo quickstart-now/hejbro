@@ -8,13 +8,48 @@ and decision-log row in **one commit**, as D103 and D104 did. That file is
 owner-gated; this copy exists so the approved wording is diffable rather
 than re-typed from a message.
 
-**Re-verify before transcribing.** The row quotes four measured figures —
-**13**, **10**, **3**, **0**. They were measured on the implemented tree
-after `pnpm build --force`, through source-alias probes that never read
-`dist`. If the branch was rebased after this approval, re-count first; if
-any figure moved, the corrected wording goes back to the lead **before it
-lands**, because the approval was of a specific claim, not of a
-placeholder.
+**Re-verify before transcribing.** The row quotes four measured figures.
+They are measured on the implemented tree after `pnpm build --force`,
+through source-alias probes that never read `dist`. If the branch is
+rebased, re-count first; if any figure moves, the corrected wording goes
+back to the lead **before it lands**, because the approval was of a
+specific claim, not of a placeholder.
+
+**That protocol fired.** The rebase onto `5b8a895` moved one figure:
+**F2 went 10 → 11**, because #479 (plpgsql body statements) added
+`queryKindNames`, an exhaustive mapped type over `QueryNode["queryKind"]`
+— a new consumer of exactly the kind F2 counts. The transcription was
+reverted, the number corrected here, and the row re-approved. The other
+three (13 / 3 / 0) held.
+
+**How each figure is produced.** One dummy member, one count, one revert;
+never `dist`.
+
+```bash
+git status --porcelain          # must be empty before and after each probe
+pnpm build --force              # then leave the build alone
+
+# F1: add to packages/core/src/expr/ast.ts
+#   type FromNode = TableRefNode | CteRefNode | { readonly probeName: string };
+# F2: add a variant to the QueryNode union
+#   | { readonly queryKind: "probe"; readonly body: SelectNode }
+# B1 / B2: add to SelectNode
+#   readonly probeField: ReadonlyArray<string>;      // B1
+#   readonly probeField?: ReadonlyArray<string>;     // B2
+#   (JSON-compatible on purpose — an `unknown` here collides with the
+#    recursive JsonValue constraint and adds two errors that are the
+#    probe's own, not the field's)
+
+pnpm --filter @hejbro/core exec tsc --noEmit | grep -c "error TS"
+pnpm exec tsc -p /tmp/ctprobe-query.json     | grep -c "error TS"   # baseline 1
+pnpm exec tsc -p /tmp/ctprobe-supabase.json  | grep -c "error TS"   # baseline 0
+
+git checkout -- packages/core/src/expr/ast.ts
+```
+
+F2's eleventh site is `packages/core/src/plpgsql/body-context.ts`'s
+`queryKindNames`; the other ten are `render-sql.ts` ×1,
+`column-order.ts` ×4, `compile/compile.ts` ×2 and `db/convert.ts` ×3.
 
 Summary-table row:
 
@@ -25,7 +60,7 @@ Summary-table row:
 Decision-log row:
 
 ```
-| D105 | **A CTE lives in two places, both of them variants rather than fields: `WithNode` is a `QueryNode` variant carrying the entry list and a body, and a CTE reference reaches a statement through a `FromNode` union that `SelectNode.from` and `JoinNode.table` both widen into.** #299's parked fork (its own D5) asked where a non-table row source belongs, since `TableRefNode` renders hard-qualified and a CTE name has neither schema nor table. Measured on the implemented tree: adding a member to `FromNode` stops **13** call sites compiling across renderer, walker, retarget, column order, codec, result conversion and the Supabase RLS validator; adding a `QueryNode` variant stops **10**; the rejected `SelectNode.with` field stops **3** when required — all of them "you left a key out of an object literal", none of them a traversal site — and **0** when optional, which is the shape any real design would have picked. The security axis decided it: under the union, the preset validator that collects the tables a view reads **cannot compile** until it says whether a CTE body's tables count; under a field it compiles untouched while the case is reachable, so a view reading an RLS-guarded table inside a CTE would slip past the warning in silence. A sentinel schema on `TableRefNode` was rejected too — it makes unqualified rendering a runtime special case on a magic value rather than an arm the compiler demands. **Scope**: recursive CTEs are included (Postgres's grammar is `UNION [ALL | DISTINCT]`, not `union all` as #417's text said), `materialized` hints are included, and a view body may declare CTEs — refusing that would make the one-vocabulary promise false, the asymmetry D103 already rejected. **The named row environment strips `typeNode`/`sqlName` uniformly**, so a CTE column is structurally not a `ColumnRef` and cannot reach a foreign key target, a foreign key's local column list, or `.references()` at the type level; the three declaration sites that take an expression (index predicate, index column list, RLS policy) are unreachable that way and keep their runtime guards as the first line. **Recursive terms reuse set operations' `SameKeys` compatibility test** — the type moved into core so both layers can reach one rule — but **only the test**: a recursive CTE's column types come from its anchor, because Postgres refuses to widen there (`42804`) where a plain `UNION` widens. Known boundaries, each filed rather than left silent: #464 (an index's column list never checked column ownership), #487 (core's own `union()` carries no compatibility check), #489 (a recursive term whose column types resolve differently from the anchor type-checks here and fails on the server). **Snapshot**: `formatVersion` 8 unchanged — a new discriminator is vocabulary (D73) — and existing declarations serialize byte-identically, goldens included. (Decided 2026-08-29 under the owner's standing delegation, by the lead session; #299's parked fork was resolved on the terrain the sequencing built for it — set operations and window functions landed first — and is to be surfaced to the owner on return.) | a `SelectNode.with` side-channel (enforced by nothing: 3 key-filling errors when required, 0 when optional); a sentinel schema inside `TableRefNode` (magic value, runtime special case, and a live path for a table rename to rewrite an unrelated CTE); data-modifying CTEs (D94: mutations never reach a snapshot, so the node would split into a storable half and an unstorable one; Postgres also forbids recursive self-reference in them); the output column alias list (two sources of truth for one row's key names); `SEARCH`/`CYCLE`; forward references and mutual recursion (Postgres does not implement the latter) | One question, one answer: a CTE is a *kind of thing* the IR already knows how to enumerate, so the compiler can be made to ask about it everywhere — and the places it asks are the places where getting it wrong is silent |
+| D105 | **A CTE lives in two places, both of them variants rather than fields: `WithNode` is a `QueryNode` variant carrying the entry list and a body, and a CTE reference reaches a statement through a `FromNode` union that `SelectNode.from` and `JoinNode.table` both widen into.** #299's parked fork (its own D5) asked where a non-table row source belongs, since `TableRefNode` renders hard-qualified and a CTE name has neither schema nor table. Measured on the implemented tree: adding a member to `FromNode` stops **13** call sites compiling across renderer, walker, retarget, column order, codec, result conversion and the Supabase RLS validator; adding a `QueryNode` variant stops **11**, one of which is the exhaustive `queryKind` map plpgsql body statements added while this change was in flight — a consumer that did not exist when the fork was decided and that the shape caught anyway; the rejected `SelectNode.with` field stops **3** when required — all of them "you left a key out of an object literal", none of them a traversal site — and **0** when optional, which is the shape any real design would have picked. The security axis decided it: under the union, the preset validator that collects the tables a view reads **cannot compile** until it says whether a CTE body's tables count; under a field it compiles untouched while the case is reachable, so a view reading an RLS-guarded table inside a CTE would slip past the warning in silence. A sentinel schema on `TableRefNode` was rejected too — it makes unqualified rendering a runtime special case on a magic value rather than an arm the compiler demands. **Scope**: recursive CTEs are included (Postgres's grammar is `UNION [ALL | DISTINCT]`, not `union all` as #417's text said), `materialized` hints are included, and a view body may declare CTEs — refusing that would make the one-vocabulary promise false, the asymmetry D103 already rejected. **The named row environment strips `typeNode`/`sqlName` uniformly**, so a CTE column is structurally not a `ColumnRef` and cannot reach a foreign key target, a foreign key's local column list, or `.references()` at the type level; the three declaration sites that take an expression (index predicate, index column list, RLS policy) are unreachable that way and keep their runtime guards as the first line. **Recursive terms reuse set operations' `SameKeys` compatibility test** — the type moved into core so both layers can reach one rule — but **only the test**: a recursive CTE's column types come from its anchor, because Postgres refuses to widen there (`42804`) where a plain `UNION` widens. Known boundaries, each filed rather than left silent: #464 (an index's column list never checked column ownership), #487 (core's own `union()` carries no compatibility check), #489 (a recursive term whose column types resolve differently from the anchor type-checks here and fails on the server). **Snapshot**: `formatVersion` 8 unchanged — a new discriminator is vocabulary (D73) — and existing declarations serialize byte-identically, goldens included. (Decided 2026-08-29 under the owner's standing delegation, by the lead session; #299's parked fork was resolved on the terrain the sequencing built for it — set operations and window functions landed first — and is to be surfaced to the owner on return.) | a `SelectNode.with` side-channel (enforced by nothing: 3 key-filling errors when required, 0 when optional); a sentinel schema inside `TableRefNode` (magic value, runtime special case, and a live path for a table rename to rewrite an unrelated CTE); data-modifying CTEs (D94: mutations never reach a snapshot, so the node would split into a storable half and an unstorable one; Postgres also forbids recursive self-reference in them); the output column alias list (two sources of truth for one row's key names); `SEARCH`/`CYCLE`; forward references and mutual recursion (Postgres does not implement the latter) | One question, one answer: a CTE is a *kind of thing* the IR already knows how to enumerate, so the compiler can be made to ask about it everywhere — and the places it asks are the places where getting it wrong is silent |
 ```
 
 **Barred from this row, deliberately.** The retracted `Omit`-drops-brands
