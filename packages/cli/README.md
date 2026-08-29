@@ -8,12 +8,15 @@ TypeScript, and generate deterministic migration SQL from the diff.
 
 This package is the user-facing surface: the DSL re-exported from
 `@hejbro/core`, plus the CLI (`hejbro init`, `hejbro generate`, `hejbro
-verify`).
+baseline`, `hejbro verify`, `hejbro history`, `hejbro restore`).
 
 ```bash
 hejbro init       # scaffold hejbro.config.ts, migrations/, an empty snapshot
 hejbro generate   # diff declarations against the last snapshot, write a migration
+hejbro baseline   # adopt an existing database: write the first migration as already-applied
 hejbro verify     # re-derive the migration chain from checked-out files, no live DB
+hejbro history    # list every migration and whether its declaration state still exists in git
+hejbro restore    # restore the declarations to a past migration's own recorded state
 ```
 
 Provider presets (Supabase first) live in separate packages, e.g.

@@ -59,6 +59,63 @@ describe("hejbro --help", () => {
 	});
 });
 
+/**
+ * Every `--flag` citty's `OPTIONS` block lists, parsed from its own
+ * `--flag=<placeholder>` rendering -- not a hand-maintained list, so it
+ * tracks whatever `GENERATE_ARGS` actually declares. Anchored on the
+ * `OPTIONS` heading line specifically (`\nOPTIONS\n\n`), not the first
+ * substring match: the `USAGE hejbro generate [OPTIONS]` line above it
+ * also contains the bare word "OPTIONS". The `--flag=` pattern only
+ * matches value-taking flags, rendered as `--flag=<placeholder>` -- every
+ * `GENERATE_ARGS` entry is a string today, so this stays a sound
+ * comparison. A future boolean flag renders with no `=` at all, so it
+ * would be missing from BOTH `generateFlags` and `baselineFlags` here at
+ * once -- invisible to the R-b drift check this helper exists for, not
+ * merely miscounted.
+ */
+const optionFlags = (stdout: string): ReadonlyArray<string> => {
+	const optionsBlock = stdout.match(/\nOPTIONS\n\n([\s\S]*)/)?.[1] ?? "";
+	return [...optionsBlock.matchAll(/--([a-z-]+)=/g)].map(
+		(match) => `--${match[1]}`,
+	);
+};
+
+describe("hejbro baseline --help", () => {
+	it("does not list the rename or drop-confirmation flags (#445, nit)", async () => {
+		const result = await runHelp(cwd, ["baseline", "--help"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).not.toContain("--rename");
+		expect(result.stdout).not.toContain("--confirm-drop");
+	});
+
+	it("still lists --config and --name", async () => {
+		const result = await runHelp(cwd, ["baseline", "--help"]);
+		expect(result.stdout).toContain("--config");
+		expect(result.stdout).toContain("--name");
+	});
+
+	it("lists exactly generate's own flags minus --rename and --confirm-drop (#445 review R-b)", async () => {
+		const generateResult = await runHelp(cwd, ["generate", "--help"]);
+		const baselineResult = await runHelp(cwd, ["baseline", "--help"]);
+
+		const generateFlags = optionFlags(generateResult.stdout);
+		const baselineFlags = optionFlags(baselineResult.stdout);
+
+		// sanity first: the set this test derives "expected" from actually
+		// contains what it's about to subtract, so the assertion below
+		// isn't vacuously true against an already-empty starting set.
+		expect(generateFlags).toEqual(
+			expect.arrayContaining(["--rename", "--confirm-drop"]),
+		);
+		const expectedBaselineFlags = generateFlags.filter(
+			(flag) => flag !== "--rename" && flag !== "--confirm-drop",
+		);
+		expect([...baselineFlags].sort()).toEqual(
+			[...expectedBaselineFlags].sort(),
+		);
+	});
+});
+
 describe("hejbro restore --help", () => {
 	it("documents the migration number positional", async () => {
 		const result = await runHelp(cwd, ["restore", "--help"]);

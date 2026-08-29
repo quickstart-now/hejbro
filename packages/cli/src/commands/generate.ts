@@ -75,6 +75,71 @@ const GENERATE_ARGS = {
 	},
 } as const;
 
+/**
+ * The `GENERATE_ARGS` keys a baseline can never use (#445, nit; review
+ * R-b): a baseline diffs against an empty snapshot, so nothing exists yet
+ * to rename or drop. The one list both `BASELINE_ARGS` (the `--help`
+ * surface, below) and `BASELINE_INAPPLICABLE_FLAGS` (the pre-parse
+ * refusal) derive from, so the two can never drift into naming different
+ * sets of flags.
+ */
+const BASELINE_EXCLUDED_ARG_KEYS: ReadonlyArray<keyof typeof GENERATE_ARGS> = [
+	"rename",
+	"confirm-drop",
+];
+
+/** `hejbro baseline`'s own `--help` args: {@link GENERATE_ARGS} minus {@link BASELINE_EXCLUDED_ARG_KEYS}, so the descriptions above stay the single source citty renders for both commands. */
+const BASELINE_ARGS = Object.fromEntries(
+	Object.entries(GENERATE_ARGS).filter(
+		([key]) =>
+			!(BASELINE_EXCLUDED_ARG_KEYS as ReadonlyArray<string>).includes(key),
+	),
+) as Omit<typeof GENERATE_ARGS, (typeof BASELINE_EXCLUDED_ARG_KEYS)[number]>;
+
+/** {@link BASELINE_EXCLUDED_ARG_KEYS}, spelled as the `--`-prefixed tokens `rawArgs` actually carries. */
+const BASELINE_INAPPLICABLE_FLAGS: ReadonlyArray<string> =
+	BASELINE_EXCLUDED_ARG_KEYS.map((key) => `--${key}`);
+
+/**
+ * Pre-parse intercept (#445, nit): catches `--rename`/`--confirm-drop` on
+ * `rawArgs` directly, before either flag's value is ever parsed into a
+ * `RenameSpec`/`ConfirmDropSpec` and before config/declarations load --
+ * the lead explicitly rejected letting citty's own unknown-flag dump do
+ * this job (its message doesn't say why the flag is inapplicable, or what
+ * to run instead).
+ */
+const assertBaselineFlagsApplicable = (
+	mode: GenerateMode,
+	rawArgs: ReadonlyArray<string>,
+): void => {
+	if (mode !== "baseline") {
+		return;
+	}
+	const disallowed = BASELINE_INAPPLICABLE_FLAGS.find((flag) =>
+		rawArgs.includes(flag),
+	);
+	if (disallowed === undefined) {
+		return;
+	}
+	// #445 review B5: the message has exactly one quoted substring -- the
+	// solution command -- and identityFromMessage takes the first quoted
+	// substring as the diagnostic's own identity (matches
+	// error[config-not-found]: hejbro.config.ts's own convention).
+	// Backtick-quoting the command instead (repo convention for a command
+	// name, loader.ts's own `` `hejbro init` ``) leaves no quoted
+	// substring at all, so the identity falls through to fallbackIdentity
+	// (the config path) instead. Kept as a comment ABOVE this call, not
+	// between its two arguments: check-next-marker.mjs's argument scan is
+	// text-based, not a real parser, and a comma anywhere in an inline
+	// comment between the code and message arguments (as this one used to
+	// have, in "command name, loader.ts's own") splits them wrong, hiding
+	// a real "Next:" clause from the gate.
+	throwHejbroError(
+		"baseline-flag-not-applicable",
+		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: run \`hejbro generate\` instead to record a change to an already-adopted project.`,
+	);
+};
+
 type ParsedGenerateArgv = {
 	readonly configFlag: string | undefined;
 	readonly name: string | undefined;
@@ -369,6 +434,35 @@ const baselineBlockerText = (
 	return `found ${migrationCount} migration(s) in "${migrationsDir}" and a snapshot that already records declared objects`;
 };
 
+/**
+ * #445/D2 review R-d: `declarationCount` dropped -- every actual
+ * declaration kind (schema, table, grant, ...) contributes at least one
+ * object to a diff against an empty snapshot (probed directly: a
+ * schema-only and a grant-only declaration set each produced a `create`
+ * change), and `assertBaselineIsFirst` above guarantees the snapshot is
+ * empty in this mode. There is no declaration set that both parses as a
+ * `HejbroInput` and diffs to nothing, so the only way this branch is ever
+ * reached is an empty declarations array -- one sentence, not two branches
+ * for a state that can't happen.
+ *
+ * That flat claim rests on a premise, not a proof: every declared kind
+ * fans out to at least one snapshot object. It depends on today's kind
+ * set staying that way -- a future kind that can legitimately fan out to
+ * zero would make this message false, not just incomplete. The one
+ * candidate this could plausibly fail on -- `grant(...).to()` called with
+ * no role, which contributes no `GrantDeclaration` at all -- is already
+ * excluded before it gets here: `dsl/grant.ts`'s `buildRolesStage` throws
+ * `grant-missing-roles` at declaration time, so it can never reach
+ * `generateMigration`'s `declarations` array as a zero-fanout input.
+ */
+const throwBaselineNothingToAdopt = (entry: ReadonlyArray<string>): never => {
+	const entryPhrase = entry.map((pattern) => `"${pattern}"`).join(", ");
+	throwHejbroError(
+		"baseline-nothing-to-adopt",
+		`baseline found nothing to adopt: your declaration files loaded, but exported no hejbro declarations (schema/table/... calls). Next: check ${entryPhrase} in hejbro.config.ts -- either the entry pattern isn't matching the files you meant, or those files don't actually export their schema/table declarations.`,
+	);
+};
+
 /** `hejbro baseline` refuses unless the project is at its `init` state: a baseline IS a first migration, and there is nothing to baseline against a chain that already exists. */
 const assertBaselineIsFirst = (
 	migrationCount: number,
@@ -430,6 +524,7 @@ export const runGenerate = async (
 	const parsedArgv = parseGenerateArgv(rawArgs);
 	const fallbackIdentity = parsedArgv.configFlag ?? "hejbro.config.ts";
 	try {
+		assertBaselineFlagsApplicable(mode, rawArgs);
 		const renames: ReadonlyArray<RenameSpec> =
 			parsedArgv.renameValues.map(parseRenameFlag);
 		const confirmedDrops: ReadonlyArray<ConfirmDropSpec> =
@@ -477,6 +572,9 @@ export const runGenerate = async (
 				);
 			}
 			if (!firstPass.hasChanges) {
+				if (mode === "baseline") {
+					throwBaselineNothingToAdopt(config.entry);
+				}
 				return {
 					exitCode: 0,
 					stdout: ["no changes — snapshot already matches your declarations."],
@@ -571,7 +669,7 @@ export const baselineCommand = defineCommand({
 		name: "baseline",
 		description: BASELINE_DESCRIPTION,
 	},
-	args: GENERATE_ARGS,
+	args: BASELINE_ARGS,
 	run: async (ctx) => {
 		const result = await runGenerate(
 			process.cwd(),

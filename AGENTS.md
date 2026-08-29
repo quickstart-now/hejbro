@@ -117,10 +117,11 @@ again.
   gate doesn't ask for one; use `pnpm changeset add --empty` if you want an
   explicit record anyway. Run `pnpm changeset` and answer its prompts; pick
   `minor` for a new capability, `patch` for a fix, and `major` is not used
-  before 1.0 (see the design spec's decision log). The three published
-  packages (`@hejbro/core`, `hejbro`, `@hejbro/supabase`) are a **fixed**
-  group in `.changeset/config.json` — they always version together, so a
-  changeset naming any one of them is enough to move all three.
+  before 1.0 (see the design spec's decision log). The five published
+  packages (`@hejbro/core`, `hejbro`, `@hejbro/supabase`, `@hejbro/query`,
+  `@hejbro/pg`) are a **fixed** group in `.changeset/config.json` — they
+  always version together, so a changeset naming any one of them is
+  enough to move all five.
 
 ## Hard gates (owner approval required)
 

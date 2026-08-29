@@ -11,12 +11,13 @@ import { executeOn, sendCompiled } from "./execute";
  * What a `transaction()` callback receives — `execute` plus the same
  * thenable chain members every other surface carries (task 7.4, group 7
  * decision ③: the chain surface is identical on the unscoped handle,
- * `db.as` scope, and `tx`). There is no `.transaction` member here at all
- * (unlike {@link Driver}/`Db`), so `tx.transaction(...)` is a `tsc` error,
- * not a runtime one; the nested case this group actually has to guard
- * against is a callback closing over the *outer* `db` and calling
- * `db.transaction(...)` again, which `createTransactionApi`'s own `state`
- * below catches at runtime.
+ * `db.as` scope, and `tx`), plus its own `transaction` member for nesting
+ * on the same connection via a savepoint. Reaching back to the *outer*
+ * `db` handle and calling `db.transaction(...)` again from inside a
+ * callback is a different thing entirely — a second connection out of the
+ * pool, not a nesting of this one — and still fails with
+ * `nested-transaction-unsupported`, caught by `createTransactionApi`'s own
+ * `state` below.
  *
  * `execute` resolves {@link ExecuteResult}`<TStatement>` — exactly the same
  * generic signature `Db["execute"]`/`ScopedDb["execute"]` carry (task 3.1,
@@ -36,31 +37,27 @@ export type Tx<TSchema = Record<string, unknown>> = ChainApi<TSchema> & {
 	 * A nested transaction on the same connection, bracketed by a
 	 * `SAVEPOINT` (#313): the callback's own statements are released into
 	 * the enclosing transaction on normal return and rolled back to the
-	 * savepoint on a thrown error, which is rethrown unchanged. Rolling
-	 * back a savepoint does not abort the transaction containing it, so
-	 * the outer callback can catch and carry on.
+	 * savepoint on a thrown error (synchronous or rejected alike), which is
+	 * rethrown unchanged. Rolling back a savepoint does not abort the
+	 * transaction containing it, so the outer callback can catch and carry
+	 * on; a rolled-back savepoint is also released, so a transaction that
+	 * nests repeatedly does not grow its savepoint stack for its own
+	 * lifetime.
 	 *
-	 * This is the supported way to nest. Reaching back to the *outer
-	 * handle's* `db.transaction(...)` from inside a callback still fails
-	 * with `nested-transaction-unsupported` — that would take a second
+	 * This is the supported way to nest — but only one at a time per `tx`:
+	 * savepoints on one connection are strictly nested, so starting a
+	 * second nested transaction on this same `tx` while the first is still
+	 * in flight fails immediately with `concurrent-nested-transaction`,
+	 * before any savepoint statement is sent. Await one before starting the
+	 * next. Reaching back to the *outer handle's* `db.transaction(...)`
+	 * from inside a callback still fails with
+	 * `nested-transaction-unsupported` — that would take a second
 	 * connection out of the pool, which is a different thing entirely and
 	 * a deadlock waiting to happen, not a nesting of this transaction.
 	 */
 	transaction<T>(callback: (tx: Tx<TSchema>) => Promise<T>): Promise<T>;
 };
 
-/**
- * Builds the `tx` handle a callback receives, on `session` — the one
- * shared shape `transaction.ts`'s own `createTransactionApi` and
- * `context.ts`'s `scopedTransaction` both hand their callbacks (task 7.4):
- * the chain surface (`createChainApi`, tasks 7.1/7.2) parameterized by
- * `(send) => send(session)` (the session is already open and held by the
- * caller, so a chain member never needs to open one of its own — the same
- * "session already in hand" shape `db.fn`'s own `run` takes when it's
- * already inside a transaction), plus `execute`. One builder, not two
- * hand-written `Tx` object literals that could quietly drift apart on
- * which members they carry.
- */
 /**
  * The savepoint counter one transaction's whole `tx` tree shares —
  * monotonic, never per-depth. Depth-keyed names would reuse a name after
@@ -76,12 +73,57 @@ const savepointStatement = (verb: string, name: string): CompileResult => ({
 	kind: "sql",
 });
 
-/** Rethrows the callback's own error after rolling back to `name`; a failing rollback means the connection itself is in trouble, so it surfaces as its own error rather than being swallowed — with the callback's error kept on the side so neither fact is lost. */
-async function rollbackToSavepoint(
+/** Builds and throws the `concurrent-nested-transaction`-coded error (D57) guarding the shape #445/D1 found: two sibling `tx.transaction()` calls on one connection interleave one SAVEPOINT sequence, which can silently discard a sibling's already-resolved work or abort the whole transaction, depending on the interleaving. */
+function throwConcurrentNestedTransaction(): never {
+	throw Object.assign(
+		new Error(
+			'transaction() was called on this "tx" while a previous nested transaction started from it is still in flight. Next: await one nested transaction before starting the next on the same "tx" -- concurrent siblings would interleave one SAVEPOINT sequence on a single connection, which can silently discard one sibling\'s work or abort the whole transaction depending on the interleaving.',
+		),
+		{ code: "concurrent-nested-transaction" },
+	);
+}
+
+/**
+ * What triggered a rollback attempt, and how {@link rollbackOrFail}'s own
+ * failure message should describe it (#445 review B2) -- `rollbackOrFail`
+ * is shared by two callers with genuinely different truths: a thrown
+ * callback (`rollbackToSavepoint`) and a normally-returned callback whose
+ * `RELEASE` failed (`recoverFromFailedRelease`). Reusing one hard-coded "…
+ * callback threw" message for both would state something false on the
+ * second path -- exactly the defect class R1 (1.5) fixed on this same
+ * function, reintroduced by sharing it naively.
+ */
+type RollbackFailureTrigger = {
+	/** Completes "rolling back to savepoint "<name>" failed ${trigger}." -- must stay true for the calling path. */
+	readonly trigger: string;
+	/** The property name the thrown error carries `reason` under, and the key named in the message's own `Next:` clause. */
+	readonly key: "callbackError" | "releaseError";
+};
+
+const POINTER_LABEL_BY_KEY: Record<RollbackFailureTrigger["key"], string> = {
+	callbackError: "what the callback threw",
+	releaseError:
+		"the RELEASE failure this rollback was attempting to recover from",
+};
+
+const CALLBACK_THREW: RollbackFailureTrigger = {
+	trigger: "after the nested transaction callback threw",
+	key: "callbackError",
+};
+
+const RECOVERING_FAILED_RELEASE: RollbackFailureTrigger = {
+	trigger:
+		"while recovering from a failed RELEASE after the nested transaction callback returned normally",
+	key: "releaseError",
+};
+
+/** Attempts `ROLLBACK TO SAVEPOINT "name"`, throwing the `savepoint-rollback-failed`-coded error (carrying both the rollback failure as `cause` and `reason` -- whatever triggered the rollback attempt, described truthfully per {@link RollbackFailureTrigger}) if that itself fails; resolves silently on success so both callers can layer their own outcome on top. */
+async function rollbackOrFail(
 	session: DriverSession,
 	name: string,
-	callbackError: unknown,
-): Promise<never> {
+	reason: unknown,
+	{ trigger, key }: RollbackFailureTrigger,
+): Promise<void> {
 	try {
 		await sendCompiled(
 			session,
@@ -90,35 +132,116 @@ async function rollbackToSavepoint(
 	} catch (rollbackError) {
 		throw Object.assign(
 			new Error(
-				`rolling back to savepoint "${name}" failed after the nested transaction callback threw. Next: inspect "cause" for the rollback failure and "callbackError" for what the callback threw -- the connection is likely no longer usable, and the enclosing transaction will roll back.`,
+				`rolling back to savepoint "${name}" failed ${trigger}. Do not catch this error: if it escapes the enclosing callback the transaction rolls back, and if you catch it the transaction can still commit without the nested work. Next: inspect "cause" for the rollback failure and "${key}" for ${POINTER_LABEL_BY_KEY[key]} -- when the rollback failed because the connection itself is unusable, letting this error escape is also what gets that connection discarded.`,
 			),
 			{
 				code: "savepoint-rollback-failed",
 				cause: rollbackError,
-				callbackError,
+				[key]: reason,
 			},
 		);
 	}
+}
+
+/** Rethrows the callback's own error after rolling back to `name` and releasing that savepoint (#445 nit -- `ROLLBACK TO` alone keeps the savepoint alive, so leaving it unreleased would grow the savepoint stack for the life of a transaction that nests repeatedly); a failing rollback surfaces as its own `savepoint-rollback-failed` error instead, via {@link rollbackOrFail}. */
+async function rollbackToSavepoint(
+	session: DriverSession,
+	name: string,
+	callbackError: unknown,
+): Promise<never> {
+	await rollbackOrFail(session, name, callbackError, CALLBACK_THREW);
+	// best-effort (#445 review B4): "rethrowing that error unchanged" is
+	// this path's own contract (the modified requirement), so a failure on
+	// this cleanup-only release must never replace or swallow the
+	// callback's error -- unlike the release-failure path above, there is
+	// nothing else here worth surfacing as its own error.
+	await sendCompiled(
+		session,
+		savepointStatement("release savepoint", name),
+	).catch(() => {});
 	throw callbackError;
 }
 
-/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw. */
+/** A statement error swallowed inside a nested callback leaves the subtransaction aborted, so the `RELEASE SAVEPOINT` that follows its normal return fails (#445 R2). Attempts `ROLLBACK TO SAVEPOINT` to recover -- surfacing `savepoint-release-failed` on success, or letting the existing rollback-failure path in {@link rollbackOrFail} take over if that recovery itself fails (carrying the release failure as `releaseError`, never mislabeled `callbackError` -- the callback returned normally here). */
+async function recoverFromFailedRelease(
+	session: DriverSession,
+	name: string,
+	releaseError: unknown,
+): Promise<never> {
+	await rollbackOrFail(session, name, releaseError, RECOVERING_FAILED_RELEASE);
+	// best-effort: ROLLBACK TO clears the aborted state, so the savepoint
+	// can actually be released now, keeping the "no savepoint outlives its
+	// nested transaction" invariant (task 1.4) even on this failure exit. A
+	// second failure here doesn't change what's surfaced -- the error
+	// identity stays pinned to the original release failure below.
+	await sendCompiled(
+		session,
+		savepointStatement("release savepoint", name),
+	).catch(() => {});
+	throw Object.assign(
+		new Error(
+			`releasing savepoint "${name}" failed, most likely because a statement error was swallowed inside its nested transaction callback and left the subtransaction aborted. Rolling back to the savepoint recovered the connection. Next: rethrow statement errors inside a nested transaction callback instead of swallowing them -- inspect "cause" for the release failure this triggered.`,
+		),
+		{ code: "savepoint-release-failed", cause: releaseError },
+	);
+}
+
+/** Builds the `transaction` member a {@link Tx} carries — one savepoint per call, released on return and rolled back on a throw, guarded against a second nested transaction starting on this same `tx` while one is still in flight (#445/D1). */
 const createSavepointApi = (
 	session: DriverSession,
 	tables: Declarations["tables"],
 	counter: SavepointCounter,
-): Tx["transaction"] =>
-	(async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
-		const name = `hejbro_sp_${counter.next}`;
-		counter.next += 1;
-		await sendCompiled(session, savepointStatement("savepoint", name));
-		const result = await callback(buildTx(session, tables, counter)).catch(
-			(error: unknown) => rollbackToSavepoint(session, name, error),
-		);
-		await sendCompiled(session, savepointStatement("release savepoint", name));
-		return result;
+): Tx["transaction"] => {
+	const state = { active: false };
+	return (async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
+		if (state.active) {
+			throwConcurrentNestedTransaction();
+		}
+		state.active = true;
+		try {
+			const name = `hejbro_sp_${counter.next}`;
+			counter.next += 1;
+			await sendCompiled(session, savepointStatement("savepoint", name));
+			// `Promise.resolve().then(...)` (#445 review B1), not a plain
+			// `callback(...)` call: a callback that throws SYNCHRONOUSLY
+			// throws immediately, before ever producing a promise for
+			// `.catch` to attach to -- wrapping it inside a `.then` handler
+			// normalizes that throw into this same chain's rejection, so
+			// one `.catch` covers both a rejected promise and a synchronous
+			// throw without a second, nested try (and without the `let`
+			// that would otherwise be needed to carry the result out of it).
+			const result = await Promise.resolve()
+				.then(() => callback(buildTx(session, tables, counter)))
+				.catch((callbackError: unknown) =>
+					rollbackToSavepoint(session, name, callbackError),
+				);
+			try {
+				await sendCompiled(
+					session,
+					savepointStatement("release savepoint", name),
+				);
+			} catch (releaseError) {
+				return await recoverFromFailedRelease(session, name, releaseError);
+			}
+			return result;
+		} finally {
+			state.active = false;
+		}
 	}) as Tx["transaction"];
+};
 
+/**
+ * Builds the `tx` handle a callback receives, on `session` — the one
+ * shared shape `transaction.ts`'s own `createTransactionApi` and
+ * `context.ts`'s `scopedTransaction` both hand their callbacks (task 7.4):
+ * the chain surface (`createChainApi`, tasks 7.1/7.2) parameterized by
+ * `(send) => send(session)` (the session is already open and held by the
+ * caller, so a chain member never needs to open one of its own — the same
+ * "session already in hand" shape `db.fn`'s own `run` takes when it's
+ * already inside a transaction), plus `execute`. One builder, not two
+ * hand-written `Tx` object literals that could quietly drift apart on
+ * which members they carry.
+ */
 export const buildTx = (
 	session: DriverSession,
 	tables: Declarations["tables"],

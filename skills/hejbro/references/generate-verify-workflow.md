@@ -25,6 +25,38 @@ hash lines:
 The two hashes form a tamper-evident chain across the whole migration
 history — `hejbro verify` recomputes and checks them.
 
+### Parsing the banner instead of reading it
+
+An apply tool deciding what to do with a migration file doesn't have to
+string-match these lines — hejbro exports a parser for each marker a
+banner can carry:
+
+```ts
+import {
+	parseBannerBaseline,
+	parseBannerHashes,
+	parseBannerVersion,
+} from "hejbro";
+
+declare const fileContent: string;
+
+const hashes = parseBannerHashes(fileContent); // { parent, current } | null
+const version = parseBannerVersion(fileContent); // string | null (pre-#229 files carry none)
+const isBaseline = parseBannerBaseline(fileContent); // boolean — see below
+```
+
+`parseBannerHashes`/`parseBannerVersion` return `null` when their own
+line is absent (a pre-Phase-5 or pre-#229 file). `parseBannerBaseline`
+returns a plain `boolean` instead — for a marker, absence is itself a
+meaningful answer (`false`, an ordinary migration to *run*), not a
+missing value; `true` means *register this migration as applied, never
+run it* — the marker `hejbro baseline` writes (`brownfield-adoption.md`
+covers when and why). Every parser matches its own known prefix only
+(`parseBannerBaseline`'s is `-- baseline:` itself, never the human-facing
+guidance after the colon, which may reword), so an unrelated banner
+line — or a future line an older hejbro doesn't recognize — is never
+mistaken for one it does.
+
 ## Ambiguous renames
 
 `hejbro generate` never guesses whether a same-table column (or schema

@@ -350,6 +350,7 @@ export {
 	migrationFileName,
 	migrationPrefixStrategies,
 	migrationVersionOf,
+	parseBannerBaseline,
 	parseBannerHashes,
 	parseBannerVersion,
 	renderBanner,

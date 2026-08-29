@@ -125,6 +125,156 @@ describe("hejbro baseline", () => {
 		}
 	});
 
+	it("refuses to adopt when declarations load but export nothing, and writes no files (#445/D2)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			// matches the entry glob and loads cleanly, but exports nothing
+			// hejbro recognizes as a declaration -- the exact D2 shape.
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				"export const notADeclaration = 1;\n",
+			);
+			await runCli(cwd, ["init"]);
+			const snapshotPath = join(cwd, "hejbro.snapshot.json");
+			const snapshotBefore = await readFile(snapshotPath, "utf8");
+
+			const result = await runCli(cwd, ["baseline"]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[baseline-nothing-to-adopt]");
+			expect(result.stdout).toBe("");
+
+			const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
+				(name) => name.endsWith(".sql"),
+			);
+			expect(migrationFiles).toHaveLength(0);
+			// the snapshot init left behind is byte-untouched -- baseline wrote
+			// nothing at all, not even an empty rewrite.
+			const snapshotAfter = await readFile(snapshotPath, "utf8");
+			expect(snapshotAfter).toBe(snapshotBefore);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("refuses --rename before anything is written (#445, nit)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_SOURCE);
+			await runCli(cwd, ["init"]);
+
+			const result = await runCli(cwd, [
+				"baseline",
+				"--rename",
+				"app.old=posts",
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[baseline-flag-not-applicable]");
+			expect(result.stderr).toContain("hejbro generate");
+
+			const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
+				(name) => name.endsWith(".sql"),
+			);
+			expect(migrationFiles).toHaveLength(0);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("refuses --confirm-drop before anything is written (#445, nit)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_SOURCE);
+			await runCli(cwd, ["init"]);
+
+			const result = await runCli(cwd, [
+				"baseline",
+				"--confirm-drop",
+				"app.posts",
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[baseline-flag-not-applicable]");
+
+			const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
+				(name) => name.endsWith(".sql"),
+			);
+			expect(migrationFiles).toHaveLength(0);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("the diagnostic header names the config, not the solution command (#445 review B5)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_SOURCE);
+			await runCli(cwd, ["init"]);
+
+			const result = await runCli(cwd, [
+				"baseline",
+				"--rename",
+				"app.old=posts",
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				"error[baseline-flag-not-applicable]: hejbro.config.ts",
+			);
+			// not the solution command -- identityFromMessage takes the
+			// first quoted substring as the diagnostic's own subject, and a
+			// double-quoted "hejbro generate" in the message used to win
+			// that slot instead of the config path.
+			expect(result.stderr).not.toContain(
+				"error[baseline-flag-not-applicable]: hejbro generate",
+			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("refuses the flag before any config or declaration loads (#445 review R-a)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			// no hejbro.config.ts at all -- if the flag intercept ever moved
+			// to after config/declaration loading, this would surface
+			// config-not-found instead, breaking the delta's "before any
+			// declaration is loaded" guarantee silently.
+			const result = await runCli(cwd, [
+				"baseline",
+				"--rename",
+				"app.old=posts",
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[baseline-flag-not-applicable]");
+			expect(result.stderr).not.toContain("config-not-found");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("refuses --rename=<value> (equals form) the same as the space form (#445 review R-c)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_SOURCE);
+			await runCli(cwd, ["init"]);
+
+			const result = await runCli(cwd, ["baseline", "--rename=app.old=posts"]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[baseline-flag-not-applicable]");
+
+			const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
+				(name) => name.endsWith(".sql"),
+			);
+			expect(migrationFiles).toHaveLength(0);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
 	it("refuses to run over a chain that already exists", async () => {
 		const cwd = await createCliFixtureDir();
 		try {

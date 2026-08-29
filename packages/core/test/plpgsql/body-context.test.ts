@@ -25,6 +25,20 @@ const triggerConfig = {
 	forEach: "row" as const,
 };
 
+// #445/R4: a column literally named after the internal expression field
+// `isExpr` duck-types on -- the exact shape that made `ctx.return(ctx.new)`
+// misfire down the expression path instead of the trigger-row path.
+const tricky = table(app, "tricky", {
+	id: uuid().primaryKey(),
+	exprNode: uuid(),
+});
+const trickyTriggerConfig = {
+	name: "tricky_guard",
+	timing: "before" as const,
+	events: ["insert"] as const,
+	forEach: "row" as const,
+};
+
 describe("body-context recording", () => {
 	it("records rowOrNull as non-strict selectInto with derived scalar names", () => {
 		const declaration = defineTrigger(
@@ -244,6 +258,42 @@ describe("body-context recording", () => {
 				ctx.return(parent);
 			}),
 		).toThrowError(/isn't a trigger row/);
+	});
+
+	it("a trigger row is returned as a ref even when the table has a column named exprNode (#445/R4)", () => {
+		const declaration = defineTrigger(
+			tricky,
+			trickyTriggerConfig,
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const [returnStmt] = declaration.functionDeclaration.body.statements;
+		expect(returnStmt).toEqual({ stmtKind: "returnRef", refName: "new" });
+	});
+
+	it("a trigger row returned from a scalar-returning declaration still fails with scalar-return-expects-expression (#445/R4, delta: shape errors survive the reordering)", () => {
+		// #445/R4 review R-f: a trigger row has no type-legal path into a
+		// scalar declaration's ctx.return() at all (hence the type-escape
+		// directive a few lines down) -- capturing one via a trigger body
+		// is the only way to reproduce this, so this fixture defends the
+		// runtime guard for a consumer who bypasses the types, not a shape
+		// a well-typed caller could ever construct.
+		const captured: { row?: unknown } = {};
+		defineTrigger(comments, triggerConfig, (_ctx, { new: row }) => {
+			captured.row = row;
+		});
+		expect(() =>
+			defineFunction(
+				app,
+				"bad_scalar_from_trigger_row",
+				{ returns: { typeName: "integer" } },
+				(ctx) => {
+					// @ts-expect-error — a TriggerRow isn't a valid ctx.return() argument for a scalar function
+					ctx.return(captured.row);
+				},
+			),
+		).toThrowError(/received a query or trigger row/);
 	});
 
 	it("unknown update-of column throws unknown-trigger-column", () => {

@@ -396,28 +396,32 @@ const recordReturnExpr = (state: RecordingState, value: Expr): void => {
 	pushStatement(state, { stmtKind: "returnExpr", expr: value.exprNode });
 };
 
-const recordReturn = (
+/** Builds and throws the `scalar-return-expects-expression`-coded error (D57) -- shared by both non-expression shapes {@link recordReturn} can receive from a scalar-returning declaration (a trigger row and a query), so the message and code can't drift between the two call sites. #445/R4 review R-g: a `function` declaration, not an arrow `const`, because both call sites use it in *statement* position -- TS only narrows control flow through a `never` return that way; this file's other `never` helpers stay arrows because they are only ever called in return/expression position. */
+function throwScalarReturnExpectsExpression(state: RecordingState): never {
+	return throwHejbroError(
+		"scalar-return-expects-expression",
+		`ctx.return() in ${state.identity} received a query or trigger row, but this declaration returns a scalar type. Postgres rejects "return query" in a non-SETOF function at create time. Next: return an expression (a column ref, an argument ref, or a sql\`…\` fragment), or declare "returns" as a table for a setof function.`,
+		state.declaredAt,
+	);
+}
+
+/** {@link recordReturn}'s non-expression dispatch: a trigger row or a query, exhaustively -- split out so each function's own branching stays under the CRAP gate (#154) once the brand check (#445/R4) is added. */
+const recordReturnShape = (
 	state: RecordingState,
-	value: TriggerRow<Table> | ReturnableQuery | Expr,
+	value: TriggerRow<Table> | ReturnableQuery,
 ): void => {
-	state.returned.current = true;
-	if (isReturnableExpr(value)) {
-		recordReturnExpr(state, value);
-		return;
-	}
-	if (state.returnKind === "scalar") {
-		throwHejbroError(
-			"scalar-return-expects-expression",
-			`ctx.return() in ${state.identity} received a query or trigger row, but this declaration returns a scalar type. Postgres rejects "return query" in a non-SETOF function at create time. Next: return an expression (a column ref, an argument ref, or a sql\`…\` fragment), or declare "returns" as a table for a setof function.`,
-			state.declaredAt,
-		);
-	}
 	if (isTriggerRow(value)) {
+		if (state.returnKind === "scalar") {
+			throwScalarReturnExpectsExpression(state);
+		}
 		pushStatement(state, {
 			stmtKind: "returnRef",
 			refName: value[triggerRowMeta],
 		});
 		return;
+	}
+	if (state.returnKind === "scalar") {
+		throwScalarReturnExpectsExpression(state);
 	}
 	if (recordReturnQuery(state, value)) {
 		return;
@@ -427,6 +431,26 @@ const recordReturn = (
 		`ctx.return() in ${state.identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
 		state.declaredAt,
 	);
+};
+
+const recordReturn = (
+	state: RecordingState,
+	value: TriggerRow<Table> | ReturnableQuery | Expr,
+): void => {
+	state.returned.current = true;
+	// #445/R4: the trigger-row brand (checked inside recordReturnShape) is
+	// consulted before isReturnableExpr's duck-type (`"exprNode" in
+	// value`) ever gets the deciding vote -- a table with a column
+	// literally named `exprNode` gives its trigger row that same
+	// property, which would otherwise misroute `ctx.return(ctx.new)` down
+	// the expression path for that table only.
+	if (!isTriggerRow(value) && isReturnableExpr(value)) {
+		recordReturnExpr(state, value);
+		return;
+	}
+	// the branch above already exhausted every Expr this function can
+	// receive -- what's left is a TriggerRow or a ReturnableQuery.
+	recordReturnShape(state, value as TriggerRow<Table> | ReturnableQuery);
 };
 
 const recordForEach = <TProjection extends RowProjection>(

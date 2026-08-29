@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
+// #445/R5 review R-e: imported separately from core's own public index, not
+// just "../src/sql/migration-file" like every other symbol below -- the
+// delta's own requirement is that this parser is exposed PUBLICLY, and
+// nothing here proves that without importing it the same way a consumer
+// would.
+import { parseBannerBaseline as parseBannerBaselineFromIndex } from "../src/index";
 import type { KindChange } from "../src/kind/object-kind";
 import {
 	deriveSlug,
 	findDuplicateVersionGroups,
 	migrationFileName,
 	migrationVersionOf,
+	parseBannerBaseline,
 	parseBannerHashes,
 	parseBannerVersion,
 	renderBanner,
@@ -228,6 +235,66 @@ describe("parseBannerVersion", () => {
 
 	it("returns null for a version-less banner (every pre-#229 migration file)", () => {
 		expect(parseBannerVersion(renderBanner([createChange]))).toBeNull();
+	});
+});
+
+describe("parseBannerBaseline (#445/R5)", () => {
+	it("reads the baseline marker back off a rendered banner, and reports its absence on an ordinary migration", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			undefined,
+			undefined,
+			true,
+		);
+		const ordinarySql = renderBanner([createChange]);
+		expect(parseBannerBaseline(baselineSql)).toBe(true);
+		expect(parseBannerBaseline(ordinarySql)).toBe(false);
+	});
+
+	it("stays true even with a version line and a hash chain also present, and false for a hash-chained non-baseline migration", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+			true,
+		);
+		const nonBaselineSql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+		);
+		expect(parseBannerBaseline(baselineSql)).toBe(true);
+		expect(parseBannerBaseline(nonBaselineSql)).toBe(false);
+	});
+
+	it("is exported from core's own public index, not just its defining module (#445/R5 review R-e)", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			undefined,
+			undefined,
+			true,
+		);
+		expect(parseBannerBaselineFromIndex(baselineSql)).toBe(true);
+		expect(parseBannerBaselineFromIndex).toBe(parseBannerBaseline);
+	});
+
+	it("ignores an unrelated banner line that happens to contain the word 'baseline'", () => {
+		// a `false` guard: parsing must key on the exact known prefix, not a
+		// loose substring match that an unrelated line could accidentally
+		// trip (e.g. a future kind's own note text).
+		const sql = "-- hejbro migration\n-- ~ table app.posts [baseline notes]";
+		expect(parseBannerBaseline(sql)).toBe(false);
+	});
+
+	it("still reports true for a differently-worded baseline line -- the prefix is the contract, not the guidance prose", () => {
+		// simulates an already-written migration whose prose predates a
+		// future wording change: matching the whole rendered sentence
+		// (instead of just the "-- baseline:" prefix) would silently
+		// report `false` here, telling an apply tool to RUN a migration
+		// that must only ever be registered.
+		const sql =
+			"-- hejbro migration\n-- baseline: an earlier wording of this same guidance\n-- + table app.posts [new]";
+		expect(parseBannerBaseline(sql)).toBe(true);
 	});
 });
 
