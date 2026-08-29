@@ -3,6 +3,8 @@ import { check } from "../../src/dsl/check";
 import { schema } from "../../src/dsl/schema";
 import { getTableMeta, table } from "../../src/dsl/table";
 import { generateMigration } from "../../src/engine/generate";
+import type { ExprNode } from "../../src/expr/ast";
+import { expr } from "../../src/expr/ast";
 import {
 	and,
 	between,
@@ -137,6 +139,37 @@ describe("check()", () => {
 					),
 				],
 			})),
+		).toThrow(
+			/check-subquery|Postgres forbids subqueries in CHECK constraints/,
+		);
+	});
+
+	// add-window-functions task 1.7: proves the shallow someExprNode
+	// walker's window arm actually descends into fn/partitionBy/orderBy --
+	// this validator (validateChecks, dsl/table.ts) is a REAL consumer of
+	// that walker, unlike a unit test of walk.ts in isolation. Hand-built
+	// (the over()/rank() DSL lands in group 2): a window function whose
+	// partitionBy hides an exists() must still trip the existing
+	// check-subquery guard.
+	it("rejects a subquery nested inside a window function's partitionBy", () => {
+		const other = table(app, "other", { id: uuid() });
+		expect(() =>
+			table(app, "posts", { id: uuid() }, (t) => {
+				const windowNode: ExprNode = {
+					nodeKind: "window",
+					fn: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "rank",
+						args: [],
+					},
+					partitionBy: [
+						exists(select(other).where(eq(other.id, t.id))).exprNode,
+					],
+					orderBy: [],
+				};
+				return { checks: [check("bad", expr("unknown", windowNode))] };
+			}),
 		).toThrow(
 			/check-subquery|Postgres forbids subqueries in CHECK constraints/,
 		);

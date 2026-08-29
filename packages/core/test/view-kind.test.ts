@@ -3,6 +3,7 @@ import { defineView } from "../src/dsl/define-view";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
+import { expr } from "../src/expr/ast";
 import { eq, isNotNull } from "../src/expr/operators";
 import { createDefaultRegistry } from "../src/kind/registry";
 import type { ViewSnapshot } from "../src/kinds/view-kind";
@@ -59,6 +60,57 @@ describe("viewKind.serialize", () => {
 
 		// and the round trip through a real snapshot diffs to nothing: the
 		// clauses come back out of the snapshot exactly as they went in.
+		const declarations = [posts, view];
+		const first = generateMigration({
+			declarations,
+			previousSnapshot: emptySnapshot,
+			registry,
+		});
+		expect(first.errors).toEqual([]);
+		const second = generateMigration({
+			declarations,
+			previousSnapshot: first.snapshot,
+			registry,
+		});
+		expect(second.errors).toEqual([]);
+		expect(second.sql).toBe("");
+	});
+
+	// add-window-functions task 1.8: 1.3's codec round-trip is NODE-level
+	// (encodeExprNode/decodeExprNode called directly) -- this proves the
+	// VIEW-level path the spec scenario and D104 both name ("a view
+	// carrying a window function round-trips … a field shape would have
+	// round-tripped it into a different view"): buildSnapshot's own
+	// encode, then a second generateMigration decoding that snapshot back
+	// and diffing to nothing. Hand-built (the over()/rank() DSL lands in
+	// group 2) via expr(), same technique the D70 fixture uses.
+	it("a view body's window function survives the snapshot round-trip (task 1.8)", () => {
+		const view = defineView(
+			app,
+			"posts_ranked",
+			select(
+				{
+					id: posts.id,
+					rank: expr("numeric", {
+						nodeKind: "window",
+						fn: {
+							nodeKind: "functionCall",
+							schemaName: null,
+							functionName: "rank",
+							args: [],
+						},
+						partitionBy: [posts.status.exprNode],
+						orderBy: [{ expr: posts.publishedAt.exprNode, direction: "desc" }],
+					}),
+				},
+				posts,
+			),
+		);
+		const snapshot = viewKind.serialize(view) as ViewSnapshot;
+		expect(viewSelectSql(snapshot)).toContain(
+			'rank() over (partition by "app"."posts"."status" order by "app"."posts"."published_at" desc)',
+		);
+
 		const declarations = [posts, view];
 		const first = generateMigration({
 			declarations,

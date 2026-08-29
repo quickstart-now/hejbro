@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ExprNode } from "../../src/expr/ast";
+import type { ExprNode, FunctionCallNode } from "../../src/expr/ast";
 import { someDeepExprNode, someExprNode } from "../../src/expr/walk";
 
 const rawSqlCall = (sql: string): ExprNode => ({ nodeKind: "rawSql", sql });
@@ -253,5 +253,55 @@ describe("someDeepExprNode (#141: exists()-descending sibling of someExprNode)",
 			],
 		};
 		expect(someDeepExprNode(node, isMarker)).toBe(true);
+	});
+
+	// add-window-functions task 1.7: someDeepExprNodeHandlers.window has no
+	// in-core consumer (it's exported purely for @hejbro/supabase's own
+	// validators, whose exercise of it doesn't count toward THIS package's
+	// own coverage/CRAP score, measured per package) -- a direct test of
+	// each of its three branches, same convention as functionCall/
+	// sqlTemplate above. `rls-cached-auth-outside-rls.test.ts`'s own new
+	// case proves the real consumer path; this proves the branch itself.
+	const buildWindow = (fields: {
+		readonly fn?: FunctionCallNode;
+		readonly partitionBy?: ReadonlyArray<ExprNode>;
+		readonly orderBy?: ReadonlyArray<ExprNode>;
+	}): ExprNode => ({
+		nodeKind: "window",
+		fn: fields.fn ?? {
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "rank",
+			args: [],
+		},
+		partitionBy: fields.partitionBy ?? [],
+		orderBy: (fields.orderBy ?? []).map((expr) => ({ expr, direction: "asc" })),
+	});
+
+	it("finds a match through a window function's own fn argument", () => {
+		const node = buildWindow({
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "coalesce",
+				args: [rawSqlCall("marker")],
+			},
+		});
+		expect(someDeepExprNode(node, isMarker)).toBe(true);
+	});
+
+	it("finds a match through a window function's partitionBy", () => {
+		const node = buildWindow({ partitionBy: [rawSqlCall("marker")] });
+		expect(someDeepExprNode(node, isMarker)).toBe(true);
+	});
+
+	it("finds a match through a window function's orderBy", () => {
+		const node = buildWindow({ orderBy: [rawSqlCall("marker")] });
+		expect(someDeepExprNode(node, isMarker)).toBe(true);
+	});
+
+	it("returns false when a window function matches nothing", () => {
+		const node = buildWindow({ partitionBy: [columnRef] });
+		expect(someDeepExprNode(node, isMarker)).toBe(false);
 	});
 });

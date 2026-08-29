@@ -5,6 +5,7 @@ import {
 	emptySnapshot,
 	eq,
 	exists,
+	expr,
 	generateMigration,
 	index,
 	isNotNull,
@@ -165,6 +166,46 @@ describe("rlsCachedAuthOutsideRlsValidator", () => {
 			id: uuid().primaryKey(),
 			hasProfile: boolean().default(
 				exists(select(profiles).where(eq(profiles.userId, authUidCached()))),
+			),
+		});
+		const result = generateMigration({
+			declarations: [app, profiles, accounts],
+			previousSnapshot: emptySnapshot,
+			validators: [rlsCachedAuthOutsideRlsValidator],
+		});
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
+	});
+
+	// add-window-functions task 1.7: proves the DEEP walker's window arm
+	// (over()/rank() DSL lands in group 2, so the window node is hand-built)
+	// -- a column default has no structural exists()/window guard (unlike
+	// CHECK/index-predicate, which core's own validateChecks/
+	// validateIndexPredicates reject any exists() in outright), so it is
+	// the one site where this shape can actually reach the validator, same
+	// reasoning as the exists()-in-a-default case right above.
+	it("finds authUidCached() buried inside an exists(...) subquery inside a window function's partitionBy, in a column default", () => {
+		const profiles = table(app, "profiles", {
+			id: uuid().primaryKey(),
+			userId: uuid(),
+		});
+		const accounts = table(app, "accounts", {
+			id: uuid().primaryKey(),
+			hasProfile: boolean().default(
+				expr("boolean", {
+					nodeKind: "window",
+					fn: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "rank",
+						args: [],
+					},
+					partitionBy: [
+						exists(select(profiles).where(eq(profiles.userId, authUidCached())))
+							.exprNode,
+					],
+					orderBy: [],
+				}),
 			),
 		});
 		const result = generateMigration({

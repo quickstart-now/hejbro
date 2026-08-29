@@ -71,6 +71,27 @@ discipline").
       `packages/query/src/compile/params.ts`,
       `packages/supabase/src/validators/rls-uncached-auth-call.ts`, those
       tests.
+- [x] 1.7 (~8m) Positive descent proof for the **two walk workers**, the
+      same way 1.5 does it for `retarget`. 1.5 covered one registry;
+      review found both `walk.ts` arms at zero coverage, and deleting them
+      left the whole suite green — the exact trap this change documents,
+      one registry over. Prove each through its real consumer: an
+      `exists()` hidden in `over()`'s `partitionBy` inside a `check`
+      constraint is still refused by the existing `check-subquery` guard
+      (`someExprNode`), and a **cached** `auth.uid()` — `(select
+      auth.uid())` — hidden the same way is still reported by
+      `rls-cached-auth-outside-rls` (`someDeepExprNode`, a different
+      validator from 1.6's). Red: those two guards' own test files;
+      `window: () => false` in either arm must turn them red. Files: those
+      tests only.
+- [x] 1.8 (~6m) View-level round-trip: a view whose body carries a window
+      function is serialized **and decoded back**, not just the node in
+      isolation. 1.3 proves the mechanism; this proves the path the
+      proposal names as the whole reason for D104 ("a view carrying a
+      window function would round-trip into a different view"). Red:
+      `packages/core/test/view-lifecycle` (or the view-kind test) — "a
+      view with a window function round-trips through the snapshot".
+      Files: that test only.
 
 ## 2. The vocabulary and the over() wrapper — after group 1
 
@@ -192,20 +213,31 @@ discipline").
 
 ## Verification
 
-- **Every `check:*` script in the root `package.json`, plus `check`,
-  `check-types` and `test`** — read the list off `package.json` at
-  verification time rather than trusting this one. A hand-kept gate list
-  drifts exactly the way a hand-kept traversal list does, and this change
-  exists partly because of the second kind. At the time of writing that
-  is `check`, `check-types`, `test`, `check:first-release-version`,
-  `check:next-marker`, `check:diagnostic-xref`,
-  `check:pnpm-publish-tool`, `check:crap`, `check:tasktime` — output
-  shown.
-- Two of those are load-bearing for this change specifically, because it
-  introduces several new error codes: `check:next-marker` (every
-  user-facing `HejbroError` carries a `Next:` clause) and
-  `check:diagnostic-xref` (a code quoted inside another diagnostic's
-  message must be one this codebase can actually throw).
+- **Everything `.github/workflows/ci.yml` runs**, read off that file at
+  the commit under test — not a list kept here, and not the
+  `package.json` scripts whose names happen to start with `check:`. The
+  prefix is a naming habit, not the CI contract: `build`,
+  `smoke:pack-install` and `changeset status` gate a PR without carrying
+  it, and `check:pnpm-publish-tool` carries it without gating a PR (it
+  runs only in `release-publish.yml`). A hand-kept gate list drifts the
+  way a hand-kept traversal list does; a list whose *boundary* is a name
+  prefix drifts the same way one level up.
+- Three are load-bearing for this change specifically:
+  `check:next-marker` (every user-facing `HejbroError` carries a `Next:`
+  clause) and `check:diagnostic-xref` (a code quoted inside another
+  diagnostic's message must be one this codebase can actually throw),
+  because the change introduces several new error codes; and
+  `smoke:pack-install`, because task 2.3 widens the published export
+  surface.
+- Run the gates with turbo's cache disabled (`TURBO_FORCE=1`). The cache
+  is content-addressed and shared across worktrees: a detached review
+  checkout replays the *implementer's* logs and reports green having run
+  nothing. Same failure shape as the integration suite reporting green
+  after running zero tests.
+- `check:crap` and `check:tasktime` are **not** judged by exit code. Both
+  rewrite `README.md`, and CI's verdict is `git diff --exit-code --
+  README.md` after each, in that order. Running them inside a checkout
+  modifies it — one more reason review runs in a detached worktree.
 - `pnpm --filter @hejbro/pg test:integration` against a real postgres:17,
   with the executed test names listed and zero skipped.
 - Goldens and example chains are expected to be **unchanged**: a new
