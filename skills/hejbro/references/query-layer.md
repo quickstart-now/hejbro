@@ -116,6 +116,13 @@ const withComments = await handle
 	.innerJoin(comments, eq(posts.id, comments.postId));
 ```
 
+The `asc(...)`/`desc(...)`/nulls-placement examples above (`latestPerStatus`,
+`oldestFirstNullsFirst`) were verified by compiling and executing them
+against the real chain surface at `a853d9c5d699193b1ffd613af6c4a94570e7ea2e`
+— a point-in-time check, not a standing regression guard: nothing here
+re-runs them, so a later edit that breaks the example would not be
+caught by anything in this repository.
+
 An insert chain also has `.onConflictDoNothing(...target columns)` and
 `.onConflictDoUpdate({ target: [...], set: {...} })`, mirroring core's
 own `insert(...).onConflictDoNothing()`/`.onConflictDoUpdate()` stages —
