@@ -154,7 +154,7 @@ re-derives it by hand.
 Closes #482 and #475. The CLI stops naming a preset's kind, and stops
 calling "difference" what it never compared.
 
-- [ ] 2.1 [design] `~9m` The kind's comparison-coverage slot. Red:
+- [x] 2.1 [design] `~9m` The kind's comparison-coverage slot. Red:
       `packages/core/test/kind-registry.test.ts` » "a kind can declare
       that no catalog object backs it, with a reason" — fails today
       because `ObjectKind` has no such member. What breaks makes it red:
@@ -167,7 +167,7 @@ calling "difference" what it never compared.
       naming the issue filed for it. Files either way:
       `packages/core/src/kind/object-kind.ts`,
       `packages/core/test/kind-registry.test.ts`.
-- [ ] 2.2 `~8m` The preset declares what the CLI hardcoded. Red:
+- [x] 2.2 `~8m` The preset declares what the CLI hardcoded. Red:
       `packages/supabase/test/storage-bucket-kind.test.ts` » "the bucket
       kind declares itself uncomparable against a catalog, with the
       reason" (red before 2.1's member exists), and
@@ -177,7 +177,7 @@ calling "difference" what it never compared.
       `packages/supabase/src/storage/bucket-kind.ts`,
       `packages/supabase/test/storage-bucket-kind.test.ts`,
       `packages/cli/test/check-compare.test.ts`.
-- [ ] 2.3 `~8m` Comparison routes through the registry. Red:
+- [x] 2.3 `~8m` Comparison routes through the registry. Red:
       `packages/cli/test/check-compare.test.ts` » "a kind that declares
       itself uncomparable is stated in the coverage boundary and does
       not change the exit code" — the comparator gains the registry it
@@ -186,7 +186,7 @@ calling "difference" what it never compared.
       Files: `packages/cli/src/check/compare.ts`,
       `packages/cli/src/commands/check.ts`,
       `packages/cli/test/check-compare.test.ts`.
-- [ ] 2.4 `~8m` An unregistered kind is not-compared, never differs.
+- [x] 2.4 `~8m` An unregistered kind is not-compared, never differs.
       Red: same test file » "a declared object of an unregistered kind
       is reported as not compared, with the reason, and the run cannot
       exit zero" — today `compareEntry` emits `check-object-differs`
@@ -194,21 +194,21 @@ calling "difference" what it never compared.
       `packages/cli/test/check-compare.test.ts`, and
       `packages/cli/test/check-report.test.ts` if the report's boundary
       line is asserted there.
-- [ ] 2.5 `~8m` Spec delta transcribed: the two categories are drawn
+- [x] 2.5 `~8m` Spec delta transcribed: the two categories are drawn
       apart — declared-uncomparable (coverage boundary, exit unchanged)
       versus could-not-compare (`check-not-compared`, never exit zero).
       Red: `openspec validate enforce-driver-contract --strict` while
       the delta is absent; the scenarios are exercised by 2.3/2.4.
       RENAMED, not MODIFIED, if a requirement's title moves. Files:
       `openspec/changes/enforce-driver-contract/specs/cli-commands/spec.md`.
-- [ ] 2.6 `~7m` The four constraint wrappers become the table they
+- [x] 2.6 `~7m` The four constraint wrappers become the table they
       already are. Red: `packages/cli/test/check-compare.test.ts` »
       the existing primary-key / unique / foreign-key / check
       assertions, which must stay green across the rewrite — this task
       is a refactor whose red is the absence of behavior change, so it
       lands only with those assertions passing before and after. Files:
       `packages/cli/src/check/compare.ts`.
-- [ ] 2.7 `~6m` One foreign-keys section, with a when-to-use-which
+- [x] 2.7 `~6m` One foreign-keys section, with a when-to-use-which
       table. Red: none — a documentation task; done means
       `skills/hejbro/references/dsl-cheatsheet.md` has exactly one
       `## Foreign keys` heading, and it states both entry points: the

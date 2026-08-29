@@ -777,7 +777,12 @@ const compareEntry = (
  * vacuous "no differences". `registry` (#482, task 2.3) is optional and
  * additive, the same pattern as `ObjectKind`'s own optional members --
  * defaults to the core-only registry, so a caller (test or otherwise)
- * that never registers a preset kind sees no behavior change.
+ * that never registers a preset kind sees no behavior change. A caller
+ * that forgets to pass its real registry does not silently drop a
+ * preset kind's objects from the report either (task 2.4): every one of
+ * them falls to the unregistered-kind path, `check-not-compared`, which
+ * forbids exit `0` -- a forgotten argument surfaces loudly as "could not
+ * answer", never as a clean pass that skipped something.
  */
 export const compareCatalog = (
 	snapshot: Snapshot,

@@ -55,12 +55,53 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 	});
 
 	it("a session-state:true driver checked against the false tier's observation is rejected -- the kit reads the declaration, the caller doesn't hand it a tier", () => {
-		expect(() =>
+		try {
 			assertSessionStateConformance(capabilitiesWithSessionState(true), {
 				recordedForOneExecute: [{ sql: "select 1", params: [] }],
 				callerStatement: { sql: "select 1", params: [] },
-			}),
-		).toThrowError(/session-state/);
+			});
+			expect.unreachable(
+				"expected the true-declared/false-shaped mismatch to be rejected",
+			);
+		} catch (error) {
+			// Asserts the error's own identity (code + tier), never a bare
+			// message substring: a kit that picked the obligation from
+			// `observation`'s own shape instead of `capabilities` (the
+			// exact forbidden move this test exists to catch) would, for
+			// this input, fall through to the false-tier check instead --
+			// which throws its own message embedding the literal text
+			// "session-state:false", so `/session-state/` matches either
+			// way and can't tell the mismatch-rejection apart from the
+			// wrong obligation quietly running and merely happening to
+			// fail (measured: this exact mutant survived a regex-only
+			// assertion here). `tier` pins which failure actually fired.
+			expect(error).toMatchObject({
+				code: "driver-conformance-violation",
+				tier: "session-state:true",
+			});
+		}
+	});
+
+	it("a session-state:false driver checked against the true tier's observation is rejected", () => {
+		// Symmetric to the case above -- the reverse-direction guard
+		// (`recordedForSetupSession` handed to a declared-false driver)
+		// had no test of its own; disabling it in isolation left every
+		// other test green.
+		try {
+			assertSessionStateConformance(capabilitiesWithSessionState(false), {
+				recordedForSetupSession: [
+					{ sql: "set intervalstyle to 'postgres'", params: [] },
+				],
+			});
+			expect.unreachable(
+				"expected the false-declared/true-shaped mismatch to be rejected",
+			);
+		} catch (error) {
+			expect(error).toMatchObject({
+				code: "driver-conformance-violation",
+				tier: "session-state:false",
+			});
+		}
 	});
 
 	it("a session-state:true driver delivers the settings through its setup hook", () => {

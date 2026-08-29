@@ -193,7 +193,12 @@ const summaryLine = (
  * and additive, defaulting to the core-only registry the same way
  * `compareCatalog`'s own does -- an existing call site that never
  * registers a preset kind sees the same three static boundary lines it
- * always did.
+ * always did. This default's own safety is narrower than
+ * `compareCatalog`'s: forgetting it here only drops informational
+ * boundary text, never the exit code -- that guarantee comes from
+ * `compareCatalog` already having turned an unregistered preset kind
+ * into a `check-not-compared` finding (task 2.4) before `findings` ever
+ * reaches this function.
  */
 export const renderCheckReport = (
 	findings: ReadonlyArray<Finding>,
@@ -277,7 +282,10 @@ export const declaredCheckConstraints = (
  * 3) -- merged into one findings list. Takes `session`, not a full
  * `Driver`, so a test injects a fake one with no real I/O at all;
  * `runCheck` passes its own already-open `Driver` (which structurally
- * satisfies `DriverSession`).
+ * satisfies `DriverSession`). `registry`'s default forwards straight to
+ * `compareCatalog`'s own -- same optional-and-safe reasoning documented
+ * there (task 2.4 turns a forgotten registry into a loud
+ * `check-not-compared`, never a silent skip).
  */
 export const compareCheckAgainstCatalog = async (
 	snapshot: Snapshot,

@@ -23,9 +23,17 @@ A driver shipped from this repository SHALL be checked, at test time,
 against the obligation its declared `session-state` tier carries: a
 `false` declaration is checked for carrying its settings with every
 execution, in that order; a `true` declaration is checked for delivering
-them through its session-setup hook. The check SHALL read which tier
-applies from the driver's own capabilities declaration, never from a
-choice the caller makes independently of it, and SHALL NOT use observed
+them through its session-setup hook. This check observes order, not
+content: it reads no driver's own settings text, so it cannot tell a
+genuinely unrelated statement that merely precedes the caller's own from
+the settings themselves — it checks only that some statement precedes
+the caller's own for a `false` declaration, in the position the settings
+would occupy if present. This is a deliberate limitation of what this
+verification observes, not an oversight it is expected to close.
+
+The check SHALL read which tier applies from the driver's own
+capabilities declaration, never from a choice the caller makes
+independently of it, and SHALL NOT use observed
 behavior to infer, normalize, or correct the declaration itself — reading
 the declaration to select an obligation is required; changing it from
 what is observed is forbidden. This verification is repo-internal; it is
