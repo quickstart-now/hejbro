@@ -283,6 +283,44 @@ describe("rlsUncachedAuthCallValidator", () => {
 		expect(result.warnings[0]?.code).toBe("rls-uncached-auth-call");
 	});
 
+	// #444 F5b: childrenOfHandlers' exists entry used to hand-list
+	// where/joins.on/orderBy only (a private copy of core's own pre-#444
+	// traversal), missing the two clauses #443 added.
+	it("flags an uncached auth.uid() inside an exists() subquery's having", () => {
+		const profiles = table(app, "profiles", {
+			id: uuid().primaryKey(),
+			userId: uuid().notNull(),
+		});
+		const accounts = table(
+			app,
+			"accounts",
+			{ id: uuid().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readOwn: rls
+						.policy("accounts_read_own")
+						.for("select")
+						.to("authenticated")
+						.using(
+							exists(
+								select(profiles)
+									.where(eq(profiles.id, profiles.id))
+									.groupBy(profiles.userId)
+									.having(eq(profiles.userId, authUid())),
+							),
+						),
+				}),
+			}),
+		);
+		const result = generateMigration({
+			declarations: [app, usageGrant, profiles, accounts],
+			previousSnapshot: emptySnapshot,
+			validators: [rlsUncachedAuthCallValidator],
+		});
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]?.code).toBe("rls-uncached-auth-call");
+	});
+
 	it("does not warn on an exists(...) subquery with no where clause (nothing to walk)", () => {
 		const profiles = table(app, "profiles", { id: uuid().primaryKey() });
 		const accounts = table(

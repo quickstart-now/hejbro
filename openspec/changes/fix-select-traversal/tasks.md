@@ -129,7 +129,7 @@ hand-write a `SelectNode` field list.
 
 ## 4. The preset's private copy
 
-- [ ] 4.1 (~7m) **F5b.** `rls-uncached-auth-call` deletes its own
+- [x] 4.1 (~7m) **F5b.** `rls-uncached-auth-call` deletes its own
       `childrenOfExists`/`childrenOfSelectExpr`/`projectionExprsOf`/
       `whereClauseOf` and calls core's exported helpers, so an uncached
       `auth.uid()` inside a subquery's `having` or `groupBy` is found.
