@@ -136,6 +136,62 @@ not be dropped.
       a later one is refused". Files:
       `packages/core/src/expr/render-sql.ts`, that test.
 
+- [x] 1.5 (review-born; no estimate — overhead) The eight findings from
+      group 1's review, in the reviewer's priority order. Three are
+      substantive and five are hygiene:
+      (a) **`check:crap` is red** — `columnPlanForResult` and
+      `applyColumnOrderToQuery` fell below threshold because group 1's own
+      unreachable throws are uncovered, and `validateIndexPredicates`
+      crossed on complexity alone. Fix by **asserting the stubs**
+      (hand-built `WithNode` → `"unreachable"`), which lowers CRAP and
+      pins stub criterion 1 in the same stroke; extract 1.2c's branch in
+      the third. The README CRAP block goes in the same commit.
+      (b) **`encodeColumnRef` writes `schema: null` silently** for a CTE
+      column while `decodeColumnRef` throws on it — an encode/decode
+      asymmetry that commits an unreadable snapshot. Guard it in the
+      shape `encodeFromNode` already uses, one function away in the same
+      file.
+      (c) **`orderedProjection` returns silently** where every other
+      deferral throws; its own comment admits it. Make it throw.
+      (d) `dsl/rls.ts`'s policy diagnostic interpolates `null.x.y` for a
+      CTE column — the fifth declaration site of the class 1.2c closed.
+      (e) `renderWith`'s visibility narrowing carries no group-6 deferral
+      marker, so it reads as a finished rule.
+      (f) `index-builder.ts`'s `#TBD` is `#464`; `render-sql.ts:250` defers
+      wording to task 1.3, which is done — settle the text or drop the
+      comment. Its `Next:` still tells a CTE subject to "join that table".
+      (g) `assertCtesVisible`'s ~30-line comment block violates the
+      comments rule — keep the content, move it to `design.md`, leave the
+      invariant.
+      Files: `packages/core/src/{expr/render-sql,expr/codec,dsl/rls,dsl/index-builder,snapshot/column-order,dsl/table}.ts`,
+      `packages/query/src/db/convert.ts`, their tests, `README.md`.
+
+- [x] 1.6 (~15m) Separate "declared" from "in scope". Found while writing
+      1.5(f)'s test: `with a as (…), b as (…) select b.id from a` — `b`
+      declared but never joined — **builds cleanly**, and Postgres rejects
+      it (`missing FROM-clause entry for table "b"`), exactly as it
+      rejects the same shape for a real table. This is a regression 1.3b
+      introduced: to reach nested subqueries it injects every declared CTE
+      name into `outerScope`, and `outerScope` feeds **two different
+      questions** — `assertCtesVisible` asks "is this name declared
+      anywhere in the WITH list" (the whole list is right) and
+      `assertInScope` asks "was this column's source actually joined at
+      this level" (the whole list is wrong). One channel, two meanings,
+      and the second one silently answers yes to everything.
+      Fix by making the two meanings structurally distinct: a render-time
+      `DeclaredCteMarker` (`{ declaredCte }`) that lives in
+      `render-sql.ts`, **not** in `ast.ts` — it is a rendering concept,
+      not IR, and giving it a different key from `CteRefNode`'s
+      `cteName` is what stops the two being confused again.
+      `isInScope` ignores markers; `assertCtesVisible` accepts both.
+      Measured: `OuterScope` is a type alias 18 sites already share, so
+      widening the alias carries them; 5 literal spellings and the
+      `scope` parameter of `isInScope`/`assertInScope`/
+      `findForeignColumnRef` are the manual edits, all inside this one
+      file. Red: `packages/core/test/expr/with-scope.test.ts` — "a column
+      of a declared but unjoined CTE is refused". Files:
+      `packages/core/src/expr/render-sql.ts`, that test.
+
 ## 2. Serialization and traversal — after group 1
 
 - [ ] 2.1 (~9m) Codec: the `with` token in the query-kind mapping plus
@@ -307,7 +363,11 @@ route it through the lead rather than absorbing it.
       than narrowing quietly. Red:
       `packages/core/test/query/with-recursive.test.ts` — "a recursive CTE
       anchors and self-references, rendering with recursive … union all".
-      Files: `packages/core/src/query/with-recursive.ts` (new), that test.
+      Files: `packages/core/src/query/with-recursive.ts` (new),
+      **`packages/core/src/expr/render-sql.ts`** (the visibility narrowing
+      lives there and must learn about `recursive` — review found the
+      original file list could not have satisfied this task's own
+      precondition), that test.
 - [ ] 6.2 (~7m) The recursive term is typed from the anchor: the
       reference's columns are the anchor's projected fields, and a
       recursive term whose shape disagrees does not type-check. Red: same

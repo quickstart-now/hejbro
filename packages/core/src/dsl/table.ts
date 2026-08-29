@@ -1,6 +1,6 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
-import type { ColumnRef, Expr, ExprNode } from "../expr/ast";
+import type { ColumnRef, ColumnRefNode, Expr, ExprNode } from "../expr/ast";
 import { columnRef, expr } from "../expr/ast";
 import { isNull } from "../expr/operators";
 import { collectColumnRefs } from "../expr/render-sql";
@@ -852,6 +852,33 @@ const indexPredicateEntries = (
 	});
 
 /** Rejects a partial index `.where(...)` predicate that contains a subquery or references another table's column, mirroring {@link validateChecks} (D50/D51). */
+/**
+ * The two `index-predicate-foreign-column-ref` shapes {@link
+ * validateIndexPredicates} throws for a predicate column outside the
+ * table (add-ctes task 1.2c's CTE case, and the pre-existing wrong-table
+ * case) — split out so the caller's own branching stays flat (task 1.5(a)
+ * review, CRAP).
+ */
+const throwIndexPredicateForeignColumnRef = (
+	tableName: string,
+	foreign: { readonly name: string; readonly ref: ColumnRefNode },
+): never => {
+	if (foreign.ref.schemaName === null) {
+		// add-ctes task 1.2c: a CTE column reaching a partial index's
+		// predicate -- a CTE does not exist at index-creation time
+		// (it is statement-local to a query, not a schema object), so
+		// naming it here is meaningless, not merely out of scope.
+		return throwHejbroError(
+			"index-predicate-foreign-column-ref",
+			`index "${foreign.name}"'s where predicate on table "${tableName}" references a column of the CTE "${foreign.ref.tableName}" — a CTE is statement-local and does not exist at index-creation time. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
+		);
+	}
+	return throwHejbroError(
+		"index-predicate-foreign-column-ref",
+		`index "${foreign.name}"'s where predicate on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a partial index predicate can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
+	);
+};
+
 const validateIndexPredicates = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -891,20 +918,7 @@ const validateIndexPredicates = (
 				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
 		);
 	if (foreign !== undefined) {
-		if (foreign.ref.schemaName === null) {
-			// add-ctes task 1.2c: a CTE column reaching a partial index's
-			// predicate -- a CTE does not exist at index-creation time
-			// (it is statement-local to a query, not a schema object), so
-			// naming it here is meaningless, not merely out of scope.
-			throwHejbroError(
-				"index-predicate-foreign-column-ref",
-				`index "${foreign.name}"'s where predicate on table "${tableName}" references a column of the CTE "${foreign.ref.tableName}" — a CTE is statement-local and does not exist at index-creation time. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
-			);
-		}
-		throwHejbroError(
-			"index-predicate-foreign-column-ref",
-			`index "${foreign.name}"'s where predicate on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a partial index predicate can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
-		);
+		throwIndexPredicateForeignColumnRef(tableName, foreign);
 	}
 };
 

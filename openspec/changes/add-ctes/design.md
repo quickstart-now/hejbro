@@ -188,3 +188,38 @@ and a type-level constraint is defense in depth, added only as far as
 group 3's own `[design]` tasks (3.1/3.2) can get one without the
 silent-erasure failure mode. Group 3 does not need to re-litigate this
 fork; the runtime guard already covers the case unconditionally.
+
+## CTE visibility: one check, no new traversal (task 1.5(a) review)
+
+`assertCtesVisible` (`render-sql.ts`) throws `undeclared-cte` when a
+from/join target names a CTE outside `outerScope`'s own CTE markers. The
+skip is gated on "are there any CTE targets to check" (task 1.3c), not on
+whether `outerScope` is defined: a from/join list with no CTE reference
+at all never reads `outerScope`, which is what keeps every existing
+table-only render — bare or correlated — unaffected; a CTE reference with
+an `undefined` or CTE-marker-less `outerScope` means literally nothing is
+visible, which is exactly `undeclared-cte`'s own case, not a reason to
+look away (rendering that select stand-alone would otherwise name a
+relation no `WITH` ever declares, passing here only to fail on the server
+with no diagnostic).
+
+`renderWith` is the only producer of a scope carrying CTE markers, and
+every render call already threads `outerScope` down through
+`exists()`/`selectExpr()` (`renderExistsNode`/`renderSelectExprNode` pass
+it straight through to their own nested `renderSelect`), so calling this
+once inside `renderSelectClauses` — the one place every select's own
+`from`/joins are assembled, top-level or nested — reaches a from/join
+target buried inside a subquery too, with no separate traversal: a single
+code covers task 1.3 (a name the statement never declares at all), task
+1.4 (a name it declares, but not yet visible from here — `renderWith`
+narrows `outerScope`'s markers to the earlier entries only when rendering
+an entry), task 1.3b (a target inside a nested `exists()`/`selectExpr()`
+subquery), and task 1.3c (a CTE reference rendered with no enclosing
+`WITH` in sight at all — a reference object escaping the statement that
+declared it, reachable once group 3 hands one out).
+
+Not `foreign-column-ref`'s family: that family names a *column*
+mismatched against a resolved table; this is a from/join target naming a
+relation that either does not exist or is not visible yet, which needs
+its own available-sources listing, not a "join that table" suggestion
+that does not apply to a CTE.

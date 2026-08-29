@@ -66,7 +66,7 @@ const declarationColumnSelf = (
 	if (isColumnRef(column)) {
 		if (column.exprNode.schemaName === null) {
 			// add-ctes task 1.2d: `.on()` has no table-ownership check at
-			// all (a pre-existing gap out of this change's scope, #TBD) --
+			// all (a pre-existing gap out of this change's scope, #464) --
 			// but a CTE column reference is new with this change, so
 			// closing that one case here is this change's own exposure to
 			// close, joining 1.2c's foreign-column-ref family rather than

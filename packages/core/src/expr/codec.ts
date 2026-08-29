@@ -208,12 +208,30 @@ const encodeLiteral = (literal: LiteralNode["literal"]): JsonValue => {
 	return handler(literal);
 };
 
-const encodeColumnRef = (node: ColumnRefNode): JsonValue => ({
-	nodeKind: NODE_KIND_TO_SNAPSHOT.columnRef,
-	schema: node.schemaName,
-	table: node.tableName,
-	column: node.columnName,
-});
+/**
+ * A CTE column reference (`schemaName === null`, add-ctes) encodes with a
+ * `cte` key instead of `schema`/`table` — the same shape {@link
+ * encodeFromNode} uses for a CTE from/join target, so a reader sees one
+ * consistent marker for "this identifies a CTE, not a table" across both
+ * node kinds. Without this branch, `schema: null` would write silently
+ * and {@link decodeColumnRefNode}'s `stringField` would throw reading it
+ * back — a snapshot that commits but cannot be read (task 1.5(a) review).
+ */
+const encodeColumnRef = (node: ColumnRefNode): JsonValue => {
+	if (node.schemaName === null) {
+		return {
+			nodeKind: NODE_KIND_TO_SNAPSHOT.columnRef,
+			cte: node.tableName,
+			column: node.columnName,
+		};
+	}
+	return {
+		nodeKind: NODE_KIND_TO_SNAPSHOT.columnRef,
+		schema: node.schemaName,
+		table: node.tableName,
+		column: node.columnName,
+	};
+};
 
 const encodePlpgsqlRef = (node: PlpgsqlRefNode): JsonValue => ({
 	nodeKind: NODE_KIND_TO_SNAPSHOT.plpgsqlRef,
@@ -513,14 +531,25 @@ const decodeLiteralNode = (node: Record<string, JsonValue>): LiteralNode => ({
 	literal: decodeLiteral(node.literal as JsonValue),
 });
 
+/** The decoding counterpart to {@link encodeColumnRef}'s CTE branch — a `cte` key means a CTE column reference, otherwise a table column reference. */
 const decodeColumnRefNode = (
 	node: Record<string, JsonValue>,
-): ColumnRefNode => ({
-	nodeKind: "columnRef",
-	schemaName: stringField(node, "schema"),
-	tableName: stringField(node, "table"),
-	columnName: stringField(node, "column"),
-});
+): ColumnRefNode => {
+	if ("cte" in node) {
+		return {
+			nodeKind: "columnRef",
+			schemaName: null,
+			tableName: stringField(node, "cte"),
+			columnName: stringField(node, "column"),
+		};
+	}
+	return {
+		nodeKind: "columnRef",
+		schemaName: stringField(node, "schema"),
+		tableName: stringField(node, "table"),
+		columnName: stringField(node, "column"),
+	};
+};
 
 const decodePlpgsqlRefNode = (
 	node: Record<string, JsonValue>,

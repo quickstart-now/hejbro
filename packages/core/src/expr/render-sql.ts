@@ -87,7 +87,7 @@ const qualifiedFunctionName = (
 
 const renderSqlTemplateChunk = (
 	chunk: SqlTemplateChunk,
-	outerScope: ReadonlyArray<FromNode> | undefined,
+	outerScope: ReadonlyArray<FromNode | DeclaredCteMarker> | undefined,
 ): string => {
 	switch (chunk.chunkKind) {
 		case "text":
@@ -101,7 +101,7 @@ const renderSqlTemplateChunk = (
 
 const renderOperand = (
 	node: ExprNode,
-	outerScope: ReadonlyArray<FromNode> | undefined,
+	outerScope: ReadonlyArray<FromNode | DeclaredCteMarker> | undefined,
 ): string => {
 	const rendered = renderExpr(node, outerScope);
 	if (compositeNodeKinds.has(node.nodeKind)) {
@@ -116,6 +116,22 @@ export const renderTableRef = (node: TableRefNode): string =>
 
 /** A CTE reference has no schema (D105) — narrows a {@link FromNode} by the field only {@link CteRefNode} carries. */
 const isCteRef = (node: FromNode): node is CteRefNode => "cteName" in node;
+
+/**
+ * A render-time-only scope marker (task 1.6) — never a stored AST node,
+ * so it lives here rather than in `ast.ts`. Names a CTE the enclosing
+ * `WITH` list declares, without claiming it is actually joined at this
+ * level: `assertCtesVisible`'s "is this name declared anywhere" question
+ * reads it, `isInScope`'s "was this column's source joined here" question
+ * must not (only a real `CteRefNode` in scope answers that). A distinct
+ * key from `CteRefNode.cteName` is what keeps the two from being
+ * conflated the way task 1.3b's single-shape `outerScope` injection was.
+ */
+type DeclaredCteMarker = { readonly declaredCte: string };
+
+const isDeclaredCteMarker = (
+	node: FromNode | DeclaredCteMarker,
+): node is DeclaredCteMarker => "declaredCte" in node;
 
 /** Renders a {@link FromNode}: a CTE reference bare and quoted (add-ctes, task 1.2), a table reference schema-qualified. */
 export const renderFromNode = (node: FromNode): string => {
@@ -213,10 +229,15 @@ export const collectColumnRefs = (
 };
 
 const isInScope = (
-	scope: ReadonlyArray<FromNode>,
+	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 	ref: ColumnRefNode,
 ): boolean =>
 	scope.some((source) => {
+		// A declared-but-not-necessarily-joined marker never grants column
+		// access (task 1.6) -- only a real from/join target does.
+		if (isDeclaredCteMarker(source)) {
+			return false;
+		}
 		if (isCteRef(source)) {
 			return ref.schemaName === null && ref.tableName === source.cteName;
 		}
@@ -226,7 +247,7 @@ const isInScope = (
 	});
 
 const findForeignColumnRef = (
-	scope: ReadonlyArray<FromNode>,
+	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 	refs: ReadonlyArray<ColumnRefNode>,
 ): ColumnRefNode | undefined => refs.find((ref) => !isInScope(scope, ref));
 
@@ -237,8 +258,16 @@ const findForeignColumnRef = (
  * validated exactly like a select's (Phase 3 function bodies rely on this
  * for all four statement kinds, not just `select`).
  */
+/** The `Next:` advice's noun for a foreign column's own source — "CTE" when the column belongs to one (`schemaName === null`), "table" otherwise; a CTE joins the same way a table does (task 1.2b), so only the noun needs to change. */
+const joinAdviceNoun = (ref: ColumnRefNode): string => {
+	if (ref.schemaName === null) {
+		return "CTE";
+	}
+	return "table";
+};
+
 const assertInScope = (
-	scope: ReadonlyArray<FromNode>,
+	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 	refs: ReadonlyArray<ColumnRefNode>,
 	verb: string,
 	subject: FromNode,
@@ -247,10 +276,7 @@ const assertInScope = (
 	if (badRef !== undefined) {
 		throwHejbroError(
 			"foreign-column-ref",
-			// add-ctes task 1.3 owns this message's final wording for a CTE
-			// subject/reference; describeFromNode/describeColumnRef keep it
-			// truthful (no bare "null.table") in the meantime.
-			`${verb} "${describeFromNode(subject)}" references column "${describeColumnRef(badRef)}". Next: join that table, or reference it from an enclosing query via exists().`,
+			`${verb} "${describeFromNode(subject)}" references column "${describeColumnRef(badRef)}". Next: join that ${joinAdviceNoun(badRef)}, or reference it from an enclosing query via exists().`,
 		);
 	}
 };
@@ -310,7 +336,7 @@ const collectWhereRefs = (
 
 const whereClause = (
 	where: ExprNode | null,
-	scope: ReadonlyArray<FromNode>,
+	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	if (where === null) {
 		return "";
@@ -382,7 +408,7 @@ const distinctKeyword = (
 
 const renderProjection = (
 	projection: ProjectionNode,
-	scope: ReadonlyArray<FromNode>,
+	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	switch (projection.projectionKind) {
 		case "allColumns":
@@ -403,7 +429,7 @@ const renderProjection = (
 
 const renderOnConflictAction = (
 	action: OnConflictNode["action"],
-	scope: ReadonlyArray<FromNode>,
+	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	switch (action.actionKind) {
 		case "nothing":
@@ -424,7 +450,7 @@ const renderOnConflictAction = (
 
 const renderOnConflict = (
 	onConflict: OnConflictNode | null,
-	scope: ReadonlyArray<FromNode>,
+	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	if (onConflict === null) {
 		return "";
@@ -435,7 +461,7 @@ const renderOnConflict = (
 
 const renderReturning = (
 	returning: ReturningNode | null,
-	scope: ReadonlyArray<FromNode>,
+	scope: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	if (returning === null) {
 		return "";
@@ -464,7 +490,7 @@ const renderReturning = (
  */
 const renderSelectClauses = (
 	query: SelectNode,
-	outerScope: ReadonlyArray<FromNode> | undefined,
+	outerScope: ReadonlyArray<FromNode | DeclaredCteMarker> | undefined,
 	clauseAfterProjection?: string,
 ): string => {
 	const scope = [
@@ -516,7 +542,7 @@ const renderSelectClauses = (
  */
 export const renderSelect = (
 	query: SelectNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => renderSelectClauses(query, outerScope);
 
 const intoKeyword = (strict: boolean): string => {
@@ -549,7 +575,7 @@ export const renderSelectInto = (
 	query: SelectNode,
 	intoVariables: ReadonlyArray<string>,
 	options: { readonly strict: boolean },
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string =>
 	renderSelectClauses(
 		query,
@@ -560,7 +586,7 @@ export const renderSelectInto = (
 /** Renders an {@link InsertNode}. `outerScope` follows the same scope rule as {@link renderSelect} (`[table, …outerScope]`). */
 export const renderInsert = (
 	node: InsertNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
 	const mentionedRefs = [
@@ -589,7 +615,7 @@ export const renderInsert = (
 /** Renders an {@link UpdateNode}. `outerScope` follows the same scope rule as {@link renderSelect} (`[table, …outerScope]`). */
 export const renderUpdate = (
 	node: UpdateNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
 	const mentionedRefs = [
@@ -618,7 +644,7 @@ export const renderUpdate = (
 /** Renders a {@link DeleteNode}. `outerScope` follows the same scope rule as {@link renderSelect} (`[table, …outerScope]`). */
 export const renderDelete = (
 	node: DeleteNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
 	const mentionedRefs = [
@@ -650,14 +676,14 @@ export const renderDelete = (
 type RenderQueryHandlers = {
 	readonly [K in QueryNode["queryKind"]]: (
 		node: Extract<QueryNode, { readonly queryKind: K }>,
-		outerScope?: ReadonlyArray<FromNode>,
+		outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 	) => string;
 };
 
 /** A branch renders parenthesized when it is itself a set operation — associativity stays explicit in the emitted text, never implied. */
 const renderSetOpBranch = (
 	branch: SelectNode | SetOpNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	if (branch.queryKind === "setOp") {
 		return `(${renderSetOp(branch, outerScope)})`;
@@ -708,7 +734,7 @@ const setOpKeyword = (node: SetOpNode): string => {
 /** Renders a {@link SetOpNode}: both branches, the operator keyword, then the whole-set `order by`/`limit` (add-set-operations, D103). */
 export const renderSetOp = (
 	node: SetOpNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	const outputColumns = leftBranchOutputColumns(node.left);
 	const badTerm = node.orderBy
@@ -734,7 +760,7 @@ export const renderSetOp = (
 /** Renders a `WITH` entry's or body's query without adding parentheses — the caller decides whether parens are needed (an entry always gets them, the body never does at top level). */
 const renderQueryBody = (
 	node: SelectNode | SetOpNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	if (node.queryKind === "setOp") {
 		return renderSetOp(node, outerScope);
@@ -755,7 +781,7 @@ const materializedKeyword = (materialized: boolean | null): string => {
 
 const renderWithEntry = (
 	entry: WithEntryNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string =>
 	`${quoteIdentifier(entry.name)} as ${materializedKeyword(entry.materialized)}(${renderQueryBody(entry.query, outerScope)})`;
 
@@ -767,47 +793,43 @@ const recursiveKeyword = (recursive: boolean): string => {
 };
 
 /**
- * Throws `undeclared-cte` when `targets` names a CTE that is not among
- * `outerScope`'s own CTE markers. The skip is gated on "are there any CTE
- * targets to check" (task 1.3c), not on whether `outerScope` is defined:
- * a from/join list with no CTE reference at all never reads `outerScope`,
- * which is what keeps every existing table-only render — bare or
- * correlated — unaffected; a CTE reference with an `undefined` or
- * CTE-marker-less `outerScope` means literally nothing is visible, which
- * is exactly `undeclared-cte`'s own case, not a reason to look away
- * (rendering that select stand-alone would otherwise name a relation no
- * `WITH` ever declares, passing here only to fail on the server with no
- * diagnostic). `renderWith` is the only producer of a scope carrying CTE
- * markers, and every render call already threads `outerScope` down
- * through `exists()`/`selectExpr()` (`renderExistsNode`/
- * `renderSelectExprNode` pass it straight through to their own nested
- * `renderSelect`), so calling this once here — the one place every
- * select's own `from`/joins are assembled, top-level or nested — reaches
- * a from/join target buried inside a subquery too, with no separate
- * traversal: a single code covers task 1.3 (a name the statement never
- * declares at all), task 1.4 (a name it declares, but not yet visible
- * from here — `renderWith` narrows `outerScope`'s markers to the earlier
- * entries only when rendering an entry), task 1.3b (a target inside a
- * nested `exists()`/`selectExpr()` subquery), and task 1.3c (a CTE
- * reference rendered with no enclosing `WITH` in sight at all — a
- * reference object escaping the statement that declared it, reachable
- * once group 3 hands one out). Not `foreign-column-ref`'s family: that
- * family names a *column* mismatched against a resolved table; this is a
- * from/join target naming a relation that either does not exist or is
- * not visible yet, which needs its own available-sources listing, not a
- * "join that table" suggestion that does not apply to a CTE.
+ * Throws `undeclared-cte` when `targets` names a CTE outside
+ * `outerScope`'s own CTE markers. Skips only when `targets` has no CTE
+ * reference at all — never on `outerScope` alone being `undefined` (task
+ * 1.3c: a CTE reference with nothing visible is exactly the error case,
+ * not a reason to look away). Covers every visibility rule this file
+ * enforces (tasks 1.3/1.3b/1.3c/1.4) in one place, reusing `outerScope`'s
+ * existing threading rather than a separate traversal — see `design.md`
+ * ("CTE visibility: one check, no new traversal") for the full reasoning.
  */
+/**
+ * Every CTE name `outerScope` makes visible — a declared-only marker and
+ * a genuinely joined {@link CteRefNode} both count (task 1.6): this
+ * question is "does the name exist in the WITH list", not "was it joined
+ * at this level" (that second question is {@link isInScope}'s alone).
+ */
+const visibleCteNames = (
+	outerScope: ReadonlyArray<FromNode | DeclaredCteMarker>,
+): ReadonlyArray<string> =>
+	outerScope.flatMap((source) => {
+		if (isDeclaredCteMarker(source)) {
+			return [source.declaredCte];
+		}
+		if (isCteRef(source)) {
+			return [source.cteName];
+		}
+		return [];
+	});
+
 const assertCtesVisible = (
-	outerScope: ReadonlyArray<FromNode> | undefined,
+	outerScope: ReadonlyArray<FromNode | DeclaredCteMarker> | undefined,
 	targets: ReadonlyArray<FromNode>,
 ): void => {
 	const cteTargets = targets.filter(isCteRef);
 	if (cteTargets.length === 0) {
 		return;
 	}
-	const visibleNames = (outerScope ?? [])
-		.filter(isCteRef)
-		.map((ref) => ref.cteName);
+	const visibleNames = visibleCteNames(outerScope ?? []);
 	const undeclaredRef = cteTargets.find(
 		(ref) => !visibleNames.includes(ref.cteName),
 	);
@@ -821,14 +843,16 @@ const assertCtesVisible = (
 	);
 };
 
-/** `entry`/`body` markers for {@link renderWith}'s own `outerScope` injection: a bare CTE name becomes the minimal {@link CteRefNode} shape {@link assertCtesVisible} reads back out. */
-const cteMarkers = (names: ReadonlyArray<string>): ReadonlyArray<CteRefNode> =>
-	names.map((cteName) => ({ cteName }));
+/** `entry`/`body` markers for {@link renderWith}'s own `outerScope` injection: a bare CTE name becomes a {@link DeclaredCteMarker} (task 1.6) — "declared", not "joined", which only a real {@link CteRefNode} in scope claims. */
+const cteMarkers = (
+	names: ReadonlyArray<string>,
+): ReadonlyArray<DeclaredCteMarker> =>
+	names.map((declaredCte) => ({ declaredCte }));
 
 /** Renders a {@link WithNode}: its entries comma-separated in declaration order, `with recursive` when the list is recursive, then the body — never itself parenthesized (add-ctes, task 1.1). */
 export const renderWith = (
 	node: WithNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	const declaredNames = node.ctes.map((entry) => entry.name);
 	const entriesSql = node.ctes
@@ -837,6 +861,8 @@ export const renderWith = (
 			// (task 1.4) — forward reference is unrepresentable by the
 			// builder (each entry is handed only the earlier references),
 			// so this guards the artifact path, not the builder path.
+			// Does not yet except node.recursive: a recursive entry's own
+			// self-reference is task 6.1's to widen this for.
 			const entryScope = [
 				...cteMarkers(declaredNames.slice(0, index)),
 				...(outerScope ?? []),
@@ -860,11 +886,11 @@ const renderQueryHandlers: RenderQueryHandlers = {
 /** Dispatches a {@link QueryNode} to its renderer by `queryKind`. */
 export const renderQuery = (
 	node: QueryNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	const handler = renderQueryHandlers[node.queryKind] as (
 		node: QueryNode,
-		outerScope?: ReadonlyArray<FromNode>,
+		outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 	) => string;
 	return handler(node, outerScope);
 };
@@ -877,7 +903,7 @@ export const renderQuery = (
  * `exists (select 1 from posts where posts.id = comments.post_id)` pass
  * scope validation (see {@link renderSelect}).
  */
-type OuterScope = ReadonlyArray<FromNode> | undefined;
+type OuterScope = ReadonlyArray<FromNode | DeclaredCteMarker> | undefined;
 
 /** A CTE column reference (`schemaName === null`, add-ctes) qualifies by the bare CTE name only — a CTE has no schema to render. */
 const renderColumnRefNode = (node: ColumnRefNode): string => {
@@ -1037,7 +1063,7 @@ const renderExprHandlers: RenderExprHandlers = {
 
 export const renderExpr = (
 	node: ExprNode,
-	outerScope?: ReadonlyArray<FromNode>,
+	outerScope?: ReadonlyArray<FromNode | DeclaredCteMarker>,
 ): string => {
 	const handler = renderExprHandlers[node.nodeKind] as (
 		node: ExprNode,

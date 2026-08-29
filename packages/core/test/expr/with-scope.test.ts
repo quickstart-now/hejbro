@@ -253,3 +253,44 @@ describe("A CTE reference escaping its WITH is refused (task 1.3c)", () => {
 		expect(() => renderQuery(recentOrders)).not.toThrow();
 	});
 });
+
+describe("foreign-column-ref advice names a CTE, not always a table (task 1.5(a) review)", () => {
+	it("a column of a declared-but-not-joined CTE is refused with 'join that CTE'", () => {
+		const topCustomers: SelectNode = {
+			...recentOrders,
+			from: { schemaName: "app", tableName: "customers" },
+		};
+		const body: SelectNode = {
+			...recentOrders,
+			projection: {
+				projectionKind: "columns",
+				columns: [
+					{
+						alias: "id",
+						expr: {
+							nodeKind: "columnRef",
+							schemaName: null,
+							tableName: "top_customers",
+							columnName: "id",
+						},
+					},
+				],
+			},
+		};
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{ name: "recent_orders", query: recentOrders, materialized: null },
+				{ name: "top_customers", query: topCustomers, materialized: null },
+			],
+			recursive: false,
+			body,
+		};
+		expect(() => renderQuery(node)).toThrow(
+			expect.objectContaining({
+				code: "foreign-column-ref",
+				message: expect.stringContaining("join that CTE"),
+			}),
+		);
+	});
+});

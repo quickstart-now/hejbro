@@ -185,9 +185,12 @@ const orderedProjection = (
 	}
 	// add-ctes group 1 stopgap: a CTE reference has no column-order oracle
 	// entry (it is never in the snapshot) -- task 4.2 owns asserting this
-	// deliberately, with its own red test, rather than this silent skip.
+	// deliberately, with its own red test.
 	if ("cteName" in from) {
-		return projection;
+		return throwHejbroError(
+			"unreachable",
+			"orderedProjection() cannot yet reach a CTE reference's allColumns projection: add-ctes task 4.2 wires this up.",
+		);
 	}
 	const order = columnOrder(from);
 	if (order === null) {

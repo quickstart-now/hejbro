@@ -77,6 +77,15 @@ describe("expr codec — round-trip", () => {
 				columnName: "id",
 			},
 		],
+		[
+			"columnRef (CTE column, add-ctes task 1.5(a))",
+			{
+				nodeKind: "columnRef",
+				schemaName: null,
+				tableName: "recent",
+				columnName: "id",
+			},
+		],
 		["plpgsqlRef", { nodeKind: "plpgsqlRef", path: ["new", "post_id"] }],
 		[
 			"comparison (SQL-token operator with a space, untouched)",

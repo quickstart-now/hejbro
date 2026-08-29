@@ -284,6 +284,16 @@ const assertOwnColumnsOnly = (
 		.map((expr) => findExprScopeViolation(expr, scope))
 		.find((ref): ref is ColumnRefNode => ref !== undefined);
 	if (foreignRef !== undefined) {
+		if (foreignRef.schemaName === null) {
+			// add-ctes task 1.2c family (task 1.5(a) review): a CTE column
+			// reference reaching a policy expression -- a CTE is
+			// statement-local and never a table an RLS policy can name.
+			throwHejbroError(
+				"rls-policy-foreign-column",
+				`policy "${policy.policyName}" on "${schemaName}.${tableName}" references a column of the CTE "${foreignRef.tableName}" — a CTE is statement-local and does not exist where a policy expression evaluates. Next: reference "${schemaName}.${tableName}"'s own columns, or reach another table through exists().`,
+				policy.declaredAt,
+			);
+		}
 		throwHejbroError(
 			"rls-policy-foreign-column",
 			`policy "${policy.policyName}" on "${schemaName}.${tableName}" references column "${foreignRef.schemaName}.${foreignRef.tableName}.${foreignRef.columnName}" — a policy expression (including inside exists()) may only reference its own table's columns, or, from inside exists(), that subquery's own table. Next: reach a different table through exists(), correlating back to "${schemaName}.${tableName}" rather than referencing a third table directly.`,

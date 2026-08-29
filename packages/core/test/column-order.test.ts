@@ -338,6 +338,13 @@ describe("applyColumnOrderTo*", () => {
 		expect(applyColumnOrderToSelect(unknown, oracle)).toBe(unknown);
 	});
 
+	it("throws unreachable for an allColumns projection over a CTE reference (add-ctes group 1 stopgap, task 1.5(a)) -- no builder wires one through here before task 4.2", () => {
+		const fromCte = { ...select, from: { cteName: "recent" } };
+		expect(() => applyColumnOrderToSelect(fromCte, oracle)).toThrow(
+			expect.objectContaining({ code: "unreachable" }),
+		);
+	});
+
 	it("re-orders an allColumns returning on insert/update/delete", () => {
 		const update = {
 			queryKind: "update",
@@ -352,5 +359,17 @@ describe("applyColumnOrderTo*", () => {
 		expect(applyColumnOrderToQuery(update, oracle)).toMatchObject({
 			returning: { columnNames: ["id", "title", "archived_at", "description"] },
 		});
+	});
+
+	it("throws unreachable for a WithNode (add-ctes group 1 stopgap, task 1.5(a)) -- no builder wires one through here before task 4.2", () => {
+		const withNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: select, materialized: null }],
+			recursive: false,
+			body: select,
+		} as const;
+		expect(() => applyColumnOrderToQuery(withNode, oracle)).toThrow(
+			expect.objectContaining({ code: "unreachable" }),
+		);
 	});
 });

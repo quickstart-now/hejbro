@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { rls } from "../../src/dsl/rls";
 import { schema } from "../../src/dsl/schema";
 import { getTableMeta, table } from "../../src/dsl/table";
+import type { ColumnRef } from "../../src/expr/ast";
 import { eq, isNotNull } from "../../src/expr/operators";
 import { sql } from "../../src/expr/sql-template";
 import { tableKind } from "../../src/kinds/table-kind";
@@ -342,6 +343,48 @@ describe("nested reads inside policy expressions (add-relational-reads group 2 r
 			),
 		).toThrowError(
 			expect.objectContaining({ code: "rls-policy-foreign-column" }),
+		);
+	});
+});
+
+describe("a CTE column reference in a policy expression (add-ctes task 1.2c family, task 1.5(a) review)", () => {
+	it("names the CTE, not a bare 'null' schema, in the diagnostic", () => {
+		const posts = table(app, "posts_cte_fc", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		// hand-built the way group 3's with() reference will hand one out --
+		// schemaName: null, tableName the CTE's bare name.
+		const cteColumnRef: ColumnRef = {
+			...posts.id,
+			sqlName: "id",
+			exprNode: {
+				nodeKind: "columnRef",
+				schemaName: null,
+				tableName: "ranked",
+				columnName: "id",
+			},
+		};
+
+		expect(() =>
+			table(
+				app,
+				"comments_cte_fc",
+				{ id: uuid().primaryKey().defaultRandom() },
+				(t) => ({
+					rls: rls.enabled({
+						read: rls
+							.policy("bad")
+							.for("select")
+							.to("anon")
+							.using(eq(cteColumnRef, t.id)),
+					}),
+				}),
+			),
+		).toThrowError(
+			expect.objectContaining({
+				code: "rls-policy-foreign-column",
+				message: expect.stringContaining("ranked"),
+			}),
 		);
 	});
 });

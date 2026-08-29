@@ -1,4 +1,4 @@
-import type { Expr } from "@hejbro/core";
+import type { Expr, QueryNode } from "@hejbro/core";
 import {
 	bigint,
 	count,
@@ -706,5 +706,25 @@ describe("aggregate conversion (#416)", () => {
 			columnPlanForResult(node, tables),
 		);
 		expect(converted.label).toBe("draft");
+	});
+});
+
+describe("columnPlanForResult (add-ctes group 1 stopgap, task 1.5(a))", () => {
+	it("throws unreachable for a WithNode -- no builder wires one through here before task 5.3", () => {
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{
+					name: "recent",
+					query: select(posts).selectQuery,
+					materialized: null,
+				},
+			],
+			recursive: false,
+			body: select(posts).selectQuery,
+		};
+		expect(() => columnPlanForResult(node, tables)).toThrow(
+			expect.objectContaining({ code: "unreachable" }),
+		);
 	});
 });
