@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { HejbroInput, Snapshot } from "@hejbro/core";
 import {
 	check,
@@ -512,5 +515,22 @@ describe("compareCatalog / 2.5 table sub-object existence", () => {
 		expect(findings).toHaveLength(1);
 		expect(findings[0]?.identity).toBe(`app.posts.${pkName}`);
 		expect(findings[0]?.error.code).toBe("check-object-missing");
+	});
+});
+
+describe("the CLI names no preset's kind (#482, task 2.2/2.3)", () => {
+	it("compare.ts routes by registry, never by a preset's own kind name", () => {
+		// A plain text scan, not a runtime probe: the whole point is that
+		// this source file never spells a preset's kind name at all, so
+		// there's nothing to exercise at runtime -- reading the file is
+		// the only way to check for an absence like this. Red until 2.3
+		// removes the hardcoded "supabase-storage-bucket" entry this scan
+		// currently still finds.
+		const compareSourcePath = join(
+			dirname(fileURLToPath(import.meta.url)),
+			"../src/check/compare.ts",
+		);
+		const compareSource = readFileSync(compareSourcePath, "utf8");
+		expect(compareSource).not.toMatch(/supabase/i);
 	});
 });

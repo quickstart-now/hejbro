@@ -10,6 +10,13 @@ import { registerSupabaseKinds } from "../src/index";
 import { storageBucket } from "../src/storage/bucket";
 import { storageBucketKind } from "../src/storage/bucket-kind";
 
+describe("storageBucketKind.noCatalogObjectReason (#482, task 2.2)", () => {
+	it("the bucket kind declares itself uncomparable against a catalog, with the reason", () => {
+		expect(storageBucketKind.noCatalogObjectReason).toBeDefined();
+		expect(storageBucketKind.noCatalogObjectReason).toMatch(/Storage API/);
+	});
+});
+
 describe("storageBucketKind.serialize / identify", () => {
 	it("serializes a full-option bucket with every field present", () => {
 		const bucket = storageBucket("avatars", {
