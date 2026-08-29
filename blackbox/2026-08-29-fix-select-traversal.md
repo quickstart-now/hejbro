@@ -1,7 +1,7 @@
 Refs:
-- openspec/changes/fix-select-traversal/proposal.md @ blob 42cfc10e7df8407f0c196fe69c73776131c0e0bc
-- openspec/changes/fix-select-traversal/specs/query-type-inference/spec.md @ blob f7e547b1c7fe4063fc397349d4b7fafbdfe7e5f5
-- openspec/changes/fix-select-traversal/tasks.md @ blob 9fadd52b6a01147d7113464c27d5682671105207
+- openspec/changes/archive/2026-08-29-fix-select-traversal/proposal.md @ blob 42cfc10e7df8407f0c196fe69c73776131c0e0bc
+- openspec/changes/archive/2026-08-29-fix-select-traversal/specs/query-type-inference/spec.md @ blob f7e547b1c7fe4063fc397349d4b7fafbdfe7e5f5
+- openspec/changes/archive/2026-08-29-fix-select-traversal/tasks.md @ blob 9fadd52b6a01147d7113464c27d5682671105207
 - packages/core/src/expr/aggregate.ts @ blob 43d86f66fe0469bdf876370dd913b09ce1d8d125
 - packages/core/src/expr/codec.ts @ blob d8712e8450dbf6d2c565c5149e2b6b3f51384aa5
 - packages/core/src/expr/render-sql.ts @ blob 46e6d83b7766b49784965a7dc8005da4ee60bf78

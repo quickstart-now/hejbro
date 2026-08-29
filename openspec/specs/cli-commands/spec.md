@@ -20,6 +20,24 @@ that already exist and must be registered as applied rather than run.
 snapshot, naming `generate` as what to run instead — a baseline is by
 definition the first migration of an adopted database.
 
+`baseline` SHALL also refuse when the run would produce no changes: the
+emptiness guard above has already established that the snapshot is
+empty, so nothing to adopt means the declarations loaded but exported
+nothing. It SHALL fail with `baseline-nothing-to-adopt` and a non-zero
+exit code, naming the declaration entry points as what to check —
+never the `generate` path's "no changes — snapshot already matches your
+declarations" success line, which is both untrue here and an exit 0 that
+hides a mistake. `generate`'s own no-change line and exit 0 are
+unaffected.
+
+`baseline` SHALL accept only the flags a first migration can use. Rename
+and drop-confirmation flags are not among them — a baseline diffs against
+an empty snapshot, so nothing can be renamed and nothing can be dropped.
+Its `--help` SHALL NOT list them, and passing one SHALL be refused before
+argument parsing with a hejbro-coded error that gives that reason and
+names `generate` as the command for a change to an already-adopted
+project — never a raw argument-parser message.
+
 The emitted migration SHALL be an ordinary migration in every other
 respect — same DDL, same banner hash chain — so `verify` accepts the
 chain it starts and every later `generate` emits only what changed.
@@ -56,3 +74,42 @@ they match the live schema stays a separate step.
   migrations or a non-empty snapshot
 - **THEN** it fails with `baseline-not-first`, naming `hejbro generate`
   as the command for a change to an already-adopted project
+
+#### Scenario: A baseline with nothing to adopt is refused
+- **WHEN** `hejbro baseline` runs on a project whose declarations load
+  but export nothing
+- **THEN** it fails with `baseline-nothing-to-adopt` and a non-zero exit
+  code, writing no migration and no snapshot
+
+#### Scenario: The baseline flag surface excludes renames and drops
+- **WHEN** `hejbro baseline --help` runs
+- **THEN** the flags it lists do not include the rename or
+  drop-confirmation flags
+
+#### Scenario: A rename flag passed to baseline is refused explainably
+- **WHEN** `hejbro baseline --rename …` runs
+- **THEN** it fails with a hejbro-coded error stating that a baseline
+  diffs against an empty snapshot and naming `hejbro generate` instead,
+  before any declaration is loaded or any file written
+
+### Requirement: The baseline banner marker is machine-readable
+The `-- baseline:` banner line marks a migration that must be registered
+as applied rather than run, and its only consumer is a tool deciding
+which of the two to do. That decision SHALL NOT require string-matching
+the banner: hejbro SHALL expose a parser for the marker publicly,
+alongside the parsers for the banner's hash-chain and version lines.
+
+The parser SHALL read the marker by its own known prefix only, leaving
+unknown banner lines ignored, so an older hejbro reading a newer file
+stays unaffected.
+
+The machine contract is the `-- baseline:` prefix; the guidance that
+follows the colon is prose for humans and MAY change. A parser that
+matched the whole line would return `false` for every migration written
+before such a wording change — and a `false` here tells an apply tool to
+*run* a migration that must only be registered.
+
+#### Scenario: A baseline migration is identified by its marker
+- **WHEN** a tool parses a migration file written by `hejbro baseline`
+- **THEN** the exported parser reports the marker as present, and reports
+  it absent for a migration written by `hejbro generate`

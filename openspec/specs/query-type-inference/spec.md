@@ -80,7 +80,12 @@ value it accepts:
 - a `json`/`jsonb` column accepts any JSON-serializable value, which the
   query layer serializes; the column's declared type — `json` or `jsonb`
   — SHALL decide the cast, so a `json` column is never written through a
-  `jsonb` cast and never acquires jsonb's key reordering
+  `jsonb` cast and never acquires jsonb's key reordering. A written
+  `null` SHALL become SQL NULL, not the JSON document `null`: `null` is
+  how every other column type spells absence, and a value stored as the
+  JSON document `null` would be invisible to `is null` and would satisfy
+  a `notNull` constraint. The JSON document `null` stays expressible
+  through the `sql` escape hatch (``sql`'null'::jsonb` ``)
 - a `bytea` column accepts a `Uint8Array`, which the query layer
   hex-encodes; a string SHALL NOT be accepted, because its encoding would
   have to be guessed
@@ -105,6 +110,13 @@ never as text spliced into the statement.
 - **THEN** it type-checks, the compiled statement carries the serialized
   document as a bind parameter, and reading the row back yields an equal
   value
+
+#### Scenario: A null written to a json column is SQL NULL
+- **WHEN** an insert or update writes `null` to a `json` or `jsonb`
+  column
+- **THEN** the column holds SQL NULL — `where payload is null` finds the
+  row and a `notNull` column refuses the write — and writing the JSON
+  document `null` requires the `sql` escape hatch
 
 #### Scenario: A brand narrows the write as well as the read
 - **WHEN** a `jsonb().$type<T>()` column is written a value that is not a
