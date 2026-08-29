@@ -5,6 +5,8 @@ import type { IndexColumnDeclaration, IndexMethod } from "../../src/dsl/table";
 import { getTableMeta, table } from "../../src/dsl/table";
 import { eq, isNotNull } from "../../src/expr/operators";
 import { sql } from "../../src/expr/sql-template";
+import { tableKind } from "../../src/kinds/table-kind";
+import { asTableSnapshot } from "../../src/kinds/table-snapshot";
 import { exists, select } from "../../src/query/select";
 import {
 	text,
@@ -29,9 +31,16 @@ describe("index builder — ordering and partial predicates", () => {
 				],
 			}),
 		);
+		const origin = { schemaName: "app", tableName: "posts" };
 		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
-			{ name: "created_at", desc: false, nulls: null, opclass: null },
-			{ name: "published_at", desc: true, nulls: "first", opclass: null },
+			{ name: "created_at", origin, desc: false, nulls: null, opclass: null },
+			{
+				name: "published_at",
+				origin,
+				desc: true,
+				nulls: "first",
+				opclass: null,
+			},
 		]);
 	});
 
@@ -87,6 +96,56 @@ describe("index builder — ordering and partial predicates", () => {
 	});
 });
 
+// #464: `.on()`'s column list had no table-ownership check — the one
+// declaration site out of four that silently accepted a column ref from
+// another table. 2.1 preserves the origin a plain column ref was resolved
+// from (declaration-side only); 2.2 uses it to refuse a foreign column,
+// joining the `foreign-column-ref` family the CTE guard in
+// `dsl/index-builder.ts` and the FK guards already form.
+describe("index builder — plain column origin (#464)", () => {
+	it("an index column keeps the table it came from", () => {
+		const posts = table(app, "posts", { slug: text() }, (t) => ({
+			indexes: [index("posts_slug_idx").on(t.slug)],
+		}));
+		const [column] = getTableMeta(posts).indexes[0]?.columns ?? [];
+		expect(column && "origin" in column && column.origin).toEqual({
+			schemaName: "app",
+			tableName: "posts",
+		});
+	});
+
+	it("the serialized index column is unchanged by that", () => {
+		const posts = table(app, "posts", { slug: text() }, (t) => ({
+			indexes: [index("posts_slug_idx").on(t.slug)],
+		}));
+		const snapshot = asTableSnapshot(tableKind.serialize(getTableMeta(posts)));
+		const [indexSnapshot] = snapshot.indexes;
+		expect(indexSnapshot?.columns).toEqual([{ name: "slug" }]);
+	});
+
+	it("rejects an index over another table's column", () => {
+		const other = table(app, "other", { n: text() });
+		expect(() =>
+			table(app, "posts", { id: uuid() }, () => ({
+				indexes: [index("bad").on(other.n)],
+			})),
+		).toThrow(
+			/foreign-column-ref|an index can only use this table's own columns/,
+		);
+	});
+
+	it("rejects an index over another table's column that shares a name with one of its own", () => {
+		const other = table(app, "other", { id: uuid() });
+		expect(() =>
+			table(app, "posts", { id: uuid() }, () => ({
+				indexes: [index("bad").on(other.id)],
+			})),
+		).toThrow(
+			/foreign-column-ref|an index can only use this table's own columns/,
+		);
+	});
+});
+
 // #284 Foundational (T002): the widened public types every US1/US2/US3 story
 // depends on — no `.using()`/`op()`/expression-`.on()` behaviour yet (that's
 // T014/T024/T036), just the shape and its default.
@@ -115,6 +174,7 @@ describe("index builder — Foundational types (#284)", () => {
 	it("IndexColumnDeclaration carries opclass alongside name/desc/nulls", () => {
 		const byName: IndexColumnDeclaration = {
 			name: "email",
+			origin: { schemaName: "app", tableName: "posts" },
 			desc: false,
 			nulls: null,
 			opclass: null,
@@ -211,7 +271,13 @@ describe("index builder — operator class (#284 US2)", () => {
 			indexes: [index("posts_data_idx").on(op(t.data, "text_pattern_ops"))],
 		}));
 		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
-			{ name: "data", desc: false, nulls: null, opclass: "text_pattern_ops" },
+			{
+				name: "data",
+				origin: { schemaName: "app", tableName: "posts" },
+				desc: false,
+				nulls: null,
+				opclass: "text_pattern_ops",
+			},
 		]);
 	});
 
@@ -226,6 +292,7 @@ describe("index builder — operator class (#284 US2)", () => {
 		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
 			{
 				name: "data",
+				origin: { schemaName: "app", tableName: "posts" },
 				desc: true,
 				nulls: "last",
 				opclass: "text_pattern_ops",
@@ -244,6 +311,7 @@ describe("index builder — operator class (#284 US2)", () => {
 		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
 			{
 				name: "data",
+				origin: { schemaName: "app", tableName: "posts" },
 				desc: true,
 				nulls: "first",
 				opclass: "text_pattern_ops",

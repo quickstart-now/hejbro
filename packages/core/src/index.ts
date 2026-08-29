@@ -55,6 +55,7 @@ export type {
 	ForeignKeyInput,
 	ForeignKeyReferenceTarget,
 	IndexColumnDeclaration,
+	IndexColumnOrigin,
 	IndexDeclaration,
 	IndexMethod,
 	IndexNulls,
