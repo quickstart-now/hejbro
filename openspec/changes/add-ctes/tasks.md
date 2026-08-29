@@ -665,8 +665,17 @@ route it through the lead rather than absorbing it.
       relaxed rule would be a second answer to one question. **Two pins,
       both required**, so the relaxation reads as a contract rather than
       an accident: a differing **key set** is still refused, and a field
-      computed differently on each side **is accepted and types as the
-      union** of the two. The weaker defence against a genuine type
+      computed differently on each side **is accepted and reads back as
+      the anchor's type**.
+      *(The second pin originally said "types as the union of the two",
+      in the planner's recommendation and in the lead's approval
+      condition; group 6 review measured it false. A plain union widens —
+      `int` and `bigint` resolve to `bigint` — but a recursive CTE
+      refuses to, with `42804`. So the compatibility **test** is shared
+      with set operations; the row type is the anchor's. The gap that
+      leaves — a recursive term whose column types resolve differently
+      from the anchor type-checks here and fails on the server — is
+      **#489**.)* The weaker defence against a genuine type
       mismatch is what set operations already ship — tightening it is a
       set-op decision, not this one. Red: same file — "the recursive term
       sees the anchor's columns", "a recursive term missing one of the
@@ -738,7 +747,7 @@ route it through the lead rather than absorbing it.
 
 ## 7. Live witness and the paperwork — after groups 1–6
 
-- [ ] 7.1 (~10m) Docker postgres:17: the motivating case end to end (a
+- [x] 7.1 (~10m) Docker postgres:17: the motivating case end to end (a
       window function in a CTE, filtered outside it — assert the row
       *values*, since a row count is unchanged even if the filter
       degenerates), a recursive tree walk returning every descendant, an
@@ -847,16 +856,22 @@ route it through the lead rather than absorbing it.
       *non*-additions too — the output column alias list was excluded to
       keep one source of truth for a row's key names. Goes in the PR body
       and the merge declaration.
-- [ ] 7.8 (~5m) The **probe recipe**, for #476. The `Omit`-over-a-generic
-      brand loss found at 3.2 is not local to this change: a repo-wide
-      sweep found the same shape at `expr/window.ts`'s
-      `WindowFunctionCall` and `expr/aggregate.ts`'s `Aggregated`. Write
-      down, in `design.md`, how the isolated probe distinguished the two
-      cases (`Omit` over a **concrete** type keeps optional `unique
-      symbol` keys; over a **generic parameter** it drops them, silently
-      and with a clean compile) and where the regression tests that pin
-      the fixed behaviour live, so #476's handler reuses the method
-      instead of rediscovering it. Point the PR body at that section.
+- [ ] 7.8 (~5m) **The retraction, written down.** This task was going to
+      be a probe recipe for #476 — until the defect it described failed to
+      reproduce and the issue was closed. What is worth recording is not
+      the defect but the shape of the mistake, in `design.md`:
+      a "measured" type-system finding was reported up, believed, swept
+      for repo-wide, and filed against two more sites; independent review
+      then failed to reproduce it four ways, the decisive one being
+      **restore the suspect form and run the gates — all green**; the root
+      cause was a stale `packages/core/dist/index.d.ts`, correctly
+      diagnosed mid-investigation but never applied backwards to the
+      findings taken before it. Record the two rules that came out of it
+      (a stale-artifact diagnosis invalidates every earlier measurement; a
+      test that stays green when you restore the bug is not a pin) and
+      that `Omit` over a generic is, as far as four experiments could
+      tell, **fine**. Someone will otherwise read the retracted claim in
+      the git history and re-file it.
 
 - [ ] 7.6 (~10m) The `blackbox/` entry (D89) — an owner-driven change
       carries one in the same PR: what was asked, what was built, why, and
@@ -908,6 +923,20 @@ route it through the lead rather than absorbing it.
       and the amplification path (implementer → planner → lead → issue →
       memory) had no verification step at any hop, each trusting the one
       before.
+      **"The same rule" was a phrase that hid three different errors.**
+      Three times a claim of the form *this is the rule we already have*
+      turned out to share only part of that rule, and each time the gap
+      was found by someone else measuring: the type layer closes three of
+      six declaration sites, not all six; brand preservation came from a
+      key-remapping mapped type, not from the `Omit` the design named; and
+      set-op compatibility shares its **test** with recursive CTEs but not
+      its **result typing** — a plain union widens where a recursive CTE
+      refuses (`42804`). The third one propagated furthest: the planner
+      wrote it into a spec delta, the lead wrote it into an approval
+      condition as a required pin, and review measured it false. Both
+      corrections are recorded where they were made. The standing lesson
+      is narrow and worth keeping: **"the same rule" names a whole rule;
+      if only part of it applies, say which part.**
       **The escalation trigger fired, and firing was the cheap outcome.**
       Group 6's typing hit a real contradiction: the pin requiring a
       recursive term to match its anchor exactly made this change's own

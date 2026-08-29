@@ -367,7 +367,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 	// real, guided failure with a second, confusing "docker rm failed".
 	const containerStarted: { current: boolean } = { current: false };
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		if (!dockerAvailable()) {
 			throw new Error(
 				"packages/pg's integration suite needs a running Docker daemon (Docker Desktop, or colima: `colima start`) -- `docker info` failed. Next: start Docker and re-run `pnpm --filter @hejbro/pg test:integration`.",
@@ -392,6 +392,20 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			user: "postgres",
 			password: "postgres",
 			database: "postgres",
+		});
+		// add-ctes, task 7.1: a database-level default, not a per-query one --
+		// every NEW connection this pool opens from here on inherits it, so
+		// every recursive test below is guarded without repeating the SET at
+		// each call site. Today's recursive fixtures are trees (termination
+		// is a property of the data, not the query), but Postgres accepts a
+		// self-reference on `r left join t`'s non-nullable side and that
+		// construct does not terminate on its own (design.md) -- an
+		// unguarded witness would hang CI instead of failing it the moment a
+		// future fixture grows a cycle.
+		await pgDriver(pool.current).execute({
+			sql: "alter database postgres set statement_timeout = '5s'",
+			params: [],
+			kind: "sql",
 		});
 	}, 60_000);
 
@@ -2045,5 +2059,203 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			null,
 			200n,
 		]);
+	});
+
+	/**
+	 * add-ctes, task 7.1: the motivating case end to end. `cte_tree` mirrors
+	 * design.md's own measured fixture (`t(id, parent, v)`, rows
+	 * `(1,null,10),(2,1,20),(3,2,30)`) so the values asserted below are the
+	 * same ones already measured by hand with `psql` -- this witness is the
+	 * proof the builder reaches them, not a new set of numbers to trust.
+	 */
+	it("ctes (add-ctes): a window function in a CTE filtered outside it, an entry referencing an earlier entry, both materialization hints, and a parameter arrives as a parameter, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.cte_tree (
+				id integer primary key,
+				parent integer,
+				v numeric not null,
+				label text not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const cteTree = table(testSchema, "cte_tree", {
+			id: integer().primaryKey(),
+			parent: integer(),
+			v: numeric({ mode: "number" }).notNull(),
+			label: text().notNull(),
+		});
+		const handle = db({ cteTree }, driver);
+		// row 3's label is adversarial (a quote and a statement terminator) --
+		// seeded here, matched by value below, never spliced as SQL text.
+		const adversarialLabel = "o'brien; drop table cte_tree; --";
+		await handle.insert(cteTree).values([
+			{ id: 1, parent: null, v: 10, label: "root" },
+			{ id: 2, parent: 1, v: 20, label: "child" },
+			{ id: 3, parent: 2, v: 30, label: adversarialLabel },
+		]);
+
+		// The motivating case: a window function inside a plain (non-
+		// recursive) CTE, with the outer query filtering on the windowed
+		// value -- a row COUNT alone cannot tell "filtered correctly" from
+		// "window degenerated to a constant", so the kept rows' own values
+		// are asserted.
+		const ranked = await handle.with((w) => {
+			const r = w.as(
+				"ranked",
+				select(
+					{
+						id: cteTree.id,
+						v: cteTree.v,
+						rn: over(rowNumber(), { orderBy: [cteTree.v] }),
+					},
+					cteTree,
+				),
+				{ materialized: true },
+			);
+			return select({ id: r.id, v: r.v }, r).where(gt(r.rn, 1));
+		});
+		expect(ranked.map((row) => row.id).sort()).toEqual([2, 3]);
+		expect(ranked.find((row) => row.id === 2)?.v).toBe(20);
+		expect(ranked.find((row) => row.id === 3)?.v).toBe(30);
+
+		// An entry referencing an earlier entry -- "b" selects from "a", not
+		// from the base table -- with the OTHER materialization hint on the
+		// earlier entry, proving both tokens are accepted by the server
+		// (not merely rendered).
+		const chained = await handle.with((w) => {
+			const a = w.as("a", select({ id: cteTree.id, v: cteTree.v }, cteTree), {
+				materialized: false,
+			});
+			const b = w.as("b", select({ id: a.id, v: a.v }, a).where(gt(a.v, 15)));
+			return select({ id: b.id, v: b.v }, b).orderBy(b.id);
+		});
+		expect(chained.map((row) => [row.id, row.v])).toEqual([
+			[2, 20],
+			[3, 30],
+		]);
+
+		// A parameter arrives as a parameter: the adversarial label above is
+		// matched by VALUE inside a CTE's own where clause. A text-spliced
+		// value would either fail the statement outright or execute the
+		// trailing DDL it contains -- surviving with exactly the matched row
+		// AND the table still present afterward is only possible if the
+		// value travelled as a bind parameter.
+		const paramProof = await handle.with((w) => {
+			const r = w.as(
+				"filtered",
+				select({ id: cteTree.id }, cteTree).where(
+					eq(cteTree.label, adversarialLabel),
+				),
+			);
+			return select({ id: r.id }, r);
+		});
+		expect(paramProof.map((row) => row.id)).toEqual([3]);
+		const stillThere = await handle.select(cteTree);
+		expect(stillThere).toHaveLength(3);
+
+		// The two shapes 3.6 refuses at build time are refused by the
+		// server too (measured at group 3 review) -- exercised here via raw
+		// SQL, since the builder's own guards make both unreachable through
+		// `withCte()`/`w.as()`. Sent through `driver.execute()` directly
+		// (not `handle.execute()`), so the raw pg error surfaces
+		// unwrapped -- `query-execution-failed` is `@hejbro/query`'s own
+		// wrapper (`db/execute.ts`), never the driver's.
+		try {
+			await driver.execute({
+				sql: 'with "dup" as (select 1), "dup" as (select 2) select 1',
+				params: [],
+				kind: "sql",
+			});
+			expect.unreachable("a duplicate CTE name should have been refused");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "42712");
+		}
+		try {
+			await driver.execute({
+				sql: "with select 1",
+				params: [],
+				kind: "sql",
+			});
+			expect.unreachable("an empty WITH list should have been refused");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "42601");
+		}
+	});
+
+	/**
+	 * add-ctes, task 7.1: recursion. Same `cte_tree` fixture as the test
+	 * above (created there, reused here). Two claims 6.5 rests on that no
+	 * committed unit test exercises against a real server: a recursive
+	 * tree walk returns the right descendants (not just the right count),
+	 * and a window function inside the recursive term is evaluated PER
+	 * ITERATION, not merely accepted -- design.md's own measured values
+	 * (10, 1, 1) are asserted verbatim below, since a count-only assertion
+	 * cannot distinguish "accepted and evaluated" from "accepted and
+	 * ignored". `not materialized` on the recursive entry is exercised on
+	 * the same query, proving it is accepted and ignored rather than an
+	 * error (6.5's own premise). The database-level `statement_timeout`
+	 * `beforeAll` set above guards both queries.
+	 */
+	it("recursive ctes (add-ctes): a tree walk with a running total, a window function evaluated per iteration, and not materialized accepted and ignored, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		const cteTree = table(testSchema, "cte_tree", {
+			id: integer().primaryKey(),
+			parent: integer(),
+			v: numeric({ mode: "number" }).notNull(),
+			label: text().notNull(),
+		});
+		const handle = db({ cteTree }, driver);
+
+		// The running-total walk (design.md's own alias-omitted fixture,
+		// `t.v + r.v`): every descendant of the root, each row's own value
+		// the sum of its ancestors' -- 10, 30, 60, proving the join actually
+		// walks the tree rather than returning the anchor alone.
+		const walked = await handle.with((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: cteTree.id, v: cteTree.v }, cteTree).where(
+					isNull(cteTree.parent),
+				),
+				(self) =>
+					select(
+						{ id: cteTree.id, v: sql`${cteTree.v} + ${self.v}` },
+						self,
+					).innerJoin(cteTree, eq(self.id, cteTree.parent)),
+				{ materialized: false },
+			);
+			return select({ id: r.id, v: r.v }, r).orderBy(r.id);
+		});
+		expect(walked.map((row) => Number(row.v))).toEqual([10, 30, 60]);
+
+		// The window-in-recursive-term case: design.md's own measured
+		// values, id 1 keeps the anchor's v (10), and each recursive row's
+		// row_number() restarts at 1 because the working table holds
+		// exactly one row per iteration -- v arrives (10, 1, 1), not (10, 1,
+		// 2), which is what "evaluated per iteration" means concretely.
+		const windowed = await handle.with((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: cteTree.id, v: cteTree.v }, cteTree).where(
+					isNull(cteTree.parent),
+				),
+				(self) =>
+					select(
+						{ id: cteTree.id, v: over(rowNumber(), { orderBy: [cteTree.id] }) },
+						self,
+					).innerJoin(cteTree, eq(self.id, cteTree.parent)),
+			);
+			return select({ id: r.id, v: r.v }, r).orderBy(r.id);
+		});
+		expect(windowed.map((row) => Number(row.v))).toEqual([10, 1, 1]);
 	});
 });
