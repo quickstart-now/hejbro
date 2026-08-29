@@ -426,10 +426,20 @@ describe("a cast aggregate cell actually revives, not just compiles cast (#444 F
  * purity boundary (`select.ts`'s classification is core-only;
  * `convert.ts`'s is query-only, keyed off `Declarations["tables"]` core
  * never sees), so this test asserts their AGREEMENT observably instead
- * of unifying the source: for each shape, "select.ts cast it" and
- * "convert.ts revived it to bigint" must be the same boolean. A future
- * edit that casts a new aggregate shape without teaching convert.ts to
- * revive it (or the reverse) fails here, not in production.
+ * of unifying the source: for each of the three shapes below,
+ * "select.ts cast it" and "convert.ts revived it to bigint" must be the
+ * same boolean.
+ *
+ * **This is a fixed-shape regression test, not a ratchet** — unlike
+ * `select-children.ts`'s type-level guarantee elsewhere in this change,
+ * nothing here is derived from either side's actual classification set,
+ * because neither is exported. It catches the two known sides
+ * disagreeing about `count`/`max`/`sum` specifically; it does NOT catch
+ * a genuinely new aggregate shape being taught to one side (a cast
+ * added to `select.ts`, say) without a matching case added here AND to
+ * `convert.ts` — that drift needs a human to remember to extend this
+ * file, the same manual-sync risk this whole piece exists to close
+ * everywhere it *can* be closed structurally.
  */
 describe("select.ts casts iff convert.ts revives (#444 F6 drift guard)", () => {
 	// a past-2^53 value, delivered as text: distinguishes "revived as

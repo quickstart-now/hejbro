@@ -618,14 +618,22 @@ const convertCell = (
  * revives via `columnStateForExpr`'s own dispatch for that expr's
  * shape", not an enumerated `columnRef | functionCall` allowlist — a
  * closed list is exactly the class of bug this whole change (#444)
- * exists to close, and this file has no way to tell "hejbro's own cast
- * builder wrote this" from "the caller's own `` sql`${x}::text` ``
- * escape hatch wrote this" (nor should it try to — the meaning of
- * `::text` doesn't depend on who wrote it). Known, accepted consequence:
- * a caller's own `` sql`${max(t.a)}::text` ``, written wanting a text
- * value out, now revives to the argument's original type instead — a
- * behavior change from before this file's #444 fix, flagged to the
- * planner for a possible spec-delta sentence, not decided here.
+ * exists to close.
+ *
+ * **Correction (group 8 follow-up, caught by a red test):** this was
+ * first written believing a caller's own `` sql`${max(t.a)}::text` ``
+ * escape hatch reaches this same path and revives identically — it
+ * does not, in practice, through the public `sql` tag. `sqlTag`
+ * (`expr/sql-template.ts`) always emits `strings.length ===
+ * values.length + 1` text chunks, so a template that OPENS with an
+ * interpolation (`` sql`${x}...` ``) still gets a leading **empty**
+ * text chunk before it — three chunks total (`["", <expr>, "::text"]`),
+ * never the exact two `castTarget` requires below. Only hejbro's own
+ * `castExprNode` (`packages/core/src/query/select.ts`), which builds
+ * the `sqlTemplate` node directly rather than through the tag function,
+ * ever produces the true two-chunk shape. The rule is still correctly
+ * "whatever's inside the wrapper, not just `columnRef`" — it is just
+ * narrower in practice than "regardless of who wrote it" claimed.
  */
 const isCastSuffixChunk = (chunk: SqlTemplateChunk | undefined): boolean =>
 	chunk?.chunkKind === "text" &&

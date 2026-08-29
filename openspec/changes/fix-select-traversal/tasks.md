@@ -242,6 +242,17 @@ hand-write a `SelectNode` field list.
       the owner directly. Recording that the decision came through the
       delegation — rather than writing it as if the owner ruled — is
       what the file is for.
+- [ ] 8.3 (~5m) The second spec delta,
+      `specs/query-execution/spec.md` (written by the planner, commit
+      and validate only): nested-read revival covers aggregate cells,
+      and a `::text` cast is transparent to conversion regardless of who
+      wrote it. Added because the live witness turned F6 from "the cast
+      is emitted" into "the value survives", and the existing
+      requirement only ever spoke of a *column's* declared read type —
+      an aggregate cell has none. No code change is expected; if the
+      implemented behavior and this wording disagree, the wording is
+      what gets reported, not silently edited. Verify with `openspec
+      validate fix-select-traversal --strict`.
 
 ## Verification
 
