@@ -626,5 +626,12 @@ describe("countWhere is removed (#469)", () => {
 		// with the directive removed: TS2694 "Namespace '\"…/src/index\"'
 		// has no exported member 'countWhere'."
 		type _Removed = typeof import("../../src/index").countWhere;
+		// Positive control, deliberately undirected: `@ts-expect-error`
+		// swallows TS2307 ("Cannot find module") too, so a rotted import
+		// path (the file moved or was renamed) would make the red above
+		// pass for the wrong reason -- silently, since nothing else in
+		// this file exercises that path. This line has no directive: if
+		// the path dies, this is what makes the suite fail loudly instead.
+		type _PathControl = typeof import("../../src/index").count;
 	});
 });
