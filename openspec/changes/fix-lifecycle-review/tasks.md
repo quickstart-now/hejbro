@@ -96,13 +96,39 @@ Files (whole group): `packages/query/src/db/transaction.ts`,
       swallowed statement error is recovered by ROLLBACK TO and leaves
       the enclosing transaction usable".
 
+- [ ] 1.7 (~10m) Review rework (3780fea, blockers B1–B3):
+      **B1** `let result: T;` is the only `let` in the repository's own
+      source — AGENTS.md forbids it and Biome has no `noLet`, so
+      `pnpm check` cannot catch it. Normalize the callback into a
+      rejection with an async wrapper, which drops both the `let` and the
+      doubled `try` without losing 1.2's synchronous-throw coverage.
+      **B2** the fallback path's message asserts something false — the
+      reused `rollbackOrFail` says "after the nested transaction callback
+      threw" and files the release failure under `callbackError`, on a
+      path where the callback *returned normally*. That is R1's own
+      defect class, reintroduced by R1's own commit. Parameterize the
+      helper with the triggering fact and the side-property name so each
+      path states what is true; the delta's "carrying both failures" is
+      unaffected, and 1.5's three elements stay on the callback-throw
+      path.
+      **B3** the delta scenario "A failing recovery rollback falls
+      through" has no test — a spec scenario without one is not a
+      contract. Red: `packages/query/test/db/transaction.test.ts` — a
+      release failure *and* a failing recovery rollback, asserting the
+      `savepoint-rollback-failed` identity and that both messages state
+      only true facts. This single test closes B2 and B3 together; had it
+      existed, B2 would have surfaced while writing it.
+      Optional (reviewer's recommendation, not a blocker): move
+      `expect(secondRan).not.toHaveBeenCalled()` ahead of the outcome
+      assertion in 1.1 so "the callback never ran" is what fails first.
+
 ## 2. `baseline` command surface
 
 Files (whole group): `packages/cli/src/commands/generate.ts`,
 `packages/cli/test/baseline-command.test.ts`,
 `packages/cli/test/help.test.ts`.
 
-- [ ] 2.1 (~8m) [design — settled] D2: in `"baseline"` mode a no-change
+- [x] 2.1 (~8m) [design — settled] D2: in `"baseline"` mode a no-change
       run fails with `baseline-nothing-to-adopt` and exit 1 instead of
       printing `no changes — snapshot already matches your declarations`
       and exiting 0. The message diagnoses the actual state — the
@@ -116,7 +142,7 @@ Files (whole group): `packages/cli/src/commands/generate.ts`,
       `packages/cli/test/baseline-command.test.ts` — "a baseline over
       declarations that export nothing fails with
       `baseline-nothing-to-adopt` and writes no files".
-- [ ] 2.2 (~9m) [design — settled] `baseline` stops advertising
+- [x] 2.2 (~9m) [design — settled] `baseline` stops advertising
       `--rename`/`--confirm-drop` — nothing exists to rename or drop in a
       first migration — and rejecting them is a pre-parse intercept in
       `runGenerate`'s `"baseline"` mode, not a citty unknown-flag dump:
@@ -178,7 +204,14 @@ settle. Files: `packages/skills/turbo.json`,
       and this is the likelier cause). Verified the way #431 was: with a
       warm cache, break a `packages/*/src` API the snippets use, confirm
       `pnpm test` goes red rather than replaying FULL TURBO, then revert.
-      Record that reproduction in the PR body. Update the file's own
+      Record that reproduction in the PR body. **Run it with
+      `TURBO_FORCE=1` for the baseline measurement**: the turbo cache is
+      shared across worktrees, so a run in a fresh worktree happily
+      replays a `FULL TURBO` log produced somewhere else entirely
+      (observed in group 1's review gate, where `check-types` replayed a
+      log from the main worktree's `examples/postgres`). Without that,
+      this task's own verification measures the cache instead of the
+      code — the same failure class it exists to close. Update the file's own
       comment to say what the inputs now cover.
 - [ ] 5.2 (~8m) Docs: `skills/hejbro/references/query-layer.md`'s nested
       transaction section gains the concurrency rule and both new error

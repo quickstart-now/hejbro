@@ -75,6 +75,45 @@ const GENERATE_ARGS = {
 	},
 } as const;
 
+/** `hejbro baseline`'s own `--help` args (#445, nit): `--rename`/`--confirm-drop` are dropped from the declared surface entirely, not merely refused at runtime -- {@link GENERATE_ARGS} minus those two keys, so the descriptions above stay the single source citty renders for both commands. */
+const BASELINE_ARGS = {
+	config: GENERATE_ARGS.config,
+	name: GENERATE_ARGS.name,
+} as const;
+
+/** The two flags a baseline can never use (#445, nit): a baseline diffs against an empty snapshot, so nothing exists yet to rename or drop. */
+const BASELINE_INAPPLICABLE_FLAGS: ReadonlyArray<string> = [
+	"--rename",
+	"--confirm-drop",
+];
+
+/**
+ * Pre-parse intercept (#445, nit): catches `--rename`/`--confirm-drop` on
+ * `rawArgs` directly, before either flag's value is ever parsed into a
+ * `RenameSpec`/`ConfirmDropSpec` and before config/declarations load --
+ * the lead explicitly rejected letting citty's own unknown-flag dump do
+ * this job (its message doesn't say why the flag is inapplicable, or what
+ * to run instead).
+ */
+const assertBaselineFlagsApplicable = (
+	mode: GenerateMode,
+	rawArgs: ReadonlyArray<string>,
+): void => {
+	if (mode !== "baseline") {
+		return;
+	}
+	const disallowed = BASELINE_INAPPLICABLE_FLAGS.find((flag) =>
+		rawArgs.includes(flag),
+	);
+	if (disallowed === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"baseline-flag-not-applicable",
+		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: run "hejbro generate" instead to record a change to an already-adopted project.`,
+	);
+};
+
 type ParsedGenerateArgv = {
 	readonly configFlag: string | undefined;
 	readonly name: string | undefined;
@@ -369,6 +408,26 @@ const baselineBlockerText = (
 	return `found ${migrationCount} migration(s) in "${migrationsDir}" and a snapshot that already records declared objects`;
 };
 
+/** Diagnoses which of the two ways a baseline ends up with nothing: the entry pattern's files loaded but exported no hejbro declarations, or they exported some but the two states still landed identical. */
+const baselineNothingToAdoptDiagnosis = (declarationCount: number): string => {
+	if (declarationCount === 0) {
+		return "your declaration files loaded, but exported no hejbro declarations (schema/table/... calls)";
+	}
+	return `${declarationCount} declaration(s) loaded, but there is still nothing for a first migration to record`;
+};
+
+/** #445/D2: a baseline no-op is always a mistake -- the guard directly above it just confirmed the snapshot is empty, so reporting "already matches" would describe success over a diff that was never possible. */
+const throwBaselineNothingToAdopt = (
+	declarationCount: number,
+	entry: ReadonlyArray<string>,
+): never => {
+	const entryPhrase = entry.map((pattern) => `"${pattern}"`).join(", ");
+	throwHejbroError(
+		"baseline-nothing-to-adopt",
+		`baseline found nothing to adopt: ${baselineNothingToAdoptDiagnosis(declarationCount)}. Next: check ${entryPhrase} in hejbro.config.ts -- either the entry pattern isn't matching the files you meant, or those files don't actually export their schema/table declarations.`,
+	);
+};
+
 /** `hejbro baseline` refuses unless the project is at its `init` state: a baseline IS a first migration, and there is nothing to baseline against a chain that already exists. */
 const assertBaselineIsFirst = (
 	migrationCount: number,
@@ -430,6 +489,7 @@ export const runGenerate = async (
 	const parsedArgv = parseGenerateArgv(rawArgs);
 	const fallbackIdentity = parsedArgv.configFlag ?? "hejbro.config.ts";
 	try {
+		assertBaselineFlagsApplicable(mode, rawArgs);
 		const renames: ReadonlyArray<RenameSpec> =
 			parsedArgv.renameValues.map(parseRenameFlag);
 		const confirmedDrops: ReadonlyArray<ConfirmDropSpec> =
@@ -477,6 +537,9 @@ export const runGenerate = async (
 				);
 			}
 			if (!firstPass.hasChanges) {
+				if (mode === "baseline") {
+					throwBaselineNothingToAdopt(declarations.length, config.entry);
+				}
 				return {
 					exitCode: 0,
 					stdout: ["no changes — snapshot already matches your declarations."],
@@ -571,7 +634,7 @@ export const baselineCommand = defineCommand({
 		name: "baseline",
 		description: BASELINE_DESCRIPTION,
 	},
-	args: GENERATE_ARGS,
+	args: BASELINE_ARGS,
 	run: async (ctx) => {
 		const result = await runGenerate(
 			process.cwd(),

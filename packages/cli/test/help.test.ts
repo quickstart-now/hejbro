@@ -59,6 +59,21 @@ describe("hejbro --help", () => {
 	});
 });
 
+describe("hejbro baseline --help", () => {
+	it("does not list the rename or drop-confirmation flags (#445, nit)", async () => {
+		const result = await runHelp(cwd, ["baseline", "--help"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).not.toContain("--rename");
+		expect(result.stdout).not.toContain("--confirm-drop");
+	});
+
+	it("still lists --config and --name", async () => {
+		const result = await runHelp(cwd, ["baseline", "--help"]);
+		expect(result.stdout).toContain("--config");
+		expect(result.stdout).toContain("--name");
+	});
+});
+
 describe("hejbro restore --help", () => {
 	it("documents the migration number positional", async () => {
 		const result = await runHelp(cwd, ["restore", "--help"]);
