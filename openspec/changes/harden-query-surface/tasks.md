@@ -526,15 +526,31 @@ by reading the code, and it holds whatever the server says.
       strip the "legal on both" claim from its comment, which is the
       part no longer supported. Files: as enumerated above, plus that
       test.
-- [ ] 6.3 **(execution pending)** (~7m) Live witness for whichever cases
-      6.2's rule claims to refuse: the same query, executed, produces the
-      SQLSTATE the rule predicted. A rule that refuses a program the
-      server actually accepts is a worse defect than the one being
-      fixed, so this witness runs in both directions. **Written and
-      committed in this group; executed in 7.7's closing slot.** Unticked
-      until then, and **append-only at the bottom of the file** — 5.4's
-      note explains why (the lead's PR #495 owns the harness helper
-      region while it is under review). Files:
+- [ ] 6.3 **(execution pending)** (~7m) **Premise changed — this task was
+      rewritten after 6.1 and 6.2 landed.** It originally read "live
+      witness for whichever cases 6.2's rule claims to refuse", which
+      assumed 6.2 would produce a *refusing* rule. It did not: 6.1
+      settled on (a) (keep permitting, state the residue) and 6.2 on
+      outcome 1 (no source change), so **nothing new is refused** and
+      there is no refusal to witness. Dropping the task outright would
+      leave a different question unmeasured, so it is repointed rather
+      than deleted.
+
+      **What it witnesses instead**: that the shapes 6.1/6.2 *permit*
+      actually run — the M3b-i shape (`numeric` anchor, `bigint`
+      recursive term) and the M4 shape (nullability divergence),
+      executed **through the builder's own compiled SQL**. Group 1
+      measured those shapes as **hand-written raw SQL**; nobody has
+      checked that what hejbro renders for them behaves the same. That
+      is exactly the gap this slice has already caught twice — a
+      construct that type-checks while the rendered path differs (#470's
+      window `nulls`, and 5.1's own review hole). A guard test proving
+      "this compiles" is worth little if the thing it compiles to fails
+      on the server.
+
+      **Written and committed in this group; executed in 7.7's closing
+      slot.** Unticked until then, and **append-only at the bottom of
+      the file** — 5.4's note explains why. Files:
       `packages/pg/test/integration.test.ts`.
 
 ## 7. Release hygiene
@@ -835,10 +851,25 @@ by reading the code, and it holds whatever the server says.
          anchor against a `sql`-escape-hatch recursive term, which
          Postgres accepts; (iii) the measurements a rule needs first —
          which family pairs Postgres actually refuses to unify, and how
-         `unknown` behaves. **Not** this issue: #489's own residue is
-         the *directional same-family* case, which the family system
-         cannot express at all (every numeric SQL type shares one
-         family); that stays in 6.2's spec delta.
+         `unknown` behaves — note there is a clean mitigation for the
+         false positive (treat `unknown` as a wildcard), so that risk
+         alone would not sink the rule.
+
+         **The issue must say it is independent of #489, and the reason
+         is the load-bearing part.** A cross-family rule does **not**
+         close #489's gap: #489 is about divergence *within* a family
+         (`int`/`bigint`, `numeric`/`bigint`) — precisely what raises
+         `42804` — and family granularity cannot see it, since
+         `type-family.ts` collapses smallint, integer, bigint, real,
+         double precision, numeric and the serials into one `"numeric"`
+         family. So adding it would leave #489's case still uncaught
+         while putting a type check into the recursive-term area, and a
+         later reader of the `query-type-inference` delta would
+         reasonably conclude #489 had been handled. **Closing an
+         adjacent gap can mask the original one** — which is why it is
+         filed as its own improvement rather than folded into 6.2, where
+         it would make an honest "here is what we did not narrow, and
+         why" read as less honest.
       Files: none in-tree.
 - [ ] 7.6 (~6m) Boundary check before the PR:
       `git diff --name-only dev...HEAD` (three-dot) names nothing under

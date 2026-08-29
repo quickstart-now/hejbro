@@ -2445,4 +2445,127 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			.map((row) => row.v);
 		expect(byRank).toEqual([2, 1, null]);
 	});
+
+	/**
+	 * harden-query-surface group 6.3 (#489) -- execution pending, run in
+	 * 7.7's closing slot alongside 5.4 and the suite's own gate.
+	 *
+	 * 6.1 and 6.2 both concluded "keep allowing this, state the residue"
+	 * (outcome (a) and outcome 1 respectively) -- neither added a new
+	 * refusal, so there is no rule-predicted SQLSTATE for this witness
+	 * to confirm the server agrees with, the way 6.3's own task text
+	 * originally anticipated. What group 1's M4 addendum and M3b-i
+	 * measured with hand-written raw SQL, this witnesses through
+	 * hejbro's OWN builder and compiled SQL instead -- the gap this
+	 * change has already found twice (the #470 window-nulls case, the
+	 * #487 order-guard case): a construct can type-check and even be
+	 * measured-accepted by Postgres in the abstract, and still not be
+	 * what *our own rendered SQL* actually sends. Both of 6.1/6.2's own
+	 * guard tests build exactly these shapes already (unit-level, no
+	 * server); this confirms the same shapes round-trip against a real
+	 * postgres:17 too.
+	 */
+	it("the 6.1/6.2 guard shapes (nullable-divergent and same-family-divergent recursive terms) actually execute, live against a real postgres:17 (group 6.3, #489)", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+
+		// 6.1's own shape (M4 addendum): anchor's "v" is non-null, the
+		// recursive term's "v" is a genuinely nullable column, same
+		// family, no other divergence -- confirms the null the guard
+		// test's TYPES already permit really does arrive in a live row,
+		// through our builder's own rendered SQL.
+		await driver.execute({
+			sql: `create table g5_integration.g6_nullable (
+				id integer primary key,
+				parent integer,
+				v numeric
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const nullableDivergent = table(testSchema, "g6_nullable", {
+			id: integer().primaryKey(),
+			parent: integer(),
+			v: numeric({ mode: "number" }),
+		});
+		const nullableHandle = db({ nullableDivergent }, driver);
+		await nullableHandle.insert(nullableDivergent).values([
+			{ id: 1, parent: null, v: null },
+			{ id: 2, parent: 1, v: null },
+		]);
+		const nullableWalked = await nullableHandle.with((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{ id: nullableDivergent.id, v: nullableDivergent.id },
+					nullableDivergent,
+				).where(isNull(nullableDivergent.parent)),
+				(self) =>
+					select({ id: self.id, v: nullableDivergent.v }, self).innerJoin(
+						nullableDivergent,
+						eq(self.id, nullableDivergent.parent),
+					),
+			);
+			return select({ id: r.id, v: r.v }, r).orderBy(r.id);
+		});
+		expect(nullableWalked).toEqual([
+			{ id: 1, v: 1 },
+			{ id: 2, v: null },
+		]);
+
+		// 6.2's own shape (M3b-i): anchor's "amount" is numeric, the
+		// recursive term's "amount" is bigint -- same family
+		// ("numeric"), different declared type. Confirms this compiles
+		// AND executes AND the recursive row reads back as the
+		// anchor's own type (a JS number, never a bigint), matching
+		// M3b-i's raw-SQL measurement (resolves to the anchor's type)
+		// through our builder instead.
+		await driver.execute({
+			sql: `create table g5_integration.g6_numbig (
+				id integer primary key,
+				parent integer,
+				amount numeric,
+				big_amount bigint
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const sameFamilyDivergent = table(testSchema, "g6_numbig", {
+			id: integer().primaryKey(),
+			parent: integer(),
+			amount: numeric({ mode: "number" }),
+			bigAmount: bigint(),
+		});
+		const sameFamilyHandle = db({ sameFamilyDivergent }, driver);
+		await sameFamilyHandle.insert(sameFamilyDivergent).values([
+			{ id: 1, parent: null, amount: 100, bigAmount: null },
+			{ id: 2, parent: 1, amount: null, bigAmount: 200n },
+		]);
+		const sameFamilyWalked = await sameFamilyHandle.with((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{ id: sameFamilyDivergent.id, amount: sameFamilyDivergent.amount },
+					sameFamilyDivergent,
+				).where(isNull(sameFamilyDivergent.parent)),
+				(self) =>
+					select(
+						{ id: self.id, amount: sameFamilyDivergent.bigAmount },
+						self,
+					).innerJoin(
+						sameFamilyDivergent,
+						eq(self.id, sameFamilyDivergent.parent),
+					),
+			);
+			return select({ id: r.id, amount: r.amount }, r).orderBy(r.id);
+		});
+		expect(sameFamilyWalked).toEqual([
+			{ id: 1, amount: 100 },
+			{ id: 2, amount: 200 },
+		]);
+		expect(typeof sameFamilyWalked[1]?.amount).toBe("number");
+	});
 });
