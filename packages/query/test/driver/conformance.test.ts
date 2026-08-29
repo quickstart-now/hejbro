@@ -62,4 +62,58 @@ describe("assertSessionStateConformance (task 1.4/1.5, #481)", () => {
 			}),
 		).toThrowError(/session-state/);
 	});
+
+	it("a session-state:true driver delivers the settings through its setup hook", () => {
+		// Negative control first: an empty setup-hook recording is the
+		// violation -- a true-tier driver that never actually pins
+		// anything through its setup hook, positive `capabilities` claim
+		// notwithstanding.
+		expect(() =>
+			assertSessionStateConformance(capabilitiesWithSessionState(true), {
+				recordedForSetupSession: [],
+			}),
+		).toThrowError(/session-state/);
+
+		// Positive: the setup hook sent something -- the kit reads no pin
+		// SQL text (same as the false tier), only that the hook is where
+		// this tier's settings actually travel.
+		expect(() =>
+			assertSessionStateConformance(capabilitiesWithSessionState(true), {
+				recordedForSetupSession: [
+					{
+						sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+						params: [],
+					},
+				],
+			}),
+		).not.toThrow();
+	});
+
+	it("the declaration is left alone -- the kit reads capabilities, never writes it, for either tier", () => {
+		// Structural guarantee, made explicit: `assertSessionStateConformance`
+		// never receives a `Driver` or any mutable reference to its
+		// `capabilities` -- only a plain value copy -- so there is no
+		// channel through which running the kit could ever change what a
+		// driver's own capabilities object reads afterward. This test
+		// exercises both tiers' *compliant* path and then re-reads the
+		// same object literal to make that structural fact an executable
+		// check, not just an argument.
+		const falseCapabilities = capabilitiesWithSessionState(false);
+		assertSessionStateConformance(falseCapabilities, {
+			recordedForOneExecute: [
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+				{ sql: "select 1", params: [] },
+			],
+			callerStatement: { sql: "select 1", params: [] },
+		});
+		expect(falseCapabilities["session-state"]).toBe(false);
+
+		const trueCapabilities = capabilitiesWithSessionState(true);
+		assertSessionStateConformance(trueCapabilities, {
+			recordedForSetupSession: [
+				{ sql: "set intervalstyle to 'postgres'", params: [] },
+			],
+		});
+		expect(trueCapabilities["session-state"]).toBe(true);
+	});
 });
