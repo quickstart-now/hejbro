@@ -1,11 +1,11 @@
 Refs:
 - openspec/changes/fix-lifecycle-review/proposal.md @ blob 710dbc2f14f50ab9d4df6c49bb61f01991dc2c9c
-- openspec/changes/fix-lifecycle-review/tasks.md @ blob 3520771aa25151111c299efa09483a3ddb7d1cfb
+- openspec/changes/fix-lifecycle-review/tasks.md @ blob c6c5929477d13f3eec51412ca6ff64c4512a02d6
 - openspec/changes/fix-lifecycle-review/specs/query-execution/spec.md @ blob 55630e07a8919908eef863663117fa24839abecd
 - openspec/changes/fix-lifecycle-review/specs/cli-commands/spec.md @ blob 58d1eea4cc4c09267c87c5b74e3290852fb5b7c1
 - openspec/changes/fix-lifecycle-review/specs/plpgsql-function-bodies/spec.md @ blob 3bdc14caada0b0f6872f926edb23c145cbe5182e
 - packages/query/src/db/transaction.ts @ blob ba3a9c4d719126bcff612f263fcd708c235b4ffa
-- packages/cli/src/commands/generate.ts @ blob 3c48893bcb6309c0972568d934cf2aefcf8c0108
+- packages/cli/src/commands/generate.ts @ blob 4ca6099a9039842455b3b4c326643dc04e844590
 - packages/core/src/sql/migration-file.ts @ blob d642455d5871e259f232d2bb5701de5bf04b2741
 - packages/core/src/plpgsql/body-context.ts @ blob d67fab6d063c765ea2609692f4b8768e61b3d9f6
 
@@ -174,7 +174,18 @@ their own conflict-resolution convention, neither pinned) → `1aecd6a`
 call's two arguments split the gate's text-based argument scan wrong;
 fixed by moving the comment above the call, and the gate itself joins
 this change's own Verification list so its own omission can't recur
-silently next time).
+silently next time) → `a89e023` (that same commit also reworded the
+`Next:` clause's wording, which was never broken and didn't need
+touching — reverted to the exact original text. The real lesson landed
+here: three attempts at listing "the gate set" in a row were each
+wrong in a different way — a 6-item hand-list missing
+`check:next-marker`, then a `package.json` `check:*` sweep that both
+missed non-`check:`-prefixed CI steps [`pnpm build`,
+`smoke:pack-install`, `changeset status`] and wrongly included one
+that isn't in PR CI at all [`check:pnpm-publish-tool`]. Settled on
+reading `.github/workflows/ci.yml` fresh every time instead of
+enumerating from memory, and recorded that rule in this change's own
+Verification section, not just this entry).
 
 Red observed directly for every task from `ded34dc` on: the
 implementation was reverted via `git stash` (source only, tests kept)
