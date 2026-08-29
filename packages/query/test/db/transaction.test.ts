@@ -290,6 +290,11 @@ describe("db().transaction (task 4.6)", () => {
 		]);
 	});
 
+	// This test and the next are a pair, not a duplicate: an all-attempts-
+	// fail fixture (this one) can't tell a first release failure from a
+	// last one by message text alone, so only the next test (recovery
+	// succeeds) catches `cause` drifting to the recovery release's own
+	// result instead of staying pinned to the original failure. Keep both.
 	it("a swallowed statement error inside a nested callback issues a ROLLBACK TO and surfaces savepoint-release-failed", async () => {
 		const { driver, sessionExecute } = transactionalDriver(true);
 		const handle = db({ posts }, driver);

@@ -227,7 +227,7 @@ Files (whole group): `packages/core/src/sql/migration-file.ts`,
       the baseline marker back off a rendered banner, and reports its
       absence on an ordinary migration".
 
-- [ ] 3.2 (~6m) Lead decision (relayed 2026-08-29): the parser matches
+- [x] 3.2 (~6m) Lead decision (relayed 2026-08-29): the parser matches
       the **`-- baseline:` prefix only**, not the whole marker line.
       Split a `BASELINE_PREFIX` constant out of `BASELINE_LINE` (the
       renderer keeps writing the full line) and match on it, exactly as
@@ -249,7 +249,7 @@ Files (whole group): `packages/core/src/sql/migration-file.ts`,
       bare `-- baseline:` unreadable. `BASELINE_LINE` becomes a template
       built from it, so the prefix is stated once — a second hardcoded
       copy is the same drift shape as group 2's R-b.
-- [ ] 3.2b (~5m) R-e: R5's actual deliverable — the *public export* —
+- [x] 3.2b (~5m) R-e: R5's actual deliverable — the *public export* —
       has no test. Deleting `parseBannerBaseline,` from
       `packages/core/src/index.ts` leaves all 36 core tests green and
       `tsc --noEmit` clean, because the tests import from

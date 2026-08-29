@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+// #445/R5 review R-e: imported separately from core's own public index, not
+// just "../src/sql/migration-file" like every other symbol below -- the
+// delta's own requirement is that this parser is exposed PUBLICLY, and
+// nothing here proves that without importing it the same way a consumer
+// would.
+import { parseBannerBaseline as parseBannerBaselineFromIndex } from "../src/index";
 import type { KindChange } from "../src/kind/object-kind";
 import {
 	deriveSlug,
@@ -259,6 +265,17 @@ describe("parseBannerBaseline (#445/R5)", () => {
 		);
 		expect(parseBannerBaseline(baselineSql)).toBe(true);
 		expect(parseBannerBaseline(nonBaselineSql)).toBe(false);
+	});
+
+	it("is exported from core's own public index, not just its defining module (#445/R5 review R-e)", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			undefined,
+			undefined,
+			true,
+		);
+		expect(parseBannerBaselineFromIndex(baselineSql)).toBe(true);
+		expect(parseBannerBaselineFromIndex).toBe(parseBannerBaseline);
 	});
 
 	it("ignores an unrelated banner line that happens to contain the word 'baseline'", () => {
