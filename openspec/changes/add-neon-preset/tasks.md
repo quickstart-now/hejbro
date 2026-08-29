@@ -337,6 +337,18 @@ starts from its own failing test.
       failure D96's `SET LOCAL` choice exists to prevent. Red: same file
       — "identity does not survive the scoped execution on a reused
       connection". Files: that test.
+- [ ] 7.7 (~8m) Row arrival shapes, witnessed against a real server. The
+      contract fixes what the vanilla driver's rows look like per type,
+      and `@hejbro/query`'s conversion layer is written against those
+      shapes — but `@neondatabase/serverless` ships its **own** bundled
+      type parsers, not `pg-types`, so "the same shapes" is an assumption
+      until something reads them. The one-time measurement covered
+      `interval` and `bytea` only. This reads back the types whose
+      parsers most plausibly differ — `numeric`, `int8`, `timestamptz`,
+      and an array — and asserts each arrives as the vanilla driver's
+      documented shape. Red: same file — "rows arrive in the vanilla
+      driver's shapes for numeric, int8, timestamptz, and arrays". Files:
+      that test.
 
 ## 8. Gate registration
 

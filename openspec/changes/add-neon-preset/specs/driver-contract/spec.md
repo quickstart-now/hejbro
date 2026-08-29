@@ -68,6 +68,14 @@ capability it lacks.
 - **THEN** query building, compiling, and execution behave identically
   to the vanilla driver for every capability both drivers declare
 
+#### Scenario: A preset driver's rows arrive in the vanilla shapes
+- **WHEN** a preset driver built on a client library with its own type
+  parsers — not the vanilla driver's — reads back values whose arrival
+  shape the contract fixes
+- **THEN** they arrive in the same shapes the vanilla driver produces,
+  because the conversion layer above is written against those shapes and
+  reads no capability that would tell it otherwise
+
 #### Scenario: A driver's own transaction member refuses when the capability is false
 - **WHEN** a driver that declares interactive transactions `false` has
   its transaction member called directly, bypassing the query layer's

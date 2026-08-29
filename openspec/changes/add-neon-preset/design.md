@@ -186,11 +186,22 @@ measurement is indistinguishable from one that was never run.
 > `packages/pg` (ct team's territory per this piece's own file-ownership
 > rule), so `pgDriver` itself could not be invoked directly. `psql` sends
 > the identical SQL text (same two `set` pins, same `select`) over the
-> same TCP wire protocol `@hejbro/pg` uses — the value that reaches
-> either client is a property of Postgres's own wire format under these
-> two GUCs, not of which TCP client issued the query, so this is the
-> same measurement `@hejbro/pg` would produce, not an approximation of
-> it. Command:
+> same TCP wire protocol `@hejbro/pg` uses, so it stands in for the
+> **server-side rendering** half of arrival shape — what text Postgres
+> puts on the wire under these two GUCs, independent of which TCP client
+> asked. It does **not** stand in for the **client-side parsing** half:
+> `@hejbro/pg` (`pg-types`) and `@hejbro/neon` (`@neondatabase/serverless`'s
+> own bundled parser) are different code, and `psql` exercises neither.
+> That half is not a gap in the two values compared above, though —
+> `interval` is overridden to raw text on both drivers (identical code
+> path, `intervalPassthroughTypes`), and `bytea` was verified byte-equal,
+> not merely typeof-equal. So, **for the two values measured here** —
+> where the client parser is either overridden to raw text (interval) or
+> verified byte-equal (bytea) — this is the same measurement `@hejbro/pg`
+> would produce, not an approximation of it; a type this measurement
+> never touches (`numeric`, `int8`, `timestamptz`, arrays, …) would need
+> its own comparison, not this one's conclusion borrowed wholesale.
+> Command:
 > ```
 > docker exec ne-pg psql -U postgres -d main -t -A -c \
 >   "set intervalstyle to 'postgres'; set bytea_output to 'hex'; \
