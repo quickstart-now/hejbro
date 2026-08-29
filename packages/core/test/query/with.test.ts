@@ -179,6 +179,7 @@ describe("two diagnostics the builder gives before Postgres ever sees the statem
 		expect(() => withCte(() => select(posts))).toThrow(
 			expect.objectContaining({
 				code: "empty-with-list",
+				message: expect.stringContaining("42601"),
 			}),
 		);
 	});

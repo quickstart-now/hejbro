@@ -645,11 +645,11 @@ route it through the lead rather than absorbing it.
       proves the server agrees. Two more the documentation could not
       settle, so the server does: a `not materialized` hint on a recursive
       entry is **accepted and ignored**, not an error (6.5's premise); the
-      two shapes 3.6 refuses at build time (a duplicate entry name, an
-      empty `WITH`) are refused by the server too — the first was
-      measured at `42712`, the second **was not measured at all** and is
-      the one place this change wrote a diagnostic from a rendering it
-      only read, so it gets its own line here; and
+      two shapes 3.6 refuses at build time are refused by the server too,
+      both now measured — a duplicate entry name at `42712`, an empty
+      `WITH` at `42601` (measured at group 3 review, closing the one place
+      this change had written a diagnostic from a rendering it only read);
+      and
       a window function inside a recursive term is accepted — the two
       claims 6.5 rests on that no committed test would otherwise exercise
       against a real server. **Every recursive case carries a depth guard

@@ -258,13 +258,14 @@ const assertNoDuplicateCteName = (
  * Rejects a `withCte()` call whose callback never declares an entry
  * (add-ctes, task 3.6) — `with  select ...` (an empty entry list) is not
  * valid SQL; Postgres's own grammar requires at least one `<name> AS
- * (<query>)` after `WITH`.
+ * (<query>)` after `WITH`. `42601` (syntax_error) is measured against
+ * postgres:17 (task 7.1), the same rendered text this guard refuses.
  */
 const assertNonEmptyCteList = (entries: ReadonlyArray<WithEntryNode>): void => {
 	if (entries.length === 0) {
 		throwHejbroError(
 			"empty-with-list",
-			'withCte() declared no entries at all -- "with select ..." is not valid SQL. Next: call w.as(...) at least once before returning the body.',
+			'withCte() declared no entries at all -- "with  select ..." is not valid SQL (Postgres refuses this, 42601). Next: call w.as(...) at least once before returning the body.',
 		);
 	}
 };
