@@ -184,7 +184,14 @@ lands its entry in the same commit or PR as the change.
 
 ## Before claiming done
 
-- [ ] `pnpm check`, `pnpm check-types`, `pnpm test` all pass — show output
+- [ ] `pnpm check`, `pnpm check-types`, `pnpm test` all pass — show output.
+      In a review or otherwise isolated worktree, run every gate with
+      `TURBO_FORCE=1`: the turbo cache is shared across worktrees, so a
+      fresh worktree's first run can replay **another worktree's** logs
+      as `FULL TURBO` hits and "the gates passed here" stops meaning
+      anything (#448 — measured: a detached review worktree replayed the
+      main checkout's `check-types` logs). Forcing skips cache reads but
+      still writes, so later runs stay fast
 - [ ] Public API surface changed → `skills/hejbro` updated in the same PR
       (the skill documents the surface; a stale skill is a broken user
       contract, not a docs nit)
