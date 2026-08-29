@@ -220,6 +220,18 @@ measurement is indistinguishable from one that was never run.
 > `Buffer`, decoded from the same underlying wire bytes — confirmed with
 > `Buffer.compare(Buffer.from('4445414442454546','hex'), <the HTTP
 > Buffer>) === 0`. **Gate passes: group 2 proceeds.**
+>
+> **Scope of what this shows.** This measurement shows that **the two
+> pinned paths agree** — the HTTP batch's own pins and `psql`'s explicit
+> `set` statements produce identical arrival shapes. It does **not** show
+> that the pins are what *caused* agreement here: `postgres:17`'s own
+> defaults already happen to be `IntervalStyle=postgres`/
+> `bytea_output=hex`, so an unpinned HTTP batch would likely have matched
+> too, on this server. That is out of this measurement's scope, not a
+> gap in it — the pins exist for a server whose defaults differ (any
+> managed Postgres that changes `IntervalStyle`, e.g., which this local
+> image does not), and this gate is about arrival-shape parity between
+> the two connection paths, not about proving the pins' own necessity.
 
 **Reproduction** (design probe, never committed infrastructure). Three
 traps are recorded because each one costs an hour to rediscover and none
