@@ -207,7 +207,7 @@ Two rules apply to every task here and are not repeated per line:
       Red: `packages/core/test/plpgsql/body-context.test.ts` — "a sql
       fragment is a body condition".
       Files: `plpgsql/body-context.ts`, that test.
-- [ ] 1.8 (~10m) The audit trigger from #426 as a real declaration in
+- [x] 1.8 (~10m) The audit trigger from #426 as a real declaration in
       `examples/postgres`, with its migration and golden — the round-trip
       witness the issue asks for, and the first body in the repository
       that executes a statement.
