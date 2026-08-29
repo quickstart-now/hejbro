@@ -117,6 +117,16 @@ spec delta — the plain cycle applies to them.
   released contract moves. Both packages are pre-1.0 and the changeset is
   `patch`.
 - **Node shape**: unchanged. No golden or example regeneration.
+- **Known consequence of F1**, found by the live witness: a *literal*
+  used in both `distinct on` and the leading `order by` term now lifts
+  to two different `$n` parameters, and Postgres rejects that with
+  "DISTINCT ON expressions must match initial ORDER BY expressions" —
+  where the old, spec-violating inline text happened to match itself.
+  Column references (the normal shape) are unaffected: they are never
+  lifted. Deduplicating identical literals into one `$n` would fix it
+  and is deliberately not done here — sequential numbering with no
+  deduplication is the owner-settled compiler contract (2026-08-26), so
+  changing it is a separate decision, not a side effect of a bug fix.
 - **Decision log**: no new row.
 
 ## Verification note

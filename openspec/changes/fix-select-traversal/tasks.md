@@ -215,12 +215,12 @@ hand-write a `SelectNode` field list.
 
 ## 8. Release hygiene
 
-- [ ] 8.1 (~7m) `skills/hejbro/references/query-layer.md`: the json
+- [x] 8.1 (~7m) `skills/hejbro/references/query-layer.md`: the json
       write paragraph gains the null rule and the escape hatch (F4), and
       the aggregate paragraph states that `min`/`max` are expressions,
       not column references (F9). A stale skill is a broken user
       contract, so this lands in the same PR.
-- [ ] 8.2 (~6m) One `.changeset/*.md` (D59, `patch`). Its body carries
+- [x] 8.2 (~6m) One `.changeset/*.md` (D59, `patch`). Its body carries
       the reason the grade is not higher, because the proposal calls F9
       breaking: the change is a *type narrowing* on an unreleased
       surface — `min`/`max` stop satisfying an API that demands a

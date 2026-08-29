@@ -442,6 +442,26 @@ const typeNodeOf = (inputValue: unknown): TypeNode | undefined =>
 	(inputValue as { readonly typeNode?: TypeNode } | undefined)?.typeNode;
 
 /**
+ * The builder's own unqualified aggregate function name, or `undefined`
+ * for anything else — a schema-qualified call is a declared function
+ * (`db.fn`), which may legitimately be named `count`/`min`/`max` in
+ * someone's own schema and must not be treated as the builder's
+ * aggregate, and a non-`functionCall` expr obviously isn't one either.
+ * Split out (D71/#154 ratchet-5) so {@link isCountCall}/{@link
+ * isPassthroughAggregateCall} each stay a single comparison instead of
+ * repeating this same two-part shape guard.
+ */
+const builderAggregateFunctionName = (expr: ExprNode): string | undefined => {
+	if (expr.nodeKind !== "functionCall") {
+		return undefined;
+	}
+	if (expr.schemaName !== null) {
+		return undefined;
+	}
+	return expr.functionName;
+};
+
+/**
  * `count()` is always `bigint` — Postgres's `int8`, whatever it counted —
  * unconditionally at risk with no `typeNode` to check: unlike `min`/`max`
  * (#444 F9's `Aggregated<TExpr>`), `count()`'s own return type carries no
@@ -451,9 +471,7 @@ const typeNodeOf = (inputValue: unknown): TypeNode | undefined =>
  * write side.
  */
 const isCountCall = (expr: ExprNode): boolean =>
-	expr.nodeKind === "functionCall" &&
-	expr.schemaName === null &&
-	expr.functionName === "count";
+	builderAggregateFunctionName(expr) === "count";
 
 /**
  * `min`/`max` read back as their argument's own type, so the same
@@ -467,10 +485,18 @@ const isCountCall = (expr: ExprNode): boolean =>
  * measurement: they never manufacture a wrong *bigint* either way,
  * cast or not, so they carry no risk this cast exists to close).
  */
-const isPassthroughAggregateCall = (expr: ExprNode): boolean =>
-	expr.nodeKind === "functionCall" &&
-	expr.schemaName === null &&
-	(expr.functionName === "min" || expr.functionName === "max");
+const isPassthroughAggregateCall = (expr: ExprNode): boolean => {
+	const name = builderAggregateFunctionName(expr);
+	return name === "min" || name === "max";
+};
+
+/** `true` for a direct `columnRef` or a passthrough aggregate — the two shapes {@link atRiskCastSuffix} resolves via `typeNode`, split out to keep that function's own branch count low (D71/#154 ratchet-5). */
+const isColumnRefOrPassthroughAggregate = (expr: ExprNode): boolean => {
+	if (expr.nodeKind === "columnRef") {
+		return true;
+	}
+	return isPassthroughAggregateCall(expr);
+};
 
 /**
  * The `::text`/`::text[]` suffix `expr` needs to survive JSON transport
@@ -487,7 +513,7 @@ const atRiskCastSuffix = (
 	if (isCountCall(expr)) {
 		return "::text";
 	}
-	if (expr.nodeKind !== "columnRef" && !isPassthroughAggregateCall(expr)) {
+	if (!isColumnRefOrPassthroughAggregate(expr)) {
 		return null;
 	}
 	const typeNode = typeNodeOf(inputValue);

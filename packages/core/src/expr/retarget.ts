@@ -359,30 +359,39 @@ const retargetOrderByTerm = (
 	return { ...term, expr };
 };
 
-/**
- * Did retargeting `query` for `target` actually produce anything
- * different from the original, or can {@link retargetSelectNode} return
- * `query` itself unchanged? A plain reference comparison on each field —
- * every field along the way (the identifier-carrying `projection`/`from`
- * pass below, {@link retargetJoinTable}, and {@link
- * replaceSelectChildExprs}'s own per-clause identity checks,
- * `select-children.ts`) already guarantees "unchanged in" means
- * "unchanged reference out", so there is no five-way recomputation left
- * to do here (D71/#154 ratchet-5's own complexity-splitting reasoning,
- * simplified further once the generic table absorbed it, #444).
- */
-const isSelectNodeUnchanged = (
+/** `true` when every entry of `items` is the exact same reference as its `originals` counterpart — `Array.prototype.map` always allocates a new array even when every mapped entry is unchanged, so retargeting `query.joins` needs this to decide whether the mapped array can be thrown away in favor of the original one. */
+const sameByIndex = <T>(
+	items: ReadonlyArray<T>,
+	originals: ReadonlyArray<T>,
+): boolean => items.every((item, index) => item === originals[index]);
+
+/** `original` itself when `retargetJoinTable` changed nothing across every join, else the freshly mapped array — `.map` always allocates, even when every entry comes back unchanged. */
+const joinsWithIdentityPreserved = (
+	retargeted: ReadonlyArray<JoinNode>,
+	original: ReadonlyArray<JoinNode>,
+): ReadonlyArray<JoinNode> => {
+	if (sameByIndex(retargeted, original)) {
+		return original;
+	}
+	return retargeted;
+};
+
+/** `query` itself when none of its three identifier fields changed, else a fresh node carrying the retargeted ones — the base {@link retargetSelectNode} runs its generic expression pass over. */
+const selectNodeWithIdentifiers = (
 	query: SelectNode,
-	candidate: SelectNode,
-): boolean =>
-	candidate.projection === query.projection &&
-	candidate.from === query.from &&
-	candidate.joins.every((join, i) => join === query.joins[i]) &&
-	candidate.where === query.where &&
-	candidate.groupBy.every((expr, i) => expr === query.groupBy[i]) &&
-	candidate.having === query.having &&
-	candidate.orderBy.every((term, i) => term === query.orderBy[i]) &&
-	candidate.distinct === query.distinct;
+	projection: ProjectionNode,
+	from: TableRefNode,
+	joins: ReadonlyArray<JoinNode>,
+): SelectNode => {
+	if (
+		projection === query.projection &&
+		from === query.from &&
+		joins === query.joins
+	) {
+		return query;
+	}
+	return { ...query, projection, from, joins };
+};
 
 /**
  * Retargets a whole {@link SelectNode} for `target`, same identity
@@ -406,6 +415,15 @@ const isSelectNodeUnchanged = (
  * already retargeted finds nothing left to match and hands back the
  * exact same references, so this costs a redundant walk, never a wrong
  * answer or a second rewrite.
+ *
+ * No separate "did anything change" comparison is needed at the end
+ * (unlike the pre-#444 version, D71/#154 ratchet-5's own complexity-
+ * splitting reasoning): `base` below is `query` itself, verbatim, when
+ * the identifier pass changed nothing, and {@link
+ * replaceSelectChildExprs}'s own per-clause identity checks
+ * (`select-children.ts`) already hand back `base` unchanged when the
+ * expression pass changes nothing either — so an unrelated rename
+ * returns `query`'s own reference for free, by construction.
  */
 export const retargetSelectNode = (
 	query: SelectNode,
@@ -413,24 +431,15 @@ export const retargetSelectNode = (
 ): SelectNode => {
 	const projection = retargetProjection(query.projection, query.from, target);
 	const from = retargetTableRef(query.from, target);
-	const joins = query.joins.map((join) => retargetJoinTable(join, target));
-	const withIdentifiersRetargeted: SelectNode = {
-		...query,
-		projection,
-		from,
-		joins,
-	};
-	const retargetedExprs = selectChildExprs(withIdentifiersRetargeted).map(
-		(expr) => retargetExprNode(expr, target),
+	const retargetedJoins = query.joins.map((join) =>
+		retargetJoinTable(join, target),
 	);
-	const candidate = replaceSelectChildExprs(
-		withIdentifiersRetargeted,
-		retargetedExprs,
+	const joins = joinsWithIdentityPreserved(retargetedJoins, query.joins);
+	const base = selectNodeWithIdentifiers(query, projection, from, joins);
+	const retargetedExprs = selectChildExprs(base).map((expr) =>
+		retargetExprNode(expr, target),
 	);
-	if (isSelectNodeUnchanged(query, candidate)) {
-		return query;
-	}
-	return candidate;
+	return replaceSelectChildExprs(base, retargetedExprs);
 };
 
 /** Retargets a set-operation statement's branches (add-set-operations) — the same identity invariant: the exact same reference comes back when neither branch changed. */
