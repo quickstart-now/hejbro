@@ -383,8 +383,12 @@ by reading the code, and it holds whatever the server says.
       eliding it opens a gap on the other side: anchor `number`,
       recursive term `number | null` is accepted, the CTE's row type is
       the anchor's, so the declared type says `number` while the
-      recursive term really does carry nulls into the rows. Three
-      options; the second is a scope boundary, not a preference:
+      recursive term really does carry nulls into the rows.
+
+      **6.1 is not blocked and should run first** — this fork came out
+      of reading the code, not the server, and it decides the *shape* of
+      the comparison 6.2 then fills in. Three options; the second is a
+      scope boundary, not a preference:
       **The gap is measured, not hypothetical** (group 1, M4 addendum):
       a recursive term yielding `null::int` against an `int` anchor is
       accepted, `pg_typeof` stays `integer` on every row, and **the null
@@ -423,11 +427,22 @@ by reading the code, and it holds whatever the server says.
       rule that could break it. Files: as enumerated per outcome, plus
       that test.
 - [ ] 6.2 (~9m) [design] Write the rule the group-1 measurements
-      support, and no more, in the shape 6.1 settled. The key question
-      1.2 answers: does the rule key on the **type pair** (symmetric) or
-      on the **anchor** (directional)? If M3b-i passes and M3b-ii raises
-      `42804`, a symmetric rule is wrong by construction. Possible
-      outcomes and their file sets:
+      support, and no more, in the shape 6.1 settled.
+
+      **The key question is already answered — start from it, do not
+      re-derive it.** 1.2 asked whether the rule keys on the **type
+      pair** (symmetric) or on the **anchor** (directional). Measured:
+      M3b-i (`numeric` anchor, `bigint` recursive term) is **accepted**
+      and resolves to `numeric`; M3b-ii, the identical pair with the
+      sides swapped, is **refused with `42804`**. Same two types,
+      opposite verdicts. **A symmetric rule is therefore wrong by
+      construction**: the rule keys on the anchor — the recursive term's
+      resolved type must match the anchor's, and Postgres's ordinary
+      (symmetric) implicit-cast resolution is not the test.
+
+      What that leaves open is only how much of it TypeScript can
+      honestly express, which is this task's actual design work.
+      Possible outcomes and their file sets:
       - *directional, expressible in TS*: `packages/core/src/query/with.ts`
       - *directional, needs a shared helper*: that plus
         `packages/core/src/query/select.ts` (where `SetOpResult` lives)
@@ -563,12 +578,10 @@ by reading the code, and it holds whatever the server says.
       ```
       Each hit is either consistent with the corrected wording, or it is
       another instance of the same drift and is fixed here. This is
-      an existing rule applied at a new moment, not a new rule: **when a
+      a standing rule applied at a new moment, not a new rule: **when a
       measurement lands, another statement of the same fact may survive
-      elsewhere, so grep the fact's key nouns and compare hit by hit**
-      (the lead's Rule 35(ii) and Rule 41 — stated here in full because
-      the numbers do not resolve to anything a reader of this archived
-      file can open).
+      elsewhere, so grep the fact's key nouns and account for every
+      hit.**
       `orderBy`'s accepted vocabulary and nulls placement),
       `snapshot-format` (the additive-compact `nulls`). Verify with
       **bare** `openspec validate harden-query-surface --strict` — the
@@ -867,9 +880,9 @@ I/O — it reads two projection objects).
       decision.
 
       **Name the input surface, don't just claim unreachability**
-      (the lead's Rule 12 — **an unreachability claim must name the
-      input surfaces it is claiming are closed**): the offending node
-      can reach `decodeSelectNode` two ways. (1) A snapshot *written* by a version predating this guard —
+      — **an unreachability claim names the input surfaces it is
+      claiming are closed**: the offending node can reach
+      `decodeSelectNode` two ways. (1) A snapshot *written* by a version predating this guard —
       impossible for any released version, since core's set-op surface
       is absent at `@hejbro/core@0.1.1`, and possible only for a
       snapshot written from an unreleased build of this very branch.
@@ -897,9 +910,8 @@ I/O — it reads two projection objects).
 - [ ] 8.3 (~6m) The spec delta for this half, in `query-builder` (the
       set-operation requirement). Three things it must carry, per the
       lead: the **measured evidence** — review's postgres:17 output
-      showing an email column holding a city (the lead's Rule 45 — **a
-      justification that asserts server behaviour cites a measurement or
-      is not written**); the **division of labour**
+      showing an email column holding a city — **a justification that
+      asserts server behaviour cites a measurement or is not written**; the **division of labour**
       — a *type* divergence is caught by the server itself
       (`UNION types uuid and text cannot be matched`, measured), and
       this guard covers the half the server cannot see, where the types
@@ -919,10 +931,9 @@ I/O — it reads two projection objects).
       as the reason. A hand-edited snapshot is the one real input
       surface; `hejbro verify` detects it **when the user runs that
       command**, which is the honest form of the claim — nothing invokes
-      `verify` automatically. That is a boundary stated under the lead's
-      Rule 46 — **a gap the type system cannot see is a boundary; a gap
-      we could close and chose not to is a defect** — not a gap left
-      implied.
+      `verify` automatically. That is a boundary, stated — **a gap the
+      type system cannot see is a boundary; a gap we could close and
+      chose not to is a defect** — not a gap left implied.
       Files: the `query-builder` delta under this change.
 
 ## Verification

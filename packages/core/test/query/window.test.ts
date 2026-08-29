@@ -4,6 +4,7 @@ import {
 	count,
 	cumeDist,
 	denseRank,
+	desc,
 	firstValue,
 	lag,
 	lastValue,
@@ -148,6 +149,22 @@ describe("over() (task 2.2)", () => {
 		expect(renderSelect(query.selectQuery)).not.toContain("group by");
 		expect(renderSelect(query.selectQuery)).toContain(
 			'count(*) over (order by "app"."posts"."published_at" asc) as "running"',
+		);
+	});
+
+	it("over({ orderBy }) accepts desc(column) too -- one ordering vocabulary, not three (#470)", () => {
+		// WindowSpec.orderBy is typed straight off OrderTermInput (D104) --
+		// widening that union once in expr/ast.ts (group 5) covers this
+		// medium for free, no change to expr/window.ts itself.
+		const query = select(
+			{
+				id: posts.id,
+				rnk: over(rank(), { orderBy: [desc(posts.publishedAt)] }),
+			},
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toContain(
+			'rank() over (order by "app"."posts"."published_at" desc) as "rnk"',
 		);
 	});
 

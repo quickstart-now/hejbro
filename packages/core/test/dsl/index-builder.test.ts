@@ -44,6 +44,28 @@ describe("index builder — ordering and partial predicates", () => {
 		]);
 	});
 
+	it("asc()/desc() still declare an index column exactly as before (group 5's no-regression pin, #470)", () => {
+		// IndexColumn now extends the shared OrderedTerm (expr/ast.ts) --
+		// a type-only change (group 5.1); asc()/desc() themselves, and
+		// everything toDeclarationColumn does with their result, are
+		// untouched. This pins the declaration-side shape byte-for-byte
+		// against that refactor.
+		const posts = table(app, "posts", { publishedAt: timestamptz() }, (t) => ({
+			indexes: [
+				index("posts_published_idx").on(asc(t.publishedAt, { nulls: "last" })),
+			],
+		}));
+		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
+			{
+				name: "published_at",
+				origin: { schemaName: "app", tableName: "posts" },
+				desc: false,
+				nulls: "last",
+				opclass: null,
+			},
+		]);
+	});
+
 	it("records a where predicate after on()", () => {
 		const posts = table(
 			app,

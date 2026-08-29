@@ -1,6 +1,12 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
-import type { ColumnRef, ColumnRefNode, Expr, ExprNode } from "../expr/ast";
+import type {
+	ColumnRef,
+	ColumnRefNode,
+	Expr,
+	ExprNode,
+	NullsPlacement,
+} from "../expr/ast";
 import { columnRef, expr } from "../expr/ast";
 import { isNull } from "../expr/operators";
 import { collectColumnRefs } from "../expr/render-sql";
@@ -35,8 +41,8 @@ export const foreignKeyActions = [
 /** @see foreignKeyActions */
 export type ForeignKeyAction = (typeof foreignKeyActions)[number];
 
-/** Where an ordered index column places SQL nulls relative to its sort order. */
-export type IndexNulls = "first" | "last";
+/** Where an ordered index column places SQL nulls relative to its sort order — alias of the shared {@link NullsPlacement} (`expr/ast.ts`, group 5, harden-query-surface, #470): the index declaration medium and the query medium share one nulls-placement vocabulary now, not two independently declared unions kept in sync by hand. */
+export type IndexNulls = NullsPlacement;
 
 /** Postgres access methods hejbro accepts (D85, closed) — built-in six plus pgvector's two. `"btree"` is Postgres' own default and is never recorded in a declaration or snapshot (SC-004): see {@link IndexDeclaration.method}. */
 export const indexMethods = [

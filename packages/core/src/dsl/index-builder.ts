@@ -1,5 +1,5 @@
 import { throwHejbroError } from "../error";
-import type { ColumnRef, Expr } from "../expr/ast";
+import type { ColumnRef, Expr, OrderedTerm } from "../expr/ast";
 import { isExpr } from "../expr/ast";
 import { renderExpr } from "../expr/render-sql";
 import { assertSqlName } from "../sql/identifier-rules";
@@ -12,11 +12,8 @@ import type {
 } from "./table";
 import { indexMethods } from "./table";
 
-/** One column of an ordered index: a column ref or any expression (R5, e.g. `sql\`lower(${t.email})\``), its sort direction, an optional explicit nulls placement (D51), and an optional operator class (R4). */
-export type IndexColumn = {
-	readonly column: ColumnRef | Expr;
-	readonly desc: boolean;
-	readonly nulls: IndexNulls | null;
+/** One column of an ordered index: the shared ordering vocabulary ({@link OrderedTerm}, `expr/ast.ts` — a column ref or any expression (R5, e.g. `sql\`lower(${t.email})\``), its sort direction, and an optional explicit nulls placement, D51) plus an optional operator class (R4), the one field an index column carries that a query's `order by` term does not. */
+export type IndexColumn = OrderedTerm & {
 	readonly opclass: string | null;
 };
 

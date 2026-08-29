@@ -2,11 +2,13 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ColumnBuilder, ColumnRef, SetOpNode } from "../../src/index";
 import {
 	and,
+	asc,
 	avg,
 	bigint,
 	bytea,
 	count,
 	date,
+	desc,
 	eq,
 	exists,
 	gt,
@@ -167,6 +169,37 @@ describe("select builder", () => {
 		const query = select(posts).where(isNotNull(comments.postId));
 		expect(() => renderSelect(query.selectQuery)).toThrowError(
 			/foreign-column-ref|join that table/,
+		);
+	});
+});
+
+describe("one ordering vocabulary (#470)", () => {
+	it("orderBy accepts desc(column) -- the declaration medium's own asc()/desc()", () => {
+		// Before group 5, OrderTermInput was Expr | { by, direction } only --
+		// desc(posts.id) (dsl/index-builder.ts's IndexColumn) satisfied
+		// neither, a compile error. Widening OrderTermInput to include
+		// OrderedTerm (expr/ast.ts) is what makes this compile now; the
+		// rendered SQL is identical to the equivalent { by, direction } form
+		// (a select's own orderBy renders a table-qualified reference,
+		// same as every other bare-Expr orderBy term in this file).
+		const query = select(posts).orderBy(desc(posts.id));
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."id" desc',
+		);
+	});
+
+	it("orderBy accepts asc(column, { nulls }) too -- compiles; the nulls placement itself renders starting group 5.2", () => {
+		// This term's `nulls` doesn't reach the rendered SQL yet -- that is
+		// 5.2's own scope (OrderByTerm.nulls and the renderers), with its
+		// own dedicated red in expr/render-sql.test.ts. This test only
+		// pins that the WIDENED vocabulary accepts the { nulls } form at
+		// all, the same compile-time property the test above pins for the
+		// bare form.
+		const query = select(posts).orderBy(
+			asc(posts.publishedAt, { nulls: "last" }),
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."published_at" asc',
 		);
 	});
 });
