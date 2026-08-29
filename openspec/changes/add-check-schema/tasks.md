@@ -214,14 +214,14 @@ Postgres rewrites expressions on write.
 
 ## 4. The command surface and its report
 
-- [ ] 4.1 (~8m) [design] Subcommand registration, description and flag
+- [x] 4.1 (~8m) [design] Subcommand registration, description and flag
       surface. The [design] part is the user-facing text and the flag
       set; `check` is a new command and everything it prints is contract.
       Red: `packages/cli/test/help.test.ts` — "lists check among the
       commands"; `packages/cli/test/check-command.test.ts` — "prints its
       flags". Files: `packages/cli/src/commands/check.ts`,
       `packages/cli/src/main.ts`, those two tests.
-- [ ] 4.2 (~9m) The report and the exit codes: findings grouped by
+- [x] 4.2 (~9m) The report and the exit codes: findings grouped by
       object, non-zero when any declared object is missing or differs,
       zero when none do. The "never a diff" rule needs an assertion that
       can fail: a report can carry object identity *and* dump a diff, and
@@ -231,7 +231,7 @@ Postgres rewrites expressions on write.
       everything agrees", "emits no diff hunk markers (`@@`, `+++`,
       `---`) anywhere in its report". Files:
       `packages/cli/src/commands/check.ts`, that test.
-- [ ] 4.3 (~7m) The coverage-boundary statement: the report says what it
+- [x] 4.3 (~7m) The coverage-boundary statement: the report says what it
       did not compare — view bodies, existence-only axes, and that its
       reads are **not** taken as one snapshot, so a schema changing
       mid-run can produce a torn report. That last one is the price of
