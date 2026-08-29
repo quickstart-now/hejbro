@@ -366,6 +366,10 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 	// (the Docker-absent case above), which would otherwise mask the
 	// real, guided failure with a second, confusing "docker rm failed".
 	const containerStarted: { current: boolean } = { current: false };
+	// the container's own mapped host port -- kept so a later test can open
+	// its own short-lived pool against the same postgres (task 7.1's own
+	// statement_timeout cancellation proof, below).
+	const hostPort: { current: number | undefined } = { current: undefined };
 
 	beforeAll(async () => {
 		if (!dockerAvailable()) {
@@ -386,13 +390,20 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		containerStarted.current = true;
 		waitUntilReady();
 		const port = discoverHostPort();
-		// add-ctes, task 7.1: a client-level default (not `alter database`),
-		// so it applies to every connection this pool ever hands out --
-		// including the one the ALTER statement itself would have run on,
-		// which stays at its own session default regardless of what the
-		// ALTER changes for connections opened later (measured: `alter
-		// database ... set statement_timeout` does not retroactively apply
-		// to the session that ran it). Today's recursive fixtures are trees
+		hostPort.current = port;
+		// add-ctes, task 7.1: a client-level default (`PoolConfig.
+		// statement_timeout`, @types/pg's own declared option), not
+		// `alter database ... set statement_timeout` -- an `alter database`
+		// approach was tried first and measured broken: it does not apply
+		// to the session that ran the ALTER itself, and pg's own `Pool`
+		// reuses that exact idle connection for the pool's next query
+		// (measured down to the backend pid), so "every NEW connection
+		// inherits it" being true does nothing for a suite that mostly
+		// reuses the pool's existing connections rather than opening fresh
+		// ones. The client-level option has no such gap -- it is honored by
+		// every connection the pool ever hands out, the first one included
+		// (asserted immediately below, and cancellation is proven, not just
+		// reported, further down). Today's recursive fixtures are trees
 		// (termination is a property of the data, not the query), but
 		// Postgres accepts a self-reference on `r left join t`'s
 		// non-nullable side and that construct does not terminate on its
@@ -2224,8 +2235,9 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 	 * cannot distinguish "accepted and evaluated" from "accepted and
 	 * ignored". `not materialized` on the recursive entry is exercised on
 	 * the same query, proving it is accepted and ignored rather than an
-	 * error (6.5's own premise). The database-level `statement_timeout`
-	 * `beforeAll` set above guards both queries.
+	 * error (6.5's own premise). The pool's own client-level
+	 * `statement_timeout` (`beforeAll`, above) guards both queries -- every
+	 * connection this pool hands out, not only freshly opened ones.
 	 */
 	it("recursive ctes (add-ctes): a tree walk with a running total, a window function evaluated per iteration, and not materialized accepted and ignored, live against a real postgres:17", async () => {
 		const activePool = pool.current;
@@ -2305,5 +2317,45 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			return select({ id: r.id }, r);
 		});
 		expect(depthGuarded).toHaveLength(6);
+	});
+
+	/**
+	 * add-ctes, task 7.1: `show statement_timeout` reporting a value proves
+	 * the setting is VISIBLE, not that it actually cancels anything -- two
+	 * different claims review flagged this suite for conflating once
+	 * already (comment-says-it-works, nothing checks it). This proves
+	 * cancellation directly: a genuinely long-running statement dies with
+	 * `57014` under a short timeout. A separate, short-lived pool (1s, not
+	 * the suite's own 5s) keeps this fast rather than adding a multi-second
+	 * wait to every run.
+	 */
+	it("the statement_timeout guard actually cancels a long-running statement (not just reports a value), live against a real postgres:17", async () => {
+		const port = hostPort.current;
+		if (port === undefined) {
+			throw new Error("beforeAll did not set up the host port");
+		}
+		const shortPool = new Pool({
+			host: "localhost",
+			port,
+			user: "postgres",
+			password: "postgres",
+			database: "postgres",
+			// biome-ignore lint/style/useNamingConvention: node-postgres's own PoolConfig key -- not ours to rename.
+			statement_timeout: 1_000,
+		});
+		try {
+			await pgDriver(shortPool).execute({
+				sql: "select pg_sleep(3)",
+				params: [],
+				kind: "sql",
+			});
+			expect.unreachable(
+				"pg_sleep(3) under a 1s statement_timeout should have been canceled",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "57014");
+		} finally {
+			await shortPool.end();
+		}
 	});
 });

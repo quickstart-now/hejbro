@@ -745,6 +745,38 @@ route it through the lead rather than absorbing it.
       the entry's. Red: same file — "one recursive keyword covers the
       list". Files: that test only.
 
+- [x] 6.7 (review-born) Group 6's three findings. (a) The "accept" test
+      for an aggregate inside a scalar subquery **rendered SQL Postgres
+      rejects** — the `sql` hatch's subquery had no `from`, so the
+      aggregate's arguments were all outer references and the aggregate
+      belonged to the recursive term itself (`42803`). It now matches the
+      measured form (`select sum(v) from t t2`). (b) "types as the union"
+      was wrong twice — the implementation types from the anchor, and
+      Postgres refuses to widen in a recursive CTE (`42804`) where a plain
+      union widens. Fixed in the docstring, in the test name, **and in the
+      spec delta**, which is the copy that gets promoted to
+      `openspec/specs/` and becomes the next reader's source. The test now
+      carries a type-level assertion; it had none. (c) `visibleEntryNames`
+      is stricter than Postgres for forward references under `RECURSIVE`,
+      and the comment said "no such case exists" rather than "this is
+      measured, and accepted because the callback shape makes it
+      unreachable".
+- [x] 7.9 (review-born) The witness guard, and two documents that were
+      never committed. The guard: `alter database … set statement_timeout`
+      does **not** apply to the connection that runs it, and pg's `Pool`
+      hands that same idle connection to the next query — measured, with
+      the backend pid, so every recursive test ran unguarded while a
+      comment said otherwise. Replaced with `new Pool({ …,
+      statement_timeout })`, which covers the first connection too, plus
+      an assertion that the guard is actually set and a depth-guarded
+      recursion case as a second layer. The documents: `design.md` (the
+      post-implementation enforcement figures, the two diagnostics'
+      SQLSTATEs) and the `query-type-inference` delta (the anchor-typing
+      correction) sat uncommitted through three groups because their
+      author was misidentified. **Planner writes them; implementer commits
+      them** — an unowned file in a change directory is a file nobody
+      ships.
+
 ## 7. Live witness and the paperwork — after groups 1–6
 
 - [x] 7.1 (~10m) Docker postgres:17: the motivating case end to end (a
