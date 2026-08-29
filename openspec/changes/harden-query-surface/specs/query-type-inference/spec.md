@@ -206,7 +206,7 @@ There is no separate filtered-count constructor: `count()`'s own
 (harden-query-surface, #469 — an invented name, `countWhere(expr)`,
 covered a use no other constructor's name pattern generalized to, and
 was removed rather than kept; a real `FILTER (WHERE …)` clause is
-tracked as a follow-up rather than shipped under that name).
+tracked as a follow-up rather than shipped under that name, #501).
 
 #### Scenario: count is a bigint end to end
 - **WHEN** a select projects `count()` and executes against a real

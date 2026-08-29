@@ -216,7 +216,7 @@ constructor: a `FILTER (WHERE …)` clause is not yet part of the
 vocabulary (harden-query-surface, #469 — the invented name
 `countWhere(expr)` covered that one use without generalizing to a real
 `FILTER` clause, and was removed rather than kept; a real `FILTER (WHERE
-…)` construct is tracked as a follow-up).
+…)` construct is tracked as a follow-up, #501).
 
 #### Scenario: Grouping with a group filter
 - **WHEN** a select projects a column and `count()`, filters rows with
