@@ -80,6 +80,18 @@ describe("window vocabulary (task 2.1)", () => {
 		expect(last.family).toBe(posts.status.family);
 	});
 
+	it("a bare lag(...) result is not accepted where an Expr is required either (a type-level proof, not just the runtime 'exprNode' in x check above)", () => {
+		// @ts-expect-error the value-function passthrough brand has the
+		// same "no exprNode" contract as the six argument-less
+		// constructors above -- it just carries the operand's real
+		// family/typeNode through instead of a virtual one. A runtime
+		// `"exprNode" in x` check (above) proves the property is absent at
+		// a given call; this proves the CONTRACT itself is compiler-
+		// enforced, not merely true of today's implementation.
+		const _atRisk: Expr = lag(posts.publishedAt);
+		expect(_atRisk).toBeDefined();
+	});
+
 	it("the six argument-less constructors carry the numeric family", () => {
 		expect(rowNumber().family).toBe("numeric");
 		expect(rank().family).toBe("numeric");

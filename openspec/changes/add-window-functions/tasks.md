@@ -105,17 +105,22 @@ discipline").
       window-only constructors in a new `expr/window.ts`, including their
       argument shapes (`lag`/`lead` take an offset and an optional
       default, `nthValue` an index, `ntile` a bucket count). Settled here:
-      that the brand deliberately lacks `family`/`exprNode` so a bare call
-      is unusable, and how `family`/`ReadAs` ride along to survive
-      `over()`. The five value functions take **one** signature each —
+      that the brand deliberately lacks `exprNode` so a bare call is
+      unusable — `Expr` requires both `family` and `exprNode`, so dropping
+      one is enough, and `family` is kept because it is real runtime data
+      the comparison operators read to lift the other operand — and how
+      `family`/`ReadAs` ride along to survive `over()`. The five value functions take **one** signature each —
       supplying a default does not narrow the result (proposal, "The value
       functions take one signature, not two"). Red:
       `packages/core/test/query/window.test.ts` — "a bare rowNumber() is
       not accepted where an Expr is required" and "lag, lead and nthValue
       pass the operand's type through whatever their extra arguments".
       Files: `packages/core/src/expr/window.ts`, that test.
-- [x] 2.2 (~8m) [design] `over(expr, spec)` — the two overloads (an
-      aggregate `Expr` and a `WindowFunctionCall`), what `spec` accepts,
+- [x] 2.2 (~8m) [design] `over(expr, spec)` — one generic taking either
+      input (an aggregate `Expr` or a `WindowFunctionCall`; declared
+      overloads were tried and rejected by `TS2394`, the `Omit`-based
+      brand not being compatible with the implementation signature), what
+      `spec` accepts,
       and the `invalid-over-target` error for a non-function-call operand.
       Red: same file — "over() wraps an aggregate and a window-only call
       into the same node". Files: `packages/core/src/expr/window.ts`,
