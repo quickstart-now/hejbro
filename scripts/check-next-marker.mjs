@@ -168,7 +168,8 @@ const scanBalanced = (text, startIndex, open, close) => {
  * in the args" scan can mistake the call's *third* argument (`declaredAt`)
  * for its message, if a same-file local happens to also be named
  * `declaredAt` (confirmed false positive: rename-plan.ts's
- * unknown-rename-target sites, #87 investigation). */
+ * unknown-rename-target sites, #87 investigation). Comments between
+ * arguments are dropped, not copied through (#454). */
 const splitTopLevelArgs = (argsText) => {
 	const args = [];
 	let depth = 0;
@@ -186,6 +187,27 @@ const splitTopLevelArgs = (argsText) => {
 				quote = null;
 			}
 			i++;
+			continue;
+		}
+		if (c === "/" && argsText[i + 1] === "/") {
+			// A comment between arguments is not argument text (#454): a
+			// comma inside one would split an argument in two, and a
+			// "Next:" inside one would satisfy the check without being in
+			// the message -- so comments are dropped entirely, at any
+			// depth. Quote state is checked first, so a `//` inside a
+			// string (a URL in a message) is never treated as a comment.
+			while (i < argsText.length && argsText[i] !== "\n") {
+				i++;
+			}
+			continue;
+		}
+		if (c === "/" && argsText[i + 1] === "*") {
+			const end = argsText.indexOf("*/", i + 2);
+			if (end === -1) {
+				i = argsText.length;
+			} else {
+				i = end + 2;
+			}
 			continue;
 		}
 		if (c === '"' || c === "'" || c === "`") {
@@ -446,9 +468,20 @@ for (const root of SOURCE_ROOTS) {
 				continue;
 			}
 			if (!/Next:/.test(messageText)) {
-				problems.push(
-					`${filePath}:${call.lineNo} — code "${code}" has no "Next:" and isn't on the exemption list`,
-				);
+				// Only claim "has no Next:" when the resolver actually saw
+				// message content (some string/template literal). Otherwise
+				// the site was located but its message was not -- a parser
+				// miss, and asserting a content diagnosis for it misdirected
+				// a fix twice before it was caught (#454).
+				if (/["'`]/.test(messageText)) {
+					problems.push(
+						`${filePath}:${call.lineNo} — code "${code}" has no "Next:" and isn't on the exemption list`,
+					);
+				} else {
+					problems.push(
+						`${filePath}:${call.lineNo} — code "${code}": could not locate the message literal (the call's 2nd argument resolved to no string/template) — check for unusual formatting around the call's arguments, then verify the message's "Next:" clause by reading it, not this gate`,
+					);
+				}
 			}
 		}
 	}
