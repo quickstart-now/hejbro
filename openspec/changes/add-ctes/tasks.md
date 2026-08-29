@@ -209,7 +209,7 @@ not be dropped.
       with entry order and hints" and "a with node without a body is
       rejected, not repaired". Files: `packages/core/src/expr/codec.ts`,
       that test.
-- [ ] 2.2 (~7m) The traversal arms: `walk.ts`'s handler maps and
+- [x] 2.2 (~7m) The traversal arms: `walk.ts`'s handler maps and
       `retarget.ts`'s arm, for the new node **and** for the widened `from`
       **and `JoinNode.table`** — a CTE reached through a join is reached
       through a different field than one in `from`, and only one of the
@@ -219,13 +219,13 @@ not be dropped.
       existing walker tests plus `packages/core/test/expr/walk.test.ts` —
       "a walk reaches an expression inside a CTE body". Files:
       `packages/core/src/expr/{walk,retarget}.ts`, that test.
-- [ ] 2.3 (~7m) Positive descent proof. The registries force a handler to
+- [x] 2.3 (~7m) Positive descent proof. The registries force a handler to
       be *written*, not to *descend*; `with: (node) => node` compiles and
       passes `retarget.test.ts`'s reference-identity loop. Red:
       `packages/core/test/expr/retarget.test.ts` — "a column referenced
       only inside a CTE body is rewritten by a rename". Files: that test
       only.
-- [ ] 2.4 (~6m) The negative pin, which is the sentinel-schema hazard the
+- [x] 2.4 (~6m) The negative pin, which is the sentinel-schema hazard the
       proposal rejects an alternative over: a table rename does **not**
       rewrite a same-named CTE reference or its columns. Prose in the
       proposal is not the form this claim ships in. Red: same file — "a
@@ -465,7 +465,13 @@ route it through the lead rather than absorbing it.
       by issue number, and this change closes it. Do not describe
       behaviour the witness did not exercise; a "verified live" badge
       without the measurement is worse than an unbadged guess.
-- [ ] 7.3 (~5m) The published-surface assertion block in
+- [ ] 7.3 (~5m) Also settle one shape review flagged at group 1:
+      `DeclaredCteMarker` is unexported yet appears in the signatures of
+      the public `renderQuery`/`renderSelect`/`renderSelectInto`. Builds
+      and type-checks pass (the dts inlines it) and callers can still
+      pass `FromNode[]`, but they cannot name that parameter's type.
+      Export it or narrow the public wrappers — decide, do not inherit.
+      Then the published-surface assertion block in
       `packages/cli/test/exports.test.ts`. **Signal the lead immediately
       before starting this task** — that file is inside another team's
       slice and the lead sequences it. `packages/cli/src/index.ts` needs

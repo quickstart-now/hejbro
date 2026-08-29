@@ -1,4 +1,3 @@
-import { throwHejbroError } from "../error";
 import type {
 	BetweenNode,
 	ComparisonNode,
@@ -20,6 +19,8 @@ import type {
 	SqlTemplateNode,
 	TableRefNode,
 	WindowNode,
+	WithEntryNode,
+	WithNode,
 } from "./ast";
 import { replaceSelectChildExprs, selectChildExprs } from "./select-children";
 
@@ -76,23 +77,17 @@ const retargetTableRef = (
 const retargetUnchanged = (node: ExprNode): ExprNode => node;
 
 /**
- * add-ctes group 1 stopgap: `SelectNode.from` can now be a CTE reference,
- * which neither {@link retargetProjection} nor {@link retargetTableRef}
- * below can accept (both need a real table's schema/name). The real
- * contract -- a rename never rewrites a CTE reference (proposal, "A CTE
- * is a from-source") -- is group 2's own positive/negative pins
- * (2.3/2.4), each with its own red test; this throws rather than
- * pre-deciding it, since nothing reaches here with a CTE-sourced `from`
- * before group 3/4 wire a declaration through to the rename engine.
+ * A rename never rewrites a CTE reference (proposal, "A CTE is a
+ * from-source"; D105's sentinel-schema rejection carries the same
+ * reasoning here): a table rename identifies its target by schema and
+ * table together, and a CTE has neither, so it is always left exactly as
+ * it is (task 2.2, positive/negative pins proven by tasks 2.3/2.4).
  */
-const assertTableFrom = (from: FromNode): TableRefNode => {
+const retargetFromNode = (from: FromNode, target: RenameTarget): FromNode => {
 	if ("cteName" in from) {
-		return throwHejbroError(
-			"unreachable",
-			"retargetSelectNode() cannot yet retarget a CTE-sourced select: add-ctes tasks 2.3/2.4 wire this up.",
-		);
+		return from;
 	}
-	return from;
+	return retargetTableRef(from, target);
 };
 
 const retargetedColumnName = (
@@ -342,10 +337,13 @@ const retargetColumnsProjection = (
 
 const retargetProjection = (
 	projection: ProjectionNode,
-	from: TableRefNode,
+	from: FromNode,
 	target: RenameTarget,
 ): ProjectionNode => {
-	if (projection.projectionKind === "allColumns") {
+	// A CTE's `allColumns` list denormalizes a real table's own column
+	// names (D27) -- a CTE has none to denormalize, so a rename can never
+	// touch it here (add-ctes task 2.2, same reasoning as retargetFromNode).
+	if (projection.projectionKind === "allColumns" && !("cteName" in from)) {
 		return retargetAllColumnsProjection(projection, from, target);
 	}
 	if (projection.projectionKind !== "columns") {
@@ -364,7 +362,7 @@ const retargetProjection = (
  * handling, unlike {@link retargetOrderByTerm} below.
  */
 const retargetJoinTable = (join: JoinNode, target: RenameTarget): JoinNode => {
-	const table = retargetTableRef(assertTableFrom(join.table), target);
+	const table = retargetFromNode(join.table, target);
 	if (table === join.table) {
 		return join;
 	}
@@ -388,11 +386,11 @@ const sameByIndex = <T>(
 	originals: ReadonlyArray<T>,
 ): boolean => items.every((item, index) => item === originals[index]);
 
-/** `original` itself when `retargetJoinTable` changed nothing across every join, else the freshly mapped array — `.map` always allocates, even when every entry comes back unchanged. */
-const joinsWithIdentityPreserved = (
-	retargeted: ReadonlyArray<JoinNode>,
-	original: ReadonlyArray<JoinNode>,
-): ReadonlyArray<JoinNode> => {
+/** `original` itself when a `.map` pass (joins, or add-ctes' own `with` entries) changed nothing across every element, else the freshly mapped array — `.map` always allocates, even when every entry comes back unchanged. */
+const arrayWithIdentityPreserved = <T>(
+	retargeted: ReadonlyArray<T>,
+	original: ReadonlyArray<T>,
+): ReadonlyArray<T> => {
 	if (sameByIndex(retargeted, original)) {
 		return original;
 	}
@@ -403,7 +401,7 @@ const joinsWithIdentityPreserved = (
 const selectNodeWithIdentifiers = (
 	query: SelectNode,
 	projection: ProjectionNode,
-	from: TableRefNode,
+	from: FromNode,
 	joins: ReadonlyArray<JoinNode>,
 ): SelectNode => {
 	if (
@@ -452,13 +450,12 @@ export const retargetSelectNode = (
 	query: SelectNode,
 	target: RenameTarget,
 ): SelectNode => {
-	const tableFrom = assertTableFrom(query.from);
-	const projection = retargetProjection(query.projection, tableFrom, target);
-	const from = retargetTableRef(tableFrom, target);
+	const projection = retargetProjection(query.projection, query.from, target);
+	const from = retargetFromNode(query.from, target);
 	const retargetedJoins = query.joins.map((join) =>
 		retargetJoinTable(join, target),
 	);
-	const joins = joinsWithIdentityPreserved(retargetedJoins, query.joins);
+	const joins = arrayWithIdentityPreserved(retargetedJoins, query.joins);
 	const base = selectNodeWithIdentifiers(query, projection, from, joins);
 	const retargetedExprs = selectChildExprs(base).map((expr) =>
 		retargetExprNode(expr, target),
@@ -491,6 +488,42 @@ const retargetQueryBranch = (
 		return retargetSetOpNode(branch, target);
 	}
 	return retargetSelectNode(branch, target);
+};
+
+/** One `WITH` entry's own query, reusing {@link retargetQueryBranch} (a `WithEntryNode.query` is always `SelectNode | SetOpNode`, never another `with`). */
+const retargetWithEntry = (
+	entry: WithEntryNode,
+	target: RenameTarget,
+): WithEntryNode => {
+	const query = retargetQueryBranch(entry.query, target);
+	if (query === entry.query) {
+		return entry;
+	}
+	return { ...entry, query };
+};
+
+/**
+ * Retargets a whole {@link WithNode} (add-ctes, task 2.2's positive
+ * descent arm) — every entry's own query and the body, same identity
+ * invariant as {@link retargetExprNode}. Proves task 2.3's own claim:
+ * the registry forces this handler to be *written*, and this is what
+ * makes it *descend* (`with: (node) => node` would compile and pass the
+ * reference-identity loop without ever reaching a column inside a CTE
+ * body).
+ */
+export const retargetWithNode = (
+	node: WithNode,
+	target: RenameTarget,
+): WithNode => {
+	const retargetedCtes = node.ctes.map((entry) =>
+		retargetWithEntry(entry, target),
+	);
+	const ctes = arrayWithIdentityPreserved(retargetedCtes, node.ctes);
+	const body = retargetQueryBranch(node.body, target);
+	if (ctes === node.ctes && body === node.body) {
+		return node;
+	}
+	return { ...node, ctes, body };
 };
 
 const retargetExists = (node: ExistsNode, target: RenameTarget): ExprNode => {
