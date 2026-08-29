@@ -1,3 +1,4 @@
+import { arrayWithIdentityPreserved } from "../array-identity";
 import type {
 	BetweenNode,
 	ComparisonNode,
@@ -382,22 +383,11 @@ const retargetOrderByTerm = (
 	return { ...term, expr };
 };
 
-/** `true` when every entry of `items` is the exact same reference as its `originals` counterpart — `Array.prototype.map` always allocates a new array even when every mapped entry is unchanged, so retargeting `query.joins` needs this to decide whether the mapped array can be thrown away in favor of the original one. */
+/** `true` when every entry of `items` is the exact same reference as its `originals` counterpart — used directly where only the boolean matters (the window-function identifier check below), not the array itself (see `arrayWithIdentityPreserved`, `array-identity.ts`, for that). */
 const sameByIndex = <T>(
 	items: ReadonlyArray<T>,
 	originals: ReadonlyArray<T>,
 ): boolean => items.every((item, index) => item === originals[index]);
-
-/** `original` itself when a `.map` pass (joins, or add-ctes' own `with` entries) changed nothing across every element, else the freshly mapped array — `.map` always allocates, even when every entry comes back unchanged. */
-const arrayWithIdentityPreserved = <T>(
-	retargeted: ReadonlyArray<T>,
-	original: ReadonlyArray<T>,
-): ReadonlyArray<T> => {
-	if (sameByIndex(retargeted, original)) {
-		return original;
-	}
-	return retargeted;
-};
 
 /** `query` itself when none of its three identifier fields changed, else a fresh node carrying the retargeted ones — the base {@link retargetSelectNode} runs its generic expression pass over. */
 const selectNodeWithIdentifiers = (

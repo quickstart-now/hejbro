@@ -1,3 +1,4 @@
+import { arrayWithIdentityPreserved } from "../array-identity";
 import type { TableDeclaration } from "../dsl/table";
 import type {
 	ColumnRenameSpec,
@@ -239,17 +240,6 @@ const applyColumnOrderToSetOp = (
 		left: left as typeof node.left,
 		right: right as typeof node.right,
 	};
-};
-
-/** `original` itself when a `.map` pass changed nothing across every element, else the freshly mapped array -- `.map` always allocates, even when every entry comes back unchanged (mirrors `expr/retarget.ts`'s own `arrayWithIdentityPreserved`, not shared across files on purpose: a column-order pass and a rename pass are different traversals over the same node shape). */
-const arrayWithIdentityPreserved = <T>(
-	mapped: ReadonlyArray<T>,
-	original: ReadonlyArray<T>,
-): ReadonlyArray<T> => {
-	if (mapped.every((item, index) => item === original[index])) {
-		return original;
-	}
-	return mapped;
 };
 
 /** One `WITH` entry's own query reordered against its own `from` -- an entry's body is an ordinary select over a real table (or another entry), with exactly the physical order any other select has (add-ctes, task 4.2b: entries were wrongly treated as computed results with no physical order of their own, the same status a CTE *reference* correctly has, but an entry's *body* does not). */

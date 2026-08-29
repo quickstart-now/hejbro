@@ -539,6 +539,26 @@ rather than impossible.
       `packages/supabase/src/validators/view-security-invoker.ts`, that
       test.
 
+- [x] 4.6 (~5m) Extract `arrayWithIdentityPreserved` to one home. It now
+      has **three** copies (`expr/retarget.ts`, `snapshot/column-order.ts`,
+      `kinds/view-kind.ts`), and the reviewer's standing signal — "a third
+      copy is when it goes up" — has fired. The justification offered for
+      copying ("these are different traversals") is true of the *callers*
+      and irrelevant to the helper: its signature is
+      `<T>(mapped, original) => readonly T[]`, it imports nothing, and it
+      knows no node shape. Three reasons to do it now rather than later:
+      the copies have **already drifted** in implementation (one delegates
+      to `sameByIndex`, two inline `.every`); the contract is subtle
+      enough to get wrong — every caller's `=== node` shortcut depends on
+      "a `.map` always allocates, so return `original` when nothing
+      changed" — and there are three places to get it wrong; and group 5
+      is about to need the same shape, which would make four. Put it
+      beside `src/sort.ts` (the existing precedent for a small shared
+      util at the src root) and **do not export it from `index.ts`** —
+      internal symbol, zero surface delta. Red: none new; the existing
+      identity tests on all three paths stay green through the move.
+      Files: `packages/core/src/array-identity.ts` (new), those three.
+
 ## 5. The query layer — after group 3
 
 **Cross-team boundary.** `packages/query/src/db/fn.ts` and
