@@ -232,6 +232,11 @@ measurement is indistinguishable from one that was never run.
 > managed Postgres that changes `IntervalStyle`, e.g., which this local
 > image does not), and this gate is about arrival-shape parity between
 > the two connection paths, not about proving the pins' own necessity.
+> That the pinned `SET`s take effect **inside** the batch is not left to
+> this parity alone, though — the leak probe above already shows it
+> indirectly: a non-default `bytea_output` reading back at its default on
+> the *next* request only makes sense if it read as non-default *inside*
+> the batch that set it.
 
 **Reproduction** (design probe, never committed infrastructure). Three
 traps are recorded because each one costs an hour to rediscover and none

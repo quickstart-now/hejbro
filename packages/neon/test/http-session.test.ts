@@ -1,3 +1,4 @@
+import type { DriverSession } from "@hejbro/query";
 import { neon, neonConfig } from "@neondatabase/serverless";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildHttpDriver } from "../src/http";
@@ -178,6 +179,23 @@ describe("HTTP session batch", () => {
 			code: "driver-missing-capability",
 			capability: "interactive-transactions",
 		});
+		expect(calls).toHaveLength(0);
+	});
+
+	it("setupSession resolves and sends no request", async () => {
+		const calls = stubSuccess([EMPTY_RESULT]);
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+		// The contract calls this with the connection's own session; the
+		// HTTP path has none to pin, so the argument is never touched --
+		// any object matching the shape is enough to prove that.
+		const unusedSession: DriverSession = {
+			execute: async () => {
+				throw new Error("setupSession must never call execute");
+			},
+		};
+
+		await expect(driver.setupSession(unusedSession)).resolves.toBeUndefined();
 		expect(calls).toHaveLength(0);
 	});
 
