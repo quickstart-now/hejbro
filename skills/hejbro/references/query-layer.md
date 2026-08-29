@@ -298,10 +298,9 @@ column refuses it); write the JSON document `null` itself through the
 `sql` escape hatch (`` sql`'null'::jsonb` ``) — and a `bytea` column
 accepts a `Uint8Array` (hex-encoded for you — never a string, whose
 encoding would have to be guessed). On the read side, a `jsonb` column
-surfaces as
-`unknown` unless its declaration opts into a `.$type<T>()` brand — and
-since the write type is the read type, the brand narrows **both**: a
-branded column accepts its own `T` and nothing else.
+surfaces as `unknown` unless its declaration opts into a `.$type<T>()`
+brand — and since the write type is the read type, the brand narrows
+**both**: a branded column accepts its own `T` and nothing else.
 
 ```ts
 import { bytea, db, jsonb, schema, table, uuid } from "hejbro";

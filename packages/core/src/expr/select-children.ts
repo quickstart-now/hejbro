@@ -152,6 +152,16 @@ const replaceOrderByChildExprs = (
 	}));
 };
 
+const replaceGroupByChildExprs = (
+	groupBy: ReadonlyArray<ExprNode>,
+	exprs: ReadonlyArray<ExprNode>,
+): ReadonlyArray<ExprNode> => {
+	if (sameExprs(exprs, groupBy)) {
+		return groupBy;
+	}
+	return exprs;
+};
+
 /**
  * Every field of {@link SelectNode}, mapped to its {@link ClauseTraversal}
  * — a `keyof SelectNode`-keyed object literal, so a field added to
@@ -177,25 +187,15 @@ const replaceOrderByChildExprs = (
  * field really carries no expressions is the one thing nothing in this
  * file (or its own type) can check. The type-level guarantee is "you
  * cannot forget to decide"; it is not "you decided correctly".
- */
-const replaceGroupByChildExprs = (
-	groupBy: ReadonlyArray<ExprNode>,
-	exprs: ReadonlyArray<ExprNode>,
-): ReadonlyArray<ExprNode> => {
-	if (sameExprs(exprs, groupBy)) {
-		return groupBy;
-	}
-	return exprs;
-};
-
-/**
- * Every field's `replace` returns `query` itself, unchanged, when the
- * clause it owns comes back identical (`sameExprs`/each helper's own
- * identity check above) — not just an `Object.is`-equal *rebuild*, the
- * exact same reference. `retarget.ts` depends on this all the way up:
- * an unrelated rename must return the exact same `SelectNode` reference
- * it was given, and that can only hold if every field along the way
- * refuses to allocate a new wrapper for a value that didn't change.
+ *
+ * **Every field's `replace` returns `query` itself, unchanged**, when
+ * the clause it owns comes back identical (`sameExprs`/each helper's
+ * own identity check above) — not just an `Object.is`-equal *rebuild*,
+ * the exact same reference. `retarget.ts` depends on this all the way
+ * up: an unrelated rename must return the exact same `SelectNode`
+ * reference it was given, and that can only hold if every field along
+ * the way refuses to allocate a new wrapper for a value that didn't
+ * change.
  */
 export const SELECT_CLAUSE_TRAVERSALS: {
 	readonly [K in keyof SelectNode]: ClauseTraversal;

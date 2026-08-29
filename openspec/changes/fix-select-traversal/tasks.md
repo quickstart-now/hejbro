@@ -245,14 +245,24 @@ hand-write a `SelectNode` field list.
 - [x] 8.3 (~5m) The second spec delta,
       `specs/query-execution/spec.md` (written by the planner, commit
       and validate only): nested-read revival covers aggregate cells,
-      and a `::text` cast is transparent to conversion regardless of who
-      wrote it. Added because the live witness turned F6 from "the cast
-      is emitted" into "the value survives", and the existing
-      requirement only ever spoke of a *column's* declared read type —
-      an aggregate cell has none. No code change is expected; if the
-      implemented behavior and this wording disagree, the wording is
-      what gets reported, not silently edited. Verify with `openspec
-      validate fix-select-traversal --strict`.
+      and the compiler's own at-risk `::text` cast is undone by the
+      type of the expression inside it, whatever that expression is —
+      but an explicit `::text` a caller writes through the `sql` escape
+      hatch is left alone, because that cast is the author's own
+      instruction, not the compiler's internal encoding. Added because
+      the live witness turned F6 from "the cast is emitted" into "the
+      value survives", and the existing requirement only ever spoke of
+      a *column's* declared read type — an aggregate cell has none. No
+      code change is expected; if the implemented behavior and this
+      wording disagree, the wording is what gets reported, not silently
+      edited. **Correction history**: the delta's first draft claimed
+      the cast is undone "regardless of who wrote it" — a red test
+      (a caller's own `` sql`${max(t.a)}::text` `` cast, mocked-driver)
+      proved that false (the public `sql` tag always adds a leading
+      empty text chunk, so a caller's template never matches the
+      compiler's own two-chunk cast shape at all), which is what
+      settled the "left alone" wording actually shipped. Verify with
+      `openspec validate fix-select-traversal --strict`.
 
 ## Verification
 

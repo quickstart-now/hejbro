@@ -439,7 +439,11 @@ const decodeDistinct = (value: JsonValue): DistinctNode | null => {
 	}
 	return {
 		distinctKind: "on",
-		columns: (node.columns as ReadonlyArray<JsonValue>).map(decodeExprNode),
+		// #444 F7 (review R4): a missing/non-array `columns` used to raw-
+		// TypeError on `.map` -- decodeExprArrayField's own missing-vs-
+		// malformed leniency (below) closes this the same way it already
+		// does for groupBy.
+		columns: decodeExprArrayField(node, "columns"),
 	};
 };
 

@@ -717,6 +717,36 @@ describe("distinct codec round-trip and guards (#437)", () => {
 			expect.objectContaining({ code: "malformed-snapshot-node" }),
 		);
 	});
+
+	// #444 review R4: decodeDistinct's "on" branch used to call
+	// `.map(decodeExprNode)` on `node.columns` unconditionally, raw-
+	// TypeErroring instead of a coded diagnostic when `columns` was
+	// missing or not an array -- the same missing-vs-malformed leniency
+	// group 2 already gave `groupBy` (decodeExprArrayField), reused here.
+	it("a distinct on node missing its columns key decodes as an empty column list", () => {
+		const corrupted = JSON.parse(
+			JSON.stringify(
+				encodeSelectNode(select(posts3).distinctOn(posts3.status).selectQuery),
+			),
+		);
+		corrupted.distinct.columns = undefined;
+		expect(decodeSelectNode(corrupted).distinct).toEqual({
+			distinctKind: "on",
+			columns: [],
+		});
+	});
+
+	it("a distinct on node with a non-array columns value fails loudly, never a raw TypeError", () => {
+		const corrupted = JSON.parse(
+			JSON.stringify(
+				encodeSelectNode(select(posts3).distinctOn(posts3.status).selectQuery),
+			),
+		);
+		corrupted.distinct.columns = "not an array";
+		expect(() => decodeSelectNode(corrupted)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
 });
 
 // #444 F7: `groupBy`/`having`/`distinct`/`limit`/`offset` were all added
