@@ -27,6 +27,8 @@ import type {
 	SqlTemplateNode,
 	TableRefNode,
 	WindowNode,
+	WithEntryNode,
+	WithNode,
 } from "./ast";
 import { joinKinds } from "./ast";
 
@@ -371,19 +373,15 @@ const encodeTableRef = (node: TableRefNode): JsonValue => ({
 });
 
 /**
- * add-ctes group 1 stopgap: `encodeSelectNode`'s `from` can now be a CTE
- * reference, but round-tripping one is task 2.1's own contract (snapshot
- * vocabulary, decode-side leniency rules) -- not decided here. No builder
- * produces a CTE-sourced `from` before group 3 exists, so this throws
- * rather than half-encoding something group 2 hasn't designed the wire
- * shape for yet.
+ * A CTE reference (add-ctes, task 2.1) encodes to its own shape, `{ cte:
+ * <name> }` — not a `TableRefNode` with a sentinel schema (D105 already
+ * rejected that for the in-memory node; the snapshot form follows the
+ * same reasoning). `cte` names what the reference points at, the same
+ * role `table`/`function` play for those referenced-object kinds (D57).
  */
 const encodeFromNode = (node: FromNode): JsonValue => {
 	if ("cteName" in node) {
-		return throwHejbroError(
-			"unreachable",
-			"encodeSelectNode() cannot yet encode a CTE from-reference: add-ctes task 2.1 wires this up.",
-		);
+		return { cte: node.cteName };
 	}
 	return encodeTableRef(node);
 };
@@ -787,6 +785,15 @@ const decodeTableRef = (value: JsonValue): TableRefNode => {
 	};
 };
 
+/** The decoding counterpart to {@link encodeFromNode} — a `cte` key means a CTE reference, otherwise a table reference (same shape {@link decodeTableRef} reads). */
+const decodeFromNode = (value: JsonValue): FromNode => {
+	const node = asRecord(value, "from");
+	if ("cte" in node) {
+		return { cteName: stringField(node, "cte") };
+	}
+	return decodeTableRef(value);
+};
+
 /**
  * One handler per {@link ProjectionNode} `projectionKind`, same technique
  * as {@link decodeExprNodeHandlers} above. Applied for coverage, not
@@ -846,7 +853,7 @@ const decodeJoin = (value: JsonValue): JoinNode => {
 	}
 	return {
 		joinKind,
-		table: decodeTableRef(node.table as JsonValue),
+		table: decodeFromNode(node.table as JsonValue),
 		on: decodeExprNode(node.on as JsonValue),
 	};
 };
@@ -939,6 +946,29 @@ export const encodeQueryNode = (node: SelectNode | SetOpNode): JsonValue => {
 	return encodeSelectNode(node);
 };
 
+/** One `WITH` entry: its name, its query (reusing {@link encodeQueryNode} — a `WithEntryNode.query` is always `SelectNode | SetOpNode`, never another `with`), and its `materialized` hint. The key is always written, `null` included, matching `distinct`'s own convention above: an absent key is corruption, not "no hint" (this format version never wrote one out any other way). */
+const encodeWithEntry = (entry: WithEntryNode): JsonValue => ({
+	name: entry.name,
+	query: encodeQueryNode(entry.query),
+	materialized: entry.materialized,
+});
+
+/**
+ * Encodes a {@link WithNode} (add-ctes, task 2.1) — entries in declaration
+ * order, the `recursive` flag, and the body, reusing {@link
+ * encodeQueryNode} for both an entry's query and the body (neither can be
+ * another `with`, so the existing `SelectNode | SetOpNode` dispatcher
+ * needs no widening). Not merged into {@link encodeQueryNode} itself: a
+ * `WithNode` reaching a *stored declaration* (a view body) is task 4.1's
+ * own wiring decision, not this task's.
+ */
+export const encodeWithNode = (node: WithNode): JsonValue => ({
+	queryKind: "with",
+	ctes: node.ctes.map(encodeWithEntry),
+	recursive: node.recursive,
+	body: encodeQueryNode(node.body),
+});
+
 /** The decoding counterpart to {@link encodeQueryNode} — dispatches on the stored `queryKind`. */
 export const decodeQueryNode = (value: JsonValue): SelectNode | SetOpNode => {
 	const node = asRecord(value, "queryKind");
@@ -959,7 +989,7 @@ export const decodeSelectNode = (value: JsonValue): SelectNode => {
 	return {
 		queryKind,
 		projection: decodeProjection(node.projection as JsonValue),
-		from: decodeTableRef(node.from as JsonValue),
+		from: decodeFromNode(node.from as JsonValue),
 		joins: (node.joins as ReadonlyArray<JsonValue>).map(decodeJoin),
 		where: decodeWhere(node.where as JsonValue),
 		groupBy: decodeExprArrayField(node, "groupBy"),
@@ -968,5 +998,55 @@ export const decodeSelectNode = (value: JsonValue): SelectNode => {
 		limit: (node.limit ?? null) as number | null,
 		offset: (node.offset ?? null) as number | null,
 		distinct: decodeDistinct((node.distinct ?? null) as JsonValue),
+	};
+};
+
+/**
+ * The decoding counterpart to {@link encodeWithEntry}. `query` and
+ * `materialized` are both required — new in this format, so a missing
+ * key is corruption, not an older shape (same leniency rule
+ * {@link decodeRequiredArrayField}'s own doc comment states).
+ */
+const decodeWithEntry = (value: JsonValue): WithEntryNode => {
+	const node = asRecord(value, "name");
+	if (node.query === undefined) {
+		return unknownDiscriminator("query", "undefined");
+	}
+	if (node.materialized === undefined) {
+		return unknownDiscriminator("materialized", "undefined");
+	}
+	return {
+		name: stringField(node, "name"),
+		query: decodeQueryNode(node.query),
+		materialized: node.materialized as boolean | null,
+	};
+};
+
+/**
+ * The decoding counterpart to {@link encodeWithNode} (add-ctes, task
+ * 2.1). A stored `with` node missing its `ctes` list or its `body` is
+ * refused, not repaired: `with` is new in this format version, so an
+ * absent field is corruption rather than an older shape — decoding it
+ * into a plausible value (an empty entry list, a `null` body) would turn
+ * a damaged snapshot into a silently different declaration (query-builder
+ * spec, "A damaged with node is refused, not repaired").
+ */
+export const decodeWithNode = (value: JsonValue): WithNode => {
+	const node = asRecord(value, "queryKind");
+	const queryKind = stringField(node, "queryKind");
+	if (queryKind !== "with") {
+		return unknownDiscriminator("queryKind", queryKind);
+	}
+	if (node.body === undefined) {
+		return unknownDiscriminator("body", "undefined");
+	}
+	if (node.recursive === undefined) {
+		return unknownDiscriminator("recursive", "undefined");
+	}
+	return {
+		queryKind: "with",
+		ctes: decodeRequiredArrayField(node, "ctes", decodeWithEntry),
+		recursive: node.recursive as boolean,
+		body: decodeQueryNode(node.body),
 	};
 };

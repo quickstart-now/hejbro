@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { ExprNode, SetOpNode } from "../../src/expr/ast";
+import type {
+	ExprNode,
+	SelectNode,
+	SetOpNode,
+	WithNode,
+} from "../../src/expr/ast";
 import {
 	decodeExprNode,
 	decodeQueryNode,
 	decodeSelectNode,
+	decodeWithNode,
 	encodeExprNode,
 	encodeQueryNode,
 	encodeSelectNode,
+	encodeWithNode,
 	NODE_KIND_TO_SNAPSHOT,
 	PROJECTION_KIND_TO_SNAPSHOT,
 } from "../../src/expr/codec";
@@ -859,5 +866,166 @@ describe("WindowNode codec", () => {
 		expect(() => decodeExprNode(withoutOrderBy)).toThrowError(
 			expect.objectContaining({ code: "malformed-snapshot-node" }),
 		);
+	});
+});
+
+describe("with-node codec round-trip (add-ctes task 2.1)", () => {
+	const app = schema("app");
+	const posts = table(app, "posts", { id: uuid().primaryKey() });
+	const comments = table(app, "comments", {
+		id: uuid().primaryKey(),
+		postId: uuid(),
+	});
+
+	const normalize = (node: WithNode): JsonValue =>
+		JSON.parse(
+			JSON.stringify(node, (key, value) => {
+				if (key === "resultKey") {
+					return undefined;
+				}
+				return value;
+			}),
+		);
+
+	it("a with node round-trips with entry order and hints", () => {
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [
+				{
+					name: "recent",
+					query: select(posts).selectQuery,
+					materialized: true,
+				},
+				{
+					name: "ranked",
+					query: select(comments).selectQuery,
+					materialized: false,
+				},
+			],
+			recursive: true,
+			body: select(posts).selectQuery,
+		};
+		const encoded = encodeWithNode(node);
+		expect(JSON.stringify(encoded)).toContain('"with"');
+		expect(decodeWithNode(encoded)).toEqual(normalize(node));
+	});
+
+	it("a with node's entry declaring neither materialization hint round-trips as null", () => {
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [
+				{
+					name: "recent",
+					query: select(posts).selectQuery,
+					materialized: null,
+				},
+			],
+			recursive: false,
+			body: select(posts).selectQuery,
+		};
+		const encoded = encodeWithNode(node);
+		expect(decodeWithNode(encoded)).toEqual(normalize(node));
+	});
+
+	it("a CTE reference round-trips as a select's from-source", () => {
+		const selectFromCte: SelectNode = {
+			...select(posts).selectQuery,
+			from: { cteName: "recent" },
+		};
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [
+				{
+					name: "recent",
+					query: select(posts).selectQuery,
+					materialized: null,
+				},
+			],
+			recursive: false,
+			body: selectFromCte,
+		};
+		const encoded = encodeWithNode(node);
+		expect(JSON.stringify(encoded)).toContain('"cte":"recent"');
+		expect(decodeWithNode(encoded)).toEqual(normalize(node));
+	});
+
+	it("a CTE reference round-trips as a join target", () => {
+		const selectJoiningCte: SelectNode = {
+			...select(posts).selectQuery,
+			joins: [
+				{
+					joinKind: "inner",
+					table: { cteName: "recent" },
+					on: {
+						nodeKind: "literal",
+						literal: { literalKind: "boolean", value: true },
+					},
+				},
+			],
+		};
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [
+				{
+					name: "recent",
+					query: select(posts).selectQuery,
+					materialized: null,
+				},
+			],
+			recursive: false,
+			body: selectJoiningCte,
+		};
+		const encoded = encodeWithNode(node);
+		expect(decodeWithNode(encoded)).toEqual(normalize(node));
+	});
+
+	it("a with node without a body is rejected, not repaired", () => {
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [
+				{
+					name: "recent",
+					query: select(posts).selectQuery,
+					materialized: null,
+				},
+			],
+			recursive: false,
+			body: select(posts).selectQuery,
+		};
+		const encoded = encodeWithNode(node) as Record<string, JsonValue>;
+		const { body: _body, ...withoutBody } = encoded;
+		expect(() => decodeWithNode(withoutBody)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("a with node without a ctes list is rejected, not repaired", () => {
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [
+				{
+					name: "recent",
+					query: select(posts).selectQuery,
+					materialized: null,
+				},
+			],
+			recursive: false,
+			body: select(posts).selectQuery,
+		};
+		const encoded = encodeWithNode(node) as Record<string, JsonValue>;
+		const { ctes: _ctes, ...withoutCtes } = encoded;
+		expect(() => decodeWithNode(withoutCtes)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("the plain-select decoder rejects a with node loudly", () => {
+		const encoded = encodeWithNode({
+			queryKind: "with",
+			ctes: [],
+			recursive: false,
+			body: select(posts).selectQuery,
+		});
+		expect(() => decodeSelectNode(encoded)).toThrowError(/with|queryKind/);
 	});
 });
