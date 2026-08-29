@@ -27,7 +27,7 @@ export const resolveConnectionString = (
 	);
 };
 
-/** An optional peer, never a hard dependency of this package (proposal.md: installing hejbro must not pull in a driver for commands that never connect). */
+/** Declared as no dependency kind of this package at all -- not a runtime dependency, not a peer, optional or otherwise (proposal.md: installing hejbro must not pull in a driver for commands that never connect). */
 export const CHECK_DRIVER_PACKAGE = "@hejbro/pg";
 
 /**

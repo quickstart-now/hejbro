@@ -421,7 +421,7 @@ split-config shape `packages/pg` already uses.
 
 ## 7. Documentation and release chores
 
-- [ ] 7.1 (~7m) `skills/hejbro/references/brownfield-adoption.md`: the
+- [x] 7.1 (~7m) `skills/hejbro/references/brownfield-adoption.md`: the
       hand-run two-path `pg_dump` comparison it documents is what this
       command replaces. The skill documents the public surface, so a
       stale skill here is a broken user contract. **No new reference
@@ -429,13 +429,13 @@ split-config shape `packages/pg` already uses.
       description** — the existing "adopting into an existing database"
       row already routes here, and those are the parts another change in
       flight also edits. Files: that reference.
-- [ ] 7.2 (~5m) `skills/hejbro/SKILL.md` rule 7 only: it currently says
+- [x] 7.2 (~5m) `skills/hejbro/SKILL.md` rule 7 only: it currently says
       `verify` re-derives the chain "from checked-out files only (no live
       DB)" and names no command that does read one, which is exactly the
       gap `check` fills. One line, coordinated separately because this
       file is shared with another change in flight. Files:
       `skills/hejbro/SKILL.md`.
-- [ ] 7.3 (~6m) Changeset (D59, `minor` — a new capability), task-time
+- [x] 7.3 (~6m) Changeset (D59, `minor` — a new capability), task-time
       rows, README badges. **`README.md`'s package table is not
       touched**: its `hejbro` row names three commands as illustration
       and already omits `baseline`, `history` and `restore`, so adding
@@ -444,11 +444,28 @@ split-config shape `packages/pg` already uses.
       this change follows that precedent rather than setting a new one.
       Files: `.changeset/*.md`, `openspec/task-times.csv`, `README.md`
       (badges only).
-- [ ] 7.4 (~7m) `blackbox/` entry (D89): this change carries an
+- [x] 7.4 (~9m) `blackbox/` entry (D89): this change carries an
       owner-level decision — the issue asks for `check --schema <dump>`
       and the change deliberately does not build it. What was asked, what
       was measured, what was decided instead, and the reopening
-      condition. Two process observations belong in it because they are
+      condition. The owner-request section records the delegation under
+      which this change's owner-level calls were made — **in the form
+      `blackbox/README.md` prescribes**, which is a faithful English
+      rewrite, never word-for-word translation. It names those calls in
+      prose (live-connection-only, rejecting the issue's own
+      `--schema <dump>` notation on measured grounds; and the driver
+      declared as no dependency at all rather than an optional peer) —
+      **not** as `D<n>` labels, which belong to the design spec's own
+      decision log and would collide. The entry lists what this change
+      got **wrong** as plainly as what it got right — a flight recorder
+      that only records good flights is not one. That list covers the
+      instructions that were wrong, not only the code: the planner's
+      replacement grant query, which reintroduced the same false
+      "missing" through `aclexplode(NULL)`, and two lead instructions
+      the implementer declined to follow blindly — quoting the owner
+      verbatim in Korean, against this directory's own rule, and
+      labelling decisions `D2`/`D3`, colliding with the design spec's
+      global log. Both were caught by asking rather than complying. Two process observations belong in it because they are
       the reason the design is what it is, and neither survives in the
       code: the grant read's *same mistake, opposite direction* (dropping
       a role-filtered view was right, and the replacement silently
@@ -468,6 +485,13 @@ split-config shape `packages/pg` already uses.
         convention that came out of it: a test whose name claims a
         semantic property must either prove it or say where it is
         proved.
+      - **Cutting a comparison short makes the happy test pass harder,
+        not easier.** Stubbing the check-constraint walk to return
+        nothing left the live "reports no differences" witness green —
+        fewer comparisons means fewer findings means a cleaner report.
+        Only the witness that asserts *how many* objects were compared
+        turned red. A test that checks for the absence of complaints
+        cannot notice that nothing was inspected.
       - **A comparison nobody calls is worse than one that is missing.**
         The expression comparison sat fully built and unreachable for a
         group and a half; every test passed and the report simply said
@@ -495,5 +519,10 @@ split-config shape `packages/pg` already uses.
   truth for what else runs — read it there, do not trust this list.
 - `pnpm --filter hejbro test:integration` locally against a real
   postgres:17, with the executed test list and zero skipped shown.
+  **Build first.** A stale `dist` makes the suite report `7 skipped` —
+  the file still fails and the exit code is still 1, so CI is safe, but
+  anyone reading the "Tests" line alone sees skips that are really a
+  build-freshness failure. "Skipped 0" is evidence we hand upward, so it
+  has to mean what it says.
 - Isolated gate runs use `TURBO_FORCE=1` (#448: the turbo cache is shared
   across worktrees and will otherwise replay another worktree's logs).

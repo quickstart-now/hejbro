@@ -506,12 +506,12 @@ export const posts = table(app, "posts", {
 	// modules, so the fixture's own symlinks were never what made it
 	// unresolvable). Measured: with @hejbro/pg's dist built, `--url=...`
 	// now reaches a real connection attempt against the literal
-	// "nonexistent-host" from the URL ("check-catalog-unreadable",
-	// `getaddrinfo ENOTFOUND nonexistent-host") instead of
-	// "check-driver-missing" -- which specific one depends on whether
-	// @hejbro/pg's dist happens to be built when this test runs (unbuilt
-	// in a fresh CI checkout before its own build step, but not
-	// guaranteed to stay that way).
+	// "nonexistent-host" from the URL -- 1.5's own connectivity probe
+	// (assertConnected) fails before any catalog read runs, so the
+	// outcome is "check-connection-failed" (`getaddrinfo ENOTFOUND
+	// nonexistent-host`), not "check-catalog-unreadable". Unbuilt (a
+	// fresh CI checkout before its own build step, but not guaranteed to
+	// stay that way), it is "check-driver-missing" instead.
 	//
 	// The real invariant is not "which downstream code either form
 	// reaches" (an environment fact, and asserting on it directly is
