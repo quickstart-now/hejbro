@@ -181,6 +181,12 @@ const cteColumnState = (
 	tables: Declarations["tables"],
 	cteQueryByName: CteQueryByName,
 ): ColumnState | undefined => {
+	// An unresolved cteName here is unreachable, not silently tolerated:
+	// render already rejects a reference to an undeclared CTE upstream
+	// (task 1.3c), and the builder can't construct one either -- `w.as`
+	// only ever hands out a reference to an entry already bound by a JS
+	// `const` (TDZ), so there is no code path that reaches this branch
+	// with a name `cteQueryByName` doesn't carry.
 	const entryQuery = cteQueryByName.get(cteName);
 	if (entryQuery === undefined) {
 		return undefined;
@@ -474,9 +480,8 @@ const wrapperKeyPresence: Record<CompileInputWrapperKey, true> = {
 	updateQuery: true,
 	deleteQuery: true,
 	// add-ctes task 5.1: compile.ts's own CompileInput grew this wrapper key;
-	// this exhaustive record must track it to keep compiling, even though
-	// columnPlanForResult's own "with" handling (below) is still task 5.3's
-	// stopgap, not this task's.
+	// this exhaustive record must track it to keep compiling. columnPlanForResult's
+	// own "with" handling (above, task 5.3) already resolves it fully.
 	withQuery: true,
 };
 

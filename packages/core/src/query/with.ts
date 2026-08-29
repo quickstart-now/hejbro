@@ -8,7 +8,14 @@ import type {
 	WithEntryNode,
 	WithNode,
 } from "../expr/ast";
-import type { SelectLimited, SelectProjection, SetOpStage } from "./select";
+import type {
+	SelectLimited,
+	SelectProjection,
+	SetOpResult,
+	SetOpStage,
+} from "./select";
+import type { RecursiveCteEntryOptions } from "./with-recursive";
+import { buildRecursiveEntryQuery } from "./with-recursive";
 
 /**
  * One projected field's reference from inside a `withCte()` body (add-ctes,
@@ -134,6 +141,26 @@ export type CteEntryOptions = {
 };
 
 /**
+ * Poisons `asRecursive`'s `recursiveTerm` parameter when its own projection
+ * is not union-compatible with the anchor's (add-ctes, task 6.5) — the same
+ * mechanism `@hejbro/query`'s chain `union()` already uses (`SetOpResult`
+ * resolving `never`), reused rather than re-invented, since a `WITH
+ * RECURSIVE` entry's anchor/recursive-term pair is grammatically
+ * `anchor UNION [ALL] recursive-term` (Postgres): "is the recursive term
+ * union-compatible with the anchor" is the exact question `SetOpResult`
+ * already answers. A missing/extra key still resolves to `never` (task 6.2's
+ * own pin, kept); a key present on both sides but computed differently
+ * (e.g. a window function or `distinct` in the recursive term) now type-
+ * checks, with the result column typed as the union of both — same as any
+ * other `union`.
+ */
+type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
+	SetOpResult<TProjection, TRecursiveProjection>,
+] extends [never]
+	? never
+	: unknown;
+
+/**
  * Passed into a `withCte(...)` callback (add-ctes, task 3.1) — the only way
  * to declare an entry.
  *
@@ -147,6 +174,44 @@ export type CteBuilder = {
 		name: string,
 		query: SelectLimited<TProjection> | SetOpStage<TProjection>,
 		options?: CteEntryOptions,
+	) => CteReference<TProjection>;
+	/**
+	 * Declares a recursive entry (add-ctes, task 6.1): `anchor` fixes the
+	 * CTE's own row type (`CteReference<TProjection>` — Postgres takes a
+	 * recursive CTE's column names/types from its anchor, never the
+	 * recursive term), and `recursiveTerm` is written inside a callback
+	 * receiving a reference typed from it. `recursiveTerm`'s own projection
+	 * must be union-compatible with the anchor's (task 6.5, via
+	 * {@link CompatibleRecursiveTerm}): missing or extra keys don't
+	 * type-check (task 6.2), but a key both sides carry may be computed
+	 * differently on each side (window function, `distinct`, ...) — the
+	 * grammar is literally `anchor UNION [ALL] recursive-term`, so this is
+	 * the same compatibility rule any other `union()` already applies, not
+	 * a new one. Every entry in the list becomes visible to render-sql.ts's
+	 * own scope check once even one `asRecursive` call happens (task
+	 * 6.1/6.4: `recursive` is the whole list's flag, not this one entry's).
+	 *
+	 * Surface: `w.as` cannot express "a reference to the entry currently
+	 * being declared" — the anchor/recursive-term split, and the row type
+	 * flowing from one to the other, is a genuinely different shape, not a
+	 * variant reachable by composing `w.as` with something else.
+	 * `as<Verb>` mirrors `w.as`'s own name, the same relationship
+	 * `insert()`/`insert().values()` already has between a base call and
+	 * its own qualified sibling.
+	 */
+	readonly asRecursive: <
+		TProjection extends SelectProjection,
+		TRecursiveProjection extends SelectProjection = TProjection,
+	>(
+		name: string,
+		anchor: SelectLimited<TProjection> | SetOpStage<TProjection>,
+		recursiveTerm: ((
+			self: CteReference<TProjection>,
+		) =>
+			| SelectLimited<TRecursiveProjection>
+			| SetOpStage<TRecursiveProjection>) &
+			CompatibleRecursiveTerm<TProjection, TRecursiveProjection>,
+		options?: RecursiveCteEntryOptions,
 	) => CteReference<TProjection>;
 };
 
@@ -293,6 +358,11 @@ export const withCte = <TProjection extends SelectProjection>(
 	build: (w: CteBuilder) => WithBody<TProjection>,
 ): WithStage<TProjection> => {
 	const entries: WithEntryNode[] = [];
+	// One `asRecursive` call makes the whole list recursive (task 6.4,
+	// Postgres's own list-level flag) -- a length check reads that fact
+	// without a second boolean local, the same push-only-const shape as
+	// `entries` itself.
+	const recursiveCalls: true[] = [];
 	const w: CteBuilder = {
 		as: (name, query, options) => {
 			assertNoDuplicateCteName(entries, name);
@@ -303,6 +373,22 @@ export const withCte = <TProjection extends SelectProjection>(
 			});
 			return buildCteRowEnvironment(name, query.projectionInput);
 		},
+		asRecursive: (name, anchor, recursiveTerm, options) => {
+			assertNoDuplicateCteName(entries, name);
+			const anchorRef = buildCteRowEnvironment(name, anchor.projectionInput);
+			const term = recursiveTerm(anchorRef);
+			recursiveCalls.push(true);
+			entries.push({
+				name,
+				query: buildRecursiveEntryQuery(
+					bodyQueryNode(anchor),
+					bodyQueryNode(term),
+					options?.all ?? true,
+				),
+				materialized: options?.materialized ?? null,
+			});
+			return anchorRef;
+		},
 	};
 	const body = build(w);
 	assertNonEmptyCteList(entries);
@@ -310,7 +396,7 @@ export const withCte = <TProjection extends SelectProjection>(
 		withQuery: {
 			queryKind: "with",
 			ctes: entries,
-			recursive: false,
+			recursive: recursiveCalls.length > 0,
 			body: bodyQueryNode(body),
 		},
 		projectionInput: body.projectionInput,

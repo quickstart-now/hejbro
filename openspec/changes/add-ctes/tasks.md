@@ -598,9 +598,36 @@ route it through the lead rather than absorbing it.
       byte-identically to the core builder formulation". Files:
       `packages/query/src/db/chain.ts`, that test.
 
+- [x] 5.5 (~8m) Four things group 5's review left, none of them behaviour:
+      (a) **`convert.ts:479`'s comment is false** — it says
+      `columnPlanForResult`'s `with` handling "is still task 5.3's
+      stopgap", but 5.3 landed in the same commit, and `(below)` points
+      the wrong way (that function is above). It is now the only thing a
+      "are there stubs left" grep finds, so it manufactures the single
+      false positive against a tree that has none. Same family as G2-2.
+      (b) **CTE-of-CTE has no test.** The recursion through
+      `columnPlanFromProjection` was named as 5.3's mechanism, and review
+      verified by probe that a 2-hop and a 3-hop chain both resolve — but
+      all six shipped tests use a single entry, so folding that recursion
+      flat turns nothing red. One 2-hop test closes it.
+      (c) **`params.ts`'s docstring overclaims.** It says the option-B
+      defect is "proven here"; what is proven is that the shipped design
+      lifts correctly. What option B *would* have done cannot be tested,
+      because option B was not built. Lower it to "pins the property this
+      design guarantees" — and note that a D105 row citing this test as
+      evidence against option B would be inferring, not measuring. Third
+      time this change has met that shape.
+      (d) **Say why silence is right** where `cteQueryByName` falls back
+      to `[]`/`undefined` for an unresolved name: render already refused
+      it upstream (1.3c), and the builder cannot construct it (TDZ). A
+      change that has chosen loud over quiet everywhere else owes one line
+      where it chooses quiet.
+      Files: `packages/query/src/db/convert.ts`,
+      `packages/query/src/compile/params.ts`, `convert`'s test.
+
 ## 6. Recursive CTEs — after group 5
 
-- [ ] 6.1 (~10m) [design] `withRecursive` and the two-stage callback: the
+- [x] 6.1 (~10m) [design] `withRecursive` and the two-stage callback: the
       anchor term fixes the row type, and the recursive term is written
       inside a callback receiving a reference typed from it. Settled here:
       the callback's shape and where `union all` is spelled.
@@ -619,13 +646,33 @@ route it through the lead rather than absorbing it.
       **`packages/core/src/expr/render-sql.ts`** (the visibility narrowing
       lives there and must learn about `recursive` — review found the
       original file list could not have satisfied this task's own
-      precondition), that test.
-- [ ] 6.2 (~7m) The recursive term is typed from the anchor: the
-      reference's columns are the anchor's projected fields, and a
-      recursive term whose shape disagrees does not type-check. Red: same
-      file — "the recursive term sees the anchor's columns" and "a
-      mismatched recursive term is refused". Files: that test only.
-- [ ] 6.3 (~9m) [design] The four violations **this builder can actually
+      precondition), **`packages/core/src/query/with.ts`** (`asRecursive`
+      is a method on `CteBuilder`, which 3.1's own docstring already
+      promises — a second entry point would give users two ways to start a
+      CTE, the shape the surface audit exists to prevent; group 3 is
+      complete and nobody else holds that file, so the no-overlap rule is
+      not in play), that test.
+- [x] 6.2 (~7m) The recursive term is typed from the anchor: the
+      reference's columns are the anchor's projected fields.
+      **Settled after escalation (lead, 2026-08-29): the term is
+      constrained by `SameKeys` — the rule set operations already use —
+      not by identity with the anchor's projection.** The first draft
+      required an exact match, and that made this change's own motivating
+      case fail to type-check: the anchor's field is a full `ColumnRef`
+      and the recursive term's is an `Aggregated`, so no exact-match rule
+      can admit both. A recursive CTE *is* `anchor UNION term`, so union
+      compatibility already has an approved answer (D103); a second,
+      relaxed rule would be a second answer to one question. **Two pins,
+      both required**, so the relaxation reads as a contract rather than
+      an accident: a differing **key set** is still refused, and a field
+      computed differently on each side **is accepted and types as the
+      union** of the two. The weaker defence against a genuine type
+      mismatch is what set operations already ship — tightening it is a
+      set-op decision, not this one. Red: same file — "the recursive term
+      sees the anchor's columns", "a recursive term missing one of the
+      anchor's keys is refused", and "a field computed differently on each
+      side is accepted and types as the union". Files: that test only.
+- [x] 6.3 (~9m) [design] The four violations **this builder can actually
       construct**, measured on postgres:17 rather than recalled. The
       recalled list ("no aggregates, no window functions, no `distinct`,
       no `group by`") was measured and is **half wrong** — see 6.6 — so it
@@ -656,7 +703,7 @@ route it through the lead rather than absorbing it.
       branch refuses order by, limit and offset" and "intersect and except
       are not offered on a recursive branch". Files:
       `packages/core/src/query/with-recursive.ts`, that test.
-- [ ] 6.5 (~7m) The **accept** list, which is longer than the refuse list
+- [x] 6.5 (~7m) The **accept** list, which is longer than the refuse list
       and is the half that protects this change from itself. Measured
       accepted on postgres:17, therefore not refused here: a window
       function in the recursive term (refusing this would block **this
@@ -676,7 +723,7 @@ route it through the lead rather than absorbing it.
       group by and an anchor aggregate", "an aggregate inside a scalar
       subquery in the recursive term is accepted", and "a recursive entry
       accepts both materialization hints". Files: that test only.
-- [ ] 6.6 (~5m) Record the correction where it will be read. The manual
+- [x] 6.6 (~5m) Record the correction where it will be read. The manual
       states no restriction list, and the widely-recalled one is wrong on
       four counts by measurement. That fact belongs in the proposal's
       recursion section and in the skill, not only in a test name — the
@@ -684,7 +731,7 @@ route it through the lead rather than absorbing it.
       recalled list. Files: `openspec/changes/add-ctes/proposal.md`,
       `skills/hejbro/references/query-layer.md` (the same edit 7.2 makes,
       done once).
-- [ ] 6.4 (~6m) One `with recursive` covers a list containing both a
+- [x] 6.4 (~6m) One `with recursive` covers a list containing both a
       recursive and a non-recursive entry — the flag is the list's, not
       the entry's. Red: same file — "one recursive keyword covers the
       list". Files: that test only.
@@ -722,14 +769,33 @@ route it through the lead rather than absorbing it.
       by issue number, and this change closes it. Do not describe
       behaviour the witness did not exercise; a "verified live" badge
       without the measurement is worse than an unbadged guess.
+      Two things belong here that are easy to leave out: the
+      `withCte`/`db.with` **name asymmetry** and why it exists (a reserved
+      word blocks the standalone export, not the method), and the
+      **infinite-recursion caveat** — `r left join t` is accepted by
+      Postgres and does not terminate on its own, which is a caveat to
+      state, not a feature to guard (#220: detect and explain, do not
+      prevent). Files: `skills/hejbro/references/query-layer.md`. If the
+      edit turns out to need `skills/hejbro/SKILL.md`, stop and ask —
+      that file is shared and the lead sequences it.
 - [ ] 7.3 (~5m) Also settle one shape review flagged at group 1:
       `DeclaredCteMarker` is unexported yet appears in the signatures of
       the public `renderQuery`/`renderSelect`/`renderSelectInto`. Builds
       and type-checks pass (the dts inlines it) and callers can still
       pass `FromNode[]`, but they cannot name that parameter's type.
       Export it or narrow the public wrappers — decide, do not inherit.
+      **Whichever way that goes, it edits a file this task did not
+      originally list** (`packages/core/src/index.ts` to export, or
+      `packages/core/src/expr/render-sql.ts` to narrow) — the same file-list
+      gap that hit 6.1 twice. Both are group 1/3 files, complete and
+      unheld, so the no-overlap rule is not in play.
       Then the published-surface assertion block in
-      `packages/cli/test/exports.test.ts`. **No longer gated** — the team
+      **two** files, not one: `packages/cli/test/exports.test.ts` **and
+      `packages/query/test/exports.test.ts`**, the latter because group 5
+      exported `WithChainTerminal` without adding it to that file's
+      presence list — deliberately deferred here, and it only arrives if
+      this task names the file and the symbol rather than trusting someone
+      to remember. **No longer gated** — the team
       that held that file finished and dissolved (lead, 2026-08-29), so
       its final version is on `dev` and this change meets it at the last
       rebase like any other file. `packages/cli/src/index.ts` needs no
@@ -737,6 +803,19 @@ route it through the lead rather than absorbing it.
 - [ ] 7.4 (~6m) Changeset (D59, `minor`), `openspec/task-times.csv` rows
       from **measured** durations, README task-time and CRAP badges.
 - [ ] 7.5 (~8m) The D105 rows in `docs/specs/2026-08-19-hejbro-design.md`.
+      **Write the wording from scratch, from the confirmed facts — do not
+      patch the drafts** (owner rule on spec loops, 2026-08-29). This
+      change's D105 material has been corrected three times: the type
+      layer's reach went from "uniform" to "three of six sites", the brand
+      preservation claim was retracted outright when it failed to
+      reproduce, and the `Omit` mechanism it named turned out to be the
+      wrong device. A fourth incremental edit inherits the structure those
+      corrections left behind; a fresh draft inherits only what is true.
+      Two claims are **barred** from the row regardless: the retracted
+      `Omit`-drops-brands defect, and any use of 5.2's parameter test as
+      evidence *against* option B — that test pins what the shipped design
+      guarantees, and what the unbuilt design would have done was never
+      measured.
       The numbers the row cites are **re-measured on the implemented
       branch**, never transcribed from the design round's scratch
       measurement. If the branch was rebased after the wording was
@@ -829,6 +908,19 @@ route it through the lead rather than absorbing it.
       and the amplification path (implementer → planner → lead → issue →
       memory) had no verification step at any hop, each trusting the one
       before.
+      **The escalation trigger fired, and firing was the cheap outcome.**
+      Group 6's typing hit a real contradiction: the pin requiring a
+      recursive term to match its anchor exactly made this change's own
+      motivating case — a window function in the recursive term — fail to
+      type-check, because the anchor's field is a `ColumnRef` and the
+      term's is an `Aggregated`. The implementer stopped without
+      narrowing anything, which is what the proposal promised would
+      happen. What settled it is worth more than the fix: **the answer
+      was not a new rule but a second application of an existing one.** A
+      recursive CTE is `anchor UNION term`, so union compatibility was
+      already decided (D103's `SameKeys`), and inventing a relaxed
+      matcher would have put two answers to one question in the codebase
+      — the shape this change spent a day removing elsewhere.
       **What the process caught that review would not have.** 1.6's
       regression surfaced while writing the red test for an unrelated
       review finding: `select b.id from a` with `b` declared but unjoined

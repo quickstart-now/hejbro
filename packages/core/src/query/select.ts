@@ -78,6 +78,41 @@ export type SetOpCombinators<TProjection extends SelectProjection> = {
 	exceptAll(other: SetOpBranch): SetOpStage<TProjection>;
 };
 
+/** `SameKeys<TLeft, TRight>` is `true` only when both sides carry exactly the same key set (neither a missing nor an extra one) — the shape half of the union-compatibility question, checked in both directions since `keyof` alone only proves a subset. */
+type SameKeys<TLeft, TRight> = [keyof TLeft] extends [keyof TRight]
+	? [keyof TRight] extends [keyof TLeft]
+		? true
+		: false
+	: false;
+
+/**
+ * Set-operation result typing (moved from `@hejbro/query`, add-ctes task
+ * 6.5): the database rejects branches whose rows are not union-compatible,
+ * so the type layer rejects them FIRST — mismatched key sets resolve the
+ * whole result to `never`. On a match the result takes the LEFT branch's
+ * keys (SQL's own naming rule); each column is the union of the two
+ * branches' declared types (identical declarations collapse by
+ * idempotence), so a column typed differently by each branch is typed as
+ * their union in the result — the same rule a recursive CTE's own anchor/
+ * recursive-term pair needs (task 6.5: a window function or `distinct` in
+ * the recursive term computes a field differently from the anchor without
+ * disagreeing on which fields exist).
+ *
+ * Surface: originally `@hejbro/query`-only (add-set-operations, D103) —
+ * moved here because its subject (whether two `SelectProjection` shapes
+ * union-compatible) is core vocabulary, and a second, independently
+ * maintained copy in `@hejbro/core` would answer the same question twice.
+ * `@hejbro/query` re-exports this name unchanged, so its own chain typing
+ * has no visible surface change. `@hejbro/core`'s own plain `union()`
+ * above does not use this type (out of this change's scope; a mismatched
+ * union still compiles here and fails at the server instead — tracked
+ * separately, #487).
+ */
+export type SetOpResult<TLeft, TRight> =
+	SameKeys<TLeft, TRight> extends true
+		? { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
+		: never;
+
 export type SelectLimited<
 	TProjection extends SelectProjection = SelectProjection,
 > = {

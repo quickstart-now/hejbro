@@ -30,12 +30,35 @@ anchor term's projection. A recursive term whose projection does not match
 the anchor's SHALL NOT type-check, matching Postgres's requirement that
 both branches of the union agree.
 
+"Match" here means **the same key set**, and a column's type is the union
+of the two branches' — the same rule a set operation already uses, because
+a recursive CTE *is* an anchor and a recursive term joined by `UNION`.
+Requiring the two projections to be identical would be stricter than that
+rule and would reject the constructs Postgres accepts in a recursive term:
+a field the anchor reads straight from a column and the recursive term
+computes with a window function or an aggregate has a different type on
+each side and is legal on both.
+
+This check holds in the core builder, where the recursive term is written.
+A plain `union()` in the core builder does **not** carry it today — that
+rule has only ever been wired into the chain surface — so a mismatched
+plain union still builds and fails on the server. That gap is #487's, not
+this change's: the compatibility type moves into core here, which is most
+of what closing it needs, but wiring it into `union()` changes a surface
+D103 settled and belongs to its own change.
+
 #### Scenario: The recursive term sees the anchor's columns
 - **WHEN** a recursive term is written inside the callback that receives
   the CTE's own reference
 - **THEN** that reference's columns are the anchor term's projected fields,
   with the anchor's types
 
-#### Scenario: A mismatched recursive term is refused
-- **WHEN** a recursive term projects a different shape from the anchor
+#### Scenario: A recursive term missing one of the anchor's keys is refused
+- **WHEN** a recursive term projects a different key set from the anchor
 - **THEN** it does not type-check
+
+#### Scenario: A field computed differently on each side is accepted
+- **WHEN** the anchor projects a column directly and the recursive term
+  projects the same key through a window function
+- **THEN** it type-checks, and the field's type is the union of the two —
+  the rule a set operation already applies to its branches

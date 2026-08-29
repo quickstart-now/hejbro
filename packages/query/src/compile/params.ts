@@ -484,10 +484,12 @@ const liftWithEntry = (
  * Lifts a whole {@link WithNode} (add-ctes, task 5.2): every entry's own
  * query, in declaration order, then the body — matching the rendered
  * text's own left-to-right order (`with "a" as (...), "b" as (...) <body>`)
- * so `$n` numbering follows it. This is the exact defect the proposal
- * rejects "one shared placeholder pool split arbitrarily" (option B) over,
- * proven here rather than assumed: an entry's literal is always bound
- * before the body's, never the reverse, and never inlined as raw text.
+ * so `$n` numbering follows it. This pins the property the shipped design
+ * guarantees: an entry's literal is always bound before the body's, never
+ * the reverse, and never inlined as raw text. It does not demonstrate that
+ * the rejected "one shared placeholder pool split arbitrarily" (option B)
+ * would have numbered wrongly -- that design was never built, so it was
+ * never tested.
  */
 export const liftWithNode = (
 	node: WithNode,

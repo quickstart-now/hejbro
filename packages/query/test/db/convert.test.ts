@@ -769,6 +769,22 @@ describe("columnPlanForResult reads a WITH statement's body through the wrapper 
 		).toBe("bigint");
 	});
 
+	it("a CTE-of-CTE chain resolves a column's state through two hops, not just one", () => {
+		const stage = withCte((w) => {
+			const ranked = w.as("ranked", select(posts));
+			const doubled = w.as(
+				"doubled",
+				select({ id: ranked.id, amount: ranked.amount }, ranked),
+			);
+			return select({ id: doubled.id, amount: doubled.amount }, doubled);
+		});
+		const plan = columnPlanForResult(stage.withQuery, tables);
+		expect(plan.map((entry) => entry.alias)).toEqual(["id", "amount"]);
+		expect(
+			plan.find((entry) => entry.alias === "amount")?.columnState?.mode,
+		).toBe("bigint");
+	});
+
 	it("an unresolvable CTE name (a decoded or hand-built node naming an entry that isn't declared) yields no columns rather than throwing", () => {
 		const node: QueryNode = {
 			queryKind: "with",

@@ -849,6 +849,29 @@ const cteMarkers = (
 ): ReadonlyArray<DeclaredCteMarker> =>
 	names.map((declaredCte) => ({ declaredCte }));
 
+/**
+ * Which entry names are visible to entry `index` itself (add-ctes, task
+ * 6.1): without `recursive`, only the earlier entries (task 1.4); with it,
+ * the earlier entries **and this one** — `node.recursive` is the list's own
+ * flag (task 6.4, Postgres's own grammar), so it widens visibility for
+ * every entry, not just the ones that actually self-reference. A later
+ * sibling stays invisible either way: this builder's own `w.as`/
+ * `w.asRecursive` only ever hand out references to entries already
+ * declared, so mutual forward-reference between siblings is
+ * unrepresentable, not merely unguarded.
+ */
+const visibleEntryNames = (
+	declaredNames: ReadonlyArray<string>,
+	index: number,
+	entryName: string,
+	recursive: boolean,
+): ReadonlyArray<string> => {
+	if (recursive) {
+		return [...declaredNames.slice(0, index), entryName];
+	}
+	return declaredNames.slice(0, index);
+};
+
 /** Renders a {@link WithNode}: its entries comma-separated in declaration order, `with recursive` when the list is recursive, then the body — never itself parenthesized (add-ctes, task 1.1). */
 export const renderWith = (
 	node: WithNode,
@@ -861,12 +884,13 @@ export const renderWith = (
 			// (task 1.4) — forward reference is unrepresentable by the
 			// builder (each entry is handed only the earlier references),
 			// so this guards the artifact path, not the builder path.
-			// Does not yet except node.recursive: a recursive entry's own
-			// self-reference is task 6.1's to widen this for.
-			const entryScope = [
-				...cteMarkers(declaredNames.slice(0, index)),
-				...(outerScope ?? []),
-			];
+			const visibleNames = visibleEntryNames(
+				declaredNames,
+				index,
+				entry.name,
+				node.recursive,
+			);
+			const entryScope = [...cteMarkers(visibleNames), ...(outerScope ?? [])];
 			return renderWithEntry(entry, entryScope);
 		})
 		.join(", ");
