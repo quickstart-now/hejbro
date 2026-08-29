@@ -7,7 +7,7 @@ Refs:
 - packages/query/src/db/transaction.ts @ blob ba3a9c4d719126bcff612f263fcd708c235b4ffa
 - packages/cli/src/commands/generate.ts @ blob 799d52d9931560c6888677233f5aea6cd378bd75
 - packages/core/src/sql/migration-file.ts @ blob d642455d5871e259f232d2bb5701de5bf04b2741
-- packages/core/src/plpgsql/body-context.ts @ blob 08c8dfd1a0dbfcd7ff5af3f77642a5eb546fc067
+- packages/core/src/plpgsql/body-context.ts @ blob d67fab6d063c765ea2609692f4b8768e61b3d9f6
 
 # fix-lifecycle-review — an adversarial self-review of the day's own merges (#445)
 
@@ -152,12 +152,20 @@ message content) → `db3f61d`/`9067ab2` (group 3, R5 plus its own
 self-found prefix-matching defect) → `57b200b` (group 2 rework, B5 +
 R-a..R-d) → `201cc48` (group 3 rework, 3.2/3.2b, plus a group 1
 pairing-constraint comment carried over from review) → `17ee487`
-(group 4, R4) → `60756b3` (group 5, cache input + docs catch-up).
+(group 4, R4) → `60756b3` (group 5, cache input + docs catch-up) →
+`7d52216` (5.3/5.4, plus the CRAP-gate complexity split R4 forced) →
+`7ad1bf1` (2.4/4.2, review-prose constraints landed as comments) →
+`2c88abc` (2.4's two comments sharpened to the reviewer's own judging
+criteria).
 
-Red observed directly for every task, not inferred: the implementation
-was reverted via `git stash` (source only, tests kept) and rebuilt
-before each fix, with the actual failing assertion output captured —
-including, for 5.1's own cache-blind-spot fix, a live measurement in
-both directions (a broken `schema()` signature replaying a stale
-`FULL TURBO` PASS without the turbo.json fix, and correctly busting
-the cache with it).
+Red observed directly for every task from `9c66223` on: the
+implementation was reverted via `git stash` (source only, tests kept)
+and rebuilt before each fix, with the actual failing assertion output
+captured — including, for 5.1's own cache-blind-spot fix, a live
+measurement in both directions (a broken `schema()` signature replaying
+a stale `FULL TURBO` PASS without the turbo.json fix, and correctly
+busting the cache with it). Group 1's first pass (`3780fea`) did not:
+its own red was inferred by reading the code instead of reverting it,
+and the reviewer's own mutation runs (source reverted in an isolated
+worktree, the guard removed) supplied the measurement this record
+otherwise lacked — that gap is part of why 1.7 exists.

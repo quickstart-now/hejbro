@@ -444,10 +444,12 @@ const recordReturn = (
 	// literally named `exprNode` gives its trigger row that same
 	// property, which would otherwise misroute `ctx.return(ctx.new)` down
 	// the expression path for that table only.
-	if (isReturnableExpr(value) && !isTriggerRow(value)) {
+	if (!isTriggerRow(value) && isReturnableExpr(value)) {
 		recordReturnExpr(state, value);
 		return;
 	}
+	// the branch above already exhausted every Expr this function can
+	// receive -- what's left is a TriggerRow or a ReturnableQuery.
 	recordReturnShape(state, value as TriggerRow<Table> | ReturnableQuery);
 };
 
