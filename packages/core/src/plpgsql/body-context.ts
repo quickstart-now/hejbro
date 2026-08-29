@@ -615,19 +615,40 @@ const unusedBuilderNextClause = (queries: ReadonlyArray<QueryNode>): string => {
 	return clauses.join("; ");
 };
 
+/** `"statement"`/`"statements"` — the count is user-facing text (#423), not a template that reads fine either way. */
+const pluralizeStatement = (count: number): string => {
+	if (count === 1) {
+		return "statement";
+	}
+	return "statements";
+};
+
+/** `"trigger"` when `returnKind` says so, `"function"` otherwise — the noun {@link unusedBuilderMessage} names the declaration by. */
+const declarationNoun = (returnKind: ReturnKind): string => {
+	if (returnKind === "trigger") {
+		return "trigger";
+	}
+	return "function";
+};
+
 /**
  * `statement-builder-unused`'s message (#423): names every builder a body
  * made and never consumed, in the order it was made (`closeRecordingSession`'s
  * own order — a `Map`'s insertion order, deterministic for a given
  * recording so the determinism guard (D22) sees the same message from
- * both runs).
+ * both runs). Calls the declaration `"trigger"` rather than `"function"`
+ * when `returnKind` says so — the user wrote `defineTrigger`, and
+ * `returnKind` already distinguishes the two without asking the caller
+ * for anything new.
  */
 const unusedBuilderMessage = (
 	identity: string,
+	returnKind: ReturnKind,
 	queries: ReadonlyArray<QueryNode>,
 ): string => {
 	const kinds = queries.map(describeQueryKind).join(", ");
-	return `function "${identity}" built ${queries.length} statement(s) it never used (${kinds}). Next: ${unusedBuilderNextClause(queries)}.`;
+	const noun = declarationNoun(returnKind);
+	return `${noun} "${identity}" built ${queries.length} ${pluralizeStatement(queries.length)} it never used (${kinds}). Next: ${unusedBuilderNextClause(queries)}.`;
 };
 
 export const createRecordingContext = (
@@ -670,7 +691,7 @@ export const createRecordingContext = (
 		if (unconsumed.length > 0) {
 			throwHejbroError(
 				"statement-builder-unused",
-				unusedBuilderMessage(identity, unconsumed),
+				unusedBuilderMessage(identity, returnKind, unconsumed),
 				declaredAt,
 			);
 		}

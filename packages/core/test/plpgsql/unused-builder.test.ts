@@ -198,21 +198,19 @@ describe("statement-builder-unused", () => {
 				ctx.return(row);
 			}),
 		).toThrowError(
-			/built 1 statement\(s\) it never used \(an insert\)\. Next: run it for its effect with ctx\.execute/,
+			/built 1 statement it never used \(an insert\)\. Next: run it for its effect with ctx\.execute/,
 		);
 		expect(hasOpenRecordingSession()).toBe(false);
 	});
 
-	it("names every unused builder, in the order they were built", () => {
+	it("names every unused builder, in the order they were built, pluralizing the count", () => {
 		expect(() =>
 			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
 				insert(comments).values({ postId: row.postId });
 				select({ id: comments.id }, comments);
 				ctx.return(row);
 			}),
-		).toThrowError(
-			/built 2 statement\(s\) it never used \(an insert, a select\)/,
-		);
+		).toThrowError(/built 2 statements it never used \(an insert, a select\)/);
 	});
 
 	it("a set operation left unused is not told to use ctx.execute, which cannot carry one", () => {
@@ -224,7 +222,7 @@ describe("statement-builder-unused", () => {
 				ctx.return(row);
 			}),
 		).toThrowError(
-			/built 1 statement\(s\) it never used \(a set operation\)\. Next: a body has no statement that carries a set operation/,
+			/built 1 statement it never used \(a set operation\)\. Next: a body has no statement that carries a set operation/,
 		);
 	});
 
@@ -238,6 +236,15 @@ describe("statement-builder-unused", () => {
 					select(comments);
 				},
 			),
-		).toThrowError(/built 1 statement\(s\) it never used/);
+		).toThrowError(/^function ".*" built 1 statement it never used/);
+	});
+
+	it('names a trigger declaration "trigger", not "function"', () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				insert(comments).values({ postId: row.postId });
+				ctx.return(row);
+			}),
+		).toThrowError(/^trigger ".*" built/);
 	});
 });
