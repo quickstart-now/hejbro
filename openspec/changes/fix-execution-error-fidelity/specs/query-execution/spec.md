@@ -17,8 +17,8 @@ The query layer itself SHALL NEVER write the statement's parameter
 *values* onto the thrown error — not into the message (the SQL stays
 parameterized; the params array is never read on this path), not as an
 enumerable field, not via the error's string or JSON representation.
-Text the database echoes inside its own error message is the database's
-report and is carried faithfully, not scrubbed.
+Text the database echoes inside its own error message or fields is the
+database's report and is carried faithfully, not scrubbed.
 
 #### Scenario: Constraint violation reaches the caller
 - **WHEN** an executed insert violates a declared unique constraint
@@ -36,8 +36,8 @@ report and is carried faithfully, not scrubbed.
   JSON form
 
 #### Scenario: A server-echoed value is carried, not scrubbed
-- **WHEN** the driver's own error message quotes a value the server
-  echoed back
+- **WHEN** the driver's own error message or fields quote a value the
+  server echoed back
 - **THEN** the thrown error's message carries the driver's message
   verbatim — fidelity to the database's report wins over scrubbing text
   this layer did not write

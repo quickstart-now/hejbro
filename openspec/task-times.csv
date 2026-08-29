@@ -358,3 +358,4 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-29,fix-execution-error-fidelity,1.1,1,6,7,0,
 2026-08-29,fix-execution-error-fidelity,1.2,1,4,2,0,
 2026-08-29,fix-execution-error-fidelity,1.3,1,5,4,0,
+2026-08-30,fix-execution-error-fidelity,review-fix,1,,5,0,review-born: skill row B1 + empty-message pin B2

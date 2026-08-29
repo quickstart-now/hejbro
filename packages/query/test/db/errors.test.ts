@@ -132,6 +132,21 @@ describe("driver-message fidelity (#427)", () => {
 		);
 	});
 
+	it("an empty-message Error cause is named, not interpolated blank", async () => {
+		const handle = db({ posts }, driverThatThrows(new Error("")));
+
+		try {
+			await handle.execute(select(posts).where(eq(posts.status, MARKER)));
+			expect.unreachable("execute should have rejected");
+		} catch (error) {
+			const message = (error as Error).message;
+			expect(message).toMatch(/no message|non-error/i);
+			expect(message).not.toContain("undefined");
+			expect(message).toContain("$1");
+			expect(message).not.toContain(MARKER);
+		}
+	});
+
 	it("a non-error cause is named, not interpolated", async () => {
 		const driver: Driver = {
 			capabilities: {
@@ -139,7 +154,6 @@ describe("driver-message fidelity (#427)", () => {
 				"session-state": true,
 			},
 			execute: vi.fn(async () => {
-				// eslint-disable-next-line no-throw-literal
 				throw { weird: true };
 			}),
 			transaction: vi.fn(async (callback) =>
