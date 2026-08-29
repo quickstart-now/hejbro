@@ -122,12 +122,30 @@ const countPosts = defineFunction(
 	},
 );
 
+/**
+ * A builder-declared scalar return carrying an explicit numeric mode
+ * (#433) — `countPosts` above declares its `bigint` return as a raw
+ * `TypeNode`, which carries no mode of its own and always falls back to
+ * `defaultNumericMode`; this one declares the mode explicitly so a
+ * disagreement between the declared mode and the runtime conversion has
+ * something to show up against.
+ */
+const countPostsAsNumber = defineFunction(
+	app,
+	"count_posts_as_number",
+	{ returns: bigint({ mode: "number" }) },
+	(ctx) => {
+		ctx.return(sql`(select count(*) from "app"."posts")`);
+	},
+);
+
 const appSchema = {
 	posts,
 	listPublished,
 	searchByStatus,
 	searchByStatusAndLimit,
 	countPosts,
+	countPostsAsNumber,
 	touchTriggerFn: touchTrigger.functionDeclaration,
 };
 
@@ -174,6 +192,7 @@ describe("db.fn.* (task 4.9)", () => {
 			"searchByStatus",
 			"searchByStatusAndLimit",
 			"countPosts",
+			"countPostsAsNumber",
 			"touchTriggerFn",
 		]);
 	});
@@ -320,6 +339,25 @@ describe("db.fn.* (task 4.9)", () => {
 		} else {
 			expect(typeof value).toBe("string");
 		}
+	});
+
+	it("a bigint return declared as number arrives as number (#433)", async () => {
+		// within Number.MAX_SAFE_INTEGER -- "number" mode's own contract
+		// (unlike the "bigint"/"string" fixtures above, which deliberately
+		// use a value beyond it) is that a value this small round-trips
+		// exactly, so this is the case that actually exercises the declared
+		// mode rather than tripping numeric-mode-overflow first.
+		const { driver } = recordingDriver([{ result: "42" }]);
+		const handle = db(appSchema, driver);
+
+		const value = await handle.fn.countPostsAsNumber({});
+
+		// the declared mode wins over defaultNumericMode's own "bigint"
+		// default for a bare bigint TypeNode -- without task 2.3's fix this
+		// arrived as a bigint, disagreeing with fn-types.ts's own
+		// ColumnReadType-derived `number` result type.
+		expect(typeof value).toBe("number");
+		expect(value).toBe(42);
 	});
 
 	it('a scalar call fails fast when the driver doesn\'t return exactly one row with a "result" column', async () => {

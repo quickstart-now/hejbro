@@ -277,7 +277,7 @@ Two rules apply to every task here and are not repeated per line:
       `varchar({ length })`, an enum, and a `$type`-branded `jsonb`
       return infer their exact types.
       Files: `packages/query/src/db/fn-types.ts`, that test.
-- [ ] 2.3 (~8m) The declared numeric mode reaches the call: the scalar
+- [x] 2.3 (~8m) The declared numeric mode reaches the call: the scalar
       return carries `mode` (and `jsonType`), and `db.fn`'s conversion
       reads it instead of re-deriving `defaultNumericMode` from the type
       node. This is a real defect the builder form exposes, not a detail

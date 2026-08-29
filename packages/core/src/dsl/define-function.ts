@@ -7,7 +7,11 @@ import type { FunctionBody } from "../plpgsql/body-ast";
 import type { BodyContext } from "../plpgsql/body-context";
 import { recordBodyWithGuard } from "../plpgsql/body-context";
 import { assertValidLocalName } from "../plpgsql/reserved";
-import type { BuilderFamily, ColumnBuilder } from "../types/column-builder";
+import type {
+	BuilderFamily,
+	ColumnBuilder,
+	NumericMode,
+} from "../types/column-builder";
 import type { TypeNode } from "../types/type-node";
 import type { SchemaDeclaration } from "./schema";
 import type { Table } from "./table";
@@ -84,7 +88,12 @@ export type FunctionDeclaration<
 				readonly schemaName: string;
 				readonly tableName: string;
 		  }
-		| { readonly returnsKind: "scalar"; readonly typeNode: TypeNode };
+		| {
+				readonly returnsKind: "scalar";
+				readonly typeNode: TypeNode;
+				/** The declared numeric mode (#433) — `null` for a raw `TypeNode` return, which carries no mode of its own; `db.fn`'s conversion reads this instead of re-deriving a default from `typeNode` alone, so a builder-declared `bigint({ mode: "number" })` return arrives as `number`, not `bigint`. */
+				readonly mode: NumericMode | null;
+		  };
 	readonly security: "invoker" | "definer";
 	readonly body: FunctionBody;
 	readonly declaredAt: string | null;
@@ -125,9 +134,13 @@ const resolveFunctionReturns = (
 		};
 	}
 	if (isColumnBuilder(returns)) {
-		return { returnsKind: "scalar", typeNode: returns.columnState.typeNode };
+		return {
+			returnsKind: "scalar",
+			typeNode: returns.columnState.typeNode,
+			mode: returns.columnState.mode,
+		};
 	}
-	return { returnsKind: "scalar", typeNode: returns };
+	return { returnsKind: "scalar", typeNode: returns, mode: null };
 };
 
 type ResolvedArgs<TArgs extends Record<string, ColumnBuilder>> = {

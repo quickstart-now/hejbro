@@ -103,14 +103,29 @@ const defaultNumericMode = (typeNode: TypeNode): NumericMode | null => {
 	return null;
 };
 
-/** A synthetic `ColumnState` for a scalar return's own declared `TypeNode` — there is no real column declaration behind a `defineFunction` return, only the type it was declared with, so `notNull`/`primaryKey`/`unique`/`defaultValue` (properties of a *column*, not a *type*) are all their least-committal values; only `typeNode`/`mode` ever reach {@link convertRows}'s own conversion. */
-const scalarColumnState = (typeNode: TypeNode): ColumnState => ({
+/**
+ * A synthetic `ColumnState` for a scalar return's own declared `TypeNode`
+ * — there is no real column declaration behind a `defineFunction`
+ * return, only the type (and, for a builder-declared return, the mode)
+ * it was declared with, so `notNull`/`primaryKey`/`unique`/
+ * `defaultValue` (properties of a *column*, not a *type*) are all their
+ * least-committal values; only `typeNode`/`mode` ever reach
+ * {@link convertRows}'s own conversion. `declaredMode` wins over the
+ * derived default when present (#433) — a `bigint({ mode: "number" })`
+ * return declared it explicitly, so re-deriving `defaultNumericMode`
+ * here would silently disagree with the type `fn-types.ts`'s
+ * `ColumnReadType` already promised the caller.
+ */
+const scalarColumnState = (
+	typeNode: TypeNode,
+	declaredMode: NumericMode | null,
+): ColumnState => ({
 	typeNode,
 	notNull: false,
 	primaryKey: false,
 	unique: false,
 	defaultValue: null,
-	mode: defaultNumericMode(typeNode),
+	mode: declaredMode ?? defaultNumericMode(typeNode),
 });
 
 /**
@@ -125,6 +140,7 @@ const scalarCall = (
 	declaration: FunctionDeclaration,
 	placeholders: string,
 	typeNode: TypeNode,
+	declaredMode: NumericMode | null,
 ): {
 	readonly compiled: CompileResult;
 	readonly columnState: ColumnState;
@@ -136,7 +152,7 @@ const scalarCall = (
 			params: [],
 			kind: "sql",
 		},
-		columnState: scalarColumnState(typeNode),
+		columnState: scalarColumnState(typeNode, declaredMode),
 	};
 };
 
@@ -224,7 +240,12 @@ const dispatchCall = (
 	if (declaration.returns.returnsKind === "scalar") {
 		return {
 			callKind: "scalar",
-			...scalarCall(declaration, placeholders, declaration.returns.typeNode),
+			...scalarCall(
+				declaration,
+				placeholders,
+				declaration.returns.typeNode,
+				declaration.returns.mode,
+			),
 		};
 	}
 	const { schemaName, tableName } = declaration.returns;
