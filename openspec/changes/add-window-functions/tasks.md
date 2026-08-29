@@ -169,7 +169,7 @@ discipline").
       FunctionCallNode` makes it unrepresentable. Red: same file — "an
       aggregate refuses a windowed argument". Files:
       `packages/core/src/expr/aggregate.ts`, that test.
-- [ ] 3.3 (~8m) [design] The three declaration sites that **already** have
+- [x] 3.3 (~8m) [design] The three declaration sites that **already** have
       a subquery guard — `check` constraints (`dsl/table.ts:694`), index
       expressions (`:392`) and index predicates (`:756`) — refuse a window
       function too. Same shape as the precedent: `someExprNode` (the
@@ -187,7 +187,7 @@ discipline").
       constraint, an index expression and an index predicate each refuse a
       window function, each naming its own site". Files:
       `packages/core/src/dsl/table.ts`, that test.
-- [ ] 3.4 (~8m) The three declaration sites with **no** precedent guard —
+- [x] 3.4 (~8m) The three declaration sites with **no** precedent guard —
       column defaults, generated columns, and a policy's
       `using`/`with check`. These are new guard homes, not extra arms on
       an existing one, which is why they are split from 3.3. Same shape

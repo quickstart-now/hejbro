@@ -184,37 +184,75 @@ describe("rlsCachedAuthOutsideRlsValidator", () => {
 	// validateIndexPredicates reject any exists() in outright), so it is
 	// the one site where this shape can actually reach the validator, same
 	// reasoning as the exists()-in-a-default case right above.
+	// add-window-functions task 3.4 added a declaration-time guard
+	// (column-default-window-function) rejecting ANY window function in a
+	// column default, so `table()` can no longer construct this shape at
+	// all -- hand-assembled (same precedent as the unnamed-index-expression
+	// case above) to reach the validator directly, bypassing that guard on
+	// purpose: this test is about the DEEP walker's own descent, a
+	// narrower concern than whether the shape is legal to declare.
 	it("finds authUidCached() buried inside an exists(...) subquery inside a window function's partitionBy, in a column default", () => {
 		const profiles = table(app, "profiles", {
 			id: uuid().primaryKey(),
 			userId: uuid(),
 		});
-		const accounts = table(app, "accounts", {
-			id: uuid().primaryKey(),
-			hasProfile: boolean().default(
-				expr("boolean", {
-					nodeKind: "window",
-					fn: {
-						nodeKind: "functionCall",
-						schemaName: null,
-						functionName: "rank",
-						args: [],
+		const windowedDefault = expr("boolean", {
+			nodeKind: "window",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "rank",
+				args: [],
+			},
+			partitionBy: [
+				exists(select(profiles).where(eq(profiles.userId, authUidCached())))
+					.exprNode,
+			],
+			orderBy: [],
+		}).exprNode;
+		const accounts: TableDeclaration = {
+			declarationKind: "table",
+			schema: app,
+			tableName: "accounts",
+			columns: [
+				{
+					columnKey: "id",
+					columnName: "id",
+					columnState: {
+						typeNode: { typeName: "uuid" },
+						notNull: false,
+						primaryKey: true,
+						unique: false,
+						defaultValue: null,
+						mode: null,
 					},
-					partitionBy: [
-						exists(select(profiles).where(eq(profiles.userId, authUidCached())))
-							.exprNode,
-					],
-					orderBy: [],
-				}),
-			),
-		});
-		const result = generateMigration({
-			declarations: [app, profiles, accounts],
-			previousSnapshot: emptySnapshot,
-			validators: [rlsCachedAuthOutsideRlsValidator],
-		});
-		expect(result.errors).toHaveLength(1);
-		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
+				},
+				{
+					columnKey: "hasProfile",
+					columnName: "has_profile",
+					columnState: {
+						typeNode: { typeName: "boolean" },
+						notNull: false,
+						primaryKey: false,
+						unique: false,
+						defaultValue: windowedDefault,
+						mode: null,
+					},
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			checks: [],
+			rls: null,
+			existing: false,
+			declaredAt: null,
+		};
+		const result = rlsCachedAuthOutsideRlsValidator(emptySnapshot, [
+			app,
+			accounts,
+		]);
+		expect(result).toHaveLength(1);
+		expect(result[0]?.code).toBe("rls-cached-auth-outside-rls");
 	});
 
 	// This validator is scoped to default/CHECK/index-predicate only (its
