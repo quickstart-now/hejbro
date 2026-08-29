@@ -64,6 +64,18 @@ const declarationColumnSelf = (
 	column: ColumnRef | Expr,
 ): { readonly name: string } | { readonly expression: Expr["exprNode"] } => {
 	if (isColumnRef(column)) {
+		if (column.exprNode.schemaName === null) {
+			// add-ctes task 1.2d: `.on()` has no table-ownership check at
+			// all (a pre-existing gap out of this change's scope, #TBD) --
+			// but a CTE column reference is new with this change, so
+			// closing that one case here is this change's own exposure to
+			// close, joining 1.2c's foreign-column-ref family rather than
+			// letting it through as a bare, unowned column name.
+			return throwHejbroError(
+				"foreign-column-ref",
+				`index column references a column of the CTE "${column.exprNode.tableName}" — a CTE is statement-local and cannot back an index column. Next: pass one of the table's own columns instead.`,
+			);
+		}
 		return { name: column.sqlName };
 	}
 	return { expression: column.exprNode };

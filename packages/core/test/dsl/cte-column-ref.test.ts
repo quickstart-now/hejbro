@@ -94,4 +94,17 @@ describe("declaration sites refuse a CTE column reference (task 1.2c)", () => {
 			}),
 		);
 	});
+
+	it("an index's own column list refuses a CTE column, naming the CTE (task 1.2d)", () => {
+		expect(() =>
+			table(app, "comments", { postId: uuid() }, () => ({
+				indexes: [index().on(cteColumnRef("ranked", "id"))],
+			})),
+		).toThrow(
+			expect.objectContaining({
+				code: "foreign-column-ref",
+				message: expect.stringContaining("ranked"),
+			}),
+		);
+	});
 });

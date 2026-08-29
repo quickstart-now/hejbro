@@ -73,6 +73,19 @@ not be dropped.
       this stage; group 3 reaches the same guard through a real
       `with()` reference once one exists. Files:
       `packages/core/src/dsl/table.ts`, that test.
+- [ ] 1.2d (~5m) Close 1.2c's remaining opening: an index's **column**
+      list (`.on(...)`), which 1.2c does not cover — it guards index
+      *predicates*. `declarationColumnSelf` reads a `ColumnRef`'s
+      `sqlName` and nothing else, so a CTE column passed there becomes an
+      index on a bare name with no owner. Guard the CTE case only (a null
+      schema), with 1.2c's error family. The **general** weakness behind
+      it — that any other table's column passes the same way, CTEs
+      aside — is pre-existing, is not this change's to fix, and is
+      reported for its own issue. A guard that covers three of four
+      declaration sites is the shape a reviewer is right to reject. Red:
+      `packages/core/test/dsl/cte-column-ref.test.ts` — "an index column
+      list refuses a CTE column reference". Files:
+      `packages/core/src/dsl/index-builder.ts`, that test.
 - [ ] 1.3 (~8m) [design] Scope: the enclosing `WITH` list is the set of
       available names. A column belonging to a CTE the statement does not
       declare is refused at build time. Settled here: whether this reuses
