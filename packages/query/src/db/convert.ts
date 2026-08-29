@@ -658,7 +658,21 @@ const castInnerRef = (
 	return undefined;
 };
 
-/** The two-chunk `[expr, suffix]` inner expr, else `undefined` — only `jsonArrayFrom`/`jsonObjectFrom`'s own cast builder produces this exact shape (a `sql\`\`` template always leads with a text chunk unless a caller's own template happens to start with an interpolation, in which case it means the same thing anyway), so the suffix check is a cheap shape confirmation, not a reachable DSL path. */
+/**
+ * The two-chunk `[expr, suffix]` inner expr, else `undefined` — only
+ * `jsonArrayFrom`/`jsonObjectFrom`'s own cast builder (`castExprNode`,
+ * `packages/core/src/query/select.ts`) produces this exact shape,
+ * because it builds the `sqlTemplate` node directly rather than
+ * through the public `sql` tag. A caller's own template can never
+ * match it, even one that opens with an interpolation (`` sql`${x}
+ * ::text` ``): the tag function (`expr/sql-template.ts`) always emits
+ * one more text chunk than interpolations, so that shape is three
+ * chunks (a leading EMPTY one first), never two — see `isCastSuffixChunk`'s
+ * own doc comment above for the full correction and why this is the
+ * right line to hold, not a gap: an explicit user `::text` is an
+ * instruction to leave the value as text, and this two-chunk-only
+ * check is what keeps `uncast` from overriding that instruction.
+ */
 const castInnerRefIfSuffixed = (
 	first: SqlTemplateChunk | undefined,
 	second: SqlTemplateChunk | undefined,
