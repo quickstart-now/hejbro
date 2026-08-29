@@ -762,11 +762,63 @@ const recursiveKeyword = (recursive: boolean): string => {
 	return "";
 };
 
+/**
+ * Every CTE reference a query names directly as a from/join target — a
+ * CTE can only be reached that way (a bare column reference to one is
+ * meaningless without also naming it in `from`/a join, and that case is
+ * already refused by {@link assertInScope}'s own local scope check), so
+ * this needs no descent into `where`/projection expressions or nested
+ * subqueries: `selectChildExprs`/`collectColumnRefs` already own that
+ * axis (task 1.2's `assertInScope`), and this owns the from/join axis
+ * only (task 1.3).
+ */
+const cteRefsIn = (
+	query: SelectNode | SetOpNode,
+): ReadonlyArray<CteRefNode> => {
+	if (query.queryKind === "setOp") {
+		return [...cteRefsIn(query.left), ...cteRefsIn(query.right)];
+	}
+	return [query.from, ...query.joins.map((join) => join.table)].filter(
+		isCteRef,
+	);
+};
+
+/**
+ * Throws `undeclared-cte` when a from/join target names a CTE outside
+ * `declaredNames` — the enclosing `WITH` list is the whole set of
+ * available names (task 1.3; task 1.4 narrows this per entry to "earlier
+ * entries only"). A dedicated code, not `foreign-column-ref`'s family:
+ * that family names a *column* mismatched against a resolved table: this
+ * is a from/join target naming a relation that was never declared at
+ * all, which needs its own available-sources listing, not a "join that
+ * table" suggestion that does not apply to a CTE.
+ */
+const assertDeclaredCtes = (
+	declaredNames: ReadonlyArray<string>,
+	refs: ReadonlyArray<CteRefNode>,
+): void => {
+	const declared = new Set(declaredNames);
+	const undeclaredRef = refs.find((ref) => !declared.has(ref.cteName));
+	if (undeclaredRef === undefined) {
+		return;
+	}
+	const available = declaredNames.map((name) => `"${name}"`).join(", ");
+	throwHejbroError(
+		"undeclared-cte",
+		`with statement references "${undeclaredRef.cteName}", which it does not declare — declared: ${available || "(none)"}. Next: add "${undeclaredRef.cteName}" to the with() list, or reference one of the declared CTEs instead.`,
+	);
+};
+
 /** Renders a {@link WithNode}: its entries comma-separated in declaration order, `with recursive` when the list is recursive, then the body — never itself parenthesized (add-ctes, task 1.1). */
 export const renderWith = (
 	node: WithNode,
 	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
+	const declaredNames = node.ctes.map((entry) => entry.name);
+	assertDeclaredCtes(declaredNames, [
+		...node.ctes.flatMap((entry) => cteRefsIn(entry.query)),
+		...cteRefsIn(node.body),
+	]);
 	const entriesSql = node.ctes
 		.map((entry) => renderWithEntry(entry, outerScope))
 		.join(", ");
