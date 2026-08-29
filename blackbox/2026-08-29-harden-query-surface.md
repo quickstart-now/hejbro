@@ -31,12 +31,12 @@ Refs:
 - packages/core/test/table-kind-emit.test.ts @ blob 55c5b3ad0b548c1889f5ed6f8ca1cef8763e56de
 - packages/core/test/table-surface.test.ts @ blob 47354f5ab7a358df714bb7d4f29be8f4a61ca54e
 - packages/core/test/view-kind.test.ts @ blob d493ccb92c8aba58c72c2edb421ad95848232476
-- packages/pg/test/integration.test.ts @ blob 579831fca3bcede6e627691e6da8f9818fa8aa56
+- packages/pg/test/integration.test.ts @ blob 3467b177abc65b18a9b27b2ae7b6a441b835c556
 - packages/query/src/db/chain.ts @ blob 0d4242cbcdeb3658989897393107009c81e9763f
 - packages/query/test/db/set-op.test.ts @ blob d859c563d678e2c6a9bad3246db2aca7e56a42d0
-- README.md @ blob 54c26a72c7fb4f6ef9d3e67ba85a1b5c1b90e858
+- README.md @ blob a010ddf8f1fdca415721f3cd05b3e0517f86fe62
 - skills/hejbro/references/dsl-cheatsheet.md @ blob 74ce210fb1fff705cbcd1c587861faed547da14c
-- skills/hejbro/references/query-layer.md @ blob 3a25f4bf66480a4f2db975cc48b274682c43db09
+- skills/hejbro/references/query-layer.md @ blob 155bc6f6bbee83784f3a222f9b135daf3105a47e
 
 (Re-pinned three times since the original `ab0fe8f` pin, as `design.md`,
 `tasks.md`, and `skills/hejbro/references/query-layer.md` kept moving —
@@ -56,6 +56,31 @@ still be re-verified against the final tree after any rebase/squash,
 before the PR is considered done; a pin taken mid-branch does not
 survive a squash unless the pinned content is also present in the final
 tree.)
+
+(Re-pinned a fourth time after `git rebase upstream/dev` — the branch's
+base had moved four squashes (#495/#494/#498/#499) and needed a real
+rebase, not just new commits on a stale base. Three pins moved from
+content, not just from the rebase renumbering every commit SHA:
+`README.md` (a real conflict — both this branch and `#498`'s neon
+preset had updated the CRAP/task-time badge blocks; resolved by
+re-running `pnpm check:crap`/`check:tasktime` against the merged tree
+rather than hand-merging the two sets of numbers, so the recorded
+counts — 1518 functions, `@hejbro/neon` included — are a measurement
+of the rebased tree, not an edit), `packages/pg/test/integration.test.ts`
+and `skills/hejbro/references/query-layer.md` (both auto-merged clean —
+`#495`/`#494` touched other regions of the same files). Two things
+checked before re-declaring, since the new base moved capability specs
+this change's own deltas neighbor: `#494` changed
+`query-execution-failed`'s message text, not its `code`/`kind`/`cause`
+shape, and nothing in this change's own tests or docs asserts that
+message's exact text (checked by grep across every file this change
+touches) — no drift. `#499` moved `driver-contract`/`query-execution`/
+`rls-execution-context`'s shipped specs, none of which this change's
+four deltas touch — confirmed by `openspec validate --strict` passing
+clean on the rebased tree, and by checking (learned from the parallel
+slice's own measured finding) that none of this change's `MODIFIED`
+requirement titles differ from their shipped counterparts, which would
+read as a rename and fail the same way at archive time.)
 
 (Drafting note, recorded rather than silently omitted: this entry is
 written by the implementer session from committed artifacts — proposal.md,
