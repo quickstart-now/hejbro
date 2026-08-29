@@ -438,7 +438,9 @@ const baselineBlockerText = (
  * empty in this mode. There is no declaration set that both parses as a
  * `HejbroInput` and diffs to nothing, so the only way this branch is ever
  * reached is an empty declarations array -- one sentence, not two branches
- * for a state that can't happen.
+ * for a state that can't happen. That flat claim depends on today's kind
+ * set: a future declaration kind that can fan out to zero snapshot
+ * changes would make this message false, not just incomplete.
  */
 const throwBaselineNothingToAdopt = (entry: ReadonlyArray<string>): never => {
 	const entryPhrase = entry.map((pattern) => `"${pattern}"`).join(", ");

@@ -65,7 +65,10 @@ describe("hejbro --help", () => {
  * tracks whatever `GENERATE_ARGS` actually declares. Anchored on the
  * `OPTIONS` heading line specifically (`\nOPTIONS\n\n`), not the first
  * substring match: the `USAGE hejbro generate [OPTIONS]` line above it
- * also contains the bare word "OPTIONS".
+ * also contains the bare word "OPTIONS". The `--flag=` pattern only
+ * matches value-taking flags -- every `GENERATE_ARGS` entry is a string
+ * today, so this stays a sound comparison, but a future boolean flag
+ * would silently escape it.
  */
 const optionFlags = (stdout: string): ReadonlyArray<string> => {
 	const optionsBlock = stdout.match(/\nOPTIONS\n\n([\s\S]*)/)?.[1] ?? "";

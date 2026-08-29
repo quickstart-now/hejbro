@@ -1,13 +1,13 @@
 Refs:
 - openspec/changes/fix-lifecycle-review/proposal.md @ blob 710dbc2f14f50ab9d4df6c49bb61f01991dc2c9c
-- openspec/changes/fix-lifecycle-review/tasks.md @ blob c6425f7d694c35909c85ddc93aa441ac4158e87a
+- openspec/changes/fix-lifecycle-review/tasks.md @ blob 2b64892377332db0136e4fdf8b595438b8fe208f
 - openspec/changes/fix-lifecycle-review/specs/query-execution/spec.md @ blob 55630e07a8919908eef863663117fa24839abecd
 - openspec/changes/fix-lifecycle-review/specs/cli-commands/spec.md @ blob 58d1eea4cc4c09267c87c5b74e3290852fb5b7c1
 - openspec/changes/fix-lifecycle-review/specs/plpgsql-function-bodies/spec.md @ blob 3bdc14caada0b0f6872f926edb23c145cbe5182e
 - packages/query/src/db/transaction.ts @ blob ba3a9c4d719126bcff612f263fcd708c235b4ffa
-- packages/cli/src/commands/generate.ts @ blob 6559bbf0a3a97baf798a39f223f2f6e8b624b6f9
+- packages/cli/src/commands/generate.ts @ blob 799d52d9931560c6888677233f5aea6cd378bd75
 - packages/core/src/sql/migration-file.ts @ blob d642455d5871e259f232d2bb5701de5bf04b2741
-- packages/core/src/plpgsql/body-context.ts @ blob 3cc48460728b4d1e4ae024db341141b36eb52482
+- packages/core/src/plpgsql/body-context.ts @ blob 08c8dfd1a0dbfcd7ff5af3f77642a5eb546fc067
 
 # fix-lifecycle-review — an adversarial self-review of the day's own merges (#445)
 
@@ -110,6 +110,17 @@ on group 2:
   `recordReturnShape`, so `recordReturn` becomes a two-branch shell and
   the CRAP gate measures each function's own complexity again, both at
   or under the threshold.
+- Two more comment-only closures from review prose, landed as 2.4 and
+  4.2 so the constraints outlive this PR's own tasks.md: `help.test.ts`'s
+  flag-drift regex only ever matched value-taking flags (every
+  `GENERATE_ARGS` entry happens to be one today); `baseline-nothing-to-
+  adopt`'s flat "exported nothing" wording depends on R-d's own finding
+  (no declaration kind fans out to zero snapshot changes) staying true.
+  4.2 also caught its own instance of #447's own finding: the R4 delta
+  test written for the group-4 rework used `let capturedRow: unknown;`
+  to smuggle a trigger row out of its defining callback -- fixed to a
+  mutated-object capture (`const captured: { row?: unknown } = {}`)
+  before it could become a second entry in that grep.
 
 ## Follow-up issues the lead filed from this change's findings
 

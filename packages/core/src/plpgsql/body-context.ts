@@ -396,7 +396,7 @@ const recordReturnExpr = (state: RecordingState, value: Expr): void => {
 	pushStatement(state, { stmtKind: "returnExpr", expr: value.exprNode });
 };
 
-/** Builds and throws the `scalar-return-expects-expression`-coded error (D57) -- shared by both non-expression shapes {@link recordReturn} can receive from a scalar-returning declaration (a trigger row and a query), so the message and code can't drift between the two call sites. */
+/** Builds and throws the `scalar-return-expects-expression`-coded error (D57) -- shared by both non-expression shapes {@link recordReturn} can receive from a scalar-returning declaration (a trigger row and a query), so the message and code can't drift between the two call sites. #445/R4 review R-g: a `function` declaration, not an arrow `const`, because both call sites use it in *statement* position -- TS only narrows control flow through a `never` return that way; this file's other `never` helpers stay arrows because they are only ever called in return/expression position. */
 function throwScalarReturnExpectsExpression(state: RecordingState): never {
 	return throwHejbroError(
 		"scalar-return-expects-expression",

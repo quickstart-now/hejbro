@@ -251,3 +251,5 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-29,fix-lifecycle-review,5.2,5,8,10,0,"query-layer.md concurrency rule + three-parser banner subsection in generate-verify-workflow.md; README/AGENTS.md catch-up"
 2026-08-29,fix-lifecycle-review,5.3,5,7,9,0,"blackbox entry: decision path across all four groups' rework, not a diff summary"
 2026-08-29,fix-lifecycle-review,5.4,5,5,7,0,"changeset, task-times rows, README badges, CRAP block, findings.md scratch file deleted"
+2026-08-29,fix-lifecycle-review,2.4,2,5,6,0,"two review-prose constraints landed as comments: help.test.ts's flag regex value-taking-only, baseline-nothing-to-adopt's message depending on today's kind set"
+2026-08-29,fix-lifecycle-review,4.2,4,5,7,0,"two review-prose constraints landed as comments: the test's own reachability note, and why the shared throw helper stays a function declaration not an arrow const; also removed a let the new test itself had introduced"

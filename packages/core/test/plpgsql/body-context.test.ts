@@ -273,9 +273,15 @@ describe("body-context recording", () => {
 	});
 
 	it("a trigger row returned from a scalar-returning declaration still fails with scalar-return-expects-expression (#445/R4, delta: shape errors survive the reordering)", () => {
-		let capturedRow: unknown;
+		// #445/R4 review R-f: a trigger row has no type-legal path into a
+		// scalar declaration's ctx.return() at all (hence the type-escape
+		// directive a few lines down) -- capturing one via a trigger body
+		// is the only way to reproduce this, so this fixture defends the
+		// runtime guard for a consumer who bypasses the types, not a shape
+		// a well-typed caller could ever construct.
+		const captured: { row?: unknown } = {};
 		defineTrigger(comments, triggerConfig, (_ctx, { new: row }) => {
-			capturedRow = row;
+			captured.row = row;
 		});
 		expect(() =>
 			defineFunction(
@@ -284,7 +290,7 @@ describe("body-context recording", () => {
 				{ returns: { typeName: "integer" } },
 				(ctx) => {
 					// @ts-expect-error — a TriggerRow isn't a valid ctx.return() argument for a scalar function
-					ctx.return(capturedRow);
+					ctx.return(captured.row);
 				},
 			),
 		).toThrowError(/received a query or trigger row/);

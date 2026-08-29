@@ -211,7 +211,7 @@ Files (whole group): `packages/cli/src/commands/generate.ts`,
       guard above means any real declaration makes `hasChanges` true.
       Show a reachable case or delete the branch.
 
-- [ ] 2.4 (~5m) Two constraints the group 2 review surfaced that live
+- [x] 2.4 (~5m) Two constraints the group 2 review surfaced that live
       only in review prose today — both are one comment each, stating the
       constraint only:
       (a) `help.test.ts`'s flag regex (`--([a-z-]+)=`) matches
@@ -289,7 +289,7 @@ Files (whole group): `packages/core/src/plpgsql/body-context.ts`,
       is returned as a ref even when the table has a column named
       `exprNode`", plus the existing scalar-guard tests staying green.
 
-- [ ] 4.2 (~5m) Two constraints from group 4's review, one comment each:
+- [x] 4.2 (~5m) Two constraints from group 4's review, one comment each:
       **R-f** in the test — a trigger row cannot be handed to a scalar
       declaration through any type-legal path (the test needs
       `@ts-expect-error`), so capturing one inside a trigger body is the
