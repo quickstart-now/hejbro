@@ -434,6 +434,20 @@ const assertNoForeignIndexExpressionColumn = (
 				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
 		);
 	if (foreign !== undefined) {
+		if (foreign.ref.schemaName === null) {
+			// add-ctes task 3.5: this guard predates CTEs and never expected a
+			// null schema -- unfixed, the fallback message below renders it as
+			// the literal string "null" ("null.ranked.id"). A withCte()
+			// reference reaches here (it has no `sqlName`, so `isColumnRef` in
+			// dsl/index-builder.ts sends it to this expression path instead of
+			// the ColumnRef one) once it escapes its own withCte() scope --
+			// our exposure to close, not this guard's general shape to
+			// redesign.
+			throwHejbroError(
+				"index-expression-foreign-column-ref",
+				`index "${foreign.indexName}" on table "${tableName}" references a column of the CTE "${foreign.ref.tableName}" in an index expression — an index expression can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`).`,
+			);
+		}
 		throwHejbroError(
 			"index-expression-foreign-column-ref",
 			`index "${foreign.indexName}" on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" in an index expression — an index expression can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`).`,

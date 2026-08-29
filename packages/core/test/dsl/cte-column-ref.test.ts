@@ -1,14 +1,25 @@
 import { describe, expect, it } from "vitest";
 import type { ColumnRef } from "../../src/index";
-import { index, isNull, schema, table, uuid } from "../../src/index";
+import {
+	index,
+	isNull,
+	schema,
+	select,
+	table,
+	uuid,
+	withCte,
+} from "../../src/index";
 
 const app = schema("app");
 
 /**
- * A CTE column reference (add-ctes, task 1.2c) hand-built the way group 3's
- * `with()` reference will hand one out once it exists — `schemaName: null`,
- * `tableName` the CTE's bare name. `family`/`typeNode`/`sqlName` are copied
- * from a real column so only the identity half is synthetic.
+ * A CTE column reference (add-ctes, task 1.2c) hand-built to look like the
+ * shape `withCte()`'s own reference (`w.as()`, task 3.1/3.2) hands out —
+ * `schemaName: null`, `tableName` the CTE's bare name — except it keeps
+ * `sqlName` (a real `withCte()` reference does not, task 3.2), so it still
+ * reaches `dsl/index-builder.ts`'s `ColumnRef` branch rather than its
+ * expression one. `family`/`typeNode` are copied from a real column so only
+ * the identity half is synthetic.
  */
 const cteColumnRef = (
 	tableName: string,
@@ -104,6 +115,32 @@ describe("declaration sites refuse a CTE column reference (task 1.2c)", () => {
 			expect.objectContaining({
 				code: "foreign-column-ref",
 				message: expect.stringContaining("ranked"),
+			}),
+		);
+	});
+
+	// add-ctes task 3.5: a REAL withCte() reference (no `sqlName`, unlike the
+	// hand-built cteColumnRef above) takes a different branch in
+	// dsl/index-builder.ts's own isColumnRef duck-typing -- it lands as an
+	// index EXPRESSION, not a plain column, so it is
+	// assertNoForeignIndexExpressionColumn (a pre-existing, non-add-ctes
+	// guard) that actually rejects it, and that guard's message never
+	// expected a null schema before this change made one reachable.
+	it("an index expression naming a CTE column names the CTE, not `null`", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const stage = withCte((w) => {
+			const ranked = w.as("ranked", select(posts));
+			return select({ id: ranked.id }, ranked);
+		});
+		const leaked = stage.projectionInput.id;
+		expect(() =>
+			table(app, "comments", { postId: uuid() }, () => ({
+				indexes: [index("comments_leaked_idx").on(leaked)],
+			})),
+		).toThrow(
+			expect.objectContaining({
+				code: "index-expression-foreign-column-ref",
+				message: expect.stringContaining('of the CTE "ranked"'),
 			}),
 		);
 	});

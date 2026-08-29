@@ -324,9 +324,23 @@ rather than impossible.
       before the design: every comparison and filter operator reads only
       `.exprNode` and `.family` from its operand, and `.typeNode` is
       required only at declaration sites.
-      **One consequence to mark in the code** (review, group 2): once the
-      type layer closes the builder path, 1.2c/1.2d's runtime guards
-      become unreachable from any builder — their tests already
+      **Measured after implementation — the claim holds for three of the
+      six guards, not all six.** The type layer closes a site only where
+      the parameter is typed `ColumnRef`: the foreign-key target, the
+      foreign-key local column list, and `.references()`'s sugar. The
+      other three take an expression (`Expr<"boolean">` / `Condition`) —
+      an index predicate, an index's own column list, an RLS policy's
+      `using`/`with check` — so a reference without `typeNode` still
+      type-checks there and the **runtime guard remains the first line**.
+      (`.on()` additionally splits on `isColumnRef`'s `sqlName`
+      duck-typing and lands on a different code,
+      `index-expression-foreign-column-ref`.) Say this per site rather
+      than once, because it is not uniform; the first draft of those
+      comments claimed closure at a site that is not closed, and the audit
+      caught it.
+      **One consequence to mark in the code** (review, group 2): where the
+      type layer *does* close the builder path, that guard becomes
+      unreachable from any builder — their tests already
       hand-assemble a null-schema reference. That is the intended
       ordering, but what it leaves behind reads like dead code: a guard no
       caller can reach, kept alive by a hand-built test. Leave one line at
@@ -359,6 +373,16 @@ rather than impossible.
       accepted, because Postgres ignores it there rather than erroring. Red: same file — "an entry declares
       materialized, not materialized, or neither". Files:
       `packages/core/src/query/with.ts`, that test.
+
+- [x] 3.5 (~4m) `assertNoForeignIndexExpressionColumn`'s message renders
+      a CTE reference's schema as the string `"null"` — `null.ranked.id`.
+      The guard's *decision* is right; only its text is wrong. This is
+      the same defect 1.5(d) fixed in `rls.ts`, at a site that was
+      unreachable with a null schema until this change made one, so it is
+      **our exposure to close** — the general shape of the site is not
+      ours to redesign. Red: `packages/core/test/dsl/cte-column-ref.test.ts`
+      — "an index expression naming a CTE column names the CTE, not
+      `null`". Files: that guard's home, that test.
 
 ## 4. Views, column order, rename engine, preset validator — after group 3
 

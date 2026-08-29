@@ -7,7 +7,7 @@ import type {
 	WithEntryNode,
 	WithNode,
 } from "../expr/ast";
-import type { BuilderFamily } from "../types/column-builder";
+import type { BuilderFamily, OriginBrand } from "../types/column-builder";
 import type { SelectLimited, SelectProjection, SetOpStage } from "./select";
 
 /**
@@ -21,23 +21,54 @@ import type { SelectLimited, SelectProjection, SetOpStage } from "./select";
  * projected value carried (`ReadAs`, the column-origin brand) survives for
  * free through the plain object spread below — nothing here recomputes
  * them.
+ *
+ * Built with a key-remapped mapped type (`as`), not the built-in `Omit`:
+ * `Omit`/`Pick` silently drop an optional `unique symbol` key (`ReadAs`'s
+ * `readAsBrand`, `OriginBrand`'s `columnOriginBrand`) once `TValue` is a
+ * generic type parameter rather than a concrete object type (measured —
+ * `Omit<TValue, "exprNode">` compiled clean but the brand was gone from the
+ * result; this form keeps it).
+ *
+ * Surface: no existing utility composes to "an `Expr` minus its
+ * declaration-only fields" — `Omit`/`Pick` alone lose the brands above, so
+ * this is its own type, not a one-off inline expression at each call site.
+ * Named `<Noun>Ref`, the same suffix `ColumnRef`/`TableRefNode` already use
+ * for "a reference to X".
  */
-export type CteFieldRef<TValue extends Expr = Expr> = Omit<
-	TValue,
-	"exprNode" | "typeNode" | "sqlName"
-> & { readonly exprNode: ColumnRefNode };
+export type CteFieldRef<TValue extends Expr = Expr> = {
+	readonly [P in keyof TValue as P extends "exprNode" | "typeNode" | "sqlName"
+		? never
+		: P]: TValue[P];
+} & { readonly exprNode: ColumnRefNode };
 
 /**
  * The named row environment `w.as(...)` hands back (add-ctes, task 3.1/3.2)
  * — one {@link CteFieldRef} per **projected** field, keyed by that field's
  * own key. A column the source table declares but the entry's projection
  * never mentions is not a key here at all — not merely inaccessible, absent.
+ *
+ * The whole-table branch rebuilds `ColumnRef<...> & OriginBrand<TColumns, K>`
+ * from `TColumns` directly rather than indexing `TProjection[K]` — TS does
+ * not carry the optional-symbol `OriginBrand` through an indexed access on a
+ * type parameter narrowed by `extends Table<infer TColumns>` (measured: it
+ * silently drops to the bare `ColumnRef`). Carrying `OriginBrand` matters
+ * beyond typing: it is what lets `@hejbro/query`'s `SelectResult` recover
+ * the declared column's full read type later (measured: without it,
+ * `select({ id: ranked.id }, ranked)` for a whole-table `ranked` widened to
+ * the bare SQL family instead of the declared type — the same richness a
+ * passthrough column already gets in an ordinary object projection, #311).
+ *
+ * Surface: no existing type maps a `SelectProjection` to "one reference per
+ * projected key" — `TableColumns` is the closest sibling but is keyed by a
+ * table's own declared columns, never a projection. `<Noun>Environment`
+ * names what SQL itself calls this (the row environment a `WITH` entry
+ * introduces for everything after it), not a spelling this file invented.
  */
 export type CteRowEnvironment<TProjection extends SelectProjection> =
 	TProjection extends Table<infer TColumns>
 		? {
 				readonly [K in keyof TColumns]: CteFieldRef<
-					ColumnRef<BuilderFamily<TColumns[K]>>
+					ColumnRef<BuilderFamily<TColumns[K]>> & OriginBrand<TColumns, K>
 				>;
 			}
 		: TProjection extends Record<string, Expr>
@@ -50,6 +81,11 @@ export type CteRowEnvironment<TProjection extends SelectProjection> =
  * a `Table`, for the same reason: `Object.entries`/`Object.fromEntries`
  * skip symbol keys, so it never leaks into the enumerable field ref map
  * {@link buildCteRowEnvironment} builds.
+ *
+ * Surface: `select()`'s own `from`-source dispatch needs a runtime-checkable
+ * identity a structural row environment alone can't give it (two different
+ * CTEs can project the exact same field shape). Mirrors `tableMeta` exactly
+ * — same mechanism, same reason, `<noun>Meta` naming kept symmetric with it.
  */
 export const cteRowMeta: unique symbol = Symbol("hejbro:cte-row-meta");
 
@@ -61,22 +97,51 @@ export type CteRowMeta = { readonly cteName: string };
  * environment plus the hidden `cteRowMeta` brand `select()`'s own
  * `from`-source widening reads to build a `CteRefNode` instead of a
  * `TableRefNode`.
+ *
+ * Surface: distinct from {@link CteRowEnvironment} because that type alone
+ * is structural (no way to dispatch on it at runtime); this is the nominal
+ * type callers actually hold. Named to read next to `Table` at a `from`
+ * call site (`Table | CteReference`), not after it alphabetically by
+ * accident.
  */
 export type CteReference<
 	TProjection extends SelectProjection = SelectProjection,
 > = CteRowEnvironment<TProjection> & { readonly [cteRowMeta]: CteRowMeta };
 
-/** Guards that `value` is a {@link CteReference} — the counterpart to `dsl/table.ts`'s `isTable`. */
+/**
+ * Guards that `value` is a {@link CteReference} — the counterpart to
+ * `dsl/table.ts`'s `isTable`.
+ *
+ * Surface: mirrors `isTable` exactly (same mechanism, same reason); a
+ * user-facing `is<Noun>` predicate isn't expressible by composing existing
+ * exports since the brand itself is not exported for direct `in` checks.
+ */
 export const isCteReference = (value: unknown): value is CteReference =>
 	typeof value === "object" && value !== null && cteRowMeta in value;
 
-/** A `w.as(...)` entry's optional hints (add-ctes, task 3.4). */
+/**
+ * A `w.as(...)` entry's optional hints (add-ctes, task 3.4).
+ *
+ * Surface: a third, all-optional parameter needs its own named type once it
+ * carries more than a single positional value (`TableExtras` is the same
+ * pattern for `table()`'s own callback options) — a bag of one field today,
+ * room for a second (e.g. a future recursive-entry hint) without breaking
+ * `.as()`'s call shape.
+ */
 export type CteEntryOptions = {
 	/** Tri-state, matching {@link WithEntryNode.materialized}: `true`/`false` render their own keyword, omitted (`undefined`) renders neither and leaves the choice to the planner. */
 	readonly materialized?: boolean;
 };
 
-/** Passed into a `withCte(...)` callback (add-ctes, task 3.1) — the only way to declare an entry. */
+/**
+ * Passed into a `withCte(...)` callback (add-ctes, task 3.1) — the only way
+ * to declare an entry.
+ *
+ * Surface: `withCte`'s own parameter needs a named type for its callback
+ * argument; no existing builder type shape fits (it is not a query stage
+ * itself, just the accumulator). `<Noun>Builder` matches `IndexBuilder`'s
+ * own naming for the same role elsewhere in this package.
+ */
 export type CteBuilder = {
 	readonly as: <TProjection extends SelectProjection>(
 		name: string,
@@ -85,7 +150,18 @@ export type CteBuilder = {
 	) => CteReference<TProjection>;
 };
 
-/** What `withCte(...)` returns — the `withQuery` field mirrors every other builder stage's own `*Query` wrapper key (`selectQuery`, `setOpQuery`, ...), the convention `@hejbro/query`'s `compile()` dispatches on (task 5.1). */
+/**
+ * What `withCte(...)` returns — the `withQuery` field mirrors every other
+ * builder stage's own `*Query` wrapper key (`selectQuery`, `setOpQuery`,
+ * ...), the convention `@hejbro/query`'s `compile()` dispatches on (task
+ * 5.1).
+ *
+ * Surface: `withCte`'s return type can't reuse `SelectLimited`/`SetOpStage`
+ * — a `WITH` statement is a different `QueryNode` kind with no further
+ * chain methods of its own (they live on the body, already built before
+ * `withCte` wraps it). `<Noun>Stage` keeps the same suffix `SetOpStage`
+ * already uses for "a builder stage holding a `QueryNode`".
+ */
 export type WithStage<TProjection extends SelectProjection = SelectProjection> =
 	{
 		readonly withQuery: WithNode;
@@ -168,6 +244,14 @@ const buildCteRowEnvironment = <TProjection extends SelectProjection>(
  * reference). `entries` accumulates via `.push()` into a local `const`,
  * scoped to this one call and never observed outside it — the same shape
  * `plpgsql/body-context.ts` already uses for its own statement recording.
+ *
+ * Surface: no existing export starts a `WITH` statement — `select()`/
+ * `insert()`/`update()`/`deleteFrom()` each start a different `QueryNode`
+ * kind, and none composes into one that declares named entries ahead of a
+ * body. `with` is the SQL keyword but a reserved JS word (`TS1389`/
+ * `TS1003`, task 3.1); `withCte` is the same escape `deleteFrom` already
+ * uses for `delete`, keeping the name recognizably "the `WITH` one" rather
+ * than an unrelated synonym like `cte`.
  */
 export const withCte = <TProjection extends SelectProjection>(
 	build: (w: CteBuilder) => WithBody<TProjection>,

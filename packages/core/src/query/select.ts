@@ -20,7 +20,16 @@ import type { TypeNode } from "../types/type-node";
 import type { CteReference } from "./with";
 import { cteRowMeta, isCteReference } from "./with";
 
-/** A `select()` from-source: a declared table, or a `withCte()` reference (add-ctes, task 3.3). */
+/**
+ * A `select()` from-source: a declared table, or a `withCte()` reference
+ * (add-ctes, task 3.3).
+ *
+ * Surface: `Table` alone stopped being what `from`/`fromTable` accept once
+ * a CTE reference was; the plain union has no smaller composition (it is
+ * exactly `SelectProjection`'s own two component types minus the object-
+ * projection shape). Named `<Noun>Source` for what the field it types is
+ * already called (`fromTable`, `from`), not a new coinage.
+ */
 export type FromSource = Table | CteReference;
 
 /** A `select()` projection: the whole table (deterministic column list), or an object of aliased expressions. */

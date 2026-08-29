@@ -1,4 +1,4 @@
-import type { Expr } from "@hejbro/core";
+import type { CteRowEnvironment, Expr } from "@hejbro/core";
 import {
 	bigint,
 	type count,
@@ -214,5 +214,24 @@ describe("aggregate result types (#416)", () => {
 		expectTypeOf<Proj>().toEqualTypeOf<{
 			readonly total: number | bigint | string | null;
 		}>();
+	});
+});
+
+describe("a withCte() reference's read type (add-ctes task 3.2)", () => {
+	// A CTE-sourced select always goes through SelectResult's object-projection
+	// branch (a CTE reference is never a Table), so what matters is what each
+	// CteFieldRef carries into ProjectedColumnResult/OriginColumn.
+	it("a whole-table entry's field keeps the declared type, not the bare family (measured regression: this needed CteRowEnvironment to rebuild ColumnRef & OriginBrand explicitly -- indexing the inferred TColumns dropped the brand)", () => {
+		type Ranked = CteRowEnvironment<typeof posts>;
+		type Proj = SelectResult<{ readonly a: Ranked["amountRequired"] }>;
+		expectTypeOf<Proj>().toEqualTypeOf<{ readonly a: number | null }>();
+	});
+
+	it("an object-projected computed field keeps its ReadAs brand outside the CTE", () => {
+		type Ranked = CteRowEnvironment<{
+			readonly rn: ReturnType<typeof count>;
+		}>;
+		type Proj = SelectResult<{ readonly r: Ranked["rn"] }>;
+		expectTypeOf<Proj>().toEqualTypeOf<{ readonly r: bigint | null }>();
 	});
 });
