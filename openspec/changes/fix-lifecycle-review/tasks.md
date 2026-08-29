@@ -378,18 +378,31 @@ settle. Files: `packages/skills/turbo.json`,
 
 ## Verification
 
-- `pnpm check`, `pnpm check-types`, `pnpm test`, `pnpm check:crap`,
-  `pnpm check:tasktime`, `pnpm check:next-marker` all pass — output in
-  the PR body. `check:next-marker` was missing from this list originally
-  (CI caught what the local gate set didn't): `baseline-flag-not-
-  applicable`'s message did have a `Next:` clause, but a comma inside a
-  multi-line comment sitting *between* the call's two arguments split
-  the gate's text-based argument scan wrong, hiding it from the wrong
-  argument slot. Fixed by moving that comment above the call instead of
-  between its arguments — never rely on a comma-free comment as the fix,
-  since the same class of comment could reappear elsewhere.
-- `pnpm --filter @hejbro/pg test:integration` against a real postgres:17,
-  including 1.6's two new witnesses.
+- The gate list is never hand-enumerated from memory or from this file's
+  own prior revisions — read `.github/workflows/ci.yml` fresh each time
+  and run exactly what it runs, for the reason below. As of this
+  revision that's: `pnpm check`, `pnpm check-types`, `pnpm test`,
+  `pnpm build`, `pnpm smoke:pack-install`, `pnpm check:crap` (+ `git diff
+  --exit-code -- README.md`, since the script rewrites README from its
+  own result rather than merely reporting), `pnpm check:tasktime` (same
+  README-diff check), `pnpm changeset status`, `pnpm check:first-
+  release-version`, `pnpm check:next-marker`, `pnpm check:diagnostic-
+  xref` — all pass, output in the PR body.
+- This change's own release-gate history is why the rule above exists:
+  three separate hand-enumerated gate lists were each wrong in turn
+  (a 6-item list missing `check:next-marker` entirely; a `package.json`
+  `check:*` sweep that both missed non-`check:`-prefixed CI steps like
+  `pnpm build`/`smoke:pack-install`/`changeset status` AND wrongly
+  included `check:pnpm-publish-tool`, which isn't in PR CI at all). CI
+  caught what the hand-enumerated set didn't: `baseline-flag-not-
+  applicable`'s message already had a correct `Next:` clause, but a
+  comma inside a multi-line comment sitting *between* the call's two
+  arguments split `check:next-marker`'s text-based (not AST) argument
+  scan wrong, so it validated a truncated fragment of that comment
+  instead of the real message. Fixed by moving the comment above the
+  call entirely, message text unchanged.
+- `pnpm --filter @hejbro/pg test:integration` against a real postgres:17
+  (local-only, not in `ci.yml`), including 1.6's two new witnesses.
 - 5.1's cache reproduction recorded in the PR body.
 - Two one-off flakes were seen during review and did not reproduce:
   `@hejbro/pg`'s integration suite failed wholesale once at `beforeAll`

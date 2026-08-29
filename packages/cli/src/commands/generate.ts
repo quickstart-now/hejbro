@@ -136,7 +136,7 @@ const assertBaselineFlagsApplicable = (
 	// a real "Next:" clause from the gate.
 	throwHejbroError(
 		"baseline-flag-not-applicable",
-		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: to record a change to an already-adopted project, run \`hejbro generate\`.`,
+		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: run \`hejbro generate\` instead to record a change to an already-adopted project.`,
 	);
 };
 
