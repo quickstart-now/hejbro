@@ -375,6 +375,73 @@ side was checked there); chains of three or more branches; the `all`
 variants (`unionAll`/`intersectAll`/`exceptAll`); any Postgres version
 other than 17.11.
 
+## M6 — do differently-named union branches execute? (review-run, postgres:17.11)
+
+Run during review of 7.1 in a throw-away container (`qh-rev-m6`, removed
+afterwards; `test:integration` not run). Measured **before** the closing
+slot because 7.1's corrected set-operation justification cites it, and a
+spec sentence must not rest on a forward citation.
+
+Container:
+
+```
+docker run --rm -d --name qh-rev-m6 -e POSTGRES_PASSWORD=x -P postgres:17
+```
+```
+PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu
+```
+
+SQL run:
+
+```sql
+create table a (email text not null, city text not null);
+create table b (login text not null, town text not null);
+insert into a values ('alice@x.com','Seoul');
+insert into b values ('bob@y.com','Busan');
+select a.email, a.city from a union select b.login, b.town from b;
+```
+
+Server output (verbatim):
+
+```
+    email    | city
+-------------+-------
+ alice@x.com | Seoul
+ bob@y.com   | Busan
+(2 rows)
+```
+
+Result: **accepted.** Every column name differs between the branches and
+the statement still executes; the result takes the **left** branch's
+names. Confirmed through a view as well:
+
+```sql
+create view m6v as select a.email, a.city from a union select b.login, b.town from b;
+select string_agg(column_name, ',' order by ordinal_position)
+  from information_schema.columns where table_name='m6v';
+```
+```
+email,city
+```
+
+**Positive control** (that the instrument reports refusals at all):
+
+```sql
+select a.email from a union select 1 from b;
+```
+```
+ERROR:  42804
+```
+
+So the acceptance above is a real acceptance, not the silence of a
+broken check. Server version `PostgreSQL 17.11`.
+
+**What this settles**: the shipped spec's claim that key-set mismatch is
+refused because "the database would reject the statement" is **false** —
+Postgres matches set-operation branches by position and type, never by
+name. The rule stands on the TypeScript row type being name-keyed, which
+is what 7.1's delta now says.
+
 ## Summary table
 
 | ID | Construct | Result | SQLSTATE / type |

@@ -548,6 +548,16 @@ by reading the code, and it holds whatever the server says.
       "this compiles" is worth little if the thing it compiles to fails
       on the server.
 
+      **Repeat group 1's observations, don't just check for absence of
+      an error.** A witness that only asserts "no error" passes even
+      when the builder emits subtly different SQL — an inserted cast
+      would turn the M3b-i shape into a different case and still run
+      clean. Transferring a measurement means repeating what it
+      observed: M3b-i → accepted **and `pg_typeof` is `numeric`**;
+      M4 → accepted **and the null reaches the row**. Same axis as
+      5.4's discriminating-placement rule: an expected value that would
+      hold anyway proves nothing.
+
       **Written and committed in this group; executed in 7.7's closing
       slot.** Unticked until then, and **append-only at the bottom of
       the file** — 5.4's note explains why. Files:
@@ -577,9 +587,25 @@ by reading the code, and it holds whatever the server says.
       ORM has, and silently taking the left's names is worse than a
       compile error — but it stands on **that** reason, not on a false
       claim about the server. Rewrite the justification accordingly;
-      M6 (7.7) supplies the evidence. Same failure mode as the
-      recursive-term justification this change already corrects, found
-      the same way.
+      **M6 supplies the evidence and has already been measured** — see
+      `measurements.md`'s M6 section, run during review rather than
+      deferred, precisely so this sentence would not rest on a scheduled
+      citation. Same failure mode as the recursive-term justification
+      this change already corrects, found the same way.
+
+      **The sentence to correct is already inside this change's own
+      delta — do not skip the file because it looks written.** Groups
+      6.1 and 6.2 both edited
+      `specs/query-type-inference/spec.md`, so it reads as done; but its
+      `## MODIFIED Requirements` block still carries, at lines 20-23,
+      the shipped text *"…a window function or an aggregate has a
+      different type on each side and is legal on both."* A MODIFIED
+      block **replaces** the shipped requirement at archive time, so
+      leaving it there ships a measurement-falsified sentence **as
+      newly written**. 6.2's own added paragraph is accurate, which
+      means the file currently contradicts itself — the same shape this
+      change found between two shipped specs, reproduced inside one
+      delta.
 
       **The justification correction is asymmetric — write what was
       measured, not a tidy generalization.** The shipped sentence claims
@@ -704,7 +730,15 @@ by reading the code, and it holds whatever the server says.
       loose. This block is **"what passing deltas look like", reverse-
       engineered from one example — not a reading of what `--strict`
       checks.** It exists to make the first attempt likely, not to
-      substitute for the run. Files: those delta files.
+      substitute for the run.
+
+      **One `--strict` rule learned the hard way, recorded so nobody
+      rediscovers it**: when a MODIFIED block carries a requirement
+      forward, its **scenario titles are matched verbatim against the
+      shipped spec**. Renaming a carried-forward scenario — even to
+      describe its own corrected body more accurately — fails with
+      *"MODIFIED … omits scenario(s) the current spec still has"*. Fix
+      the body; keep the title. Files: those delta files.
 - [ ] 7.2 (~8m) `skills/hejbro`: the ordering vocabulary section says
       one thing where it used to say two — concretely **three
       statements**, identified once group 5 landed: (a) a query's
@@ -730,6 +764,20 @@ by reading the code, and it holds whatever the server says.
       user writes against, and a required field on a declaration they
       only ever receive is not that).
 
+      **If a documented example is verified by running it, say what kind
+      of verification that was.** The new ordering examples were checked
+      by compiling and executing them against the real chain surface in
+      a throw-away test that was then deleted — which is a genuine
+      measurement and much stronger than reading them. But it is a
+      **point-in-time check, not a regression guard**: nothing now fails
+      if the example rots. Record that in the commit message or here —
+      *"examples executed at SHA X; no standing guard"* — so a later
+      reader does not ask why the test did not catch a broken example.
+      There is none. (Pinning every skill example with a permanent test
+      is a different, larger question and is not proposed here; the
+      point is only that "verified" and "protected" are different
+      claims.)
+
       **The precise place, located in review**:
       `skills/hejbro/references/dsl-cheatsheet.md:108,126-127` documents
       what `.on(...)` accepts and does **not** state the new
@@ -743,15 +791,16 @@ by reading the code, and it holds whatever the server says.
       in this PR. Then re-run 4.2's grep across the whole repo as the
       final check that no decided word survives anywhere.
 
-      **One stale surface no grep can find**, so it is named here
-      instead: `packages/core/test/query/with-recursive.test.ts`
-      comments at `:87-97` and `:225-227` restate the spec's old
-      justification ("legal on both"). Once 7.1 changes the spec, those
-      comments document a claim the spec no longer makes — the same
-      class of staleness as the skill, but invisible to a search,
-      because every word in them is an ordinary word. Check them by
-      hand. Files: `skills/hejbro/**`,
-      `packages/core/test/query/with-recursive.test.ts`.
+      **A stale surface was suspected here and ruled out** — recorded so
+      it is not re-suspected: `with-recursive.test.ts`'s comments were
+      flagged as possibly restating the spec's old "legal on both"
+      justification. Checked: that phrase does not appear in the file
+      (`rg -n "legal on both"` finds it only in this change's artifacts,
+      the shipped spec and the archive), and the comments there speak
+      only about what `CompatibleRecursiveTerm`/`SameKeys` do and do not
+      see — **type-system claims, not server-legality claims** — so
+      correcting the spec does not make them stale. No edit needed.
+      Files: `skills/hejbro/**`.
 - [ ] 7.3 (~6m) D103's note in
       `docs/specs/2026-08-19-hejbro-design.md`, verbatim: "(amended
       2026-08-29 by harden-query-surface, under the owner's standing
@@ -885,6 +934,15 @@ by reading the code, and it holds whatever the server says.
       of one command, so batching them costs one scheduling round instead
       of three (lead-approved). Tick 5.4 and 6.3 here, never earlier.
 
+      **The witnesses were pre-verified during review, and that does not
+      make running them redundant** — the two answer different
+      questions. Review measured *"this SQL behaves this way on the
+      server"* by reproducing the shapes by hand. This slot measures
+      *"our tests depend on that behaviour"* — that what the builder
+      actually renders reaches the same server, and that the assertions
+      fail when it does not. A shape confirmed by hand still says
+      nothing about whether the committed test exercises it.
+
       **Plus a mutation on the witnesses themselves.** A live witness
       can pass while proving nothing, and reading it will not reveal
       that: 5.4's first draft asserted `desc … nulls first` and expected
@@ -900,15 +958,20 @@ by reading the code, and it holds whatever the server says.
       claimed**. That turns "we chose discriminating cases" from a
       deduction into a measurement.
 
-      **Plus M6, a two-line psql check** (group 3 raised it; it is the
-      evidence 7.1's rewritten set-op justification cites): does
-      `select id, name from a union select id, title from b` execute,
-      and what are the result column names? Expected: accepted, names
-      from the left branch — which is exactly why the shipped
-      justification "the database would reject the statement" is false.
-      Cheap enough to ride along, and this slice does not assert server
-      behavior it has not measured. Record it in `measurements.md` in
-      the same three-part form as group 1.
+      **M6 is no longer part of this slot — it was measured early, and
+      the reason it was is worth keeping.** 7.1's corrected set-op
+      justification cited M6 in three places in the completed tense
+      *before M6 existed*, which is the failure mode this change spent
+      its whole length correcting elsewhere. Review caught the wording,
+      then simply ran the measurement (a two-line psql question needing
+      no slot) rather than leaving a spec sentence resting on a forward
+      citation. It came back **supporting** the delta — differently
+      named branches execute and take the left branch's names, with a
+      positive control showing the instrument still reports refusals.
+      Recorded in `measurements.md`. Had it come back the other way, the
+      delta would have had to be rewritten before the PR; that it did
+      not is luck, not method, and the method is: **do not ship a
+      sentence whose evidence is scheduled.**
 
       **Re-adjudication clause** (the lead's own condition): if any
       witness comes back **red** in this run, the verdict on its group
