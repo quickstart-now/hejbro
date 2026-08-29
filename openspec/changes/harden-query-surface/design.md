@@ -74,6 +74,91 @@ each, not assumed". The qualifier was right and the claim was wrong:
 corrected in `proposal.md`, and it stands as a case of an unverified
 convenience claim surviving into a plan document.
 
+## Surface delta
+
+Six parts, in this order. The structure is stated here rather than
+assumed, because it is otherwise carried in the lead session and a
+reader of this archived file has no way to recover it: **(1)** additions
+and removals with their justification, **(2)** parameter widenings that
+remove an asymmetry, **(3)** the machine checks that hold this
+description true, **(4)** diagnostic naming, **(5)** a one-line verdict,
+**(6)** what was deliberately not added.
+
+### 1. Added and removed, each justified
+
+Justification runs on two axes: **why a user could not compose it** from
+what already exists, and **how the name sits against its siblings**.
+
+| | |
+|---|---|
+| `IndexColumnOrigin` (type) | Not composable — an index column's declaring table is dropped by `toDeclarationColumn` before any check sees it, so nothing downstream could reconstruct it. Named after what it holds, matching `IndexColumn*`. |
+| `OrderedTerm`, `NullsPlacement` (types) | Not composable — ordering had three spellings across two layers and `expr/` may not import `dsl/`, so no user-side type could unify them. Promoted downward so both media consume one shape. |
+| `assertSameSetOpKeyOrder` (function) | **Public for an internal reason, and that is the justification**: `@hejbro/core` and `@hejbro/query` both construct set-operation nodes and must share one implementation. It is not user-facing vocabulary. |
+| **removed:** `countWhere` | A pure duplicate of `count(expr)` under an invented name — `aggregate.ts`'s own rule is that the five aggregates carry Postgres's names verbatim, and this was the only invention. Absent from `@hejbro/core@0.1.1`, so nothing released moves. |
+
+### 2. Parameter widenings — asymmetries removed
+
+- `count()` → `count(operand?)`. Two names for one operation collapse to
+  one; the argument form is SQL's own spelling.
+- `OrderTermInput` accepts `asc()`/`desc()` with `nulls`. Three
+  vocabularies (declaration, query, window) become one — the barrel
+  already exported `asc`/`desc`, and `orderBy` simply refused them.
+
+### 3. Machine checks holding this description true
+
+- **Exact-set export assertion** — the barrel's export set is pinned, so
+  an *unintended* addition fails too, not only a removal.
+- **Type-only import block** — `tsc` carries the type axis, so the
+  narrowings below are checked rather than described.
+- **0.1.1-era snapshot decode test** — `OrderByTerm` is a released
+  serialized shape, so the additive-compact claim is executed.
+- Per-site mutations proved each of the three set-op construction sites
+  is guarded individually, rather than one test appearing to cover all.
+
+### 4. Diagnostic naming
+
+Two codes, one family, and the split is semantic rather than cosmetic:
+`set-op-key-set-mismatch` (different keys, including a missing one) and
+`set-op-key-order-mismatch` (same keys, wrong order). **Discrimination
+order is load-bearing** — sets are compared first, so the order code is
+only ever raised where reordering actually helps. Reversed, the code
+would stop pointing at its own remedy. `foreign-column-ref` is reused,
+not added: #464's case joins a family that already had three members.
+
+### 5. Verdict
+
+Five defects closed; three types and one function added, one function
+removed for a net reduction in vocabulary; two new diagnostics whose
+discrimination order is itself machine-enforced; one consumption site
+touched outside `@hejbro/core`.
+
+### 6. Deliberately not added
+
+- A real `FILTER (WHERE …)` aggregate — **#501**. A rename must not
+  carry a new capability in behind it.
+- Cross-family set-operation rejection — **#503**. The server refuses
+  these loudly, so it is a late failure worth moving earlier rather than
+  silent corruption; and adding it would leave #489's own case (within
+  one family) still uncaught while looking like #489 had been handled.
+- A decode-path guard — stated as a boundary, with both input surfaces
+  named.
+- A directional same-family type rule — **#489's residue, #500**. Every
+  numeric SQL type shares one family, so the family system cannot
+  express the direction at all.
+- The `.$type<T>()` brand axis — out of scope and recorded as such;
+  since no rule tightened, it is not a defect today.
+
+### Appendix (not part of the six)
+
+**New compile-time refusals**: mismatched key sets in core's `union()`
+family; branch column-order mismatch at all three construction sites;
+an index column belonging to another table, including the same-named
+case. No new refusal on recursive-term types — that outcome was "not
+expressible", not "not attempted".
+
+**Snapshot format**: `OrderByTerm.nulls` is additive-compact and
+`formatVersion` stays 8.
+
 ## Task durations: none recorded, and why
 
 **Decided 2026-08-30 by the lead session, under the owner's standing
