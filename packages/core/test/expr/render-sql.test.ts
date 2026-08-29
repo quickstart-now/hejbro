@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ExprNode } from "../../src/index";
-import { renderExpr } from "../../src/index";
+import type { ExprNode, SelectNode } from "../../src/index";
+import { renderExpr, renderSelect } from "../../src/index";
 
 const publishedAt: ExprNode = {
 	nodeKind: "columnRef",
@@ -105,5 +105,51 @@ describe("renderExpr", () => {
 			}),
 		).toBe('char_length("app"."posts"."status") > 3');
 		expect(renderExpr({ nodeKind: "rawSql", sql: "1 = 1" })).toBe("1 = 1");
+	});
+});
+
+// #444 F2: renderSelectClauses' own mentionedRefs list missed
+// groupBy/having/distinct on -- a foreign reference there used to render
+// wrong SQL instead of throwing.
+describe("renderSelect scope checks (#444 F2)", () => {
+	const outside: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "comments",
+		columnName: "id",
+	};
+	const baseQuery: SelectNode = {
+		queryKind: "select",
+		projection: { projectionKind: "constantOne" },
+		from: { schemaName: "app", tableName: "posts" },
+		joins: [],
+		where: null,
+		groupBy: [],
+		having: null,
+		orderBy: [],
+		limit: null,
+		offset: null,
+		distinct: null,
+	};
+
+	it("throws foreign-column-ref for a groupBy reference outside scope", () => {
+		expect(() =>
+			renderSelect({ ...baseQuery, groupBy: [outside] }),
+		).toThrowError(expect.objectContaining({ code: "foreign-column-ref" }));
+	});
+
+	it("throws foreign-column-ref for a having reference outside scope", () => {
+		expect(() => renderSelect({ ...baseQuery, having: outside })).toThrowError(
+			expect.objectContaining({ code: "foreign-column-ref" }),
+		);
+	});
+
+	it("throws foreign-column-ref for a distinct on reference outside scope", () => {
+		expect(() =>
+			renderSelect({
+				...baseQuery,
+				distinct: { distinctKind: "on", columns: [outside] },
+			}),
+		).toThrowError(expect.objectContaining({ code: "foreign-column-ref" }));
 	});
 });

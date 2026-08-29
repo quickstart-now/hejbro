@@ -5,19 +5,18 @@ import type {
 	ExprNode,
 	FunctionCallNode,
 	InListNode,
-	JoinNode,
 	LiteralNode,
 	LogicalNode,
 	NotNode,
 	NullTestNode,
 	OrderByTerm,
-	ProjectionNode,
 	SelectExprNode,
 	SelectNode,
 	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
 } from "@hejbro/core";
+import { replaceSelectChildExprs, selectChildExprs } from "@hejbro/core";
 
 // This file stays one module on purpose, past the ~300-line guideline:
 // `liftExprNode` and `liftSelectNode` below are mutually recursive by
@@ -335,87 +334,6 @@ export const liftExprNode = (
 	return handler(node, startIndex);
 };
 
-const liftProjectionColumns = (
-	columns: ReadonlyArray<{ readonly alias: string; readonly expr: ExprNode }>,
-	startIndex: number,
-): Lifted<ReadonlyArray<{ readonly alias: string; readonly expr: ExprNode }>> =>
-	columns.reduce<
-		Lifted<ReadonlyArray<{ readonly alias: string; readonly expr: ExprNode }>>
-	>(
-		(acc, column) => {
-			const lifted = liftExprNode(column.expr, startIndex + acc.params.length);
-			return {
-				node: [...acc.node, { alias: column.alias, expr: lifted.node }],
-				params: [...acc.params, ...lifted.params],
-			};
-		},
-		{ node: [], params: [] },
-	);
-
-const liftColumnsProjection = (
-	projection: Extract<ProjectionNode, { readonly projectionKind: "columns" }>,
-	startIndex: number,
-): Lifted<ProjectionNode> => {
-	const lifted = liftProjectionColumns(projection.columns, startIndex);
-	return {
-		node: { ...projection, columns: lifted.node },
-		params: lifted.params,
-	};
-};
-
-const liftUnchangedProjection = (
-	projection: ProjectionNode,
-): Lifted<ProjectionNode> => ({ node: projection, params: [] });
-
-// One handler per `ProjectionNode["projectionKind"]` — only an object
-// projection has an expression to lift.
-const projectionLiftHandlers: {
-	readonly [K in ProjectionNode["projectionKind"]]: (
-		projection: Extract<ProjectionNode, { readonly projectionKind: K }>,
-		startIndex: number,
-	) => Lifted<ProjectionNode>;
-} = {
-	allColumns: liftUnchangedProjection,
-	constantOne: liftUnchangedProjection,
-	columns: liftColumnsProjection,
-};
-
-const liftProjection = (
-	projection: ProjectionNode,
-	startIndex: number,
-): Lifted<ProjectionNode> => {
-	const handler = projectionLiftHandlers[projection.projectionKind] as (
-		projection: ProjectionNode,
-		startIndex: number,
-	) => Lifted<ProjectionNode>;
-	return handler(projection, startIndex);
-};
-
-const liftJoins = (
-	joins: ReadonlyArray<JoinNode>,
-	startIndex: number,
-): Lifted<ReadonlyArray<JoinNode>> =>
-	joins.reduce<Lifted<ReadonlyArray<JoinNode>>>(
-		(acc, join) => {
-			const lifted = liftExprNode(join.on, startIndex + acc.params.length);
-			return {
-				node: [...acc.node, { ...join, on: lifted.node }],
-				params: [...acc.params, ...lifted.params],
-			};
-		},
-		{ node: [], params: [] },
-	);
-
-const liftWhere = (
-	where: ExprNode | null,
-	startIndex: number,
-): Lifted<ExprNode | null> => {
-	if (where === null) {
-		return { node: null, params: [] };
-	}
-	return liftExprNode(where, startIndex);
-};
-
 const liftOrderBy = (
 	terms: ReadonlyArray<OrderByTerm>,
 	startIndex: number,
@@ -431,15 +349,6 @@ const liftOrderBy = (
 		{ node: [], params: [] },
 	);
 
-/**
- * Lifts a whole {@link SelectNode} in render order — projection, `from`
- * (a table reference only, nothing to lift), joins, `where`, `orderBy` —
- * so `$n` numbering matches the order each literal appears in the
- * rendered SQL. `limit` is never touched: the builder already validated
- * it as a non-negative integer, and the compiler contract inlines it
- * (owner-settled, 2026-08-26). Exported for `liftExistsNode` above and for
- * `select.ts`'s `compileSelect`.
- */
 /** Lifts a set-operation statement: left branch, then right, then the whole-set orderBy — matching the operator's own render order so `$n` numbering follows the SQL text (add-set-operations). */
 export const liftSetOpNode = (
 	node: SetOpNode,
@@ -472,36 +381,54 @@ const liftQueryBranch = (
 	return liftSelectNode(branch, startIndex);
 };
 
+/**
+ * Lifts a whole {@link SelectNode} by walking {@link selectChildExprs} in
+ * its own render order — `distinct on`, projection, joins, `where`,
+ * `groupBy`, `having`, `orderBy` (#444 F1: every clause, not the
+ * projection/joins/where/orderBy subset this used to hand-list, which
+ * left a literal inside `groupBy`/`having`/`distinct on` spliced into
+ * the SQL text instead of becoming a bind parameter) — so `$n` numbering
+ * matches the order each literal appears in `render-sql.ts`'s rendered
+ * SQL. `from`/`limit`/`offset`/`queryKind` are never touched: `from` is
+ * a table reference (nothing to lift), and the compiler contract inlines
+ * `limit`/`offset` as validated non-negative integers (owner-settled,
+ * 2026-08-26). Exported for `liftExistsNode` above and for `select.ts`'s
+ * `compileSelect`.
+ *
+ * **Known consequence of F1, found by the live witness
+ * (`packages/pg/test/integration.test.ts`), not a defect in this
+ * function**: `distinct on` and the leading `order by` are lifted
+ * independently, each literal getting its own `$n`. Postgres's own
+ * `DISTINCT ON expressions must match initial ORDER BY expressions`
+ * rule compares the parsed expression tree, so the SAME authored
+ * literal repeated in both clauses now compiles to two DIFFERENT `$n`
+ * placeholders and Postgres rejects the statement — where the old,
+ * spec-violating spliced text happened to be byte-identical in both
+ * places and so matched. A `columnRef` (the ordinary `distinctOn(t.a)
+ * .orderBy(t.a)` shape) is unaffected: nothing about a `columnRef` is
+ * ever lifted, so both clauses render the exact same text either way.
+ * Deduplicating identical literals into one shared `$n` would fix it
+ * and is deliberately not done here — sequential numbering with no
+ * deduplication is the owner-settled compiler contract (2026-08-26), so
+ * changing that is a separate decision, not a side effect of this fix
+ * (tracked in #450, not a 0.2.0 gate).
+ */
 export const liftSelectNode = (
 	node: SelectNode,
 	startIndex: number,
 ): Lifted<SelectNode> => {
-	const projection = liftProjection(node.projection, startIndex);
-	const joins = liftJoins(node.joins, startIndex + projection.params.length);
-	const where = liftWhere(
-		node.where,
-		startIndex + projection.params.length + joins.params.length,
-	);
-	const orderBy = liftOrderBy(
-		node.orderBy,
-		startIndex +
-			projection.params.length +
-			joins.params.length +
-			where.params.length,
+	const lifted = selectChildExprs(node).reduce<Lifted<ReadonlyArray<ExprNode>>>(
+		(acc, expr) => {
+			const result = liftExprNode(expr, startIndex + acc.params.length);
+			return {
+				node: [...acc.node, result.node],
+				params: [...acc.params, ...result.params],
+			};
+		},
+		{ node: [], params: [] },
 	);
 	return {
-		node: {
-			...node,
-			projection: projection.node,
-			joins: joins.node,
-			where: where.node,
-			orderBy: orderBy.node,
-		},
-		params: [
-			...projection.params,
-			...joins.params,
-			...where.params,
-			...orderBy.params,
-		],
+		node: replaceSelectChildExprs(node, lifted.node),
+		params: lifted.params,
 	};
 };

@@ -66,17 +66,32 @@ const resolveIntervalLift = (
 
 /**
  * The serialized JSON text for `value` against `typeNode`, or `undefined`
- * when this isn't a json write. Every JSON-serializable value is admitted,
- * objects and arrays included: the ambiguity `liftLiteral` refuses to
- * guess at (array literal vs jsonb) is not an ambiguity here, because the
- * column's declared type already answered it. Same split-for-complexity
+ * when this isn't a json write (including a written `null`, #444 F4).
+ * Every OTHER JSON-serializable value is admitted, objects and arrays
+ * included: the ambiguity `liftLiteral` refuses to guess at (array
+ * literal vs jsonb) is not an ambiguity here, because the column's
+ * declared type already answered it. Same split-for-complexity
  * reasoning as {@link resolveArrayLift}.
+ *
+ * `null` falls through to `liftOperand` instead, the same way {@link
+ * resolveIntervalLift}'s `isPlainObject` guard already excludes it —
+ * `null` is how every other column type spells absence, and `JSON.
+ * stringify(null)` would instead write the JSON document `'null'`,
+ * invisible to `is null` and satisfying a `notNull` constraint. The JSON
+ * document `null` stays reachable through the `sql` escape hatch
+ * (``sql`'null'::jsonb` ``). `undefined` keeps its existing, different
+ * meaning (the key is absent from the write) — this resolver never sees
+ * it at all, since `MutationValue`'s own optional-key handling drops an
+ * absent key before any resolver runs.
  */
 const resolveJsonLift = (
 	typeNode: TypeNode,
 	value: unknown,
 ): string | undefined => {
 	if (typeNode.typeName !== "json" && typeNode.typeName !== "jsonb") {
+		return undefined;
+	}
+	if (value === null) {
 		return undefined;
 	}
 	return JSON.stringify(value);

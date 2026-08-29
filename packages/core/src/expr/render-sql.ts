@@ -30,6 +30,7 @@ import type {
 	UpdateNode,
 } from "./ast";
 import { renderLiteral } from "./literal";
+import { selectChildExprs } from "./select-children";
 
 /** Composite node kinds that must be parenthesized when used as an operand. */
 const compositeNodeKinds = new Set([
@@ -334,22 +335,6 @@ const distinctKeyword = (
 	return `select distinct on (${columns})`;
 };
 
-const collectProjectionRefs = (
-	projection: ProjectionNode,
-): ReadonlyArray<ColumnRefNode> => {
-	switch (projection.projectionKind) {
-		case "allColumns":
-		case "constantOne":
-			return [];
-		case "columns":
-			return projection.columns.flatMap((entry) =>
-				collectColumnRefs(entry.expr),
-			);
-		default:
-			return assertNever(projection);
-	}
-};
-
 const renderProjection = (
 	projection: ProjectionNode,
 	scope: ReadonlyArray<TableRefNode>,
@@ -443,12 +428,11 @@ const renderSelectClauses = (
 		...(outerScope ?? []),
 	];
 
-	const mentionedRefs = [
-		...collectProjectionRefs(query.projection),
-		...query.joins.flatMap((join) => collectColumnRefs(join.on)),
-		...collectWhereRefs(query.where),
-		...query.orderBy.flatMap((term) => collectColumnRefs(term.expr)),
-	];
+	// #444 F2: every clause's refs, via the same table walk.ts/params.ts
+	// consume — a hand-written list here is exactly what let
+	// groupBy/having/distinct on's refs go unchecked when #438/#443 added
+	// them.
+	const mentionedRefs = selectChildExprs(query).flatMap(collectColumnRefs);
 	assertInScope(scope, mentionedRefs, "select from", query.from);
 
 	const joinsSql = query.joins

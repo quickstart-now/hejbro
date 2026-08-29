@@ -361,6 +361,54 @@ describe("json/jsonb + bytea raw writes (#425 -- the declaration says which type
 	});
 });
 
+// #444 F4: a written `null` used to reach a json/jsonb column as the JSON
+// document `null` (`'null'::jsonb`), not SQL NULL -- invisible to `is
+// null` and satisfying a `notNull` constraint. `payload` is nullable
+// here (unlike `documents.payload` above) specifically so `null` is a
+// legal write to test against.
+const settings = table(app, "settings", {
+	id: uuid().primaryKey(),
+	payload: jsonb(),
+});
+
+describe("json/jsonb null writes (#444 F4)", () => {
+	it("values({payload: null}) compiles to a null parameter, not a 'null' document", () => {
+		const query = insert(settings)
+			.values({ payload: null })
+			.returning({ id: settings.id });
+		const sqlText = renderQuery(query.insertQuery);
+		expect(sqlText).not.toContain("'null'");
+		const payloadIndex = query.insertQuery.columnNames.indexOf("payload");
+		expect(query.insertQuery.rows[0]?.[payloadIndex]).toEqual({
+			nodeKind: "literal",
+			literal: { literalKind: "null" },
+		});
+	});
+
+	it("the sql escape hatch still writes a JSON null document", () => {
+		const query = insert(settings)
+			.values({ payload: sql`'null'::jsonb` })
+			.returning({ id: settings.id });
+		const sqlText = renderQuery(query.insertQuery);
+		expect(sqlText).toContain("'null'::jsonb");
+	});
+
+	// The spec delta's own "a notNull column refuses it" half is a TYPE-
+	// level claim, not a runtime one: core's own MutationRow/MutationValue
+	// accept `null` for EVERY column unconditionally by design ("unlike
+	// comparisons, null is a legal write", ast.ts's own MutationValue doc)
+	// -- `notNull` narrows which KEYS a row must supply, never which
+	// VALUES a column's write type accepts, so it is `@hejbro/query`'s
+	// InsertInput/UpdateInput (InsertColumnValue's `Exclude<
+	// MutationValue<TColumn>, null>` for a notNull column) that actually
+	// owns this rejection, not anything in this package. See
+	// `packages/query/test/types/insert-input.test.ts` — "a notNull
+	// jsonb column's write type rejects null (#444 F4 spec delta)",
+	// alongside the pre-existing generic case ("notNull still forbids an
+	// explicit null value...") that already proved the same exclusion
+	// for a plain text column.
+});
+
 // harden-query-layer #322 task 2.3 fork-1 fix: `.array()` always sets its
 // own column's family to `"array"` (`column-builder.ts`'s own `array()`
 // return type), regardless of the wrapped element's family -- so

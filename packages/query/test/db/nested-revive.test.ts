@@ -1,15 +1,18 @@
 import {
 	bigint,
 	bytea,
+	count,
 	date as dateColumn,
 	eq,
 	interval,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	max,
 	numeric,
 	schema,
 	select,
 	sql,
+	sum,
 	table,
 	text,
 	timestamptz,
@@ -310,5 +313,240 @@ describe("grandchild revive (g3 review F4 -- kills the nested-plan recursion mut
 		}>;
 		const grandchild = threads[0]?.parent;
 		expect(grandchild?.viewTotal).toBe(9007199254740993n);
+	});
+});
+
+// #444 F6 task 6.2: characterize which aggregate cell shapes inside a
+// nested read actually come back wrong before fixing anything.
+// withJsonSafeCasts' at-risk cast (select.ts) is columnRef-only, so a
+// bigint-typed aggregate cell in a jsonArrayFrom/jsonObjectFrom
+// projection compiles WITHOUT the ::text cast that carries the value
+// through JSON transport losslessly -- convert.ts's columnStateForExpr
+// already resolves count()/min()/max()'s declared bigint state
+// correctly (a JS-side revive concern, separate from this SQL-level
+// cast), so it WILL attempt BigInt(rawJsonValue) on whatever the
+// uncast JSON number already lost precision to. sum()/avg() are never
+// converted by convert.ts at all (PASSTHROUGH_AGGREGATES excludes
+// them, deliberately -- Postgres's own promotion table isn't modeled),
+// so they never claim a wrong bigint either way, cast or not.
+describe("aggregate cell casts inside a nested read, characterized (#444 F6 task 6.2)", () => {
+	it("an aggregate cell in a nested read survives past 2^53", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "0b0e5b3e-0000-4000-8000-000000000001", stats: [] }],
+		});
+		const handle = db({ app, posts, comments }, driver);
+		await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select(
+						{ maxViews: max(comments.viewCount), total: count() },
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		const sentSql = topLevelSent[0]?.sql ?? "";
+		// at risk, and convert.ts DOES try to revive both as bigint: must
+		// be cast, so a real server hands back text, not a lossy number.
+		expect(sentSql).toContain('max("app"."comments"."view_count")::text');
+		expect(sentSql).toContain("count(*)::text");
+	});
+
+	it("sum() is never converted by convert.ts, cast or not -- already safe from the wrong-bigint defect", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "0b0e5b3e-0000-4000-8000-000000000001", stats: [] }],
+		});
+		const handle = db({ app, posts, comments }, driver);
+		await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select({ total: sum(comments.viewCount) }, comments).where(
+						eq(comments.postId, posts.id),
+					),
+				),
+			},
+			posts,
+		);
+		const sentSql = topLevelSent[0]?.sql ?? "";
+		expect(sentSql).toContain('sum("app"."comments"."view_count")');
+		expect(sentSql).not.toContain('sum("app"."comments"."view_count")::text');
+	});
+});
+
+// #444 F6 follow-up (found live, task 7.3): the ::text cast alone was not
+// enough -- convert.ts's own uncast() only recognized a cast-wrapped
+// columnRef, so a cast-wrapped aggregate (functionCall) fell through
+// columnStateForExpr unresolved and the now-text value arrived un-revived
+// (a string, not a bigint). uncast() now sees through any cast-wrapped
+// expr, not columnRef only.
+describe("a cast aggregate cell actually revives, not just compiles cast (#444 F6 live-witness follow-up)", () => {
+	it("a cast max(bigint)/count() cell in a nested read revives to bigint, not a string", async () => {
+		const rawRow = {
+			id: "0b0e5b3e-0000-4000-8000-000000000001",
+			stats: [
+				{
+					// biome-ignore lint/style/useNamingConvention: models the real json child key (the projection's own alias).
+					max_views: "9007199254740993",
+					total: "2",
+				},
+			],
+		};
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ app, posts, comments }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select(
+						{ maxViews: max(comments.viewCount), total: count() },
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		const stat = rows[0]?.stats[0];
+		expect(stat?.maxViews).toBe(9007199254740993n);
+		expect(stat?.total).toBe(2n);
+	});
+
+	// #444 F6 spec delta -- "Scenario: An explicit user cast is left
+	// alone": a caller's OWN `` sql`${max(t.a)}::text` `` is an
+	// instruction ("give me text"), not the compiler's own at-risk
+	// encoding, so it is deliberately never undone -- unlike
+	// hejbro's own cast (the test above), this one keeps its
+	// as-written text shape. Pins the behavior the group-8 red test
+	// found (a user-authored template never matches the compiler's
+	// own two-chunk cast shape, see convert.ts's `castTarget`) now
+	// that it is specified, not just true by accident.
+	it("a user-authored sql cast (interpolating an aggregate, ::text) in a nested read stays text, not revived", async () => {
+		const rawRow = {
+			id: "0b0e5b3e-0000-4000-8000-000000000001",
+			// biome-ignore lint/style/useNamingConvention: models the real json child key (the projection's own rendered SQL alias, snake_case).
+			stats: [{ max_views: "9007199254740993" }],
+		};
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ app, posts, comments }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select(
+						{ maxViews: sql`${max(comments.viewCount)}::text` },
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		expect(rows[0]?.stats[0]?.maxViews).toBe("9007199254740993");
+	});
+});
+
+/**
+ * #444 F6 group-8 follow-up: `select.ts`'s cast decision
+ * (`atRiskCastSuffix`) and `convert.ts`'s revive decision
+ * (`columnStateForExpr`/`aggregateColumnState`) are two hand-written
+ * classifications of the same vocabulary (`count`/`min`/`max` cast+
+ * revive, `sum`/`avg` neither) living in two different packages with no
+ * shared source — exactly the kind of duplication this whole change
+ * exists to close everywhere else. There is no single export either
+ * side could re-derive the other from without crossing the core/query
+ * purity boundary (`select.ts`'s classification is core-only;
+ * `convert.ts`'s is query-only, keyed off `Declarations["tables"]` core
+ * never sees), so this test asserts their AGREEMENT observably instead
+ * of unifying the source: for each of the three shapes below,
+ * "select.ts cast it" and "convert.ts revived it to bigint" must be the
+ * same boolean.
+ *
+ * **This is a fixed-shape regression test, not a ratchet** — unlike
+ * `select-children.ts`'s type-level guarantee elsewhere in this change,
+ * nothing here is derived from either side's actual classification set,
+ * because neither is exported. It catches the two known sides
+ * disagreeing about `count`/`max`/`sum` specifically; it does NOT catch
+ * a genuinely new aggregate shape being taught to one side (a cast
+ * added to `select.ts`, say) without a matching case added here AND to
+ * `convert.ts` — that drift needs a human to remember to extend this
+ * file, the same manual-sync risk this whole piece exists to close
+ * everywhere it *can* be closed structurally.
+ */
+describe("select.ts casts iff convert.ts revives (#444 F6 drift guard)", () => {
+	// a past-2^53 value, delivered as text: distinguishes "revived as
+	// bigint" (exact) from "passed through as a plain JS value" (a
+	// string arriving un-revived stays exactly this string, never
+	// becomes the bigint).
+	const rawTextValue = "9007199254740993";
+
+	const agreementFor = async (
+		alias: string,
+		stats: Parameters<typeof jsonArrayFrom>[0],
+	): Promise<{
+		readonly wasCast: boolean;
+		readonly wasRevivedToBigint: boolean;
+	}> => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [
+				{
+					id: "0b0e5b3e-0000-4000-8000-000000000001",
+					stats: [{ [alias]: rawTextValue }],
+				},
+			],
+		});
+		const handle = db({ app, posts, comments }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(stats),
+			},
+			posts,
+		);
+		const sentSql = topLevelSent[0]?.sql ?? "";
+		const revivedValue = (
+			rows[0]?.stats[0] as Record<string, unknown> | undefined
+		)?.[alias];
+		return {
+			wasCast: sentSql.includes("::text"),
+			wasRevivedToBigint: typeof revivedValue === "bigint",
+		};
+	};
+
+	it("count(): cast and revive both true", async () => {
+		const result = await agreementFor(
+			"total",
+			select({ total: count() }, comments).where(eq(comments.postId, posts.id)),
+		);
+		expect(result.wasCast).toBe(true);
+		expect(result.wasRevivedToBigint).toBe(true);
+	});
+
+	// single-word aliases throughout this describe (no camelCase hump) so
+	// the raw driver row's own key and the converted row's resultKey are
+	// spelled identically -- a hump (e.g. "maxViews") renders as a
+	// different snake_case SQL alias ("max_views") than the camelCase
+	// resultKey the converted row carries, which is a real, separate
+	// naming-translation concern this drift guard isn't about.
+	it("max(bigintColumn): cast and revive both true", async () => {
+		const result = await agreementFor(
+			"biggest",
+			select({ biggest: max(comments.viewCount) }, comments).where(
+				eq(comments.postId, posts.id),
+			),
+		);
+		expect(result.wasCast).toBe(true);
+		expect(result.wasRevivedToBigint).toBe(true);
+	});
+
+	it("sum(bigintColumn): cast and revive both false", async () => {
+		const result = await agreementFor(
+			"summed",
+			select({ summed: sum(comments.viewCount) }, comments).where(
+				eq(comments.postId, posts.id),
+			),
+		);
+		expect(result.wasCast).toBe(false);
+		expect(result.wasRevivedToBigint).toBe(false);
 	});
 });

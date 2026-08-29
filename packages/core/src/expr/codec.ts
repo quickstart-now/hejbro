@@ -425,6 +425,28 @@ const encodeDistinct = (distinct: DistinctNode | null): JsonValue => {
 	};
 };
 
+/**
+ * `columns` for a `distinctKind: "on"` node — unlike `groupBy`'s own
+ * missing-vs-malformed leniency below, a MISSING `columns` here is
+ * never history (#444 review R4): no v8 version ever encoded
+ * `distinctKind: "on"` without one — `distinctOn()` itself already
+ * rejects an empty input as `empty-distinct-on`, and `encodeDistinct`
+ * always writes `columns` when it writes `distinctKind: "on"` at all —
+ * so a missing key here is corruption, not an old file, the same
+ * distinction F7's own leniency rule draws everywhere else. Decoding it
+ * as `[]` would manufacture `distinct on ()`, a node `render-sql.ts`
+ * cannot render, moving the diagnostic away from where the corruption
+ * actually is.
+ */
+const decodeDistinctOnColumns = (
+	node: Record<string, JsonValue>,
+): ReadonlyArray<ExprNode> => {
+	if (node.columns === undefined) {
+		return unknownDiscriminator("columns", "undefined");
+	}
+	return decodeExprArrayField(node, "columns");
+};
+
 const decodeDistinct = (value: JsonValue): DistinctNode | null => {
 	if (value === null) {
 		return null;
@@ -439,7 +461,7 @@ const decodeDistinct = (value: JsonValue): DistinctNode | null => {
 	}
 	return {
 		distinctKind: "on",
-		columns: (node.columns as ReadonlyArray<JsonValue>).map(decodeExprNode),
+		columns: decodeDistinctOnColumns(node),
 	};
 };
 
@@ -761,6 +783,37 @@ const decodeWhere = (where: JsonValue): ExprNode | null => {
 	return decodeExprNode(where);
 };
 
+/**
+ * A missing clause field (a v8 snapshot written before #443 added
+ * `groupBy`) decodes to its empty value, `[]` — a present-but-not-an-
+ * array one still fails through the same coded `unknownDiscriminator`
+ * every other malformed field hits, never a raw `TypeError` (#444 F7,
+ * the read half of the #412/#413 snapshot upgrade-path obligation). Not
+ * a version bump: v8 was extended in place (#443), so an old v8 file is
+ * exactly the case this leniency exists for.
+ */
+const decodeExprArrayField = (
+	node: Record<string, JsonValue>,
+	key: string,
+): ReadonlyArray<ExprNode> => {
+	const value = node[key];
+	if (value === undefined) {
+		return [];
+	}
+	if (!Array.isArray(value)) {
+		return unknownDiscriminator(key, JSON.stringify(value));
+	}
+	return value.map(decodeExprNode);
+};
+
+/** Same missing-vs-malformed leniency as {@link decodeExprArrayField}, for a single-`ExprNode`-or-`null` field (`having`) — a missing key decodes to `null`, same as an explicit `null` already does. */
+const decodeOptionalWhere = (value: JsonValue | undefined): ExprNode | null => {
+	if (value === undefined) {
+		return decodeWhere(null);
+	}
+	return decodeWhere(value);
+};
+
 /** `SetOpNode.operator` values are verbatim SQL keywords and already kebab-safe; only the `queryKind` discriminator needs the camel↔kebab map (`setOp` ↔ `set-op`, D57/D70). */
 export const encodeSetOpNode = (node: SetOpNode): JsonValue => ({
 	queryKind: "set-op",
@@ -826,11 +879,11 @@ export const decodeSelectNode = (value: JsonValue): SelectNode => {
 		from: decodeTableRef(node.from as JsonValue),
 		joins: (node.joins as ReadonlyArray<JsonValue>).map(decodeJoin),
 		where: decodeWhere(node.where as JsonValue),
-		groupBy: (node.groupBy as ReadonlyArray<JsonValue>).map(decodeExprNode),
-		having: decodeWhere(node.having as JsonValue),
+		groupBy: decodeExprArrayField(node, "groupBy"),
+		having: decodeOptionalWhere(node.having),
 		orderBy: (node.orderBy as ReadonlyArray<JsonValue>).map(decodeOrderByTerm),
-		limit: node.limit as number | null,
-		offset: node.offset as number | null,
-		distinct: decodeDistinct(node.distinct as JsonValue),
+		limit: (node.limit ?? null) as number | null,
+		offset: (node.offset ?? null) as number | null,
+		distinct: decodeDistinct((node.distinct ?? null) as JsonValue),
 	};
 };

@@ -444,6 +444,70 @@ describe('retargetSelectNode with a "columns" projection (defineView\'s own colu
 	});
 });
 
+// #444 F3: retargetSelectNode used to hand-list projection/from/joins/
+// where/orderBy only, missing groupBy/having/distinct on -- a rename left
+// stale identifiers behind in those three clauses.
+describe("retargetSelectNode groupBy/having/distinctOn (#444 F3)", () => {
+	const renamedRef: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "posts",
+		columnName: "title",
+	};
+	const buildQuery = (fields: {
+		readonly groupBy?: ReadonlyArray<ExprNode>;
+		readonly having?: ExprNode | null;
+		readonly distinct?: SelectNode["distinct"];
+	}): SelectNode => ({
+		queryKind: "select",
+		projection: { projectionKind: "allColumns", columnNames: ["id"] },
+		from: { schemaName: "app", tableName: "posts" },
+		joins: [],
+		where: null,
+		groupBy: fields.groupBy ?? [],
+		having: fields.having ?? null,
+		orderBy: [],
+		limit: null,
+		offset: null,
+		distinct: fields.distinct ?? null,
+	});
+
+	it("retargets a column reference inside groupBy/having/distinctOn", () => {
+		const query = buildQuery({
+			groupBy: [renamedRef],
+			having: renamedRef,
+			distinct: { distinctKind: "on", columns: [renamedRef] },
+		});
+		const retargeted = retargetSelectNode(query, columnRenameTarget);
+		const renamed: ExprNode = { ...renamedRef, columnName: "headline" };
+		expect(retargeted.groupBy).toEqual([renamed]);
+		expect(retargeted.having).toEqual(renamed);
+		expect(retargeted.distinct).toEqual({
+			distinctKind: "on",
+			columns: [renamed],
+		});
+	});
+
+	it("returns the exact same reference when groupBy/having/distinctOn mention no renamed column", () => {
+		const unrelated: ExprNode = {
+			nodeKind: "columnRef",
+			schemaName: "app",
+			tableName: "posts",
+			columnName: "id",
+		};
+		const query = buildQuery({
+			groupBy: [unrelated],
+			having: unrelated,
+			distinct: { distinctKind: "on", columns: [unrelated] },
+		});
+		const retargeted = retargetSelectNode(query, columnRenameTarget);
+		expect(retargeted).toBe(query);
+		expect(retargeted.groupBy).toBe(query.groupBy);
+		expect(retargeted.having).toBe(query.having);
+		expect(retargeted.distinct).toBe(query.distinct);
+	});
+});
+
 describe("set-op retarget (add-set-operations task 1.4)", () => {
 	it("retargets both branches and returns the same reference when unrelated", () => {
 		const base: SetOpNode = {

@@ -604,11 +604,46 @@ const convertCell = (
  * shape, so an extra driver-side key is dropped, not an error.
  */
 /**
- * Sees through the F1 cast wrapper (`sqlTemplate` of exactly
- * `[columnRef, "::text" | "::text[]"]`, baked by `jsonArrayFrom`/
- * `jsonObjectFrom` at build time) so a cast column still resolves its
- * declared state — without this, exactly the columns the cast protects
- * (bigint/numeric) would arrive as unrevived text.
+ * Sees through the F1/F6 cast wrapper (`sqlTemplate` of exactly
+ * `[expr, "::text" | "::text[]"]`, baked by `jsonArrayFrom`/
+ * `jsonObjectFrom` at build time) so a cast column OR a cast aggregate
+ * cell (`count()`/`min`/`max`, #444 F6) still resolves its declared
+ * state — without this, exactly the cells the cast protects
+ * (bigint/numeric columns, and now bigint-typed aggregates) would
+ * arrive as unrevived text instead of the typed value the cast exists
+ * to deliver losslessly.
+ *
+ * **Deliberately not restricted to `columnRef`** (group 8 review): the
+ * rule is "whatever sits inside a `[expr, '::text']` cast wrapper
+ * revives via `columnStateForExpr`'s own dispatch for that expr's
+ * shape", not an enumerated `columnRef | functionCall` allowlist — a
+ * closed list is exactly the class of bug this whole change (#444)
+ * exists to close.
+ *
+ * **Correction (group 8 follow-up, caught by a red test):** this was
+ * first written believing a caller's own `` sql`${max(t.a)}::text` ``
+ * escape hatch reaches this same path and revives identically — it
+ * does not, in practice, through the public `sql` tag. `sqlTag`
+ * (`expr/sql-template.ts`) always emits `strings.length ===
+ * values.length + 1` text chunks, so a template that OPENS with an
+ * interpolation (`` sql`${x}...` ``) still gets a leading **empty**
+ * text chunk before it — three chunks total (`["", <expr>, "::text"]`),
+ * never the exact two `castTarget` requires below. Only hejbro's own
+ * `castExprNode` (`packages/core/src/query/select.ts`), which builds
+ * the `sqlTemplate` node directly rather than through the tag function,
+ * ever produces the true two-chunk shape. The rule is still correctly
+ * "whatever's inside the wrapper, not just `columnRef`" — it is just
+ * narrower in practice than "regardless of who wrote it" claimed.
+ *
+ * **This narrowness is the correct line, not an accident left
+ * standing** (owner-delegated ruling, query-execution spec delta's own
+ * "Scenario: An explicit user cast is left alone"): the compiler's own
+ * at-risk cast is an internal ENCODING, so undoing it on the way back
+ * is the whole contract; a user's own `` sql`${x}::text` `` is an
+ * INSTRUCTION — "give me text" — and reviving past it would hand back
+ * a `bigint` where its author explicitly asked for a string. Widening
+ * `castTarget` to also match a user's leading-interpolation template
+ * would silently break that instruction, not fix a gap.
  */
 const isCastSuffixChunk = (chunk: SqlTemplateChunk | undefined): boolean =>
 	chunk?.chunkKind === "text" &&
@@ -617,13 +652,27 @@ const isCastSuffixChunk = (chunk: SqlTemplateChunk | undefined): boolean =>
 const castInnerRef = (
 	chunk: SqlTemplateChunk | undefined,
 ): ExprNode | undefined => {
-	if (chunk?.chunkKind === "expr" && chunk.expr.nodeKind === "columnRef") {
+	if (chunk?.chunkKind === "expr") {
 		return chunk.expr;
 	}
 	return undefined;
 };
 
-/** The two-chunk `[ref, suffix]` inner ref, else `undefined` — only `jsonArrayFrom`/`jsonObjectFrom`'s own cast builder produces this exact shape (a `sql\`\`` template always leads with a text chunk), so the suffix check is a cheap shape confirmation, not a reachable DSL path. */
+/**
+ * The two-chunk `[expr, suffix]` inner expr, else `undefined` — only
+ * `jsonArrayFrom`/`jsonObjectFrom`'s own cast builder (`castExprNode`,
+ * `packages/core/src/query/select.ts`) produces this exact shape,
+ * because it builds the `sqlTemplate` node directly rather than
+ * through the public `sql` tag. A caller's own template can never
+ * match it, even one that opens with an interpolation (`` sql`${x}
+ * ::text` ``): the tag function (`expr/sql-template.ts`) always emits
+ * one more text chunk than interpolations, so that shape is three
+ * chunks (a leading EMPTY one first), never two — see `isCastSuffixChunk`'s
+ * own doc comment above for the full correction and why this is the
+ * right line to hold, not a gap: an explicit user `::text` is an
+ * instruction to leave the value as text, and this two-chunk-only
+ * check is what keeps `uncast` from overriding that instruction.
+ */
 const castInnerRefIfSuffixed = (
 	first: SqlTemplateChunk | undefined,
 	second: SqlTemplateChunk | undefined,

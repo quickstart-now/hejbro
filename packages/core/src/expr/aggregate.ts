@@ -49,19 +49,48 @@ export const count = (): Expr<"numeric"> & ReadAs<bigint> =>
 export const countWhere = (operand: Expr): Expr<"numeric"> & ReadAs<bigint> =>
 	expr("numeric", aggregate("count", [operand.exprNode]));
 
-/** `min(<expr>)` — reads back as whatever the argument reads back as, which is exactly what Postgres's own `min` returns. */
-export const min = <TExpr extends Expr>(operand: TExpr): TExpr =>
-	({
-		...operand,
-		exprNode: aggregate("min", [operand.exprNode]),
-	}) as TExpr;
+/**
+ * `min`/`max`'s return type: the argument's own read type (`family`,
+ * `typeNode`, any `.$type<T>()` brand carried on `typeNode`) but not its
+ * ColumnRef-ness (#444 F9) — the returned expression's `exprNode` is a
+ * `functionCall`, so keeping `exprNode: ColumnRefNode`/`sqlName` (a
+ * `ColumnRef`'s two identifying fields, `ast.ts`) would be a lie a
+ * declaration API acting on `"sqlName" in x` (`dsl/index-builder.ts`'s
+ * `isColumnRef`) or requiring a real `ColumnRef` (`ForeignKeyInput.
+ * columns`, `dsl/table.ts`) could act on before ever reaching a
+ * mismatched runtime shape. `Omit` drops both; nothing else about
+ * `TExpr` is required to be a `ColumnRef` in the first place, so
+ * `max(max(x))` and a plain non-`ColumnRef` `Expr` argument both still
+ * type-check.
+ */
+export type Aggregated<TExpr extends Expr> = Omit<
+	TExpr,
+	"exprNode" | "sqlName"
+> & {
+	readonly exprNode: ExprNode;
+};
+
+/** `min`/`max`'s shared body — one runtime rebuild (drops `sqlName`, not just its type) for both, keyed by which Postgres function name to render. */
+const aggregatedExtremum = <TExpr extends Expr>(
+	functionName: "min" | "max",
+	operand: TExpr,
+): Aggregated<TExpr> => {
+	const { sqlName: _sqlName, ...rest } = operand as TExpr & {
+		readonly sqlName?: string;
+	};
+	return {
+		...rest,
+		exprNode: aggregate(functionName, [operand.exprNode]),
+	} as Aggregated<TExpr>;
+};
+
+/** `min(<expr>)` — reads back as whatever the argument reads back as, which is exactly what Postgres's own `min` returns; see {@link Aggregated} for the exact typing rule. */
+export const min = <TExpr extends Expr>(operand: TExpr): Aggregated<TExpr> =>
+	aggregatedExtremum("min", operand);
 
 /** `max(<expr>)` — same typing rule as {@link min}. */
-export const max = <TExpr extends Expr>(operand: TExpr): TExpr =>
-	({
-		...operand,
-		exprNode: aggregate("max", [operand.exprNode]),
-	}) as TExpr;
+export const max = <TExpr extends Expr>(operand: TExpr): Aggregated<TExpr> =>
+	aggregatedExtremum("max", operand);
 
 /** `sum(<expr>)`. See {@link aggregate} for why this carries no read-type brand. */
 export const sum = (operand: Expr): Expr<"numeric"> =>

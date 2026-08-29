@@ -1,7 +1,9 @@
 import {
 	and,
 	coalesce,
+	count,
 	eq,
+	gt,
 	schema,
 	select,
 	table,
@@ -151,5 +153,61 @@ describe("compile: offset and distinct (#437)", () => {
 		expect(compile(select(posts).distinctOn(posts.status)).sql).toBe(
 			'select distinct on ("app"."posts"."status") "id", "status", "published_at" from "app"."posts"',
 		);
+	});
+});
+
+// #444 F1 (spec violation): liftSelectNode used to hand-list
+// projection/joins/where/orderBy only, so a literal inside
+// having/groupBy/distinctOn was spliced into the SQL text instead of
+// becoming a bind parameter.
+describe("compile: parameters in having, groupBy and distinctOn (#444 F1)", () => {
+	it("lifts literals in having, groupBy and distinctOn to bind parameters", () => {
+		const statement = select({ status: posts.status, total: count() }, posts)
+			.distinctOn(coalesce(posts.status, "fallback-distinct"))
+			.groupBy(coalesce(posts.status, "fallback-group"))
+			.having(gt(coalesce(posts.status, "fallback-having"), "target"));
+		const result = compile(statement);
+
+		expect(result.sql).not.toContain("fallback-distinct");
+		expect(result.sql).not.toContain("fallback-group");
+		expect(result.sql).not.toContain("fallback-having");
+		expect(result.sql).not.toContain("'target'");
+		expect(result.params).toEqual([
+			"fallback-distinct",
+			"fallback-group",
+			"fallback-having",
+			"target",
+		]);
+	});
+
+	it("numbers parameters in rendered order across all clauses", () => {
+		// one literal in every clause at once (adversarial values, distinct
+		// per clause so a misordering shows up as a mismatched param, not a
+		// coincidentally-right one) -- distinct on sorts before the
+		// projection, matching renderSelectClauses.
+		const statement = select(
+			{ status: coalesce(posts.status, "p"), total: count() },
+			posts,
+		)
+			.distinctOn(coalesce(posts.status, "d"))
+			.where(eq(coalesce(posts.status, "w"), "w-target"))
+			.groupBy(coalesce(posts.status, "g"))
+			.having(gt(coalesce(posts.status, "h"), "h-target"))
+			.orderBy(coalesce(posts.status, "o"));
+		const result = compile(statement);
+
+		expect(result.sql).toBe(
+			'select distinct on (coalesce("app"."posts"."status", $1)) coalesce("app"."posts"."status", $2) as "status", count(*) as "total" from "app"."posts" where coalesce("app"."posts"."status", $3) = $4 group by coalesce("app"."posts"."status", $5) having coalesce("app"."posts"."status", $6) > $7 order by coalesce("app"."posts"."status", $8) asc',
+		);
+		expect(result.params).toEqual([
+			"d",
+			"p",
+			"w",
+			"w-target",
+			"g",
+			"h",
+			"h-target",
+			"o",
+		]);
 	});
 });

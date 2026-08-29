@@ -3,6 +3,7 @@ import {
 	assertNoNulls,
 	bigint,
 	bytea,
+	coalesce,
 	count,
 	date,
 	emptySnapshot,
@@ -14,7 +15,9 @@ import {
 	insert,
 	integer,
 	interval,
+	isNull,
 	json,
+	jsonArrayFrom,
 	jsonb,
 	max,
 	numeric,
@@ -24,6 +27,7 @@ import {
 	select,
 	serializeInterval,
 	sql,
+	sum,
 	table,
 	text,
 	timestamptz,
@@ -1582,5 +1586,180 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(typeof row?.orders).toBe("bigint");
 		// max carries the argument's own declared mode through.
 		expect(row?.biggest).toBe(20n);
+	});
+
+	// #444 F1: liftSelectNode used to hand-list projection/joins/where/
+	// orderBy only, so a literal inside having/groupBy/distinct on was
+	// spliced into the SQL text instead of becoming a bind parameter. A
+	// text-spliced adversarial value (a quote and a semicolon) would fail
+	// the statement outright -- the query still returning the right rows,
+	// and the table still existing afterward, is only possible if the
+	// value arrived as a parameter, so this witness measures the
+	// parameterization rather than restating the compiler's own SQL-text
+	// assertion (`packages/query/test/compile/select.test.ts`).
+	it("F1: an adversarial literal in having and distinct on arrives as a parameter, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.f1_orders (
+				id uuid primary key,
+				region text not null,
+				amount bigint not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const orders = table(testSchema, "f1_orders", {
+			id: uuid().primaryKey(),
+			region: text().notNull(),
+			amount: bigint({ mode: "bigint" }).notNull(),
+		});
+		const handle = db({ orders }, driver);
+		await handle.insert(orders).values([
+			{ id: "70000000-0000-0000-0000-000000000001", region: "eu", amount: 10n },
+			{ id: "70000000-0000-0000-0000-000000000002", region: "eu", amount: 20n },
+			{ id: "70000000-0000-0000-0000-000000000003", region: "us", amount: 5n },
+		]);
+
+		const adversarial = "'; drop table g5_integration.f1_orders; --";
+
+		const havingRows = await handle
+			.select({ region: orders.region, total: sum(orders.amount) }, orders)
+			.groupBy(orders.region)
+			.having(eq(coalesce(orders.region, adversarial), orders.region))
+			.orderBy(orders.region);
+		expect(havingRows.map((row) => row.region)).toEqual(["eu", "us"]);
+
+		// No `orderBy` here on purpose: Postgres requires `distinct on`'s
+		// own expressions to match the LEADING `order by` expressions
+		// exactly, and two lifted literals -- even textually identical --
+		// compile to two DIFFERENT `$n` placeholders, so pairing the same
+		// authored literal in both clauses would fail
+		// `SELECT DISTINCT ON expressions must match initial ORDER BY
+		// expressions` regardless of correctness (a real SQL/parameterization
+		// interaction, not a hejbro defect). Omitting `order by` is legal
+		// SQL (which row per group survives is merely unpredictable, not an
+		// error) and this witness only needs "the query ran, the value
+		// wasn't spliced as text".
+		const distinctRows = await handle
+			.select({ region: orders.region }, orders)
+			.distinctOn(coalesce(orders.region, adversarial));
+		expect(new Set(distinctRows.map((row) => row.region))).toEqual(
+			new Set(["eu", "us"]),
+		);
+
+		// the table must still exist -- proves the adversarial value never
+		// reached the SQL text as text.
+		const stillThere = await handle.select({ id: orders.id }, orders);
+		expect(stillThere.length).toBe(3);
+	});
+
+	// #444 F4: a written null used to reach a json/jsonb column as the
+	// JSON document 'null', not SQL NULL -- invisible to `is null`.
+	it("F4: a null written to a jsonb column is SQL NULL, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.f4_settings (
+				id uuid primary key,
+				payload jsonb
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const settings = table(testSchema, "f4_settings", {
+			id: uuid().primaryKey(),
+			payload: jsonb(),
+		});
+		const handle = db({ settings }, driver);
+
+		await handle.insert(settings).values([
+			{ id: "80000000-0000-0000-0000-000000000001", payload: null },
+			{ id: "80000000-0000-0000-0000-000000000002", payload: { a: 1 } },
+		]);
+
+		const nulls = await handle.select(settings).where(isNull(settings.payload));
+		expect(nulls.map((row) => row.id)).toEqual([
+			"80000000-0000-0000-0000-000000000001",
+		]);
+		expect(nulls[0]?.payload).toBeNull();
+
+		// the escape hatch still reaches the JSON document null, distinct
+		// from SQL NULL -- `is null` does not find it.
+		await handle.insert(settings).values({
+			id: "80000000-0000-0000-0000-000000000003",
+			payload: sql`'null'::jsonb`,
+		});
+		const stillNull = await handle
+			.select(settings)
+			.where(isNull(settings.payload));
+		expect(stillNull.length).toBe(1);
+	});
+
+	// #444 F6, task 7.3: 6.2 (packages/query/test/db/nested-revive.test.ts)
+	// could only measure through a proxy -- a mock driver cannot round-trip
+	// a real value, so it asserts the ::text cast is present rather than
+	// that the value survives. This is the one place the actual claim can
+	// be made: a max(bigint)/count() cell inside a jsonArrayFrom whose
+	// value is past 2^53 comes back exactly, not rounded -- only possible
+	// because withJsonSafeCasts now casts it (F6), so JSON transport never
+	// sees the raw number at all.
+	it("F6: a max(bigint) and count() cell inside a nested read survive past 2^53, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: "create table g5_integration.f6_reports (id uuid primary key)",
+			params: [],
+			kind: "sql",
+		});
+		await driver.execute({
+			sql: `create table g5_integration.f6_sales (
+				id uuid primary key,
+				amount bigint not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const reports = table(testSchema, "f6_reports", {
+			id: uuid().primaryKey(),
+		});
+		const sales = table(testSchema, "f6_sales", {
+			id: uuid().primaryKey(),
+			amount: bigint({ mode: "bigint" }).notNull(),
+		});
+		const handle = db({ reports, sales }, driver);
+		await handle
+			.insert(reports)
+			.values({ id: "90000000-0000-0000-0000-000000000001" });
+		await handle.insert(sales).values([
+			{
+				id: "90000000-0000-0000-0000-000000000002",
+				amount: 9007199254740993n,
+			},
+			{ id: "90000000-0000-0000-0000-000000000003", amount: 1n },
+		]);
+
+		const rows = await handle.select(
+			{
+				id: reports.id,
+				stats: jsonArrayFrom(
+					select({ maxAmount: max(sales.amount), total: count() }, sales),
+				),
+			},
+			reports,
+		);
+		const stat = rows[0]?.stats[0];
+		expect(stat?.maxAmount).toBe(9007199254740993n);
+		expect(typeof stat?.maxAmount).toBe("bigint");
+		expect(stat?.total).toBe(2n);
 	});
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ColumnBuilder, SetOpNode } from "../../src/index";
+import type { ColumnBuilder, ColumnRef, SetOpNode } from "../../src/index";
 import {
 	and,
 	avg,
@@ -306,6 +306,42 @@ describe("group 2 review rulings (F1/F2) and the at-risk table", () => {
 			}
 		}
 	});
+
+	// #444 F6 (task 6.3): the at-risk cast used to be columnRef-only, so a
+	// bigint-typed aggregate cell inside a nested read compiled without
+	// the ::text cast @hejbro/query's convert.ts needs to revive it
+	// losslessly (task 6.2's own characterization, packages/query/test/
+	// db/nested-revive.test.ts).
+	it("casts an at-risk aggregate cell in a nested read", () => {
+		const ledger = table(app, "ledger", {
+			id: uuid().primaryKey(),
+			amount: bigint().notNull(),
+		});
+		const rendered = renderSelect(
+			select(
+				{
+					id: posts.id,
+					stats: jsonArrayFrom(
+						select(
+							{
+								maxAmount: max(ledger.amount),
+								total: count(),
+								summed: sum(ledger.amount),
+							},
+							ledger,
+						),
+					),
+				},
+				posts,
+			).selectQuery,
+		);
+		expect(rendered).toContain('max("app"."ledger"."amount")::text');
+		expect(rendered).toContain("count(*)::text");
+		// sum/avg stay uncast (F6 task 6.2's own measurement: convert.ts
+		// never tries to revive them as a fixed type either, cast or not).
+		expect(rendered).toContain('sum("app"."ledger"."amount")');
+		expect(rendered).not.toContain('sum("app"."ledger"."amount")::text');
+	});
 });
 
 describe("set operations (add-set-operations tasks 1.1-1.2)", () => {
@@ -475,5 +511,22 @@ describe("aggregates and grouping (#416)", () => {
 
 	it("rejects an empty group by", () => {
 		expect(() => select(posts).groupBy()).toThrow(/at least one expression/);
+	});
+
+	// #444 F9: min/max used to spread the argument's whole shape, including
+	// sqlName/exprNode: ColumnRefNode -- an aggregate reported itself as a
+	// real column reference to any code checking "sqlName" in x.
+	it("max() keeps the argument's read type", () => {
+		const result = max(posts.publishedAt);
+		expect(result.family).toBe(posts.publishedAt.family);
+		expect(result.typeNode).toEqual(posts.publishedAt.typeNode);
+		expect("sqlName" in result).toBe(false);
+	});
+
+	it("max() is not accepted where a ColumnRef is required (a type-level red)", () => {
+		// @ts-expect-error max() no longer carries ColumnRef-ness (F9) --
+		// its exprNode is a functionCall, not a real column reference, so
+		// index()/a foreign-key column list must stop accepting it.
+		const _atRisk: ColumnRef = max(posts.publishedAt);
 	});
 });

@@ -21,6 +21,7 @@ import {
 	text,
 	uuid,
 } from "../../src/index";
+import type { JsonValue } from "../../src/snapshot/stable-json";
 
 const KEBAB_CASE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -693,11 +694,97 @@ describe("distinct codec round-trip and guards (#437)", () => {
 		);
 	});
 
-	it("a hand-edited snapshot that dropped the distinct key fails loudly, never silently as 'no distinct'", () => {
+	// #444 F7 revises this: a MISSING clause key is now the pre-#437/#438/
+	// #443 v8 shape leniency exists for (a v8 file written before this
+	// field existed at all), so it decodes to the field's empty value
+	// instead of throwing -- superseding the narrower pre-#444 guard this
+	// test used to assert ("fails loudly, never silently"). A distinct key
+	// that IS present but malformed still throws (the test right below).
+	it("a snapshot missing the distinct key entirely decodes as no distinct (pre-#437 v8 shape, F7)", () => {
 		const corrupted = JSON.parse(
 			JSON.stringify(encodeSelectNode(select(posts3).distinct().selectQuery)),
 		);
 		corrupted.distinct = undefined;
-		expect(() => decodeSelectNode(corrupted)).toThrowError();
+		expect(decodeSelectNode(corrupted).distinct).toBeNull();
+	});
+
+	it("a present but malformed distinct value still fails loudly", () => {
+		const corrupted = JSON.parse(
+			JSON.stringify(encodeSelectNode(select(posts3).distinct().selectQuery)),
+		);
+		corrupted.distinct = "not an object";
+		expect(() => decodeSelectNode(corrupted)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	// #444 review R4: decodeDistinct's "on" branch used to call
+	// `.map(decodeExprNode)` on `node.columns` unconditionally, raw-
+	// TypeErroring instead of a coded diagnostic when `columns` was
+	// missing or not an array. Unlike `groupBy`'s own missing-vs-
+	// malformed leniency, a MISSING `columns` here is never history: no
+	// v8 version ever encoded `distinctKind: "on"` without one
+	// (`distinctOn()` itself rejects an empty input as
+	// `empty-distinct-on`, and `encodeDistinct` always writes `columns`
+	// alongside `distinctKind: "on"`) — decoding it as `[]` would
+	// manufacture `distinct on ()`, a node `render-sql.ts` cannot
+	// render, moving the diagnostic away from the actual corruption. So
+	// missing and non-array both fail the same coded way here.
+	it("a distinct on node missing its columns key fails loudly, never a raw TypeError", () => {
+		const corrupted = JSON.parse(
+			JSON.stringify(
+				encodeSelectNode(select(posts3).distinctOn(posts3.status).selectQuery),
+			),
+		);
+		corrupted.distinct = { distinctKind: "on" };
+		expect(() => decodeSelectNode(corrupted)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("a distinct on node with a non-array columns value fails loudly, never a raw TypeError", () => {
+		const corrupted = JSON.parse(
+			JSON.stringify(
+				encodeSelectNode(select(posts3).distinctOn(posts3.status).selectQuery),
+			),
+		);
+		corrupted.distinct = { distinctKind: "on", columns: "x" };
+		expect(() => decodeSelectNode(corrupted)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+});
+
+// #444 F7: `groupBy`/`having`/`distinct`/`limit`/`offset` were all added
+// after v8's original shape (#437/#438/#443) -- a pre-extension v8
+// snapshot has none of them, and decodeSelectNode used to raw-TypeError
+// on the first one it touched (`node.groupBy.map` on `undefined`) instead
+// of a coded diagnostic or a lenient default.
+describe("decodeSelectNode leniency for a pre-extension v8 snapshot (#444 F7)", () => {
+	const preExtensionSelect = (): { readonly [key: string]: JsonValue } => ({
+		queryKind: "select",
+		projection: { projectionKind: "constant-one" },
+		from: { schema: "app", table: "posts" },
+		joins: [],
+		where: null,
+		orderBy: [],
+		// groupBy, having, limit, offset, distinct: absent, as a v8 file
+		// written before #438/#443 would have them.
+	});
+
+	it("decodes a pre-extension v8 select node without its clause fields", () => {
+		const decoded = decodeSelectNode(preExtensionSelect());
+		expect(decoded.groupBy).toEqual([]);
+		expect(decoded.having).toBeNull();
+		expect(decoded.limit).toBeNull();
+		expect(decoded.offset).toBeNull();
+		expect(decoded.distinct).toBeNull();
+	});
+
+	it("fails with a coded diagnostic on a malformed clause field", () => {
+		const malformed = { ...preExtensionSelect(), groupBy: "not an array" };
+		expect(() => decodeSelectNode(malformed)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
 	});
 });

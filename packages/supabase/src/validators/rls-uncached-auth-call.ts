@@ -1,14 +1,15 @@
 import type {
 	Diagnostic,
-	ExistsNode,
 	ExprNode,
 	FunctionCallNode,
 	PolicyDeclaration,
-	SelectExprNode,
-	SelectNode,
 	Validator,
 } from "@hejbro/core";
-import { diagnostic } from "@hejbro/core";
+import {
+	diagnostic,
+	existsChildExprs,
+	selectExprChildExprs,
+} from "@hejbro/core";
 import { declaredAtOf, isPolicyDeclaration } from "./schema-of";
 
 /** The two `auth` schema functions with an initPlan-cached form (#97). */
@@ -31,72 +32,6 @@ const isUncachedAuthCall = (node: ExprNode): node is UncachedAuthCallNode =>
 	node.schemaName === "auth" &&
 	isCachableAuthFunctionName(node.functionName);
 
-/** `query.where`, as a 0-or-1-element array — no ternary, just an early return either way. */
-const whereClauseOf = (query: SelectNode): ReadonlyArray<ExprNode> => {
-	if (query.where === null) {
-		return [];
-	}
-	return [query.where];
-};
-
-/**
- * An `exists(...)` node's child expressions: its `where` clause, each
- * join's `on` condition, and each `orderBy` term's expression. Split out
- * from {@link childrenOf} (a separate module-scope function, not a nested
- * one) to keep both functions' own complexity low (D71).
- *
- * Deliberately descends into these, unlike core's own `someExprNode`
- * (`packages/core/src/expr/walk.ts`), which treats `exists` as opaque —
- * a different concern, column-reference scope checking. For this
- * validator's purpose, a subquery's predicate is evaluated once per outer
- * row exactly like the policy's own clause is, so `auth.uid()` inside
- * `exists(select(...).where(eq(profiles.userId, authUid())))` is exactly
- * as expensive as one directly in `using(...)` — and this is the common
- * real shape: `examples/supabase`'s own policies hit this path twice out
- * of the three real uncached calls.
- *
- * `orderBy` is walked for the same reason, not skipped: `exists()`
- * (`buildExists` in `packages/core/src/query/select.ts`) only overrides
- * the subquery's `projection` to `constantOne` -- it does not clear
- * `orderBy`, so a term set via the public `.orderBy(...)` builder before
- * `exists(...)` wraps the query survives into the persisted `ExistsNode`
- * untouched. Confirmed directly: `exists(select(t).where(...).orderBy(
- * authUid()))` produces an `ExistsNode` whose `query.orderBy[0].expr` is
- * the same uncached `functionCall` node an unwalked `orderBy` would miss
- * warning about, even though it's meaningless for what `EXISTS` actually
- * returns.
- *
- * Projection *is* skipped, and that omission is the one that's actually
- * unreachable: `buildExists` always replaces `projection` with the fixed
- * `constantOne` shape (D70) before the query becomes an `ExistsNode`, so
- * there is no path through the public DSL for an expression -- cached or
- * not -- to end up in an `exists()` subquery's projection at all.
- */
-const childrenOfExists = (node: ExistsNode): ReadonlyArray<ExprNode> => [
-	...whereClauseOf(node.query),
-	...node.query.joins.map((join) => join.on),
-	...node.query.orderBy.map((term) => term.expr),
-];
-
-/** A nested read's children — unlike `exists()`, its projection carries real expressions (never `constantOne`), and an uncached `auth.uid()` inside one is exactly as costly, so the projection is walked too. */
-const projectionExprsOf = (
-	query: SelectExprNode["query"],
-): ReadonlyArray<ExprNode> => {
-	if (query.projection.projectionKind !== "columns") {
-		return [];
-	}
-	return query.projection.columns.map((column) => column.expr);
-};
-
-const childrenOfSelectExpr = (
-	node: SelectExprNode,
-): ReadonlyArray<ExprNode> => [
-	...projectionExprsOf(node.query),
-	...whereClauseOf(node.query),
-	...node.query.joins.map((join) => join.on),
-	...node.query.orderBy.map((term) => term.expr),
-];
-
 /**
  * One handler per {@link ExprNode} `nodeKind`, receiving the node narrowed
  * to that exact variant — same technique core's own `someExprNodeHandlers`
@@ -117,6 +52,24 @@ type ChildrenOfHandlers = {
 	) => ReadonlyArray<ExprNode>;
 };
 
+/**
+ * `exists`/`selectExpr` descend via core's own {@link existsChildExprs}/
+ * {@link selectExprChildExprs} (#444 F5b) rather than a private copy of
+ * the same walk — deliberately, unlike core's own `someExprNode`
+ * (`packages/core/src/expr/walk.ts`), which treats `exists` as opaque (a
+ * different concern, column-reference scope checking). For this
+ * validator's purpose, a subquery's predicate is evaluated once per
+ * outer row exactly like the policy's own clause is, so `auth.uid()`
+ * inside `exists(select(...).where(eq(profiles.userId, authUid())))` is
+ * exactly as expensive as one directly in `using(...)` — the common real
+ * shape: `examples/supabase`'s own policies hit this path twice out of
+ * the three real uncached calls. A nested read's (`selectExpr`)
+ * projection carries real expressions (never `constantOne`), so it is
+ * walked too; an `exists()` subquery's projection is always
+ * `constantOne` (D70's `buildExists`) and contributes nothing either
+ * way — see `existsChildExprs`'s own doc comment for why reusing the
+ * wider `selectExprChildExprs` list is still correct there.
+ */
 const childrenOfHandlers: ChildrenOfHandlers = {
 	literal: () => [],
 	rawSql: () => [],
@@ -133,18 +86,22 @@ const childrenOfHandlers: ChildrenOfHandlers = {
 		node.chunks
 			.filter((chunk) => chunk.chunkKind === "expr")
 			.map((chunk) => chunk.expr),
-	exists: childrenOfExists,
-	selectExpr: childrenOfSelectExpr,
+	exists: existsChildExprs,
+	selectExpr: selectExprChildExprs,
 };
 
 /**
  * `node`'s immediate child expressions, for the walk below. Extracted to
  * its own module-scope function (not nested) to keep its own complexity
  * low (D71) rather than folding the whole traversal into one function —
- * the same "children lookup" split core's own `someExprNode` doesn't need
- * but this validator does, since core's version isn't part of the public
- * API surface and can't be imported here. Dispatches through
- * {@link childrenOfHandlers}, a closed map keyed by `nodeKind`.
+ * the same "children lookup" split core's own `someExprNode` doesn't
+ * need but this validator does: `someDeepExprNode`/`someExprNode` answer
+ * "does a match exist anywhere", this validator needs the actual
+ * matched node (its `functionName`, for the diagnostic message), which
+ * is a different shape of walk. `exists`/`selectExpr` no longer carry a
+ * private copy of core's own traversal (#444 F5b) — see {@link
+ * childrenOfHandlers}'s own doc comment. Dispatches through {@link
+ * childrenOfHandlers}, a closed map keyed by `nodeKind`.
  */
 const childrenOf = (node: ExprNode): ReadonlyArray<ExprNode> => {
 	const handler = childrenOfHandlers[node.nodeKind] as (

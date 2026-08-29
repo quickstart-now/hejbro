@@ -292,12 +292,15 @@ type: a `bigint`/`numeric` column accepts whatever its mode reads back as
 structured `IntervalValue`, a `date`/`timestamp`/`timestamptz` column
 accepts exactly `Date` (never a plain ISO string), a `json`/`jsonb` column
 accepts any JSON-serializable value (hejbro serializes it; the declared
-type decides between `json` and `jsonb`), and a `bytea` column accepts a
-`Uint8Array` (hex-encoded for you — never a string, whose encoding would
-have to be guessed). On the read side, a `jsonb` column surfaces as
-`unknown` unless its declaration opts into a `.$type<T>()` brand — and
-since the write type is the read type, the brand narrows **both**: a
-branded column accepts its own `T` and nothing else.
+type decides between `json` and `jsonb`) — a written `null` becomes SQL
+NULL, not the JSON document `null` (`is null` finds it, a `notNull`
+column refuses it); write the JSON document `null` itself through the
+`sql` escape hatch (`` sql`'null'::jsonb` ``) — and a `bytea` column
+accepts a `Uint8Array` (hex-encoded for you — never a string, whose
+encoding would have to be guessed). On the read side, a `jsonb` column
+surfaces as `unknown` unless its declaration opts into a `.$type<T>()`
+brand — and since the write type is the read type, the brand narrows
+**both**: a branded column accepts its own `T` and nothing else.
 
 ```ts
 import { bytea, db, jsonb, schema, table, uuid } from "hejbro";
@@ -526,6 +529,12 @@ What each reads back as:
 | `count()` / `countWhere(x)` | `bigint` | Postgres's `count` is `int8` whatever it counted, and hejbro converts it — the value really is a `bigint`, not the text the driver hands back |
 | `min(x)` / `max(x)` | `x`'s own declared type | they return their argument's type, so a `bigint({mode:"number"})` column stays `number` |
 | `sum(x)` / `avg(x)` | `number \| bigint \| string` | Postgres promotes these by the argument's *exact* type (`sum(int4)` is `int8`, `sum(int8)` is `numeric`, `avg(int)` is `numeric`, `avg(float8)` is `float8`), so one declared result type would be wrong for most inputs. Narrow it yourself with a cast in a `sql` fragment when you need to |
+
+`min`/`max` read back as their argument's type but are **expressions**,
+not column references: `min(posts.amount)` cannot stand in for
+`posts.amount` itself anywhere a declaration API requires a real column
+(an index's `.on(...)`, a foreign key's `columns`) — that fails to
+type-check now, rather than compiling and failing wrong later.
 
 `having` is available only after `groupBy`, and `groupBy` only after
 `where` — the chain allows what SQL allows, in the order SQL allows it.
