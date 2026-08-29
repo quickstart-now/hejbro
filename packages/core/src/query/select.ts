@@ -438,6 +438,65 @@ const inputValueFor = (
 	return projectionInput[resultKey];
 };
 
+const typeNodeOf = (inputValue: unknown): TypeNode | undefined =>
+	(inputValue as { readonly typeNode?: TypeNode } | undefined)?.typeNode;
+
+/**
+ * `count()` is always `bigint` — Postgres's `int8`, whatever it counted —
+ * unconditionally at risk with no `typeNode` to check: unlike `min`/`max`
+ * (#444 F9's `Aggregated<TExpr>`), `count()`'s own return type carries no
+ * backing `typeNode` at all, only the `ReadAs<bigint>` brand (#416).
+ * Mirrors `@hejbro/query`'s `convert.ts`'s own `COUNT_STATE` — the same
+ * "count reads back as bigint" fact, on the read side of this cast's
+ * write side.
+ */
+const isCountCall = (expr: ExprNode): boolean =>
+	expr.nodeKind === "functionCall" &&
+	expr.schemaName === null &&
+	expr.functionName === "count";
+
+/**
+ * `min`/`max` read back as their argument's own type, so the same
+ * `typeNode`-driven cast rule the `columnRef` case already uses applies
+ * to their result unchanged. `sum`/`avg` are deliberately excluded:
+ * `convert.ts`'s own `PASSTHROUGH_AGGREGATES` never attempts to revive
+ * them as a fixed type either (Postgres's own promotion table isn't
+ * modeled there), so casting them to text here would be a lie the read
+ * side never corrects — a value arriving as a string where a number was
+ * promised, a regression this cast must not introduce (F6 task 6.2's own
+ * measurement: they never manufacture a wrong *bigint* either way,
+ * cast or not, so they carry no risk this cast exists to close).
+ */
+const isPassthroughAggregateCall = (expr: ExprNode): boolean =>
+	expr.nodeKind === "functionCall" &&
+	expr.schemaName === null &&
+	(expr.functionName === "min" || expr.functionName === "max");
+
+/**
+ * The `::text`/`::text[]` suffix `expr` needs to survive JSON transport
+ * losslessly, or `null` when it doesn't need one — covers a direct
+ * `columnRef` and the two aggregate shapes `convert.ts`'s own revive
+ * logic tries to type as something more precise than "whatever JSON
+ * says" (#444 F6): `count()` unconditionally, `min`/`max` via the same
+ * `typeNode` lookup a bare column ref uses.
+ */
+const atRiskCastSuffix = (
+	expr: ExprNode,
+	inputValue: unknown,
+): string | null => {
+	if (isCountCall(expr)) {
+		return "::text";
+	}
+	if (expr.nodeKind !== "columnRef" && !isPassthroughAggregateCall(expr)) {
+		return null;
+	}
+	const typeNode = typeNodeOf(inputValue);
+	if (typeNode === undefined) {
+		return null;
+	}
+	return jsonSafeCastSuffix(typeNode);
+};
+
 const castColumnIfAtRisk = (
 	column: {
 		readonly alias: string;
@@ -450,15 +509,7 @@ const castColumnIfAtRisk = (
 	readonly resultKey?: string;
 	readonly expr: ExprNode;
 } => {
-	if (column.expr.nodeKind !== "columnRef") {
-		return column;
-	}
-	const typeNode = (inputValue as { readonly typeNode?: TypeNode } | undefined)
-		?.typeNode;
-	if (typeNode === undefined) {
-		return column;
-	}
-	const suffix = jsonSafeCastSuffix(typeNode);
+	const suffix = atRiskCastSuffix(column.expr, inputValue);
 	if (suffix === null) {
 		return column;
 	}
@@ -470,11 +521,14 @@ const castColumnIfAtRisk = (
  * projection AT BUILD TIME — the node itself carries the casts, so the
  * compiled SQL, the snapshot codec round-trip, and rename retargeting
  * all see the same statement (a render-time cast could not: the stored
- * node has no column types). Only direct column refs are cast — a
- * computed expression's JSON shape is its author's own contract. The
- * types come from the chain's own `projectionInput` (the built refs
- * carry their `typeNode`); a whole-`Table` subselect expands into the
- * equivalent aliased projection so its casts apply too (F2).
+ * node has no column types). A direct column ref and the `count()`/
+ * `min`/`max` aggregate shapes `convert.ts`'s own revive logic tries to
+ * type precisely are cast (#444 F6); any other computed expression's
+ * JSON shape is its author's own contract. The types come from the
+ * chain's own `projectionInput` (the built refs — and, since #444 F9,
+ * `min`/`max`'s own result — carry their `typeNode`); a whole-`Table`
+ * subselect expands into the equivalent aliased projection so its casts
+ * apply too (F2).
  */
 /** Expands a whole-`Table` subselect into an explicit aliased projection with the F1 casts applied — the builder knows every column's type here (the table meta), so the most common nested-read form must not be the one that silently loses precision (F2 owner ruling at group 2 review). */
 const expandTableProjection = (

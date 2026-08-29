@@ -173,14 +173,14 @@ hand-write a `SelectNode` field list.
       keeps the argument's read type" and "max() is not accepted where a
       ColumnRef is required" (a type-level red). Files:
       `packages/core/src/expr/aggregate.ts`, that test.
-- [ ] 6.2 (~6m) Characterize **F6** before fixing it: which aggregate
+- [x] 6.2 (~6m) Characterize **F6** before fixing it: which aggregate
       cell shapes inside a `jsonArrayFrom`/`jsonObjectFrom` actually come
       back wrong — `max(bigintColumn)`, `count()`, `sum(...)` — and
       which are already safe. The measurement decides 6.3's rule instead
       of a guess about it. Red:
       `packages/query/test/db/nested-revive.test.ts` — "an aggregate
       cell in a nested read survives past 2^53". Files: that test.
-- [ ] 6.3 (~9m) [design] **F6.** `withJsonSafeCasts`' at-risk cast stops
+- [x] 6.3 (~9m) [design] **F6.** `withJsonSafeCasts`' at-risk cast stops
       being `columnRef`-only and covers the aggregate cells 6.2 proved
       are at risk, using the read type the chain already has in
       `projectionInput` (6.1 is what keeps that type available on an

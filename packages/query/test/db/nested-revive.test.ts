@@ -1,15 +1,18 @@
 import {
 	bigint,
 	bytea,
+	count,
 	date as dateColumn,
 	eq,
 	interval,
 	jsonArrayFrom,
 	jsonObjectFrom,
+	max,
 	numeric,
 	schema,
 	select,
 	sql,
+	sum,
 	table,
 	text,
 	timestamptz,
@@ -310,5 +313,65 @@ describe("grandchild revive (g3 review F4 -- kills the nested-plan recursion mut
 		}>;
 		const grandchild = threads[0]?.parent;
 		expect(grandchild?.viewTotal).toBe(9007199254740993n);
+	});
+});
+
+// #444 F6 task 6.2: characterize which aggregate cell shapes inside a
+// nested read actually come back wrong before fixing anything.
+// withJsonSafeCasts' at-risk cast (select.ts) is columnRef-only, so a
+// bigint-typed aggregate cell in a jsonArrayFrom/jsonObjectFrom
+// projection compiles WITHOUT the ::text cast that carries the value
+// through JSON transport losslessly -- convert.ts's columnStateForExpr
+// already resolves count()/min()/max()'s declared bigint state
+// correctly (a JS-side revive concern, separate from this SQL-level
+// cast), so it WILL attempt BigInt(rawJsonValue) on whatever the
+// uncast JSON number already lost precision to. sum()/avg() are never
+// converted by convert.ts at all (PASSTHROUGH_AGGREGATES excludes
+// them, deliberately -- Postgres's own promotion table isn't modeled),
+// so they never claim a wrong bigint either way, cast or not.
+describe("aggregate cell casts inside a nested read, characterized (#444 F6 task 6.2)", () => {
+	it("an aggregate cell in a nested read survives past 2^53", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "0b0e5b3e-0000-4000-8000-000000000001", stats: [] }],
+		});
+		const handle = db({ app, posts, comments }, driver);
+		await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select(
+						{ maxViews: max(comments.viewCount), total: count() },
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		const sentSql = topLevelSent[0]?.sql ?? "";
+		// at risk, and convert.ts DOES try to revive both as bigint: must
+		// be cast, so a real server hands back text, not a lossy number.
+		expect(sentSql).toContain('max("app"."comments"."view_count")::text');
+		expect(sentSql).toContain("count(*)::text");
+	});
+
+	it("sum() is never converted by convert.ts, cast or not -- already safe from the wrong-bigint defect", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "0b0e5b3e-0000-4000-8000-000000000001", stats: [] }],
+		});
+		const handle = db({ app, posts, comments }, driver);
+		await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select({ total: sum(comments.viewCount) }, comments).where(
+						eq(comments.postId, posts.id),
+					),
+				),
+			},
+			posts,
+		);
+		const sentSql = topLevelSent[0]?.sql ?? "";
+		expect(sentSql).toContain('sum("app"."comments"."view_count")');
+		expect(sentSql).not.toContain('sum("app"."comments"."view_count")::text');
 	});
 });
