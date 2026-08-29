@@ -333,6 +333,7 @@ export type {
 	SetOpStage,
 } from "./query/select";
 export {
+	assertSameSetOpKeyOrder,
 	exists,
 	jsonArrayFrom,
 	jsonObjectFrom,

@@ -448,11 +448,19 @@ describe("union() enforces row compatibility (#487)", () => {
 		// TS2345: "Argument of type 'SelectDistinctable<Table<{ id:
 		// ColumnBuilder<"uuid", ...>; postId: ColumnBuilder<"uuid",
 		// ...>; }>>' is not assignable to parameter of type 'never'."
-		select(posts).union(
-			// @ts-expect-error comments' key set does not match posts' --
-			// see the TS2345 text above.
-			select(comments),
-		);
+		// `@ts-expect-error` only suppresses the compile error -- the JS
+		// still runs, and group 8's runtime guard (assertSameSetOpKeyOrder)
+		// also refuses a key-set mismatch as a degenerate case of an
+		// order mismatch, so this now throws for real too; wrapped in
+		// toThrow() so that second, independent refusal doesn't fail the
+		// test with an uncaught exception.
+		expect(() =>
+			select(posts).union(
+				// @ts-expect-error comments' key set does not match posts' --
+				// see the TS2345 text above.
+				select(comments),
+			),
+		).toThrow();
 	});
 
 	it("a union of two selects with the same key set still type-checks, and its result row keeps the left branch's keys", () => {
@@ -474,6 +482,39 @@ describe("union() enforces row compatibility (#487)", () => {
 		expect(renderSetOp(active.union(archived).setOpQuery)).toBe(
 			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\'',
 		);
+	});
+});
+
+describe("union() checks branch key ORDER, not just the key set (#487, second half — group 8)", () => {
+	// same key SET ({email, city}) on both tables, declared in a
+	// different order -- SameKeys/SetOpResult (group 3) only sees the
+	// set, so this pair type-checks; Postgres itself matches
+	// set-operation branches by POSITION, so this is exactly the shape
+	// that used to compile and silently swap each row's email/city
+	// (measured on postgres:17, group 8's own red).
+	const usersByEmail = table(app, "users_by_email", {
+		email: text().notNull(),
+		city: text().notNull(),
+	});
+	const usersByCity = table(app, "users_by_city", {
+		city: text().notNull(),
+		email: text().notNull(),
+	});
+
+	it("a union whose branches list the same keys in a different order is refused, and the message shows both orders", () => {
+		expect(() => select(usersByEmail).union(select(usersByCity))).toThrow(
+			/set-op-key-order-mismatch|left: \(email, city\), right: \(city, email\)/,
+		);
+	});
+
+	it("a union whose branches list the same keys in the SAME order still compiles and works (positive control)", () => {
+		const usersByEmailToo = table(app, "users_by_email_too", {
+			email: text().notNull(),
+			city: text().notNull(),
+		});
+		expect(() =>
+			select(usersByEmail).union(select(usersByEmailToo)),
+		).not.toThrow();
 	});
 });
 

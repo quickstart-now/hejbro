@@ -14,6 +14,7 @@ import type {
 	TableRefNode,
 } from "../expr/ast";
 import { expr, resolveOrderTerm } from "../expr/ast";
+import { leftBranchOutputColumns } from "../expr/render-sql";
 import { someExprNode } from "../expr/walk";
 import { markConsumed, noteBuilder } from "../plpgsql/recording-session";
 import type { TypeNode } from "../types/type-node";
@@ -140,6 +141,67 @@ export type SetOpResult<TLeft, TRight> =
 		? { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
 		: never;
 
+/** The first position at which two key lists disagree (either a different key, or one list running out), or `undefined` if they agree at every position they both have — {@link assertSameSetOpKeyOrder}'s own scan. `Math.max` covers a length mismatch too, though `SameKeys` (checked at the type level before either branch reaches here) already guarantees equal length in the typed call path. */
+type KeyOrderMismatch = {
+	readonly position: number;
+	readonly leftKey: string | undefined;
+	readonly rightKey: string | undefined;
+};
+const findKeyOrderMismatch = (
+	left: ReadonlyArray<string>,
+	right: ReadonlyArray<string>,
+): KeyOrderMismatch | undefined =>
+	Array.from(
+		{ length: Math.max(left.length, right.length) },
+		(_, position) => ({
+			position,
+			leftKey: left[position],
+			rightKey: right[position],
+		}),
+	).find((entry) => entry.leftKey !== entry.rightKey);
+
+/**
+ * Rejects two set-op branches whose OUTPUT columns list the same names in
+ * a different ORDER (#487, second half — harden-query-surface group 8).
+ * `SameKeys`/`SetOpResult` (above) check the key SET, which `keyof` can
+ * see; `keyof` has no order, so a same-set-different-order pair still
+ * type-checks there. Postgres itself matches set-operation branches by
+ * POSITION, not by name, so that pair still compiles today and produces
+ * silent data corruption at the server, not an error — measured on
+ * postgres:17, unioning `{email, city}` against `{city, email}`: the
+ * `email` output column comes back holding a city value and vice versa.
+ * A genuine type divergence between branches is already caught by the
+ * server itself (`UNION types uuid and text cannot be matched`,
+ * measured) — this guard covers exactly the half the server cannot see,
+ * where the types match and only the declared order differs. It cannot
+ * be a type-level check (no key order in `keyof`), so it is a runtime
+ * guard — still pure, no I/O — over each branch's own rendered OUTPUT
+ * column order ({@link leftBranchOutputColumns}, reused here for either
+ * side: a branch's own output order is its own leftmost select's,
+ * recursively, the same "left branch's keys win" rule `SetOpResult`
+ * already states), taking `SelectNode | SetOpNode` — the query nodes
+ * both `combineSetOp` (here) and `@hejbro/query`'s chain `combine`
+ * already build their `other` branch into — rather than the original
+ * `SelectProjection` object, so one implementation serves both
+ * construction sites without either reconstructing the other's runtime
+ * shape.
+ */
+export const assertSameSetOpKeyOrder = (
+	left: SelectNode | SetOpNode,
+	right: SelectNode | SetOpNode,
+): void => {
+	const leftOrder = leftBranchOutputColumns(left);
+	const rightOrder = leftBranchOutputColumns(right);
+	const mismatch = findKeyOrderMismatch(leftOrder, rightOrder);
+	if (mismatch === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"set-op-key-order-mismatch",
+		`a set operation's branches list the same keys in a different order — left: (${leftOrder.join(", ")}), right: (${rightOrder.join(", ")}), disagreeing at position ${mismatch.position + 1} ("${mismatch.leftKey ?? "(none)"}" vs "${mismatch.rightKey ?? "(none)"}"). Postgres matches set-operation branches by position, not by name, so this compiles and silently mismatches every row's columns from that position on. Next: reorder one branch's projection so both list the same keys in the same order.`,
+	);
+};
+
 export type SelectLimited<
 	TProjection extends SelectProjection = SelectProjection,
 > = {
@@ -241,6 +303,7 @@ const combineSetOp = <TProjection extends SelectProjection>(
 	projectionInput: TProjection,
 ): SetOpStage<TProjection> => {
 	const right = branchNode(other);
+	assertSameSetOpKeyOrder(left, right);
 	const node: SetOpNode = {
 		queryKind: "setOp",
 		operator,

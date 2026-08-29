@@ -30,6 +30,7 @@ import type {
 	WithStage,
 } from "@hejbro/core";
 import {
+	assertSameSetOpKeyOrder,
 	deleteFrom as coreDeleteFrom,
 	insert as coreInsert,
 	select as coreSelect,
@@ -273,21 +274,30 @@ const chainSetOpCombinators = <TRow>(
 		operator: SetOpNode["operator"],
 		all: boolean,
 		other: SetOpChainBranch<TOther>,
-	): SelectChainSetOp<SetOpResult<TRow, TOther>> =>
-		makeSetOpChain<SetOpResult<TRow, TOther>>(
+	): SelectChainSetOp<SetOpResult<TRow, TOther>> => {
+		const leftNode = left();
+		const rightNode = chainBranchNode(other);
+		// #487, second half (group 8): the chain surface builds its own
+		// setOp node instead of routing through core's combineSetOp, so it
+		// needs its own call to the same order guard -- guarding only core
+		// would leave this, the primary user-facing surface, still
+		// corrupting data on a same-key-different-order union.
+		assertSameSetOpKeyOrder(leftNode, rightNode);
+		return makeSetOpChain<SetOpResult<TRow, TOther>>(
 			run,
 			{
 				queryKind: "setOp",
 				operator,
 				all,
-				left: left(),
-				right: chainBranchNode(other),
+				left: leftNode,
+				right: rightNode,
 				orderBy: [],
 				limit: null,
 				offset: null,
 			},
 			tables,
 		);
+	};
 	return {
 		union: (other) => combine("union", false, other),
 		unionAll: (other) => combine("union", true, other),

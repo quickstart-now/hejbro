@@ -702,8 +702,8 @@ const renderSetOpBranch = (
 	return renderSelect(branch, outerScope);
 };
 
-/** The leftmost select's OUTPUT column names — what Postgres resolves a set-op's whole-set `order by` against (measured live, group 4: a table-qualified or non-output reference is an ERROR there, so the guard checks membership in THIS list, never a table scope). */
-const leftBranchOutputColumns = (
+/** The leftmost select's OUTPUT column names — what Postgres resolves a set-op's whole-set `order by` against (measured live, group 4: a table-qualified or non-output reference is an ERROR there, so the guard checks membership in THIS list, never a table scope). Reused by `query/select.ts`'s `assertSameSetOpKeyOrder` (#487, group 8) for EITHER side of a combinator — a branch's own output order is its own leftmost select's, recursively, on either side of `union`/etc., the same "left branch's keys win" rule `SetOpResult` already states. */
+export const leftBranchOutputColumns = (
 	branch: SelectNode | SetOpNode,
 ): ReadonlyArray<string> => {
 	if (branch.queryKind === "setOp") {
