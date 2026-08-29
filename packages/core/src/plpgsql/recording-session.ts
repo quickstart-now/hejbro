@@ -47,11 +47,13 @@ export const closeRecordingSession = (): ReadonlyArray<QueryNode> => {
 };
 
 /**
- * `true` while at least one recording session is open — what gates every
- * `query/*` builder factory's `noteBuilder` call (#426): outside a
- * session, `@hejbro/query`'s runtime chain builds the exact same
- * factories on every executed query and must track nothing, so those
- * call sites check this before registering anything.
+ * `true` while at least one recording session is open. `query/*` builder
+ * factories call `noteBuilder`/`markConsumed` unconditionally on every
+ * chain stage (#426) — they never check this themselves; it is
+ * `noteBuilder`/`markConsumed` that no-op when no session is open, so a
+ * factory tracks nothing while `@hejbro/query`'s runtime chain builds the
+ * exact same factories outside a body. This flag exists for tests that
+ * assert the session lifecycle directly.
  */
 export const hasOpenRecordingSession = (): boolean => sessionStack.length > 0;
 

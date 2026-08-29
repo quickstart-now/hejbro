@@ -390,7 +390,7 @@ const assertExecuteHasNoReturning = (
 	}
 	throwHejbroError(
 		"execute-expects-no-returning",
-		`ctx.execute() in ${state.identity} received a ${query.queryKind} that ends in .returning() — plpgsql's PERFORM/bare statement form has no INTO clause to receive the returned rows, and Postgres rejects a statement that returns rows without one. Next: drop the .returning() call to run this ${query.queryKind} for its effect, or pass it to ctx.return(...) instead of ctx.execute() when its rows are the function's result.`,
+		`ctx.execute() in ${state.identity} received ${describeQueryKind(query)} that ends in .returning() — plpgsql's PERFORM/bare statement form has no INTO clause to receive the returned rows, and Postgres rejects a statement that returns rows without one. Next: drop the .returning() call to run this ${query.queryKind} for its effect, or pass it to ctx.return(...) instead of ctx.execute() when its rows are the function's result.`,
 		state.declaredAt,
 	);
 };
@@ -411,7 +411,7 @@ const recordExecute = (state: RecordingState, value: ReturnableQuery): void => {
 	if (query === null) {
 		throwHejbroError(
 			"execute-expects-statement",
-			`ctx.execute() in ${state.identity} received a value that isn't a select, insert, update or delete builder. Next: pass one of those.`,
+			`ctx.execute() in ${state.identity} received a value that isn't a select, insert, update or delete builder. Next: pass a select, insert, update or delete builder to ctx.execute() instead.`,
 			state.declaredAt,
 		);
 		return;
@@ -558,27 +558,6 @@ const recordForEach = <TProjection extends RowProjection>(
 };
 
 /**
- * Builds the recording {@link BodyContext} for one `defineFunction`/
- * `defineTrigger` call: every `ctx.*` call appends to (or reads back) a
- * frame stack of {@link BodyStatement}s. `finish()` reads the finished tree
- * back out — call it exactly once, after the body callback has returned.
- *
- * The actual recording logic lives in the module-scope functions above
- * (`recordRow`, `recordIf`, `recordRaise`, `recordReturn`, `recordForEach`,
- * and their shared helpers), each taking the mutable {@link RecordingState}
- * as an explicit first parameter, rather than as ~15 closures nested
- * inside this function capturing its locals directly. That used to be a
- * CRAP-gate violation (#154 PR2): a CRAP/complexity tool attributes every
- * nested closure's own complexity to whichever named function lexically
- * contains it (the correct granularity for "which function would a human
- * actually refactor" — see `scripts/check-crap.mjs`'s own file comment),
- * so this function's reported complexity used to be the *sum* of all ~15
- * closures' complexity, even though each one is individually simple. Only
- * the capture mechanism changed here — module-scope functions taking an
- * explicit `state` parameter instead of closures reading it lexically —
- * not the recording behavior itself.
- */
-/**
  * One human-readable name per {@link QueryNode} kind — {@link
  * unusedBuilderMessage}'s own listing, never render-facing (that's
  * `renderExecutedStatement`'s job). A mapped type over the closed union
@@ -662,6 +641,27 @@ const unusedBuilderMessage = (
 	return `${noun} "${identity}" built ${queries.length} ${pluralizeStatement(queries.length)} it never used (${kinds}). Next: ${unusedBuilderNextClause(queries)}.`;
 };
 
+/**
+ * Builds the recording {@link BodyContext} for one `defineFunction`/
+ * `defineTrigger` call: every `ctx.*` call appends to (or reads back) a
+ * frame stack of {@link BodyStatement}s. `finish()` reads the finished tree
+ * back out — call it exactly once, after the body callback has returned.
+ *
+ * The actual recording logic lives in the module-scope functions above
+ * (`recordRow`, `recordIf`, `recordRaise`, `recordReturn`, `recordForEach`,
+ * and their shared helpers), each taking the mutable {@link RecordingState}
+ * as an explicit first parameter, rather than as ~15 closures nested
+ * inside this function capturing its locals directly. That used to be a
+ * CRAP-gate violation (#154 PR2): a CRAP/complexity tool attributes every
+ * nested closure's own complexity to whichever named function lexically
+ * contains it (the correct granularity for "which function would a human
+ * actually refactor" — see `scripts/check-crap.mjs`'s own file comment),
+ * so this function's reported complexity used to be the *sum* of all ~15
+ * closures' complexity, even though each one is individually simple. Only
+ * the capture mechanism changed here — module-scope functions taking an
+ * explicit `state` parameter instead of closures reading it lexically —
+ * not the recording behavior itself.
+ */
 export const createRecordingContext = (
 	identity: string,
 	declaredAt: string | null,
