@@ -121,17 +121,22 @@ const assertBaselineFlagsApplicable = (
 	if (disallowed === undefined) {
 		return;
 	}
+	// #445 review B5: the message has exactly one quoted substring -- the
+	// solution command -- and identityFromMessage takes the first quoted
+	// substring as the diagnostic's own identity (matches
+	// error[config-not-found]: hejbro.config.ts's own convention).
+	// Backtick-quoting the command instead (repo convention for a command
+	// name, loader.ts's own `` `hejbro init` ``) leaves no quoted
+	// substring at all, so the identity falls through to fallbackIdentity
+	// (the config path) instead. Kept as a comment ABOVE this call, not
+	// between its two arguments: check-next-marker.mjs's argument scan is
+	// text-based, not a real parser, and a comma anywhere in an inline
+	// comment between the code and message arguments (as this one used to
+	// have, in "command name, loader.ts's own") splits them wrong, hiding
+	// a real "Next:" clause from the gate.
 	throwHejbroError(
 		"baseline-flag-not-applicable",
-		// #445 review B5: the message had exactly one quoted substring --
-		// the solution command -- and identityFromMessage takes the first
-		// quoted substring as the diagnostic's own identity (matches
-		// error[config-not-found]: hejbro.config.ts's own convention).
-		// Backtick-quoting the command instead (repo convention for a
-		// command name, loader.ts's own `` `hejbro init` ``) leaves no
-		// quoted substring at all, so the identity falls through to
-		// fallbackIdentity (the config path) instead.
-		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: run \`hejbro generate\` instead to record a change to an already-adopted project.`,
+		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: to record a change to an already-adopted project, run \`hejbro generate\`.`,
 	);
 };
 

@@ -379,7 +379,15 @@ settle. Files: `packages/skills/turbo.json`,
 ## Verification
 
 - `pnpm check`, `pnpm check-types`, `pnpm test`, `pnpm check:crap`,
-  `pnpm check:tasktime` all pass — output in the PR body.
+  `pnpm check:tasktime`, `pnpm check:next-marker` all pass — output in
+  the PR body. `check:next-marker` was missing from this list originally
+  (CI caught what the local gate set didn't): `baseline-flag-not-
+  applicable`'s message did have a `Next:` clause, but a comma inside a
+  multi-line comment sitting *between* the call's two arguments split
+  the gate's text-based argument scan wrong, hiding it from the wrong
+  argument slot. Fixed by moving that comment above the call instead of
+  between its arguments — never rely on a comma-free comment as the fix,
+  since the same class of comment could reappear elsewhere.
 - `pnpm --filter @hejbro/pg test:integration` against a real postgres:17,
   including 1.6's two new witnesses.
 - 5.1's cache reproduction recorded in the PR body.
