@@ -5,6 +5,7 @@ import {
 	bytea,
 	coalesce,
 	count,
+	cumeDist,
 	date,
 	emptySnapshot,
 	eq,
@@ -19,10 +20,16 @@ import {
 	json,
 	jsonArrayFrom,
 	jsonb,
+	lag,
+	lastValue,
 	max,
+	ntile,
 	numeric,
+	over,
+	percentRank,
 	rls,
 	roleName,
+	rowNumber,
 	schema,
 	select,
 	serializeInterval,
@@ -1861,5 +1868,159 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(stat?.maxAmount).toBe(9007199254740993n);
 		expect(typeof stat?.maxAmount).toBe("bigint");
 		expect(stat?.total).toBe(2n);
+	});
+
+	/**
+	 * add-window-functions, task 5.1: window functions live against a real
+	 * postgres:17. Five rows, two partitions (region), one strictly
+	 * increasing `created_at` across all of them, so the global order
+	 * (`ntile`/`percent_rank`/`cume_dist`) and the per-partition order
+	 * (`row_number`/`sum`/`lag`/`last_value`) are both fully determined --
+	 * every assertion below names an exact expected value, not just a row
+	 * count (row count survives a window degenerating to a constant, so it
+	 * proves nothing on its own).
+	 */
+	it("window functions (D104): value sequences, running totals, partition-edge nulls, and the 'no conversion needed' claims, live against a real postgres:17", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.win_orders (
+				id uuid primary key,
+				region text not null,
+				amount bigint not null,
+				created_at timestamptz not null
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const orders = table(testSchema, "win_orders", {
+			id: uuid().primaryKey(),
+			region: text().notNull(),
+			amount: bigint({ mode: "bigint" }).notNull(),
+			createdAt: timestamptz().notNull(),
+		});
+		const handle = db({ orders }, driver);
+		// global order (by createdAt) is A, B, C, D, E -- eu holds the first
+		// three, us the last two, so partition order and global order agree.
+		await handle.insert(orders).values([
+			{
+				id: "a0000000-0000-0000-0000-000000000001",
+				region: "eu",
+				amount: 10n,
+				createdAt: new Date("2026-01-01T00:00:00Z"),
+			},
+			{
+				id: "a0000000-0000-0000-0000-000000000002",
+				region: "eu",
+				amount: 20n,
+				createdAt: new Date("2026-01-02T00:00:00Z"),
+			},
+			{
+				id: "a0000000-0000-0000-0000-000000000003",
+				region: "eu",
+				amount: 5n,
+				createdAt: new Date("2026-01-03T00:00:00Z"),
+			},
+			{
+				id: "a0000000-0000-0000-0000-000000000004",
+				region: "us",
+				amount: 100n,
+				createdAt: new Date("2026-01-04T00:00:00Z"),
+			},
+			{
+				id: "a0000000-0000-0000-0000-000000000005",
+				region: "us",
+				amount: 200n,
+				createdAt: new Date("2026-01-05T00:00:00Z"),
+			},
+		]);
+
+		const rows = await handle
+			.select(
+				{
+					region: orders.region,
+					amount: orders.amount,
+					rn: over(rowNumber(), {
+						partitionBy: [orders.region],
+						orderBy: [orders.createdAt],
+					}),
+					running: over(sum(orders.amount), {
+						partitionBy: [orders.region],
+						orderBy: [orders.createdAt],
+					}),
+					prev: over(lag(orders.amount), {
+						partitionBy: [orders.region],
+						orderBy: [orders.createdAt],
+					}),
+					bucket: over(ntile(2), { orderBy: [orders.createdAt] }),
+					pct: over(percentRank(), { orderBy: [orders.createdAt] }),
+					cume: over(cumeDist(), { orderBy: [orders.createdAt] }),
+					regionCount: over(count(), { partitionBy: [orders.region] }),
+					// default frame (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT
+					// ROW): lastValue returns the CURRENT row's own value, not the
+					// partition's true last row -- the exact claim task 5.2's docs
+					// need backing for.
+					lastAmt: over(lastValue(orders.amount), {
+						partitionBy: [orders.region],
+						orderBy: [orders.createdAt],
+					}),
+				},
+				orders,
+			)
+			.orderBy(orders.region, orders.createdAt);
+
+		expect(rows.map((row) => row.region)).toEqual([
+			"eu",
+			"eu",
+			"eu",
+			"us",
+			"us",
+		]);
+
+		// row_number restarts at 1 in EACH partition -- the value sequence,
+		// not merely that 5 rows came back.
+		expect(rows.map((row) => row.rn)).toEqual([1n, 2n, 3n, 1n, 2n]);
+		expect(rows.every((row) => typeof row.rn === "bigint")).toBe(true);
+
+		// windowed sum as a running total, per partition -- Postgres
+		// promotes sum(int8) to numeric, and sum/avg deliberately stay
+		// uncast whether windowed or not (convert.ts's own documented
+		// exclusion), so the driver's raw text is the correct arrival, not
+		// a lie: the running-total VALUES are still asserted exactly.
+		expect(rows.map((row) => row.running)).toEqual([
+			"10",
+			"30",
+			"35",
+			"100",
+			"300",
+		]);
+
+		// lag: null at each partition's own first row (the partition edge),
+		// the previous row's amount everywhere else.
+		expect(rows.map((row) => row.prev)).toEqual([null, 10n, 20n, null, 100n]);
+
+		// "no conversion needed" claims: ntile/percentRank/cumeDist arrive as
+		// plain JS numbers, not text -- these are the OTHER half of the type
+		// table's own claims, and get the same live check as the bigint half.
+		expect(rows.map((row) => row.bucket)).toEqual([1, 1, 1, 2, 2]);
+		expect(rows.every((row) => typeof row.bucket === "number")).toBe(true);
+		expect(rows.map((row) => row.pct)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+		expect(rows.every((row) => typeof row.pct === "number")).toBe(true);
+		expect(rows.map((row) => row.cume)).toEqual([0.2, 0.4, 0.6, 0.8, 1]);
+		expect(rows.every((row) => typeof row.cume === "number")).toBe(true);
+
+		// count() over (...) still converts like count() -- bigint, not text.
+		expect(rows.map((row) => row.regionCount)).toEqual([3n, 3n, 3n, 2n, 2n]);
+		expect(rows.every((row) => typeof row.regionCount === "bigint")).toBe(true);
+
+		// lastValue under the default frame returns the CURRENT row's own
+		// value (Postgres's own documented "unhelpful under the default
+		// frame" behavior) -- same value as amount itself, every row.
+		expect(rows.map((row) => row.lastAmt)).toEqual(
+			rows.map((row) => row.amount),
+		);
 	});
 });
