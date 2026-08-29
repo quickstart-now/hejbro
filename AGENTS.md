@@ -86,7 +86,7 @@ again.
   `.claude/rules/core-purity.md`.
 - **The provider interface is the product.** If a preset needs a core
   special case, the interface is wrong — fix the interface. Rule:
-  `.claude/rules/supabase-preset.md`.
+  `.claude/rules/provider-preset.md`.
 - **All GitHub-facing text in English** (code, comments, docs, issues, PRs,
   commits).
 - **Comments state the constraint only.** A comment records what the code
@@ -151,7 +151,7 @@ the repository's size and shape justify, record what was reviewed and
 rejected (decided 2026-08-26):
 
 - **Adopted.** Instruction layering stays root AGENTS.md +
-  `.claude/rules/` (`core-purity.md`, `supabase-preset.md`, `naming.md`
+  `.claude/rules/` (`core-purity.md`, `provider-preset.md`, `naming.md`
   — path-scoped; naming needs cross-package globs no per-directory file
   can express). `.claude/settings.json` carries `Read` deny rules for
   build outputs (`node_modules/`, `dist/`, `build/`, `coverage/`,

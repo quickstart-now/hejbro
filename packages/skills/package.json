@@ -9,6 +9,7 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
+		"@neondatabase/serverless": "^1.1.0",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

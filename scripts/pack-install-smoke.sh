@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# #86 pack-install smoke: packs the five published packages
-# (@hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg --
-# @hejbro/query/@hejbro/pg promoted here in task 7.10 once 7.6/7.7 gave
-# them real dist packaging), installs the tarballs into a scratch project
+# #86 pack-install smoke: packs the six published packages
+# (@hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg,
+# @hejbro/neon -- @hejbro/query/@hejbro/pg promoted here in task 7.10
+# once 7.6/7.7 gave them real dist packaging; @hejbro/neon added in
+# add-neon-preset's task 8.2), installs the tarballs into a scratch project
 # with plain `npm install` (no workspace, no pnpm — the closest
 # simulation of a real consumer), and runs init/generate/verify there,
 # with the Supabase preset registered so more than just hejbro actually
@@ -71,6 +72,7 @@ PACKAGES=(
   "@hejbro/supabase:packages/supabase"
   "@hejbro/query:packages/query"
   "@hejbro/pg:packages/pg"
+  "@hejbro/neon:packages/neon"
 )
 
 for entry in "${PACKAGES[@]}"; do
@@ -95,6 +97,7 @@ CLI_TGZ="$(ls "$PACK_DIR"/hejbro-[0-9]*.tgz)"
 SUPABASE_TGZ="$(ls "$PACK_DIR"/hejbro-supabase-*.tgz)"
 QUERY_TGZ="$(ls "$PACK_DIR"/hejbro-query-*.tgz)"
 PG_TGZ="$(ls "$PACK_DIR"/hejbro-pg-*.tgz)"
+NEON_TGZ="$(ls "$PACK_DIR"/hejbro-neon-*.tgz)"
 
 echo "== scratch project: $SCRATCH_DIR"
 cat > "$SCRATCH_DIR/package.json" <<EOF
@@ -107,7 +110,8 @@ cat > "$SCRATCH_DIR/package.json" <<EOF
     "hejbro": "file:$CLI_TGZ",
     "@hejbro/supabase": "file:$SUPABASE_TGZ",
     "@hejbro/query": "file:$QUERY_TGZ",
-    "@hejbro/pg": "file:$PG_TGZ"
+    "@hejbro/pg": "file:$PG_TGZ",
+    "@hejbro/neon": "file:$NEON_TGZ"
   }
 }
 EOF
@@ -150,6 +154,7 @@ assert_tarball_contains "$CLI_TGZ" package.json LICENSE README.md dist/cli.js di
 assert_tarball_contains "$SUPABASE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 assert_tarball_contains "$QUERY_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 assert_tarball_contains "$PG_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$NEON_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 echo "   ok"
 
 echo "== assertion 1b: every file the tarball packed exists in the install tree"
@@ -168,6 +173,7 @@ assert_tarball_files_installed "$CLI_TGZ" "$SCRATCH_DIR/node_modules/hejbro"
 assert_tarball_files_installed "$SUPABASE_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/supabase"
 assert_tarball_files_installed "$QUERY_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/query"
 assert_tarball_files_installed "$PG_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/pg"
+assert_tarball_files_installed "$NEON_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/neon"
 echo "   ok"
 
 echo "== assertion 1c: the installed LICENSE is real content, not a broken link"
@@ -184,6 +190,7 @@ assert_license_content "$SCRATCH_DIR/node_modules/hejbro"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/supabase"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/query"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/pg"
+assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/neon"
 echo "   ok"
 
 echo "== assertion 2: no installed dependency string still says workspace:"
@@ -196,6 +203,7 @@ assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/hejbro/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/supabase/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/query/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/pg/package.json"
+assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/neon/package.json"
 echo "   ok"
 
 echo "== assertion 3: the hejbro binary runs init/generate/verify, with @hejbro/supabase's preset registered so more than just hejbro actually loads (hejbro's own dist re-exports @hejbro/core and @hejbro/query, and the registered preset loads @hejbro/supabase directly)"
@@ -273,4 +281,13 @@ GENERATED_COUNT="$(find "$SCRATCH_DIR/migrations" -maxdepth 1 -name '*.sql' | wc
 (cd "$SCRATCH_DIR" && "$BIN" verify >/dev/null) || fail "hejbro verify exited non-zero on its own output"
 echo "   ok"
 
-echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg install cleanly with npm and run init/generate/verify"
+echo "== assertion 4: @hejbro/neon's own exports resolve -- installed-but-unimported is the M6 gap (a broken exports field would otherwise pass every assertion above silently, same as the reviewer-broke-supabase-exports finding assertion 3's own comment records). @hejbro/neon ships no Preset bundle to register (no kinds, no validators; proposal.md's Out of scope) -- an empty bundle would be surface invented only to satisfy this gate, so a direct import of a real exported value is the equivalent check instead"
+(cd "$SCRATCH_DIR" && node --input-type=module -e "
+import { neonAuth } from '@hejbro/neon';
+if (typeof neonAuth !== 'function') {
+  throw new Error('@hejbro/neon exported neonAuth is not a function: ' + typeof neonAuth);
+}
+") || fail "@hejbro/neon's own exports did not resolve (neonAuth import failed)"
+echo "   ok"
+
+echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg, @hejbro/neon install cleanly with npm and run init/generate/verify"
