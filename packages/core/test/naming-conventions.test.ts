@@ -16,6 +16,7 @@ import {
 	emptySnapshot,
 	eq,
 	exists,
+	expr,
 	generateMigration,
 	getTableMeta,
 	grant,
@@ -393,6 +394,34 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			posts,
 		),
 	);
+	// add-window-functions (D104): a view carrying a window function is the
+	// declaration-reachable producer of the `window` node -- without one
+	// here, the completeness assertion below would flag `window` as
+	// vocabulary the fixture never reached. Hand-built (the over()/rank()
+	// DSL lands in group 2) but exercises all three child positions: `fn`
+	// (a real function call), `partitionBy` and `orderBy` (real declared
+	// columns, not string literals, matching this fixture's own style).
+	const rankByAuthorView = defineView(
+		app,
+		"rank_by_author_view",
+		select(
+			{
+				id: posts.id,
+				rank: expr("numeric", {
+					nodeKind: "window",
+					fn: {
+						nodeKind: "functionCall",
+						schemaName: null,
+						functionName: "rank",
+						args: [],
+					},
+					partitionBy: [posts.authorId.exprNode],
+					orderBy: [{ expr: posts.price.exprNode, direction: "asc" }],
+				}),
+			},
+			posts,
+		),
+	);
 
 	const result = generateMigration({
 		declarations: [
@@ -404,6 +433,7 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			combinedPricesView,
 			postsWithCommentsView,
 			priceSummaryView,
+			rankByAuthorView,
 		],
 		previousSnapshot: emptySnapshot,
 		registry,

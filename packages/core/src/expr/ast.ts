@@ -122,6 +122,22 @@ export type FunctionCallNode = {
 	readonly args: ReadonlyArray<ExprNode>;
 };
 
+/**
+ * A window function call (`over(...)`, D104) — `fn` is narrowed to a
+ * {@link FunctionCallNode}, not a general `ExprNode`: Postgres requires
+ * the windowed thing to *be* a function call, and the narrowing makes "a
+ * window function inside a window function" unrepresentable rather than
+ * merely rejected. `partitionBy`/`orderBy` mirror the shapes
+ * {@link SelectNode} already uses for its own grouping/ordering; a frame
+ * clause is out of scope for this change (proposal, "Out of scope").
+ */
+export type WindowNode = {
+	readonly nodeKind: "window";
+	readonly fn: FunctionCallNode;
+	readonly partitionBy: ReadonlyArray<ExprNode>;
+	readonly orderBy: ReadonlyArray<OrderByTerm>;
+};
+
 export type SqlTemplateChunk =
 	| { readonly chunkKind: "text"; readonly text: string }
 	| { readonly chunkKind: "expr"; readonly expr: ExprNode };
@@ -168,7 +184,8 @@ export type ExprNode =
 	| SqlTemplateNode
 	| RawSqlNode
 	| ExistsNode
-	| SelectExprNode;
+	| SelectExprNode
+	| WindowNode;
 
 // --- query statement nodes ---
 

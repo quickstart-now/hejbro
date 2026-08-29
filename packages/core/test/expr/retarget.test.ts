@@ -285,6 +285,97 @@ describe("retargetExprNode (#110 item 7/18: rename retargeting)", () => {
 	});
 });
 
+// add-window-functions task 1.5: the exhaustive registries force a handler
+// to be WRITTEN, not to DESCEND -- `window: (node) => node` compiles and
+// passes the it.each unrelated-rename loop above just as well as a real
+// descent would. This is the hand-written positive-descent proof the
+// registries can't provide on their own.
+describe("retargetExprNode window descent (#416/D104 task 1.5)", () => {
+	const buildWindow = (partitionBy: ReadonlyArray<ExprNode>): ExprNode => ({
+		nodeKind: "window",
+		fn: {
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "rank",
+			args: [],
+		},
+		partitionBy,
+		orderBy: [],
+	});
+
+	it("a column referenced only inside over()'s partitionBy is rewritten by a rename", () => {
+		const node = buildWindow([
+			{
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "title",
+			},
+		]);
+		expect(retargetExprNode(node, columnRenameTarget)).toEqual(
+			buildWindow([
+				{
+					nodeKind: "columnRef",
+					schemaName: "app",
+					tableName: "posts",
+					columnName: "headline",
+				},
+			]),
+		);
+	});
+
+	it("a column referenced only inside over()'s orderBy is rewritten by a rename", () => {
+		const buildOrderedWindow = (columnName: string): ExprNode => ({
+			nodeKind: "window",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "rank",
+				args: [],
+			},
+			partitionBy: [],
+			orderBy: [
+				{
+					expr: {
+						nodeKind: "columnRef",
+						schemaName: "app",
+						tableName: "posts",
+						columnName,
+					},
+					direction: "asc",
+				},
+			],
+		});
+		expect(
+			retargetExprNode(buildOrderedWindow("title"), columnRenameTarget),
+		).toEqual(buildOrderedWindow("headline"));
+	});
+
+	it("a column referenced only inside the windowed function's own argument is rewritten by a rename", () => {
+		const node: ExprNode = {
+			nodeKind: "window",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "sum",
+				args: [
+					{
+						nodeKind: "columnRef",
+						schemaName: "app",
+						tableName: "posts",
+						columnName: "title",
+					},
+				],
+			},
+			partitionBy: [],
+			orderBy: [],
+		};
+		const retargeted = retargetExprNode(node, columnRenameTarget);
+		expect(JSON.stringify(retargeted)).toContain('"headline"');
+		expect(JSON.stringify(retargeted)).not.toContain('"title"');
+	});
+});
+
 // #157/D72, item 96: `retargetSelectNode` was previously reachable only
 // through `retargetExists` (nested inside an `ExprNode`); #157 exports it
 // so `rename-plan.ts` can retarget a view's own top-level query

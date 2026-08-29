@@ -156,6 +156,7 @@ export type {
 	SqlTemplateNode,
 	TableRefNode,
 	UpdateNode,
+	WindowNode,
 } from "./expr/ast";
 export {
 	columnRef,

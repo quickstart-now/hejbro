@@ -92,6 +92,14 @@ const someExprNodeHandlers: SomeExprNodeHandlers = {
 			(chunk) =>
 				chunk.chunkKind === "expr" && someExprNode(chunk.expr, predicate),
 		),
+	// `window`'s three positions are plain sibling expressions, not a
+	// subquery boundary (unlike `exists`/`selectExpr` above) -- the shallow
+	// walker descends into them the same way it descends into a
+	// `functionCall`'s own args.
+	window: (node, predicate) =>
+		someExprNode(node.fn, predicate) ||
+		node.partitionBy.some((expr) => someExprNode(expr, predicate)) ||
+		node.orderBy.some((term) => someExprNode(term.expr, predicate)),
 };
 
 /**
@@ -178,6 +186,10 @@ const someDeepExprNodeHandlers: SomeExprNodeHandlers = {
 		selectExprChildExprs(node).some((child) =>
 			someDeepExprNode(child, predicate),
 		),
+	window: (node, predicate) =>
+		someDeepExprNode(node.fn, predicate) ||
+		node.partitionBy.some((expr) => someDeepExprNode(expr, predicate)) ||
+		node.orderBy.some((term) => someDeepExprNode(term.expr, predicate)),
 };
 
 /**
@@ -287,6 +299,14 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
 		];
 		return firstScopeViolation(selectExprChildExprs(node), extendedScope);
 	},
+	// `window`'s three positions are plain sibling expressions, not a
+	// subquery -- scope is checked in the SAME scope as the surrounding
+	// expression, matching `functionCall`'s own args above.
+	window: (node, scope) =>
+		firstScopeViolation(
+			[node.fn, ...node.partitionBy, ...node.orderBy.map((term) => term.expr)],
+			scope,
+		),
 };
 
 /**

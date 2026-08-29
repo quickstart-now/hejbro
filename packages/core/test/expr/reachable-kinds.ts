@@ -212,6 +212,18 @@ export const buildUnrelatedCase = (kind: ExprNode["nodeKind"]): ExprNode => {
 					distinct: null,
 				},
 			};
+		case "window":
+			return {
+				nodeKind: "window",
+				fn: {
+					nodeKind: "functionCall",
+					schemaName: null,
+					functionName: "rank",
+					args: [unrelatedColumnRef],
+				},
+				partitionBy: [unrelatedColumnRef],
+				orderBy: [{ expr: unrelatedLiteral, direction: "asc" }],
+			};
 		case "selectExpr":
 			return {
 				nodeKind: "selectExpr",
