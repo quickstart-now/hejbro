@@ -1,0 +1,16 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"moduleResolution": "bundler",
+		"module": "esnext",
+		"noEmit": true,
+		"allowImportingTsExtensions": true
+	},
+	"include": [
+		"src",
+		"test",
+		"vitest.config.ts",
+		"vitest.integration.config.ts",
+		"vitest.shared.ts"
+	]
+}
