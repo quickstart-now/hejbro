@@ -413,3 +413,98 @@ describe("a cast aggregate cell actually revives, not just compiles cast (#444 F
 		expect(stat?.total).toBe(2n);
 	});
 });
+
+/**
+ * #444 F6 group-8 follow-up: `select.ts`'s cast decision
+ * (`atRiskCastSuffix`) and `convert.ts`'s revive decision
+ * (`columnStateForExpr`/`aggregateColumnState`) are two hand-written
+ * classifications of the same vocabulary (`count`/`min`/`max` cast+
+ * revive, `sum`/`avg` neither) living in two different packages with no
+ * shared source — exactly the kind of duplication this whole change
+ * exists to close everywhere else. There is no single export either
+ * side could re-derive the other from without crossing the core/query
+ * purity boundary (`select.ts`'s classification is core-only;
+ * `convert.ts`'s is query-only, keyed off `Declarations["tables"]` core
+ * never sees), so this test asserts their AGREEMENT observably instead
+ * of unifying the source: for each shape, "select.ts cast it" and
+ * "convert.ts revived it to bigint" must be the same boolean. A future
+ * edit that casts a new aggregate shape without teaching convert.ts to
+ * revive it (or the reverse) fails here, not in production.
+ */
+describe("select.ts casts iff convert.ts revives (#444 F6 drift guard)", () => {
+	// a past-2^53 value, delivered as text: distinguishes "revived as
+	// bigint" (exact) from "passed through as a plain JS value" (a
+	// string arriving un-revived stays exactly this string, never
+	// becomes the bigint).
+	const rawTextValue = "9007199254740993";
+
+	const agreementFor = async (
+		alias: string,
+		stats: Parameters<typeof jsonArrayFrom>[0],
+	): Promise<{
+		readonly wasCast: boolean;
+		readonly wasRevivedToBigint: boolean;
+	}> => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [
+				{
+					id: "0b0e5b3e-0000-4000-8000-000000000001",
+					stats: [{ [alias]: rawTextValue }],
+				},
+			],
+		});
+		const handle = db({ app, posts, comments }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(stats),
+			},
+			posts,
+		);
+		const sentSql = topLevelSent[0]?.sql ?? "";
+		const revivedValue = (
+			rows[0]?.stats[0] as Record<string, unknown> | undefined
+		)?.[alias];
+		return {
+			wasCast: sentSql.includes("::text"),
+			wasRevivedToBigint: typeof revivedValue === "bigint",
+		};
+	};
+
+	it("count(): cast and revive both true", async () => {
+		const result = await agreementFor(
+			"total",
+			select({ total: count() }, comments).where(eq(comments.postId, posts.id)),
+		);
+		expect(result.wasCast).toBe(true);
+		expect(result.wasRevivedToBigint).toBe(true);
+	});
+
+	// single-word aliases throughout this describe (no camelCase hump) so
+	// the raw driver row's own key and the converted row's resultKey are
+	// spelled identically -- a hump (e.g. "maxViews") renders as a
+	// different snake_case SQL alias ("max_views") than the camelCase
+	// resultKey the converted row carries, which is a real, separate
+	// naming-translation concern this drift guard isn't about.
+	it("max(bigintColumn): cast and revive both true", async () => {
+		const result = await agreementFor(
+			"biggest",
+			select({ biggest: max(comments.viewCount) }, comments).where(
+				eq(comments.postId, posts.id),
+			),
+		);
+		expect(result.wasCast).toBe(true);
+		expect(result.wasRevivedToBigint).toBe(true);
+	});
+
+	it("sum(bigintColumn): cast and revive both false", async () => {
+		const result = await agreementFor(
+			"summed",
+			select({ summed: sum(comments.viewCount) }, comments).where(
+				eq(comments.postId, posts.id),
+			),
+		);
+		expect(result.wasCast).toBe(false);
+		expect(result.wasRevivedToBigint).toBe(false);
+	});
+});

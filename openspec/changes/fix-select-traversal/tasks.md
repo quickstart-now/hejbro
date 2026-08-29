@@ -87,7 +87,11 @@ hand-write a `SelectNode` field list.
       expressions through `retargetExprNode` and rebuilds via
       `replaceSelectChildExprs`; `isSelectNodeUnchanged` collapses into
       the same list comparison (identity preserved — an unrelated rename
-      must still return the exact same object reference). `projection`
+      must still return the exact same object reference). Group 8's CRAP
+      gate then removed that helper outright: once
+      `replaceSelectChildExprs` is itself identity-preserving, "nothing
+      changed" is the rebuild returning the same reference, and the
+      eight-way `&&` chain had nothing left to compare. `projection`
       and `from` keep their existing dedicated handling for the
       *identifiers* they carry (`allColumns`' column names, the table
       ref); the generic path covers expressions only, and the table's

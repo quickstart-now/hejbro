@@ -210,6 +210,21 @@ describe("update-input (D1/D3, task 3.12)", () => {
 		const nullOnNullable: UpdateInput<Posts> = { title: null };
 	});
 
+	// #444 F4 spec delta ("a notNull column refuses [a written null]"):
+	// the same InsertColumnValue exclusion the test above proves for a
+	// plain text column applies uniformly to json/jsonb -- it is keyed
+	// off notNull, not the column's family, so there is no json-specific
+	// branch to separately trust. Made explicit anyway, since F4's own
+	// spec sentence names json/jsonb specifically.
+	it("a notNull jsonb column's write type rejects null (#444 F4 spec delta)", () => {
+		// UpdateInput, not InsertInput, for the same reason the test above
+		// does: every key is optional there, so this line's only possible
+		// error is the null value itself, not an unrelated missing-required-
+		// key error on the object literal.
+		// @ts-expect-error payloadRequired is notNull -- null is not a legal value, SQL NULL semantics notwithstanding.
+		const _nullOnNotNullJsonb: UpdateInput<Posts> = { payloadRequired: null };
+	});
+
 	it("rejects an undeclared column key", () => {
 		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture.
 		const withUnknownKey: UpdateInput<Posts> = {

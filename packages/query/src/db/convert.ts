@@ -611,13 +611,21 @@ const convertCell = (
  * state — without this, exactly the cells the cast protects
  * (bigint/numeric columns, and now bigint-typed aggregates) would
  * arrive as unrevived text instead of the typed value the cast exists
- * to deliver losslessly. Not restricted to `columnRef`: `columnStateForExpr`
- * below already dispatches a `functionCall` to `aggregateColumnState`
- * correctly, so any expr chunk here is safe to hand it — the same is
- * already true of a user's own `` sql`${max(t.a)}::text` `` escape
- * hatch, which gets the identical, correct treatment for the identical
- * reason (the `::text` suffix means the same thing regardless of who
- * wrote it).
+ * to deliver losslessly.
+ *
+ * **Deliberately not restricted to `columnRef`** (group 8 review): the
+ * rule is "whatever sits inside a `[expr, '::text']` cast wrapper
+ * revives via `columnStateForExpr`'s own dispatch for that expr's
+ * shape", not an enumerated `columnRef | functionCall` allowlist — a
+ * closed list is exactly the class of bug this whole change (#444)
+ * exists to close, and this file has no way to tell "hejbro's own cast
+ * builder wrote this" from "the caller's own `` sql`${x}::text` ``
+ * escape hatch wrote this" (nor should it try to — the meaning of
+ * `::text` doesn't depend on who wrote it). Known, accepted consequence:
+ * a caller's own `` sql`${max(t.a)}::text` ``, written wanting a text
+ * value out, now revives to the argument's original type instead — a
+ * behavior change from before this file's #444 fix, flagged to the
+ * planner for a possible spec-delta sentence, not decided here.
  */
 const isCastSuffixChunk = (chunk: SqlTemplateChunk | undefined): boolean =>
 	chunk?.chunkKind === "text" &&

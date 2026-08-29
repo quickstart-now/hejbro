@@ -392,6 +392,21 @@ describe("json/jsonb null writes (#444 F4)", () => {
 		const sqlText = renderQuery(query.insertQuery);
 		expect(sqlText).toContain("'null'::jsonb");
 	});
+
+	// The spec delta's own "a notNull column refuses it" half is a TYPE-
+	// level claim, not a runtime one: core's own MutationRow/MutationValue
+	// accept `null` for EVERY column unconditionally by design ("unlike
+	// comparisons, null is a legal write", ast.ts's own MutationValue doc)
+	// -- `notNull` narrows which KEYS a row must supply, never which
+	// VALUES a column's write type accepts, so it is `@hejbro/query`'s
+	// InsertInput/UpdateInput (InsertColumnValue's `Exclude<
+	// MutationValue<TColumn>, null>` for a notNull column) that actually
+	// owns this rejection, not anything in this package. See
+	// `packages/query/test/types/insert-input.test.ts` — "a notNull
+	// jsonb column's write type rejects null (#444 F4 spec delta)",
+	// alongside the pre-existing generic case ("notNull still forbids an
+	// explicit null value...") that already proved the same exclusion
+	// for a plain text column.
 });
 
 // harden-query-layer #322 task 2.3 fork-1 fix: `.array()` always sets its

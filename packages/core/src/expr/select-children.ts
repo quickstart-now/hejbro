@@ -169,6 +169,14 @@ const replaceOrderByChildExprs = (
  * distinct on (...) <projection> ... group by ... having ... order by
  * ...`) — a JS object literal's own key order is what carries that
  * constraint here; no second ordering list exists anywhere in this file.
+ *
+ * **The ratchet's limit**: this table forces an *entry*, not a correct
+ * traversal. A field added to `SelectNode` and entered here as
+ * `noExprs("...")` compiles fine whether or not that's actually true —
+ * the reason string is a claim its author is making, and whether the
+ * field really carries no expressions is the one thing nothing in this
+ * file (or its own type) can check. The type-level guarantee is "you
+ * cannot forget to decide"; it is not "you decided correctly".
  */
 const replaceGroupByChildExprs = (
 	groupBy: ReadonlyArray<ExprNode>,

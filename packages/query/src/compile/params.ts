@@ -394,6 +394,24 @@ const liftQueryBranch = (
  * `limit`/`offset` as validated non-negative integers (owner-settled,
  * 2026-08-26). Exported for `liftExistsNode` above and for `select.ts`'s
  * `compileSelect`.
+ *
+ * **Known consequence of F1, found by the live witness
+ * (`packages/pg/test/integration.test.ts`), not a defect in this
+ * function**: `distinct on` and the leading `order by` are lifted
+ * independently, each literal getting its own `$n`. Postgres's own
+ * `DISTINCT ON expressions must match initial ORDER BY expressions`
+ * rule compares the parsed expression tree, so the SAME authored
+ * literal repeated in both clauses now compiles to two DIFFERENT `$n`
+ * placeholders and Postgres rejects the statement — where the old,
+ * spec-violating spliced text happened to be byte-identical in both
+ * places and so matched. A `columnRef` (the ordinary `distinctOn(t.a)
+ * .orderBy(t.a)` shape) is unaffected: nothing about a `columnRef` is
+ * ever lifted, so both clauses render the exact same text either way.
+ * Deduplicating identical literals into one shared `$n` would fix it
+ * and is deliberately not done here — sequential numbering with no
+ * deduplication is the owner-settled compiler contract (2026-08-26), so
+ * changing that is a separate decision, not a side effect of this fix
+ * (tracked in #450, not a 0.2.0 gate).
  */
 export const liftSelectNode = (
 	node: SelectNode,
