@@ -481,3 +481,7 @@ the creation of the blackbox entry.
 *(Measured with `git diff --name-only a3eb5f5..<commit>` across all 45
 pre-rebase commits — the old base, matching the counts being corrected;
 set differences with `LC_ALL=C sort` and `comm`.)*
+
+*(These pre-rebase SHAs are unreachable from any upstream ref after the
+force-push and squash merge; the measurement was taken before the rebase
+and is not reproducible from the merged history.)*
