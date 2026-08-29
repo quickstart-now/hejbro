@@ -508,36 +508,33 @@ export const posts = table(app, "posts", {
 	// now reaches a real connection attempt against the literal
 	// "nonexistent-host" from the URL ("check-catalog-unreadable",
 	// `getaddrinfo ENOTFOUND nonexistent-host") instead of
-	// "check-driver-missing" -- and *either* outcome only happens because
-	// --url reached connection resolution, so both are accepted here.
-	// Whether @hejbro/pg's dist happens to be built when this test runs
-	// (unbuilt in a fresh CI checkout before its own build step, but not
-	// guaranteed to stay that way) is exactly the kind of environment
-	// dependency this assertion must not lean on.
-	const reachedConnectionResolution = (stderr: string): boolean =>
-		stderr.includes("check-driver-missing") ||
-		stderr.includes("nonexistent-host");
-
-	it("accepts --url=<value>, not only the space form", async () => {
-		const result = await runCli(
+	// "check-driver-missing" -- which specific one depends on whether
+	// @hejbro/pg's dist happens to be built when this test runs (unbuilt
+	// in a fresh CI checkout before its own build step, but not
+	// guaranteed to stay that way).
+	//
+	// The real invariant is not "which downstream code either form
+	// reaches" (an environment fact, and asserting on it directly is
+	// exactly the fragile shape cs-planner flagged) but that **both
+	// forms reach the same one** -- whatever it happens to be here. If
+	// --url= is ever silently dropped again, it diverges to
+	// check-connection-missing while the space form does not, and this
+	// fails immediately without needing to know the downstream code.
+	it("--url=<value> reaches the same result as --url <value>", async () => {
+		const equalsForm = await runCli(
 			cwd,
 			["check", "--url=postgres://user@nonexistent-host/db"],
 			{ env: envWithoutDatabaseUrl() },
 		);
-
-		expect(result.exitCode).toBe(1);
-		expect(result.stderr).not.toContain("check-connection-missing");
-		expect(reachedConnectionResolution(result.stderr)).toBe(true);
-	});
-
-	it("--url <value> (space form) still works after adding equals-form support (regression guard)", async () => {
-		const result = await runCli(
+		const spaceForm = await runCli(
 			cwd,
 			["check", "--url", "postgres://user@nonexistent-host/db"],
 			{ env: envWithoutDatabaseUrl() },
 		);
 
-		expect(result.exitCode).toBe(1);
-		expect(reachedConnectionResolution(result.stderr)).toBe(true);
+		expect(equalsForm.exitCode).toBe(spaceForm.exitCode);
+		expect(equalsForm.stderr).toBe(spaceForm.stderr);
+		expect(equalsForm.stdout).toBe(spaceForm.stdout);
+		expect(equalsForm.stderr).not.toContain("check-connection-missing");
 	});
 });

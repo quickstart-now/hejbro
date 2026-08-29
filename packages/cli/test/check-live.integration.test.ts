@@ -329,6 +329,48 @@ describe("hejbro check / live witness (group 6)", () => {
 			);
 		}
 	});
+
+	it("exits 2 against a real server when a check constraint cannot be compared", async () => {
+		// The process-only half of the 3-way contract (4.5): 0 and 1 are
+		// already covered above via the CLI itself (6.2's "no differences",
+		// 6.3's altered column) -- this is 2's own live witness, and the
+		// reviewer's own validated negative control: revoking SELECT on one
+		// table leaves that table's own structural comparison untouched
+		// (readCatalog's reads are all over pg_catalog, role-independent by
+		// 1.4) but fails the EXPLAIN probe every one of its check
+		// constraints' expression comparison depends on, so all four of
+		// tasks's own check constraints (tasks_title_length,
+		// tasks_status_valid, tasks_priority_range,
+		// tasks_estimate_hours_non_negative) report as not-compared -- and
+		// nothing else in the fixture disagrees, so the exit code is 2, not
+		// 1.
+		psqlCommand(
+			"chain",
+			"create role check_live_limited login; grant usage on schema app to check_live_limited; grant select on all tables in schema app to check_live_limited; revoke select on app.tasks from check_live_limited;",
+		);
+		try {
+			const result = await runCli(EXAMPLE_DIR, [
+				"check",
+				"--url",
+				hostUrl("check_live_limited", "chain"),
+			]);
+
+			expect(result.exitCode).toBe(2);
+			expect(result.stderr).toContain("check-not-compared");
+			expect(result.stderr).toContain("could not be compared");
+			expect(result.stderr).not.toContain("check-object-differs");
+			expect(result.stderr).not.toContain("check-object-missing");
+		} finally {
+			// `drop role` alone fails while any grant to it still exists
+			// (measured: "cannot be dropped because some objects depend on
+			// it", naming every table/schema privilege granted above) --
+			// `drop owned by` revokes them all first.
+			psqlCommand(
+				"chain",
+				"drop owned by check_live_limited; drop role check_live_limited;",
+			);
+		}
+	});
 });
 
 describe("hejbro check / role independence (group 6, task 6.4)", () => {
