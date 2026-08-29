@@ -12,6 +12,7 @@ import {
 	text,
 	update,
 	uuid,
+	withCte,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { compile } from "../../src/compile/compile";
@@ -483,6 +484,49 @@ describe("chain.compile() (task 7.3)", () => {
 		// single transaction opened.
 		expect(topLevelSent).toHaveLength(0);
 		expect(sentPerTransaction).toHaveLength(0);
+	});
+});
+
+describe("db().with chain (add-ctes task 5.4)", () => {
+	it("a chain-built CTE statement compiles byte-identically to the core builder formulation", () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver();
+		const handle = db({ posts }, driver);
+
+		const chainCompiled = handle
+			.with((w) => {
+				const ranked = w.as("ranked", select(posts));
+				return select({ id: ranked.id, amount: ranked.amount }, ranked);
+			})
+			.compile();
+		const coreCompiled = compile(
+			withCte((w) => {
+				const ranked = w.as("ranked", select(posts));
+				return select({ id: ranked.id, amount: ranked.amount }, ranked);
+			}),
+		);
+
+		expect(chainCompiled).toEqual(coreCompiled);
+		// `.compile()` never touches the driver, same contract as every
+		// other chain terminal (task 7.3).
+		expect(topLevelSent).toHaveLength(0);
+	});
+
+	it("await on a with chain returns converted rows", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [rawRow],
+		});
+		const handle = db({ posts }, driver);
+
+		const chain = handle.with((w) => {
+			const ranked = w.as("ranked", select(posts));
+			return select({ id: ranked.id, amount: ranked.amount }, ranked);
+		});
+		expect(topLevelSent).toHaveLength(0);
+
+		const rows = await chain;
+
+		expect(rows).toEqual([{ id: rawRow.id, amount: 9007199254740993n }]);
+		expect(topLevelSent).toHaveLength(1);
 	});
 });
 

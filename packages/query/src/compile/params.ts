@@ -16,6 +16,8 @@ import type {
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	WindowNode,
+	WithEntryNode,
+	WithNode,
 } from "@hejbro/core";
 import { replaceSelectChildExprs, selectChildExprs } from "@hejbro/core";
 
@@ -466,5 +468,44 @@ export const liftSelectNode = (
 	return {
 		node: replaceSelectChildExprs(node, lifted.node),
 		params: lifted.params,
+	};
+};
+
+/** Lifts one `WITH` entry's own query, threading `$n` numbering forward. */
+const liftWithEntry = (
+	entry: WithEntryNode,
+	startIndex: number,
+): Lifted<WithEntryNode> => {
+	const lifted = liftQueryBranch(entry.query, startIndex);
+	return { node: { ...entry, query: lifted.node }, params: lifted.params };
+};
+
+/**
+ * Lifts a whole {@link WithNode} (add-ctes, task 5.2): every entry's own
+ * query, in declaration order, then the body — matching the rendered
+ * text's own left-to-right order (`with "a" as (...), "b" as (...) <body>`)
+ * so `$n` numbering follows it. This is the exact defect the proposal
+ * rejects "one shared placeholder pool split arbitrarily" (option B) over,
+ * proven here rather than assumed: an entry's literal is always bound
+ * before the body's, never the reverse, and never inlined as raw text.
+ */
+export const liftWithNode = (
+	node: WithNode,
+	startIndex: number,
+): Lifted<WithNode> => {
+	const ctes = node.ctes.reduce<Lifted<ReadonlyArray<WithEntryNode>>>(
+		(acc, entry) => {
+			const lifted = liftWithEntry(entry, startIndex + acc.params.length);
+			return {
+				node: [...acc.node, lifted.node],
+				params: [...acc.params, ...lifted.params],
+			};
+		},
+		{ node: [], params: [] },
+	);
+	const body = liftQueryBranch(node.body, startIndex + ctes.params.length);
+	return {
+		node: { ...node, ctes: ctes.node, body: body.node },
+		params: [...ctes.params, ...body.params],
 	};
 };

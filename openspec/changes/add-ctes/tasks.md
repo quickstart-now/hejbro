@@ -252,7 +252,9 @@ meant as one.
       rewrite a same-named CTE reference or its columns. Prose in the
       proposal is not the form this claim ships in. Red: same file — "a
       table rename leaves a same-named CTE alone". Files: that test only.
-- [~] 2.5 **moved to 4.5** — mis-sequenced here. The producer this task
+> **2.5 moved to 4.5** — mis-sequenced here, and left as a note rather
+      than a checkbox because it is neither done nor pending in this
+      group. The producer it
       asks for is *a view whose body declares a CTE*, and `defineView`
       cannot accept one until 4.1 widens `ViewDeclaration.query`. The
       three ways out were: widen that type from group 2 (breaks 4.1's file
@@ -566,25 +568,25 @@ rather than impossible.
 group's file list; if an edit here starts to spread into either, stop and
 route it through the lead rather than absorbing it.
 
-- [ ] 5.1 (~7m) `compileHandlers`' arm and what `CompileKind` says for a
+- [x] 5.1 (~7m) `compileHandlers`' arm and what `CompileKind` says for a
       statement wrapped in a `WITH` — the kind is the **body's**, since
       that is what determines how rows are read. Red:
       `packages/query/test/compile/with.test.ts` — "a with statement
       compiles and reports its body's kind". Files:
       `packages/query/src/compile/compile.ts`, that test.
-- [ ] 5.2 (~8m) The parameter lifter: entry bodies are lifted in
+- [x] 5.2 (~8m) The parameter lifter: entry bodies are lifted in
       declaration order, then the body statement, so `$n` numbering
       matches rendered order. This is the defect the proposal rejects
       option B over; it must be proven here, not assumed. Red: same file —
       "literals inside a CTE body are bound before the body statement's,
       and no literal is inlined". Files:
       `packages/query/src/compile/params.ts`, that test.
-- [ ] 5.3 (~6m) `columnPlanForResult` reads the body's projection through
+- [x] 5.3 (~6m) `columnPlanForResult` reads the body's projection through
       the wrapper, so conversions apply exactly as they would unwrapped.
       Red: `packages/query/test/db/with.test.ts` — "a field needing
       conversion arrives converted through a with wrapper". Files:
       `packages/query/src/db/convert.ts`, that test.
-- [ ] 5.4 (~9m) [design] The chain's own `with()` — **this one keeps the
+- [x] 5.4 (~9m) [design] The chain's own `with()` — **this one keeps the
       bare name**: a chain method is a property, so the reserved word is
       legal there, and D102 reserved exactly this slot. The asymmetry with
       core's `withCte` is deliberate and gets one line in the skill, so

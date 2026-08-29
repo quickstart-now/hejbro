@@ -280,6 +280,8 @@ export type Db<
 	update: ChainApi["update"];
 	/** Thenable `deleteFrom` chain (task 7.2, group 7 decision ②) — mirrors core's `deleteFrom(target)`. */
 	deleteFrom: ChainApi["deleteFrom"];
+	/** Thenable `WITH` chain (add-ctes, task 5.4) — mirrors core's own `withCte()` exactly, the same callback signature. */
+	with: ChainApi["with"];
 };
 
 /**
