@@ -22,10 +22,16 @@ closing slot runs them. This file is the slice's only progress record,
 so a tick that means two different things at two places would make it
 useless.
 
-Current state: group 1 (measurements) and group 2 (#464) ticked —
-reviewed and passed. Group 3 (#487, key-set half) landed and came back
-*needs work* (its D103 guarantee regressed); group 4 (#469) passed with
-one hardening still to land. Neither is ticked yet.
+Current state: groups 1, 2, 3, 4 and 8 are ticked — written, reviewed
+and passed. Group 5 is ticked through 5.3; **5.4 stays unticked because
+it has not been executed**, which is the whole point of the convention.
+Groups 6 and 7 are not started.
+
+Two groups came back *needs work* and were repaired before ticking:
+group 3 (its D103 left-branch guarantee had regressed from
+machine-enforced to comment-only) and group 8 (one diagnostic was
+covering three different failures, two of them with an impossible
+remedy).
 
 **Declared file overlaps** (so they are sequenced rather than pretended
 away — these pairs are *not* parallel-safe):
@@ -195,7 +201,7 @@ expectations moved, never snapshot-form ones, which is precisely what
 
 ## 3. Core's union() enforces row compatibility (#487)
 
-- [ ] 3.1 (~9m) The six combinators in `SetOpCombinators` bind the other
+- [x] 3.1 (~9m) The six combinators in `SetOpCombinators` bind the other
       branch's projection and consume `SetOpResult` — which already sits
       in this file for the recursive-term case — so a mismatched key set
       resolves `never` and stops compiling. The runtime, the built node
@@ -218,7 +224,7 @@ expectations moved, never snapshot-form ones, which is precisely what
       (`a.union(b).except(c)`) stay unguarded. Same file, so the file set
       does not grow. Files: `packages/core/src/query/select.ts`, that
       test.
-- [ ] 3.2 (~7m) Fix the one existing test 3.1's narrowing breaks:
+- [x] 3.2 (~7m) Fix the one existing test 3.1's narrowing breaks:
       `packages/core/test/view-kind.test.ts:604` ("a union view
       round-trips and lists the left branch's columns") unions
       `{id, name}` with `{id, title}`, and its own comment says the right
@@ -239,7 +245,7 @@ expectations moved, never snapshot-form ones, which is precisely what
 
 ## 4. countWhere is removed (#469)
 
-- [ ] 4.1 (~9m) Remove `countWhere` from `expr/aggregate.ts` and from
+- [x] 4.1 (~9m) Remove `countWhere` from `expr/aggregate.ts` and from
       the barrel in the same task — the two cannot be split without a
       broken build. `count(operand)` is the surviving spelling, and the
       conditional work in this task **fires**: measured, `aggregate.ts`
@@ -260,7 +266,7 @@ expectations moved, never snapshot-form ones, which is precisely what
       count(<expr>)" and "countWhere is not exported" (a type-level red
       on the import). Files: `packages/core/src/expr/aggregate.ts`,
       `packages/core/src/index.ts`, that test.
-- [ ] 4.2 (~6m) Grep the decided word immediately after 4.1:
+- [x] 4.2 (~6m) Grep the decided word immediately after 4.1:
       `rg -n 'countWhere' --glob '!node_modules'`. Measured before this
       task was written (28 hits / 11 files), the pass condition is that
       the grep returns **only** these four categories:
@@ -302,7 +308,7 @@ expectations moved, never snapshot-form ones, which is precisely what
 Runs after 2 (shares `dsl/index-builder.ts`) and after 4 (shares the
 barrel).
 
-- [ ] 5.1 (~10m) [design] Promote the shared ordering vocabulary
+- [x] 5.1 (~10m) [design] Promote the shared ordering vocabulary
       **downward** (lead-settled direction): one construct that both the
       declaration medium and the query medium accept, living where
       `expr/` can own it, with `dsl/index-builder.ts` consuming it —
@@ -325,7 +331,7 @@ barrel).
       `packages/core/test/query/select.test.ts` — "orderBy accepts
       desc(column)" (currently a type error; the red is that it does not
       compile). Files: as enumerated above, plus those two tests.
-- [ ] 5.2 (~8m) `OrderByTerm` gains an optional `nulls` placement and
+- [x] 5.2 (~8m) `OrderByTerm` gains an optional `nulls` placement and
       both renderers emit it in SQL's own order — `orderByClause`
       (shared by a select and a window `over(...)`) and
       `setOpOrderByClause`. Group 1.4 has already established the clause
@@ -335,7 +341,7 @@ barrel).
       x desc nulls last` in a select, a window clause, and a set-op
       whole-set order". Files: `packages/core/src/expr/ast.ts`,
       `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 5.3 (~8m) The codec encodes and decodes `nulls`
+- [x] 5.3 (~8m) The codec encodes and decodes `nulls`
       **additive-compact**: present only when set, absent decoding to
       "no explicit placement", `formatVersion` stays 8 (D84's precedent,
       and fix-select-traversal's v8 rule). This is a compatibility
@@ -820,7 +826,7 @@ Type-level narrowing cannot reach this: TypeScript object types have no
 key order to compare. A build-time check can, and it stays pure (no
 I/O — it reads two projection objects).
 
-- [ ] 8.1 (~9m) [design] A pure helper in `@hejbro/core` comparing the
+- [x] 8.1 (~9m) [design] A pure helper in `@hejbro/core` comparing the
       two branches' projection key **order**, and the diagnostic it
       throws. Settle the error shape before code (lead's requirement):
       the message **prints both orders verbatim**, naming which branch
@@ -831,7 +837,7 @@ I/O — it reads two projection objects).
       branches list the same keys in a different order is refused, and
       the message shows both orders". Files: the new helper (placement
       decided here — `query/select.ts` or its own module), that test.
-- [ ] 8.2 (~9m) **Every construction site consumes it. There are three,
+- [x] 8.2 (~9m) **Every construction site consumes it. There are three,
       not the two this task first named** (found in review; the
       enumerating grep is below, and the planner had its output in hand
       and read two lines out of it):

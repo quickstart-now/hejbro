@@ -116,6 +116,19 @@ const findKeyOrderMismatch = (
  * (`with-recursive.ts` importing a VALUE from `select.ts`) would complete
  * a runtime import cycle across three files. This module depends on
  * nothing from `query/`, so none of the three needs to import another.
+ *
+ * A fourth mangled-diagnosis case was considered and ruled out (review):
+ * `leftBranchOutputColumns` returns `[]` for a `constantOne` projection
+ * (`select 1`, always empty output columns), which would compare as a
+ * key-SET mismatch against any non-empty branch. Not reachable through
+ * the public builder: `select()` only ever produces `allColumns`/
+ * `columns` projections (`query/select.ts`); `constantOne` is built
+ * exclusively by `exists()`/`notExists()` (`buildExists`), which return
+ * `Expr<"boolean">`, never a chainable `SelectLimited`/`SetOpStage` a
+ * combinator could take as `other`. Only a hand-assembled `SelectNode`
+ * could carry `constantOne` into this guard — the same input class
+ * (decoded snapshot, hand-built IR) this guard is already documented as
+ * defensive against, not a fifth one.
  */
 export const assertSameSetOpKeyOrder = (
 	left: SelectNode | SetOpNode,

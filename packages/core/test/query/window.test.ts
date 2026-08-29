@@ -168,6 +168,27 @@ describe("over() (task 2.2)", () => {
 		);
 	});
 
+	it("over({ orderBy }) carries an explicit nulls placement through the real builder chain, not just the type (#470)", () => {
+		// group 5.2's own render-sql.test.ts red hand-builds a WindowNode
+		// directly, bypassing over()/desc() -- that proves the RENDERER
+		// emits nulls, not that the BUILDER chain (desc()'s own { nulls }
+		// option, flowing through over()'s WindowSpec, through
+		// resolveOrderTerm) actually carries it there. This closes that
+		// gap end to end.
+		const query = select(
+			{
+				id: posts.id,
+				rnk: over(rank(), {
+					orderBy: [desc(posts.publishedAt, { nulls: "last" })],
+				}),
+			},
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toContain(
+			'rank() over (order by "app"."posts"."published_at" desc nulls last) as "rnk"',
+		);
+	});
+
 	it("over refuses a target that is not a function call", () => {
 		expect(() => over(posts.status, {})).toThrowError(
 			expect.objectContaining({ code: "invalid-over-target" }),
