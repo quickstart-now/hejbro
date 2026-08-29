@@ -55,6 +55,7 @@ export type {
 	ForeignKeyInput,
 	ForeignKeyReferenceTarget,
 	IndexColumnDeclaration,
+	IndexColumnOrigin,
 	IndexDeclaration,
 	IndexMethod,
 	IndexNulls,
@@ -113,15 +114,7 @@ export {
 	throwHejbroError,
 } from "./error";
 export type { Aggregated, ReadAs } from "./expr/aggregate";
-export {
-	avg,
-	count,
-	countWhere,
-	max,
-	min,
-	readAsBrand,
-	sum,
-} from "./expr/aggregate";
+export { avg, count, max, min, readAsBrand, sum } from "./expr/aggregate";
 export type {
 	BetweenNode,
 	ColumnRef,
@@ -143,9 +136,11 @@ export type {
 	LiteralNode,
 	LogicalNode,
 	NotNode,
+	NullsPlacement,
 	NullTestNode,
 	OnConflictNode,
 	OrderByTerm,
+	OrderedTerm,
 	PlpgsqlRefNode,
 	ProjectionNode,
 	QueryNode,
@@ -348,6 +343,7 @@ export {
 	resolveOrderTerm,
 	select,
 } from "./query/select";
+export { assertSameSetOpKeyOrder } from "./query/set-op-key-order";
 export type {
 	CteBuilder,
 	CteEntryOptions,

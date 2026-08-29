@@ -1,13 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ColumnBuilder, ColumnRef, SetOpNode } from "../../src/index";
 import {
 	and,
+	asc,
 	avg,
 	bigint,
 	bytea,
 	count,
-	countWhere,
 	date,
+	desc,
 	eq,
 	exists,
 	gt,
@@ -168,6 +169,35 @@ describe("select builder", () => {
 		const query = select(posts).where(isNotNull(comments.postId));
 		expect(() => renderSelect(query.selectQuery)).toThrowError(
 			/foreign-column-ref|join that table/,
+		);
+	});
+});
+
+describe("one ordering vocabulary (#470)", () => {
+	it("orderBy accepts desc(column) -- the declaration medium's own asc()/desc()", () => {
+		// Before group 5, OrderTermInput was Expr | { by, direction } only --
+		// desc(posts.id) (dsl/index-builder.ts's IndexColumn) satisfied
+		// neither, a compile error. Widening OrderTermInput to include
+		// OrderedTerm (expr/ast.ts) is what makes this compile now; the
+		// rendered SQL is identical to the equivalent { by, direction } form
+		// (a select's own orderBy renders a table-qualified reference,
+		// same as every other bare-Expr orderBy term in this file).
+		const query = select(posts).orderBy(desc(posts.id));
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."id" desc',
+		);
+	});
+
+	it("orderBy accepts asc(column, { nulls }) too, and the placement reaches the rendered SQL (group 5.2)", () => {
+		// The dedicated red for the renderer half (OrderByTerm.nulls and
+		// both renderers, across all three positions) lives in
+		// expr/render-sql.test.ts; this pins the same property end to end
+		// through the query builder's own orderBy().
+		const query = select(posts).orderBy(
+			asc(posts.publishedAt, { nulls: "last" }),
+		);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."published_at" asc nulls last',
 		);
 	});
 });
@@ -439,6 +469,179 @@ describe("set-op combinators (add-set-operations task 2.1)", () => {
 	});
 });
 
+describe("union() enforces row compatibility (#487)", () => {
+	it("a union of two selects with different key sets does not type-check", () => {
+		// posts {id, status, publishedAt} vs comments {id, postId} -- a
+		// mismatched key set resolves SetOpResult to `never`, poisoning
+		// the `other` parameter (the same mechanism with.ts's
+		// CompatibleRecursiveTerm and @hejbro/query's CompatibleBranch
+		// already use). With the directive removed, the actual error is
+		// TS2345: "Argument of type 'SelectDistinctable<Table<{ id:
+		// ColumnBuilder<"uuid", ...>; postId: ColumnBuilder<"uuid",
+		// ...>; }>>' is not assignable to parameter of type 'never'."
+		// `@ts-expect-error` only suppresses the compile error -- the JS
+		// still runs, and group 8's runtime guard (assertSameSetOpKeyOrder)
+		// also refuses a key-set mismatch (group 8.4: the set check runs
+		// BEFORE the order check, so a genuinely different key set lands
+		// on set-op-key-set-mismatch, not set-op-key-order-mismatch --
+		// "reorder" would be no remedy at all here, nothing shares a key
+		// set to reorder), so this now throws for real too; wrapped in
+		// toThrow() (asserting the specific code, not any exception) so
+		// that second, independent refusal doesn't fail the test with an
+		// uncaught exception, and doesn't silently pass for a different
+		// reason either.
+		expect(() =>
+			select(posts).union(
+				// @ts-expect-error comments' key set does not match posts' --
+				// see the TS2345 text above.
+				select(comments),
+			),
+		).toThrow(expect.objectContaining({ code: "set-op-key-set-mismatch" }));
+	});
+
+	it("a union of two selects with the same key set still type-checks, and its result row keeps the left branch's keys", () => {
+		const active = select(posts).where(eq(posts.status, "active"));
+		const archived = select(posts).where(eq(posts.status, "archived"));
+		const combined = active.union(archived);
+		// positive control: the compatibility gate does not poison the
+		// matching case, and the result stage's own projection is still
+		// exactly the LEFT branch's (SetOpResult's computed shape is
+		// discarded, never propagated into the return type -- #487).
+		expectTypeOf(combined.projectionInput).toEqualTypeOf(
+			active.projectionInput,
+		);
+	});
+
+	it("a matching union compiles to the same SQL it did before", () => {
+		const active = select(posts).where(eq(posts.status, "active"));
+		const archived = select(posts).where(eq(posts.status, "archived"));
+		expect(renderSetOp(active.union(archived).setOpQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\'',
+		);
+	});
+});
+
+describe("union() checks branch key ORDER, not just the key set (#487, second half — group 8)", () => {
+	// same key SET ({email, city}) on both tables, declared in a
+	// different order -- SameKeys/SetOpResult (group 3) only sees the
+	// set, so this pair type-checks; Postgres itself matches
+	// set-operation branches by POSITION, so this is exactly the shape
+	// that used to compile and silently swap each row's email/city
+	// (measured on postgres:17, group 8's own red).
+	const usersByEmail = table(app, "users_by_email", {
+		email: text().notNull(),
+		city: text().notNull(),
+	});
+	const usersByCity = table(app, "users_by_city", {
+		city: text().notNull(),
+		email: text().notNull(),
+	});
+
+	it("a union whose branches list the same keys in a different order is refused, and the message shows both orders", () => {
+		expect(() => select(usersByEmail).union(select(usersByCity))).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-order-mismatch",
+				message: expect.stringContaining(
+					"left: (email, city), right: (city, email)",
+				),
+			}),
+		);
+	});
+
+	it("a union whose branches list the same keys in the SAME order still compiles and works (positive control)", () => {
+		const usersByEmailToo = table(app, "users_by_email_too", {
+			email: text().notNull(),
+			city: text().notNull(),
+		});
+		expect(() =>
+			select(usersByEmail).union(select(usersByEmailToo)),
+		).not.toThrow();
+	});
+});
+
+describe("branch key SET mismatches are their own code, not folded into ORDER (group 8.4)", () => {
+	// #464/#469/#487/#489's own recurring failure mode, repeated once more
+	// in the guard this very slice added: findKeyOrderMismatch's original
+	// scan was a pure positional walk with no set comparison, so a
+	// genuinely different key set (or a missing key) also fell through
+	// to "different order" -- a real diagnostic code, but a "reorder"
+	// remedy that cannot be followed when there is nothing correctly-
+	// keyed to reorder. The set check now runs FIRST.
+	const usersIdEmail = table(app, "users_id_email_84", {
+		id: uuid().primaryKey(),
+		email: text().notNull(),
+	});
+	const usersIdTown = table(app, "users_id_town_84", {
+		id: uuid().primaryKey(),
+		town: text().notNull(),
+	});
+	const usersIdOnly = table(app, "users_id_only_84", {
+		id: uuid().primaryKey(),
+	});
+	const usersTownId = table(app, "users_town_id_84", {
+		town: text().notNull(),
+		id: uuid().primaryKey(),
+	});
+
+	it("genuinely different keys (same size) are a key-SET mismatch, not order", () => {
+		expect(() =>
+			select(usersIdEmail).union(
+				// @ts-expect-error usersIdTown's key set differs from
+				// usersIdEmail's (email vs town) -- a genuine set mismatch,
+				// not a reordering of the same keys.
+				select(usersIdTown),
+			),
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-set-mismatch",
+				message: expect.stringContaining(
+					'only in left: "email", only in right: "town"',
+				),
+			}),
+		);
+	});
+
+	it("a branch missing a key is a key-SET mismatch, not order -- nothing to reorder", () => {
+		expect(() =>
+			select(usersIdEmail).union(
+				// @ts-expect-error usersIdOnly is missing usersIdEmail's
+				// `email` key entirely.
+				select(usersIdOnly),
+			),
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-set-mismatch",
+				message: expect.stringContaining(
+					'only in left: "email", only in right: (none)',
+				),
+			}),
+		);
+	});
+
+	it("both a set difference AND a positional difference at once still resolves to the key-SET code (discrimination order)", () => {
+		// {id, email} vs {town, id}: shares "id", but "email"/"town" are
+		// genuinely different keys -- a pure positional scan would also
+		// see position 0 disagree ("id" vs "town") and could mis-report
+		// this as an order problem. Set-first sends it to the set code,
+		// whose remedy ("project the same keys") is the one that is
+		// actually true here.
+		expect(() =>
+			select(usersIdEmail).union(
+				// @ts-expect-error usersTownId's key set differs from
+				// usersIdEmail's -- see the comment above.
+				select(usersTownId),
+			),
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-set-mismatch",
+				message: expect.stringContaining(
+					'only in left: "email", only in right: "town"',
+				),
+			}),
+		);
+	});
+});
+
 describe("set-op order-by output-column guard (review F1)", () => {
 	const active = select(posts).where(eq(posts.status, "active"));
 	const archived = select(posts).where(eq(posts.status, "archived"));
@@ -476,7 +679,7 @@ describe("aggregates and grouping (#416)", () => {
 			{
 				status: posts.status,
 				total: count(),
-				published: countWhere(posts.publishedAt),
+				published: count(posts.publishedAt),
 				earliest: min(posts.publishedAt),
 				latest: max(posts.publishedAt),
 			},
@@ -528,5 +731,31 @@ describe("aggregates and grouping (#416)", () => {
 		// its exprNode is a functionCall, not a real column reference, so
 		// index()/a foreign-key column list must stop accepting it.
 		const _atRisk: ColumnRef = max(posts.publishedAt);
+	});
+});
+
+describe("countWhere is removed (#469)", () => {
+	it("count(expr) renders count(<expr>)", () => {
+		const query = select({ published: count(posts.publishedAt) }, posts);
+		expect(renderSelect(query.selectQuery)).toBe(
+			'select count("app"."posts"."published_at") as "published" from "app"."posts"',
+		);
+	});
+
+	it("countWhere is not exported (a type-level red)", () => {
+		// @ts-expect-error countWhere was removed, not renamed -- the
+		// surviving spelling is the argumented count(operand)
+		// (aggregate.ts's own rule: all five aggregate names carry
+		// Postgres's own names verbatim, no invented ones). Actual error
+		// with the directive removed: TS2694 "Namespace '\"…/src/index\"'
+		// has no exported member 'countWhere'."
+		type _Removed = typeof import("../../src/index").countWhere;
+		// Positive control, deliberately undirected: `@ts-expect-error`
+		// swallows TS2307 ("Cannot find module") too, so a rotted import
+		// path (the file moved or was renamed) would make the red above
+		// pass for the wrong reason -- silently, since nothing else in
+		// this file exercises that path. This line has no directive: if
+		// the path dies, this is what makes the suite fail loudly instead.
+		type _PathControl = typeof import("../../src/index").count;
 	});
 });

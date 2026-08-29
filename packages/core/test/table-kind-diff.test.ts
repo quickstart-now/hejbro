@@ -194,7 +194,13 @@ describe("tableKind.serialize", () => {
 			indexes: [
 				{
 					columns: [
-						{ name: t.postId.sqlName, desc: false, nulls: null, opclass: null },
+						{
+							name: t.postId.sqlName,
+							origin: { schemaName: "app", tableName: "comments" },
+							desc: false,
+							nulls: null,
+							opclass: null,
+						},
 					],
 					unique: false,
 					indexName: null,
@@ -357,6 +363,7 @@ describe("tableKind.diff", () => {
 					columns: [
 						{
 							name: t.publishedAt.sqlName,
+							origin: { schemaName: "app", tableName: "posts" },
 							desc: false,
 							nulls: null,
 							opclass: null,

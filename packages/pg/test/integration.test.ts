@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+	asc,
 	assertNoNulls,
 	bigint,
 	bytea,
@@ -7,6 +8,7 @@ import {
 	count,
 	cumeDist,
 	date,
+	desc,
 	emptySnapshot,
 	eq,
 	generateMigration,
@@ -2366,5 +2368,228 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		} finally {
 			await shortPool.end();
 		}
+	});
+
+	/**
+	 * harden-query-surface group 5.4 (#470) -- execution pending, run in
+	 * 7.7's closing slot alongside 6.3 and the suite's own gate (lead-
+	 * approved batching, one Docker slot instead of three). Group 1.4
+	 * already measured `nulls first`/`nulls last` legal in all three
+	 * positions on postgres:17 (a plain select, a window `over(...)`,
+	 * and a set-op whole-set order); this is the difference between
+	 * "the golden string matches" (group 5.2's own unit tests) and "the
+	 * server actually orders the rows that way" when hejbro's own
+	 * `asc()`/`desc()` render the clause. `v` is nullable and one seeded
+	 * row leaves it null on purpose -- the only way to observe where
+	 * nulls actually land, as opposed to merely that the clause parses.
+	 *
+	 * Review-measured on postgres:17: `asc` already defaults to
+	 * `nulls last` and `desc` already defaults to `nulls first`, so a
+	 * witness whose expected placement matches the DEFAULT would pass
+	 * even against a build that silently drops the `nulls` clause
+	 * entirely -- it proves nothing. Only the two placements that
+	 * DIFFER from the default discriminate: `asc … nulls first` and
+	 * `desc … nulls last`, one used for each of the two assertions below
+	 * so both discriminating cases are covered rather than one of them
+	 * twice. 7.7's own execution slot additionally strips the rendered
+	 * `nulls` clause and confirms both assertions go red individually,
+	 * closing the exact gap this defaulting fact opened the first time.
+	 */
+	it("nulls first/last render and the server orders rows that way, in a plain select and in a window over(...), live against a real postgres:17 (group 5.4, #470)", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		await driver.execute({
+			sql: `create table g5_integration.ord_nulls (
+				id uuid primary key,
+				v integer
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const ordNulls = table(testSchema, "ord_nulls", {
+			id: uuid().primaryKey(),
+			v: integer(),
+		});
+		const handle = db({ ordNulls }, driver);
+		await handle.insert(ordNulls).values([
+			{ id: "eeeeeeee-0000-4000-8000-000000000001", v: 1 },
+			{ id: "eeeeeeee-0000-4000-8000-000000000002", v: null },
+			{ id: "eeeeeeee-0000-4000-8000-000000000003", v: 2 },
+		]);
+
+		// plain select: asc nulls first -- DIFFERS from asc's own default
+		// (nulls last), so this is discriminating: the null-valued row
+		// leads, then ascending.
+		const selectOrdered = await handle
+			.select(ordNulls)
+			.orderBy(asc(ordNulls.v, { nulls: "first" }));
+		expect(selectOrdered.map((row) => row.v)).toEqual([null, 1, 2]);
+
+		// window over(...): desc nulls last -- row_number() confirms the
+		// null-valued row is ranked AFTER both non-null rows, not just that
+		// it appears last in this particular result set's happenstance order.
+		const windowed = await handle.select(
+			{
+				v: ordNulls.v,
+				rn: over(rowNumber(), {
+					orderBy: [desc(ordNulls.v, { nulls: "last" })],
+				}),
+			},
+			ordNulls,
+		);
+		const byRank = [...windowed]
+			.sort((a, b) => Number(a.rn) - Number(b.rn))
+			.map((row) => row.v);
+		expect(byRank).toEqual([2, 1, null]);
+	});
+
+	/**
+	 * harden-query-surface group 6.3 (#489) -- execution pending, run in
+	 * 7.7's closing slot alongside 5.4 and the suite's own gate.
+	 *
+	 * 6.1 and 6.2 both concluded "keep allowing this, state the residue"
+	 * (outcome (a) and outcome 1 respectively) -- neither added a new
+	 * refusal, so there is no rule-predicted SQLSTATE for this witness
+	 * to confirm the server agrees with, the way 6.3's own task text
+	 * originally anticipated. What group 1's M4 addendum and M3b-i
+	 * measured with hand-written raw SQL, this witnesses through
+	 * hejbro's OWN builder and compiled SQL instead -- the gap this
+	 * change has already found twice (the #470 window-nulls case, the
+	 * #487 order-guard case): a construct can type-check and even be
+	 * measured-accepted by Postgres in the abstract, and still not be
+	 * what *our own rendered SQL* actually sends. Both of 6.1/6.2's own
+	 * guard tests build exactly these shapes already (unit-level, no
+	 * server); this confirms the same shapes round-trip against a real
+	 * postgres:17 too.
+	 */
+	it("the 6.1/6.2 guard shapes (nullable-divergent and same-family-divergent recursive terms) actually execute, live against a real postgres:17 (group 6.3, #489)", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+
+		// 6.1's own shape (M4 addendum): anchor's "v" is a NOT NULL
+		// numeric column ("seed"), the recursive term's "v" is a
+		// genuinely nullable numeric column ("v") -- same declared type
+		// on both sides, nullability the only divergence. (Review
+		// caught a first draft that instead diverged in TYPE -- anchor
+		// projecting the integer primary key as "v" -- which reproduces
+		// M3b-ii's refused shape, `42804`, not M4's accepted one.)
+		// Confirms the null the guard test's TYPES already permit
+		// really does arrive in a live row, through our builder's own
+		// rendered SQL. The recursive term's own "id" is the JOINED
+		// row's id (the child), not the anchor's -- projecting the
+		// anchor's `self.id` back out would keep every row at id 1 and
+		// leave `.orderBy(r.id)` unable to order rows deterministically.
+		await driver.execute({
+			sql: `create table g5_integration.g6_nullable (
+				id integer primary key,
+				parent integer,
+				seed numeric not null,
+				v numeric
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const nullableDivergent = table(testSchema, "g6_nullable", {
+			id: integer().primaryKey(),
+			parent: integer(),
+			seed: numeric({ mode: "number" }).notNull(),
+			v: numeric({ mode: "number" }),
+		});
+		const nullableHandle = db({ nullableDivergent }, driver);
+		await nullableHandle.insert(nullableDivergent).values([
+			{ id: 1, parent: null, seed: 1, v: null },
+			{ id: 2, parent: 1, seed: 99, v: null },
+		]);
+		const nullableWalked = await nullableHandle.with((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{ id: nullableDivergent.id, v: nullableDivergent.seed },
+					nullableDivergent,
+				).where(isNull(nullableDivergent.parent)),
+				(self) =>
+					select(
+						{ id: nullableDivergent.id, v: nullableDivergent.v },
+						self,
+					).innerJoin(nullableDivergent, eq(self.id, nullableDivergent.parent)),
+			);
+			return select({ id: r.id, v: r.v }, r).orderBy(r.id);
+		});
+		expect(nullableWalked).toEqual([
+			{ id: 1, v: 1 },
+			{ id: 2, v: null },
+		]);
+
+		// 6.2's own shape (M3b-i): anchor's "amount" is numeric, the
+		// recursive term's "amount" is bigint -- same family
+		// ("numeric"), different declared type. Confirms this compiles
+		// AND executes AND the recursive row reads back as the
+		// anchor's own type (a JS number, never a bigint), matching
+		// M3b-i's raw-SQL measurement (resolves to the anchor's type)
+		// through our builder instead. `pg_typeof` is projected
+		// alongside `amount` (via the `sql` escape hatch, over the
+		// builder's own compiled recursive CTE) because a JS-side
+		// `typeof === "number"` check alone only observes hejbro's own
+		// read-side conversion, never the server's resolved column
+		// type -- M3b-i's own measurement is a claim about
+		// `pg_typeof`, so the live witness has to observe the same
+		// thing, not a proxy for it (review). As with the nullable
+		// case above, the recursive term's own "id" is the joined row's.
+		await driver.execute({
+			sql: `create table g5_integration.g6_numbig (
+				id integer primary key,
+				parent integer,
+				amount numeric,
+				big_amount bigint
+			)`,
+			params: [],
+			kind: "sql",
+		});
+		const sameFamilyDivergent = table(testSchema, "g6_numbig", {
+			id: integer().primaryKey(),
+			parent: integer(),
+			amount: numeric({ mode: "number" }),
+			bigAmount: bigint(),
+		});
+		const sameFamilyHandle = db({ sameFamilyDivergent }, driver);
+		await sameFamilyHandle.insert(sameFamilyDivergent).values([
+			{ id: 1, parent: null, amount: 100, bigAmount: null },
+			{ id: 2, parent: 1, amount: null, bigAmount: 200n },
+		]);
+		const sameFamilyWalked = await sameFamilyHandle.with((w) => {
+			const r = w.asRecursive(
+				"r",
+				select(
+					{ id: sameFamilyDivergent.id, amount: sameFamilyDivergent.amount },
+					sameFamilyDivergent,
+				).where(isNull(sameFamilyDivergent.parent)),
+				(self) =>
+					select(
+						{
+							id: sameFamilyDivergent.id,
+							amount: sameFamilyDivergent.bigAmount,
+						},
+						self,
+					).innerJoin(
+						sameFamilyDivergent,
+						eq(self.id, sameFamilyDivergent.parent),
+					),
+			);
+			return select(
+				{ id: r.id, amount: r.amount, amountType: sql`pg_typeof(${r.amount})` },
+				r,
+			).orderBy(r.id);
+		});
+		expect(sameFamilyWalked).toEqual([
+			{ id: 1, amount: 100, amountType: "numeric" },
+			{ id: 2, amount: 200, amountType: "numeric" },
+		]);
+		expect(typeof sameFamilyWalked[1]?.amount).toBe("number");
 	});
 });

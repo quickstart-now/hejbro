@@ -15,6 +15,7 @@ import type {
 	LiteralNode,
 	LogicalNode,
 	NotNode,
+	NullsPlacement,
 	NullTestNode,
 	OrderByTerm,
 	PlpgsqlRefNode,
@@ -432,9 +433,20 @@ const encodeJoin = (node: JoinNode): JsonValue => ({
 	on: encodeExprNode(node.on),
 });
 
+/** `{ nulls }` when set, `{}` when not (group 5.3, harden-query-surface, #470) — additive-compact: `OrderByTerm` is a released shape (present at the `@hejbro/core@0.1.1` tag), so a snapshot a released version wrote, with no `nulls` key at all, must stay exactly what it was. */
+const encodeOrderByTermNullsField = (
+	nulls: NullsPlacement | undefined,
+): { readonly nulls?: NullsPlacement } => {
+	if (nulls === undefined) {
+		return {};
+	}
+	return { nulls };
+};
+
 const encodeOrderByTerm = (term: OrderByTerm): JsonValue => ({
 	expr: encodeExprNode(term.expr),
 	direction: term.direction,
+	...encodeOrderByTermNullsField(term.nulls),
 });
 
 const encodeWhere = (where: ExprNode | null): JsonValue => {
@@ -887,11 +899,22 @@ const decodeJoin = (value: JsonValue): JoinNode => {
 	};
 };
 
+/** `{ nulls }` when the decoded node has one, `{}` when absent — a 0.1.1-era `OrderByTerm` (written before `nulls` existed) decodes to "no explicit placement" the same way any other released snapshot missing a since-added optional key does, not to a decode error. */
+const decodeOrderByTermNullsField = (
+	nulls: JsonValue | undefined,
+): { readonly nulls?: NullsPlacement } => {
+	if (nulls === undefined) {
+		return {};
+	}
+	return { nulls: nulls as NullsPlacement };
+};
+
 const decodeOrderByTerm = (value: JsonValue): OrderByTerm => {
 	const node = asRecord(value, "direction");
 	return {
 		expr: decodeExprNode(node.expr as JsonValue),
 		direction: node.direction as OrderByTerm["direction"],
+		...decodeOrderByTermNullsField(node.nulls),
 	};
 };
 

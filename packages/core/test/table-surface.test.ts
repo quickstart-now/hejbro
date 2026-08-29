@@ -48,7 +48,13 @@ describe("table() surface (D15)", () => {
 			(t) => ({ indexes: [index().on(t.publishedAt)] }),
 		);
 		expect(getTableMeta(posts).indexes[0]?.columns).toEqual([
-			{ name: "published_at", desc: false, nulls: null, opclass: null },
+			{
+				name: "published_at",
+				origin: { schemaName: "shop", tableName: "posts" },
+				desc: false,
+				nulls: null,
+				opclass: null,
+			},
 		]);
 		const comments = table(
 			shop,

@@ -102,7 +102,13 @@ describe("table() — app-style posts", () => {
 		expect(getTableMeta(posts).indexes).toEqual([
 			{
 				columns: [
-					{ name: "published_at", desc: false, nulls: null, opclass: null },
+					{
+						name: "published_at",
+						origin: { schemaName: "app", tableName: "posts" },
+						desc: false,
+						nulls: null,
+						opclass: null,
+					},
 				],
 				unique: false,
 				indexName: null,
@@ -118,7 +124,13 @@ describe("table() — app-style posts", () => {
 				indexes: [
 					{
 						columns: [
-							{ name: "nonexistent", desc: false, nulls: null, opclass: null },
+							{
+								name: "nonexistent",
+								origin: { schemaName: "app", tableName: "posts" },
+								desc: false,
+								nulls: null,
+								opclass: null,
+							},
 						],
 						unique: false,
 						indexName: null,

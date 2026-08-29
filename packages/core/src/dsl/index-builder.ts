@@ -1,21 +1,19 @@
 import { throwHejbroError } from "../error";
-import type { ColumnRef, Expr } from "../expr/ast";
+import type { ColumnRef, Expr, OrderedTerm } from "../expr/ast";
 import { isExpr } from "../expr/ast";
 import { renderExpr } from "../expr/render-sql";
 import { assertSqlName } from "../sql/identifier-rules";
 import type {
 	IndexColumnDeclaration,
+	IndexColumnOrigin,
 	IndexDeclaration,
 	IndexMethod,
 	IndexNulls,
 } from "./table";
 import { indexMethods } from "./table";
 
-/** One column of an ordered index: a column ref or any expression (R5, e.g. `sql\`lower(${t.email})\``), its sort direction, an optional explicit nulls placement (D51), and an optional operator class (R4). */
-export type IndexColumn = {
-	readonly column: ColumnRef | Expr;
-	readonly desc: boolean;
-	readonly nulls: IndexNulls | null;
+/** One column of an ordered index: the shared ordering vocabulary ({@link OrderedTerm}, `expr/ast.ts` — a column ref or any expression (R5, e.g. `sql\`lower(${t.email})\``), its sort direction, and an optional explicit nulls placement, D51) plus an optional operator class (R4), the one field an index column carries that a query's `order by` term does not. */
+export type IndexColumn = OrderedTerm & {
 	readonly opclass: string | null;
 };
 
@@ -59,10 +57,12 @@ export const op = (input: IndexColumnInput, opclass: string): IndexColumn => ({
 	opclass: assertSqlName(opclass, "operator class", null),
 });
 
-/** `{ name }` for a `ColumnRef` input, `{ expression: ExprNode }` for any other expression (R5) — {@link toDeclarationColumn}'s own field. */
+/** `{ name, origin }` for a `ColumnRef` input (`origin` is the table it was resolved from, #464 — `assertNoForeignIndexColumn`'s own input, declaration-side only), `{ expression: ExprNode }` for any other expression (R5) — {@link toDeclarationColumn}'s own field. */
 const declarationColumnSelf = (
 	column: ColumnRef | Expr,
-): { readonly name: string } | { readonly expression: Expr["exprNode"] } => {
+):
+	| { readonly name: string; readonly origin: IndexColumnOrigin }
+	| { readonly expression: Expr["exprNode"] } => {
 	if (isColumnRef(column)) {
 		if (column.exprNode.schemaName === null) {
 			// add-ctes task 1.2d: `.on()` has no table-ownership check at
@@ -84,7 +84,13 @@ const declarationColumnSelf = (
 				`index column references a column of the CTE "${column.exprNode.tableName}" — a CTE is statement-local and cannot back an index column. Next: pass one of the table's own columns instead.`,
 			);
 		}
-		return { name: column.sqlName };
+		return {
+			name: column.sqlName,
+			origin: {
+				schemaName: column.exprNode.schemaName,
+				tableName: column.exprNode.tableName,
+			},
+		};
 	}
 	return { expression: column.exprNode };
 };

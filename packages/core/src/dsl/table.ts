@@ -1,6 +1,12 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
-import type { ColumnRef, ColumnRefNode, Expr, ExprNode } from "../expr/ast";
+import type {
+	ColumnRef,
+	ColumnRefNode,
+	Expr,
+	ExprNode,
+	NullsPlacement,
+} from "../expr/ast";
 import { columnRef, expr } from "../expr/ast";
 import { isNull } from "../expr/operators";
 import { collectColumnRefs } from "../expr/render-sql";
@@ -35,8 +41,8 @@ export const foreignKeyActions = [
 /** @see foreignKeyActions */
 export type ForeignKeyAction = (typeof foreignKeyActions)[number];
 
-/** Where an ordered index column places SQL nulls relative to its sort order. */
-export type IndexNulls = "first" | "last";
+/** Where an ordered index column places SQL nulls relative to its sort order — alias of the shared {@link NullsPlacement} (`expr/ast.ts`, group 5, harden-query-surface, #470): the index declaration medium and the query medium share one nulls-placement vocabulary now, not two independently declared unions kept in sync by hand. */
+export type IndexNulls = NullsPlacement;
 
 /** Postgres access methods hejbro accepts (D85, closed) — built-in six plus pgvector's two. `"btree"` is Postgres' own default and is never recorded in a declaration or snapshot (SC-004): see {@link IndexDeclaration.method}. */
 export const indexMethods = [
@@ -53,15 +59,21 @@ export const indexMethods = [
 /** @see indexMethods */
 export type IndexMethod = (typeof indexMethods)[number];
 
+/** The table a plain index column's `name` was resolved from (#464) — declaration-side only, `assertNoForeignIndexColumn`'s own input; never reaches the snapshot (`serializeIndexColumnSelf` picks `name` alone). */
+export type IndexColumnOrigin = {
+	readonly schemaName: string;
+	readonly tableName: string;
+};
+
 /**
  * One entry of an index's column list after `table()` resolves it (D51):
- * a plain column (`name`) or an expression column (`expression`, a
- * structured node reused from the partial-predicate machinery, D46) —
- * exactly one of the two — plus its sort direction, nulls placement, and
- * optional operator class (R4/R5).
+ * a plain column (`name`, plus the table it came from, `origin`) or an
+ * expression column (`expression`, a structured node reused from the
+ * partial-predicate machinery, D46) — exactly one of the two — plus its
+ * sort direction, nulls placement, and optional operator class (R4/R5).
  */
 export type IndexColumnDeclaration = (
-	| { readonly name: string }
+	| { readonly name: string; readonly origin: IndexColumnOrigin }
 	| { readonly expression: ExprNode }
 ) & {
 	readonly desc: boolean;
@@ -240,6 +252,55 @@ export const buildColumnRefs = <TColumns extends Record<string, ColumnBuilder>>(
 			),
 		]),
 	) as TableColumns<TColumns>;
+
+type ForeignNamedIndexColumn = {
+	readonly name: string;
+	readonly origin: IndexColumnOrigin;
+};
+
+/** Every plain (`name`) index column paired with the table it was resolved from, across every index — an expression column carries no `origin` and is out of this scan (its own foreign-column check runs in `assertNoForeignIndexExpressionColumn`). */
+const namedIndexColumnsWithOrigin = (
+	indexes: ReadonlyArray<IndexDeclaration>,
+): ReadonlyArray<ForeignNamedIndexColumn> =>
+	indexes.flatMap((index) =>
+		index.columns.flatMap((column) => {
+			if (!("origin" in column)) {
+				return [];
+			}
+			return [{ name: column.name, origin: column.origin }];
+		}),
+	);
+
+/**
+ * Rejects a plain index column (`.on(t.col)`, not an expression) naming
+ * another table's column (#464) — joins the `foreign-column-ref` family
+ * the CTE guard in `dsl/index-builder.ts`'s `declarationColumnSelf`
+ * already forms for this same `.on()` position: a CTE column is refused
+ * there at build time (no table context needed yet), and this is that
+ * guard's other half, refused here once `table()` knows which table is
+ * declaring the index. Runs before {@link validateColumnRefs} so a
+ * foreign column gets this diagnosis instead of either passing silently
+ * (same-named case) or reading as a typo (`unknown-index-column`,
+ * different-named case).
+ */
+const assertNoForeignIndexColumn = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const foreign = namedIndexColumnsWithOrigin(indexes).find(
+		(column) =>
+			column.origin.schemaName !== owner.schemaName ||
+			column.origin.tableName !== tableName,
+	);
+	if (foreign === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"foreign-column-ref",
+		`table "${tableName}" declares an index over column "${foreign.origin.schemaName}.${foreign.origin.tableName}.${foreign.name}" — an index can only use this table's own columns. Next: use this table's own columns (the callback's \`t\`).`,
+	);
+};
 
 const validateColumnRefs = (
 	tableName: string,
@@ -1224,6 +1285,15 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const knownColumnNames = new Set(
 		columnEntries.map((entry) => entry.columnName),
 	);
+	// Order affects diagnosis, not detection (#464, measured): running
+	// this after validateColumnRefs would misdiagnose a different-named
+	// foreign column as unknown-index-column (a typo) instead of
+	// foreign-column-ref -- validateColumnRefs only checks name
+	// membership, so it can't itself catch a same-named foreign column
+	// either way; this guard is what does, regardless of the two calls'
+	// order. A same-named foreign column passing silently is what
+	// removing this guard entirely (not merely reordering it) causes.
+	assertNoForeignIndexColumn(owner, tableName, indexes);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 	validateDuplicateNames(tableName, indexes, foreignKeys);
 	validateIndexExpressions(owner, tableName, indexes);

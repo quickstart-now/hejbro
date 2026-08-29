@@ -4,6 +4,7 @@ import {
 	count,
 	cumeDist,
 	denseRank,
+	desc,
 	firstValue,
 	lag,
 	lastValue,
@@ -148,6 +149,43 @@ describe("over() (task 2.2)", () => {
 		expect(renderSelect(query.selectQuery)).not.toContain("group by");
 		expect(renderSelect(query.selectQuery)).toContain(
 			'count(*) over (order by "app"."posts"."published_at" asc) as "running"',
+		);
+	});
+
+	it("over({ orderBy }) accepts desc(column) too -- one ordering vocabulary, not three (#470)", () => {
+		// WindowSpec.orderBy is typed straight off OrderTermInput (D104) --
+		// widening that union once in expr/ast.ts (group 5) covers this
+		// medium for free, no change to expr/window.ts itself.
+		const query = select(
+			{
+				id: posts.id,
+				rnk: over(rank(), { orderBy: [desc(posts.publishedAt)] }),
+			},
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toContain(
+			'rank() over (order by "app"."posts"."published_at" desc) as "rnk"',
+		);
+	});
+
+	it("over({ orderBy }) carries an explicit nulls placement through the real builder chain, not just the type (#470)", () => {
+		// group 5.2's own render-sql.test.ts red hand-builds a WindowNode
+		// directly, bypassing over()/desc() -- that proves the RENDERER
+		// emits nulls, not that the BUILDER chain (desc()'s own { nulls }
+		// option, flowing through over()'s WindowSpec, through
+		// resolveOrderTerm) actually carries it there. This closes that
+		// gap end to end.
+		const query = select(
+			{
+				id: posts.id,
+				rnk: over(rank(), {
+					orderBy: [desc(posts.publishedAt, { nulls: "last" })],
+				}),
+			},
+			posts,
+		);
+		expect(renderSelect(query.selectQuery)).toContain(
+			'rank() over (order by "app"."posts"."published_at" desc nulls last) as "rnk"',
 		);
 	});
 

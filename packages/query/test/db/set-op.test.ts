@@ -62,6 +62,38 @@ describe("chain set-op combinators (add-set-operations task 3.3)", () => {
 	});
 });
 
+describe("chain union refuses branches whose key order differs (#487, second half — group 8)", () => {
+	// same key SET ({email, city}) on both tables, declared in a
+	// different order -- the chain builds its own setOp node directly
+	// (never routing through core's combineSetOp), so it needs its own
+	// call to the same order guard, or this, the primary user-facing
+	// surface, would still silently corrupt data (measured on
+	// postgres:17, group 8's own core-level red).
+	const usersByEmail = table(app, "chain_users_by_email", {
+		email: text().notNull(),
+		city: text().notNull(),
+	});
+	const usersByCity = table(app, "chain_users_by_city", {
+		city: text().notNull(),
+		email: text().notNull(),
+	});
+
+	it("the chain's union refuses branches whose key order differs", () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = db({ app, usersByEmail, usersByCity }, driver);
+		expect(() =>
+			handle.select(usersByEmail).union(handle.select(usersByCity)),
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-order-mismatch",
+				message: expect.stringContaining(
+					"left: (email, city), right: (city, email)",
+				),
+			}),
+		);
+	});
+});
+
 describe("left-branch conversion and codec/retarget gaps (review F4-F6)", () => {
 	it("rows convert per the LEFT branch's declarations when modes differ (F4)", async () => {
 		const leftLedger = table(app, "left_ledger", {

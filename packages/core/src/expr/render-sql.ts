@@ -355,6 +355,14 @@ const whereClause = (
 	return `where ${renderExpr(where, scope)}`;
 };
 
+/** ` nulls first`/` nulls last` when the term carries an explicit placement, else nothing — absent means Postgres' own default, never rendered (group 5.2, harden-query-surface, #470). Shared by both `order by` renderers below — the one place `OrderByTerm.nulls` reaches SQL text. */
+const nullsSuffix = (term: OrderByTerm): string => {
+	if (term.nulls === undefined) {
+		return "";
+	}
+	return ` nulls ${term.nulls}`;
+};
+
 /** Shared by a select's own `order by` and a window clause's `order by` — both are the exact same shape (`OrderByTerm[]`), rendered the exact same way. */
 const orderByClause = (
 	orderBy: ReadonlyArray<OrderByTerm>,
@@ -364,7 +372,10 @@ const orderByClause = (
 		return "";
 	}
 	const terms = orderBy
-		.map((term) => `${renderExpr(term.expr, scope)} ${term.direction}`)
+		.map(
+			(term) =>
+				`${renderExpr(term.expr, scope)} ${term.direction}${nullsSuffix(term)}`,
+		)
 		.join(", ");
 	return `order by ${terms}`;
 };
@@ -702,8 +713,8 @@ const renderSetOpBranch = (
 	return renderSelect(branch, outerScope);
 };
 
-/** The leftmost select's OUTPUT column names — what Postgres resolves a set-op's whole-set `order by` against (measured live, group 4: a table-qualified or non-output reference is an ERROR there, so the guard checks membership in THIS list, never a table scope). */
-const leftBranchOutputColumns = (
+/** The leftmost select's OUTPUT column names — what Postgres resolves a set-op's whole-set `order by` against (measured live, group 4: a table-qualified or non-output reference is an ERROR there, so the guard checks membership in THIS list, never a table scope). Reused by `query/select.ts`'s `assertSameSetOpKeyOrder` (#487, group 8) for EITHER side of a combinator — a branch's own output order is its own leftmost select's, recursively, on either side of `union`/etc., the same "left branch's keys win" rule `SetOpResult` already states. */
+export const leftBranchOutputColumns = (
 	branch: SelectNode | SetOpNode,
 ): ReadonlyArray<string> => {
 	if (branch.queryKind === "setOp") {
@@ -730,7 +741,7 @@ const setOpOrderByClause = (orderBy: ReadonlyArray<OrderByTerm>): string => {
 				"a set operation's order by accepts only plain column references (the combined output's own columns). Next: order by a left-branch column, or write the statement with sql``.",
 			);
 		}
-		return `"${term.expr.columnName}" ${term.direction}`;
+		return `"${term.expr.columnName}" ${term.direction}${nullsSuffix(term)}`;
 	});
 	return `order by ${rendered.join(", ")}`;
 };

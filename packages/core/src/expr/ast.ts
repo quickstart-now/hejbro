@@ -241,6 +241,8 @@ export type JoinNode = {
 export type OrderByTerm = {
 	readonly expr: ExprNode;
 	readonly direction: "asc" | "desc";
+	/** Explicit `nulls first`/`nulls last` (group 5, harden-query-surface, #470) — absent means no explicit placement (Postgres' own default), additive-compact in the snapshot codec since `OrderByTerm` is a released shape. */
+	readonly nulls?: NullsPlacement;
 };
 
 /**
@@ -425,27 +427,81 @@ export const columnRef = <TNode extends TypeNode>(
 export const isExpr = (value: unknown): value is Expr =>
 	typeof value === "object" && value !== null && "exprNode" in value;
 
+/** Where SQL places nulls relative to a sort order — one vocabulary shared between an index's declared ordering (D51, `dsl/table.ts`'s `IndexNulls` aliases this) and a query's `order by` (group 5, harden-query-surface, #470), rather than two independently declared unions that happen to match today and could silently drift apart. */
+export type NullsPlacement = "first" | "last";
+
+/**
+ * The ordering vocabulary `asc(...)`/`desc(...)` build (`dsl/index-builder.ts`,
+ * which owns the wrapper functions themselves and extends this with its
+ * own `opclass` field as `IndexColumn`) — a column or expression, its
+ * sort direction, and an optional explicit nulls placement. Lives here,
+ * not in `dsl/`, so the query medium can accept it too (widening
+ * {@link OrderTermInput} below) without `expr/` importing `dsl/` — the
+ * layering this package holds throughout (group 5, harden-query-surface,
+ * #470: promoted downward rather than having `expr/` reach up into
+ * `dsl/index-builder.ts`).
+ */
+export type OrderedTerm = {
+	readonly column: ColumnRef | Expr;
+	readonly desc: boolean;
+	readonly nulls: NullsPlacement | null;
+};
+
+const isOrderedTerm = (value: object): value is OrderedTerm =>
+	"column" in value && isExpr((value as OrderedTerm).column);
+
 /**
  * What accepts an order term everywhere one is needed: a select's own
  * `orderBy()` (`query/select.ts`, re-exported from there for its own
- * callers) and a window's `over()` spec (`expr/window.ts`) — a bare
- * ascending `Expr`, or `{ by, direction }` for an explicit direction.
- * Lives here, not in `query/`, because `query/` depends on `expr/`
- * throughout this package and never the reverse — `expr/window.ts`
- * duplicated this shape locally at first (D104 group 2) rather than
- * invert that; promoted here in group 3 once a second real consumer
- * existed, closing the drift risk a hand-kept duplicate carries (the
- * exact shape `reachable-kinds.ts` already consolidated once for
- * `retarget.test.ts`/`naming-conventions.test.ts`'s own node-kind lists).
+ * callers), a window's `over()` spec (`expr/window.ts`), and now the
+ * same `asc(...)`/`desc(...)`-wrapped {@link OrderedTerm} the declaration
+ * medium's index columns already accept (group 5, harden-query-surface,
+ * #470) — a bare ascending `Expr`, `{ by, direction }` for an explicit
+ * direction, or an `OrderedTerm`. Lives here, not in `query/`, because
+ * `query/` depends on `expr/` throughout this package and never the
+ * reverse — `expr/window.ts` duplicated this shape locally at first
+ * (D104 group 2) rather than invert that; promoted here in group 3 once
+ * a second real consumer existed, closing the drift risk a hand-kept
+ * duplicate carries (the exact shape `reachable-kinds.ts` already
+ * consolidated once for `retarget.test.ts`/`naming-conventions.test.ts`'s
+ * own node-kind lists). `WindowSpec.orderBy` is typed straight off this
+ * union, so it accepts `asc()`/`desc()` too without any change of its
+ * own — one vocabulary, not three.
  */
 export type OrderTermInput =
 	| Expr
-	| { readonly by: Expr; readonly direction: "asc" | "desc" };
+	| { readonly by: Expr; readonly direction: "asc" | "desc" }
+	| OrderedTerm;
 
-/** Resolves an {@link OrderTermInput} to a stored {@link OrderByTerm} — a bare `Expr` orders ascending. */
+/** `desc: boolean` to SQL's own direction spelling — the same if/return shape `table-kind-emit-sql.ts`'s `descKeyword` already uses for the declaration medium's own `desc` field, not a ternary. */
+const directionOf = (desc: boolean): "asc" | "desc" => {
+	if (desc) {
+		return "desc";
+	}
+	return "asc";
+};
+
+/** `{ nulls }` when set, `{}` when not — additive-compact, the same shape `OrderByTerm.nulls`'s own doc comment states. */
+const nullsField = (
+	nulls: NullsPlacement | null,
+): { readonly nulls?: NullsPlacement } => {
+	if (nulls === null) {
+		return {};
+	}
+	return { nulls };
+};
+
+/** Resolves an {@link OrderTermInput} to a stored {@link OrderByTerm} — a bare `Expr` orders ascending; an `OrderedTerm` (`asc()`/`desc()`) carries its own direction and nulls placement through. */
 export const resolveOrderTerm = (term: OrderTermInput): OrderByTerm => {
 	if (isExpr(term)) {
 		return { expr: term.exprNode, direction: "asc" };
+	}
+	if (isOrderedTerm(term)) {
+		return {
+			expr: term.column.exprNode,
+			direction: directionOf(term.desc),
+			...nullsField(term.nulls),
+		};
 	}
 	return { expr: term.by.exprNode, direction: term.direction };
 };

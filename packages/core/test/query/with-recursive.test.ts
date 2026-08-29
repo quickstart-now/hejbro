@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
+	bigint,
 	count,
 	eq,
 	integer,
@@ -63,20 +64,61 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 	});
 
 	it("a recursive term missing one of the anchor's keys is refused", () => {
-		withCte((w) => {
-			w.asRecursive(
-				"r",
-				select({ id: t.id, v: t.v }, t).where(isNull(t.parent)),
-				// @ts-expect-error the recursive term's own projection ({id}
-				// only) is missing the anchor's `v` key -- SetOpResult (task
-				// 6.5) resolves key-set mismatches to `never`, poisoning the
-				// whole callback parameter, so this fails to compile, not
-				// just to run.
-				(self) =>
-					select({ id: t.id }, self).innerJoin(t, eq(self.id, t.parent)),
-			);
-			return select(t);
-		});
+		// `@ts-expect-error` only suppresses the compile error -- the JS
+		// still runs, and group 8's runtime guard (assertSameSetOpKeyOrder,
+		// wired into buildRecursiveEntryQuery) also refuses a key-set
+		// mismatch (group 8.4: the set check runs BEFORE the order check,
+		// so a missing key lands on set-op-key-set-mismatch, not
+		// set-op-key-order-mismatch -- "reorder" would be no remedy here),
+		// so this now throws for real too; wrapped in toThrow() (asserting
+		// the specific code, not any exception) so that second,
+		// independent refusal doesn't fail the test with an uncaught
+		// exception, and doesn't silently pass for a different reason
+		// either.
+		expect(() =>
+			withCte((w) => {
+				w.asRecursive(
+					"r",
+					select({ id: t.id, v: t.v }, t).where(isNull(t.parent)),
+					// @ts-expect-error the recursive term's own projection ({id}
+					// only) is missing the anchor's `v` key -- SetOpResult (task
+					// 6.5) resolves key-set mismatches to `never`, poisoning the
+					// whole callback parameter, so this fails to compile, not
+					// just to run.
+					(self) =>
+						select({ id: t.id }, self).innerJoin(t, eq(self.id, t.parent)),
+				);
+				return select(t);
+			}),
+		).toThrow(expect.objectContaining({ code: "set-op-key-set-mismatch" }));
+	});
+
+	it("a recursive term listing the anchor's keys in a different order is refused (#487, second half — group 8)", () => {
+		// same key SET ({id, v}) as the anchor, declared in the OPPOSITE
+		// order -- CompatibleRecursiveTerm (SameKeys-based, like every
+		// other type-level check in this slice) cannot see order, so this
+		// type-checks; buildRecursiveEntryQuery's own call to
+		// assertSameSetOpKeyOrder is what refuses it, at build time,
+		// before the anchor UNION recursive-term ever reaches the server.
+		expect(() =>
+			withCte((w) => {
+				w.asRecursive(
+					"r",
+					select({ id: t.id, v: t.v }, t).where(isNull(t.parent)),
+					(self) =>
+						select({ v: self.v, id: self.id }, self).innerJoin(
+							t,
+							eq(self.id, t.parent),
+						),
+				);
+				return select(t);
+			}),
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-order-mismatch",
+				message: expect.stringContaining("left: (id, v), right: (v, id)"),
+			}),
+		);
 	});
 
 	it("a field computed differently on each side is accepted and reads back as the anchor's type", () => {
@@ -362,5 +404,91 @@ describe("the accept list (add-ctes task 6.5)", () => {
 		const rendered = renderQuery(stage.withQuery);
 		expect(rendered).toContain('"materialized_r" as materialized (');
 		expect(rendered).toContain('"not_materialized_r" as not materialized (');
+	});
+});
+
+// harden-query-surface group 6.1 (#489): the null fork. SetOpResult is a
+// plain mapped type and nullability rides inside the value type, not a
+// separate flag -- so a rule tightened to "same type" would count
+// `number | null` against `number` and reject programs Postgres accepts.
+// The comparison therefore elides null, which opens a gap on the other
+// side: anchor `number`, recursive term `number | null` still compiles,
+// the CTE's declared row type stays the anchor's (`number`, not
+// `number | null`), and the recursive term's null really does reach the
+// result rows -- measured, not hypothetical (group 1, M4 addendum:
+// `v_is_null = t` on the affected rows). Lead-settled outcome (a): keep
+// the anchor's type, state the gap. Residue pinned at #412's sub-issue
+// (issue.sh) and in the query-type-inference spec delta.
+describe("a recursive term's nullability is not the reason to refuse it (#489, group 6.1)", () => {
+	it("a recursive term nullable where the anchor is not still compiles", () => {
+		// This is a GUARD, not a red-to-green: it is green today (before
+		// 6.2's own type narrowing exists) and must stay green after --
+		// 6.2's rule elides null per this task's own decision, so a
+		// nullability-only divergence must never become the reason a
+		// recursive term is refused.
+		//
+		// anchor's own "v" key: t.id's value -- non-null (primaryKey).
+		// recursive term's own "v" key: t.v's value -- nullable, same
+		// family (numeric) as the anchor's, a pure nullability
+		// divergence with no underlying type mismatch, matching M4's
+		// own measured shape.
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self).innerJoin(
+						t,
+						eq(self.id, t.parent),
+					),
+			);
+			return select({ id: r.id, v: r.v }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+});
+
+// harden-query-surface group 6.2 (#489), outcome 1 -- NO source change.
+// The key question (does the rule key on the type PAIR or on the
+// ANCHOR?) is already answered by group 1: M3b-i (numeric anchor +
+// bigint recursive term) is accepted and resolves to numeric; M3b-ii,
+// the identical pair reversed, is refused with 42804. A directional
+// rule is therefore correct in principle, but not expressible as a
+// build-time TS check without reproducing Postgres's own numeric
+// promotion table: this package's SqlTypeFamily collapses every
+// integer/real/numeric/serial type into one family, "numeric" -- the
+// same family both M3b-i's and M3b-ii's branches share, so nothing at
+// the family level (the coarsest information a keyof-based check has)
+// can tell the accepted pair from the refused one. Reported here, not
+// silently: this outcome closes the key-SET axis (already checked) and
+// states the type axis as a residual gap in the query-type-inference
+// spec delta, rather than building a narrower rule that would need the
+// same promotion table by another name.
+describe("a same-family type divergence between anchor and recursive term is not caught (#489, group 6.2 outcome 1)", () => {
+	it("a recursive term whose column type differs from the anchor's (same family) still compiles -- the residual gap this outcome documents, not closes", () => {
+		// M3b-i's own shape (group 1, measured accepted on postgres:17):
+		// numeric anchor + bigint recursive term, same key, same
+		// SqlTypeFamily ("numeric"), different declared hejbro type.
+		const numBig = table(app, "num_big", {
+			id: integer().primaryKey(),
+			parent: integer(),
+			amount: numeric({ mode: "number" }),
+			bigAmount: bigint(),
+		});
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: numBig.id, amount: numBig.amount }, numBig).where(
+					isNull(numBig.parent),
+				),
+				(self) =>
+					select({ id: self.id, amount: numBig.bigAmount }, self).innerJoin(
+						numBig,
+						eq(self.id, numBig.parent),
+					),
+			);
+			return select({ id: r.id, amount: r.amount }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
 	});
 });

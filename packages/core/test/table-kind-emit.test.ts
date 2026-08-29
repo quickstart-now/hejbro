@@ -50,6 +50,7 @@ describe("tableKind.emit — create", () => {
 						columns: [
 							{
 								name: t.postId.sqlName,
+								origin: { schemaName: "app", tableName: "comments" },
 								desc: false,
 								nulls: null,
 								opclass: null,
@@ -109,6 +110,7 @@ describe("tableKind.emit — create", () => {
 						columns: [
 							{
 								name: t.email.sqlName,
+								origin: { schemaName: "app", tableName: "users" },
 								desc: false,
 								nulls: null,
 								opclass: null,
@@ -448,7 +450,13 @@ describe("tableKind.emit — alter", () => {
 			indexes: [
 				{
 					columns: [
-						{ name: t.slug.sqlName, desc: false, nulls: null, opclass: null },
+						{
+							name: t.slug.sqlName,
+							origin: { schemaName: "app", tableName: "posts" },
+							desc: false,
+							nulls: null,
+							opclass: null,
+						},
 					],
 					unique: false,
 					indexName: null,
