@@ -122,6 +122,11 @@ export const TARGET_PACKAGES = [
 		srcDir: join(REPO_ROOT, "packages/pg/src"),
 		coverageJson: join(REPO_ROOT, "packages/pg/coverage/coverage-final.json"),
 	},
+	{
+		name: "@hejbro/neon",
+		srcDir: join(REPO_ROOT, "packages/neon/src"),
+		coverageJson: join(REPO_ROOT, "packages/neon/coverage/coverage-final.json"),
+	},
 ];
 
 const DECISION_LOOP_KINDS = new Set([

@@ -6,6 +6,7 @@ import {
 	generateMigration,
 	grant,
 	integer,
+	interval,
 	literal,
 	numeric,
 	rls,
@@ -90,13 +91,28 @@ const roleGated = table(
 	}),
 );
 
-/** Arrival-shape witness table (task 7.7) -- the types whose parsers most plausibly differ between `pg-types` and `@neondatabase/serverless`'s own bundled set. */
+/**
+ * Arrival-shape witness table (task 7.7, extended by 7.8) -- the types
+ * whose parsers most plausibly differ between `pg-types` and
+ * `@neondatabase/serverless`'s own bundled set. Task 7.7's original four
+ * columns (bigint/numeric scalar/timestamptz/integer[]) all fall through
+ * to the client's own default parser -- none of them exercise the three
+ * oids `type-overrides.ts` actually overrides (1186 interval, 1187
+ * interval[], 1231 numeric[]), so a live-data bug in the override itself
+ * (present but wrong, not merely missing) had nothing here to catch it
+ * (measured: reviewer's "drop the interval/numeric[] oid from the
+ * override" mutants both survived this file before 7.8). `duration` and
+ * `durations` and `precisions` close that gap.
+ */
 const shapes = table(app, "shapes", {
 	id: uuid().primaryKey().defaultRandom(),
 	amount: bigint({ mode: "number" }).notNull(),
 	precise: numeric({ mode: "string" }).notNull(),
 	seenAt: timestamptz().notNull(),
 	tags: integer().array().notNull(),
+	duration: interval().notNull(),
+	durations: interval().array().notNull(),
+	precisions: numeric({ mode: "string" }).array().notNull(),
 });
 
 const declarations = { identityGated, roleGated, shapes };
@@ -162,11 +178,23 @@ describe("Neon WebSocket local witness (group 7)", () => {
 				{ ownerId: OWNER_B },
 			]);
 		await handle.insert(roleGated).values([{ id: randomUUID() }]);
+		const oneDayTwoHours = {
+			years: 0,
+			months: 0,
+			days: 1,
+			hours: 2,
+			minutes: 0,
+			seconds: 0,
+			microseconds: 0,
+		};
 		await handle.insert(shapes).values({
 			amount: 9007199254740991,
 			precise: "123456789012345678901234.567890123456789",
 			seenAt: new Date("2026-01-15T10:30:00Z"),
 			tags: [1, 2, 3],
+			duration: oneDayTwoHours,
+			durations: [oneDayTwoHours, oneDayTwoHours],
+			precisions: ["123.450000", "0.100000"],
 		});
 	}, 30_000);
 
@@ -304,5 +332,36 @@ describe("Neon WebSocket local witness (group 7)", () => {
 		expect((row.seenAt as Date).toISOString()).toBe("2026-01-15T10:30:00.000Z");
 		// integer().array(): an array of numbers, element-wise parsed.
 		expect(row.tags).toEqual([1, 2, 3]);
+	});
+
+	it("rows arrive in the vanilla driver's shapes for the three oid-overridden types too (task 7.8)", async () => {
+		const driver = neonDriver(poolRef.current as Pool);
+		const handle = db(declarations, driver);
+
+		const rows = await handle.execute(select(shapes));
+
+		expect(rows).toHaveLength(1);
+		const row = rows[0];
+		if (row === undefined) {
+			throw new Error("the seeded shapes row was never returned");
+		}
+		const oneDayTwoHours = {
+			years: 0,
+			months: 0,
+			days: 1,
+			hours: 2,
+			minutes: 0,
+			seconds: 0,
+			microseconds: 0,
+		};
+		// interval() (oid 1186, the override's own raw-text passthrough):
+		// a structured IntervalValue, never a client-parsed object neither
+		// hejbro's conversion layer nor `pg-types` would recognize.
+		expect(row.duration).toEqual(oneDayTwoHours);
+		// interval[] (oid 1187): element-wise the same structured shape.
+		expect(row.durations).toEqual([oneDayTwoHours, oneDayTwoHours]);
+		// numeric[] (oid 1231): raw decimal text per element, never
+		// already-`parseFloat`'d numbers -- exact scale/precision intact.
+		expect(row.precisions).toEqual(["123.450000", "0.100000"]);
 	});
 });

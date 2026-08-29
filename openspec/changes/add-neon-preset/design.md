@@ -287,13 +287,62 @@ docker run -d --name ne-http --network ne \
 **The identity witness needs `pg_session_jwt`, and there is no image that
 has it.** Neither Docker Hub nor ghcr nor the extension registries publish
 a Postgres image carrying it, so the local stack has to build it: it is a
-Rust `pgrx` extension, and the build wants a current toolchain (a system
-Rust old enough to miss `cargo-pgrx`'s requirement fails late and
-unhelpfully). Building it in a `rust:1-bookworm` container against
-`postgresql-server-dev-17`, then copying the `.so` and the extension files
-into the running `postgres:17` container, works because both sides are the
-same major version and Debian release — the artifact is copied, not
-rebuilt in place. Roughly eight minutes, once per stack.
+Rust `pgrx` extension. It builds in a container and the artifact is
+copied into the running `postgres:17` container — same major version,
+same Debian release, so the `.so` is portable as-is and is never rebuilt
+in place. Roughly ten minutes on a warm Docker cache, once per stack.
+
+```bash
+PGJWT_COMMIT=937a79a65e596d916295d078b3a82ab421291665   # extension 0.5.0
+PGRX_VERSION=0.16.1
+
+docker run -d --name ne-build rust:1-bookworm bash -c '
+  set -e
+  apt-get update -qq
+  apt-get install -y -qq --no-install-recommends \
+    ca-certificates curl gnupg git build-essential pkg-config libssl-dev \
+    libreadline-dev zlib1g-dev flex bison >/dev/null
+
+  install -d /usr/share/postgresql-common/pgdg
+  curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+    > /etc/apt/sources.list.d/pgdg.list
+  apt-get update -qq
+  apt-get install -y -qq postgresql-server-dev-17 >/dev/null
+
+  cargo install cargo-pgrx --version '"$PGRX_VERSION"' --locked -q
+  cargo pgrx init --pg17 "$(which pg_config)"
+
+  git clone -q https://github.com/neondatabase/pg_session_jwt /src
+  cd /src && git checkout -q '"$PGJWT_COMMIT"'
+  cargo pgrx package --pg-config "$(which pg_config)"
+  echo BUILD_OK
+'
+
+until docker logs ne-build 2>&1 | grep -q BUILD_OK; do sleep 10; done
+docker cp ne-build:/src/target/release/pg_session_jwt-pg17/usr /tmp/pgjwt
+docker cp /tmp/pgjwt/lib/postgresql/17/lib/pg_session_jwt.so \
+  ne-pg:/usr/lib/postgresql/17/lib/
+docker cp /tmp/pgjwt/share/postgresql/17/extension/. \
+  ne-pg:/usr/share/postgresql/17/extension/
+docker exec ne-pg psql -U postgres -d main -c "create extension pg_session_jwt"
+docker rm -f ne-build
+```
+
+4. **`postgresql-server-dev-17` is not in `rust:1-bookworm`'s own apt
+   repositories.** Debian bookworm ships PostgreSQL 15, so the PGDG
+   repository has to be added first — otherwise the install fails
+   immediately with a message ("no installation candidate") that names
+   the package rather than the cause.
+5. **The script is inlined into `bash -c` and the artifact comes back
+   through `docker cp`, deliberately.** Mounting a build script into the
+   container failed on macOS Docker Desktop, which created an empty
+   directory where the file should have been (`Is a directory`). Inlining
+   avoids that path entirely, and `docker cp` avoids needing a mount for
+   the output — which is also why the container is not started with
+   `--rm`: it has to outlive the build long enough to be copied from.
 
 Verify before writing any witness that reads identity:
 
@@ -303,7 +352,9 @@ docker exec ne-pg psql -U postgres -d main -c "
   select auth.uid();"
 ```
 
-That returns the subject when the extension is present and configured in
+**This output, not `BUILD_OK`, is what says the extension is ready** — the
+build finishing still leaves the copy and `create extension` ahead of it.
+It returns the subject when the extension is present and configured in
 claims mode — which is also the platform fact the claims-mode builder
 depends on, observed rather than assumed. A stub SQL function reading the
 same setting would have made the witness cheaper and would have tested our

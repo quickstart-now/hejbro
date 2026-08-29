@@ -426,6 +426,39 @@ starts from its own failing test.
       driver's shapes for numeric, int8, timestamptz, and arrays". Files:
       that test.
 
+- [x] 7.8 (~6m) The witness reads back the three types the driver
+      **overrides**, not only the ones it leaves to the client's parser.
+      7.7 covers `numeric` (scalar), `int8`, `timestamptz`, and an
+      `integer[]` — none of which is `interval` (1186), `interval[]`
+      (1187), or `numeric[]` (1231), the three the override exists for.
+      The witness has two axes and 7.7 covered one: types whose parser we
+      **trust** (checked because it might differ) and types whose parser
+      we **bypass** (checked because the bypass might not work). A type
+      added later belongs to whichever axis it falls on; naming both is
+      what keeps the next addition from landing on the covered side by
+      default.
+      So a live run cannot currently tell whether the override does the
+      right thing to the types it is *about*: measured, dropping 1231
+      from the shared module and dropping 1186 both leave the witness at
+      6 passed. Unit tests catch the override going **missing**; only a
+      witness can catch it being **wrong against real data**. Red:
+      `packages/neon/test/integration/ws.integration.test.ts` — the two
+      surviving mutants (drop 1231, drop 1186) must turn it red. Files:
+      that test.
+- [x] 7.9 (~6m) Promote `design.md`'s extension build from prose to a
+      block that can be run, and record the trap found by rebuilding it
+      independently: `postgresql-server-dev-17` is **not in
+      `rust:1-bookworm`'s default apt sources** — Debian bookworm carries
+      PostgreSQL 15, so the PGDG repository has to be added first or the
+      install fails immediately. The existing prose says what to build
+      against; it does not say the repository URL, the commit, the
+      `cargo-pgrx` version, `init`/`package` invocation, or the artifact
+      paths, all of which the second person to run it had to rediscover —
+      which is the cost the surrounding traps are recorded to avoid. Red
+      (no test covers a document; the check is the red): a reader
+      following the section has to write the commands themselves. Files:
+      `openspec/changes/add-neon-preset/design.md`.
+
 ## 8. Gate registration
 
 Last, not first: every task here claims that a gate now sees this
@@ -433,7 +466,7 @@ package, and that claim is only observable once the package has source
 and tests to be seen. Each red below is a defect deliberately planted —
 absence is not a red.
 
-- [ ] 8.1 (~8m) Register `@hejbro/neon` in `scripts/crap-report.mjs`'s
+- [x] 8.1 (~8m) Register `@hejbro/neon` in `scripts/crap-report.mjs`'s
       `TARGET_PACKAGES` and refresh the README CRAP block, whose numbers
       move — CI compares that block by diff, so leaving it stale fails the
       build. This list is hardcoded, not derived from the workspace
@@ -441,7 +474,7 @@ absence is not a red.
       green — the failure mode #372 already named. Red: a function well
       over the CRAP threshold planted in `packages/neon/src` leaves `pnpm
       check:crap` passing. Files: `scripts/crap-report.mjs`, `README.md`.
-- [ ] 8.2 (~9m) Register `@hejbro/neon` in `scripts/pack-install-smoke.sh`
+- [x] 8.2 (~9m) Register `@hejbro/neon` in `scripts/pack-install-smoke.sh`
       at all six existing sites: the `PACKAGES` array, the `NEON_TGZ`
       resolution, the consumer `package.json`, `assert_tarball_files_
       installed`, `assert_license_content`, and
@@ -450,7 +483,7 @@ absence is not a red.
       other. Red: removing `dist` from `packages/neon`'s `files` leaves
       `pnpm smoke:pack-install` passing. Files:
       `scripts/pack-install-smoke.sh`.
-- [ ] 8.3 (~7m) [design] Make the smoke consumer **import**
+- [x] 8.3 (~7m) [design] Make the smoke consumer **import**
       `@hejbro/neon`, not merely install it. Installed-but-unimported is
       the gap the script's own comment records as M6: a reviewer broke
       `@hejbro/supabase`'s `exports` and every assertion stayed green.
@@ -460,7 +493,7 @@ absence is not a red.
       assertion references a real exported value instead. Red: breaking
       `packages/neon`'s `exports` field leaves `pnpm smoke:pack-install`
       green. Files: `scripts/pack-install-smoke.sh`.
-- [ ] 8.4 (~6m) Add `@hejbro/neon` to `.changeset/config.json`'s `fixed`
+- [x] 8.4 (~6m) Add `@hejbro/neon` to `.changeset/config.json`'s `fixed`
       group (5 → 6) and add the change's single `.changeset/*.md`
       (`minor`). Approved as a release-surface decision; the first publish
       remains an owner gate. Red: `changeset status` treats
