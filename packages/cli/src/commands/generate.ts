@@ -438,9 +438,17 @@ const baselineBlockerText = (
  * empty in this mode. There is no declaration set that both parses as a
  * `HejbroInput` and diffs to nothing, so the only way this branch is ever
  * reached is an empty declarations array -- one sentence, not two branches
- * for a state that can't happen. That flat claim depends on today's kind
- * set: a future declaration kind that can fan out to zero snapshot
- * changes would make this message false, not just incomplete.
+ * for a state that can't happen.
+ *
+ * That flat claim rests on a premise, not a proof: every declared kind
+ * fans out to at least one snapshot object. It depends on today's kind
+ * set staying that way -- a future kind that can legitimately fan out to
+ * zero would make this message false, not just incomplete. The one
+ * candidate this could plausibly fail on -- `grant(...).to()` called with
+ * no role, which contributes no `GrantDeclaration` at all -- is already
+ * excluded before it gets here: `dsl/grant.ts`'s `buildRolesStage` throws
+ * `grant-missing-roles` at declaration time, so it can never reach
+ * `generateMigration`'s `declarations` array as a zero-fanout input.
  */
 const throwBaselineNothingToAdopt = (entry: ReadonlyArray<string>): never => {
 	const entryPhrase = entry.map((pattern) => `"${pattern}"`).join(", ");

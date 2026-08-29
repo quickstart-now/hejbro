@@ -66,9 +66,12 @@ describe("hejbro --help", () => {
  * `OPTIONS` heading line specifically (`\nOPTIONS\n\n`), not the first
  * substring match: the `USAGE hejbro generate [OPTIONS]` line above it
  * also contains the bare word "OPTIONS". The `--flag=` pattern only
- * matches value-taking flags -- every `GENERATE_ARGS` entry is a string
- * today, so this stays a sound comparison, but a future boolean flag
- * would silently escape it.
+ * matches value-taking flags, rendered as `--flag=<placeholder>` -- every
+ * `GENERATE_ARGS` entry is a string today, so this stays a sound
+ * comparison. A future boolean flag renders with no `=` at all, so it
+ * would be missing from BOTH `generateFlags` and `baselineFlags` here at
+ * once -- invisible to the R-b drift check this helper exists for, not
+ * merely miscounted.
  */
 const optionFlags = (stdout: string): ReadonlyArray<string> => {
 	const optionsBlock = stdout.match(/\nOPTIONS\n\n([\s\S]*)/)?.[1] ?? "";
