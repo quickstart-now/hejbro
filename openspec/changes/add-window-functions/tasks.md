@@ -199,7 +199,40 @@ discipline").
 
 ## 4. Result typing and conversion — after group 2
 
-- [ ] 4.1 (~8m) [design] What each window function reads back as:
+- [x] 4.0 (~5m) Two cleanups review flagged. (a) `walk.ts`'s deep arm
+      gains one line: the in-repo consumer path is closed by 3.3/3.4, and
+      the arm exists for presets calling the **public**
+      `someDeepExprNode` — a reader of `walk.ts` alone would otherwise
+      assume an internal caller still reaches it. (b) `window.test.ts`'s
+      bare `toThrow()` on the degenerate `sum(rowNumber())` call is
+      narrowed or the runtime call dropped: the contract there is the
+      `@ts-expect-error`, and an unqualified `toThrow()` stays green even
+      if the guard breaks. Files: `packages/core/src/expr/walk.ts`,
+      `packages/core/test/query/window.test.ts`.
+- [x] 4.0b (~7m) Two refinements review produced after 4.0 landed.
+      (a) The degenerate `sum(rowNumber())` keeps its `@ts-expect-error`
+      but loses its **runtime call** — narrowing the throw is not enough.
+      It passes today because the guard walks an `undefined` node into a
+      `TypeError`; asserting that pins an accident as a contract. Follow
+      `column-builder.test.ts:866`: keep the statement, drop the
+      execution, let the directive be the assertion (`check-types`
+      enforces it — group 2 proved so via `TS2578`). The real 3.2 contract
+      is already held by `window-placement.test.ts:109/121`.
+      (b) The 1.7 supabase test becomes **self-pinning**: beside the
+      hand-assembled declaration, assert that `table()` *does* reject the
+      same shape (`column-default-window-function`). That rejection is the
+      reason the hand assembly exists; without it, a later relaxation of
+      3.4 reopens the real path while the test quietly stays on the
+      detour, and nothing anywhere connects the two. Prose alone is the
+      form #87 already rejected for exactly this class of claim.
+      Note for the record: `window` does **not** belong in
+      `UNREACHABLE_NODE_KINDS`. That list is about node kinds being
+      *produced* into a serialized declaration, and views still produce
+      this one. What is unreachable is one handler arm's in-repo caller —
+      a different axis, and one that list does not track.
+      Files: `packages/core/test/query/window.test.ts`,
+      the `rls-cached-auth-outside-rls` test.
+- [x] 4.1 (~8m) [design] What each window function reads back as:
       `rowNumber`/`rank`/`denseRank` carry `ReadAs<bigint>`;
       `ntile`/`percentRank`/`cumeDist` need no brand (they arrive as JS
       numbers); the value functions pass their argument's type through.
@@ -213,25 +246,56 @@ discipline").
       bigint; ntile reads as number; lag keeps its argument's type".
       Files: `packages/query/src/types/select-result.ts` (if threading is
       needed), that test.
-- [ ] 4.2 (~6m) `convert.ts`'s window arm delegating to `expr.fn`, so a
-      windowed aggregate converts exactly as the aggregate does and
-      `rowNumber` converts as a `bigint`. Red:
+- [ ] 4.2 (~8m) `convert.ts`'s window arm delegating to `expr.fn`, so a
+      windowed aggregate converts exactly as the aggregate does — **plus**
+      recognising `row_number`/`rank`/`dense_rank` as `bigint` the way
+      `count` already is **and the five value functions as passthroughs
+      the way `min`/`max` already are**. The delegation alone is not
+      enough: none of those eight names appears in `COUNT_STATE`'s branch
+      or in `PASSTHROUGH_AGGREGATES`, so `over(rowNumber(), …)` would
+      arrive as the string `"1"`, and `over(lag(col), …)` over a
+      `bigint({mode:"number"})` column would arrive as text while 4.1's
+      type says `number | null` — the same defect twice, and the second
+      one is *unintentionally* missing where `sum`/`avg` are deliberately
+      absent (Postgres promotes those; these return the argument's exact
+      type, which is what makes `min`/`max` delegable in the first place).
+      The bigint constant's name stops being true once three more
+      functions share it — rename it rather than leave a comment that
+      describes `count` only. Red:
       `packages/query/test/db/window.test.ts` — "a projected rowNumber
       arrives as a bigint, not a string" and "count() over (…) still
       converts like count()". Files: `packages/query/src/db/convert.ts`,
       that test.
-- [ ] 4.3 (~6m) The chain surface reaches the same node as the core
-      builder. Red: same file — "a chain-built window projection compiles
-      byte-identically to the core builder formulation". Files:
+- [ ] 4.3 (~7m) The chain surface reaches the same node as the core
+      builder, **and refuses what the core builder refuses**. The chain
+      delegates its `where`/`groupBy`/`having` to core today, so 3.1's
+      guards come along — but that is a fact about the current code, not a
+      contract, and criterion 15 (ask the same question on the other path)
+      applies: prove the rejection on the chain, not only on the builder.
+      Red: same file — "a chain-built window projection compiles
+      byte-identically to the core builder formulation" and "the chain's
+      where/groupBy/having refuse a window function too". Files:
       `packages/query/src/db/chain.ts`, that test.
 
 ## 5. Live witness and the paperwork — after groups 1–4
 
-- [ ] 5.1 (~8m) Docker postgres:17: `row_number` restarting at 1 in each
+- [ ] 5.1 (~10m) Docker postgres:17: `row_number` restarting at 1 in each
       partition (assert the value sequence — a row count is unchanged even
       if the window degenerates to a constant, so it proves nothing), a
       windowed `sum` running total, and `lag` returning null at a
-      partition edge. Verify load-bearing by asserting `typeof` is
+      partition edge. Also the arrivals the type table *claims need no
+      conversion* — `ntile` as a number, `percentRank`/`cumeDist` as
+      numbers, not the text a driver hands back for some types — and
+      `count() over (…)` as a `bigint`, which is where the node shape's
+      known regression would surface. And one behaviour the docs will
+      assert: under the default frame `lastValue` returns the *current*
+      row's value, not the partition's last — Postgres's own warning, and
+      the reason `lastValue`/`nthValue` are of limited use until frames
+      land. Writing that in the skill without a live check would be the
+      same unbacked claim in prose form. A declared read type with nothing
+      backing it is the defect this change's own spec names; the claim
+      that *no* conversion is needed deserves the same live check as the
+      claim that one is. Verify load-bearing by asserting `typeof` is
       `"string"` on the `bigint` arrival and watching it fail. Run with
       `pnpm --filter @hejbro/pg test:integration` — `pnpm test` excludes
       this file and would report green having run none of it. Files:
@@ -240,7 +304,26 @@ discipline").
       functions section with the type table, and window removed from the
       "not supported" line — that line names CTEs too, and #417 keeps
       them. Changeset (D59, `minor`), `openspec/task-times.csv` rows,
-      README task-time and CRAP badges.
+      README task-time and CRAP badges. Beware: writing about
+      `@ts-expect-error` in a comment makes TypeScript treat it as a real
+      directive — the token has to be broken up, and backticks do not
+      help.
+- [ ] 5.3 (~6m) The D104 rows in `docs/specs/2026-08-19-hejbro-design.md`.
+      The wording is **already approved** (lead, 2026-08-29) and sits in
+      this change's `design.md` — transcribe it verbatim rather than
+      re-deriving it; that file is owner-gated and the approved text is
+      the record of the delegation being exercised. Summary-table row and
+      decision-log row go in **one commit**, as D103 did.
+- [ ] 5.4 (~10m) The `blackbox/` entry (D89) — this is an owner-driven
+      change, so it carries one in the same PR: what was asked, what was
+      built, why, and the internal processing, with per-file git blob SHA
+      pins per `blackbox/README.md`. The owner-interaction context is
+      quoted verbatim in Korean (the team did not hold it; the lead
+      supplied it); the surrounding record is English. Include what this
+      change got wrong on the way — the planner's two mis-instructions,
+      the field-vs-node cost claim that had to be re-measured, and the
+      walk-arm coverage blocker — since a record that only lists what
+      worked is not a flight recorder.
 
 ## Verification
 

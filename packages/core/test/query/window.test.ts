@@ -49,17 +49,21 @@ describe("window vocabulary (task 2.1)", () => {
 	});
 
 	it("nesting a window-only call inside an aggregate's argument does not compile", () => {
-		// A compile-time proof, not a runtime one: this test's own point is
-		// the directive right below rejecting the argument. Forcing the
-		// call past the type checker anyway reaches a bare `functionCall`
-		// args build with no real `exprNode` (rowNumber() has none until
-		// over() wraps it) -- unrepresentable, not merely rejected, matches
-		// Postgres's own prohibition on nesting, and throws either way.
-		const callWithWindowArgument = () =>
+		// A compile-time proof only (task 4.0b) -- the function is declared
+		// but never called, matching column-builder.test.ts:866's own
+		// directive-only convention: calling it WOULD throw (there is no
+		// real exprNode until over() wraps rowNumber()), so invoking it
+		// would pin a degenerate crash as this test's contract instead of
+		// the compile-time rejection that's actually being tested. The REAL
+		// over()-wrapped case (task 3.2) is what window-placement.test.ts's
+		// own runtime tests assert throws with the correct
+		// windowed-aggregate-argument code.
+		const _atRisk = () => {
 			// @ts-expect-error sum()'s operand must be an Expr; rowNumber()
 			// has no exprNode until over() wraps it.
-			sum(rowNumber());
-		expect(callWithWindowArgument).toThrow();
+			return sum(rowNumber());
+		};
+		expect(typeof _atRisk).toBe("function");
 	});
 
 	it("lag, lead and nthValue pass the operand's type through whatever their extra arguments", () => {

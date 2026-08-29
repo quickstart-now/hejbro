@@ -186,6 +186,18 @@ const someDeepExprNodeHandlers: SomeExprNodeHandlers = {
 		selectExprChildExprs(node).some((child) =>
 			someDeepExprNode(child, predicate),
 		),
+	// D104: no in-core caller reaches this arm today, and add-window-
+	// functions' own 3.3/3.4 guards close the three declaration sites
+	// (column default, CHECK, index predicate) that used to be the one
+	// real path to it (a window function is rejected at each before
+	// `someDeepExprNode` would ever run against it). That does NOT make
+	// this arm dead code: `someDeepExprNode` is a PUBLIC export
+	// (`index.ts`), the provider-preset interface's own surface (AGENTS.md,
+	// "the provider interface is the product") -- a preset validator is
+	// free to call it against a view body or any other place a window
+	// function legitimately lives, and this arm is what keeps that call
+	// correct. Missing it would be a silent gap in the public contract,
+	// not an unreachable branch.
 	window: (node, predicate) =>
 		someDeepExprNode(node.fn, predicate) ||
 		node.partitionBy.some((expr) => someDeepExprNode(expr, predicate)) ||

@@ -9,6 +9,8 @@ import {
 	generateMigration,
 	index,
 	isNotNull,
+	over,
+	rank,
 	rls,
 	schema,
 	select,
@@ -253,6 +255,30 @@ describe("rlsCachedAuthOutsideRlsValidator", () => {
 		]);
 		expect(result).toHaveLength(1);
 		expect(result[0]?.code).toBe("rls-cached-auth-outside-rls");
+	});
+
+	// Self-pin (task 4.0b): what actually makes the hand-assembled
+	// TableDeclaration above necessary is core's own column-default guard,
+	// not "the public API contract" in the abstract -- if that guard is
+	// ever relaxed, table() would build this shape again, the real-consumer
+	// path above would come back, and this hand-built bypass should be
+	// reconsidered rather than silently kept. Executable, not prose: this
+	// turns red FIRST if column-default-window-function ever stops firing,
+	// pointing straight at the guard this file's own bypass depends on.
+	it("pins why the test above bypasses table(): a column default with a window function is rejected at declaration time", () => {
+		expect(() =>
+			table(app, "accounts", {
+				id: uuid().primaryKey(),
+				// wrapped as Expr<"unknown"> (the sql escape hatch's own
+				// shape, boolean().default()'s other accepted arm) since
+				// rank() is numeric-family, not boolean.
+				hasProfile: boolean().default(
+					expr("unknown", over(rank(), {}).exprNode),
+				),
+			}),
+		).toThrowError(
+			expect.objectContaining({ code: "column-default-window-function" }),
+		);
 	});
 
 	// This validator is scoped to default/CHECK/index-predicate only (its
