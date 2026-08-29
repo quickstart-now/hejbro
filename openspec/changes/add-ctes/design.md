@@ -159,3 +159,32 @@ decision rests on is unaffected and was confirmed: **no new file opens.**
 Whichever number a decision-log row quotes, it names the baseline it was
 measured against, because "+4" and "+6" are answers to two different
 questions.
+
+## A CTE reference escaping its `WITH`: runtime guard first, type-level is defense in depth
+
+Task 1.3c closed a real gap: a `CteRefNode` rendered with nothing visible
+(no enclosing `WITH`, or an `outerScope` that never names it) used to
+render unqualified anyway, producing SQL naming a relation no `WITH`
+declares — caught only by the server, not by the builder. The fix is a
+runtime check in `render-sql.ts` (`assertCtesVisible`, gated on "are there
+CTE targets to check", not on whether `outerScope` is defined).
+
+The alternative — make the escape **unrepresentable** by typing the
+reference object group 3's `with()` hands back so it cannot leave the
+statement that declared it — was considered and set aside for *this*
+change, not rejected outright. Once a value is a plain object a caller
+can bind to a variable and pass anywhere, closing that off requires a
+phantom token threaded through every position that could hold the
+reference, and `add-window-functions` already measured this exact shape
+and rejected it: a phantom brand is silent past **any** user-defined
+helper the value crosses (a local `const pickSource = (r) => r`
+type-checks and erases the brand), so the type-level guarantee reads
+stronger than it is. That is worse than no guarantee if a reader takes
+the type at its word.
+
+So the runtime guard is the primary defense — it is what actually fires,
+on every render, regardless of how the reference traveled to get there —
+and a type-level constraint is defense in depth, added only as far as
+group 3's own `[design]` tasks (3.1/3.2) can get one without the
+silent-erasure failure mode. Group 3 does not need to re-litigate this
+fork; the runtime guard already covers the case unconditionally.

@@ -18,7 +18,7 @@ not be dropped.
 
 ## 1. The WithNode, the from union, and their rendering
 
-- [ ] 1.1 (~9m) [design] `WithNode` as a `QueryNode` variant, plus its
+- [x] 1.1 (~9m) [design] `WithNode` as a `QueryNode` variant, plus its
       renderer. Settled here: the node's field names (`ctes`, `body`,
       `recursive`), each entry's shape (`name`, `query`, `materialized`),
       the snapshot token (`with`), the body type (`SelectNode |
@@ -31,7 +31,7 @@ not be dropped.
       "renders a with list ahead of its body, comma-separated in
       declaration order". Files: `packages/core/src/expr/ast.ts`,
       `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 1.2 (~8m) [design] `FromNode` union and unqualified rendering.
+- [x] 1.2 (~8m) [design] `FromNode` union and unqualified rendering.
       Settled here: the union's discriminator, how a CTE reference renders
       (bare, quoted as an identifier, never schema-qualified), and how a
       column reference belonging to one qualifies. The four readers that
@@ -41,7 +41,7 @@ not be dropped.
       "a select whose from-source is a CTE reference renders the name
       unqualified". Files: `packages/core/src/expr/ast.ts`,
       `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 1.2b (~7m) A join may target a CTE reference, not only a table —
+- [x] 1.2b (~7m) A join may target a CTE reference, not only a table —
       the second half of "top N per group" rejoins the ranked CTE to carry
       detail columns. The fan-out is **measured, not to be re-measured**:
       widening `from` alone is 18 errors over 7 files, widening both is
@@ -55,7 +55,7 @@ not be dropped.
       reference, resolving the join condition against both sources".
       Files: `packages/core/src/expr/ast.ts`,
       `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 1.2c (~7m) [design] A CTE column reference reaching a **declaration
+- [x] 1.2c (~7m) [design] A CTE column reference reaching a **declaration
       site** is refused, not cast away. Widening `ColumnRefNode.schemaName`
       to `string | null` (1.2) makes three sites in `dsl/table.ts` stop
       compiling — the foreign-key reference target and the two
@@ -73,7 +73,7 @@ not be dropped.
       this stage; group 3 reaches the same guard through a real
       `with()` reference once one exists. Files:
       `packages/core/src/dsl/table.ts`, that test.
-- [ ] 1.2d (~5m) Close 1.2c's remaining opening: an index's **column**
+- [x] 1.2d (~5m) Close 1.2c's remaining opening: an index's **column**
       list (`.on(...)`), which 1.2c does not cover — it guards index
       *predicates*. `declarationColumnSelf` reads a `ColumnRef`'s
       `sqlName` and nothing else, so a CTE column passed there becomes an
@@ -86,7 +86,7 @@ not be dropped.
       `packages/core/test/dsl/cte-column-ref.test.ts` — "an index column
       list refuses a CTE column reference". Files:
       `packages/core/src/dsl/index-builder.ts`, that test.
-- [ ] 1.3 (~8m) [design] Scope: the enclosing `WITH` list is the set of
+- [x] 1.3 (~8m) [design] Scope: the enclosing `WITH` list is the set of
       available names. A column belonging to a CTE the statement does not
       declare is refused at build time. Settled here: whether this reuses
       `foreign-column-ref` or takes its own code, and the message — the
@@ -94,7 +94,7 @@ not be dropped.
       CTE. Red: `packages/core/test/expr/with-scope.test.ts` — "a column
       of an undeclared CTE is refused, naming the statement's available
       sources". Files: `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 1.3b (~9m) The same rule one level down: a CTE reference inside a
+- [x] 1.3b (~9m) The same rule one level down: a CTE reference inside a
       **nested subquery** is checked against the declared entries too.
       1.3 validates the body's and each entry's own from/join targets, and
       scope checking does not cover the gap — it answers "does this column
@@ -109,7 +109,7 @@ not be dropped.
       CTE reference inside an exists subquery is refused when undeclared,
       and accepted when it names an earlier entry". Files:
       `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 1.3c (~4m) A CTE reference rendered with **no enclosing `WITH` at
+- [x] 1.3c (~4m) A CTE reference rendered with **no enclosing `WITH` at
       all** is refused. 1.3b's check skips when the render carries no
       outer scope, which is right for an ordinary bare select and wrong
       for one whose from-source is a CTE reference: nothing declares it,
@@ -123,7 +123,7 @@ not be dropped.
       `packages/core/test/expr/with-scope.test.ts` — "a select rendered
       outside any WITH refuses a CTE from-source". Files:
       `packages/core/src/expr/render-sql.ts`, that test.
-- [ ] 1.4 (~8m) [design] Entry visibility within the list. The manual:
+- [x] 1.4 (~8m) [design] Entry visibility within the list. The manual:
       "Without `RECURSIVE`, `WITH` queries can only reference sibling
       `WITH` queries that are earlier in the `WITH` list." Scope for entry
       *n* is therefore the entries before it, not the whole list, and that

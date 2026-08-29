@@ -106,7 +106,7 @@ describe("WithNode rendering (task 1.1)", () => {
 
 describe("FromNode rendering (task 1.2)", () => {
 	it("a select whose from-source is a CTE reference renders the name unqualified", () => {
-		const node: SelectNode = {
+		const selectFromCte: SelectNode = {
 			queryKind: "select",
 			projection: {
 				projectionKind: "columns",
@@ -133,18 +133,26 @@ describe("FromNode rendering (task 1.2)", () => {
 			distinct: null,
 		};
 		// task 1.3c: a CTE reference is only ever valid where some enclosing
-		// WITH declares it visible -- renderWith is what supplies that in
-		// practice; here it's simulated directly since this test isolates
-		// rendering, not the WITH wiring (that's with-scope.test.ts's job).
-		expect(renderQuery(node, [{ cteName: "recent_orders" }])).toBe(
-			'select "recent_orders"."id" as "id" from "recent_orders"',
+		// WITH declares it visible, so the select under test is wrapped in
+		// one, exactly as renderWith supplies it in practice -- a WITH-less
+		// render of this same select is refused (with-scope.test.ts).
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{ name: "recent_orders", query: recentOrders, materialized: null },
+			],
+			recursive: false,
+			body: selectFromCte,
+		};
+		expect(renderQuery(node)).toBe(
+			'with "recent_orders" as (select 1 from "app"."orders") select "recent_orders"."id" as "id" from "recent_orders"',
 		);
 	});
 });
 
 describe("Join to a CTE reference (task 1.2b)", () => {
 	it("a select joins a CTE reference, resolving the join condition against both sources", () => {
-		const node: SelectNode = {
+		const selectJoiningCte: SelectNode = {
 			queryKind: "select",
 			projection: {
 				projectionKind: "columns",
@@ -191,9 +199,15 @@ describe("Join to a CTE reference (task 1.2b)", () => {
 			offset: null,
 			distinct: null,
 		};
-		// task 1.3c: simulated visibility, same reasoning as the 1.2 test above.
-		expect(renderQuery(node, [{ cteName: "ranked" }])).toBe(
-			'select "app"."orders"."id" as "id" from "app"."orders" inner join "ranked" on "app"."orders"."id" = "ranked"."order_id"',
+		// task 1.3c: wrapped in a real WITH, same reasoning as the 1.2 test above.
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [{ name: "ranked", query: recentOrders, materialized: null }],
+			recursive: false,
+			body: selectJoiningCte,
+		};
+		expect(renderQuery(node)).toBe(
+			'with "ranked" as (select 1 from "app"."orders") select "app"."orders"."id" as "id" from "app"."orders" inner join "ranked" on "app"."orders"."id" = "ranked"."order_id"',
 		);
 	});
 });
