@@ -72,6 +72,19 @@ point of this change is that they cannot repeat this.
   is present and malformed is a different situation and keeps failing
   loudly. This is the read half of #413's snapshot upgrade-path
   obligation.
+
+  This **supersedes #437's absence guard deliberately**, and the
+  supersession is the point rather than a casualty: #437 made a missing
+  `distinct` key fail loudly so a hand-edited snapshot could not
+  silently lose its `distinct`. Hand-edit detection is a real
+  requirement, but the decoder is the wrong layer for it — `hejbro
+  verify`'s banner hash chain already catches an edited snapshot as
+  `snapshot-stale`/`chain-tip-mismatch`, which is the layer that can
+  tell "edited" from "written by an older version" at all. The decoder
+  cannot: to it, both look like an absent key. What the decoder owns is
+  shape drift *within* a version, and for that, absence is history and
+  malformation is corruption. The guard's loud failure on a
+  present-but-malformed `distinct` stays exactly as #437 wrote it.
 - **`min`/`max` keep their argument's read type but not its
   ColumnRef-ness** (F9), so an aggregate stops type-checking where a
   declaration API requires a real column reference.

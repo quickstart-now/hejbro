@@ -114,7 +114,7 @@ hand-write a `SelectNode` field list.
 
 ## 3. The compiler's parameter lift
 
-- [ ] 3.1 (~10m) **F1 (spec violation).** `liftSelectNode` walks the
+- [x] 3.1 (~10m) **F1 (spec violation).** `liftSelectNode` walks the
       table's clauses in entry order — which is render order — so every
       literal in `distinct on`/`groupBy`/`having` becomes a `$n` bind
       parameter and `$n` numbering still matches the order the
