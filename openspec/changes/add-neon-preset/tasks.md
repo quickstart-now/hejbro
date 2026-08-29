@@ -94,6 +94,7 @@ starts from its own failing test.
       absence is a gate failure. Red (no unit test covers the smoke
       script; the check is the red): `pnpm smoke:pack-install` fails
       `assert_license_content` for `@hejbro/neon`. Files: those two.
+
 ## 2. The HTTP path and its per-request pins
 
 - [x] 2.1 (~10m) **The batch shape, first and gating.** Each execution

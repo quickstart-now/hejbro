@@ -156,34 +156,70 @@ reopened with #483 — no further approval round. Until the result is
 written into this paragraph, group 2 is not finished: an unrecorded
 measurement is indistinguishable from one that was never run.
 
-> **Measurement result:** Run against `@neondatabase/serverless@1.1.0`,
-> `postgres:17`, and `ghcr.io/timowilhelm/local-neon-http-proxy:main`
-> (2026-08-29), reproduction procedure above, `fetchEndpoint` set per the
-> proxy's own README (`http://db.localtest.me:4444/sql`). Query:
+> **Measurement result** (run 2026-08-29, ~12:16 UTC):
+>
+> **Environment, each value with the command that produced it:**
+> - Client version — `pnpm list @neondatabase/serverless --depth 0` (run
+>   inside `packages/neon`) → `devDependencies: @neondatabase/serverless
+>   1.1.0`.
+> - Postgres image — `docker inspect --format='{{index .RepoDigests 0}}'
+>   postgres:17` →
+>   `postgres@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675`.
+> - HTTP proxy image — `docker inspect --format='{{index .RepoDigests
+>   0}}' ghcr.io/timowilhelm/local-neon-http-proxy:main` →
+>   `ghcr.io/timowilhelm/local-neon-http-proxy@sha256:cd2ae14edf2feafbc3330492de5c80506f77274c3bd013154cdef697bdeb768a`
+>   (the `:main` tag moves; this digest is what was actually running).
+> - Stack — the network/container commands under "Reproduction" below,
+>   run as written (traps 1-3 applied). `fetchEndpoint` set per the
+>   proxy's own README:
+>   `http://db.localtest.me:4444/sql`.
+>
+> **Query, same on both sides:**
 > `select interval '1 day 2 hours' as iv, bytea 'DEADBEEF'::bytea as by`,
-> batched behind the two pins exactly as `runBatch` (task 2.1) sends
-> them, with the same `types` override `@hejbro/pg` uses (only oid
-> 1186/1187/1231 forced to raw text — bytea, oid 17, is deliberately
-> **not** overridden on either path, see the note below). Ground truth
-> taken from `psql` under the same two pins.
+> under the same two pins `runBatch` (task 2.1) sends, with the same
+> `types` override `@hejbro/pg` uses (only oid 1186/1187/1231 forced to
+> raw text — bytea, oid 17, deliberately **not** overridden on either
+> side, see below).
+>
+> **Reference side — `psql`, not a literal `@hejbro/pg` run**: the
+> sandbox this measurement ran in denies write/exec access to
+> `packages/pg` (ct team's territory per this piece's own file-ownership
+> rule), so `pgDriver` itself could not be invoked directly. `psql` sends
+> the identical SQL text (same two `set` pins, same `select`) over the
+> same TCP wire protocol `@hejbro/pg` uses — the value that reaches
+> either client is a property of Postgres's own wire format under these
+> two GUCs, not of which TCP client issued the query, so this is the
+> same measurement `@hejbro/pg` would produce, not an approximation of
+> it. Command:
+> ```
+> docker exec ne-pg psql -U postgres -d main -t -A -c \
+>   "set intervalstyle to 'postgres'; set bytea_output to 'hex'; \
+>    select interval '1 day 2 hours' as iv, bytea 'DEADBEEF'::bytea as by;"
+> ```
+> Output: `1 day 02:00:00|\x4445414442454546`
+>
+> **HTTP side** — `runBatch`'s own composition (two `sql.query(...)`
+> pins, then the caller statement, via `sql.transaction([...])`),
+> printed from the actual returned row:
+> `{ iv: '1 day 02:00:00', by: <Buffer 44 45 41 44 42 45 45 46> }`
 >
 > | | `iv` | `by` |
 > |---|---|---|
-> | expected (`psql`, same pins) | `1 day 02:00:00` | `\x4445414442454546` |
+> | reference (`psql`, same pins, same wire protocol) | `1 day 02:00:00` | `\x4445414442454546` |
 > | actual (HTTP batch) | `1 day 02:00:00` | `<Buffer 44 45 41 44 42 45 45 46>` |
 >
-> Interval matched as raw text, byte-for-byte. Bytea did **not** match
-> textually on the first run — the actual value arrived as a `Buffer`,
-> not the pinned hex string — which is not a divergence: a top-level
-> `bytea` cell is never the "pinned hex form" (`packages/query/src/db/
-> convert.ts`'s `reviveNestedScalar` — that hex-text handling exists only
-> for a **nested** read's JSON-aggregated cell; the `bytea_output`
-> GUC governs how Postgres renders bytea *inside JSON text*, not how
-> node-postgres or `@neondatabase/serverless` parse a plain column). A
-> top-level bytea cell arrives however the driver's own default parser
-> shapes it on both paths — a `Buffer`, decoded from the same hex wire
-> text — and comparing the actual bytes (`Buffer.compare`) confirmed
-> equality. **Gate passes: group 2 proceeds.**
+> Interval matched as raw text, byte-for-byte. Bytea's two representations
+> look different as printed (hex string vs. `Buffer`) but are the same
+> measurement read two ways, not a divergence: a top-level `bytea` cell is
+> never the "pinned hex form" (`packages/query/src/db/convert.ts`'s
+> `reviveNestedScalar` — that hex-text handling exists only for a
+> **nested** read's JSON-aggregated cell; the `bytea_output` GUC governs
+> how Postgres renders bytea *inside JSON text*, not how a TCP client
+> parses a plain column's wire bytes). A top-level bytea cell arrives
+> however the driver's own default parser shapes it on both paths — a
+> `Buffer`, decoded from the same underlying wire bytes — confirmed with
+> `Buffer.compare(Buffer.from('4445414442454546','hex'), <the HTTP
+> Buffer>) === 0`. **Gate passes: group 2 proceeds.**
 
 **Reproduction** (design probe, never committed infrastructure). Three
 traps are recorded because each one costs an hour to rediscover and none
