@@ -1,6 +1,6 @@
 Refs:
 - openspec/changes/fix-lifecycle-review/proposal.md @ blob 710dbc2f14f50ab9d4df6c49bb61f01991dc2c9c
-- openspec/changes/fix-lifecycle-review/tasks.md @ blob c6c5929477d13f3eec51412ca6ff64c4512a02d6
+- openspec/changes/fix-lifecycle-review/tasks.md @ blob 4e36b64b174794c2a21e27db6498f644b2f27d9b
 - openspec/changes/fix-lifecycle-review/specs/query-execution/spec.md @ blob 55630e07a8919908eef863663117fa24839abecd
 - openspec/changes/fix-lifecycle-review/specs/cli-commands/spec.md @ blob 58d1eea4cc4c09267c87c5b74e3290852fb5b7c1
 - openspec/changes/fix-lifecycle-review/specs/plpgsql-function-bodies/spec.md @ blob 3bdc14caada0b0f6872f926edb23c145cbe5182e
@@ -185,7 +185,13 @@ missed non-`check:`-prefixed CI steps [`pnpm build`,
 that isn't in PR CI at all [`check:pnpm-publish-tool`]. Settled on
 reading `.github/workflows/ci.yml` fresh every time instead of
 enumerating from memory, and recorded that rule in this change's own
-Verification section, not just this entry).
+Verification section, not just this entry) → `dc4d95e` (that
+Verification-section fix still named every check individually, which
+was the exact anti-pattern it was written to close — rewritten to a
+name-free pointer at `.github/workflows/ci.yml`, plus its own explicit
+rule that `check:crap`/`check:tasktime` are judged by CI's
+`git diff --exit-code -- README.md` step afterward, never by their own
+exit code).
 
 Red observed directly for every task from `ded34dc` on: the
 implementation was reverted via `git stash` (source only, tests kept)
