@@ -246,7 +246,7 @@ discipline").
       bigint; ntile reads as number; lag keeps its argument's type".
       Files: `packages/query/src/types/select-result.ts` (if threading is
       needed), that test.
-- [ ] 4.2 (~8m) `convert.ts`'s window arm delegating to `expr.fn`, so a
+- [x] 4.2 (~8m) `convert.ts`'s window arm delegating to `expr.fn`, so a
       windowed aggregate converts exactly as the aggregate does — **plus**
       recognising `row_number`/`rank`/`dense_rank` as `bigint` the way
       `count` already is **and the five value functions as passthroughs
@@ -266,7 +266,7 @@ discipline").
       arrives as a bigint, not a string" and "count() over (…) still
       converts like count()". Files: `packages/query/src/db/convert.ts`,
       that test.
-- [ ] 4.3 (~7m) The chain surface reaches the same node as the core
+- [x] 4.3 (~7m) The chain surface reaches the same node as the core
       builder, **and refuses what the core builder refuses**. The chain
       delegates its `where`/`groupBy`/`having` to core today, so 3.1's
       guards come along — but that is a fact about the current code, not a
