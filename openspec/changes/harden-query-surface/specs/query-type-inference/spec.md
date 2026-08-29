@@ -134,36 +134,38 @@ declared-type axis is neither — it is simply not reachable by a
 A set-operation combinator SHALL fail to type-check when the two
 branches' result rows carry different key sets.
 
-This is not a rule the server imposes. That Postgres matches set-
-operation branches by **position and type**, never by name, is already
-measured (harden-query-surface group 8: unioning `{email, city}` against
-the same key SET reordered to `{city, email}` compiles and executes, and
-the combined result keeps the LEFT branch's own column names while the
-values underneath came from the wrong position — direct evidence names
-are not what the server matches on). Whether a branch pair whose column
-NAMES genuinely differ (not merely reordered) also executes rather than
-being refused is a related but distinct question, not yet measured by
-this change as of this delta's writing — **pending M6** (harden-query-
-surface group 7, scheduled for 7.7's closing verification pass: a plain
-two-column union such as `select id, name from a union select id, title
-from b`, expected to execute and return the left branch's names,
-unrefused). If M6 comes back otherwise, this paragraph is wrong and is
-rewritten before the PR, per 7.7's re-adjudication clause. The refusal
-this requirement imposes is TypeScript's own regardless of M6's outcome:
-a `SelectProjection` is keyed by name, so a branch pair whose key sets
-differ has no honest single row type to assign — reconciling it would
-mean inventing a value for a key one branch never projects, or silently
-dropping a key the other branch does. Failing to type-check is more
-honest than either, which is the actual justification, not a claim that
-the database would refuse the statement.
+This is not a rule the server imposes. Postgres matches set-operation
+branches by **position and type**, never by name — measured twice, from
+two different angles. Harden-query-surface group 8: unioning
+`{email, city}` against the same key SET reordered to `{city, email}`
+compiles and executes, and the combined result keeps the LEFT branch's
+own column names while the values underneath came from the wrong
+position. Harden-query-surface group 7, M6: a plain two-column union
+whose branches' column NAMES genuinely differ at both positions
+(`select a.email, a.city from a union select b.login, b.town from b`, no
+common name at either position) still compiles and executes, and the
+combined result again keeps the left branch's own names (`email, city`,
+confirmed both from the query directly and from `information_schema.
+columns` behind a view over it) — with a positive control alongside it
+(a genuine type mismatch at a position, `42804`) confirming the
+instrument reports a real refusal when there is one, so the acceptance
+above is not the silence of a broken check. Together the two measurements
+cover both ways a key set can diverge from an exact match — same set,
+different order (group 8) and genuinely different names (M6) — and
+Postgres refuses neither. The refusal this requirement imposes is
+TypeScript's own: a `SelectProjection` is keyed by name, so a branch pair
+whose key sets differ has no honest single row type to assign —
+reconciling it would mean inventing a value for a key one branch never
+projects, or silently dropping a key the other branch does. Failing to
+type-check is more honest than either, which is the actual justification,
+not a claim that the database would refuse the statement.
 
 The combined result row SHALL take the LEFT branch's keys — SQL's own
-naming rule, already demonstrated by the group 8 measurement above (the
-combined result kept the left branch's own column names) and expected to
-hold again under M6 — with each column's type the union of the two
-branches' declared read types for that key (identical declarations stay
-unchanged), and a column nullable in EITHER branch SHALL be nullable in
-the result.
+naming rule, demonstrated by both measurements above (the combined result
+kept the left branch's own column names in each) — with each column's
+type the union of the two branches' declared read types for that key
+(identical declarations stay unchanged), and a column nullable in EITHER
+branch SHALL be nullable in the result.
 
 #### Scenario: Identical branch shapes pass through unchanged
 - **WHEN** two whole-table selects over identically-declared tables
@@ -173,11 +175,11 @@ the result.
 #### Scenario: Mismatched keys are rejected at compile time
 - **WHEN** a select over `{ id, name }` unions a select over
   `{ id, title }`
-- **THEN** the program fails to type-check regardless of whether the
-  server itself would accept the equivalent hand-written SQL (expected,
-  pending M6) — the refusal is TypeScript's own name-keyed row type
-  having no single honest shape to assign when a key set differs, not a
-  claim about what the server does
+- **THEN** the program fails to type-check even though the server itself
+  would accept the equivalent hand-written SQL (measured, M6) — the
+  refusal is TypeScript's own name-keyed row type having no single honest
+  shape to assign when a key set differs, not a claim about what the
+  server does
 
 #### Scenario: Nullability widens to the union
 - **WHEN** a branch with a `notNull` column unions a branch where the
