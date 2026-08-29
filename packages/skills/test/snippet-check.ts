@@ -356,8 +356,27 @@ export const checkSnippets = (
 
 	const program = buildProgram(units);
 	const unitFileNames = new Set(units.map((unit) => unit.fileName));
-	const diagnostics = ts
-		.getPreEmitDiagnostics(program)
+	// Only the snippet files' own diagnostics are ever reported (the filter
+	// below has always dropped everything else), but
+	// `ts.getPreEmitDiagnostics(program)` computes semantic diagnostics for
+	// EVERY file the program pulled in -- all five packages' src trees,
+	// which `pnpm check-types` already gates -- before the filter throws
+	// that work away. Asking the checker for exactly the snippet files
+	// keeps the reported set identical (#436, measured: same diagnostic
+	// set, ~40% less wall clock at 23 snippets) while leaving package
+	// sources to the gate that owns them.
+	const snippetSourceFiles = units.flatMap((unit) => {
+		const sourceFile = program.getSourceFile(unit.fileName);
+		if (sourceFile === undefined) {
+			return [];
+		}
+		return [sourceFile];
+	});
+	const diagnostics = snippetSourceFiles
+		.flatMap((sourceFile) => [
+			...program.getSyntacticDiagnostics(sourceFile),
+			...program.getSemanticDiagnostics(sourceFile),
+		])
 		.filter((diagnostic) => unitFileNames.has(diagnostic.file?.fileName ?? ""));
 	const diagnosticsByFile = groupDiagnosticsByFile(diagnostics);
 
