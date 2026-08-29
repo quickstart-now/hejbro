@@ -607,12 +607,15 @@ window function — Postgres itself accepts one there, so hejbro does too.
 
 Window functions render under Postgres's own default frame (`RANGE
 BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) — frame clauses (`ROWS`/
-`RANGE`/`GROUPS`) aren't modeled yet (#416). One consequence worth
-knowing rather than discovering, and verified live against postgres:17
+`RANGE`/`GROUPS`) aren't modeled yet (#416). Two consequences are worth
+knowing rather than discovering, both verified live against postgres:17
 rather than asserted from the docs alone: under that default frame,
-`lastValue`/`nthValue` return the *current* row's value, not the
-partition's last/nth row — Postgres's own documentation calls this "not
-so useful" without an explicit frame.
+`lastValue` returns the *current* row's value, not the partition's last
+row (the frame's upper bound tracks the current row); `nthValue(x, n)`
+instead returns `null` until the frame grows to contain `n` rows, then
+returns row `n`'s value and stays frozen there for every later row in
+the partition — Postgres's own documentation calls both of these "not so
+useful" without an explicit frame.
 
 ## Not supported in this version
 

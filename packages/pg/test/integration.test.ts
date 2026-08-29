@@ -23,6 +23,7 @@ import {
 	lag,
 	lastValue,
 	max,
+	nthValue,
 	ntile,
 	numeric,
 	over,
@@ -1967,6 +1968,14 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 						partitionBy: [orders.region],
 						orderBy: [orders.createdAt],
 					}),
+					// nthValue behaves differently from lastValue under the same
+					// default frame -- 5.1b review finding: the skill's doc wrongly
+					// claimed both track the current row. nth_value(x, 2) is null
+					// until the frame grows to 2 rows, then freezes at row 2's value.
+					secondAmt: over(nthValue(orders.amount, 2), {
+						partitionBy: [orders.region],
+						orderBy: [orders.createdAt],
+					}),
 				},
 				orders,
 			)
@@ -2022,5 +2031,19 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		expect(rows.map((row) => row.lastAmt)).toEqual(
 			rows.map((row) => row.amount),
 		);
+
+		// nthValue(x, 2) under the default frame: null until the frame holds
+		// 2 rows, then frozen at row 2's own value for the rest of the
+		// partition -- NOT the current row's value, unlike lastValue above.
+		// This is the load-bearing check 5.1b asked for: the doc's prior
+		// claim (both track the current row) would have predicted
+		// [null, 20n, 5n, null, 200n] here instead.
+		expect(rows.map((row) => row.secondAmt)).toEqual([
+			null,
+			20n,
+			20n,
+			null,
+			200n,
+		]);
 	});
 });

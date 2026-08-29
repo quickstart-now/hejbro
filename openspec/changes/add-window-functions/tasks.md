@@ -314,13 +314,26 @@ discipline").
       `@ts-expect-error` in a comment makes TypeScript treat it as a real
       directive — the token has to be broken up, and backticks do not
       help.
+- [x] 5.1b (review-born; no estimate — overhead) The skill said
+      `lastValue`/`nthValue` both return the current row's value under the
+      default frame, and called that "verified live". Half of it is false
+      and the other half was never in the witness. Measured on
+      postgres:17: `nth_value(x, n)` freezes on the **n-th row of the
+      frame** — NULL until the frame holds n rows, then constant — while
+      `lastValue` does track the current row. Fix both halves: correct the
+      sentence, and add an `nthValue` axis to the witness so the
+      "verified live" claim covers what it names. A claim carrying a
+      measured-live badge without the measurement is worse than an
+      unbadged guess, and this change spent five groups refusing exactly
+      that. Files: `skills/hejbro/references/query-layer.md`,
+      `packages/pg/test/integration.test.ts`.
 - [x] 5.3 (~6m) The D104 rows in `docs/specs/2026-08-19-hejbro-design.md`.
       The wording is **already approved** (lead, 2026-08-29) and sits in
       this change's `design.md` — transcribe it verbatim rather than
       re-deriving it; that file is owner-gated and the approved text is
       the record of the delegation being exercised. Summary-table row and
       decision-log row go in **one commit**, as D103 did.
-- [ ] 5.4 (~10m) The `blackbox/` entry (D89) — this is an owner-driven
+- [x] 5.4 (~10m) The `blackbox/` entry (D89) — this is an owner-driven
       change, so it carries one in the same PR: what was asked, what was
       built, why, and the internal processing, with per-file git blob SHA
       pins per `blackbox/README.md`. The owner-interaction context is
