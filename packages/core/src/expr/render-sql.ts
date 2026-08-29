@@ -472,6 +472,10 @@ const renderSelectClauses = (
 		...query.joins.map((join) => join.table),
 		...(outerScope ?? []),
 	];
+	assertCtesVisible(outerScope, [
+		query.from,
+		...query.joins.map((join) => join.table),
+	]);
 
 	// #444 F2: every clause's refs, via the same table walk.ts/params.ts
 	// consume — a hand-written list here is exactly what let
@@ -763,99 +767,76 @@ const recursiveKeyword = (recursive: boolean): string => {
 };
 
 /**
- * Every CTE reference a query names directly as a from/join target — a
- * CTE can only be reached that way (a bare column reference to one is
- * meaningless without also naming it in `from`/a join, and that case is
- * already refused by {@link assertInScope}'s own local scope check), so
- * this needs no descent into `where`/projection expressions or nested
- * subqueries: `selectChildExprs`/`collectColumnRefs` already own that
- * axis (task 1.2's `assertInScope`), and this owns the from/join axis
- * only (task 1.3).
+ * Throws `undeclared-cte` when `targets` names a CTE that is not among
+ * `outerScope`'s own CTE markers — `undefined` (no enclosing `WITH` at
+ * all, e.g. a bare hand-built node rendered directly) skips the check
+ * entirely, which is what keeps a standalone CTE-sourced select (task
+ * 1.2's own red test) rendering unqualified with no `WITH` in sight.
+ * `renderWith` is the only producer of a *defined* scope carrying CTE
+ * markers, and every render call already threads `outerScope` down
+ * through `exists()`/`selectExpr()` (`renderExistsNode`/
+ * `renderSelectExprNode` pass it straight through to their own nested
+ * `renderSelect`), so calling this once here — the one place every
+ * select's own `from`/joins are assembled, top-level or nested — reaches
+ * a from/join target buried inside a subquery too, with no separate
+ * traversal: a single code covers task 1.3 (a name the statement never
+ * declares at all), task 1.4 (a name it declares, but not yet visible
+ * from here — `renderWith` narrows `outerScope`'s markers to the earlier
+ * entries only when rendering an entry), and a target inside a nested
+ * `exists()`/`selectExpr()` subquery, which the pre-nested-subquery
+ * version of this check could not reach. Not `foreign-column-ref`'s
+ * family: that family names a *column* mismatched against a resolved
+ * table; this is a from/join target naming a relation that either does
+ * not exist or is not visible yet, which needs its own
+ * available-sources listing, not a "join that table" suggestion that
+ * does not apply to a CTE.
  */
-const cteRefsIn = (
-	query: SelectNode | SetOpNode,
-): ReadonlyArray<CteRefNode> => {
-	if (query.queryKind === "setOp") {
-		return [...cteRefsIn(query.left), ...cteRefsIn(query.right)];
-	}
-	return [query.from, ...query.joins.map((join) => join.table)].filter(
-		isCteRef,
-	);
-};
-
-/**
- * One from/join target's visibility check: the CTE names it is allowed to
- * name, and the refs it actually names. Without `RECURSIVE`, entry *n*
- * sees only the entries before it (task 1.4) — forward reference is
- * unrepresentable by the builder (each entry is handed only the earlier
- * references), so this guards the artifact path (a hand-assembled or
- * decoded node), not the builder path. The body sees every entry, since
- * it is written after the whole list.
- */
-type CteVisibilityCheck = {
-	readonly visibleNames: ReadonlyArray<string>;
-	readonly refs: ReadonlyArray<CteRefNode>;
-};
-
-const cteVisibilityChecks = (
-	node: WithNode,
-): ReadonlyArray<CteVisibilityCheck> => {
-	const declaredNames = node.ctes.map((entry) => entry.name);
-	const entryChecks = node.ctes.map((entry, index) => ({
-		visibleNames: declaredNames.slice(0, index),
-		refs: cteRefsIn(entry.query),
-	}));
-	return [
-		...entryChecks,
-		{ visibleNames: declaredNames, refs: cteRefsIn(node.body) },
-	];
-};
-
-/**
- * Throws `undeclared-cte` on the first from/join target naming a CTE
- * outside its own check's `visibleNames` — a single code covers both task
- * 1.3 (a name the statement never declares at all) and task 1.4 (a name
- * it declares, but not yet visible from here): from the referencing
- * site's own vantage point both are simply "not among the names visible
- * here", and `visibleNames` already reflects which case it is. A
- * dedicated code, not `foreign-column-ref`'s family: that family names a
- * *column* mismatched against a resolved table; this is a from/join
- * target naming a relation that either does not exist or is not visible
- * yet, which needs its own available-sources listing, not a "join that
- * table" suggestion that does not apply to a CTE.
- */
-const assertCteVisibility = (
-	checks: ReadonlyArray<CteVisibilityCheck>,
+const assertCtesVisible = (
+	outerScope: ReadonlyArray<FromNode> | undefined,
+	targets: ReadonlyArray<FromNode>,
 ): void => {
-	const violation = checks
-		.flatMap((check) =>
-			check.refs
-				.filter((ref) => !check.visibleNames.includes(ref.cteName))
-				.map((ref) => ({ ref, visibleNames: check.visibleNames })),
-		)
-		.at(0);
-	if (violation === undefined) {
+	if (outerScope === undefined) {
 		return;
 	}
-	const available = violation.visibleNames
-		.map((name) => `"${name}"`)
-		.join(", ");
+	const visibleNames = outerScope.filter(isCteRef).map((ref) => ref.cteName);
+	const undeclaredRef = targets
+		.filter(isCteRef)
+		.find((ref) => !visibleNames.includes(ref.cteName));
+	if (undeclaredRef === undefined) {
+		return;
+	}
+	const available = visibleNames.map((name) => `"${name}"`).join(", ");
 	throwHejbroError(
 		"undeclared-cte",
-		`with statement references "${violation.ref.cteName}", which is not declared and visible here — visible: ${available || "(none)"}. Next: add "${violation.ref.cteName}" to the with() list ahead of this reference, or reference one of the visible CTEs instead.`,
+		`with statement references "${undeclaredRef.cteName}", which is not declared and visible here — visible: ${available || "(none)"}. Next: add "${undeclaredRef.cteName}" to the with() list ahead of this reference, or reference one of the visible CTEs instead.`,
 	);
 };
+
+/** `entry`/`body` markers for {@link renderWith}'s own `outerScope` injection: a bare CTE name becomes the minimal {@link CteRefNode} shape {@link assertCtesVisible} reads back out. */
+const cteMarkers = (names: ReadonlyArray<string>): ReadonlyArray<CteRefNode> =>
+	names.map((cteName) => ({ cteName }));
 
 /** Renders a {@link WithNode}: its entries comma-separated in declaration order, `with recursive` when the list is recursive, then the body — never itself parenthesized (add-ctes, task 1.1). */
 export const renderWith = (
 	node: WithNode,
 	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
-	assertCteVisibility(cteVisibilityChecks(node));
+	const declaredNames = node.ctes.map((entry) => entry.name);
 	const entriesSql = node.ctes
-		.map((entry) => renderWithEntry(entry, outerScope))
+		.map((entry, index) => {
+			// Without RECURSIVE, entry n sees only the entries before it
+			// (task 1.4) — forward reference is unrepresentable by the
+			// builder (each entry is handed only the earlier references),
+			// so this guards the artifact path, not the builder path.
+			const entryScope = [
+				...cteMarkers(declaredNames.slice(0, index)),
+				...(outerScope ?? []),
+			];
+			return renderWithEntry(entry, entryScope);
+		})
 		.join(", ");
-	return `with ${recursiveKeyword(node.recursive)}${entriesSql} ${renderQueryBody(node.body, outerScope)}`;
+	const bodyScope = [...cteMarkers(declaredNames), ...(outerScope ?? [])];
+	return `with ${recursiveKeyword(node.recursive)}${entriesSql} ${renderQueryBody(node.body, bodyScope)}`;
 };
 
 const renderQueryHandlers: RenderQueryHandlers = {

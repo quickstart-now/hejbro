@@ -144,3 +144,74 @@ describe("Entry visibility within the list (task 1.4)", () => {
 		);
 	});
 });
+
+describe("Visibility reaches a nested subquery's own from/join (task 1.3 follow-up)", () => {
+	it("an exists() subquery naming an undeclared CTE is refused", () => {
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{ name: "recent_orders", query: recentOrders, materialized: null },
+			],
+			recursive: false,
+			body: {
+				...recentOrders,
+				where: {
+					nodeKind: "exists",
+					negated: false,
+					query: { ...recentOrders, from: { cteName: "missing_cte" } },
+				},
+			},
+		};
+		expect(() => renderQuery(node)).toThrow(
+			expect.objectContaining({
+				code: "undeclared-cte",
+				message: expect.stringContaining("missing_cte"),
+			}),
+		);
+	});
+
+	it("an exists() subquery may reference a CTE visible at the body's own position", () => {
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{ name: "recent_orders", query: recentOrders, materialized: null },
+			],
+			recursive: false,
+			body: {
+				...recentOrders,
+				where: {
+					nodeKind: "exists",
+					negated: false,
+					query: { ...recentOrders, from: { cteName: "recent_orders" } },
+				},
+			},
+		};
+		expect(() => renderQuery(node)).not.toThrow();
+	});
+
+	it("an exists() subquery inside an entry sees only that entry's earlier CTEs", () => {
+		const laterInsideExists: SelectNode = {
+			...recentOrders,
+			where: {
+				nodeKind: "exists",
+				negated: false,
+				query: { ...recentOrders, from: { cteName: "top_customers" } },
+			},
+		};
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [
+				{ name: "recent_orders", query: laterInsideExists, materialized: null },
+				{ name: "top_customers", query: recentOrders, materialized: null },
+			],
+			recursive: false,
+			body: recentOrders,
+		};
+		expect(() => renderQuery(node)).toThrow(
+			expect.objectContaining({
+				code: "undeclared-cte",
+				message: expect.stringContaining("top_customers"),
+			}),
+		);
+	});
+});
