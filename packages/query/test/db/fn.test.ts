@@ -360,6 +360,20 @@ describe("db.fn.* (task 4.9)", () => {
 		expect(value).toBe(42);
 	});
 
+	it("a declared number-mode return reaches the same overflow guard a number-mode column would (mode really does travel to the runtime check, not just to a small value)", async () => {
+		const { driver } = recordingDriver([{ result: "9007199254740993" }]);
+		const handle = db(appSchema, driver);
+
+		try {
+			await handle.fn.countPostsAsNumber({});
+			expect.unreachable("expected the overflow guard to fire");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "result-conversion-failed");
+			const cause = (error as Error & { cause?: unknown }).cause;
+			expect(cause).toHaveProperty("code", "numeric-mode-overflow");
+		}
+	});
+
 	it('a scalar call fails fast when the driver doesn\'t return exactly one row with a "result" column', async () => {
 		const { driver } = recordingDriver([]);
 		const handle = db(appSchema, driver);
