@@ -1,7 +1,7 @@
 Refs:
-- openspec/changes/fix-select-traversal/proposal.md @ blob 42cfc10e7df8407f0c196fe69c73776131c0e0bc
-- openspec/changes/fix-select-traversal/specs/query-type-inference/spec.md @ blob f7e547b1c7fe4063fc397349d4b7fafbdfe7e5f5
-- openspec/changes/fix-select-traversal/tasks.md @ blob 9fadd52b6a01147d7113464c27d5682671105207
+- openspec/changes/archive/2026-08-29-fix-select-traversal/proposal.md @ blob 48fb646617e1fc12e22d3ecadde2ee13b9f04b86
+- openspec/changes/archive/2026-08-29-fix-select-traversal/specs/query-type-inference/spec.md @ blob f7e547b1c7fe4063fc397349d4b7fafbdfe7e5f5
+- openspec/changes/archive/2026-08-29-fix-select-traversal/tasks.md @ blob 9db335d8c22a45a795125de71d9cc24ca0089ce7
 - packages/core/src/expr/aggregate.ts @ blob 43d86f66fe0469bdf876370dd913b09ce1d8d125
 - packages/core/src/expr/codec.ts @ blob d8712e8450dbf6d2c565c5149e2b6b3f51384aa5
 - packages/core/src/expr/render-sql.ts @ blob 46e6d83b7766b49784965a7dc8005da4ee60bf78
@@ -19,6 +19,8 @@ Refs:
 - skills/hejbro/references/query-layer.md @ blob e287512c9b4451b18dc6c1e362d1d3edcac0503b
 - .changeset/fix-select-traversal.md @ blob e14f25b38d449b5d7c6334df368d61952d298054
 - openspec/task-times.csv @ blob fcc8066608ecd7f99e65f5483cf69021bd02ee03
+
+Re-pin note (lead, 2026-08-29): the proposal.md and tasks.md pins above originally pointed at a pre-8.3 revision — the piece's late additions (task 8.3 and the second query-execution delta) were committed without re-pinning, the same omission family as the 8.3 ledger row this archive commit also restores. Re-pinned to the merged final blobs; the original SHAs (42cfc10, 9fadd52) remain resolvable in history for provenance.
 
 # fix-select-traversal — a SelectNode field grows, every traversal site must too (#444)
 

@@ -1,9 +1,9 @@
 Refs:
-- openspec/changes/fix-lifecycle-review/proposal.md @ blob 710dbc2f14f50ab9d4df6c49bb61f01991dc2c9c
-- openspec/changes/fix-lifecycle-review/tasks.md @ blob 4e36b64b174794c2a21e27db6498f644b2f27d9b
-- openspec/changes/fix-lifecycle-review/specs/query-execution/spec.md @ blob 55630e07a8919908eef863663117fa24839abecd
-- openspec/changes/fix-lifecycle-review/specs/cli-commands/spec.md @ blob 58d1eea4cc4c09267c87c5b74e3290852fb5b7c1
-- openspec/changes/fix-lifecycle-review/specs/plpgsql-function-bodies/spec.md @ blob 3bdc14caada0b0f6872f926edb23c145cbe5182e
+- openspec/changes/archive/2026-08-29-fix-lifecycle-review/proposal.md @ blob 710dbc2f14f50ab9d4df6c49bb61f01991dc2c9c
+- openspec/changes/archive/2026-08-29-fix-lifecycle-review/tasks.md @ blob 4e36b64b174794c2a21e27db6498f644b2f27d9b
+- openspec/changes/archive/2026-08-29-fix-lifecycle-review/specs/query-execution/spec.md @ blob 55630e07a8919908eef863663117fa24839abecd
+- openspec/changes/archive/2026-08-29-fix-lifecycle-review/specs/cli-commands/spec.md @ blob 58d1eea4cc4c09267c87c5b74e3290852fb5b7c1
+- openspec/changes/archive/2026-08-29-fix-lifecycle-review/specs/plpgsql-function-bodies/spec.md @ blob 3bdc14caada0b0f6872f926edb23c145cbe5182e
 - packages/query/src/db/transaction.ts @ blob ba3a9c4d719126bcff612f263fcd708c235b4ffa
 - packages/cli/src/commands/generate.ts @ blob 4ca6099a9039842455b3b4c326643dc04e844590
 - packages/core/src/sql/migration-file.ts @ blob d642455d5871e259f232d2bb5701de5bf04b2741
