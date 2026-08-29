@@ -17,18 +17,32 @@ the anchor**, not from a union of the two branches: a plain union widens
 bigint overall"). So the compatibility *test* is shared; the resulting
 row type is the anchor's.
 Requiring the two projections to be identical would be stricter than that
-rule and would reject the constructs Postgres accepts in a recursive term:
-a field the anchor reads straight from a column and the recursive term
-computes with a window function or an aggregate has a different type on
-each side and is legal on both.
+rule and would reject constructs Postgres genuinely accepts in a
+recursive term — but not every differently-computed field is such a
+construct, and this requirement does not claim the category is safe, only
+the two divergences it was actually measured against. An aggregate
+computing a shared key in the recursive term is refused outright
+(`42P19`, "aggregate functions are not allowed in a recursive query's
+recursive term" — harden-query-surface group 1, M1); a window function
+computing it is not refused at parse time, but the measured construct
+(`row_number() over ()`, whose value does not advance with the recursion)
+never terminates rather than returning a row (measured, M2). Neither is
+evidence that a recursive term may compute a shared key with a window
+function or an aggregate, and this requirement makes no such claim. What
+the relaxation from "identical" to "compatible" is actually justified by
+are two divergences group 1 measured as accepted: a key nullable in the
+recursive term where the anchor's is not (M4), and a same-family declared-
+type divergence that resolves through the anchor's own type (M3b-i,
+`numeric` anchor + `bigint` recursive term) — both are their own scenarios
+below.
 
-This check holds in the core builder, where the recursive term is written.
-A plain `union()` in the core builder does **not** carry it today — that
-rule has only ever been wired into the chain surface — so a mismatched
-plain union still builds and fails on the server. That gap is #487's, not
-this change's: the compatibility type moves into core here, which is most
-of what closing it needs, but wiring it into `union()` changes a surface
-D103 settled and belongs to its own change.
+This check holds in the core builder, where the recursive term is
+written, and — since harden-query-surface group 3 — in a plain `union()`
+there too: the same compatibility test now gates every set-op combinator
+core provides (`union`/`unionAll`/`intersect`/`intersectAll`/`except`/
+`exceptAll`), not only the recursive-term case, closing the gap this
+requirement used to park at #487. The query package's own chain surface
+carries the identical check independently (D103, predating this change).
 
 The compatibility test elides nullability when comparing the anchor's and
 the recursive term's projected keys — a rule tightened to require an exact
@@ -115,3 +129,85 @@ declared-type axis is neither — it is simply not reachable by a
   Postgres's own directional resolution (accepting one order, refusing
   the reversed order with `42804`, measured) is not reproduced here
   (#489)
+
+### Requirement: Set-operation branches must be row-compatible, and the result types honestly
+A set-operation combinator SHALL fail to type-check when the two
+branches' result rows carry different key sets.
+
+This is not a rule the server imposes: Postgres itself matches set-
+operation branches by **position and type**, never by name, so two
+branches whose column *names* differ at a position still compile and
+execute, taking the left branch's names for the combined result
+(harden-query-surface group 7, M6 — a plain two-column union with
+differently-named columns at both positions executes and returns the
+left branch's names, unrefused). The refusal here is TypeScript's own:
+a `SelectProjection` is keyed by name, so a branch pair whose key sets
+differ has no honest single row type to assign — reconciling it would
+mean inventing a value for a key one branch never projects, or silently
+dropping a key the other branch does. Failing to type-check is more
+honest than either, which is the actual justification, not a claim that
+the database would refuse the statement.
+
+The combined result row SHALL take the LEFT branch's keys — this part
+**is** SQL's own naming rule, the same one M6 shows the server applying
+when names disagree — with each column's type the union of the two
+branches' declared read types for that key (identical declarations stay
+unchanged), and a column nullable in EITHER branch SHALL be nullable in
+the result.
+
+#### Scenario: Identical branch shapes pass through unchanged
+- **WHEN** two whole-table selects over identically-declared tables
+  combine with `.union(...)`
+- **THEN** the awaited row type equals the single-select row type
+
+#### Scenario: Mismatched keys are rejected at compile time
+- **WHEN** a select over `{ id, name }` unions a select over
+  `{ id, title }`
+- **THEN** the program fails to type-check — not because the server
+  would refuse the statement (unioning differently-named, same-typed
+  columns executes, per M6), but because TypeScript's own name-keyed row
+  type has no single honest shape to assign when a key set differs
+
+#### Scenario: Nullability widens to the union
+- **WHEN** a branch with a `notNull` column unions a branch where the
+  same key is nullable
+- **THEN** the result types that column as nullable
+
+### Requirement: An aggregate's result type is the type it really returns
+A projected aggregate SHALL read back as the type Postgres actually
+returns for it, and the runtime conversion SHALL deliver that type — a
+declared result type without the matching conversion would describe the
+driver's raw text rather than the value.
+
+- `count()` SHALL type as `bigint` and SHALL be converted to one:
+  Postgres's `count` is `int8` whatever it counted.
+- `min(expr)`/`max(expr)` SHALL type and convert as their argument does,
+  which is what Postgres returns for them.
+- `sum(expr)`/`avg(expr)` SHALL type as the numeric family's widest
+  honest type. Postgres promotes their result by the argument's exact
+  type, so a single declared result type would be wrong for most inputs;
+  widening is the honest answer until that promotion is modeled.
+
+There is no separate filtered-count constructor: `count()`'s own
+`FILTER (WHERE …)` form is not yet part of the builder's vocabulary
+(harden-query-surface, #469 — an invented name, `countWhere(expr)`,
+covered a use no other constructor's name pattern generalized to, and
+was removed rather than kept; a real `FILTER (WHERE …)` clause is
+tracked as a follow-up rather than shipped under that name).
+
+#### Scenario: count is a bigint end to end
+- **WHEN** a select projects `count()` and executes against a real
+  database
+- **THEN** the field's type is `bigint | null` and the value that arrives
+  is a `bigint`, not the text the driver hands back for `int8`
+
+#### Scenario: max keeps its argument's declared type
+- **WHEN** a select projects `max(column)` over a column declared with a
+  numeric mode
+- **THEN** the field's type is that column's own declared read type, not
+  the numeric family's union
+
+#### Scenario: sum stays honestly wide
+- **WHEN** a select projects `sum(column)`
+- **THEN** the field's type is the numeric family's union rather than a
+  single type that would be wrong for most argument types

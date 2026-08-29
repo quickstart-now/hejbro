@@ -2,6 +2,44 @@
 
 ## MODIFIED Requirements
 
+### Requirement: Select statements over declared tables
+The query package SHALL build select statements from declared tables
+with an explicit column projection, optional `where`, `order`, `limit`,
+and inner/left joins. The rendered SQL SHALL always list columns
+explicitly and SHALL never contain `select *`.
+
+`order` SHALL accept `asc(column)`/`desc(column)`, each optionally
+carrying a `nulls: "first" | "last"` placement, and SHALL render Postgres's
+own `nulls first`/`nulls last` suffix after the direction (harden-query-
+surface #470 — the same vocabulary a declared index's own column order
+already accepted; a query's `orderBy` previously accepted only a bare
+column or direction, with no way to spell a nulls placement at all). A
+window specification's own `orderBy` and a set operation's whole-set
+`orderBy` accept the identical vocabulary, rendered the same way, rather
+than each position inventing its own spelling.
+
+#### Scenario: Basic select with filter, order, and limit
+- **WHEN** a select over a declared table picks named columns and adds a
+  `where` condition, an `order`, and a `limit`
+- **THEN** compiling yields one SQL statement listing exactly the picked
+  columns, with the condition values passed as bind parameters, and the
+  given ordering and limit
+
+#### Scenario: Inner and left join between declared tables
+- **WHEN** a select joins a second declared table with an inner or left
+  join on a column equality
+- **THEN** the compiled SQL contains the corresponding `join` /
+  `left join` clause and every projected column stays schema-qualified
+  and explicitly listed
+
+#### Scenario: A nulls placement is spelled and rendered
+- **WHEN** an `order` calls `asc(column, { nulls: "first" })` or
+  `desc(column, { nulls: "last" })`
+- **THEN** the compiled SQL renders `nulls first`/`nulls last` right
+  after the direction, and the same call compiles identically inside a
+  window specification's `orderBy` and a set operation's whole-set
+  `orderBy`
+
 ### Requirement: Set operations combine selects into one visible statement
 A select chain SHALL offer `.union(other)`, `.unionAll(other)`,
 `.intersect(other)`, `.intersectAll(other)`, `.except(other)`, and
@@ -107,3 +145,91 @@ command.
   a decode-path concern, not this guard's — a hand-edited snapshot is
   the one realistic way to reach it, and `hejbro verify` reports it as
   a hash mismatch when run
+
+### Requirement: Recursive CTEs traverse
+The builder SHALL support recursive CTEs: an anchor term, a `UNION` — with
+or without `all`, both of which Postgres's grammar allows — and a
+recursive term that may reference the CTE being defined. `recursive` SHALL
+be a property of the `WITH` list, not of an entry, matching Postgres's
+grammar: one `with recursive` covers every entry in the list and has no
+effect on the entries that do not recurse.
+
+A recursive branch SHALL NOT offer `intersect` or `except`, and SHALL NOT
+carry a whole-set `order by`, `limit` or `offset`: Postgres refuses all
+four, the first as a recursion-structure violation and the rest as
+unimplemented features.
+
+Everything Postgres's parser accepts in a recursive term SHALL remain
+accepted here — `distinct`, `distinct on`, `group by`/`having`, `union`
+as well as `union all`, and either materialization hint on a recursive
+entry all parse and execute there. Two constructs carry a narrower claim,
+each measured (harden-query-surface group 1), and the wording here is no
+wider than what was measured: an aggregate is accepted in the **anchor**
+term, not the recursive term — Postgres refuses an aggregate in the
+recursive term itself (`42P19`, "aggregate functions are not allowed in a
+recursive query's recursive term", measured, M1); a window function in
+the recursive term is not refused at parse time, but the measured
+construct (`row_number() over ()`, whose value does not advance with the
+recursion) never terminates rather than returning a row (measured, M2) —
+this is not evidence that window functions are illegal in a recursive
+term, only that this particular construct does not complete, and the
+builder does not refuse on Postgres's behalf either way. The commonly
+recalled restriction list is wider than the database's actual one, and
+refusing on it would make the builder stricter than Postgres.
+
+The recursive term SHALL be written against a reference whose columns come
+from the anchor term, so that the row shape is fixed before self-reference
+is possible.
+
+#### Scenario: A tree is walked
+- **WHEN** a recursive CTE anchors on the roots of a self-referencing table
+  and joins children in its recursive term
+- **THEN** the compiled SQL carries `with recursive … union all …`, and the
+  database returns every descendant
+
+#### Scenario: A window function survives inside a recursive term
+- **WHEN** a recursive term projects a window function
+- **THEN** the statement is accepted at parse time, as Postgres accepts it
+  — whether the specific window construct's recursion terminates is a
+  property of that construct (measured, M2: `row_number() over ()` does
+  not), not something this builder refuses on Postgres's behalf
+
+#### Scenario: One recursive keyword covers the list
+- **WHEN** a `WITH` list containing a recursive entry also contains a
+  non-recursive one
+- **THEN** the rendered SQL carries a single `with recursive`, with both
+  entries under it
+
+### Requirement: Selects aggregate and group
+The builder SHALL provide the aggregate vocabulary — `count()`, `min`,
+`max`, `sum`, `avg` — and the `groupBy` and `having` stages.
+
+`groupBy` SHALL be available after `where` and SHALL require at least one
+expression. `having` SHALL be available only after `groupBy`, and
+`orderBy`/`limit`/`offset` SHALL still follow it: the chain admits
+exactly SQL's own clause order, so a placement Postgres would reject is
+not expressible.
+
+Aggregates SHALL render as Postgres's own function names, with
+`count()` rendering `count(*)`. There is no separate filtered-count
+constructor: a `FILTER (WHERE …)` clause is not yet part of the
+vocabulary (harden-query-surface, #469 — the invented name
+`countWhere(expr)` covered that one use without generalizing to a real
+`FILTER` clause, and was removed rather than kept; a real `FILTER (WHERE
+…)` construct is tracked as a follow-up).
+
+#### Scenario: Grouping with a group filter
+- **WHEN** a select projects a column and `count()`, filters rows with
+  `where`, groups by that column, filters groups with `having`, then
+  orders and limits
+- **THEN** the compiled SQL carries `where`, `group by`, `having`,
+  `order by` and `limit` in that order, and the database returns only the
+  groups `having` kept
+
+#### Scenario: An empty group by is refused
+- **WHEN** `groupBy()` is called with no expressions
+- **THEN** it fails immediately, naming what to pass
+
+#### Scenario: having is unavailable without grouping
+- **WHEN** a chain has not called `groupBy`
+- **THEN** `having` is not on that stage
