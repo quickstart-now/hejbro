@@ -2472,15 +2472,24 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		}
 		const driver = pgDriver(activePool);
 
-		// 6.1's own shape (M4 addendum): anchor's "v" is non-null, the
-		// recursive term's "v" is a genuinely nullable column, same
-		// family, no other divergence -- confirms the null the guard
-		// test's TYPES already permit really does arrive in a live row,
-		// through our builder's own rendered SQL.
+		// 6.1's own shape (M4 addendum): anchor's "v" is a NOT NULL
+		// numeric column ("seed"), the recursive term's "v" is a
+		// genuinely nullable numeric column ("v") -- same declared type
+		// on both sides, nullability the only divergence. (Review
+		// caught a first draft that instead diverged in TYPE -- anchor
+		// projecting the integer primary key as "v" -- which reproduces
+		// M3b-ii's refused shape, `42804`, not M4's accepted one.)
+		// Confirms the null the guard test's TYPES already permit
+		// really does arrive in a live row, through our builder's own
+		// rendered SQL. The recursive term's own "id" is the JOINED
+		// row's id (the child), not the anchor's -- projecting the
+		// anchor's `self.id` back out would keep every row at id 1 and
+		// leave `.orderBy(r.id)` unable to order rows deterministically.
 		await driver.execute({
 			sql: `create table g5_integration.g6_nullable (
 				id integer primary key,
 				parent integer,
+				seed numeric not null,
 				v numeric
 			)`,
 			params: [],
@@ -2489,25 +2498,26 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		const nullableDivergent = table(testSchema, "g6_nullable", {
 			id: integer().primaryKey(),
 			parent: integer(),
+			seed: numeric({ mode: "number" }).notNull(),
 			v: numeric({ mode: "number" }),
 		});
 		const nullableHandle = db({ nullableDivergent }, driver);
 		await nullableHandle.insert(nullableDivergent).values([
-			{ id: 1, parent: null, v: null },
-			{ id: 2, parent: 1, v: null },
+			{ id: 1, parent: null, seed: 1, v: null },
+			{ id: 2, parent: 1, seed: 99, v: null },
 		]);
 		const nullableWalked = await nullableHandle.with((w) => {
 			const r = w.asRecursive(
 				"r",
 				select(
-					{ id: nullableDivergent.id, v: nullableDivergent.id },
+					{ id: nullableDivergent.id, v: nullableDivergent.seed },
 					nullableDivergent,
 				).where(isNull(nullableDivergent.parent)),
 				(self) =>
-					select({ id: self.id, v: nullableDivergent.v }, self).innerJoin(
-						nullableDivergent,
-						eq(self.id, nullableDivergent.parent),
-					),
+					select(
+						{ id: nullableDivergent.id, v: nullableDivergent.v },
+						self,
+					).innerJoin(nullableDivergent, eq(self.id, nullableDivergent.parent)),
 			);
 			return select({ id: r.id, v: r.v }, r).orderBy(r.id);
 		});
@@ -2522,7 +2532,15 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 		// AND executes AND the recursive row reads back as the
 		// anchor's own type (a JS number, never a bigint), matching
 		// M3b-i's raw-SQL measurement (resolves to the anchor's type)
-		// through our builder instead.
+		// through our builder instead. `pg_typeof` is projected
+		// alongside `amount` (via the `sql` escape hatch, over the
+		// builder's own compiled recursive CTE) because a JS-side
+		// `typeof === "number"` check alone only observes hejbro's own
+		// read-side conversion, never the server's resolved column
+		// type -- M3b-i's own measurement is a claim about
+		// `pg_typeof`, so the live witness has to observe the same
+		// thing, not a proxy for it (review). As with the nullable
+		// case above, the recursive term's own "id" is the joined row's.
 		await driver.execute({
 			sql: `create table g5_integration.g6_numbig (
 				id integer primary key,
@@ -2553,18 +2571,24 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 				).where(isNull(sameFamilyDivergent.parent)),
 				(self) =>
 					select(
-						{ id: self.id, amount: sameFamilyDivergent.bigAmount },
+						{
+							id: sameFamilyDivergent.id,
+							amount: sameFamilyDivergent.bigAmount,
+						},
 						self,
 					).innerJoin(
 						sameFamilyDivergent,
 						eq(self.id, sameFamilyDivergent.parent),
 					),
 			);
-			return select({ id: r.id, amount: r.amount }, r).orderBy(r.id);
+			return select(
+				{ id: r.id, amount: r.amount, amountType: sql`pg_typeof(${r.amount})` },
+				r,
+			).orderBy(r.id);
 		});
 		expect(sameFamilyWalked).toEqual([
-			{ id: 1, amount: 100 },
-			{ id: 2, amount: 200 },
+			{ id: 1, amount: 100, amountType: "numeric" },
+			{ id: 2, amount: 200, amountType: "numeric" },
 		]);
 		expect(typeof sameFamilyWalked[1]?.amount).toBe("number");
 	});
