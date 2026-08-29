@@ -926,9 +926,14 @@ by reading the code, and it holds whatever the server says.
       `scripts/pack-install-smoke.sh`, `.changeset/config.json`, or
       `.github/workflows/ci.yml` — the parallel team's slice. A hit here
       is reported, never resolved by editing their file.
-- [ ] 7.7 (~8m) **The closing Docker slot** — one run, signalled to the
-      lead when this point is reached; the lead clears the server and
-      hands it over (the parallel team may need a turn first).
+- [ ] 7.7 (~8m) **The closing Docker slot** — one run. **No signal is
+      needed any more**: the server has no other users (the parallel
+      team disbanded and the lead's own measurements finished), so this
+      runs as soon as 7.6 passes. The scheduling constraint that shaped
+      this task — batch everything into one slot because the slot is
+      contended — has expired; the batching stays anyway, because its
+      second reason still holds (one run, one verdict, no partial
+      results to reconcile).
       `pnpm --filter @hejbro/pg test:integration` executes **5.4, 6.3 and
       the slice's own integration gate at once** — the three are subsets
       of one command, so batching them costs one scheduling round instead
