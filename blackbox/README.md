@@ -22,9 +22,18 @@ rule's origin.
 - **Content-pinned.** Each entry opens with `Refs:` lines naming the
   changed files and their blob SHAs (`git hash-object <path>`) at the
   recorded state. Blob SHAs are content-addressed, so the pin survives
-  squash, rebase, and any history rewrite — no merge-method constraint
-  exists, and the entry lands in the same commit or PR as the change.
-  Verify with `git hash-object`; retrieve a pinned state with
+  squash, rebase, and any history rewrite — provided the pinned content
+  is in the final tree: a blob that existed only in an intermediate
+  state does not survive a squash. Take Refs after the change's last
+  commit (after any rebase), and before declaring done confirm every pin
+  matches its path in the final tree
+  (`[ "$(git rev-parse HEAD:<path>)" = "<sha>" ]`) — existence in history
+  is not enough: run pre-squash, `git log --find-object` still finds
+  intermediate blobs and passes stale pins. Use `--find-object` only to
+  classify a mismatch (path moved vs. content changed). A stale pin trips
+  no gate. No merge-method constraint exists, and the
+  entry lands in the same commit or PR as the change. Verify with
+  `git hash-object`; retrieve a pinned state with
   `git log --find-object=<sha>` or the GitHub blobs API.
 - **Load only on demand.** Never read this directory during normal work.
   It exists for provenance questions — "why does this rule exist?",
