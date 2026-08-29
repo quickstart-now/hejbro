@@ -1,5 +1,6 @@
 import { captureDeclarationSite } from "../declaration-site";
 import type { SelectNode, SetOpNode } from "../expr/ast";
+import { markConsumed } from "../plpgsql/recording-session";
 import type { SelectLimited, SetOpStage } from "../query/select";
 import type { SchemaDeclaration } from "./schema";
 
@@ -36,11 +37,19 @@ export const defineView = (
 	viewName: string,
 	query: SelectLimited | SetOpStage,
 	options?: { readonly securityInvoker?: boolean },
-): ViewDeclaration => ({
-	declarationKind: "view",
-	schema: owner,
-	viewName,
-	query: queryNodeOf(query),
-	securityInvoker: options?.securityInvoker ?? false,
-	declaredAt: captureDeclarationSite(),
-});
+): ViewDeclaration => {
+	const node = queryNodeOf(query);
+	// #423: a body may call defineView(...) with a query it built itself
+	// (the recorder never sees the view declaration -- it lives entirely
+	// outside the body's own statement tree), so the query must be marked
+	// consumed here or the unused-builder guard would flag it as dropped.
+	markConsumed(node);
+	return {
+		declarationKind: "view",
+		schema: owner,
+		viewName,
+		query: node,
+		securityInvoker: options?.securityInvoker ?? false,
+		declaredAt: captureDeclarationSite(),
+	};
+};

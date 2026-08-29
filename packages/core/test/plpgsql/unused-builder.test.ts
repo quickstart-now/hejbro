@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { QueryNode } from "../../src/expr/ast";
 import {
+	defineFunction,
 	defineTrigger,
 	deleteFrom,
 	insert,
@@ -183,5 +184,60 @@ describe("the runtime query chain is unaffected", () => {
 			.returning();
 		expect(query.deleteQuery.returning).not.toBeNull();
 		expect(hasOpenRecordingSession()).toBe(false);
+	});
+});
+
+// #423/1.5: the failure itself -- a builder created while a body records
+// and never consumed fails the declaration, naming every unused builder
+// (not just the first) and closing the session either way.
+describe("statement-builder-unused", () => {
+	it("a statement built and dropped fails the declaration", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				insert(comments).values({ postId: row.postId });
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/built 1 statement\(s\) it never used \(an insert\)\. Next: run it for its effect with ctx\.execute/,
+		);
+		expect(hasOpenRecordingSession()).toBe(false);
+	});
+
+	it("names every unused builder, in the order they were built", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				insert(comments).values({ postId: row.postId });
+				select({ id: comments.id }, comments);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/built 2 statement\(s\) it never used \(an insert, a select\)/,
+		);
+	});
+
+	it("a set operation left unused is not told to use ctx.execute, which cannot carry one", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				select({ id: comments.id }, comments).union(
+					select({ id: comments.id }, comments),
+				);
+				ctx.return(row);
+			}),
+		).toThrowError(
+			/built 1 statement\(s\) it never used \(a set operation\)\. Next: a body has no statement that carries a set operation/,
+		);
+	});
+
+	it("an unused builder fails before scalar-return-missing is ever reached", () => {
+		expect(() =>
+			defineFunction(
+				app,
+				"silent_and_wasteful",
+				{ returns: { typeName: "integer" } },
+				() => {
+					select(comments);
+				},
+			),
+		).toThrowError(/built 1 statement\(s\) it never used/);
 	});
 });

@@ -111,7 +111,6 @@ Two rules apply to every task here and are not repeated per line:
       | File | Site | ~line | Why |
       |------|------|-------|-----|
       | `select.ts` | `select` | 402 | produces the entry builder |
-      | `select.ts` | `makeSetOpStage` | 190 | produces the set-op stage |
       | `select.ts` | `combineSetOp` | 150 | consumes the argument, supersedes the receiver |
       | `select.ts` | `buildExists` | 691 | consumes a select as an expression |
       | `select.ts` | `buildSelectExpr` | 672 | same, for the json aggregates |
@@ -120,8 +119,11 @@ Two rules apply to every task here and are not repeated per line:
       | `mutate.ts` | `deleteFrom` | 583 | produces the entry builder |
 
       **Stage makers — a local helper, then every transition through it.**
-      A stage maker is any function whose methods spread a new node: in
-      `select.ts`, `makeStages` (240) and `makeDistinctableStages` (320);
+      A stage maker is any function whose methods spread a new node —
+      **the test is the transitions, never the name**: in `select.ts`,
+      `makeStages` (240), `makeDistinctableStages` (320) and
+      `makeSetOpStage` (190), whose own `orderBy`/`limit` make it one of
+      these and not an entry site;
       in `mutate.ts`, `makeInsertConflictable` (413),
       `makeInsertReturnable` (398), `makeUpdateFilterable` (508),
       `makeUpdateReturnable` (493), `makeDeleteFilterable` (565) and
@@ -173,7 +175,7 @@ Two rules apply to every task here and are not repeated per line:
       runtime query chain is unaffected".
       Files: `packages/core/src/query/mutate.ts`,
       `packages/core/src/query/select.ts`, that test.
-- [ ] 1.5 (~8m) The failure itself: a builder left unconsumed when
+- [x] 1.5 (~8m) The failure itself: a builder left unconsumed when
       `finish()` runs fails the declaration with
       `statement-builder-unused`, naming the statement kind and the body,
       with a `Next:` clause pointing at the form that fits what was
@@ -186,7 +188,7 @@ Two rules apply to every task here and are not repeated per line:
       statement built and dropped fails the declaration".
       Files: `plpgsql/body-context.ts`, `plpgsql/recording-session.ts`,
       that test, the xref reference.
-- [ ] 1.6 (~8m) The consumers that are not `ctx.return` all leave a
+- [x] 1.6 (~8m) The consumers that are not `ctx.return` all leave a
       declaration passing. Each is a case, because each is a way this
       guard can turn working code into an error: `ctx.row`,
       `ctx.rowOrNull`, `ctx.forEach`, `ctx.execute`; the expression

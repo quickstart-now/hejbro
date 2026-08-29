@@ -1,6 +1,6 @@
 import type { Table } from "../dsl/table";
 import { toSnakeCase } from "../dsl/table";
-import { throwHejbroError } from "../error";
+import { assertNever, throwHejbroError } from "../error";
 import type { ColumnRef, Expr, QueryNode } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
@@ -16,6 +16,7 @@ import type {
 } from "./body-ast";
 import {
 	closeRecordingSession,
+	markConsumed,
 	openRecordingSession,
 } from "./recording-session";
 import { assertValidLocalName } from "./reserved";
@@ -233,6 +234,7 @@ const recordRow =
 		query: SelectLimited<TProjection>,
 		name?: string,
 	): RowColumns<TProjection> => {
+		markConsumed(query.selectQuery);
 		state.rowCounter.current += 1;
 		const rowName = name ?? `row_${state.rowCounter.current}`;
 		const entries = resolveRowEntries(state, query.projectionInput);
@@ -384,6 +386,7 @@ const recordReturnQuery = (
 	if (query === null) {
 		return false;
 	}
+	markConsumed(query);
 	pushStatement(state, { stmtKind: "returnQuery", query });
 	return true;
 };
@@ -433,6 +436,7 @@ const recordExecute = (state: RecordingState, value: ReturnableQuery): void => {
 		return;
 	}
 	assertExecuteHasNoReturning(state, query);
+	markConsumed(query);
 	pushStatement(state, { stmtKind: "execute", query });
 };
 
@@ -524,6 +528,7 @@ const recordForEach = <TProjection extends RowProjection>(
 	body: (row: RowColumns<TProjection>) => void,
 	name?: string,
 ): void => {
+	markConsumed(query.selectQuery);
 	state.loopCounter.current += 1;
 	const loopName = name ?? `loop_${state.loopCounter.current}`;
 	registerLocalName(state, loopName);
@@ -573,6 +578,66 @@ const recordForEach = <TProjection extends RowProjection>(
  * explicit `state` parameter instead of closures reading it lexically —
  * not the recording behavior itself.
  */
+/** One human-readable name per {@link QueryNode} kind — {@link unusedBuilderMessage}'s own listing, never render-facing (that's `renderExecutedStatement`'s job). */
+const describeQueryKind = (query: QueryNode): string => {
+	switch (query.queryKind) {
+		case "select":
+			return "a select";
+		case "insert":
+			return "an insert";
+		case "update":
+			return "an update";
+		case "delete":
+			return "a delete";
+		case "setOp":
+			return "a set operation";
+		default:
+			return assertNever(query);
+	}
+};
+
+/**
+ * {@link unusedBuilderMessage}'s `Next:` clause — a select/insert/update/
+ * delete has two working forms (`ctx.execute`, or a consumer that uses its
+ * rows); a set operation has neither, since no body statement accepts one
+ * yet (#423) — pointing at `ctx.execute` for it would send the user to a
+ * call that rejects it (spec: "A failure names a form the body actually
+ * accepts"). Both clauses can apply at once, since one declaration can
+ * leave both kinds unconsumed.
+ */
+const unusedBuilderNextClause = (queries: ReadonlyArray<QueryNode>): string => {
+	const clauses: Array<string> = [];
+	if (queries.some((query) => query.queryKind !== "setOp")) {
+		clauses.push(
+			"run it for its effect with ctx.execute(...), or pass it to ctx.return(...)/ctx.row(...)/ctx.rowOrNull(...)/ctx.forEach(...) when its rows are the result",
+		);
+	}
+	if (queries.some((query) => query.queryKind === "setOp")) {
+		clauses.push(
+			"a body has no statement that carries a set operation on its own — combine it into a select, insert, update or delete first",
+		);
+	}
+	clauses.push(
+		"if a builder was made ahead of a choice, construct it only inside the branch that's kept (e.g. ctx.return(condition ? update(t) : deleteFrom(t)) instead of building both first)",
+	);
+	return clauses.join("; ");
+};
+
+/**
+ * `statement-builder-unused`'s message (#423): names every builder a body
+ * made and never consumed, in the order it was made (`closeRecordingSession`'s
+ * own order — a `Map`'s insertion order, deterministic for a given
+ * recording so the determinism guard (D22) sees the same message from
+ * both runs).
+ */
+const unusedBuilderMessage = (
+	identity: string,
+	queries: ReadonlyArray<QueryNode>,
+): string => {
+	const kinds = queries.map(describeQueryKind).join(", ");
+	return `function "${identity}" built ${queries.length} statement(s) it never used (${kinds}). Next: ${unusedBuilderNextClause(queries)}.`;
+};
+
 export const createRecordingContext = (
 	identity: string,
 	declaredAt: string | null,
@@ -602,10 +667,21 @@ export const createRecordingContext = (
 	};
 
 	const finish = (): FunctionBody => {
-		// Closed first, unconditionally: `scalar-return-missing` below still
-		// has to fire, but a thrown diagnostic must not leave this
-		// declaration's session open for the next one to inherit (#426).
-		closeRecordingSession();
+		// Closed first, unconditionally: the checks below still have to run,
+		// but a thrown diagnostic must not leave this declaration's session
+		// open for the next one to inherit (#426).
+		const unconsumed = closeRecordingSession();
+		// Checked before `scalar-return-missing`: a body that both leaves a
+		// builder unused AND never returns has lost written code, which is
+		// the more surprising failure — a missing return is visible just by
+		// reading the same body, an unused builder is not (#423).
+		if (unconsumed.length > 0) {
+			throwHejbroError(
+				"statement-builder-unused",
+				unusedBuilderMessage(identity, unconsumed),
+				declaredAt,
+			);
+		}
 		if (returnKind === "scalar" && !state.returned.current) {
 			throwHejbroError(
 				"scalar-return-missing",
