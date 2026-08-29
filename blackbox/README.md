@@ -26,8 +26,12 @@ rule's origin.
   is in the final tree: a blob that existed only in an intermediate
   state does not survive a squash. Take Refs after the change's last
   commit (after any rebase), and before declaring done confirm every pin
-  recovers (`git log --find-object=<sha>` shows at least one commit) —
-  a stale pin trips no gate. No merge-method constraint exists, and the
+  matches its path in the final tree
+  (`[ "$(git rev-parse HEAD:<path>)" = "<sha>" ]`) — existence in history
+  is not enough: run pre-squash, `git log --find-object` still finds
+  intermediate blobs and passes stale pins. Use `--find-object` only to
+  classify a mismatch (path moved vs. content changed). A stale pin trips
+  no gate. No merge-method constraint exists, and the
   entry lands in the same commit or PR as the change. Verify with
   `git hash-object`; retrieve a pinned state with
   `git log --find-object=<sha>` or the GitHub blobs API.
