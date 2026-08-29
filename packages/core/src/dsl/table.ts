@@ -1279,6 +1279,12 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const knownColumnNames = new Set(
 		columnEntries.map((entry) => entry.columnName),
 	);
+	// Order matters (#464): must run before validateColumnRefs, or a
+	// foreign column is misdiagnosed instead of caught here — a
+	// different-named one reads as a typo (unknown-index-column, since
+	// its name is absent from this table's knownColumnNames), and a
+	// same-named one (the whole reason this guard exists) passes
+	// validateColumnRefs' name-only check silently.
 	assertNoForeignIndexColumn(owner, tableName, indexes);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 	validateDuplicateNames(tableName, indexes, foreignKeys);
