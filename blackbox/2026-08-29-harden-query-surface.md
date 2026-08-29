@@ -38,6 +38,14 @@ Refs:
 - skills/hejbro/references/dsl-cheatsheet.md @ blob 74ce210fb1fff705cbcd1c587861faed547da14c
 - skills/hejbro/references/query-layer.md @ blob 155bc6f6bbee83784f3a222f9b135daf3105a47e
 
+(Archive addendum, 2026-08-30, lead session: the pins above record the
+merge-commit state (dafb897) and stay as that record. The archive commit
+then appended closing sections to two pinned files and moved the change
+directory under openspec/changes/archive/; at the archived paths their
+blobs are design.md @ 3f03dd91049e2fba7486cecfc4df4bea697473fd and
+measurements.md @ a4c84aad0ab72e712845500dfd83aa0976325a72. Every other
+pinned file is content-unchanged by the archive.)
+
 (Re-pinned three times since the original `ab0fe8f` pin, as `design.md`,
 `tasks.md`, and `skills/hejbro/references/query-layer.md` kept moving —
 most recently by this very commit, which corrects 7.8 back to unticked
