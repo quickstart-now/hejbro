@@ -112,7 +112,7 @@ export {
 	hejbroError,
 	throwHejbroError,
 } from "./error";
-export type { ReadAs } from "./expr/aggregate";
+export type { Aggregated, ReadAs } from "./expr/aggregate";
 export {
 	avg,
 	count,

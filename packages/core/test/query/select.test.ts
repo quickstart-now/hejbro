@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ColumnBuilder, SetOpNode } from "../../src/index";
+import type { ColumnBuilder, ColumnRef, SetOpNode } from "../../src/index";
 import {
 	and,
 	avg,
@@ -475,5 +475,22 @@ describe("aggregates and grouping (#416)", () => {
 
 	it("rejects an empty group by", () => {
 		expect(() => select(posts).groupBy()).toThrow(/at least one expression/);
+	});
+
+	// #444 F9: min/max used to spread the argument's whole shape, including
+	// sqlName/exprNode: ColumnRefNode -- an aggregate reported itself as a
+	// real column reference to any code checking "sqlName" in x.
+	it("max() keeps the argument's read type", () => {
+		const result = max(posts.publishedAt);
+		expect(result.family).toBe(posts.publishedAt.family);
+		expect(result.typeNode).toEqual(posts.publishedAt.typeNode);
+		expect("sqlName" in result).toBe(false);
+	});
+
+	it("max() is not accepted where a ColumnRef is required (a type-level red)", () => {
+		// @ts-expect-error max() no longer carries ColumnRef-ness (F9) --
+		// its exprNode is a functionCall, not a real column reference, so
+		// index()/a foreign-key column list must stop accepting it.
+		const _atRisk: ColumnRef = max(posts.publishedAt);
 	});
 });

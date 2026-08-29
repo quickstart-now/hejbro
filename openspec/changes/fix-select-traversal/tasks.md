@@ -162,7 +162,7 @@ hand-write a `SelectNode` field list.
 
 ## 6. Aggregates: typing and precision
 
-- [ ] 6.1 (~7m) [design] **F9.** `min`/`max` keep their argument's read
+- [x] 6.1 (~7m) [design] **F9.** `min`/`max` keep their argument's read
       type (family, `typeNode`, any `.$type<T>()` brand) but drop its
       ColumnRef-ness — the returned expression's `exprNode` is a
       `functionCall`, so a value typed as a `ColumnRef` would be a lie.
