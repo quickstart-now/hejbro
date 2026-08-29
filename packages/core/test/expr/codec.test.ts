@@ -721,19 +721,25 @@ describe("distinct codec round-trip and guards (#437)", () => {
 	// #444 review R4: decodeDistinct's "on" branch used to call
 	// `.map(decodeExprNode)` on `node.columns` unconditionally, raw-
 	// TypeErroring instead of a coded diagnostic when `columns` was
-	// missing or not an array -- the same missing-vs-malformed leniency
-	// group 2 already gave `groupBy` (decodeExprArrayField), reused here.
-	it("a distinct on node missing its columns key decodes as an empty column list", () => {
+	// missing or not an array. Unlike `groupBy`'s own missing-vs-
+	// malformed leniency, a MISSING `columns` here is never history: no
+	// v8 version ever encoded `distinctKind: "on"` without one
+	// (`distinctOn()` itself rejects an empty input as
+	// `empty-distinct-on`, and `encodeDistinct` always writes `columns`
+	// alongside `distinctKind: "on"`) — decoding it as `[]` would
+	// manufacture `distinct on ()`, a node `render-sql.ts` cannot
+	// render, moving the diagnostic away from the actual corruption. So
+	// missing and non-array both fail the same coded way here.
+	it("a distinct on node missing its columns key fails loudly, never a raw TypeError", () => {
 		const corrupted = JSON.parse(
 			JSON.stringify(
 				encodeSelectNode(select(posts3).distinctOn(posts3.status).selectQuery),
 			),
 		);
-		corrupted.distinct.columns = undefined;
-		expect(decodeSelectNode(corrupted).distinct).toEqual({
-			distinctKind: "on",
-			columns: [],
-		});
+		corrupted.distinct = { distinctKind: "on" };
+		expect(() => decodeSelectNode(corrupted)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
 	});
 
 	it("a distinct on node with a non-array columns value fails loudly, never a raw TypeError", () => {
@@ -742,7 +748,7 @@ describe("distinct codec round-trip and guards (#437)", () => {
 				encodeSelectNode(select(posts3).distinctOn(posts3.status).selectQuery),
 			),
 		);
-		corrupted.distinct.columns = "not an array";
+		corrupted.distinct = { distinctKind: "on", columns: "x" };
 		expect(() => decodeSelectNode(corrupted)).toThrowError(
 			expect.objectContaining({ code: "malformed-snapshot-node" }),
 		);

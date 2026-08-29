@@ -425,6 +425,28 @@ const encodeDistinct = (distinct: DistinctNode | null): JsonValue => {
 	};
 };
 
+/**
+ * `columns` for a `distinctKind: "on"` node — unlike `groupBy`'s own
+ * missing-vs-malformed leniency below, a MISSING `columns` here is
+ * never history (#444 review R4): no v8 version ever encoded
+ * `distinctKind: "on"` without one — `distinctOn()` itself already
+ * rejects an empty input as `empty-distinct-on`, and `encodeDistinct`
+ * always writes `columns` when it writes `distinctKind: "on"` at all —
+ * so a missing key here is corruption, not an old file, the same
+ * distinction F7's own leniency rule draws everywhere else. Decoding it
+ * as `[]` would manufacture `distinct on ()`, a node `render-sql.ts`
+ * cannot render, moving the diagnostic away from where the corruption
+ * actually is.
+ */
+const decodeDistinctOnColumns = (
+	node: Record<string, JsonValue>,
+): ReadonlyArray<ExprNode> => {
+	if (node.columns === undefined) {
+		return unknownDiscriminator("columns", "undefined");
+	}
+	return decodeExprArrayField(node, "columns");
+};
+
 const decodeDistinct = (value: JsonValue): DistinctNode | null => {
 	if (value === null) {
 		return null;
@@ -439,11 +461,7 @@ const decodeDistinct = (value: JsonValue): DistinctNode | null => {
 	}
 	return {
 		distinctKind: "on",
-		// #444 F7 (review R4): a missing/non-array `columns` used to raw-
-		// TypeError on `.map` -- decodeExprArrayField's own missing-vs-
-		// malformed leniency (below) closes this the same way it already
-		// does for groupBy.
-		columns: decodeExprArrayField(node, "columns"),
+		columns: decodeDistinctOnColumns(node),
 	};
 };
 
