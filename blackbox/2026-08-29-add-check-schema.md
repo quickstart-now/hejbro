@@ -171,19 +171,16 @@ A flight recorder that only records good flights is not one:
   own ruling, once asked: the implementer's catch was correct and the
   instruction was wrong — a Korean quote is neither a rewrite nor
   compliant with this repository's own English-only rule for
-  GitHub-facing text, and a sibling piece's entry had already merged
-  the same wrong instruction elsewhere, requiring the lead's own
-  follow-up correction there. Separately, the planner instructed
-  labelling this piece's own delegated decisions `D2` and the `D3`
-  amendment. The implementer asked again rather than writing them that
-  way: those labels belong to the design spec's own global decision
-  log, where `D2`/`D3` already name an unrelated subject (the plpgsql
-  function-body compiler, v1's scope), and reusing them here would
-  collide. The lead's ruling: correct again, written in prose instead,
-  no local labels at all — the same defect class (a session-local label
-  colliding with a permanent, global one) had already happened once in
-  a different piece under a different name, and this catch is what kept
-  it from happening a second time inside this one.
+  GitHub-facing text. Separately, the planner instructed labelling this
+  piece's own delegated decisions `D2` and the `D3` amendment. The
+  implementer asked again rather than writing them that way: those
+  labels belong to the design spec's own global decision log, where
+  `D2`/`D3` already name an unrelated subject (the plpgsql function-body
+  compiler, v1's scope), and reusing them here would collide. The
+  lead's ruling: correct again, written in prose instead, no local
+  labels at all. Neither instruction was followed because it came from
+  above the implementer; both were followed only after being asked
+  about and confirmed wrong.
 
 ## Reviewer's own contribution: #461
 
