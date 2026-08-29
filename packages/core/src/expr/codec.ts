@@ -967,7 +967,16 @@ export const decodeSetOpNode = (value: JsonValue): SetOpNode => {
 	};
 };
 
-/** Encodes the snapshot-reachable QUERY subset — a select or a set operation (D94 boundary rule: mutations never reach a snapshot, so they have no snapshot form). */
+/**
+ * Encodes the snapshot-reachable QUERY subset — a select or a set
+ * operation (D94 boundary rule: mutations never reach a snapshot, so
+ * they have no snapshot form). Deliberately not widened to `WithNode`
+ * (add-ctes): {@link encodeWithNode} is a fully working, separate
+ * function already, not a stub -- whether a *stored declaration* (a
+ * view body) reaches it through this dispatcher or through
+ * `encodeWithNode` directly is task 4.1's own wiring call to make, not
+ * a gap this function leaves open.
+ */
 export const encodeQueryNode = (node: SelectNode | SetOpNode): JsonValue => {
 	if (node.queryKind === "setOp") {
 		return encodeSetOpNode(node);
