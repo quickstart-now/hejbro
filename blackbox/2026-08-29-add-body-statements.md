@@ -11,12 +11,12 @@ Refs:
 - openspec/changes/add-body-statements/specs/plpgsql-function-bodies/spec.md @ blob c99a3131ba0faa2cbd0e50a8626e4ba90b77e35b
 - openspec/changes/add-body-statements/specs/typed-function-execution/spec.md @ blob 7846594ae108453e90f30e916cb7a3fee1e12405
 - openspec/changes/add-body-statements/tasks.md @ blob c507fd96db2427f84c96b9868932a990ddd3b311
-- openspec/task-times.csv @ blob b436a84f954b824641ebdac3d9f178d840bdcbbe
+- openspec/task-times.csv @ blob 40f042da0d9b22e6331ac61250315fa0114ed110
 - packages/core/src/dsl/define-function.ts @ blob f9d92a853e0e621d5313002ee8e2cf440179f1f1
 - packages/core/src/dsl/define-view.ts @ blob 16f0b8fd4d8920b9d266e0298c1b51bdfa92e49e
 - packages/core/src/plpgsql/body-ast.ts @ blob 08094a543c6e0c841c7db2da4a227c3e27d4c92e
-- packages/core/src/plpgsql/body-context.ts @ blob e51f56eff6dd5b22b0105fbbe5f9d8b2cba77ace
-- packages/core/src/plpgsql/recording-session.ts @ blob fa62064164f2ade5f458de117b25604dce071c71
+- packages/core/src/plpgsql/body-context.ts @ blob 5d1a044d5bc37e6cf3219a879b2e5915aa1856a4
+- packages/core/src/plpgsql/recording-session.ts @ blob 6a5fde34cab0b52081e4e1b0fde7936e2e799922
 - packages/core/src/plpgsql/render-body.ts @ blob a100aa531211c423b2799c8f860c9cd23e5fec7e
 - packages/core/src/query/mutate.ts @ blob 9b58d4b8b2f8e7103dc05bdbd7147a46f5a59d57
 - packages/core/src/query/select.ts @ blob cceea1b049c222522609277b5a1b486b49762ef3
@@ -32,10 +32,10 @@ Refs:
 - packages/query/src/db/fn.ts @ blob 4b82c080561ae55d92c5bd5a0f32727e7eda59fc
 - packages/query/test/db/fn-types.test.ts @ blob 57f99a3ffe3afa9b57dc0073a90839882a3a8f3c
 - packages/query/test/db/fn.test.ts @ blob 3a929803e9701d7987159600dfd452ed157cb9e0
-- README.md @ blob b7d0e08444947257cfa20ddd5da5c4f900e0209d
+- README.md @ blob 8f7a5e17edfd6f62ad6db1d18375bcec663cba17
 - skills/hejbro/references/dsl-cheatsheet.md @ blob 319ca53c8f10928b62e618400e5a7a8008ab4de2
 - skills/hejbro/references/function-builder-pitfalls.md @ blob ee4e917c81fba66f8df97a24fb6649f03c79a61a
-- skills/hejbro/SKILL.md @ blob 5b6e8f8bf443830efb289ce17a64aa014999e72b
+- skills/hejbro/SKILL.md @ blob e54f8b376888967b9f2e1ec866a31158cac607c1
 
 # add-body-statements — ctx.execute, the unused-builder guard, and returns accepting a builder (#426 #423 #433)
 
