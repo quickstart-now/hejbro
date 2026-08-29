@@ -54,12 +54,23 @@ on top of it.
 
 ## Owner context
 
-Owner delegation (2026-08-29, verbatim, Korean): "다시 자리 비워야하니까
-이제 머지던 기획 결정사항이던 전부 너가 ORM을 만든다는 기준으로 결정하고
-기존절차대로 처리해줘. … 너랑 내가 만들고 있는 이게 ORM이라는것, 오로지
-Postgres, Postgres기반으로 만들어진 서비스를 위한 ORM이라는거 명심하고
-처리해줄래? 기존 절차대로 팀이 필요하면 팀으로 처리도 하고, openspec에서
-오너결정사항 필요해도 내가 올때까지 너가 직접 결정하고."
+Owner delegation (2026-08-29, rewritten from Korean per this
+directory's convention): the owner, stepping away again, delegated
+everything — merges and planning decisions alike — to the assistant, to
+be decided as the builder of this product and processed through the
+established procedures; the owner stressed that what is being built is
+an ORM, exclusively for Postgres and for services built on Postgres;
+teams are to be used through the existing procedures where a piece
+needs one, and even owner-gated OpenSpec decisions are to be made
+directly by the assistant until the owner is back.
+
+(Correction note: this section originally quoted the owner's Korean
+verbatim, on the lead's instruction — which contradicted this
+directory's own convention ("English rewrites, not literal
+translations", owner rule 2026-08-26). Caught by the add-check-schema
+piece's implementer while writing that change's entry; both entries now
+follow the convention. The lead's mis-instruction is part of the
+record.)
 
 Return rule (owner, same day): mid-session owner messages do not end the
 delegation; only an explicit return declaration does. All owner-gated
