@@ -1279,12 +1279,14 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const knownColumnNames = new Set(
 		columnEntries.map((entry) => entry.columnName),
 	);
-	// Order matters (#464): must run before validateColumnRefs, or a
-	// foreign column is misdiagnosed instead of caught here — a
-	// different-named one reads as a typo (unknown-index-column, since
-	// its name is absent from this table's knownColumnNames), and a
-	// same-named one (the whole reason this guard exists) passes
-	// validateColumnRefs' name-only check silently.
+	// Order affects diagnosis, not detection (#464, measured): running
+	// this after validateColumnRefs would misdiagnose a different-named
+	// foreign column as unknown-index-column (a typo) instead of
+	// foreign-column-ref -- validateColumnRefs only checks name
+	// membership, so it can't itself catch a same-named foreign column
+	// either way; this guard is what does, regardless of the two calls'
+	// order. A same-named foreign column passing silently is what
+	// removing this guard entirely (not merely reordering it) causes.
 	assertNoForeignIndexColumn(owner, tableName, indexes);
 	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
 	validateDuplicateNames(tableName, indexes, foreignKeys);
