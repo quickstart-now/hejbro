@@ -1,13 +1,17 @@
+import type { JsonValue, Snapshot } from "@hejbro/core";
 import {
 	generateMigration,
 	parseSnapshot,
 	requiredKeysByKind,
 } from "@hejbro/core";
+import type { DriverSession } from "@hejbro/query";
 import { defineCommand } from "citty";
+import type { Catalog } from "../check/catalog";
 import { readCatalog } from "../check/catalog";
 import type { Finding } from "../check/compare";
 import { compareCatalog } from "../check/compare";
 import { connectForCheck } from "../check/driver";
+import { compareCheckConstraint } from "../check/expression";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { loadConfig, loadDeclarations } from "../loader";
@@ -92,6 +96,78 @@ export const renderCheckReport = (
 	};
 };
 
+// Mirrors compare.ts's own internal-invariant idiom (table/column shapes
+// aren't part of core's public surface -- only decodeExprNode/renderExpr/
+// renderTypeNode are).
+type LocalCheckSnapshot = {
+	readonly name: string;
+	readonly expression: JsonValue;
+};
+type LocalTableSnapshot = {
+	readonly schema: string;
+	readonly name: string;
+	readonly checks?: ReadonlyArray<LocalCheckSnapshot>;
+};
+
+type DeclaredCheckConstraint = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+	readonly expression: JsonValue;
+};
+
+/**
+ * Every declared check constraint across *every* declared table (4.4) --
+ * exported so its own test can assert the walk isn't accidentally
+ * limited to the first table it sees. Group 3 built the expression
+ * comparison and nothing called it until this task; an unreached
+ * comparison is worse than a missing one, since every test passes and
+ * the report stays silent.
+ */
+export const declaredCheckConstraints = (
+	snapshot: Snapshot,
+): ReadonlyArray<DeclaredCheckConstraint> =>
+	Object.entries(snapshot.objects)
+		.filter(([key]) => key.startsWith("table:"))
+		.flatMap(([, node]) => {
+			const tableNode = node as LocalTableSnapshot;
+			return (tableNode.checks ?? []).map((checkNode) => ({
+				schema: tableNode.schema,
+				table: tableNode.name,
+				name: checkNode.name,
+				expression: checkNode.expression,
+			}));
+		});
+
+/**
+ * `compareCatalog` (existence/columns) plus, for every declared check
+ * constraint, `compareCheckConstraint` (expression/enforcement, group
+ * 3) -- merged into one findings list. Takes `session`, not a full
+ * `Driver`, so a test injects a fake one with no real I/O at all;
+ * `runCheck` passes its own already-open `Driver` (which structurally
+ * satisfies `DriverSession`).
+ */
+export const compareCheckAgainstCatalog = async (
+	snapshot: Snapshot,
+	catalog: Catalog,
+	session: DriverSession,
+): Promise<ReadonlyArray<Finding>> => {
+	const tableFindings = compareCatalog(snapshot, catalog);
+	const expressionFindingLists = await Promise.all(
+		declaredCheckConstraints(snapshot).map((constraint) =>
+			compareCheckConstraint(
+				session,
+				catalog,
+				constraint.schema,
+				constraint.table,
+				constraint.name,
+				constraint.expression,
+			),
+		),
+	);
+	return [...tableFindings, ...expressionFindingLists.flat()];
+};
+
 const FIRST_QUOTED_SUBSTRING = /"([^"]+)"/;
 
 /** Same identity-extraction heuristic as verify.ts/generate.ts's own copies: every message leads with the thing it's about inside the first `"..."`, or there is no object yet (a connection/driver/catalog-read failure) and `fallback` names the command instead. */
@@ -123,11 +199,12 @@ const preconditionErrorReport = (error: unknown): CheckReport => {
  * `hejbro check`'s own thin orchestration: connect (read-only), read the
  * catalog, build the declared snapshot exactly as `generate`/`verify` do
  * (the checked-in snapshot as the D81 parent, so column order matches
- * reality), compare, render. Every step but the last is I/O -- this
- * function itself is not tested directly (CI has no database); its own
- * pieces (`connectForCheck`, `readCatalog`, `compareCatalog`,
- * `renderCheckReport`) each are, and group 6 proves the assembled whole
- * against a real server.
+ * reality), compare (`compareCheckAgainstCatalog`, 4.4 -- existence/
+ * columns *and* every declared check constraint's expression), render.
+ * Every step but the last is I/O -- this function itself is not tested
+ * directly (CI has no database); its own pieces (`connectForCheck`,
+ * `readCatalog`, `compareCheckAgainstCatalog`, `renderCheckReport`) each
+ * are, and group 6 proves the assembled whole against a real server.
  */
 export const runCheck = async (
 	cwd: string,
@@ -149,7 +226,11 @@ export const runCheck = async (
 		}).snapshot;
 		const driver = await connectForCheck(urlFlag, process.env);
 		const catalog = await readCatalog(driver);
-		const findings = compareCatalog(snapshot, catalog);
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			driver,
+		);
 		return renderCheckReport(findings);
 	} catch (error) {
 		return preconditionErrorReport(error);

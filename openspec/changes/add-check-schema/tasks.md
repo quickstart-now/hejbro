@@ -259,7 +259,7 @@ Postgres rewrites expressions on write.
       differences", "says its reads are not a single snapshot". Files:
       `packages/cli/src/commands/check.ts`, that test.
 
-- [ ] 4.4 (~8m) The expression comparison is actually reached: `check`
+- [x] 4.4 (~8m) The expression comparison is actually reached: `check`
       walks the declared check constraints and puts each through group
       3, merging those findings with the catalog comparison's. Group 3
       built the comparison and nothing called it — a gap this plan left
