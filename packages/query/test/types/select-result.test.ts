@@ -221,7 +221,7 @@ describe("a withCte() reference's read type (add-ctes task 3.2)", () => {
 	// A CTE-sourced select always goes through SelectResult's object-projection
 	// branch (a CTE reference is never a Table), so what matters is what each
 	// CteFieldRef carries into ProjectedColumnResult/OriginColumn.
-	it("a whole-table entry's field keeps the declared type, not the bare family (measured regression: this needed CteRowEnvironment to rebuild ColumnRef & OriginBrand explicitly -- indexing the inferred TColumns dropped the brand)", () => {
+	it("a whole-table entry's field keeps the declared type, not the bare family", () => {
 		type Ranked = CteRowEnvironment<typeof posts>;
 		type Proj = SelectResult<{ readonly a: Ranked["amountRequired"] }>;
 		expectTypeOf<Proj>().toEqualTypeOf<{ readonly a: number | null }>();

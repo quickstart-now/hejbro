@@ -311,7 +311,58 @@ rather than impossible.
       Condition on this: confirm the read types of a whole-table CTE
       projection are unchanged by the strip — if `SelectResult` turns out
       to lean on `typeNode` for those, the cost is real and the uniform
-      rule is renegotiated rather than paid silently. Two
+      rule is renegotiated rather than paid silently.
+      **Measured, and the prediction was wrong.** The strip itself is
+      safe — `SelectResult` reads neither field. But the check surfaced
+      two real defects, and one of them invalidates the mechanism this
+      task was approved with:
+      **⚠️ DISPUTED — this claim did not reproduce under independent
+      review (group 3) and may not be written anywhere until it does.**
+      The reviewer built a synthetic probe, evaluated the real type, and
+      **reverted `CteFieldRef` to the `Omit` form and ran every gate**:
+      `check-types` 13/13, the new pin tests 17/17, all green. The pins
+      added for this defect instantiate `CteRowEnvironment` with a
+      *concrete* type argument, which is the case that works under either
+      form — so they cannot tell the two apart. The bar is one line:
+      **reverting to `Omit` must turn a gate red.** Until it does, the
+      remap form stays (it is not wrong, and it is more explicit) but its
+      justification is "deliberate and explicit", not "measured TS
+      defect", and nothing about it goes into the D105 row. The original
+      claim, kept for the record:
+      **`Omit` silently drops optional `unique symbol` keys when it is
+      applied to a generic type parameter.** It compiles clean; the
+      brands are simply gone. So `Omit<TValue, "exprNode">` does **not**
+      preserve `ReadAs`/the origin brand "for free" — that claim was true
+      of the intent and false of the code. The working form is a
+      key-remapping mapped type (`as`-clause), verified against an
+      isolated probe: `Omit` over a *concrete* type keeps the brands, over
+      a generic it does not. **This is what the D105 row must say** — the
+      brands are preserved, but by a specific device chosen after
+      measurement, not by `Omit`.
+      **RESOLVED, against the implementer — neither defect reproduces.**
+      Re-tested both under the review's own bar (revert, force-rebuild
+      `@hejbro/core`, run every gate) rather than defending the original
+      claim: `CteFieldRef` reverted to `Omit<TValue, "exprNode" |
+      "typeNode" | "sqlName">`, `check-types` clean, all pin tests green.
+      `CteRowEnvironment`'s whole-table branch reverted to plain
+      `CteFieldRef<TProjection[K]>` (no `ColumnRef & OriginBrand<...>`
+      reconstruction), same result — `TProjection[K]` for `TProjection
+      extends Table<TColumns>` already *is* `TableColumns<TColumns>[K]`
+      (branded), so there was nothing to reconstruct. Root cause: the
+      earlier "measured" session diagnosed a stale `packages/core/dist/
+      index.d.ts` (fixed with `pnpm build --force`) *midway*, after
+      already concluding both defects from readings taken against that
+      same stale build, and never re-ran either claim cleanly afterward —
+      an #448-class trap, this time against this package's own `dist`
+      rather than a sibling worktree's. `CteFieldRef` **keeps** the
+      key-remap form regardless (the reviewer's own call: behaviorally
+      identical, states its own reduction directly) — its doc no longer
+      says "measured", it says "written this way on purpose".
+      `CteRowEnvironment` **reverts** to the simpler `TProjection[K]`
+      form (no reason to keep the more complex one once it is not doing
+      anything). The two `select-result.test.ts` tests stay — not as
+      regression pins (nothing regresses on revert), but as ordinary
+      correctness assertions worth having regardless. Two
       consequences, both load-bearing and both worth stating in the D105
       row: every type-level brand the projected value carried (`ReadAs`,
       the column-origin brand) is **preserved for free**, so no brand
@@ -383,6 +434,23 @@ rather than impossible.
       ours to redesign. Red: `packages/core/test/dsl/cte-column-ref.test.ts`
       — "an index expression naming a CTE column names the CTE, not
       `null`". Files: that guard's home, that test.
+
+- [ ] 3.6 (~7m) Two diagnostics the builder can give and currently does
+      not (group 3 review). Both are the failure class 1.3c exists to
+      close — a statement that builds cleanly and fails on the server:
+      (a) **a duplicate entry name.** `w.as("dup", …)` twice renders
+      `with "dup" as (…), "dup" as (…)`, which Postgres refuses with
+      `42712`, and the second reference silently shadows the first, so
+      the statement that runs is not the one that was written. `entries`
+      is a push-only local, so checking it inside `w.as` is immediate.
+      Code: **`duplicate-cte-name`**, joining the existing family
+      (`duplicate-identity`, `duplicate-index-name` — naming rule 2).
+      (b) **no entries at all.** A callback that never calls `w.as`
+      renders `with  select …`, a syntax error. Code:
+      **`empty-with-list`**. Both messages carry a `Next:` clause.
+      Red: `packages/core/test/query/with.test.ts` — "a duplicate entry
+      name is refused" and "a with list with no entries is refused".
+      Files: `packages/core/src/query/with.ts`, that test.
 
 ## 4. Views, column order, rename engine, preset validator — after group 3
 
@@ -639,6 +707,17 @@ route it through the lead rather than absorbing it.
       *non*-additions too — the output column alias list was excluded to
       keep one source of truth for a row's key names. Goes in the PR body
       and the merge declaration.
+- [ ] 7.8 (~5m) The **probe recipe**, for #476. The `Omit`-over-a-generic
+      brand loss found at 3.2 is not local to this change: a repo-wide
+      sweep found the same shape at `expr/window.ts`'s
+      `WindowFunctionCall` and `expr/aggregate.ts`'s `Aggregated`. Write
+      down, in `design.md`, how the isolated probe distinguished the two
+      cases (`Omit` over a **concrete** type keeps optional `unique
+      symbol` keys; over a **generic parameter** it drops them, silently
+      and with a clean compile) and where the regression tests that pin
+      the fixed behaviour live, so #476's handler reuses the method
+      instead of rediscovering it. Point the PR body at that section.
+
 - [ ] 7.6 (~10m) The `blackbox/` entry (D89) — an owner-driven change
       carries one in the same PR: what was asked, what was built, why, and
       the internal processing, with per-file git blob SHA pins per

@@ -7,7 +7,6 @@ import type {
 	WithEntryNode,
 	WithNode,
 } from "../expr/ast";
-import type { BuilderFamily, OriginBrand } from "../types/column-builder";
 import type { SelectLimited, SelectProjection, SetOpStage } from "./select";
 
 /**
@@ -22,18 +21,19 @@ import type { SelectLimited, SelectProjection, SetOpStage } from "./select";
  * free through the plain object spread below — nothing here recomputes
  * them.
  *
- * Built with a key-remapped mapped type (`as`), not the built-in `Omit`:
- * `Omit`/`Pick` silently drop an optional `unique symbol` key (`ReadAs`'s
- * `readAsBrand`, `OriginBrand`'s `columnOriginBrand`) once `TValue` is a
- * generic type parameter rather than a concrete object type (measured —
- * `Omit<TValue, "exprNode">` compiled clean but the brand was gone from the
- * result; this form keeps it).
+ * Written as a key-remapped mapped type (`as`) rather than the built-in
+ * `Omit` — behaviorally identical (both were verified, with a fresh build,
+ * to preserve `ReadAs`/`OriginBrand` through this generic alias; an earlier
+ * draft claimed `Omit` drops them and did not reproduce under review, see
+ * D105's own log for the correction). This form is kept because it states
+ * directly, at the definition, which three fields are gone and which
+ * `TValue` is reduced to — `Omit<TValue, "exprNode" | "typeNode" |
+ * "sqlName">` says the same thing one level of indirection away.
  *
  * Surface: no existing utility composes to "an `Expr` minus its
- * declaration-only fields" — `Omit`/`Pick` alone lose the brands above, so
- * this is its own type, not a one-off inline expression at each call site.
- * Named `<Noun>Ref`, the same suffix `ColumnRef`/`TableRefNode` already use
- * for "a reference to X".
+ * declaration-only fields" — this is its own type, not a one-off inline
+ * expression at each call site. Named `<Noun>Ref`, the same suffix
+ * `ColumnRef`/`TableRefNode` already use for "a reference to X".
  */
 export type CteFieldRef<TValue extends Expr = Expr> = {
 	readonly [P in keyof TValue as P extends "exprNode" | "typeNode" | "sqlName"
@@ -47,16 +47,19 @@ export type CteFieldRef<TValue extends Expr = Expr> = {
  * own key. A column the source table declares but the entry's projection
  * never mentions is not a key here at all — not merely inaccessible, absent.
  *
- * The whole-table branch rebuilds `ColumnRef<...> & OriginBrand<TColumns, K>`
- * from `TColumns` directly rather than indexing `TProjection[K]` — TS does
- * not carry the optional-symbol `OriginBrand` through an indexed access on a
- * type parameter narrowed by `extends Table<infer TColumns>` (measured: it
- * silently drops to the bare `ColumnRef`). Carrying `OriginBrand` matters
- * beyond typing: it is what lets `@hejbro/query`'s `SelectResult` recover
- * the declared column's full read type later (measured: without it,
- * `select({ id: ranked.id }, ranked)` for a whole-table `ranked` widened to
- * the bare SQL family instead of the declared type — the same richness a
- * passthrough column already gets in an ordinary object projection, #311).
+ * Both branches key off `TProjection[K]` — the entry's own projected value,
+ * unmodified — rather than rebuilding a fresh `ColumnRef` from `TColumns`.
+ * For the whole-table branch this is what carries `OriginBrand` through:
+ * `TProjection[K]` for `TProjection extends Table<TColumns>` already is
+ * `TableColumns<TColumns>[K]` (`ColumnRef<family> & OriginBrand<TColumns,
+ * K>`), so `CteFieldRef` receives it already branded — no separate
+ * reconstruction needed, and none was found necessary (verified against
+ * `@hejbro/query`'s `SelectResult` with a fresh build; an earlier draft
+ * claimed the indexed access drops the brand and did not reproduce under
+ * review). `OriginBrand` is what lets `SelectResult` recover the declared
+ * column's full read type for a whole-table CTE's field — the same
+ * richness a passthrough column already gets in an ordinary object
+ * projection (#311); pinned in `@hejbro/query`'s `select-result.test.ts`.
  *
  * Surface: no existing type maps a `SelectProjection` to "one reference per
  * projected key" — `TableColumns` is the closest sibling but is keyed by a
@@ -66,11 +69,7 @@ export type CteFieldRef<TValue extends Expr = Expr> = {
  */
 export type CteRowEnvironment<TProjection extends SelectProjection> =
 	TProjection extends Table<infer TColumns>
-		? {
-				readonly [K in keyof TColumns]: CteFieldRef<
-					ColumnRef<BuilderFamily<TColumns[K]>> & OriginBrand<TColumns, K>
-				>;
-			}
+		? { readonly [K in keyof TColumns]: CteFieldRef<TProjection[K]> }
 		: TProjection extends Record<string, Expr>
 			? { readonly [K in keyof TProjection]: CteFieldRef<TProjection[K]> }
 			: never;
