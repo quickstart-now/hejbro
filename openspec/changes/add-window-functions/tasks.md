@@ -264,7 +264,13 @@ discipline").
       describes `count` only. Red:
       `packages/query/test/db/window.test.ts` — "a projected rowNumber
       arrives as a bigint, not a string" and "count() over (…) still
-      converts like count()". Files: `packages/query/src/db/convert.ts`,
+      converts like count()". **Every one of the eight names carries its
+      own assertion**, plus one multi-argument form (`lag(operand, offset,
+      default)` or `nthValue(operand, n)`): a name list is exactly the
+      shape where a typo or an omission converts nothing and no test
+      notices — deleting four of them from the list must turn this file
+      red. `sum`/`avg` get a pinning assertion of the opposite kind: they
+      stay unconverted through the delegation. Files: `packages/query/src/db/convert.ts`,
       that test.
 - [x] 4.3 (~7m) The chain surface reaches the same node as the core
       builder, **and refuses what the core builder refuses**. The chain

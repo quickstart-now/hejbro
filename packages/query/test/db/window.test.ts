@@ -3,7 +3,11 @@ import {
 	boolean,
 	count,
 	cumeDist,
+	firstValue,
 	lag,
+	lastValue,
+	lead,
+	nthValue,
 	ntile,
 	over,
 	percentRank,
@@ -83,6 +87,78 @@ describe("window function conversion (task 4.2)", () => {
 		);
 		expect(converted.prev).toBe(500n);
 		expect(typeof converted.prev).toBe("bigint");
+	});
+
+	// Each of the remaining four passthrough value functions (plus lag's
+	// own multi-argument form) gets its own assertion: PASSTHROUGH_AGGREGATES
+	// is a plain string list, so a missing or misspelled name compiles fine
+	// and produces no other symptom than silent non-conversion -- deleting
+	// any one of these four names from that list must turn this test red.
+	it("lead, firstValue, lastValue and nthValue each convert as their own operand's declared column does, and lag's multi-argument form still does too", () => {
+		const leadNode = select(
+			{ next: over(lead(posts.amount), { orderBy: [posts.status] }) },
+			posts,
+		).selectQuery;
+		expect(
+			convertRow({ next: "600" }, columnPlanForResult(leadNode, tables)).next,
+		).toBe(600n);
+		expect(
+			typeof convertRow({ next: "600" }, columnPlanForResult(leadNode, tables))
+				.next,
+		).toBe("bigint");
+
+		const firstNode = select(
+			{ first: over(firstValue(posts.amount), { orderBy: [posts.status] }) },
+			posts,
+		).selectQuery;
+		const firstConverted = convertRow(
+			{ first: "700" },
+			columnPlanForResult(firstNode, tables),
+		);
+		expect(firstConverted.first).toBe(700n);
+		expect(typeof firstConverted.first).toBe("bigint");
+
+		const lastNode = select(
+			{ last: over(lastValue(posts.amount), { orderBy: [posts.status] }) },
+			posts,
+		).selectQuery;
+		const lastConverted = convertRow(
+			{ last: "800" },
+			columnPlanForResult(lastNode, tables),
+		);
+		expect(lastConverted.last).toBe(800n);
+		expect(typeof lastConverted.last).toBe("bigint");
+
+		const nthNode = select(
+			{ nth: over(nthValue(posts.amount, 2), { orderBy: [posts.status] }) },
+			posts,
+		).selectQuery;
+		const nthConverted = convertRow(
+			{ nth: "900" },
+			columnPlanForResult(nthNode, tables),
+		);
+		expect(nthConverted.nth).toBe(900n);
+		expect(typeof nthConverted.nth).toBe("bigint");
+
+		// lag's own multi-argument form (offset + default) -- same first-
+		// argument-is-the-operand contract passthroughArgumentState relies on.
+		const laggedWithDefaultNode = select(
+			{
+				prevOrDefault: over(lag(posts.amount, 1, posts.amount), {
+					orderBy: [posts.status],
+				}),
+			},
+			posts,
+		).selectQuery;
+		const laggedWithDefaultConverted = convertRow(
+			{
+				// biome-ignore lint/style/useNamingConvention: prev_or_default models the real driver row key toSnakeCase(alias) produces -- resultKey (camelCase) is what the CONVERTED row carries.
+				prev_or_default: "1000",
+			},
+			columnPlanForResult(laggedWithDefaultNode, tables),
+		);
+		expect(laggedWithDefaultConverted.prevOrDefault).toBe(1000n);
+		expect(typeof laggedWithDefaultConverted.prevOrDefault).toBe("bigint");
 	});
 
 	it("ntile/percentRank/cumeDist need no conversion -- they pass through unchanged", () => {
