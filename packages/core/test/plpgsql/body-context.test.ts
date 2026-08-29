@@ -494,4 +494,14 @@ describe("body-context recording", () => {
 		const [ifStmt] = declaration.functionDeclaration.body.statements;
 		expect(ifStmt?.stmtKind).toBe("if");
 	});
+
+	it("a query returned from a trigger body is refused", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				ctx.return(select(comments).where(eq(comments.id, row.id)));
+			}),
+		).toThrowError(
+			/must return a trigger row.*Next: run the statement with ctx\.execute/,
+		);
+	});
 });

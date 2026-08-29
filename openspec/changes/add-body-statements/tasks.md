@@ -222,7 +222,7 @@ Two rules apply to every task here and are not repeated per line:
       Red: `packages/skills/test/snippet-compile.test.ts` — the reference's
       snippets compile.
       Files: `skills/hejbro/references/function-builder-pitfalls.md`.
-- [ ] 1.10 (~6m) A trigger body that returns a *query* is refused. Today
+- [x] 1.10 (~6m) A trigger body that returns a *query* is refused. Today
       the shape check only fires when the declaration returns a scalar,
       so a trigger body's query passes and renders `return query …`
       inside a `returns trigger` function — SQL Postgres rejects at

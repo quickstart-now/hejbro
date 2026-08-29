@@ -347,7 +347,7 @@ const isTriggerRow = (value: unknown): value is TriggerRow<Table> =>
 /**
  * Extracts the `QueryNode` a {@link ReturnableQuery} value carries, by
  * which of its four own fields is present — shared by {@link
- * recordReturnQuery} and {@link recordExecute} so the same four-way
+ * recordReturnShape} and {@link recordExecute} so the same four-way
  * dispatch isn't repeated. Returns `null` only for a value matching none
  * of the four shapes — structurally unreachable for a type-correct
  * caller (`ReturnableQuery`'s own four members each carry exactly one of
@@ -370,25 +370,6 @@ const returnableQueryNode = (value: ReturnableQuery): QueryNode | null => {
 		return value.deleteQuery;
 	}
 	return null;
-};
-
-/**
- * {@link recordReturn}'s `ReturnableQuery` half — split out to keep both
- * halves' own complexity under threshold (D71/#154 ratchet-5). Returns
- * `true` once it has pushed a `returnQuery` statement, `false` if
- * {@link returnableQueryNode} found no match.
- */
-const recordReturnQuery = (
-	state: RecordingState,
-	value: ReturnableQuery,
-): boolean => {
-	const query = returnableQueryNode(value);
-	if (query === null) {
-		return false;
-	}
-	markConsumed(query);
-	pushStatement(state, { stmtKind: "returnQuery", query });
-	return true;
 };
 
 /**
@@ -419,11 +400,11 @@ const assertExecuteHasNoReturning = (
  * builder as a statement run for its side effect. `returnableQueryNode`
  * returning `null` is reachable only by a caller that ignores `ReturnableQuery`
  * (raw JS, or a `ts-expect-error`/`as any` escape) — the same class of
- * gap `recordReturnQuery` leaves for `recordReturnShape`'s
- * `unsupported-return-value` to name, so this states its own user-facing
- * diagnostic here rather than hiding behind the exempt `"unreachable"`
- * code (#288 would flag that: `unreachable` skips `check:next-marker`,
- * and this site is reachable once the type system is bypassed).
+ * gap `recordReturnShape` leaves its own `unsupported-return-value` to
+ * name, so this states its own user-facing diagnostic here rather than
+ * hiding behind the exempt `"unreachable"` code (#288 would flag that:
+ * `unreachable` skips `check:next-marker`, and this site is reachable
+ * once the type system is bypassed).
  */
 const recordExecute = (state: RecordingState, value: ReturnableQuery): void => {
 	const query = returnableQueryNode(value);
@@ -492,14 +473,25 @@ const recordReturnShape = (
 	if (state.returnKind === "scalar") {
 		throwScalarReturnExpectsExpression(state);
 	}
-	if (recordReturnQuery(state, value)) {
+	const query = returnableQueryNode(value);
+	if (query === null) {
+		throwHejbroError(
+			"unsupported-return-value",
+			`ctx.return() in ${state.identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
+			state.declaredAt,
+		);
 		return;
 	}
-	throwHejbroError(
-		"unsupported-return-value",
-		`ctx.return() in ${state.identity} received a value that isn't a trigger row (new/old) or a query with .returning(). Next: pass one of those.`,
-		state.declaredAt,
-	);
+	if (state.returnKind === "trigger") {
+		throwHejbroError(
+			"trigger-return-expects-row",
+			`ctx.return() in ${state.identity} received a query, but a trigger body must return a trigger row (new/old). Postgres rejects "return query" inside a returns trigger function at create time. Next: run the statement with ctx.execute(...), then return the trigger row with ctx.return(new) (or old).`,
+			state.declaredAt,
+		);
+		return;
+	}
+	markConsumed(query);
+	pushStatement(state, { stmtKind: "returnQuery", query });
 };
 
 const recordReturn = (
