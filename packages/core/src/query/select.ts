@@ -47,35 +47,61 @@ export type SelectProjection = Table | Record<string, Expr>;
 export type { OrderTermInput };
 export { resolveOrderTerm };
 
-/** A combined set-operation stage (add-set-operations, D103): carries the recursive node, whole-set `orderBy`/`limit`, and further combinators — so `(a union b) except c` chains naturally. */
+/** A combined set-operation stage (add-set-operations, D103): carries the recursive node, whole-set `orderBy`/`limit`, and the same six combinators every select stage carries ({@link SetOpCombinators}) — so `(a union b) except c` chains naturally, and `c`'s own compatibility is checked exactly like `b`'s was (#487: this used to be a hand-duplicated, unchecked six rather than this intersection, which is how the chained position kept the gap after the first position was fixed). */
 export type SetOpStage<
 	TProjection extends SelectProjection = SelectProjection,
 > = {
 	readonly setOpQuery: SetOpNode;
 	readonly projectionInput: TProjection;
-	union(other: SetOpBranch): SetOpStage<TProjection>;
-	unionAll(other: SetOpBranch): SetOpStage<TProjection>;
-	intersect(other: SetOpBranch): SetOpStage<TProjection>;
-	intersectAll(other: SetOpBranch): SetOpStage<TProjection>;
-	except(other: SetOpBranch): SetOpStage<TProjection>;
-	exceptAll(other: SetOpBranch): SetOpStage<TProjection>;
 	orderBy(...terms: ReadonlyArray<OrderTermInput>): SetOpStage<TProjection>;
 	limit(count: number): SetOpStage<TProjection>;
-};
+} & SetOpCombinators<TProjection>;
 
 /** What a combinator accepts as its other side: any select stage, or a prior combination. */
 export type SetOpBranch<
 	TProjection extends SelectProjection = SelectProjection,
 > = SelectLimited<TProjection> | SetOpStage<TProjection>;
 
-/** The six combinators every select stage carries (and every {@link SetOpStage} carries again). */
+/**
+ * Poisons a set-op combinator's `other` parameter when its projection is
+ * not union-compatible with the left side's (#487) — the same mechanism
+ * `with.ts`'s `CompatibleRecursiveTerm` and `@hejbro/query`'s chain
+ * `CompatibleBranch` already use (`SetOpResult` resolving `never` turns
+ * the parameter itself into `never`, so the mismatch errors at the call
+ * site instead of compiling into a statement the database would reject).
+ * Only the compatibility check is consumed here, never the computed
+ * result type: `TProjection` (the LEFT side) is still what every
+ * combinator returns — a plain `union()` widens a mismatched column
+ * type at the server, but which side's *keys* name the result is a
+ * fixed SQL rule (the left branch's), not something a call should be
+ * able to change by uttering `SetOpResult` in its own return position.
+ */
+type CompatibleSetOpBranch<TProjection, TOther> = [
+	SetOpResult<TProjection, TOther>,
+] extends [never]
+	? never
+	: unknown;
+
+/** The six combinators every select stage carries (and every {@link SetOpStage} carries again) — each binds the OTHER branch's own projection (`TOther`) and gates it through {@link CompatibleSetOpBranch}, so a mismatched key set resolves the parameter to `never` and the call does not compile (#487). The runtime, the built node, and the rendered SQL are unchanged: this is a type-level narrowing only, and the result stays `SetOpStage<TProjection>` — the left branch's own projection, per SQL's own naming rule. */
 export type SetOpCombinators<TProjection extends SelectProjection> = {
-	union(other: SetOpBranch): SetOpStage<TProjection>;
-	unionAll(other: SetOpBranch): SetOpStage<TProjection>;
-	intersect(other: SetOpBranch): SetOpStage<TProjection>;
-	intersectAll(other: SetOpBranch): SetOpStage<TProjection>;
-	except(other: SetOpBranch): SetOpStage<TProjection>;
-	exceptAll(other: SetOpBranch): SetOpStage<TProjection>;
+	union<TOther extends SelectProjection>(
+		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
+	): SetOpStage<TProjection>;
+	unionAll<TOther extends SelectProjection>(
+		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
+	): SetOpStage<TProjection>;
+	intersect<TOther extends SelectProjection>(
+		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
+	): SetOpStage<TProjection>;
+	intersectAll<TOther extends SelectProjection>(
+		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
+	): SetOpStage<TProjection>;
+	except<TOther extends SelectProjection>(
+		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
+	): SetOpStage<TProjection>;
+	exceptAll<TOther extends SelectProjection>(
+		other: SetOpBranch<TOther> & CompatibleSetOpBranch<TProjection, TOther>,
+	): SetOpStage<TProjection>;
 };
 
 /** `SameKeys<TLeft, TRight>` is `true` only when both sides carry exactly the same key set (neither a missing nor an extra one) — the shape half of the union-compatibility question, checked in both directions since `keyof` alone only proves a subset. */
@@ -104,9 +130,10 @@ type SameKeys<TLeft, TRight> = [keyof TLeft] extends [keyof TRight]
  * maintained copy in `@hejbro/core` would answer the same question twice.
  * `@hejbro/query` re-exports this name unchanged, so its own chain typing
  * has no visible surface change. `@hejbro/core`'s own plain `union()`
- * above does not use this type (out of this change's scope; a mismatched
- * union still compiles here and fails at the server instead — tracked
- * separately, #487).
+ * family ({@link SetOpCombinators}) now gates its own `other` branch
+ * through this same type too (#487, harden-query-surface) — a
+ * mismatched union used to compile here and fail at the server instead;
+ * it is refused at build time now, matching every other union surface.
  */
 export type SetOpResult<TLeft, TRight> =
 	SameKeys<TLeft, TRight> extends true

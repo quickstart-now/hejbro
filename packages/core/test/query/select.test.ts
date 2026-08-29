@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ColumnBuilder, ColumnRef, SetOpNode } from "../../src/index";
 import {
 	and,
@@ -436,6 +436,45 @@ describe("set-op combinators (add-set-operations task 2.1)", () => {
 		expect(typeof active.intersect).toBe("function");
 		expect(typeof active.intersectAll).toBe("function");
 		expect(typeof active.except).toBe("function");
+	});
+});
+
+describe("union() enforces row compatibility (#487)", () => {
+	it("a union of two selects with different key sets does not type-check", () => {
+		// posts {id, status, publishedAt} vs comments {id, postId} -- a
+		// mismatched key set resolves SetOpResult to `never`, poisoning
+		// the `other` parameter (the same mechanism with.ts's
+		// CompatibleRecursiveTerm and @hejbro/query's CompatibleBranch
+		// already use). With the directive removed, the actual error is
+		// TS2345: "Argument of type 'SelectDistinctable<Table<{ id:
+		// ColumnBuilder<"uuid", ...>; postId: ColumnBuilder<"uuid",
+		// ...>; }>>' is not assignable to parameter of type 'never'."
+		select(posts).union(
+			// @ts-expect-error comments' key set does not match posts' --
+			// see the TS2345 text above.
+			select(comments),
+		);
+	});
+
+	it("a union of two selects with the same key set still type-checks, and its result row keeps the left branch's keys", () => {
+		const active = select(posts).where(eq(posts.status, "active"));
+		const archived = select(posts).where(eq(posts.status, "archived"));
+		const combined = active.union(archived);
+		// positive control: the compatibility gate does not poison the
+		// matching case, and the result stage's own projection is still
+		// exactly the LEFT branch's (SetOpResult's computed shape is
+		// discarded, never propagated into the return type -- #487).
+		expectTypeOf(combined.projectionInput).toEqualTypeOf(
+			active.projectionInput,
+		);
+	});
+
+	it("a matching union compiles to the same SQL it did before", () => {
+		const active = select(posts).where(eq(posts.status, "active"));
+		const archived = select(posts).where(eq(posts.status, "archived"));
+		expect(renderSetOp(active.union(archived).setOpQuery)).toBe(
+			'select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'active\' union select "id", "status", "published_at" from "app"."posts" where "app"."posts"."status" = \'archived\'',
+		);
 	});
 });
 

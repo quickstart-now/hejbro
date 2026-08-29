@@ -589,15 +589,23 @@ describe("set-operation view bodies (add-set-operations task 2.2)", () => {
 		id: uuid().primaryKey(),
 		name: text().notNull(),
 	});
-	// the RIGHT branch's second column is deliberately named differently
-	// (review F3): the view's declared columns must come from the LEFT
-	// branch, and identical branch names could never tell the two apart.
+	// #487 (harden-query-surface task 3.2): core's own union() now refuses
+	// a mismatched key set at build time (SetOpResult resolving `never`),
+	// so the two branches must share a key set -- this test used to give
+	// the RIGHT branch's second column a different name ("title")
+	// specifically to prove the view's declared columns come from the
+	// LEFT branch; that construction no longer compiles (by design), so
+	// the distinguishing signal moves to TYPE instead: `name` is
+	// nullable here where the LEFT's is notNull, still union-compatible
+	// (SetOpResult widens: notNull ∪ nullable = nullable) and exercises
+	// the boundary this task's fix must NOT reject (same key, different
+	// declared type) while a different key still would.
 	const archivedUsers = table(app, "archived_users", {
 		id: uuid().primaryKey(),
-		title: text().notNull(),
+		name: text(),
 	});
 
-	it("a union view round-trips and lists the left branch's columns", () => {
+	it("a union view round-trips and lists the shared column names", () => {
 		const unionView = defineView(
 			app,
 			"all_users_view",
@@ -609,7 +617,7 @@ describe("set-operation view bodies (add-set-operations task 2.2)", () => {
 		});
 		expect(result.errors).toEqual([]);
 		expect(result.sql).toContain(
-			'create or replace view "app"."all_users_view" as select "id", "name" from "app"."active_users" union select "id", "title" from "app"."archived_users";',
+			'create or replace view "app"."all_users_view" as select "id", "name" from "app"."active_users" union select "id", "name" from "app"."archived_users";',
 		);
 		const viewSnapshot = Object.entries(result.snapshot.objects).find(([key]) =>
 			key.startsWith("view:"),
