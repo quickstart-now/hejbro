@@ -1,9 +1,12 @@
 import type { HejbroInput, Snapshot } from "@hejbro/core";
 import {
+	check,
 	defineTrigger,
 	emptySnapshot,
 	generateMigration,
 	grant,
+	index,
+	isNotNull,
 	literal,
 	pgEnum,
 	rls,
@@ -65,6 +68,15 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			tables: [{ schema: "app", table: "posts", rls: false }],
+			constraints: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
 			columns: [
 				{
 					schema: "app",
@@ -110,6 +122,15 @@ describe("compareCatalog / 2.2 column type comparison", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			tables: [{ schema: "app", table: "posts", rls: false }],
+			constraints: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
 			columns: [
 				{
 					schema: "app",
@@ -154,6 +175,15 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			tables: [{ schema: "app", table: "posts", rls: false }],
+			constraints: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
 			columns: [
 				{
 					schema: "app",
@@ -194,6 +224,15 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			tables: [{ schema: "app", table: "posts", rls: false }],
+			constraints: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
 			columns: [
 				{
 					schema: "app",
@@ -257,6 +296,15 @@ describe("compareCatalog / 2.4 existence for every declared kind", () => {
 		const catalog: Catalog = {
 			...emptyCatalog(),
 			tables: [{ schema: "app", table: "posts", rls: true }],
+			constraints: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
 			columns: [
 				{
 					schema: "app",
@@ -296,5 +344,100 @@ describe("compareCatalog / 2.4 existence for every declared kind", () => {
 		expect(() => compareCatalog(emptySnapshot, emptyCatalog())).toThrow(
 			expect.objectContaining({ code: "check-declarations-empty" }),
 		);
+	});
+});
+
+type LocalTableNode = {
+	readonly primaryKeyName?: string;
+	readonly foreignKeys: ReadonlyArray<{ readonly name: string }>;
+};
+
+const uuidColumnRow = (table: string, name: string) => ({
+	schema: "app",
+	table,
+	name,
+	notNull: false,
+	catalogType: "uuid",
+	baseTypeKind: null,
+	baseTypeSchema: null,
+	baseTypeName: null,
+	catalogDefault: null,
+});
+
+describe("compareCatalog / 2.5 table sub-object existence", () => {
+	it("reports a missing index, foreign key and check constraint by identity", () => {
+		const authors = table(app, "authors", { id: uuid() });
+		const posts = table(
+			app,
+			"posts",
+			{
+				id: uuid(),
+				authorId: uuid().references(() => authors.id),
+			},
+			(t) => ({
+				indexes: [index("posts_author_idx").on(t.authorId)],
+				checks: [check("posts_has_author", isNotNull(t.authorId))],
+			}),
+		);
+		const snapshot = buildTestSnapshot([authors, posts]);
+		const postsNode = snapshot.objects["table:app.posts"] as LocalTableNode;
+		const fkName = postsNode.foreignKeys[0]?.name;
+		if (fkName === undefined) {
+			throw new Error("expected the built snapshot to declare a foreign key");
+		}
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [
+				{ schema: "app", table: "authors", rls: false },
+				{ schema: "app", table: "posts", rls: false },
+			],
+			columns: [
+				uuidColumnRow("authors", "id"),
+				uuidColumnRow("posts", "id"),
+				uuidColumnRow("posts", "author_id"),
+			],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		const byIdentity = new Map(
+			findings.map((finding) => [finding.identity, finding]),
+		);
+		expect(byIdentity.size).toBe(3);
+		expect(byIdentity.get("app.posts.posts_author_idx")?.error.code).toBe(
+			"check-object-missing",
+		);
+		expect(byIdentity.get(`app.posts.${fkName}`)?.error.code).toBe(
+			"check-object-missing",
+		);
+		expect(byIdentity.get("app.posts.posts_has_author")?.error.code).toBe(
+			"check-object-missing",
+		);
+	});
+
+	it("reports a declared primary key the table does not have", () => {
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const snapshot = buildTestSnapshot([posts]);
+		const postsNode = snapshot.objects["table:app.posts"] as LocalTableNode;
+		const pkName = postsNode.primaryKeyName;
+		if (pkName === undefined) {
+			throw new Error("expected the built snapshot to declare a primary key");
+		}
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "posts", rls: false }],
+			columns: [
+				{
+					...uuidColumnRow("posts", "id"),
+					notNull: true,
+				},
+			],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe(`app.posts.${pkName}`);
+		expect(findings[0]?.error.code).toBe("check-object-missing");
 	});
 });

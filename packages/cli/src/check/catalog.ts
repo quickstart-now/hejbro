@@ -1,3 +1,4 @@
+import { throwHejbroError } from "@hejbro/core";
 import type { DriverRow, DriverSession } from "@hejbro/query";
 import { z } from "zod";
 
@@ -170,10 +171,23 @@ export const CHECK_CATALOG_QUERIES = {
 		join pg_namespace n on n.oid = c.relnamespace
 		where not t.tgisinternal
 	`,
+	// Not information_schema.role_table_grants (1.4): that view shows only
+	// the grants the connected role is party to (grantor/grantee/
+	// membership), so a limited role would read a real grant as absent.
+	// aclexplode reads pg_class.relacl directly -- role-independent, like
+	// its two neighbours below. A null relacl means "the owner's default
+	// privileges", not "no privileges", and aclexplode(NULL) returns zero
+	// rows, so it is read through acldefault('r', relowner) to expand
+	// that default explicitly (the view being replaced already does this
+	// expansion internally).
 	tableGrants: `
-		select table_schema as schema, table_name as "table", grantee as role,
-			privilege_type as privilege
-		from information_schema.role_table_grants
+		select n.nspname as schema, c.relname as "table",
+			case when g.grantee = 0 then 'public' else g.grantee::regrole::text end as role,
+			g.privilege_type as privilege
+		from pg_class c
+		join pg_namespace n on n.oid = c.relnamespace
+		cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) as g
+		where c.relkind in ('r','p')
 	`,
 	schemaUsageGrants: `
 		select n.nspname as schema,
@@ -224,12 +238,8 @@ const runCatalogQuery = async <T>(
 	return rows.map((row) => rowSchema.parse(row));
 };
 
-/**
- * Reads the whole catalog inventory this command's comparison (group 2)
- * needs, as fourteen independent, parameterless read-only statements run
- * concurrently over one already-open session.
- */
-export const readCatalog = async (session: DriverSession): Promise<Catalog> => {
+/** The `Promise.all`-driven read itself, unwrapped -- {@link readCatalog} is the try/caught public entry point. */
+const readCatalogRows = async (session: DriverSession): Promise<Catalog> => {
 	const [
 		schemas,
 		tables,
@@ -293,4 +303,32 @@ export const readCatalog = async (session: DriverSession): Promise<Catalog> => {
 		schemaUsageGrants,
 		defaultTableGrants,
 	};
+};
+
+/** True for a plain `Error`-like value with a `message`, the shape every read failure this function must not lose (a coded driver error, a plain network error, or a zod validation error alike) -- narrower than `instanceof Error` would need to be, but every real case reaching here already has this shape. */
+const messageOf = (error: unknown): string => {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return String(error);
+};
+
+/**
+ * Reads the whole catalog inventory this command's comparison (group 2)
+ * needs, as fourteen independent, parameterless read-only statements run
+ * concurrently over one already-open session. A read that fails outright
+ * (a permission error, a dropped connection, a malformed row) SHALL NOT
+ * be read as "the objects it would have returned do not exist" (spec:
+ * "What the catalog says does not depend on who is asking") -- it stops
+ * the whole command with a coded error instead.
+ */
+export const readCatalog = async (session: DriverSession): Promise<Catalog> => {
+	try {
+		return await readCatalogRows(session);
+	} catch (error) {
+		return throwHejbroError(
+			"check-catalog-unreadable",
+			`hejbro check could not read the database catalog: ${messageOf(error)}. Next: confirm the connected role can read pg_catalog and information_schema (the standard grant for any login role), and that --url/DATABASE_URL points at a reachable database.`,
+		);
+	}
 };

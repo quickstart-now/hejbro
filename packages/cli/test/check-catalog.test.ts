@@ -102,3 +102,46 @@ describe("readCatalog", () => {
 		expect(catalog).toEqual(FIXTURE_ROWS);
 	});
 });
+
+describe("CHECK_CATALOG_QUERIES.tableGrants / 1.4", () => {
+	// information_schema.role_table_grants shows only the grants the
+	// connected role is party to (grantor/grantee/membership) -- a
+	// limited role reading it would see fewer grants than exist, and
+	// `check` would report a real grant as absent. aclexplode on
+	// pg_class.relacl directly is not role-filtered: every login role
+	// reads the same access list.
+	it("reads table grants without depending on the connected role", () => {
+		expect(CHECK_CATALOG_QUERIES.tableGrants).not.toContain(
+			"information_schema",
+		);
+		expect(CHECK_CATALOG_QUERIES.tableGrants).toContain("aclexplode");
+		expect(CHECK_CATALOG_QUERIES.tableGrants).toContain("c.relacl");
+	});
+
+	// A null relacl means "the owner's default privileges", not "no
+	// privileges" -- aclexplode(NULL) returns zero rows, so reading
+	// relacl bare would silently drop every un-explicitly-granted
+	// owner's-default privilege, bringing the same wrong "missing" back
+	// through a different door for any project that grants to the
+	// owning role.
+	it("does not report an owner's default privileges as missing on a table with no explicit grants", () => {
+		expect(CHECK_CATALOG_QUERIES.tableGrants).toContain("acldefault");
+		expect(CHECK_CATALOG_QUERIES.tableGrants).toContain("coalesce(c.relacl");
+	});
+});
+
+describe("readCatalog / 1.4 unreadable catalog", () => {
+	it("fails with a coded error when a catalog read is refused", async () => {
+		const session: DriverSession = {
+			execute: async () => {
+				throw Object.assign(new Error("permission denied for schema app"), {
+					code: "42501",
+				});
+			},
+		};
+
+		await expect(readCatalog(session)).rejects.toEqual(
+			expect.objectContaining({ code: "check-catalog-unreadable" }),
+		);
+	});
+});

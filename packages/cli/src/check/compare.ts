@@ -46,12 +46,21 @@ type LocalColumnSnapshot = {
 	readonly typeNode: TypeNode;
 	readonly notNull?: true;
 	readonly default?: JsonValue;
+	readonly uniqueName?: string;
 };
+
+type LocalIndexSnapshot = { readonly name: string };
+type LocalForeignKeySnapshot = { readonly name: string };
+type LocalCheckSnapshot = { readonly name: string };
 
 type LocalTableSnapshot = {
 	readonly schema: string;
 	readonly name: string;
 	readonly columns: ReadonlyArray<LocalColumnSnapshot>;
+	readonly indexes?: ReadonlyArray<LocalIndexSnapshot>;
+	readonly foreignKeys?: ReadonlyArray<LocalForeignKeySnapshot>;
+	readonly checks?: ReadonlyArray<LocalCheckSnapshot>;
+	readonly primaryKeyName?: string;
 };
 
 type LocalSchemaSnapshot = { readonly name: string };
@@ -285,6 +294,128 @@ const compareColumn = (
 	];
 };
 
+const hasConstraint = (
+	catalog: Catalog,
+	schema: string,
+	table: string,
+	type: string,
+	name: string,
+): boolean =>
+	catalog.constraints.some(
+		(row) =>
+			row.schema === schema &&
+			row.table === table &&
+			row.type === type &&
+			row.name === name,
+	);
+
+/** Existence only, by name -- 3.4 compares a check constraint's expression, 3.2 an index's predicate; this only confirms the object itself is there. */
+const compareConstraintExistence = (
+	schema: string,
+	table: string,
+	type: string,
+	describe: string,
+	name: string,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const identity = `${schema}.${table}.${name}`;
+	if (hasConstraint(catalog, schema, table, type, name)) {
+		return [];
+	}
+	return [missingFinding(identity, describe)];
+};
+
+const comparePrimaryKey = (
+	schema: string,
+	table: string,
+	node: LocalTableSnapshot,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	if (node.primaryKeyName === undefined) {
+		return [];
+	}
+	return compareConstraintExistence(
+		schema,
+		table,
+		"p",
+		"primary key",
+		node.primaryKeyName,
+		catalog,
+	);
+};
+
+const compareUniqueConstraints = (
+	schema: string,
+	table: string,
+	columns: ReadonlyArray<LocalColumnSnapshot>,
+	catalog: Catalog,
+): ReadonlyArray<Finding> =>
+	columns.flatMap((column) => {
+		if (column.uniqueName === undefined) {
+			return [];
+		}
+		return compareConstraintExistence(
+			schema,
+			table,
+			"u",
+			"unique constraint",
+			column.uniqueName,
+			catalog,
+		);
+	});
+
+const compareForeignKeys = (
+	schema: string,
+	table: string,
+	foreignKeys: ReadonlyArray<LocalForeignKeySnapshot>,
+	catalog: Catalog,
+): ReadonlyArray<Finding> =>
+	foreignKeys.flatMap((foreignKey) =>
+		compareConstraintExistence(
+			schema,
+			table,
+			"f",
+			"foreign key",
+			foreignKey.name,
+			catalog,
+		),
+	);
+
+const compareChecks = (
+	schema: string,
+	table: string,
+	checks: ReadonlyArray<LocalCheckSnapshot>,
+	catalog: Catalog,
+): ReadonlyArray<Finding> =>
+	checks.flatMap((check) =>
+		compareConstraintExistence(
+			schema,
+			table,
+			"c",
+			"check constraint",
+			check.name,
+			catalog,
+		),
+	);
+
+const compareIndexes = (
+	schema: string,
+	table: string,
+	indexes: ReadonlyArray<LocalIndexSnapshot>,
+	catalog: Catalog,
+): ReadonlyArray<Finding> =>
+	indexes.flatMap((index) => {
+		const identity = `${schema}.${table}.${index.name}`;
+		const found = catalog.indexes.some(
+			(row) =>
+				row.schema === schema && row.table === table && row.name === index.name,
+		);
+		if (found) {
+			return [];
+		}
+		return [missingFinding(identity, "index")];
+	});
+
 const compareTable = (
 	identity: string,
 	node: JsonValue,
@@ -298,9 +429,26 @@ const compareTable = (
 	if (row === undefined) {
 		return [missingFinding(identity, "table")];
 	}
-	return table.columns.flatMap((column) =>
-		compareColumn(table.schema, table.name, column, catalog),
-	);
+	return [
+		...table.columns.flatMap((column) =>
+			compareColumn(table.schema, table.name, column, catalog),
+		),
+		...comparePrimaryKey(table.schema, table.name, table, catalog),
+		...compareUniqueConstraints(
+			table.schema,
+			table.name,
+			table.columns,
+			catalog,
+		),
+		...compareForeignKeys(
+			table.schema,
+			table.name,
+			table.foreignKeys ?? [],
+			catalog,
+		),
+		...compareChecks(table.schema, table.name, table.checks ?? [], catalog),
+		...compareIndexes(table.schema, table.name, table.indexes ?? [], catalog),
+	];
 };
 
 const compareSchema = (
