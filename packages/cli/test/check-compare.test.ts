@@ -433,6 +433,10 @@ describe("compareCatalog / 2.4 existence for every declared kind", () => {
 type LocalTableNode = {
 	readonly primaryKeyName?: string;
 	readonly foreignKeys: ReadonlyArray<{ readonly name: string }>;
+	readonly columns: ReadonlyArray<{
+		readonly name: string;
+		readonly uniqueName?: string;
+	}>;
 };
 
 const uuidColumnRow = (table: string, name: string) => ({
@@ -521,6 +525,57 @@ describe("compareCatalog / 2.5 table sub-object existence", () => {
 
 		expect(findings).toHaveLength(1);
 		expect(findings[0]?.identity).toBe(`app.posts.${pkName}`);
+		expect(findings[0]?.error.code).toBe("check-object-missing");
+	});
+
+	// No test in this file previously exercised the unique-constraint
+	// branch (task 2.6's own audit) -- added here so the refactor that
+	// collapses all four constraint wrappers into one has a real
+	// before/after witness for every one of them, not three out of four.
+	it("reports a declared unique constraint the table does not have", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			slug: text().unique(),
+		});
+		const snapshot = buildTestSnapshot([posts]);
+		const postsNode = snapshot.objects["table:app.posts"] as LocalTableNode;
+		const uniqueName = postsNode.columns.find(
+			(column) => column.name === "slug",
+		)?.uniqueName;
+		if (uniqueName === undefined) {
+			throw new Error(
+				"expected the built snapshot to declare a unique constraint",
+			);
+		}
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "posts", rls: false }],
+			columns: [
+				{
+					...uuidColumnRow("posts", "id"),
+					notNull: true,
+				},
+				{
+					...uuidColumnRow("posts", "slug"),
+					catalogType: "text",
+					notNull: false,
+				},
+			],
+			constraints: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe(`app.posts.${uniqueName}`);
 		expect(findings[0]?.error.code).toBe("check-object-missing");
 	});
 });

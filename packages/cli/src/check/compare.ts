@@ -351,75 +351,43 @@ const compareConstraintExistence = (
 	return [missingFinding(identity, describe)];
 };
 
-const comparePrimaryKey = (
-	schema: string,
-	table: string,
-	node: LocalTableSnapshot,
-	catalog: Catalog,
-): ReadonlyArray<Finding> => {
-	if (node.primaryKeyName === undefined) {
-		return [];
-	}
-	return compareConstraintExistence(
-		schema,
-		table,
-		"p",
-		"primary key",
-		node.primaryKeyName,
-		catalog,
-	);
+/**
+ * The four `pg_constraint` type letters `check` compares by existence
+ * only -- a four-row table, not four near-identical wrapper functions
+ * whose entire body was one `(type letter, description)` pair passed to
+ * {@link compareConstraintExistence} (task 2.6).
+ */
+type ConstraintKind = "p" | "u" | "f" | "c";
+
+const CONSTRAINT_KIND_DESCRIPTIONS: Readonly<Record<ConstraintKind, string>> = {
+	p: "primary key",
+	u: "unique constraint",
+	f: "foreign key",
+	c: "check constraint",
 };
 
-const compareUniqueConstraints = (
-	schema: string,
-	table: string,
-	columns: ReadonlyArray<LocalColumnSnapshot>,
-	catalog: Catalog,
-): ReadonlyArray<Finding> =>
-	columns.flatMap((column) => {
-		if (column.uniqueName === undefined) {
-			return [];
-		}
-		return compareConstraintExistence(
-			schema,
-			table,
-			"u",
-			"unique constraint",
-			column.uniqueName,
-			catalog,
-		);
-	});
+/** `[]` for an absent optional name, `[name]` otherwise -- a guard clause, not a ternary (house style), so a single name and a name list feed {@link compareConstraintsByName} the same shape. */
+const optionalName = (name: string | undefined): ReadonlyArray<string> => {
+	if (name === undefined) {
+		return [];
+	}
+	return [name];
+};
 
-const compareForeignKeys = (
+const compareConstraintsByName = (
 	schema: string,
 	table: string,
-	foreignKeys: ReadonlyArray<LocalForeignKeySnapshot>,
+	type: ConstraintKind,
+	names: ReadonlyArray<string>,
 	catalog: Catalog,
 ): ReadonlyArray<Finding> =>
-	foreignKeys.flatMap((foreignKey) =>
+	names.flatMap((name) =>
 		compareConstraintExistence(
 			schema,
 			table,
-			"f",
-			"foreign key",
-			foreignKey.name,
-			catalog,
-		),
-	);
-
-const compareChecks = (
-	schema: string,
-	table: string,
-	checks: ReadonlyArray<LocalCheckSnapshot>,
-	catalog: Catalog,
-): ReadonlyArray<Finding> =>
-	checks.flatMap((check) =>
-		compareConstraintExistence(
-			schema,
-			table,
-			"c",
-			"check constraint",
-			check.name,
+			type,
+			CONSTRAINT_KIND_DESCRIPTIONS[type],
+			name,
 			catalog,
 		),
 	);
@@ -459,20 +427,34 @@ const compareTable = (
 		...table.columns.flatMap((column) =>
 			compareColumn(table.schema, table.name, column, catalog),
 		),
-		...comparePrimaryKey(table.schema, table.name, table, catalog),
-		...compareUniqueConstraints(
+		...compareConstraintsByName(
 			table.schema,
 			table.name,
-			table.columns,
+			"p",
+			optionalName(table.primaryKeyName),
 			catalog,
 		),
-		...compareForeignKeys(
+		...compareConstraintsByName(
 			table.schema,
 			table.name,
-			table.foreignKeys ?? [],
+			"u",
+			table.columns.flatMap((column) => optionalName(column.uniqueName)),
 			catalog,
 		),
-		...compareChecks(table.schema, table.name, table.checks ?? [], catalog),
+		...compareConstraintsByName(
+			table.schema,
+			table.name,
+			"f",
+			(table.foreignKeys ?? []).map((foreignKey) => foreignKey.name),
+			catalog,
+		),
+		...compareConstraintsByName(
+			table.schema,
+			table.name,
+			"c",
+			(table.checks ?? []).map((check) => check.name),
+			catalog,
+		),
 		...compareIndexes(table.schema, table.name, table.indexes ?? [], catalog),
 	];
 };
