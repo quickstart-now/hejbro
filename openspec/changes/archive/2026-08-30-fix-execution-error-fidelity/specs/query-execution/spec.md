@@ -27,7 +27,7 @@ database's report and is carried faithfully, not scrubbed.
   reports it), exposing the underlying database error as `cause`, and no
   automatic retry occurs
 
-#### Scenario: Parameter values are never written by this layer
+#### Scenario: Parameter values never reach the thrown error
 - **WHEN** an executed, parameterized statement fails
 - **THEN** the thrown error's message contains the statement's SQL text
   with bind-parameter placeholders, and the value bound to each
