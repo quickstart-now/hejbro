@@ -247,15 +247,21 @@ reported with its reason and the scope is renegotiated — not quietly
 narrowed.
 
 One expectation had to be dropped on the way, and it is worth recording
-because it shaped a task. The restriction set for a recursive term —
-"no aggregates, no window functions, no `distinct`, no `group by`" — is
-**not in the PostgreSQL manual**; both `queries-with.html` and
-`sql-select.html` were read in full and neither states one. So this change
-writes a build-time diagnostic only for rules it has **measured** against
-a real server, never for rules it recalled, and it leaves everything else
-to Postgres's own error. Two standing rules follow, and neither is new
-here — both are how this repository already decided the `distinctOn` case
-in add-window-functions:
+because it changed what gets built. The restriction set usually recalled
+for a recursive term — "no aggregates, no window functions, no
+`distinct`, no `group by`" — is **not in the PostgreSQL manual** (both
+`queries-with.html` and `sql-select.html` were read in full), and when
+measured on postgres:17 it turned out to be **half wrong**. Window
+functions, `distinct`, `distinct on`, `group by`/`having` and an aggregate
+in the *anchor* term are all accepted. Only an aggregate in the recursive
+term is refused, alongside `order by`/`limit`/`offset` (unimplemented) and
+the self-reference placement rules.
+
+Had the recalled list been implemented as a guard, this change would have
+rejected a window function inside a recursive term — the very construct it
+exists to make available, one room over. Two standing rules follow, and
+neither is new here; both are how this repository already decided the
+`distinctOn` case in add-window-functions:
 
 - **A diagnostic is written for a measured rule, never a remembered one.**
 - **hejbro is never stricter than Postgres.** A construct the server

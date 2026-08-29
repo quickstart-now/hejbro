@@ -234,26 +234,58 @@ not be dropped.
       recursive term whose shape disagrees does not type-check. Red: same
       file — "the recursive term sees the anchor's columns" and "a
       mismatched recursive term is refused". Files: that test only.
-- [ ] 6.3 (~8m) [design] What a recursive term refuses, and whether hejbro
-      refuses it first. **The restriction set is not in the manual** —
-      both `queries-with.html` and `sql-select.html` were read in full and
-      neither states one, so the earlier plan to "quote the documentation"
-      is void. What the manual does state is enforced instead, and it is a
-      different list: exactly one self-reference per query, on the
-      right-hand side of the `UNION`. Anything beyond that is settled from
-      the live probe's measured error codes (D104's `42P20`/`42803`
-      precedent — a build-time diagnostic is written only for a rule we
-      measured, never for one we recalled), and a rule we cannot back is
-      left to Postgres rather than guessed at. Red: same file — "a second
-      self-reference is refused at build time", plus one case per
-      measured restriction the probe confirms. Files:
+- [ ] 6.3 (~9m) [design] The four violations **this builder can actually
+      construct**, measured on postgres:17 rather than recalled. The
+      recalled list ("no aggregates, no window functions, no `distinct`,
+      no `group by`") was measured and is **half wrong** — see 6.6 — so it
+      is not what gets enforced. What the probe found reachable from our
+      own surface is:
+      `SetOpNode` carries whole-set `orderBy`/`limit`/`offset`, and each
+      of the three is `0A000 … in a recursive query is not implemented`;
+      and `intersect`/`except`, which `SetOpCombinators` exposes beside
+      `union`, is `42P19 recursive query "r" does not have the form
+      non-recursive-term UNION [ALL] recursive-term`.
+      **Direction pre-approved (lead, 2026-08-29): maximise
+      unrepresentability.** Narrow the recursive branch's combinator
+      surface to `union`/`unionAll` and withhold the whole-set clauses, so
+      the violations cannot be built rather than being caught. This is not
+      "stricter than Postgres" — all four are measured server rejections
+      (`42P19`, `0A000`), so making them unbuildable only moves Postgres's
+      own rule to build time, at the top of D104's ordering. Settled here:
+      the exact shape that achieves it, and which residue the shape cannot
+      close. A build-time check backed by a measured SQLSTATE is the
+      fallback for that residue only. No round trip is needed for the
+      direction; escalate only if the shape degrades inference or error
+      messages (same trigger as 6.1). Where a diagnostic is
+      written, the two SQLSTATE families stay **separate codes** —
+      `42P19` is a recursion-structure violation and `0A000` is an
+      unimplemented feature, and collapsing them describes one rule where
+      Postgres has two. Red:
+      `packages/core/test/query/with-recursive.test.ts` — "a recursive
+      branch refuses order by, limit and offset" and "intersect and except
+      are not offered on a recursive branch". Files:
       `packages/core/src/query/with-recursive.ts`, that test.
-- [ ] 6.5 (~5m) A `not materialized` hint on a recursive entry is
-      **accepted**, not refused: Postgres ignores it there rather than
-      erroring, and refusing it would make hejbro stricter than the
-      database — the ground `distinctOn` was left alone on in
-      add-window-functions. Red: same file — "a recursive entry accepts a
-      not-materialized hint". Files: that test only.
+- [ ] 6.5 (~7m) The **accept** list, which is longer than the refuse list
+      and is the half that protects this change from itself. Measured
+      accepted on postgres:17, therefore not refused here: a window
+      function in the recursive term (refusing this would block **this
+      change's own motivating case** one room over), `distinct`,
+      `distinct on`, `group by`/`having`, an aggregate in the *anchor*
+      term (the ban is recursive-term-only), `union` as well as `union
+      all`, and both `materialized` and `not materialized` on a recursive
+      entry. Each carries an assertion; a list like this is exactly where
+      one silent over-rejection hides. Red: same file — "a recursive term
+      accepts a window function, distinct, group by and an anchor
+      aggregate" and "a recursive entry accepts both materialization
+      hints". Files: that test only.
+- [ ] 6.6 (~5m) Record the correction where it will be read. The manual
+      states no restriction list, and the widely-recalled one is wrong on
+      four counts by measurement. That fact belongs in the proposal's
+      recursion section and in the skill, not only in a test name — the
+      next person to reach for a build-time guard here will reach for the
+      recalled list. Files: `openspec/changes/add-ctes/proposal.md`,
+      `skills/hejbro/references/query-layer.md` (the same edit 7.2 makes,
+      done once).
 - [ ] 6.4 (~6m) One `with recursive` covers a list containing both a
       recursive and a non-recursive entry — the flag is the list's, not
       the entry's. Red: same file — "one recursive keyword covers the
@@ -271,8 +303,9 @@ not be dropped.
       proves the server agrees. Two more the documentation could not
       settle, so the server does: a `not materialized` hint on a recursive
       entry is **accepted and ignored**, not an error (6.5's premise), and
-      whatever restrictions 6.3's probe measured on a recursive term still
-      hold on this version. Run with `pnpm --filter @hejbro/pg
+      a window function inside a recursive term is accepted — the two
+      claims 6.5 rests on that no committed test would otherwise exercise
+      against a real server. Run with `pnpm --filter @hejbro/pg
       test:integration` — `pnpm test` excludes this file and would report
       green having run none of it. Files:
       `packages/pg/test/integration.test.ts`.

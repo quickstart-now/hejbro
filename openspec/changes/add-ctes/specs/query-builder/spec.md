@@ -90,9 +90,17 @@ be a property of the `WITH` list, not of an entry, matching Postgres's
 grammar: one `with recursive` covers every entry in the list and has no
 effect on the entries that do not recurse.
 
-A `not materialized` hint on a recursive entry SHALL NOT be refused.
-Postgres ignores it there rather than erroring, and refusing it would make
-the builder stricter than the database.
+A recursive branch SHALL NOT offer `intersect` or `except`, and SHALL NOT
+carry a whole-set `order by`, `limit` or `offset`: Postgres refuses all
+four, the first as a recursion-structure violation and the rest as
+unimplemented features.
+
+Everything Postgres accepts in a recursive term SHALL remain accepted
+here — a window function, `distinct`, `distinct on`, `group by`/`having`,
+an aggregate in the anchor term, `union` as well as `union all`, and
+either materialization hint on a recursive entry. The commonly recalled
+restriction list is wider than the database's actual one, and refusing on
+it would make the builder stricter than Postgres.
 
 The recursive term SHALL be written against a reference whose columns come
 from the anchor term, so that the row shape is fixed before self-reference
@@ -103,6 +111,10 @@ is possible.
   and joins children in its recursive term
 - **THEN** the compiled SQL carries `with recursive … union all …`, and the
   database returns every descendant
+
+#### Scenario: A window function survives inside a recursive term
+- **WHEN** a recursive term projects a window function
+- **THEN** the statement is accepted, as Postgres accepts it
 
 #### Scenario: One recursive keyword covers the list
 - **WHEN** a `WITH` list containing a recursive entry also contains a
