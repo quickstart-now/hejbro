@@ -1195,13 +1195,23 @@ I/O — it reads two projection objects).
       capability specs mention no diagnostic code at all — so
       documenting one here would depart from it, not repair an omission.
 
-- [ ] 7.8 (~9m) **The PR.** Added late: group 7 ended at the closing
-      slot, but the branch still has to become a reviewable pull
-      request, and its body is a required artifact rather than a
-      formality. `upstream/feat-harden-query-surface` → `dev`, squash
-      merge. The body carries:
+- [ ] 7.8 (~9m) **Assemble the merge-request declaration.** Added late,
+      then corrected: this task first read "open the PR", which is not
+      the team's step — **PR creation belongs to the lead**, who
+      verifies the declaration (SHA equals the remote head, base is
+      current `dev`, merge-tree reports no conflicts), opens the PR,
+      watches CI, squash-merges with `--match-head-commit`, runs the
+      post-merge checks, closes the issues and files the archive PR. The
+      team's last output is the **declaration**, not a pull request.
+
+      It carries: the **frozen 40-character SHA** with the sentence
+      *"this SHA is fixed — no further commits, no rewrites"*; the
+      **gate evidence**; the **six-part surface delta** (written out in
+      `design.md`, quoted here); and the PR-body materials the lead will
+      use verbatim —
       - **the commits to be squashed**, listed — the repo's standing PR
         rule
+      - **`Closes #464 #469 #470 #487 #489`**
       - **the five issues this closes** (#464, #487, #469, #470, #489)
         and, for #487, that it took **two halves** (key sets in group 3,
         column order in group 8) so a reader does not think the second
