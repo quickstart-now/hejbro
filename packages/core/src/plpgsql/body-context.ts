@@ -396,28 +396,41 @@ const recordReturnExpr = (state: RecordingState, value: Expr): void => {
 	pushStatement(state, { stmtKind: "returnExpr", expr: value.exprNode });
 };
 
+/** Builds and throws the `scalar-return-expects-expression`-coded error (D57) -- shared by both non-expression shapes {@link recordReturn} can receive from a scalar-returning declaration (a trigger row and a query), so the message and code can't drift between the two call sites. */
+function throwScalarReturnExpectsExpression(state: RecordingState): never {
+	return throwHejbroError(
+		"scalar-return-expects-expression",
+		`ctx.return() in ${state.identity} received a query or trigger row, but this declaration returns a scalar type. Postgres rejects "return query" in a non-SETOF function at create time. Next: return an expression (a column ref, an argument ref, or a sql\`…\` fragment), or declare "returns" as a table for a setof function.`,
+		state.declaredAt,
+	);
+}
+
 const recordReturn = (
 	state: RecordingState,
 	value: TriggerRow<Table> | ReturnableQuery | Expr,
 ): void => {
 	state.returned.current = true;
-	if (isReturnableExpr(value)) {
-		recordReturnExpr(state, value);
-		return;
-	}
-	if (state.returnKind === "scalar") {
-		throwHejbroError(
-			"scalar-return-expects-expression",
-			`ctx.return() in ${state.identity} received a query or trigger row, but this declaration returns a scalar type. Postgres rejects "return query" in a non-SETOF function at create time. Next: return an expression (a column ref, an argument ref, or a sql\`…\` fragment), or declare "returns" as a table for a setof function.`,
-			state.declaredAt,
-		);
-	}
+	// #445/R4: the trigger-row brand is checked before isReturnableExpr's
+	// duck-type (`"exprNode" in value`) -- a table with a column literally
+	// named `exprNode` gives its trigger row that same property, which
+	// would otherwise misroute `ctx.return(ctx.new)` down the expression
+	// path for that table only.
 	if (isTriggerRow(value)) {
+		if (state.returnKind === "scalar") {
+			throwScalarReturnExpectsExpression(state);
+		}
 		pushStatement(state, {
 			stmtKind: "returnRef",
 			refName: value[triggerRowMeta],
 		});
 		return;
+	}
+	if (isReturnableExpr(value)) {
+		recordReturnExpr(state, value);
+		return;
+	}
+	if (state.returnKind === "scalar") {
+		throwScalarReturnExpectsExpression(state);
 	}
 	if (recordReturnQuery(state, value)) {
 		return;

@@ -211,6 +211,21 @@ Files (whole group): `packages/cli/src/commands/generate.ts`,
       guard above means any real declaration makes `hasChanges` true.
       Show a reachable case or delete the branch.
 
+- [ ] 2.4 (~5m) Two constraints the group 2 review surfaced that live
+      only in review prose today — both are one comment each, stating the
+      constraint only:
+      (a) `help.test.ts`'s flag regex (`--([a-z-]+)=`) matches
+      value-taking flags only. Every `GENERATE_ARGS` entry is a string
+      today so the comparison is symmetric and sound, but a boolean flag
+      added later would silently escape the drift check R-b exists to
+      provide. Note it where the regex is.
+      (b) `baseline-nothing-to-adopt`'s message now states flatly that
+      the declarations exported nothing. That is true only while every
+      declaration kind contributes at least one change to an empty
+      snapshot (R-d's finding). Note the dependency where the message is
+      built, so a future kind that fans out to zero changes makes someone
+      revisit the wording instead of shipping a false diagnostic.
+
 ## 3. Baseline banner parser
 
 Files (whole group): `packages/core/src/sql/migration-file.ts`,
@@ -263,7 +278,7 @@ Files (whole group): `packages/core/src/sql/migration-file.ts`,
 Files (whole group): `packages/core/src/plpgsql/body-context.ts`,
 `packages/core/test/plpgsql/body-context.test.ts`.
 
-- [ ] 4.1 (~9m) R4: `recordReturn` checks the `triggerRowMeta` brand
+- [x] 4.1 (~9m) R4: `recordReturn` checks the `triggerRowMeta` brand
       before `isReturnableExpr`'s duck-type, so a table with a column
       named `exprNode` no longer sends `ctx.return(ctx.new)` down the
       expression path. Preserve the current ordering's *effects*: a
@@ -354,6 +369,12 @@ settle. Files: `packages/skills/turbo.json`,
 - `pnpm --filter @hejbro/pg test:integration` against a real postgres:17,
   including 1.6's two new witnesses.
 - 5.1's cache reproduction recorded in the PR body.
+- Two one-off flakes were seen during review and did not reproduce:
+  `@hejbro/pg`'s integration suite failed wholesale once at `beforeAll`
+  (2 clean reruns), and `cli-smoke`'s e2e failed once in six runs. Both
+  ran in isolated worktrees, so #102-style interference is ruled out.
+  The last full run before the PR watches for either; if one recurs,
+  capture the output rather than rerunning it away.
 - Every delta scenario has a test paired to it. B2/B3 showed this is a
   detector, not paperwork: the one scenario without a test was where a
   reintroduced defect hid. Carry this practice into the completion
