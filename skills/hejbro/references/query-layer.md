@@ -48,7 +48,7 @@ await handle.select(posts).from(posts);
 ```
 
 ```ts prelude=query-handle
-import { eq } from "hejbro";
+import { asc, desc, eq } from "hejbro";
 
 // select(table) projects every declared column; select({alias: expr}, table)
 // projects an explicit object of expressions. Neither ever renders
@@ -64,10 +64,25 @@ const published = await handle
 // projection — so it is available on the first stage and exactly once.
 // `distinctOn` is Postgres's own: one row per group, and WHICH row is
 // decided by the order by, whose leading terms must be those columns.
+//
+// `orderBy` accepts the same `asc(...)`/`desc(...)` vocabulary a declared
+// index's own column order already does — a bare column orders ascending
+// with no explicit nulls placement (as `posts.id` did above); wrap it to
+// pick a direction and, optionally, an explicit `nulls: "first" | "last"`
+// placement, rendered as Postgres's own `nulls first`/`nulls last` right
+// after the direction. A window specification's own `orderBy` (see below)
+// and a set operation's whole-set `orderBy` take the identical vocabulary.
 const latestPerStatus = await handle
 	.select(posts)
 	.distinctOn(posts.status)
-	.orderBy(posts.status, { by: posts.publishedAt, direction: "desc" });
+	.orderBy(posts.status, desc(posts.publishedAt, { nulls: "last" }));
+
+// asc(...) is the explicit-direction, ascending counterpart — useful
+// mainly to pair with a nulls placement, since a bare column already
+// orders ascending with no placement:
+const oldestFirstNullsFirst = await handle
+	.select(posts)
+	.orderBy(asc(posts.publishedAt, { nulls: "first" }));
 
 // .compile() is a pure preview — it never touches the driver, and the
 // chain itself sends nothing until it is actually awaited. What a driver
@@ -641,9 +656,13 @@ const result = await handle.transaction(async (tx) => {
 
 ## Aggregates and grouping
 
-`count()`, `countWhere(expr)`, `min`, `max`, `sum` and `avg`, with
-`groupBy`/`having` in SQL's own clause order (`where` filters rows,
-`having` filters groups):
+`count()`, `min`, `max`, `sum` and `avg`, with `groupBy`/`having` in
+SQL's own clause order (`where` filters rows, `having` filters groups).
+There is no `FILTER (WHERE …)` constructor yet — an earlier, invented
+`countWhere(expr)` covered one use of it without generalizing to the
+real clause, and was removed rather than kept (#469); a real `FILTER
+(WHERE …)` construct is a tracked follow-up, not this version's
+vocabulary:
 
 ```ts prelude=query-handle
 import { count, gt, max } from "hejbro";
@@ -660,7 +679,7 @@ What each reads back as:
 
 | aggregate | type | why |
 |---|---|---|
-| `count()` / `countWhere(x)` | `bigint` | Postgres's `count` is `int8` whatever it counted, and hejbro converts it — the value really is a `bigint`, not the text the driver hands back |
+| `count()` | `bigint` | Postgres's `count` is `int8` whatever it counted, and hejbro converts it — the value really is a `bigint`, not the text the driver hands back |
 | `min(x)` / `max(x)` | `x`'s own declared type | they return their argument's type, so a `bigint({mode:"number"})` column stays `number` |
 | `sum(x)` / `avg(x)` | `number \| bigint \| string` | Postgres promotes these by the argument's *exact* type (`sum(int4)` is `int8`, `sum(int8)` is `numeric`, `avg(int)` is `numeric`, `avg(float8)` is `float8`), so one declared result type would be wrong for most inputs. Narrow it yourself with a cast in a `sql` fragment when you need to |
 
@@ -682,7 +701,9 @@ type-check now, rather than compiling and failing wrong later.
 `lag(x, offset?, default?)`, `lead(x, offset?, default?)`,
 `firstValue(x)`, `lastValue(x)`, `nthValue(x, n)`. A window-only call has
 no meaning on its own — it doesn't type-check anywhere an expression is
-expected until `over()` wraps it.
+expected until `over()` wraps it. `spec.orderBy` takes the identical
+`asc(...)`/`desc(...)`/nulls-placement vocabulary a select's own
+`orderBy` does — see "The chain surface" above — not a separate spelling.
 
 ```ts prelude=query-handle
 import { lag, over, rowNumber, sum } from "hejbro";

@@ -110,6 +110,13 @@ optionally partial via `.where(expr)`. An unnamed index derives its name
 from the table and columns — except an expression index, which requires
 an explicit name (see below).
 
+A plain `.on(...)` column MUST belong to the table declaring the index —
+`t.col` from the callback's own `t`, never a column resolved from a
+different table's declaration. A foreign column fails declaration with a
+`foreign-column-ref` error naming the foreign column's own schema, table,
+and column, even when it shares its name with one of the declaring
+table's own columns (which a name-only check could not tell apart).
+
 `.using(method)` picks the access method: `btree` (default, never recorded
 as a change), `hash`, `gin`, `gist`, `spgist`, `brin`, or pgvector's `hnsw`
 / `ivfflat` — any other name fails at declaration time with that list.
