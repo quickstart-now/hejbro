@@ -16,18 +16,10 @@ import { resolve } from "node:path";
  */
 export const hejbroSourceAlias = {
 	"@hejbro/core": resolve(import.meta.dirname, "../core/src/index.ts"),
-	// #481 (enforce-driver-contract, task 1.4/1.7): the one deliberate
-	// exception to "public entry points only" above -- the driver
-	// conformance kit is repo-internal by ratified decision (never
-	// `./index.ts`, never `package.json`'s `exports` map), so this test
-	// file is its only way in. A named, single-file alias, not a
-	// directory mapping into `../query/src/`, so no other internal stays
-	// reachable by accident. Declared *before* the plain `@hejbro/query`
-	// entry below -- Vite's alias resolution treats a string `find` as
-	// matching either an exact id or `id + "/"` prefix, in array/object
-	// insertion order, so the shorter `@hejbro/query` key would otherwise
-	// prefix-match this specifier first and mangle it into
-	// `.../index.ts/testing/driver-conformance` (measured).
+	// #481: the one named exception to "public entry points only" above --
+	// the repo-internal conformance kit's only way in. Must precede the
+	// shorter `@hejbro/query` key below, or Vite's prefix-matching alias
+	// resolution mangles this specifier into the wrong path.
 	"@hejbro/query/testing/driver-conformance": resolve(
 		import.meta.dirname,
 		"../query/src/testing/driver-conformance.ts",
