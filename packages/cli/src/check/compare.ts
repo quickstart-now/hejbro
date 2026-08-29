@@ -1,0 +1,581 @@
+import type { HejbroError, JsonValue, Snapshot, TypeNode } from "@hejbro/core";
+import {
+	decodeExprNode,
+	hejbroError,
+	renderExpr,
+	renderTypeNode,
+	throwHejbroError,
+} from "@hejbro/core";
+import type { Catalog, ColumnRow } from "./catalog";
+
+/**
+ * One comparison outcome, carrying the object's identity and the
+ * `HejbroError` the report renders (group 4's `fromHejbroError` already
+ * takes exactly this pair) -- never a raw diff (spec: "Differences are
+ * reported per object, never as a diff").
+ */
+export type Finding = {
+	readonly identity: string;
+	readonly error: HejbroError;
+};
+
+const missingFinding = (identity: string, describe: string): Finding => ({
+	identity,
+	error: hejbroError(
+		"check-object-missing",
+		`declared ${describe} "${identity}" was not found in the database. Next: apply the migration that creates it, or remove the declaration if it is no longer needed.`,
+	),
+});
+
+const differsFinding = (
+	identity: string,
+	message: string,
+	next: string,
+): Finding => ({
+	identity,
+	error: hejbroError("check-object-differs", `${message} Next: ${next}`),
+});
+
+// The kind node shapes below mirror packages/core/src/kinds/*.ts's own
+// snapshot types exactly (table/column/schema/enum aren't part of core's
+// public surface -- only decodeExprNode/renderExpr/renderTypeNode are,
+// per proposal.md's "Affected code"). Internal invariant, same idiom core
+// itself uses for its own asXSnapshot casts.
+type LocalColumnSnapshot = {
+	readonly name: string;
+	readonly typeNode: TypeNode;
+	readonly notNull?: true;
+	readonly default?: JsonValue;
+};
+
+type LocalTableSnapshot = {
+	readonly schema: string;
+	readonly name: string;
+	readonly columns: ReadonlyArray<LocalColumnSnapshot>;
+};
+
+type LocalSchemaSnapshot = { readonly name: string };
+type LocalNamedSnapshot = { readonly schema: string; readonly name: string };
+type LocalTableScopedSnapshot = {
+	readonly schema: string;
+	readonly table: string;
+	readonly name: string;
+};
+type LocalRlsSnapshot = { readonly schema: string; readonly table: string };
+type LocalGrantSnapshot = {
+	readonly schema: string;
+	readonly grantKind: string;
+	readonly role: string;
+	readonly privileges: ReadonlyArray<string>;
+};
+
+/**
+ * The #218 display-correction table (ported from
+ * `scripts/check-declared-vs-catalog.mjs`, measured against a real
+ * postgres:17): `renderTypeNode` and `format_type()` agree for every
+ * simple type except these.
+ */
+const TYPE_DISPLAY_CORRECTIONS: ReadonlyArray<readonly [RegExp, string]> = [
+	[/^time$/, "time without time zone"],
+	[/^timestamp$/, "timestamp without time zone"],
+	[/^varchar$/, "character varying"],
+	[/^varchar\((\d+)\)$/, "character varying($1)"],
+	[/^char\((\d+)\)$/, "character($1)"],
+	[/^numeric\((\d+)\)$/, "numeric($1,0)"],
+];
+
+const applyTypeDisplayCorrection = (rendered: string): string => {
+	const correction = TYPE_DISPLAY_CORRECTIONS.find(([pattern]) =>
+		pattern.test(rendered),
+	);
+	if (correction === undefined) {
+		return rendered;
+	}
+	const [pattern, replacement] = correction;
+	return rendered.replace(pattern, replacement);
+};
+
+/** The catalog's own display spelling `typeNode` should read as -- enum renders as its base type's schema-qualified name, never `renderTypeNode`'s quoted-identifier enum branch (that renders a SQL identifier, not the plain form `catalogTypeDisplay` compares against). */
+const expectedCatalogType = (typeNode: TypeNode): string => {
+	if (typeNode.typeName === "array") {
+		return `${expectedCatalogType(typeNode.element)}[]`;
+	}
+	if (typeNode.typeName === "enum") {
+		return `${typeNode.enumSchema}.${typeNode.enumName}`;
+	}
+	return applyTypeDisplayCorrection(renderTypeNode(typeNode));
+};
+
+/** The catalog row's own type in `expectedCatalogType`'s shape -- `format_type()`'s `catalogType` directly for a built-in type, or the base type's own schema-qualified name (never `format_type()`'s enum spelling, `search_path`-sensitive, measured) when the column is an enum. */
+const catalogTypeDisplay = (row: ColumnRow): string => {
+	if (
+		row.baseTypeKind !== "e" ||
+		row.baseTypeSchema === null ||
+		row.baseTypeName === null
+	) {
+		return row.catalogType;
+	}
+	const qualified = `${row.baseTypeSchema}.${row.baseTypeName}`;
+	if (row.catalogType.endsWith("[]")) {
+		return `${qualified}[]`;
+	}
+	return qualified;
+};
+
+const WHITESPACE_RUN = /\s+/g;
+const normalizeSql = (text: string): string =>
+	text.trim().replace(WHITESPACE_RUN, " ");
+const escapeForRegExp = (text: string): string =>
+	text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** True when `catalogText` is `declaredText` plus Postgres's own trailing `::<type>` cast on a literal default (ported, measured -- see the source script's own doc comment for the exact reproduction cases). */
+const matchesWithCastSuffix = (
+	declaredText: string,
+	catalogText: string,
+): boolean =>
+	new RegExp(
+		`^${escapeForRegExp(declaredText)}::[A-Za-z_][A-Za-z0-9_., \\[\\]()]*$`,
+	).test(catalogText);
+
+const NUMERIC_LITERAL = /^-?\d+(\.\d+)?$/;
+
+/** True when `catalogText` is a bare numeric literal `declaredText` wrapped in Postgres's own quotes-plus-cast for a negative numeric default (ported, measured). */
+const matchesQuotedNumericCast = (
+	declaredText: string,
+	catalogText: string,
+): boolean => {
+	if (!NUMERIC_LITERAL.test(declaredText)) {
+		return false;
+	}
+	return new RegExp(
+		`^'${escapeForRegExp(declaredText)}'::[A-Za-z_][A-Za-z0-9_., \\[\\]()]*$`,
+	).test(catalogText);
+};
+
+const defaultsMatch = (declaredText: string, catalogText: string): boolean => {
+	const declared = normalizeSql(declaredText);
+	const actual = normalizeSql(catalogText);
+	if (declared === actual) {
+		return true;
+	}
+	if (matchesWithCastSuffix(declared, actual)) {
+		return true;
+	}
+	return matchesQuotedNumericCast(declared, actual);
+};
+
+const declaredDefaultText = (column: LocalColumnSnapshot): string | null => {
+	if (column.default === undefined) {
+		return null;
+	}
+	return renderExpr(decodeExprNode(column.default));
+};
+
+const compareColumnNotNull = (
+	identity: string,
+	column: LocalColumnSnapshot,
+	row: ColumnRow,
+): ReadonlyArray<Finding> => {
+	if (column.notNull !== true) {
+		return [];
+	}
+	if (row.notNull) {
+		return [];
+	}
+	return [
+		differsFinding(
+			identity,
+			`declared column "${identity}" is not null, but the database allows null.`,
+			"write a migration that adds the not-null constraint, or remove it from the declaration.",
+		),
+	];
+};
+
+const compareColumnType = (
+	identity: string,
+	column: LocalColumnSnapshot,
+	row: ColumnRow,
+): ReadonlyArray<Finding> => {
+	const expected = expectedCatalogType(column.typeNode);
+	const actual = catalogTypeDisplay(row);
+	if (expected === actual) {
+		return [];
+	}
+	return [
+		differsFinding(
+			identity,
+			`declared column "${identity}" has type "${expected}", but the database has "${actual}".`,
+			"change the declaration to match the database, or write a migration that alters the column to the declared type.",
+		),
+	];
+};
+
+const missingDefaultFinding = (
+	identity: string,
+	declared: string | null,
+	catalogDefault: string | null,
+): Finding => {
+	if (declared !== null) {
+		return differsFinding(
+			identity,
+			`declared column "${identity}" has a default ("${declared}"), but the database has none.`,
+			"write a migration that adds the default, or remove it from the declaration.",
+		);
+	}
+	return differsFinding(
+		identity,
+		`declared column "${identity}" has no default, but the database has one ("${catalogDefault}").`,
+		"add the default to the declaration, or write a migration that drops it.",
+	);
+};
+
+const compareColumnDefault = (
+	identity: string,
+	column: LocalColumnSnapshot,
+	row: ColumnRow,
+): ReadonlyArray<Finding> => {
+	const declared = declaredDefaultText(column);
+	const catalogDefault = row.catalogDefault;
+	if (declared === null && catalogDefault === null) {
+		return [];
+	}
+	if (declared === null || catalogDefault === null) {
+		return [missingDefaultFinding(identity, declared, catalogDefault)];
+	}
+	if (defaultsMatch(declared, catalogDefault)) {
+		return [];
+	}
+	return [
+		differsFinding(
+			identity,
+			`declared column "${identity}" has default "${declared}", but the database has "${catalogDefault}".`,
+			"change the declaration to match the database, or write a migration that alters the default.",
+		),
+	];
+};
+
+const findColumnRow = (
+	catalog: Catalog,
+	schema: string,
+	table: string,
+	name: string,
+): ColumnRow | undefined =>
+	catalog.columns.find(
+		(row) => row.schema === schema && row.table === table && row.name === name,
+	);
+
+const compareColumn = (
+	schema: string,
+	table: string,
+	column: LocalColumnSnapshot,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const identity = `${schema}.${table}.${column.name}`;
+	const row = findColumnRow(catalog, schema, table, column.name);
+	if (row === undefined) {
+		return [missingFinding(identity, "column")];
+	}
+	const notNullFindings = compareColumnNotNull(identity, column, row);
+	if (notNullFindings.length > 0) {
+		return notNullFindings;
+	}
+	return [
+		...compareColumnType(identity, column, row),
+		...compareColumnDefault(identity, column, row),
+	];
+};
+
+const compareTable = (
+	identity: string,
+	node: JsonValue,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const table = node as LocalTableSnapshot;
+	const row = catalog.tables.find(
+		(candidate) =>
+			candidate.schema === table.schema && candidate.table === table.name,
+	);
+	if (row === undefined) {
+		return [missingFinding(identity, "table")];
+	}
+	return table.columns.flatMap((column) =>
+		compareColumn(table.schema, table.name, column, catalog),
+	);
+};
+
+const compareSchema = (
+	identity: string,
+	node: JsonValue,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const target = node as LocalSchemaSnapshot;
+	const found = catalog.schemas.some((row) => row.schema === target.name);
+	if (found) {
+		return [];
+	}
+	return [missingFinding(identity, "schema")];
+};
+
+const compareNamedExistence = (
+	identity: string,
+	node: JsonValue,
+	describe: string,
+	rows: ReadonlyArray<{ readonly schema: string; readonly name: string }>,
+): ReadonlyArray<Finding> => {
+	const target = node as LocalNamedSnapshot;
+	const found = rows.some(
+		(row) => row.schema === target.schema && row.name === target.name,
+	);
+	if (found) {
+		return [];
+	}
+	return [missingFinding(identity, describe)];
+};
+
+const compareTableScopedExistence = (
+	identity: string,
+	node: JsonValue,
+	describe: string,
+	rows: ReadonlyArray<{
+		readonly schema: string;
+		readonly table: string;
+		readonly name: string;
+	}>,
+): ReadonlyArray<Finding> => {
+	const target = node as LocalTableScopedSnapshot;
+	const found = rows.some(
+		(row) =>
+			row.schema === target.schema &&
+			row.table === target.table &&
+			row.name === target.name,
+	);
+	if (found) {
+		return [];
+	}
+	return [missingFinding(identity, describe)];
+};
+
+const compareRls = (
+	identity: string,
+	node: JsonValue,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const target = node as LocalRlsSnapshot;
+	const row = catalog.tables.find(
+		(candidate) =>
+			candidate.schema === target.schema && candidate.table === target.table,
+	);
+	if (row === undefined) {
+		return [missingFinding(identity, "row-level security")];
+	}
+	if (row.rls) {
+		return [];
+	}
+	return [
+		differsFinding(
+			identity,
+			`declared row-level security on "${identity}" is not enabled in the database.`,
+			"write a migration that runs `alter table ... enable row level security`, or remove the declaration.",
+		),
+	];
+};
+
+const hasSchemaUsage = (
+	catalog: Catalog,
+	schema: string,
+	role: string,
+): boolean =>
+	catalog.schemaUsageGrants.some(
+		(grant) =>
+			grant.schema === schema &&
+			grant.role === role &&
+			grant.privilege === "USAGE",
+	);
+
+const hasTableGrant = (
+	catalog: Catalog,
+	schema: string,
+	table: string,
+	role: string,
+	privilege: string,
+): boolean =>
+	catalog.tableGrants.some(
+		(grant) =>
+			grant.schema === schema &&
+			grant.table === table &&
+			grant.role === role &&
+			grant.privilege === privilege,
+	);
+
+const hasDefaultTableGrant = (
+	catalog: Catalog,
+	schema: string,
+	role: string,
+	privilege: string,
+): boolean =>
+	catalog.defaultTableGrants.some(
+		(grant) =>
+			grant.schema === schema &&
+			grant.role === role &&
+			grant.privilege === privilege,
+	);
+
+const compareSchemaUsageGrant = (
+	identity: string,
+	schema: string,
+	role: string,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	if (hasSchemaUsage(catalog, schema, role)) {
+		return [];
+	}
+	return [missingFinding(identity, "grant")];
+};
+
+const compareAllTablesPrivilegesGrant = (
+	identity: string,
+	schema: string,
+	role: string,
+	privileges: ReadonlyArray<string>,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const tablesInSchema = catalog.tables.filter((row) => row.schema === schema);
+	const gaps = tablesInSchema.flatMap((row) =>
+		privileges
+			.filter(
+				(privilege) =>
+					!hasTableGrant(catalog, schema, row.table, role, privilege),
+			)
+			.map((privilege) => `${row.table}:${privilege}`),
+	);
+	if (gaps.length === 0) {
+		return [];
+	}
+	return [
+		differsFinding(
+			identity,
+			`declared grant "${identity}" is missing on ${gaps.join(", ")} in the database.`,
+			"write a migration that grants the missing privileges, or remove them from the declaration.",
+		),
+	];
+};
+
+const compareDefaultTablePrivilegesGrant = (
+	identity: string,
+	schema: string,
+	role: string,
+	privileges: ReadonlyArray<string>,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const missingPrivileges = privileges.filter(
+		(privilege) => !hasDefaultTableGrant(catalog, schema, role, privilege),
+	);
+	if (missingPrivileges.length === 0) {
+		return [];
+	}
+	return [missingFinding(identity, "grant")];
+};
+
+const compareGrant = (
+	identity: string,
+	node: JsonValue,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const grant = node as LocalGrantSnapshot;
+	const privileges = grant.privileges.map((privilege) =>
+		privilege.toUpperCase(),
+	);
+	if (grant.grantKind === "schema-usage") {
+		return compareSchemaUsageGrant(identity, grant.schema, grant.role, catalog);
+	}
+	if (grant.grantKind === "all-tables-privileges") {
+		return compareAllTablesPrivilegesGrant(
+			identity,
+			grant.schema,
+			grant.role,
+			privileges,
+			catalog,
+		);
+	}
+	return compareDefaultTablePrivilegesGrant(
+		identity,
+		grant.schema,
+		grant.role,
+		privileges,
+		catalog,
+	);
+};
+
+/** No catalog object backs a Supabase storage bucket (a row the Storage API service owns, not this database's own migrations) -- same reasoning as scripts/verify-supabase-image.sh's skip_storage_kind. */
+const compareStorageBucket = (): ReadonlyArray<Finding> => [];
+
+type Comparator = (
+	identity: string,
+	node: JsonValue,
+	catalog: Catalog,
+) => ReadonlyArray<Finding>;
+
+/** Every declared kind this command compares by existence (and, for `table`, by column). Nested table structures the proposal's own "What it compares" list omits -- indexes, foreign keys, primary/unique constraints -- are out of scope here; check constraints are group 3's (`expression.ts`), which owns their existence and expression together via `pg_constraint`. */
+const KIND_COMPARATORS: Readonly<Record<string, Comparator>> = {
+	schema: compareSchema,
+	table: compareTable,
+	enum: (identity, node, catalog) =>
+		compareNamedExistence(identity, node, "enum", catalog.enums),
+	sequence: (identity, node, catalog) =>
+		compareNamedExistence(identity, node, "sequence", catalog.sequences),
+	function: (identity, node, catalog) =>
+		compareNamedExistence(identity, node, "function", catalog.functions),
+	view: (identity, node, catalog) =>
+		compareNamedExistence(identity, node, "view", catalog.views),
+	policy: (identity, node, catalog) =>
+		compareTableScopedExistence(identity, node, "policy", catalog.policies),
+	trigger: (identity, node, catalog) =>
+		compareTableScopedExistence(identity, node, "trigger", catalog.triggers),
+	rls: compareRls,
+	grant: compareGrant,
+	"supabase-storage-bucket": compareStorageBucket,
+};
+
+const kindOfKey = (key: string): string => key.slice(0, key.indexOf(":"));
+const identityOfKey = (key: string): string => key.slice(key.indexOf(":") + 1);
+
+const compareEntry = (
+	key: string,
+	node: JsonValue,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const kind = kindOfKey(key);
+	const identity = identityOfKey(key);
+	const comparator = KIND_COMPARATORS[kind];
+	if (comparator === undefined) {
+		return [
+			differsFinding(
+				identity,
+				`declared object "${key}" has an unrecognized kind "${kind}".`,
+				"check for a typo in the declaration, or update hejbro if this is a new kind.",
+			),
+		];
+	}
+	return comparator(identity, node, catalog);
+};
+
+/**
+ * Compares a declared snapshot against a live database's catalog,
+ * object by object -- pure, no I/O (group 1's `readCatalog` already ran).
+ * Refuses an empty declaration set outright (spec: "every comparison
+ * would be vacuous, which is never a real pass") rather than reporting a
+ * vacuous "no differences".
+ */
+export const compareCatalog = (
+	snapshot: Snapshot,
+	catalog: Catalog,
+): ReadonlyArray<Finding> => {
+	const entries = Object.entries(snapshot.objects);
+	if (entries.length === 0) {
+		return throwHejbroError(
+			"check-declarations-empty",
+			"hejbro check received a declaration set with 0 declared objects -- every comparison would be vacuous, which is never a real pass. Next: confirm the entry pattern in hejbro.config.ts matches real declaration files that export table()/schema()/... declarations.",
+		);
+	}
+	return entries.flatMap(([key, node]) => compareEntry(key, node, catalog));
+};
