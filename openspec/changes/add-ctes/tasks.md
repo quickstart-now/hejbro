@@ -43,10 +43,14 @@ not be dropped.
       `packages/core/src/expr/render-sql.ts`, that test.
 - [ ] 1.2b (~7m) A join may target a CTE reference, not only a table —
       the second half of "top N per group" rejoins the ranked CTE to carry
-      detail columns. **Measure the fan-out of widening `JoinNode.table`
-      before writing code** (`from`'s own widening measured 18 errors
-      across 7 files); if it is materially larger than that, report before
-      proceeding rather than absorbing it. Red:
+      detail columns. The fan-out is **measured, not to be re-measured**:
+      widening `from` alone is 18 errors over 7 files, widening both is
+      22 over the same 7, so the join costs **+4 and opens no new file**.
+      All four are the join-side sibling of a call the `from` widening
+      already opens — `renderTableRef` in the joins loop, `retargetJoin`,
+      `encodeJoin`, and the preset validator's join collection — so each
+      reuses the answer written one argument over. If reality disagrees
+      with that, stop and report; do not absorb a surprise. Red:
       `packages/core/test/expr/with-node.test.ts` — "a select joins a CTE
       reference, resolving the join condition against both sources".
       Files: `packages/core/src/expr/ast.ts`,

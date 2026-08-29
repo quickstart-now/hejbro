@@ -38,7 +38,10 @@ brainstorm, which is **not** the design spec's D5 (`Generic Postgres core
   enclosing `WITH` list rather than against a declared table. Joining is
   not an extra: the motivating case rejoins the ranked CTE to its source
   table to carry detail columns, so a CTE usable only in `from` would
-  close half of what this change exists for.
+  close half of what this change exists for. Measured, it is also nearly
+  free — widening `from` alone stops 18 call sites compiling, widening
+  both stops 22, and the four extra are the join-side sibling of calls the
+  first widening already opens.
 - **A named row environment.** A CTE reference exposes its own columns —
   including computed ones, which is the whole point: `over(rowNumber(),
   …) as rn` in the CTE, `where(rn <= 3)` outside it. The row type is
@@ -242,6 +245,24 @@ non-recursive groups ship independently of it. If the two-stage callback
 cannot be typed without degrading inference or error messages, that is
 reported with its reason and the scope is renegotiated — not quietly
 narrowed.
+
+One expectation had to be dropped on the way, and it is worth recording
+because it shaped a task. The restriction set for a recursive term —
+"no aggregates, no window functions, no `distinct`, no `group by`" — is
+**not in the PostgreSQL manual**; both `queries-with.html` and
+`sql-select.html` were read in full and neither states one. So this change
+writes a build-time diagnostic only for rules it has **measured** against
+a real server, never for rules it recalled, and it leaves everything else
+to Postgres's own error. Two standing rules follow, and neither is new
+here — both are how this repository already decided the `distinctOn` case
+in add-window-functions:
+
+- **A diagnostic is written for a measured rule, never a remembered one.**
+- **hejbro is never stricter than Postgres.** A construct the server
+  accepts is not refused by the builder, even when refusing it would look
+  tidier. `not materialized` on a recursive entry is the live example: the
+  manual says Postgres *ignores* it there rather than erroring, so this
+  change accepts it too.
 
 ## Out of scope
 
