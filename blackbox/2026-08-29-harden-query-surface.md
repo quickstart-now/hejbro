@@ -8,7 +8,7 @@ Refs:
 - openspec/changes/harden-query-surface/specs/query-type-inference/spec.md @ blob bcc62be0443090814339b8c8acd61c011a5ef661
 - openspec/changes/harden-query-surface/specs/snapshot-format/spec.md @ blob c571644618d030e36f593c8c816afa3718ff1ac6
 - openspec/changes/harden-query-surface/specs/table-declaration/spec.md @ blob 9e81a1cc983ff904f81b7f42b305e9d346e8b245
-- openspec/changes/harden-query-surface/tasks.md @ blob b8e5df6f666615f3e0b76e57310fd0d9d9c3be47
+- openspec/changes/harden-query-surface/tasks.md @ blob 1cc26fd0a505e3707fd48b1dd18a807eaafc07a5
 - packages/core/src/dsl/index-builder.ts @ blob 743b25d4312ffb3cb5d637ca870f70cede870d8c
 - packages/core/src/dsl/table.ts @ blob 531739f13d742ad2b0d5b2a55b376963f89710bc
 - packages/core/src/expr/aggregate.ts @ blob 74b751136d97a5337000699b5052a2a20966daee
@@ -38,17 +38,20 @@ Refs:
 - skills/hejbro/references/dsl-cheatsheet.md @ blob 74ce210fb1fff705cbcd1c587861faed547da14c
 - skills/hejbro/references/query-layer.md @ blob 3a25f4bf66480a4f2db975cc48b274682c43db09
 
-(Re-pinned twice since the original `ab0fe8f` pin, as `design.md`,
+(Re-pinned three times since the original `ab0fe8f` pin, as `design.md`,
 `tasks.md`, and `skills/hejbro/references/query-layer.md` kept moving —
-most recently by this very commit, which ticks 7.8/7.9 in `tasks.md`
-(group 7's own final edit) and updates that one path's pin in the same
-breath: the `tasks.md` blob hash above was computed against the
-**staged** content (`git rev-parse :openspec/changes/harden-query-surface/tasks.md`),
-so it already reflects this commit's own change, rather than one commit
-behind it — the loop a pin-then-edit-then-repin sequence would otherwise
-never close, since `tasks.md` is exactly the file every wrap-up task
-edits last. This is the slice's last file edit; no task after this one
-touches a pinned path. Per add-ctes' own correction, these pins must
+most recently by this very commit, which corrects 7.8 back to unticked
+in `tasks.md` (its declaration cannot exist in the tree it would have to
+describe — see that file's own "Final state" paragraph) and updates
+that one path's pin in the same breath: the `tasks.md` blob hash above
+was computed against the **staged** content (`git rev-parse
+:openspec/changes/harden-query-surface/tasks.md`), so it already
+reflects this commit's own change, rather than one commit behind it —
+the loop a pin-then-edit-then-repin sequence would otherwise never
+close, since `tasks.md` is exactly the file every wrap-up task edits
+last. This is genuinely the slice's last file edit: no task after this
+one touches a pinned path, and 7.8 (the only task left open) produces a
+message, not a file change. Per add-ctes' own correction, these pins must
 still be re-verified against the final tree after any rebase/squash,
 before the PR is considered done; a pin taken mid-branch does not
 survive a squash unless the pinned content is also present in the final

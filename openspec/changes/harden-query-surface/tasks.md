@@ -22,13 +22,23 @@ closing slot runs them. This file is the slice's only progress record,
 so a tick that means two different things at two places would make it
 useless.
 
-Current state: every task is ticked. 5.4 and 6.3 carried
-`(execution pending)` until the closing slot ran them; they now read
-`(executed in 7.7)`, and the distinction between "written" and "run"
-stayed visible in this file for the whole time it was true. 7.9 ran
-before 7.8 (this commit) precisely because 7.9 is the last task that
-edits this file — running it after 7.8 would have invalidated the
-declaration's own frozen SHA with 7.9's own edit.
+Final state: every task is ticked **except 7.8**, and that is not an
+oversight — **7.8 cannot be ticked in the tree it describes.** Its
+output is a declaration quoting a frozen SHA, so it necessarily happens
+*after* the last commit; ticking it would take another commit, which
+would move the SHA the declaration had just frozen and stale
+`blackbox`'s content pins again. This file archives with one box open
+and the reason stated, rather than with a tick that would be false at
+the moment it was written.
+
+7.9 ran before 7.8 for the same reason: 7.9 is the last task that edits
+this file, and running it afterwards would have invalidated the
+declaration's SHA with 7.9's own edit.
+
+5.4 and 6.3 carried `(execution pending)` until the closing slot ran
+them; they now read `(executed in 7.7)`. The distinction between
+"written" and "run" stayed visible here for the whole time it was true,
+which was the point of the convention.
 
 Two groups came back *needs work* and were repaired before ticking:
 group 3 (its D103 left-branch guarantee had regressed from
@@ -1006,7 +1016,7 @@ by reading the code, and it holds whatever the server says.
       failure, and the slice's overall pass is withheld until green.
       Files: none — this task runs a command and records its output.
 
-- [x] 7.8 (~9m) **Assemble the merge-request declaration.** Added late,
+- [ ] 7.8 (~9m) **Assemble the merge-request declaration.** Added late,
       then corrected twice: it first read "open the PR", which is not the
       team's step — **PR creation belongs to the lead**, who verifies the
       declaration (SHA equals the remote head, base is current `dev`,
