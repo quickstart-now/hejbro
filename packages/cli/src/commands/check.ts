@@ -12,8 +12,11 @@ import type { Finding } from "../check/compare";
 import { compareCatalog } from "../check/compare";
 import { connectForCheck } from "../check/driver";
 import { compareCheckConstraint } from "../check/expression";
+import type { Inventory } from "../check/inventory";
+import { buildInventory } from "../check/inventory";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { normalizeEqualsFlags } from "../flags";
 import { loadConfig, loadDeclarations } from "../loader";
 import { buildRegistry } from "../presets";
 import { readSnapshotFileText } from "../snapshot-file";
@@ -66,20 +69,54 @@ export type CheckReport = {
 	readonly stderr: string | null;
 };
 
+const EMPTY_INVENTORY: Inventory = { unmanagedTables: [], extensions: [] };
+
+/** `[]` when there is nothing to report -- an empty run says nothing extra, rather than printing an empty "unmanaged tables:" header every time. */
+const extensionsLines = (
+	extensions: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	if (extensions.length === 0) {
+		return [];
+	}
+	return [`installed extensions: ${extensions.join(", ")}`];
+};
+
+/**
+ * The report's own inventory section (task 5.1, spec Req5): informational
+ * only, present whether or not `check` found any differences, and never
+ * itself a `Finding` -- 2.1's own code set has no inventory entry,
+ * because an unmanaged table or an installed extension is never a
+ * difference a project is obliged to fix.
+ */
+const inventoryLines = (inventory: Inventory): ReadonlyArray<string> => [
+	...inventory.unmanagedTables.map(
+		(table) =>
+			`unmanaged table (not covered by any declaration): ${table.schema}.${table.table}`,
+	),
+	...extensionsLines(inventory.extensions),
+];
+
 /**
  * `findings[] -> CheckReport`, a pure function (no I/O) so the report's
  * own shape -- exit codes, the coverage-boundary statement, the "never a
- * diff" rule -- runs entirely in CI with no database (`runCheck` is the
- * only caller that ever does I/O; group 6 proves the real findings a live
- * server produces).
+ * diff" rule, the inventory section -- runs entirely in CI with no
+ * database (`runCheck` is the only caller that ever does I/O; group 6
+ * proves the real findings a live server produces). `inventory` defaults
+ * to empty so every pre-5.1 call site (and test) keeps working unchanged.
  */
 export const renderCheckReport = (
 	findings: ReadonlyArray<Finding>,
+	inventory: Inventory = EMPTY_INVENTORY,
 ): CheckReport => {
+	const inventoryFooter = inventoryLines(inventory);
 	if (findings.length === 0) {
 		return {
 			exitCode: 0,
-			stdout: [...COVERAGE_BOUNDARY_LINES, "check: no differences."],
+			stdout: [
+				...COVERAGE_BOUNDARY_LINES,
+				...inventoryFooter,
+				"check: no differences.",
+			],
 			stderr: null,
 		};
 	}
@@ -88,7 +125,7 @@ export const renderCheckReport = (
 	);
 	return {
 		exitCode: 1,
-		stdout: [...COVERAGE_BOUNDARY_LINES],
+		stdout: [...COVERAGE_BOUNDARY_LINES, ...inventoryFooter],
 		stderr: renderDiagnostics(
 			diagnostics,
 			`check: ${findings.length} finding(s) — fix the differences above and rerun \`hejbro check\`.`,
@@ -200,9 +237,10 @@ const preconditionErrorReport = (error: unknown): CheckReport => {
  * catalog, build the declared snapshot exactly as `generate`/`verify` do
  * (the checked-in snapshot as the D81 parent, so column order matches
  * reality), compare (`compareCheckAgainstCatalog`, 4.4 -- existence/
- * columns *and* every declared check constraint's expression), render.
- * Every step but the last is I/O -- this function itself is not tested
- * directly (CI has no database); its own pieces (`connectForCheck`,
+ * columns *and* every declared check constraint's expression), build the
+ * inventory section (`buildInventory`, 5.1), render. Every step but the
+ * last is I/O -- this function itself is not tested directly (CI has no
+ * database); its own pieces (`connectForCheck`,
  * `readCatalog`, `compareCheckAgainstCatalog`, `renderCheckReport`) each
  * are, and group 6 proves the assembled whole against a real server.
  */
@@ -210,7 +248,7 @@ export const runCheck = async (
 	cwd: string,
 	argv: ReadonlyArray<string> = [],
 ): Promise<CheckReport> => {
-	const urlFlag = lastFlagValue(argv, "--url");
+	const urlFlag = lastFlagValue(normalizeEqualsFlags(argv), "--url");
 	try {
 		const { config, configPath } = await loadConfig(cwd, undefined);
 		const declarations = await loadDeclarations(configPath, config);
@@ -231,7 +269,8 @@ export const runCheck = async (
 			catalog,
 			driver,
 		);
-		return renderCheckReport(findings);
+		const inventory = buildInventory(snapshot, catalog);
+		return renderCheckReport(findings, inventory);
 	} catch (error) {
 		return preconditionErrorReport(error);
 	}

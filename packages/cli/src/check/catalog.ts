@@ -80,6 +80,9 @@ const schemaGrantRow = z.object({
 export type SchemaUsageGrantRow = z.infer<typeof schemaGrantRow>;
 export type DefaultTableGrantRow = z.infer<typeof schemaGrantRow>;
 
+const extensionRow = z.object({ name: z.string() });
+export type ExtensionRow = z.infer<typeof extensionRow>;
+
 /**
  * One query per catalog concern, ported from
  * `scripts/check-declared-vs-catalog.mjs` (measured against a real
@@ -205,6 +208,10 @@ export const CHECK_CATALOG_QUERIES = {
 		cross join lateral aclexplode(d.defaclacl) as g
 		where d.defaclobjtype = 'r'
 	`,
+	// pg_extension is ordinary catalog metadata (like pg_class/pg_namespace)
+	// -- globally readable, no aclexplode needed, role-independent the same
+	// way table/column existence already is (1.4's rule).
+	extensions: `select extname as name from pg_extension`,
 } as const satisfies Readonly<Record<string, string>>;
 
 export type Catalog = {
@@ -222,6 +229,7 @@ export type Catalog = {
 	readonly tableGrants: ReadonlyArray<TableGrantRow>;
 	readonly schemaUsageGrants: ReadonlyArray<SchemaUsageGrantRow>;
 	readonly defaultTableGrants: ReadonlyArray<DefaultTableGrantRow>;
+	readonly extensions: ReadonlyArray<ExtensionRow>;
 };
 
 /** Runs one catalog query and validates every row against `rowSchema` -- the system-boundary check for data arriving from a live database, never trusted as pre-shaped. */
@@ -255,6 +263,7 @@ const readCatalogRows = async (session: DriverSession): Promise<Catalog> => {
 		tableGrants,
 		schemaUsageGrants,
 		defaultTableGrants,
+		extensions,
 	] = await Promise.all([
 		runCatalogQuery(session, CHECK_CATALOG_QUERIES.schemas, schemaRow),
 		runCatalogQuery(session, CHECK_CATALOG_QUERIES.tables, tableRow),
@@ -286,6 +295,7 @@ const readCatalogRows = async (session: DriverSession): Promise<Catalog> => {
 			CHECK_CATALOG_QUERIES.defaultTableGrants,
 			schemaGrantRow,
 		),
+		runCatalogQuery(session, CHECK_CATALOG_QUERIES.extensions, extensionRow),
 	]);
 	return {
 		schemas,
@@ -302,6 +312,7 @@ const readCatalogRows = async (session: DriverSession): Promise<Catalog> => {
 		tableGrants,
 		schemaUsageGrants,
 		defaultTableGrants,
+		extensions,
 	};
 };
 
@@ -315,7 +326,7 @@ const messageOf = (error: unknown): string => {
 
 /**
  * Reads the whole catalog inventory this command's comparison (group 2)
- * needs, as fourteen independent, parameterless read-only statements run
+ * needs, as independent, parameterless read-only statements run
  * concurrently over one already-open session. A read that fails outright
  * (a permission error, a dropped connection, a malformed row) SHALL NOT
  * be read as "the objects it would have returned do not exist" (spec:

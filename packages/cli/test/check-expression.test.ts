@@ -38,6 +38,7 @@ const emptyCatalog = (): Catalog => ({
 	tableGrants: [],
 	schemaUsageGrants: [],
 	defaultTableGrants: [],
+	extensions: [],
 });
 
 const withPostsTable = (): Catalog => ({

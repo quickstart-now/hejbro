@@ -52,9 +52,10 @@ const FIXTURE_ROWS: {
 	defaultTableGrants: [
 		{ schema: "app", role: "authenticated", privilege: "SELECT" },
 	],
+	extensions: [{ name: "pgcrypto" }],
 };
 
-/** A fake single-connection session that answers each query by matching its exact text against {@link CHECK_CATALOG_QUERIES} -- order-independent, since `readCatalog` is free to run its 14 reads concurrently in any order. */
+/** A fake single-connection session that answers each query by matching its exact text against {@link CHECK_CATALOG_QUERIES} -- order-independent, since `readCatalog` is free to run its reads concurrently in any order. */
 const makeFakeSession = (): {
 	readonly session: DriverSession;
 	readonly calls: CompileResult[];

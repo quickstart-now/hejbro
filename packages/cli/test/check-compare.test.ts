@@ -42,6 +42,7 @@ const emptyCatalog = (): Catalog => ({
 	tableGrants: [],
 	schemaUsageGrants: [],
 	defaultTableGrants: [],
+	extensions: [],
 });
 
 describe("compareCatalog / 2.1 finding shape", () => {

@@ -231,7 +231,16 @@ Postgres rewrites expressions on write.
 
 ## 4. The command surface and its report
 
-- [x] 4.1 (~8m) [design] Subcommand registration, description and flag
+- [x] 4.1 (~8m) [design] A value-taking flag is registered in
+      `flags.ts`'s own list, not just parsed locally: that file states
+      the rule and predicts the failure — a fifth value-taking flag that
+      skips it "silently keeps requiring the space form". `--url` was
+      that fifth flag, and `--url=…` was dropped while `--url …` worked,
+      so the command answered "neither --url nor DATABASE_URL is set"
+      to a user who had just passed `--url`. With `DATABASE_URL` also
+      set it is worse than a wrong message: the flag is ignored, a
+      *different* database is checked, and the confident result is about
+      the wrong server. Subcommand registration, description and flag
       surface. The [design] part is the user-facing text and the flag
       set; `check` is a new command and everything it prints is contract.
       Red: `packages/cli/test/help.test.ts` — "lists check among the
@@ -274,7 +283,7 @@ Postgres rewrites expressions on write.
 
 ## 5. Unmanaged inventory
 
-- [ ] 5.1 (~8m) [design] Tables inside the declared schemas that no declaration
+- [x] 5.1 (~8m) [design] Tables inside the declared schemas that no declaration
       covers, and the extensions the database has, reported as
       information with no effect on the exit code. Existence only — no
       expression, no type, nothing that could produce a false positive.
@@ -320,9 +329,15 @@ split-config shape `packages/pg` already uses.
       shows the rewrite actually cancels. It therefore asserts **how
       many** expressions it compared — the example declares eight check
       constraints, and a run that silently compared zero would otherwise
-      pass. Red: same file — "reports no differences for the example's
-      own declarations", "compares every check constraint the example
-      declares". Files: that test.
+      pass. It also fixes the scope of 3.1's other measured claim: that
+      Postgres keeps two identical target-list entries rather than
+      folding them was observed on postgres:17, so it is established for
+      whatever image this witness runs — no further. `pg_get_viewdef`
+      changing between 15 and 16 is the standing reminder that deparse
+      behaviour is not a constant across majors. Red: same file —
+      "reports no differences for the example's own declarations",
+      "compares every check constraint the example declares". Files:
+      that test.
 - [ ] 6.3 (~6m) The true-difference witness: alter one column's type on
       the live server and `check` reports exactly that object and exits
       non-zero. Verified load-bearing by asserting the *unaltered* column

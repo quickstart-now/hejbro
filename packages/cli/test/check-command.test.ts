@@ -14,6 +14,7 @@ import type { DriverRow, DriverSession } from "@hejbro/query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import type { Finding } from "../src/check/compare";
+import type { Inventory } from "../src/check/inventory";
 import {
 	compareCheckAgainstCatalog,
 	renderCheckReport,
@@ -23,6 +24,7 @@ import {
 	createCliFixtureDir,
 	removeCliFixtureDir,
 	runCli,
+	writeFixtureFile,
 } from "./support/cli-runner";
 
 const missingTableFinding: Finding = {
@@ -93,6 +95,34 @@ describe("renderCheckReport / 4.3 coverage boundary", () => {
 	});
 });
 
+describe("renderCheckReport / 5.1 inventory section", () => {
+	it("prints the inventory section in the report", () => {
+		const inventory: Inventory = {
+			unmanagedTables: [{ schema: "app", table: "legacy_table" }],
+			extensions: ["pgcrypto"],
+		};
+
+		const report = renderCheckReport([], inventory);
+
+		// Informational (spec Req5): present even on an otherwise-clean run,
+		// and never affects the exit code -- these are never differences.
+		expect(report.exitCode).toBe(0);
+		const stdoutText = report.stdout.join("\n");
+		expect(stdoutText).toContain("app.legacy_table");
+		expect(stdoutText).toContain("pgcrypto");
+	});
+
+	it("says nothing extra when there is no unmanaged inventory", () => {
+		const report = renderCheckReport([], {
+			unmanagedTables: [],
+			extensions: [],
+		});
+
+		const stdoutText = report.stdout.join("\n");
+		expect(stdoutText).not.toContain("unmanaged");
+	});
+});
+
 const app = schema("app");
 
 const buildTestSnapshot = (
@@ -115,6 +145,7 @@ const emptyCatalog = (): Catalog => ({
 	tableGrants: [],
 	schemaUsageGrants: [],
 	defaultTableGrants: [],
+	extensions: [],
 });
 
 const idColumnRow = (table: string) => ({
@@ -370,5 +401,70 @@ describe("hejbro check --help", () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("--url");
+	});
+});
+
+describe("hejbro check --url=<value> (equals form, #459-class defect)", () => {
+	beforeAll(assertBuiltCli);
+
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await runCli(cwd, ["init"]);
+		await writeFixtureFile(
+			cwd,
+			"src/app.schema.ts",
+			`import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`,
+		);
+		await runCli(cwd, ["generate"]);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	// A stripped env (no DATABASE_URL) makes the two outcomes distinguishable
+	// without a real database: if --url=... is silently dropped, connection
+	// resolution finds neither flag nor DATABASE_URL and fails with
+	// check-connection-missing; if accepted, it proceeds to load @hejbro/pg
+	// (absent from this fixture) and fails with check-driver-missing
+	// instead. The fixture project (init + a real schema + generate) is
+	// required to even reach connection resolution -- runCheck loads
+	// config/declarations/snapshot first.
+	const envWithoutDatabaseUrl = (): NodeJS.ProcessEnv => {
+		const env = { ...process.env };
+		env.DATABASE_URL = undefined;
+		return env;
+	};
+
+	it("accepts --url=<value>, not only the space form", async () => {
+		const result = await runCli(
+			cwd,
+			["check", "--url=postgres://user@nonexistent-host/db"],
+			{ env: envWithoutDatabaseUrl() },
+		);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("check-driver-missing");
+		expect(result.stderr).not.toContain("check-connection-missing");
+	});
+
+	it("--url <value> (space form) still works after adding equals-form support (regression guard)", async () => {
+		const result = await runCli(
+			cwd,
+			["check", "--url", "postgres://user@nonexistent-host/db"],
+			{ env: envWithoutDatabaseUrl() },
+		);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("check-driver-missing");
 	});
 });
