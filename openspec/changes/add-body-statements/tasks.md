@@ -296,7 +296,7 @@ Two rules apply to every task here and are not repeated per line:
       Files: `skills/hejbro/SKILL.md`,
       `skills/hejbro/references/dsl-cheatsheet.md`, `.changeset/*.md`,
       `openspec/task-times.csv`, `README.md`.
-- [ ] 2.5 (~6m) The `blackbox/` entry: the owner-delegated decisions this
+- [x] 2.5 (~6m) The `blackbox/` entry: the owner-delegated decisions this
       change ran on — the boundary exception and why the alternatives to
       it fail, the four settled design questions, and the pre-hypothesis
       that "a builder not returned is an error", which measurement cut
