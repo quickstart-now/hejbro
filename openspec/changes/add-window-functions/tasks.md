@@ -314,7 +314,7 @@ discipline").
       `@ts-expect-error` in a comment makes TypeScript treat it as a real
       directive — the token has to be broken up, and backticks do not
       help.
-- [ ] 5.3 (~6m) The D104 rows in `docs/specs/2026-08-19-hejbro-design.md`.
+- [x] 5.3 (~6m) The D104 rows in `docs/specs/2026-08-19-hejbro-design.md`.
       The wording is **already approved** (lead, 2026-08-29) and sits in
       this change's `design.md` — transcribe it verbatim rather than
       re-deriving it; that file is owner-gated and the approved text is
@@ -343,6 +343,14 @@ discipline").
       response was freeze-first and forbid destructive operations. The
       standing correction is to check the ref and the object store, not
       only the files.
+      One thing that went right belongs beside them, for the same reason
+      — it shows which habit paid: the gates after the final rebase were
+      judged as "does this still pass **after** #456's fix", not "does
+      this still pass". That mattered. #456 was deliberately
+      bidirectional (its commit message says so): besides fixing a false
+      failure, it stopped a `Next:` sitting in a comment from satisfying
+      the check. Nine new error codes passed under the stricter parser,
+      which is a different fact from having passed before it.
 
 ## Verification
 
