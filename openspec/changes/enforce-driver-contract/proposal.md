@@ -99,47 +99,82 @@ re-derives it by hand.
 - One `.changeset/*.md` (`minor` — new public surface on published
   packages).
 
-## Open decisions
+## Decisions
 
-Settled with the lead in the `[design]` tasks before any production
-code; each names the alternatives it is chosen against.
+Settled at approval; the remaining detail (names and shapes) is settled
+in the `[design]` tasks. Each records the alternative it was chosen
+against.
 
-- **D1 — the missing-capability export's shape.** A throwing helper
-  (`never`-returning, what `@hejbro/neon` needs today), a builder that
-  returns the `Error`, and/or `assertCapability` itself for drivers that
-  want to enforce their own declaration. Fewer exports is better; the
-  spec scenario "a driver's own transaction member refuses when the
-  capability is false" is the use to serve.
-- **D2 — how `session-state` becomes observable.** Candidates: (a) a
-  driver-conformance kit exported from `@hejbro/query` that every driver
-  package runs against a recording session, asserting the declaration
-  matches behavior (`false` ⇒ the required settings ride with each
-  statement; `true` ⇒ the session-setup hook delivers them); (b) the
-  same, but kept in-repo with no public export; (c) narrower — the query
-  layer names the settings its value conversion depends on as exported
-  data, ending the three hand-copies of the pin SQL
-  (`packages/pg/src/driver.ts:94`, `packages/neon/src/driver.ts:51-52`,
-  `packages/neon/src/http.ts:41-44`). (c) modifies a standing spec
-  requirement (today the hook's contents are "that driver's
-  responsibility, not the query layer's"), so it is a decision, not a
-  detail.
-- **D3 — the comparison slot's name and shape.** `ObjectKind.compare?`
-  versus `Preset.comparators?`; and function-valued (a real comparator,
-  which would drag the CLI's catalog types across the preset boundary —
-  presets may use core plus the query driver contract, nothing else)
-  versus data-valued (the kind declares that no catalog object backs it,
-  with the reason, and the CLI keeps every comparator it owns). This is
-  the extension interface itself, so the lead ratifies it.
-- **D4 — what an uncomparable kind does to the exit code.** Today the
-  bucket kind returns zero findings, i.e. `check` reports it as
-  agreeing. The spec forbids passing an object that was not compared,
-  and `check` exits 2 when every finding is `check-not-compared` — so
-  the honest report may turn every Supabase project's clean run into an
-  exit 2. The alternative is a third category: an object stated in the
-  coverage-boundary section (which the spec already requires the report
-  to carry) rather than counted as a finding.
+### One throwing helper, not three exports
+
+`@hejbro/query` exports a single `never`-returning helper that throws the
+missing-capability failure. Rejected: also exporting a builder that
+returns the `Error`, and exporting `assertCapability` — both are
+composable from, or redundant with, the one export, and the use to serve
+is the spec scenario "a driver's own transaction member refuses when the
+capability is false". The name is settled in `[design]` against the
+existing diagnostic naming family. Machine check for done: the copied
+message string appears nowhere outside `@hejbro/query`.
+
+### A conformance kit, not a runtime guard
+
+An `assertCapability(driver, "session-state", …)` at the execute path is
+rejected outright: the driver-contract spec does not merely permit a
+`session-state: false` driver, it *obliges* one to carry the settings
+value conversion depends on with every statement it executes (and to
+keep declaring `false` all the same). A guard there would refuse a
+driver that is discharging that obligation. Instead `@hejbro/query`
+gains a conformance kit each driver package runs against its own driver.
+
+Its binding design constraint: the kit checks **tier-specific
+obligations**, never "declaration equals behavior". Declaring `false`
+and applying the settings per execution is the spec's own prescribed
+combination, so a kit that inferred or corrected the declaration from
+observed behavior would violate the requirement that such a driver still
+reads `false`. Exposure (whether the kit is a public subpath export —
+the justification being that out-of-repo driver authors are consumers
+too) is settled in `[design]`.
+
+### Deliberately not added: query-owned session settings
+
+Centralizing the pin SQL in the query layer (ending its three copies at
+`packages/pg/src/driver.ts:94`, `packages/neon/src/driver.ts:51-52`,
+`packages/neon/src/http.ts:41-44`) is *not* part of this change. The
+conformance kit makes a drift between those copies observable, which was
+the reason to centralize; what would remain is the cost of modifying a
+standing requirement (today the hook's contents are "that driver's
+responsibility, not the query layer's"). Revisit when a fourth copy
+appears.
+
+### A data slot on the kind, not a comparator function
+
+The extension interface gains a **data** contribution: a kind declares
+that no catalog object backs it, with the reason. Rejected: a
+function-valued comparator slot, which would drag the CLI's catalog and
+finding types across the preset boundary (a preset may use core's
+extension interface plus the query driver contract, nothing else), and
+which no existing kind needs — there is no custom kind today that a
+catalog *could* compare. That makes a function slot speculative surface
+rather than a gap that can be closed; the boundary is stated in the spec
+and cited at the code site by issue number, to be decided when a third
+provider actually asks for it.
+
+### Two categories, not one, for what `check` did not compare
+
+A kind that declares itself uncomparable by design (the storage bucket:
+the Storage API owns that row, no catalog object exists) is stated in
+the report's coverage-boundary section and leaves the exit code
+unchanged. A comparison that *should* have happened and could not
+(missing privilege, unrenderable expression, an unregistered kind)
+stays `check-not-compared` and still forbids exit zero. Today's spec
+text does not distinguish the two, and reading it as one category would
+turn every clean Supabase run into an exit 2 — which was never its
+intent; its intent is that `check` must not report a difference it did
+not find. Drawing that line is the substance of the `cli-commands`
+delta.
 
 ## Approval
 
-Pending. Proposed by the driver-contract piece's planner; the lead
-approves under the owner's standing delegation.
+Approved 2026-08-30 by the lead session under the owner's standing
+delegation, with the five decisions above; proposed by this piece's
+planner. To be surfaced to the owner on return.
