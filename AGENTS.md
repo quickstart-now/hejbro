@@ -94,8 +94,11 @@ again.
   narratives, derivations, and process history go to the PR body or
   `blackbox/` (D89) — never multi-screen comment blocks.
 - TypeScript strict. Our own source: no `any`, no `let`/`var`, no
-  `for`/`while`, no ternary. *Generated SQL output* and the *user-facing DSL
-  design* are governed by the spec, not by these style rules.
+  `for`/`while`, no ternary. Machine-enforced, not habit (#447): Biome
+  covers `any`/`var`/ternary; `pnpm check:bans` (CI) walks `packages/*/src`
+  for the rest — `let` and every loop form. *Generated SQL output* and the
+  *user-facing DSL design* are governed by the spec, not by these style
+  rules.
 - **Naming follows the medium** (D57): snapshot self/reference fields are
   `name`/`schema`/`table`/`function`; tokens that reach generated artifacts
   are kebab-case; TypeScript-only unions stay camelCase. See

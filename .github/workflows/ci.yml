@@ -158,3 +158,4 @@ jobs:
       - run: pnpm check:first-release-version
       - run: pnpm check:next-marker
       - run: pnpm check:diagnostic-xref
+      - run: pnpm check:bans
