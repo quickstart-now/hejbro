@@ -2,16 +2,28 @@ import * as core from "@hejbro/core";
 import * as query from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 /**
- * Type-only presence check for the query-layer surface the facade must
- * carry (task 7.9, group 7 decision ①) -- a `tsc` error at this import if
- * any name is missing, never a silent gap a runtime-only assertion could
- * catch (a `export type` name never produces a runtime binding).
+ * Type-only presence check for names the facade must carry (task 7.9,
+ * group 7 decision ①) -- a `tsc` error at this import if any name is
+ * missing, never a silent gap a runtime-only assertion could catch (a
+ * `export type` name never produces a runtime binding). Most of these are
+ * query-layer types; `DeclaredCteMarker` is core's own (add-ctes, task
+ * 7.3), reaching the facade only through core's `export *` (line 10,
+ * never curated by hand) -- this is what actually proves it arrived
+ * rather than assuming a wildcard export always does.
  */
-import type { Db, DbContext, ExecuteResult, ScopedDb, Tx } from "../src/index";
+import type {
+	Db,
+	DbContext,
+	DeclaredCteMarker,
+	ExecuteResult,
+	ScopedDb,
+	Tx,
+} from "../src/index";
 import * as hejbro from "../src/index";
 
 /** Referenced so the type-only import block above isn't flagged unused. */
 type _QueryTypesPresent = [Db, DbContext, ExecuteResult<never>, ScopedDb, Tx];
+type _CoreTypesPresent = [DeclaredCteMarker];
 
 describe("hejbro facade (task 7.9)", () => {
 	it("exports db from @hejbro/query", () => {

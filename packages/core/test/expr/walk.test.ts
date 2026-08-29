@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ExprNode, FunctionCallNode } from "../../src/expr/ast";
-import { someDeepExprNode, someExprNode } from "../../src/expr/walk";
+import {
+	findExprScopeViolation,
+	someDeepExprNode,
+	someExprNode,
+} from "../../src/expr/walk";
 
 const rawSqlCall = (sql: string): ExprNode => ({ nodeKind: "rawSql", sql });
 
@@ -303,5 +307,92 @@ describe("someDeepExprNode (#141: exists()-descending sibling of someExprNode)",
 	it("returns false when a window function matches nothing", () => {
 		const node = buildWindow({ partitionBy: [columnRef] });
 		expect(someDeepExprNode(node, isMarker)).toBe(false);
+	});
+});
+
+describe("findExprScopeViolation reaches a CTE-sourced exists() (add-ctes task 2.2)", () => {
+	it("a walk reaches an expression inside a CTE body -- a column of an exists()'s own CTE from-source is in scope", () => {
+		const node: ExprNode = {
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: { projectionKind: "constantOne" },
+				from: { cteName: "ranked" },
+				joins: [],
+				where: {
+					nodeKind: "columnRef",
+					schemaName: null,
+					tableName: "ranked",
+					columnName: "id",
+				},
+				groupBy: [],
+				having: null,
+				orderBy: [],
+				limit: null,
+				offset: null,
+				distinct: null,
+			},
+		};
+		expect(findExprScopeViolation(node, [])).toBeUndefined();
+	});
+
+	it("a column naming a different CTE than the exists()'s own from-source is a violation", () => {
+		const node: ExprNode = {
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: { projectionKind: "constantOne" },
+				from: { cteName: "ranked" },
+				joins: [],
+				where: {
+					nodeKind: "columnRef",
+					schemaName: null,
+					tableName: "other_cte",
+					columnName: "id",
+				},
+				groupBy: [],
+				having: null,
+				orderBy: [],
+				limit: null,
+				offset: null,
+				distinct: null,
+			},
+		};
+		const violation = findExprScopeViolation(node, []);
+		expect(violation?.tableName).toBe("other_cte");
+	});
+
+	it("a join to a CTE inside exists() extends scope the same way a table join does", () => {
+		const node: ExprNode = {
+			nodeKind: "exists",
+			negated: false,
+			query: {
+				queryKind: "select",
+				projection: { projectionKind: "constantOne" },
+				from: { schemaName: "app", tableName: "profiles" },
+				joins: [
+					{
+						joinKind: "inner",
+						table: { cteName: "ranked" },
+						on: {
+							nodeKind: "columnRef",
+							schemaName: null,
+							tableName: "ranked",
+							columnName: "id",
+						},
+					},
+				],
+				where: null,
+				groupBy: [],
+				having: null,
+				orderBy: [],
+				limit: null,
+				offset: null,
+				distinct: null,
+			},
+		};
+		expect(findExprScopeViolation(node, [])).toBeUndefined();
 	});
 });

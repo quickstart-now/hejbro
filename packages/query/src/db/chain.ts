@@ -1,6 +1,7 @@
 import type {
 	ColumnRef,
 	Condition,
+	CteBuilder,
 	DeleteFilterable,
 	DeleteFinal,
 	DeleteReturnable,
@@ -20,16 +21,20 @@ import type {
 	SelectOrdered,
 	SelectProjection,
 	SetOpNode,
+	SetOpStage,
 	Table,
 	UpdateFilterable,
 	UpdateFinal,
 	UpdateReturnable,
+	WithNode,
+	WithStage,
 } from "@hejbro/core";
 import {
 	deleteFrom as coreDeleteFrom,
 	insert as coreInsert,
 	select as coreSelect,
 	update as coreUpdate,
+	withCte as coreWithCte,
 	isTable,
 	resolveOrderTerm,
 } from "@hejbro/core";
@@ -198,6 +203,25 @@ const makeChainTerminal = <TRow>(
 	compile: () => compile(stage),
 	// biome-ignore lint/suspicious/noThenProperty: this object IS the thenable (group 7 decision ③, chain termination = thenable) -- inert until awaited, never eagerly resolved.
 	then: makeChainThen<TRow>(run, stage, tables),
+});
+
+/**
+ * Wraps a core `withCte()` result into a chain terminal (add-ctes, task
+ * 5.4) — the same `{ withQuery }` shape `compile()`/`executeOn` already
+ * accept (task 5.1/5.3), so no new execution path is needed, only the
+ * thenable wrapper every other chain terminal already gets.
+ */
+const makeWithChain = <TProjection extends SelectProjection>(
+	run: ChainRun,
+	stage: WithStage<TProjection>,
+	tables: Declarations["tables"],
+): WithChainTerminal<TProjection> => ({
+	withQuery: stage.withQuery,
+	...makeChainTerminal<SelectResult<TProjection>>(
+		run,
+		{ withQuery: stage.withQuery },
+		tables,
+	),
 });
 
 /** The statement behind any chain branch a combinator accepts — a select stage wrapper or a prior set-op chain stage. */
@@ -663,6 +687,28 @@ type RelatedCapableMembers<TSchema, TTable extends Table> = {
 	>;
 };
 
+/**
+ * A chain-built `WITH` statement's terminal shape (add-ctes, task 5.4) —
+ * mirrors core's own `WithStage`, not {@link SelectChainLimited}: a
+ * `WithNode` has no set-op combinators of its own (`union()`/etc. apply to
+ * the body BEFORE `withCte()` wraps it, inside the callback, exactly as
+ * core's own builder already requires), so there is nothing here beyond
+ * `compile()`/thenable plus the underlying node for symmetry with every
+ * other chain terminal.
+ *
+ * Surface: `db.with(...)`'s own return type can't reuse
+ * `SelectChainLimited` (it structurally promises combinators a `WithNode`
+ * doesn't have) or `ChainTerminal` alone (callers need `withQuery` to
+ * combine a with-chain the way `chainBranchNode` reads `selectQuery`/
+ * `setOpQuery` off the others). `<Verb>ChainTerminal` matches this
+ * package's own `ChainTerminal` naming for the same role.
+ */
+export type WithChainTerminal<TProjection extends SelectProjection> =
+	PromiseLike<ReadonlyArray<SelectResult<TProjection>>> & {
+		compile(): CompileResult;
+		readonly withQuery: WithNode;
+	};
+
 export type ChainApi<TSchema = Record<string, unknown>> = {
 	/**
 	 * Starts a thenable `select` chain, mirroring core's own two call
@@ -700,6 +746,24 @@ export type ChainApi<TSchema = Record<string, unknown>> = {
 	deleteFrom<TTable extends Table>(
 		target: TTable,
 	): DeleteChainFilterable<TTable>;
+	/**
+	 * Starts a thenable `WITH` statement, mirroring core's own `withCte()`
+	 * exactly — the SAME callback signature (`CteBuilder`, `w.as(...)`),
+	 * because this takes the core-built list rather than growing a second,
+	 * parallel entry chain (task 5.4): a chain-built statement compiles
+	 * byte-identically to `compile(coreWithCte(build))`.
+	 *
+	 * Surface: kept as `with`, not `withCte` — a chain method is a
+	 * property name, so the reserved word is legal here (unlike core's own
+	 * standalone export, task 3.1), and D102 reserved exactly this slot.
+	 * The asymmetry with core's `withCte` is deliberate, not an
+	 * inconsistency (`skills/hejbro`, task 7.2, carries the same line).
+	 */
+	with<TProjection extends SelectProjection>(
+		build: (
+			w: CteBuilder,
+		) => SelectLimited<TProjection> | SetOpStage<TProjection>,
+	): WithChainTerminal<TProjection>;
 };
 
 export const createChainApi = (
@@ -738,4 +802,5 @@ export const createChainApi = (
 	}),
 	deleteFrom: (target) =>
 		makeDeleteFilterableChain(run, coreDeleteFrom(target), tables),
+	with: (build) => makeWithChain(run, coreWithCte(build), tables),
 });

@@ -6,11 +6,12 @@ import type {
 	SelectNode,
 	SetOpNode,
 	UpdateNode,
+	WithNode,
 } from "@hejbro/core";
 import { renderExpr } from "@hejbro/core";
 import { compileDelete, compileInsert, compileUpdate } from "./mutation";
 import { liftExprNode } from "./params";
-import { compileSelect, compileSetOp } from "./select";
+import { compileSelect, compileSetOp, compileWith } from "./select";
 
 /**
  * `compile()`'s input: any stage of a `select`/`insert`/`update`/
@@ -26,6 +27,7 @@ export type CompileInput =
 	| { readonly insertQuery: InsertNode }
 	| { readonly updateQuery: UpdateNode }
 	| { readonly deleteQuery: DeleteNode }
+	| { readonly withQuery: WithNode }
 	| { readonly statementExpr: ExprNode }
 	| QueryNode;
 
@@ -61,6 +63,7 @@ const wrapperKeys = [
 	"insertQuery",
 	"updateQuery",
 	"deleteQuery",
+	"withQuery",
 ] as const;
 
 type WrapperKey = (typeof wrapperKeys)[number];
@@ -131,6 +134,7 @@ const compileHandlers: {
 	update: compileUpdate,
 	delete: compileDelete,
 	setOp: compileSetOp,
+	with: compileWith,
 };
 
 /**
@@ -152,5 +156,21 @@ export const compile = (statement: CompileInput): CompileResult => {
 		node: QueryNode,
 	) => RenderedQuery;
 	const { sql, params } = handler(queryNode);
-	return { sql, params, kind: queryNode.queryKind };
+	return { sql, params, kind: compileKindOf(queryNode) };
+};
+
+/**
+ * A `WITH` statement's own `CompileKind` is its **body's** (add-ctes, task
+ * 5.1) — the body is what determines how rows are read, and `ctes` are
+ * never themselves the statement's outer shape. Both branches return a
+ * member of `QueryNode["queryKind"]` narrower than `"with"` itself
+ * (`node.body.queryKind` is `SelectNode | SetOpNode`'s own two-member
+ * union; the non-`with` branch excludes `"with"` by the `if` above), so
+ * both already satisfy {@link CompileKind} with no cast.
+ */
+const compileKindOf = (node: QueryNode): CompileKind => {
+	if (node.queryKind === "with") {
+		return node.body.queryKind;
+	}
+	return node.queryKind;
 };

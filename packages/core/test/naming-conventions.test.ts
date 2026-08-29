@@ -38,6 +38,7 @@ import {
 	table,
 	timestamptz,
 	uuid,
+	withCte,
 } from "../src/index";
 import { CORE_KIND_IDS } from "../src/kind/registry";
 import type { JsonValue } from "../src/snapshot/stable-json";
@@ -417,6 +418,26 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 		),
 	);
 
+	// add-ctes, task 4.5: a view whose body declares a CTE is the
+	// declaration-reachable producer of the "with" query vocabulary --
+	// group 1 deferred the question of whether `encodeQueryNode` needed
+	// widening to this fixture forcing it. It does not: `defineView`
+	// (task 4.1) routes a `WithNode` through `view-kind.ts`'s own
+	// `encodeViewQueryNode`, which calls `encodeWithNode` directly rather
+	// than through the shared (and deliberately narrow) `encodeQueryNode`
+	// dispatcher -- confirmed by this fixture compiling and passing
+	// unchanged, not by a red/green cycle at this task. The classification
+	// ("a documented boundary, not a stub") holds; `encodeQueryNode`'s own
+	// docstring already says so (task 4.3).
+	const rankedPostsView = defineView(
+		app,
+		"ranked_posts_view",
+		withCte((w) => {
+			const ranked = w.as("ranked", select(posts));
+			return select({ id: ranked.id, price: ranked.price }, ranked);
+		}),
+	);
+
 	const result = generateMigration({
 		declarations: [
 			app,
@@ -428,6 +449,7 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			postsWithCommentsView,
 			priceSummaryView,
 			rankByAuthorView,
+			rankedPostsView,
 		],
 		previousSnapshot: emptySnapshot,
 		registry,

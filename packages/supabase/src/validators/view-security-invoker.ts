@@ -1,12 +1,31 @@
 import type {
+	FromNode,
 	HejbroDeclaration,
 	SelectNode,
 	SetOpNode,
 	TableRefNode,
 	Validator,
+	WithNode,
 } from "@hejbro/core";
 import { diagnostic } from "@hejbro/core";
 import { declaredAtOf, isRlsDeclaration, isViewDeclaration } from "./schema-of";
+
+/**
+ * A `from`/join target's real table, or `undefined` for a CTE reference
+ * (add-ctes, task 4.4) — a CTE is statement-local, never an object an RLS
+ * declaration can bind to, so it contributes nothing here rather than
+ * being reported as a table that does not exist. This is the reason the
+ * proposal chose the `FromNode` union over a side-channel field (D105):
+ * under a field this validator would compile untouched and warn about
+ * nothing, a silent false negative exactly where a security check must
+ * not have one.
+ */
+const tableRefOf = (from: FromNode): TableRefNode | undefined => {
+	if ("cteName" in from) {
+		return undefined;
+	}
+	return from;
+};
 
 const viewOverRlsMessage = (
 	viewSchema: string,
@@ -26,14 +45,31 @@ const rlsProtectedTables = (
 			.map((rls) => `${rls.schemaName}.${rls.tableName}`),
 	);
 
-/** Every table a view's query touches: each leaf select's `from` plus join targets — BOTH branches of a set operation (an RLS bypass through either branch is equally a bypass, add-set-operations). */
+/**
+ * Every table a view's query touches: each leaf select's `from` plus join
+ * targets — BOTH branches of a set operation (an RLS bypass through either
+ * branch is equally a bypass, add-set-operations) and, since add-ctes
+ * (task 4.4), every CTE entry's own body too — a table read only inside a
+ * CTE is still read, and the RLS bypass it risks is exactly as real as one
+ * read directly in the outer body. The CTE name itself is filtered out by
+ * `tableRefOf` returning `undefined` for it, never by skipping the entry.
+ */
 const referencedTables = (
-	query: SelectNode | SetOpNode,
+	query: SelectNode | SetOpNode | WithNode,
 ): ReadonlyArray<TableRefNode> => {
+	if (query.queryKind === "with") {
+		return [
+			...query.ctes.flatMap((entry) => referencedTables(entry.query)),
+			...referencedTables(query.body),
+		];
+	}
 	if (query.queryKind === "setOp") {
 		return [...referencedTables(query.left), ...referencedTables(query.right)];
 	}
-	return [query.from, ...query.joins.map((join) => join.table)];
+	return [
+		tableRefOf(query.from),
+		...query.joins.map((join) => tableRefOf(join.table)),
+	].filter((ref): ref is TableRefNode => ref !== undefined);
 };
 
 /**

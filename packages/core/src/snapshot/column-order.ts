@@ -1,3 +1,4 @@
+import { arrayWithIdentityPreserved } from "../array-identity";
 import type { TableDeclaration } from "../dsl/table";
 import type {
 	ColumnRenameSpec,
@@ -6,12 +7,15 @@ import type {
 } from "../engine/rename-plan";
 import type {
 	ExprNode,
+	FromNode,
 	ProjectionNode,
 	QueryNode,
 	ReturningNode,
 	SelectNode,
 	SetOpNode,
 	TableRefNode,
+	WithEntryNode,
+	WithNode,
 } from "../expr/ast";
 import { renderExpr } from "../expr/render-sql";
 import type { HejbroDeclaration } from "../kind/object-kind"; // type-only; object-kind.ts imports ColumnOrderOracle back as `import type`, which TS erases — no runtime cycle
@@ -175,13 +179,20 @@ export const computeColumnOrder = (
 
 const orderedProjection = (
 	projection: ProjectionNode,
-	table: TableRefNode,
+	from: FromNode,
 	columnOrder: ColumnOrderOracle,
 ): ProjectionNode => {
 	if (projection.projectionKind !== "allColumns") {
 		return projection;
 	}
-	const order = columnOrder(table);
+	// A CTE reference is inert here by construction (add-ctes, task 4.2):
+	// it is never a snapshot object, so no oracle entry could ever exist
+	// for it -- the same "unknown table" case columnOrder already answers
+	// null for, just proven rather than reached through the oracle at all.
+	if ("cteName" in from) {
+		return projection;
+	}
+	const order = columnOrder(from);
 	if (order === null) {
 		return projection;
 	}
@@ -231,6 +242,43 @@ const applyColumnOrderToSetOp = (
 	};
 };
 
+/** One `WITH` entry's own query reordered against its own `from` -- an entry's body is an ordinary select over a real table (or another entry), with exactly the physical order any other select has (add-ctes, task 4.2b: entries were wrongly treated as computed results with no physical order of their own, the same status a CTE *reference* correctly has, but an entry's *body* does not). */
+const applyColumnOrderToWithEntry = (
+	entry: WithEntryNode,
+	columnOrder: ColumnOrderOracle,
+): WithEntryNode => {
+	const query = applyColumnOrderToQuery(entry.query, columnOrder);
+	if (query === entry.query) {
+		return entry;
+	}
+	return { ...entry, query: query as typeof entry.query };
+};
+
+/**
+ * A `WITH` statement's own physical order reaches both its body and every
+ * entry's own query (add-ctes, task 4.2b) -- only a CTE *reference* (a
+ * `from`/join naming one by its bare name) has no physical order, handled
+ * separately by `orderedProjection`'s own `cteName` branch; an entry's
+ * *body* is a plain select over real tables and reorders exactly like any
+ * other one, the same way `retargetWithNode` already recurses into
+ * `ctes` for a rename. Split out (D71/#154 ratchet-5), same reasoning as
+ * {@link applyColumnOrderToSetOp}.
+ */
+const applyColumnOrderToWith = (
+	node: WithNode,
+	columnOrder: ColumnOrderOracle,
+): WithNode => {
+	const ctes = arrayWithIdentityPreserved(
+		node.ctes.map((entry) => applyColumnOrderToWithEntry(entry, columnOrder)),
+		node.ctes,
+	);
+	const body = applyColumnOrderToQuery(node.body, columnOrder);
+	if (ctes === node.ctes && body === node.body) {
+		return node;
+	}
+	return { ...node, ctes, body: body as typeof node.body };
+};
+
 export const applyColumnOrderToQuery = (
 	node: QueryNode,
 	columnOrder: ColumnOrderOracle,
@@ -240,6 +288,9 @@ export const applyColumnOrderToQuery = (
 	}
 	if (node.queryKind === "setOp") {
 		return applyColumnOrderToSetOp(node, columnOrder);
+	}
+	if (node.queryKind === "with") {
+		return applyColumnOrderToWith(node, columnOrder);
 	}
 	const returning = orderedReturning(node.returning, node.table, columnOrder);
 	if (returning === node.returning) {

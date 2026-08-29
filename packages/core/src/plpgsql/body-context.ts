@@ -573,6 +573,14 @@ const queryKindNames: { readonly [K in QueryNode["queryKind"]]: string } = {
 	update: "an update",
 	delete: "a delete",
 	setOp: "a set operation",
+	// add-ctes / plpgsql-bodies rebase: `ReturnableQuery` (what
+	// ctx.execute/ctx.return/ctx.row/ctx.rowOrNull/ctx.forEach accept)
+	// does not include `WithStage`, so a body statement can never
+	// legitimately consume a `withCte(...)` builder -- this entry exists
+	// only to keep this lookup exhaustive over `QueryNode["queryKind"]`
+	// now that it has a sixth member, not because this path is reachable
+	// today.
+	with: "a with statement",
 };
 
 const describeQueryKind = (query: QueryNode): string =>

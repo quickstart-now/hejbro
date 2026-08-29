@@ -1,13 +1,13 @@
 # hejbro
 
 <!-- crap-badge:start -->
-[![CRAP ≤ 5 · 0 / 1434](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201434-brightgreen)](#status)
+[![CRAP ≤ 5 · 0 / 1485](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201485-brightgreen)](#status)
 <!-- crap-badge:end -->
 <!-- tasktime-badges:start -->
-[![tasks · 251 done](https://img.shields.io/badge/tasks-251%20done-blue)](openspec/task-times.csv)
-[![avg task · 15m](https://img.shields.io/badge/avg%20task-15m-blue)](openspec/task-times.csv)
-[![estimate · 1.79x](https://img.shields.io/badge/estimate-1.79x-blue)](openspec/task-times.csv)
-[![overhead · 27%](https://img.shields.io/badge/overhead-27%25-blue)](openspec/task-times.csv)
+[![tasks · 297 done](https://img.shields.io/badge/tasks-297%20done-blue)](openspec/task-times.csv)
+[![avg task · 14m](https://img.shields.io/badge/avg%20task-14m-blue)](openspec/task-times.csv)
+[![estimate · 1.76x](https://img.shields.io/badge/estimate-1.76x-blue)](openspec/task-times.csv)
+[![overhead · 25%](https://img.shields.io/badge/overhead-25%25-blue)](openspec/task-times.csv)
 <!-- tasktime-badges:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -217,7 +217,7 @@ minor version is supported; see [`SECURITY.md`](SECURITY.md).
 - Roadmap: [`docs/plans/2026-08-19-roadmap.md`](docs/plans/2026-08-19-roadmap.md)
 
 <!-- crap:start -->
-**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1434 functions** over the threshold, highest score 5.00 — measured at `d9c766c` (2026-08-29).
+**Code quality gate:** every named function in `@hejbro/core`, `@hejbro/supabase`, `@hejbro/query`, `@hejbro/pg` must score **CRAP ≤ 5** (CRAP = CC² × (1 − coverage)³ + CC; gated in CI). Current: **0 of 1485 functions** over the threshold, highest score 5.00 — measured at `e28c9a3` (2026-08-29).
 <!-- crap:end -->
 
 <!-- ai-metrics:start -->

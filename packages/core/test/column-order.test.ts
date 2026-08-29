@@ -338,6 +338,11 @@ describe("applyColumnOrderTo*", () => {
 		expect(applyColumnOrderToSelect(unknown, oracle)).toBe(unknown);
 	});
 
+	it("leaves an allColumns projection over a CTE reference alone -- a CTE is never a snapshot object, so no oracle entry could ever exist for it (add-ctes task 4.2)", () => {
+		const fromCte = { ...select, from: { cteName: "recent" } };
+		expect(applyColumnOrderToSelect(fromCte, oracle)).toBe(fromCte);
+	});
+
 	it("re-orders an allColumns returning on insert/update/delete", () => {
 		const update = {
 			queryKind: "update",
@@ -352,5 +357,41 @@ describe("applyColumnOrderTo*", () => {
 		expect(applyColumnOrderToQuery(update, oracle)).toMatchObject({
 			returning: { columnNames: ["id", "title", "archived_at", "description"] },
 		});
+	});
+
+	it("column order applies to both a CTE-declaring statement's body and every entry's own query (add-ctes task 4.2/4.2b)", () => {
+		const withNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: select, materialized: null }],
+			recursive: false,
+			body: select,
+		} as const;
+		const reordered = applyColumnOrderToQuery(withNode, oracle);
+		expect(reordered).not.toBe(withNode);
+		expect((reordered as typeof withNode).body.projection).toEqual({
+			projectionKind: "allColumns",
+			columnNames: ["id", "title", "archived_at", "description"],
+		});
+		// an entry's own query is a plain select over a real table, with
+		// exactly the same physical order as any other one (task 4.2b) --
+		// not left untouched the way a CTE *reference* correctly is.
+		expect((reordered as typeof withNode).ctes[0].query.projection).toEqual({
+			projectionKind: "allColumns",
+			columnNames: ["id", "title", "archived_at", "description"],
+		});
+	});
+
+	it("a WithNode over an unknown-table body AND unknown-table entries keeps reference identity", () => {
+		const unknownSelect = {
+			...select,
+			from: { schemaName: "app", tableName: "unknown" },
+		} as const;
+		const withNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: unknownSelect, materialized: null }],
+			recursive: false,
+			body: unknownSelect,
+		} as const;
+		expect(applyColumnOrderToQuery(withNode, oracle)).toBe(withNode);
 	});
 });

@@ -5,6 +5,7 @@ import type {
 	Condition,
 	Expr,
 	ExprNode,
+	FromNode,
 	JoinKind,
 	OrderTermInput,
 	ProjectionNode,
@@ -16,6 +17,20 @@ import { expr, resolveOrderTerm } from "../expr/ast";
 import { someExprNode } from "../expr/walk";
 import { markConsumed, noteBuilder } from "../plpgsql/recording-session";
 import type { TypeNode } from "../types/type-node";
+import type { CteReference } from "./with";
+import { cteRowMeta, isCteReference } from "./with";
+
+/**
+ * A `select()` from-source: a declared table, or a `withCte()` reference
+ * (add-ctes, task 3.3).
+ *
+ * Surface: `Table` alone stopped being what `from`/`fromTable` accept once
+ * a CTE reference was; the plain union has no smaller composition (it is
+ * exactly `SelectProjection`'s own two component types minus the object-
+ * projection shape). Named `<Noun>Source` for what the field it types is
+ * already called (`fromTable`, `from`), not a new coinage.
+ */
+export type FromSource = Table | CteReference;
 
 /** A `select()` projection: the whole table (deterministic column list), or an object of aliased expressions. */
 export type SelectProjection = Table | Record<string, Expr>;
@@ -63,11 +78,46 @@ export type SetOpCombinators<TProjection extends SelectProjection> = {
 	exceptAll(other: SetOpBranch): SetOpStage<TProjection>;
 };
 
+/** `SameKeys<TLeft, TRight>` is `true` only when both sides carry exactly the same key set (neither a missing nor an extra one) — the shape half of the union-compatibility question, checked in both directions since `keyof` alone only proves a subset. */
+type SameKeys<TLeft, TRight> = [keyof TLeft] extends [keyof TRight]
+	? [keyof TRight] extends [keyof TLeft]
+		? true
+		: false
+	: false;
+
+/**
+ * Set-operation result typing (moved from `@hejbro/query`, add-ctes task
+ * 6.5): the database rejects branches whose rows are not union-compatible,
+ * so the type layer rejects them FIRST — mismatched key sets resolve the
+ * whole result to `never`. On a match the result takes the LEFT branch's
+ * keys (SQL's own naming rule); each column is the union of the two
+ * branches' declared types (identical declarations collapse by
+ * idempotence), so a column typed differently by each branch is typed as
+ * their union in the result — the same rule a recursive CTE's own anchor/
+ * recursive-term pair needs (task 6.5: a window function or `distinct` in
+ * the recursive term computes a field differently from the anchor without
+ * disagreeing on which fields exist).
+ *
+ * Surface: originally `@hejbro/query`-only (add-set-operations, D103) —
+ * moved here because its subject (whether two `SelectProjection` shapes
+ * union-compatible) is core vocabulary, and a second, independently
+ * maintained copy in `@hejbro/core` would answer the same question twice.
+ * `@hejbro/query` re-exports this name unchanged, so its own chain typing
+ * has no visible surface change. `@hejbro/core`'s own plain `union()`
+ * above does not use this type (out of this change's scope; a mismatched
+ * union still compiles here and fails at the server instead — tracked
+ * separately, #487).
+ */
+export type SetOpResult<TLeft, TRight> =
+	SameKeys<TLeft, TRight> extends true
+		? { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
+		: never;
+
 export type SelectLimited<
 	TProjection extends SelectProjection = SelectProjection,
 > = {
 	readonly selectQuery: SelectNode;
-	readonly fromTable: Table;
+	readonly fromTable: FromSource;
 	readonly projectionInput: TProjection;
 } & SetOpCombinators<TProjection>;
 export type SelectOffsetted<
@@ -126,6 +176,14 @@ export type SelectDistinctable<
 const tableRefOf = (target: Table): TableRefNode => {
 	const meta = getTableMeta(target);
 	return { schemaName: meta.schema.schemaName, tableName: meta.tableName };
+};
+
+/** A `from`-source's own `FromNode` (add-ctes, task 3.3) — a table renders qualified, a `withCte()` reference renders bare by its declared name (its own `cteRowMeta` brand, not a lookup). */
+const fromNodeOf = (source: FromSource): FromNode => {
+	if (isCteReference(source)) {
+		return { cteName: source[cteRowMeta].cteName };
+	}
+	return tableRefOf(source);
 };
 
 const appendJoin = (
@@ -253,7 +311,7 @@ const assertNoWindowFunction = (
 
 const makeStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
-	fromTable: Table,
+	fromTable: FromSource,
 	projectionInput: TProjection,
 	// Every stage member exists on the one object `makeStages` builds; the
 	// STAGE TYPES are what hide the ones SQL wouldn't allow next. The
@@ -318,7 +376,7 @@ const makeStages = <TProjection extends SelectProjection>(
  */
 const makeDistinctableStages = <TProjection extends SelectProjection>(
 	query: SelectNode,
-	fromTable: Table,
+	fromTable: FromSource,
 	projectionInput: TProjection,
 ): SelectDistinctable<TProjection> => {
 	// Same pairing as `makeStages`'s own `derive` (#423): `distinct`/
@@ -351,12 +409,12 @@ const makeDistinctableStages = <TProjection extends SelectProjection>(
 
 type ResolvedProjection = {
 	readonly projectionNode: ProjectionNode;
-	readonly fromTable: Table;
+	readonly fromTable: FromSource;
 };
 
 const resolveProjection = (
 	projection: SelectProjection,
-	from: Table | undefined,
+	from: FromSource | undefined,
 ): ResolvedProjection => {
 	if (isTable(projection)) {
 		const meta = getTableMeta(projection);
@@ -400,13 +458,13 @@ const resolveProjection = (
  */
 export const select = <TProjection extends SelectProjection>(
 	projection: TProjection,
-	from?: Table,
+	from?: FromSource,
 ): SelectDistinctable<TProjection> => {
 	const { projectionNode, fromTable } = resolveProjection(projection, from);
 	const query: SelectNode = {
 		queryKind: "select",
 		projection: projectionNode,
-		from: tableRefOf(fromTable),
+		from: fromNodeOf(fromTable),
 		joins: [],
 		where: null,
 		groupBy: [],

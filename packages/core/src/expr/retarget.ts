@@ -1,8 +1,10 @@
+import { arrayWithIdentityPreserved } from "../array-identity";
 import type {
 	BetweenNode,
 	ComparisonNode,
 	ExistsNode,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	InListNode,
 	JoinNode,
@@ -18,6 +20,8 @@ import type {
 	SqlTemplateNode,
 	TableRefNode,
 	WindowNode,
+	WithEntryNode,
+	WithNode,
 } from "./ast";
 import { replaceSelectChildExprs, selectChildExprs } from "./select-children";
 
@@ -73,6 +77,20 @@ const retargetTableRef = (
 
 const retargetUnchanged = (node: ExprNode): ExprNode => node;
 
+/**
+ * A rename never rewrites a CTE reference (proposal, "A CTE is a
+ * from-source"; D105's sentinel-schema rejection carries the same
+ * reasoning here): a table rename identifies its target by schema and
+ * table together, and a CTE has neither, so it is always left exactly as
+ * it is (task 2.2, positive/negative pins proven by tasks 2.3/2.4).
+ */
+const retargetFromNode = (from: FromNode, target: RenameTarget): FromNode => {
+	if ("cteName" in from) {
+		return from;
+	}
+	return retargetTableRef(from, target);
+};
+
 const retargetedColumnName = (
 	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
 	target: RenameTarget,
@@ -89,6 +107,8 @@ const retargetedColumnName = (
  * function's own complexity stays low without folding this question's
  * two comparisons into it.
  */
+// A CTE column ref (`schemaName === null`) can never match: `RenameTarget.
+// oldSchema` is `string`, never `null` — load-bearing for add-ctes 2.4.
 const matchesOldTarget = (
 	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
 	target: RenameTarget,
@@ -320,10 +340,13 @@ const retargetColumnsProjection = (
 
 const retargetProjection = (
 	projection: ProjectionNode,
-	from: TableRefNode,
+	from: FromNode,
 	target: RenameTarget,
 ): ProjectionNode => {
-	if (projection.projectionKind === "allColumns") {
+	// A CTE's `allColumns` list denormalizes a real table's own column
+	// names (D27) -- a CTE has none to denormalize, so a rename can never
+	// touch it here (add-ctes task 2.2, same reasoning as retargetFromNode).
+	if (projection.projectionKind === "allColumns" && !("cteName" in from)) {
 		return retargetAllColumnsProjection(projection, from, target);
 	}
 	if (projection.projectionKind !== "columns") {
@@ -342,7 +365,7 @@ const retargetProjection = (
  * handling, unlike {@link retargetOrderByTerm} below.
  */
 const retargetJoinTable = (join: JoinNode, target: RenameTarget): JoinNode => {
-	const table = retargetTableRef(join.table, target);
+	const table = retargetFromNode(join.table, target);
 	if (table === join.table) {
 		return join;
 	}
@@ -360,28 +383,17 @@ const retargetOrderByTerm = (
 	return { ...term, expr };
 };
 
-/** `true` when every entry of `items` is the exact same reference as its `originals` counterpart — `Array.prototype.map` always allocates a new array even when every mapped entry is unchanged, so retargeting `query.joins` needs this to decide whether the mapped array can be thrown away in favor of the original one. */
+/** `true` when every entry of `items` is the exact same reference as its `originals` counterpart — used directly where only the boolean matters (the window-function identifier check below), not the array itself (see `arrayWithIdentityPreserved`, `array-identity.ts`, for that). */
 const sameByIndex = <T>(
 	items: ReadonlyArray<T>,
 	originals: ReadonlyArray<T>,
 ): boolean => items.every((item, index) => item === originals[index]);
 
-/** `original` itself when `retargetJoinTable` changed nothing across every join, else the freshly mapped array — `.map` always allocates, even when every entry comes back unchanged. */
-const joinsWithIdentityPreserved = (
-	retargeted: ReadonlyArray<JoinNode>,
-	original: ReadonlyArray<JoinNode>,
-): ReadonlyArray<JoinNode> => {
-	if (sameByIndex(retargeted, original)) {
-		return original;
-	}
-	return retargeted;
-};
-
 /** `query` itself when none of its three identifier fields changed, else a fresh node carrying the retargeted ones — the base {@link retargetSelectNode} runs its generic expression pass over. */
 const selectNodeWithIdentifiers = (
 	query: SelectNode,
 	projection: ProjectionNode,
-	from: TableRefNode,
+	from: FromNode,
 	joins: ReadonlyArray<JoinNode>,
 ): SelectNode => {
 	if (
@@ -431,11 +443,11 @@ export const retargetSelectNode = (
 	target: RenameTarget,
 ): SelectNode => {
 	const projection = retargetProjection(query.projection, query.from, target);
-	const from = retargetTableRef(query.from, target);
+	const from = retargetFromNode(query.from, target);
 	const retargetedJoins = query.joins.map((join) =>
 		retargetJoinTable(join, target),
 	);
-	const joins = joinsWithIdentityPreserved(retargetedJoins, query.joins);
+	const joins = arrayWithIdentityPreserved(retargetedJoins, query.joins);
 	const base = selectNodeWithIdentifiers(query, projection, from, joins);
 	const retargetedExprs = selectChildExprs(base).map((expr) =>
 		retargetExprNode(expr, target),
@@ -468,6 +480,50 @@ const retargetQueryBranch = (
 		return retargetSetOpNode(branch, target);
 	}
 	return retargetSelectNode(branch, target);
+};
+
+/** One `WITH` entry's own query, reusing {@link retargetQueryBranch} (a `WithEntryNode.query` is always `SelectNode | SetOpNode`, never another `with`). */
+const retargetWithEntry = (
+	entry: WithEntryNode,
+	target: RenameTarget,
+): WithEntryNode => {
+	const query = retargetQueryBranch(entry.query, target);
+	if (query === entry.query) {
+		return entry;
+	}
+	return { ...entry, query };
+};
+
+/**
+ * Retargets a whole {@link WithNode} (add-ctes, task 2.2's positive
+ * descent arm) — every entry's own query and the body, same identity
+ * invariant as {@link retargetExprNode}. Called from production code since
+ * task 4.3 (`engine/rename/retarget.ts`'s own `retargetViewQuery`, a
+ * stored view's rename path). Unlike {@link retargetSelectNode}'s
+ * siblings, no registry forces this handler to exist, and none ever will:
+ * this file has no `queryKind`-keyed registry (`render-sql.ts`'s
+ * `RenderQueryHandlers` has no counterpart here), and `REACHABLE_NODE_KINDS`
+ * is an `ExprNode` vocabulary — `QueryNode.queryKind` was never a member of
+ * it and task 4.5 confirmed that stays true (a `WithNode` reaching a
+ * stored view adds a producer for kinds already listed, never a new map
+ * entry). Task 2.3's dedicated test is therefore the permanent, only
+ * defence here — a real caller now depends on this function returning
+ * something other than `node`, but that dependency is not wired into any
+ * completeness check that would fail loudly if the descent broke.
+ */
+export const retargetWithNode = (
+	node: WithNode,
+	target: RenameTarget,
+): WithNode => {
+	const retargetedCtes = node.ctes.map((entry) =>
+		retargetWithEntry(entry, target),
+	);
+	const ctes = arrayWithIdentityPreserved(retargetedCtes, node.ctes);
+	const body = retargetQueryBranch(node.body, target);
+	if (ctes === node.ctes && body === node.body) {
+		return node;
+	}
+	return { ...node, ctes, body };
 };
 
 const retargetExists = (node: ExistsNode, target: RenameTarget): ExprNode => {

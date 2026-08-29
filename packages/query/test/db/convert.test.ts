@@ -1,4 +1,4 @@
-import type { Expr } from "@hejbro/core";
+import type { Expr, QueryNode } from "@hejbro/core";
 import {
 	bigint,
 	count,
@@ -16,6 +16,7 @@ import {
 	text,
 	timestamptz,
 	uuid,
+	withCte,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -706,5 +707,94 @@ describe("aggregate conversion (#416)", () => {
 			columnPlanForResult(node, tables),
 		);
 		expect(converted.label).toBe("draft");
+	});
+});
+
+describe("columnPlanForResult reads a WITH statement's body through the wrapper (add-ctes task 5.3)", () => {
+	it("a CTE column's own conversion state is resolved by reading through the entry's own projection", () => {
+		const stage = withCte((w) => {
+			const ranked = w.as("ranked", select(posts));
+			return select({ id: ranked.id, amount: ranked.amount }, ranked);
+		});
+		const plan = columnPlanForResult(stage.withQuery, tables);
+		expect(plan.map((entry) => entry.alias)).toEqual(["id", "amount"]);
+		expect(
+			plan.find((entry) => entry.alias === "amount")?.columnState?.mode,
+		).toBe("bigint");
+	});
+
+	it("a set-op body still resolves through the wrapper, per the LEFT branch (D103)", () => {
+		const stage = withCte((w) => {
+			const ranked = w.as("ranked", select(posts));
+			return select({ id: ranked.id }, ranked).union(
+				select({ id: posts.id }, posts),
+			);
+		});
+		const plan = columnPlanForResult(stage.withQuery, tables);
+		expect(plan.map((entry) => entry.alias)).toEqual(["id"]);
+	});
+
+	it("an allColumns projection over a CTE reference resolves through the entry's own projection", () => {
+		// select()'s whole-table form requires a real Table (isTable), which a
+		// CTE reference structurally never is -- unreachable via the real
+		// builder, same as the other allColumns/CTE edge cases pinned
+		// elsewhere with a hand-built node.
+		const stage = withCte((w) => {
+			const ranked = w.as("ranked", select(posts));
+			return select({ id: ranked.id }, ranked);
+		});
+		const withNode = stage.withQuery;
+		if (withNode.body.queryKind !== "select") {
+			throw new Error("expected the body to be a plain select");
+		}
+		const wholeTableOverCte: QueryNode = {
+			...withNode,
+			body: {
+				...withNode.body,
+				projection: {
+					projectionKind: "allColumns",
+					columnNames: ["id", "status", "amount", "duration"],
+				},
+			},
+		};
+		const plan = columnPlanForResult(wholeTableOverCte, tables);
+		expect(plan.map((entry) => entry.alias)).toEqual([
+			"id",
+			"status",
+			"amount",
+			"duration",
+		]);
+		expect(
+			plan.find((entry) => entry.alias === "amount")?.columnState?.mode,
+		).toBe("bigint");
+	});
+
+	it("a CTE-of-CTE chain resolves a column's state through two hops, not just one", () => {
+		const stage = withCte((w) => {
+			const ranked = w.as("ranked", select(posts));
+			const doubled = w.as(
+				"doubled",
+				select({ id: ranked.id, amount: ranked.amount }, ranked),
+			);
+			return select({ id: doubled.id, amount: doubled.amount }, doubled);
+		});
+		const plan = columnPlanForResult(stage.withQuery, tables);
+		expect(plan.map((entry) => entry.alias)).toEqual(["id", "amount"]);
+		expect(
+			plan.find((entry) => entry.alias === "amount")?.columnState?.mode,
+		).toBe("bigint");
+	});
+
+	it("an unresolvable CTE name (a decoded or hand-built node naming an entry that isn't declared) yields no columns rather than throwing", () => {
+		const node: QueryNode = {
+			queryKind: "with",
+			ctes: [],
+			recursive: false,
+			body: {
+				...select(posts).selectQuery,
+				from: { cteName: "missing" },
+			},
+		};
+		expect(columnPlanForResult(node, tables)).toEqual([]);
 	});
 });

@@ -1,7 +1,19 @@
+import { arrayWithIdentityPreserved } from "../array-identity";
 import type { ViewDeclaration } from "../dsl/define-view";
 import { assertNever, throwHejbroError } from "../error";
-import type { ProjectionNode, SelectNode, SetOpNode } from "../expr/ast";
-import { decodeQueryNode, encodeQueryNode } from "../expr/codec";
+import type {
+	ProjectionNode,
+	SelectNode,
+	SetOpNode,
+	WithEntryNode,
+	WithNode,
+} from "../expr/ast";
+import {
+	decodeQueryNode,
+	decodeWithNode,
+	encodeQueryNode,
+	encodeWithNode,
+} from "../expr/codec";
 import { renderQuery } from "../expr/render-sql";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
 import { dispatchEmit } from "../kind/emit-helpers";
@@ -40,9 +52,41 @@ export type ViewSnapshot = {
 	readonly securityInvoker?: true;
 };
 
+/**
+ * Encodes a view's own query, `WithNode` included (add-ctes, task 4.1) —
+ * `encodeQueryNode` stays `SelectNode | SetOpNode` (D94: a stored view body
+ * is a snapshot-reachable caller that needs the wider set; `encodeWithNode`'s
+ * own docstring names this exact wiring call). Exported (not merged into
+ * the shared dispatcher, which stays narrow: a `WithEntryNode.query`/
+ * `SetOpNode.left`/`right` can never themselves be a `WithNode`, so widening
+ * `encodeQueryNode` there would let a value that must never exist
+ * type-check) so the rename engine's own view path (task 4.3,
+ * `engine/rename/retarget.ts`) can reuse the same dispatch rather than
+ * duplicating it.
+ */
+export const encodeViewQueryNode = (
+	query: SelectNode | SetOpNode | WithNode,
+): JsonValue => {
+	if (query.queryKind === "with") {
+		return encodeWithNode(query);
+	}
+	return encodeQueryNode(query);
+};
+
+/** The decoding counterpart to {@link encodeViewQueryNode}. */
+export const decodeViewQueryNode = (
+	value: JsonValue,
+): SelectNode | SetOpNode | WithNode => {
+	const record = value as { readonly queryKind?: string };
+	if (record.queryKind === "with") {
+		return decodeWithNode(value);
+	}
+	return decodeQueryNode(value);
+};
+
 /** `snapshot.query` decoded and rendered back to SQL text. */
 export const viewSelectSql = (snapshot: ViewSnapshot): string =>
-	renderQuery(decodeQueryNode(snapshot.query));
+	renderQuery(decodeViewQueryNode(snapshot.query));
 
 /** `snapshot.securityInvoker`, defaulting to `false` when absent (compact snapshot). */
 export const viewSecurityInvoker = (snapshot: ViewSnapshot): boolean =>
@@ -77,35 +121,96 @@ const VIEW_RECREATE_NOTE = "view columns changed; recreating";
  * `columnNames` (via `retargetProjection`), and `columns` must follow it,
  * or the D27 prefix-rule diff compares a stale name against the new one.
  */
-/** The leftmost select of a view query — a set-operation's output columns are its LEFT branch's, SQL's own naming rule (D103). */
-const leftmostSelect = (query: SelectNode | SetOpNode): SelectNode => {
+/**
+ * The leftmost select of a view query — a set-operation's output columns
+ * are its LEFT branch's, SQL's own naming rule (D103). A `WithNode`
+ * defers to its own `body` (add-ctes, task 4.1) — a `WITH` statement's
+ * output columns are the body's, never an entry's, the same one-vocabulary
+ * rule D103 already established for a set operation's left branch.
+ */
+const leftmostSelect = (
+	query: SelectNode | SetOpNode | WithNode,
+): SelectNode => {
+	if (query.queryKind === "with") {
+		return leftmostSelect(query.body);
+	}
 	if (query.queryKind === "setOp") {
 		return leftmostSelect(query.left);
 	}
 	return query;
 };
 
-/** A view query's declared column list — a plain select's projection, or the left branch's through a set operation. */
+/** A view query's declared column list — a plain select's projection, the left branch's through a set operation, or the body's through a `WITH` statement. */
 export const viewQueryColumns = (
-	query: SelectNode | SetOpNode,
+	query: SelectNode | SetOpNode | WithNode,
 ): ReadonlyArray<string> => projectionColumns(leftmostSelect(query).projection);
+
+/** One `WITH` entry's own query reordered against its own `from` -- an entry's body is an ordinary select over a real table (or another entry), with exactly the physical order any other select has (add-ctes, task 4.2b). */
+const applyColumnOrderToViewWithEntry = (
+	entry: WithEntryNode,
+	columnOrder: ColumnOrderOracle,
+): WithEntryNode => {
+	const query = applyColumnOrderToViewQuery(entry.query, columnOrder);
+	if (query === entry.query) {
+		return entry;
+	}
+	return { ...entry, query: query as typeof entry.query };
+};
+
+/**
+ * A `WITH` statement's own physical order reaches both its body and every
+ * entry's own query (add-ctes, task 4.2b) -- only a CTE *reference* has
+ * no physical order (handled by `column-order.ts`'s own `orderedProjection`
+ * `cteName` branch); an entry's *body* is a plain select over real tables
+ * and reorders exactly like any other one, the same way `retargetWithNode`
+ * already recurses into `ctes` for a rename. Split out (D71/#154
+ * ratchet-5) to keep `applyColumnOrderToViewQuery`'s own complexity from
+ * accumulating a third branch's worth.
+ */
+const applyColumnOrderToViewWith = (
+	query: WithNode,
+	columnOrder: ColumnOrderOracle,
+): WithNode => {
+	const ctes = arrayWithIdentityPreserved(
+		query.ctes.map((entry) =>
+			applyColumnOrderToViewWithEntry(entry, columnOrder),
+		),
+		query.ctes,
+	);
+	const body = applyColumnOrderToViewQuery(query.body, columnOrder);
+	if (ctes === query.ctes && body === query.body) {
+		return query;
+	}
+	return { ...query, ctes, body: body as typeof query.body };
+};
+
+/** D81 over a set operation: each leaf select reorders against its own `from`. Split out (D71/#154 ratchet-5), same reasoning as {@link applyColumnOrderToViewWith}. */
+const applyColumnOrderToViewSetOp = (
+	query: SetOpNode,
+	columnOrder: ColumnOrderOracle,
+): SetOpNode => {
+	const left = applyColumnOrderToViewQuery(query.left, columnOrder);
+	const right = applyColumnOrderToViewQuery(query.right, columnOrder);
+	if (left === query.left && right === query.right) {
+		return query;
+	}
+	return {
+		...query,
+		left: left as typeof query.left,
+		right: right as typeof query.right,
+	};
+};
 
 /** D81 column order over a view query — each set-op leaf reorders against its own `from` (the same rule `applyColumnOrderToQuery` applies). */
 const applyColumnOrderToViewQuery = (
-	query: SelectNode | SetOpNode,
+	query: SelectNode | SetOpNode | WithNode,
 	columnOrder: ColumnOrderOracle,
-): SelectNode | SetOpNode => {
+): SelectNode | SetOpNode | WithNode => {
+	if (query.queryKind === "with") {
+		return applyColumnOrderToViewWith(query, columnOrder);
+	}
 	if (query.queryKind === "setOp") {
-		const left = applyColumnOrderToViewQuery(query.left, columnOrder);
-		const right = applyColumnOrderToViewQuery(query.right, columnOrder);
-		if (left === query.left && right === query.right) {
-			return query;
-		}
-		return {
-			...query,
-			left: left as typeof query.left,
-			right: right as typeof query.right,
-		};
+		return applyColumnOrderToViewSetOp(query, columnOrder);
 	}
 	return applyColumnOrderToSelect(query, columnOrder);
 };
@@ -230,7 +335,7 @@ export const viewKind: ObjectKind<ViewDeclaration> = {
 			schema: declaration.schema.schemaName,
 			name: declaration.viewName,
 			columns: viewQueryColumns(query),
-			query: encodeQueryNode(query),
+			query: encodeViewQueryNode(query),
 			...securityInvokerField(declaration.securityInvoker),
 		};
 		return snapshot;

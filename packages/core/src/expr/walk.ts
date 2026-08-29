@@ -2,10 +2,15 @@ import type {
 	ColumnRefNode,
 	ExistsNode,
 	ExprNode,
+	FromNode,
 	SelectExprNode,
-	TableRefNode,
 } from "./ast";
 import { selectChildExprs } from "./select-children";
+
+/** A CTE reference has no schema (D105) — same narrowing `render-sql.ts`'s own `isCteRef` uses. */
+const isCteRef = (
+	node: FromNode,
+): node is Extract<FromNode, { readonly cteName: string }> => "cteName" in node;
 
 /**
  * Every child expression of an embedded select, `groupBy`/`having`/
@@ -237,13 +242,17 @@ export const someDeepExprNode = (
 };
 
 const isRefInScope = (
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 	ref: ColumnRefNode,
 ): boolean =>
-	scope.some(
-		(table) =>
-			table.schemaName === ref.schemaName && table.tableName === ref.tableName,
-	);
+	scope.some((source) => {
+		if (isCteRef(source)) {
+			return ref.schemaName === null && ref.tableName === source.cteName;
+		}
+		return (
+			source.schemaName === ref.schemaName && source.tableName === ref.tableName
+		);
+	});
 
 /**
  * One handler per {@link ExprNode} `nodeKind` for
@@ -253,13 +262,13 @@ const isRefInScope = (
 type ScopeViolationHandlers = {
 	readonly [K in ExprNode["nodeKind"]]: (
 		node: Extract<ExprNode, { readonly nodeKind: K }>,
-		scope: ReadonlyArray<TableRefNode>,
+		scope: ReadonlyArray<FromNode>,
 	) => ColumnRefNode | undefined;
 };
 
 const firstScopeViolation = (
 	children: ReadonlyArray<ExprNode>,
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 ): ColumnRefNode | undefined =>
 	children
 		.map((child) => findExprScopeViolation(child, scope))
@@ -342,11 +351,11 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
  */
 export const findExprScopeViolation = (
 	expr: ExprNode,
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 ): ColumnRefNode | undefined => {
 	const handler = scopeViolationHandlers[expr.nodeKind] as (
 		node: ExprNode,
-		scope: ReadonlyArray<TableRefNode>,
+		scope: ReadonlyArray<FromNode>,
 	) => ColumnRefNode | undefined;
 	return handler(expr, scope);
 };

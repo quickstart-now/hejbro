@@ -193,6 +193,130 @@ per the left branch's declarations. A set-operation query is also a
 valid view body (`defineView` accepts it; the view's columns come from
 the left branch).
 
+## Common table expressions (CTEs)
+
+`withCte((w) => { ... })` builds a `WITH` statement: `w.as(name, query,
+options?)` declares an entry and hands back a typed reference to it, usable
+anywhere a `from` source is expected (`select(projection, ref)`) — but never
+as a join *target*: `.innerJoin()`/`.leftJoin()` still only accept a real
+declared `Table`, so a CTE reference always goes on the FROM side of a join,
+never the joined-in side. The callback's own return value is the
+statement's body — the query actually run and returned.
+
+On a `db()` handle, the identical builder is `handle.with((w) => { ... })`
+— the same `w.as`/`w.asRecursive` callback, not a second API. `with` is a
+reserved JS word, so a top-level `export const with = ...` doesn't
+type-check; that is why the standalone core export is named `withCte` (the
+same escape `deleteFrom` already uses for `delete`). As an object
+*method*, `with` is a legal name — property keys aren't restricted the way
+top-level declarations are — so the chain keeps the plain name.
+
+```ts prelude=query-handle
+import { eq, gt, over, rowNumber, select } from "hejbro";
+
+// a window function inside a CTE, filtered outside it -- the motivating
+// case: the outer query can filter on a windowed value the projection
+// alone couldn't express.
+const ranked = await handle.with((w) => {
+	const r = w.as(
+		"ranked",
+		select(
+			{
+				id: posts.id,
+				status: posts.status,
+				rn: over(rowNumber(), { partitionBy: [posts.status], orderBy: [posts.id] }),
+			},
+			posts,
+		),
+	);
+	return select({ id: r.id, status: r.status }, r).where(gt(r.rn, 1));
+});
+
+// an entry may reference an earlier entry -- "recent" selects from
+// "drafts", not from the base table.
+const recentDrafts = await handle.with((w) => {
+	const drafts = w.as(
+		"drafts",
+		select(posts).where(eq(posts.status, "draft")),
+	);
+	return select({ id: drafts.id }, drafts).orderBy(drafts.id).limit(5);
+});
+```
+
+An entry can reference an earlier entry, but never a later one or itself
+(without `asRecursive`, below) — the builder only ever hands out a
+reference to an entry already declared, so a forward reference is
+unrepresentable rather than merely refused. `options?.materialized` is a
+tri-state hint (`true`/`false`/omitted) rendering Postgres's own
+`MATERIALIZED`/`NOT MATERIALIZED`/neither; both tokens are accepted, live
+verified against a real postgres:17.
+
+### Recursive CTEs
+
+`w.asRecursive(name, anchor, (self) => recursiveTerm, options?)` declares a
+recursive entry: `anchor` fixes the CTE's own column names and types
+(Postgres takes a recursive CTE's row shape from its anchor, never the
+recursive term), and `recursiveTerm` is written inside a callback receiving
+a reference (`self`) typed from the anchor. The recursive term must project
+the same **keys** as the anchor — a missing or extra key doesn't
+type-check — but each key may be *computed* differently on either side (the
+recursive term commonly needs a window function or an aggregate the anchor
+doesn't): a recursive CTE is grammatically `anchor UNION [ALL]
+recursive-term`, so this is the same union-compatibility rule
+`.union()`/`.unionAll()` already apply between any two branches, not a
+second one.
+
+```ts prelude=query-handle
+import { eq, select } from "hejbro";
+
+const rootId = "00000000-0000-0000-0000-000000000000";
+
+// every descendant of a root category, walking down the tree.
+const descendants = await handle.with((w) => {
+	const r = w.asRecursive(
+		"r",
+		select({ id: categories.id, name: categories.name }, categories).where(
+			eq(categories.id, rootId),
+		),
+		(self) =>
+			select({ id: categories.id, name: categories.name }, self).innerJoin(
+				categories,
+				eq(self.id, categories.parentId),
+			),
+	);
+	return select({ id: r.id, name: r.name }, r);
+});
+```
+
+The self-reference (`self`) always goes on the FROM side of the recursive
+term, never the join target — same rule as any other CTE reference above.
+
+A window function in the recursive term, `distinct`, `distinct on`,
+`group by`/`having`, and an aggregate in the *anchor* term are all
+accepted — measured on postgres:17, and worth stating plainly because the
+widely recalled restriction list ("no aggregates, no window functions, no
+`distinct`, no `group by`") is not in the PostgreSQL manual and turned out
+wrong on four counts. What a recursive term itself refuses: an aggregate at
+its own select level, `order by`/`limit`/`offset` (unimplemented for a
+recursive query), a second self-reference, a self-reference inside a
+subquery or in the anchor, and `intersect`/`except` as the combinator — the
+last two and the three whole-set clauses can't even be spelled here:
+`w.asRecursive`'s own recursive branch offers only `union`/`unionAll`, no
+further chain of combinators, so those five shapes are unrepresentable
+through this builder rather than merely rejected.
+
+**Caveat: a self-reference on the non-nullable side of a `LEFT JOIN` is
+accepted by Postgres and does not terminate on its own.** Written as
+`select({...}, self).leftJoin(realTable, ...)` (`self` outer-joined
+against the real table, rather than the `innerJoin` above), every iteration
+still yields at least one row — nothing ever empties the working table.
+Postgres allows this shape, so hejbro does not refuse it either; pair it
+with a depth guard in the recursive term's own `where` clause (`where
+self.depth < N`) or a `statement_timeout`, the same way a hand-written
+recursive `LEFT JOIN` query would need one. `not materialized` on a
+recursive entry is accepted too — Postgres documents that it *ignores* the
+hint there rather than erroring, also live verified.
+
 ## The `sql` escape hatch and injection safety
 
 `sql` is the typed tagged-template escape hatch for anything the builder
@@ -622,8 +746,6 @@ useful" without an explicit frame.
 These read naturally as query-builder features but aren't there yet —
 use the `sql` escape hatch, or wait for the tracked issue:
 
-- CTEs (#417) outside the `sql` escape hatch. Aggregates, `group
-  by`/`having`, and window functions (`over(...)`) DO exist; see above.
 - `@hejbro/neon` and `@hejbro/nile` presets (#300, #301) — only
   `@hejbro/pg` (vanilla) and `@hejbro/supabase` exist today.
 - A startup assertion that the connected database matches the checked-out
@@ -653,10 +775,13 @@ concrete next step.
 ## Where this is enforced
 
 - Specs: `openspec/specs/query-builder/spec.md` (chain surface, `sql`
-  escape hatch, injection safety, column-explicit rendering),
+  escape hatch, injection safety, column-explicit rendering, `with`/
+  `withCte`'s entry/recursive-entry scenarios),
   `openspec/specs/query-execution/spec.md` (execution, error
-  propagation, nested transactions, result conversion),
-  `openspec/specs/query-type-inference/spec.md`,
+  propagation, nested transactions, result conversion, a `WITH`
+  statement's own execution path),
+  `openspec/specs/query-type-inference/spec.md` (the recursive term's
+  union-compatibility check against the anchor),
   `openspec/specs/driver-contract/spec.md` (capabilities),
   `openspec/specs/rls-execution-context/spec.md` (role whitelist,
   `SET LOCAL ROLE`/`set_config`, Supabase claims contexts),
@@ -684,7 +809,15 @@ concrete next step.
   `packages/query/src/driver/errors.ts` (capabilities,
   `driver-missing-capability`),
   `packages/query/src/db/convert.ts` (`.notNullElements()` NULL
-  fail-fast), `packages/pg/src/driver.ts` (`pgDriver`),
+  fail-fast, and its own CTE column-state resolution),
+  `packages/core/src/query/with.ts` (`withCte`, `w.as`, `w.asRecursive`,
+  the union-compatibility poison on the recursive term),
+  `packages/core/src/query/with-recursive.ts` (the recursive branch's
+  narrowed `union`/`unionAll`-only combinator surface),
+  `packages/core/src/expr/render-sql.ts` (`renderWith`, the
+  self-visibility widening `recursive: true` gives an entry),
+  `packages/query/src/db/chain.ts` (`handle.with`, mirroring
+  `withCte`'s own callback), `packages/pg/src/driver.ts` (`pgDriver`),
   `packages/supabase/src/context.ts` (`asUser`/`asAnon`,
   `claims-subject-missing`), `packages/supabase/src/driver.ts`
   (`supabaseDriver`), `packages/core/src/types/assert-no-nulls.ts`

@@ -32,6 +32,7 @@ export type {
 	UpdateChainFilterable,
 	UpdateChainFinal,
 	UpdateChainReturnable,
+	WithChainTerminal,
 } from "./db/chain";
 export type { DbContext, ScopedDb } from "./db/context";
 export type {

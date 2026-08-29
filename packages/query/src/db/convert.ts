@@ -1,10 +1,13 @@
 import type {
 	ColumnState,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	ProjectionNode,
 	QueryNode,
 	ReturningNode,
+	SelectNode,
+	SetOpNode,
 	SqlTemplateChunk,
 	Table,
 	TableRefNode,
@@ -145,22 +148,77 @@ const PASSTHROUGH_AGGREGATES = [
 const isBuilderAggregate = (expr: ExprNode): expr is FunctionCallNode =>
 	expr.nodeKind === "functionCall" && expr.schemaName === null;
 
+/**
+ * Every declared `WITH` entry's own query, by name (add-ctes, task 5.3) --
+ * threaded alongside `tables` so a CTE column ref can resolve its
+ * conversion state by reading through the entry's own projection instead
+ * of a declared table. Empty outside a `WithNode`'s own body/entries (the
+ * default every top-level caller gets); populated once, in
+ * {@link columnPlanForResult}'s own "with" branch, from `node.ctes`.
+ */
+type CteQueryByName = ReadonlyMap<string, SelectNode | SetOpNode>;
+
+const EMPTY_CTES: CteQueryByName = new Map();
+
+/** A set-operation's own output is its LEFT branch's (D103, mirrors core's `render-sql.ts`/`view-kind.ts` own `leftmostSelect`) -- recurse until a plain select is reached. */
+const leftmostQuery = (query: SelectNode | SetOpNode): SelectNode => {
+	if (query.queryKind === "setOp") {
+		return leftmostQuery(query.left);
+	}
+	return query;
+};
+
+/**
+ * A CTE column ref's own conversion state (add-ctes, task 5.3): resolved
+ * by reading through the named entry's own projection, never guessed at
+ * from the reference alone -- an entry can itself select from an earlier
+ * CTE, so this composes with {@link columnPlanFromProjection}'s own
+ * recursion rather than duplicating it.
+ */
+const cteColumnState = (
+	cteName: string,
+	columnName: string,
+	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName,
+): ColumnState | undefined => {
+	// An unresolved cteName here is unreachable, not silently tolerated:
+	// render already rejects a reference to an undeclared CTE upstream
+	// (task 1.3c), and the builder can't construct one either -- `w.as`
+	// only ever hands out a reference to an entry already bound by a JS
+	// `const` (TDZ), so there is no code path that reaches this branch
+	// with a name `cteQueryByName` doesn't carry.
+	const entryQuery = cteQueryByName.get(cteName);
+	if (entryQuery === undefined) {
+		return undefined;
+	}
+	const leftmost = leftmostQuery(entryQuery);
+	const plan = columnPlanFromProjection(
+		leftmost.projection,
+		leftmost.from,
+		tables,
+		cteQueryByName,
+	);
+	return plan.find((entry) => entry.alias === columnName)?.columnState;
+};
+
 /** The conversion state a passthrough aggregate borrows from its own argument. */
 const passthroughArgumentState = (
 	expr: FunctionCallNode,
 	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName,
 ): ColumnState | undefined => {
 	const [argument] = expr.args;
 	if (argument === undefined) {
 		return undefined;
 	}
-	return columnStateForExpr(argument, tables);
+	return columnStateForExpr(argument, tables, cteQueryByName);
 };
 
 /** The conversion state for a projected aggregate, or `undefined` when this isn't one. */
 const aggregateColumnState = (
 	expr: ExprNode,
 	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName,
 ): ColumnState | undefined => {
 	if (!isBuilderAggregate(expr)) {
 		return undefined;
@@ -171,7 +229,7 @@ const aggregateColumnState = (
 	if (!PASSTHROUGH_AGGREGATES.includes(expr.functionName)) {
 		return undefined;
 	}
-	return passthroughArgumentState(expr, tables);
+	return passthroughArgumentState(expr, tables, cteQueryByName);
 };
 
 /**
@@ -181,17 +239,27 @@ const aggregateColumnState = (
  * `over(lag(col), spec)` by passing through to `col`'s own state. `sum`/
  * `avg` stay uncast either way, windowed or not (see
  * {@link PASSTHROUGH_AGGREGATES}'s own doc comment) — this delegation
- * never has to special-case them.
+ * never has to special-case them. `cteQueryByName` defaults to empty
+ * everywhere outside a `WITH` body (add-ctes, task 5.3).
  */
 const columnStateForExpr = (
 	expr: ExprNode,
 	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName = EMPTY_CTES,
 ): ColumnState | undefined => {
 	if (expr.nodeKind === "window") {
-		return columnStateForExpr(expr.fn, tables);
+		return columnStateForExpr(expr.fn, tables, cteQueryByName);
 	}
 	if (expr.nodeKind !== "columnRef") {
-		return aggregateColumnState(expr, tables);
+		return aggregateColumnState(expr, tables, cteQueryByName);
+	}
+	if (expr.schemaName === null) {
+		return cteColumnState(
+			expr.tableName,
+			expr.columnName,
+			tables,
+			cteQueryByName,
+		);
 	}
 	return resolveColumnState(
 		tables,
@@ -235,6 +303,7 @@ const projectionPlanEntry = (
 		readonly expr: ExprNode;
 	},
 	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName,
 ): ColumnPlanEntry => {
 	const { alias, resultKey, expr } = column;
 	if (expr.nodeKind === "selectExpr") {
@@ -248,6 +317,7 @@ const projectionPlanEntry = (
 					expr.query.projection,
 					expr.query.from,
 					tables,
+					cteQueryByName,
 				),
 			},
 		};
@@ -255,26 +325,66 @@ const projectionPlanEntry = (
 	return {
 		alias,
 		resultKey: resultKey ?? alias,
-		columnState: columnStateForExpr(uncast(expr), tables),
+		columnState: columnStateForExpr(uncast(expr), tables, cteQueryByName),
 	};
 };
 
+/**
+ * An `allColumns` projection's own plan — a CTE `from` (add-ctes, task
+ * 5.3) recurses into the named entry's own projection instead of
+ * resolving declared columns directly, the same "read through the
+ * wrapper" rule `columnPlanForResult` applies at the statement's own top
+ * level, one level down. Split out (D71/#154 ratchet-5) to keep
+ * {@link columnPlanFromProjection}'s own complexity from accumulating a
+ * second branch's worth.
+ */
+const allColumnsPlan = (
+	projection: Extract<
+		ProjectionNode,
+		{ readonly projectionKind: "allColumns" }
+	>,
+	from: FromNode,
+	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName,
+): ReadonlyArray<ColumnPlanEntry> => {
+	if ("cteName" in from) {
+		const entryQuery = cteQueryByName.get(from.cteName);
+		if (entryQuery === undefined) {
+			return [];
+		}
+		const leftmost = leftmostQuery(entryQuery);
+		return columnPlanFromProjection(
+			leftmost.projection,
+			leftmost.from,
+			tables,
+			cteQueryByName,
+		);
+	}
+	return projection.columnNames.map((columnName) =>
+		allColumnsPlanEntry(tables, from, columnName),
+	);
+};
+
+/**
+ * The ordered plan for one projection, `from` alongside it since an
+ * `allColumns` shape needs it to resolve each real column's declared
+ * state.
+ */
 const columnPlanFromProjection = (
 	projection: ProjectionNode,
-	from: TableRefNode,
+	from: FromNode,
 	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName = EMPTY_CTES,
 ): ReadonlyArray<ColumnPlanEntry> => {
 	if (projection.projectionKind === "allColumns") {
-		return projection.columnNames.map((columnName) =>
-			allColumnsPlanEntry(tables, from, columnName),
-		);
+		return allColumnsPlan(projection, from, tables, cteQueryByName);
 	}
 	if (projection.projectionKind === "columns") {
 		// `resultKey` is the caller's verbatim projection key (#339); a node
 		// without one (hand-built, or codec-decoded -- stored view queries)
 		// falls back to the rendered alias, the pre-#339 behavior.
 		return projection.columns.map((column) =>
-			projectionPlanEntry(column, tables),
+			projectionPlanEntry(column, tables, cteQueryByName),
 		);
 	}
 	// "constantOne" -- the exists()/notExists() subquery projection; never
@@ -304,19 +414,36 @@ const columnPlanFromReturning = (
  * The ordered per-result-column plan for `node` — one entry per key a
  * driver row will actually carry, in the same order `compile()` rendered
  * them. A select's own projection, or a mutation's `returning()`; a
- * `returning`-less mutation has no result columns at all.
+ * `returning`-less mutation has no result columns at all. A `WITH`
+ * statement (add-ctes, task 5.3) reads the **body's** projection through
+ * the wrapper — `ctes` are never themselves the statement's own result
+ * shape, the same rule `compile.ts`'s `compileKindOf` applies to
+ * `CompileKind` — with every entry's own query available by name for
+ * `columnPlanFromProjection`'s CTE-reference branch to resolve against.
  */
 export const columnPlanForResult = (
 	node: QueryNode,
 	tables: Declarations["tables"],
+	cteQueryByName: CteQueryByName = EMPTY_CTES,
 ): ReadonlyArray<ColumnPlanEntry> => {
 	if (node.queryKind === "select") {
-		return columnPlanFromProjection(node.projection, node.from, tables);
+		return columnPlanFromProjection(
+			node.projection,
+			node.from,
+			tables,
+			cteQueryByName,
+		);
 	}
 	if (node.queryKind === "setOp") {
 		// a set-op's rows convert per the LEFT branch (D103 -- SQL's own
 		// naming rule; the leftmost select is what names the output).
-		return columnPlanForResult(node.left, tables);
+		return columnPlanForResult(node.left, tables, cteQueryByName);
+	}
+	if (node.queryKind === "with") {
+		const entries: CteQueryByName = new Map(
+			node.ctes.map((entry) => [entry.name, entry.query]),
+		);
+		return columnPlanForResult(node.body, tables, entries);
 	}
 	if (node.returning === null) {
 		return [];
@@ -352,6 +479,10 @@ const wrapperKeyPresence: Record<CompileInputWrapperKey, true> = {
 	insertQuery: true,
 	updateQuery: true,
 	deleteQuery: true,
+	// add-ctes task 5.1: compile.ts's own CompileInput grew this wrapper key;
+	// this exhaustive record must track it to keep compiling. columnPlanForResult's
+	// own "with" handling (above, task 5.3) already resolves it fully.
+	withQuery: true,
 };
 
 const compileInputWrapperKeys = Object.keys(

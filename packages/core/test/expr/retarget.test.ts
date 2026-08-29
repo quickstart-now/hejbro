@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { ExprNode, SelectNode, SetOpNode } from "../../src/expr/ast";
+import type {
+	ExprNode,
+	SelectNode,
+	SetOpNode,
+	WithNode,
+} from "../../src/expr/ast";
 import type { RenameTarget } from "../../src/expr/retarget";
 import {
 	retargetExprNode,
 	retargetSelectNode,
 	retargetSetOpNode,
+	retargetWithNode,
 } from "../../src/expr/retarget";
 import { buildUnrelatedCase, REACHABLE_NODE_KINDS } from "./reachable-kinds";
 
@@ -693,5 +699,99 @@ describe("set-op right-branch rename (review F5)", () => {
 		expect(renamed).not.toBe(node);
 		expect(JSON.stringify(renamed.right)).toContain('"settlers"');
 		expect(JSON.stringify(renamed.left)).toContain('"keepers"');
+	});
+});
+
+describe("retargetWithNode (add-ctes tasks 2.2/2.3/2.4)", () => {
+	const anchor: SelectNode = {
+		queryKind: "select",
+		projection: { projectionKind: "constantOne" },
+		from: { schemaName: "app", tableName: "posts" },
+		joins: [],
+		where: null,
+		groupBy: [],
+		having: null,
+		orderBy: [],
+		limit: null,
+		offset: null,
+		distinct: null,
+	};
+
+	// task 2.3, positive descent proof: the registry forces retargetWithNode
+	// to be *written*, not to *descend* -- `with: (node) => node` would
+	// compile and pass every reference-identity check just as well as this
+	// does. Only a rewritten column, reached through an entry's own body
+	// (never touched by the top-level identifier-only pass), proves it
+	// actually walks in.
+	it("a column referenced only inside a CTE body is rewritten by a rename", () => {
+		const entryQuery: SelectNode = {
+			...anchor,
+			where: {
+				nodeKind: "columnRef",
+				schemaName: "app",
+				tableName: "posts",
+				columnName: "id",
+			},
+		};
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: entryQuery, materialized: null }],
+			recursive: false,
+			body: anchor,
+		};
+		const retargeted = retargetWithNode(node, tableRenameTarget);
+		expect(retargeted).not.toBe(node);
+		const retargetedEntryQuery = retargeted.ctes[0]?.query;
+		expect(retargetedEntryQuery?.queryKind).toBe("select");
+		expect((retargetedEntryQuery as SelectNode | undefined)?.where).toEqual({
+			nodeKind: "columnRef",
+			schemaName: "app",
+			tableName: "articles",
+			columnName: "id",
+		});
+	});
+
+	// task 2.4, the negative pin -- the sentinel-schema hazard D105 rejected
+	// an alternative over: a rename identifies its target by schema and
+	// table together, and a CTE has neither, so a same-named CTE (and its
+	// own column references) must be left exactly alone.
+	it("a table rename leaves a same-named CTE alone", () => {
+		const body: SelectNode = {
+			...anchor,
+			from: { cteName: "posts" },
+			projection: {
+				projectionKind: "columns",
+				columns: [
+					{
+						alias: "id",
+						expr: {
+							nodeKind: "columnRef",
+							schemaName: null,
+							tableName: "posts",
+							columnName: "id",
+						},
+					},
+				],
+			},
+		};
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [{ name: "posts", query: anchor, materialized: null }],
+			recursive: false,
+			body,
+		};
+		const retargeted = retargetWithNode(node, tableRenameTarget);
+		expect(retargeted.body).toBe(body);
+		expect(retargeted.body).toEqual(body);
+	});
+
+	it("returns the exact same reference when nothing in the list or body matches", () => {
+		const node: WithNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: anchor, materialized: null }],
+			recursive: false,
+			body: anchor,
+		};
+		expect(retargetWithNode(node, columnRenameTarget)).toBe(node);
 	});
 });
