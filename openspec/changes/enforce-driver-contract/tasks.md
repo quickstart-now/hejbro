@@ -99,12 +99,22 @@ re-derives it by hand.
       the session-setup hook delivers them — and never infers,
       normalizes, or corrects the declaration from observed behavior,
       which the spec's own scenario ("the declaration stays false")
-      forbids. Escalate the exposure choice to the lead before code.
-      Files either way: `packages/query/src/testing/driver-conformance.ts`
-      (new), `packages/query/test/driver/conformance.test.ts`; if
-      exported publicly, also `packages/query/src/index.ts` or
-      `packages/query/package.json`'s exports map, and
-      `packages/query/test/exports.test.ts`.
+      forbids. **Settled at ratification**: the kit is a pure judgment
+      function — the caller hands it the ordered `{sql, params}` record
+      its own stub captured, so the kit never knows a transport and
+      never knows the pin SQL's text, only the order the spec names.
+      The kit is **repo-internal**: the consumers are all in this
+      repository today, opening it later is additive, and its shape is
+      most trustworthy after a fourth driver has consumed it. What
+      remains for this task: the function boundary (one entry per
+      declared tier), the failure diagnostic's `code`, and the vitest
+      alias wiring in the three consuming packages. Files:
+      `packages/query/src/testing/driver-conformance.ts` (new),
+      `packages/query/test/driver/conformance.test.ts`, and each
+      consuming package's vitest config; **not**
+      `packages/query/src/index.ts` and not the exports map — if the kit
+      reaches `dist` or the published surface, the "internal" decision
+      has not actually been implemented.
 - [ ] 1.5 `~8m` The false tier's obligation is observed. Red: same test
       file » "settings ride with the statement, in that order" — a
       recording session captures what a `session-state: false` driver

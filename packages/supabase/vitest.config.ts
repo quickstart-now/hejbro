@@ -26,6 +26,23 @@ export default defineConfig({
 			// now resolve the workspace-linked `dist` build and could pass
 			// against a stale one. #131's original intent now applies to
 			// this package for real.
+			// #481 (enforce-driver-contract, task 1.4/1.7): the one deliberate
+			// exception to "public entry point only" above -- the driver
+			// conformance kit is repo-internal by ratified decision (never
+			// `./index.ts`, never `package.json`'s `exports` map), so this
+			// test file is its only way in. A named, single-file alias, not a
+			// directory mapping into `../query/src/`, so no other internal
+			// stays reachable by accident. Declared *before* the plain
+			// `@hejbro/query` entry below -- Vite's alias resolution treats a
+			// string `find` as matching either an exact id or `id + "/"`
+			// prefix, in object insertion order, so the shorter
+			// `@hejbro/query` key would otherwise prefix-match this
+			// specifier first and mangle it into
+			// `.../index.ts/testing/driver-conformance` (measured).
+			"@hejbro/query/testing/driver-conformance": resolve(
+				import.meta.dirname,
+				"../query/src/testing/driver-conformance.ts",
+			),
 			"@hejbro/query": resolve(import.meta.dirname, "../query/src/index.ts"),
 		},
 	},
