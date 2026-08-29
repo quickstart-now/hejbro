@@ -1005,6 +1005,51 @@ by reading the code, and it holds whatever the server says.
       failure, and the slice's overall pass is withheld until green.
       Files: none — this task runs a command and records its output.
 
+- [ ] 7.8 (~9m) **Assemble the merge-request declaration.** Added late,
+      then corrected twice: it first read "open the PR", which is not the
+      team's step — **PR creation belongs to the lead**, who verifies the
+      declaration (SHA equals the remote head, base is current `dev`,
+      merge-tree reports no conflicts), opens the PR, watches CI,
+      squash-merges with `--match-head-commit`, runs the post-merge
+      checks, closes the issues and files the archive PR. The team's last
+      output is the **declaration**, not a pull request. It was then
+      moved here from below group 8, where appending it had put a
+      `7.x` task under the `## 8.` heading — `openspec validate --strict`
+      rejects that, and rightly: a task's number is a claim about which
+      group owns it.
+
+      It carries: the **frozen 40-character SHA** with the sentence
+      *"this SHA is fixed — no further commits, no rewrites"*; the
+      **gate evidence**; the **six-part surface delta** (written out in
+      `design.md`, quoted here); and the PR-body materials the lead will
+      use verbatim —
+      - **the commits to be squashed**, listed — the repo's standing PR
+        rule
+      - **`Closes #464 #469 #470 #487 #489`**
+      - for **#487**, that it took **two halves** (key sets in group 3,
+        column order in group 8) so a reader does not read the second as
+        scope creep
+      - **the three follow-ups filed** (#501, #502, #503) with one line
+        each on why they were filed rather than built — the scope
+        boundary should be visible without reading `tasks.md`
+      - **what was measured**, pointing at `measurements.md`, and the
+        two witnesses that ran only in the closing slot
+      - **the residue #489 leaves** and that it is tracked at #500
+      - **`blackbox/`'s Refs are pinned mid-branch** and need
+        re-verification against the final tree after any rebase (the
+        entry says so itself; the PR body repeats it because that is
+        where a merger looks)
+
+      **Not in the body**: lead rule numbers, and anything a reader
+      cannot resolve from the repository. Same rule the archived
+      artifacts follow.
+- [ ] 7.9 (~5m) After the closing slot passes, **tick 5.4 and 6.3** —
+      they are the only boxes deliberately left open, and forgetting
+      them would leave the slice's own progress record claiming two
+      tasks were never finished. Then confirm `tasks.md`, `design.md`,
+      `measurements.md` and every delta are committed, since this file
+      is the last thing edited and is therefore the likeliest to drift.
+
 ## 8. Branch column order is checked at build time (#487, second half)
 
 Added mid-flight by lead decision (`design.md`). `SameKeys` is `keyof`
@@ -1196,49 +1241,6 @@ I/O — it reads two projection objects).
       the code strings. Measured convention — 10 of 12 shipped
       capability specs mention no diagnostic code at all — so
       documenting one here would depart from it, not repair an omission.
-
-- [ ] 7.8 (~9m) **Assemble the merge-request declaration.** Added late,
-      then corrected: this task first read "open the PR", which is not
-      the team's step — **PR creation belongs to the lead**, who
-      verifies the declaration (SHA equals the remote head, base is
-      current `dev`, merge-tree reports no conflicts), opens the PR,
-      watches CI, squash-merges with `--match-head-commit`, runs the
-      post-merge checks, closes the issues and files the archive PR. The
-      team's last output is the **declaration**, not a pull request.
-
-      It carries: the **frozen 40-character SHA** with the sentence
-      *"this SHA is fixed — no further commits, no rewrites"*; the
-      **gate evidence**; the **six-part surface delta** (written out in
-      `design.md`, quoted here); and the PR-body materials the lead will
-      use verbatim —
-      - **the commits to be squashed**, listed — the repo's standing PR
-        rule
-      - **`Closes #464 #469 #470 #487 #489`**
-      - **the five issues this closes** (#464, #487, #469, #470, #489)
-        and, for #487, that it took **two halves** (key sets in group 3,
-        column order in group 8) so a reader does not think the second
-        was scope creep
-      - **the three follow-ups filed** (#501, #502, #503) with one line
-        each on why they were filed rather than built — a reviewer
-        should be able to see the scope boundary without reading
-        `tasks.md`
-      - **what was measured**, pointing at `measurements.md`, and the
-        two witnesses that ran only in the closing slot
-      - **the residue #489 leaves** and that it is tracked at #500
-      - **`blackbox/`'s Refs are pinned mid-branch** and need
-        re-verification against the final tree after any rebase (the
-        entry says so itself; the PR body repeats it because that is
-        where a merger looks)
-
-      **Not in the body**: lead rule numbers, and anything a reader
-      cannot resolve from the repository. Same rule the archived
-      artifacts follow.
-- [ ] 7.9 (~5m) After the closing slot passes, **tick 5.4 and 6.3** —
-      they are the only boxes deliberately left open, and forgetting
-      them would leave the slice's own progress record claiming two
-      tasks were never finished. Then confirm `tasks.md`, `design.md`,
-      `measurements.md` and every delta are committed, since this file
-      is the last thing edited and is therefore the likeliest to drift.
 
 ## Verification
 

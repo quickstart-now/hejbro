@@ -106,8 +106,21 @@ what already exists, and **how the name sits against its siblings**.
 
 ### 3. Machine checks holding this description true
 
-- **Exact-set export assertion** — the barrel's export set is pinned, so
-  an *unintended* addition fails too, not only a removal.
+- **A negative export assertion for the removal**, plus its own control:
+  `type _Removed = typeof import("…/src/index").countWhere` under
+  `@ts-expect-error` fails if `countWhere` ever returns, and an
+  undirected `_PathControl` line beside it fails loudly if the import
+  path rots — because `@ts-expect-error` swallows `TS2307` as readily as
+  the error it was written for.
+- **This is not an exact-set pin, and the difference matters.** The
+  barrel's export list is *not* asserted as a whole anywhere: the tests
+  check named exports individually (`packages/cli/test/exports.test.ts`)
+  and check that this one name is gone. So a **removal** is caught and
+  an **unintended addition is not**. Stated because the draft of this
+  section claimed an exact-set assertion that does not exist — the claim
+  was written from what such a section ought to contain rather than from
+  the repository, which is the exact failure this change spent its
+  length correcting elsewhere.
 - **Type-only import block** — `tsc` carries the type axis, so the
   narrowings below are checked rather than described.
 - **0.1.1-era snapshot decode test** — `OrderByTerm` is a released
