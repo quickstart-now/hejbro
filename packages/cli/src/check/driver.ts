@@ -29,7 +29,20 @@ export const resolveConnectionString = (
 /** An optional peer, never a hard dependency of this package (proposal.md: installing hejbro must not pull in a driver for commands that never connect). */
 export const CHECK_DRIVER_PACKAGE = "@hejbro/pg";
 
-type PgDriverFactory = (connectionString: string) => Driver;
+/**
+ * `@hejbro/pg`'s connection-string form is never auto-closed (its own
+ * contract, `packages/pg/src/driver.ts`: "pool lifetime = process
+ * lifetime" -- a caller that needs teardown calls `driver.client.end()`
+ * itself). `check` is exactly that caller: it opens one connection for
+ * one report and exits, so the widened type is what lets
+ * {@link withCheckConnection} close it -- narrower than `Driver` alone,
+ * which erases `.client` entirely.
+ */
+export type CheckDriverConnection = Driver & {
+	readonly client: { end(): Promise<void> };
+};
+
+type PgDriverFactory = (connectionString: string) => CheckDriverConnection;
 
 type PgDriverModule = { readonly pgDriver: PgDriverFactory };
 
@@ -70,12 +83,34 @@ export const loadCheckDriver = async (
 	}
 };
 
-/** Resolves the connection string and the driver together, and opens the connection -- the one call the `check` command (group 4) makes. */
+/** Resolves the connection string and the driver together, and opens the connection. `importer` threads through to {@link loadCheckDriver}, defaulting the same way. */
 export const connectForCheck = async (
 	url: string | undefined,
 	env: ConnectionEnv,
-): Promise<Driver> => {
+	importer?: CheckDriverImporter,
+): Promise<CheckDriverConnection> => {
 	const connectionString = resolveConnectionString(url, env);
-	const pgDriver = await loadCheckDriver();
+	const pgDriver = await loadCheckDriver(importer);
 	return pgDriver(connectionString);
+};
+
+/**
+ * Opens a connection, runs `body`, and closes the connection afterward --
+ * on the success path and on a rejection alike, since a caller that only
+ * closes on success leaves the pool open exactly when there was
+ * something to report. This is the only place `check` opens a
+ * connection, so it is the only place that needs to close one.
+ */
+export const withCheckConnection = async <T>(
+	url: string | undefined,
+	env: ConnectionEnv,
+	body: (driver: CheckDriverConnection) => Promise<T>,
+	importer?: CheckDriverImporter,
+): Promise<T> => {
+	const driver = await connectForCheck(url, env, importer);
+	try {
+		return await body(driver);
+	} finally {
+		await driver.client.end();
+	}
 };

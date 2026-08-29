@@ -10,7 +10,8 @@ import type { Catalog } from "../check/catalog";
 import { readCatalog } from "../check/catalog";
 import type { Finding } from "../check/compare";
 import { compareCatalog } from "../check/compare";
-import { connectForCheck } from "../check/driver";
+import type { CheckDriverImporter } from "../check/driver";
+import { withCheckConnection } from "../check/driver";
 import { compareCheckConstraint } from "../check/expression";
 import type { Inventory } from "../check/inventory";
 import { buildInventory } from "../check/inventory";
@@ -218,7 +219,14 @@ const identityFromMessage = (message: string, fallback: string): string => {
 
 const FALLBACK_IDENTITY = "hejbro check";
 
-/** A precondition failure (config/entry/connection/driver/catalog-read) -- before any comparison ran, so it is its own early exit, never folded into `findings`. */
+/**
+ * A precondition failure (config/entry/connection/driver/catalog-read) --
+ * before any comparison ran, so it is its own early exit, never folded
+ * into `findings`. Deliberately carries no `COVERAGE_BOUNDARY_LINES`:
+ * that statement says what a *comparison* did not look at, and no
+ * comparison ran here to have a boundary worth stating -- printing it
+ * anyway would read as information about a run that never happened.
+ */
 const preconditionErrorReport = (error: unknown): CheckReport => {
 	const checkError = asHejbroError(error);
 	const diagnostic = fromHejbroError(
@@ -238,15 +246,21 @@ const preconditionErrorReport = (error: unknown): CheckReport => {
  * (the checked-in snapshot as the D81 parent, so column order matches
  * reality), compare (`compareCheckAgainstCatalog`, 4.4 -- existence/
  * columns *and* every declared check constraint's expression), build the
- * inventory section (`buildInventory`, 5.1), render. Every step but the
- * last is I/O -- this function itself is not tested directly (CI has no
- * database); its own pieces (`connectForCheck`,
- * `readCatalog`, `compareCheckAgainstCatalog`, `renderCheckReport`) each
- * are, and group 6 proves the assembled whole against a real server.
+ * inventory section (`buildInventory`, 5.1), render. `withCheckConnection`
+ * (N2) closes the connection pool whether the body returns or throws --
+ * `@hejbro/pg`'s connection-string pool is never auto-closed, and this
+ * command opens one, uses it once, and exits, so it is the one caller
+ * that must. Every step but the last is I/O -- this function itself is
+ * not tested directly (CI has no database); its own pieces
+ * (`withCheckConnection`, `readCatalog`, `compareCheckAgainstCatalog`,
+ * `renderCheckReport`) each are, and group 6 proves the assembled whole
+ * against a real server. `importer` is test-only DI (mirrors
+ * `loadCheckDriver`'s own parameter) -- `checkCommand` never passes it.
  */
 export const runCheck = async (
 	cwd: string,
 	argv: ReadonlyArray<string> = [],
+	importer?: CheckDriverImporter,
 ): Promise<CheckReport> => {
 	const urlFlag = lastFlagValue(normalizeEqualsFlags(argv), "--url");
 	try {
@@ -262,15 +276,21 @@ export const runCheck = async (
 			previousSnapshot: diskSnapshot,
 			registry,
 		}).snapshot;
-		const driver = await connectForCheck(urlFlag, process.env);
-		const catalog = await readCatalog(driver);
-		const findings = await compareCheckAgainstCatalog(
-			snapshot,
-			catalog,
-			driver,
+		return await withCheckConnection(
+			urlFlag,
+			process.env,
+			async (driver) => {
+				const catalog = await readCatalog(driver);
+				const findings = await compareCheckAgainstCatalog(
+					snapshot,
+					catalog,
+					driver,
+				);
+				const inventory = buildInventory(snapshot, catalog);
+				return renderCheckReport(findings, inventory);
+			},
+			importer,
 		);
-		const inventory = buildInventory(snapshot, catalog);
-		return renderCheckReport(findings, inventory);
 	} catch (error) {
 		return preconditionErrorReport(error);
 	}

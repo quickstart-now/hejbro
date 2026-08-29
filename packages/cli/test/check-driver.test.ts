@@ -1,8 +1,11 @@
+import type { DriverCapabilities } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
+import type { CheckDriverConnection } from "../src/check/driver";
 import {
 	CHECK_DRIVER_PACKAGE,
 	loadCheckDriver,
 	resolveConnectionString,
+	withCheckConnection,
 } from "../src/check/driver";
 
 describe("resolveConnectionString", () => {
@@ -64,5 +67,66 @@ describe("loadCheckDriver", () => {
 		await expect(loadCheckDriver(brokenImporter)).rejects.toThrow(
 			"Unexpected token",
 		);
+	});
+});
+
+describe("withCheckConnection / N2 pool teardown", () => {
+	// A driver-shaped fake with a spied `client.end()` -- no real I/O, and
+	// `execute`/`transaction`/`setupSession` are never called by these
+	// tests, so they throw if reached (a bug elsewhere calling them would
+	// surface here, not silently pass).
+	const fakeCapabilities: DriverCapabilities = {
+		"interactive-transactions": false,
+		"session-state": false,
+	};
+	const buildFakeImporter = (ends: number[]) => {
+		const connection: CheckDriverConnection = {
+			capabilities: fakeCapabilities,
+			execute: async () => {
+				throw new Error("execute should not be called by this test");
+			},
+			transaction: async () => {
+				throw new Error("transaction should not be called by this test");
+			},
+			setupSession: async () => {
+				throw new Error("setupSession should not be called by this test");
+			},
+			client: {
+				end: async () => {
+					ends.push(1);
+				},
+			},
+		};
+		return async () => ({ pgDriver: () => connection });
+	};
+
+	it("closes the connection pool after a successful run", async () => {
+		const ends: number[] = [];
+
+		const result = await withCheckConnection(
+			"postgres://from-flag",
+			{},
+			async () => "report",
+			buildFakeImporter(ends),
+		);
+
+		expect(result).toBe("report");
+		expect(ends).toHaveLength(1);
+	});
+
+	it("closes the connection pool after a failing run", async () => {
+		const ends: number[] = [];
+
+		await expect(
+			withCheckConnection(
+				"postgres://from-flag",
+				{},
+				async () => {
+					throw new Error("catalog read failed");
+				},
+				buildFakeImporter(ends),
+			),
+		).rejects.toThrow("catalog read failed");
+		expect(ends).toHaveLength(1);
 	});
 });

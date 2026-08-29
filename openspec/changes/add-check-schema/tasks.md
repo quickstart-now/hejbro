@@ -58,8 +58,11 @@ and goes through the driver.
       catalog read that errors outright SHALL fail the command with
       `check-catalog-unreadable`, never be silently read as "the object
       does not exist". This task also settles how a grantee is spelled
-      (`grantee = 0` is `public`, otherwise `grantee::regrole::text`),
-      which 2.4's grant comparison consumes — so it lands before 2.4.
+      (`grantee = 0` is `public`, otherwise `pg_get_userbyid(grantee)` —
+      *not* `grantee::regrole::text`, which quotes an identifier when it
+      needs to, so a role named `Reader` reads back as `"Reader"` and
+      never matches the declaration), which 2.4's grant comparison
+      consumes — so it lands before 2.4.
       Red: `packages/cli/test/check-catalog.test.ts` — "reads table
       grants without depending on the connected role", "does not report
       an owner's default privileges as missing on a table with no
