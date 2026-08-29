@@ -455,3 +455,29 @@ is what 7.1's delta now says.
 | M5 (select) | nulls first/last | accepted, honored | — |
 | M5 (window) | nulls first/last | accepted, honored | — |
 | M5 (set-op) | nulls first/last | accepted syntactically (unexercised placement) | — |
+
+## Correction: the pre-rebase file count of 38 (reviewer, measured)
+
+During review the pre-rebase file count of 38 was reported as having
+"never been true". That is wrong. The measurement window at the time was
+eight late commits, all of which sat *after* the blackbox entry was
+created. A census of all 45 pre-rebase commits shows:
+
+- Exactly one commit has a branch-diff file count of 38 — `ab0fe8f`
+  (*chore: refresh the crap readme badge*).
+- The next commit, `ba48668` (*docs(openspec): add the
+  harden-query-surface blackbox entry*), takes the count to 39 by
+  bringing exactly one new path into the set,
+  `blackbox/2026-08-29-harden-query-surface.md` (set difference: one
+  entering, none leaving). That commit also modified `tasks.md`, but
+  that file had been in the set since `357a01a`, so it does not move
+  the count.
+
+The 38 the implementer cited was therefore a **true value**. The error
+was not the number but its **attribution** — it was reported as a
+before/after-rebase difference, and the real boundary is before/after
+the creation of the blackbox entry.
+
+*(Measured with `git diff --name-only a3eb5f5..<commit>` across all 45
+pre-rebase commits — the old base, matching the counts being corrected;
+set differences with `LC_ALL=C sort` and `comm`.)*

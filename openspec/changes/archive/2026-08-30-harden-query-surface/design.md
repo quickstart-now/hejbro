@@ -257,3 +257,97 @@ the implementer doing the work. Both are more precise-looking than an
 estimate and no closer to work minutes, which makes them the more
 tempting error: someone who can see a timestamp will reasonably think
 the number was there all along.
+
+## Instrument failures: a fifth kind, and why re-measuring cannot catch it
+
+This slice ran on a rule that every number carries the command that
+produced it. Four ways an instrument can lie were catalogued while the
+work ran:
+
+1. **A zero that is false** — the command reports "none" because it was
+   pointed somewhere the thing could not be. Caught by a positive
+   control: show the same command reporting "some" under conditions
+   where some is known to exist.
+2. **A positive that is false** — the count is non-zero but the matches
+   are not what the count is being used to claim. Caught by printing the
+   matched content, never the count alone.
+3. **A classification that is false** — the tool sorts a real result
+   into the wrong bucket. Caught when a domain fact contradicts the
+   label.
+4. **Conditions that do not hold** — the measurement cannot mean what it
+   is being asked to mean. The prescription is not to run it.
+
+A fifth kind surfaced at the end, and it does not belong to that family:
+**the instrument is correct and the sentence built on it is wider than
+what it measured.**
+
+Two instances, both from this change:
+
+- A measured run contained no `NOT NULL` constraint, and the note drawn
+  from it said Postgres ignores the anchor's `NOT NULL`. The run
+  supports only that Postgres's type resolution has no nullability
+  dimension. The citation scope now sits beside the record in
+  `measurements.md`.
+- A file-count claim was checked across eight late commits, found in
+  none of them, and reported as "never true". All eight sat after the
+  commit that explained the number. Widening the census — not narrowing
+  the sentence — found the value had been true, once, immediately before
+  that commit.
+
+The first four are all caught by measuring again, more carefully.
+**This one is not: measuring again returns the same correct result.**
+The gap is between the result and the sentence, so it is visible only
+when the two are read against each other — the claim's scope against the
+measurement's scope, explicitly.
+
+The practical form is a habit rather than a check: **put the window in
+the sentence.** "Not present in these eight commits" can be widened by
+the next reader; "never true" names no window, so it invites no
+comparison and cannot be falsified cheaply. A conclusion that carries
+its own boundary is checkable; one that does not is merely believed.
+
+This kind also **selects for good measurers.** Someone who does not
+measure has no data to overrun, and the sentence reads as *more*
+trustworthy precisely because a real measurement stands behind it.
+
+## An exact prediction is not a confirmation
+
+A reported count of pinned files disagreed with the artifact by one. A
+mechanism was proposed that reproduced the reported value exactly: among
+the pinned paths exactly one begins with an upper-case letter, so a
+case-sensitive pattern would drop that one and yield the reported
+number. The arithmetic matched, and the match was treated as evidence —
+the hypothesis was put forward as though the candidate were unique.
+
+It was wrong twice.
+
+- **The candidate set was itself miscounted.** A second path begins with
+  a dot, so the proposed pattern yields a different number than the one
+  observed. The uniqueness claim rested on the same kind of error it was
+  offered to explain.
+- **The observed number does not narrow the cause at all.** Any pattern
+  that drops a single path produces it, so the count admits as many
+  explanations as there are pinned paths. Reasoning backwards from the
+  count to the cause is not inefficient; it is closed.
+
+The real cause was recoverable only by the person who produced the
+number — arithmetic done mentally and never re-derived at the point the
+claim was made.
+
+Two things survive:
+
+- **A value that matches a prediction exactly is not evidence for the
+  prediction when other mechanisms produce the same value.** Precision
+  of agreement is not evidential force.
+- **What settled the question was an observation chosen to be
+  independent of the hypothesis**: comparing the recorded pin against
+  the tree's actual blob answers "intact or stale" whichever explanation
+  of the count is true. Aim at an observation that splits the outcomes,
+  not at the cause.
+
+The wrong hypothesis was still useful, and that is worth keeping
+separate from being right: because it named a specific number and a
+specific mechanism, it gave the next person something to count, and
+counting it is what exposed the second candidate. A vaguer doubt would
+have left nothing to check. **Being wrong in a falsifiable shape is a
+contribution; being vague is not.**
