@@ -52,7 +52,7 @@ starts from its own failing test.
 
 ## 1. Package scaffolding
 
-- [ ] 1.1 (~8m) [design] `packages/neon/package.json`: name, `version`
+- [x] 1.1 (~8m) [design] `packages/neon/package.json`: name, `version`
       `0.0.0` (the shape `@hejbro/query` and `@hejbro/pg` still carry —
       an unpublished package does not invent a version), `type: module`,
       `exports` with `types`+`import`, `files: ["dist"]`, `engines`
@@ -67,19 +67,19 @@ starts from its own failing test.
       is a second global. Red: `pnpm --filter @hejbro/neon test` fails —
       there is no such workspace package. Files:
       `packages/neon/package.json`.
-- [ ] 1.2 (~6m) `tsconfig.json`, `tsdown.config.ts`, `turbo.json`, all
+- [x] 1.2 (~6m) `tsconfig.json`, `tsdown.config.ts`, `turbo.json`, all
       three copied in shape from `packages/pg` (`extends` the base
       config, `noEmit`, `entry: ["src/index.ts"]`, `dts: true`,
       `dependsOn: ["^build"]`). Red: `pnpm check-types --filter
       @hejbro/neon` cannot run — the package has no `check-types` target.
       Files: those three.
-- [ ] 1.3 (~7m) `vitest.shared.ts` and `vitest.config.ts`: the
+- [x] 1.3 (~7m) `vitest.shared.ts` and `vitest.config.ts`: the
       `@hejbro/core`/`@hejbro/query` source aliases (#131) pointing at
       each package's **public index only, never a deep path** — the
       preset boundary applies to the test setup too. Red: `pnpm --filter
       @hejbro/neon test` fails — the package has no test target. Files:
       those two.
-- [ ] 1.4 (~7m) `src/index.ts` and `test/entry.test.ts`, together, so the
+- [x] 1.4 (~7m) `src/index.ts` and `test/entry.test.ts`, together, so the
       package builds and tests from its first commit. The entry starts
       empty (`export {}`) and 6.1 fills it; the test asserts only that
       importing the package entry succeeds. This is not a placeholder
@@ -89,14 +89,14 @@ starts from its own failing test.
       length of this change. Red: `pnpm --filter @hejbro/neon test` fails
       with "No test files found". Files: `packages/neon/src/index.ts`,
       `packages/neon/test/entry.test.ts`.
-- [ ] 1.5 (~6m) `README.md` and `LICENSE`. Not documentation polish: the
+- [x] 1.5 (~6m) `README.md` and `LICENSE`. Not documentation polish: the
       pack smoke asserts both are present in the tarball, so their
       absence is a gate failure. Red (no unit test covers the smoke
       script; the check is the red): `pnpm smoke:pack-install` fails
       `assert_license_content` for `@hejbro/neon`. Files: those two.
 ## 2. The HTTP path and its per-request pins
 
-- [ ] 2.1 (~10m) **The batch shape, first and gating.** Each execution
+- [x] 2.1 (~10m) **The batch shape, first and gating.** Each execution
       goes out as one batch built with the client's `sql.query(text,
       params)` form — the two session pins, then the caller's compiled
       statement — and the driver reads the **last** result entry. Pinned
@@ -111,13 +111,13 @@ starts from its own failing test.
       "sends both pins and the caller's statement as one batch and
       returns the last result". Files: `packages/neon/src/http.ts`, that
       test.
-- [ ] 2.2 (~7m) A batch carries exactly one caller statement and its
+- [x] 2.2 (~7m) A batch carries exactly one caller statement and its
       parameters through unchanged, and the driver returns that
       statement's rows only — the pins' empty result sets are never
       mistaken for the answer. Red: same file — "returns only the
       caller's rows from a pinned batch". Files:
       `packages/neon/src/http.ts`, that test.
-- [ ] 2.3 (~8m) [design] The HTTP capability declaration:
+- [x] 2.3 (~8m) [design] The HTTP capability declaration:
       `{"interactive-transactions": false, "session-state": false}`, as a
       constant on the value. The [design] part is that both read `false`
       and neither is softened — `session-state: false` is true about
@@ -127,7 +127,7 @@ starts from its own failing test.
       pre-assembled batch (#486). Red: same file — "declares both
       capabilities false before any connection". Files:
       `packages/neon/src/http.ts`, that test.
-- [ ] 2.4 (~9m) `transaction()` and `setupSession()` on the HTTP driver.
+- [x] 2.4 (~9m) `transaction()` and `setupSession()` on the HTTP driver.
       The contract requires both members of every driver; a driver
       lacking the capability implements `transaction` as one that
       **always throws the missing-capability error before sending
@@ -141,7 +141,7 @@ starts from its own failing test.
       `packages/neon/test/http-session.test.ts` — "calling transaction
       directly throws the missing-capability error and sends nothing".
       Files: `packages/neon/src/http.ts`, that test.
-- [ ] 2.5 (~6m) The error a failed batch produces is passed through
+- [x] 2.5 (~6m) The error a failed batch produces is passed through
       unchanged, and the documented boundary is that it carries no member
       index — a failing pin is indistinguishable from a failing caller
       statement. The pins are the two constant `SET`s `@hejbro/pg`
@@ -251,8 +251,13 @@ starts from its own failing test.
       re-exports the driver, the
       roles, the auth expressions, and the context builders — and no
       `Preset` bundle, because there are no kinds and no validators to
-      register. Red: `packages/neon/test/entry.test.ts` — "re-exports the
-      public surface". Files: `packages/neon/src/index.ts`, that test.
+      register. `README.md` is brought in line with what is actually
+      exported in the same task: it was written in 1.5 describing the
+      finished package, and no gate compares it to the entry — the pack
+      smoke checks that the file exists, not what it says. Red:
+      `packages/neon/test/entry.test.ts` — "re-exports the public
+      surface". Files: `packages/neon/src/index.ts`, that test,
+      `packages/neon/README.md`.
 - [ ] 6.2 (~7m) Rename `.claude/rules/supabase-preset.md` to
       `provider-preset.md` with an explicit path list covering both
       preset packages, and update `AGENTS.md`'s two references to the old

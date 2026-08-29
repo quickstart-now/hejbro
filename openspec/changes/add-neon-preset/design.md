@@ -156,9 +156,34 @@ reopened with #483 — no further approval round. Until the result is
 written into this paragraph, group 2 is not finished: an unrecorded
 measurement is indistinguishable from one that was never run.
 
-> **Measurement result:** _(to be filled by the task that runs it —
-> record the client version, the proxy image reference, and both
-> values.)_
+> **Measurement result:** Run against `@neondatabase/serverless@1.1.0`,
+> `postgres:17`, and `ghcr.io/timowilhelm/local-neon-http-proxy:main`
+> (2026-08-29), reproduction procedure above, `fetchEndpoint` set per the
+> proxy's own README (`http://db.localtest.me:4444/sql`). Query:
+> `select interval '1 day 2 hours' as iv, bytea 'DEADBEEF'::bytea as by`,
+> batched behind the two pins exactly as `runBatch` (task 2.1) sends
+> them, with the same `types` override `@hejbro/pg` uses (only oid
+> 1186/1187/1231 forced to raw text — bytea, oid 17, is deliberately
+> **not** overridden on either path, see the note below). Ground truth
+> taken from `psql` under the same two pins.
+>
+> | | `iv` | `by` |
+> |---|---|---|
+> | expected (`psql`, same pins) | `1 day 02:00:00` | `\x4445414442454546` |
+> | actual (HTTP batch) | `1 day 02:00:00` | `<Buffer 44 45 41 44 42 45 45 46>` |
+>
+> Interval matched as raw text, byte-for-byte. Bytea did **not** match
+> textually on the first run — the actual value arrived as a `Buffer`,
+> not the pinned hex string — which is not a divergence: a top-level
+> `bytea` cell is never the "pinned hex form" (`packages/query/src/db/
+> convert.ts`'s `reviveNestedScalar` — that hex-text handling exists only
+> for a **nested** read's JSON-aggregated cell; the `bytea_output`
+> GUC governs how Postgres renders bytea *inside JSON text*, not how
+> node-postgres or `@neondatabase/serverless` parse a plain column). A
+> top-level bytea cell arrives however the driver's own default parser
+> shapes it on both paths — a `Buffer`, decoded from the same hex wire
+> text — and comparing the actual bytes (`Buffer.compare`) confirmed
+> equality. **Gate passes: group 2 proceeds.**
 
 **Reproduction** (design probe, never committed infrastructure). Three
 traps are recorded because each one costs an hour to rediscover and none
