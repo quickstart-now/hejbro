@@ -53,7 +53,7 @@ Closes #490 and #481. The two are one disease: the query layer holds a
 requirement and exports no way to satisfy or observe it, so each preset
 re-derives it by hand.
 
-- [ ] 1.1 [design] `~8m` The missing-capability thrower joins the public
+- [x] 1.1 [design] `~8m` The missing-capability thrower joins the public
       surface. Red: `packages/query/test/exports.test.ts` » "the
       missing-capability thrower is exported" — fails today because
       `packages/query/src/index.ts` exports driver *types* only and no
@@ -67,7 +67,7 @@ re-derives it by hand.
       `packages/query/src/index.ts`,
       `packages/query/test/exports.test.ts`; if the name changes an
       existing symbol, also `packages/query/test/driver/errors.test.ts`.
-- [ ] 1.2 `~7m` Neon's HTTP driver constructs the error instead of
+- [x] 1.2 `~7m` Neon's HTTP driver constructs the error instead of
       copying it. Red: `packages/neon/test/http-session.test.ts` » "the
       one-shot driver's refusal is the query layer's own error" —
       assert `code`, `capability`, `operation`, and message are what the
@@ -76,14 +76,14 @@ re-derives it by hand.
       literal. Files: `packages/neon/src/http.ts` (the local
       `throwMissingCapability` and its "kept byte-identical" comment
       both go), `packages/neon/test/http-session.test.ts`.
-- [ ] 1.3 `~7m` The copy cannot come back. Red: `pnpm check:bans` (a new
+- [x] 1.3 `~7m` The copy cannot come back. Red: `pnpm check:bans` (a new
       rule: the missing-capability message template may appear only in
       `packages/query/src/driver/errors.ts`) — red before 1.2 lands,
       because the copy is still in `packages/neon/src/http.ts` today.
       Positive control before believing a clean result: reinstate the
       copied string in a scratch edit and confirm the rule reports it,
       then revert. Files: `scripts/check-bans.mjs`.
-- [ ] 1.4 [design] `~10m` The conformance kit's entry shape and exposure.
+- [x] 1.4 [design] `~10m` The conformance kit's entry shape and exposure.
       Red: `packages/query/test/driver/conformance.test.ts` » "a driver
       that declares session-state false and sends the settings only once
       fails the kit" — fails today because no kit exists to import.
@@ -115,26 +115,26 @@ re-derives it by hand.
       `packages/query/src/index.ts` and not the exports map — if the kit
       reaches `dist` or the published surface, the "internal" decision
       has not actually been implemented.
-- [ ] 1.5 `~8m` The false tier's obligation is observed. Red: same test
+- [x] 1.5 `~8m` The false tier's obligation is observed. Red: same test
       file » "settings ride with the statement, in that order" — a
       recording session captures what a `session-state: false` driver
       sends for one compiled statement; the settings precede the
       caller's SQL and the caller's statement cannot be the first thing
       sent. Files: `packages/query/src/testing/driver-conformance.ts`,
       `packages/query/test/driver/conformance.test.ts`.
-- [ ] 1.6 `~8m` The true tier's obligation is observed, and the
+- [x] 1.6 `~8m` The true tier's obligation is observed, and the
       declaration is left alone. Red: same file » "a session-state true
       driver delivers the settings through its setup hook, and still
       reads true" plus "a false driver still reads false after the kit
       has run". Files: same two.
-- [ ] 1.7 `~9m` Every in-repo driver runs the kit. Red:
+- [x] 1.7 `~9m` Every in-repo driver runs the kit. Red:
       `packages/pg/test/driver.test.ts`,
       `packages/supabase/test/driver.test.ts`,
       `packages/neon/test/http-session.test.ts` » "conforms to the
       driver contract" in each — three call sites, each supplying its
       own driver; red before the kit exists. Files: those three test
       files.
-- [ ] 1.8 `~8m` Spec delta transcribed: the contract is observable, and
+- [x] 1.8 `~8m` Spec delta transcribed: the contract is observable, and
       the missing-capability error has one definition presets consume.
       Red: `openspec validate enforce-driver-contract --strict` fails
       while the delta file is absent or malformed; the new scenarios are
@@ -142,7 +142,7 @@ re-derives it by hand.
       is written as a RENAMED (`FROM:`/`TO:`) section, never a MODIFIED
       with a new title — the archive refuses that. Files:
       `openspec/changes/enforce-driver-contract/specs/driver-contract/spec.md`.
-- [ ] 1.9 `~6m` The skill documents the new surface. Red: none — a
+- [x] 1.9 `~6m` The skill documents the new surface. Red: none — a
       documentation task; done means the public surface added in 1.1
       (and 1.4, if it is exported) appears in
       `skills/hejbro/references/query-layer.md`, and
