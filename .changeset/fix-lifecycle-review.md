@@ -1,9 +1,9 @@
 ---
-"@hejbro/core": patch
-"hejbro": patch
-"@hejbro/query": patch
-"@hejbro/supabase": patch
-"@hejbro/pg": patch
+"@hejbro/core": minor
+"hejbro": minor
+"@hejbro/query": minor
+"@hejbro/supabase": minor
+"@hejbro/pg": minor
 ---
 
 Fixes from an adversarial review of the day's nested-transaction and
