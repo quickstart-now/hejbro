@@ -317,14 +317,17 @@ Method is D104's: add a dummy member and count what stops compiling.
 | Probe | src errors | test churn |
 |---|---|---|
 | **F1** — a third member on `FromNode` (a new kind of row source) | **13** | 0 |
-| **F2** — a new `QueryNode` variant (a new kind of statement) | **10** | 0 |
+| **F2** — a new `QueryNode` variant (a new kind of statement) | **11** | 0 |
 | **B1** — the rejected `SelectNode` field, required | **3** | 42 |
 | **B2** — the rejected `SelectNode` field, optional | **0** | 0 |
 
 F1's 13 are `render-sql` ×5, `walk` ×2, `retarget` ×2, `column-order`,
 `codec`, `convert`, and the Supabase RLS validator — the last one being
-the security axis this change argued the union for. F2's 10 match the
-pre-implementation figure for the variant exactly. B1's 3 are still all
+the security axis this change argued the union for. **F2 was 10 until the
+rebase and is 11 now**: ten of them matched the pre-implementation figure
+exactly, and the eleventh is the exhaustive `queryKind` map #479 added
+while this change was in flight (see the re-verification note at the top
+of this file — it is the same number, not a second measurement). B1's 3 are still all
 "you left a key out of an object literal", with **zero** traversal sites
 among them; its fixture churn grew from 28 to 42 as the change added
 tests that build `SelectNode` literals. The rejection argument is

@@ -162,7 +162,9 @@ export type CteEntryOptions = {
  * column type (`int` and `bigint` resolve to `bigint`), but a recursive
  * CTE refuses to (measured, `42804`, "column N has type integer in
  * non-recursive term but type bigint overall") — its row type is always
- * the anchor's, not a union.
+ * the anchor's, not a union. The gap this leaves — a recursive term whose
+ * column types resolve differently from the anchor's type-checks here and
+ * fails on the server instead — is tracked separately, #489.
  */
 type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
 	SetOpResult<TProjection, TRecursiveProjection>,
