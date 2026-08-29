@@ -143,7 +143,7 @@ hand-write a `SelectNode` field list.
 
 ## 5. A json null is a null
 
-- [ ] 5.1 (~6m) **F4.** `resolveJsonLift` guards `null` the way its
+- [x] 5.1 (~6m) **F4.** `resolveJsonLift` guards `null` the way its
       array and interval siblings already do, so a written `null`
       reaches the column as SQL NULL instead of the JSON document
       `'null'`. `undefined` keeps its existing meaning (the key is
@@ -152,7 +152,7 @@ hand-write a `SelectNode` field list.
       and `packages/core/test/query/mutate.test.ts` — "values({payload:
       null}) compiles to a null parameter, not a 'null' document".
       Files: `packages/core/src/query/column-value.ts`, those two tests.
-- [ ] 5.2 (~5m) The spec delta this change already carries
+- [x] 5.2 (~5m) The spec delta this change already carries
       (`specs/query-type-inference/spec.md`, the json bullet's null
       sentence and its scenario) is checked against the implemented
       behavior and the escape hatch in it is compiled, not asserted from

@@ -6,6 +6,8 @@ const BIGINT: TypeNode = { typeName: "bigint" };
 const NUMERIC: TypeNode = { typeName: "numeric", precision: null, scale: null };
 const INTERVAL: TypeNode = { typeName: "interval" };
 const TEXT: TypeNode = { typeName: "text" };
+const JSON_TYPE: TypeNode = { typeName: "json" };
+const JSONB_TYPE: TypeNode = { typeName: "jsonb" };
 const BIGINT_ARRAY: TypeNode = { typeName: "array", element: BIGINT };
 const TEXT_ARRAY: TypeNode = { typeName: "array", element: TEXT };
 const INTERVAL_ARRAY: TypeNode = { typeName: "array", element: INTERVAL };
@@ -81,6 +83,31 @@ describe("liftColumnValue (#322 task 2.3 -- the sole constructor of bigint/inter
 			literal: { literalKind: "number", value: 42 },
 		});
 		expect(liftColumnValue(null, TEXT)).toEqual({
+			nodeKind: "literal",
+			literal: { literalKind: "null" },
+		});
+	});
+
+	it("lifts a plain object written to a json/jsonb column to its serialized text", () => {
+		expect(liftColumnValue({ a: 1 }, JSON_TYPE)).toEqual({
+			nodeKind: "literal",
+			literal: { literalKind: "json", text: '{"a":1}', typeName: "json" },
+		});
+		expect(liftColumnValue({ a: 1 }, JSONB_TYPE)).toEqual({
+			nodeKind: "literal",
+			literal: { literalKind: "json", text: '{"a":1}', typeName: "jsonb" },
+		});
+	});
+
+	// #444 F4: resolveJsonLift used to JSON.stringify(null) into the text
+	// "null" -- the JSON document null, not SQL NULL. A written null must
+	// reach the column the way every other column type spells absence.
+	it("lifts a null written to a json column as a SQL null literal", () => {
+		expect(liftColumnValue(null, JSON_TYPE)).toEqual({
+			nodeKind: "literal",
+			literal: { literalKind: "null" },
+		});
+		expect(liftColumnValue(null, JSONB_TYPE)).toEqual({
 			nodeKind: "literal",
 			literal: { literalKind: "null" },
 		});
