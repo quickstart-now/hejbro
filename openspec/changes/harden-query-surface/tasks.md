@@ -936,6 +936,55 @@ I/O — it reads two projection objects).
       chose not to is a defect** — not a gap left implied.
       Files: the `query-builder` delta under this change.
 
+- [ ] 8.4 (~9m) [design] **Split the diagnostic — one message was
+      covering three different failures.** Found in review of 8.2: the
+      guard's scan (`findKeyOrderMismatch`) is a pure positional walk
+      with **no set comparison at all**, so everything lands on the
+      "different order" verdict. Three failures share it, and for two of
+      them the message is false *and* its `Next:` is impossible to
+      follow:
+      | input | today's message | true? |
+      |---|---|---|
+      | `{id,v}` vs `{v,id}` | same keys, different order → reorder | yes |
+      | `{id,email}` vs `{id,town}` | same keys, different order → reorder | **no — different keys; reordering cannot produce them** |
+      | `{id,v}` vs `{id}` | same keys, different order → reorder | **no — a key is absent; there is nothing to reorder** |
+
+      Telling a user to reorder something that cannot be reordered is
+      the same defect class this change fixes in #469: the text says one
+      thing, the code does another.
+
+      **Two codes, three messages.** `set-op-key-set-mismatch` covers
+      rows 2 and 3 — they are one family because the **remedy is
+      identical** ("make both branches project the same keys"), and a
+      set of a different size is just a different set; its message names
+      which keys differ or are missing. `set-op-key-order-mismatch`
+      keeps row 1. Splitting into three codes would separate two
+      failures that are fixed the same way, which is what a code is for.
+
+      **Discrimination order is load-bearing: compare sets first, order
+      second.** Both can be true at once (`{id,email}` vs `{town,id}`),
+      and a positional scan would classify that case by *where the scan
+      happened to stop* rather than by what is wrong — reporting "order"
+      for an input where reordering cannot help. Set-first sends every
+      both-true case to the key-set code, which is what makes
+      "the code points at the remedy" true rather than aspirational.
+      Reversed, that justification is simply false.
+
+      Red: `packages/core/test/query/select.test.ts` — one case per row
+      above **plus** the both-true case `{id,email}` vs `{town,id}`
+      expecting `set-op-key-set-mismatch` (that case is the single
+      indicator of whether the discrimination order is right). Each
+      assertion checks **`code` and `message`** — code alone cannot
+      catch a wrong message, which is exactly why this defect survived
+      the earlier `toThrow` hardening. Files:
+      `packages/core/src/query/set-op-key-order.ts`, that test,
+      `packages/core/test/query/with-recursive.test.ts`.
+
+      **Not to be done here**: the delta and the skill do **not** gain
+      the code strings. Measured convention — 10 of 12 shipped
+      capability specs mention no diagnostic code at all — so
+      documenting one here would depart from it, not repair an omission.
+
 ## Verification
 
 - `pnpm check`, `pnpm check-types`, `pnpm test`, `pnpm check:crap`,

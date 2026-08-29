@@ -661,6 +661,52 @@ describe("set-op codec round-trip (add-set-operations task 1.3)", () => {
 	});
 });
 
+describe("OrderByTerm.nulls codec (group 5.3, harden-query-surface, #470)", () => {
+	const app = schema("app");
+	const posts = table(app, "posts", { id: uuid().primaryKey() });
+
+	it("an order term with no explicit placement round-trips without gaining a key", () => {
+		const node: SelectNode = {
+			...select(posts).selectQuery,
+			orderBy: [{ expr: posts.id.exprNode, direction: "asc" }],
+		};
+		const encoded = encodeSelectNode(node);
+		// additive-compact: `nulls` was never set on this term, so the
+		// encoded form must not carry the key at all -- not even `null`.
+		expect(JSON.stringify(encoded)).not.toContain("nulls");
+		expect(decodeSelectNode(encoded)).toEqual(node);
+	});
+
+	it("decodes an order term written without a nulls field", () => {
+		// Simulates a snapshot a released version wrote (OrderByTerm is
+		// present at @hejbro/core@0.1.1, `nulls` is not): hand-build the
+		// encoded JSON exactly as that version would have -- no `nulls`
+		// key anywhere -- and confirm decode still succeeds, reading the
+		// absence as "no explicit placement", not as corruption.
+		const node: SelectNode = {
+			...select(posts).selectQuery,
+			orderBy: [{ expr: posts.id.exprNode, direction: "desc" }],
+		};
+		const encoded = encodeSelectNode(node);
+		const legacyEncoded = JSON.parse(JSON.stringify(encoded)) as JsonValue;
+		const decoded = decodeSelectNode(legacyEncoded);
+		expect(decoded.orderBy).toEqual([
+			{ expr: posts.id.exprNode, direction: "desc" },
+		]);
+		expect(decoded.orderBy[0]).not.toHaveProperty("nulls");
+	});
+
+	it("an explicit nulls placement round-trips too", () => {
+		const node: SelectNode = {
+			...select(posts).selectQuery,
+			orderBy: [{ expr: posts.id.exprNode, direction: "desc", nulls: "last" }],
+		};
+		const encoded = encodeSelectNode(node);
+		expect(JSON.stringify(encoded)).toContain('"nulls":"last"');
+		expect(decodeSelectNode(encoded)).toEqual(node);
+	});
+});
+
 describe("set-op codec guards (review F6)", () => {
 	it("an unknown operator in a stored set-op is refused loudly", () => {
 		const app2 = schema("app");
