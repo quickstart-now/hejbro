@@ -4,8 +4,11 @@ Eight groups. Two files are shared between two groups — named below,
 with the reason; every other file has exactly one owner. Everything new
 lands in
 `packages/neon`; outside it, only `scripts/` (two hardcoded gate lists),
-`.changeset/`, `.claude/rules/`, `AGENTS.md`, and `skills/hejbro` are
-touched. **No file under `packages/core`, `packages/query`,
+`packages/skills` (a third hardcoded gate list plus the dev dependency
+its snippet compiler needs to resolve a client library — both found
+while writing the skill page rather than while planning), `.changeset/`,
+`.claude/rules/`, `AGENTS.md`, and `skills/hejbro` are touched.
+**No file under `packages/core`, `packages/query`,
 `packages/cli`, `packages/pg`, or `packages/supabase` is edited** — if a
 task appears to need one, that is the interface failing and it goes back
 to the planner, not into the diff. Estimates are pure work minutes (D88).
@@ -264,7 +267,7 @@ starts from its own failing test.
 
 ## 6. Public surface, rules, and user-facing docs
 
-- [ ] 6.1 (~6m) `packages/neon/src/index.ts` — created empty by 1.4, now
+- [x] 6.1 (~6m) `packages/neon/src/index.ts` — created empty by 1.4, now
       re-exports the driver, the
       roles, the auth expressions, the auth-surface factory with its mode
       type, and the claims type its user builder accepts — and no
@@ -272,14 +275,20 @@ starts from its own failing test.
       register. The claims type is this package's own, structurally like
       the Supabase preset's but not imported from it: presets do not
       reference each other, which is the same boundary that makes the oid
-      constants a deliberate copy rather than an import. `README.md` is brought in line with what is actually
+      constants a deliberate copy rather than an import.
+      One assertion in `test/context.test.ts` moves with this task: the
+      JWT builder's "exactly as given" is currently pinned with a token
+      that has no leading or trailing space, so a `token.trim()` inserted
+      into the builder survives (measured). Give that assertion a token
+      with surrounding whitespace and the spec's own word — *untouched* —
+      becomes what the test checks. `README.md` is brought in line with what is actually
       exported in the same task: it was written in 1.5 describing the
       finished package, and no gate compares it to the entry — the pack
       smoke checks that the file exists, not what it says. Red:
       `packages/neon/test/entry.test.ts` — "re-exports the public
       surface". Files: `packages/neon/src/index.ts`, that test,
       `packages/neon/README.md`.
-- [ ] 6.2 (~7m) Rename `.claude/rules/supabase-preset.md` to
+- [x] 6.2 (~7m) Rename `.claude/rules/supabase-preset.md` to
       `provider-preset.md` with an explicit path list covering both
       preset packages, and update `AGENTS.md`'s two references to the old
       filename. A rule that does not load for the second preset is not a
@@ -290,7 +299,7 @@ starts from its own failing test.
       file under `packages/neon`, and `AGENTS.md` names a filename that
       will not exist. Files: `.claude/rules/provider-preset.md`,
       `AGENTS.md`.
-- [ ] 6.3 (~9m) `skills/hejbro` gains a Neon reference page: the two
+- [x] 6.3 (~9m) `skills/hejbro` gains a Neon reference page: the two
       connection paths and what each can do; the two authentication
       modes, the fact that the declared mode is never checked against the
       database, and **the route from symptom to cause** — when every row
@@ -307,7 +316,29 @@ starts from its own failing test.
       shared `SKILL.md` tables. Red (no test covers the skill; the check
       is the red): no file under `skills/hejbro/references/` mentions
       `neonDriver`. Files: `skills/hejbro/references/neon-preset.md`.
-- [ ] 6.4 (~6m) Move the raw-text type override into one module both
+- [x] 6.5 (~5m) Register `@hejbro/neon` in the snippet compiler's package
+      map (`packages/skills/test/snippet-check.ts`). That map is the
+      whitelist of hejbro packages a skill snippet may import, and it is
+      the **third** hardcoded gate list this change has met (#484 lists
+      two). Unlike the other two, this one is registered **now, not in
+      group 8**: its subject is 6.3's own page, which exists as soon as
+      6.3 lands, so the registration has an observable effect
+      immediately — the reason group 8 exists does not apply. Runs before
+      6.3's page carries any `ts` fence. Red: a fence importing
+      `@hejbro/neon` fails `pnpm --filter @hejbro/skills test` with
+      "Cannot find module '@hejbro/neon'". The snippet also imports the
+      client library, which that map cannot supply: it is a whitelist of
+      **hejbro** packages, and mixing a third-party path into it blurs
+      the one thing it means. The dependency is made real instead —
+      `@neondatabase/serverless` added to `packages/skills`'s own
+      devDependencies, resolved like any other import. The type-only
+      alternative was tried first and measured wrong:
+      `Parameters<typeof neonDriver>[0]` resolves to an overloaded
+      function's **last** signature, so a WebSocket example would have
+      been typed as the HTTP one. Files:
+      `packages/skills/test/snippet-check.ts`,
+      `packages/skills/package.json`.
+- [x] 6.4 (~6m) Move the raw-text type override into one module both
       drivers import, and delete the two copies. The duplication was
       correct while it existed — exporting it from `http.ts` would have
       meant a group-3 task editing a group-2 file — but that constraint

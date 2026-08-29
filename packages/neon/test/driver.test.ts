@@ -2,7 +2,9 @@ import type { Pool as NeonPool } from "@neondatabase/serverless";
 import { neon, Pool } from "@neondatabase/serverless";
 import { describe, expect, it, vi } from "vitest";
 import { neonDriver } from "../src/driver";
+import { buildHttpDriver, type HttpQueryable } from "../src/http";
 import { anonymousRole, authenticatedRole } from "../src/roles";
+import { intervalPassthroughTypes } from "../src/type-overrides";
 
 /** What `driver.ts`'s own `makeSession` actually sends a queryable -- a bare `"BEGIN"`/`"COMMIT"`/`"ROLLBACK"` string, or the structured `{text, values, types}` config every compiled statement goes through. Typed narrowly to exactly the shapes the driver constructs. */
 type CapturedQueryConfig = {
@@ -259,5 +261,51 @@ describe("neonDriver(pool) execute + interval types override (task 3.6)", () => 
 		// identity (breaking delegation entirely) would still pass the
 		// three assertions above alone.
 		expect(config.types.getTypeParser(23, "text")("42")).toBe(42);
+	});
+});
+
+describe("both connection paths use the same type-overrides module (task 6.4)", () => {
+	it("both drivers send the same override object", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const wsDriver = neonDriver(pool);
+		await wsDriver.execute({ sql: "select 1", params: [], kind: "sql" });
+		const wsConfig = calls
+			.filter((call): call is CapturedQueryConfig => typeof call !== "string")
+			.find((call) => call.text === "select 1");
+		if (wsConfig === undefined) {
+			throw new Error("the WS path's caller statement was never sent");
+		}
+		// Reference identity (toBe, not toEqual): both drivers must hand
+		// the query the exact same module-level object, not two literals
+		// that merely look alike -- the only way "done means the oid set
+		// is still pinned afterwards" (tasks.md 6.4) survives a future
+		// refactor that only checks sameness, never content.
+		expect(wsConfig.types).toBe(intervalPassthroughTypes);
+
+		const queryTypesSeen: Array<unknown> = [];
+		const fakeSql = Object.assign(
+			() => {
+				throw new Error("tagged-template form not used by this driver");
+			},
+			{
+				query: vi.fn(
+					(_text: string, _params: unknown[], opts?: { types?: unknown }) => {
+						queryTypesSeen.push(opts?.types);
+						return { queryData: { query: _text, params: _params }, opts };
+					},
+				),
+				transaction: vi.fn(async (members: ReadonlyArray<unknown>) =>
+					members.map(() => []),
+				),
+			},
+		) as unknown as HttpQueryable;
+		const httpDriver = buildHttpDriver(fakeSql);
+		await httpDriver.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		const httpConfigTypes = queryTypesSeen.at(-1);
+		expect(httpConfigTypes).toBe(intervalPassthroughTypes);
+		// Both paths resolve to the exact same object as each other, not
+		// just each equal to the imported constant by coincidence.
+		expect(httpConfigTypes).toBe(wsConfig.types);
 	});
 });

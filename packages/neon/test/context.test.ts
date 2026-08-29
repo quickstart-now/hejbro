@@ -89,7 +89,11 @@ describe("asUser(claims) (task 5.2)", () => {
 describe("asJwtUser(token) (task 5.3)", () => {
 	it("passes the token through untouched under the jwt mode's setting", () => {
 		const { asJwtUser } = neonAuth("jwt");
-		const token = "header.payload.signature";
+		// Surrounding whitespace on purpose (task 6.1's own measured gap):
+		// a token with no leading/trailing space can't tell "untouched"
+		// apart from "trimmed" -- a `token.trim()` inserted into the
+		// builder would still pass a whitespace-free fixture.
+		const token = "  header.payload.signature  ";
 		const context = asJwtUser(token);
 
 		expect(context.role).toBe(authenticatedRole);

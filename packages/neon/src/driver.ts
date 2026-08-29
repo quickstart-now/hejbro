@@ -4,14 +4,10 @@ import type {
 	DriverCapabilities,
 	DriverSession,
 } from "@hejbro/query";
-import type {
-	CustomTypesConfig,
-	Pool,
-	PoolClient,
-} from "@neondatabase/serverless";
-import { types as neonTypes } from "@neondatabase/serverless";
+import type { Pool, PoolClient } from "@neondatabase/serverless";
 import { buildHttpDriver, type HttpQueryable } from "./http";
 import { anonymousRole, authenticatedRole } from "./roles";
+import { intervalPassthroughTypes } from "./type-overrides";
 
 /**
  * Fixed per task 3.4, measured against a local proxy (`design.md`), not
@@ -23,44 +19,6 @@ import { anonymousRole, authenticatedRole } from "./roles";
 const WS_CAPABILITIES: DriverCapabilities = {
 	"interactive-transactions": true,
 	"session-state": true,
-};
-
-/**
- * Same builtin oids `@hejbro/pg` pins (`packages/pg/src/driver.ts`) and
- * `http.ts` pins for its own path — duplicated a third time here, never
- * imported across either boundary: a preset may only use `@hejbro/query`'s
- * driver contract type, never a concrete driver implementation
- * (`.claude/rules/provider-preset.md`), and `http.ts`/`driver.ts` stay
- * independently reviewable per their own group's file list rather than
- * sharing a module across groups 2 and 3.
- */
-const INTERVAL_OID = 1186;
-const INTERVAL_ARRAY_OID = 1187;
-const NUMERIC_ARRAY_OID = 1231;
-
-/**
- * The `types` override every query sends over the WebSocket path (task
- * 3.6) — the same three oids `http.ts` forces to raw text, and the same
- * reason: Neon's `Pool` ships its own bundled parsers, not `pg-types`,
- * so without this a returned `interval` arrives as a parsed object and a
- * `numeric[]` as already-`parseFloat`'d numbers — the two outcomes the
- * contract's arrival-shape requirement forbids, one of them lossy
- * (`numeric`'s exact scale/precision). A different mechanism from
- * {@link setupSession}'s pins below: those decide what the *server*
- * renders; this decides whether the *client's* parser is bypassed.
- */
-const intervalPassthroughTypes: CustomTypesConfig = {
-	getTypeParser: (oid, format) => {
-		const oidValue = oid as number;
-		if (
-			oidValue === INTERVAL_OID ||
-			oidValue === INTERVAL_ARRAY_OID ||
-			oidValue === NUMERIC_ARRAY_OID
-		) {
-			return (value: string): string => value;
-		}
-		return neonTypes.getTypeParser(oid, format);
-	},
 };
 
 /**

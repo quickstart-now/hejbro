@@ -296,6 +296,12 @@ it was overlooked, and not because `@hejbro/supabase` lacks it.
   Neon Auth, has been enabled, so a constant naming it would resolve for
   some projects and be a lie about the schema for the rest. Reopen when
   someone needs the foreign-key anchor.
+- **A claims setting on the anonymous context.** The Supabase preset's
+  `asAnon()` writes `{"role":"anon"}` into the claims setting; Neon's
+  `asAnonymous()` writes no setting at all. Nothing on the Neon side
+  reads a claims object for an unauthenticated request — the role is the
+  whole context — so a setting there would be a value the database never
+  looks at, which is worse than absent: it reads like an identity.
 - **A custom `ObjectKind`.** Supabase has storage buckets — a resource
   outside the database that still belongs in a declaration. No Neon
   analogue was found. Inventing one to match the shape would add a kind

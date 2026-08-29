@@ -1,5 +1,10 @@
-// Filled by 6.1 once groups 2-5 land: the driver, the roles, the auth
-// expressions, and the context builders. Empty here on purpose (task
-// 1.4) so the package builds and tests from its first commit -- see
-// tasks.md's "the package never exists in an unbuildable state".
-export {};
+// The Neon preset's public surface (task 6.1): the driver, the roles,
+// the auth expression helpers, the auth-surface factory with its mode
+// type, and the claims type its claims-mode builder accepts. No `Preset`
+// bundle -- this package registers no object kinds and no validators
+// (proposal.md's "Out of scope"), so there is nothing for one to carry.
+export { authJwt, authUid } from "./auth";
+export type { Claims, NeonAuthMode } from "./context";
+export { neonAuth } from "./context";
+export { neonDriver } from "./driver";
+export { anonymousRole, authenticatedRole } from "./roles";

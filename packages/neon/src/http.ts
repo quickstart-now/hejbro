@@ -5,11 +5,8 @@ import type {
 	DriverCapabilityKey,
 	DriverRow,
 } from "@hejbro/query";
-import type {
-	CustomTypesConfig,
-	NeonQueryFunction,
-} from "@neondatabase/serverless";
-import { types as neonTypes } from "@neondatabase/serverless";
+import type { NeonQueryFunction } from "@neondatabase/serverless";
+import { intervalPassthroughTypes } from "./type-overrides";
 
 /**
  * The Neon HTTP one-shot client this driver wraps -- `neon(connectionString)`'s
@@ -31,38 +28,6 @@ export type HttpQueryable = NeonQueryFunction<false, false>;
 const CAPABILITIES: DriverCapabilities = {
 	"interactive-transactions": false,
 	"session-state": false,
-};
-
-/**
- * Same builtin oids `@hejbro/pg` pins (`packages/pg/src/driver.ts`) --
- * duplicated here, never imported: a preset may only use `@hejbro/query`'s
- * driver contract type, never a concrete driver implementation
- * (`.claude/rules/provider-preset.md`).
- */
-const INTERVAL_OID = 1186;
-const INTERVAL_ARRAY_OID = 1187;
-const NUMERIC_ARRAY_OID = 1231;
-
-/**
- * The per-statement `types` override the caller's own batch member sends
- * (mirrors `@hejbro/pg`'s `intervalPassthroughTypes`): oid 1186/1187/1231
- * pass through as raw text for `@hejbro/query`'s own conversion layer to
- * parse, every other oid keeps `@neondatabase/serverless`'s own default
- * parser (its bundled `pg-types` fallback, re-exported here as
- * `neonTypes`).
- */
-const intervalPassthroughTypes: CustomTypesConfig = {
-	getTypeParser: (oid, format) => {
-		const oidValue = oid as number;
-		if (
-			oidValue === INTERVAL_OID ||
-			oidValue === INTERVAL_ARRAY_OID ||
-			oidValue === NUMERIC_ARRAY_OID
-		) {
-			return (value: string): string => value;
-		}
-		return neonTypes.getTypeParser(oid, format);
-	},
 };
 
 /**

@@ -24,6 +24,7 @@ const compilerOptions: ts.CompilerOptions = {
 		"@hejbro/query": ["packages/query/src/index.ts"],
 		"@hejbro/pg": ["packages/pg/src/index.ts"],
 		"@hejbro/supabase": ["packages/supabase/src/index.ts"],
+		"@hejbro/neon": ["packages/neon/src/index.ts"],
 	},
 };
 
