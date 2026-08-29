@@ -215,7 +215,7 @@ Two rules apply to every task here and are not repeated per line:
       generated SQL.
       Files: `examples/postgres/src/app.schema.ts`,
       `examples/postgres/migrations/*`, `packages/core/test/golden/cases/*`.
-- [ ] 1.9 (~6m) `function-builder-pitfalls.md`: the `ctx` surface table
+- [x] 1.9 (~6m) `function-builder-pitfalls.md`: the `ctx` surface table
       gains `execute`, and the "a builder you build is a builder you use"
       rule replaces the silence the file currently documents around
       unreturned builders.
