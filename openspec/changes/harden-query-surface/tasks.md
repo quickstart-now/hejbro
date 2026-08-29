@@ -963,6 +963,23 @@ by reading the code, and it holds whatever the server says.
       claimed**. That turns "we chose discriminating cases" from a
       deduction into a measurement.
 
+      **That mutation needs two runs, not one** — found before the slot
+      opened. 5.4's two assertions live in a single `it()`, and vitest
+      stops a test at its first failing `expect`, so one mutated run
+      reports `1 failed` with the **window assertion never executed**.
+      That proves "at least one of them discriminates", which is not the
+      claim. And the renderer cannot be mutated selectively: `nullsSuffix`
+      is the single point both `orderByClause` (shared by select and
+      window) and `setOpOrderByClause` call. So: **run 1** with the
+      mutation, confirm the plain-select assertion goes red; **run 2**
+      with the mutation still in place and that first assertion
+      temporarily disabled, confirm the window assertion goes red; then
+      revert and run the final gate. A container spin-up is 30–60s, so
+      two runs cost little, and this stays *one slot, one verdict* — it
+      is two executions inside it, not two slots. Same defect as group
+      8's "one test appears to cover three sites"; here one assertion
+      masks another.
+
       **M6 is no longer part of this slot — it was measured early, and
       the reason it was is worth keeping.** 7.1's corrected set-op
       justification cited M6 in three places in the completed tense
@@ -1177,6 +1194,39 @@ I/O — it reads two projection objects).
       the code strings. Measured convention — 10 of 12 shipped
       capability specs mention no diagnostic code at all — so
       documenting one here would depart from it, not repair an omission.
+
+- [ ] 7.8 (~9m) **The PR.** Added late: group 7 ended at the closing
+      slot, but the branch still has to become a reviewable pull
+      request, and its body is a required artifact rather than a
+      formality. `upstream/feat-harden-query-surface` → `dev`, squash
+      merge. The body carries:
+      - **the commits to be squashed**, listed — the repo's standing PR
+        rule
+      - **the five issues this closes** (#464, #487, #469, #470, #489)
+        and, for #487, that it took **two halves** (key sets in group 3,
+        column order in group 8) so a reader does not think the second
+        was scope creep
+      - **the three follow-ups filed** (#501, #502, #503) with one line
+        each on why they were filed rather than built — a reviewer
+        should be able to see the scope boundary without reading
+        `tasks.md`
+      - **what was measured**, pointing at `measurements.md`, and the
+        two witnesses that ran only in the closing slot
+      - **the residue #489 leaves** and that it is tracked at #500
+      - **`blackbox/`'s Refs are pinned mid-branch** and need
+        re-verification against the final tree after any rebase (the
+        entry says so itself; the PR body repeats it because that is
+        where a merger looks)
+
+      **Not in the body**: lead rule numbers, and anything a reader
+      cannot resolve from the repository. Same rule the archived
+      artifacts follow.
+- [ ] 7.9 (~5m) After the closing slot passes, **tick 5.4 and 6.3** —
+      they are the only boxes deliberately left open, and forgetting
+      them would leave the slice's own progress record claiming two
+      tasks were never finished. Then confirm `tasks.md`, `design.md`,
+      `measurements.md` and every delta are committed, since this file
+      is the last thing edited and is therefore the likeliest to drift.
 
 ## Verification
 
