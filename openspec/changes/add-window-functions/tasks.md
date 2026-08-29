@@ -79,11 +79,17 @@ discipline").
       `exists()` hidden in `over()`'s `partitionBy` inside a `check`
       constraint is still refused by the existing `check-subquery` guard
       (`someExprNode`), and a **cached** `auth.uid()` — `(select
-      auth.uid())` — hidden the same way is still reported by
-      `rls-cached-auth-outside-rls` (`someDeepExprNode`, a different
-      validator from 1.6's). Red: those two guards' own test files;
-      `window: () => false` in either arm must turn them red. Files: those
-      tests only.
+      auth.uid())` — hidden inside a **column default** is still reported
+      by `rls-cached-auth-outside-rls` (`someDeepExprNode`, a different
+      validator from 1.6's). The column default is not a substitute site
+      but the only reachable one: that validator scopes RLS
+      `using`/`with check` out deliberately, and in a `check` or an index
+      predicate core's own subquery guards hard-error before it runs.
+      Red: those two guards' own test files; `window: () => false` in
+      either arm must turn them red. Files: those tests, plus
+      `walk.test.ts` — CRAP coverage is measured per package, so a core
+      function whose only consumers live in another package needs a
+      core-local test alongside the real-consumer one.
 - [x] 1.8 (~6m) View-level round-trip: a view whose body carries a window
       function is serialized **and decoded back**, not just the node in
       isolation. 1.3 proves the mechanism; this proves the path the
@@ -95,7 +101,7 @@ discipline").
 
 ## 2. The vocabulary and the over() wrapper — after group 1
 
-- [ ] 2.1 (~10m) [design] The `WindowFunctionCall` brand and the eleven
+- [x] 2.1 (~10m) [design] The `WindowFunctionCall` brand and the eleven
       window-only constructors in a new `expr/window.ts`, including their
       argument shapes (`lag`/`lead` take an offset and an optional
       default, `nthValue` an index, `ntile` a bucket count). Settled here:
@@ -108,13 +114,13 @@ discipline").
       not accepted where an Expr is required" and "lag, lead and nthValue
       pass the operand's type through whatever their extra arguments".
       Files: `packages/core/src/expr/window.ts`, that test.
-- [ ] 2.2 (~8m) [design] `over(expr, spec)` — the two overloads (an
+- [x] 2.2 (~8m) [design] `over(expr, spec)` — the two overloads (an
       aggregate `Expr` and a `WindowFunctionCall`), what `spec` accepts,
       and the `invalid-over-target` error for a non-function-call operand.
       Red: same file — "over() wraps an aggregate and a window-only call
       into the same node". Files: `packages/core/src/expr/window.ts`,
       that test.
-- [ ] 2.3 (~6m) Public surface: `index.ts` exports and the `hejbro`
+- [x] 2.3 (~6m) Public surface: `index.ts` exports and the `hejbro`
       re-export assertion. Red: `packages/cli/test/exports.test.ts` — the
       new names are missing from the asserted surface. Files:
       `packages/core/src/index.ts`, that test.
