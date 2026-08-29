@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+	asc,
 	assertNoNulls,
 	bigint,
 	bytea,
@@ -2381,6 +2382,18 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 	 * `asc()`/`desc()` render the clause. `v` is nullable and one seeded
 	 * row leaves it null on purpose -- the only way to observe where
 	 * nulls actually land, as opposed to merely that the clause parses.
+	 *
+	 * Review-measured on postgres:17: `asc` already defaults to
+	 * `nulls last` and `desc` already defaults to `nulls first`, so a
+	 * witness whose expected placement matches the DEFAULT would pass
+	 * even against a build that silently drops the `nulls` clause
+	 * entirely -- it proves nothing. Only the two placements that
+	 * DIFFER from the default discriminate: `asc … nulls first` and
+	 * `desc … nulls last`, one used for each of the two assertions below
+	 * so both discriminating cases are covered rather than one of them
+	 * twice. 7.7's own execution slot additionally strips the rendered
+	 * `nulls` clause and confirms both assertions go red individually,
+	 * closing the exact gap this defaulting fact opened the first time.
 	 */
 	it("nulls first/last render and the server orders rows that way, in a plain select and in a window over(...), live against a real postgres:17 (group 5.4, #470)", async () => {
 		const activePool = pool.current;
@@ -2407,11 +2420,13 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			{ id: "eeeeeeee-0000-4000-8000-000000000003", v: 2 },
 		]);
 
-		// plain select: desc nulls first -- the null-valued row leads.
+		// plain select: asc nulls first -- DIFFERS from asc's own default
+		// (nulls last), so this is discriminating: the null-valued row
+		// leads, then ascending.
 		const selectOrdered = await handle
 			.select(ordNulls)
-			.orderBy(desc(ordNulls.v, { nulls: "first" }));
-		expect(selectOrdered.map((row) => row.v)).toEqual([null, 2, 1]);
+			.orderBy(asc(ordNulls.v, { nulls: "first" }));
+		expect(selectOrdered.map((row) => row.v)).toEqual([null, 1, 2]);
 
 		// window over(...): desc nulls last -- row_number() confirms the
 		// null-valued row is ranked AFTER both non-null rows, not just that
