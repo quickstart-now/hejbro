@@ -82,8 +82,8 @@ three of them.
 - **Context builders, one per authentication mode.** `pg_session_jwt`
   resolves identity from `request.jwt.claims` when no JWK is configured
   and from `pg_session_jwt.jwt` — a raw token it verifies itself — when
-  one is. The two are mutually exclusive: in the verifying mode the
-  claims setting is ignored outright. Both settings are ordinary
+  one is. The two are mutually exclusive: where the database verifies a
+  token itself, the claims setting is ignored outright. Both settings are ordinary
   `Userset` GUCs, so both modes are expressible through the existing
   `{role, settings}` context with no new mechanism; what differs is the
   key. The mode is stated **once**, when the preset's auth surface is

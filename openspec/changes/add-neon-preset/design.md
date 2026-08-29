@@ -96,7 +96,7 @@ session-scoped `SET`, which is strictly weaker than the transaction-local
 
 Both modes therefore ship. Shipping only one would have been a bet on
 which mode a user's database runs, and losing that bet is silent: in the
-verifying mode the claims setting is ignored outright, so a claims-only
+JWT mode the claims setting is ignored outright, so a claims-only
 surface would set a GUC nothing reads.
 
 The mode is taken **once**, when the auth surface is constructed, and the

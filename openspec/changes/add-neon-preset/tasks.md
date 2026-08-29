@@ -217,11 +217,11 @@ starts from its own failing test.
 
 ## 5. Context builders
 
-- [ ] 5.1 (~10m) [design] The auth surface factory: it takes the
+- [x] 5.1 (~10m) [design] The auth surface factory: it takes the
       database's authentication mode once and returns only that mode's
       builders. The [design] part is the type shape — the return type
       must split on the mode argument such that asking a claims-mode
-      surface for the verifying-mode builder does not compile, and a mode
+      surface for the JWT-mode builder does not compile, and a mode
       argument the type layer has not narrowed (an `as`-cast environment
       variable, say) exposes **neither** builder rather than both. The
       second half is the easy one to get backwards. The [design] part
@@ -232,24 +232,24 @@ starts from its own failing test.
       own mode's builders", plus a type-level case asserting the
       cross-mode access is an error. Files:
       `packages/neon/src/context.ts`, that test.
-- [ ] 5.2 (~9m) `asUser(claims)` on the claims-mode surface: role
+- [x] 5.2 (~9m) `asUser(claims)` on the claims-mode surface: role
       `authenticated`, claims carried as the `request.jwt.claims`
       setting, `sub` required both by the parameter type and by a runtime
       guard, any caller-supplied `role` claim discarded — a caller's role
       is never trusted, as in the Supabase preset. Red: same file —
       "requires a subject, fixes the role, and ignores a supplied role
       claim". Files: `packages/neon/src/context.ts`, that test.
-- [ ] 5.3 (~8m) [design] The verifying-mode builder: role
+- [x] 5.3 (~8m) [design] The JWT-mode builder: role
       `authenticated`, the token carried opaquely as the
       `pg_session_jwt.jwt` setting, never decoded or validated by the
       preset. The [design] part is the name, which must say the mode it
       belongs to. Red: same file — "passes the token through untouched
-      under the verifying mode's setting". Files:
+      under the JWT mode's setting". Files:
       `packages/neon/src/context.ts`, that test.
-- [ ] 5.4 (~6m) `asAnonymous()` on both surfaces: role `anonymous`, no
+- [x] 5.4 (~6m) `asAnonymous()` on both surfaces: role `anonymous`, no
       identity setting. Red: same file — "applies the anonymous role with
       no identity". Files: `packages/neon/src/context.ts`, that test.
-- [ ] 5.5 (~8m) Every context this preset produces is applied with
+- [x] 5.5 (~8m) Every context this preset produces is applied with
       transaction-local scope: the emitted `set_config` carries `true` as
       its third argument, pinned by an assertion on the statement itself
       rather than only on the value read back inside the transaction —
@@ -266,9 +266,13 @@ starts from its own failing test.
 
 - [ ] 6.1 (~6m) `packages/neon/src/index.ts` — created empty by 1.4, now
       re-exports the driver, the
-      roles, the auth expressions, and the context builders — and no
+      roles, the auth expressions, the auth-surface factory with its mode
+      type, and the claims type its user builder accepts — and no
       `Preset` bundle, because there are no kinds and no validators to
-      register. `README.md` is brought in line with what is actually
+      register. The claims type is this package's own, structurally like
+      the Supabase preset's but not imported from it: presets do not
+      reference each other, which is the same boundary that makes the oid
+      constants a deliberate copy rather than an import. `README.md` is brought in line with what is actually
       exported in the same task: it was written in 1.5 describing the
       finished package, and no gate compares it to the entry — the pack
       smoke checks that the file exists, not what it says. Red:
@@ -303,6 +307,24 @@ starts from its own failing test.
       shared `SKILL.md` tables. Red (no test covers the skill; the check
       is the red): no file under `skills/hejbro/references/` mentions
       `neonDriver`. Files: `skills/hejbro/references/neon-preset.md`.
+- [ ] 6.4 (~6m) Move the raw-text type override into one module both
+      drivers import, and delete the two copies. The duplication was
+      correct while it existed — exporting it from `http.ts` would have
+      meant a group-3 task editing a group-2 file — but that constraint
+      is this change's own task partition, and **it does not survive the
+      merge**. Its comment currently offers that reason alongside the
+      package-boundary one; only the second is durable, and it justifies
+      not importing from `@hejbro/pg`, never two copies inside one
+      package. Red: `packages/neon/test/driver.test.ts` — "both drivers
+      send the same override object" (fails while two literals exist).
+      **Done means the oid set is still pinned afterwards**: dropping
+      1231 from the shared module must still turn a test red. A refactor
+      that leaves only "both drivers use the same object" asserted has
+      traded a check of *what* the override contains for a check that
+      it is *shared* — the same object, silently wrong, in two places
+      instead of one. Files: `packages/neon/src/type-overrides.ts` (new),
+      `packages/neon/src/driver.ts`, `packages/neon/src/http.ts`, that
+      test.
 
 ## 7. Local witness
 
@@ -330,13 +352,13 @@ starts from its own failing test.
 - [ ] 7.4 (~8m) The witness runs a select under `asUser(claims)` against
       a table with a policy reading `auth.uid()`, and rows filter to the
       subject. This exercises the claims mode, which is what a local
-      `pg_session_jwt` without a configured JWK uses; the verifying mode
+      `pg_session_jwt` without a configured JWK uses; the JWT mode
       is stated in the spec as unverified locally rather than implied to
       be covered. Red: same file — "filters rows to the context's
       subject". Files: that test.
 - [ ] 7.5 (~8m) The dangerous half of a mode mismatch, witnessed. The
       local stack has no verification key configured, so it is in claims
-      mode — which makes a context from the **verifying-mode** builder a
+      mode — which makes a context from the **JWT-mode** builder a
       genuine mismatch, with no extra infrastructure. Under it, a policy
       keyed on the identity function denies, and a policy keyed only on
       the role **admits with no identity resolved**. This is the only

@@ -4,7 +4,7 @@
 Neon's session extension resolves identity from one of two settings
 depending on how the database is configured: a claims object, or a raw
 JWT it verifies itself. The two are mutually exclusive — when the
-verifying mode is configured, the claims setting is ignored entirely.
+database verifies a token itself, the claims setting is ignored entirely.
 The preset SHALL take the mode once, when its auth surface is
 constructed, and SHALL expose only the builders that mode can use, so
 that a single codebase cannot mix them. The mode SHALL NOT be discovered
@@ -156,7 +156,7 @@ nothing.
   JWT string
 
 #### Scenario: A raw token reaches a database that verifies it
-- **WHEN** a raw token is carried by the Neon preset's verifying-mode
+- **WHEN** a raw token is carried by the Neon preset's JWT-mode
   builder to a database with a verification key configured
 - **THEN** the database checks the signature before resolving identity,
   and the preset itself has decoded nothing
