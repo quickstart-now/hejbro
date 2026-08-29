@@ -32,6 +32,19 @@ for a column its type, its `notNull`, and its default. It SHALL exit
 non-zero when any declared object is missing or differs, and zero when
 none do.
 
+Where a column differs on more than one of those axes, `check` SHALL
+report all of them from one run. Reporting only the first would make the
+user fix it, run again, and meet a second difference in the same column
+— the tool drip-feeding what it already knew.
+
+A declaration that grants over *all tables in a schema* SHALL be compared
+against the tables the declarations cover, not against every table the
+schema happens to contain. A table hejbro does not declare is inventory,
+never a finding: hejbro cannot emit a migration for it, so reporting it
+as a difference would hand the user a failure with no fix — and the
+grant hejbro does emit is a one-shot statement that never covered that
+table either.
+
 `check` SHALL refuse to report a clean result for an empty declaration
 set: zero declared objects means every comparison is vacuous, which is
 never a real pass and is almost always the wrong path or entry point. It

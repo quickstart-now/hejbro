@@ -155,7 +155,7 @@ our rendered text to the catalog's text directly was measured at 14 false
 positives in 23 expression fields — 8 of 8 check constraints — because
 Postgres rewrites expressions on write.
 
-- [ ] 3.1 (~10m) [design] The probe form — **settled: the expression
+- [x] 3.1 (~10m) [design] The probe form — **settled: the expression
       goes in the select list**, `SELECT (<expr>) FROM <table>`, and the
       comparison reads the plan's `Output`. Never a `WHERE` predicate: a
       qual is subject to the planner and to row-security rewriting, an
@@ -173,7 +173,7 @@ Postgres rewrites expressions on write.
       for a rewritten `in (...)`", "reports a constraint whose bound
       differs", "obtains both renderings from a single session". Files:
       `packages/cli/src/check/expression.ts`, that test.
-- [ ] 3.2 (~8m) The rendering is read from the plan without depending on
+- [x] 3.2 (~8m) The rendering is read from the plan without depending on
       the plan's shape. Guard the hazard directly: the same comparison
       must hold with an **index** on the probed column. Measured — a
       `WHERE` probe flips from `SeqScan`/`Filter` to
@@ -182,7 +182,7 @@ Postgres rewrites expressions on write.
       byte-identical before and after. Red: same file — "compares
       identically with and without an index on the probed column". Files:
       `packages/cli/src/check/expression.ts`, that test.
-- [ ] 3.3 (~7m) The uncomparable classification: when a rendering cannot
+- [x] 3.3 (~7m) The uncomparable classification: when a rendering cannot
       be obtained — a privilege is missing, the server refuses the
       expression — the object is reported as not compared **with the
       reason** and is never counted as agreeing. This is what keeps the
@@ -199,7 +199,7 @@ Postgres rewrites expressions on write.
       policy on the table", "reports a declared table's absence once, not
       again as not-compared". Files:
       `packages/cli/src/check/expression.ts`, that test.
-- [ ] 3.4 (~6m) The catalog side of a check constraint comes from
+- [x] 3.4 (~6m) The catalog side of a check constraint comes from
       `pg_constraint.conbin` through `pg_get_expr` — it yields the bare
       expression, so there is no `CHECK (...)` wrapper to strip and no
       regex to be defeated by a `NOT VALID` or `NO INHERIT` suffix.
@@ -263,7 +263,12 @@ real server. It runs locally, gated on Docker, in the same
 split-config shape `packages/pg` already uses.
 
 - [ ] 6.1 (~9m) The Docker-gated suite and its config split, so the
-      default `pnpm test` run stays free of skipped tests. Red:
+      default `pnpm test` run stays free of skipped tests. This group is
+      what makes a driver resolvable in this package for the first time,
+      which is exactly what could silently disarm the "driver is missing"
+      test in 1.2 — that test must still be able to fail **with**
+      `@hejbro/pg` installed, or it has stopped testing anything. Confirm
+      it, do not assume it. Red:
       `packages/cli/test/check-live.integration.test.ts` — "connects to a
       real postgres and reads its catalog". Files: that test,
       `packages/cli/vitest.config.ts`,
@@ -291,10 +296,14 @@ split-config shape `packages/pg` already uses.
       **The fixture has to contain that shape** — a table whose `relacl`
       is null and a declaration granting to the owning role — or both
       roles agree on "no grants", the test is green, and the trap it
-      exists for walks straight through it. Red:
+      exists for walks straight through it. This witness is also what
+      backs 1.4's pinned query text, so it checks that the pin and the
+      statement actually sent to the server are the same string: a pin
+      that has drifted from what runs is worse than no pin, because it
+      reads as coverage. Red:
       `packages/cli/test/check-live.integration.test.ts` — "reports the
-      same findings as a limited role as it does as the owner". Files:
-      that test.
+      same findings as a limited role as it does as the owner", "runs the
+      catalog queries 1.4 pinned, verbatim". Files: that test.
 
 ## 7. Documentation and release chores
 
@@ -325,7 +334,16 @@ split-config shape `packages/pg` already uses.
       owner-level decision — the issue asks for `check --schema <dump>`
       and the change deliberately does not build it. What was asked, what
       was measured, what was decided instead, and the reopening
-      condition. Files: `blackbox/2026-08-29-add-check-schema.md`.
+      condition. Two process observations belong in it because they are
+      the reason the design is what it is, and neither survives in the
+      code: the grant read's *same mistake, opposite direction* (dropping
+      a role-filtered view was right, and the replacement silently
+      reintroduced the same wrong "missing" through `aclexplode(NULL)`
+      until `acldefault` was added), and the order that found it — the
+      implementer asking "where would this signal even come from?"
+      *before* building the plumbing, which is what exposed the wrong
+      data source underneath. Files:
+      `blackbox/2026-08-29-add-check-schema.md`.
 
 ## Verification
 

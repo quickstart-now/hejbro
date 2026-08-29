@@ -43,10 +43,15 @@ the life of the project; a generator is run once.
   schemas that no declaration covers, and the extensions the database
   has. Existence only, no exit-code effect. This is the honest answer to
   "check passed, so my declarations cover this database" — they may not.
-- **Driver**: `@hejbro/pg` as an optional peer, imported dynamically,
-  with a hejbro-coded diagnostic naming the install command when it is
-  absent. The connection string is never read from `hejbro.config.ts`:
-  that file is committed, and a database URL carries a secret.
+- **Driver**: `@hejbro/pg`, imported dynamically at run time and declared
+  as a dependency of **no** kind — not a dependency, not a peer, optional
+  or otherwise. Installing `hejbro` therefore never pulls in a driver for
+  the commands that never connect, and the package manager is never asked
+  to reason about a package only one command uses. When it is absent, a
+  hejbro-coded diagnostic names the install command, which is the signal
+  a peer-dependency warning would have carried anyway. The connection
+  string is never read from `hejbro.config.ts`: that file is committed,
+  and a database URL carries a secret.
 
 ## Capabilities
 
