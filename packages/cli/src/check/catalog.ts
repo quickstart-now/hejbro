@@ -182,7 +182,7 @@ export const CHECK_CATALOG_QUERIES = {
 	// expansion internally).
 	tableGrants: `
 		select n.nspname as schema, c.relname as "table",
-			case when g.grantee = 0 then 'public' else g.grantee::regrole::text end as role,
+			case when g.grantee = 0 then 'public' else pg_get_userbyid(g.grantee) end as role,
 			g.privilege_type as privilege
 		from pg_class c
 		join pg_namespace n on n.oid = c.relnamespace
@@ -191,14 +191,14 @@ export const CHECK_CATALOG_QUERIES = {
 	`,
 	schemaUsageGrants: `
 		select n.nspname as schema,
-			case when g.grantee = 0 then 'public' else g.grantee::regrole::text end as role,
+			case when g.grantee = 0 then 'public' else pg_get_userbyid(g.grantee) end as role,
 			g.privilege_type as privilege
 		from pg_namespace n
 		cross join lateral aclexplode(n.nspacl) as g
 	`,
 	defaultTableGrants: `
 		select n.nspname as schema,
-			case when g.grantee = 0 then 'public' else g.grantee::regrole::text end as role,
+			case when g.grantee = 0 then 'public' else pg_get_userbyid(g.grantee) end as role,
 			g.privilege_type as privilege
 		from pg_default_acl d
 		join pg_namespace n on n.oid = d.defaclnamespace
@@ -328,7 +328,7 @@ export const readCatalog = async (session: DriverSession): Promise<Catalog> => {
 	} catch (error) {
 		return throwHejbroError(
 			"check-catalog-unreadable",
-			`hejbro check could not read the database catalog: ${messageOf(error)}. Next: confirm the connected role can read pg_catalog and information_schema (the standard grant for any login role), and that --url/DATABASE_URL points at a reachable database.`,
+			`hejbro check could not read the database catalog: ${messageOf(error)}. Next: confirm the connected role can read pg_catalog (the standard grant for any login role), and that --url/DATABASE_URL points at a reachable database.`,
 		);
 	}
 };

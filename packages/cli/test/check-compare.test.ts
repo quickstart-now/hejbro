@@ -266,6 +266,60 @@ describe("compareCatalog / 2.3 notNull and default comparison", () => {
 		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
 		expect(findings[0]?.error.message).toContain("member");
 	});
+
+	it("reports a column's type and not-null differences together", () => {
+		// A reader who fixes the reported difference and reruns must not meet
+		// a *second*, previously-known difference on the same column -- both
+		// axes this column actually differs on are reported from one run.
+		// Plain uuid() columns throughout (no .primaryKey()) so this fixture
+		// carries no primary-key constraint to also satisfy -- the point
+		// here is column-axis reporting, not table sub-object existence.
+		const posts = table(app, "posts", {
+			id: uuid(),
+			title: text().notNull(),
+		});
+		const snapshot = buildTestSnapshot([posts]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "posts", rls: false }],
+			columns: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "id",
+					notNull: false,
+					catalogType: "uuid",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: null,
+				},
+				{
+					schema: "app",
+					table: "posts",
+					name: "title",
+					notNull: false,
+					catalogType: "character varying(120)",
+					baseTypeKind: null,
+					baseTypeSchema: null,
+					baseTypeName: null,
+					catalogDefault: null,
+				},
+			],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(2);
+		expect(
+			findings.every((finding) => finding.identity === "app.posts.title"),
+		).toBe(true);
+		const codes = findings.map((finding) => finding.error.code).sort();
+		expect(codes).toEqual(["check-object-differs", "check-object-differs"]);
+		const messages = findings.map((finding) => finding.error.message).join(" ");
+		expect(messages).toContain("not null");
+		expect(messages).toContain("character varying(120)");
+	});
 });
 
 describe("compareCatalog / 2.4 existence for every declared kind", () => {
@@ -344,6 +398,24 @@ describe("compareCatalog / 2.4 existence for every declared kind", () => {
 		expect(() => compareCatalog(emptySnapshot, emptyCatalog())).toThrow(
 			expect.objectContaining({ code: "check-declarations-empty" }),
 		);
+	});
+
+	it("does not report an undeclared table's missing grant as a difference", () => {
+		// hejbro cannot emit a migration for a table it never declared, and
+		// `grant ... on all tables in schema` only ever covered the tables
+		// that existed when it ran (#121) -- a table some other tool created
+		// later is unmanaged inventory (5.1), never a "missing grant" finding
+		// with no fix a user could apply.
+		const usage = grant(app).tables("select").to("authenticated");
+		const snapshot = buildTestSnapshot([usage]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "legacy_table", rls: false }],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toEqual([]);
 	});
 });
 

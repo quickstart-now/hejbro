@@ -567,4 +567,47 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 
 		expect(findings).toEqual([]);
 	});
+
+	it("does not report a missing constraint a second time when 2.5 already found it absent", async () => {
+		// Existence is compare.ts's 2.5, not this function's: a check
+		// constraint that does not exist gets exactly one "missing" finding,
+		// from 2.5's own catalog.constraints walk. This function's own
+		// metadata lookup found nothing either (same underlying pg_constraint,
+		// read independently) -- it must defer silently, not pile a second
+		// finding onto the same absence.
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text() },
+			(t) => ({
+				checks: [
+					check("posts_status_valid", inArray(t.status, ["a", "b", "c"])),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_status_valid",
+		);
+		const { session, calls } = makeFakeSession({});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_status_valid",
+			declaredExpression,
+		);
+
+		expect(findings).toEqual([]);
+		// No EXPLAIN probe was even attempted -- the metadata lookup alone
+		// (which found nothing) is enough to defer.
+		const explainCalls = calls.filter((call) =>
+			call.sql.trim().toLowerCase().startsWith("explain"),
+		);
+		expect(explainCalls).toHaveLength(0);
+	});
 });

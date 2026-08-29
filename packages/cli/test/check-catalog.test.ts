@@ -123,10 +123,63 @@ describe("CHECK_CATALOG_QUERIES.tableGrants / 1.4", () => {
 	// relacl bare would silently drop every un-explicitly-granted
 	// owner's-default privilege, bringing the same wrong "missing" back
 	// through a different door for any project that grants to the
-	// owning role.
-	it("does not report an owner's default privileges as missing on a table with no explicit grants", () => {
+	// owning role. This is a query-text pin, not a semantic proof: a unit
+	// test cannot run acldefault() against a real catalog. 6.4 is the
+	// live witness that proves the semantics this text only pins.
+	it("pins tableGrants to a role-independent catalog source (semantics proved by 6.4)", () => {
 		expect(CHECK_CATALOG_QUERIES.tableGrants).toContain("acldefault");
 		expect(CHECK_CATALOG_QUERIES.tableGrants).toContain("coalesce(c.relacl");
+	});
+
+	// grantee::regrole::text quotes an identifier only when Postgres itself
+	// decides it needs quoting -- a role with uppercase letters, a hyphen,
+	// or a reserved word then reads back quoted ("Reader") while nothing
+	// in a declaration is ever spelled that way, so a real grant compares
+	// as absent. pg_get_userbyid() returns the bare role name, unquoted,
+	// every time.
+	it("spells a grantee with pg_get_userbyid, never regrole::text", () => {
+		expect(CHECK_CATALOG_QUERIES.tableGrants).toContain("pg_get_userbyid");
+		expect(CHECK_CATALOG_QUERIES.tableGrants).not.toContain("regrole");
+		expect(CHECK_CATALOG_QUERIES.schemaUsageGrants).toContain(
+			"pg_get_userbyid",
+		);
+		expect(CHECK_CATALOG_QUERIES.schemaUsageGrants).not.toContain("regrole");
+		expect(CHECK_CATALOG_QUERIES.defaultTableGrants).toContain(
+			"pg_get_userbyid",
+		);
+		expect(CHECK_CATALOG_QUERIES.defaultTableGrants).not.toContain("regrole");
+	});
+});
+
+describe("readCatalog / grantee spelling round-trips a mixed-case role", () => {
+	it("returns a mixed-case role name verbatim, never case-folded", async () => {
+		const rows: ReadonlyArray<DriverRow> = [
+			{ schema: "app", table: "posts", role: "Reader", privilege: "SELECT" },
+		];
+		const session: DriverSession = {
+			execute: async (compiled) => {
+				if (compiled.sql === CHECK_CATALOG_QUERIES.tableGrants) {
+					return rows;
+				}
+				const entry = (
+					Object.entries(CHECK_CATALOG_QUERIES) as ReadonlyArray<
+						[CatalogQueryKey, string]
+					>
+				).find(([key, sql]) => key !== "tableGrants" && sql === compiled.sql);
+				if (entry === undefined) {
+					throw new Error(
+						`unexpected query sent to readCatalog: ${compiled.sql}`,
+					);
+				}
+				return FIXTURE_ROWS[entry[0]];
+			},
+		};
+
+		const catalog = await readCatalog(session);
+
+		expect(catalog.tableGrants).toEqual([
+			{ schema: "app", table: "posts", role: "Reader", privilege: "SELECT" },
+		]);
 	});
 });
 

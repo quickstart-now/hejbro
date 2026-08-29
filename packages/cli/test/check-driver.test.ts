@@ -32,17 +32,37 @@ describe("resolveConnectionString", () => {
 });
 
 describe("loadCheckDriver", () => {
-	// @hejbro/pg is deliberately absent from this package's own
-	// dependencies (proposal.md: an optional peer, resolved from the
-	// user's project at runtime) -- so in this repo's own test
-	// environment the dynamic import is guaranteed to miss, exercising
-	// the real "not installed" path without any mocking.
+	// The importer is injected (never relying on @hejbro/pg's real absence
+	// from this package's own dependencies) so this test keeps failing the
+	// driver-missing path even after group 6 adds @hejbro/pg as a
+	// devDependency for its own live-server suite -- a test that only
+	// passes because a package happens not to be installed stops testing
+	// anything the moment that stops being true.
 	it("names the package to install when the driver is missing", async () => {
-		await expect(loadCheckDriver()).rejects.toEqual(
+		const rejectingImporter = async () => {
+			throw Object.assign(
+				new Error(`Cannot find package '${CHECK_DRIVER_PACKAGE}'`),
+				{ code: "ERR_MODULE_NOT_FOUND" },
+			);
+		};
+
+		await expect(loadCheckDriver(rejectingImporter)).rejects.toEqual(
 			expect.objectContaining({
 				code: "check-driver-missing",
 				message: expect.stringContaining(CHECK_DRIVER_PACKAGE),
 			}),
+		);
+	});
+
+	it("rethrows an error unrelated to module resolution as itself", async () => {
+		// A real bug inside an *installed* @hejbro/pg (e.g. a syntax error)
+		// must surface as itself, not get misreported as "not installed".
+		const brokenImporter = async () => {
+			throw new SyntaxError("Unexpected token in @hejbro/pg's own module");
+		};
+
+		await expect(loadCheckDriver(brokenImporter)).rejects.toThrow(
+			"Unexpected token",
 		);
 	});
 });

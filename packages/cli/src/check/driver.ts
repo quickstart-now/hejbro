@@ -33,6 +33,12 @@ type PgDriverFactory = (connectionString: string) => Driver;
 
 type PgDriverModule = { readonly pgDriver: PgDriverFactory };
 
+/** {@link loadCheckDriver}'s own dynamic-import call, injectable so a test can simulate the package's absence (or an unrelated failure inside it) without depending on whether `@hejbro/pg` actually happens to be installed in this environment. */
+export type CheckDriverImporter = () => Promise<PgDriverModule>;
+
+const importCheckDriver: CheckDriverImporter = () =>
+	import(CHECK_DRIVER_PACKAGE) as Promise<PgDriverModule>;
+
 /** Node's own code for "the package named in a dynamic `import()` could not be resolved" -- narrowed on so a real bug inside an *installed* `@hejbro/pg` (e.g. a syntax error) surfaces as itself, not misreported as "not installed". */
 const isModuleNotFoundError = (error: unknown): boolean =>
 	error instanceof Error &&
@@ -41,11 +47,17 @@ const isModuleNotFoundError = (error: unknown): boolean =>
 /**
  * Imports `@hejbro/pg` dynamically, so its absence never surfaces as a raw
  * module-resolution stack trace -- only as this hejbro-coded diagnostic
- * naming the package to install.
+ * naming the package to install. `importer` defaults to the real dynamic
+ * `import()`; passing one in is how a test exercises the missing-package
+ * path without relying on the package's real absence from this
+ * environment (which group 6's own devDependency would otherwise
+ * silently invalidate).
  */
-export const loadCheckDriver = async (): Promise<PgDriverFactory> => {
+export const loadCheckDriver = async (
+	importer: CheckDriverImporter = importCheckDriver,
+): Promise<PgDriverFactory> => {
 	try {
-		const pgModule = (await import(CHECK_DRIVER_PACKAGE)) as PgDriverModule;
+		const pgModule = await importer();
 		return pgModule.pgDriver;
 	} catch (error) {
 		if (!isModuleNotFoundError(error)) {

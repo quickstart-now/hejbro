@@ -284,11 +284,12 @@ const compareColumn = (
 	if (row === undefined) {
 		return [missingFinding(identity, "column")];
 	}
-	const notNullFindings = compareColumnNotNull(identity, column, row);
-	if (notNullFindings.length > 0) {
-		return notNullFindings;
-	}
+	// Every axis this column differs on is reported from this one run
+	// (spec Req1) -- never an early return after the first mismatch, which
+	// would make a reader fix one difference, rerun, and meet a second one
+	// the tool already knew about.
 	return [
+		...compareColumnNotNull(identity, column, row),
 		...compareColumnType(identity, column, row),
 		...compareColumnDefault(identity, column, row),
 	];
@@ -580,14 +581,39 @@ const compareSchemaUsageGrant = (
 	return [missingFinding(identity, "grant")];
 };
 
+/**
+ * Every table name a `table:` snapshot entry declares in `schema` --
+ * `compareAllTablesPrivilegesGrant`'s own universe (spec: "compared
+ * against the tables the declarations cover, not against every table the
+ * schema happens to contain"). A table hejbro never declared is
+ * inventory (5.1), not a finding: hejbro cannot emit a migration for it,
+ * and `grant ... on all tables in schema` never covered it either --
+ * that clause is a run-time snapshot (#121), not a standing rule.
+ */
+const declaredTableNames = (
+	snapshot: Snapshot,
+	schema: string,
+): ReadonlySet<string> =>
+	new Set(
+		Object.entries(snapshot.objects)
+			.filter(([key]) => kindOfKey(key) === "table")
+			.map(([, node]) => node as LocalTableSnapshot)
+			.filter((table) => table.schema === schema)
+			.map((table) => table.name),
+	);
+
 const compareAllTablesPrivilegesGrant = (
 	identity: string,
 	schema: string,
 	role: string,
 	privileges: ReadonlyArray<string>,
 	catalog: Catalog,
+	snapshot: Snapshot,
 ): ReadonlyArray<Finding> => {
-	const tablesInSchema = catalog.tables.filter((row) => row.schema === schema);
+	const declaredNames = declaredTableNames(snapshot, schema);
+	const tablesInSchema = catalog.tables.filter(
+		(row) => row.schema === schema && declaredNames.has(row.table),
+	);
 	const gaps = tablesInSchema.flatMap((row) =>
 		privileges
 			.filter(
@@ -628,6 +654,7 @@ const compareGrant = (
 	identity: string,
 	node: JsonValue,
 	catalog: Catalog,
+	snapshot: Snapshot,
 ): ReadonlyArray<Finding> => {
 	const grant = node as LocalGrantSnapshot;
 	const privileges = grant.privileges.map((privilege) =>
@@ -643,6 +670,7 @@ const compareGrant = (
 			grant.role,
 			privileges,
 			catalog,
+			snapshot,
 		);
 	}
 	return compareDefaultTablePrivilegesGrant(
@@ -661,9 +689,18 @@ type Comparator = (
 	identity: string,
 	node: JsonValue,
 	catalog: Catalog,
+	snapshot: Snapshot,
 ) => ReadonlyArray<Finding>;
 
-/** Every declared kind this command compares by existence (and, for `table`, by column). Nested table structures the proposal's own "What it compares" list omits -- indexes, foreign keys, primary/unique constraints -- are out of scope here; check constraints are group 3's (`expression.ts`), which owns their existence and expression together via `pg_constraint`. */
+/**
+ * Every declared kind this command compares. `table` also compares its
+ * columns and, since 2.5, every declared table sub-object (primary key,
+ * unique constraints, foreign keys, check constraints, indexes) by
+ * existence -- see `compareTable`. A check constraint's own *expression*
+ * and enforcement are group 3's (`expression.ts`), which only ever runs
+ * against a constraint this comparator already found to exist (never a
+ * second existence check of its own).
+ */
 const KIND_COMPARATORS: Readonly<Record<string, Comparator>> = {
 	schema: compareSchema,
 	table: compareTable,
@@ -691,6 +728,7 @@ const compareEntry = (
 	key: string,
 	node: JsonValue,
 	catalog: Catalog,
+	snapshot: Snapshot,
 ): ReadonlyArray<Finding> => {
 	const kind = kindOfKey(key);
 	const identity = identityOfKey(key);
@@ -704,7 +742,7 @@ const compareEntry = (
 			),
 		];
 	}
-	return comparator(identity, node, catalog);
+	return comparator(identity, node, catalog, snapshot);
 };
 
 /**
@@ -725,5 +763,7 @@ export const compareCatalog = (
 			"hejbro check received a declaration set with 0 declared objects -- every comparison would be vacuous, which is never a real pass. Next: confirm the entry pattern in hejbro.config.ts matches real declaration files that export table()/schema()/... declarations.",
 		);
 	}
-	return entries.flatMap(([key, node]) => compareEntry(key, node, catalog));
+	return entries.flatMap(([key, node]) =>
+		compareEntry(key, node, catalog, snapshot),
+	);
 };
