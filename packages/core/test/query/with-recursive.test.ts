@@ -405,3 +405,44 @@ describe("the accept list (add-ctes task 6.5)", () => {
 		expect(rendered).toContain('"not_materialized_r" as not materialized (');
 	});
 });
+
+// harden-query-surface group 6.1 (#489): the null fork. SetOpResult is a
+// plain mapped type and nullability rides inside the value type, not a
+// separate flag -- so a rule tightened to "same type" would count
+// `number | null` against `number` and reject programs Postgres accepts.
+// The comparison therefore elides null, which opens a gap on the other
+// side: anchor `number`, recursive term `number | null` still compiles,
+// the CTE's declared row type stays the anchor's (`number`, not
+// `number | null`), and the recursive term's null really does reach the
+// result rows -- measured, not hypothetical (group 1, M4 addendum:
+// `v_is_null = t` on the affected rows). Lead-settled outcome (a): keep
+// the anchor's type, state the gap. Residue pinned at #412's sub-issue
+// (issue.sh) and in the query-type-inference spec delta.
+describe("a recursive term's nullability is not the reason to refuse it (#489, group 6.1)", () => {
+	it("a recursive term nullable where the anchor is not still compiles", () => {
+		// This is a GUARD, not a red-to-green: it is green today (before
+		// 6.2's own type narrowing exists) and must stay green after --
+		// 6.2's rule elides null per this task's own decision, so a
+		// nullability-only divergence must never become the reason a
+		// recursive term is refused.
+		//
+		// anchor's own "v" key: t.id's value -- non-null (primaryKey).
+		// recursive term's own "v" key: t.v's value -- nullable, same
+		// family (numeric) as the anchor's, a pure nullability
+		// divergence with no underlying type mismatch, matching M4's
+		// own measured shape.
+		const stage = withCte((w) => {
+			const r = w.asRecursive(
+				"r",
+				select({ id: t.id, v: t.id }, t).where(isNull(t.parent)),
+				(self) =>
+					select({ id: self.id, v: t.v }, self).innerJoin(
+						t,
+						eq(self.id, t.parent),
+					),
+			);
+			return select({ id: r.id, v: r.v }, r);
+		});
+		expect(stage.withQuery.recursive).toBe(true);
+	});
+});

@@ -356,7 +356,24 @@ barrel).
       `nulls first`/`nulls last` executes against a real `postgres:17`
       and orders that way, in a plain select and in a window `over(...)`.
       This is the difference between "the golden string matches" and
-      "the server agrees". **Written and committed in this group;
+      "the server agrees".
+
+      **Pick placements that differ from Postgres's own defaults, or the
+      witness proves nothing.** Measured on postgres:17 during review:
+      `asc` already means `NULLS LAST` and `desc` already means
+      `NULLS FIRST`, so a witness asserting `desc … nulls first` returns
+      the same rows whether the clause is rendered or dropped entirely —
+      it passes on a build that emits no `nulls` at all. Only two
+      combinations discriminate:
+      | placement | vs default | usable |
+      |---|---|---|
+      | `asc nulls last` | same | no |
+      | **`asc nulls first`** | differs (`NULL 1 2`) | **yes** |
+      | **`desc nulls last`** | differs (`2 1 NULL`) | **yes** |
+      | `desc nulls first` | same | no |
+      Use one of each — `asc nulls first` for the plain select and
+      `desc nulls last` for the window — so the two assertions cover
+      both discriminating cases instead of one of them twice. **Written and committed in this group;
       executed in 7.7's closing slot** (lead-approved batching). This
       box stays unticked until that run — ticking an unexecuted witness
       would make the only progress record of this slice a false one.
@@ -393,8 +410,34 @@ by reading the code, and it holds whatever the server says.
 
       **6.1 is not blocked and should run first** — this fork came out
       of reading the code, not the server, and it decides the *shape* of
-      the comparison 6.2 then fills in. Three options; the second is a
-      scope boundary, not a preference:
+      the comparison 6.2 then fills in.
+
+      **Enumerate the axes before choosing what to elide.** Two
+      projections can differ on more than one dimension, and a rule that
+      elides only the dimension someone happened to name will reject
+      programs Postgres accepts on the others. Known axes: key set
+      (`SameKeys`, existing), key **order** (group 8's runtime guard),
+      **declared type** (6.2's subject), **nullability** (this task's
+      fork), and — raised in review, **not yet established** —
+      **`.$type<T>()` brands**. A `jsonb` column carries a TS-only brand
+      on its `typeNode`; an anchor branded `A` against a recursive term
+      branded `B` is **two `jsonb` columns to Postgres and two different
+      types to TypeScript**, which is exactly this fork's shape. If the
+      rule tightens to "declared types must agree" while eliding only
+      null, a brand mismatch becomes a false rejection.
+
+      **This is a hypothesis, not a finding**: whether a brand actually
+      survives into the projection type that `SetOpResult` /
+      `CompatibleRecursiveTerm` compare has **not** been checked. One
+      `tsc` run settles it — two differently-branded `jsonb` columns in
+      a recursive CTE — but only *after* 6.2 writes a rule, since with
+      no rule everything compiles. So: either widen this fork to
+      **nullability + brands**, or **record brands as out of scope in
+      one explicit sentence**. What must not happen is the axis dropping
+      out silently and resurfacing in a `jsonb` recursive CTE later.
+
+      Three options for the null axis; the second is a scope boundary,
+      not a preference:
       **The gap is measured, not hypothetical** (group 1, M4 addendum):
       a recursive term yielding `null::int` against an `int` anchor is
       accepted, `pg_typeof` stays `integer` on every row, and **the null
@@ -794,6 +837,21 @@ by reading the code, and it holds whatever the server says.
       of one command, so batching them costs one scheduling round instead
       of three (lead-approved). Tick 5.4 and 6.3 here, never earlier.
 
+      **Plus a mutation on the witnesses themselves.** A live witness
+      can pass while proving nothing, and reading it will not reveal
+      that: 5.4's first draft asserted `desc … nulls first` and expected
+      `[null, 2, 1]` — correct name, correct syntax, and the server
+      really does return that, yet **`DESC` already defaults to
+      `NULLS FIRST`**, so it passed on a build emitting no `nulls`
+      clause at all. Nothing inside the test says so; catching it needed
+      an external fact about the server's defaults. So in this slot,
+      **strip the `nulls` clause in the renderer and confirm both 5.4
+      assertions go red individually.** The general form, for any
+      witness: mutate not only the code under test but **the assumption
+      that the expected value is specific to the behaviour being
+      claimed**. That turns "we chose discriminating cases" from a
+      deduction into a measurement.
+
       **Plus M6, a two-line psql check** (group 3 raised it; it is the
       evidence 7.1's rewritten set-op justification cites): does
       `select id, name from a union select id, title from b` execute,
@@ -926,7 +984,7 @@ I/O — it reads two projection objects).
       overclaim this slice has corrected three times already. 8.3 states
       the boundary with both input surfaces named and this qualifier
       intact.
-- [ ] 8.3 (~6m) The spec delta for this half, in `query-builder` (the
+- [x] 8.3 (~6m) The spec delta for this half, in `query-builder` (the
       set-operation requirement). Three things it must carry, per the
       lead: the **measured evidence** — review's postgres:17 output
       showing an email column holding a city — **a justification that
@@ -955,7 +1013,7 @@ I/O — it reads two projection objects).
       chose not to is a defect** — not a gap left implied.
       Files: the `query-builder` delta under this change.
 
-- [ ] 8.4 (~9m) [design] **Split the diagnostic — one message was
+- [x] 8.4 (~9m) [design] **Split the diagnostic — one message was
       covering three different failures.** Found in review of 8.2: the
       guard's scan (`findKeyOrderMismatch`) is a pure positional walk
       with **no set comparison at all**, so everything lands on the

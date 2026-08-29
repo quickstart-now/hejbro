@@ -165,6 +165,21 @@ export type CteEntryOptions = {
  * the anchor's, not a union. The gap this leaves — a recursive term whose
  * column types resolve differently from the anchor's type-checks here and
  * fails on the server instead — is tracked separately, #489.
+ *
+ * harden-query-surface group 6.1's own null fork (settled, outcome (a)):
+ * `SetOpResult` unions each key's two value types rather than requiring
+ * an exact match, so nullability rides inside that union same as any
+ * other divergence — a nullable recursive term against a non-null
+ * anchor still type-checks here, on purpose (measured accepted by
+ * Postgres, group 1's M4). The residue this leaves — the CTE's declared
+ * row type stays the anchor's non-null type while a real null can reach
+ * the rows (measured, M4 addendum: `v_is_null = t`) — is not closed
+ * here; widening the declared type to cover it is D105 territory this
+ * slice has no standing to revisit. Tracked at #500 (a `#412` sub-issue)
+ * and in the `query-type-inference` spec delta. Elision covers
+ * nullability only — a `.$type<T>()` brand (TS-only, invisible to
+ * Postgres) is a separate axis this fork does not address, recorded as
+ * a stated boundary in that same spec delta.
  */
 type CompatibleRecursiveTerm<TProjection, TRecursiveProjection> = [
 	SetOpResult<TProjection, TRecursiveProjection>,
