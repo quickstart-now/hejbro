@@ -42,6 +42,7 @@ import {
 	expect,
 	expectTypeOf,
 	it,
+	vi,
 } from "vitest";
 import { pgDriver } from "../src/driver";
 
@@ -1400,6 +1401,105 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 			"kept",
 			"released",
 		]);
+	});
+
+	it("concurrent nested transactions are refused before any savepoint is sent, live against a real postgres:17 (#445/D1)", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		const spRows = table(testSchema, "sp_rows", {
+			id: uuid().primaryKey(),
+			label: text().notNull(),
+		});
+		const handle = db({ spRows }, driver);
+		const secondRan = vi.fn();
+		const survivedId = "77777777-7777-7777-7777-777777777777";
+
+		await handle.transaction(async (tx) => {
+			const [firstOutcome, secondOutcome] = await Promise.all([
+				tx.transaction(async (nested) => {
+					await nested
+						.insert(spRows)
+						.values({ id: survivedId, label: "survived" });
+					return "first-done";
+				}),
+				tx
+					.transaction(async () => {
+						secondRan();
+					})
+					.catch((error: unknown) => error),
+			]);
+
+			expect(firstOutcome).toBe("first-done");
+			expect(secondOutcome).toHaveProperty(
+				"code",
+				"concurrent-nested-transaction",
+			);
+		});
+
+		// the second sibling's callback never ran against the real server
+		// either, and the first sibling's row is really there -- a claim a
+		// fixture driver's own recorded statement log cannot make.
+		expect(secondRan).not.toHaveBeenCalled();
+		const committed = await handle.select(spRows);
+		expect(committed.map((row) => row.id)).toContain(survivedId);
+	});
+
+	it("a swallowed statement error is recovered by ROLLBACK TO and leaves the enclosing transaction usable, live against a real postgres:17 (#445/R2)", async () => {
+		const activePool = pool.current;
+		if (activePool === undefined) {
+			throw new Error("beforeAll did not set up the pool");
+		}
+		const driver = pgDriver(activePool);
+		const spRows = table(testSchema, "sp_rows", {
+			id: uuid().primaryKey(),
+			label: text().notNull(),
+		});
+		const handle = db({ spRows }, driver);
+		const duplicateId = "99999999-9999-9999-9999-999999999999";
+		const afterId = "aaaaaaaa-9999-9999-9999-999999999999";
+
+		const caught = await handle.transaction(async (tx) => {
+			const inner = await tx
+				.transaction(async (nested) => {
+					await nested.insert(spRows).values({ id: duplicateId, label: "one" });
+					// a real statement error -- a duplicate primary key -- swallowed
+					// inside the nested callback, leaving the subtransaction
+					// aborted exactly as #445/R2 describes. `Promise.resolve(...)`
+					// because a chain terminal is only ever `PromiseLike` (group 7
+					// decision ③) -- inert until awaited, no `.catch` of its own.
+					await Promise.resolve(
+						nested
+							.insert(spRows)
+							.values({ id: duplicateId, label: "duplicate" }),
+					).catch(() => {
+						// swallowed
+					});
+				})
+				.catch((error: unknown) => error);
+
+			// the enclosing transaction is NOT aborted -- this statement would
+			// fail with "current transaction is aborted" if the recovery
+			// rollback had not kept it usable.
+			await tx.insert(spRows).values({ id: afterId, label: "after-recovery" });
+			return inner;
+		});
+
+		expect(caught).toHaveProperty("code", "savepoint-release-failed");
+		expect(caught).toHaveProperty("cause");
+
+		// the whole nested subtransaction -- including the first, otherwise
+		// successful insert -- rolled back with it; only the statement issued
+		// on the still-usable enclosing transaction afterward survives.
+		const committed = await handle.select(spRows);
+		expect(
+			committed
+				.filter((row) => row.id === duplicateId || row.id === afterId)
+				.map((row) => row.label)
+				.sort(),
+		).toEqual(["after-recovery"]);
 	});
 
 	it("offset and distinct on (#437): pagination and one row per group, live against a real postgres:17", async () => {

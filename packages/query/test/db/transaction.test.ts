@@ -153,7 +153,10 @@ describe("db().transaction (task 4.6)", () => {
 		);
 		expect(sql[0]).toBe('savepoint "hejbro_sp_1"');
 		expect(sql[1]).toBe('rollback to savepoint "hejbro_sp_1"');
-		expect(sql[2]).toContain("select");
+		// the rolled-back savepoint is also released, so it does not linger
+		// on the savepoint stack for the rest of the enclosing transaction.
+		expect(sql[2]).toBe('release savepoint "hejbro_sp_1"');
+		expect(sql[3]).toContain("select");
 		// the OUTER transaction still commits -- a rolled-back savepoint
 		// does not abort the transaction that contains it.
 		expect(commit).toHaveBeenCalledTimes(1);
@@ -182,6 +185,219 @@ describe("db().transaction (task 4.6)", () => {
 			'savepoint "hejbro_sp_3"',
 			'release savepoint "hejbro_sp_3"',
 		]);
+	});
+
+	it("concurrent sibling nested transactions are rejected, and the first sibling's work survives", async () => {
+		const { driver, sessionExecute } = transactionalDriver(true);
+		const handle = db({ posts }, driver);
+		const secondRan = vi.fn();
+
+		await handle.transaction(async (tx) => {
+			const [firstOutcome, secondOutcome] = await Promise.all([
+				tx.transaction(async (inner) => {
+					await inner.execute(select(posts));
+					return "first-survived";
+				}),
+				tx
+					.transaction(async (inner) => {
+						secondRan();
+						await inner.execute(select(posts));
+					})
+					.catch((error: unknown) => error),
+			]);
+
+			// the first sibling completed and returned its own value -- its
+			// work was never touched by the second sibling's rejection.
+			expect(firstOutcome).toBe("first-survived");
+			expect(secondOutcome).toHaveProperty(
+				"code",
+				"concurrent-nested-transaction",
+			);
+		});
+
+		// the second sibling's callback never ran, so no savepoint statement
+		// for it ever reached the connection -- not merely "some error
+		// happened somewhere", which today's unguarded interleaving can also
+		// produce by accident depending on timing.
+		expect(secondRan).not.toHaveBeenCalled();
+		const sql = sessionExecute.mock.calls.map(
+			(call) => (call[0] as { sql: string }).sql,
+		);
+		expect(sql).toEqual([
+			'savepoint "hejbro_sp_1"',
+			expect.stringContaining("select"),
+			'release savepoint "hejbro_sp_1"',
+		]);
+	});
+
+	it("a nested callback that throws synchronously rolls back to its savepoint and rethrows unchanged", async () => {
+		const { driver, sessionExecute, commit, rollback } =
+			transactionalDriver(true);
+		const handle = db({ posts }, driver);
+		const boom = new Error("sync boom");
+
+		const outcome = await handle.transaction(async (tx) => {
+			const caught = await tx
+				.transaction((): never => {
+					throw boom;
+				})
+				.catch((error: unknown) => error);
+			await tx.execute(select(posts));
+			return caught;
+		});
+
+		expect(outcome).toBe(boom);
+		const sql = sessionExecute.mock.calls.map(
+			(call) => (call[0] as { sql: string }).sql,
+		);
+		expect(sql[0]).toBe('savepoint "hejbro_sp_1"');
+		expect(sql[1]).toBe('rollback to savepoint "hejbro_sp_1"');
+		expect(sql[2]).toBe('release savepoint "hejbro_sp_1"');
+		expect(sql[3]).toContain("select");
+		expect(commit).toHaveBeenCalledTimes(1);
+		expect(rollback).not.toHaveBeenCalled();
+	});
+
+	it("a rolled-back savepoint is released, leaving no savepoint behind", async () => {
+		const { driver, sessionExecute } = transactionalDriver(true);
+		const handle = db({ posts }, driver);
+		const boom = new Error("boom");
+
+		await handle.transaction(async (tx) => {
+			await tx
+				.transaction(async () => {
+					throw boom;
+				})
+				.catch(() => {});
+			// a later sibling gets a fresh, distinct savepoint name --
+			// proving the earlier one left no savepoint behind to collide
+			// with or accidentally reuse.
+			await tx.transaction(async () => {});
+		});
+
+		const sql = sessionExecute.mock.calls.map(
+			(call) => (call[0] as { sql: string }).sql,
+		);
+		expect(sql).toEqual([
+			'savepoint "hejbro_sp_1"',
+			'rollback to savepoint "hejbro_sp_1"',
+			'release savepoint "hejbro_sp_1"',
+			'savepoint "hejbro_sp_2"',
+			'release savepoint "hejbro_sp_2"',
+		]);
+	});
+
+	it("a swallowed statement error inside a nested callback issues a ROLLBACK TO and surfaces savepoint-release-failed", async () => {
+		const { driver, sessionExecute } = transactionalDriver(true);
+		const handle = db({ posts }, driver);
+		// simulates what a real Postgres connection does after a swallowed
+		// statement error: the subtransaction is left aborted, so the
+		// RELEASE that follows a normal return fails.
+		sessionExecute.mockImplementation(async (compiled: { sql: string }) => {
+			if (compiled.sql === 'release savepoint "hejbro_sp_1"') {
+				throw new Error("current transaction is aborted");
+			}
+			return [];
+		});
+
+		const outcome = await handle
+			.transaction(async (tx) =>
+				tx.transaction(async (inner) => {
+					await inner.execute(select(posts)).catch(() => {
+						// swallowed -- the bug this recovers from.
+					});
+				}),
+			)
+			.catch((error: unknown) => error);
+
+		expect(outcome).toHaveProperty("code", "savepoint-release-failed");
+		expect(outcome).toHaveProperty("cause");
+		const sql = sessionExecute.mock.calls.map(
+			(call) => (call[0] as { sql: string }).sql,
+		);
+		expect(sql).toEqual([
+			'savepoint "hejbro_sp_1"',
+			expect.stringContaining("select"),
+			'release savepoint "hejbro_sp_1"',
+			'rollback to savepoint "hejbro_sp_1"',
+			// best-effort: the recovery rollback clears the aborted state, so
+			// the savepoint is released too (task 1.4's invariant) -- this
+			// fixture keeps failing every "release" call, so it fails again
+			// here too, without changing what error surfaced above.
+			'release savepoint "hejbro_sp_1"',
+		]);
+	});
+
+	it("a swallowed statement error's recovery releases the savepoint once the connection is usable again", async () => {
+		const { driver, sessionExecute } = transactionalDriver(true);
+		const handle = db({ posts }, driver);
+		let releaseAttempts = 0;
+		sessionExecute.mockImplementation(async (compiled: { sql: string }) => {
+			if (compiled.sql === 'release savepoint "hejbro_sp_1"') {
+				releaseAttempts += 1;
+				if (releaseAttempts === 1) {
+					throw new Error("current transaction is aborted");
+				}
+			}
+			return [];
+		});
+
+		const outcome = await handle
+			.transaction(async (tx) =>
+				tx.transaction(async (inner) => {
+					await inner.execute(select(posts)).catch(() => {
+						// swallowed -- the bug this recovers from.
+					});
+				}),
+			)
+			.catch((error: unknown) => error);
+
+		expect(outcome).toHaveProperty("code", "savepoint-release-failed");
+		const sql = sessionExecute.mock.calls.map(
+			(call) => (call[0] as { sql: string }).sql,
+		);
+		// the second release attempt (after the recovery rollback) succeeds,
+		// so no savepoint is left open -- the error is still surfaced (the
+		// swallowed statement error is still a bug), but the connection's
+		// own bookkeeping is clean.
+		expect(sql).toEqual([
+			'savepoint "hejbro_sp_1"',
+			expect.stringContaining("select"),
+			'release savepoint "hejbro_sp_1"',
+			'rollback to savepoint "hejbro_sp_1"',
+			'release savepoint "hejbro_sp_1"',
+		]);
+		expect(releaseAttempts).toBe(2);
+	});
+
+	it("a failing rollback surfaces savepoint-rollback-failed with a message stating both outcomes", async () => {
+		const { driver, sessionExecute } = transactionalDriver(true);
+		const handle = db({ posts }, driver);
+		const boom = new Error("callback boom");
+		sessionExecute.mockImplementation(async (compiled: { sql: string }) => {
+			if (compiled.sql === 'rollback to savepoint "hejbro_sp_1"') {
+				throw new Error("connection reset");
+			}
+			return [];
+		});
+
+		const outcome = await handle
+			.transaction((tx) =>
+				tx.transaction(async () => {
+					throw boom;
+				}),
+			)
+			.catch((error: unknown) => error);
+
+		expect(outcome).toHaveProperty("code", "savepoint-rollback-failed");
+		expect(outcome).toHaveProperty("cause");
+		expect(outcome).toHaveProperty("callbackError", boom);
+		const message = (outcome as Error).message;
+		expect(message).toContain(
+			'rolling back to savepoint "hejbro_sp_1" failed after the nested transaction callback threw.',
+		);
+		expect(message).toContain("Do not catch this error");
+		expect(message).not.toContain("the enclosing transaction will roll back");
 	});
 
 	it("a nested transaction() call fails fast with nested-transaction-unsupported, before any further send", async () => {

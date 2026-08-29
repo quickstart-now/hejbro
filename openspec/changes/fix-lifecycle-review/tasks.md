@@ -1,0 +1,224 @@
+# Tasks: fix-lifecycle-review
+
+Five groups. Groups 1–4 share no files and are parallel-safe; group 5 is
+cache inputs, docs and release chore that quote names groups 1–4 settle,
+so it runs last. Estimates are pure work minutes (D88). Every task starts
+from a failing test named below.
+
+Every `[design]` decision below is already settled — the value is
+recorded in the task. None is open, so no task waits on a decision.
+
+## 1. Nested-transaction lifecycle
+
+Files (whole group): `packages/query/src/db/transaction.ts`,
+`packages/query/test/db/transaction.test.ts`,
+`packages/pg/test/integration.test.ts`.
+
+- [x] 1.1 (~10m) [design — settled] D1: a second in-flight nested
+      transaction on the same `tx` is rejected with
+      `concurrent-nested-transaction`, before any savepoint SQL is sent,
+      and its callback never runs. Message carries a `Next:` clause
+      naming sequential nesting (await one before starting the next).
+      Guard state is per built `transaction` member, mirroring
+      `createTransactionApi`'s own `state.active`. Documentation-only was
+      considered and rejected by the lead: silent data loss is not
+      acceptable in this repo. Red:
+      `packages/query/test/db/transaction.test.ts` — "concurrent sibling
+      nested transactions are rejected, and the first sibling's work
+      survives". Assert the surviving rows, not only the error: an
+      error-only assertion also passes against today's `no such
+      savepoint` ordering, so it would not be load-bearing.
+- [x] 1.2 (~7m) A callback that throws synchronously rolls back:
+      `callback().catch(...)` is replaced by `try`/`await`/`catch`, which
+      also covers a throw that happens before the promise exists. Red:
+      same file — "a nested callback that throws synchronously rolls back
+      to its savepoint and rethrows unchanged".
+- [x] 1.3 (~9m) [design — settled] R2: a failing `RELEASE` attempts
+      `ROLLBACK TO` for that savepoint; on a successful rollback it
+      surfaces `savepoint-release-failed` — named for its mechanism, like
+      its sibling `savepoint-rollback-failed` — carrying the release
+      failure as `cause`, with a `Next:` advising rethrowing inside the
+      nested callback instead of swallowing (a swallowed statement error
+      is what aborted the subtransaction). After a successful recovery
+      rollback the savepoint is released too, best-effort: `ROLLBACK TO`
+      clears the aborted state, so the release now succeeds, and the
+      invariant below stays uniform. A release that fails again is not
+      surfaced separately — the error thrown is still
+      `savepoint-release-failed` carrying the *first* failure as `cause`,
+      so the error identity does not depend on how the recovery went. If
+      the recovery rollback itself fails, the existing
+      `savepoint-rollback-failed` path takes over. Red: same file — "a
+      swallowed statement error inside a nested
+      callback issues a ROLLBACK TO and surfaces
+      `savepoint-release-failed`", asserted on the recording driver's
+      statement log, not only on the error.
+- [x] 1.4 (~6m) A rolled-back savepoint is also released, so a
+      transaction that nests repeatedly does not grow its savepoint stack
+      for its own lifetime (the prevailing ORM convention). Ordering with
+      1.3 matters: this is the throw path's release, 1.3's is the
+      release path's rollback. Red: same file — "a rolled-back savepoint
+      is released, leaving no savepoint behind" (statement-sequence
+      assertion).
+
+      **The invariant both tasks serve**: no savepoint outlives the
+      nested transaction that created it, on every exit — normal return,
+      thrown callback, and failed release alike. An enclosing callback
+      may catch any of these and keep going, so "we are about to throw
+      anyway" is not a reason to leave one behind. Any exit that cannot
+      hold the invariant fails loudly instead (1.3's fallback), never
+      silently.
+- [x] 1.5 (~6m) [design — settled] R1: `savepoint-rollback-failed`'s
+      message stops asserting "the enclosing transaction will roll back".
+      Text to use, verbatim unless every one of the three required
+      elements survives a rewording — (a) both outcomes stated, (b) the
+      imperative not to catch, (c) the `cause`/`callbackError` pointers:
+
+      > rolling back to savepoint "<name>" failed after the nested
+      > transaction callback threw. Do not catch this error: if it
+      > escapes the enclosing callback the transaction rolls back, and if
+      > you catch it the transaction can still commit without the nested
+      > work. Next: inspect "cause" for the rollback failure and
+      > "callbackError" for what the callback threw — when the rollback
+      > failed because the connection itself is unusable, letting this
+      > error escape is also what gets that connection discarded.
+
+      "the connection is likely no longer usable" moves inside that
+      conditional: it is true only on the escape path the driver
+      discards. Same task removes the orphaned and now-contradictory tsdoc
+      in this file (`buildTx`'s stray second block; `Tx`'s "there is no
+      `.transaction` member here at all … `tx.transaction(...)` is a
+      `tsc` error", directly above the member that exists). Red: same
+      file — the message assertion in the existing rollback-failure test.
+- [x] 1.6 (~7m) Live witness against a real postgres:17 — the server's
+      own behavior, not a fixture driver's. Red:
+      `packages/pg/test/integration.test.ts` — "concurrent nested
+      transactions are refused before any savepoint is sent" and "a
+      swallowed statement error is recovered by ROLLBACK TO and leaves
+      the enclosing transaction usable".
+
+## 2. `baseline` command surface
+
+Files (whole group): `packages/cli/src/commands/generate.ts`,
+`packages/cli/test/baseline-command.test.ts`,
+`packages/cli/test/help.test.ts`.
+
+- [ ] 2.1 (~8m) [design — settled] D2: in `"baseline"` mode a no-change
+      run fails with `baseline-nothing-to-adopt` and exit 1 instead of
+      printing `no changes — snapshot already matches your declarations`
+      and exiting 0. The message diagnoses the actual state — the
+      declarations loaded but exported no hejbro declarations, or they
+      are empty — plus a `Next:` clause pointing at the config's
+      declaration entry points. "Already matches" is doubly wrong here:
+      the guard directly above has just established the snapshot is
+      empty. `generate` mode's own no-change line and exit 0 are
+      untouched (three example suites plus `generate-command.test.ts`
+      assert that text). Red:
+      `packages/cli/test/baseline-command.test.ts` — "a baseline over
+      declarations that export nothing fails with
+      `baseline-nothing-to-adopt` and writes no files".
+- [ ] 2.2 (~9m) [design — settled] `baseline` stops advertising
+      `--rename`/`--confirm-drop` — nothing exists to rename or drop in a
+      first migration — and rejecting them is a pre-parse intercept in
+      `runGenerate`'s `"baseline"` mode, not a citty unknown-flag dump:
+      the flags are caught before argument parsing and refused with
+      `baseline-flag-not-applicable`, whose message gives the reason
+      (a baseline diffs against an empty snapshot, so there is nothing to
+      rename and nothing to drop) and a `Next:` naming `hejbro generate`
+      for a change to an already-adopted project. Red:
+      `packages/cli/test/help.test.ts` — "`baseline --help` does not list
+      the rename or drop-confirmation flags"; and
+      `packages/cli/test/baseline-command.test.ts` — "`baseline
+      --rename …` fails with `baseline-flag-not-applicable` before
+      anything is written".
+
+## 3. Baseline banner parser
+
+Files (whole group): `packages/core/src/sql/migration-file.ts`,
+`packages/core/src/index.ts`,
+`packages/core/test/migration-file.test.ts`.
+
+- [ ] 3.1 (~8m) [design — settled] R5: `parseBannerBaseline` joins
+      `parseBannerHashes`/`parseBannerVersion`, exported from core's
+      index, following the existing parser pattern in that file — matches
+      the known `BASELINE_LINE` prefix only, leaving unknown banner lines
+      ignored. Returns `boolean`, not the `T | null` its two siblings
+      use: for a marker, absence is a meaningful `false`, not a missing
+      value. Red: `packages/core/test/migration-file.test.ts` — "reads
+      the baseline marker back off a rendered banner, and reports its
+      absence on an ordinary migration".
+
+## 4. Trigger-row dispatch
+
+Files (whole group): `packages/core/src/plpgsql/body-context.ts`,
+`packages/core/test/plpgsql/body-context.test.ts`.
+
+- [ ] 4.1 (~9m) R4: `recordReturn` checks the `triggerRowMeta` brand
+      before `isReturnableExpr`'s duck-type, so a table with a column
+      named `exprNode` no longer sends `ctx.return(ctx.new)` down the
+      expression path. Preserve the current ordering's *effects*: a
+      trigger row returned from a scalar-returning declaration must still
+      fail with `scalar-return-expects-expression`, which today falls out
+      of the expression branch running first. Red:
+      `packages/core/test/plpgsql/body-context.test.ts` — "a trigger row
+      is returned as a ref even when the table has a column named
+      `exprNode`", plus the existing scalar-guard tests staying green.
+
+## 5. Cache inputs, docs and release chore
+
+Runs after 1–4: 5.2 quotes the codes and export names those groups
+settle. Files: `packages/skills/turbo.json`,
+`skills/hejbro/references/query-layer.md`, `README.md`,
+`packages/cli/README.md`, `AGENTS.md`, `blackbox/*.md`,
+`.changeset/*.md`, `openspec/task-times.csv`.
+
+- [ ] 5.1 (~7m) R3: `packages/skills/turbo.json`'s `test` inputs gain
+      `$TURBO_ROOT$/packages/*/src/**` — the snippet test type-checks
+      against those sources, so an API rename currently replays a stale
+      cached PASS (#430's failure class; #431 closed only the docs half,
+      and this is the likelier cause). Verified the way #431 was: with a
+      warm cache, break a `packages/*/src` API the snippets use, confirm
+      `pnpm test` goes red rather than replaying FULL TURBO, then revert.
+      Record that reproduction in the PR body. Update the file's own
+      comment to say what the inputs now cover.
+- [ ] 5.2 (~8m) Docs: `skills/hejbro/references/query-layer.md`'s nested
+      transaction section gains the concurrency rule and both new error
+      codes (a stale skill is a broken user contract); `README.md`'s CLI
+      list and `packages/cli/README.md`'s command block gain `baseline`,
+      `history` and `restore`; `AGENTS.md`'s "three published packages"
+      becomes the five-package fixed group `.changeset/config.json`
+      actually declares. Verified by the snippet-compile test plus
+      review, not by a new test.
+- [ ] 5.3 (~7m) `blackbox/2026-08-29-fix-lifecycle-review.md` (D89): the
+      decision path, not a summary of the diff — the findings originate
+      in an adversarial review of the day's own merges, and the four
+      contract decisions (D1, D2, R2, R5) were settled by the lead under
+      the owner's 2026-08-29 blanket delegation rather than by the owner
+      directly. Records what was rejected too: documentation-only for D1,
+      a citty unknown-flag dump for 2.2. Lands in this same PR.
+- [ ] 5.4 (~5m) Release chore: one `patch` changeset (D59 — the five
+      fixed-group packages move together, so one changeset is both
+      necessary and sufficient), `openspec/task-times.csv` rows for
+      groups 1–5, README task-time badges (`pnpm check:tasktime`) and
+      CRAP block (`pnpm check:crap`), and delete this change's
+      `findings.md` scratch file.
+
+## Housekeeping before the first commit
+
+- Three deltas, not two: `query-execution` (D1, R2), `cli-commands`
+  (D2, R5, and 2.2's flag refusal) and `plpgsql-function-bodies`. The
+  third is kept because R4 does yield an observable promise — a user's
+  own column name never changes what `ctx.return(ctx.new)` means — and
+  that scenario is already written. Everything else (R1, R3, the nits)
+  restores specified behavior and rides the plain cycle.
+- `findings.md` is scratch: never committed, deleted in 5.4.
+
+## Verification
+
+- `pnpm check`, `pnpm check-types`, `pnpm test`, `pnpm check:crap`,
+  `pnpm check:tasktime` all pass — output in the PR body.
+- `pnpm --filter @hejbro/pg test:integration` against a real postgres:17,
+  including 1.6's two new witnesses.
+- 5.1's cache reproduction recorded in the PR body.
+- Commits: conventional, lower-case subject ≤72 chars, each carrying
+  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
+  Push to `upstream fix-lifecycle-review`; the PR is the lead's.
