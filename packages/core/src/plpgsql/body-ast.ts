@@ -60,7 +60,15 @@ export type BodyStatement =
 			readonly loopName: string;
 			readonly query: SelectNode;
 			readonly statements: ReadonlyArray<BodyStatement>;
-	  };
+	  }
+	/**
+	 * `ctx.execute(...)` — a statement run for its side effect, not its
+	 * value (#426). A select renders `perform <sql>;` (plpgsql rejects a
+	 * bare `select` with no `into`); an insert/update/delete renders
+	 * `<sql>;` as-is. `queryKind` on `query` itself is what the renderer
+	 * branches on — no separate discriminator needed here.
+	 */
+	| { readonly stmtKind: "execute"; readonly query: QueryNode };
 
 /** A recorded function/trigger body: its locals plus its statements, in order. */
 export type FunctionBody = {

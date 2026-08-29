@@ -14,6 +14,7 @@ import {
 	schema,
 	select,
 	table,
+	text,
 	timestamptz,
 	update,
 	uuid,
@@ -28,6 +29,10 @@ const comments = table(app, "comments", {
 const posts = table(app, "posts", {
 	id: uuid().primaryKey(),
 	publishedAt: timestamptz(),
+});
+const auditLog = table(app, "audit_log", {
+	id: uuid().primaryKey(),
+	tableName: text().notNull(),
 });
 
 describe("renderFunctionSql", () => {
@@ -180,6 +185,60 @@ describe("renderFunctionSql", () => {
 				"$function$;",
 			].join("\n"),
 		);
+	});
+
+	it("runs an audit insert for effect, then returns the trigger row (#426)", () => {
+		const trigger = defineTrigger(
+			posts,
+			{
+				name: "audit_posts",
+				timing: "after",
+				events: ["update"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.execute(insert(auditLog).values({ tableName: "posts" }));
+				ctx.return(row);
+			},
+		);
+
+		expect(renderFunctionSql(trigger.functionDeclaration)).toBe(
+			[
+				'create or replace function "app"."audit_posts_fn"()',
+				"returns trigger",
+				"language plpgsql",
+				"as $function$",
+				"begin",
+				'\tinsert into "app"."audit_log" ("table_name") values (\'posts\');',
+				"\treturn new;",
+				"end;",
+				"$function$;",
+			].join("\n"),
+		);
+	});
+
+	it("a select executed for effect becomes perform", () => {
+		const trigger = defineTrigger(
+			posts,
+			{
+				name: "notify_posts",
+				timing: "after",
+				events: ["update"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.execute(
+					select({ id: posts.id }, posts).where(eq(posts.id, row.id)),
+				);
+				ctx.return(row);
+			},
+		);
+
+		const sql = renderFunctionSql(trigger.functionDeclaration);
+		expect(sql).toContain(
+			'\tperform "app"."posts"."id" as "id" from "app"."posts" where "app"."posts"."id" = new.id;',
+		);
+		expect(sql).not.toMatch(/\n\tselect /);
 	});
 
 	it("guards against a body whose rendered SQL contains the dollar-quote tag", () => {

@@ -1,6 +1,6 @@
 import type { FunctionDeclaration } from "../dsl/define-function";
 import { assertNever, throwHejbroError } from "../error";
-import type { ExprNode } from "../expr/ast";
+import type { ExprNode, QueryNode } from "../expr/ast";
 import {
 	renderExpr,
 	renderQuery,
@@ -90,11 +90,28 @@ const renderIfLines = (
 };
 
 /**
+ * `ctx.execute(...)`'s own spelling rule (#426, relayed from Postgres):
+ * "except for the replacement of SELECT with PERFORM, the SQL command is
+ * written normally". `renderQuery` always renders a select query starting
+ * with the literal word "select" (`distinctKeyword` guarantees it, even
+ * with `distinct`/`distinct on`), so swapping only that leading token
+ * keeps `distinct` and everything after it intact; an insert/update/
+ * delete renders as-is.
+ */
+const renderExecutedStatement = (query: QueryNode): string => {
+	const rendered = renderQuery(query);
+	if (query.queryKind === "select") {
+		return `perform${rendered.slice("select".length)}`;
+	}
+	return rendered;
+};
+
+/**
  * One handler per {@link BodyStatement} `stmtKind`, same technique used
  * across this phase's other tree-walker/renderer switches (#154
  * ratchet-5): a mapped type over the closed union, so a missing entry is
  * a compile error. The former `switch`'s `default: assertNever(statement)`
- * was structurally unreachable (`BodyStatement` has exactly these six
+ * was structurally unreachable (`BodyStatement` has exactly these seven
  * kinds), so no test could ever reach it. `forEach`'s handler recurses
  * into {@link renderStatementLines} — resolved lazily through the closure
  * at call time, so it's fine that this map is defined before that
@@ -128,6 +145,9 @@ const renderStatementHandlers: RenderStatementHandlers = {
 		`${indent(depth)}return ${renderExpr(statement.expr)};`,
 	],
 	if: renderIfLines,
+	execute: (statement, depth, _identity, _declaredAt, columnOrder) => [
+		`${indent(depth)}${renderExecutedStatement(applyColumnOrderToQuery(statement.query, columnOrder))};`,
+	],
 	forEach: (statement, depth, identity, declaredAt, columnOrder) => {
 		const headerLine = `${indent(depth)}for ${statement.loopName} in ${renderSelect(applyColumnOrderToSelect(statement.query, columnOrder))} loop`;
 		const bodyLines = statement.statements.flatMap((inner) =>

@@ -1,7 +1,7 @@
 import type { Table } from "../dsl/table";
 import { toSnakeCase } from "../dsl/table";
 import { throwHejbroError } from "../error";
-import type { ColumnRef, Expr } from "../expr/ast";
+import type { ColumnRef, Expr, QueryNode } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
 import type { DeleteFinal, InsertFinal, UpdateFinal } from "../query/mutate";
@@ -94,6 +94,8 @@ export type BodyContext = {
 	readonly if: (condition: Expr<"boolean">, thenBranch: () => void) => IfChain;
 	readonly raise: (message: string, ...args: ReadonlyArray<RaiseArg>) => void;
 	readonly return: (value: TriggerRow<Table> | ReturnableQuery | Expr) => void;
+	/** Runs a statement for its side effect (#426) — a select renders `perform`, a mutation renders as-is. */
+	readonly execute: (statement: ReturnableQuery) => void;
 	readonly forEach: <TProjection extends RowProjection>(
 		query: SelectLimited<TProjection>,
 		body: (row: RowColumns<TProjection>) => void,
@@ -337,38 +339,70 @@ const isTriggerRow = (value: unknown): value is TriggerRow<Table> =>
 	typeof value === "object" && value !== null && triggerRowMeta in value;
 
 /**
+ * Extracts the `QueryNode` a {@link ReturnableQuery} value carries, by
+ * which of its four own fields is present — shared by {@link
+ * recordReturnQuery} and {@link recordExecute} so the same four-way
+ * dispatch isn't repeated. Returns `null` only for a value matching none
+ * of the four shapes — structurally unreachable for a type-correct
+ * caller (`ReturnableQuery`'s own four members each carry exactly one of
+ * these keys), the same class of gap a `switch`'s `default:
+ * assertNever(...)` leaves elsewhere in this codebase, kept here as a
+ * real `null` (not a throw) so each caller decides what "no shape
+ * matched" means for itself.
+ */
+const returnableQueryNode = (value: ReturnableQuery): QueryNode | null => {
+	if ("selectQuery" in value) {
+		return value.selectQuery;
+	}
+	if ("insertQuery" in value) {
+		return value.insertQuery;
+	}
+	if ("updateQuery" in value) {
+		return value.updateQuery;
+	}
+	if ("deleteQuery" in value) {
+		return value.deleteQuery;
+	}
+	return null;
+};
+
+/**
  * {@link recordReturn}'s `ReturnableQuery` half — split out to keep both
  * halves' own complexity under threshold (D71/#154 ratchet-5). Returns
- * `true` once it has pushed a `returnQuery` statement, `false` if `value`
- * matched none of the four query shapes — structurally unreachable for a
- * type-correct caller (`ReturnableQuery`'s own four members each carry
- * exactly one of these keys), the same class of gap a `switch`'s
- * `default: assertNever(...)` leaves elsewhere in this codebase, kept
- * here as a real runtime `false` (not a throw) so {@link recordReturn}
- * — not this function — decides what "no query shape matched" means for
- * its own caller.
+ * `true` once it has pushed a `returnQuery` statement, `false` if
+ * {@link returnableQueryNode} found no match.
  */
 const recordReturnQuery = (
 	state: RecordingState,
 	value: ReturnableQuery,
 ): boolean => {
-	if ("selectQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.selectQuery });
-		return true;
+	const query = returnableQueryNode(value);
+	if (query === null) {
+		return false;
 	}
-	if ("insertQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.insertQuery });
-		return true;
+	pushStatement(state, { stmtKind: "returnQuery", query });
+	return true;
+};
+
+/**
+ * `ctx.execute(...)` (#426): records a select/insert/update/delete
+ * builder as a statement run for its side effect. `value` matching none
+ * of `ReturnableQuery`'s four shapes is structurally unreachable for a
+ * type-correct caller (the parameter type admits nothing else) — same
+ * "unreachable" classification as `currentFrame`/`popFrame` above, not a
+ * new user-facing code.
+ */
+const recordExecute = (state: RecordingState, value: ReturnableQuery): void => {
+	const query = returnableQueryNode(value);
+	if (query === null) {
+		throwHejbroError(
+			"unreachable",
+			`${state.identity}: ctx.execute() received a value matching none of ReturnableQuery's shapes.`,
+			state.declaredAt,
+		);
+		return;
 	}
-	if ("updateQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.updateQuery });
-		return true;
-	}
-	if ("deleteQuery" in value) {
-		pushStatement(state, { stmtKind: "returnQuery", query: value.deleteQuery });
-		return true;
-	}
-	return false;
+	pushStatement(state, { stmtKind: "execute", query });
 };
 
 /** `true` for a plain expression — anything carrying a `family`/`exprNode` pair that isn't one of the four query shapes or a trigger row. */
@@ -531,6 +565,7 @@ export const createRecordingContext = (
 		if: (condition, thenBranch) => recordIf(state, condition, thenBranch),
 		raise: (message, ...args) => recordRaise(state, message, args),
 		return: (value) => recordReturn(state, value),
+		execute: (statement) => recordExecute(state, statement),
 		forEach: (query, body, name) => recordForEach(state, query, body, name),
 	};
 
