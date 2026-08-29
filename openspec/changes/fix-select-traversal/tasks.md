@@ -242,7 +242,7 @@ hand-write a `SelectNode` field list.
       the owner directly. Recording that the decision came through the
       delegation — rather than writing it as if the owner ruled — is
       what the file is for.
-- [ ] 8.3 (~5m) The second spec delta,
+- [x] 8.3 (~5m) The second spec delta,
       `specs/query-execution/spec.md` (written by the planner, commit
       and validate only): nested-read revival covers aggregate cells,
       and a `::text` cast is transparent to conversion regardless of who
