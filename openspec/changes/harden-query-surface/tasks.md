@@ -563,9 +563,12 @@ by reading the code, and it holds whatever the server says.
       ```
       Each hit is either consistent with the corrected wording, or it is
       another instance of the same drift and is fixed here. This is
-      Rule 35(ii)'s "another statement of the same fact survives
-      elsewhere" applied at the moment a measurement lands, and Rule 41's
-      item-by-item comparison — not a new rule.
+      an existing rule applied at a new moment, not a new rule: **when a
+      measurement lands, another statement of the same fact may survive
+      elsewhere, so grep the fact's key nouns and compare hit by hit**
+      (the lead's Rule 35(ii) and Rule 41 — stated here in full because
+      the numbers do not resolve to anything a reader of this archived
+      file can open).
       `orderBy`'s accepted vocabulary and nulls placement),
       `snapshot-format` (the additive-compact `nulls`). Verify with
       **bare** `openspec validate harden-query-surface --strict` — the
@@ -864,8 +867,9 @@ I/O — it reads two projection objects).
       decision.
 
       **Name the input surface, don't just claim unreachability**
-      (Rule 12): the offending node can reach `decodeSelectNode` two
-      ways. (1) A snapshot *written* by a version predating this guard —
+      (the lead's Rule 12 — **an unreachability claim must name the
+      input surfaces it is claiming are closed**): the offending node
+      can reach `decodeSelectNode` two ways. (1) A snapshot *written* by a version predating this guard —
       impossible for any released version, since core's set-op surface
       is absent at `@hejbro/core@0.1.1`, and possible only for a
       snapshot written from an unreleased build of this very branch.
@@ -893,8 +897,9 @@ I/O — it reads two projection objects).
 - [ ] 8.3 (~6m) The spec delta for this half, in `query-builder` (the
       set-operation requirement). Three things it must carry, per the
       lead: the **measured evidence** — review's postgres:17 output
-      showing an email column holding a city (Rule 45: the justification
-      cites a measurement, not an assertion); the **division of labour**
+      showing an email column holding a city (the lead's Rule 45 — **a
+      justification that asserts server behaviour cites a measurement or
+      is not written**); the **division of labour**
       — a *type* divergence is caught by the server itself
       (`UNION types uuid and text cannot be matched`, measured), and
       this guard covers the half the server cannot see, where the types
@@ -914,8 +919,10 @@ I/O — it reads two projection objects).
       as the reason. A hand-edited snapshot is the one real input
       surface; `hejbro verify` detects it **when the user runs that
       command**, which is the honest form of the claim — nothing invokes
-      `verify` automatically. That is a boundary stated under Rule 46,
-      not a gap left implied.
+      `verify` automatically. That is a boundary stated under the lead's
+      Rule 46 — **a gap the type system cannot see is a boundary; a gap
+      we could close and chose not to is a defect** — not a gap left
+      implied.
       Files: the `query-builder` delta under this change.
 
 ## Verification

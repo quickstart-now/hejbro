@@ -452,15 +452,17 @@ describe("union() enforces row compatibility (#487)", () => {
 		// still runs, and group 8's runtime guard (assertSameSetOpKeyOrder)
 		// also refuses a key-set mismatch as a degenerate case of an
 		// order mismatch, so this now throws for real too; wrapped in
-		// toThrow() so that second, independent refusal doesn't fail the
-		// test with an uncaught exception.
+		// toThrow() (asserting the specific code, not any exception) so
+		// that second, independent refusal doesn't fail the test with an
+		// uncaught exception, and doesn't silently pass for a different
+		// reason either.
 		expect(() =>
 			select(posts).union(
 				// @ts-expect-error comments' key set does not match posts' --
 				// see the TS2345 text above.
 				select(comments),
 			),
-		).toThrow();
+		).toThrow(expect.objectContaining({ code: "set-op-key-order-mismatch" }));
 	});
 
 	it("a union of two selects with the same key set still type-checks, and its result row keeps the left branch's keys", () => {
@@ -503,7 +505,12 @@ describe("union() checks branch key ORDER, not just the key set (#487, second ha
 
 	it("a union whose branches list the same keys in a different order is refused, and the message shows both orders", () => {
 		expect(() => select(usersByEmail).union(select(usersByCity))).toThrow(
-			/set-op-key-order-mismatch|left: \(email, city\), right: \(city, email\)/,
+			expect.objectContaining({
+				code: "set-op-key-order-mismatch",
+				message: expect.stringContaining(
+					"left: (email, city), right: (city, email)",
+				),
+			}),
 		);
 	});
 

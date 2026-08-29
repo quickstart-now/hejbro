@@ -84,7 +84,12 @@ describe("chain union refuses branches whose key order differs (#487, second hal
 		expect(() =>
 			handle.select(usersByEmail).union(handle.select(usersByCity)),
 		).toThrow(
-			/set-op-key-order-mismatch|left: \(email, city\), right: \(city, email\)/,
+			expect.objectContaining({
+				code: "set-op-key-order-mismatch",
+				message: expect.stringContaining(
+					"left: (email, city), right: (city, email)",
+				),
+			}),
 		);
 	});
 });

@@ -67,9 +67,10 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 		// still runs, and group 8's runtime guard (assertSameSetOpKeyOrder,
 		// wired into buildRecursiveEntryQuery) also refuses a key-set
 		// mismatch as a degenerate case of an order mismatch, so this now
-		// throws for real too; wrapped in toThrow() so that second,
-		// independent refusal doesn't fail the test with an uncaught
-		// exception.
+		// throws for real too; wrapped in toThrow() (asserting the
+		// specific code, not any exception) so that second, independent
+		// refusal doesn't fail the test with an uncaught exception, and
+		// doesn't silently pass for a different reason either.
 		expect(() =>
 			withCte((w) => {
 				w.asRecursive(
@@ -85,7 +86,7 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 				);
 				return select(t);
 			}),
-		).toThrow();
+		).toThrow(expect.objectContaining({ code: "set-op-key-order-mismatch" }));
 	});
 
 	it("a recursive term listing the anchor's keys in a different order is refused (#487, second half — group 8)", () => {
@@ -108,7 +109,12 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 				);
 				return select(t);
 			}),
-		).toThrow(/set-op-key-order-mismatch|left: \(id, v\), right: \(v, id\)/);
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-order-mismatch",
+				message: expect.stringContaining("left: (id, v), right: (v, id)"),
+			}),
+		);
 	});
 
 	it("a field computed differently on each side is accepted and reads back as the anchor's type", () => {
