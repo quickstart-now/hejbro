@@ -138,3 +138,23 @@ describe("ObjectKind type-predicate narrowing", () => {
 		throw new Error("expected blockKind to own the declaration");
 	});
 });
+
+/** A kind whose declared objects have no catalog counterpart at all -- mirrors `@hejbro/supabase`'s real storage-bucket kind (#482), a row the Storage API owns rather than this database's own migrations. */
+const catalogLessKind: ObjectKind<BlockDeclaration> = {
+	...blockKind,
+	kind: "catalog-less-block",
+	noCatalogObjectReason:
+		"a catalog-less-block is a row an external service owns, not this database's own migrations.",
+};
+
+describe("ObjectKind.noCatalogObjectReason (#482, task 2.1)", () => {
+	it("a kind can declare that no catalog object backs it, with a reason", () => {
+		expect(catalogLessKind.noCatalogObjectReason).toBe(
+			"a catalog-less-block is a row an external service owns, not this database's own migrations.",
+		);
+	});
+
+	it("is optional and additive -- a kind that never sets it is unaffected", () => {
+		expect(blockKind.noCatalogObjectReason).toBeUndefined();
+	});
+});
