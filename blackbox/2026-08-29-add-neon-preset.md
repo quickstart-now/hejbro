@@ -224,8 +224,117 @@ pedantry without it.
   than a wrong assertion: the other party has to find the evidence to
   refute it, and if uncorrected it enters the record.
 
-## Pending
+## What the verification actually showed
 
-_(Filled before the PR: groups 7–8 outcomes, the final gate evidence
-including the `set_config` scope mutation observed red in both its
-statement-level and behavioural pins, and the `Refs:` blob SHAs.)_
+Four observations carried the change. Each began as an argument and ended
+as something watched.
+
+**The pooling guarantee.** D96 chose transaction-local scope so an
+identity cannot outlive the request that set it. Two tests were written
+to hold that — one asserting the emitted statement's third argument,
+one asserting a reused pooled connection is clean afterwards — on the
+reasoning that either alone is insufficient: inside a single transaction
+the two scopes are indistinguishable, so reading the value back cannot
+tell them apart. With the local stack running, the reviewer mutated
+`@hejbro/query` itself to emit session scope instead. Both went red, and
+the behavioural one printed the leak:
+
+```
+× identity does not survive the scoped execution on a reused connection
+   AssertionError: expected '{"sub":"aaaaaaaa-0000-4000-8000-00000…' to be falsy
+```
+
+The mismatched-mode test failed alongside it, unplanned: the leaked
+identity reached the *next* test and admitted rows that scenario exists
+to see denied. The failure mode spreading across requests is what
+pooling leaks are, watched directly.
+
+**The gate that could not see the package.** The proposal claimed that
+hardcoded registration lists leave a new package unmeasured while CI
+stays green. The reviewer planted one over-threshold function and ran
+the gate twice — once with the registration removed, once restored:
+
+```
+registration removed → scanned 1434 functions across core, supabase, query, pg
+                       check-crap: ok -- no violations
+registration restored → scanned 1455 functions, incl. @hejbro/neon
+                       30.00  complexity=5 coverage=0%  plantedComplexity
+                       error[check-crap]: 1 function(s) exceed the threshold
+```
+
+The same defect, invisible and then caught. This is also where the
+counterfactual discipline this change adopted proved its own premise.
+
+**A gate list that was one entry short.** The task named six sites in the
+pack smoke; the implementer judged a seventh belonged (every other
+package had it) and added it. That seventh assertion is the one that
+caught a deliberately emptied `files` field. Six would have passed.
+
+**A criterion that measured nothing.** Group 8's acceptance test for the
+fixed-group registration — that `changeset status` lists the package with
+the other five rather than alone — was set in group 1, ratified, and
+carried for eight groups. Run as a counterfactual it turned out to be
+blind: the text output is identical with and without the registration,
+because the changeset file declares the bump directly. The correct
+observation is the resulting version (`0.2.0` alongside the others,
+`0.1.0` alone), read from `--output` JSON. The registration was right;
+the criterion had never been able to tell.
+
+## The drift this change predicted, dated
+
+`@hejbro/neon` copies the `driver-missing-capability` message text
+because the contract requires that error and exports no builder for it
+(#490). The copies were byte-identical when the issue was filed, with
+nothing holding them so.
+
+While this change was in review, `@hejbro/query` shipped an error-message
+change. It turned out to touch a different error entirely —
+`query-execution-failed`, in a different file — leaving the copied text's
+own source untouched. So this was not a near miss: it was a reason to
+look, and looking found the copies still identical, verified twice
+(before and after the rebase) with a control showing the comparison
+detects a one-character difference.
+
+What that leaves is a dated left edge, not a resolution. The check
+happened because a person read the issue and went to compare; nothing in
+the repository would have said anything had the copied path been the one
+that moved. When the copies do diverge, this record says when they had
+not yet.
+
+## Final state
+
+Rebased onto `dev` at `f2e7781`, which had moved three commits past the
+value announced when the rebase was planned — so the target was read at
+the moment of the rebase rather than taken from the announcement. Two
+files conflicted, both append-or-regenerate rather than semantic:
+`README.md`'s two badge blocks (resolved by regenerating, not by hand-
+editing numbers) and `openspec/task-times.csv`'s tail, where two changes
+had each appended rows; both sides kept, this change's 47 rows confirmed
+present afterwards. `.changeset/config.json` merged clean and still
+carries the package in the fixed group.
+
+Every figure quoted during the change is stale after that move, so all
+were re-measured:
+
+```
+check          514 files, no fixes            (was 502)
+check-types    15/15
+test           16/16 — @hejbro/neon 36 tests
+build          6/6
+check:bans     170 source files               (was 167)
+check:crap     0 of 1506 functions over CRAP 5, highest 5.00,
+               across core, supabase, query, pg, neon        (was 1454)
+check:tasktime 335 tasks / 14m avg / 1.69x / 28% overhead — idempotent on re-run
+smoke          all assertions, six packages
+```
+
+The fixed-group registration was checked with the criterion that
+replaced the blind one — resulting versions rather than the listing:
+all six packages move `0.1.1 → 0.2.0` together, the new package among
+them rather than alone at `0.1.0`.
+
+The interface claim held to the end. Across all eight groups the diff
+touches no file under `packages/core`, `packages/query`, `packages/cli`,
+`packages/pg`, or `packages/supabase` — checked with a three-dot range
+so a moving `dev` cannot contaminate it, and with the pattern shown to
+match where it should before its silence was read as absence.
