@@ -159,3 +159,6 @@ jobs:
       - run: pnpm check:next-marker
       - run: pnpm check:diagnostic-xref
       - run: pnpm check:bans
+      # #488: the changeset fixed group must equal the workspace's published
+      # set exactly -- a new package outside the group would version alone.
+      - run: pnpm check:fixed-group

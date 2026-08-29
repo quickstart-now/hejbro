@@ -12,7 +12,7 @@
 // in its own right. `waited_user_min` is excluded by construction --
 // the ledger keeps owner-decision wait in its own column, so pure work
 // time is what every metric reads (owner rule).
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -103,9 +103,40 @@ const replaceBlock = (readme, block) => {
 	return readme.slice(0, start) + block + readme.slice(end + BADGE_END.length);
 };
 
+// #496: the badge check verified README-vs-ledger agreement but never
+// that the ledger HAS rows for the change being worked -- seven reviewed
+// groups once shipped with zero rows and every gate stayed green. An
+// active change whose tasks.md has a completed (checked) task must have
+// at least one ledger row under its change id. The honest escape for a
+// piece that deliberately recorded nothing is a sentinel row -- task_id
+// `none-recorded`, empty est/actual (metric-neutral by construction:
+// est-empty rows are overhead, and an empty actual sums as zero), with
+// the reason in notes.
+const activeChangesMissingRows = (rows) => {
+	const changesDir = join(REPO_ROOT, "openspec", "changes");
+	const ledgerIds = new Set(rows.map((row) => row[1]));
+	const entries = readdirSync(changesDir).filter(
+		(entry) =>
+			entry !== "archive" && existsSync(join(changesDir, entry, "tasks.md")),
+	);
+	return entries
+		.filter((id) =>
+			/- \[x\]/i.test(readFileSync(join(changesDir, id, "tasks.md"), "utf8")),
+		)
+		.filter((id) => !ledgerIds.has(id));
+};
+
 const checkOnly = process.argv.slice(2).includes("--check");
+const ledgerRows = readLedger();
+const missingRows = activeChangesMissingRows(ledgerRows);
+if (missingRows.length > 0) {
+	console.error(
+		`error[check-tasktime-rows]: active change(s) with completed tasks but no ledger rows: ${missingRows.join(", ")}. Next: append the group's measured rows to openspec/task-times.csv, or -- for a piece that deliberately recorded nothing -- one sentinel row per change: <date>,<change-id>,none-recorded,-,,,0,<why nothing was recorded>`,
+	);
+	process.exit(1);
+}
 const readme = readFileSync(README_PATH, "utf8");
-const next = replaceBlock(readme, renderBlock(computeMetrics(readLedger())));
+const next = replaceBlock(readme, renderBlock(computeMetrics(ledgerRows)));
 
 if (next === readme) {
 	console.log("check-tasktime: README task-time badges are current");

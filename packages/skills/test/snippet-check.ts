@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 
@@ -7,7 +7,40 @@ export const REPO_ROOT = resolve(import.meta.dirname, "..", "..", "..");
 
 const PRELUDE_DIR = join(REPO_ROOT, "packages/skills/test/fixtures/preludes");
 
-/** Every user-facing package a snippet is allowed to import from (#131 policy: source entries, never `dist`). */
+/** Every user-facing package a snippet is allowed to import from (#131 policy: source entries, never `dist`). Deliberately hand-curated — the map's meaning is "allowed imports", not "packages that exist", so deriving it from the workspace would silently widen the allowed surface with every new package (#484's design note). The guard below keeps it from dangling instead: every key and target must exist in the workspace, so the list can under-approve but never rot. */
+const allowedImportPaths: Record<string, string[]> = {
+	hejbro: ["packages/cli/src/index.ts"],
+	"@hejbro/core": ["packages/core/src/index.ts"],
+	"@hejbro/query": ["packages/query/src/index.ts"],
+	"@hejbro/pg": ["packages/pg/src/index.ts"],
+	"@hejbro/supabase": ["packages/supabase/src/index.ts"],
+	"@hejbro/neon": ["packages/neon/src/index.ts"],
+};
+
+Object.entries(allowedImportPaths).forEach(([name, targets]) => {
+	targets.forEach((target) => {
+		const entry = join(REPO_ROOT, target);
+		const manifestPath = join(
+			REPO_ROOT,
+			target.split("/src/")[0] ?? "",
+			"package.json",
+		);
+		if (!existsSync(entry) || !existsSync(manifestPath)) {
+			throw new Error(
+				`snippet-check: allowed-import entry "${name}" points at a path that does not exist (${target}). Next: fix or remove the entry — a dangling allow-list key fails no gate on its own.`,
+			);
+		}
+		const manifestName: unknown = JSON.parse(
+			readFileSync(manifestPath, "utf8"),
+		).name;
+		if (manifestName !== name) {
+			throw new Error(
+				`snippet-check: allowed-import key "${name}" resolves to a package named "${String(manifestName)}" (${target}). Next: the key must match the package's own name.`,
+			);
+		}
+	});
+});
+
 const compilerOptions: ts.CompilerOptions = {
 	strict: true,
 	noEmit: true,
@@ -18,14 +51,7 @@ const compilerOptions: ts.CompilerOptions = {
 	noUnusedLocals: false,
 	noUnusedParameters: false,
 	baseUrl: REPO_ROOT,
-	paths: {
-		hejbro: ["packages/cli/src/index.ts"],
-		"@hejbro/core": ["packages/core/src/index.ts"],
-		"@hejbro/query": ["packages/query/src/index.ts"],
-		"@hejbro/pg": ["packages/pg/src/index.ts"],
-		"@hejbro/supabase": ["packages/supabase/src/index.ts"],
-		"@hejbro/neon": ["packages/neon/src/index.ts"],
-	},
+	paths: { ...allowedImportPaths },
 };
 
 export type SnippetDirectives = {
