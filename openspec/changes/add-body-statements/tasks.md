@@ -29,7 +29,7 @@ Two rules apply to every task here and are not repeated per line:
 
 ## 1. The body's statement surface
 
-- [ ] 1.1 (~8m) [design] An `execute` body statement: `ctx.execute(...)`
+- [x] 1.1 (~8m) [design] An `execute` body statement: `ctx.execute(...)`
       records a select, insert, update or delete in body order; the
       renderer emits `perform <sql>;` for a select and `<sql>;` for a
       mutation. [design] settles the member name, the admissible builder
@@ -45,7 +45,7 @@ Two rules apply to every task here and are not repeated per line:
       executed for effect becomes perform".
       Files: `packages/core/src/plpgsql/body-ast.ts`,
       `plpgsql/body-context.ts`, `plpgsql/render-body.ts`, that test.
-- [ ] 1.2 (~7m) [design] `ctx.execute` refuses a mutation carrying
+- [x] 1.2 (~7m) [design] `ctx.execute` refuses a mutation carrying
       `.returning()`, at runtime (`returning !== null`) because the
       returning stage's type is a subtype of the stage before it. [design]
       settles the code name — `execute-expects-no-returning` unless a

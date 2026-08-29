@@ -465,4 +465,13 @@ describe("body-context recording", () => {
 		const [executeStmt] = declaration.functionDeclaration.body.statements;
 		expect(executeStmt?.stmtKind).toBe("execute");
 	});
+
+	it("ctx.execute() of a value that isn't a statement builder throws execute-expects-statement", () => {
+		expect(() =>
+			defineTrigger(comments, triggerConfig, (ctx, { new: row }) => {
+				// @ts-expect-error — a trigger row isn't a valid ctx.execute() argument
+				ctx.execute(row);
+			}),
+		).toThrowError(/isn't a select, insert, update or delete builder/);
+	});
 });

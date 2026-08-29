@@ -409,18 +409,21 @@ const assertExecuteHasNoReturning = (
 
 /**
  * `ctx.execute(...)` (#426): records a select/insert/update/delete
- * builder as a statement run for its side effect. `value` matching none
- * of `ReturnableQuery`'s four shapes is structurally unreachable for a
- * type-correct caller (the parameter type admits nothing else) — same
- * "unreachable" classification as `currentFrame`/`popFrame` above, not a
- * new user-facing code.
+ * builder as a statement run for its side effect. `returnableQueryNode`
+ * returning `null` is reachable only by a caller that ignores `ReturnableQuery`
+ * (raw JS, or a `ts-expect-error`/`as any` escape) — the same class of
+ * gap `recordReturnQuery` leaves for `recordReturnShape`'s
+ * `unsupported-return-value` to name, so this states its own user-facing
+ * diagnostic here rather than hiding behind the exempt `"unreachable"`
+ * code (#288 would flag that: `unreachable` skips `check:next-marker`,
+ * and this site is reachable once the type system is bypassed).
  */
 const recordExecute = (state: RecordingState, value: ReturnableQuery): void => {
 	const query = returnableQueryNode(value);
 	if (query === null) {
 		throwHejbroError(
-			"unreachable",
-			`${state.identity}: ctx.execute() received a value matching none of ReturnableQuery's shapes.`,
+			"execute-expects-statement",
+			`ctx.execute() in ${state.identity} received a value that isn't a select, insert, update or delete builder. Next: pass one of those.`,
 			state.declaredAt,
 		);
 		return;
