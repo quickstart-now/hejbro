@@ -152,7 +152,7 @@ starts from its own failing test.
 
 ## 3. The WebSocket path and the driver entry
 
-- [ ] 3.1 (~9m) [design] `neonDriver`, overloaded on the client it is
+- [x] 3.1 (~9m) [design] `neonDriver`, overloaded on the client it is
       handed: a Neon `Pool` selects the WebSocket path, the `neon()`
       query function selects the HTTP path. The [design] part is that the
       overload — not an option flag and never a runtime probe — fixes the
@@ -160,30 +160,30 @@ starts from its own failing test.
       exists. Red: `packages/neon/test/driver.test.ts` — "the client
       argument fixes the capability set". Files:
       `packages/neon/src/driver.ts`, that test.
-- [ ] 3.2 (~8m) WebSocket execution: a compiled statement's SQL and
+- [x] 3.2 (~8m) WebSocket execution: a compiled statement's SQL and
       parameters reach the pool, and rows come back as the contract's row
       shape. Neon's `Pool` is **not** assignable to `pg`'s (measured: its
       `connect()` returns a different `PoolClient`), so this is written
       against Neon's own types rather than reusing `pgDriver`. Red: same
       file — "executes a compiled statement over the pool". Files:
       `packages/neon/src/driver.ts`, that test.
-- [ ] 3.3 (~9m) WebSocket interactive transactions over a checked-out
+- [x] 3.3 (~9m) WebSocket interactive transactions over a checked-out
       client, with rollback on a thrown callback. Red: same file —
       "rolls back when the transaction callback throws". Files:
       `packages/neon/src/driver.ts`, that test.
-- [ ] 3.4 (~7m) `setupSession` applies the same pins `@hejbro/pg` applies,
+- [x] 3.4 (~7m) `setupSession` applies the same pins `@hejbro/pg` applies,
       once per checkout, and the WebSocket capability declaration reads
       `{"interactive-transactions": true, "session-state": true}` —
       measured true against a local proxy, not assumed from the client's
       node-postgres compatibility. Red: same file — "pins the session at
       checkout and declares both capabilities". Files:
       `packages/neon/src/driver.ts`, that test.
-- [ ] 3.5 (~6m) `contributedRoles` carries `authenticated` and
+- [x] 3.5 (~6m) `contributedRoles` carries `authenticated` and
       `anonymous`, so the context mechanism's fail-closed role allowlist
       admits them without a declaration that grants them. Consumes group
       4's constants. Red: same file — "contributes Neon's two Data API
       roles". Files: `packages/neon/src/driver.ts`, that test.
-- [ ] 3.6 (~8m) Every query carries the same `types` override
+- [x] 3.6 (~8m) Every query carries the same `types` override
       `@hejbro/pg` sends — oids 1186/1187/1231 forced to raw text, every
       other type left to the client's own parser. **Runs with 3.2**; it
       is numbered last only so the tasks already cited in review
