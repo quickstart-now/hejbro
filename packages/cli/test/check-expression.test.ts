@@ -112,6 +112,13 @@ type FakeSessionOptions = {
  * after review round 2): two statements can land on two pooled
  * connections whose `search_path` differs, so "one statement" is the
  * enforceable claim, not "one session object was passed".
+ *
+ * The `), (` check pins the statement to *two* parenthesized expressions
+ * in the select list, not one -- a syntactic guard only; whether
+ * Postgres itself keeps two agreeing entries as two `Output` elements
+ * rather than folding them is a server fact this fake-session unit test
+ * cannot establish (measured directly instead, see this file's own
+ * comments; the real proof is 6.2's live witness).
  */
 const expectOneSelectListProbe = (
 	calls: ReadonlyArray<CompileResult>,
@@ -123,6 +130,7 @@ const expectOneSelectListProbe = (
 	const [explainCall] = explainCalls;
 	const sql = explainCall?.sql.toLowerCase() ?? "";
 	expect(sql).toContain("select (");
+	expect(sql).toContain("), (");
 	expect(sql).not.toMatch(/\bwhere\b/);
 };
 

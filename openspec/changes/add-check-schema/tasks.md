@@ -280,10 +280,17 @@ Postgres rewrites expressions on write.
       expression, no type, nothing that could produce a false positive.
       The [design] part is the wording and placement of the section: it
       is user-facing text that must read as information, never as a
-      failure the exit code forgot to report. Red:
+      failure the exit code forgot to report. **This task ends at the
+      report, not at the module** — it adds the extension read, the
+      inventory itself, and the lines the command prints, because 4.4
+      already showed what a comparison nobody calls is worth. Red:
       `packages/cli/test/check-inventory.test.ts` — "lists an unmanaged
-      table and still exits zero", "lists the installed extensions".
-      Files: `packages/cli/src/check/inventory.ts`, that test.
+      table and still exits zero", "lists the installed extensions";
+      `packages/cli/test/check-command.test.ts` — "prints the inventory
+      section in the report". Files:
+      `packages/cli/src/check/inventory.ts`,
+      `packages/cli/src/check/catalog.ts` (the extension read),
+      `packages/cli/src/commands/check.ts` (the section), those tests.
 
 ## 6. The live witness
 
