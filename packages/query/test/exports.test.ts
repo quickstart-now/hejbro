@@ -103,12 +103,24 @@ type _ColumnPlanEntryNeverReExported = ColumnPlanEntry;
  * -- both are the header's own words, restated as assertions.
  */
 describe("@hejbro/query public barrel (task 7.8)", () => {
-	it("exposes exactly the agreed runtime value exports -- db, compile, sql", () => {
+	it("exposes exactly the agreed runtime value exports -- db, compile, sql, throwMissingCapability", () => {
 		// Exact-set equality (not just "contains") -- the task's own
 		// contract is "matches the agreed list": this fails just as hard
 		// on an accidental future *addition* (e.g. a stray `convertRows`
-		// leak) as it does on one of the three agreed names going missing.
-		expect(Object.keys(barrel).sort()).toEqual(["compile", "db", "sql"]);
+		// leak) as it does on one of the agreed names going missing.
+		expect(Object.keys(barrel).sort()).toEqual([
+			"compile",
+			"db",
+			"sql",
+			"throwMissingCapability",
+		]);
+	});
+
+	it("the missing-capability thrower is exported (#490 -- presets construct, never copy, the user-facing text)", () => {
+		expect(typeof barrel.throwMissingCapability).toBe("function");
+		expect(() =>
+			barrel.throwMissingCapability("session-state", "setupSession"),
+		).toThrowError(/session-state/);
 	});
 
 	it("never re-exports the test-only conversion internals (db/convert.ts) -- named absence, redundant with the exact-match above on purpose (one loosening independently of the other still fails)", () => {
