@@ -1,7 +1,56 @@
 # 2026-08-29 — `@hejbro/neon`, the second provider preset
 
-Refs: _(blob SHAs pinned at the recorded state — filled before the PR, see
-"Pinning" at the end)_
+Refs — blob SHAs of this change's files in its final tree, generated with
+`git rev-parse <commit>:<path>` at branch commit `c1eb7eb` and unchanged
+since. That commit is provenance only: a squash merge does not preserve
+it, while the blobs it names are the content of the merge commit's tree,
+which is what a pin is for. The renamed rule file appears here only under
+its surviving path — a deleted path carries no blob in the final tree, so
+there is nothing to pin.
+
+```
+.changeset/add-neon-preset.md 082ea6227ed98d1a2bb18e7fbaf6e0f2a74ad6aa
+.changeset/config.json 8fd471a60449382c211ee5dcfa7f8c2fa0849361
+.claude/rules/provider-preset.md 8e2469d2e2713c0a779518eab3e080e65240001e
+AGENTS.md a5584e2a86da047985b7fd18be9a51746d970433
+openspec/changes/add-neon-preset/.openspec.yaml 50adc91034fafb883485599339d460729ea20b5c
+openspec/changes/add-neon-preset/design.md cd19eb6b12da5d099118e6ffbf60bfb92ade649f
+openspec/changes/add-neon-preset/proposal.md b98a25f6a8a1dbe1e227ff755141713b1b4f9ee4
+openspec/changes/add-neon-preset/specs/driver-contract/spec.md 0929e895be7261acd6b59a06b230dbe20236cc6b
+openspec/changes/add-neon-preset/specs/rls-execution-context/spec.md d708def0499ae5abe33161d8d2f744016b68b0f6
+openspec/changes/add-neon-preset/tasks.md dce6b0381ff3cbe960c66e4b491be27368a17859
+openspec/task-times.csv 032655ff288645f919e377fb003abb0083784c5e
+packages/neon/LICENSE 91bfc8d3fd5f41a85ea969de60cb3253c9dc8377
+packages/neon/README.md 97b2cfe2f3a17d4330690957edbd067e385906ce
+packages/neon/package.json d2daf51dad969ec92b9b448f0009244ccf588053
+packages/neon/src/auth.ts 659a1bb82713a76fd90b7b2cbf4dbec5fe58fd17
+packages/neon/src/context.ts 4d9a5470493776fb54d77c51732618e73f4a0b54
+packages/neon/src/driver.ts 9d73089e81a5ab0b575b8b2c927484f9672d1152
+packages/neon/src/http.ts dd84a521bed1233768c1ee839cf5e0e92bc5deb4
+packages/neon/src/index.ts 0e662226c24ed6f82d10a142200f4dc16823b400
+packages/neon/src/roles.ts e5fce7777e1634679d01c2685a77868b6c6942fd
+packages/neon/src/type-overrides.ts 940bbab4a438119644900e99bc0a531f8e50c32d
+packages/neon/test/auth.test.ts e448aae0888a19930ff51801bf62575711ed2cf8
+packages/neon/test/context.test.ts 167d1e5dffe07cc8f0ef589ac01d4de7894bf0f2
+packages/neon/test/driver.test.ts ce9b3bffe6e6127430f168e5a41e99344920cb1a
+packages/neon/test/entry.test.ts 410c4cbe41bf83f8c24fb81f83441c097e273f68
+packages/neon/test/http-session.test.ts 72810b5b3e408a9c16e5bbbb3d219ff499bf36a5
+packages/neon/test/integration/ws.integration.test.ts 7e4a9e1e1136c447a48f396211a197ae7adee8a7
+packages/neon/test/roles.test.ts 096e8ad3222ba77acc06dd9131d9b59c7fbae9aa
+packages/neon/tsconfig.json 736377c39eee2c5cb58d95037d1fac81d0f23aec
+packages/neon/tsdown.config.ts 2c54079c897adf725ff778fb15dc13adce558d43
+packages/neon/turbo.json 5368f20f33e7df2f7aa5d0e9df07b641f8fcf61d
+packages/neon/vitest.config.ts 0ce449c7086e39631bffcfe575e42d74b10a94e7
+packages/neon/vitest.integration.config.ts ada5a8e3b8b4aa05dc308142e70c24a86876fbff
+packages/neon/vitest.shared.ts e8aff23756e2e4b44239c716919140d37a917a21
+packages/skills/package.json 4e79cc6148ad11992fa2dd6f18c4789936e2ebf7
+packages/skills/test/snippet-check.ts 5fb631b2cf0ae36f8d12eb867d10c85b38a53388
+pnpm-lock.yaml 23d1890502969aa40ff80ac44bb3962015eefdf6
+scripts/crap-report.mjs 7305f8ac99295f83eeabf4709da85707cf229d16
+scripts/pack-install-smoke.sh 3af17ccd52c385498b776e1482dbfef1e8160bf3
+skills/hejbro/references/neon-preset.md bfde5b9ef85759e970e7a1243cdd9737d22f98cb
+README.md a02b3fabe2a2a0b5f4fa6a046552ca63c5278ffb
+```
 
 ## Owner context
 
