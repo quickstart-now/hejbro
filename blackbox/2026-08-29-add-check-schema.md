@@ -1,8 +1,8 @@
 Refs:
 - openspec/changes/add-check-schema/proposal.md @ blob d7a171b454881017c7f34ec45d0ca90278b51262
-- openspec/changes/add-check-schema/tasks.md @ blob 699101fc09ed32a9728699ea173f0346c1ad1015
+- openspec/changes/add-check-schema/tasks.md @ blob 237fc97ab625419f6594a498f214fefb3c78f16f
 - openspec/changes/add-check-schema/specs/cli-commands/spec.md @ blob 976e93fd78ec464586feff2088525b593a0eaf4a
-- packages/cli/src/check/driver.ts @ blob 708a1e39617fdd56d104c1376f27eeb3b152dea0
+- packages/cli/src/check/driver.ts @ blob b27320fe02dd4a47ca12a6448d8da6a95f229b34
 - packages/cli/src/check/catalog.ts @ blob 1460fdf19ef8e00c07bd6df4ba11f096094bc422
 - packages/cli/src/check/compare.ts @ blob 9ce57a50ea69f6cd71c049a7a0d62f6709eb0928
 - packages/cli/src/check/expression.ts @ blob c50b179524ff2cc736b00810cc6488563f7489a1
@@ -10,7 +10,13 @@ Refs:
 - packages/cli/src/check/inventory.ts @ blob 9d734afad1487f302c48c9e35a9f343abb62a047
 - packages/cli/src/commands/check.ts @ blob 2ee4c0efb20104c72935460a0c6fe3448a4d8c14
 - packages/cli/src/flags.ts @ blob 44f6f48fafb03c48f8623573af5c4e42e643d683
+- packages/cli/test/check-command.test.ts @ blob c8142a2ae88d53b01508ebc401a53f7e262a5ea0
 - packages/cli/test/check-live.integration.test.ts @ blob 7407a342d4e15e119ddd8f1aa4ad7c8e387969fa
+- skills/hejbro/references/brownfield-adoption.md @ blob e47737b34e70526b8c9fb823ae0f5c2b11cb5f79
+- skills/hejbro/SKILL.md @ blob f0360abf42aba67548c03ab3148642fcd8a4f498
+- .changeset/add-check-schema.md @ blob 712d49d19cee9f502924292f1534691a47c9a375
+- openspec/task-times.csv @ blob 657ea529798d60040fabd5c8b9fea969bdc27862
+- README.md @ blob 120000966e61ffc1828d6e4c2205e9bb8b090c66
 
 # add-check-schema — `hejbro check` (#442)
 
@@ -24,42 +30,28 @@ No owner exchange specific to `check` — #442 was filed by the assistant
 ("Claude Code (agent)") against a gap `hejbro baseline` (#441) left open
 on purpose. Every owner-level call this change makes (the live-connection
 decision, the driver's dependency-declaration shape) was made under a
-standing delegation, not a direct ruling on this piece. `blackbox/
-README.md`'s own rule applies here in full: the delegation is recorded
-**verbatim, in the owner's own Korean**, never summarized or translated
-— a paraphrase is a record of what the assistant heard, not of what was
-said.
+standing delegation, not a direct ruling on this piece, and `blackbox/
+README.md`'s own rule governs how that delegation is recorded here: a
+faithful English rewrite, complete in content and natural in form, never
+a word-for-word translation of the owner's Korean.
 
-Owner delegation (2026-08-29, verbatim, Korean):
-
-> "다시 자리 비워야하니까 이제 머지던 기획 결정사항이던 전부 너가 ORM을
-> 만든다는 기준으로 결정하고 기존절차대로 처리해줘. … 너랑 내가 만들고
-> 있는 이게 ORM이라는것, 오로지 Postgres, Postgres기반으로 만들어진
-> 서비스를 위한 ORM이라는거 명심하고 처리해줄래? 기존 절차대로 팀이
-> 필요하면 팀으로 처리도 하고, openspec에서 오너결정사항 필요해도 내가
-> 올때까지 너가 직접 결정하고."
-
-Return rule (owner, same day): mid-session owner messages do not end the
-delegation; only an explicit return declaration does.
-
-Two calls in this change were made under that delegation rather than by
-the owner directly (local labels, this entry's own — not the design
-spec's global decision log, which already owns D1-D3 for an unrelated
-subject and would collide):
-
-- **D2 (this entry).** Live connection only, `--url`/`DATABASE_URL` —
-  rejecting the issue's own `--schema <dump>` notation on the measured
-  grounds below. #442's own title and body treat a dump as at least a
-  candidate input; this change closes that door on evidence, not by
-  reflex.
-- **D3 amendment (this entry).** `@hejbro/pg` is declared as no
-  dependency kind of `hejbro` at all — not a runtime dependency, not a
-  peer, optional or otherwise — never simply "an optional peer," which
-  is not a `package.json` field this repository's tooling recognizes
-  and was the implementer's own first (wrong) phrasing of this same
-  decision in this change's own skill doc and changeset, caught and
-  fixed while writing this entry (see "What this change got wrong"
-  below).
+Before stepping away for a period, the owner delegated every decision
+this class of work would otherwise need — merge decisions, planning
+decisions, and anything that would normally require an explicit
+`openspec` owner ruling — to be made directly, judged against one
+standing criterion: this project is an ORM, and specifically an ORM for
+Postgres and Postgres-based services, never a generic multi-database
+tool. The owner's own instruction authorized forming a team and
+following the existing process where that process already calls for
+one. Reserved from the delegation: the npm publish gate itself (approving
+the actual release) stays the owner's alone, unaffected by this
+delegation. The delegation's own return rule, given the same day: an
+owner message arriving mid-session does not end it — only an explicit
+return declaration does. Every owner-level call this piece makes (the
+live-connection decision below, and the driver's dependency-declaration
+shape) was made inside a lead session operating under that delegation,
+not directly by the owner, and is therefore something the owner's return
+should confirm rather than something already settled by them.
 
 ## What was measured, and decided instead
 
@@ -84,10 +76,11 @@ Measurement said a dump file cannot be the input:
   versions returned byte-identical results for the fields this command
   compares.
 
-Decided instead (D2): `hejbro check --url <connection-string>` (or
-`DATABASE_URL`), a read-only connection to the real database, never a
-dump. A second measurement then shaped how expressions are compared:
-comparing our own rendered expression text to the catalog's text
+Decided instead — under the delegation, not by the owner directly:
+`hejbro check --url <connection-string>` (or `DATABASE_URL`), a
+read-only connection to the real database, never a dump. A second
+measurement then shaped how expressions are compared: comparing our own
+rendered expression text to the catalog's text
 produced 14 false positives across 23 expression-bearing fields in
 `examples/postgres`, including 8 of 8 check constraints — Postgres
 rewrites expressions on write (`in (...)` becomes `= ANY(...)`, a cast
@@ -109,6 +102,18 @@ the cost is a real SQL parser, which does not exist anywhere in this
 repository today (every SQL path here runs in the emit direction only),
 and that decision should be made against that price, not by inheriting
 the phrasing of #442's own title.
+
+The second owner-level call this piece makes, also under the delegation
+rather than a direct ruling: `@hejbro/pg` is declared as no dependency
+kind of `hejbro` at all — not a runtime dependency, and not a peer,
+optional or otherwise. Installing `hejbro` therefore never pulls in a
+Postgres client for the commands that never connect, and the package
+manager is never asked to reason about a package only `check` uses. The
+implementer's own first phrasing of this same decision, in this change's
+own skill doc and changeset, called it "an optional peer" — a
+`package.json` field this repository's tooling does not recognize for
+this dependency at all. Caught while writing this entry, against the
+actual `package.json` (see "What this change got wrong" below).
 
 ## What this change got wrong
 
@@ -155,6 +160,30 @@ A flight recorder that only records good flights is not one:
   adding a true positive control (`convalidated: true`, matching, zero
   findings) alongside it, so the axis this test claims to cover is
   actually exercised in both directions.
+- **Two instructions this entry's own author gave, both wrong, both
+  caught by the implementer asking instead of complying.** Writing this
+  entry, the planner first instructed that the owner-request section
+  above quote the delegation verbatim in the owner's own Korean. The
+  implementer asked rather than writing it that way: `blackbox/
+  README.md`'s own rule (owner rule, 2026-08-26) is a faithful English
+  rewrite, never a word-for-word translation, and the nearest precedent
+  entry in this same directory follows exactly that rule. The lead's
+  own ruling, once asked: the implementer's catch was correct and the
+  instruction was wrong — a Korean quote is neither a rewrite nor
+  compliant with this repository's own English-only rule for
+  GitHub-facing text, and a sibling piece's entry had already merged
+  the same wrong instruction elsewhere, requiring the lead's own
+  follow-up correction there. Separately, the planner instructed
+  labelling this piece's own delegated decisions `D2` and the `D3`
+  amendment. The implementer asked again rather than writing them that
+  way: those labels belong to the design spec's own global decision
+  log, where `D2`/`D3` already name an unrelated subject (the plpgsql
+  function-body compiler, v1's scope), and reusing them here would
+  collide. The lead's ruling: correct again, written in prose instead,
+  no local labels at all — the same defect class (a session-local label
+  colliding with a permanent, global one) had already happened once in
+  a different piece under a different name, and this catch is what kept
+  it from happening a second time inside this one.
 
 ## Reviewer's own contribution: #461
 
