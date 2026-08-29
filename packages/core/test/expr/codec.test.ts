@@ -788,3 +788,76 @@ describe("decodeSelectNode leniency for a pre-extension v8 snapshot (#444 F7)", 
 		);
 	});
 });
+
+// add-window-functions task 1.3: a WindowNode's three child positions
+// (fn/partitionBy/orderBy) round-trip, and window is new in the snapshot
+// format (#444 R4) -- a missing fn is corruption, never repaired.
+describe("WindowNode codec", () => {
+	const customerId: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "orders",
+		columnName: "customer_id",
+	};
+	const createdAt: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "orders",
+		columnName: "created_at",
+	};
+	const amount: ExprNode = {
+		nodeKind: "columnRef",
+		schemaName: "app",
+		tableName: "orders",
+		columnName: "amount",
+	};
+	const windowNode: ExprNode = {
+		nodeKind: "window",
+		fn: {
+			nodeKind: "functionCall",
+			schemaName: null,
+			functionName: "sum",
+			args: [amount],
+		},
+		partitionBy: [customerId],
+		orderBy: [{ expr: createdAt, direction: "desc" }],
+	};
+
+	it("a window function survives encode/decode", () => {
+		const encoded = encodeExprNode(windowNode);
+		expect(JSON.stringify(encoded)).toContain('"window"');
+		expect(decodeExprNode(encoded)).toEqual(windowNode);
+	});
+
+	it("a window node without its function call is rejected, not repaired", () => {
+		const encoded = encodeExprNode(windowNode) as Record<string, JsonValue>;
+		const { fn: _fn, ...withoutFn } = encoded;
+		expect(() => decodeExprNode(withoutFn)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("a window node whose fn is not itself a function call is rejected", () => {
+		const encoded = encodeExprNode(windowNode) as Record<string, JsonValue>;
+		const corrupted = { ...encoded, fn: encodeExprNode(customerId) };
+		expect(() => decodeExprNode(corrupted)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("a window node missing partitionBy is rejected, not decoded as empty", () => {
+		const encoded = encodeExprNode(windowNode) as Record<string, JsonValue>;
+		const { partitionBy: _partitionBy, ...withoutPartitionBy } = encoded;
+		expect(() => decodeExprNode(withoutPartitionBy)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+
+	it("a window node missing orderBy is rejected, not decoded as empty", () => {
+		const encoded = encodeExprNode(windowNode) as Record<string, JsonValue>;
+		const { orderBy: _orderBy, ...withoutOrderBy } = encoded;
+		expect(() => decodeExprNode(withoutOrderBy)).toThrowError(
+			expect.objectContaining({ code: "malformed-snapshot-node" }),
+		);
+	});
+});

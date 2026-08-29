@@ -17,6 +17,7 @@ import type {
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
+	WindowNode,
 } from "./ast";
 import { replaceSelectChildExprs, selectChildExprs } from "./select-children";
 
@@ -477,6 +478,30 @@ const retargetExists = (node: ExistsNode, target: RenameTarget): ExprNode => {
 	return { ...node, query };
 };
 
+/**
+ * `window`'s three child positions are plain sibling expressions, not a
+ * subquery — `fn` reuses {@link retargetFunctionCall} directly (its own
+ * `nodeKind` is already narrowed to `functionCall`, so the concrete result
+ * is always a `FunctionCallNode` even though the function's own return
+ * type is the shared `ExprNode`), `partitionBy`/`orderBy` walk generically
+ * like every other composite node above.
+ */
+const retargetWindow = (node: WindowNode, target: RenameTarget): ExprNode => {
+	const fn = retargetFunctionCall(node.fn, target) as FunctionCallNode;
+	const partitionBy = node.partitionBy.map((expr) =>
+		retargetExprNode(expr, target),
+	);
+	const orderBy = node.orderBy.map((term) => retargetOrderByTerm(term, target));
+	if (
+		fn === node.fn &&
+		sameByIndex(partitionBy, node.partitionBy) &&
+		sameByIndex(orderBy, node.orderBy)
+	) {
+		return node;
+	}
+	return { ...node, fn, partitionBy, orderBy };
+};
+
 const retargetSelectExpr = (
 	node: SelectExprNode,
 	target: RenameTarget,
@@ -520,6 +545,7 @@ const retargetExprNodeHandlers: RetargetExprNodeHandlers = {
 	sqlTemplate: retargetSqlTemplate,
 	exists: retargetExists,
 	selectExpr: retargetSelectExpr,
+	window: retargetWindow,
 };
 
 /** Walks every `ExprNode` reachable from `node` (including into an `exists()`'s own `SelectNode`) rewriting `ColumnRefNode`/`TableRefNode` matches for `target`. Returns `node` unchanged (same reference) when nothing matched, so a caller can cheaply check `retargeted !== node` to decide whether re-encoding is needed. */

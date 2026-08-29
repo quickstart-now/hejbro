@@ -1,7 +1,7 @@
 import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { ColumnRefNode, Expr, ExprNode, TableRefNode } from "../expr/ast";
-import { findExprScopeViolation } from "../expr/walk";
+import { findExprScopeViolation, someExprNode } from "../expr/walk";
 import type { Role } from "./role";
 
 /** The Postgres commands a policy can be scoped to. */
@@ -292,6 +292,33 @@ const assertOwnColumnsOnly = (
 	}
 };
 
+/**
+ * Rejects a policy `using`/`with check` expression containing a window
+ * function (D104) — a new guard home (no site here rejected anything
+ * about window functions before this). Uses the SHALLOW `someExprNode`,
+ * matching `where`/`groupBy`/`having`'s own rule (`query/select.ts`) —
+ * deliberately NOT `assertOwnColumnsOnly`'s deep, `exists()`-descending
+ * walker right above: a window function inside an `exists()` subquery's
+ * own select list is a different, legal query, and following the deep
+ * precedent here would false-positive on it.
+ */
+const assertNoPolicyWindowFunction = (
+	schemaName: string,
+	tableName: string,
+	policy: PolicyInput,
+): void => {
+	const windowed = [policy.usingExpr, policy.withCheckExpr]
+		.filter((expr): expr is ExprNode => expr !== null)
+		.find((expr) => someExprNode(expr, (node) => node.nodeKind === "window"));
+	if (windowed !== undefined) {
+		throwHejbroError(
+			"rls-policy-window-function",
+			`policy "${policy.policyName}" on "${schemaName}.${tableName}" contains a window function — Postgres forbids window functions in a policy's USING/WITH CHECK expression. Next: move the window function into a view the policy reads from instead, or restructure with a subquery.`,
+			policy.declaredAt,
+		);
+	}
+};
+
 const bindPolicy = (
 	schemaName: string,
 	tableName: string,
@@ -299,6 +326,7 @@ const bindPolicy = (
 ): PolicyDeclaration => {
 	assertClauseAllowed(policy);
 	assertOwnColumnsOnly(schemaName, tableName, policy);
+	assertNoPolicyWindowFunction(schemaName, tableName, policy);
 	return {
 		declarationKind: "policy",
 		schemaName,

@@ -156,6 +156,7 @@ export type {
 	SqlTemplateNode,
 	TableRefNode,
 	UpdateNode,
+	WindowNode,
 } from "./expr/ast";
 export {
 	columnRef,
@@ -225,6 +226,21 @@ export {
 	selectExprChildExprs,
 	someDeepExprNode,
 } from "./expr/walk";
+export type { WindowFunctionCall, WindowSpec } from "./expr/window";
+export {
+	cumeDist,
+	denseRank,
+	firstValue,
+	lag,
+	lastValue,
+	lead,
+	nthValue,
+	ntile,
+	over,
+	percentRank,
+	rank,
+	rowNumber,
+} from "./expr/window";
 export type { KeyedDiff } from "./kind/diff-helpers";
 export { diffByKey, sameJson } from "./kind/diff-helpers";
 export type {

@@ -15,6 +15,7 @@ import type {
 	SetOpNode,
 	SqlTemplateChunk,
 	SqlTemplateNode,
+	WindowNode,
 } from "@hejbro/core";
 import { replaceSelectChildExprs, selectChildExprs } from "@hejbro/core";
 
@@ -295,6 +296,40 @@ const liftSelectExprNode = (
 	return { node: { ...node, query: lifted.node }, params: lifted.params };
 };
 
+/**
+ * Lifts a window function's three child positions in render order (#444
+ * F1's own discipline, applied to the one clause shape it predates): `fn`'s
+ * own args first, then `partitionBy`, then `orderBy` — matching
+ * `render-sql.ts`'s `<fn>(…) over (partition by … order by …)` text, so
+ * `$n` numbering follows the same left-to-right order a literal appears
+ * in. `liftOrderBy` is declared further down this file; referenced here
+ * the same way `liftSelectExprNode` above already forward-references
+ * `liftSelectNode`.
+ */
+const liftWindowNode = (
+	node: WindowNode,
+	startIndex: number,
+): Lifted<ExprNode> => {
+	const fn = liftFunctionCallNode(node.fn, startIndex);
+	const partitionBy = liftExprSequence(
+		node.partitionBy,
+		startIndex + fn.params.length,
+	);
+	const orderBy = liftOrderBy(
+		node.orderBy,
+		startIndex + fn.params.length + partitionBy.params.length,
+	);
+	return {
+		node: {
+			...node,
+			fn: fn.node as FunctionCallNode,
+			partitionBy: partitionBy.node,
+			orderBy: orderBy.node,
+		},
+		params: [...fn.params, ...partitionBy.params, ...orderBy.params],
+	};
+};
+
 // One handler per `ExprNode["nodeKind"]` — a mapped type over the full
 // union, so a missing handler is a `tsc` error (same technique as core's
 // `renderExprHandlers`). Every handler is O(1) branch-free, keeping its
@@ -320,6 +355,7 @@ const exprLiftHandlers: {
 	rawSql: liftUnchangedNode,
 	exists: liftExistsNode,
 	selectExpr: liftSelectExprNode,
+	window: liftWindowNode,
 };
 
 /** Lifts every {@link LiteralNode} inside `node` to a `$n` bind parameter, dispatching by `nodeKind`. */

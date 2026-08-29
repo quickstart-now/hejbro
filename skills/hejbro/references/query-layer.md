@@ -549,14 +549,81 @@ type-check now, rather than compiling and failing wrong later.
 `having` is available only after `groupBy`, and `groupBy` only after
 `where` — the chain allows what SQL allows, in the order SQL allows it.
 
+## Window functions
+
+`over(target, spec)` attaches a window specification (`partitionBy`/
+`orderBy`) to either an existing aggregate (`count()`, `sum(x)`, `min(x)`,
+`max(x)`, `avg(x)`) or one of the window-only constructors: `rowNumber()`,
+`rank()`, `denseRank()`, `percentRank()`, `cumeDist()`, `ntile(buckets)`,
+`lag(x, offset?, default?)`, `lead(x, offset?, default?)`,
+`firstValue(x)`, `lastValue(x)`, `nthValue(x, n)`. A window-only call has
+no meaning on its own — it doesn't type-check anywhere an expression is
+expected until `over()` wraps it.
+
+```ts prelude=query-handle
+import { lag, over, rowNumber, sum } from "hejbro";
+
+const withRunningTotal = await handle
+	.select(
+		{
+			status: posts.status,
+			amount: posts.amount,
+			position: over(rowNumber(), {
+				partitionBy: [posts.status],
+				orderBy: [posts.publishedAt],
+			}),
+			running: over(sum(posts.amount), {
+				partitionBy: [posts.status],
+				orderBy: [posts.publishedAt],
+			}),
+			previous: over(lag(posts.amount), {
+				partitionBy: [posts.status],
+				orderBy: [posts.publishedAt],
+			}),
+		},
+		posts,
+	)
+	.orderBy(posts.status, posts.publishedAt);
+```
+
+What each window function reads back as:
+
+| function | type | why |
+|---|---|---|
+| `rowNumber()` / `rank()` / `denseRank()` | `bigint` | Postgres's own return type is `int8`, converted like `count()` above |
+| `percentRank()` / `cumeDist()` | `number` | `float8`, arrives already as a JS number, no conversion needed |
+| `ntile(buckets)` | `number` | `int4`, same reasoning |
+| `lag(x)` / `lead(x)` / `firstValue(x)` / `lastValue(x)` / `nthValue(x, n)` | `x`'s own declared type | they return their argument's type unchanged, exactly like `min`/`max` above |
+| `count()` wrapped in `over(...)` | `bigint` | same conversion as plain `count()` — `over()` only adds a window clause |
+| `sum(x)` / `avg(x)` wrapped in `over(...)` | `number \| bigint \| string` | **exactly the same as plain `sum`/`avg` above, conversion included** — Postgres's promotion rule depends on the argument's exact type, not on whether a window clause is attached, so a windowed running total over a `bigint` column arrives as the *text* Postgres sends for `numeric` (e.g. `"35"`), not a `bigint`. This is easy to mistake for a bug the first time a running total prints a string instead of a number; it isn't one — narrow it yourself with a cast in a `sql` fragment when you need to, same as the plain form |
+
+`where`/`groupBy`/`having`, an aggregate's own argument, and the six
+declaration sites that store an expression (a column default, a generated
+column, an index expression or predicate, a check constraint, an RLS
+policy) all reject a window function with a build-time diagnostic —
+Postgres itself refuses most of these placements, and hejbro never leaves
+the rest to the raw driver error. `distinctOn` does **not** reject a
+window function — Postgres itself accepts one there, so hejbro does too.
+
+Window functions render under Postgres's own default frame (`RANGE
+BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) — frame clauses (`ROWS`/
+`RANGE`/`GROUPS`) aren't modeled yet (#416). Two consequences are worth
+knowing rather than discovering, both verified live against postgres:17
+rather than asserted from the docs alone: under that default frame,
+`lastValue` returns the *current* row's value, not the partition's last
+row (the frame's upper bound tracks the current row); `nthValue(x, n)`
+instead returns `null` until the frame grows to contain `n` rows, then
+returns row `n`'s value and stays frozen there for every later row in
+the partition — Postgres's own documentation calls both of these "not so
+useful" without an explicit frame.
+
 ## Not supported in this version
 
 These read naturally as query-builder features but aren't there yet —
 use the `sql` escape hatch, or wait for the tracked issue:
 
-- CTEs (#417) and window functions — `over(...)` (#416) — outside the
-  `sql` escape hatch. Aggregates and `group by`/`having` DO exist; see
-  below.
+- CTEs (#417) outside the `sql` escape hatch. Aggregates, `group
+  by`/`having`, and window functions (`over(...)`) DO exist; see above.
 - `@hejbro/neon` and `@hejbro/nile` presets (#300, #301) — only
   `@hejbro/pg` (vanilla) and `@hejbro/supabase` exist today.
 - A startup assertion that the connected database matches the checked-out

@@ -35,6 +35,21 @@ describe("hejbro facade (task 7.9)", () => {
 		}
 	});
 
+	it("exports the window vocabulary and over() from @hejbro/core (add-window-functions task 2.3)", () => {
+		expect(typeof hejbro.rowNumber).toBe("function");
+		expect(typeof hejbro.rank).toBe("function");
+		expect(typeof hejbro.denseRank).toBe("function");
+		expect(typeof hejbro.percentRank).toBe("function");
+		expect(typeof hejbro.cumeDist).toBe("function");
+		expect(typeof hejbro.ntile).toBe("function");
+		expect(typeof hejbro.lag).toBe("function");
+		expect(typeof hejbro.lead).toBe("function");
+		expect(typeof hejbro.firstValue).toBe("function");
+		expect(typeof hejbro.lastValue).toBe("function");
+		expect(typeof hejbro.nthValue).toBe("function");
+		expect(typeof hejbro.over).toBe("function");
+	});
+
 	it("core and query's runtime export sets collide on exactly one name -- sql (the only name group 7 decision ① names as a replacement target)", () => {
 		// R2 finding: a bare "sql is exported" probe proves nothing here --
 		// `export * from "@hejbro/core"` alone already put a `sql` on this

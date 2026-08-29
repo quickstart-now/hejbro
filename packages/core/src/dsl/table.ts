@@ -400,6 +400,22 @@ const assertNoIndexExpressionSubquery = (
 	}
 };
 
+/** Rejects an index expression containing a window function (D104), same shape as {@link assertNoIndexExpressionSubquery} right above — Postgres forbids window functions in index expressions too. */
+const assertNoIndexExpressionWindowFunction = (
+	tableName: string,
+	indexes: ReadonlyArray<IndexDeclaration>,
+): void => {
+	const windowed = indexExpressionEntries(indexes).find((entry) =>
+		someExprNode(entry.expression, (node) => node.nodeKind === "window"),
+	);
+	if (windowed !== undefined) {
+		throwHejbroError(
+			"index-expression-window-function",
+			`index "${windowed.indexName}" on table "${tableName}" contains a window function in an index expression — Postgres forbids window functions in index expressions. Next: express the column over this table's own columns, or index the plain column and filter elsewhere.`,
+		);
+	}
+};
+
 /** Rejects an index expression referencing another table's column, mirroring {@link validateChecks}'s check-foreign-column-ref guard. */
 const assertNoForeignIndexExpressionColumn = (
 	owner: SchemaDeclaration,
@@ -425,7 +441,7 @@ const assertNoForeignIndexExpressionColumn = (
 	}
 };
 
-/** Rejects an unnamed expression index, then a subquery inside an index expression, then an index expression referencing another table's column, in that order (D86/R6/R7). */
+/** Rejects an unnamed expression index, then a subquery inside an index expression, then a window function inside one, then an index expression referencing another table's column, in that order (D86/R6/R7, D104). */
 const validateIndexExpressions = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -433,6 +449,7 @@ const validateIndexExpressions = (
 ): void => {
 	assertIndexExpressionsAreNamed(tableName, indexes);
 	assertNoIndexExpressionSubquery(tableName, indexes);
+	assertNoIndexExpressionWindowFunction(tableName, indexes);
 	assertNoForeignIndexExpressionColumn(owner, tableName, indexes);
 };
 
@@ -608,6 +625,56 @@ const validateGeneratedAndIdentityColumns = (
 };
 
 /**
+ * Rejects a column `.default(...)` expression containing a window
+ * function (D104) — a new guard home, not an arm on an existing one:
+ * unlike `check`/index expressions/index predicates, `.default(...)` has
+ * no structural validation at all today (nothing here rejects a subquery
+ * either), so this is the first thing to ever look inside it.
+ */
+const assertNoDefaultWindowFunction = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = columnEntries.find(
+		(entry) =>
+			entry.columnState.defaultValue !== null &&
+			someExprNode(
+				entry.columnState.defaultValue,
+				(node) => node.nodeKind === "window",
+			),
+	);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"column-default-window-function",
+		`table "${tableName}" column "${invalid.columnName}"'s default contains a window function — Postgres forbids window functions in DEFAULT expressions. Next: compute the value another way (a trigger via defineTrigger, or a plain literal/expression), or drop the window function from "${invalid.columnName}"'s default.`,
+	);
+};
+
+/** Rejects a `.generatedAlwaysAs(...)` expression containing a window function (D104) — same "new guard home" reasoning as {@link assertNoDefaultWindowFunction}. */
+const assertNoGeneratedWindowFunction = (
+	tableName: string,
+	columnEntries: ReadonlyArray<ColumnEntry>,
+): void => {
+	const invalid = columnEntries.find(
+		(entry) =>
+			entry.columnState.generated !== undefined &&
+			someExprNode(
+				entry.columnState.generated,
+				(node) => node.nodeKind === "window",
+			),
+	);
+	if (invalid === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"generated-column-window-function",
+		`table "${tableName}" column "${invalid.columnName}" is generated from an expression containing a window function — Postgres forbids window functions in generated column expressions. Next: compute the value another way, or drop the window function from "${invalid.columnName}"'s generated expression.`,
+	);
+};
+
+/**
  * `array_position("<schema>"."<table>"."<column>", null) is null`, as a
  * structured expression (a `columnRef` + `functionCall` + null `literal`,
  * wrapped in the existing `isNull` operator's `nullTest`) — never a
@@ -675,9 +742,8 @@ const deriveNotNullElementsChecks = (
 		notNullElementsCheckOrEmpty(owner, tableName, entry),
 	);
 
-/** Rejects duplicate CHECK names, subqueries, and cross-table column refs, in that order (D50). */
-const validateChecks = (
-	owner: SchemaDeclaration,
+/** Rejects two CHECK constraints sharing a name (D50) — split out of {@link validateChecks} (D71/#154 ratchet-5) so that function's own complexity stays low. */
+const assertNoDuplicateCheckName = (
 	tableName: string,
 	checks: ReadonlyArray<CheckDeclaration>,
 ): void => {
@@ -690,7 +756,13 @@ const validateChecks = (
 			`table "${tableName}" declares two check constraints named "${duplicate}" — Postgres requires unique constraint names per table. Next: rename one of them.`,
 		);
 	}
+};
 
+/** Rejects a CHECK expression containing a subquery (D50) — split out of {@link validateChecks}, same reasoning as {@link assertNoDuplicateCheckName}. */
+const assertNoCheckSubquery = (
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
 	const subquery = checks.find((entry) =>
 		someExprNode(entry.expression, (node) => node.nodeKind === "exists"),
 	);
@@ -700,7 +772,30 @@ const validateChecks = (
 			`check "${subquery.checkName}" on table "${tableName}" contains a subquery — Postgres forbids subqueries in CHECK constraints. Next: express the rule over this row's own columns, or enforce it with a trigger (defineTrigger).`,
 		);
 	}
+};
 
+/** Rejects a CHECK expression containing a window function (D104) — split out of {@link validateChecks}, same reasoning as {@link assertNoDuplicateCheckName}. */
+const assertNoCheckWindowFunction = (
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
+	const windowed = checks.find((entry) =>
+		someExprNode(entry.expression, (node) => node.nodeKind === "window"),
+	);
+	if (windowed !== undefined) {
+		throwHejbroError(
+			"check-window-function",
+			`check "${windowed.checkName}" on table "${tableName}" contains a window function — Postgres forbids window functions in CHECK constraints. Next: express the rule over this row's own columns, or enforce it with a trigger (defineTrigger).`,
+		);
+	}
+};
+
+/** Rejects a CHECK expression referencing another table's column (D50) — split out of {@link validateChecks}, same reasoning as {@link assertNoDuplicateCheckName}. */
+const assertNoForeignCheckColumnRef = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
 	const foreign = checks
 		.flatMap((entry) =>
 			collectColumnRefs(entry.expression).map((ref) => ({
@@ -718,6 +813,18 @@ const validateChecks = (
 			`check "${foreign.check.checkName}" on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a CHECK can only see the row being written. Next: use this table's own columns (the callback's \`t\`), or enforce cross-table rules with a trigger (defineTrigger).`,
 		);
 	}
+};
+
+/** Rejects duplicate CHECK names, subqueries, window functions, and cross-table column refs, in that order (D50, D104). */
+const validateChecks = (
+	owner: SchemaDeclaration,
+	tableName: string,
+	checks: ReadonlyArray<CheckDeclaration>,
+): void => {
+	assertNoDuplicateCheckName(tableName, checks);
+	assertNoCheckSubquery(tableName, checks);
+	assertNoCheckWindowFunction(tableName, checks);
+	assertNoForeignCheckColumnRef(owner, tableName, checks);
 };
 
 type IndexPredicateEntry = {
@@ -759,6 +866,16 @@ const validateIndexPredicates = (
 		throwHejbroError(
 			"index-predicate-subquery",
 			`index "${subquery.name}"'s where predicate on table "${tableName}" contains a subquery — Postgres forbids subqueries in a partial index's WHERE clause. Next: express the predicate over this table's own columns, or drop the predicate and filter elsewhere.`,
+		);
+	}
+
+	const windowed = withPredicate.find((entry) =>
+		someExprNode(entry.predicate, (node) => node.nodeKind === "window"),
+	);
+	if (windowed !== undefined) {
+		throwHejbroError(
+			"index-predicate-window-function",
+			`index "${windowed.name}"'s where predicate on table "${tableName}" contains a window function — Postgres forbids window functions in a partial index's WHERE clause. Next: express the predicate over this table's own columns, or drop the predicate and filter elsewhere.`,
 		);
 	}
 
@@ -998,6 +1115,8 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	const columnEntries = buildColumnEntries(tableName, columns);
 	assertNotNullElementsOnArrayColumns(tableName, columnEntries);
 	validateGeneratedAndIdentityColumns(tableName, columnEntries);
+	assertNoDefaultWindowFunction(tableName, columnEntries);
+	assertNoGeneratedWindowFunction(tableName, columnEntries);
 	const refsObject = buildColumnRefs<TColumns>(owner, tableName, columnEntries);
 
 	const resolvedExtras = extras?.(refsObject) ?? {};

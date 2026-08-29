@@ -103,12 +103,13 @@ const findColumnEntry = (
 };
 
 /**
- * `count` is `int8` whatever it counted, and node-postgres hands an
- * `int8` back as text — so a projected `count()` needs the same
- * conversion a declared `bigint({mode:"bigint"})` column gets, or the
- * type (#416's `ReadAs<bigint>` brand) would be describing a string.
+ * `count`/`row_number`/`rank`/`dense_rank` are all `int8` regardless of
+ * what they counted or ranked, and node-postgres hands an `int8` back as
+ * text — so a projected one of these needs the same conversion a
+ * declared `bigint({mode:"bigint"})` column gets, or the type (#416's/
+ * D104's `ReadAs<bigint>` brand) would be describing a string.
  */
-const COUNT_STATE: ColumnState = {
+const BIGINT_STATE: ColumnState = {
 	typeNode: { typeName: "bigint" },
 	notNull: false,
 	primaryKey: false,
@@ -117,8 +118,28 @@ const COUNT_STATE: ColumnState = {
 	mode: "bigint",
 };
 
-/** `min`/`max` return their argument's own type, so they convert as their argument does — the type layer says the same thing (`min` returns the argument's `Expr` unchanged). `sum`/`avg` are deliberately absent: Postgres promotes their result by the argument's exact type, and guessing one conversion for all of them would be the lie the family-widened type avoids. */
-const PASSTHROUGH_AGGREGATES = ["min", "max"];
+/** Every builder function whose result is always `int8`, whatever its argument (or lack of one) — see {@link BIGINT_STATE}. */
+const BIGINT_FUNCTIONS = ["count", "row_number", "rank", "dense_rank"];
+
+/**
+ * `min`/`max` and the five window value functions (`lag`/`lead`/
+ * `firstValue`/`lastValue`/`nthValue`, D104) all return their FIRST
+ * argument's own type unchanged, so they convert as that argument does —
+ * the type layer says the same thing (`min`/`lag`/… all carry the
+ * argument's own `Expr` through, `Aggregated`/`WindowFunctionCall`'s
+ * shared shape). `sum`/`avg` are deliberately absent: Postgres promotes
+ * their result by the argument's exact type, and guessing one conversion
+ * for all of them would be the lie the family-widened type avoids.
+ */
+const PASSTHROUGH_AGGREGATES = [
+	"min",
+	"max",
+	"lag",
+	"lead",
+	"first_value",
+	"last_value",
+	"nth_value",
+];
 
 /** `true` only for the builder's own unqualified aggregates. A SCHEMA-qualified call is a declared function (`db.fn`), which may legitimately be named `count` in someone's schema and must not be converted as one. */
 const isBuilderAggregate = (expr: ExprNode): expr is FunctionCallNode =>
@@ -144,8 +165,8 @@ const aggregateColumnState = (
 	if (!isBuilderAggregate(expr)) {
 		return undefined;
 	}
-	if (expr.functionName === "count") {
-		return COUNT_STATE;
+	if (BIGINT_FUNCTIONS.includes(expr.functionName)) {
+		return BIGINT_STATE;
 	}
 	if (!PASSTHROUGH_AGGREGATES.includes(expr.functionName)) {
 		return undefined;
@@ -153,10 +174,22 @@ const aggregateColumnState = (
 	return passthroughArgumentState(expr, tables);
 };
 
+/**
+ * A windowed expression (D104) converts exactly as its own `fn` would
+ * unwindowed — `over(count(), spec)` reads back as a `count()` does,
+ * `over(rowNumber(), spec)` as the new `row_number` bigint state above,
+ * `over(lag(col), spec)` by passing through to `col`'s own state. `sum`/
+ * `avg` stay uncast either way, windowed or not (see
+ * {@link PASSTHROUGH_AGGREGATES}'s own doc comment) — this delegation
+ * never has to special-case them.
+ */
 const columnStateForExpr = (
 	expr: ExprNode,
 	tables: Declarations["tables"],
 ): ColumnState | undefined => {
+	if (expr.nodeKind === "window") {
+		return columnStateForExpr(expr.fn, tables);
+	}
 	if (expr.nodeKind !== "columnRef") {
 		return aggregateColumnState(expr, tables);
 	}

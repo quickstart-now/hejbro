@@ -88,6 +88,15 @@ const childrenOfHandlers: ChildrenOfHandlers = {
 			.map((chunk) => chunk.expr),
 	exists: existsChildExprs,
 	selectExpr: selectExprChildExprs,
+	// `window`'s three positions (fn/partitionBy/orderBy) are plain sibling
+	// expressions, not a subquery -- an auth.uid() hidden in any of them is
+	// exactly as expensive as one directly in the clause, same as a plain
+	// `functionCall`'s own args above.
+	window: (node) => [
+		node.fn,
+		...node.partitionBy,
+		...node.orderBy.map((term) => term.expr),
+	],
 };
 
 /**

@@ -25,6 +25,7 @@ import type {
 	SqlTemplateChunk,
 	SqlTemplateNode,
 	TableRefNode,
+	WindowNode,
 } from "./ast";
 import { joinKinds } from "./ast";
 
@@ -79,6 +80,7 @@ export const NODE_KIND_TO_SNAPSHOT: Readonly<
 	rawSql: "raw-sql",
 	exists: "exists",
 	selectExpr: "select-expr",
+	window: "window",
 };
 
 const NODE_KIND_FROM_SNAPSHOT: Readonly<Record<string, ExprNode["nodeKind"]>> =
@@ -305,6 +307,13 @@ const encodeExists = (node: ExistsNode): JsonValue => ({
 	query: encodeSelectNode(node.query),
 });
 
+const encodeWindowNode = (node: WindowNode): JsonValue => ({
+	nodeKind: NODE_KIND_TO_SNAPSHOT.window,
+	fn: encodeExprNode(node.fn),
+	partitionBy: node.partitionBy.map(encodeExprNode),
+	orderBy: node.orderBy.map(encodeOrderByTerm),
+});
+
 const encodeLiteralNode = (node: LiteralNode): JsonValue => ({
 	nodeKind: "literal",
 	literal: encodeLiteral(node.literal),
@@ -344,6 +353,7 @@ const encodeExprNodeHandlers: EncodeExprNodeHandlers = {
 	rawSql: encodeRawSql,
 	exists: encodeExists,
 	selectExpr: encodeSelectExprNode,
+	window: encodeWindowNode,
 };
 
 /** @internal exported for {@link decodeExprNode}'s exhaustive-map symmetry and for tests. */
@@ -581,6 +591,59 @@ const decodeExistsNode = (node: Record<string, JsonValue>): ExistsNode => ({
 });
 
 /**
+ * A required array field, missing-or-malformed both rejected —
+ * {@link decodeExprArrayField}'s opposite leniency rule, for a field with
+ * no history to be lenient about. `window`'s three child positions
+ * (`fn`/`partitionBy`/`orderBy`) are all new in this snapshot format
+ * (#444 R4): no older version ever wrote one out at all, let alone
+ * without them, so an absent one is corruption, not an old shape —
+ * the same distinction {@link decodeDistinctOnColumns} already draws for
+ * `distinct on`'s own required `columns`.
+ */
+const decodeRequiredArrayField = <T>(
+	node: Record<string, JsonValue>,
+	key: string,
+	decodeElement: (value: JsonValue) => T,
+): ReadonlyArray<T> => {
+	const value = node[key];
+	if (value === undefined) {
+		return unknownDiscriminator(key, "undefined");
+	}
+	if (!Array.isArray(value)) {
+		return unknownDiscriminator(key, JSON.stringify(value));
+	}
+	return value.map(decodeElement);
+};
+
+/**
+ * `fn` on a decoded window node — missing or not itself a function call
+ * is corruption, refused rather than repaired (same "new in this format,
+ * no leniency" reasoning as {@link decodeRequiredArrayField}). Narrowing
+ * happens here, not by trusting the stored `nodeKind`, because a
+ * hand-edited or otherwise damaged snapshot could name any node kind
+ * under `fn` — this is the one place that enforces {@link WindowNode}'s
+ * own `fn: FunctionCallNode` narrowing on the way back in.
+ */
+const decodeWindowFn = (node: Record<string, JsonValue>): FunctionCallNode => {
+	const value = node.fn;
+	if (value === undefined) {
+		return unknownDiscriminator("fn", "undefined");
+	}
+	const fn = decodeExprNode(value);
+	if (fn.nodeKind !== "functionCall") {
+		return unknownDiscriminator("fn", JSON.stringify(value));
+	}
+	return fn;
+};
+
+const decodeWindowNode = (node: Record<string, JsonValue>): WindowNode => ({
+	nodeKind: "window",
+	fn: decodeWindowFn(node),
+	partitionBy: decodeRequiredArrayField(node, "partitionBy", decodeExprNode),
+	orderBy: decodeRequiredArrayField(node, "orderBy", decodeOrderByTerm),
+});
+
+/**
  * One handler per {@link ExprNode} `nodeKind` for {@link decodeExprNode} —
  * a mapped type over the full `nodeKind` union, not a hand-written list,
  * so a missing handler is a `tsc` error the same way a `switch`'s
@@ -611,6 +674,7 @@ const decodeExprNodeHandlers: DecodeExprNodeHandlers = {
 	rawSql: decodeRawSqlNode,
 	exists: decodeExistsNode,
 	selectExpr: decodeSelectExprNode,
+	window: decodeWindowNode,
 };
 
 export const decodeExprNode = (value: JsonValue): ExprNode => {

@@ -28,6 +28,7 @@ import type {
 	SqlTemplateNode,
 	TableRefNode,
 	UpdateNode,
+	WindowNode,
 } from "./ast";
 import { renderLiteral } from "./literal";
 import { selectChildExprs } from "./select-children";
@@ -158,6 +159,11 @@ const collectColumnRefsHandlers: CollectColumnRefsHandlers = {
 			}
 			return [];
 		}),
+	window: (node) => [
+		...collectColumnRefs(node.fn),
+		...node.partitionBy.flatMap(collectColumnRefs),
+		...node.orderBy.flatMap((term) => collectColumnRefs(term.expr)),
+	],
 };
 
 /**
@@ -274,9 +280,10 @@ const whereClause = (
 	return `where ${renderExpr(where, scope)}`;
 };
 
+/** Shared by a select's own `order by` and a window clause's `order by` — both are the exact same shape (`OrderByTerm[]`), rendered the exact same way. */
 const orderByClause = (
 	orderBy: ReadonlyArray<OrderByTerm>,
-	scope: ReadonlyArray<TableRefNode>,
+	scope: OuterScope,
 ): string => {
 	if (orderBy.length === 0) {
 		return "";
@@ -781,6 +788,30 @@ const renderFunctionCallNode = (
 	return `${name}(${args})`;
 };
 
+/** `partition by …` — the window clause's own first sub-clause, omitted when empty (D104: rendering nothing under an empty spec is exactly Postgres's default). */
+const partitionByClause = (
+	partitionBy: ReadonlyArray<ExprNode>,
+	outerScope: OuterScope,
+): string => {
+	if (partitionBy.length === 0) {
+		return "";
+	}
+	const columns = partitionBy
+		.map((column) => renderExpr(column, outerScope))
+		.join(", ");
+	return `partition by ${columns}`;
+};
+
+/** `<fn>(…) over (partition by … order by …)` — clause order and omission follow SQL's own `over (...)` grammar (D104). */
+const renderWindowNode = (node: WindowNode, outerScope: OuterScope): string => {
+	const fnSql = renderFunctionCallNode(node.fn, outerScope);
+	const overClauses = [
+		partitionByClause(node.partitionBy, outerScope),
+		orderByClause(node.orderBy, outerScope),
+	].filter((clause) => clause !== "");
+	return `${fnSql} over (${overClauses.join(" ")})`;
+};
+
 const renderSqlTemplateNode = (
 	node: SqlTemplateNode,
 	outerScope: OuterScope,
@@ -836,6 +867,7 @@ const renderExprHandlers: RenderExprHandlers = {
 	rawSql: renderRawSqlNode,
 	exists: renderExistsNode,
 	selectExpr: renderSelectExprNode,
+	window: renderWindowNode,
 };
 
 export const renderExpr = (

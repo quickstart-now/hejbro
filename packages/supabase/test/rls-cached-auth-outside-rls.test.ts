@@ -5,9 +5,12 @@ import {
 	emptySnapshot,
 	eq,
 	exists,
+	expr,
 	generateMigration,
 	index,
 	isNotNull,
+	over,
+	rank,
 	rls,
 	schema,
 	select,
@@ -174,6 +177,108 @@ describe("rlsCachedAuthOutsideRlsValidator", () => {
 		});
 		expect(result.errors).toHaveLength(1);
 		expect(result.errors[0]?.code).toBe("rls-cached-auth-outside-rls");
+	});
+
+	// add-window-functions task 1.7: proves the DEEP walker's window arm
+	// (over()/rank() DSL lands in group 2, so the window node is hand-built)
+	// -- a column default has no structural exists()/window guard (unlike
+	// CHECK/index-predicate, which core's own validateChecks/
+	// validateIndexPredicates reject any exists() in outright), so it is
+	// the one site where this shape can actually reach the validator, same
+	// reasoning as the exists()-in-a-default case right above.
+	// add-window-functions task 3.4 added a declaration-time guard
+	// (column-default-window-function) rejecting ANY window function in a
+	// column default, so `table()` can no longer construct this shape at
+	// all -- hand-assembled (same precedent as the unnamed-index-expression
+	// case above) to reach the validator directly, bypassing that guard on
+	// purpose: this test is about the DEEP walker's own descent, a
+	// narrower concern than whether the shape is legal to declare.
+	it("finds authUidCached() buried inside an exists(...) subquery inside a window function's partitionBy, in a column default", () => {
+		const profiles = table(app, "profiles", {
+			id: uuid().primaryKey(),
+			userId: uuid(),
+		});
+		const windowedDefault = expr("boolean", {
+			nodeKind: "window",
+			fn: {
+				nodeKind: "functionCall",
+				schemaName: null,
+				functionName: "rank",
+				args: [],
+			},
+			partitionBy: [
+				exists(select(profiles).where(eq(profiles.userId, authUidCached())))
+					.exprNode,
+			],
+			orderBy: [],
+		}).exprNode;
+		const accounts: TableDeclaration = {
+			declarationKind: "table",
+			schema: app,
+			tableName: "accounts",
+			columns: [
+				{
+					columnKey: "id",
+					columnName: "id",
+					columnState: {
+						typeNode: { typeName: "uuid" },
+						notNull: false,
+						primaryKey: true,
+						unique: false,
+						defaultValue: null,
+						mode: null,
+					},
+				},
+				{
+					columnKey: "hasProfile",
+					columnName: "has_profile",
+					columnState: {
+						typeNode: { typeName: "boolean" },
+						notNull: false,
+						primaryKey: false,
+						unique: false,
+						defaultValue: windowedDefault,
+						mode: null,
+					},
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			checks: [],
+			rls: null,
+			existing: false,
+			declaredAt: null,
+		};
+		const result = rlsCachedAuthOutsideRlsValidator(emptySnapshot, [
+			app,
+			accounts,
+		]);
+		expect(result).toHaveLength(1);
+		expect(result[0]?.code).toBe("rls-cached-auth-outside-rls");
+	});
+
+	// Self-pin (task 4.0b): what actually makes the hand-assembled
+	// TableDeclaration above necessary is core's own column-default guard,
+	// not "the public API contract" in the abstract -- if that guard is
+	// ever relaxed, table() would build this shape again, the real-consumer
+	// path above would come back, and this hand-built bypass should be
+	// reconsidered rather than silently kept. Executable, not prose: this
+	// turns red FIRST if column-default-window-function ever stops firing,
+	// pointing straight at the guard this file's own bypass depends on.
+	it("pins why the test above bypasses table(): a column default with a window function is rejected at declaration time", () => {
+		expect(() =>
+			table(app, "accounts", {
+				id: uuid().primaryKey(),
+				// wrapped as Expr<"unknown"> (the sql escape hatch's own
+				// shape, boolean().default()'s other accepted arm) since
+				// rank() is numeric-family, not boolean.
+				hasProfile: boolean().default(
+					expr("unknown", over(rank(), {}).exprNode),
+				),
+			}),
+		).toThrowError(
+			expect.objectContaining({ code: "column-default-window-function" }),
+		);
 	});
 
 	// This validator is scoped to default/CHECK/index-predicate only (its

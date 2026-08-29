@@ -28,6 +28,8 @@ import {
 	jsonArrayFrom,
 	migrationPrefixStrategies,
 	not,
+	over,
+	rank,
 	rls,
 	roleName,
 	schema,
@@ -393,6 +395,27 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			posts,
 		),
 	);
+	// add-window-functions (D104): a view carrying a window function is the
+	// declaration-reachable producer of the `window` node -- without one
+	// here, the completeness assertion below would flag `window` as
+	// vocabulary the fixture never reached. Built through the real public
+	// DSL (over()/rank(), group 2) now that it exists -- group 1 hand-built
+	// the node here instead, before either was public; the declaration-
+	// reachable path is the one D70's own producers are meant to exercise.
+	const rankByAuthorView = defineView(
+		app,
+		"rank_by_author_view",
+		select(
+			{
+				id: posts.id,
+				rank: over(rank(), {
+					partitionBy: [posts.authorId],
+					orderBy: [posts.price],
+				}),
+			},
+			posts,
+		),
+	);
 
 	const result = generateMigration({
 		declarations: [
@@ -404,6 +427,7 @@ describe("D70 naming convention: expression subtree discriminators are kebab-cas
 			combinedPricesView,
 			postsWithCommentsView,
 			priceSummaryView,
+			rankByAuthorView,
 		],
 		previousSnapshot: emptySnapshot,
 		registry,
