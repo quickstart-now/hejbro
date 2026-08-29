@@ -3,6 +3,7 @@ import type { HejbroDeclaration, HejbroInput } from "../src";
 import {
 	buildSnapshot,
 	check,
+	count,
 	createDefaultRegistry,
 	defineView,
 	desc,
@@ -1215,6 +1216,56 @@ describe("planRenames — view query retargeting (#157/D72)", () => {
 					tableName: "posts",
 					oldName: "price",
 					newName: "cost",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
+	// #444 F3: retargetSelectNode used to miss groupBy/having/distinct on --
+	// a rename left a stale identifier behind in exactly one of those
+	// clauses, breaking D67's no-leftover-diff invariant.
+	it("a column rename retargets a view's own groupBy, with no leftover diff", () => {
+		const postsBefore = table(app, "posts", {
+			id: uuid().primaryKey(),
+			status: text().notNull(),
+		});
+		const postsAfter = table(app, "posts", {
+			id: uuid().primaryKey(),
+			state: text().notNull(),
+		});
+		const viewBefore = defineView(
+			app,
+			"posts_by_status",
+			select(
+				{ status: postsBefore.status, total: count() },
+				postsBefore,
+			).groupBy(postsBefore.status),
+		);
+		const viewAfter = defineView(
+			app,
+			"posts_by_status",
+			select({ status: postsAfter.state, total: count() }, postsAfter).groupBy(
+				postsAfter.state,
+			),
+		);
+
+		const previous = snap(app, postsBefore, viewBefore);
+		const next = snap(app, postsAfter, viewAfter);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "column",
+					schemaName: "app",
+					tableName: "posts",
+					oldName: "status",
+					newName: "state",
 				},
 			],
 			confirmedDrops: [],

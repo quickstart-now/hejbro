@@ -75,7 +75,7 @@ hand-write a `SelectNode` field list.
 
 ## 2. Core's own traversal sites
 
-- [ ] 2.1 (~8m) **F2.** `render-sql.ts`'s `renderSelectClauses` builds
+- [x] 2.1 (~8m) **F2.** `render-sql.ts`'s `renderSelectClauses` builds
       `mentionedRefs` from `selectChildExprs`, so a foreign reference in
       `groupBy`/`having`/`distinct on` throws `foreign-column-ref`
       instead of rendering wrong SQL. Red:
@@ -83,7 +83,7 @@ hand-write a `SelectNode` field list.
       foreign-column-ref for a groupBy/having/distinctOn reference
       outside scope". Files: `packages/core/src/expr/render-sql.ts`,
       that test.
-- [ ] 2.2 (~9m) **F3.** `retargetSelectNode` maps the table's child
+- [x] 2.2 (~9m) **F3.** `retargetSelectNode` maps the table's child
       expressions through `retargetExprNode` and rebuilds via
       `replaceSelectChildExprs`; `isSelectNodeUnchanged` collapses into
       the same list comparison (identity preserved — an unrelated rename
@@ -97,7 +97,7 @@ hand-write a `SelectNode` field list.
       `packages/core/test/rename-plan.test.ts` — "no leftover diff after
       renaming a column a view groups by". Files:
       `packages/core/src/expr/retarget.ts`, those two tests.
-- [ ] 2.3 (~7m) [design] **F7.** `decodeSelectNode` reads a v8 snapshot
+- [x] 2.3 (~7m) [design] **F7.** `decodeSelectNode` reads a v8 snapshot
       written before the clause fields existed: a **missing** field
       decodes to its empty value (`groupBy: []`, `having: null`,
       `distinct: null`, `offset: null`, `limit: null`), a **present but

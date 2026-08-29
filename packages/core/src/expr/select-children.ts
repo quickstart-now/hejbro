@@ -51,11 +51,20 @@ const projectionChildExprs = (
 	return projection.columns.map((column) => column.expr);
 };
 
+/** `true` when every entry of `exprs` is the exact same reference as its `originals` counterpart — the identity-preservation invariant `retarget.ts` depends on (a caller that changed nothing gets the exact same object back, cheaply comparable via `!==`). */
+const sameExprs = (
+	exprs: ReadonlyArray<ExprNode>,
+	originals: ReadonlyArray<ExprNode>,
+): boolean => exprs.every((expr, index) => expr === originals[index]);
+
 const replaceProjectionChildExprs = (
 	projection: ProjectionNode,
 	exprs: ReadonlyArray<ExprNode>,
 ): ProjectionNode => {
 	if (projection.projectionKind !== "columns") {
+		return projection;
+	}
+	if (sameExprs(exprs, projectionChildExprs(projection))) {
 		return projection;
 	}
 	return {
@@ -83,6 +92,9 @@ const replaceDistinctChildExprs = (
 	if (distinct === null || distinct.distinctKind !== "on") {
 		return distinct;
 	}
+	if (sameExprs(exprs, distinct.columns)) {
+		return distinct;
+	}
 	return { ...distinct, columns: exprs };
 };
 
@@ -93,8 +105,15 @@ const joinsChildExprs = (
 const replaceJoinsChildExprs = (
 	joins: ReadonlyArray<JoinNode>,
 	exprs: ReadonlyArray<ExprNode>,
-): ReadonlyArray<JoinNode> =>
-	joins.map((join, index) => ({ ...join, on: exprs[index] as ExprNode }));
+): ReadonlyArray<JoinNode> => {
+	if (sameExprs(exprs, joinsChildExprs(joins))) {
+		return joins;
+	}
+	return joins.map((join, index) => ({
+		...join,
+		on: exprs[index] as ExprNode,
+	}));
+};
 
 const whereChildExprs = (where: ExprNode | null): ReadonlyArray<ExprNode> => {
 	if (where === null) {
@@ -110,6 +129,9 @@ const replaceWhereChildExprs = (
 	if (where === null) {
 		return where;
 	}
+	if (exprs[0] === where) {
+		return where;
+	}
 	return exprs[0] as ExprNode;
 };
 
@@ -120,8 +142,15 @@ const orderByChildExprs = (
 const replaceOrderByChildExprs = (
 	orderBy: ReadonlyArray<OrderByTerm>,
 	exprs: ReadonlyArray<ExprNode>,
-): ReadonlyArray<OrderByTerm> =>
-	orderBy.map((term, index) => ({ ...term, expr: exprs[index] as ExprNode }));
+): ReadonlyArray<OrderByTerm> => {
+	if (sameExprs(exprs, orderByChildExprs(orderBy))) {
+		return orderBy;
+	}
+	return orderBy.map((term, index) => ({
+		...term,
+		expr: exprs[index] as ExprNode,
+	}));
+};
 
 /**
  * Every field of {@link SelectNode}, mapped to its {@link ClauseTraversal}
@@ -141,58 +170,101 @@ const replaceOrderByChildExprs = (
  * ...`) — a JS object literal's own key order is what carries that
  * constraint here; no second ordering list exists anywhere in this file.
  */
+const replaceGroupByChildExprs = (
+	groupBy: ReadonlyArray<ExprNode>,
+	exprs: ReadonlyArray<ExprNode>,
+): ReadonlyArray<ExprNode> => {
+	if (sameExprs(exprs, groupBy)) {
+		return groupBy;
+	}
+	return exprs;
+};
+
+/**
+ * Every field's `replace` returns `query` itself, unchanged, when the
+ * clause it owns comes back identical (`sameExprs`/each helper's own
+ * identity check above) — not just an `Object.is`-equal *rebuild*, the
+ * exact same reference. `retarget.ts` depends on this all the way up:
+ * an unrelated rename must return the exact same `SelectNode` reference
+ * it was given, and that can only hold if every field along the way
+ * refuses to allocate a new wrapper for a value that didn't change.
+ */
 export const SELECT_CLAUSE_TRAVERSALS: {
 	readonly [K in keyof SelectNode]: ClauseTraversal;
 } = {
 	queryKind: noExprs("the statement-kind discriminator, never an expression"),
 	distinct: exprClause(
 		(query) => distinctChildExprs(query.distinct),
-		(query, exprs) => ({
-			...query,
-			distinct: replaceDistinctChildExprs(query.distinct, exprs),
-		}),
+		(query, exprs) => {
+			const distinct = replaceDistinctChildExprs(query.distinct, exprs);
+			if (distinct === query.distinct) {
+				return query;
+			}
+			return { ...query, distinct };
+		},
 	),
 	projection: exprClause(
 		(query) => projectionChildExprs(query.projection),
-		(query, exprs) => ({
-			...query,
-			projection: replaceProjectionChildExprs(query.projection, exprs),
-		}),
+		(query, exprs) => {
+			const projection = replaceProjectionChildExprs(query.projection, exprs);
+			if (projection === query.projection) {
+				return query;
+			}
+			return { ...query, projection };
+		},
 	),
 	from: noExprs(
 		"a table reference identifier, not an expression — retargetTableRef/render-sql's own table renderer own it",
 	),
 	joins: exprClause(
 		(query) => joinsChildExprs(query.joins),
-		(query, exprs) => ({
-			...query,
-			joins: replaceJoinsChildExprs(query.joins, exprs),
-		}),
+		(query, exprs) => {
+			const joins = replaceJoinsChildExprs(query.joins, exprs);
+			if (joins === query.joins) {
+				return query;
+			}
+			return { ...query, joins };
+		},
 	),
 	where: exprClause(
 		(query) => whereChildExprs(query.where),
-		(query, exprs) => ({
-			...query,
-			where: replaceWhereChildExprs(query.where, exprs),
-		}),
+		(query, exprs) => {
+			const where = replaceWhereChildExprs(query.where, exprs);
+			if (where === query.where) {
+				return query;
+			}
+			return { ...query, where };
+		},
 	),
 	groupBy: exprClause(
 		(query) => query.groupBy,
-		(query, exprs) => ({ ...query, groupBy: exprs }),
+		(query, exprs) => {
+			const groupBy = replaceGroupByChildExprs(query.groupBy, exprs);
+			if (groupBy === query.groupBy) {
+				return query;
+			}
+			return { ...query, groupBy };
+		},
 	),
 	having: exprClause(
 		(query) => whereChildExprs(query.having),
-		(query, exprs) => ({
-			...query,
-			having: replaceWhereChildExprs(query.having, exprs),
-		}),
+		(query, exprs) => {
+			const having = replaceWhereChildExprs(query.having, exprs);
+			if (having === query.having) {
+				return query;
+			}
+			return { ...query, having };
+		},
 	),
 	orderBy: exprClause(
 		(query) => orderByChildExprs(query.orderBy),
-		(query, exprs) => ({
-			...query,
-			orderBy: replaceOrderByChildExprs(query.orderBy, exprs),
-		}),
+		(query, exprs) => {
+			const orderBy = replaceOrderByChildExprs(query.orderBy, exprs);
+			if (orderBy === query.orderBy) {
+				return query;
+			}
+			return { ...query, orderBy };
+		},
 	),
 	limit: noExprs("an inlined integer literal, never a bind-able expression"),
 	offset: noExprs("an inlined integer literal, never a bind-able expression"),

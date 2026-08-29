@@ -101,6 +101,18 @@ describe("replaceSelectChildExprs (round-trip and ratchet proof, task 1.2)", () 
 		expect(roundTripped.distinct).toEqual(distinct);
 	});
 
+	// `retarget.ts` (task 2.2) depends on this: an unrelated rename must
+	// return the exact same `SelectNode` reference, which only holds if
+	// replacing a clause's exprs with themselves never allocates a new
+	// wrapper for a clause that didn't change.
+	it("returns the exact same node reference when every replacement expr is referentially identical to the original", () => {
+		const roundTripped = replaceSelectChildExprs(
+			fullyPopulatedQuery,
+			selectChildExprs(fullyPopulatedQuery),
+		);
+		expect(roundTripped).toBe(fullyPopulatedQuery);
+	});
+
 	it("rebuilds each clause from a same-length replacement list, preserving every non-expression part", () => {
 		const exprs = selectChildExprs(fullyPopulatedQuery).map(
 			(_expr, index): ExprNode => literal(`replaced-${index}`),

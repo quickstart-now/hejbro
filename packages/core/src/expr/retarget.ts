@@ -18,6 +18,7 @@ import type {
 	SqlTemplateNode,
 	TableRefNode,
 } from "./ast";
+import { replaceSelectChildExprs, selectChildExprs } from "./select-children";
 
 /**
  * A table or column rename's old/new identity, for {@link retargetExprNode}
@@ -330,13 +331,21 @@ const retargetProjection = (
 	return retargetColumnsProjection(projection, target);
 };
 
-const retargetJoin = (join: JoinNode, target: RenameTarget): JoinNode => {
+/**
+ * A join's `table` identifier only — its `on` expression is retargeted
+ * generically by {@link retargetSelectNode}'s own `selectChildExprs`/
+ * `replaceSelectChildExprs` pass (#444 F3), same reasoning as {@link
+ * retargetProjection}: `table` names an object, not an expression, so it
+ * needs its own dedicated rewrite. {@link retargetSetOpNode} has no
+ * joins of its own to retarget, so this stays local to `SelectNode`
+ * handling, unlike {@link retargetOrderByTerm} below.
+ */
+const retargetJoinTable = (join: JoinNode, target: RenameTarget): JoinNode => {
 	const table = retargetTableRef(join.table, target);
-	const on = retargetExprNode(join.on, target);
-	if (table === join.table && on === join.on) {
+	if (table === join.table) {
 		return join;
 	}
-	return { ...join, table, on };
+	return { ...join, table };
 };
 
 const retargetOrderByTerm = (
@@ -350,37 +359,30 @@ const retargetOrderByTerm = (
 	return { ...term, expr };
 };
 
-const retargetWhere = (
-	where: ExprNode | null,
-	target: RenameTarget,
-): ExprNode | null => {
-	if (where === null) {
-		return null;
-	}
-	return retargetExprNode(where, target);
-};
-
 /**
  * Did retargeting `query` for `target` actually produce anything
  * different from the original, or can {@link retargetSelectNode} return
- * `query` itself unchanged? Split out the same way as {@link
- * matchesOldTarget}/{@link alreadyAtNewTarget} above (D71/#154
- * ratchet-5), so the five-way comparison's own complexity doesn't fold
- * into `retargetSelectNode`.
+ * `query` itself unchanged? A plain reference comparison on each field —
+ * every field along the way (the identifier-carrying `projection`/`from`
+ * pass below, {@link retargetJoinTable}, and {@link
+ * replaceSelectChildExprs}'s own per-clause identity checks,
+ * `select-children.ts`) already guarantees "unchanged in" means
+ * "unchanged reference out", so there is no five-way recomputation left
+ * to do here (D71/#154 ratchet-5's own complexity-splitting reasoning,
+ * simplified further once the generic table absorbed it, #444).
  */
 const isSelectNodeUnchanged = (
 	query: SelectNode,
-	projection: ProjectionNode,
-	from: TableRefNode,
-	joins: ReadonlyArray<JoinNode>,
-	where: ExprNode | null,
-	orderBy: ReadonlyArray<OrderByTerm>,
+	candidate: SelectNode,
 ): boolean =>
-	projection === query.projection &&
-	from === query.from &&
-	joins.every((join, i) => join === query.joins[i]) &&
-	where === query.where &&
-	orderBy.every((term, i) => term === query.orderBy[i]);
+	candidate.projection === query.projection &&
+	candidate.from === query.from &&
+	candidate.joins.every((join, i) => join === query.joins[i]) &&
+	candidate.where === query.where &&
+	candidate.groupBy.every((expr, i) => expr === query.groupBy[i]) &&
+	candidate.having === query.having &&
+	candidate.orderBy.every((term, i) => term === query.orderBy[i]) &&
+	candidate.distinct === query.distinct;
 
 /**
  * Retargets a whole {@link SelectNode} for `target`, same identity
@@ -388,6 +390,22 @@ const isSelectNodeUnchanged = (
  * when nothing matched). Not `exists()`-specific — reused as-is for a
  * view's top-level query (#157), not just one nested inside an
  * `ExistsNode`.
+ *
+ * `projection` (the `allColumns` case's denormalized `columnNames`) and
+ * `from`/each join's `table` carry IDENTIFIERS, not expressions — {@link
+ * retargetProjection}, {@link retargetTableRef} and {@link
+ * retargetJoinTable} own those directly, the same dedicated handling
+ * this function always had (#444 F3 review ruling). Every other clause
+ * (`where`/`groupBy`/`having`/`orderBy`/`distinct on`, and each join's
+ * own `on`) is expressions only, so {@link selectChildExprs}/{@link
+ * replaceSelectChildExprs} cover all of them at once — including
+ * `projection`'s own `columns`-case exprs a second time, which is safe
+ * precisely because {@link retargetExprNode} is idempotent on an
+ * already-retargeted node (proven above, `retargetColumnRef`'s
+ * `alreadyAtNewTarget` guard): running it again over exprs `projection`
+ * already retargeted finds nothing left to match and hands back the
+ * exact same references, so this costs a redundant walk, never a wrong
+ * answer or a second rewrite.
  */
 export const retargetSelectNode = (
 	query: SelectNode,
@@ -395,15 +413,24 @@ export const retargetSelectNode = (
 ): SelectNode => {
 	const projection = retargetProjection(query.projection, query.from, target);
 	const from = retargetTableRef(query.from, target);
-	const joins = query.joins.map((join) => retargetJoin(join, target));
-	const where = retargetWhere(query.where, target);
-	const orderBy = query.orderBy.map((term) =>
-		retargetOrderByTerm(term, target),
+	const joins = query.joins.map((join) => retargetJoinTable(join, target));
+	const withIdentifiersRetargeted: SelectNode = {
+		...query,
+		projection,
+		from,
+		joins,
+	};
+	const retargetedExprs = selectChildExprs(withIdentifiersRetargeted).map(
+		(expr) => retargetExprNode(expr, target),
 	);
-	if (isSelectNodeUnchanged(query, projection, from, joins, where, orderBy)) {
+	const candidate = replaceSelectChildExprs(
+		withIdentifiersRetargeted,
+		retargetedExprs,
+	);
+	if (isSelectNodeUnchanged(query, candidate)) {
 		return query;
 	}
-	return { ...query, projection, from, joins, where, orderBy };
+	return candidate;
 };
 
 /** Retargets a set-operation statement's branches (add-set-operations) — the same identity invariant: the exact same reference comes back when neither branch changed. */
