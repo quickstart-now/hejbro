@@ -41,6 +41,7 @@ import type {
 	UpdateChainFilterable,
 	UpdateChainFinal,
 	UpdateChainReturnable,
+	WithChainTerminal,
 } from "../src/index";
 import * as barrel from "../src/index";
 
@@ -79,6 +80,7 @@ type _AgreedTypesPresent = [
 	UpdateChainFilterable,
 	UpdateChainFinal,
 	UpdateChainReturnable,
+	WithChainTerminal<never>,
 ];
 
 // @ts-expect-error "ColumnPlanEntry" is db/convert.ts's test-only conversion internal -- must never reach the public barrel.

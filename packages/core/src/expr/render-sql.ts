@@ -126,8 +126,19 @@ const isCteRef = (node: FromNode): node is CteRefNode => "cteName" in node;
  * must not (only a real `CteRefNode` in scope answers that). A distinct
  * key from `CteRefNode.cteName` is what keeps the two from being
  * conflated the way task 1.3b's single-shape `outerScope` injection was.
+ *
+ * Surface: exported (add-ctes, task 7.3) because it already appeared,
+ * unnamed, in `renderQuery`/`renderSelect`/`renderSelectInto`'s own public
+ * `outerScope` parameter — those three render a correlated subquery
+ * against tables/CTEs inherited from an enclosing query, a real capability
+ * a caller outside this package's own builder can reach for by hand
+ * (rendering a hand-built `SelectNode` scoped under a hand-built CTE
+ * list). Narrowing those signatures to drop it would remove that
+ * capability rather than just rename it; exporting the type callers
+ * already had to accept (positionally, unnamed) costs nothing further and
+ * lets them actually write the parameter's type down.
  */
-type DeclaredCteMarker = { readonly declaredCte: string };
+export type DeclaredCteMarker = { readonly declaredCte: string };
 
 const isDeclaredCteMarker = (
 	node: FromNode | DeclaredCteMarker,

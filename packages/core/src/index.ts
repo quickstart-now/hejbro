@@ -199,6 +199,7 @@ export {
 	now,
 	or,
 } from "./expr/operators";
+export type { DeclaredCteMarker } from "./expr/render-sql";
 export {
 	collectColumnRefs,
 	renderDelete,

@@ -787,7 +787,7 @@ route it through the lead rather than absorbing it.
       prevent). Files: `skills/hejbro/references/query-layer.md`. If the
       edit turns out to need `skills/hejbro/SKILL.md`, stop and ask —
       that file is shared and the lead sequences it.
-- [ ] 7.3 (~5m) Also settle one shape review flagged at group 1:
+- [x] 7.3 (~5m) Also settle one shape review flagged at group 1:
       `DeclaredCteMarker` is unexported yet appears in the signatures of
       the public `renderQuery`/`renderSelect`/`renderSelectInto`. Builds
       and type-checks pass (the dts inlines it) and callers can still
