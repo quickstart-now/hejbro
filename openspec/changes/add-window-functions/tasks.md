@@ -306,7 +306,7 @@ discipline").
       `pnpm --filter @hejbro/pg test:integration` — `pnpm test` excludes
       this file and would report green having run none of it. Files:
       `packages/pg/test/integration.test.ts`.
-- [ ] 5.2 (~8m, docs) `skills/hejbro/references/query-layer.md`: a window
+- [x] 5.2 (~8m, docs) `skills/hejbro/references/query-layer.md`: a window
       functions section with the type table, and window removed from the
       "not supported" line — that line names CTEs too, and #417 keeps
       them. Changeset (D59, `minor`), `openspec/task-times.csv` rows,
