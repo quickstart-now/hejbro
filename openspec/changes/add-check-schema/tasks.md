@@ -165,13 +165,30 @@ Postgres rewrites expressions on write.
       two hazards in 3.2 and 3.3. Consequence worth stating: no `SET` is
       needed, so this command depends on **no** driver capability beyond
       the parameterless reads every driver must already support. Both
-      renderings SHALL come from **one** session: two connections can
-      differ in `search_path` or any GUC that affects how an expression
-      is rendered, which would compare two things that were never
-      comparable. Red: `packages/cli/test/check-expression.test.ts` —
+      renderings SHALL come from **one statement** —
+      `SELECT (<declared>), (<catalog>) FROM <table>`, two entries in one
+      plan's `Output`. Two statements were the first shape and it was
+      wrong: a pooling driver can put them on two connections whose
+      `search_path` differs, and the assertion "one session object was
+      passed" cannot see that, because passing one object is structurally
+      always true. One statement is enforceable — the test counts
+      `execute` calls — and it is the only way to pin a connection
+      without a transaction. Two assertions carry it: `execute` is called
+      **once**, and the plan's `Output` holds **two** entries. The second
+      is not pedantry — when the comparison succeeds both expressions
+      render to the *same* text, and whether Postgres keeps two identical
+      target-list entries or folds them into one is a fact about a
+      server, not something a fake session can establish. Measure it on a
+      real one before trusting the fixture, the way the plan JSON's shape
+      was measured; if it folds, every agreeing constraint reports as
+      not-compared. When that one statement errors, neither side was
+      rendered, so the finding is not-compared with the server's own
+      reason **and both expression texts** — a server message naming a
+      column tells the user nothing about which of the two declarations
+      to go read. Red: `packages/cli/test/check-expression.test.ts` —
       "renders both sides through the server and reports no difference
       for a rewritten `in (...)`", "reports a constraint whose bound
-      differs", "obtains both renderings from a single session". Files:
+      differs", "obtains both renderings from a single statement". Files:
       `packages/cli/src/check/expression.ts`, that test.
 - [x] 3.2 (~8m) The rendering is read from the plan without depending on
       the plan's shape. Guard the hazard directly: the same comparison
@@ -242,6 +259,19 @@ Postgres rewrites expressions on write.
       differences", "says its reads are not a single snapshot". Files:
       `packages/cli/src/commands/check.ts`, that test.
 
+- [ ] 4.4 (~8m) The expression comparison is actually reached: `check`
+      walks the declared check constraints and puts each through group
+      3, merging those findings with the catalog comparison's. Group 3
+      built the comparison and nothing called it — a gap this plan left
+      between "the command wires the pieces together" and a task list
+      that named the pieces separately. An unreached comparison is worse
+      than a missing one: every test passes, the report says nothing, and
+      the silence reads as agreement. Red:
+      `packages/cli/test/check-command.test.ts` — "reports a check
+      constraint whose expression differs", "compares every declared
+      check constraint, not only the tables around them". Files:
+      `packages/cli/src/commands/check.ts`, that test.
+
 ## 5. Unmanaged inventory
 
 - [ ] 5.1 (~8m) [design] Tables inside the declared schemas that no declaration
@@ -278,8 +308,14 @@ split-config shape `packages/pg` already uses.
       committed chain applied to a real server, and `check` against the
       same declarations reports **no** differences — the claim the whole
       expression design rests on, asserted against the server rather than
-      argued. Red: same file — "reports no differences for the example's
-      own declarations". Files: that test.
+      argued. This is also what makes 3.1's query-text pin worth
+      anything: the pin fixes the probe's *shape*, and only this witness
+      shows the rewrite actually cancels. It therefore asserts **how
+      many** expressions it compared — the example declares eight check
+      constraints, and a run that silently compared zero would otherwise
+      pass. Red: same file — "reports no differences for the example's
+      own declarations", "compares every check constraint the example
+      declares". Files: that test.
 - [ ] 6.3 (~6m) The true-difference witness: alter one column's type on
       the live server and `check` reports exactly that object and exits
       non-zero. Verified load-bearing by asserting the *unaltered* column

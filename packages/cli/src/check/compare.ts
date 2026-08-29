@@ -27,7 +27,8 @@ const missingFinding = (identity: string, describe: string): Finding => ({
 	),
 });
 
-const differsFinding = (
+/** `check-object-differs`'s one shape (2.1 owns it) -- exported so expression.ts (group 3) shares it instead of defining its own, which had already started to drift (m2, review round 2). */
+export const differsFinding = (
 	identity: string,
 	message: string,
 	next: string,

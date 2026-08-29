@@ -112,8 +112,17 @@ without reconstructing the surrounding statement.
 ### Requirement: An expression is compared through the server's own rendering
 Where `check` compares an expression — a check constraint, an index
 predicate, a generated column — it SHALL obtain the rendering of **both**
-the declared expression and the database's own expression from the same
-database in the same session, and compare those.
+the declared expression and the database's own expression from **one
+statement**, and compare those.
+
+One statement, not two sent to one connection: a driver is free to pool
+connections, so two statements can land on two sessions whose
+`search_path` or other settings differ, and the deparse this comparison
+rests on is sensitive to exactly those settings. "Same session" is
+unenforceable from outside the driver — a single statement makes it true
+by construction instead, and costs a round trip less. It also stays
+within the no-capability rule: pinning a connection any other way means a
+transaction.
 
 Comparing hejbro's rendered text against the catalog's text directly is
 not permitted. Postgres rewrites an expression when it stores it, so the

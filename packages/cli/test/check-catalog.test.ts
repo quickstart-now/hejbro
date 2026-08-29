@@ -109,8 +109,11 @@ describe("CHECK_CATALOG_QUERIES.tableGrants / 1.4", () => {
 	// limited role reading it would see fewer grants than exist, and
 	// `check` would report a real grant as absent. aclexplode on
 	// pg_class.relacl directly is not role-filtered: every login role
-	// reads the same access list.
-	it("reads table grants without depending on the connected role", () => {
+	// reads the same access list. This is a query-text pin, not a
+	// semantic proof: a unit test cannot run aclexplode() against a real
+	// catalog under two different roles. 6.4 is the live witness that
+	// proves the semantics this text only pins.
+	it("pins tableGrants' query text to aclexplode(c.relacl), not information_schema (semantics proved by 6.4)", () => {
 		expect(CHECK_CATALOG_QUERIES.tableGrants).not.toContain(
 			"information_schema",
 		);

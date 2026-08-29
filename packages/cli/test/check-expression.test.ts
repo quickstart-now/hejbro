@@ -68,7 +68,7 @@ const declaredCheckExpression = (
 	return found.expression;
 };
 
-/** One row of `EXPLAIN (FORMAT JSON, COSTS OFF, VERBOSE)` output, shaped exactly as a real postgres:17 returns it (verified directly, docker `postgres:17-alpine`) -- `output` is the probed plan node's own `Output` array. */
+/** One row of `EXPLAIN (FORMAT JSON, COSTS OFF, VERBOSE)` output, shaped exactly as a real postgres:17 returns it (verified directly, docker `postgres:17-alpine`) -- `output` is the probed plan node's own `Output` array (task 3.1's single statement: index 0 is the declared side's rendering, index 1 the catalog side's). */
 const explainRow = (output: ReadonlyArray<string>): DriverRow => ({
 	"QUERY PLAN": [
 		{
@@ -96,31 +96,34 @@ type ConstraintMetadata = {
 
 type FakeSessionOptions = {
 	readonly metadata?: ConstraintMetadata;
-	/** In call order: the `Output` array for that probe, or `null` to simulate a plan with no usable Output (elided). */
-	readonly explainOutputs?: ReadonlyArray<ReadonlyArray<string> | null>;
+	/** The single combined EXPLAIN statement's own `Output` -- `[declaredText, catalogText]` -- or `null`/omitted to simulate a plan with no usable Output (elided). */
+	readonly explainOutput?: ReadonlyArray<string> | null;
 	readonly explainError?: Error;
 };
 
 /**
  * The regression guard 3.2/3.3 exist for: since a fake session can't tell
  * a `WHERE`-based probe from a select-list one by its *behavior* (it just
- * answers whatever `explainOutputs` says), only asserting on the actual
+ * answers whatever `explainOutput` says), only asserting on the actual
  * SQL text sent catches someone quietly switching the probe form back to
  * `WHERE` -- the switch this whole design exists to reject (spec: "An
  * expression compared as a query predicate fails both" [RLS/planner
- * hazards]).
+ * hazards]). Also asserts exactly one EXPLAIN call (task 3.1, settled
+ * after review round 2): two statements can land on two pooled
+ * connections whose `search_path` differs, so "one statement" is the
+ * enforceable claim, not "one session object was passed".
  */
-const expectSelectListProbes = (calls: ReadonlyArray<CompileResult>): void => {
+const expectOneSelectListProbe = (
+	calls: ReadonlyArray<CompileResult>,
+): void => {
 	const explainCalls = calls.filter((call) =>
 		call.sql.trim().toLowerCase().startsWith("explain"),
 	);
-	expect(explainCalls.length).toBeGreaterThan(0);
-	expect(
-		explainCalls.every((call) => {
-			const sql = call.sql.toLowerCase();
-			return sql.includes("select (") && !/\bwhere\b/.test(sql);
-		}),
-	).toBe(true);
+	expect(explainCalls).toHaveLength(1);
+	const [explainCall] = explainCalls;
+	const sql = explainCall?.sql.toLowerCase() ?? "";
+	expect(sql).toContain("select (");
+	expect(sql).not.toMatch(/\bwhere\b/);
 };
 
 const makeFakeSession = (
@@ -144,20 +147,19 @@ const makeFakeSession = (
 			if (options.explainError !== undefined) {
 				throw options.explainError;
 			}
-			const explainCallsSoFar = calls.filter((call) =>
-				call.sql.trim().toLowerCase().startsWith("explain"),
-			).length;
-			const output = options.explainOutputs?.[explainCallsSoFar - 1];
-			if (output === undefined || output === null) {
+			if (
+				options.explainOutput === undefined ||
+				options.explainOutput === null
+			) {
 				return [explainRow([])];
 			}
-			return [explainRow(output)];
+			return [explainRow(options.explainOutput)];
 		},
 	};
 	return { session, calls };
 };
 
-describe("compareCheckConstraint / 3.1 probe form and single session", () => {
+describe("compareCheckConstraint / 3.1 probe form and single statement", () => {
 	it("renders both sides through the server and reports no difference for a rewritten `in (...)`", async () => {
 		const posts = table(
 			app,
@@ -178,14 +180,14 @@ describe("compareCheckConstraint / 3.1 probe form and single session", () => {
 		// Measured directly (docker postgres:17-alpine): `status in ('a','b','c')`
 		// and the catalog's own `status = ANY ('{a,b,c}'::text[])` both probe
 		// to the identical Output text once run through EXPLAIN in the same
-		// session -- Postgres's own rewrite cancels.
-		const canonicalOutput = ["(status = ANY ('{a,b,c}'::text[]))"];
+		// statement -- Postgres's own rewrite cancels.
+		const canonicalText = "(status = ANY ('{a,b,c}'::text[]))";
 		const { session } = makeFakeSession({
 			metadata: {
 				expression: "status = ANY ('{a,b,c}'::text[])",
 				convalidated: true,
 			},
-			explainOutputs: [canonicalOutput, canonicalOutput],
+			explainOutput: [canonicalText, canonicalText],
 		});
 
 		const findings = await compareCheckConstraint(
@@ -220,9 +222,9 @@ describe("compareCheckConstraint / 3.1 probe form and single session", () => {
 				expression: "(amount >= 1) AND (amount <= 199)",
 				convalidated: true,
 			},
-			explainOutputs: [
-				["((amount >= '1'::numeric) AND (amount <= '200'::numeric))"],
-				["((amount >= '1'::numeric) AND (amount <= '199'::numeric))"],
+			explainOutput: [
+				"((amount >= '1'::numeric) AND (amount <= '200'::numeric))",
+				"((amount >= '1'::numeric) AND (amount <= '199'::numeric))",
 			],
 		});
 
@@ -240,7 +242,7 @@ describe("compareCheckConstraint / 3.1 probe form and single session", () => {
 		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
 	});
 
-	it("obtains both renderings from a single session", async () => {
+	it("obtains both renderings from a single statement", async () => {
 		const posts = table(
 			app,
 			"posts",
@@ -257,13 +259,13 @@ describe("compareCheckConstraint / 3.1 probe form and single session", () => {
 			"app.posts",
 			"posts_status_valid",
 		);
-		const output = ["(status = ANY ('{a,b,c}'::text[]))"];
+		const probedText = "(status = ANY ('{a,b,c}'::text[]))";
 		const { session, calls } = makeFakeSession({
 			metadata: {
 				expression: "status = ANY ('{a,b,c}'::text[])",
 				convalidated: true,
 			},
-			explainOutputs: [output, output],
+			explainOutput: [probedText, probedText],
 		});
 
 		await compareCheckConstraint(
@@ -275,14 +277,11 @@ describe("compareCheckConstraint / 3.1 probe form and single session", () => {
 			declaredExpression,
 		);
 
-		// One metadata lookup plus two EXPLAIN probes, every one of them
-		// through this same fake session's own `execute` -- there is no
-		// second session object anywhere in this call.
-		expect(calls).toHaveLength(3);
-		const explainCalls = calls.filter((call) =>
-			call.sql.trim().toLowerCase().startsWith("explain"),
-		);
-		expect(explainCalls).toHaveLength(2);
+		// One metadata lookup plus exactly one EXPLAIN statement carrying
+		// both renderings -- never two separate EXPLAIN calls, which a
+		// pooling driver could split across two connections.
+		expect(calls).toHaveLength(2);
+		expectOneSelectListProbe(calls);
 	});
 });
 
@@ -307,21 +306,21 @@ describe("compareCheckConstraint / 3.2 index robustness", () => {
 		// Measured directly: the select-list probe's Output is byte-identical
 		// whether or not an index exists on the probed column (unlike a WHERE
 		// probe, which the planner may rewrite into BitmapHeapScan/IndexCond).
-		const output = ["(status = ANY ('{a,b,c}'::text[]))"];
+		const probedText = "(status = ANY ('{a,b,c}'::text[]))";
 
 		const withoutIndex = makeFakeSession({
 			metadata: {
 				expression: "status = ANY ('{a,b,c}'::text[])",
 				convalidated: true,
 			},
-			explainOutputs: [output, output],
+			explainOutput: [probedText, probedText],
 		});
 		const withIndex = makeFakeSession({
 			metadata: {
 				expression: "status = ANY ('{a,b,c}'::text[])",
 				convalidated: true,
 			},
-			explainOutputs: [output, output],
+			explainOutput: [probedText, probedText],
 		});
 
 		const [findingsWithoutIndex, findingsWithIndex] = await Promise.all([
@@ -346,9 +345,10 @@ describe("compareCheckConstraint / 3.2 index robustness", () => {
 		expect(findingsWithoutIndex).toEqual([]);
 		expect(findingsWithIndex).toEqual([]);
 		// The regression guard itself: an index existing or not never changes
-		// *which query shape* gets sent -- it is always the select-list form.
-		expectSelectListProbes(withoutIndex.calls);
-		expectSelectListProbes(withIndex.calls);
+		// *which query shape* gets sent -- it is always one select-list
+		// statement, never two, never a WHERE.
+		expectOneSelectListProbe(withoutIndex.calls);
+		expectOneSelectListProbe(withIndex.calls);
 	});
 });
 
@@ -396,6 +396,13 @@ describe("compareCheckConstraint / 3.3 uncomparable classification", () => {
 		expect(findings[0]?.identity).toBe("app.posts.posts_status_valid");
 		expect(findings[0]?.error).toMatchObject({ code: "check-not-compared" });
 		expect(findings[0]?.error.message).toContain("permission denied");
+		// The server's own error message usually names a column or function,
+		// not which of the two declarations to go read -- both expression
+		// texts are named explicitly (tasks.md 3.1, review round 2).
+		expect(findings[0]?.error.message).toContain("in ('a', 'b', 'c')");
+		expect(findings[0]?.error.message).toContain(
+			"status = ANY ('{a,b,c}'::text[])",
+		);
 	});
 
 	it("still reports a real difference under a role with no policy on the table", async () => {
@@ -424,9 +431,9 @@ describe("compareCheckConstraint / 3.3 uncomparable classification", () => {
 				expression: "(amount >= 1) AND (amount <= 4)",
 				convalidated: true,
 			},
-			explainOutputs: [
-				["((amount >= '1'::numeric) AND (amount <= '200'::numeric))"],
-				["((amount >= '1'::numeric) AND (amount <= '4'::numeric))"],
+			explainOutput: [
+				"((amount >= '1'::numeric) AND (amount <= '200'::numeric))",
+				"((amount >= '1'::numeric) AND (amount <= '4'::numeric))",
 			],
 		});
 
@@ -444,7 +451,7 @@ describe("compareCheckConstraint / 3.3 uncomparable classification", () => {
 		// The regression guard itself: this comparison never sends a WHERE
 		// probe, so it never has a role/RLS predicate for the planner to
 		// rewrite or elide in the first place.
-		expectSelectListProbes(calls);
+		expectOneSelectListProbe(calls);
 	});
 
 	it("reports a declared table's absence once, not again as not-compared", async () => {
@@ -484,12 +491,12 @@ describe("compareCheckConstraint / 3.3 uncomparable classification", () => {
 });
 
 describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", () => {
-	it("compares a NOT VALID constraint by its expression", async () => {
+	it("compares a NOT VALID constraint by its expression, and reports both facts independently", async () => {
 		// pg_get_expr(conbin, ...) never carries "NOT VALID" -- conbin is the
 		// bare expression, no wrapper to strip -- so a genuine mismatch is
-		// still caught on a NOT VALID constraint, rather than convalidated
-		// being false short-circuiting straight to "not enforced" and hiding
-		// a real difference.
+		// still caught on a NOT VALID constraint. A mismatch and "not
+		// enforced" are two independent facts (review m3, same principle as
+		// compare.ts's C7): both are reported, not just the first one found.
 		const posts = table(
 			app,
 			"posts",
@@ -511,9 +518,9 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 				expression: "status = ANY ('{a,b}'::text[])",
 				convalidated: false,
 			},
-			explainOutputs: [
-				["(status = ANY ('{a,b,c}'::text[]))"],
-				["(status = ANY ('{a,b}'::text[]))"],
+			explainOutput: [
+				"(status = ANY ('{a,b,c}'::text[]))",
+				"(status = ANY ('{a,b}'::text[]))",
 			],
 		});
 
@@ -526,8 +533,12 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 			declaredExpression,
 		);
 
-		expect(findings).toHaveLength(1);
-		expect(findings[0]?.error).toMatchObject({ code: "check-object-differs" });
+		expect(findings).toHaveLength(2);
+		const codes = findings.map((finding) => finding.error.code).sort();
+		expect(codes).toEqual([
+			"check-constraint-not-enforced",
+			"check-object-differs",
+		]);
 	});
 
 	it("reports a matching constraint the database does not enforce", async () => {
@@ -547,13 +558,61 @@ describe("compareCheckConstraint / 3.4 catalog side via conbin, enforcement", ()
 			"app.posts",
 			"posts_status_valid",
 		);
-		const output = ["(status = ANY ('{a,b,c}'::text[]))"];
+		const matchingText = "(status = ANY ('{a,b,c}'::text[]))";
+		const { session } = makeFakeSession({
+			metadata: {
+				expression: "status = ANY ('{a,b,c}'::text[])",
+				// Not enforced (NOT VALID), even though the expression matches --
+				// this is the case the code guards, and review round 2 found it
+				// untested (M1): the test previously asserted the opposite
+				// (`convalidated: true`, expecting no finding).
+				convalidated: false,
+			},
+			explainOutput: [matchingText, matchingText],
+		});
+
+		const findings = await compareCheckConstraint(
+			session,
+			withPostsTable(),
+			"app",
+			"posts",
+			"posts_status_valid",
+			declaredExpression,
+		);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("app.posts.posts_status_valid");
+		expect(findings[0]?.error).toMatchObject({
+			code: "check-constraint-not-enforced",
+		});
+	});
+
+	it("does not report a matching, validated constraint at all", async () => {
+		// The positive control for the M1 fix above: enforced and matching is
+		// the only case that produces no finding.
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: text() },
+			(t) => ({
+				checks: [
+					check("posts_status_valid", inArray(t.status, ["a", "b", "c"])),
+				],
+			}),
+		);
+		const snapshot = buildTestSnapshot([posts]);
+		const declaredExpression = declaredCheckExpression(
+			snapshot,
+			"app.posts",
+			"posts_status_valid",
+		);
+		const matchingText = "(status = ANY ('{a,b,c}'::text[]))";
 		const { session } = makeFakeSession({
 			metadata: {
 				expression: "status = ANY ('{a,b,c}'::text[])",
 				convalidated: true,
 			},
-			explainOutputs: [output, output],
+			explainOutput: [matchingText, matchingText],
 		});
 
 		const findings = await compareCheckConstraint(
