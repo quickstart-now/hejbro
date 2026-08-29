@@ -183,16 +183,32 @@ starts from its own failing test.
       admits them without a declaration that grants them. Consumes group
       4's constants. Red: same file — "contributes Neon's two Data API
       roles". Files: `packages/neon/src/driver.ts`, that test.
+- [ ] 3.6 (~8m) Every query carries the same `types` override
+      `@hejbro/pg` sends — oids 1186/1187/1231 forced to raw text, every
+      other type left to the client's own parser. **Runs with 3.2**; it
+      is numbered last only so the tasks already cited in review
+      correspondence keep their numbers. This is a different mechanism
+      from 3.4's session pins and easy to conflate with them: the pins
+      decide what the *server* renders, this decides whether the
+      *client's* parser is bypassed. Neon's `Pool` ships its own bundled
+      parsers, so without the override an `interval` arrives as a parsed
+      object and a `numeric[]` as already-parsed numbers — the two
+      outcomes the contract's arrival-shape requirement exists to
+      forbid, one of them lossy. The HTTP driver carries this because
+      2.1 named it; the WebSocket path had no task naming it until now.
+      Red: `packages/neon/test/driver.test.ts` — "sends the raw-text type
+      override with every query". Files: `packages/neon/src/driver.ts`,
+      that test.
 
 ## 4. Roles and auth expressions
 
-- [ ] 4.1 (~6m) [design] `authenticatedRole` and `anonymousRole`. The
+- [x] 4.1 (~6m) [design] `authenticatedRole` and `anonymousRole`. The
       [design] part is the second name: Neon's Data API creates
       `anonymous`, not Supabase's `anon`, and the constant emits the SQL
       identifier, so matching Supabase here would make it lie. Red:
       `packages/neon/test/roles.test.ts` — "names Neon's own roles".
       Files: `packages/neon/src/roles.ts`, that test.
-- [ ] 4.2 (~8m) `authUid()` and `authJwt()` over `pg_session_jwt`'s
+- [x] 4.2 (~8m) `authUid()` and `authJwt()` over `pg_session_jwt`'s
       `auth.uid()` and `auth.jwt()`, rendering the same expression nodes
       the Supabase preset's helpers render — an agreement between two
       platforms that expose the same function names, not a copy. Red:
