@@ -1,14 +1,14 @@
 Refs:
 - .changeset/harden-query-surface.md @ blob 07e574552c79dd679ec0a0b39ab8c37c597c759e
 - docs/specs/2026-08-19-hejbro-design.md @ blob 00c1f08bdfb38b96d11761f8687362300ab3731d
-- openspec/changes/harden-query-surface/design.md @ blob 1e12a296f48736191c1e218aac3107a849548c51
+- openspec/changes/harden-query-surface/design.md @ blob b09d146e16de04c221fc9c7065a8c1568e287a06
 - openspec/changes/harden-query-surface/measurements.md @ blob 52d9df5fd1c625e58f74f6fb7c37a33acbf8bfd9
 - openspec/changes/harden-query-surface/proposal.md @ blob 0ed80ac2c9142b120aac085ae21389e8153a0277
 - openspec/changes/harden-query-surface/specs/query-builder/spec.md @ blob 24a569f631e3c982ac279ba2226682b3a7b48cfe
 - openspec/changes/harden-query-surface/specs/query-type-inference/spec.md @ blob bcc62be0443090814339b8c8acd61c011a5ef661
 - openspec/changes/harden-query-surface/specs/snapshot-format/spec.md @ blob c571644618d030e36f593c8c816afa3718ff1ac6
 - openspec/changes/harden-query-surface/specs/table-declaration/spec.md @ blob 9e81a1cc983ff904f81b7f42b305e9d346e8b245
-- openspec/changes/harden-query-surface/tasks.md @ blob dfd3536d431c8fe7e4332c000ed4d36b00bc9e91
+- openspec/changes/harden-query-surface/tasks.md @ blob 07e12bda73511eefd6d5fe140f12c74811b5e4e7
 - packages/core/src/dsl/index-builder.ts @ blob 743b25d4312ffb3cb5d637ca870f70cede870d8c
 - packages/core/src/dsl/table.ts @ blob 531739f13d742ad2b0d5b2a55b376963f89710bc
 - packages/core/src/expr/aggregate.ts @ blob 74b751136d97a5337000699b5052a2a20966daee
@@ -36,13 +36,21 @@ Refs:
 - packages/query/test/db/set-op.test.ts @ blob d859c563d678e2c6a9bad3246db2aca7e56a42d0
 - README.md @ blob 54c26a72c7fb4f6ef9d3e67ba85a1b5c1b90e858
 - skills/hejbro/references/dsl-cheatsheet.md @ blob 74ce210fb1fff705cbcd1c587861faed547da14c
-- skills/hejbro/references/query-layer.md @ blob efcd3b35329ea18aa89dbcb3253bfb9f6110822c
+- skills/hejbro/references/query-layer.md @ blob 3a25f4bf66480a4f2db975cc48b274682c43db09
 
-(Pinned at `ab0fe8f`, group 7 in flight — group 7.6/7.7 still to land. Per
-add-ctes' own correction, these pins must be re-verified against the
-final tree after the branch is rebased/squashed, before the PR is
-considered done; a pin taken mid-branch does not survive a squash unless
-the pinned content is also present in the final tree.)
+(Re-pinned at `fdce349`, group 7 review-passed in full — 7.8/7.9 (the
+merge-request declaration and wrap-up) are the only steps left, and
+touch no file already pinned here beyond `tasks.md` itself, which 7.9
+re-verifies again before hand-off. Originally pinned at `ab0fe8f`; three
+paths moved since — `design.md` (the surface-delta section plus its own
+machine-checks correction), `tasks.md` (checkbox updates and the 7.8/7.9
+relocation under group 7), and `skills/hejbro/references/query-layer.md`
+(the verification-marker removal and #501 citation) — re-hashed and
+updated above rather than left stale. Per add-ctes' own correction,
+these pins must still be re-verified against the final tree after any
+rebase/squash, before the PR is considered done; a pin taken mid-branch
+does not survive a squash unless the pinned content is also present in
+the final tree.)
 
 (Drafting note, recorded rather than silently omitted: this entry is
 written by the implementer session from committed artifacts — proposal.md,
