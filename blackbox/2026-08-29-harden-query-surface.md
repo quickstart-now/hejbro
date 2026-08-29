@@ -52,7 +52,9 @@ was never party to. Convention calls for "every owner input" recorded as
 an English rewrite; what follows is that content reconstructed from the
 written record, and the lead/planner session that held the actual
 exchange should amend this entry if anything here understates or
-misstates what the owner actually asked for.)
+misstates what the owner actually asked for. That gap is filled below,
+by the lead session directly — see "Owner context" under "Where the
+five came from".)
 
 # harden-query-surface — five query/declaration-surface hardening defects
 
@@ -64,6 +66,27 @@ time instead of at compile time** — plus one naming defect that makes
 correct-looking code compute the wrong number silently.
 
 ## Where the five came from
+
+**Owner context (supplied by the lead, the party to the exchange; English
+rewrites per this file's convention).** This change ran under the
+owner's standing delegation ("decide everything as if building the ORM —
+Postgres only — and follow the established process; where an owner
+decision is needed, the lead decides until I return"). The immediate
+owner input that started it, 2026-08-30: *"The derived errors have
+piled up — let's process them."* That directive selected the open
+defect backlog; the lead triaged it and bundled these five issues into
+this change (two more were taken lead-direct, the rest queued behind the
+in-flight preset piece). Two of the five (#469, #470) originate from the
+owner-requested UX/DX audit of 2026-08-29, whose brief was, in effect:
+*"I've started worrying about one of AI's failure modes — growing the
+codebase with similar functions doing similar work, without thinking
+through the syntax from a UX/DX standpoint; there appear to be at least
+1,416 functions. The work needs periodic inspection for whether UX/DX
+was genuinely considered — and now is the time."* The remaining three
+(#464, #487, #489) are the boundaries three prior changes deliberately
+left with issue numbers at their code sites. All "ratified" decisions in
+this entry are lead decisions under that delegation, to be surfaced to
+the owner on return — none are direct owner decisions.
 
 Two came from an owner-requested review of the query/declaration surface
 against how other ORMs' users would meet it (recorded in `proposal.md`
