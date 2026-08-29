@@ -131,13 +131,22 @@ const sleepSync = (seconds: number): void => {
 	execFileSync("sleep", [String(seconds)]);
 };
 
-/** Polls `pg_isready` inside `CONTAINER` until Postgres accepts connections, or throws after `maxAttempts` (a real, if rare, way this harness can hang otherwise). */
+/** Polls `pg_isready` inside `CONTAINER` until Postgres accepts connections, or throws after `maxAttempts` (a real, if rare, way this harness can hang otherwise). The probe MUST ask over TCP (`-h 127.0.0.1`), never the default Unix socket: the image's first boot runs a temporary init server that listens on the Unix socket only (measured 2026-08-29, #477: `unix=ok tcp=no` for ~160ms, container log shows the temp server with no TCP listen lines), so a socket probe reports ready in a window where the host pool's TCP path has no listener yet -- the cold-start flake where every test fails on `pool.connect`. */
 const waitUntilReady = (maxAttempts = 30): void => {
 	const isReady = (): boolean => {
 		try {
 			execFileSync(
 				"docker",
-				["exec", CONTAINER, "pg_isready", "-U", "postgres", "-q"],
+				[
+					"exec",
+					CONTAINER,
+					"pg_isready",
+					"-h",
+					"127.0.0.1",
+					"-U",
+					"postgres",
+					"-q",
+				],
 				{ stdio: "ignore" },
 			);
 			return true;
