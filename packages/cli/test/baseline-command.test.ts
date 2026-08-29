@@ -207,6 +207,74 @@ describe("hejbro baseline", () => {
 		}
 	});
 
+	it("the diagnostic header names the config, not the solution command (#445 review B5)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_SOURCE);
+			await runCli(cwd, ["init"]);
+
+			const result = await runCli(cwd, [
+				"baseline",
+				"--rename",
+				"app.old=posts",
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				"error[baseline-flag-not-applicable]: hejbro.config.ts",
+			);
+			// not the solution command -- identityFromMessage takes the
+			// first quoted substring as the diagnostic's own subject, and a
+			// double-quoted "hejbro generate" in the message used to win
+			// that slot instead of the config path.
+			expect(result.stderr).not.toContain(
+				"error[baseline-flag-not-applicable]: hejbro generate",
+			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("refuses the flag before any config or declaration loads (#445 review R-a)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			// no hejbro.config.ts at all -- if the flag intercept ever moved
+			// to after config/declaration loading, this would surface
+			// config-not-found instead, breaking the delta's "before any
+			// declaration is loaded" guarantee silently.
+			const result = await runCli(cwd, [
+				"baseline",
+				"--rename",
+				"app.old=posts",
+			]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[baseline-flag-not-applicable]");
+			expect(result.stderr).not.toContain("config-not-found");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("refuses --rename=<value> (equals form) the same as the space form (#445 review R-c)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SCHEMA_SOURCE);
+			await runCli(cwd, ["init"]);
+
+			const result = await runCli(cwd, ["baseline", "--rename=app.old=posts"]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[baseline-flag-not-applicable]");
+
+			const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
+				(name) => name.endsWith(".sql"),
+			);
+			expect(migrationFiles).toHaveLength(0);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
 	it("refuses to run over a chain that already exists", async () => {
 		const cwd = await createCliFixtureDir();
 		try {

@@ -137,6 +137,14 @@ Files (whole group): `packages/query/src/db/transaction.ts`,
       only that a `cause` exists — "the *first* release failure" is
       specified but unverified.
 
+      Closing note from the review (mutation-verified: nulling `cause`
+      reds both): the two `savepoint-release-failed` tests are load-
+      bearing **only as a pair**. The all-releases-fail fixture cannot
+      tell first from last (same message text); the recover-then-succeed
+      fixture is what catches a drift to "whatever the last release
+      attempt saw". Whoever later finds them redundant will be wrong —
+      that constraint belongs in a comment beside them, not only here.
+
 ## 2. `baseline` command surface
 
 Files (whole group): `packages/cli/src/commands/generate.ts`,
@@ -172,7 +180,7 @@ Files (whole group): `packages/cli/src/commands/generate.ts`,
       --rename …` fails with `baseline-flag-not-applicable` before
       anything is written".
 
-- [ ] 2.3 (~9m) Review rework (774948f, blocker B5 + recommendations):
+- [x] 2.3 (~9m) Review rework (774948f, blocker B5 + recommendations):
       **B5** `baseline-flag-not-applicable` renders as
       `error[baseline-flag-not-applicable]: hejbro generate` — the header's
       second slot is the diagnostic's *identity*, the file the error is
@@ -219,6 +227,37 @@ Files (whole group): `packages/core/src/sql/migration-file.ts`,
       the baseline marker back off a rendered banner, and reports its
       absence on an ordinary migration".
 
+- [ ] 3.2 (~6m) Lead decision (relayed 2026-08-29): the parser matches
+      the **`-- baseline:` prefix only**, not the whole marker line.
+      Split a `BASELINE_PREFIX` constant out of `BASELINE_LINE` (the
+      renderer keeps writing the full line) and match on it, exactly as
+      `parseBannerHashes`/`parseBannerVersion` match theirs. Rationale,
+      now also a sentence in the cli-commands delta: whole-line matching
+      couples the machine contract to human-facing prose, so a one-word
+      change to the guidance makes every previously written baseline
+      parse as `false` — and `false` tells an apply tool to *run* a
+      migration that must only be registered. Red:
+      `packages/core/test/migration-file.test.ts` — a marker line whose
+      trailing guidance differs from today's is still recognized; the
+      existing `[baseline notes]` false-positive guard stays green (that
+      line does not start with `-- baseline:`, so prefix matching keeps
+      every guard the whole-line match had — reviewer measured it: all 35
+      migration-file tests stay green).
+      The constant is `"-- baseline:"`, **colon-terminated, no trailing
+      space** (unlike the siblings' `"-- snapshot: "`): a marker has no
+      value after its colon, and a trailing space would make a future
+      bare `-- baseline:` unreadable. `BASELINE_LINE` becomes a template
+      built from it, so the prefix is stated once — a second hardcoded
+      copy is the same drift shape as group 2's R-b.
+- [ ] 3.2b (~5m) R-e: R5's actual deliverable — the *public export* —
+      has no test. Deleting `parseBannerBaseline,` from
+      `packages/core/src/index.ts` leaves all 36 core tests green and
+      `tsc --noEmit` clean, because the tests import from
+      `../src/sql/migration-file` directly and the repo has no export-
+      surface test. The delta says hejbro "SHALL expose a parser ...
+      publicly", so at least one assertion must import the symbol from
+      `../src/index`. Red: same test file, with that import.
+
 ## 4. Trigger-row dispatch
 
 Files (whole group): `packages/core/src/plpgsql/body-context.ts`,
@@ -261,7 +300,16 @@ settle. Files: `packages/skills/turbo.json`,
       comment to say what the inputs now cover.
 - [ ] 5.2 (~8m) Docs: `skills/hejbro/references/query-layer.md`'s nested
       transaction section gains the concurrency rule and both new error
-      codes (a stale skill is a broken user contract); `README.md`'s CLI
+      codes (a stale skill is a broken user contract). Carried over from
+      group 1's review: `savepoint-rollback-failed` now carries
+      **either** `callbackError` **or** `releaseError` depending on which
+      path raised it, and that is user-facing — both properties belong in
+      the skill, not just the code that reads best. Also from that
+      review: the skill documents **no** banner parser today, so adding
+      only `parseBannerBaseline` would read as an oddity. Give the three
+      (`parseBannerHashes`, `parseBannerVersion`, `parseBannerBaseline`)
+      one short subsection — the audience for R5 is exactly someone
+      writing an apply tool, and that reader needs all three or none. `README.md`'s CLI
       list and `packages/cli/README.md`'s command block gain `baseline`,
       `history` and `restore`; `AGENTS.md`'s "three published packages"
       becomes the five-package fixed group `.changeset/config.json`

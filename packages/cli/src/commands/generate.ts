@@ -75,17 +75,30 @@ const GENERATE_ARGS = {
 	},
 } as const;
 
-/** `hejbro baseline`'s own `--help` args (#445, nit): `--rename`/`--confirm-drop` are dropped from the declared surface entirely, not merely refused at runtime -- {@link GENERATE_ARGS} minus those two keys, so the descriptions above stay the single source citty renders for both commands. */
-const BASELINE_ARGS = {
-	config: GENERATE_ARGS.config,
-	name: GENERATE_ARGS.name,
-} as const;
-
-/** The two flags a baseline can never use (#445, nit): a baseline diffs against an empty snapshot, so nothing exists yet to rename or drop. */
-const BASELINE_INAPPLICABLE_FLAGS: ReadonlyArray<string> = [
-	"--rename",
-	"--confirm-drop",
+/**
+ * The `GENERATE_ARGS` keys a baseline can never use (#445, nit; review
+ * R-b): a baseline diffs against an empty snapshot, so nothing exists yet
+ * to rename or drop. The one list both `BASELINE_ARGS` (the `--help`
+ * surface, below) and `BASELINE_INAPPLICABLE_FLAGS` (the pre-parse
+ * refusal) derive from, so the two can never drift into naming different
+ * sets of flags.
+ */
+const BASELINE_EXCLUDED_ARG_KEYS: ReadonlyArray<keyof typeof GENERATE_ARGS> = [
+	"rename",
+	"confirm-drop",
 ];
+
+/** `hejbro baseline`'s own `--help` args: {@link GENERATE_ARGS} minus {@link BASELINE_EXCLUDED_ARG_KEYS}, so the descriptions above stay the single source citty renders for both commands. */
+const BASELINE_ARGS = Object.fromEntries(
+	Object.entries(GENERATE_ARGS).filter(
+		([key]) =>
+			!(BASELINE_EXCLUDED_ARG_KEYS as ReadonlyArray<string>).includes(key),
+	),
+) as Omit<typeof GENERATE_ARGS, (typeof BASELINE_EXCLUDED_ARG_KEYS)[number]>;
+
+/** {@link BASELINE_EXCLUDED_ARG_KEYS}, spelled as the `--`-prefixed tokens `rawArgs` actually carries. */
+const BASELINE_INAPPLICABLE_FLAGS: ReadonlyArray<string> =
+	BASELINE_EXCLUDED_ARG_KEYS.map((key) => `--${key}`);
 
 /**
  * Pre-parse intercept (#445, nit): catches `--rename`/`--confirm-drop` on
@@ -110,7 +123,15 @@ const assertBaselineFlagsApplicable = (
 	}
 	throwHejbroError(
 		"baseline-flag-not-applicable",
-		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: run "hejbro generate" instead to record a change to an already-adopted project.`,
+		// #445 review B5: the message had exactly one quoted substring --
+		// the solution command -- and identityFromMessage takes the first
+		// quoted substring as the diagnostic's own identity (matches
+		// error[config-not-found]: hejbro.config.ts's own convention).
+		// Backtick-quoting the command instead (repo convention for a
+		// command name, loader.ts's own `` `hejbro init` ``) leaves no
+		// quoted substring at all, so the identity falls through to
+		// fallbackIdentity (the config path) instead.
+		`baseline does not accept ${disallowed}: a baseline diffs against an empty snapshot, so there is nothing to rename and nothing to drop. Next: run \`hejbro generate\` instead to record a change to an already-adopted project.`,
 	);
 };
 
@@ -408,23 +429,22 @@ const baselineBlockerText = (
 	return `found ${migrationCount} migration(s) in "${migrationsDir}" and a snapshot that already records declared objects`;
 };
 
-/** Diagnoses which of the two ways a baseline ends up with nothing: the entry pattern's files loaded but exported no hejbro declarations, or they exported some but the two states still landed identical. */
-const baselineNothingToAdoptDiagnosis = (declarationCount: number): string => {
-	if (declarationCount === 0) {
-		return "your declaration files loaded, but exported no hejbro declarations (schema/table/... calls)";
-	}
-	return `${declarationCount} declaration(s) loaded, but there is still nothing for a first migration to record`;
-};
-
-/** #445/D2: a baseline no-op is always a mistake -- the guard directly above it just confirmed the snapshot is empty, so reporting "already matches" would describe success over a diff that was never possible. */
-const throwBaselineNothingToAdopt = (
-	declarationCount: number,
-	entry: ReadonlyArray<string>,
-): never => {
+/**
+ * #445/D2 review R-d: `declarationCount` dropped -- every actual
+ * declaration kind (schema, table, grant, ...) contributes at least one
+ * object to a diff against an empty snapshot (probed directly: a
+ * schema-only and a grant-only declaration set each produced a `create`
+ * change), and `assertBaselineIsFirst` above guarantees the snapshot is
+ * empty in this mode. There is no declaration set that both parses as a
+ * `HejbroInput` and diffs to nothing, so the only way this branch is ever
+ * reached is an empty declarations array -- one sentence, not two branches
+ * for a state that can't happen.
+ */
+const throwBaselineNothingToAdopt = (entry: ReadonlyArray<string>): never => {
 	const entryPhrase = entry.map((pattern) => `"${pattern}"`).join(", ");
 	throwHejbroError(
 		"baseline-nothing-to-adopt",
-		`baseline found nothing to adopt: ${baselineNothingToAdoptDiagnosis(declarationCount)}. Next: check ${entryPhrase} in hejbro.config.ts -- either the entry pattern isn't matching the files you meant, or those files don't actually export their schema/table declarations.`,
+		`baseline found nothing to adopt: your declaration files loaded, but exported no hejbro declarations (schema/table/... calls). Next: check ${entryPhrase} in hejbro.config.ts -- either the entry pattern isn't matching the files you meant, or those files don't actually export their schema/table declarations.`,
 	);
 };
 
@@ -538,7 +558,7 @@ export const runGenerate = async (
 			}
 			if (!firstPass.hasChanges) {
 				if (mode === "baseline") {
-					throwBaselineNothingToAdopt(declarations.length, config.entry);
+					throwBaselineNothingToAdopt(config.entry);
 				}
 				return {
 					exitCode: 0,
