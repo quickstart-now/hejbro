@@ -23,14 +23,14 @@ deliberately outside this: their result type is not the argument's,
 so they are neither cast nor converted, and casting them would deliver
 text where a number is expected.
 
-The text cast is transparent to conversion regardless of who wrote it:
-a value that arrives through a `::text` cast SHALL be revived by the
-type of the expression *inside* the cast, so hejbro's own at-risk cast
-and a user's `` sql`${max(posts.views)}::text` `` behave identically.
-The alternative — recognizing only the shapes hejbro currently casts —
-is a list that must be extended every time a new cell shape becomes
-castable, and the failure mode of forgetting is a silently unconverted
-value.
+The at-risk cast is the compiler's own encoding, and conversion SHALL
+undo exactly that: a value arriving through it is revived by the type
+of the expression *inside* the cast — whatever that expression is, a
+column reference or an aggregate — so a newly castable cell shape does
+not also require teaching the reviver a new expression kind. A `::text`
+cast a user writes through the `sql` escape hatch SHALL NOT be undone:
+an explicit cast is an instruction, and reviving past it would deliver
+a `bigint` where its author asked for text.
 
 #### Scenario: Precision survives the JSON round trip
 - **WHEN** a child row holds a `bigint` column value of
@@ -44,6 +44,11 @@ value.
   `bigint` column whose value is past `Number.MAX_SAFE_INTEGER`
 - **THEN** the delivered value is exactly that `bigint`, not a rounded
   number and not the cast's text
+
+#### Scenario: An explicit user cast is left alone
+- **WHEN** a nested cell is written as `` sql`${max(posts.views)}::text` ``
+- **THEN** the delivered value is the text the cast asked for, not a
+  revived `bigint`
 
 #### Scenario: One statement under the RLS context
 - **WHEN** `db.as(ctx).select(posts).related({ comments: true })` runs

@@ -96,8 +96,9 @@ point of this change is that they cannot repeat this.
 - `query-type-inference`: the write-acceptance rule for `json`/`jsonb`
   gains the null sentence (F4).
 - `query-execution`: nested-read revival covers aggregate cells, not
-  only columns, and states that a `::text` cast is transparent to
-  conversion regardless of who wrote it (F6). Added after the live
+  only columns, and draws the line between the compiler's own at-risk
+  cast (undone on the way back) and a user's explicit `sql` cast (left
+  alone — an explicit cast is an instruction) (F6). Added after the live
   witness: the existing requirement speaks of "its column's declared
   read type", and an aggregate cell has no column, so F6's fix delivers
   behavior the requirement did not describe — and the fix it needed in

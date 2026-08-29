@@ -412,6 +412,38 @@ describe("a cast aggregate cell actually revives, not just compiles cast (#444 F
 		expect(stat?.maxViews).toBe(9007199254740993n);
 		expect(stat?.total).toBe(2n);
 	});
+
+	// #444 F6 spec delta -- "Scenario: An explicit user cast is left
+	// alone": a caller's OWN `` sql`${max(t.a)}::text` `` is an
+	// instruction ("give me text"), not the compiler's own at-risk
+	// encoding, so it is deliberately never undone -- unlike
+	// hejbro's own cast (the test above), this one keeps its
+	// as-written text shape. Pins the behavior the group-8 red test
+	// found (a user-authored template never matches the compiler's
+	// own two-chunk cast shape, see convert.ts's `castTarget`) now
+	// that it is specified, not just true by accident.
+	it("a user-authored sql cast (interpolating an aggregate, ::text) in a nested read stays text, not revived", async () => {
+		const rawRow = {
+			id: "0b0e5b3e-0000-4000-8000-000000000001",
+			// biome-ignore lint/style/useNamingConvention: models the real json child key (the projection's own rendered SQL alias, snake_case).
+			stats: [{ max_views: "9007199254740993" }],
+		};
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ app, posts, comments }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select(
+						{ maxViews: sql`${max(comments.viewCount)}::text` },
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		expect(rows[0]?.stats[0]?.maxViews).toBe("9007199254740993");
+	});
 });
 
 /**

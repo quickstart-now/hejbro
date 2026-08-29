@@ -634,6 +634,16 @@ const convertCell = (
  * ever produces the true two-chunk shape. The rule is still correctly
  * "whatever's inside the wrapper, not just `columnRef`" — it is just
  * narrower in practice than "regardless of who wrote it" claimed.
+ *
+ * **This narrowness is the correct line, not an accident left
+ * standing** (owner-delegated ruling, query-execution spec delta's own
+ * "Scenario: An explicit user cast is left alone"): the compiler's own
+ * at-risk cast is an internal ENCODING, so undoing it on the way back
+ * is the whole contract; a user's own `` sql`${x}::text` `` is an
+ * INSTRUCTION — "give me text" — and reviving past it would hand back
+ * a `bigint` where its author explicitly asked for a string. Widening
+ * `castTarget` to also match a user's leading-interpolation template
+ * would silently break that instruction, not fix a gap.
  */
 const isCastSuffixChunk = (chunk: SqlTemplateChunk | undefined): boolean =>
 	chunk?.chunkKind === "text" &&
