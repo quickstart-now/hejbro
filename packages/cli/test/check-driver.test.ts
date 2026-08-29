@@ -26,7 +26,7 @@ describe("resolveConnectionString", () => {
 
 	it("refuses with a coded error when neither is given", () => {
 		expect(() => resolveConnectionString(undefined, {})).toThrow(
-			expect.objectContaining({ code: "check-missing-connection" }),
+			expect.objectContaining({ code: "check-connection-missing" }),
 		);
 	});
 });
@@ -40,7 +40,7 @@ describe("loadCheckDriver", () => {
 	it("names the package to install when the driver is missing", async () => {
 		await expect(loadCheckDriver()).rejects.toEqual(
 			expect.objectContaining({
-				code: "check-missing-driver",
+				code: "check-driver-missing",
 				message: expect.stringContaining(CHECK_DRIVER_PACKAGE),
 			}),
 		);

@@ -21,7 +21,7 @@ export const resolveConnectionString = (
 		return env.DATABASE_URL;
 	}
 	return throwHejbroError(
-		"check-missing-connection",
+		"check-connection-missing",
 		"hejbro check needs a database connection, but neither --url nor the DATABASE_URL environment variable is set. Next: pass --url <connection-string>, or set DATABASE_URL, then rerun `hejbro check`.",
 	);
 };
@@ -52,7 +52,7 @@ export const loadCheckDriver = async (): Promise<PgDriverFactory> => {
 			throw error;
 		}
 		return throwHejbroError(
-			"check-missing-driver",
+			"check-driver-missing",
 			`hejbro check needs the "${CHECK_DRIVER_PACKAGE}" package to connect to Postgres, and it is not installed. Next: run \`pnpm add -D ${CHECK_DRIVER_PACKAGE}\` (or your package manager's equivalent), then rerun \`hejbro check\`.`,
 		);
 	}
