@@ -572,6 +572,27 @@ describe("a kind that declares itself uncomparable (#482, task 2.3)", () => {
 	});
 });
 
+describe("an unregistered kind is not-compared, never differs (#482, task 2.4)", () => {
+	it("a declared object of an unregistered kind is reported as not compared, with the reason, and the run cannot exit zero", () => {
+		const unregisteredSnapshot: Snapshot = {
+			formatVersion: 8,
+			dialect: "postgres",
+			objects: { "totally-made-up-kind:widget": {} },
+		};
+
+		// the default (core-only) registry never registered this kind --
+		// no test needs to construct one specially for this.
+		const findings = compareCatalog(unregisteredSnapshot, emptyCatalog());
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("widget");
+		expect(findings[0]?.error.code).toBe("check-not-compared");
+
+		const report = renderCheckReport(findings, EMPTY_INVENTORY);
+		expect(report.exitCode).not.toBe(0);
+	});
+});
+
 describe("the CLI names no preset's kind (#482, task 2.2/2.3)", () => {
 	it("compare.ts routes by registry, never by a preset's own kind name", () => {
 		// A plain text scan, not a runtime probe: the whole point is that

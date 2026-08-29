@@ -45,6 +45,22 @@ export const differsFinding = (
 	error: hejbroError("check-object-differs", `${message} Next: ${next}`),
 });
 
+/**
+ * `check-not-compared`'s shape for this file (#482, task 2.4) -- a
+ * comparison that should have run and could not, never a difference:
+ * `expression.ts`'s own `notComparedFinding` is the same code for a
+ * different unrenderable-expression cause, kept separate rather than
+ * shared because the two reasons and `Next:` clauses never overlap.
+ */
+const notComparedFinding = (
+	identity: string,
+	message: string,
+	next: string,
+): Finding => ({
+	identity,
+	error: hejbroError("check-not-compared", `${message} Next: ${next}`),
+});
+
 // The kind node shapes below mirror packages/core/src/kinds/*.ts's own
 // snapshot types exactly (table/column/schema/enum aren't part of core's
 // public surface -- only decodeExprNode/renderExpr/renderTypeNode are,
@@ -755,10 +771,15 @@ const compareEntry = (
 	}
 	const comparator = KIND_COMPARATORS[kind];
 	if (comparator === undefined) {
+		// #482: an unregistered kind was never actually compared -- stating
+		// it as a difference would be a false claim about a comparison that
+		// never ran. `check-not-compared` (not `check-object-differs`)
+		// keeps the exit code from ever reading `0` for a run that skipped
+		// this object, without claiming the database disagrees.
 		return [
-			differsFinding(
+			notComparedFinding(
 				identity,
-				`declared object "${key}" has an unrecognized kind "${kind}".`,
+				`declared object "${key}" has an unrecognized kind "${kind}" and could not be compared.`,
 				"check for a typo in the declaration, or update hejbro if this is a new kind.",
 			),
 		];
