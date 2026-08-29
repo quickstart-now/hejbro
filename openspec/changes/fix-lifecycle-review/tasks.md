@@ -96,7 +96,7 @@ Files (whole group): `packages/query/src/db/transaction.ts`,
       swallowed statement error is recovered by ROLLBACK TO and leaves
       the enclosing transaction usable".
 
-- [ ] 1.7 (~10m) Review rework (3780fea, blockers B1–B3):
+- [x] 1.7 (~10m) Review rework (3780fea, blockers B1–B3):
       **B1** `let result: T;` is the only `let` in the repository's own
       source — AGENTS.md forbids it and Biome has no `noLet`, so
       `pnpm check` cannot catch it. Normalize the callback into a
@@ -118,9 +118,24 @@ Files (whole group): `packages/query/src/db/transaction.ts`,
       `savepoint-rollback-failed` identity and that both messages state
       only true facts. This single test closes B2 and B3 together; had it
       existed, B2 would have surfaced while writing it.
-      Optional (reviewer's recommendation, not a blocker): move
+      **B4** the throw path's own release (added by 1.4) is unguarded, so
+      a release failure there escapes as a bare `query-execution-failed`
+      and the callback's error is **lost**. That breaks the MODIFIED
+      requirement's "rethrowing that error unchanged" and lands in
+      exactly the shape R2 says never to produce. Same root as B2: the
+      two operations added here were reasoned through on one path only.
+      Symmetry is the fix — the throw path's release becomes best-effort
+      too (`.catch`), and the callback's error is rethrown unchanged.
+      Red: same file — "a release failure after a successful rollback
+      still rethrows the callback's own error" (`expect(outcome).toBe(
+      boom)`, identity not shape).
+      Optional (reviewer's recommendations, not blockers): move
       `expect(secondRan).not.toHaveBeenCalled()` ahead of the outcome
-      assertion in 1.1 so "the callback never ran" is what fails first.
+      assertion in 1.1 so "the callback never ran" is what fails first;
+      and pin `cause` by identity in the B3 test (its message names
+      `release savepoint "hejbro_sp_1"`), since today's two tests assert
+      only that a `cause` exists — "the *first* release failure" is
+      specified but unverified.
 
 ## 2. `baseline` command surface
 
@@ -227,7 +242,15 @@ settle. Files: `packages/skills/turbo.json`,
       contract decisions (D1, D2, R2, R5) were settled by the lead under
       the owner's 2026-08-29 blanket delegation rather than by the owner
       directly. Records what was rejected too: documentation-only for D1,
-      a citty unknown-flag dump for 2.2. Lands in this same PR.
+      a citty unknown-flag dump for 2.2. Records what the review itself
+      produced: B2/B4 (one defect class reintroduced by the very commit
+      fixing it, and its mirror image on the other path — both from
+      reasoning a new operation through one path only), and the three
+      follow-up issues the lead filed from this change's findings —
+      #447 (house TS bans not machine-enforced), #448 (turbo's shared
+      worktree cache contaminating isolated review gates), #449 (a
+      nested transaction racing a plain statement, scoped out here).
+      Lands in this same PR.
 - [ ] 5.4 (~5m) Release chore: one `patch` changeset (D59 — the five
       fixed-group packages move together, so one changeset is both
       necessary and sufficient), `openspec/task-times.csv` rows for
@@ -252,6 +275,10 @@ settle. Files: `packages/skills/turbo.json`,
 - `pnpm --filter @hejbro/pg test:integration` against a real postgres:17,
   including 1.6's two new witnesses.
 - 5.1's cache reproduction recorded in the PR body.
+- Every delta scenario has a test paired to it. B2/B3 showed this is a
+  detector, not paperwork: the one scenario without a test was where a
+  reintroduced defect hid. Carry this practice into the completion
+  report so it can be passed to the other review streams.
 - Commits: conventional, lower-case subject ≤72 chars, each carrying
   `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
   Push to `upstream fix-lifecycle-review`; the PR is the lead's.

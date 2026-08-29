@@ -83,11 +83,46 @@ function throwConcurrentNestedTransaction(): never {
 	);
 }
 
-/** Attempts `ROLLBACK TO SAVEPOINT "name"`, throwing the `savepoint-rollback-failed`-coded error (carrying both the rollback failure and whatever reason triggered the rollback -- a thrown callback error or a failed release) if that itself fails; resolves silently on success so both callers can layer their own outcome on top. */
+/**
+ * What triggered a rollback attempt, and how {@link rollbackOrFail}'s own
+ * failure message should describe it (#445 review B2) -- `rollbackOrFail`
+ * is shared by two callers with genuinely different truths: a thrown
+ * callback (`rollbackToSavepoint`) and a normally-returned callback whose
+ * `RELEASE` failed (`recoverFromFailedRelease`). Reusing one hard-coded "…
+ * callback threw" message for both would state something false on the
+ * second path -- exactly the defect class R1 (1.5) fixed on this same
+ * function, reintroduced by sharing it naively.
+ */
+type RollbackFailureTrigger = {
+	/** Completes "rolling back to savepoint "<name>" failed ${trigger}." -- must stay true for the calling path. */
+	readonly trigger: string;
+	/** The property name the thrown error carries `reason` under, and the key named in the message's own `Next:` clause. */
+	readonly key: "callbackError" | "releaseError";
+};
+
+const POINTER_LABEL_BY_KEY: Record<RollbackFailureTrigger["key"], string> = {
+	callbackError: "what the callback threw",
+	releaseError:
+		"the RELEASE failure this rollback was attempting to recover from",
+};
+
+const CALLBACK_THREW: RollbackFailureTrigger = {
+	trigger: "after the nested transaction callback threw",
+	key: "callbackError",
+};
+
+const RECOVERING_FAILED_RELEASE: RollbackFailureTrigger = {
+	trigger:
+		"while recovering from a failed RELEASE after the nested transaction callback returned normally",
+	key: "releaseError",
+};
+
+/** Attempts `ROLLBACK TO SAVEPOINT "name"`, throwing the `savepoint-rollback-failed`-coded error (carrying both the rollback failure as `cause` and `reason` -- whatever triggered the rollback attempt, described truthfully per {@link RollbackFailureTrigger}) if that itself fails; resolves silently on success so both callers can layer their own outcome on top. */
 async function rollbackOrFail(
 	session: DriverSession,
 	name: string,
 	reason: unknown,
+	{ trigger, key }: RollbackFailureTrigger,
 ): Promise<void> {
 	try {
 		await sendCompiled(
@@ -97,12 +132,12 @@ async function rollbackOrFail(
 	} catch (rollbackError) {
 		throw Object.assign(
 			new Error(
-				`rolling back to savepoint "${name}" failed after the nested transaction callback threw. Do not catch this error: if it escapes the enclosing callback the transaction rolls back, and if you catch it the transaction can still commit without the nested work. Next: inspect "cause" for the rollback failure and "callbackError" for what the callback threw -- when the rollback failed because the connection itself is unusable, letting this error escape is also what gets that connection discarded.`,
+				`rolling back to savepoint "${name}" failed ${trigger}. Do not catch this error: if it escapes the enclosing callback the transaction rolls back, and if you catch it the transaction can still commit without the nested work. Next: inspect "cause" for the rollback failure and "${key}" for ${POINTER_LABEL_BY_KEY[key]} -- when the rollback failed because the connection itself is unusable, letting this error escape is also what gets that connection discarded.`,
 			),
 			{
 				code: "savepoint-rollback-failed",
 				cause: rollbackError,
-				callbackError: reason,
+				[key]: reason,
 			},
 		);
 	}
@@ -114,18 +149,26 @@ async function rollbackToSavepoint(
 	name: string,
 	callbackError: unknown,
 ): Promise<never> {
-	await rollbackOrFail(session, name, callbackError);
-	await sendCompiled(session, savepointStatement("release savepoint", name));
+	await rollbackOrFail(session, name, callbackError, CALLBACK_THREW);
+	// best-effort (#445 review B4): "rethrowing that error unchanged" is
+	// this path's own contract (the modified requirement), so a failure on
+	// this cleanup-only release must never replace or swallow the
+	// callback's error -- unlike the release-failure path above, there is
+	// nothing else here worth surfacing as its own error.
+	await sendCompiled(
+		session,
+		savepointStatement("release savepoint", name),
+	).catch(() => {});
 	throw callbackError;
 }
 
-/** A statement error swallowed inside a nested callback leaves the subtransaction aborted, so the `RELEASE SAVEPOINT` that follows its normal return fails (#445 R2). Attempts `ROLLBACK TO SAVEPOINT` to recover -- surfacing `savepoint-release-failed` on success, or letting the existing rollback-failure path in {@link rollbackOrFail} take over if that recovery itself fails. */
+/** A statement error swallowed inside a nested callback leaves the subtransaction aborted, so the `RELEASE SAVEPOINT` that follows its normal return fails (#445 R2). Attempts `ROLLBACK TO SAVEPOINT` to recover -- surfacing `savepoint-release-failed` on success, or letting the existing rollback-failure path in {@link rollbackOrFail} take over if that recovery itself fails (carrying the release failure as `releaseError`, never mislabeled `callbackError` -- the callback returned normally here). */
 async function recoverFromFailedRelease(
 	session: DriverSession,
 	name: string,
 	releaseError: unknown,
 ): Promise<never> {
-	await rollbackOrFail(session, name, releaseError);
+	await rollbackOrFail(session, name, releaseError, RECOVERING_FAILED_RELEASE);
 	// best-effort: ROLLBACK TO clears the aborted state, so the savepoint
 	// can actually be released now, keeping the "no savepoint outlives its
 	// nested transaction" invariant (task 1.4) even on this failure exit. A
@@ -159,12 +202,19 @@ const createSavepointApi = (
 			const name = `hejbro_sp_${counter.next}`;
 			counter.next += 1;
 			await sendCompiled(session, savepointStatement("savepoint", name));
-			let result: T;
-			try {
-				result = await callback(buildTx(session, tables, counter));
-			} catch (callbackError) {
-				return await rollbackToSavepoint(session, name, callbackError);
-			}
+			// `Promise.resolve().then(...)` (#445 review B1), not a plain
+			// `callback(...)` call: a callback that throws SYNCHRONOUSLY
+			// throws immediately, before ever producing a promise for
+			// `.catch` to attach to -- wrapping it inside a `.then` handler
+			// normalizes that throw into this same chain's rejection, so
+			// one `.catch` covers both a rejected promise and a synchronous
+			// throw without a second, nested try (and without the `let`
+			// that would otherwise be needed to carry the result out of it).
+			const result = await Promise.resolve()
+				.then(() => callback(buildTx(session, tables, counter)))
+				.catch((callbackError: unknown) =>
+					rollbackToSavepoint(session, name, callbackError),
+				);
 			try {
 				await sendCompiled(
 					session,
