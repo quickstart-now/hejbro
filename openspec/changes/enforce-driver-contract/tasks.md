@@ -17,15 +17,25 @@ delta. Group 2 owns `packages/core/src/kind/object-kind.ts`,
 `README.md`. A task that appears to need a file another group owns goes
 back to the planner rather than into the diff.
 
-**Gates per group** (every run forced — this repository's turbo cache is
-shared across worktrees through the linked worktree's `.git` file, so an
-unforced run can replay another worktree's logs and "the gates passed
-here" stops being a true sentence): `TURBO_FORCE=1 pnpm check`,
-`TURBO_FORCE=1 pnpm check-types`, `TURBO_FORCE=1 pnpm test`, and — for
-every group that creates or edits a spec delta (1, 2) —
-`openspec validate enforce-driver-contract --strict`. A gate run is
-quoted with its own turbo summary lines; `Cached: 0 cached, N total` is
-what makes it evidence.
+**Gates per group.** The gate set is what CI actually runs plus the
+archive gate, not a habit: `pnpm check` (Biome, invoked directly — not a
+turbo task, so nothing to force), `TURBO_FORCE=1 pnpm check-types`,
+`TURBO_FORCE=1 pnpm test`, `pnpm build --force`, `pnpm check:bans`,
+`pnpm check:diagnostic-xref`, `pnpm check:next-marker`, and — for every
+group that creates or edits a spec delta (1, 2) —
+`openspec validate enforce-driver-contract --strict`. The turbo-run
+gates are forced because this repository's cache is shared across
+worktrees through the linked worktree's `.git` file: an unforced run can
+replay another worktree's logs, and "the gates passed here" stops being
+a true sentence. A gate run is quoted with its own summary output;
+`Cached: 0 cached, N total` is what makes a turbo gate evidence.
+
+Two CI gates are expected to fail until group 3 lands and are not a
+group 1/2 regression: `pnpm changeset status` (no changeset exists yet)
+and the README freshness pair (`pnpm check:crap`,
+`pnpm check:tasktime`, each followed by CI's own `git diff --exit-code
+-- README.md`). Group 3 closes both; before then they are named, not
+silently skipped.
 
 **Before 2.1**: the deferred function-valued comparator slot gets its own
 issue, filed under the post-0.2.0 umbrella through the issue script, and

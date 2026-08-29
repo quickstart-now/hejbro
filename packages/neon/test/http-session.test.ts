@@ -1,4 +1,5 @@
 import type { DriverSession } from "@hejbro/query";
+import { throwMissingCapability } from "@hejbro/query";
 import { neon, neonConfig } from "@neondatabase/serverless";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildHttpDriver } from "../src/http";
@@ -166,18 +167,37 @@ describe("HTTP session batch", () => {
 		});
 	});
 
-	it("calling transaction directly throws the missing-capability error and sends nothing", async () => {
+	it("the one-shot driver's refusal is the query layer's own error (#490)", async () => {
 		const calls = stubSuccess([EMPTY_RESULT]);
 		const sql = neon(CONNECTION_STRING);
 		const driver = buildHttpDriver(sql);
+
+		// Calls the exported thrower with the exact arguments the driver's
+		// own `transaction` member is expected to use, so the assertion
+		// below is pinned to `@hejbro/query`'s current wording rather than
+		// to a literal copy that could silently drift from it.
+		const expected = (() => {
+			try {
+				throwMissingCapability("interactive-transactions", "transaction");
+			} catch (error) {
+				return error as {
+					code: string;
+					capability: string;
+					operation: string;
+					message: string;
+				};
+			}
+		})();
 
 		await expect(
 			driver.transaction(async (session) =>
 				session.execute({ sql: "select 1", params: [], kind: "sql" }),
 			),
 		).rejects.toMatchObject({
-			code: "driver-missing-capability",
-			capability: "interactive-transactions",
+			code: expected.code,
+			capability: expected.capability,
+			operation: expected.operation,
+			message: expected.message,
 		});
 		expect(calls).toHaveLength(0);
 	});
