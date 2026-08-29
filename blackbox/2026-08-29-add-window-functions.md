@@ -6,7 +6,8 @@ Refs:
 - openspec/changes/add-window-functions/specs/query-builder/spec.md @ blob 84de6f68b22c9a88e2d2cb5282e99bce69a34a15
 - openspec/changes/add-window-functions/specs/query-type-inference/spec.md @ blob 9a8e4295c2ec8363e0dc7f3b51cc47202de8bf81
 - openspec/changes/add-window-functions/specs/table-declaration/spec.md @ blob f0747ad4e72519fef070124f3c203c2ce31262cc
-- openspec/changes/add-window-functions/tasks.md @ blob 1be73444a8f9308fdb6c19a3ae51b26dd87dc0a2
+- openspec/changes/add-window-functions/tasks.md @ blob a2b25354fe8c9292151e331d4082661d00850ae3
+- openspec/task-times.csv @ blob ded105d6c76c2e4d3730cb4c424ac416c3c2c12c
 - packages/cli/test/exports.test.ts @ blob b881476c9b53ac54ce48bf7004dcbafda00044e5
 - packages/core/src/dsl/rls.ts @ blob 9f9dd5902b53209f32c121b8395519394bc242f1
 - packages/core/src/dsl/table.ts @ blob a5209625c17e984cbccfd696d7d4a34453249e06
@@ -39,7 +40,7 @@ Refs:
 - packages/supabase/src/validators/rls-uncached-auth-call.ts @ blob 0b82c881a3edd3151fc0717e6c5bf649c03c9480
 - packages/supabase/test/rls-cached-auth-outside-rls.test.ts @ blob eda9867333de54f580db7c8cce1e6f8997386310
 - packages/supabase/test/rls-uncached-auth-call.test.ts @ blob 68e74735d94171d60038b171369728976e718099
-- README.md @ blob 59438dc4f861c1785b20adfdb63b4fcfdfab3ab7
+- README.md @ blob 787dd4b52cb7c0df4d9183a66befb7eda10b4846
 - skills/hejbro/references/query-layer.md @ blob bd1c6ab5e2c1572f87583ef4c498091efb6d9c1e
 
 # add-window-functions — WindowNode, over(), and the D4 fork settled as D104 (#416)
