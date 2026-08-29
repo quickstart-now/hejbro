@@ -1,11 +1,11 @@
 // #484: gate scripts derive their package lists from the workspace
 // instead of hand-maintaining them -- a new published package is covered
 // the moment its directory exists, and only *exclusions* are
-// hand-written, each carrying its reason. (The neon preset landed
-// against three hardcoded lists and every gate stayed green while the
-// new package went unmeasured; a planted CRAP-30 defect scanned clean
-// until the list was edited -- the counterfactual that motivated this
-// file.)
+// hand-written, each carrying its reason. (Motivating observation, from
+// the neon-preset review: with the crap list's registration line
+// reverted, a planted CRAP-30 defect in the new package scanned clean --
+// a demonstrated counterfactual, not a suffered incident; neon's own
+// landing commit updated all three lists.)
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

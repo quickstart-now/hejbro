@@ -64,9 +64,13 @@ cleanup() { rm -rf "$PACK_DIR" "$SCRATCH_DIR"; }
 trap cleanup EXIT
 
 # name:directory pairs for every published package, derived from the
-# workspace (#484) -- a hand-maintained list left a new package out of
-# the smoke while the gate stayed green; derivation makes additions
-# automatic and there is nothing here to forget.
+# workspace (#484 -- the risk was demonstrated with a planted
+# counterfactual during the neon review, not suffered). Derivation
+# covers the dist check and the packing loop below; the install
+# dependencies and the per-package assertion blocks further down are
+# still hand-enumerated -- the dependency-count guard after the scratch
+# install keeps the biggest gap (a packed but never-installed package)
+# from passing silently.
 PACKAGES=()
 while IFS= read -r pair; do PACKAGES+=("$pair"); done < <(
   node -e 'import(process.argv[1]).then(m => console.log(m.publishedPackages().map(p => p.name + ":" + p.dir).join("\n")))' "$REPO_ROOT/scripts/workspace-packages.mjs"
@@ -113,6 +117,16 @@ cat > "$SCRATCH_DIR/package.json" <<EOF
   }
 }
 EOF
+
+# #484 follow-through: the dependencies object above is hand-enumerated
+# while PACKAGES is derived, so a seventh published package would pack
+# but never install -- and every assertion below would silently skip it.
+# This count guard turns that silence into a failure at the seam.
+DEP_COUNT="$(node -p "Object.keys(require('$SCRATCH_DIR/package.json').dependencies).length")"
+if [ "$DEP_COUNT" -ne "${#PACKAGES[@]}" ]; then
+  echo "error[pack-install-smoke]: scratch dependencies list ${DEP_COUNT} packages but the workspace publishes ${#PACKAGES[@]}. Next: add the missing package to the scratch dependencies and to each assertion block below." >&2
+  exit 2
+fi
 
 # @hejbro/pg declares `pg` as a peerDependency; npm 7+ auto-installs an
 # unmet peer, so this install resolves `pg@8.23.0` (and its transitive
