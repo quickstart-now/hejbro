@@ -123,7 +123,7 @@ const findCandidateFiles = (root) => {
 				"grep",
 				[
 					"-rl",
-					String.raw`throwHejbroError(\|hejbroError(\|Object.assign(`,
+					String.raw`throwHejbroError(\|hejbroError(\|Object.assign(\|new HejbroError(\|code: "`,
 					root,
 					"--include=*.ts",
 				],
@@ -140,6 +140,11 @@ const findCandidateFiles = (root) => {
 	if (out === "") {
 		return [];
 	}
+	// error.ts stays excluded: it is the factory's own implementation --
+	// its `new HejbroError(...)` IS the factory body (dynamic code, would
+	// be skipped anyway), and its docs restate call shapes that would
+	// otherwise register as phantom sites. Any direct construction
+	// elsewhere is now a candidate via the `new HejbroError(` alternative.
 	return out.split("\n").filter((file) => !file.endsWith("/error.ts"));
 };
 
@@ -296,6 +301,107 @@ const extractCode = (args) => {
  * shorthand inside a thrower helper, or a non-error Object.assign like
  * sql.ts's tag composition) is skipped exactly like a dynamic-code
  * throwHejbroError call: it is not an original message site. */
+/** #461: direct `new HejbroError(code, message)` construction -- the
+ * factory (`error.ts`) is the only legitimate site today and its code is
+ * a parameter (dynamic -> skipped), but a future direct construction
+ * with a literal code would otherwise bypass the gate entirely
+ * (confirmed by mutation during the add-check-schema review). Normalized
+ * into the same `{ filePath, lineNo, args }` shape as a thrower call. */
+const extractConstructorSites = (filePath, text) => {
+	const sites = [];
+	const ctorRe = /\bnew\s+HejbroError\s*\(/g;
+	let match = ctorRe.exec(text);
+	while (match !== null) {
+		const closeIndex = scanBalanced(
+			text,
+			match.index + match[0].length,
+			"(",
+			")",
+		);
+		const argsText = text.slice(match.index + match[0].length, closeIndex - 1);
+		const lineNo = text.slice(0, match.index).split("\n").length;
+		sites.push({ filePath, lineNo, args: splitTopLevelArgs(argsText) });
+		match = ctorRe.exec(text);
+	}
+	return sites;
+};
+
+/** Walks backward from `index` to the `{` that opens the enclosing
+ * object literal, balancing any closed pairs passed on the way. */
+const findEnclosingBrace = (text, index) => {
+	let depth = 0;
+	let i = index - 1;
+	while (i >= 0) {
+		const c = text[i];
+		if (c === "}") {
+			depth++;
+		} else if (c === "{") {
+			if (depth === 0) {
+				return i;
+			}
+			depth--;
+		}
+		i--;
+	}
+	return null;
+};
+
+/** #461: diagnostics minted as plain object literals -- `{ code: "...",
+ * message: ... }` (loader.ts) and the structured Diagnostic shape
+ * `{ code: "...", body: ..., suggestions: [...] }`
+ * (rename-diagnostics.ts). The convention's substance is "state what to
+ * do next": a `suggestions` array IS that statement in structured form
+ * (each entry carries a label and concrete rerun lines), so a literal
+ * carrying `suggestions` satisfies the convention by construction and
+ * is not reduced to a message site. A literal carrying `message` or
+ * `body` WITHOUT `suggestions` must say "Next:" like any thrower
+ * message -- body text that lost its suggestions would otherwise leave
+ * the user with a finding and no action. A literal with a code and
+ * neither field (an Object.assign enrichment, a `{ code }` forward) is
+ * not an original message site and is skipped, mirroring how
+ * dynamic-code calls are skipped.
+ *
+ * Value-position detection is the comma after the string literal
+ * (`code: "x",`): type positions end in `;` or continue with `|`, and
+ * the house formatter always leaves trailing commas in multiline value
+ * literals. */
+const extractObjectLiteralSites = (filePath, text) => {
+	const sites = [];
+	const codeFieldRe = /\bcode:\s*"([^"]+)"\s*,/g;
+	let match = codeFieldRe.exec(text);
+	while (match !== null) {
+		const open = findEnclosingBrace(text, match.index);
+		if (open === null) {
+			match = codeFieldRe.exec(text);
+			continue;
+		}
+		const closeIndex = scanBalanced(text, open + 1, "{", "}");
+		const objectText = text.slice(open + 1, closeIndex - 1);
+		const fields = splitTopLevelArgs(objectText);
+		const fieldValue = (name) => {
+			const field = fields.find((candidate) =>
+				candidate.startsWith(`${name}:`),
+			);
+			if (field === undefined) {
+				return null;
+			}
+			return field.slice(field.indexOf(":") + 1).trim();
+		};
+		const hasSuggestions = fieldValue("suggestions") !== null;
+		const content = fieldValue("message") ?? fieldValue("body");
+		if (!hasSuggestions && content !== null) {
+			const lineNo = text.slice(0, match.index).split("\n").length;
+			sites.push({
+				filePath,
+				lineNo,
+				args: [`"${match[1]}"`, content],
+			});
+		}
+		match = codeFieldRe.exec(text);
+	}
+	return sites;
+};
+
 const extractAssignSites = (filePath, text) => {
 	const sites = [];
 	const assignRe = /\bObject\.assign\s*\(/g;
@@ -449,6 +555,8 @@ for (const root of SOURCE_ROOTS) {
 		const sites = [
 			...extractCalls(filePath, fileText, findLocalThrowerNames(fileText)),
 			...extractAssignSites(filePath, fileText),
+			...extractConstructorSites(filePath, fileText),
+			...extractObjectLiteralSites(filePath, fileText),
 		];
 		for (const call of sites) {
 			const code = extractCode(call.args);
@@ -501,5 +609,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-	'check-next-marker: ok — every user-facing HejbroError call site has a "Next:" clause (or is an explicitly justified internal-invariant exemption).',
+	'check-next-marker: ok — every user-facing diagnostic site (thrower calls, Object.assign enrichments, direct constructions, object-literal diagnostics) states a "Next:" or carries structured suggestions (or is an explicitly justified internal-invariant exemption).',
 );
