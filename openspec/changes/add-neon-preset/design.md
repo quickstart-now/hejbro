@@ -284,6 +284,33 @@ docker run -d --name ne-http --network ne \
    restart` on the proxy clears it; the `pg_isready` wait above prevents
    it.
 
+**The identity witness needs `pg_session_jwt`, and there is no image that
+has it.** Neither Docker Hub nor ghcr nor the extension registries publish
+a Postgres image carrying it, so the local stack has to build it: it is a
+Rust `pgrx` extension, and the build wants a current toolchain (a system
+Rust old enough to miss `cargo-pgrx`'s requirement fails late and
+unhelpfully). Building it in a `rust:1-bookworm` container against
+`postgresql-server-dev-17`, then copying the `.so` and the extension files
+into the running `postgres:17` container, works because both sides are the
+same major version and Debian release — the artifact is copied, not
+rebuilt in place. Roughly eight minutes, once per stack.
+
+Verify before writing any witness that reads identity:
+
+```bash
+docker exec ne-pg psql -U postgres -d main -c "
+  set request.jwt.claims to '{\"sub\":\"11111111-1111-1111-1111-111111111111\"}';
+  select auth.uid();"
+```
+
+That returns the subject when the extension is present and configured in
+claims mode — which is also the platform fact the claims-mode builder
+depends on, observed rather than assumed. A stub SQL function reading the
+same setting would have made the witness cheaper and would have tested our
+own context mechanism just as well, but it would not have been evidence
+about `pg_session_jwt`; the whole reason to run a witness here is that the
+extension is somebody else's code.
+
 ### The verification boundary is asymmetric, and the specs say so
 
 The WebSocket path gets a local witness against Neon's official proxy

@@ -13,6 +13,13 @@ while writing the skill page rather than while planning), `.changeset/`,
 task appears to need one, that is the interface failing and it goes back
 to the planner, not into the diff. Estimates are pure work minutes (D88).
 
+**Task numbers are identifiers, not a running order.** Three tasks were
+added after their group's earlier ones had already been cited in review
+correspondence (3.6, 6.4, 6.5), and renumbering would have made those
+citations point at different work. Each of the three says in its own text
+when it runs; nothing else in this file promises that numbers ascend with
+execution.
+
 **Ordering.** Group 1 lands first: nothing resolves until the package
 exists. Group 2's first task fixes the HTTP batch's composition and
 order against a stub transport — a test that can always be made green,
@@ -359,7 +366,7 @@ starts from its own failing test.
 
 ## 7. Local witness
 
-- [ ] 7.1 (~8m) `vitest.integration.config.ts` that does **not** inherit
+- [x] 7.1 (~8m) `vitest.integration.config.ts` that does **not** inherit
       the default config, so the local-only suite never enters the
       coverage gate — the pattern `packages/pg` established, and the
       reason `packages/supabase`'s integration test keeps its fixtures
@@ -367,27 +374,27 @@ starts from its own failing test.
       `packages/neon/test/integration/ws.integration.test.ts` — "connects
       through the local proxy" (no runner target). Files:
       `packages/neon/vitest.integration.config.ts`.
-- [ ] 7.2 (~9m) The witness detects a missing stack and **fails loudly
+- [x] 7.2 (~9m) The witness detects a missing stack and **fails loudly
       with the command to start it**, never skipping. Its proxy URL is
       overridable by environment variable. The route is `/v1` and
       `APPEND_PORT` is left unset — both measured, both contradicting the
       client's default and every community example. Red: same file —
       "names the command to start the stack when it is absent". Files:
       that test.
-- [ ] 7.3 (~9m) The witness proves the WebSocket capability declaration
+- [x] 7.3 (~9m) The witness proves the WebSocket capability declaration
       rather than asserting it: an interactive transaction commits across
       round trips, a transaction-local setting is gone after commit, and a
       session setting survives to the next statement. Red: same file —
       "the declared capabilities hold against a real server". Files: that
       test.
-- [ ] 7.4 (~8m) The witness runs a select under `asUser(claims)` against
+- [x] 7.4 (~8m) The witness runs a select under `asUser(claims)` against
       a table with a policy reading `auth.uid()`, and rows filter to the
       subject. This exercises the claims mode, which is what a local
       `pg_session_jwt` without a configured JWK uses; the JWT mode
       is stated in the spec as unverified locally rather than implied to
       be covered. Red: same file — "filters rows to the context's
       subject". Files: that test.
-- [ ] 7.5 (~8m) The dangerous half of a mode mismatch, witnessed. The
+- [x] 7.5 (~8m) The dangerous half of a mode mismatch, witnessed. The
       local stack has no verification key configured, so it is in claims
       mode — which makes a context from the **JWT-mode** builder a
       genuine mismatch, with no extra infrastructure. Under it, a policy
@@ -397,7 +404,7 @@ starts from its own failing test.
       than asserted, and it is what the skill's warning is about. Red:
       same file — "a role-keyed policy admits under a mismatched mode
       while an identity-keyed policy denies". Files: that test.
-- [ ] 7.6 (~8m) The identity a context applied does not survive it: after
+- [x] 7.6 (~8m) The identity a context applied does not survive it: after
       a scoped execution finishes, the same pooled connection reads no
       claims setting and the default role. Without this, the whole
       transaction-local claim rests on 5.5's statement assertion alone,
@@ -406,7 +413,7 @@ starts from its own failing test.
       failure D96's `SET LOCAL` choice exists to prevent. Red: same file
       — "identity does not survive the scoped execution on a reused
       connection". Files: that test.
-- [ ] 7.7 (~8m) Row arrival shapes, witnessed against a real server. The
+- [x] 7.7 (~8m) Row arrival shapes, witnessed against a real server. The
       contract fixes what the vanilla driver's rows look like per type,
       and `@hejbro/query`'s conversion layer is written against those
       shapes — but `@neondatabase/serverless` ships its **own** bundled
