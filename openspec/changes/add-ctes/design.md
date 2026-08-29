@@ -40,12 +40,21 @@ pnpm build --force              # then leave the build alone
 #    recursive JsonValue constraint and adds two errors that are the
 #    probe's own, not the field's)
 
-pnpm --filter @hejbro/core exec tsc --noEmit | grep -c "error TS"
-pnpm exec tsc -p /tmp/ctprobe-query.json     | grep -c "error TS"   # baseline 1
-pnpm exec tsc -p /tmp/ctprobe-supabase.json  | grep -c "error TS"   # baseline 0
+pnpm --filter @hejbro/core build --force
+pnpm --filter @hejbro/core     check-types
+pnpm --filter @hejbro/query    check-types
+pnpm --filter @hejbro/supabase check-types
 
 git checkout -- packages/core/src/expr/ast.ts
+pnpm --filter @hejbro/core build --force        # leave no probe in dist
 ```
+
+Rebuilding core between the edit and the count is what keeps the
+downstream packages honest — without it they type-check against a `dist`
+that predates the probe, and the count comes back too low. (The figures
+were first taken through source-alias `tsconfig`s under `/tmp` instead,
+which avoids `dist` entirely; both methods produce the same numbers, and
+the one written here is the one anybody can run.)
 
 F2's eleventh site is `packages/core/src/plpgsql/body-context.ts`'s
 `queryKindNames`; the other ten are `render-sql.ts` ×1,
