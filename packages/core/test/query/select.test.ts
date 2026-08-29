@@ -188,18 +188,16 @@ describe("one ordering vocabulary (#470)", () => {
 		);
 	});
 
-	it("orderBy accepts asc(column, { nulls }) too -- compiles; the nulls placement itself renders starting group 5.2", () => {
-		// This term's `nulls` doesn't reach the rendered SQL yet -- that is
-		// 5.2's own scope (OrderByTerm.nulls and the renderers), with its
-		// own dedicated red in expr/render-sql.test.ts. This test only
-		// pins that the WIDENED vocabulary accepts the { nulls } form at
-		// all, the same compile-time property the test above pins for the
-		// bare form.
+	it("orderBy accepts asc(column, { nulls }) too, and the placement reaches the rendered SQL (group 5.2)", () => {
+		// The dedicated red for the renderer half (OrderByTerm.nulls and
+		// both renderers, across all three positions) lives in
+		// expr/render-sql.test.ts; this pins the same property end to end
+		// through the query builder's own orderBy().
 		const query = select(posts).orderBy(
 			asc(posts.publishedAt, { nulls: "last" }),
 		);
 		expect(renderSelect(query.selectQuery)).toBe(
-			'select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."published_at" asc',
+			'select "id", "status", "published_at" from "app"."posts" order by "app"."posts"."published_at" asc nulls last',
 		);
 	});
 });
