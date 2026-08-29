@@ -35,6 +35,7 @@ Refs:
 - README.md @ blob b7d0e08444947257cfa20ddd5da5c4f900e0209d
 - skills/hejbro/references/dsl-cheatsheet.md @ blob 319ca53c8f10928b62e618400e5a7a8008ab4de2
 - skills/hejbro/references/function-builder-pitfalls.md @ blob ee4e917c81fba66f8df97a24fb6649f03c79a61a
+- skills/hejbro/SKILL.md @ blob 5b6e8f8bf443830efb289ce17a64aa014999e72b
 
 # add-body-statements — ctx.execute, the unused-builder guard, and returns accepting a builder (#426 #423 #433)
 
