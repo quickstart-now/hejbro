@@ -172,13 +172,44 @@ Files (whole group): `packages/cli/src/commands/generate.ts`,
       --rename …` fails with `baseline-flag-not-applicable` before
       anything is written".
 
+- [ ] 2.3 (~9m) Review rework (774948f, blocker B5 + recommendations):
+      **B5** `baseline-flag-not-applicable` renders as
+      `error[baseline-flag-not-applicable]: hejbro generate` — the header's
+      second slot is the diagnostic's *identity*, the file the error is
+      about, and `identityFromMessage` takes the message's first quoted
+      token. The new message quotes the remedy command, so the remedy
+      lands where the filename belongs. This is CLI error text, which
+      AGENTS.md counts as an observable contract, and golden text
+      hardens once archived. Fix: quote the command in backticks, the
+      repo's own convention (`loader.ts`'s ``run `hejbro init` ``), so
+      the header falls back to the config identity.
+      `baseline-nothing-to-adopt` renders its entry glob and is correct
+      as-is. Red: `packages/cli/test/baseline-command.test.ts` — the
+      rendered header names the config, not the remedy.
+      **R-a** the delta's "before any declaration is loaded" half has no
+      test: moving the intercept after `loadDeclarations` keeps all 15
+      tests green. Pin it with a config-less directory —
+      `baseline --rename …` there must fail with
+      `baseline-flag-not-applicable`, not `config-not-found`.
+      **R-b** `BASELINE_ARGS` is a hand-kept *inclusion* list (its
+      comment claims subtraction) and `BASELINE_INAPPLICABLE_FLAGS`
+      encodes the same set a second time. Derive both from one exclusion
+      list, or assert help's flag set as "generate's minus those two".
+      **R-c** `--rename=app.old=posts` is refused correctly today but
+      untested; one line pins that normalization stays ahead of the
+      intercept.
+      **R-d** `baselineNothingToAdoptDiagnosis`'s `declarationCount > 0`
+      branch has no test and no evident reachable path — the emptiness
+      guard above means any real declaration makes `hasChanges` true.
+      Show a reachable case or delete the branch.
+
 ## 3. Baseline banner parser
 
 Files (whole group): `packages/core/src/sql/migration-file.ts`,
 `packages/core/src/index.ts`,
 `packages/core/test/migration-file.test.ts`.
 
-- [ ] 3.1 (~8m) [design — settled] R5: `parseBannerBaseline` joins
+- [x] 3.1 (~8m) [design — settled] R5: `parseBannerBaseline` joins
       `parseBannerHashes`/`parseBannerVersion`, exported from core's
       index, following the existing parser pattern in that file — matches
       the known `BASELINE_LINE` prefix only, leaving unknown banner lines

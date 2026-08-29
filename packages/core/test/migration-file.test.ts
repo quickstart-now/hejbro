@@ -5,6 +5,7 @@ import {
 	findDuplicateVersionGroups,
 	migrationFileName,
 	migrationVersionOf,
+	parseBannerBaseline,
 	parseBannerHashes,
 	parseBannerVersion,
 	renderBanner,
@@ -228,6 +229,44 @@ describe("parseBannerVersion", () => {
 
 	it("returns null for a version-less banner (every pre-#229 migration file)", () => {
 		expect(parseBannerVersion(renderBanner([createChange]))).toBeNull();
+	});
+});
+
+describe("parseBannerBaseline (#445/R5)", () => {
+	it("reads the baseline marker back off a rendered banner, and reports its absence on an ordinary migration", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			undefined,
+			undefined,
+			true,
+		);
+		const ordinarySql = renderBanner([createChange]);
+		expect(parseBannerBaseline(baselineSql)).toBe(true);
+		expect(parseBannerBaseline(ordinarySql)).toBe(false);
+	});
+
+	it("stays true even with a version line and a hash chain also present, and false for a hash-chained non-baseline migration", () => {
+		const baselineSql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+			true,
+		);
+		const nonBaselineSql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+		);
+		expect(parseBannerBaseline(baselineSql)).toBe(true);
+		expect(parseBannerBaseline(nonBaselineSql)).toBe(false);
+	});
+
+	it("ignores an unrelated banner line that happens to contain the word 'baseline'", () => {
+		// a `false` guard: parsing must key on the exact known prefix, not a
+		// loose substring match that an unrelated line could accidentally
+		// trip (e.g. a future kind's own note text).
+		const sql = "-- hejbro migration\n-- ~ table app.posts [baseline notes]";
+		expect(parseBannerBaseline(sql)).toBe(false);
 	});
 });
 

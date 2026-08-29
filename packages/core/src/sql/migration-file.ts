@@ -270,6 +270,20 @@ export const parseBannerVersion = (fileContent: string): string | null => {
 	return versionLine.slice(VERSION_PREFIX.length);
 };
 
+/**
+ * Reads a migration file's `-- baseline:` marker (#385, #445/R5): `true`
+ * when present, `false` otherwise — the only consumer is an apply tool
+ * deciding whether to run a migration or register it as already applied,
+ * so absence is a meaningful answer, not a missing value (`T | null`, the
+ * shape {@link parseBannerHashes}/{@link parseBannerVersion} use, would be
+ * wrong here: there is no third state). Reads by {@link BASELINE_LINE}'s
+ * own known prefix only, so an unrelated banner line is never mistaken
+ * for it, and an older hejbro reading a newer file's other unknown lines
+ * stays unaffected.
+ */
+export const parseBannerBaseline = (fileContent: string): boolean =>
+	fileContent.split("\n").some((line) => line.startsWith(BASELINE_LINE));
+
 const changeVerb = (operation: ChangeOperation): string => {
 	switch (operation) {
 		case "create":
