@@ -375,3 +375,41 @@ describe("aggregate cell casts inside a nested read, characterized (#444 F6 task
 		expect(sentSql).not.toContain('sum("app"."comments"."view_count")::text');
 	});
 });
+
+// #444 F6 follow-up (found live, task 7.3): the ::text cast alone was not
+// enough -- convert.ts's own uncast() only recognized a cast-wrapped
+// columnRef, so a cast-wrapped aggregate (functionCall) fell through
+// columnStateForExpr unresolved and the now-text value arrived un-revived
+// (a string, not a bigint). uncast() now sees through any cast-wrapped
+// expr, not columnRef only.
+describe("a cast aggregate cell actually revives, not just compiles cast (#444 F6 live-witness follow-up)", () => {
+	it("a cast max(bigint)/count() cell in a nested read revives to bigint, not a string", async () => {
+		const rawRow = {
+			id: "0b0e5b3e-0000-4000-8000-000000000001",
+			stats: [
+				{
+					// biome-ignore lint/style/useNamingConvention: models the real json child key (the projection's own alias).
+					max_views: "9007199254740993",
+					total: "2",
+				},
+			],
+		};
+		const { driver } = recordingTransactionalDriver({ rows: [rawRow] });
+		const handle = db({ app, posts, comments }, driver);
+		const rows = await handle.select(
+			{
+				id: posts.id,
+				stats: jsonArrayFrom(
+					select(
+						{ maxViews: max(comments.viewCount), total: count() },
+						comments,
+					).where(eq(comments.postId, posts.id)),
+				),
+			},
+			posts,
+		);
+		const stat = rows[0]?.stats[0];
+		expect(stat?.maxViews).toBe(9007199254740993n);
+		expect(stat?.total).toBe(2n);
+	});
+});

@@ -604,11 +604,20 @@ const convertCell = (
  * shape, so an extra driver-side key is dropped, not an error.
  */
 /**
- * Sees through the F1 cast wrapper (`sqlTemplate` of exactly
- * `[columnRef, "::text" | "::text[]"]`, baked by `jsonArrayFrom`/
- * `jsonObjectFrom` at build time) so a cast column still resolves its
- * declared state — without this, exactly the columns the cast protects
- * (bigint/numeric) would arrive as unrevived text.
+ * Sees through the F1/F6 cast wrapper (`sqlTemplate` of exactly
+ * `[expr, "::text" | "::text[]"]`, baked by `jsonArrayFrom`/
+ * `jsonObjectFrom` at build time) so a cast column OR a cast aggregate
+ * cell (`count()`/`min`/`max`, #444 F6) still resolves its declared
+ * state — without this, exactly the cells the cast protects
+ * (bigint/numeric columns, and now bigint-typed aggregates) would
+ * arrive as unrevived text instead of the typed value the cast exists
+ * to deliver losslessly. Not restricted to `columnRef`: `columnStateForExpr`
+ * below already dispatches a `functionCall` to `aggregateColumnState`
+ * correctly, so any expr chunk here is safe to hand it — the same is
+ * already true of a user's own `` sql`${max(t.a)}::text` `` escape
+ * hatch, which gets the identical, correct treatment for the identical
+ * reason (the `::text` suffix means the same thing regardless of who
+ * wrote it).
  */
 const isCastSuffixChunk = (chunk: SqlTemplateChunk | undefined): boolean =>
 	chunk?.chunkKind === "text" &&
@@ -617,13 +626,13 @@ const isCastSuffixChunk = (chunk: SqlTemplateChunk | undefined): boolean =>
 const castInnerRef = (
 	chunk: SqlTemplateChunk | undefined,
 ): ExprNode | undefined => {
-	if (chunk?.chunkKind === "expr" && chunk.expr.nodeKind === "columnRef") {
+	if (chunk?.chunkKind === "expr") {
 		return chunk.expr;
 	}
 	return undefined;
 };
 
-/** The two-chunk `[ref, suffix]` inner ref, else `undefined` — only `jsonArrayFrom`/`jsonObjectFrom`'s own cast builder produces this exact shape (a `sql\`\`` template always leads with a text chunk), so the suffix check is a cheap shape confirmation, not a reachable DSL path. */
+/** The two-chunk `[expr, suffix]` inner expr, else `undefined` — only `jsonArrayFrom`/`jsonObjectFrom`'s own cast builder produces this exact shape (a `sql\`\`` template always leads with a text chunk unless a caller's own template happens to start with an interpolation, in which case it means the same thing anyway), so the suffix check is a cheap shape confirmation, not a reachable DSL path. */
 const castInnerRefIfSuffixed = (
 	first: SqlTemplateChunk | undefined,
 	second: SqlTemplateChunk | undefined,

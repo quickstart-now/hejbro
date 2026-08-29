@@ -196,15 +196,22 @@ hand-write a `SelectNode` field list.
 
 ## 7. Live witnesses
 
-- [ ] 7.1 (~8m) **F1** against a real postgres:17: a query with a value
+- [x] 7.1 (~8m) **F1** against a real postgres:17: a query with a value
       in `having` and in `distinct on` runs and returns the right rows,
       with an adversarial value that is not valid SQL text (a quote and
       a semicolon) — text splicing would fail the statement, so the
       witness measures the parameterization rather than restating the
       compiler. Files: `packages/pg/test/integration.test.ts`.
-- [ ] 7.2 (~6m) **F4** against the same server: `null` written to a
+- [x] 7.2 (~6m) **F4** against the same server: `null` written to a
       `jsonb` column is found by `where payload is null`, and a
       `notNull` json column refuses it. Files: same file.
+- [x] 7.3 (~7m) **F6** against the same server — added after 6.2 had to
+      measure through a proxy (the mock driver cannot round-trip a real
+      value, so 6.2 asserts the presence of the `::text` cast instead of
+      the surviving value). This is the one place the actual claim can be
+      made: a `max(bigint)` and a `count()` cell inside a
+      `jsonArrayFrom` whose value is past 2^53 comes back exactly, not
+      rounded. Files: same file.
 
 ## 8. Release hygiene
 
