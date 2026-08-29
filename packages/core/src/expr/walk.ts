@@ -317,7 +317,7 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
 	exists: (node, scope) => {
 		const extendedScope = [
 			assertTableFrom(node.query.from),
-			...node.query.joins.map((join) => join.table),
+			...node.query.joins.map((join) => assertTableFrom(join.table)),
 			...scope,
 		];
 		return firstScopeViolation(existsChildExprs(node), extendedScope);
@@ -325,7 +325,7 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
 	selectExpr: (node, scope) => {
 		const extendedScope = [
 			assertTableFrom(node.query.from),
-			...node.query.joins.map((join) => join.table),
+			...node.query.joins.map((join) => assertTableFrom(join.table)),
 			...scope,
 		];
 		return firstScopeViolation(selectExprChildExprs(node), extendedScope);

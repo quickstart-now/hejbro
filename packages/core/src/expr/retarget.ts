@@ -364,7 +364,7 @@ const retargetProjection = (
  * handling, unlike {@link retargetOrderByTerm} below.
  */
 const retargetJoinTable = (join: JoinNode, target: RenameTarget): JoinNode => {
-	const table = retargetTableRef(join.table, target);
+	const table = retargetTableRef(assertTableFrom(join.table), target);
 	if (table === join.table) {
 		return join;
 	}

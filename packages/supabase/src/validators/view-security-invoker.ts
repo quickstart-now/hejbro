@@ -53,7 +53,10 @@ const referencedTables = (
 	if (query.queryKind === "setOp") {
 		return [...referencedTables(query.left), ...referencedTables(query.right)];
 	}
-	return [assertTableRef(query.from), ...query.joins.map((join) => join.table)];
+	return [
+		assertTableRef(query.from),
+		...query.joins.map((join) => assertTableRef(join.table)),
+	];
 };
 
 /**

@@ -137,3 +137,58 @@ describe("FromNode rendering (task 1.2)", () => {
 		);
 	});
 });
+
+describe("Join to a CTE reference (task 1.2b)", () => {
+	it("a select joins a CTE reference, resolving the join condition against both sources", () => {
+		const node: SelectNode = {
+			queryKind: "select",
+			projection: {
+				projectionKind: "columns",
+				columns: [
+					{
+						alias: "id",
+						expr: {
+							nodeKind: "columnRef",
+							schemaName: "app",
+							tableName: "orders",
+							columnName: "id",
+						},
+					},
+				],
+			},
+			from: { schemaName: "app", tableName: "orders" },
+			joins: [
+				{
+					joinKind: "inner",
+					table: { cteName: "ranked" },
+					on: {
+						nodeKind: "comparison",
+						operator: "=",
+						left: {
+							nodeKind: "columnRef",
+							schemaName: "app",
+							tableName: "orders",
+							columnName: "id",
+						},
+						right: {
+							nodeKind: "columnRef",
+							schemaName: null,
+							tableName: "ranked",
+							columnName: "order_id",
+						},
+					},
+				},
+			],
+			where: null,
+			groupBy: [],
+			having: null,
+			orderBy: [],
+			limit: null,
+			offset: null,
+			distinct: null,
+		};
+		expect(renderQuery(node)).toBe(
+			'select "app"."orders"."id" as "id" from "app"."orders" inner join "ranked" on "app"."orders"."id" = "ranked"."order_id"',
+		);
+	});
+});

@@ -412,7 +412,7 @@ const encodeProjection = (node: ProjectionNode): JsonValue => {
 
 const encodeJoin = (node: JoinNode): JsonValue => ({
 	joinKind: node.joinKind,
-	table: encodeTableRef(node.table),
+	table: encodeFromNode(node.table),
 	on: encodeExprNode(node.on),
 });
 

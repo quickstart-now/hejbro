@@ -234,7 +234,7 @@ export type JoinKind = (typeof joinKinds)[number];
 
 export type JoinNode = {
 	readonly joinKind: JoinKind;
-	readonly table: TableRefNode;
+	readonly table: FromNode;
 	readonly on: ExprNode;
 };
 
