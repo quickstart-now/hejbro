@@ -384,3 +384,160 @@ mismatched against a resolved table; this is a from/join target naming a
 relation that either does not exist or is not visible yet, which needs
 its own available-sources listing, not a "join that table" suggestion
 that does not apply to a CTE.
+
+## Surface delta (task 7.7)
+
+The standard six-part form (lead, 2026-08-29). Every justification below
+was collected from a "Surface:" note already recorded where the symbol
+landed, not invented here.
+
+**① Added symbols, each with its own argument**
+
+*`@hejbro/core`*
+- `withCte` — starts a `WITH` statement. No existing export composes into
+  one that declares named entries ahead of a body (`select()`/`insert()`/
+  `update()`/`deleteFrom()` each start a different `QueryNode` kind).
+  `with` is the SQL keyword but a reserved JS word (`TS1389`/`TS1003`);
+  `withCte` is the same escape `deleteFrom` already uses for `delete`.
+- `CteBuilder` (+ `.as`/`.asRecursive`) — `withCte`'s own callback
+  argument type; not a query stage itself, just the accumulator, so no
+  existing builder type fits.
+- `CteEntryOptions` — a third, all-optional parameter needs its own named
+  type once it carries more than one field (`table()`'s own
+  `TableExtras` is the same pattern).
+- `CteFieldRef` — no existing utility composes to "an `Expr` minus its
+  declaration-only fields"; `<Noun>Ref` matches `ColumnRef`/
+  `TableRefNode`'s own suffix for "a reference to X".
+- `CteRowEnvironment` — no existing type maps a `SelectProjection` to
+  "one reference per field".
+- `CteReference` — distinct from `CteRowEnvironment` because that type
+  alone is structural (no runtime dispatch); this is the nominal type a
+  caller actually holds, named to read next to `Table` at a `from`
+  call site (`Table | CteReference`).
+- `cteRowMeta` / `CteRowMeta` / `isCteReference` — mirrors
+  `dsl/table.ts`'s `tableMeta`/`isTable` exactly, same mechanism, same
+  reason, same naming convention.
+- `WithStage` — `withCte`'s own return type; can't reuse
+  `SelectLimited`/`SetOpStage` (a `WITH` statement is a different
+  `QueryNode` kind with no chain methods of its own). Keeps the same
+  `<Noun>Stage` suffix `SetOpStage` already uses.
+- `FromSource` — `Table` alone stopped being what `from` accepts once a
+  CTE reference was; the plain union has no smaller composition, reusing
+  the existing field names (`fromTable`/`from`) rather than coining new
+  ones.
+- `SetOpResult` (moved into core, D103 reused) — task 6.5's own
+  escalation: the recursive term's union-compatibility check is needed
+  in core, and core cannot depend on query. A pure-type move; `@hejbro/
+  query` re-exports the same name unchanged, no surface change on that
+  side.
+- `CteRefNode` / `FromNode` / `WithEntryNode` / `WithNode` — the AST
+  types D105's own decision-log row describes: `WithNode` is a
+  `QueryNode` variant, `CteRefNode` is a member of the `FromNode` union.
+- `DeclaredCteMarker` (task 7.3) — already appeared, unnamed, in
+  `renderQuery`/`renderSelect`/`renderSelectInto`'s own public
+  `outerScope` parameter; exporting it names a type callers already had
+  to accept, not a new capability.
+
+*`@hejbro/query`*
+- `WithChainTerminal` — `db.with(...)`'s own return type; can't reuse
+  `SelectChainLimited` (structurally promises combinators a `WithNode`
+  doesn't have) or `ChainTerminal` alone (callers need `withQuery`).
+  Matches this package's own `ChainTerminal` naming.
+- `ChainApi.with` (a method on the existing `db()`/`ChainApi` surface,
+  not a new top-level export) — mirrors core's own `withCte()` exactly,
+  the same callback signature, so a chain-built statement compiles
+  byte-identically to `compile(coreWithCte(build))`. Kept as `with`, not
+  `withCte`: a chain method is a property name, so the reserved word is
+  legal here unlike core's own standalone export, and **D102 reserved
+  exactly this slot** — it named its own sugar `related()`, not `with()`,
+  specifically so this change could use the plain name without a
+  collision.
+
+**② Widened parameters — asymmetry removed, not surface added**
+- `select()`'s `from` / `JoinNode.table` — widened from `Table` alone to
+  `Table | CteReference` (the `FromNode` union). An existing parameter's
+  own accepted range, not a new parameter.
+- `ColumnRefNode.schemaName` — widened to nullable (group 1).
+- `renderQuery`/`renderSelect`/`renderSelectInto`'s `outerScope` —
+  already accepted `DeclaredCteMarker` before task 7.3; that task named
+  the type already there, it did not widen the parameter itself.
+
+**③ New top-level export count — from the machine check, not by hand**
+`packages/query/test/exports.test.ts`'s own exact-set assertion
+(`Object.keys(barrel).sort()).toEqual(["compile", "db", "sql"])`) is
+**unchanged** — this change adds zero new runtime top-level exports to
+`@hejbro/query` (`db.with` is a method on the existing `db` export, not
+a new one). Two type-only additions (`WithChainTerminal`,
+`DeclaredCteMarker`) are each backed by a type-only import in
+`packages/query/test/exports.test.ts`/`packages/cli/test/exports.test.ts`
+— a missing/renamed name is a `tsc` error at that very import, the only
+check available for an `export type` (no runtime binding to assert
+against). `@hejbro/core` carries no equivalent exact-set test (only
+`@hejbro/query` has one), so this change's own core-side symbol count is
+the ① list itself, stated rather than machine-counted — worth naming as
+a gap, not papered over (see the observation below).
+
+**④ New diagnostic codes**
+- `undeclared-cte` (`render-sql.ts`) — its own family. Different question
+  from the existing `foreign-column-ref` (a column mismatched against a
+  resolved table): this is a from/join target naming a relation that
+  either doesn't exist or isn't visible yet, needing an available-sources
+  listing rather than a "join that table" suggestion.
+- `duplicate-cte-name` (`with.ts`) — joins the existing
+  `duplicate-identity`/`duplicate-index-name` family (the same question,
+  a CTE-shaped instance of it).
+- `empty-with-list` (`with.ts`) — its own family. Not "refuse first what
+  the server would refuse" but "never emit text the server could not even
+  parse" — a different justification from every other diagnostic this
+  change writes.
+
+Why the split: `undeclared-cte`/`empty-with-list` answer questions no
+existing family asked (scope visibility, parser-level text);
+`duplicate-cte-name` answers a question an existing family already asks,
+just about a CTE instead of an identity or an index.
+
+**⑤ Overall judgement**
+Every symbol this change adds follows an existing naming family
+(`<Noun>Ref`/`<Noun>Stage`/`is<Noun>`/`<noun>Meta`/`<Verb>ChainTerminal`)
+or an already-established pattern (reserved-word escape); the new
+top-level runtime export count is zero (machine-checked, `@hejbro/query`);
+and every core-side addition is either "a name finally given to a type or
+parameter that already existed" or "a genuinely new capability" — never
+blurred together.
+
+**⑥ Deliberate non-additions**
+- **Data-modifying CTEs** (`with x as (insert … returning …)`) — collides
+  with D94 (mutations never reach a snapshot, so the node would split
+  into a storable half and an unstorable one); Postgres itself also
+  forbids recursive self-reference in a data-modifying statement, so the
+  two capabilities this change would combine have an empty intersection
+  by the manual's own rule.
+- **A `WITH` attached to a mutation** (`with x as (select …) insert into
+  …`) — an independent axis from the item above, and cheaper, but not
+  needed by anything this change exists for; `WithNode` wraps a body, so
+  its body type can widen additively later without moving the node.
+- **`SEARCH`/`CYCLE` clauses** — Postgres's own ordering/cycle-detection
+  sugar, expressible by hand in the recursive term, not needed to make
+  recursion usable.
+- **Forward references between entries, and mutual recursion** —
+  `RECURSIVE` makes a forward reference legal in Postgres, but this
+  builder hands each entry only the references declared before it, so a
+  forward reference cannot be written; mutual recursion is unoffered
+  either, and Postgres itself does not implement it. Neither is a
+  rejection with a diagnostic — both are simply unexpressible.
+- **The output column alias list** (`with x (a, b) as (…)`) — the same
+  result is already available by aliasing inside the entry's own
+  projection, which is where the named row environment already reads its
+  keys from; supporting both would give one row shape two sources of
+  truth for its key names.
+- **Named `WITH` reuse across statements** — a CTE is scoped to the
+  statement that declares it; nothing here caches or shares one.
+
+**An observation, not a fix (out of this change's scope):** ③ above
+notes that `@hejbro/core`'s own barrel carries no exact-set export test,
+unlike `@hejbro/query`'s. Core is the package whose `export *` reaches
+`hejbro` (and, from there, whatever a declaration file or
+`hejbro.config.ts` imports), so the asymmetry sits on the side that
+would benefit from it more, not less — the same axis as the owner's own
+surface audit finding that `hejbro`'s `export *` exposes roughly thirty
+internal-engine names. Flagged for the lead, not addressed here.

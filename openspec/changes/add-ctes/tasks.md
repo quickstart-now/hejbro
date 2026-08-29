@@ -864,7 +864,7 @@ route it through the lead rather than absorbing it.
       **stop and request re-approval** rather than editing the approved
       text. Summary-table row and decision-log row go in **one commit**,
       as D103 and D104 did.
-- [ ] 7.7 (~6m) The **surface delta**, in the standard five-part form
+- [x] 7.7 (~6m) The **surface delta**, in the standard five-part form
       (lead, 2026-08-29): ① each added symbol with its "not expressible by
       composing what exists" + "name symmetric with its siblings"
       argument; ② widened parameters classified **separately** — those are
