@@ -1,11 +1,11 @@
 Refs:
 - openspec/changes/fix-lifecycle-review/proposal.md @ blob 710dbc2f14f50ab9d4df6c49bb61f01991dc2c9c
-- openspec/changes/fix-lifecycle-review/tasks.md @ blob 2b64892377332db0136e4fdf8b595438b8fe208f
+- openspec/changes/fix-lifecycle-review/tasks.md @ blob 3520771aa25151111c299efa09483a3ddb7d1cfb
 - openspec/changes/fix-lifecycle-review/specs/query-execution/spec.md @ blob 55630e07a8919908eef863663117fa24839abecd
 - openspec/changes/fix-lifecycle-review/specs/cli-commands/spec.md @ blob 58d1eea4cc4c09267c87c5b74e3290852fb5b7c1
 - openspec/changes/fix-lifecycle-review/specs/plpgsql-function-bodies/spec.md @ blob 3bdc14caada0b0f6872f926edb23c145cbe5182e
 - packages/query/src/db/transaction.ts @ blob ba3a9c4d719126bcff612f263fcd708c235b4ffa
-- packages/cli/src/commands/generate.ts @ blob ac82350e71a30fc9d6f00289668aa40758a90809
+- packages/cli/src/commands/generate.ts @ blob 3c48893bcb6309c0972568d934cf2aefcf8c0108
 - packages/core/src/sql/migration-file.ts @ blob d642455d5871e259f232d2bb5701de5bf04b2741
 - packages/core/src/plpgsql/body-context.ts @ blob d67fab6d063c765ea2609692f4b8768e61b3d9f6
 
@@ -146,29 +146,43 @@ Three, all explicitly scoped out of #445 itself:
 ## Process record
 
 Four groups plus rework, one commit per closed unit (never amended):
-`3780fea`/`774948f` (groups 1/2 first pass) → `9c66223` (group 1
-rework, B1-B4) → `00751a8` (a reviewer recommendation, cause pinned by
-message content) → `db3f61d`/`9067ab2` (group 3, R5 plus its own
-self-found prefix-matching defect) → `57b200b` (group 2 rework, B5 +
-R-a..R-d) → `201cc48` (group 3 rework, 3.2/3.2b, plus a group 1
-pairing-constraint comment carried over from review) → `17ee487`
-(group 4, R4) → `60756b3` (group 5, cache input + docs catch-up) →
-`7d52216` (5.3/5.4, plus the CRAP-gate complexity split R4 forced) →
-`7ad1bf1` (2.4/4.2, review-prose constraints landed as comments) →
-`2c88abc` (2.4's two comments sharpened to the reviewer's own judging
-criteria) → `ac26b94` (R-j's operand-order match to the delta's own
-sentence, plus this record's B7/R-i corrections) → `c7709c1` (changeset
+`e3546b3`/`9dc17b3` (groups 1/2 first pass) → `ded34dc` (group 1
+rework, B1-B4) → `0dea091` (a reviewer recommendation, cause pinned by
+message content) → `57157f7`/`18d0aef` (group 3, R5 plus its own
+self-found prefix-matching defect) → `3d7982a` (group 2 rework, B5 +
+R-a..R-d) → `5194e35` (group 3 rework, 3.2/3.2b, plus a group 1
+pairing-constraint comment carried over from review) → `d3bb358`
+(group 4, R4) → `30e9e5a` (group 5, cache input + docs catch-up) →
+`23ee5c5` (5.3/5.4, plus the CRAP-gate complexity split R4 forced) →
+`b62d1cb` (2.4/4.2, review-prose constraints landed as comments) →
+`d33aaf9` (2.4's two comments sharpened to the reviewer's own judging
+criteria) → `dcdbe82` (R-j's operand-order match to the delta's own
+sentence, plus this record's B7/R-i corrections) → `38644bb` (changeset
 bumped `patch` → `minor`, a lead decision: the grade is judged by the
 consumer-facing surface alone, `parseBannerBaseline` being a genuinely
-new API rather than a restored one, never by what motivated the fix).
+new API rather than a restored one, never by what motivated the fix) →
+`79df250` (this record's nine blob pins recomputed after the two
+commits above, B8). The whole branch was then rebased onto `dev` past
+`#451`'s merge (`387a2cc`) — every SHA above is the post-rebase one,
+this record's own included, since rebase rewrites the entire history
+it touches; the rebase itself changed no pinned file's content, only
+`README.md`/`openspec/task-times.csv` (regenerated/append-merged, per
+their own conflict-resolution convention, neither pinned) → `1aecd6a`
+(PR #453's own CI caught a `check:next-marker` gap this change's
+6-gate local set never ran: `baseline-flag-not-applicable` did carry a
+`Next:` clause, but a comma inside a comment sitting between the
+call's two arguments split the gate's text-based argument scan wrong;
+fixed by moving the comment above the call, and the gate itself joins
+this change's own Verification list so its own omission can't recur
+silently next time).
 
-Red observed directly for every task from `9c66223` on: the
+Red observed directly for every task from `ded34dc` on: the
 implementation was reverted via `git stash` (source only, tests kept)
 and rebuilt before each fix, with the actual failing assertion output
 captured — including, for 5.1's own cache-blind-spot fix, a live
 measurement in both directions (a broken `schema()` signature replaying
 a stale `FULL TURBO` PASS without the turbo.json fix, and correctly
-busting the cache with it). Group 1's first pass (`3780fea`) did not:
+busting the cache with it). Group 1's first pass (`e3546b3`) did not:
 its own red was inferred by reading the code instead of reverting it,
 and the reviewer's own mutation runs (source reverted in an isolated
 worktree, the guard removed) supplied the measurement this record
