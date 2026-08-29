@@ -66,11 +66,14 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 		// `@ts-expect-error` only suppresses the compile error -- the JS
 		// still runs, and group 8's runtime guard (assertSameSetOpKeyOrder,
 		// wired into buildRecursiveEntryQuery) also refuses a key-set
-		// mismatch as a degenerate case of an order mismatch, so this now
-		// throws for real too; wrapped in toThrow() (asserting the
-		// specific code, not any exception) so that second, independent
-		// refusal doesn't fail the test with an uncaught exception, and
-		// doesn't silently pass for a different reason either.
+		// mismatch (group 8.4: the set check runs BEFORE the order check,
+		// so a missing key lands on set-op-key-set-mismatch, not
+		// set-op-key-order-mismatch -- "reorder" would be no remedy here),
+		// so this now throws for real too; wrapped in toThrow() (asserting
+		// the specific code, not any exception) so that second,
+		// independent refusal doesn't fail the test with an uncaught
+		// exception, and doesn't silently pass for a different reason
+		// either.
 		expect(() =>
 			withCte((w) => {
 				w.asRecursive(
@@ -86,7 +89,7 @@ describe("the recursive term is typed from the anchor (add-ctes task 6.2)", () =
 				);
 				return select(t);
 			}),
-		).toThrow(expect.objectContaining({ code: "set-op-key-order-mismatch" }));
+		).toThrow(expect.objectContaining({ code: "set-op-key-set-mismatch" }));
 	});
 
 	it("a recursive term listing the anchor's keys in a different order is refused (#487, second half — group 8)", () => {

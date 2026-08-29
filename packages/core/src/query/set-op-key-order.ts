@@ -2,7 +2,57 @@ import { throwHejbroError } from "../error";
 import type { SelectNode, SetOpNode } from "../expr/ast";
 import { leftBranchOutputColumns } from "../expr/render-sql";
 
-/** The first position at which two key lists disagree (either a different key, or one list running out), or `undefined` if they agree at every position they both have — {@link assertSameSetOpKeyOrder}'s own scan. `Math.max` covers a length mismatch too, though `SameKeys` (`query/select.ts`) already guarantees equal length in the typed builder call path — a hand-assembled node (e.g. `with-recursive.ts`'s anchor/recursive-term pair, or a decoded snapshot) carries no such guarantee, so this stays defensive rather than assuming it. */
+/**
+ * Which keys are only on one side, or `undefined` when both sides carry
+ * exactly the same SET of keys (order not considered — that is
+ * {@link findKeyOrderMismatch}'s question, asked only once this one comes
+ * back `undefined`, group 8.4). A positional scan alone (the pre-8.4
+ * shape) cannot tell "same keys, different order" apart from "different
+ * keys entirely" or "a key is missing" — it reports "different order"
+ * for all three, and "reorder one branch's projection" is not a remedy
+ * for the second or third. This runs FIRST and is load-bearing for that
+ * reason: a pair that is both set- and order-mismatched
+ * (`{id,email}` vs `{town,id}`) must land here, on the code whose remedy
+ * ("project the same keys") is actually true, not on the order code.
+ */
+type KeySetMismatch = {
+	readonly onlyInLeft: ReadonlyArray<string>;
+	readonly onlyInRight: ReadonlyArray<string>;
+};
+const findKeySetMismatch = (
+	left: ReadonlyArray<string>,
+	right: ReadonlyArray<string>,
+): KeySetMismatch | undefined => {
+	const leftSet = new Set(left);
+	const rightSet = new Set(right);
+	const onlyInLeft = left.filter((key) => !rightSet.has(key));
+	const onlyInRight = right.filter((key) => !leftSet.has(key));
+	if (onlyInLeft.length === 0 && onlyInRight.length === 0) {
+		return undefined;
+	}
+	return { onlyInLeft, onlyInRight };
+};
+
+/** `(none)` for an empty list, else its keys quoted and comma-joined — {@link throwKeySetMismatch}'s own field. */
+const describeKeys = (keys: ReadonlyArray<string>): string => {
+	if (keys.length === 0) {
+		return "(none)";
+	}
+	return keys.map((key) => `"${key}"`).join(", ");
+};
+
+/** Rejects two set-op branches whose OUTPUT columns are not the same SET (group 8.4) — a genuinely different key list, or one side missing a key the other has. Distinct from {@link findKeyOrderMismatch}'s code: "project the same keys" is the remedy for this one; "reorder" is not, because there is nothing correctly-keyed to reorder. */
+const throwKeySetMismatch = (
+	leftOrder: ReadonlyArray<string>,
+	rightOrder: ReadonlyArray<string>,
+	mismatch: KeySetMismatch,
+): never =>
+	throwHejbroError(
+		"set-op-key-set-mismatch",
+		`a set operation's branches project different keys — left: (${leftOrder.join(", ")}), right: (${rightOrder.join(", ")}); only in left: ${describeKeys(mismatch.onlyInLeft)}, only in right: ${describeKeys(mismatch.onlyInRight)}. Postgres matches set-operation branches by position, so both branches must project exactly the same keys. Next: make both branches' projections list the same keys, then align their order if needed.`,
+	);
+
+/** The first position at which two SAME-SET key lists disagree, or `undefined` if they agree at every position — {@link assertSameSetOpKeyOrder}'s second check, run only once {@link findKeySetMismatch} has already returned `undefined` (group 8.4: a set mismatch is diagnosed there, never here). `Math.max` is defensive leftover from when this ran alone against possibly-unequal-length inputs; with the set check gating it, both lists are always the same length by the time this runs. */
 type KeyOrderMismatch = {
 	readonly position: number;
 	readonly leftKey: string | undefined;
@@ -22,8 +72,8 @@ const findKeyOrderMismatch = (
 	).find((entry) => entry.leftKey !== entry.rightKey);
 
 /**
- * Rejects two set-op branches whose OUTPUT columns list the same names in
- * a different ORDER (#487, second half — harden-query-surface group 8).
+ * Rejects two set-op branches whose OUTPUT columns are not the same SET,
+ * in the same ORDER (#487, second half — harden-query-surface group 8).
  * `SameKeys`/`SetOpResult` (`query/select.ts`) check the key SET, which
  * `keyof` can see; `keyof` has no order, so a same-set-different-order
  * pair still type-checks there. Postgres itself matches set-operation
@@ -48,6 +98,17 @@ const findKeyOrderMismatch = (
  * serves every site without any of them reconstructing another's runtime
  * shape.
  *
+ * Two codes, checked in this order (group 8.4 — found in review: a pure
+ * positional scan cannot distinguish "same keys, different order" from
+ * "different keys" or "a key is missing", and reported all three as
+ * "different order" with a "reorder" remedy that only the first one can
+ * actually follow). `set-op-key-set-mismatch` runs FIRST and covers a
+ * genuinely different key set — one remedy either way ("project the
+ * same keys"), so one code, not one per way the set can differ.
+ * `set-op-key-order-mismatch` runs only once the sets already match, so
+ * "reorder" is always a real, followable instruction by the time it is
+ * given.
+ *
  * Lives in its own module, not `query/select.ts`, so `with-recursive.ts`
  * can import it without a cycle: `with.ts` already imports
  * `with-recursive.ts` (value) and `select.ts` (types only, erased), and
@@ -62,12 +123,16 @@ export const assertSameSetOpKeyOrder = (
 ): void => {
 	const leftOrder = leftBranchOutputColumns(left);
 	const rightOrder = leftBranchOutputColumns(right);
-	const mismatch = findKeyOrderMismatch(leftOrder, rightOrder);
-	if (mismatch === undefined) {
+	const setMismatch = findKeySetMismatch(leftOrder, rightOrder);
+	if (setMismatch !== undefined) {
+		throwKeySetMismatch(leftOrder, rightOrder, setMismatch);
+	}
+	const orderMismatch = findKeyOrderMismatch(leftOrder, rightOrder);
+	if (orderMismatch === undefined) {
 		return;
 	}
 	throwHejbroError(
 		"set-op-key-order-mismatch",
-		`a set operation's branches list the same keys in a different order — left: (${leftOrder.join(", ")}), right: (${rightOrder.join(", ")}), disagreeing at position ${mismatch.position + 1} ("${mismatch.leftKey ?? "(none)"}" vs "${mismatch.rightKey ?? "(none)"}"). Postgres matches set-operation branches by position, not by name, so this compiles and silently mismatches every row's columns from that position on. Next: reorder one branch's projection so both list the same keys in the same order.`,
+		`a set operation's branches list the same keys in a different order — left: (${leftOrder.join(", ")}), right: (${rightOrder.join(", ")}), disagreeing at position ${orderMismatch.position + 1} ("${orderMismatch.leftKey ?? "(none)"}" vs "${orderMismatch.rightKey ?? "(none)"}"). Postgres matches set-operation branches by position, not by name, so this compiles and silently mismatches every row's columns from that position on. Next: reorder one branch's projection so both list the same keys in the same order.`,
 	);
 };

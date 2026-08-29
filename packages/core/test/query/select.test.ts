@@ -481,8 +481,11 @@ describe("union() enforces row compatibility (#487)", () => {
 		// ...>; }>>' is not assignable to parameter of type 'never'."
 		// `@ts-expect-error` only suppresses the compile error -- the JS
 		// still runs, and group 8's runtime guard (assertSameSetOpKeyOrder)
-		// also refuses a key-set mismatch as a degenerate case of an
-		// order mismatch, so this now throws for real too; wrapped in
+		// also refuses a key-set mismatch (group 8.4: the set check runs
+		// BEFORE the order check, so a genuinely different key set lands
+		// on set-op-key-set-mismatch, not set-op-key-order-mismatch --
+		// "reorder" would be no remedy at all here, nothing shares a key
+		// set to reorder), so this now throws for real too; wrapped in
 		// toThrow() (asserting the specific code, not any exception) so
 		// that second, independent refusal doesn't fail the test with an
 		// uncaught exception, and doesn't silently pass for a different
@@ -493,7 +496,7 @@ describe("union() enforces row compatibility (#487)", () => {
 				// see the TS2345 text above.
 				select(comments),
 			),
-		).toThrow(expect.objectContaining({ code: "set-op-key-order-mismatch" }));
+		).toThrow(expect.objectContaining({ code: "set-op-key-set-mismatch" }));
 	});
 
 	it("a union of two selects with the same key set still type-checks, and its result row keeps the left branch's keys", () => {
@@ -553,6 +556,89 @@ describe("union() checks branch key ORDER, not just the key set (#487, second ha
 		expect(() =>
 			select(usersByEmail).union(select(usersByEmailToo)),
 		).not.toThrow();
+	});
+});
+
+describe("branch key SET mismatches are their own code, not folded into ORDER (group 8.4)", () => {
+	// #464/#469/#487/#489's own recurring failure mode, repeated once more
+	// in the guard this very slice added: findKeyOrderMismatch's original
+	// scan was a pure positional walk with no set comparison, so a
+	// genuinely different key set (or a missing key) also fell through
+	// to "different order" -- a real diagnostic code, but a "reorder"
+	// remedy that cannot be followed when there is nothing correctly-
+	// keyed to reorder. The set check now runs FIRST.
+	const usersIdEmail = table(app, "users_id_email_84", {
+		id: uuid().primaryKey(),
+		email: text().notNull(),
+	});
+	const usersIdTown = table(app, "users_id_town_84", {
+		id: uuid().primaryKey(),
+		town: text().notNull(),
+	});
+	const usersIdOnly = table(app, "users_id_only_84", {
+		id: uuid().primaryKey(),
+	});
+	const usersTownId = table(app, "users_town_id_84", {
+		town: text().notNull(),
+		id: uuid().primaryKey(),
+	});
+
+	it("genuinely different keys (same size) are a key-SET mismatch, not order", () => {
+		expect(() =>
+			select(usersIdEmail).union(
+				// @ts-expect-error usersIdTown's key set differs from
+				// usersIdEmail's (email vs town) -- a genuine set mismatch,
+				// not a reordering of the same keys.
+				select(usersIdTown),
+			),
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-set-mismatch",
+				message: expect.stringContaining(
+					'only in left: "email", only in right: "town"',
+				),
+			}),
+		);
+	});
+
+	it("a branch missing a key is a key-SET mismatch, not order -- nothing to reorder", () => {
+		expect(() =>
+			select(usersIdEmail).union(
+				// @ts-expect-error usersIdOnly is missing usersIdEmail's
+				// `email` key entirely.
+				select(usersIdOnly),
+			),
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-set-mismatch",
+				message: expect.stringContaining(
+					'only in left: "email", only in right: (none)',
+				),
+			}),
+		);
+	});
+
+	it("both a set difference AND a positional difference at once still resolves to the key-SET code (discrimination order)", () => {
+		// {id, email} vs {town, id}: shares "id", but "email"/"town" are
+		// genuinely different keys -- a pure positional scan would also
+		// see position 0 disagree ("id" vs "town") and could mis-report
+		// this as an order problem. Set-first sends it to the set code,
+		// whose remedy ("project the same keys") is the one that is
+		// actually true here.
+		expect(() =>
+			select(usersIdEmail).union(
+				// @ts-expect-error usersTownId's key set differs from
+				// usersIdEmail's -- see the comment above.
+				select(usersTownId),
+			),
+		).toThrow(
+			expect.objectContaining({
+				code: "set-op-key-set-mismatch",
+				message: expect.stringContaining(
+					'only in left: "email", only in right: "town"',
+				),
+			}),
+		);
 	});
 });
 
