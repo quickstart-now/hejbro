@@ -338,11 +338,9 @@ describe("applyColumnOrderTo*", () => {
 		expect(applyColumnOrderToSelect(unknown, oracle)).toBe(unknown);
 	});
 
-	it("throws unreachable for an allColumns projection over a CTE reference (add-ctes group 1 stopgap, task 1.5(a)) -- no builder wires one through here before task 4.2", () => {
+	it("leaves an allColumns projection over a CTE reference alone -- a CTE is never a snapshot object, so no oracle entry could ever exist for it (add-ctes task 4.2)", () => {
 		const fromCte = { ...select, from: { cteName: "recent" } };
-		expect(() => applyColumnOrderToSelect(fromCte, oracle)).toThrow(
-			expect.objectContaining({ code: "unreachable" }),
-		);
+		expect(applyColumnOrderToSelect(fromCte, oracle)).toBe(fromCte);
 	});
 
 	it("re-orders an allColumns returning on insert/update/delete", () => {
@@ -361,15 +359,31 @@ describe("applyColumnOrderTo*", () => {
 		});
 	});
 
-	it("throws unreachable for a WithNode (add-ctes group 1 stopgap, task 1.5(a)) -- no builder wires one through here before task 4.2", () => {
+	it("column order applies to a CTE-declaring statement's body, add-ctes task 4.2", () => {
 		const withNode = {
 			queryKind: "with",
 			ctes: [{ name: "recent", query: select, materialized: null }],
 			recursive: false,
 			body: select,
 		} as const;
-		expect(() => applyColumnOrderToQuery(withNode, oracle)).toThrow(
-			expect.objectContaining({ code: "unreachable" }),
-		);
+		const reordered = applyColumnOrderToQuery(withNode, oracle);
+		expect(reordered).not.toBe(withNode);
+		expect((reordered as typeof withNode).body.projection).toEqual({
+			projectionKind: "allColumns",
+			columnNames: ["id", "title", "archived_at", "description"],
+		});
+		// an entry's own query is a computed result, not a stored object --
+		// left untouched, same as `ctes` never being visited at all.
+		expect((reordered as typeof withNode).ctes).toBe(withNode.ctes);
+	});
+
+	it("a WithNode over an unknown-table body keeps reference identity", () => {
+		const withNode = {
+			queryKind: "with",
+			ctes: [{ name: "recent", query: select, materialized: null }],
+			recursive: false,
+			body: { ...select, from: { schemaName: "app", tableName: "unknown" } },
+		} as const;
+		expect(applyColumnOrderToQuery(withNode, oracle)).toBe(withNode);
 	});
 });

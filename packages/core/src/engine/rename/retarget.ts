@@ -1,15 +1,11 @@
-import type { SelectNode, SetOpNode } from "../../expr/ast";
-import {
-	decodeExprNode,
-	decodeQueryNode,
-	encodeExprNode,
-	encodeQueryNode,
-} from "../../expr/codec";
+import type { SelectNode, SetOpNode, WithNode } from "../../expr/ast";
+import { decodeExprNode, encodeExprNode } from "../../expr/codec";
 import type { RenameTarget } from "../../expr/retarget";
 import {
 	retargetExprNode,
 	retargetSelectNode,
 	retargetSetOpNode,
+	retargetWithNode,
 } from "../../expr/retarget";
 import type { KindChange } from "../../kind/object-kind";
 import type { PolicySnapshot } from "../../kinds/policy-kind";
@@ -39,7 +35,12 @@ import {
 } from "../../kinds/table-snapshot";
 import type { TriggerSnapshot } from "../../kinds/trigger-kind";
 import type { ViewSnapshot } from "../../kinds/view-kind";
-import { projectionColumns, viewQueryColumns } from "../../kinds/view-kind";
+import {
+	decodeViewQueryNode,
+	encodeViewQueryNode,
+	projectionColumns,
+	viewQueryColumns,
+} from "../../kinds/view-kind";
 import type { JsonValue } from "../../snapshot/stable-json";
 import { compareKeys } from "../../sort";
 import {
@@ -58,11 +59,19 @@ import {
 	VIEW_PREFIX,
 } from "./snapshot-sets";
 
-/** A view query is a select or a set operation since add-set-operations — retarget dispatches on the stored kind. */
+/**
+ * A view query is a select, a set operation (add-set-operations), or a
+ * `WITH` statement (add-ctes, task 4.3) — retarget dispatches on the
+ * stored kind, descending through the wrapper via {@link retargetWithNode}
+ * for the last case.
+ */
 const retargetViewQuery = (
-	query: SelectNode | SetOpNode,
+	query: SelectNode | SetOpNode | WithNode,
 	target: RenameTarget,
-): SelectNode | SetOpNode => {
+): SelectNode | SetOpNode | WithNode => {
+	if (query.queryKind === "with") {
+		return retargetWithNode(query, target);
+	}
 	if (query.queryKind === "setOp") {
 		return retargetSetOpNode(query, target);
 	}
@@ -491,7 +500,7 @@ export const retargetViewFields = (
 	viewSnapshot: ViewSnapshot,
 	target: RenameTarget,
 ): ViewSnapshot | null => {
-	const decoded = decodeQueryNode(viewSnapshot.query);
+	const decoded = decodeViewQueryNode(viewSnapshot.query);
 	const retargeted = retargetViewQuery(decoded, target);
 	if (retargeted === decoded) {
 		return null;
@@ -499,7 +508,7 @@ export const retargetViewFields = (
 	return {
 		...viewSnapshot,
 		columns: viewQueryColumns(retargeted),
-		query: encodeQueryNode(retargeted),
+		query: encodeViewQueryNode(retargeted),
 	};
 };
 

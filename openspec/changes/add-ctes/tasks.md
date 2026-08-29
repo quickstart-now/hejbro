@@ -454,7 +454,7 @@ rather than impossible.
 
 ## 4. Views, column order, rename engine, preset validator — after group 3
 
-- [ ] 4.1 (~8m) `defineView` accepts a body that declares CTEs, and
+- [x] 4.1 (~8m) `defineView` accepts a body that declares CTEs, and
       `view-kind`'s `leftmostSelect`/`viewQueryColumns` answer for one —
       a view's column list comes from the **body**, not from an entry.
       D103's one-vocabulary rule is the reason this group exists at all.
@@ -462,20 +462,20 @@ rather than impossible.
       body declares a CTE reports the body's columns". Files:
       `packages/core/src/dsl/define-view.ts`,
       `packages/core/src/kinds/view-kind.ts`, that test.
-- [ ] 4.2 (~7m) Column order: `applyColumnOrderToQuery` and the view path
+- [x] 4.2 (~7m) Column order: `applyColumnOrderToQuery` and the view path
       reach through the wrapper to the body. The oracle returns null for
       an unknown table, so a CTE reference is inert by construction —
       assert that rather than assume it. Red: same file — "column order
       applies to a CTE-declaring view's body, and a CTE reference is left
       alone". Files: `packages/core/src/snapshot/column-order.ts`, that
       test.
-- [ ] 4.3 (~7m) The rename engine's view path (`retargetViewQuery`)
+- [x] 4.3 (~7m) The rename engine's view path (`retargetViewQuery`)
       descends through a `WITH`. This is a different registry from 2.3's
       and gets its own red test for the same reason 2.3 exists. Red:
       `packages/core/test/engine/rename-with.test.ts` — "a rename rewrites
       a column referenced only inside a stored view's CTE body". Files:
       `packages/core/src/engine/rename/retarget.ts`, that test.
-- [ ] 4.5 (~7m, was 2.5) A `reachable-kinds` producer — a view whose body
+- [x] 4.5 (~7m, was 2.5) A `reachable-kinds` producer — a view whose body
       declares a CTE — so D70's completeness assertion sees the new
       vocabulary. **Runs after 4.1**, which is what makes such a view
       constructible at all. The producer lives in the in-memory fixture,
@@ -488,7 +488,7 @@ rather than impossible.
       the boundary needs its own marker. Red:
       `packages/core/test/naming-conventions.test.ts` completeness. Files:
       `packages/core/test/expr/reachable-kinds.ts`, that test.
-- [ ] 4.4 (~8m) The Supabase preset's `view-security-invoker` validator,
+- [x] 4.4 (~8m) The Supabase preset's `view-security-invoker` validator,
       which the `FromNode` union makes stop compiling until it answers.
       **Both halves of the answer carry a test**, because the proposal
       argues this shape is safer than the alternative and an argument that

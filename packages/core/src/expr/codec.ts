@@ -971,11 +971,12 @@ export const decodeSetOpNode = (value: JsonValue): SetOpNode => {
  * Encodes the snapshot-reachable QUERY subset — a select or a set
  * operation (D94 boundary rule: mutations never reach a snapshot, so
  * they have no snapshot form). Deliberately not widened to `WithNode`
- * (add-ctes): {@link encodeWithNode} is a fully working, separate
- * function already, not a stub -- whether a *stored declaration* (a
- * view body) reaches it through this dispatcher or through
- * `encodeWithNode` directly is task 4.1's own wiring call to make, not
- * a gap this function leaves open.
+ * (add-ctes): a `WithEntryNode.query`/`SetOpNode.left`/`right` can never
+ * themselves be a `WithNode`, so widening this shared dispatcher would let
+ * a value that must never exist type-check. A stored view body (task 4.1)
+ * reaches `WithNode` encoding through `kinds/view-kind.ts`'s own
+ * `encodeViewQueryNode` instead, which calls {@link encodeWithNode}
+ * directly and falls back to this function for its two narrower kinds.
  */
 export const encodeQueryNode = (node: SelectNode | SetOpNode): JsonValue => {
 	if (node.queryKind === "setOp") {
@@ -996,9 +997,10 @@ const encodeWithEntry = (entry: WithEntryNode): JsonValue => ({
  * order, the `recursive` flag, and the body, reusing {@link
  * encodeQueryNode} for both an entry's query and the body (neither can be
  * another `with`, so the existing `SelectNode | SetOpNode` dispatcher
- * needs no widening). Not merged into {@link encodeQueryNode} itself: a
- * `WithNode` reaching a *stored declaration* (a view body) is task 4.1's
- * own wiring decision, not this task's.
+ * needs no widening). Called directly by `kinds/view-kind.ts`'s
+ * `encodeViewQueryNode` (task 4.1) for a stored view body — not merged into
+ * {@link encodeQueryNode} itself, which stays narrow for the reason its own
+ * docstring states.
  */
 export const encodeWithNode = (node: WithNode): JsonValue => ({
 	queryKind: "with",

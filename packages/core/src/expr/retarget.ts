@@ -507,19 +507,18 @@ const retargetWithEntry = (
 /**
  * Retargets a whole {@link WithNode} (add-ctes, task 2.2's positive
  * descent arm) — every entry's own query and the body, same identity
- * invariant as {@link retargetExprNode}. Unlike {@link
- * retargetSelectNode}'s siblings, nothing here forces this handler to
- * exist: this file has no `queryKind`-keyed registry (`render-sql.ts`'s
- * `RenderQueryHandlers` has no counterpart here), and `REACHABLE_NODE_KINDS`
- * is an `ExprNode` list that does not contain `with`. Task 2.3's dedicated
- * test is the *only* thing standing between this function and a silent
- * `with: (node) => node` regression, until task 4.3 wires
- * `retargetViewQuery` to it and 4.5 puts `with` into the reachable-kinds
- * fixture.
- *
- * Not yet called from production code (add-ctes group 2 stopgap) — task
- * 4.3's own wiring call to make, same deferral shape as {@link
- * encodeWithNode} in `codec.ts`.
+ * invariant as {@link retargetExprNode}. Called from production code since
+ * task 4.3 (`engine/rename/retarget.ts`'s own `retargetViewQuery`, a
+ * stored view's rename path). Unlike {@link retargetSelectNode}'s
+ * siblings, nothing here yet *forces* this handler to exist: this file has
+ * no `queryKind`-keyed registry (`render-sql.ts`'s `RenderQueryHandlers`
+ * has no counterpart here), and `REACHABLE_NODE_KINDS` is an `ExprNode`
+ * list that does not contain `with` until task 4.5 adds a producer for it.
+ * Until then, task 2.3's dedicated test is still what a silent
+ * `with: (node) => node` regression would have to slip past first — a real
+ * caller now depends on this function returning something other than
+ * `node`, but that dependency isn't wired into the completeness check
+ * that would fail loudly if the descent broke.
  */
 export const retargetWithNode = (
 	node: WithNode,

@@ -1,29 +1,28 @@
 import type {
+	FromNode,
 	HejbroDeclaration,
 	SelectNode,
 	SetOpNode,
 	TableRefNode,
 	Validator,
+	WithNode,
 } from "@hejbro/core";
 import { diagnostic } from "@hejbro/core";
 import { declaredAtOf, isRlsDeclaration, isViewDeclaration } from "./schema-of";
 
 /**
- * add-ctes group 1 stopgap: `query.from`/a join's `table` can now be a CTE
- * reference. This validator is security-relevant (RLS-bypass warnings), so
- * a CTE entry is refused loudly here rather than silently dropped or
- * silently treated as a table -- either would be a false negative or
- * false positive in a security check. The real behaviour (a CTE name must
- * never be reported as a referenced table, AND a table read only inside a
- * CTE's own body must still surface the warning) is task 4.4's, with its
- * own red test on both halves. Nothing produces a CTE-containing view
- * query before group 3/4 exist.
+ * A `from`/join target's real table, or `undefined` for a CTE reference
+ * (add-ctes, task 4.4) — a CTE is statement-local, never an object an RLS
+ * declaration can bind to, so it contributes nothing here rather than
+ * being reported as a table that does not exist. This is the reason the
+ * proposal chose the `FromNode` union over a side-channel field (D105):
+ * under a field this validator would compile untouched and warn about
+ * nothing, a silent false negative exactly where a security check must
+ * not have one.
  */
-const assertTableRef = (from: SelectNode["from"]): TableRefNode => {
+const tableRefOf = (from: FromNode): TableRefNode | undefined => {
 	if ("cteName" in from) {
-		throw new Error(
-			"referencedTables() cannot yet judge a CTE reference: add-ctes task 4.4 wires this up.",
-		);
+		return undefined;
 	}
 	return from;
 };
@@ -46,17 +45,31 @@ const rlsProtectedTables = (
 			.map((rls) => `${rls.schemaName}.${rls.tableName}`),
 	);
 
-/** Every table a view's query touches: each leaf select's `from` plus join targets — BOTH branches of a set operation (an RLS bypass through either branch is equally a bypass, add-set-operations). */
+/**
+ * Every table a view's query touches: each leaf select's `from` plus join
+ * targets — BOTH branches of a set operation (an RLS bypass through either
+ * branch is equally a bypass, add-set-operations) and, since add-ctes
+ * (task 4.4), every CTE entry's own body too — a table read only inside a
+ * CTE is still read, and the RLS bypass it risks is exactly as real as one
+ * read directly in the outer body. The CTE name itself is filtered out by
+ * `tableRefOf` returning `undefined` for it, never by skipping the entry.
+ */
 const referencedTables = (
-	query: SelectNode | SetOpNode,
+	query: SelectNode | SetOpNode | WithNode,
 ): ReadonlyArray<TableRefNode> => {
+	if (query.queryKind === "with") {
+		return [
+			...query.ctes.flatMap((entry) => referencedTables(entry.query)),
+			...referencedTables(query.body),
+		];
+	}
 	if (query.queryKind === "setOp") {
 		return [...referencedTables(query.left), ...referencedTables(query.right)];
 	}
 	return [
-		assertTableRef(query.from),
-		...query.joins.map((join) => assertTableRef(join.table)),
-	];
+		tableRefOf(query.from),
+		...query.joins.map((join) => tableRefOf(join.table)),
+	].filter((ref): ref is TableRefNode => ref !== undefined);
 };
 
 /**

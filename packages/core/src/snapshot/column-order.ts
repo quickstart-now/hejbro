@@ -4,7 +4,6 @@ import type {
 	RenameSpec,
 	TableRenameSpec,
 } from "../engine/rename-plan";
-import { throwHejbroError } from "../error";
 import type {
 	ExprNode,
 	FromNode,
@@ -14,6 +13,7 @@ import type {
 	SelectNode,
 	SetOpNode,
 	TableRefNode,
+	WithNode,
 } from "../expr/ast";
 import { renderExpr } from "../expr/render-sql";
 import type { HejbroDeclaration } from "../kind/object-kind"; // type-only; object-kind.ts imports ColumnOrderOracle back as `import type`, which TS erases — no runtime cycle
@@ -183,14 +183,12 @@ const orderedProjection = (
 	if (projection.projectionKind !== "allColumns") {
 		return projection;
 	}
-	// add-ctes group 1 stopgap: a CTE reference has no column-order oracle
-	// entry (it is never in the snapshot) -- task 4.2 owns asserting this
-	// deliberately, with its own red test.
+	// A CTE reference is inert here by construction (add-ctes, task 4.2):
+	// it is never a snapshot object, so no oracle entry could ever exist
+	// for it -- the same "unknown table" case columnOrder already answers
+	// null for, just proven rather than reached through the oracle at all.
 	if ("cteName" in from) {
-		return throwHejbroError(
-			"unreachable",
-			"orderedProjection() cannot yet reach a CTE reference's allColumns projection: add-ctes task 4.2 wires this up.",
-		);
+		return projection;
 	}
 	const order = columnOrder(from);
 	if (order === null) {
@@ -242,6 +240,24 @@ const applyColumnOrderToSetOp = (
 	};
 };
 
+/**
+ * A `WITH` statement's own physical order lives in its body (add-ctes,
+ * task 4.2) -- an entry is a computed query result, not a stored object
+ * with a physical column order of its own, so only the wrapper is
+ * unwrapped here, never `ctes`. Split out (D71/#154 ratchet-5), same
+ * reasoning as {@link applyColumnOrderToSetOp}.
+ */
+const applyColumnOrderToWith = (
+	node: WithNode,
+	columnOrder: ColumnOrderOracle,
+): WithNode => {
+	const body = applyColumnOrderToQuery(node.body, columnOrder);
+	if (body === node.body) {
+		return node;
+	}
+	return { ...node, body: body as typeof node.body };
+};
+
 export const applyColumnOrderToQuery = (
 	node: QueryNode,
 	columnOrder: ColumnOrderOracle,
@@ -252,14 +268,8 @@ export const applyColumnOrderToQuery = (
 	if (node.queryKind === "setOp") {
 		return applyColumnOrderToSetOp(node, columnOrder);
 	}
-	// add-ctes group 1 stopgap (compile-only): no builder wires a WithNode
-	// through here yet — real behaviour ("reach through the wrapper to the
-	// body", task 4.2) lands in group 4.
 	if (node.queryKind === "with") {
-		return throwHejbroError(
-			"unreachable",
-			"applyColumnOrderToQuery cannot yet reach a WithNode: add-ctes task 4.2 wires this up.",
-		);
+		return applyColumnOrderToWith(node, columnOrder);
 	}
 	const returning = orderedReturning(node.returning, node.table, columnOrder);
 	if (returning === node.returning) {
