@@ -81,41 +81,91 @@ Two rules apply to every task here and are not repeated per line:
       The session must be inert when none is open, must close even when the body
       callback throws (a session left open makes the *next* declaration
       inherit the previous one's builders and fail in an unrelated file),
-      and must live on the frame stack `RecordingState` already keeps
-      rather than beside it as a second, independently-drifting state.
+      and must be a stack rather than a slot — a body can declare a view,
+      and the determinism guard runs every body twice. The holder itself
+      is module-scope of necessity: the `query/*` factories are free
+      functions that can reach no `RecordingState`. What must stay single
+      is the *lifetime* — opened and closed by `createRecordingContext`
+      and `finish()` alone, never a second state that can drift from the
+      recording it belongs to.
       Red: `packages/core/test/plpgsql/unused-builder.test.ts` (new) — "a
       chain's intermediate stages are not reported".
       Files: `packages/core/src/plpgsql/recording-session.ts` (new),
       `plpgsql/body-context.ts`, that test.
-- [ ] 1.4 (~8m) The `query/*` call sites, gated on an open session so
+- [x] 1.4 (~8m) The `query/*` call sites, gated on an open session so
       `@hejbro/query`'s runtime chain
       (`packages/query/src/db/chain.ts:712,723,733,737` calls these on
       every query) tracks nothing and pays nothing.
 
-      The boundary exception on these two files is **one import plus
-      exactly one `recording-session.ts` call per site, and no other
-      edit**. The site list below is the exception's own scope, so a diff
-      of these two files is checked against it line for line. Function
-      names are the contract; the line numbers point at `34be0bd` and are
-      a convenience — if one does not match, correct the list here before
-      touching the file, do not touch the file to match the list.
+      The boundary exception on these two files is **`recording-session.ts`
+      calls and nothing else** — no refactor, no cleanup, no type or
+      comment edits alongside. The list below is the exception's own
+      scope, and a diff of these two files is checked against it.
+      Function names are the contract; the line numbers point at
+      `34be0bd` and are a convenience — if one does not match, correct
+      the list here before touching the file, do not touch the file to
+      match the list.
+
+      **Entry and consumption sites — one line each.**
 
       | File | Site | ~line | Why |
       |------|------|-------|-----|
       | `select.ts` | `select` | 402 | produces the entry builder |
-      | `select.ts` | `makeStages` | 240 | produces a stage, supersedes its parent |
-      | `select.ts` | `makeDistinctableStages` | 320 | same, for `distinct` |
-      | `select.ts` | `combine` | 152 | consumes the argument, supersedes the receiver |
       | `select.ts` | `makeSetOpStage` | 190 | produces the set-op stage |
+      | `select.ts` | `combineSetOp` | 150 | consumes the argument, supersedes the receiver |
       | `select.ts` | `buildExists` | 691 | consumes a select as an expression |
-      | `select.ts` | `buildSelectExpr` | 673 | same, for the json aggregates |
+      | `select.ts` | `buildSelectExpr` | 672 | same, for the json aggregates |
       | `mutate.ts` | `insert` (its `values`) | 459 | produces the entry builder |
-      | `mutate.ts` | `makeInsertConflictable` | 413 | produces a stage, supersedes its parent |
-      | `mutate.ts` | `makeInsertFinal` | 390 | same |
       | `mutate.ts` | `update` | 526 | produces the entry builder |
-      | `mutate.ts` | `makeUpdateFinal` | 485 | produces a stage, supersedes its parent |
       | `mutate.ts` | `deleteFrom` | 583 | produces the entry builder |
-      | `mutate.ts` | `makeDeleteFinal` | 542 | produces a stage, supersedes its parent |
+
+      **Stage makers — a local helper, then every transition through it.**
+      A stage maker is any function whose methods spread a new node: in
+      `select.ts`, `makeStages` (240) and `makeDistinctableStages` (320);
+      in `mutate.ts`, `makeInsertConflictable` (413),
+      `makeInsertReturnable` (398), `makeUpdateFilterable` (508),
+      `makeUpdateReturnable` (493), `makeDeleteFilterable` (565) and
+      `makeDeleteReturnable` (550). `makeInsertFinal` (390),
+      `makeUpdateFinal` (485) and `makeDeleteFinal` (542) are **not** on
+      this list and take no edit at all: they are leaves that wrap a node
+      their caller already spread and registered, with no methods of
+      their own.
+
+      None of these knows its parent at its own top: each transition
+      (`where`, `orderBy`, `returning`, `onConflict…`, …) spreads a new
+      node *inside its own closure* and hands it straight to the next
+      maker, so the parent only exists there. One line per transition would mean hoisting each
+      inline spread to a `const` first — two edits where the transition
+      needs none. Instead each stage maker gets **one local helper**
+      closing over its own `query`:
+
+      ```ts
+      const derive = (next: SelectNode) => {
+        noteBuilder(next, query);
+        return makeStages(next, fromTable, projectionInput);
+      };
+      ```
+
+      and every transition's `makeStages({ ...query, … })` becomes
+      `derive({ ...query, … })`. The delegation inside the helper is
+      whatever call that maker already made — the next maker in the
+      chain, not necessarily itself (`makeUpdateFilterable` hands off to
+      `makeUpdateReturnable`, which hands off to `makeUpdateFinal`). The
+      supersession is then stated once per stage maker instead of once
+      per transition, and a transition added later inherits it — the failure mode this guards against (a new
+      transition whose parent is never superseded, turning working chains
+      into errors) cannot be introduced by forgetting a line.
+
+      The helper is the only new function the exception admits, so its
+      body carries **the `noteBuilder` call and the recursive delegation,
+      nothing else** — no branching, no normalization, no convenience.
+      An empty helper is what keeps the exception an exception.
+
+      Review criterion, mechanical: **every `{ ...query, … }` /
+      `{ ...node, … }` spread in these two files reaches the session
+      through a helper of that shape**, and no line changes for any other
+      reason. The count is ~19 transitions (measured in 1.3) routed
+      through 6 helpers, plus the 8 sites in the table above.
 
       **Signal the planner before starting** — the lead orders these two
       files against the team that owns them.

@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { QueryNode } from "../../src/expr/ast";
-import { defineTrigger, schema, table, uuid } from "../../src/index";
+import {
+	defineTrigger,
+	deleteFrom,
+	insert,
+	isNotNull,
+	schema,
+	select,
+	table,
+	update,
+	uuid,
+} from "../../src/index";
 import {
 	closeRecordingSession,
 	hasOpenRecordingSession,
@@ -129,5 +139,49 @@ describe("recording-session lifecycle", () => {
 		markConsumed(produced);
 		expect(() => markConsumed(produced)).not.toThrow();
 		expect(closeRecordingSession()).toEqual([]);
+	});
+});
+
+// #423/1.4: the query/* factories now call noteBuilder/markConsumed on
+// every stage they build -- these calls must be no-ops with no session
+// open, since @hejbro/query's runtime chain builds the exact same
+// factories on every executed query without ever declaring anything.
+describe("the runtime query chain is unaffected", () => {
+	it("builds a chained select outside any recording session", () => {
+		expect(hasOpenRecordingSession()).toBe(false);
+		const query = select(comments)
+			.where(isNotNull(comments.postId))
+			.orderBy(comments.id)
+			.limit(10);
+		expect(query.selectQuery.limit).toBe(10);
+		expect(hasOpenRecordingSession()).toBe(false);
+	});
+
+	it("builds a chained insert outside any recording session", () => {
+		expect(hasOpenRecordingSession()).toBe(false);
+		const query = insert(comments)
+			.values({ postId: "00000000-0000-0000-0000-000000000000" })
+			.returning();
+		expect(query.insertQuery.returning).not.toBeNull();
+		expect(hasOpenRecordingSession()).toBe(false);
+	});
+
+	it("builds a chained update outside any recording session", () => {
+		expect(hasOpenRecordingSession()).toBe(false);
+		const query = update(comments)
+			.set({ postId: "00000000-0000-0000-0000-000000000000" })
+			.where(isNotNull(comments.id))
+			.returning();
+		expect(query.updateQuery.returning).not.toBeNull();
+		expect(hasOpenRecordingSession()).toBe(false);
+	});
+
+	it("builds a chained delete outside any recording session", () => {
+		expect(hasOpenRecordingSession()).toBe(false);
+		const query = deleteFrom(comments)
+			.where(isNotNull(comments.id))
+			.returning();
+		expect(query.deleteQuery.returning).not.toBeNull();
+		expect(hasOpenRecordingSession()).toBe(false);
 	});
 });
