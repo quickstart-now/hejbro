@@ -278,37 +278,49 @@ work ran:
    is being asked to mean. The prescription is not to run it.
 
 A fifth kind surfaced at the end, and it does not belong to that family:
-**the instrument is correct and the sentence built on it is wider than
-what it measured.**
+**every instrument is correct, and the sentence built on them
+corresponds to no single one of them.** It appeared in two shapes.
 
-Two instances, both from this change:
+**Scope overrun — one measurement, a sentence wider than it.**
 
 - A measured run contained no `NOT NULL` constraint, and the note drawn
   from it said Postgres ignores the anchor's `NOT NULL`. The run
   supports only that Postgres's type resolution has no nullability
-  dimension. The citation scope now sits beside the record in
-  `measurements.md`.
+  dimension. The citation scope now sits beside the record.
 - A file-count claim was checked across eight late commits, found in
   none of them, and reported as "never true". All eight sat after the
   commit that explained the number. Widening the census — not narrowing
   the sentence — found the value had been true, once, immediately before
   that commit.
 
-The first four are all caught by measuring again, more carefully.
-**This one is not: measuring again returns the same correct result.**
-The gap is between the result and the sentence, so it is visible only
-when the two are read against each other — the claim's scope against the
-measurement's scope, explicitly.
+**Source mixing — two measurements, one sentence.**
 
-The practical form is a habit rather than a check: **put the window in
-the sentence.** "Not present in these eight commits" can be widened by
-the next reader; "never true" names no window, so it invites no
-comparison and cannot be falsified cheaply. A conclusion that carries
-its own boundary is checkable; one that does not is merely believed.
+- A count and a file list were set side by side as cause and effect. The
+  count came from the cumulative branch diff (`a3eb5f5..<commit>`); the
+  list came from a single commit (`git show --name-only`). The two
+  commands enumerate different sets, so the pairing implied two paths
+  entered where one did. It was caught only because the arithmetic
+  disagreed by one — **had the numbers happened to reconcile, the same
+  mismatch of sources would have read as an explanation.**
+
+The first four are all caught by measuring again, more carefully.
+**This one is not: measuring again returns the same correct results.**
+The gap is between the results and the sentence, so it is visible only
+when the two are read against each other — what the sentence claims
+against what each command actually enumerated.
+
+Two habits rather than checks, one per shape. **Put the window in the
+sentence**: "not present in these eight commits" can be widened by the
+next reader; "never true" names no window, so it invites no comparison
+and cannot be falsified cheaply. And **keep one measurement per
+clause**: where two numbers from two commands must appear together, name
+both commands there, so a reader can see whether they enumerate the same
+set before treating one as the cause of the other.
 
 This kind also **selects for good measurers.** Someone who does not
-measure has no data to overrun, and the sentence reads as *more*
-trustworthy precisely because a real measurement stands behind it.
+measure has no data to overrun and no second source to mix in, and the
+sentence reads as *more* trustworthy precisely because real measurements
+stand behind it.
 
 ## An exact prediction is not a confirmation
 

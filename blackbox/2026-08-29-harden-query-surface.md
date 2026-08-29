@@ -42,8 +42,8 @@ Refs:
 merge-commit state (dafb897) and stay as that record. The archive commit
 then appended closing sections to two pinned files and moved the change
 directory under openspec/changes/archive/; at the archived paths their
-blobs are design.md @ 3f03dd91049e2fba7486cecfc4df4bea697473fd and
-measurements.md @ a4c84aad0ab72e712845500dfd83aa0976325a72. Every other
+blobs are design.md @ fc2fd9bfd3d1f6d533f61382b1841832acfb7a5f and
+measurements.md @ 7863399fe1b08642c7d48a9b26303b8f6fcba0cb. Every other
 pinned file is content-unchanged by the archive.)
 
 (Re-pinned three times since the original `ab0fe8f` pin, as `design.md`,
