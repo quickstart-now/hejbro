@@ -891,6 +891,16 @@ const validateIndexPredicates = (
 				ref.schemaName !== owner.schemaName || ref.tableName !== tableName,
 		);
 	if (foreign !== undefined) {
+		if (foreign.ref.schemaName === null) {
+			// add-ctes task 1.2c: a CTE column reaching a partial index's
+			// predicate -- a CTE does not exist at index-creation time
+			// (it is statement-local to a query, not a schema object), so
+			// naming it here is meaningless, not merely out of scope.
+			throwHejbroError(
+				"index-predicate-foreign-column-ref",
+				`index "${foreign.name}"'s where predicate on table "${tableName}" references a column of the CTE "${foreign.ref.tableName}" — a CTE is statement-local and does not exist at index-creation time. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
+			);
+		}
 		throwHejbroError(
 			"index-predicate-foreign-column-ref",
 			`index "${foreign.name}"'s where predicate on table "${tableName}" references column "${foreign.ref.schemaName}.${foreign.ref.tableName}.${foreign.ref.columnName}" — a partial index predicate can only see this table's own columns. Next: use this table's own columns (the callback's \`t\`), or drop the predicate.`,
@@ -975,6 +985,16 @@ const resolveReferenceTarget = (
 	references: ForeignKeyInput["references"],
 ): ForeignKeyReferenceTarget => {
 	const first = firstReferencedColumnOrThrow(tableName, references.columns);
+	if (first.exprNode.schemaName === null) {
+		// add-ctes task 1.2c: a CTE column reaching the FK reference target
+		// itself -- a CTE has no schema, so it cannot be what a foreign key
+		// points at (D94's boundary: a CTE is statement-local, never a
+		// schema object a constraint can name).
+		return throwHejbroError(
+			"foreign-column-ref",
+			`table "${tableName}" declares a foreign key whose references.columns names "${first.exprNode.tableName}.${first.exprNode.columnName}", a column of a CTE — a foreign key's target must be a declared table's own column. Next: reference a declared table's column instead.`,
+		);
+	}
 	const [, ...rest] = references.columns;
 	const derived: ReferencedTable = {
 		schemaName: first.exprNode.schemaName,
@@ -1004,6 +1024,15 @@ const resolveForeignKey = (
 ): ForeignKeyDeclaration => {
 	const foreignRef = findForeignColumnRef(owner, tableName, input.columns);
 	if (foreignRef !== undefined) {
+		if (foreignRef.exprNode.schemaName === null) {
+			// add-ctes task 1.2c: a CTE column reaching a local FK column
+			// position (D105 -- "reachable but silent" is the exact failure
+			// this refusal exists to name instead of).
+			return throwHejbroError(
+				"foreign-column-ref",
+				`table "${tableName}" received a column of the CTE "${foreignRef.exprNode.tableName}" as a foreign key's local column — a CTE is statement-local and cannot back a table's foreign key. Next: pass one of "${tableName}"'s own columns instead.`,
+			);
+		}
 		return throwHejbroError(
 			"foreign-column-ref",
 			`table "${tableName}" received a column of "${foreignRef.exprNode.schemaName}.${foreignRef.exprNode.tableName}" — indexes and local fk columns must use this table's own columns. Next: pass one of "${tableName}"'s own columns instead — to reference "${foreignRef.exprNode.schemaName}.${foreignRef.exprNode.tableName}", use it as a references.table target on a foreign key, not as a local column.`,
@@ -1077,12 +1106,23 @@ const assertNoDoublyDeclaredReference = (
 
 /** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. */
 const foldColumnReferences = (
+	tableName: string,
 	columnEntries: ReadonlyArray<ColumnEntry>,
 ): ReadonlyArray<ForeignKeyDeclaration> =>
 	columnEntries.flatMap((entry) => {
 		const target = entry.columnState.references?.();
 		if (target === undefined) {
 			return [];
+		}
+		if (target.exprNode.schemaName === null) {
+			// add-ctes task 1.2c: the per-column `.references()` sugar's own
+			// reference target, the D102 twin of resolveReferenceTarget's
+			// guard above -- a CTE column reaching here is refused the same
+			// way, not half-encoded into a target that has no schema.
+			return throwHejbroError(
+				"foreign-column-ref",
+				`table "${tableName}" column "${entry.columnName}" declares .references() pointing at "${target.exprNode.tableName}.${target.exprNode.columnName}", a column of a CTE — a foreign key's target must be a declared table's own column. Next: reference a declared table's column instead.`,
+			);
 		}
 		return [
 			{
@@ -1126,7 +1166,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	);
 	assertNoDoublyDeclaredReference(tableName, columnEntries, extrasForeignKeys);
 	const foreignKeys = [
-		...foldColumnReferences(columnEntries),
+		...foldColumnReferences(tableName, columnEntries),
 		...extrasForeignKeys,
 	].sort(compareForeignKeys);
 	const checks = [

@@ -1,11 +1,30 @@
+import { throwHejbroError } from "../error";
 import type {
 	ColumnRefNode,
 	ExistsNode,
 	ExprNode,
+	FromNode,
 	SelectExprNode,
 	TableRefNode,
 } from "./ast";
 import { selectChildExprs } from "./select-children";
+
+/**
+ * add-ctes group 1 stopgap: an `exists()`/`selectExpr` subquery's `from`
+ * can now be a CTE reference, which this file's scope arrays can't accept
+ * yet -- extending a scope walk through one is group 2's own task (2.2).
+ * Nothing reaches here with a CTE-sourced `from` before group 3/4 wire a
+ * declaration through to a scope-checked expression.
+ */
+const assertTableFrom = (from: FromNode): TableRefNode => {
+	if ("cteName" in from) {
+		return throwHejbroError(
+			"unreachable",
+			"walk.ts cannot yet extend scope through a CTE from-reference: add-ctes task 2.2 wires this up.",
+		);
+	}
+	return from;
+};
 
 /**
  * Every child expression of an embedded select, `groupBy`/`having`/
@@ -297,7 +316,7 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
 		),
 	exists: (node, scope) => {
 		const extendedScope = [
-			node.query.from,
+			assertTableFrom(node.query.from),
 			...node.query.joins.map((join) => join.table),
 			...scope,
 		];
@@ -305,7 +324,7 @@ const scopeViolationHandlers: ScopeViolationHandlers = {
 	},
 	selectExpr: (node, scope) => {
 		const extendedScope = [
-			node.query.from,
+			assertTableFrom(node.query.from),
 			...node.query.joins.map((join) => join.table),
 			...scope,
 		];

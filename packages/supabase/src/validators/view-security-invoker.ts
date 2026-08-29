@@ -8,6 +8,26 @@ import type {
 import { diagnostic } from "@hejbro/core";
 import { declaredAtOf, isRlsDeclaration, isViewDeclaration } from "./schema-of";
 
+/**
+ * add-ctes group 1 stopgap: `query.from`/a join's `table` can now be a CTE
+ * reference. This validator is security-relevant (RLS-bypass warnings), so
+ * a CTE entry is refused loudly here rather than silently dropped or
+ * silently treated as a table -- either would be a false negative or
+ * false positive in a security check. The real behaviour (a CTE name must
+ * never be reported as a referenced table, AND a table read only inside a
+ * CTE's own body must still surface the warning) is task 4.4's, with its
+ * own red test on both halves. Nothing produces a CTE-containing view
+ * query before group 3/4 exist.
+ */
+const assertTableRef = (from: SelectNode["from"]): TableRefNode => {
+	if ("cteName" in from) {
+		throw new Error(
+			"referencedTables() cannot yet judge a CTE reference: add-ctes task 4.4 wires this up.",
+		);
+	}
+	return from;
+};
+
 const viewOverRlsMessage = (
 	viewSchema: string,
 	viewName: string,
@@ -33,7 +53,7 @@ const referencedTables = (
 	if (query.queryKind === "setOp") {
 		return [...referencedTables(query.left), ...referencedTables(query.right)];
 	}
-	return [query.from, ...query.joins.map((join) => join.table)];
+	return [assertTableRef(query.from), ...query.joins.map((join) => join.table)];
 };
 
 /**

@@ -55,6 +55,24 @@ not be dropped.
       reference, resolving the join condition against both sources".
       Files: `packages/core/src/expr/ast.ts`,
       `packages/core/src/expr/render-sql.ts`, that test.
+- [ ] 1.2c (~7m) [design] A CTE column reference reaching a **declaration
+      site** is refused, not cast away. Widening `ColumnRefNode.schemaName`
+      to `string | null` (1.2) makes three sites in `dsl/table.ts` stop
+      compiling — the foreign-key reference target and the two
+      `foreign-column-ref` guards — and the tempting fix is a non-null
+      assertion, on the reasoning that a declared table's column always
+      has a schema. That reasoning is exactly what D105 rejects one file
+      over: a CTE reference object hands out `ColumnRef`s, so a user *can*
+      pass `cte.col` to an index or a foreign key, and the cast would turn
+      a diagnosable mistake into `"null"."x"` in a rendered constraint.
+      Settled here: the error code, joining the existing family
+      (`foreign-column-ref`'s siblings) rather than inventing a new shape,
+      and its message. Red: `packages/core/test/dsl/cte-column-ref.test.ts`
+      — "a foreign key and an index each refuse a CTE column reference,
+      naming the site". The test hand-builds the null-schema reference at
+      this stage; group 3 reaches the same guard through a real
+      `with()` reference once one exists. Files:
+      `packages/core/src/dsl/table.ts`, that test.
 - [ ] 1.3 (~8m) [design] Scope: the enclosing `WITH` list is the set of
       available names. A column belonging to a CTE the statement does not
       declare is refused at build time. Settled here: whether this reuses
@@ -273,11 +291,18 @@ not be dropped.
       `distinct on`, `group by`/`having`, an aggregate in the *anchor*
       term (the ban is recursive-term-only), `union` as well as `union
       all`, and both `materialized` and `not materialized` on a recursive
-      entry. Each carries an assertion; a list like this is exactly where
-      one silent over-rejection hides. Red: same file — "a recursive term
-      accepts a window function, distinct, group by and an anchor
-      aggregate" and "a recursive entry accepts both materialization
-      hints". Files: that test only.
+      entry. Two more the follow-up probes added, both of which a
+      carelessly written guard would break: an **aggregate inside a scalar
+      subquery** in the recursive term (the rule is about the term's own
+      select level — a deep walk over-rejects, and the shallow boundary is
+      the one `collectColumnRefs` already draws for `exists`), and a
+      self-reference on an outer join's **non-nullable** side (`r left
+      join t`), which Postgres accepts. Each carries an assertion; a list
+      like this is exactly where one silent over-rejection hides. Red:
+      same file — "a recursive term accepts a window function, distinct,
+      group by and an anchor aggregate", "an aggregate inside a scalar
+      subquery in the recursive term is accepted", and "a recursive entry
+      accepts both materialization hints". Files: that test only.
 - [ ] 6.6 (~5m) Record the correction where it will be read. The manual
       states no restriction list, and the widely-recalled one is wrong on
       four counts by measurement. That fact belongs in the proposal's
@@ -305,7 +330,12 @@ not be dropped.
       entry is **accepted and ignored**, not an error (6.5's premise), and
       a window function inside a recursive term is accepted — the two
       claims 6.5 rests on that no committed test would otherwise exercise
-      against a real server. Run with `pnpm --filter @hejbro/pg
+      against a real server. **Every recursive case carries a depth guard
+      or a `statement_timeout`**, not only the `r left join t` one that
+      provably does not terminate: today's fixture is a tree, so
+      termination is a property of the *data*, and the first fixture with
+      a cycle in it brings the hang back silently. An unguarded witness
+      hangs CI rather than failing it. Run with `pnpm --filter @hejbro/pg
       test:integration` — `pnpm test` excludes this file and would report
       green having run none of it. Files:
       `packages/pg/test/integration.test.ts`.

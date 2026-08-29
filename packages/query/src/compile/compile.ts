@@ -131,6 +131,14 @@ const compileHandlers: {
 	update: compileUpdate,
 	delete: compileDelete,
 	setOp: compileSetOp,
+	// add-ctes group 1 stopgap (compile-only): no builder wires a WithNode
+	// through here yet -- real behaviour ("the kind is the body's", task
+	// 5.1) lands in group 5.
+	with: () =>
+		throwQueryError(
+			"unreachable",
+			"compile() cannot yet reach a WithNode: add-ctes task 5.1 wires this up.",
+		),
 };
 
 /**
@@ -152,5 +160,9 @@ export const compile = (statement: CompileInput): CompileResult => {
 		node: QueryNode,
 	) => RenderedQuery;
 	const { sql, params } = handler(queryNode);
-	return { sql, params, kind: queryNode.queryKind };
+	// add-ctes group 1 stopgap: the "with" handler above always throws, so
+	// this cast is never observed for that kind -- what a WITH statement's
+	// own CompileKind should be ("the kind is the body's", task 5.1) is
+	// group 5's decision, not this group's.
+	return { sql, params, kind: queryNode.queryKind as CompileKind };
 };

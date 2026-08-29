@@ -46,9 +46,15 @@ export type LiteralNode = {
 		| { readonly literalKind: "bytea"; readonly text: string };
 };
 
+/**
+ * A reference to one column. `schemaName` is `null` when the reference
+ * belongs to a CTE (add-ctes) — a CTE has no schema, unlike a declared
+ * table — mirroring {@link FunctionCallNode.schemaName}'s existing
+ * nullable-schema shape rather than a sentinel string (D105).
+ */
 export type ColumnRefNode = {
 	readonly nodeKind: "columnRef";
-	readonly schemaName: string;
+	readonly schemaName: string | null;
 	readonly tableName: string;
 	readonly columnName: string;
 };
@@ -194,6 +200,19 @@ export type TableRefNode = {
 	readonly tableName: string;
 };
 
+/**
+ * A reference to a `WITH` entry by its bare name (add-ctes) — a CTE has
+ * neither schema nor identity beyond the statement that declares it, so
+ * this is a distinct shape from {@link TableRefNode} rather than a
+ * sentinel-schema table reference (D105: a sentinel is a magic value a
+ * reader can silently fail to check; a discriminated union is a case the
+ * compiler forces every reader to answer).
+ */
+export type CteRefNode = { readonly cteName: string };
+
+/** A `select`'s or a join's source: a declared table, or a `WITH` entry by name (add-ctes). */
+export type FromNode = TableRefNode | CteRefNode;
+
 export type ProjectionNode =
 	| {
 			readonly projectionKind: "allColumns";
@@ -240,7 +259,7 @@ export type DistinctNode =
 export type SelectNode = {
 	readonly queryKind: "select";
 	readonly projection: ProjectionNode;
-	readonly from: TableRefNode;
+	readonly from: FromNode;
 	readonly joins: ReadonlyArray<JoinNode>;
 	readonly where: ExprNode | null;
 	readonly groupBy: ReadonlyArray<ExprNode>;
@@ -325,12 +344,39 @@ export type SetOpNode = {
 	readonly offset: number | null;
 };
 
+/**
+ * One `WITH` entry — a name, its body, and an optional `MATERIALIZED`
+ * hint. `materialized` is a tri-state: `true`/`false` render their own
+ * token, `null` renders neither and leaves the choice to the planner
+ * (Postgres's default).
+ */
+export type WithEntryNode = {
+	readonly name: string;
+	readonly query: SelectNode | SetOpNode;
+	readonly materialized: boolean | null;
+};
+
+/**
+ * A `WITH` statement (add-ctes) — a list of named queries ahead of a body.
+ * `recursive` is the list's own property, not an entry's, matching
+ * Postgres's grammar: one `with recursive` covers every entry. `body`'s
+ * type is deliberately `SelectNode | SetOpNode`, not the whole
+ * `QueryNode` union — data-modifying CTEs are out of scope (proposal, D94).
+ */
+export type WithNode = {
+	readonly queryKind: "with";
+	readonly ctes: ReadonlyArray<WithEntryNode>;
+	readonly recursive: boolean;
+	readonly body: SelectNode | SetOpNode;
+};
+
 export type QueryNode =
 	| SelectNode
 	| InsertNode
 	| UpdateNode
 	| DeleteNode
-	| SetOpNode;
+	| SetOpNode
+	| WithNode;
 
 // --- the user-facing wrapper ---
 

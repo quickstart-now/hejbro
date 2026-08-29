@@ -1,6 +1,7 @@
 import type {
 	ColumnState,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	ProjectionNode,
 	QueryNode,
@@ -193,6 +194,19 @@ const columnStateForExpr = (
 	if (expr.nodeKind !== "columnRef") {
 		return aggregateColumnState(expr, tables);
 	}
+	if (expr.schemaName === null) {
+		// add-ctes group 1 stopgap: a CTE column ref has no declared table
+		// to resolve a ColumnState against here -- reading it through the
+		// CTE's own projection is task 5.3's job. Nothing produces one of
+		// these before group 3/4 exist, so this throws rather than
+		// silently skipping the conversion 5.3 is meant to prove.
+		throw Object.assign(
+			new Error(
+				"columnStateForExpr() cannot yet resolve a CTE column reference's conversion: add-ctes task 5.3 wires this up.",
+			),
+			{ code: "unreachable" },
+		);
+	}
 	return resolveColumnState(
 		tables,
 		expr.schemaName,
@@ -261,10 +275,21 @@ const projectionPlanEntry = (
 
 const columnPlanFromProjection = (
 	projection: ProjectionNode,
-	from: TableRefNode,
+	from: FromNode,
 	tables: Declarations["tables"],
 ): ReadonlyArray<ColumnPlanEntry> => {
 	if (projection.projectionKind === "allColumns") {
+		if ("cteName" in from) {
+			// add-ctes group 1 stopgap: a whole-CTE `allColumns` projection
+			// has no declared table to resolve a ColumnState against here --
+			// task 5.3 owns reading it through the CTE's own projection.
+			throw Object.assign(
+				new Error(
+					"columnPlanFromProjection() cannot yet resolve an allColumns projection over a CTE reference: add-ctes task 5.3 wires this up.",
+				),
+				{ code: "unreachable" },
+			);
+		}
 		return projection.columnNames.map((columnName) =>
 			allColumnsPlanEntry(tables, from, columnName),
 		);
@@ -317,6 +342,17 @@ export const columnPlanForResult = (
 		// a set-op's rows convert per the LEFT branch (D103 -- SQL's own
 		// naming rule; the leftmost select is what names the output).
 		return columnPlanForResult(node.left, tables);
+	}
+	if (node.queryKind === "with") {
+		// add-ctes group 1 stopgap (compile-only): no builder wires a
+		// WithNode through here yet -- real behaviour ("reads the body's
+		// projection through the wrapper", task 5.3) lands in group 5.
+		throw Object.assign(
+			new Error(
+				"columnPlanForResult() cannot yet reach a WithNode: add-ctes task 5.3 wires this up.",
+			),
+			{ code: "unreachable" },
+		);
 	}
 	if (node.returning === null) {
 		return [];

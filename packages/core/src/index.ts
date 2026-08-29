@@ -129,10 +129,12 @@ export type {
 	ComparisonNode,
 	ComparisonOperator,
 	Condition,
+	CteRefNode,
 	DeleteNode,
 	ExistsNode,
 	Expr,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	InListNode,
 	InsertNode,
@@ -157,6 +159,8 @@ export type {
 	TableRefNode,
 	UpdateNode,
 	WindowNode,
+	WithEntryNode,
+	WithNode,
 } from "./expr/ast";
 export {
 	columnRef,

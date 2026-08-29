@@ -7,6 +7,7 @@ import type {
 	DistinctNode,
 	ExistsNode,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	InListNode,
 	JoinKind,
@@ -369,6 +370,24 @@ const encodeTableRef = (node: TableRefNode): JsonValue => ({
 	table: node.tableName,
 });
 
+/**
+ * add-ctes group 1 stopgap: `encodeSelectNode`'s `from` can now be a CTE
+ * reference, but round-tripping one is task 2.1's own contract (snapshot
+ * vocabulary, decode-side leniency rules) -- not decided here. No builder
+ * produces a CTE-sourced `from` before group 3 exists, so this throws
+ * rather than half-encoding something group 2 hasn't designed the wire
+ * shape for yet.
+ */
+const encodeFromNode = (node: FromNode): JsonValue => {
+	if ("cteName" in node) {
+		return throwHejbroError(
+			"unreachable",
+			"encodeSelectNode() cannot yet encode a CTE from-reference: add-ctes task 2.1 wires this up.",
+		);
+	}
+	return encodeTableRef(node);
+};
+
 const encodeProjection = (node: ProjectionNode): JsonValue => {
 	switch (node.projectionKind) {
 		case "allColumns":
@@ -478,7 +497,7 @@ const decodeDistinct = (value: JsonValue): DistinctNode | null => {
 export const encodeSelectNode = (node: SelectNode): JsonValue => ({
 	queryKind: node.queryKind,
 	projection: encodeProjection(node.projection),
-	from: encodeTableRef(node.from),
+	from: encodeFromNode(node.from),
 	joins: node.joins.map(encodeJoin),
 	where: encodeWhere(node.where),
 	groupBy: node.groupBy.map(encodeExprNode),

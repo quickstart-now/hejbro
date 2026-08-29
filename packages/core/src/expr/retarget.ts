@@ -1,8 +1,10 @@
+import { throwHejbroError } from "../error";
 import type {
 	BetweenNode,
 	ComparisonNode,
 	ExistsNode,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	InListNode,
 	JoinNode,
@@ -72,6 +74,26 @@ const retargetTableRef = (
 };
 
 const retargetUnchanged = (node: ExprNode): ExprNode => node;
+
+/**
+ * add-ctes group 1 stopgap: `SelectNode.from` can now be a CTE reference,
+ * which neither {@link retargetProjection} nor {@link retargetTableRef}
+ * below can accept (both need a real table's schema/name). The real
+ * contract -- a rename never rewrites a CTE reference (proposal, "A CTE
+ * is a from-source") -- is group 2's own positive/negative pins
+ * (2.3/2.4), each with its own red test; this throws rather than
+ * pre-deciding it, since nothing reaches here with a CTE-sourced `from`
+ * before group 3/4 wire a declaration through to the rename engine.
+ */
+const assertTableFrom = (from: FromNode): TableRefNode => {
+	if ("cteName" in from) {
+		return throwHejbroError(
+			"unreachable",
+			"retargetSelectNode() cannot yet retarget a CTE-sourced select: add-ctes tasks 2.3/2.4 wire this up.",
+		);
+	}
+	return from;
+};
 
 const retargetedColumnName = (
 	node: Extract<ExprNode, { readonly nodeKind: "columnRef" }>,
@@ -430,8 +452,9 @@ export const retargetSelectNode = (
 	query: SelectNode,
 	target: RenameTarget,
 ): SelectNode => {
-	const projection = retargetProjection(query.projection, query.from, target);
-	const from = retargetTableRef(query.from, target);
+	const tableFrom = assertTableFrom(query.from);
+	const projection = retargetProjection(query.projection, tableFrom, target);
+	const from = retargetTableRef(tableFrom, target);
 	const retargetedJoins = query.joins.map((join) =>
 		retargetJoinTable(join, target),
 	);

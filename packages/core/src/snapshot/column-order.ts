@@ -4,8 +4,10 @@ import type {
 	RenameSpec,
 	TableRenameSpec,
 } from "../engine/rename-plan";
+import { throwHejbroError } from "../error";
 import type {
 	ExprNode,
+	FromNode,
 	ProjectionNode,
 	QueryNode,
 	ReturningNode,
@@ -175,13 +177,19 @@ export const computeColumnOrder = (
 
 const orderedProjection = (
 	projection: ProjectionNode,
-	table: TableRefNode,
+	from: FromNode,
 	columnOrder: ColumnOrderOracle,
 ): ProjectionNode => {
 	if (projection.projectionKind !== "allColumns") {
 		return projection;
 	}
-	const order = columnOrder(table);
+	// add-ctes group 1 stopgap: a CTE reference has no column-order oracle
+	// entry (it is never in the snapshot) -- task 4.2 owns asserting this
+	// deliberately, with its own red test, rather than this silent skip.
+	if ("cteName" in from) {
+		return projection;
+	}
+	const order = columnOrder(from);
 	if (order === null) {
 		return projection;
 	}
@@ -240,6 +248,15 @@ export const applyColumnOrderToQuery = (
 	}
 	if (node.queryKind === "setOp") {
 		return applyColumnOrderToSetOp(node, columnOrder);
+	}
+	// add-ctes group 1 stopgap (compile-only): no builder wires a WithNode
+	// through here yet — real behaviour ("reach through the wrapper to the
+	// body", task 4.2) lands in group 4.
+	if (node.queryKind === "with") {
+		return throwHejbroError(
+			"unreachable",
+			"applyColumnOrderToQuery cannot yet reach a WithNode: add-ctes task 4.2 wires this up.",
+		);
 	}
 	const returning = orderedReturning(node.returning, node.table, columnOrder);
 	if (returning === node.returning) {

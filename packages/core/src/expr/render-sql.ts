@@ -4,10 +4,12 @@ import type {
 	BetweenNode,
 	ColumnRefNode,
 	ComparisonNode,
+	CteRefNode,
 	DeleteNode,
 	DistinctNode,
 	ExistsNode,
 	ExprNode,
+	FromNode,
 	FunctionCallNode,
 	InListNode,
 	InsertNode,
@@ -29,6 +31,8 @@ import type {
 	TableRefNode,
 	UpdateNode,
 	WindowNode,
+	WithEntryNode,
+	WithNode,
 } from "./ast";
 import { renderLiteral } from "./literal";
 import { selectChildExprs } from "./select-children";
@@ -83,7 +87,7 @@ const qualifiedFunctionName = (
 
 const renderSqlTemplateChunk = (
 	chunk: SqlTemplateChunk,
-	outerScope: ReadonlyArray<TableRefNode> | undefined,
+	outerScope: ReadonlyArray<FromNode> | undefined,
 ): string => {
 	switch (chunk.chunkKind) {
 		case "text":
@@ -97,7 +101,7 @@ const renderSqlTemplateChunk = (
 
 const renderOperand = (
 	node: ExprNode,
-	outerScope: ReadonlyArray<TableRefNode> | undefined,
+	outerScope: ReadonlyArray<FromNode> | undefined,
 ): string => {
 	const rendered = renderExpr(node, outerScope);
 	if (compositeNodeKinds.has(node.nodeKind)) {
@@ -109,6 +113,33 @@ const renderOperand = (
 /** Renders a table reference schema-qualified: `qualifyName(schema, table)`. */
 export const renderTableRef = (node: TableRefNode): string =>
 	qualifyName(node.schemaName, node.tableName);
+
+/** A CTE reference has no schema (D105) — narrows a {@link FromNode} by the field only {@link CteRefNode} carries. */
+const isCteRef = (node: FromNode): node is CteRefNode => "cteName" in node;
+
+/** Renders a {@link FromNode}: a CTE reference bare and quoted (add-ctes, task 1.2), a table reference schema-qualified. */
+export const renderFromNode = (node: FromNode): string => {
+	if (isCteRef(node)) {
+		return quoteIdentifier(node.cteName);
+	}
+	return renderTableRef(node);
+};
+
+/** Human-readable identity for a diagnostic message — `schema.table` for a table, the bare name for a CTE. */
+const describeFromNode = (node: FromNode): string => {
+	if (isCteRef(node)) {
+		return node.cteName;
+	}
+	return `${node.schemaName}.${node.tableName}`;
+};
+
+/** Human-readable identity for a diagnostic message — `schema.table.column` for a table column, `cte.column` for a CTE column (`schemaName === null`). */
+const describeColumnRef = (ref: ColumnRefNode): string => {
+	if (ref.schemaName === null) {
+		return `${ref.tableName}.${ref.columnName}`;
+	}
+	return `${ref.schemaName}.${ref.tableName}.${ref.columnName}`;
+};
 
 /**
  * One handler per {@link ExprNode} `nodeKind` for {@link collectColumnRefs}
@@ -182,16 +213,20 @@ export const collectColumnRefs = (
 };
 
 const isInScope = (
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 	ref: ColumnRefNode,
 ): boolean =>
-	scope.some(
-		(table) =>
-			table.schemaName === ref.schemaName && table.tableName === ref.tableName,
-	);
+	scope.some((source) => {
+		if (isCteRef(source)) {
+			return ref.schemaName === null && ref.tableName === source.cteName;
+		}
+		return (
+			ref.schemaName === source.schemaName && ref.tableName === source.tableName
+		);
+	});
 
 const findForeignColumnRef = (
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 	refs: ReadonlyArray<ColumnRefNode>,
 ): ColumnRefNode | undefined => refs.find((ref) => !isInScope(scope, ref));
 
@@ -203,16 +238,19 @@ const findForeignColumnRef = (
  * for all four statement kinds, not just `select`).
  */
 const assertInScope = (
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 	refs: ReadonlyArray<ColumnRefNode>,
 	verb: string,
-	subject: TableRefNode,
+	subject: FromNode,
 ): void => {
 	const badRef = findForeignColumnRef(scope, refs);
 	if (badRef !== undefined) {
 		throwHejbroError(
 			"foreign-column-ref",
-			`${verb} "${subject.schemaName}.${subject.tableName}" references column "${badRef.schemaName}.${badRef.tableName}.${badRef.columnName}". Next: join that table, or reference it from an enclosing query via exists().`,
+			// add-ctes task 1.3 owns this message's final wording for a CTE
+			// subject/reference; describeFromNode/describeColumnRef keep it
+			// truthful (no bare "null.table") in the meantime.
+			`${verb} "${describeFromNode(subject)}" references column "${describeColumnRef(badRef)}". Next: join that table, or reference it from an enclosing query via exists().`,
 		);
 	}
 };
@@ -272,7 +310,7 @@ const collectWhereRefs = (
 
 const whereClause = (
 	where: ExprNode | null,
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 ): string => {
 	if (where === null) {
 		return "";
@@ -344,7 +382,7 @@ const distinctKeyword = (
 
 const renderProjection = (
 	projection: ProjectionNode,
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 ): string => {
 	switch (projection.projectionKind) {
 		case "allColumns":
@@ -365,7 +403,7 @@ const renderProjection = (
 
 const renderOnConflictAction = (
 	action: OnConflictNode["action"],
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 ): string => {
 	switch (action.actionKind) {
 		case "nothing":
@@ -386,7 +424,7 @@ const renderOnConflictAction = (
 
 const renderOnConflict = (
 	onConflict: OnConflictNode | null,
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 ): string => {
 	if (onConflict === null) {
 		return "";
@@ -397,7 +435,7 @@ const renderOnConflict = (
 
 const renderReturning = (
 	returning: ReturningNode | null,
-	scope: ReadonlyArray<TableRefNode>,
+	scope: ReadonlyArray<FromNode>,
 ): string => {
 	if (returning === null) {
 		return "";
@@ -426,7 +464,7 @@ const renderReturning = (
  */
 const renderSelectClauses = (
 	query: SelectNode,
-	outerScope: ReadonlyArray<TableRefNode> | undefined,
+	outerScope: ReadonlyArray<FromNode> | undefined,
 	clauseAfterProjection?: string,
 ): string => {
 	const scope = [
@@ -452,7 +490,7 @@ const renderSelectClauses = (
 	const clauses = [
 		`${distinctKeyword(query.distinct, scope)} ${renderProjection(query.projection, scope)}`,
 		clauseAfterProjection ?? "",
-		`from ${renderTableRef(query.from)}`,
+		`from ${renderFromNode(query.from)}`,
 		joinsSql,
 		whereClause(query.where, scope),
 		groupByClause(query.groupBy, scope),
@@ -474,7 +512,7 @@ const renderSelectClauses = (
  */
 export const renderSelect = (
 	query: SelectNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string => renderSelectClauses(query, outerScope);
 
 const intoKeyword = (strict: boolean): string => {
@@ -507,7 +545,7 @@ export const renderSelectInto = (
 	query: SelectNode,
 	intoVariables: ReadonlyArray<string>,
 	options: { readonly strict: boolean },
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string =>
 	renderSelectClauses(
 		query,
@@ -518,7 +556,7 @@ export const renderSelectInto = (
 /** Renders an {@link InsertNode}. `outerScope` follows the same scope rule as {@link renderSelect} (`[table, …outerScope]`). */
 export const renderInsert = (
 	node: InsertNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
 	const mentionedRefs = [
@@ -547,7 +585,7 @@ export const renderInsert = (
 /** Renders an {@link UpdateNode}. `outerScope` follows the same scope rule as {@link renderSelect} (`[table, …outerScope]`). */
 export const renderUpdate = (
 	node: UpdateNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
 	const mentionedRefs = [
@@ -576,7 +614,7 @@ export const renderUpdate = (
 /** Renders a {@link DeleteNode}. `outerScope` follows the same scope rule as {@link renderSelect} (`[table, …outerScope]`). */
 export const renderDelete = (
 	node: DeleteNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
 	const scope = [node.table, ...(outerScope ?? [])];
 	const mentionedRefs = [
@@ -608,14 +646,14 @@ export const renderDelete = (
 type RenderQueryHandlers = {
 	readonly [K in QueryNode["queryKind"]]: (
 		node: Extract<QueryNode, { readonly queryKind: K }>,
-		outerScope?: ReadonlyArray<TableRefNode>,
+		outerScope?: ReadonlyArray<FromNode>,
 	) => string;
 };
 
 /** A branch renders parenthesized when it is itself a set operation — associativity stays explicit in the emitted text, never implied. */
 const renderSetOpBranch = (
 	branch: SelectNode | SetOpNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
 	if (branch.queryKind === "setOp") {
 		return `(${renderSetOp(branch, outerScope)})`;
@@ -666,7 +704,7 @@ const setOpKeyword = (node: SetOpNode): string => {
 /** Renders a {@link SetOpNode}: both branches, the operator keyword, then the whole-set `order by`/`limit` (add-set-operations, D103). */
 export const renderSetOp = (
 	node: SetOpNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
 	const outputColumns = leftBranchOutputColumns(node.left);
 	const badTerm = node.orderBy
@@ -689,22 +727,69 @@ export const renderSetOp = (
 	return clauses.join(" ");
 };
 
+/** Renders a `WITH` entry's or body's query without adding parentheses — the caller decides whether parens are needed (an entry always gets them, the body never does at top level). */
+const renderQueryBody = (
+	node: SelectNode | SetOpNode,
+	outerScope?: ReadonlyArray<FromNode>,
+): string => {
+	if (node.queryKind === "setOp") {
+		return renderSetOp(node, outerScope);
+	}
+	return renderSelect(node, outerScope);
+};
+
+/** `null` renders neither token, leaving the choice to the planner (Postgres's default); `true`/`false` render their own. */
+const materializedKeyword = (materialized: boolean | null): string => {
+	if (materialized === true) {
+		return "materialized ";
+	}
+	if (materialized === false) {
+		return "not materialized ";
+	}
+	return "";
+};
+
+const renderWithEntry = (
+	entry: WithEntryNode,
+	outerScope?: ReadonlyArray<FromNode>,
+): string =>
+	`${quoteIdentifier(entry.name)} as ${materializedKeyword(entry.materialized)}(${renderQueryBody(entry.query, outerScope)})`;
+
+const recursiveKeyword = (recursive: boolean): string => {
+	if (recursive) {
+		return "recursive ";
+	}
+	return "";
+};
+
+/** Renders a {@link WithNode}: its entries comma-separated in declaration order, `with recursive` when the list is recursive, then the body — never itself parenthesized (add-ctes, task 1.1). */
+export const renderWith = (
+	node: WithNode,
+	outerScope?: ReadonlyArray<FromNode>,
+): string => {
+	const entriesSql = node.ctes
+		.map((entry) => renderWithEntry(entry, outerScope))
+		.join(", ");
+	return `with ${recursiveKeyword(node.recursive)}${entriesSql} ${renderQueryBody(node.body, outerScope)}`;
+};
+
 const renderQueryHandlers: RenderQueryHandlers = {
 	select: renderSelect,
 	insert: renderInsert,
 	update: renderUpdate,
 	delete: renderDelete,
 	setOp: renderSetOp,
+	with: renderWith,
 };
 
 /** Dispatches a {@link QueryNode} to its renderer by `queryKind`. */
 export const renderQuery = (
 	node: QueryNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
 	const handler = renderQueryHandlers[node.queryKind] as (
 		node: QueryNode,
-		outerScope?: ReadonlyArray<TableRefNode>,
+		outerScope?: ReadonlyArray<FromNode>,
 	) => string;
 	return handler(node, outerScope);
 };
@@ -717,10 +802,15 @@ export const renderQuery = (
  * `exists (select 1 from posts where posts.id = comments.post_id)` pass
  * scope validation (see {@link renderSelect}).
  */
-type OuterScope = ReadonlyArray<TableRefNode> | undefined;
+type OuterScope = ReadonlyArray<FromNode> | undefined;
 
-const renderColumnRefNode = (node: ColumnRefNode): string =>
-	`${qualifyName(node.schemaName, node.tableName)}.${quoteIdentifier(node.columnName)}`;
+/** A CTE column reference (`schemaName === null`, add-ctes) qualifies by the bare CTE name only — a CTE has no schema to render. */
+const renderColumnRefNode = (node: ColumnRefNode): string => {
+	if (node.schemaName === null) {
+		return `${quoteIdentifier(node.tableName)}.${quoteIdentifier(node.columnName)}`;
+	}
+	return `${qualifyName(node.schemaName, node.tableName)}.${quoteIdentifier(node.columnName)}`;
+};
 
 const renderPlpgsqlRefNode = (node: PlpgsqlRefNode): string =>
 	node.path.join(".");
@@ -872,7 +962,7 @@ const renderExprHandlers: RenderExprHandlers = {
 
 export const renderExpr = (
 	node: ExprNode,
-	outerScope?: ReadonlyArray<TableRefNode>,
+	outerScope?: ReadonlyArray<FromNode>,
 ): string => {
 	const handler = renderExprHandlers[node.nodeKind] as (
 		node: ExprNode,
