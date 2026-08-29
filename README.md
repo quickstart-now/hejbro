@@ -126,7 +126,7 @@ PL/pgSQL builder compiler for functions and triggers is the novel part.
 
 | Package | Role |
 |---------|------|
-| `hejbro` | User-facing package: the DSL + query layer + CLI (`hejbro init`, `hejbro generate`, `hejbro verify`) |
+| `hejbro` | User-facing package: the DSL + query layer + CLI (`hejbro init`, `hejbro generate`, `hejbro baseline`, `hejbro verify`, `hejbro history`, `hejbro restore`) |
 | `@hejbro/core` | Declaration model, builder DSL, compiler, snapshot & diff engine (pure) |
 | `@hejbro/query` | Typed query layer: statement compiler, driver contract, RLS execution context, thenable chain surface |
 | `@hejbro/pg` | Vanilla node-postgres driver for `@hejbro/query` |

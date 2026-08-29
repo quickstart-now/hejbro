@@ -289,6 +289,20 @@ Files (whole group): `packages/core/src/plpgsql/body-context.ts`,
       is returned as a ref even when the table has a column named
       `exprNode`", plus the existing scalar-guard tests staying green.
 
+- [ ] 4.2 (~5m) Two constraints from group 4's review, one comment each:
+      **R-f** in the test — a trigger row cannot be handed to a scalar
+      declaration through any type-legal path (the test needs
+      `@ts-expect-error`), so capturing one inside a trigger body is the
+      only way to reproduce it; what the test defends is that the runtime
+      guard survives for consumers who bypass the types. Without that
+      line the fixture reads as contrived and invites deletion.
+      **R-g** on the helper — it is a `function` declaration, not an
+      arrow const, because it is called in *statement* position and TS
+      only narrows control flow through `never` that way. Core's other
+      `never` helpers are arrows because they are only ever called in
+      return/expression position. Unstated, the next person "fixes" the
+      inconsistency and meets a tsc error.
+
 ## 5. Cache inputs, docs and release chore
 
 Runs after 1–4: 5.2 quotes the codes and export names those groups
@@ -297,7 +311,7 @@ settle. Files: `packages/skills/turbo.json`,
 `packages/cli/README.md`, `AGENTS.md`, `blackbox/*.md`,
 `.changeset/*.md`, `openspec/task-times.csv`.
 
-- [ ] 5.1 (~7m) R3: `packages/skills/turbo.json`'s `test` inputs gain
+- [x] 5.1 (~7m) R3: `packages/skills/turbo.json`'s `test` inputs gain
       `$TURBO_ROOT$/packages/*/src/**` — the snippet test type-checks
       against those sources, so an API rename currently replays a stale
       cached PASS (#430's failure class; #431 closed only the docs half,
@@ -313,7 +327,7 @@ settle. Files: `packages/skills/turbo.json`,
       this task's own verification measures the cache instead of the
       code — the same failure class it exists to close. Update the file's own
       comment to say what the inputs now cover.
-- [ ] 5.2 (~8m) Docs: `skills/hejbro/references/query-layer.md`'s nested
+- [x] 5.2 (~8m) Docs: `skills/hejbro/references/query-layer.md`'s nested
       transaction section gains the concurrency rule and both new error
       codes (a stale skill is a broken user contract). Carried over from
       group 1's review: `savepoint-rollback-failed` now carries

@@ -477,6 +477,16 @@ a throw, all on the same connection. A rolled-back nested transaction
 does *not* abort the transaction containing it, so the outer callback can
 catch the error and keep issuing statements that still commit.
 
+**Only one nested transaction in flight per `tx` at a time.** Starting a
+second one — `await Promise.all([tx.transaction(a), tx.transaction(b)])`
+— fails the second immediately with `concurrent-nested-transaction`,
+before any savepoint statement is sent and before its callback ever
+runs: savepoints on one connection are strictly nested, so concurrent
+siblings would interleave one `SAVEPOINT` sequence, silently discarding
+one sibling's work or aborting the whole transaction depending on the
+interleaving. Await one nested transaction before starting the next —
+sequential nesting is unaffected.
+
 Calling `transaction()` on the **handle** from inside an already-open
 callback of that same member still fails fast with
 `nested-transaction-unsupported` **before any further statement is sent**
@@ -567,7 +577,9 @@ concrete next step.
 | `result-conversion-failed` | A returned column's value couldn't convert to its declared type (an unconvertible/missing column, an array arrival-shape mismatch, or a `NULL` element under `.notNullElements()`). |
 | `driver-missing-capability` | An operation (a transaction, a `db.as` context) needs a capability the active driver doesn't declare `true` — a capability explicitly declared `false` fails exactly like an undeclared one, never attempted. The capability set itself is fixed and exhaustive: a driver's own declaration must name every one of them, and omitting one, or naming one outside the set, fails to type-check rather than defaulting silently — this is a compile-time guarantee, checked before this runtime error's own path is ever reached. |
 | `nested-transaction-unsupported` | The db handle's `transaction()` was called again from inside its own already-open callback — nest with `tx.transaction(...)` instead. |
-| `savepoint-rollback-failed` | Rolling back to a nested transaction's savepoint itself failed; the rollback failure is on `cause` and the callback's own error on `callbackError`. |
+| `concurrent-nested-transaction` | A second nested transaction was started on the same `tx` while the first was still in flight — await one before starting the next. |
+| `savepoint-release-failed` | A nested transaction's callback returned normally, but its `RELEASE SAVEPOINT` failed (a statement error was swallowed inside the callback instead of rethrown, leaving the subtransaction aborted) — the release failure is on `cause`. |
+| `savepoint-rollback-failed` | A `ROLLBACK TO SAVEPOINT` itself failed. Its trigger differs by path, so the fact that triggered it lands on a differently-named property: after a callback threw, on `callbackError`; while recovering from a failing release (above), on `releaseError`. The rollback failure itself is always on `cause`. |
 | `undeclared-role` | `db.as({ role, ... })`'s role isn't in the declared whitelist. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |
 
