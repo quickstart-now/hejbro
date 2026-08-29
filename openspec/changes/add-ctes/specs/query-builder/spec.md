@@ -42,9 +42,20 @@ available names: a column reference belonging to a CTE that the statement
 does not declare SHALL be refused at build time, the way an out-of-scope
 table reference already is.
 
+A join SHALL accept a CTE reference as its target as well, so a CTE can be
+joined back to the table it was derived from — the second half of "top N
+per group", where the ranked CTE is rejoined to carry detail columns.
+
 A rename SHALL NOT rewrite a CTE reference. Renames identify a table by
 schema and name together, and a CTE has neither; a CTE that shares a
 renamed table's name SHALL be left untouched.
+
+A CTE body SHALL be part of the query for every purpose that walks one.
+Scope checking, renames, parameter binding, and the table collection a
+provider preset uses to warn about RLS bypass SHALL all reach inside it: a
+table read only inside a CTE body is still a table this query reads, and
+treating the body as opaque would silence a security warning rather than
+answer it.
 
 #### Scenario: Selecting from a named query
 - **WHEN** a select's from-source is a CTE reference
@@ -55,10 +66,21 @@ renamed table's name SHALL be left untouched.
 - **THEN** it fails at build time, naming the reference and the statement's
   available sources
 
+#### Scenario: A CTE is joined back to a table
+- **WHEN** a select joins a CTE reference on a column of its from-table
+- **THEN** the rendered SQL joins the bare CTE name, and the join
+  condition's references resolve against both sources
+
 #### Scenario: A table rename leaves a same-named CTE alone
 - **WHEN** a table is renamed and a statement declares a CTE with the old
   table's name
 - **THEN** the CTE's own column references are unchanged
+
+#### Scenario: A table read inside a CTE body is still reported
+- **WHEN** a view's body reads a table only inside a CTE, and the preset
+  collects the tables that view reads
+- **THEN** that table is among them, so an RLS-bypass warning is raised
+  exactly as it would be for a direct read
 
 ### Requirement: Recursive CTEs traverse
 The builder SHALL support recursive CTEs: an anchor term, a `UNION` — with

@@ -41,6 +41,16 @@ not be dropped.
       "a select whose from-source is a CTE reference renders the name
       unqualified". Files: `packages/core/src/expr/ast.ts`,
       `packages/core/src/expr/render-sql.ts`, that test.
+- [ ] 1.2b (~7m) A join may target a CTE reference, not only a table —
+      the second half of "top N per group" rejoins the ranked CTE to carry
+      detail columns. **Measure the fan-out of widening `JoinNode.table`
+      before writing code** (`from`'s own widening measured 18 errors
+      across 7 files); if it is materially larger than that, report before
+      proceeding rather than absorbing it. Red:
+      `packages/core/test/expr/with-node.test.ts` — "a select joins a CTE
+      reference, resolving the join condition against both sources".
+      Files: `packages/core/src/expr/ast.ts`,
+      `packages/core/src/expr/render-sql.ts`, that test.
 - [ ] 1.3 (~8m) [design] Scope: the enclosing `WITH` list is the set of
       available names. A column belonging to a CTE the statement does not
       declare is refused at build time. Settled here: whether this reuses
@@ -66,7 +76,11 @@ not be dropped.
 
 - [ ] 2.1 (~9m) Codec: the `with` token in the query-kind mapping plus
       encode/decode handlers, round-tripping entry order, the `recursive`
-      flag, each entry's `materialized` hint, and a nested body. Leniency
+      flag, each entry's `materialized` hint, and a nested body — plus a
+      CTE reference in **both** positions it can occupy, `from` and a
+      join, since `encodeJoin` encodes its target through its own path and
+      a round-trip test that only exercises `from` would leave that path
+      unproven. Leniency
       follows #444's R4: a missing field is tolerated only where an older
       version actually wrote it out, and `with` is new in this format — a
       stored node missing its body is corruption and throws rather than
@@ -76,8 +90,11 @@ not be dropped.
       rejected, not repaired". Files: `packages/core/src/expr/codec.ts`,
       that test.
 - [ ] 2.2 (~7m) The traversal arms: `walk.ts`'s handler maps and
-      `retarget.ts`'s arm, for the new node **and** for the widened
-      `from`. The two walk maps carry different meanings — decide each;
+      `retarget.ts`'s arm, for the new node **and** for the widened `from`
+      **and `JoinNode.table`** — a CTE reached through a join is reached
+      through a different field than one in `from`, and only one of the
+      two is exercised by 2.3's test unless both are written. The two walk
+      maps carry different meanings — decide each;
       sharing one type does not mean they want the same answer. Red: the
       existing walker tests plus `packages/core/test/expr/walk.test.ts` —
       "a walk reaches an expression inside a CTE body". Files:
@@ -151,12 +168,20 @@ not be dropped.
       `packages/core/test/engine/rename-with.test.ts` — "a rename rewrites
       a column referenced only inside a stored view's CTE body". Files:
       `packages/core/src/engine/rename/retarget.ts`, that test.
-- [ ] 4.4 (~6m) The Supabase preset's `view-security-invoker` validator:
-      its `referencedTables` must not report a CTE name as a table. A CTE
-      is statement-local and has no schema; reporting one would produce a
-      diagnostic about an object that does not exist. Red: that
-      validator's own test — "a CTE name is not reported as a referenced
-      table". Files:
+- [ ] 4.4 (~8m) The Supabase preset's `view-security-invoker` validator,
+      which the `FromNode` union makes stop compiling until it answers.
+      **Both halves of the answer carry a test**, because the proposal
+      argues this shape is safer than the alternative and an argument that
+      ships as prose is the form #87 rejected: (a) a table read **only
+      inside a CTE body** IS collected, so a view reading an RLS-guarded
+      table through a CTE still raises the bypass warning — under a
+      side-channel field this case compiles untouched and warns about
+      nothing, which is exactly why the union was chosen; (b) the CTE
+      *name itself* is NOT reported as a table, since it is
+      statement-local and has no schema, and reporting it would name an
+      object that does not exist. Red: that validator's own test — "a
+      table read inside a CTE body is reported" and "a CTE name is not
+      reported as a referenced table". Files:
       `packages/supabase/src/validators/view-security-invoker.ts`, that
       test.
 

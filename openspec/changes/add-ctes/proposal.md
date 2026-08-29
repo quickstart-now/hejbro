@@ -33,9 +33,12 @@ brainstorm, which is **not** the design spec's D5 (`Generic Postgres core
   Postgres's own grammar. Each entry carries an optional `materialized`
   hint.
 - **`from` widens into a `FromNode` union** — a table reference or a CTE
-  reference. A CTE name is neither a schema nor a table, so it renders
-  unqualified and scope-checks against the enclosing `WITH` list rather
-  than against a declared table.
+  reference — and so does a join's target. A CTE name is neither a schema
+  nor a table, so it renders unqualified and scope-checks against the
+  enclosing `WITH` list rather than against a declared table. Joining is
+  not an extra: the motivating case rejoins the ranked CTE to its source
+  table to carry detail columns, so a CTE usable only in `from` would
+  close half of what this change exists for.
 - **A named row environment.** A CTE reference exposes its own columns —
   including computed ones, which is the whole point: `over(rowNumber(),
   …) as rn` in the CTE, `where(rn <= 3)` outside it. The row type is
