@@ -76,15 +76,17 @@ export const sendPins = async (session: DriverSession): Promise<void> => {
  * this package's own tests import the module directly, so isolation
  * testing is not an argument for a public export.
  *
- * `setupSession` (task 1.5) is a deliberate no-op: the wrapped driver's
- * own member (`@hejbro/pg`'s real one, in production) sends the
- * session-scoped `SET` at checkout time -- exactly the once-per-connection
- * pin this whole path exists to stop relying on. Left inherited, it would
- * still run underneath this decorator (the vanilla driver invokes it once
- * per checked-out physical connection, late-bound, regardless of what
- * wraps it) and reintroduce the failure. The pins ride with every
- * `transaction()`/`execute()` call instead (mirrors the other
- * `session-state: false` driver's own reasoning, `packages/neon/src/http.ts`).
+ * `setupSession` (task 1.5) is a no-op: this path carries its pins per
+ * transaction/execution instead (mirrors the other `session-state: false`
+ * driver's own reasoning, `packages/neon/src/http.ts`), so there is
+ * nothing left for a once-per-connection hook to do. This does **not**
+ * suppress the wrapped driver's own checkout pin -- the vanilla driver
+ * resolves that member on its own object, captured before this decorator
+ * ever runs, so a decorator that returns a new object is never consulted
+ * for it; its session-scoped `SET` still runs at checkout (see #531).
+ * Suppressing it is not needed either: this path's correctness rests on
+ * the transaction-local pins (1.2-1.4) alone, never on the wrapped
+ * driver's own checkout behavior.
  */
 export const poolerDriver = (driver: Driver): Driver => ({
 	...driver,

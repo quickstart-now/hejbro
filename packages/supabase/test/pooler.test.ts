@@ -173,10 +173,17 @@ describe("poolerDriver(driver).execute(compiled) (task 1.4)", () => {
 
 describe("poolerDriver(driver).setupSession (task 1.5)", () => {
 	it("is a deliberate no-op -- the pins ride with every transaction/execute instead (1.3/1.4), never once at checkout time", async () => {
-		// mirrors `@hejbro/pg`'s own real `setupSession`: sends the
-		// session-scoped `SET` at checkout -- exactly the once-per-connection
-		// pin this whole path exists to stop relying on. If `poolerDriver`
-		// left this member inherited, wrapping would still run it.
+		// `underlying.setupSession` mirrors `@hejbro/pg`'s real one (sends
+		// the session-scoped `SET` it would run at checkout) only to give
+		// this test a non-trivial member to prove is not what `wrapped`
+		// sends when called directly. Nobody calls this member in
+		// production, on either driver: `@hejbro/pg`'s own checkoutGuard
+		// resolves its session-setup member on its own object, captured
+		// before this decorator ever runs (#531), and the query layer's
+		// contract never calls a driver's `setupSession` itself either --
+		// only a driver's own connection-acquisition code does. This
+		// no-op is this *value's* own honest content, not a claim that it
+		// suppresses the wrapped driver's real checkout pin.
 		const underlying: Driver = {
 			capabilities: { "interactive-transactions": true, "session-state": true },
 			execute: vi.fn(async () => []),

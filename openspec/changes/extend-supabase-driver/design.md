@@ -202,19 +202,81 @@ properties, not one:
 
    The second row is precisely the failure this path exists to remove.
 
-The kit's blind spot is not asserted from reading the kit alone — task
-1.6 demonstrated it. A hand-built capture in which the pins precede the
-statement that opens the transaction was run through both checks:
+The kit's blind spot is not asserted from reading the kit alone — it was
+demonstrated by mutating the implementation and watching which check
+noticed. Two mutations, run in a detached worktree against the landed
+code:
 
-- handed to the kit as a session-surface observation, it **passes** —
-  the conformance check raises nothing;
-- asserted positionally against the envelope, the same capture **fails**
-  — the first pin's index is below the opening statement's.
+| mutation | envelope-level assertion (1.6) | conformance kit (1.7) |
+|---|---|---|
+| pins moved **after** the caller's statement | fails | fails |
+| pins moved into a **transaction of their own** | fails | **passes** |
 
-The contrast holds, so the second check is not redundant with the first:
-it is the only one of the two that can see this failure. Had both agreed,
-the second check would have been guarding nothing and this section would
-say that instead.
+The second row is the one that earns the division of labor. A driver that
+opens one transaction for its pins and another for the caller's statement
+hands the kit `[pin, pin, caller]` — settings first, caller last, exactly
+what the tier obligation asks for — while the pins apply to a transaction
+that has already ended. That is the second failure the delta names
+("never in a transaction of their own, where the endpoint's connection
+reuse could separate them from the statement they cover"), and only the
+envelope-level check sees it.
+
+The first row matters too, in the other direction: it shows the kit is
+not a rubber stamp. A pin that vanishes or moves after the caller's
+statement is caught by the kit itself, which is what makes 1.7 a real
+regression lock rather than a check that passes by construction.
+
+Two corrections to what this section previously implied, both found in
+review:
+
+1. The **third** failure shape — pins sent *before* the transaction opens
+   — is not reachable by mutating this decorator. The decorator only ever
+   holds the session the wrapped driver's `transaction` hands it, so it
+   has no way to send anything ahead of the opening statement. It stays
+   in the delta as a property the specification forbids, but the mutation
+   that demonstrates the division of labor is the separate-transaction
+   one, not this one.
+2. The test that asserts positions on a **hand-built** statement list is
+   not a defense of the implementation — it stays green under every
+   mutation above, because its subject is a literal, not the code. Its
+   real value is different and worth keeping: it runs the kit against a
+   capture the kit currently accepts, so the day the kit learns to see
+   the envelope, that assertion goes red and tells us this division of
+   labor needs revisiting. It is a tripwire on the kit's own repair
+   (#528), not a guard on this driver.
+
+## The wrapped driver's checkout pin (#531)
+
+Measured in review, on the landed code: one `execute()` through this
+path puts six statements on the wire, in this order.
+
+```
+1  set intervalstyle to 'postgres'; set bytea_output to 'hex'   <- the wrapped driver's session-scoped pin
+2  BEGIN
+3  set local intervalstyle to 'postgres'
+4  set local bytea_output to 'hex'
+5  <the caller's statement>
+6  COMMIT
+```
+
+Statement 1 is the vanilla driver's own once-per-checkout pin, and it
+still runs. The reason is that the vanilla driver resolves its
+session-setup member on **its own object**, so a decorator that returns a
+new object — the shape every preset decorator in this repository uses —
+is never consulted. Replacing the member on the decorated value therefore
+cannot suppress it.
+
+This is recorded rather than fixed, for two reasons. It belongs to
+another package, and this path's correctness does not rest on it: the
+pins that matter are 3 and 4, inside the transaction that carries
+statement 5. What statement 1 costs is one round trip per physical
+checkout and a session setting left on a pooled backend — a state this
+change stopped depending on, which is different from a state it removed.
+
+The gap between that behavior and the contract's own wording (which reads
+as though replacing the member takes effect at every subsequent checkout)
+is filed as #531. This section is the evidence that issue points at, so
+it stays in this document through archiving.
 
 ## Tasks that had no failing stage
 

@@ -71,10 +71,14 @@ redundancy: neither check subsumes the other.
       asserts both the returned rows and those two shapes, and fails
       because `execute` currently passes straight through unpinned.
       Files: those two.
-- [x] 1.5 (~6m) The session-setup member on this path. Whatever 1.2
-      decides, the vanilla driver still invokes this member once per
-      checked-out client, late-bound, so its content on this path is a
-      deliberate choice and is asserted rather than left incidental. Red:
+- [x] 1.5 (~6m) The session-setup member on this path: a no-op, because
+      this path carries its pins per transaction and has nothing to do
+      once per connection. What this does **not** do is suppress the
+      wrapped driver's own checkout pin — measured in review: the vanilla
+      driver resolves that member on its own object, so a decorator that
+      returns a new object never reaches it, and its session-scoped pin
+      still runs. The no-op is the honest content of *this* value's
+      member, not a claim about the value underneath. Red:
       `pooler.test.ts` asserts what `setupSession` sends on this path and
       fails against the inherited implementation. Files: those two.
 - [x] 1.6 (~10m) The two properties the conformance kit cannot see,
@@ -87,11 +91,17 @@ redundancy: neither check subsumes the other.
       pin sent *before* `BEGIN` is discarded by the database with a
       warning and no effect — and neither is visible where 1.7 looks,
       because the opening statement is not among the statements 1.7
-      records. Red: a fixture that emits the pins before `BEGIN` passes
-      1.7 and fails this test; that contrast is the test's whole reason
-      to exist, so check it holds before moving on — if both go green or
-      both go red, this test is guarding nothing and that is a report,
-      not a fix to improvise. Files: those two.
+      records. Red, stated as a mutation of this driver rather than of a
+      literal: send the pins in **a transaction of their own**, before
+      the caller's — 1.7 still passes (settings first, caller last, one
+      execution) while this assertion fails. That contrast is the test's
+      whole reason to exist, so check it holds before moving on; if both
+      go green or both go red, this test is guarding nothing and that is
+      a report, not a fix to improvise. (Pins sent *before* the
+      transaction opens is the delta's other forbidden shape, but this
+      decorator cannot produce it — it only ever holds the session the
+      wrapped driver hands it — so it is not the mutation to test with.)
+      Files: those two.
 - [x] 1.7 (~6m) The conformance kit, called for this path's declared
       tier, with the observation taken at the driver-session surface.
       Red: `pooler.test.ts` calls `assertSessionStateConformance` with
@@ -154,7 +164,7 @@ path a reference page cites, and
 block on the page against this repository's real source — so a snippet
 showing the new option is red until group 2 has landed.
 
-- [ ] 3.1 (~9m) A new "Connecting" section in the Supabase preset
+- [x] 3.1 (~9m) A new "Connecting" section in the Supabase preset
       reference — the page that currently documents this preset and says
       nothing about drivers or endpoints. It carries the
       endpoint-to-capability mapping: which Supabase connection path maps
@@ -164,7 +174,7 @@ showing the new option is red until group 2 has landed.
       section is otherwise unverifiable prose — that failure is the
       signal the page and the code agree. Files:
       `skills/hejbro/references/supabase-preset.md`.
-- [ ] 3.2 (~8m) The failure a wrong declaration produces, in the two
+- [x] 3.2 (~8m) The failure a wrong declaration produces, in the two
       halves a reader needs, in the same section: declaring the session
       path on a transaction-mode endpoint loses the pins intermittently —
       under load, in a value's shape, with no error — while declaring the
@@ -175,7 +185,7 @@ showing the new option is red until group 2 has landed.
       (detect the endpoint; change prepared-statement behavior), so a
       reader meets those at their source rather than as a surprise.
       Files: that file.
-- [ ] 3.3 (~5m) One pointer line in the query-layer reference, where the
+- [x] 3.3 (~5m) One pointer line in the query-layer reference, where the
       driver surface is actually documented today, sending a reader to
       the section 3.1 creates. Without it a reader who starts from the
       driver's own page has no route to the mapping. Red: no test covers
@@ -184,7 +194,7 @@ showing the new option is red until group 2 has landed.
       `skills/hejbro/references/query-layer.md` — **the one file in this
       change outside this package's ownership; keep the diff to that
       single line.**
-- [ ] 3.4 (~5m) The changeset: `minor`, naming this package, one file.
+- [x] 3.4 (~5m) The changeset: `minor`, naming this package, one file.
       Red: `pnpm changeset status` fails the PR gate without it. Files:
       `.changeset/<name>.md`.
 

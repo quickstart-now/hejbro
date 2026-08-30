@@ -66,13 +66,19 @@ existing single-argument surface keeps its behavior.
   stating a fact about the endpoint their connection string already
   chose. The driver reads no connection string, inspects no pool option,
   and sends no probe statement to find out.
-- **Pins move to transaction-local scope on the pooler path.** The
-  vanilla driver's once-per-checkout pin is bypassed on this path — the
-  preset replaces the driver value's own session-setup member, which the
-  contract already specifies is invoked late-bound at every checkout —
-  and the pins are sent as the first statements inside the same
-  transaction as the caller's statement, so no statement can run on a
-  backend that did not receive them.
+- **Pins move to transaction-local scope on the pooler path.** They are
+  sent as the first statements inside the same transaction as the
+  caller's statement, so no statement can run on a backend that did not
+  receive them. This path stops **depending** on the wrapped driver's
+  once-per-checkout pin; it does not claim to suppress it. The preset's
+  own session-setup member becomes a no-op, which is what a driver whose
+  checkout path resolves that member through the decorated value would
+  read — but a driver that captured its own member before decoration
+  keeps sending its session-scoped pin, and the vanilla driver is one of
+  those. The cost is one extra round trip per physical checkout and a
+  session setting left on a pooled backend; the correctness of this path
+  does not rest on either, which is the whole point of carrying the pins
+  per transaction.
 - **A single-statement execution opens its own transaction on the pooler
   path.** Transaction-local pins require a transaction to be local to;
   the alternative — session-scoped pins — is the failure this path
