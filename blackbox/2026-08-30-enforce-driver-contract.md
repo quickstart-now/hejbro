@@ -27,7 +27,7 @@ Refs:
 - packages/supabase/test/storage-bucket-kind.test.ts @ blob 4eecb1c5b1c286722e26f3927f7eaa0912ed85ae
 - packages/supabase/tsconfig.json @ blob 8c31a03f139b6bd2095caf2f48239e9581a01442
 - packages/supabase/vitest.config.ts @ blob 3f09b63262aeeaadc8f7acdf82ba1c7343e94f8b
-- README.md @ blob 097a8fca464e7e090777a6f101c98786327f7886
+- README.md @ blob acc7ac075d63778e4ef3695f551078eeb735360d
 - scripts/check-bans.mjs @ blob c51e2e1959b0202a0d8ea96e726805b4b363c627
 - skills/hejbro/references/dsl-cheatsheet.md @ blob 385c06ee0ede87ad745893151630bf9ce9f6a328
 - skills/hejbro/references/query-layer.md @ blob fc1765f91397a443c14e6327d1de717a31324607
@@ -37,6 +37,15 @@ Refs:
 `tasks.md` after the previous pin was taken — the same class of
 staleness the first re-pin closed, caught the same way, before handing
 the SHA off rather than after.)
+
+(Re-pinned a third time, after `git rebase upstream/dev` onto `9b9f943`
+(#507/#509): `README.md` is the only path this rebase actually touched
+in content (its own CRAP-block `measured at` SHA changed to this
+branch's own rebased commit; the scanned-function count, 1521, did not
+move). Verified with the reviewer's own `dc-blobs.sh` (31 ok, 1 stale,
+0 missing before this fix), reproduced here rather than re-derived, to
+close the loop with the same instrument that will re-verify it. No path
+moved, so no pin needed re-targeting, only re-hashing.)
 
 (Drafting note, recorded rather than silently omitted: this entry is
 written by the implementer session from committed artifacts —
