@@ -29,5 +29,6 @@ operations:
       - Review is spec-bound — the reviewer reads the delta spec scenarios against the implementation (openspec show --diff); divergence found in review escalates like any tripwire
   archive:
     guidance:
+      - "Adversarial spec-only review gates the archive (D106): after the change's PRs merge and before archiving, a context-free session — zero piece context, never a piece-team member, a different model family from the piece's planner when practical — reads ONLY the change's delta specs and the public surface (skills/hejbro, exported API, generated artifacts), never the proposal rationale, design notes, or implementation reasoning. A finding that a delta scenario contradicts shipped behavior blocks the archive until repaired or owner-ruled; every other finding files as a tracked sub-issue of the phase that will handle it. The evaluator's report lands as evaluation.md in the change directory so the archive preserves it"
       - Append one line per task to openspec/task-times.csv before archiving
       - Close the tracking issue and confirm the durations landed
