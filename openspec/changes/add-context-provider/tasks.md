@@ -73,7 +73,7 @@ Files: `packages/query/src/db/db.ts`,
 Files: `packages/supabase/test/context-provider.test.ts` (new),
 `skills/hejbro/references/`.
 
-- [ ] 2.1 (~8m) The adapter is the existing builders and nothing else: a
+- [x] 2.1 (~8m) The adapter is the existing builders and nothing else: a
       provider whose resolver returns `asUser(claims)` for a request
       carrying verified claims and `asAnon()` otherwise applies through
       the generic mechanism. Red:
@@ -82,7 +82,7 @@ Files: `packages/supabase/test/context-provider.test.ts` (new),
       preset-side mechanism". **Tripwire**: if this task needs new code
       under `packages/supabase/src/`, the generic shape is wrong — stop
       and escalate, do not add the code.
-- [ ] 2.2 (~7m) The skill reference documents the provider surface (a
+- [x] 2.2 (~7m) The skill reference documents the provider surface (a
       changed public surface is a changed user contract, AGENTS.md):
       registration, that an explicit `as()` wins, that the resolver runs
       once per execution uncached, and that a throwing resolver

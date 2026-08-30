@@ -1,6 +1,6 @@
 ---
 name: hejbro
-description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — when generating/verifying migrations, when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()), when writing typed queries against a declared schema (db(), the select/insert/update/deleteFrom chain, db.fn), when running a query under an RLS execution context (db.as, asUser/asAnon), when asserting at startup that the connected database actually matches its declarations (assertSchema), or when adopting hejbro into an existing (brownfield) database.
+description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — when generating/verifying migrations, when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()), when writing typed queries against a declared schema (db(), the select/insert/update/deleteFrom chain, db.fn), when running a query under an RLS execution context (db.as, asUser/asAnon) or registering a context provider so every execution applies one automatically, when asserting at startup that the connected database actually matches its declarations (assertSchema), or when adopting hejbro into an existing (brownfield) database.
 version: 0.2.0
 license: MIT
 ---
@@ -21,6 +21,7 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 7. `hejbro verify` re-derives the migration chain from checked-out files only (no live DB) — run it in CI. The local Docker round-trip (`pnpm roundtrip`) is the deeper, pre-merge check. `hejbro check` is the one command that does read a live database (read-only, three-way exit code 0/1/2) — see `references/brownfield-adoption.md`.
 8. `db(schema, driver)` builds a typed handle straight from the same declarations — `select`/`insert`/`update`/`deleteFrom` chains stay inert until awaited, and `.compile()` never touches a driver.
 9. `db.as(context)` runs statements under an explicit role/session context (RLS); a role outside the declared whitelist fails immediately, before anything reaches the database.
+10. `db(schema, driver, { context })` registers a resolver instead: every execution surface applies the resolved context automatically. An explicit `db.as(context)` still always wins and never calls the resolver; a throwing resolver propagates unchanged rather than running uncontexted.
 
 ## References
 
