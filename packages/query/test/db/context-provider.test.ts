@@ -123,6 +123,27 @@ describe("db() context provider -- 1.2 the resolution primitive", () => {
 		expect(sentPerTransaction[0]?.[2]?.sql).toContain("posts");
 	});
 
+	it("registering a provider leaves the statement's own sql and params byte-identical -- only the wrapping around it differs", async () => {
+		// a real bound parameter (not an empty-params statement), so
+		// "unchanged" is a meaningful claim about both fields, not a
+		// vacuous pass on an always-empty params array.
+		const statement = select(posts).where(eq(posts.status, "published"));
+
+		const unprovided = recordingTransactionalDriver();
+		await db(appSchema, unprovided.driver).execute(statement);
+
+		const provided = recordingTransactionalDriver();
+		await db(appSchema, provided.driver, {
+			context: () => ({ role: roleName("grant_reader") }),
+		}).execute(statement);
+
+		// role only, no settings -- role statement then the statement itself.
+		expect(provided.sentPerTransaction[0]).toHaveLength(2);
+		expect(provided.sentPerTransaction[0]?.[1]).toEqual(
+			unprovided.topLevelSent[0],
+		);
+	});
+
 	it("an undeclared resolved role opens no transaction at all -- measured as driver.transaction's own call count, never by searching for begin text (recording-driver.ts records no begin/commit text at all)", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();
 		const handle = db(appSchema, driver, {
@@ -247,14 +268,25 @@ describe("db() context provider -- 1.2 nested-transaction guard is not silently 
 });
 
 describe("db() context provider -- 1.5 precedence and the error path", () => {
-	it("an explicit as() never calls the resolver", async () => {
-		const { driver } = recordingTransactionalDriver();
+	it("an explicit as() runs under exactly the context named at the call site, and never calls the resolver", async () => {
+		const { driver, sentPerTransaction } = recordingTransactionalDriver();
+		// the resolver names a DIFFERENT role than the explicit call below --
+		// a positive assertion on the role actually sent, not only "the
+		// resolver wasn't called": a mutant that drops the explicit context
+		// and runs the statement unscoped (never opening a transaction at
+		// all) would still leave the resolver uncalled, so that negative
+		// check alone cannot tell a fail-open apart from the correct
+		// behavior (reviewer finding, 706/706 green under that mutant).
 		const resolver = vi.fn(() => ({ role: roleName("grant_reader") }));
 		const handle = makeHandle(driver, resolver);
 
-		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+		await handle.as({ role: roleName("policy_reader") }).execute(select(posts));
 
 		expect(resolver).not.toHaveBeenCalled();
+		expect(driver.transaction).toHaveBeenCalledTimes(1);
+		expect(sentPerTransaction[0]?.[0]?.sql).toBe(
+			'set local role "policy_reader"',
+		);
 	});
 
 	it("a throwing resolver opens no transaction, and its exact error propagates unchanged", async () => {
