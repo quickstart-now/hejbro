@@ -189,9 +189,9 @@ implements. Nothing here depends on which wins — the observation above
 satisfies both — and the kit belongs to the query layer, so this is
 reported rather than repaired inside this change.
 
-## Follow-up worth registering
+## Follow-up: the conformance kit (#528)
 
-Two items for the conformance kit's owner, both out of scope here:
+Two items, both out of scope here and both tracked on #528:
 
 1. **The kit is stricter than its own specification.** The requirement
    says a `false`-tier check verifies that some statement precedes the
@@ -212,6 +212,11 @@ Two items for the conformance kit's owner, both out of scope here:
 The second shape now exists, so there is more evidence than when the kit
 was written; whether two shapes are enough to generalize on, or a third
 is wanted first, is the owner's call.
+
+One ordering note belongs with them: this change makes the pooler path's
+tests call the kit, so the day the kit's own tier check is tightened or
+relaxed, this package is one of the callers that moves with it. The
+repair is cheaper before a third driver arrives than after.
 
 ## Open contract details
 
