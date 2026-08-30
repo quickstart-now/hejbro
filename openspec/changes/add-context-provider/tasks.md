@@ -96,7 +96,7 @@ Files: `packages/cli/src/index.ts`, `packages/cli/test/exports.test.ts`,
 
 - [x] 3.1 (~9m) Re-export the provider type from the `hejbro` facade
       with its export pin, and land the bookkeeping: one `minor`
-      changeset (D59, the five published packages are a fixed group),
+      changeset (D59, the six published packages are a fixed group),
       README CRAP block (`pnpm check:crap`), task-time rows plus their
       badges (`pnpm check:tasktime`). Red: `packages/cli/test/
       exports.test.ts` — the provider type is re-exported.

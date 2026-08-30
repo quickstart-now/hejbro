@@ -3,7 +3,7 @@
 ---
 
 Pre-0.2.0 hardening of the query surface (the `harden-query-surface`
-change; the fixed group moves all five packages). A declared index's
+change; the fixed group moves all six packages). A declared index's
 `.on(...)` column must now belong to the table declaring the index —
 a plain column reference resolved from another table's declaration
 fails with `foreign-column-ref`, naming the foreign column, instead of
