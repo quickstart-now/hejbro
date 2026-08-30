@@ -143,6 +143,13 @@ Group 4 owns `.changeset/`, `README.md`, and
 `openspec/task-times.csv`. A task that appears to need another group's
 file goes back to the planner instead of into the diff.
 
+**`tasks.md` itself is the planner's file and no group owns it.** The
+planner edits it, the implementer never does, and ticks are applied only
+after a group's verdict passes — riding along in the implementer's next
+commit. So this file appearing in *any* handoff tag is expected and is
+never an ownership violation; it is the one path by which a planner edit
+reaches the branch.
+
 Groups 1–3 are parallel-safe, but one implementer works them serially in
 this order: **3.1 first**, then group 1, group 2, the rest of group 3,
 group 4. Task 3.1 leads because its result can delete later work, and an
@@ -200,6 +207,15 @@ Each task's start and end is a `date -u` run **at that moment**, reported
 as the pair. "About 8 minutes" reconstructed afterwards is not a
 measurement. The planner writes the differences into
 `openspec/task-times.csv` when a group completes.
+
+**Who ticks the boxes.** This file belongs to no group, so: the
+implementer never edits it, the planner ticks a task only **after the
+group's review verdict passes**, and that edit rides the implementer's
+next commit. Ticking before a verdict would put "this passed" into the
+one file that is the progress record — a false entry in the only ledger
+anyone reads. `task-times.csv` is written at the same moment, but it is
+group 4's file, so those rows land with group 4 alongside the README
+refresh they invalidate.
 
 ## 1. The kind-change guards say what `change.kind` already carries
 
@@ -434,6 +450,13 @@ issue's own headline example, so this is the likeliest place to be
 wrong. That gap is closed in-repo by 2.1's exhaustive iteration, not by
 these baselines; the baselines deliberately stay measurements of real
 artifacts rather than of invented ones.
+
+**The probe re-measurement is the reviewer's step, not the
+implementer's.** It is a gate, and gates are never tasks; the
+implementer neither holds the probe patch nor should build one. A
+substitute probe, however careful, makes the pre and post
+incomparable — which is the whole reason the patch is kept byte-identical
+across both runs.
 
 Re-measure with the **byte-identical probe patch** used for the base run,
 in the same order (`pnpm build --force` again after applying the probe,
