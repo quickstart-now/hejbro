@@ -15,6 +15,16 @@ declared, the driver SHALL keep the capability set it declared before
 the option existed, so an existing caller's declaration is never changed
 by the arrival of a second path.
 
+A declared value the driver does not recognize SHALL be rejected when
+the driver value is constructed, with an explicit coded error naming the
+values that are recognized. It SHALL NOT fall back to any path,
+including the default one: a misspelled declaration that silently
+selects the session path would restore exactly the intermittent,
+error-free, wrong-value-shape failure the declaration exists to remove,
+and would do so for the caller who tried hardest to be explicit. The
+check runs once, where the driver is constructed, and never on the
+execution path.
+
 #### Scenario: A declared path fixes the capability set
 - **WHEN** a driver is built for a provider whose endpoints share one
   client type, with the path stated at construction
@@ -38,6 +48,13 @@ by the arrival of a second path.
 - **WHEN** a driver is built without stating a path
 - **THEN** it declares exactly the capability set it declared before the
   path could be stated at all
+
+#### Scenario: An unrecognized declared path is refused at construction
+- **WHEN** a driver is built with a path value the driver does not
+  recognize — a caller with no type checking, or a misspelling
+- **THEN** construction fails with a coded error listing the recognized
+  values, no driver value is produced, and no path is selected on the
+  caller's behalf
 
 ## MODIFIED Requirements
 

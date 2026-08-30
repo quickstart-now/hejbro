@@ -25,29 +25,33 @@ redundancy: neither check subsumes the other.
 
 ## 1. The pooled-transaction path
 
-- [ ] 1.1 (~7m) [design] `poolerDriver(driver)` in a new module, returning
-      the wrapped driver with its capability declaration replaced by an
-      explicit constant naming both keys (`interactive-transactions:
-      true`, `session-state: false`) — no spread of the wrapped driver's
-      own capabilities, so a future key is a type error here rather than
-      a silent inheritance. **[design]**: the exported function's name and
-      whether it is exported from the package entry at all, or reachable
-      only through the factory option (group 2). Red: `pooler.test.ts`
-      asserts the returned driver's `capabilities` equals that pair and
-      fails — the module does not exist. Files:
-      `packages/supabase/src/pooler.ts`,
+- [ ] 1.1 (~7m) `poolerDriver(driver)` in a new module — **module-internal,
+      not exported from the package entry**: the factory option (group 2)
+      is the single way a caller reaches this path, and this package's own
+      tests import the module directly, which is why isolation testing is
+      not an argument for a public export. It returns the wrapped driver
+      with its capability declaration replaced by an explicit constant
+      naming both keys (`interactive-transactions: true`, `session-state:
+      false`) — never a spread of the wrapped driver's own capabilities,
+      so a future key added to the contract is a type error here rather
+      than a silently inherited value. Red: `pooler.test.ts` asserts the
+      returned driver's `capabilities` equals that pair and fails — the
+      module does not exist. Files: `packages/supabase/src/pooler.ts`,
       `packages/supabase/test/pooler.test.ts`.
-- [ ] 1.2 (~8m) [design] The transaction-local pin statements, as an
-      explicit constant in this module. **[design]**: whether the preset
-      restates the pins (`set local intervalstyle …`, `set local
-      bytea_output …`) or delegates to the wrapped driver's own
-      session-setup member. Delegation reuses the wrapped driver's
-      knowledge but sends session-scoped `SET`, which is the failure this
-      path exists to remove; restating them duplicates a list the vanilla
-      driver also owns, which is what the other `session-state: false`
-      driver already does. Decide before code. Red: `pooler.test.ts`
-      asserts the exact pin statements sent for one execution, in order,
-      and fails — nothing sends them. Files: those two.
+- [ ] 1.2 (~8m) The transaction-local pin statements, as an explicit
+      constant in this module — **restated here, not delegated** to the
+      wrapped driver's session-setup member, because that member sends
+      session-scoped `SET`, which is the failure this path exists to
+      remove and which leaks state onto a pooled backend besides. The
+      restatement duplicates a list the vanilla driver also owns, so the
+      drift trigger is named rather than assumed: if this list stops
+      matching what the value conversion needs, **1.4's value-shape
+      assertions go red** — an `interval` read back as the client
+      library's default shape instead of the pinned one, and a `bytea`
+      read back in the unpinned encoding. That is the test to look at
+      when this constant is edited. Red: `pooler.test.ts` asserts the
+      exact pin statements sent for one execution, in order, and fails —
+      nothing sends them. Files: those two.
 - [ ] 1.3 (~8m) `transaction(callback)`: the pins are sent as the
       transaction's **first** statements, on the same session the
       callback receives, and the driver opens no second transaction
@@ -55,12 +59,17 @@ redundancy: neither check subsumes the other.
       session statements for one `transaction()` call begin with the pins
       and that the wrapped driver's `transaction` was entered exactly
       once; it fails because the pins are absent. Files: those two.
-- [ ] 1.4 (~8m) `execute(compiled)`: opens its own transaction through
+- [ ] 1.4 (~9m) `execute(compiled)`: opens its own transaction through
       the wrapped driver, sends the pins, then the caller's statement,
       and returns the caller's rows — never the pins' own empty results.
-      Red: `pooler.test.ts` asserts a single `execute` returns the rows
-      the stub gave the last statement, and fails because `execute`
-      currently passes straight through unpinned. Files: those two.
+      Carries the **value-shape assertions 1.2 names as its drift
+      trigger**: an `interval` and a `bytea` read back through this path
+      arrive in the shapes the pinned settings produce, so a pin list
+      that stops matching what the conversion layer needs fails here by
+      name rather than somewhere downstream. Red: `pooler.test.ts`
+      asserts both the returned rows and those two shapes, and fails
+      because `execute` currently passes straight through unpinned.
+      Files: those two.
 - [ ] 1.5 (~6m) The session-setup member on this path. Whatever 1.2
       decides, the vanilla driver still invokes this member once per
       checked-out client, late-bound, so its content on this path is a
@@ -91,14 +100,16 @@ redundancy: neither check subsumes the other.
 
 ## 2. The factory option
 
-- [ ] 2.1 (~7m) [design] `supabaseDriver`'s second parameter. **[design]**:
-      the option key's spelling and its value type — a string union
-      naming the endpoint kind, or a boolean flag — and what an unknown
-      value does (a type error only, or a runtime rejection with a code
-      and a `Next:` clause). Red: `driver.test.ts` asserts the pooler
-      option produces the pooled-transaction capability pair and fails —
-      the factory takes one argument. Files:
-      `packages/supabase/src/driver.ts`,
+- [ ] 2.1 (~7m) `supabaseDriver`'s optional second parameter: an options
+      object whose endpoint key takes a **string union naming the
+      endpoint kind**, never a boolean — a boolean's name becomes a lie
+      the moment a third endpoint exists, and the union reads at the call
+      site as the fact it states. Both kinds are namable (the
+      session-keeping one and the transaction-mode pooler); omitting the
+      option means the session-keeping one, so an existing caller is
+      unaffected. Red: `driver.test.ts` asserts the pooler value produces
+      the pooled-transaction capability pair and fails — the factory
+      takes one argument. Files: `packages/supabase/src/driver.ts`,
       `packages/supabase/test/driver.test.ts`.
 - [ ] 2.2 (~6m) The one-argument call is unchanged: same contributed
       roles, same capability declaration as before this change, same
@@ -111,11 +122,25 @@ redundancy: neither check subsumes the other.
       replacement. Red: `driver.test.ts` asserts `contributedRoles` on
       the pooler-path driver and fails if the pooler module returns
       before the roles are applied. Files: those two.
-- [ ] 2.4 (~5m) The package entry exports whatever 1.1 and 2.1 decided is
-      public, and nothing more. Red: `test/entry.test.ts`-style import
-      assertion fails for the newly public name. Files:
-      `packages/supabase/src/index.ts`,
-      `packages/supabase/test/exports.test.ts`.
+- [ ] 2.4 (~6m) An unrecognized endpoint value is refused **where the
+      driver is constructed**, with a coded error (`unknown-pooler-mode`)
+      whose `Next:` clause lists the values that are recognized. This is
+      not a redundant check on top of the type: it is the only check a
+      caller without type checking gets, and without it a misspelling
+      falls through to the session path — reproducing, for the caller who
+      tried hardest to be explicit, exactly the silent wrong-value-shape
+      failure this change exists to remove. The comparison happens once,
+      at construction, never on the execution path. Red: `driver.test.ts`
+      asserts the code and the listed values for a misspelled value and
+      fails — the value currently falls through to the default. Files:
+      those two.
+- [ ] 2.5 (~5m) The package entry exports the option's own type where a
+      caller needs to name it, and nothing else new — the pooler driver
+      itself stays module-internal (1.1). Red: the entry's export
+      assertion fails for the newly public type. Files:
+      `packages/supabase/src/index.ts`, this package's existing entry or
+      exports test (its real filename is confirmed at the task, and this
+      line is corrected to match rather than a new file being created).
 
 ## 3. What users read
 
@@ -137,19 +162,20 @@ redundancy: neither check subsumes the other.
       Red: `pnpm changeset status` fails the PR gate without it. Files:
       `.changeset/<name>.md`.
 
-## Open contract details for the owner
+## Settled contract details
 
-Raised before code, per the [design] marks above:
+The three details raised before code, and how they were settled:
 
-1. **1.1 / 2.4** — is the pooled-transaction driver a public export in
-   its own right, or reachable only through the factory option? A public
-   export is a second way to build the same thing; an option keeps one
-   entry point but makes the driver harder to test in isolation.
-2. **1.2** — restate the pins in the preset, or delegate to the wrapped
-   driver's session-setup member? Delegation inherits the wrong scope
-   (`SET`, not `SET LOCAL`); restating duplicates a list the vanilla
-   driver owns, exactly as the other `session-state: false` driver
-   already does.
-3. **2.1** — the option key's spelling and value type, and whether an
-   unknown value fails at compile time only or also at run time with a
-   coded error.
+1. **Reachability (1.1, 2.5)** — the pooled-transaction driver is
+   module-internal; the factory option is the one entry point. Testing
+   it in isolation is not a reason to export it, because this package's
+   own tests import the module directly.
+2. **The pins (1.2)** — restated in the preset, not delegated. Delegation
+   would send session-scoped `SET`, which is the failure this path
+   removes, and would leave that state on a pooled backend afterwards.
+   The duplication's drift trigger is named in 1.2 and lives in 1.4.
+3. **The option (2.1, 2.4)** — a string union naming the endpoint kind,
+   plus a construction-time rejection of an unrecognized value with a
+   coded error. The runtime check is not doubling the type check: it is
+   the only check an untyped caller gets, and the failure it prevents is
+   a silent downgrade to the session path.

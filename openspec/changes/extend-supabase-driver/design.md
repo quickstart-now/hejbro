@@ -198,7 +198,14 @@ properties, not one:
 
    The second row is precisely the failure this path exists to remove.
 
-Both are therefore asserted directly in this package's own tests,
+The kit's blind spot is not asserted from reading the kit alone — task
+1.6 demonstrates it, and the demonstration is recorded here when it
+lands: a fixture that emits the pins before the transaction opens is run
+through both checks, and the result recorded is which one passed and
+which one failed. If both agree, the second check is guarding nothing
+and this section says so instead.
+
+Both properties are therefore asserted directly in this package's tests,
 against a capture that **does** show the envelope, and the assertion is
 positional: the pins follow the statement that opens the transaction and
 precede the caller's own. This is the division of labor the boundary
