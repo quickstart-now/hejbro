@@ -7,6 +7,7 @@ import {
 	uuid,
 } from "@hejbro/core";
 import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
+import { registerSupabaseKinds, storageBucket } from "@hejbro/supabase";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type {
 	AssertSchemaHandle,
@@ -339,6 +340,55 @@ describe("assertSchema / 2.4 the registry is an explicit parameter", () => {
 		);
 		expect(report.compared.map((entry) => entry.identity)).not.toContain(
 			"widget",
+		);
+	});
+});
+
+/**
+ * The same two 2.4 scenarios again, this time through a real preset
+ * (`@hejbro/supabase`'s storage bucket) rather than the toy kind above --
+ * the toy kind proves the mechanism; this proves the mechanism is the
+ * exact path a real user takes (delta scenarios name "a preset's
+ * declaration"/"the registry its preset contributes" explicitly).
+ * `packages/supabase` is read-only here, an existing devDependency of
+ * `packages/cli`.
+ */
+describe("assertSchema / 2.4 through a real preset (@hejbro/supabase storage bucket)", () => {
+	it("without the supabase registry, a storage bucket declaration is refused outright, before the catalog is read", async () => {
+		const avatars = storageBucket("avatars");
+		const { session, calls } = countingSession(matchingCatalog());
+		const handle: AssertSchemaHandle = {
+			schema: { posts, avatars },
+			driver: session,
+		};
+
+		expect.assertions(4);
+		try {
+			await assertSchema(handle);
+		} catch (error) {
+			expect(error).toBeInstanceOf(HejbroError);
+			expect((error as HejbroError).code).toBe("unowned-declaration");
+			expect((error as { readonly cause?: unknown }).cause).toBeUndefined();
+		}
+		expect(calls).toHaveLength(0);
+	});
+
+	it("supplying registerSupabaseKinds's registry turns the refusal into a stated boundary", async () => {
+		const avatars = storageBucket("avatars");
+		const registry = createDefaultRegistry();
+		registerSupabaseKinds(registry);
+		const handle = handleOf({ posts, avatars }, matchingCatalog());
+
+		const report = await assertSchema(handle, { registry });
+
+		expect(report.notCompared).toEqual([
+			{
+				identity: "avatars",
+				reason: expect.stringContaining("Storage"),
+			},
+		]);
+		expect(report.compared.map((entry) => entry.identity)).not.toContain(
+			"avatars",
 		);
 	});
 });
