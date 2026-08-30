@@ -1,10 +1,32 @@
-Refs: (left empty deliberately -- filled in after the group-6 commit
-lands, per blackbox/README.md's own pin-timing rule: a blob pinned
-before the last commit can silently point at an intermediate state a
-squash merge discards, and no gate catches a stale pin. Hashes taken
-and cross-checked against `git rev-parse HEAD:<path>` immediately after
-that commit, reported alongside it -- this file's own path is never
-included, since it cannot pin its own hash.)
+Refs:
+- .changeset/add-assert-schema.md @ blob 7bc31f24ea5178c7deef769333dfd60dd23cebed
+- openspec/changes/extend-query-runtime/issues.md @ blob 85f13d11267423908ff1bb25761d0d1bfc78f3fb
+- openspec/changes/extend-query-runtime/measurement.md @ blob 6c00be28cb949f8a960e1e0e7f497268300d531e
+- openspec/changes/extend-query-runtime/proposal.md @ blob 7be4ff7f4ce5e63dfc89d61e0c917cc699043c16
+- openspec/changes/extend-query-runtime/specs/query-execution/spec.md @ blob 2d8b792ced31ef6e697bb838b4d293132d24133d
+- openspec/changes/extend-query-runtime/tasks.md @ blob a6379d5a8b6513c866a569d1e1bf18ca28b65f4a
+- openspec/task-times.csv @ blob 558ed65318c5741ad2b1eb3da4c5792d4e42591e
+- packages/cli/src/assert-schema.ts @ blob 5fab37ba6b36c00b3b54d82a84f65f0d13c39dfc
+- packages/cli/src/index.ts @ blob 1a191f594aee4fe43b2a0a15a7993a17bbd7461f
+- packages/cli/test/assert-schema-imports.test.ts @ blob ff182161c5ebcb33cc4e4891975209d74693dc80
+- packages/cli/test/assert-schema-live.integration.test.ts @ blob 9fd5d3fbafe08618745163aebf927df125733179
+- packages/cli/test/assert-schema.test.ts @ blob ca0f9e5f3c15a2725c3a1f43e535620335f3cfaf
+- packages/cli/test/exports.test.ts @ blob b73868fef717a1e6caeab183c8103a3e56d2f8e5
+- packages/pg/test/prepared-statement.bench.integration.test.ts @ blob 55579942e3a75d0f3630c634a5aafd20f2acf753
+- packages/query/src/db/db.ts @ blob 184b829b800dd9527b9727b55f1c3a694c3cf037
+- packages/query/test/db/db.test.ts @ blob 166e1d6371580dfef8ed14fd1b7330f7a01c549a
+- packages/query/test/types/chain-types.test.ts @ blob 14d85770ef36048f4e108a3dc04b781245aee409
+- README.md @ blob 99f5562c97121fd9384fb15f2965a64bfc2b15e7
+- skills/hejbro/references/query-layer.md @ blob e680b3291a83853a56577a0c521f174c9300fd97
+
+(Taken from `git rev-parse HEAD:<path>` immediately after the group-6
+commit (`49aa375`), each cross-checked against `git hash-object
+<path>` on the same, clean working tree -- all 19 matched, `ok`, no
+mismatch. This file's own path is not included, since it cannot pin
+its own hash; the drafting note below has the same reasoning
+`blackbox/README.md` states for why intermediate-state blobs are
+unsafe to pin -- squash discards them, and no gate catches a stale
+pin.)
 
 (Drafting note, recorded rather than silently omitted: this entry is
 written by the implementer session from committed artifacts —
