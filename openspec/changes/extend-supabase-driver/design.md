@@ -285,8 +285,11 @@ value's own hook member — late-bound, so a decorator that replaces or
 wraps that member takes effect on every subsequent checkout", and its
 scenario *A wrapped session-setup hook takes effect at checkout* says the
 same. Neither distinguishes assigning onto the driver value from building
-a new value out of it, and every preset in this repository does the
-latter. Whoever takes #531 decides which of the two the contract means —
+a new value out of it, and the only preset decorators in this repository
+— `supabaseDriver` and the pooler path's own, both in
+`@hejbro/supabase` — do the latter. (The other preset builds its driver
+objects outright rather than wrapping one, so it never meets this
+question; the sample is small, and saying so is part of the evidence.) Whoever takes #531 decides which of the two the contract means —
 narrowing the sentence, or making the vanilla driver resolve through the
 value it hands back — but the starting point is a sentence that covers
 one pattern while the repository's presets use the other.
