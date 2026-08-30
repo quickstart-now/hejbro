@@ -193,6 +193,13 @@ place to keep a cause and belongs to a different moment. A caller who
 already catches errors from executing statements catches these the same
 way.
 
+What a failure carries SHALL be nameable. The per-object findings that
+travel on a divergence are part of the contract, so the type of one is
+exported under the assertion's own naming — structurally the shape the
+comparison already produces, not a copy of it, and named for this
+surface because a type first published here takes this surface's name
+rather than the command's.
+
 Every failure the assertion raises SHALL carry a `code`, and the `code`
 is what a caller reads. The error's class is not part of the contract: a
 propagated failure keeps whatever class it was raised with, because that

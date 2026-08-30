@@ -792,13 +792,19 @@ const report = await assertSchema(handle);
 // see "Errors" below)
 ```
 
-Five exported types carry this surface: `AssertSchemaHandle` (`{schema,
+Six exported types carry this surface: `AssertSchemaHandle` (`{schema,
 driver}`, the minimal structural slice of a `db()` handle this needs),
 `AssertSchemaOptions` (`{registry?, allowNotCompared?}`),
 `AssertSchemaEntry` (`{identity}`, one compared declaration),
 `AssertSchemaNotComparedEntry` (`AssertSchemaEntry` plus `reason` and an
-optional `code`), and `AssertSchemaReport` (`{compared, notCompared}`,
-what a successful call resolves to).
+optional `code`), `AssertSchemaReport` (`{compared, notCompared}`, what
+a successful call resolves to), and `AssertSchemaFinding` (`{identity,
+error}`, one entry of the `findings` array an `assert-schema-diverged`
+throw carries — see "Errors" below). `AssertSchemaFinding` is a type
+alias, not a copy: it is structurally the same shape `hejbro check`'s
+own comparison already produces, named under this surface's own
+vocabulary because a type never published before takes the name of the
+surface that first publishes it, not the command's.
 
 **Catch by `code`, never by the error's class.** A thrown error's class
 is not part of this function's contract — only `.code` is (the same
@@ -838,7 +844,7 @@ try {
 
 | `code` | When |
 |---|---|
-| `assert-schema-diverged` | At least one compared declaration doesn't match the live catalog — the message lists each diverging finding, quoted verbatim from the same comparison `hejbro check` uses (a quoted line may itself say to rerun that command; that instruction belongs to the quote, not to this call). |
+| `assert-schema-diverged` | At least one compared declaration doesn't match the live catalog — the message lists each diverging finding, quoted verbatim from the same comparison `hejbro check` uses (a quoted line may itself say to rerun that command; that instruction belongs to the quote, not to this call). The same findings are also attached as `findings: ReadonlyArray<AssertSchemaFinding>` on the thrown error, for a caller that wants the structured per-object data rather than parsing the message. |
 | `assert-schema-not-compared` | At least one declaration should have been compared and couldn't (a registered kind with no comparator), or the schema module declares nothing at all — `options.registry` (for the former) or actual declarations (for the latter) are the fix; `options.allowNotCompared: true` opts out of failing on this specific cause without silencing a real divergence. A kind that states none of its objects is ever comparable (e.g. a kind with no catalog-visible equivalent) never triggers this on its own — only a comparison that *should* have run and could not does. |
 | `assert-schema-catalog-unreadable` | Reading the database catalog itself failed (e.g. the connected role can't read `pg_catalog`) — the underlying failure is on `cause`. |
 
@@ -954,8 +960,10 @@ const yourDriver: Pick<Driver, "transaction"> = {
   (`supabaseDriver`), `packages/core/src/types/assert-no-nulls.ts`
   (`assertNoNulls`), `packages/cli/src/index.ts` (the `sql` shadow, lines
   23-24), `packages/cli/test/exports.test.ts` (the shadow pinned by test,
-  lines 38-50 and 52-69),
-  `packages/cli/src/assert-schema.ts` (`assertSchema`, the five exported
+  lines 38-50 and 52-69; `AssertSchemaFinding`'s own presence on the
+  public entry, type-pinned rather than runtime-probed since a type
+  alias has no `typeof` to check),
+  `packages/cli/src/assert-schema.ts` (`assertSchema`, the six exported
   types, the three `assert-schema-*` codes, the propagate/translate
   split).
 - Tests: `packages/cli/test/assert-schema.test.ts` (surface, causes

@@ -65,6 +65,22 @@ export type AssertSchemaReport = {
 	readonly notCompared: ReadonlyArray<AssertSchemaNotComparedEntry>;
 };
 
+/**
+ * One per-object finding on the `findings` array an `assert-schema-diverged`
+ * throw carries (`throwDiverged` below) — a type alias, not a copy: same
+ * shape `hejbro check`'s own comparison already produces
+ * (`{identity, error}` from `./check/compare`'s `Finding`), never
+ * reimplemented here. Named under this surface's own vocabulary rather than
+ * re-exported as `Finding` (owner decision): this type has never been
+ * published before, so the moment it is exported for the first time fixes
+ * its name, and a bare, generic name would let `hejbro check`'s internal
+ * vocabulary occupy a slot on the public surface it does not otherwise
+ * reach. This is a narrower case than "propagate a `check-`-prefixed code
+ * unchanged" above — the prefix-reuse exception exists to protect an
+ * *already-public* contract, which this type, before now, was not.
+ */
+export type AssertSchemaFinding = Finding;
+
 const ASSERT_SCHEMA_DIVERGED = "assert-schema-diverged";
 const ASSERT_SCHEMA_NOT_COMPARED = "assert-schema-not-compared";
 const ASSERT_SCHEMA_CATALOG_UNREADABLE = "assert-schema-catalog-unreadable";

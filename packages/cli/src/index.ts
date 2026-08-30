@@ -24,6 +24,7 @@ export * from "@hejbro/query";
 export { sql } from "@hejbro/query";
 export type {
 	AssertSchemaEntry,
+	AssertSchemaFinding,
 	AssertSchemaHandle,
 	AssertSchemaNotComparedEntry,
 	AssertSchemaOptions,
