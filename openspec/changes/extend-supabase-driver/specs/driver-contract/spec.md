@@ -146,10 +146,12 @@ meant to cover.
 #### Scenario: A driver that keeps transactions but not sessions carries its settings inside one
 - **WHEN** a driver declaring interactive transactions `true` and session
   state `false` executes a single statement
-- **THEN** the settings and that statement are sent inside one
-  transaction, the settings applied transaction-locally before it, so
-  neither can be separated from the other by the endpoint's own
-  connection reuse
+- **THEN** the settings are sent after that transaction has opened and
+  before the caller's statement, inside it — never before the
+  transaction begins, where a transaction-local setting would be
+  discarded without applying, and never in a transaction of their own,
+  where the endpoint's connection reuse could separate them from the
+  statement they cover
 
 #### Scenario: A caller's own transaction carries the settings as its first statements
 - **WHEN** such a driver runs a caller-supplied transaction callback

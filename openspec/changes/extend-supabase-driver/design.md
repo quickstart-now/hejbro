@@ -152,10 +152,11 @@ if it doesn't actually belong in this tier.
 
 The same capture narrowed to `[<pin>, <caller>]` passes.
 
-**The boundary, and why it is the existing one.** The observation covers
-the statements that pass through the driver session — the pins and the
-caller's statement — and not the transaction control the driver issues
-around them. Three independent facts put transaction control outside it:
+**The boundary, and what argues for it.** The observation handed to the
+kit covers the statements that pass through the driver session — the
+pins and the caller's statement — and not the transaction control the
+driver issues around them. Two facts put transaction control outside it,
+and both are about the domain rather than about habit:
 
 1. `BEGIN`/`COMMIT` are sent to the client library directly as bare
    strings. They are never built as a `CompileResult` and never cross
@@ -164,22 +165,46 @@ around them. Three independent facts put transaction control outside it:
 2. The kit's statement type is documented as carrying the same two
    fields a `CompileResult` carries onward to a driver. Transaction
    control is outside that type's stated domain.
-3. Both shipped drivers already sit on this side of the line. The
-   vanilla driver's own conformance test drives a recording session that
-   captures only what passes `execute`; the other `false`-tier driver
-   sends no textual transaction control at all, because its batch form
-   is protocol-level.
 
-**The cost, stated rather than hidden.** The kit checks ordering, not
-content, so it cannot see that the pins and the caller's statement share
-one transaction — on this path the property that actually matters, since
-a pin in a *different* transaction would be worthless and would still
-satisfy the kit. That property is fixed directly in this package's own
-tests, and the kit's verdict is treated as necessary, never sufficient.
-Choosing a narrower capture and calling the tier satisfied, without
-fixing that property separately, would be making an obligation pass by
-selecting what to look at; the separate test is what keeps this a
-boundary rather than an evasion.
+**No shipped driver is a precedent for this, and claiming otherwise
+would be wrong.** The vanilla driver is checked on the `true` tier,
+whose observation is the setup hook by definition — the envelope
+question cannot arise there. The other `false`-tier driver is captured
+at its transport, and has no textual transaction control to exclude
+because its batch form is protocol-level. The kit's own documentation
+names those two fixtures as the model, and both read at the
+transport/client level. This change is the first to draw the line at the
+session surface, which makes it a **change to the documented model**,
+not a restatement of it — and the price of that is paid below.
+
+**What the narrowed observation stops showing, in full.** Two
+properties, not one:
+
+1. That the pins and the caller's statement reach the database inside
+   **one transaction**. A pin in a different transaction is worthless
+   and still satisfies the kit.
+2. That the pins are sent **after** the transaction opens. This one is
+   invisible to any session-level observation by construction, because
+   `BEGIN` is not among the statements such an observation records. It
+   matters because a transaction-local setting issued before `BEGIN`
+   does nothing at all — it warns and is discarded — so the following
+   two orderings are indistinguishable at the session surface and both
+   pass the kit:
+
+   | actually sent | recorded at the session surface | effect |
+   |---|---|---|
+   | `BEGIN` → pin → caller → `COMMIT` | `[pin, caller]` | pin applies |
+   | pin → `BEGIN` → caller → `COMMIT` | `[pin, caller]` | pin discarded |
+
+   The second row is precisely the failure this path exists to remove.
+
+Both are therefore asserted directly in this package's own tests,
+against a capture that **does** show the envelope, and the assertion is
+positional: the pins follow the statement that opens the transaction and
+precede the caller's own. This is the division of labor the boundary
+buys — the kit checks order within the contract's surface, this package
+checks the pins' position relative to the envelope — and stating it is
+what keeps the narrowed observation a boundary rather than an evasion.
 
 **A finding recorded, not acted on.** The specification describes this
 tier's check as verifying that *some statement precedes* the caller's
@@ -213,10 +238,20 @@ The second shape now exists, so there is more evidence than when the kit
 was written; whether two shapes are enough to generalize on, or a third
 is wanted first, is the owner's call.
 
+3. **The kit's own documentation names the wrong fixtures for a driver
+   with an envelope.** Its tsdoc points a caller at the two existing
+   stubs as the model, and both capture at the transport/client level.
+   A future preset that follows that guidance for a driver that opens
+   its own transaction will hand the kit a capture ending in `COMMIT`
+   and hit the same misfire this change had to route around. The kit
+   should say which domain the observation is taken from, rather than
+   naming fixtures whose domain differs from each other's.
+
 One ordering note belongs with them: this change makes the pooler path's
 tests call the kit, so the day the kit's own tier check is tightened or
 relaxed, this package is one of the callers that moves with it. The
-repair is cheaper before a third driver arrives than after.
+repair is cheaper before a third driver arrives than after — and the
+third driver is exactly who item 3 protects.
 
 ## Open contract details
 

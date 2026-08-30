@@ -14,14 +14,14 @@ after group 1 — the two share no file, so the dependency is on group 1's
 exported function existing, not on an edit in flight. Group 3 documents
 what groups 1 and 2 settle and lands last.
 
-**Group 1's fixtures record at the driver-session surface.** The
-statements a task below asserts on are the ones that pass the contract's
-`execute` — not the `BEGIN`/`COMMIT` the underlying driver sends around
-them (`design.md` states this boundary and why both shipped drivers
-already sit on this side of it). Task 1.6 exists because that boundary
-costs something: the conformance kit cannot see that the pins and the
-caller's statement share one transaction, so that property is fixed
-directly rather than inferred from a green kit.
+**Group 1 records at two levels, deliberately.** What the conformance
+kit is handed (1.7) is the statements that pass the contract's `execute`
+— not the `BEGIN`/`COMMIT` the underlying driver sends around them;
+`design.md` states that boundary, why the domain argues for it, and why
+no shipped driver is a precedent for it. Everything the narrowing stops
+showing is then covered by 1.6, which records at the level where the
+envelope **is** visible. The two levels are the division of labor, not a
+redundancy: neither check subsumes the other.
 
 ## 1. The pooled-transaction path
 
@@ -67,14 +67,21 @@ directly rather than inferred from a green kit.
       deliberate choice and is asserted rather than left incidental. Red:
       `pooler.test.ts` asserts what `setupSession` sends on this path and
       fails against the inherited implementation. Files: those two.
-- [ ] 1.6 (~9m) The property the conformance kit cannot see: the pins and
-      the caller's statement reach the database **inside one
-      transaction**. The fixture tags each recorded statement with the
-      transaction it was sent in, and the assertion is that the pins'
-      tag equals the caller statement's — not that the pins appear
-      somewhere before it. Red: a fixture that sends pins in a *separate*
-      transaction passes the kit and fails this test, which is the point.
-      Files: those two.
+- [ ] 1.6 (~10m) The two properties the conformance kit cannot see,
+      asserted against a fixture that records the transaction control
+      too — the level the kit's observation deliberately excludes. The
+      assertion is **positional against the envelope**: for one
+      execution, the pins are recorded **after** the statement that opens
+      the transaction and **before** the caller's own. Both halves earn
+      their place: a pin in a *different* transaction is worthless, and a
+      pin sent *before* `BEGIN` is discarded by the database with a
+      warning and no effect — and neither is visible where 1.7 looks,
+      because the opening statement is not among the statements 1.7
+      records. Red: a fixture that emits the pins before `BEGIN` passes
+      1.7 and fails this test; that contrast is the test's whole reason
+      to exist, so check it holds before moving on — if both go green or
+      both go red, this test is guarding nothing and that is a report,
+      not a fix to improvise. Files: those two.
 - [ ] 1.7 (~6m) The conformance kit, called for this path's declared
       tier, with the observation taken at the driver-session surface.
       Red: `pooler.test.ts` calls `assertSessionStateConformance` with
