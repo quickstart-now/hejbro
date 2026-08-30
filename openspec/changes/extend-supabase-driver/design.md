@@ -135,32 +135,83 @@ written for a driver whose execution is a single round trip.
 
 The pooler path's execution is a transaction: transaction control, then
 the pins, then the caller's statement, then the commit. What the kit is
-handed therefore depends on what the caller's own stub records, and this
-change fixes that boundary explicitly rather than leaving it implicit:
-**the observation covers the statements that pass through the driver
-session — the pins and the caller's statement — and not the transaction
-control the driver issues around them.**
+handed therefore depends on what the caller's own fixture records, and
+that is not left implicit here.
 
-This is a boundary, so it is stated as one and its cost is stated with
-it. The kit checks ordering, not content; it cannot see that the pins
-and the caller's statement share one transaction, which on this path is
-the property that actually matters. That property is therefore fixed
-directly in this package's own tests, and the kit's verdict is treated
-as necessary rather than sufficient. The kit is not modified here — it
-belongs to the query layer, and whether it should learn this tier
-combination is a question for whoever owns it, with a third driver's
-needs in view rather than this one's.
+**Measured, before deciding.** A scratch fixture handed the kit a
+capture of `["BEGIN", <pin>, <caller>, "COMMIT"]` with the caller's
+statement named, under a `{interactive-transactions: true,
+session-state: false}` declaration. The kit throws:
+
+```
+driver conformance violation (session-state:false): the caller's own
+statement was not the last thing sent for this execution. Next: fix the
+driver's session handling for this tier, or its capabilities declaration
+if it doesn't actually belong in this tier.
+```
+
+The same capture narrowed to `[<pin>, <caller>]` passes.
+
+**The boundary, and why it is the existing one.** The observation covers
+the statements that pass through the driver session — the pins and the
+caller's statement — and not the transaction control the driver issues
+around them. Three independent facts put transaction control outside it:
+
+1. `BEGIN`/`COMMIT` are sent to the client library directly as bare
+   strings. They are never built as a `CompileResult` and never cross
+   the `execute` contract; they are the driver's own plumbing for
+   holding a connection.
+2. The kit's statement type is documented as carrying the same two
+   fields a `CompileResult` carries onward to a driver. Transaction
+   control is outside that type's stated domain.
+3. Both shipped drivers already sit on this side of the line. The
+   vanilla driver's own conformance test drives a recording session that
+   captures only what passes `execute`; the other `false`-tier driver
+   sends no textual transaction control at all, because its batch form
+   is protocol-level.
+
+**The cost, stated rather than hidden.** The kit checks ordering, not
+content, so it cannot see that the pins and the caller's statement share
+one transaction — on this path the property that actually matters, since
+a pin in a *different* transaction would be worthless and would still
+satisfy the kit. That property is fixed directly in this package's own
+tests, and the kit's verdict is treated as necessary, never sufficient.
+Choosing a narrower capture and calling the tier satisfied, without
+fixing that property separately, would be making an obligation pass by
+selecting what to look at; the separate test is what keeps this a
+boundary rather than an evasion.
+
+**A finding recorded, not acted on.** The specification describes this
+tier's check as verifying that *some statement precedes* the caller's
+own; the implementation additionally requires the caller's statement to
+be *last*. The implementation is stricter than the requirement it
+implements. Nothing here depends on which wins — the observation above
+satisfies both — and the kit belongs to the query layer, so this is
+reported rather than repaired inside this change.
 
 ## Follow-up worth registering
 
-A conformance-kit generalization: the `false` tier's obligation could
-name the property instead of the position — "the settings and the
-caller's statement are in the same transaction, or in the same round
-trip where there is no transaction" — which would cover both the HTTP
-one-shot shape and the pooled-transaction shape without either driver's
-test choosing what to record. Recorded here as a suggestion; the kit's
-owner decides whether the second shape is enough evidence to generalize
-on, or whether a third one is needed first.
+Two items for the conformance kit's owner, both out of scope here:
+
+1. **The kit is stricter than its own specification.** The requirement
+   says a `false`-tier check verifies that some statement precedes the
+   caller's own; the implementation requires the caller's statement to
+   be last. Bringing the two together is a repair of specified behavior
+   in either direction — relax the implementation, or tighten the
+   requirement — and it should be decided once rather than worked around
+   per driver.
+2. **The obligation names a position where it means a property.** It
+   could instead name the property: the settings and the caller's
+   statement reach the database in the same transaction, or in the same
+   round trip where there is no transaction. That covers the HTTP
+   one-shot shape and the pooled-transaction shape at once, and it is
+   the thing a `false`-tier driver actually has to guarantee — the
+   position is only a proxy for it, and a proxy that a driver can
+   satisfy while a pin sits in the wrong transaction.
+
+The second shape now exists, so there is more evidence than when the kit
+was written; whether two shapes are enough to generalize on, or a third
+is wanted first, is the owner's call.
 
 ## Open contract details
 

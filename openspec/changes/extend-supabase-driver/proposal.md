@@ -172,6 +172,17 @@ measurement confirms it survives the endpoint that loses session state.
 Only the once-per-connection pin breaks, which is why this change is
 about pins and capability declarations and touches no context code.
 
+One inference is deliberately not drawn from these numbers. The
+`false` declaration rests on the **absence of a guarantee**, not on the
+frequency of the failure. A transaction-mode pooler is free to hand back
+the same backend when nothing else is contending for it, so a run in
+which a `SET` survives is evidence about the load at that moment, not
+about the endpoint's contract — which is exactly why the idle runs above
+are reported and then not used as counter-evidence. Had the measurement
+never caught a loss, the declaration would still be `false`: a driver
+cannot promise the query layer a persistence the endpoint never
+promised it.
+
 Not measured, and therefore not asserted: Supavisor's internal pooling
 behavior beyond the above (where saturation begins, how backends are
 chosen), and the session-mode pooler endpoint.
@@ -250,19 +261,46 @@ caller's own file rather than an inference buried in a library.
   changes is how a driver is constructed, which the skill reference
   documents.
 
-## Open verification item
+## The conformance kit, and where this change observes
 
 The repository's driver conformance kit reads a driver's own declared
 tier and applies that tier's obligation. Its `false`-tier obligation is
-written as "the caller's own statement is the last thing sent for one
-execution, with something ahead of it" — written when no driver held a
-transaction open while declaring session state `false`. Whether that
-obligation reads correctly for a driver that wraps the execution in a
-transaction is established as part of this change, before any claim is
-made about it, because the Supabase driver's tests already call the kit
-and losing that coverage on the new path would be a regression rather
-than a neutral deferral. The kit itself is not modified here; what this
-change owns is stating the observation boundary it relies on, in
-`design.md`, and fixing the property the kit cannot see — that the pins
-and the caller's statement share one transaction — in this package's own
-tests.
+implemented as "the caller's own statement is the last thing sent for
+one execution, with something ahead of it" — written when no driver held
+a transaction open while declaring session state `false`. Measured, not
+assumed: handing the kit a capture that includes transaction control
+(`BEGIN`, pins, the caller's statement, `COMMIT`) makes it fail, because
+the last entry is `COMMIT`.
+
+The observation is therefore taken at the **driver session surface** —
+the statements that pass through the contract's own `execute`, which is
+where a `CompileResult` reaches a driver — and not the transaction
+control the driver issues around them. This is not a boundary invented
+to make the check pass:
+
+- transaction control never travels as a `CompileResult` and never
+  crosses the `execute` contract; it is the driver's own plumbing for
+  holding a connection;
+- the kit's own statement type is documented as carrying the same two
+  fields a `CompileResult` carries onward to a driver, so this is the
+  domain that type already names;
+- the vanilla driver's existing conformance test already observes at
+  exactly this surface, and the other `false`-tier driver emits no
+  textual transaction control at all — so both shipped drivers already
+  sit on this side of the line.
+
+What this boundary cannot see is stated with it: the kit checks
+ordering, not content, so it cannot tell that the pins and the caller's
+statement share **one transaction**, which on this path is the property
+that actually matters. That property is fixed directly in this package's
+own tests, and the kit's verdict is treated as necessary rather than
+sufficient.
+
+The kit is not modified here. One finding is recorded rather than acted
+on: the specification describes this tier's check as verifying that
+*some statement precedes* the caller's own, while the implementation
+additionally requires the caller's statement to be *last*. The
+implementation is stricter than the requirement it implements. Nothing
+in this change depends on which of the two wins, because the observation
+above satisfies both; reconciling them belongs to the kit's owner, with
+a third driver's needs in view rather than this one's.
