@@ -1,5 +1,6 @@
 import type { SchemaDeclaration } from "../dsl/schema";
 import { throwHejbroError } from "../error";
+import { requireNext, requirePrevious } from "../kind/emit-helpers";
 import type {
 	ChangeOperation,
 	KindChange,
@@ -17,34 +18,18 @@ const asSchemaSnapshot = (snapshot: JsonValue): SchemaSnapshot =>
 	snapshot as SchemaSnapshot;
 
 /** {@link schemaKind}'s `emit`, `"create"` case. */
-const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"schema create change is missing its next snapshot.",
-		);
-	}
-	return [
-		statement(
-			`create schema ${quoteIdentifier(asSchemaSnapshot(change.next).name)};`,
-		),
-	];
-};
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(
+		`create schema ${quoteIdentifier(asSchemaSnapshot(requireNext(change)).name)};`,
+	),
+];
 
 /** {@link schemaKind}'s `emit`, `"drop"` case. */
-const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"schema drop change is missing its previous snapshot.",
-		);
-	}
-	return [
-		statement(
-			`drop schema ${quoteIdentifier(asSchemaSnapshot(change.previous).name)};`,
-		),
-	];
-};
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(
+		`drop schema ${quoteIdentifier(asSchemaSnapshot(requirePrevious(change)).name)};`,
+	),
+];
 
 /** {@link schemaKind}'s `emit`, `"alter"` case: unreachable in practice ({@link schemaKind}'s own `diff` never produces one) — a real internal-bug guard, not a structurally-unreachable `assertNever` case. */
 const emitAlter = (): ReadonlyArray<SqlStatement> =>

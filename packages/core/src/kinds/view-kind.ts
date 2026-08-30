@@ -16,7 +16,11 @@ import {
 } from "../expr/codec";
 import { renderQuery } from "../expr/render-sql";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
-import { dispatchEmit } from "../kind/emit-helpers";
+import {
+	dispatchEmit,
+	requireNext,
+	requirePrevious,
+} from "../kind/emit-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
 import type { ColumnOrderOracle } from "../snapshot/column-order";
 import {
@@ -252,31 +256,16 @@ const securityInvokerClause = (securityInvoker: boolean): string => {
 const createOrReplaceSql = (snapshot: ViewSnapshot): string =>
 	`create or replace view ${qualifyName(snapshot.schema, snapshot.name)}${securityInvokerClause(viewSecurityInvoker(snapshot))} as ${viewSelectSql(snapshot)};`;
 
-const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"view create change is missing its next snapshot.",
-		);
-	}
-	return [statement(createOrReplaceSql(asViewSnapshot(change.next)))];
-};
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(createOrReplaceSql(asViewSnapshot(requireNext(change)))),
+];
 
 const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"view alter change is missing its next snapshot.",
-		);
-	}
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"view alter change is missing its previous snapshot.",
-		);
-	}
-	const previousSnapshot = asViewSnapshot(change.previous);
-	const nextSnapshot = asViewSnapshot(change.next);
+	// #472 trap 2: next is checked before previous here — the reverse of
+	// grant-kind.ts's alter — and that order is the observable both-null
+	// message, not a stylistic choice to harmonize.
+	const nextSnapshot = asViewSnapshot(requireNext(change));
+	const previousSnapshot = asViewSnapshot(requirePrevious(change));
 	if (isPrefixOf(previousSnapshot.columns, nextSnapshot.columns)) {
 		return [statement(createOrReplaceSql(nextSnapshot))];
 	}
@@ -286,15 +275,9 @@ const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
 	];
 };
 
-const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"view drop change is missing its previous snapshot.",
-		);
-	}
-	return [predropStatement(dropViewSql(asViewSnapshot(change.previous)))];
-};
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	predropStatement(dropViewSql(asViewSnapshot(requirePrevious(change)))),
+];
 
 /**
  * The built-in object kind for Postgres views. Identity is

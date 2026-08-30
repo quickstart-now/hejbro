@@ -1,7 +1,8 @@
 import type { GrantDeclaration, GrantKind, TablePrivilege } from "../dsl/grant";
 import { tablePrivileges } from "../dsl/grant";
-import { assertNever, throwHejbroError } from "../error";
+import { assertNever } from "../error";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
+import { requireNext, requirePrevious } from "../kind/emit-helpers";
 import type {
 	ChangeOperation,
 	KindChange,
@@ -162,13 +163,7 @@ const statementIfAny = (
 
 /** {@link grantKind}'s `emit`, `"create"` case. */
 const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"grant create change is missing its next snapshot.",
-		);
-	}
-	const nextSnapshot = asGrantSnapshot(change.next);
+	const nextSnapshot = asGrantSnapshot(requireNext(change));
 	return [
 		statement(
 			renderGrantStatement(
@@ -183,13 +178,7 @@ const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
 
 /** {@link grantKind}'s `emit`, `"drop"` case. */
 const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"grant drop change is missing its previous snapshot.",
-		);
-	}
-	const previousSnapshot = asGrantSnapshot(change.previous);
+	const previousSnapshot = asGrantSnapshot(requirePrevious(change));
 	return [
 		statement(
 			renderRevokeStatement(
@@ -204,20 +193,11 @@ const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
 
 /** {@link grantKind}'s `emit`, `"alter"` case: re-grants the added privileges and revokes the removed ones, re-deriving both sets from `previous`/`next` (notes are display-only). */
 const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"grant alter change is missing its previous snapshot.",
-		);
-	}
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"grant alter change is missing its next snapshot.",
-		);
-	}
-	const previousSnapshot = asGrantSnapshot(change.previous);
-	const nextSnapshot = asGrantSnapshot(change.next);
+	// #472 trap 2: previous is checked before next here — the reverse of
+	// view-kind.ts's alter — and that order is the observable both-null
+	// message, not a stylistic choice to harmonize.
+	const previousSnapshot = asGrantSnapshot(requirePrevious(change));
+	const nextSnapshot = asGrantSnapshot(requireNext(change));
 	const added = addedPrivileges(
 		previousSnapshot.privileges,
 		nextSnapshot.privileges,

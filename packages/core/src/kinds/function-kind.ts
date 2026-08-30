@@ -1,7 +1,10 @@
 import type { FunctionDeclaration } from "../dsl/define-function";
-import { throwHejbroError } from "../error";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
-import { dispatchEmit } from "../kind/emit-helpers";
+import {
+	dispatchEmit,
+	requireNext,
+	requirePrevious,
+} from "../kind/emit-helpers";
 import type { KindChange, ObjectKind } from "../kind/object-kind";
 import { fnv1aHex } from "../plpgsql/body-hash";
 import {
@@ -58,36 +61,18 @@ const SIGNATURE_CHANGED_NOTE = "signature changed; recreating";
 const dropFunctionStatementSql = (snapshot: FunctionSnapshot): string =>
 	`drop function ${qualifyName(snapshot.schema, snapshot.name)}(${argTypeList(snapshot.args)});`;
 
-const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"function create change is missing its next snapshot.",
-		);
-	}
-	return [statement(asFunctionSnapshot(change.next).bodySql)];
-};
+const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(asFunctionSnapshot(requireNext(change)).bodySql),
+];
 
-const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"function drop change is missing its previous snapshot.",
-		);
-	}
-	return [
-		statement(dropFunctionStatementSql(asFunctionSnapshot(change.previous))),
-	];
-};
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(
+		dropFunctionStatementSql(asFunctionSnapshot(requirePrevious(change))),
+	),
+];
 
 const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"function alter change is missing its next snapshot.",
-		);
-	}
-	const nextSnapshot = asFunctionSnapshot(change.next);
+	const nextSnapshot = asFunctionSnapshot(requireNext(change));
 	if (change.previous === null) {
 		return [statement(nextSnapshot.bodySql)];
 	}
