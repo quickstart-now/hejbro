@@ -69,8 +69,9 @@ again.
   contract — public API surface, generated SQL, file or wire formats, CLI
   output or error text, documented behavior — goes through an OpenSpec
   change: proposal → owner approval → tasks → TDD implementation →
-  review → PR → archive (artifacts under `openspec/changes/<id>/`; the
-  `/opsx` commands drive the cycle). A bug fix that restores
+  review → PR → adversarial spec-only review (D106) → archive
+  (artifacts under `openspec/changes/<id>/`; the `/opsx` commands
+  drive the cycle). A bug fix that restores
   already-specified behavior, and internal refactors, follow the plain
   cycle without a proposal. Never start a change by writing production
   code.
