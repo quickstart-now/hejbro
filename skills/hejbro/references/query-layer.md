@@ -863,7 +863,7 @@ use the `sql` escape hatch, or wait for the tracked issue:
   statement's improvement over today's unnamed text query could not be
   shown, under a spread-estimator-invariant standard, to reliably exceed
   run-to-run measurement noise on the workload and machine measured
-  (`openspec/changes/extend-query-runtime/measurement.md`) — the
+  (`openspec/changes/archive/2026-08-31-extend-query-runtime/measurement.md`) — the
   decision is scoped to that evidence, not a general claim about
   prepared statements.
 
@@ -922,7 +922,7 @@ const yourDriver: Pick<Driver, "transaction"> = {
   `openspec/specs/table-declaration/spec.md` (`.notNullElements()`'s
   backing CHECK),
   `openspec/specs/value-utilities/spec.md` (`assertNoNulls`),
-  `openspec/changes/extend-query-runtime/specs/query-execution/spec.md`
+  `openspec/changes/archive/2026-08-31-extend-query-runtime/specs/query-execution/spec.md`
   (`assertSchema`'s own scenarios — this change has not archived yet;
   once it does, these fold into `query-execution/spec.md` above and
   this citation should move with them).
