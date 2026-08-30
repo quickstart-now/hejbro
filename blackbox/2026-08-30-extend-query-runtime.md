@@ -1,10 +1,10 @@
 Refs:
 - .changeset/add-assert-schema.md @ blob 7bc31f24ea5178c7deef769333dfd60dd23cebed
-- openspec/changes/extend-query-runtime/issues.md @ blob 85f13d11267423908ff1bb25761d0d1bfc78f3fb
-- openspec/changes/extend-query-runtime/measurement.md @ blob 6c00be28cb949f8a960e1e0e7f497268300d531e
-- openspec/changes/extend-query-runtime/proposal.md @ blob 7be4ff7f4ce5e63dfc89d61e0c917cc699043c16
-- openspec/changes/extend-query-runtime/specs/query-execution/spec.md @ blob 5978643a1c18043d4585303f10c6c1c6f67c1f68
-- openspec/changes/extend-query-runtime/tasks.md @ blob 0d82cc9bdfc6e46e67a8e32eab75b1e46c5de450
+- openspec/changes/archive/2026-08-31-extend-query-runtime/issues.md @ blob 85f13d11267423908ff1bb25761d0d1bfc78f3fb
+- openspec/changes/archive/2026-08-31-extend-query-runtime/measurement.md @ blob 6c00be28cb949f8a960e1e0e7f497268300d531e
+- openspec/changes/archive/2026-08-31-extend-query-runtime/proposal.md @ blob 7be4ff7f4ce5e63dfc89d61e0c917cc699043c16
+- openspec/changes/archive/2026-08-31-extend-query-runtime/specs/query-execution/spec.md @ blob 5978643a1c18043d4585303f10c6c1c6f67c1f68
+- openspec/changes/archive/2026-08-31-extend-query-runtime/tasks.md @ blob 0d82cc9bdfc6e46e67a8e32eab75b1e46c5de450
 - openspec/task-times.csv @ blob 1ec762a4d764cd15705676a225f956ff48004a7c
 - packages/cli/src/assert-schema.ts @ blob fa351c6c902e02cfa8305bf1e023977c3141fc43
 - packages/cli/src/index.ts @ blob 3214e36aac733d70150bec904dd6cd2694126708
@@ -19,6 +19,11 @@ Refs:
 - README.md @ blob b7dba96771ff029d8399e32ca6b7bae5f74ee4ac
 - skills/hejbro/references/query-layer.md @ blob 4171cc4a5a1fcda36d6901ac817958ae4859bff4
 - skills/hejbro/SKILL.md @ blob aa69f02f8be689fc08dd9125f362af5567ffa583
+
+(Archive note: the five change-directory paths above were moved by
+`openspec archive` to `openspec/changes/archive/2026-08-31-extend-query-runtime/`
+and the pins re-pathed in the same PR; the blob SHAs are unchanged —
+what moved is the path, not the content.)
 
 (Taken from `git rev-parse HEAD:<path>` immediately after the group-6
 commit (`0bda08f`), each cross-checked against `git hash-object
