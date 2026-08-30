@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { ExprNode, FunctionCallNode } from "../../src/expr/ast";
 import {
+	exprChildren,
+	replaceExprChildren,
+} from "../../src/expr/expr-children";
+import {
 	findExprScopeViolation,
 	someDeepExprNode,
 	someExprNode,
 } from "../../src/expr/walk";
+import { buildUnrelatedCase, REACHABLE_NODE_KINDS } from "./reachable-kinds";
 
 const rawSqlCall = (sql: string): ExprNode => ({ nodeKind: "rawSql", sql });
 
@@ -307,6 +312,47 @@ describe("someDeepExprNode (#141: exists()-descending sibling of someExprNode)",
 	it("returns false when a window function matches nothing", () => {
 		const node = buildWindow({ partitionBy: [columnRef] });
 		expect(someDeepExprNode(node, isMarker)).toBe(false);
+	});
+});
+
+/**
+ * #473 2.2: someExprNode/someDeepExprNode no longer restate child
+ * positions themselves — both fold onto expr-children.ts's registry.
+ * This proves that fold mechanically rather than by a hand-picked case
+ * per kind: for every reachable node kind, a marker is planted at EACH
+ * position `exprChildren` reports (via `replaceExprChildren`, never by
+ * re-deriving the position by hand), and both walkers must find it.
+ * Before the fold, this would have needed one hand-written case per
+ * table per kind to give the same coverage — exactly the duplication
+ * #473 is about. `exists`/`selectExpr` report zero positions here on
+ * purpose (their `query` is a `SelectNode`, not a child `ExprNode`) and
+ * are covered separately above, through their own subquery-descent path.
+ */
+describe("both walkers see every position expr-children.ts's registry reports (#473 2.2)", () => {
+	const registryMarker: ExprNode = { nodeKind: "rawSql", sql: "marker" };
+	const isRegistryMarker = (node: ExprNode): boolean =>
+		node.nodeKind === "rawSql" && node.sql === "marker";
+
+	REACHABLE_NODE_KINDS.forEach((kind) => {
+		const node = buildUnrelatedCase(kind);
+		const children = exprChildren(node);
+
+		children.forEach((_child, position) => {
+			it(`${kind}: a marker at child position ${position} is found by both someExprNode and someDeepExprNode`, () => {
+				const childAt = (index: number, original: ExprNode): ExprNode => {
+					if (index === position) {
+						return registryMarker;
+					}
+					return original;
+				};
+				const withMarker = replaceExprChildren(
+					node,
+					children.map((child, index) => childAt(index, child)),
+				);
+				expect(someExprNode(withMarker, isRegistryMarker)).toBe(true);
+				expect(someDeepExprNode(withMarker, isRegistryMarker)).toBe(true);
+			});
+		});
 	});
 });
 
