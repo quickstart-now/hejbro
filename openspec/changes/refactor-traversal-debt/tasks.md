@@ -438,13 +438,35 @@ to `generateMigration` and byte-compares the resulting
 at byte level. The committed example migrations remain at zero
 (`rg -ln -i "rename" examples/*/migrations` → no match).
 
-What that one case does **not** cover is what 2.4 risks. Its rename
-targets `email`, while its only expressions (`index(...).where(isNull(
-t.deletedAt))`) reference a different column — so they take the
-*unchanged* path, and an unchanged node re-encoded deterministically
-still produces identical bytes. A golden therefore cannot distinguish
-"returned the same reference" from "rebuilt an identical clone", which
-is precisely the property `retarget.ts:276` depends on.
+That case also covers retarget's **correctness**: its indexes are built
+on `sql` templates over the renamed column
+(`index("users_email_lower_idx").on(sql\`lower(btrim(${t.email}))\`)`),
+so the expression really is retargeted. Measured — forcing the registry
+to report `sqlTemplate` as childless makes `golden.test.ts >
+table-index-methods` fail. *(A first correction of this paragraph
+claimed those expressions referenced a different column; that was also
+wrong. Both errors are left on the record below.)*
+
+What a golden **cannot** see is **reference identity**, and the reason
+has nothing to do with which column is referenced: a golden compares
+emitted SQL text, and deterministically re-cloning an unchanged node
+emits identical text. Measured — with `replaceExprChildren` forced to
+always return a fresh object, the golden suite stays **15/15 green**
+while **42** other core tests fail and the retarget baseline flips 24
+`same-ref` rows. So that property is well covered in-repo (`codec.test
+.ts`'s F3, `retarget.test.ts`'s `toBe` identity loop, 2.1's round
+trip); what the external baseline adds is narrower than first claimed —
+it measures a **real 39-object corpus** rather than a synthetic fixture,
+and it is **independent of the very tests being refactored**, which is
+this plan's own argument about weak evidence applied to itself.
+
+**Two wrong claims stood here before measurement, and the way they
+failed is the lesson.** (1) "0 of 14 golden cases exercise a rename" came
+from grepping case *directory names* instead of contents. (2) The first
+fix asserted the expressions dodged the rename, from reading one line of
+the case. Both checked a **proxy** for the property — a name, a line —
+rather than the property. Before asserting that something exists or does
+not, confirm the command inspects the thing itself.
 
 So group 2's output proof is **golden 0 bytes _plus_ a retarget baseline
 at 0 bytes**, the latter taken by running `applyRenameSpecs` over a real
@@ -625,17 +647,16 @@ fastest-growing surface has no user-viewpoint usage anywhere.
       nulls). It must also record that the obvious workaround is closed:
       `dsl/table.ts:1205-1207` makes the two forms mutually exclusive
       per column, so this is not "use the other form for the action
-      part" but a genuine either/or; and (iii) **on hold pending the
-      lead's call** — its original premise ("0 of 14 golden cases
-      exercise a rename") was disproved during group 4: one case,
-      `table-index-methods`, covers `--rename`'s code path at byte
-      level. What survives is narrower and may not warrant an issue at
-      all: one rename case out of 14, none carrying an expression that
-      the rename actually retargets, and no assertion anywhere on the
-      reference-identity property. File nothing until the reshaped claim
-      is approved — an issue filed on a premise that was already
-      corrected is worse than no issue. Issue (ii)
-      also records why
+      part" but a genuine either/or. **A third follow-up was planned and
+      is not being filed**: "the golden corpus has no rename coverage"
+      rested on three claims and measurement killed all three — one
+      golden case does drive `--rename` at byte level, its expressions
+      *are* retargeted, and reference identity *is* asserted in-repo
+      (42 tests catch its removal). Nothing is left to file. Filing it
+      anyway would plant exactly the kind of stale, unverified premise
+      that #472's own "29" turned out to be. The correction lives in the
+      record instead — see the group 2 proof section and #473's closing
+      comment. Issue (ii) also records why
       it is not being fixed now: extending the surface is proposal work,
       and the 0.2.0 gate is not being widened. Both are shaped so the
       owner can promote them to a change on return. Then
