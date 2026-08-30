@@ -4,7 +4,7 @@ Refs:
 - openspec/changes/extend-query-runtime/measurement.md @ blob 6c00be28cb949f8a960e1e0e7f497268300d531e
 - openspec/changes/extend-query-runtime/proposal.md @ blob 7be4ff7f4ce5e63dfc89d61e0c917cc699043c16
 - openspec/changes/extend-query-runtime/specs/query-execution/spec.md @ blob 5978643a1c18043d4585303f10c6c1c6f67c1f68
-- openspec/changes/extend-query-runtime/tasks.md @ blob a6379d5a8b6513c866a569d1e1bf18ca28b65f4a
+- openspec/changes/extend-query-runtime/tasks.md @ blob 0d82cc9bdfc6e46e67a8e32eab75b1e46c5de450
 - openspec/task-times.csv @ blob 1ec762a4d764cd15705676a225f956ff48004a7c
 - packages/cli/src/assert-schema.ts @ blob fa351c6c902e02cfa8305bf1e023977c3141fc43
 - packages/cli/src/index.ts @ blob 3214e36aac733d70150bec904dd6cd2694126708
@@ -70,6 +70,13 @@ without either side's diff intersecting. All twenty paths re-verified
 the same way, all `ok` (see the implementer's own report for the full
 `git hash-object`/`git rev-parse HEAD:<path>` output, sent alongside
 this commit rather than duplicated here).
+
+Re-pinned a fifth time, after this round's own commit (the tag-
+ancestry disclosure and the false-alarm/relay-error record above, plus
+the planner's own conventions-section addition on `tasks.md`, "stop
+until a state can be explained," landing in the same commit): only
+`openspec/changes/extend-query-runtime/tasks.md` gained content this
+round; the other nineteen paths re-verified unchanged, all `ok`.
 
 **The commit SHAs cited in this entry resolve on the pre-squash branch
 only** (`feat-extend-query-runtime`); after this change's squash merge
@@ -451,3 +458,65 @@ requiring invariance across four.
   transcribing the relayed figure — the practice `measurement.md`'s own
   "a record is produced, not transcribed" principle names, applied here
   to a message rather than a document.
+- **The pre-merge rebase left the handoff tags (`g4` through `g6-r5`)
+  no longer ancestors of the PR branch.** `upstream/dev` had moved four
+  commits since this branch's own base; the branch was rebased onto it
+  rather than merged, and a rebase rewrites every commit on the branch
+  it touches — not just the SHAs a citation names, but the tags
+  pointing at the pre-rebase commits too. The tags predate the rebase
+  onto `dev`: they still exist on the remote and can be checked out, so
+  each review's state stays reproducible, but they are not ancestors of
+  the PR history. The reviewer re-verified gates, pins, and the PR body
+  on the rebased head, so what was reviewed and what merges are the
+  same tree. Not reverted: the PR was already open, and unwinding a
+  force-pushed, already-reviewed branch to redo the merge would have
+  traded a real (if partly cosmetic) ancestry loss for a second
+  force-push and a second round of review risk — assessed and reported
+  rather than fixed unilaterally, and the planner's judgment (leave it)
+  is recorded in the piece's own message history.
+- **The planner's own "workspace corrupted" alert, and what it actually
+  was.** Mid-rebase, a file-watcher on the planner's side caught the
+  implementer's working tree in an intermediate state — `spec.md` and
+  `tasks.md` genuinely missing content that groups 2/4/6 had added,
+  because an interactive rebase checks out each commit's own snapshot
+  as it replays, and the watcher fired partway through 22 commits.
+  Interactive rebase in one process necessarily produces this shape:
+  the observation was real, not a false reading of the files. What was
+  wrong was the *attribution* — read as data-integrity loss, corrected
+  to what it was, a normal rebase-replay snapshot — the same
+  observation-vs-attribution distinction this piece's own conventions
+  section already names, caught here by the person who wrote the
+  convention making the exact mistake it describes. The implementer saw
+  the identical file-watcher notification at the identical moment and
+  read it correctly as noise, because the implementer had the one piece
+  of context the alert itself did not carry: that a rebase was already
+  in progress. The round this alert triggered was not wasted, even
+  though the underlying alarm was false: it produced an explicit
+  "observe, do not touch" instruction that, if a real problem had
+  existed, would have been the only thing standing between a
+  transient bad snapshot and a committed, permanent one.
+- **A fifth relay error, on the commit count itself.** The planner
+  reported 23 commits as "22" while directing the PR creation; the PR
+  body the implementer generated independently from `git log --oneline
+  upstream/dev..HEAD` already carried the correct count (23, confirmed
+  again against `gh pr view 535 --json commits`), so the artifact was
+  right and only the planner's own spoken summary of it was wrong — the
+  same shape as the prior four relay errors, all in the same direction
+  (a summary drifting from a source that was itself correct).
+- **A distinction worth keeping precise: a prediction that turns out
+  true because its own mechanism was verified is not the same as a
+  prediction that merely wasn't tested.** Before the rebase, it was
+  predictable that the README's task-time badges would go stale (the
+  ledger gained rows both branches added, 384→404, so the badge numbers
+  computed from the old ledger could not still match the new one) —
+  and, because the badges were regenerated via `pnpm check:tasktime`
+  immediately after the rebase rather than hand-adjusted, CI's own
+  single-leg (`node 24`) `git diff --exit-code -- README.md` step
+  passed clean. The prediction did not simply "not come true" by luck;
+  the failure mode it named was real and was specifically prevented by
+  regenerating from the script rather than editing the numbers by hand
+  — the mechanism was exercised, not merely absent. Recording this as
+  "the prediction was wrong" would mislead a future reader into
+  skipping the regenerate-after-merge step next time; recording it
+  accurately keeps the step where it belongs, as a required part of any
+  future rebase or merge in this repository.

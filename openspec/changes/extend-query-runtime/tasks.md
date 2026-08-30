@@ -21,6 +21,13 @@ Conventions that apply to every group:
   with `git status --porcelain`, not asserted. A mutation planted in a
   file this change is otherwise forbidden to touch is the case that
   matters: an unreverted one ships as a behaviour change.
+- When a state cannot be explained, destructive work stops until it can.
+  The cost of stopping on a false alarm is one round; the cost of
+  "recovering" from a state nobody understood is the work itself. This
+  change raised exactly one such alarm and it was false — the observer
+  was watching a rebase replay its commits — and stopping was still
+  right, because the asymmetry does not depend on how the alarm turns
+  out.
 - A record is produced, not transcribed. Numbers copied by hand into a
   document can drift from the run that made them, and the drift emits no
   signal: the arithmetic stays correct and the document stays plausible.
