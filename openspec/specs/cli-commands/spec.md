@@ -302,6 +302,20 @@ with the reason**, and SHALL NOT be counted as agreeing. A false "no
 differences" is worse than a false difference: it is the silent failure
 this command exists to end, reintroduced by the command itself.
 
+Two things equally leave an object out of a definite agree/differ
+answer, and `check` states them differently, never as one blurred
+category. A kind that states, as part of its own extension interface,
+that no catalog object will ever back its declared objects is not a
+comparison that failed — it is a comparison this command was never going
+to attempt. `check` SHALL state that once, by the kind's own declared
+reason, in its coverage-boundary section, and SHALL NOT affect the exit
+code on its account: not a `Finding`, and not counted as agreeing
+either. An object this command should have compared and could not — a
+missing privilege, an unrenderable expression, or a declared kind this
+build does not recognize — remains the other category: reported **per
+object**, not compared, with the reason, and SHALL NOT let the run exit
+zero.
+
 "Not compared" SHALL NOT be used where a plainer finding is true: an
 object that is genuinely absent from the database is *missing*, not
 uncomparable. Missing takes precedence, so a declared table that does not
@@ -327,6 +341,18 @@ rules oblige it to name rather than leave for a user to discover.
 - **WHEN** the database elides or refuses what a comparison needed
 - **THEN** that object is reported as not compared, with the reason,
   rather than counted as agreeing
+
+#### Scenario: A kind that declares itself uncomparable states its own boundary line
+- **WHEN** a declared object's kind states, in its own extension, that no
+  catalog object will ever back it
+- **THEN** `check` states that once in its coverage-boundary section,
+  naming the kind's own declared reason, and the exit code is unaffected
+  by it
+
+#### Scenario: An unregistered kind is reported as not compared, never as differing
+- **WHEN** a declared object's kind is not one this build recognizes
+- **THEN** `check` reports it as not compared, with the reason, and the
+  run cannot exit zero on the strength of a comparison that never ran
 
 #### Scenario: A catalog read that fails stops the run
 - **WHEN** a catalog read fails outright
