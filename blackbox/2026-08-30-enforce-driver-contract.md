@@ -3,11 +3,11 @@ Refs:
 - openspec/changes/enforce-driver-contract/proposal.md @ blob b605a3cbcd43dc77f34dff6685eaaa621800cf8f
 - openspec/changes/enforce-driver-contract/specs/cli-commands/spec.md @ blob 2cb56b99abf9b2751d78d174ba033659499ef098
 - openspec/changes/enforce-driver-contract/specs/driver-contract/spec.md @ blob f3c76127096ce6a9e961b4b9522038fd458b6377
-- openspec/changes/enforce-driver-contract/tasks.md @ blob 6841654748286780015ee852c44e4fb516a22cf4
-- openspec/task-times.csv @ blob 020c7d7e25ed345b1cb541e0c9af75b44e01bef2
+- openspec/changes/enforce-driver-contract/tasks.md @ blob ccfe2f8b38c57ad04881ddcd447b89d7bfe850ea
+- openspec/task-times.csv @ blob f961b2322da60904f08280ce3db0d2ea95a356aa
 - packages/cli/src/check/compare.ts @ blob 7d6a3d48a7a8682e4d0c2d31b3cda692a35102fc
 - packages/cli/src/commands/check.ts @ blob 93c8e2bbdf9bf1cdb85558945d479efee16b0820
-- packages/cli/test/check-compare.test.ts @ blob 3b3e82f377b2e6dddab2dd3fe1f3b47b170013ab
+- packages/cli/test/check-compare.test.ts @ blob 2aaab48b4c8b64994a9758ea828ed000aa18fce4
 - packages/core/src/kind/object-kind.ts @ blob 9a0b439f905dbc2c6a79a757a1728b74e1dddb1c
 - packages/core/test/kind-registry.test.ts @ blob 5c481a3952fe0b641c2f9b0f0d47098f690b3632
 - packages/neon/src/http.ts @ blob 3dc5c361526b36a65bcd19e08ebb385a54976bda
@@ -20,7 +20,7 @@ Refs:
 - packages/query/src/driver/errors.ts @ blob 8d5263256ef3a69fde8506b0f12bdf5909156175
 - packages/query/src/index.ts @ blob d1868de769ebdc9a3b48b38c217ee06507dcbb91
 - packages/query/src/testing/driver-conformance.ts @ blob 9b39587a097a3ed827459247f19cc5493b138f2b
-- packages/query/test/driver/conformance.test.ts @ blob 6dd6c1fe971170ca9fd614d1b3c8b0c17e1318b9
+- packages/query/test/driver/conformance.test.ts @ blob 4686a0caa51c3d7d37dc84a602d5457b26750964
 - packages/query/test/exports.test.ts @ blob 56fbd3094e810b3515d1f20fe2664108b2480e1e
 - packages/supabase/src/storage/bucket-kind.ts @ blob 8bbcdda0c8f597d4a4876210db14d700835e4e4d
 - packages/supabase/test/driver.test.ts @ blob 983bde731e7dd4a28eb2471fd00d65a3881f4074
@@ -168,6 +168,40 @@ observed to do but had not stated: it checks order, never content — it
 cannot tell a genuinely unrelated preceding statement from the driver's
 actual settings, because it reads no driver's pin SQL text at all. This
 is a stated limitation, not an oversight the kit is expected to close.
+
+On the second review pass the reviewer replaced the crash-inducing form
+of B2's reverse-direction mutant with a semantically faithful one (the
+guard returns silently instead of throwing, rather than falling through
+into an argument-shape crash) and confirmed B2 still fails for the
+correct reason (the expected error object stays `undefined` — the
+mismatch was never rejected — not a `TypeError` from mismatched
+argument shapes). The B1/B2 `catch` blocks were also cleaned up in the
+same pass: both originally paired a `try`/`expect.unreachable`/`catch`
+shape, which on a miss raised `expect.unreachable`'s own
+`AssertionError` *inside* the same `catch` that also runs the identity
+assertion — nesting one `AssertionError` inside another correctly still
+failed, but blurred the diagnostic. Replaced with capturing the thrown
+value outside the assertion (`let caught: unknown` set in `catch`, then
+asserted after the `try` block), so a miss reads as a plain "expected
+`undefined` to match object" instead.
+
+**G4** (group 2's own review axis, `compare.ts`'s 2.6 refactor): the
+four-row `CONSTRAINT_KIND_DESCRIPTIONS` table task 2.6 introduced had no
+test pinning which description reaches which constraint-type letter —
+swapping the `u`/`f` rows (`"unique constraint"` and `"foreign key"`)
+left the entire 258-test CLI suite green, because no existing assertion
+read a finding's `message` text for any of the four constraint kinds,
+only its `code`. This is a pre-existing gap the refactor concentrated
+into one table rather than a regression the refactor introduced — no
+assertion checked this before 2.6 either, spread invisibly across four
+near-identical functions. Fixed by adding independent `message`
+assertions (the four description strings written directly in the test,
+never read from `compare.ts`'s own table — a table-driven test here
+would make the check tautological, restating the same table it exists
+to catch a defect in) to the three existing constraint-existence tests.
+Verified by re-swapping the two rows: exactly the two tests naming
+`"foreign key"`/`"unique constraint"` failed, all 13 others stayed
+green; reverted, confirmed clean.
 
 ## What went wrong / self-corrections during implementation
 
