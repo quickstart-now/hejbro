@@ -228,6 +228,15 @@ export type Db<
 	>,
 	TSchema = Record<string, unknown>,
 > = {
+	/**
+	 * The schema module exactly as passed to `db()` — every declaration it
+	 * exports, not only the tables/functions `declarations` classifies.
+	 * The same object reference, never copied or rebuilt: a startup
+	 * assertion reads this as the ground truth the handle was typed
+	 * against, and a defensive copy here would let that truth silently
+	 * diverge from what the caller actually declared.
+	 */
+	readonly schema: TSchema;
 	readonly declarations: Declarations;
 	readonly driver: Driver;
 	/**
@@ -357,6 +366,7 @@ export const db = <TSchema extends Schema>(
 		// below -- driver already structurally satisfies DriverSession, no
 		// transaction to open.
 		...createChainApi((send) => send(driver), declarations.tables),
+		schema,
 		declarations,
 		driver,
 		execute: ((statement: CompileInput) =>

@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
  * rather than assuming a wildcard export always does.
  */
 import type {
+	AssertSchemaFinding,
 	Db,
 	DbContext,
 	DeclaredCteMarker,
@@ -24,6 +25,17 @@ import * as hejbro from "../src/index";
 /** Referenced so the type-only import block above isn't flagged unused. */
 type _QueryTypesPresent = [Db, DbContext, ExecuteResult<never>, ScopedDb, Tx];
 type _CoreTypesPresent = [DeclaredCteMarker];
+/**
+ * `AssertSchemaFinding` (extend-query-runtime, owner decision: named on
+ * this surface, not re-exported as `check`'s own `Finding`) carries no
+ * runtime binding of its own -- a type alias produces nothing to probe
+ * with `typeof` -- so its only possible check is this one: the import
+ * above already fails `tsc` if the facade stops exporting it. The
+ * `identity`/`error` shape assertion belongs to `assert-schema.test.ts`
+ * (it is `check/compare.ts`'s own `Finding` shape, unchanged); this file
+ * only pins that the *name* reaches the public entry.
+ */
+type _AssertSchemaTypesPresent = [AssertSchemaFinding];
 
 describe("hejbro facade (task 7.9)", () => {
 	it("exports db from @hejbro/query", () => {
@@ -120,5 +132,9 @@ describe("hejbro facade (task 7.9)", () => {
 		);
 
 		expect(members).toBeDefined();
+	});
+
+	it("exports assertSchema (task 2.7, extend-query-runtime), a live binding not a shadowed/renamed one", () => {
+		expect(typeof hejbro.assertSchema).toBe("function");
 	});
 });

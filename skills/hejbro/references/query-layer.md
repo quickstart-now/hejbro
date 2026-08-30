@@ -768,6 +768,89 @@ returns row `n`'s value and stays frozen there for every later row in
 the partition — Postgres's own documentation calls both of these "not so
 useful" without an explicit frame.
 
+## Startup schema assertion
+
+`assertSchema(handle, options?)` (imported from `hejbro`, `#302`) checks
+that the database `handle.driver` is actually connected to matches every
+declaration `handle.schema` exports — the same comparison `hejbro check`
+runs from the CLI, callable from application code at startup instead. It
+is opt-in and explicit: constructing a `db()` handle never connects or
+reads anything on its own, and `assertSchema` is the only thing in this
+capability that ever does. A real `db()` handle's own `.schema`/`.driver`
+fields already satisfy `AssertSchemaHandle` structurally — pass the
+handle itself, not a copy:
+
+```ts prelude=query-handle
+import { assertSchema } from "hejbro";
+
+// resolves to a report on success -- never throws for a clean match
+const report = await assertSchema(handle);
+// report.compared: every declared identity assertSchema actually
+// compared against the live catalog (e.g. "app.posts")
+// report.notCompared: identities it could not compare, each with a
+// `reason` (and a `code` only when that gap is itself a failure --
+// see "Errors" below)
+```
+
+Six exported types carry this surface: `AssertSchemaHandle` (`{schema,
+driver}`, the minimal structural slice of a `db()` handle this needs),
+`AssertSchemaOptions` (`{registry?, allowNotCompared?}`),
+`AssertSchemaEntry` (`{identity}`, one compared declaration),
+`AssertSchemaNotComparedEntry` (`AssertSchemaEntry` plus `reason` and an
+optional `code`), `AssertSchemaReport` (`{compared, notCompared}`, what
+a successful call resolves to), and `AssertSchemaFinding` (`{identity,
+error}`, one entry of the `findings` array an `assert-schema-diverged`
+throw carries — see "Errors" below). `AssertSchemaFinding` is a type
+alias, not a copy: it is structurally the same shape `hejbro check`'s
+own comparison already produces, named under this surface's own
+vocabulary because a type never published before takes the name of the
+surface that first publishes it, not the command's.
+
+**Catch by `code`, never by the error's class.** A thrown error's class
+is not part of this function's contract — only `.code` is (the same
+rule the query layer's own errors follow, "Errors" below). `assertSchema`
+throws two different shapes for two different reasons, and a caller that
+branches on `code` sees both alike:
+
+- **Propagated**, class and message untouched, no `cause` added: a
+  declaration no registered kind owns at all — `generateMigration`'s own
+  `unowned-declaration` `HejbroError` — surfaces before the catalog is
+  ever read. This already speaks this caller's own vocabulary (a
+  declaration-time failure any `db()` caller could hit), so nothing
+  about it is rewrapped.
+- **Translated** into this library's own plain-`Error` `{code, cause?}`
+  runtime shape: everything `assertSchema` itself decides. A `hejbro
+  check`-vocabulary refusal it hits along the way (a `check-`-prefixed
+  code — names something `hejbro check`'s own internals invoke, never
+  this caller) is repackaged with the original preserved on `cause`,
+  never left as-is.
+
+```ts prelude=query-handle
+import { assertSchema } from "hejbro";
+
+try {
+	await assertSchema(handle);
+} catch (error) {
+	// every failure this function raises carries `code` regardless of
+	// its class -- this is the one stable thing to branch on
+	const code = (error as { readonly code?: unknown }).code;
+	if (code === "assert-schema-diverged") {
+		// at least one compared declaration doesn't match the database
+	}
+}
+```
+
+### Errors
+
+| `code` | When |
+|---|---|
+| `assert-schema-diverged` | At least one compared declaration doesn't match the live catalog — the message lists each diverging finding, quoted verbatim from the same comparison `hejbro check` uses (a quoted line may itself say to rerun that command; that instruction belongs to the quote, not to this call). The same findings are also attached as `findings: ReadonlyArray<AssertSchemaFinding>` on the thrown error, for a caller that wants the structured per-object data rather than parsing the message. |
+| `assert-schema-not-compared` | At least one declaration should have been compared and couldn't (a registered kind with no comparator), or the schema module declares nothing at all — `options.registry` (for the former) or actual declarations (for the latter) are the fix; `options.allowNotCompared: true` opts out of failing on this specific cause without silencing a real divergence. A kind that states none of its objects is ever comparable (e.g. a kind with no catalog-visible equivalent) never triggers this on its own — only a comparison that *should* have run and could not does. |
+| `assert-schema-catalog-unreadable` | Reading the database catalog itself failed (e.g. the connected role can't read `pg_catalog`) — the underlying failure is on `cause`. |
+
+`unowned-declaration` (propagated, not translated — see above) can also
+surface, unchanged, before either of these is ever reached.
+
 ## Not supported in this version
 
 These read naturally as query-builder features but aren't there yet —
@@ -775,10 +858,14 @@ use the `sql` escape hatch, or wait for the tracked issue:
 
 - `@hejbro/neon` and `@hejbro/nile` presets (#300, #301) — only
   `@hejbro/pg` (vanilla) and `@hejbro/supabase` exist today.
-- A startup assertion that the connected database matches the checked-out
-  snapshot (#302).
 - Prepared-statement caching (#303) — every execution compiles and sends
-  fresh.
+  fresh. Measured, not shipped: a session-scoped named prepared
+  statement's improvement over today's unnamed text query could not be
+  shown, under a spread-estimator-invariant standard, to reliably exceed
+  run-to-run measurement noise on the workload and machine measured
+  (`openspec/changes/extend-query-runtime/measurement.md`) — the
+  decision is scoped to that evidence, not a general claim about
+  prepared statements.
 
 ## Errors
 
@@ -834,7 +921,11 @@ const yourDriver: Pick<Driver, "transaction"> = {
   `openspec/specs/typed-function-execution/spec.md`,
   `openspec/specs/table-declaration/spec.md` (`.notNullElements()`'s
   backing CHECK),
-  `openspec/specs/value-utilities/spec.md` (`assertNoNulls`).
+  `openspec/specs/value-utilities/spec.md` (`assertNoNulls`),
+  `openspec/changes/extend-query-runtime/specs/query-execution/spec.md`
+  (`assertSchema`'s own scenarios — this change has not archived yet;
+  once it does, these fold into `query-execution/spec.md` above and
+  this citation should move with them).
 - Code: `packages/query/src/db/chain.ts` (`select`'s positional `from`
   argument, lines 374-398 — no `.from()` stage; `insert`/`update`/
   `deleteFrom`), `packages/query/src/sql.ts` (`sql`, `sql.raw`,
@@ -869,7 +960,20 @@ const yourDriver: Pick<Driver, "transaction"> = {
   (`supabaseDriver`), `packages/core/src/types/assert-no-nulls.ts`
   (`assertNoNulls`), `packages/cli/src/index.ts` (the `sql` shadow, lines
   23-24), `packages/cli/test/exports.test.ts` (the shadow pinned by test,
-  lines 38-50 and 52-69).
+  lines 38-50 and 52-69; `AssertSchemaFinding`'s own presence on the
+  public entry, type-pinned rather than runtime-probed since a type
+  alias has no `typeof` to check),
+  `packages/cli/src/assert-schema.ts` (`assertSchema`, the six exported
+  types, the three `assert-schema-*` codes, the propagate/translate
+  split).
+- Tests: `packages/cli/test/assert-schema.test.ts` (surface, causes
+  ⓑ/ⓒ, the propagate/translate split, registry defaulting),
+  `packages/cli/test/assert-schema-imports.test.ts` (this module never
+  reaches filesystem/process/network internals -- a real handle's caller
+  may run in contexts that forbid them),
+  `packages/cli/test/assert-schema-live.integration.test.ts` (the one
+  place `assertSchema` runs its real `readCatalog` path against a live
+  postgres:17, Docker-gated, local-only).
 - Gates: every path cited above is checked by
   `packages/skills/test/links.test.ts`; every `ts` block on this page is
   type-checked against this repo's real source by
