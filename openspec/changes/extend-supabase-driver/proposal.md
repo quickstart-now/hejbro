@@ -137,8 +137,9 @@ interface these specs describe.
   the right response is to say so, not to make the edit.
 - **Breaking**: none. The existing single-argument call keeps its exact
   behavior and its capability declaration; the new path is opt-in.
-- **Publishing**: one `minor` changeset. The five published packages move
-  together as a fixed group.
+- **Publishing**: one `minor` changeset. The six published packages move
+  together as a fixed group, so one changeset naming this package moves
+  them all.
 
 ## Verification boundary
 
@@ -272,29 +273,41 @@ assumed: handing the kit a capture that includes transaction control
 (`BEGIN`, pins, the caller's statement, `COMMIT`) makes it fail, because
 the last entry is `COMMIT`.
 
-The observation is therefore taken at the **driver session surface** —
-the statements that pass through the contract's own `execute`, which is
-where a `CompileResult` reaches a driver — and not the transaction
-control the driver issues around them. This is not a boundary invented
-to make the check pass:
+The observation handed to the kit is therefore taken at the **driver
+session surface** — the statements that pass through the contract's own
+`execute`, which is where a `CompileResult` reaches a driver — and not
+the transaction control the driver issues around them. The justification
+is the domain, not a precedent: transaction control never travels as a
+`CompileResult` and never crosses the `execute` contract, and the kit's
+own statement type is documented as carrying the same two fields a
+`CompileResult` carries onward to a driver.
 
-- transaction control never travels as a `CompileResult` and never
-  crosses the `execute` contract; it is the driver's own plumbing for
-  holding a connection;
-- the kit's own statement type is documented as carrying the same two
-  fields a `CompileResult` carries onward to a driver, so this is the
-  domain that type already names;
-- the vanilla driver's existing conformance test already observes at
-  exactly this surface, and the other `false`-tier driver emits no
-  textual transaction control at all — so both shipped drivers already
-  sit on this side of the line.
+It is worth being exact about what this is **not**. No shipped driver
+sets this precedent: the vanilla driver is checked on the `true` tier,
+where the observation is the setup hook by definition and no envelope
+question exists, and the other `false`-tier driver is captured at its
+transport with no textual transaction control to exclude. This change is
+therefore the first to draw the line explicitly, and it pays for that by
+covering, itself, everything the narrowed observation stops showing.
 
-What this boundary cannot see is stated with it: the kit checks
-ordering, not content, so it cannot tell that the pins and the caller's
-statement share **one transaction**, which on this path is the property
-that actually matters. That property is fixed directly in this package's
-own tests, and the kit's verdict is treated as necessary rather than
-sufficient.
+Two things the kit then cannot see, both fixed directly in this
+package's own tests rather than inferred from a green kit:
+
+- that the pins and the caller's statement reach the database inside
+  **one transaction** — a pin in a different transaction would be
+  worthless and would still satisfy the kit;
+- that the pins are sent **after** the transaction opens — a
+  transaction-local setting issued before `BEGIN` is not an error the
+  kit could see either, and it silently does nothing, which is exactly
+  the failure this path exists to remove.
+
+The second is invisible to any session-level observation by
+construction, because the statement that opens the transaction is not
+one of the statements a session-level observation records. So the
+division of labor is stated rather than left implied: the kit checks
+order within the contract's own surface, and this package's tests check
+the position of the pins relative to the envelope. The kit's verdict is
+necessary, never sufficient.
 
 The kit is not modified here. One finding is recorded rather than acted
 on: the specification describes this tier's check as verifying that
