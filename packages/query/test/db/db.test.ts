@@ -1,7 +1,9 @@
 import {
 	defineFunction,
+	defineView,
 	eq,
 	grant,
+	pgEnum,
 	rls,
 	roleName,
 	schema,
@@ -45,11 +47,21 @@ const helloWorld = defineFunction(
 
 const readerGrant = grant(app).usage.to("grant_reader");
 
-/** A namespace-style schema module fixture (owner decision (c')): tables, a function, a grant-set, and one incidental non-declaration export mixed together, exactly like `import * as schema from "./app.schema"` would produce. */
+const postStatus = pgEnum(app, "post_status", ["draft", "published"]);
+
+const publishedPosts = defineView(
+	app,
+	"published_posts",
+	select(posts).where(eq(posts.status, "published")),
+);
+
+/** A namespace-style schema module fixture (owner decision (c')): tables, a function, a grant-set, kinds `db()` never classifies (enum, view), and one incidental non-declaration export mixed together, exactly like `import * as schema from "./app.schema"` would produce. */
 const appSchema = {
 	posts,
 	helloWorld,
 	readerGrant,
+	postStatus,
+	publishedPosts,
 	// an ordinary string export with nothing to do with roles -- must
 	// never be treated as a role candidate (see db.ts's own DbOptions
 	// tsdoc: auto-collecting string exports would let a typo'd role
@@ -145,5 +157,29 @@ describe("db()'s role whitelist -- the 4-source union (owner decision (c')/4.7)"
 			// @ts-expect-error "app_admin" must be branded via roleName(), a plain string isn't a Role.
 			roles: ["app_admin"],
 		});
+	});
+});
+
+describe("db()'s declaration retention (task 1.1/1.2, extend-query-runtime) -- the assertion's own input", () => {
+	it("keeps a declaration that is neither a table nor a function", () => {
+		const handle = db(appSchema, fakeDriver());
+
+		expect(handle.schema.posts).toBe(posts);
+		expect(handle.schema.helloWorld).toBe(helloWorld);
+		expect(handle.schema.readerGrant).toBe(readerGrant);
+		expect(handle.schema.postStatus).toBe(postStatus);
+		expect(handle.schema.publishedPosts).toBe(publishedPosts);
+	});
+
+	it("retained declarations are the module's own objects, and classification is unaffected by retention", () => {
+		const handle = db(appSchema, fakeDriver());
+
+		expect(handle.schema).toBe(appSchema);
+		expect(Object.keys(handle.declarations.tables)).toEqual(["posts"]);
+		expect(handle.declarations.tables.posts).toBe(posts);
+		expect(Object.keys(handle.declarations.functions)).toEqual(["helloWorld"]);
+		expect(handle.declarations.functions.helloWorld).toBe(helloWorld);
+		expect(handle.declarations.roles.has("grant_reader")).toBe(true);
+		expect(handle.declarations.roles.has("policy_reader")).toBe(true);
 	});
 });
