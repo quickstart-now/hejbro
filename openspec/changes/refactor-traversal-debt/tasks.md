@@ -44,6 +44,14 @@ structural measurement**, both taken against a frozen base.
   control built on `sed 's/x/y/'` where no `x` exists "passes" while
   testing nothing. An empty diff from a command that cannot fail is not
   evidence — including when the command is the control itself.
+  And a landed edit is still not enough on its own: confirm the
+  **property under test actually went away**, not merely that bytes
+  moved. Measured instance — a control that rewrote
+  `"invalid-kind-change"` to `"XXinvalid-kind-changeXX"` changed the file
+  (so `cmp` passed) yet left a `toContain("invalid-kind-change")`
+  assertion green, because the wrapped string still contains the
+  original. Count remaining occurrences to zero, or assert on the exact
+  property the test asserts on.
 
 ## Contract traps (found before code — do not rediscover these the hard way)
 
@@ -199,7 +207,7 @@ Closes #472. 31 guards restate `${change.kind} ${change.operation}` and
 nothing else; the comment that justified keeping them per-file states a
 premise the measurement disproves.
 
-- [ ] 1.1 [design] `~9m` Three helpers, with the message text pinned
+- [x] 1.1 [design] `~9m` Three helpers, with the message text pinned
       first. Red: `packages/core/test/kind/require-snapshot.test.ts` »
       "each helper renders the kind and operation message it replaces" —
       fails today because the helpers do not exist. Settles: the three
@@ -241,7 +249,7 @@ premise the measurement disproves.
       of dummy shape, which is otherwise a source of failures that look
       like guard regressions and are not. Files:
       `packages/core/src/kind/emit-helpers.ts`, the new test.
-- [ ] 1.2 `~9m` Absorb the guards in `enum-kind.ts` (3, incl. one
+- [x] 1.2 `~9m` Absorb the guards in `enum-kind.ts` (3, incl. one
       `requireBoth` at `:79`), `function-kind.ts` (3), `grant-kind.ts`
       (4), `policy-kind.ts` (3). **No red test, honestly**: delegation
       changes no observable behavior, so any test that could go red here
@@ -249,13 +257,13 @@ premise the measurement disproves.
       theatre. What protects this task is 1.1's pin test staying green
       across the edit, and 1.4's ratchet closing over all three files.
       Files: those four.
-- [ ] 1.3 `~8m` Absorb the guards in `rls-kind.ts` (3),
+- [x] 1.3 `~8m` Absorb the guards in `rls-kind.ts` (3),
       `schema-kind.ts` (2), `sequence-kind.ts` (3),
       `trigger-kind.ts` (3). No red test, same reasoning as 1.2. Note
       these are four of the five "only `next` is guarded" kinds — do not
       let the symmetry tempt a new `requirePrevious` here. Files: those
       four.
-- [ ] 1.4 `~9m` Absorb the guards in `view-kind.ts` (4) and
+- [x] 1.4 `~9m` Absorb the guards in `view-kind.ts` (4) and
       `table-kind-emit.ts` (3, incl. the second `requireBoth` at
       `:823`), and delete the disproved premise from
       `kind/emit-helpers.ts:29` ("…which differs per kind") — the
