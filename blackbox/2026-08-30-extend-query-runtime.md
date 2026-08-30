@@ -18,6 +18,7 @@ Refs:
 - packages/query/test/types/chain-types.test.ts @ blob 14d85770ef36048f4e108a3dc04b781245aee409
 - README.md @ blob 99f5562c97121fd9384fb15f2965a64bfc2b15e7
 - skills/hejbro/references/query-layer.md @ blob 917eb5775f6d8fd9ba85c818291329109763c455
+- skills/hejbro/SKILL.md @ blob aa69f02f8be689fc08dd9125f362af5567ffa583
 
 (Taken from `git rev-parse HEAD:<path>` immediately after the group-6
 commit (`49aa375`), each cross-checked against `git hash-object
@@ -36,6 +37,16 @@ first commit's; the other fourteen are unchanged and still pin
 the same class of staleness the enforce-driver-contract entry's own
 "Re-pinned a second time" note closes, caught the same way, before
 handing the SHA off rather than after.
+
+Re-pinned a third time, after `feat(cli): name the finding type on the
+public surface` (`aa6f6e6`, the `SKILL.md` index/description round,
+owner-authorized separately from the `AssertSchemaFinding` decision
+above -- same header, distinct commit): only `skills/hejbro/SKILL.md`
+gained content this round (a new path for this file, added to the list
+above rather than replacing an existing entry) -- the other twenty
+paths were re-verified unchanged and still match their own most recent
+pin. Same method: `git hash-object` against `git rev-parse
+HEAD:<path>`, all `ok`.
 
 This file's own path is not included, since it cannot pin
 its own hash; the drafting note below has the same reasoning
@@ -139,7 +150,20 @@ did. One did not.
   the moment it is exported for the first time fixes its name; the
   reused-`check-`-prefixed-code exception elsewhere in this capability
   does not apply here, because that exception protects an *already*
-  public contract, and this type was not one.
+  public contract, and this type was not one. **Round 3**: `SKILL.md`
+  (the shared skill index, cross-cutting every capability in this
+  repository, not owned by this change alone) is authorized for a
+  narrowly-scoped edit — the References table's `query-layer.md` row
+  and the frontmatter `description` both gained the schema-assertion
+  case, so a reader asking "how do I confirm the connected database
+  matches its declarations at startup" reaches this skill by its own
+  documented entry points rather than only by already knowing
+  `assertSchema` exists. Rule 7 (`hejbro check` "is the one command
+  that does read a live database") is left unedited: `assertSchema` is
+  a function a caller's own code invokes, not a CLI command, so the
+  sentence stays true as written and editing a true sentence for
+  symmetry alone was not judged worth the risk to a file every other
+  capability also depends on.
 
 ## Reversed decisions
 
