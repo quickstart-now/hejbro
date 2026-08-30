@@ -221,12 +221,12 @@ calling "difference" what it never compared.
 
 Runs after groups 1 and 2. Owns files neither of them touches.
 
-- [ ] 3.1 `~6m` One changeset, `minor` — new public surface on the
+- [x] 3.1 `~6m` One changeset, `minor` — new public surface on the
       published packages (they version as one fixed group, so naming any
       one moves all five). Red: `pnpm changeset status` in CI, which
       fails a published-package change carrying none. Files:
       `.changeset/<generated>.md`.
-- [ ] 3.2 `~8m` The flight recorder and the README numbers. Red: none —
+- [x] 3.2 `~8m` The flight recorder and the README numbers. Red: none —
       done means `blackbox/` carries this change's entry (what was
       asked, what was decided and built, why, including the two
       rejections this change records: the runtime guard and the

@@ -500,6 +500,18 @@ describe("compareCatalog / 2.5 table sub-object existence", () => {
 		expect(byIdentity.get("app.posts.posts_has_author")?.error.code).toBe(
 			"check-object-missing",
 		);
+		// Pins the constraint-kind description that reaches this message
+		// (task 2.6/G4) -- written independently here, never read from
+		// `compare.ts`'s own table, so swapping two rows of that table
+		// (e.g. "unique constraint" <-> "foreign key") is a real
+		// user-facing regression this test actually catches, not a
+		// tautology restating the table it's supposed to check.
+		expect(byIdentity.get(`app.posts.${fkName}`)?.error.message).toContain(
+			"foreign key",
+		);
+		expect(
+			byIdentity.get("app.posts.posts_has_author")?.error.message,
+		).toContain("check constraint");
 	});
 
 	it("reports a declared primary key the table does not have", () => {
@@ -526,6 +538,11 @@ describe("compareCatalog / 2.5 table sub-object existence", () => {
 		expect(findings).toHaveLength(1);
 		expect(findings[0]?.identity).toBe(`app.posts.${pkName}`);
 		expect(findings[0]?.error.code).toBe("check-object-missing");
+		// See the fk/check test's own comment above (task 2.6/G4) -- the
+		// literal "primary key" here is independent of `compare.ts`'s own
+		// table, so a swapped row is caught here, not just assumed fixed
+		// by the refactor that introduced the table.
+		expect(findings[0]?.error.message).toContain("primary key");
 	});
 
 	// No test in this file previously exercised the unique-constraint
@@ -577,6 +594,8 @@ describe("compareCatalog / 2.5 table sub-object existence", () => {
 		expect(findings).toHaveLength(1);
 		expect(findings[0]?.identity).toBe(`app.posts.${uniqueName}`);
 		expect(findings[0]?.error.code).toBe("check-object-missing");
+		// See the fk/check test's own comment above (task 2.6/G4).
+		expect(findings[0]?.error.message).toContain("unique constraint");
 	});
 });
 
