@@ -171,22 +171,22 @@ propagates without any fallback being consulted.
 
 (A)'s advantage was that a fallback is a value known at construction, so
 its role could be validated there rather than on the first request that
-resolves to none. That advantage was measured and found narrow. The
-whitelist *is* complete at that point — `declarations.roles` folds all
-four sources synchronously before the handle is assembled, with no
-dependency on the `context` option and so no cycle — so the check was
-buildable. But a preset's own `asAnon()` carries a driver-contributed
-role, which is always in the whitelist and has nothing to catch; the
-exposure narrows to a caller hand-writing an anonymous role, and that
-caller still fails **loudly**, on the same fail-closed check, at the
-first request that reaches it. Later-but-loud is not the failure class
-this project converts; silent is. Moving a loud failure earlier did not
-justify the surface.
+resolves to none. That advantage was measured, not assumed, and found
+narrow. The whitelist *is* complete at that point — `declarations.roles`
+folds all four sources synchronously before the handle is assembled,
+with no dependency on the `context` option and so no cycle — so the
+check was buildable. But a preset's own `asAnon()` carries a
+driver-contributed role, which is always in the whitelist and has
+nothing to catch; the exposure narrows to a caller hand-writing an
+anonymous role, and that caller still fails **loudly**, on the same
+fail-closed check, at the first request that reaches it. Later-but-loud
+is not the failure class this project converts; silent is. Moving a loud
+failure earlier did not justify the surface.
 
 Decisively, (B) keeps "yields no context" unrepresentable in the *type*.
-(A) with an optional fallback would have demoted that guarantee to a
-runtime check — paying dead surface and losing the compile-time
-property at once.
+An optional fallback would have demoted that guarantee to a runtime
+check while still paying for a field — losing the compile-time property
+and adding surface at once.
 
 Provisional detail ②'s intent holds as a property of the layer rather
 than of the caller's diligence: once a provider is registered, an

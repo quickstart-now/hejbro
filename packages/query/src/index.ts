@@ -37,7 +37,7 @@ export type {
 	UpdateChainReturnable,
 	WithChainTerminal,
 } from "./db/chain";
-export type { DbContext, ScopedDb } from "./db/context";
+export type { ContextProvider, DbContext, ScopedDb } from "./db/context";
 export type {
 	Db,
 	DbOptions,

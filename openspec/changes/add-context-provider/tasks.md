@@ -18,17 +18,17 @@ Files: `packages/query/src/db/db.ts`,
 `packages/query/test/db/context-provider.test.ts` (new),
 `packages/query/test/exports.test.ts`.
 
-- [ ] 1.1 (~9m) [design] The option and its fail-closed floor. The
+- [x] 1.1 (~9m) [design] The option and its fail-closed floor. The
       shape is settled by owner decision: `context` is a resolver
-      returning a context, non-nullable — no fallback field. What this
-      task still settles is the *error shape* for a caller who bypasses
-      the type and yields nothing: its code and its message text, which
-      are contract, confirmed against the query layer's existing code
-      names before adoption. Red: `context-provider.test.ts` — "a
-      handle built without a provider issues no context statements" and
-      "a resolver yielding nothing fails closed before any statement is
-      sent".
-- [ ] 1.2 (~8m) The resolution primitive: one context-applied
+      returning a context, non-nullable — **no fallback field**. What
+      this task still settles is the *error shape* for a caller who
+      bypasses the type and yields nothing: settled as code
+      `context-provider-empty`, message text confirmed against the
+      query layer's existing code names (owner-approved). Red:
+      `context-provider.test.ts` — "a handle built without a provider
+      issues no context statements" and "a resolver yielding nothing
+      fails closed before any statement is sent".
+- [x] 1.2 (~8m) The resolution primitive: one context-applied
       transaction per execution, built by reusing `applyContext` and
       validating the resolved role before `driver.transaction` is
       called. Red: same file — "applies the resolved role and settings
@@ -40,7 +40,7 @@ Files: `packages/query/src/db/db.ts`,
       bucket. Assert the boundary that way (call count 0, no bucket),
       never by searching for `begin` text, and do not extend the
       fixture to make the prose literal.
-- [ ] 1.3 (~8m) Surface coverage — **eight** execution entry points,
+- [x] 1.3 (~8m) Surface coverage — **eight** execution entry points,
       measured, not assumed: `select`/`insert`/`update`/`deleteFrom`/
       `with` (the `ChainApi` keys), `execute`, `transaction`, `fn`. The
       scoped handle already routes all eight through the single
@@ -51,17 +51,17 @@ Files: `packages/query/src/db/db.ts`,
       Confirm `fn.ts`'s own path while here (it was not read during the
       entry-point survey — the survey inferred it from `db.ts`'s call
       shape, so it is the one unverified item).
-- [ ] 1.4 (~6m) Cadence: the resolver is called once per execution and
+- [x] 1.4 (~6m) Cadence: the resolver is called once per execution and
       never cached; one `transaction(callback)` resolves once, not per
       statement. Red: same file — "two executions call the resolver
       twice" and "one transaction calls the resolver once".
-- [ ] 1.5 (~7m) Precedence and the error path: `db.as(context)` never
+- [x] 1.5 (~7m) Precedence and the error path: `db.as(context)` never
       consults the resolver, and a throwing resolver propagates
       unchanged without opening a transaction or sending anything. Red:
       same file — "an explicit as() never calls the resolver" (asserts a
       call count of 0, not just the applied context) and "a throwing
       resolver opens no transaction".
-- [ ] 1.6 (~9m) Capability ordering — `assertCapability` runs before the
+- [x] 1.6 (~9m) Capability ordering — `assertCapability` runs before the
       resolver, so the failure belongs to the driver alone — plus the
       public type on the `@hejbro/query` barrel and its export pin. Red:
       same file — "a missing capability fails before the resolver is
@@ -74,8 +74,9 @@ Files: `packages/supabase/test/context-provider.test.ts` (new),
 `skills/hejbro/references/`.
 
 - [ ] 2.1 (~8m) The adapter is the existing builders and nothing else: a
-      provider whose resolver returns `asUser(claims)` and whose
-      fallback is `asAnon()` applies through the generic mechanism. Red:
+      provider whose resolver returns `asUser(claims)` for a request
+      carrying verified claims and `asAnon()` otherwise applies through
+      the generic mechanism. Red:
       `packages/supabase/test/context-provider.test.ts` — "a Supabase
       provider applies authenticated and anonymous contexts with no
       preset-side mechanism". **Tripwire**: if this task needs new code

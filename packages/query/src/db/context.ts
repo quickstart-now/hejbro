@@ -26,6 +26,16 @@ export type DbContext = {
 };
 
 /**
+ * `db()`'s `context` option (add-context-provider, owner-settled shape
+ * (B)): a resolver consulted once per execution, returning the
+ * {@link DbContext} that execution runs under. Non-nullable on purpose --
+ * "no context" is a type error here, never a value this type admits, so a
+ * caller whose correct behavior is "no identity, no query" throws from
+ * the resolver instead of being given a slot to yield nothing into.
+ */
+export type ContextProvider = () => DbContext | Promise<DbContext>;
+
+/**
  * What `db.as(context)` returns: `execute`/`transaction`/`fn`, all
  * scoped to that context, plus the same thenable chain members every
  * other surface carries (task 7.4, group 7 decision ③) — no `.as` of its
@@ -70,6 +80,16 @@ function throwUndeclaredRole(
 			`"${role}" is not a declared role. Declared roles: ${list}. Next: grant/policy the role in your schema, add roleName("${role}") to db()'s "roles" option, or check for a typo.`,
 		),
 		{ code: "undeclared-role" },
+	);
+}
+
+/** Builds and throws the `context-provider-empty`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). `ContextProvider`'s return type is non-nullable, so this is only reachable from a caller who bypassed that type; a throwing resolver never reaches here at all (its own error propagates unchanged, task 1.1/1.5). */
+function throwProviderContextEmpty(): never {
+	throw Object.assign(
+		new Error(
+			'A registered context provider\'s resolver yielded no context. Next: return a context from the resolver on every call -- a resolver whose correct behavior is "no identity, no query" should throw instead of yielding nothing.',
+		),
+		{ code: "context-provider-empty" },
 	);
 }
 
@@ -129,6 +149,45 @@ const applyContext = async (
 			}),
 		Promise.resolve(),
 	);
+};
+
+/**
+ * The primitive a registered `context` provider runs every execution
+ * surface through (add-context-provider, task 1.1/1.2): asserts the
+ * interactive-transaction capability *before* consulting the resolver (so
+ * the failure belongs to the driver alone, task 1.6), resolves the
+ * context, rejects fail-closed if the resolver yielded nothing, validates
+ * the resolved role through the exact same {@link assertDeclaredRole}
+ * `db.as(context)` uses, then applies it via the exact same
+ * {@link applyContext} inside one fresh `driver.transaction` -- the same
+ * two functions the explicit path calls, never a second implementation of
+ * either (the invariant every task in this group serves).
+ */
+export type ProviderRun = <T>(
+	operation: string,
+	send: (session: DriverSession) => Promise<T>,
+) => Promise<T>;
+
+export const createProviderRun = (
+	driver: Driver,
+	declaredRoles: Declarations["roles"],
+	provider: ContextProvider,
+): ProviderRun => {
+	return async <T>(
+		operation: string,
+		send: (session: DriverSession) => Promise<T>,
+	): Promise<T> => {
+		assertCapability(driver, "interactive-transactions", operation);
+		const context = await provider();
+		if (context === undefined || context === null) {
+			throwProviderContextEmpty();
+		}
+		assertDeclaredRole(context.role, declaredRoles);
+		return driver.transaction(async (session) => {
+			await applyContext(session, context);
+			return send(session);
+		});
+	};
 };
 
 /**
