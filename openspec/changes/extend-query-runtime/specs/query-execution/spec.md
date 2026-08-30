@@ -56,9 +56,12 @@ that awaits it and proceeds has been told the database matched.
 ### Requirement: The assertion states the boundary of what it compared
 The assertion SHALL compare declarations through an object-kind registry
 it is given, defaulting to the generic Postgres registry when the caller
-supplies none. A declaration that no kind in that registry owns SHALL be
-reported by name as not compared — never silently skipped, and never
-counted as matching. What the caller receives SHALL keep the two apart:
+supplies none. A declaration the assertion did not compare — because no
+kind in that registry owns it, or because the kind that owns it declares
+its objects uncompared — SHALL be reported by name as not compared,
+carrying the reason that kind already states. Never silently skipped,
+and never counted as matching: "the registry owns it" is not "it was
+looked at". What the caller receives SHALL keep the two apart:
 an object that was compared and an object that could not be SHALL
 occupy different places in it, so "not counted as matching" is
 observable rather than merely stated. The boundary SHALL be reported
@@ -75,7 +78,11 @@ These two codes name the assertion's own outcome, not an object's. The
 per-object findings keep the codes the comparison already gives them —
 `assert-schema-not-compared` is the run-level statement of the very fact
 `hejbro check` reports per object as `check-not-compared`, and neither
-code replaces the other. A caller MAY opt out of that failure, and
+code replaces the other. The per-object codes therefore keep their
+`check-` prefix even when they travel inside an error a caller who never
+ran that command receives: reusing the comparison's own vocabulary
+outranks matching the prefix to the caller's entry point, and renaming
+them would break the callers that already match on them. A caller MAY opt out of that failure, and
 opting out SHALL change only whether the assertion throws: the
 not-compared declarations SHALL still be named in what the caller
 receives.
@@ -85,6 +92,12 @@ receives.
   supplied registry does not own
 - **THEN** the assertion reports that declaration by name as not
   compared, and does not treat it as matching
+
+#### Scenario: A registered kind that is not compared lands in the same place
+- **WHEN** the registry owns the declaration's kind, but that kind
+  declares its objects uncompared
+- **THEN** the declaration is reported as not compared, carrying that
+  kind's own stated reason — it never appears among the compared
 
 #### Scenario: A preset declaration is compared once its registry is supplied
 - **WHEN** the same schema module is asserted with the registry the

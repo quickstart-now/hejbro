@@ -7,14 +7,25 @@ its outcome is decided.
 Conventions that apply to every group:
 
 - The gate set is `pnpm check`, `pnpm check-types`, `pnpm test`,
-  `pnpm check:bans`, and `openspec validate extend-query-runtime
-  --strict`, all under `TURBO_FORCE=1`. `check:bans` is not optional:
-  since the ban list moved out of Biome, it is the only machine check
-  for `let` and loop forms.
+  `pnpm check:bans`, `pnpm check:crap`, `pnpm check:tasktime`, and
+  `openspec validate extend-query-runtime --strict`, all under
+  `TURBO_FORCE=1`. `check:bans` is not optional: since the ban list
+  moved out of Biome, it is the only machine check for `let` and loop
+  forms. `check:tasktime` is in the set for the same reason the task
+  ticks are: a group that writes ledger rows and leaves the badges
+  stale fails CI on one matrix leg, long after it looked green here.
+- A gate that **rewrites** a file is judged by the diff it leaves
+  behind, not by its own exit code — `check:crap` and `check:tasktime`
+  both rewrite README, so a green run with `README.md` still modified
+  means the refresh was never committed. Run them, then show
+  `git status --porcelain`; that pair is the check, and it is the same
+  pair CI performs.
 - A `[design]` task settles a contract, and a contract's shape is half
   types. Every `[design]` task therefore names at least one **type-level**
   mutation alongside its runtime one — a value mutation cannot make a
-  widened generic red.
+  widened generic red. A type-level red is proved with `check-types`,
+  never with the test runner: a type assertion does nothing at runtime,
+  so a green runner says nothing about it either way.
 - The task ticks in this file and the rows in `openspec/task-times.csv`
   are written at group boundaries and travel in that group's own commit.
 
@@ -138,7 +149,22 @@ Gates: the standard set above. Group files:
       access". What makes it red: add `import "node:fs";` to
       `assert-schema.ts` and the walker reports it.
       Files: `packages/cli/src/assert-schema.ts`, that test.
-- [ ] 2.6 (~6m) The runtime entry exports it. Red:
+- [ ] 2.6 (~7m) The two reasons a declaration goes uncompared are
+      independently observable: no kind owns it, and the kind that owns
+      it declares its objects uncompared. These are different code
+      paths, so each has its own test and neither test may cover the
+      other. Red: `packages/cli/test/assert-schema.test.ts` — the
+      second cause's case, using a registered kind that declares itself
+      uncompared. What makes it red — a two-by-two, and the diagonal is
+      the point: breaking only the registry-lookup path (an unowned
+      declaration passes silently) reddens the first cause's test and
+      leaves the second green; breaking only the declared-uncompared
+      path (that kind's objects go through as compared) reddens the
+      second and leaves the first green. One operation reddening both
+      means one test is covering both paths, and then one of the two
+      scenarios is redundant.
+      Files: `packages/cli/src/assert-schema.ts`, that test.
+- [ ] 2.7 (~6m) The runtime entry exports it. Red:
       `packages/cli/test/exports.test.ts` — "the runtime entry exposes
       the assertion". What makes it red: remove the re-export line from
       `packages/cli/src/index.ts`.
@@ -261,5 +287,5 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test`,
 
 ## Totals
 
-Groups 1–4 and 6: 16 tasks (4 + 6 + 1 + 3 + 2). Group 5 adds 4 more if
+Groups 1–4 and 6: 17 tasks (4 + 7 + 1 + 3 + 2). Group 5 adds 4 more if
 the measurement earns it.
