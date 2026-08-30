@@ -656,9 +656,13 @@ properties hold regardless of driver or preset:
   transaction.
 - **The resolver's return type forbids yielding nothing.** A caller who
   bypasses the type anyway (plain JS, an `any`) gets the coded
-  `context-provider-empty` failure instead of an unscoped send — there is
-  no path out of a handle with a registered provider that reaches the
-  database uncontexted.
+  `context-provider-empty` failure instead of an unscoped send — no
+  execution surface of a handle with a registered provider reaches the
+  database uncontexted. The handle's non-execution members are outside
+  that promise and stay uncontexted on purpose: `handle.driver` is public,
+  and `assertSchema` reads the catalog through it without consulting the
+  resolver, because catalog reads performed under a resolved application
+  role would report that role's visibility as schema divergence.
 - **A throwing resolver propagates its exact error and applies no
   context** — a failure to determine identity is not the same claim as
   an absence of identity, so this never falls back to running

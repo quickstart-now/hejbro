@@ -2,10 +2,10 @@ Refs:
 - .changeset/add-context-provider.md @ blob 863cd79a1096375e3d3fb62a69c4378599344bd8
 - .changeset/harden-query-layer.md @ blob 3685b350ecc1cd2d25b69bf8655434d3d3df2fdd
 - .changeset/harden-query-surface.md @ blob 94d6a67525724cc5ae2b4edac51b788e527b5160
-- AGENTS.md @ blob 5d36d25881769919417728432634f080f9d56c4b
+- AGENTS.md @ blob 3b1a4f58a628cd3929d1e4eaa4834ec843617ed7
 - README.md @ blob 9de4fc3c625840eaec1622614b81f4854b537ee5
 - openspec/changes/add-context-provider/proposal.md @ blob 69eceb37d85834d7a472498182a4c3a8924f7231
-- openspec/changes/add-context-provider/specs/rls-execution-context/spec.md @ blob d7ca1d7687d01160e75fa3f766b49b725aa8c88f
+- openspec/changes/add-context-provider/specs/rls-execution-context/spec.md @ blob f90f3a206c92384ec5f172547e41951d4eba39fd
 - openspec/changes/add-context-provider/tasks.md @ blob ed54b487ccd20cef187cc4b0831b657b50edbccc
 - openspec/task-times.csv @ blob f0e5f4f5327d3d52159a1a4b7be777f505f93060
 - packages/cli/test/exports.test.ts @ blob ea3cbff3cf1e1bc37dfd91dfddf310ab849c1925
@@ -13,14 +13,23 @@ Refs:
 - packages/query/src/db/db.ts @ blob f92cc04aa2d70ba2343c6ed6711ed505f45d65da
 - packages/query/src/db/transaction.ts @ blob 066aba31d05353f52e17068ddff21d7687b39b14
 - packages/query/src/index.ts @ blob da80cfc77a55a7c7e18555420b6f02cd486b7062
-- packages/query/test/db/context-provider.test.ts @ blob 704f7514adb42d2146c11891a4f6d4b9a2594bba
+- packages/query/test/db/context-provider.test.ts @ blob de03b298181d3799f61fa3c11f25a7b0231d72b0
 - packages/query/test/exports.test.ts @ blob 0b7ddf95a9adc79fba8a6d0be97fd8226b78c46c
 - packages/supabase/test/context-provider.test.ts @ blob fa3972a2c57d1a1b0520f9d24ef09655c71c4787
 - skills/hejbro/SKILL.md @ blob df6fc914f00ebfe836406662ad992b16f83c3928
-- skills/hejbro/references/query-layer.md @ blob a935ecacea4f6186965da479a5f3e4ea33ce7e89
+- skills/hejbro/references/query-layer.md @ blob 9ae79b2d1a7e06a04024dad4ffa3269986bb2d8e
 
 (Taken from `git hash-object <path>` on the closing working tree, after
-the review verdict and before the closing commit. The three
+the review verdict and before the closing commit. Three pins — the
+delta spec, the provider test file, and the query-layer reference —
+were re-pinned once more after the D106 correction round tightened
+those files; see "The D106 gate" below. The AGENTS.md pin was also
+re-taken post-merge: a concurrent change on dev edited a different
+line of the same file (the D106 cycle line, #539) while this change's
+branch held the five→six fix, so the merged file is a new blob
+joining both edits — the first measured case of a pin dying to a
+concurrent same-file edit rather than to a squash or an archive move.
+The three
 `openspec/changes/add-context-provider/` paths above will move when
 this change archives; the pins are to be re-pathed in the archive PR,
 blobs unchanged — the archive-vs-squash asymmetry recorded by the
@@ -171,3 +180,34 @@ only where the split line coincides with a file boundary. The ledger
 records the group as one measurement ("one row, not six") — the
 implementer explicitly refused to back-fill per-task numbers by ratio,
 which is the only reason the estimation error stayed visible.
+
+## The D106 gate (first application)
+
+This change was the first subject of the adversarial spec-only review
+D106 landed the same day. An isolated evaluator (fresh session, a
+different model family from the piece's planner, a detached worktree
+with the prohibited artifacts physically removed) drove every delta
+scenario through the public API with fourteen executed probes.
+**Verdict: PASS — 0 blocking, 0 major, 4 minor.** Three findings were
+consumed as a pre-archive correction round on the delta and the skill
+reference (the error code pinned in spec text, the no-unscoped-path
+sentence narrowed to the handle's execution surfaces with the
+non-execution boundary specified and ratchet-tested, the coexistence
+scenario qualified via a MODIFIED entry); the fourth — a one-clause
+qualifier on `query-execution`'s preview-equals-executed scenario —
+was filed as its own tracked issue rather than opened here.
+
+The gate also audited itself. The evaluator disclosed that the
+authorized `openspec show --diff` rendered the full proposal body — it
+reads git, not the working tree the isolation had cleaned — so the
+planner's pre-registered contamination audit classified the one
+finding whose framing vocabulary overlapped the proposal's as
+"derived after exposure, independence unconfirmable, conclusions
+divergent, non-blocking", while the finding no team member had seen
+(the public `handle.driver` refuting the absolute no-unscoped-path
+sentence) stood as the independence evidence. Both the exposure path
+and the physical-isolation lesson (worktree deletion is hiding, not
+enforcement — the object store answers `git show`/`git grep HEAD`)
+are queued for the owner as protocol amendments: a filtered
+`git archive` whitelist export with no `.git`, probed after creation,
+and delta rendering from the working tree only.

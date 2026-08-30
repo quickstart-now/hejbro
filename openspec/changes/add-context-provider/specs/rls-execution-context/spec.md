@@ -97,10 +97,18 @@ wrapping transaction's own `begin`.
 ### Requirement: A provider that yields no context fails closed
 A registered provider's resolver SHALL yield a context; the type SHALL
 NOT admit a missing one. A caller who bypasses the type and yields no
-context SHALL receive an explicit, coded failure before any statement is
-sent — the execution SHALL NOT proceed under whatever role the
-connection already holds. There is no unscoped path out of a handle that
-has a provider registered.
+context SHALL receive a failure coded `context-provider-empty` before
+any statement is sent — the execution SHALL NOT proceed under whatever
+role the connection already holds. There is no unscoped path out of the
+handle's execution surfaces once a provider is registered.
+
+That subject is exact, not shorthand. A handle also exposes members that
+are not execution surfaces — its `driver`, and the schema assertion that
+takes one — and statements issued through those SHALL continue to reach
+the database without a context, never consulting the resolver. For the
+assertion that is the correct behavior: catalog reads performed under a
+resolved application role would report divergence that reflects the
+role's visibility rather than the schema.
 
 A resolver that throws SHALL propagate its error unchanged. A failure to
 determine identity is not the same claim as an absence of identity, and
@@ -108,9 +116,17 @@ an execution SHALL NOT proceed on either.
 
 #### Scenario: A resolver yielding nothing sends nothing
 - **WHEN** a resolver that bypasses the type yields no context
-- **THEN** the execution fails with an explicit coded error, no
-  transaction is opened, and no statement reaches the database — the
+- **THEN** the execution fails with the code `context-provider-empty`,
+  no transaction is opened, and no statement reaches the database — the
   statement is never sent unscoped
+
+#### Scenario: A non-execution member of the handle stays uncontexted
+- **WHEN** a statement is issued through a provider handle's own
+  `driver` member — the path the schema assertion takes to read the
+  catalog
+- **THEN** it reaches the database with no context applied and without
+  the resolver being consulted, because registering a provider wraps the
+  handle's execution surfaces and not the driver it was built from
 
 #### Scenario: A throwing resolver sends nothing
 - **WHEN** the resolver throws
@@ -130,3 +146,14 @@ depend on whether the caller's auth layer answered.
   lacks interactive transactions
 - **THEN** the execution fails naming the missing capability, the
   resolver is never called, and nothing reaches the database
+
+## MODIFIED Requirements
+
+### Requirement: Context-scoped handle
+`db.as(context)` SHALL return a handle whose executions all run under
+that context, without mutating the original handle.
+
+#### Scenario: Scoped and unscoped handles coexist
+- **WHEN** `db.as(context)` is created from a provider-less handle and
+  both handles execute statements
+- **THEN** only the scoped handle's statements run under the context
