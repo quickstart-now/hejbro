@@ -121,4 +121,8 @@ describe("hejbro facade (task 7.9)", () => {
 
 		expect(members).toBeDefined();
 	});
+
+	it("exports assertSchema (task 2.7, extend-query-runtime), a live binding not a shadowed/renamed one", () => {
+		expect(typeof hejbro.assertSchema).toBe("function");
+	});
 });

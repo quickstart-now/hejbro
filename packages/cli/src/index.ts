@@ -22,5 +22,13 @@ export * from "@hejbro/core";
 // `test/exports.test.ts`'s own fragment-use assertion).
 export * from "@hejbro/query";
 export { sql } from "@hejbro/query";
+export type {
+	AssertSchemaEntry,
+	AssertSchemaHandle,
+	AssertSchemaNotComparedEntry,
+	AssertSchemaOptions,
+	AssertSchemaReport,
+} from "./assert-schema";
+export { assertSchema } from "./assert-schema";
 export type { HejbroConfig } from "./config";
 export { defineConfig } from "./config";

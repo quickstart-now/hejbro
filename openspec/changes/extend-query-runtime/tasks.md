@@ -14,12 +14,28 @@ Conventions that apply to every group:
   forms. `check:tasktime` is in the set for the same reason the task
   ticks are: a group that writes ledger rows and leaves the badges
   stale fails CI on one matrix leg, long after it looked green here.
+  Run `check:crap` before `check:tasktime`, the order CI itself uses:
+  the first proves README clean, so the second's diff can only be the
+  badge block.
+- Every mutation used as evidence is reverted, and the revert is shown
+  with `git status --porcelain`, not asserted. A mutation planted in a
+  file this change is otherwise forbidden to touch is the case that
+  matters: an unreverted one ships as a behaviour change.
 - A gate that **rewrites** a file is judged by the diff it leaves
   behind, not by its own exit code — `check:crap` and `check:tasktime`
   both rewrite README, so a green run with `README.md` still modified
   means the refresh was never committed. Run them, then show
   `git status --porcelain`; that pair is the check, and it is the same
   pair CI performs.
+- Any claim about how the code behaves — in a scenario, in a task, in a
+  review finding — cites the code that runs it. This change produced
+  four counterfactual claims across all three, every one of them written
+  from a module's name or role rather than its source; two reached the
+  spec and one nearly turned a positive control green. The test: is
+  there a code change that would make this claim false? If not, it is
+  decoration. A suspicion is not a claim: stating it as a hypothesis and
+  closing it against the source before reporting is the procedure, not a
+  lapse. What this rule counts is a claim that left the desk unverified.
 - A `[design]` task settles a contract, and a contract's shape is half
   types. Every `[design]` task therefore names at least one **type-level**
   mutation alongside its runtime one — a value mutation cannot make a
@@ -28,6 +44,18 @@ Conventions that apply to every group:
   so a green runner says nothing about it either way.
 - The task ticks in this file and the rows in `openspec/task-times.csv`
   are written at group boundaries and travel in that group's own commit.
+  A review round earns its own ledger row when it was clock-stamped;
+  when it was not, no row is invented and the gap is stated in the
+  group's report instead. A task born from a review carries no
+  estimate, as the ledger's own precedents do. Group 1 predates the
+  stamping and so has no review rows — that absence is the record, not
+  an omission to be filled in later from memory.
+- A group that touches `packages/cli` hands off only on **two
+  consecutive green runs** of that package's suite, and a red run is
+  reported with its full output rather than silently rerun. That suite
+  flakes at a few percent under parallel load for reasons outside this
+  change (tracked separately), so one green run is weak evidence and
+  one red run is not yet a regression.
 
 Two facts shape the layout:
 
@@ -90,7 +118,7 @@ Gates: the standard set above. Group files:
 
 ## 2. The assertion
 
-- [ ] 2.1 (~10m) [design] The public surface. **Settled with the owner**:
+- [x] 2.1 (~10m) [design] The public surface. **Settled with the owner**:
       a free function `assertSchema(handle, options?)` resolving to a
       report that keeps compared and uncompared declarations in separate
       places — "not counted as matching" has to be observable, not just
@@ -104,10 +132,24 @@ Gates: the standard set above. Group files:
       own field names are part of this settled surface, not an
       implementation choice made later, and no other task in this group
       may introduce one: the two places are **`compared`** and
-      **`notCompared`**, an uncompared entry carrying the identity and
-      the reason in the comparison's existing finding vocabulary, a
-      compared entry carrying the identity alone. This task lands that
-      surface. Red:
+      **`notCompared`**, a compared entry carrying the identity alone
+      and an uncompared entry being `{ identity, reason, code? }` — the
+      comparison's own message and code where it produced one, the
+      kind's own stated reason and **no code** where the kind declares
+      its objects never comparable. The optional code is how "one place,
+      two identifiers is wrong" becomes a type rather than a test:
+      reusing the comparison's finding type here would make its
+      mandatory error force a code onto the case that must not have one.
+      This task lands that surface. The vocabulary rule resolves to a
+      fixed mapping on the reuse path, and it is the mapping — not the
+      rule's illustration — that the code follows: the snapshot
+      builder's ownership error propagates, a raw driver error
+      propagates if one is ever met directly, and both `check-`-prefixed
+      failures (unreadable catalog, empty declaration set) translate.
+      The catalog reader wraps the driver's own error before the
+      assertion can see it, so the illustration's "propagate" answer and
+      this path's "translate" answer are both correct about different
+      errors. Red:
       `packages/cli/test/assert-schema.test.ts` (new) — "a matching
       database passes" and "a missing declared table throws naming it",
       both driven by a fixture session returning canned catalog rows.
@@ -116,7 +158,7 @@ Gates: the standard set above. Group files:
       red (type): widen the report's type to `unknown` — the report's
       own type assertion fails while both runtime cases stay green.
       Files: `packages/cli/src/assert-schema.ts` (new), that test.
-- [ ] 2.2 (~8m) The failure is one coded diagnostic carrying a finding
+- [x] 2.2 (~8m) The failure is one coded diagnostic carrying a finding
       per object with a `Next:` clause — the shape the live-comparison
       machinery already produces, reused rather than re-derived. Red:
       `packages/cli/test/assert-schema.test.ts` — "the thrown error
@@ -124,7 +166,7 @@ Gates: the standard set above. Group files:
       join the findings into a single message string and the per-object
       assertion fails.
       Files: `packages/cli/src/assert-schema.ts`, that test.
-- [ ] 2.3 (~8m) "Could not answer" is not success: a declaration no
+- [x] 2.3 (~8m) "Could not answer" is not success: a declaration no
       registry kind owns fails the assertion under its own code, distinct
       from a real divergence's, and the opt-out changes only whether it
       throws — the names stay in what the caller receives either way.
@@ -134,28 +176,53 @@ Gates: the standard set above. Group files:
       first assertion fails; drop the names from the opted-out report and
       the second does.
       Files: `packages/cli/src/assert-schema.ts`, that test.
-- [ ] 2.4 (~6m) The registry is an explicit parameter defaulting to the
-      generic Postgres registry. Red:
-      `packages/cli/test/assert-schema.test.ts` — "a preset-registered
-      declaration is compared only once the preset registry is
-      supplied". What makes it red: hard-code the default registry
-      inside the function and the supplied-registry case still reports
-      the declaration as not compared.
+- [x] 2.4 (~7m) The registry is an explicit parameter defaulting to the
+      generic Postgres registry. Omitting one a declaration needs is
+      refused outright at declaration ownership — the snapshot builder's
+      own error, propagated, before any catalog read — and supplying it
+      turns that refusal into a stated boundary, not into a comparison:
+      the comparison's kind coverage is fixed and this assertion does
+      not widen it. Red: `packages/cli/test/assert-schema.test.ts` —
+      "without its registry a preset declaration is refused, with it the
+      run completes and the declaration is still named". What makes it
+      red: hard-code the default registry inside the function and the
+      supplied-registry case is refused too.
       Files: `packages/cli/src/assert-schema.ts`, that test.
-- [ ] 2.5 (~6m) The import-graph guard: the assertion module's
+- [x] 2.5 (~8m) The import-graph guard: the assertion module's
       transitive imports reach no filesystem, process, or command-line
-      module. Red: `packages/cli/test/assert-schema-imports.test.ts`
-      (new) — "the assertion's module graph is free of filesystem
-      access". What makes it red: add `import "node:fs";` to
-      `assert-schema.ts` and the walker reports it.
+      module. This is why the comparison machinery can be reused at all
+      — that directory imports no node builtin anywhere, so reusing it
+      costs nothing here; the modules that do are the loader, the
+      snapshot file reader, the git helper, and the commands.
+      Red: `packages/cli/test/assert-schema-imports.test.ts` (new) —
+      "the assertion's module graph is free of filesystem access".
+      Three operations, and all three must redden it: `import
+      "node:fs";` in the assertion module itself; the same line in a
+      module the assertion imports (if only the first reddens, the
+      walker is not walking); and an import of the declaration loader or
+      the snapshot file reader, which is the realistic regression — a
+      later change needing config or entry loading and pulling one in.
       Files: `packages/cli/src/assert-schema.ts`, that test.
-- [ ] 2.6 (~7m) The two reasons a declaration goes uncompared are
+- [x] 2.6 (~7m) The two reasons a declaration goes uncompared are
       independently observable: no kind owns it, and the kind that owns
       it declares its objects uncompared. These are different code
       paths, so each has its own test and neither test may cover the
       other. Red: `packages/cli/test/assert-schema.test.ts` — the
       second cause's case, using a registered kind that declares itself
-      uncompared. What makes it red — a two-by-two, and the diagonal is
+      uncompared. The kind is found through the registry's own public
+      surface, and the reason carried is the kind's own string — never
+      the command's sentence *about* that string, which names a command
+      the caller never ran. Two helpers are deliberately left closed:
+      the one that wraps that sentence, and the comparison's private
+      not-compared finding (whose code means "should have been compared
+      and could not", a different fact from "never comparable"). Two
+      further cases are pinned here because a passing run proves them
+      only by accident otherwise: a run whose gaps are all
+      never-comparable completes with those names still reported and
+      nothing compared, and a mixed run fails on the comparable gap
+      alone — make the never-comparable ones count toward the failure
+      and the mixed case's test must redden, which a single-cause
+      fixture would never catch. What makes it red — a two-by-two, and the diagonal is
       the point: breaking only the registry-lookup path (an unowned
       declaration passes silently) reddens the first cause's test and
       leaves the second green; breaking only the declared-uncompared
@@ -164,7 +231,7 @@ Gates: the standard set above. Group files:
       means one test is covering both paths, and then one of the two
       scenarios is redundant.
       Files: `packages/cli/src/assert-schema.ts`, that test.
-- [ ] 2.7 (~6m) The runtime entry exports it. Red:
+- [x] 2.7 (~6m) The runtime entry exports it. Red:
       `packages/cli/test/exports.test.ts` — "the runtime entry exposes
       the assertion". What makes it red: remove the re-export line from
       `packages/cli/src/index.ts`.
