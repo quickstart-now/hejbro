@@ -32,6 +32,8 @@ const handle = db({ posts }, driver);
 `service_role` roles to `db.as`'s declared-role whitelist — see "RLS
 execution context" below.
 
+`supabaseDriver` also takes an optional second argument naming the Supabase connection path the driver was built against — see supabase-preset.md's "Connecting" section.
+
 ## The chain surface
 
 `handle.select`/`insert`/`update`/`deleteFrom` mirror core's own
