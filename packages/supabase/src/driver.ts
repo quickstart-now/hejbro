@@ -3,9 +3,22 @@ import { poolerDriver } from "./pooler";
 import { anonRole, authenticatedRole, serviceRole } from "./roles";
 
 /**
+ * Every value {@link SupabaseDriverEndpoint} names, declared once as a
+ * `readonly` tuple -- the type below is *derived* from this array, never
+ * declared independently of it. A union declared separately from its
+ * own runtime recognized-set can drift: a third value added to only one
+ * of the two still type-checks, producing a type-valid `endpoint` this
+ * file's own runtime check then rejects as unrecognized (or the
+ * reverse) -- exactly the confusing-failure shape a third preset
+ * (Nile) would be the first to hit. Deriving the type from this array
+ * makes that drift a structural impossibility rather than a discipline.
+ */
+const RECOGNIZED_ENDPOINTS = ["session", "transaction-pooler"] as const;
+
+/**
  * The two Supabase connection paths this preset's own driver factory can
- * build for (task 2.1, tasks.md "Settled contract details" ③): a string
- * union naming the endpoint kind, never a boolean -- a boolean's name
+ * build for (task 2.1, tasks.md "Settled contract details" ③) -- derived
+ * from {@link RECOGNIZED_ENDPOINTS}, never a boolean: a boolean's name
  * becomes a lie the moment a third endpoint exists, and the union reads
  * at the call site as the fact it states. `"session"` is the
  * session-keeping endpoint (a direct connection or a session-mode
@@ -14,7 +27,7 @@ import { anonRole, authenticatedRole, serviceRole } from "./roles";
  * (Supavisor, port 6543), measured in design.md to lose session state
  * across separate transactions.
  */
-export type SupabaseDriverEndpoint = "session" | "transaction-pooler";
+export type SupabaseDriverEndpoint = (typeof RECOGNIZED_ENDPOINTS)[number];
 
 /**
  * `supabaseDriver`'s own second, optional argument (task 2.1). Omitting
@@ -26,15 +39,9 @@ export type SupabaseDriverOptions = {
 	readonly endpoint?: SupabaseDriverEndpoint;
 };
 
-/** Every value {@link SupabaseDriverEndpoint} actually names -- the single list both the type-level union and this file's own runtime check read from, so the two can never drift apart into two different answers for "what's recognized". */
-const RECOGNIZED_ENDPOINTS: ReadonlyArray<SupabaseDriverEndpoint> = [
-	"session",
-	"transaction-pooler",
-];
-
 /** Narrows `value` (a plain `string` -- the type a caller without type checking actually hands this function) to {@link SupabaseDriverEndpoint} by membership in {@link RECOGNIZED_ENDPOINTS}. */
 const isKnownEndpoint = (value: string): value is SupabaseDriverEndpoint =>
-	RECOGNIZED_ENDPOINTS.includes(value as SupabaseDriverEndpoint);
+	(RECOGNIZED_ENDPOINTS as ReadonlyArray<string>).includes(value);
 
 /**
  * Builds and throws the `unknown-pooler-mode`-coded, enriched plain
