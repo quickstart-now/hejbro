@@ -34,6 +34,7 @@ import type {
 	WithEntryNode,
 	WithNode,
 } from "./ast";
+import { exprChildren } from "./expr-children";
 import { renderLiteral } from "./literal";
 import { selectChildExprs } from "./select-children";
 
@@ -169,74 +170,25 @@ const describeColumnRef = (ref: ColumnRefNode): string => {
 };
 
 /**
- * One handler per {@link ExprNode} `nodeKind` for {@link collectColumnRefs}
- * — a mapped type over the full `nodeKind` union, not a hand-written list,
- * so a missing handler is a `tsc` error ("Property ... is missing") the
- * same way a `switch`'s `default: assertNever(node)` would have been
- * (verified directly with a scratch dummy-variant edit, #154 PR2).
- */
-type CollectColumnRefsHandlers = {
-	readonly [K in ExprNode["nodeKind"]]: (
-		node: Extract<ExprNode, { readonly nodeKind: K }>,
-	) => ReadonlyArray<ColumnRefNode>;
-};
-
-/**
- * `exists` returns `[]` here deliberately: a subquery validates its own
- * scope independently when it is rendered (its `from`/joins extend the
- * scope it inherits), so its column refs are never this walk's concern.
- */
-const collectColumnRefsHandlers: CollectColumnRefsHandlers = {
-	literal: () => [],
-	rawSql: () => [],
-	exists: () => [],
-	selectExpr: () => [],
-	plpgsqlRef: () => [],
-	columnRef: (node) => [node],
-	comparison: (node) => [
-		...collectColumnRefs(node.left),
-		...collectColumnRefs(node.right),
-	],
-	logical: (node) => node.operands.flatMap(collectColumnRefs),
-	not: (node) => collectColumnRefs(node.operand),
-	nullTest: (node) => collectColumnRefs(node.operand),
-	inList: (node) => [
-		...collectColumnRefs(node.operand),
-		...node.values.flatMap(collectColumnRefs),
-	],
-	between: (node) => [
-		...collectColumnRefs(node.operand),
-		...collectColumnRefs(node.lowerBound),
-		...collectColumnRefs(node.upperBound),
-	],
-	functionCall: (node) => node.args.flatMap(collectColumnRefs),
-	sqlTemplate: (node) =>
-		node.chunks.flatMap((chunk) => {
-			if (chunk.chunkKind === "expr") {
-				return collectColumnRefs(chunk.expr);
-			}
-			return [];
-		}),
-	window: (node) => [
-		...collectColumnRefs(node.fn),
-		...node.partitionBy.flatMap(collectColumnRefs),
-		...node.orderBy.flatMap((term) => collectColumnRefs(term.expr)),
-	],
-};
-
-/**
  * Walks an {@link ExprNode} collecting every {@link ColumnRefNode} it
  * mentions — used to validate a query's scope. Does NOT descend into
- * `exists` subqueries: a subquery validates its own scope independently
- * when it is rendered (its `from`/joins extend the scope it inherits).
+ * `exists`/`selectExpr` subqueries: a subquery validates its own scope
+ * independently when it is rendered (its `from`/joins extend the scope
+ * it inherits), and {@link exprChildren} (`expr-children.ts`, #473)
+ * already reports zero direct children for those two kinds (their
+ * `query` is a `SelectNode`, not an `ExprNode`), so that opacity falls
+ * out of the registry rather than a dedicated `[]` pair here.
+ * `columnRef` is this function's one base case beyond the registry fold
+ * — a column ref has no children to recurse into; it *is* the thing
+ * being collected.
  */
 export const collectColumnRefs = (
 	node: ExprNode,
 ): ReadonlyArray<ColumnRefNode> => {
-	const handler = collectColumnRefsHandlers[node.nodeKind] as (
-		node: ExprNode,
-	) => ReadonlyArray<ColumnRefNode>;
-	return handler(node);
+	if (node.nodeKind === "columnRef") {
+		return [node];
+	}
+	return exprChildren(node).flatMap(collectColumnRefs);
 };
 
 const isInScope = (
