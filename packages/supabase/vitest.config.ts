@@ -15,6 +15,15 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@hejbro/core": resolve(import.meta.dirname, "../core/src/index.ts"),
+			// #481: the one named exception to "public entry point only"
+			// below -- the repo-internal conformance kit's only way in. Must
+			// precede the shorter `@hejbro/query` key, or Vite's
+			// prefix-matching alias resolution mangles this specifier into
+			// the wrong path.
+			"@hejbro/query/testing/driver-conformance": resolve(
+				import.meta.dirname,
+				"../query/src/testing/driver-conformance.ts",
+			),
 			// #131, same reasoning as the @hejbro/core alias above: resolves
 			// straight to source so this package's tests never pass against a
 			// stale build. This alias used to be a no-op in practice --
@@ -25,7 +34,9 @@ export default defineConfig({
 			// vitest invoked directly (outside turbo's `^build` graph) would
 			// now resolve the workspace-linked `dist` build and could pass
 			// against a stale one. #131's original intent now applies to
-			// this package for real.
+			// this package for real. Public entry point only, never a deep
+			// `../query/src/db/...` path -- except the one named exception
+			// above.
 			"@hejbro/query": resolve(import.meta.dirname, "../query/src/index.ts"),
 		},
 	},

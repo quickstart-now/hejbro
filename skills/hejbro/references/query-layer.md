@@ -793,6 +793,25 @@ concrete next step.
 | `undeclared-role` | `db.as({ role, ... })`'s role isn't in the declared whitelist. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |
 
+Writing your own `Driver` (a custom preset, or wrapping a client library
+`@hejbro/pg`/`@hejbro/supabase`/`@hejbro/neon` don't cover)? A member
+that can't honor a declared-`false` capability constructs
+`driver-missing-capability` by calling `@hejbro/query`'s exported
+`throwMissingCapability(capability, operation)` — never by reproducing
+its message text, so every driver's refusal reads identically:
+
+```ts
+import type { Driver } from "@hejbro/query";
+import { throwMissingCapability } from "@hejbro/query";
+
+const yourDriver: Pick<Driver, "transaction"> = {
+	// declares `"interactive-transactions": false` in `capabilities`
+	transaction: async () => {
+		throwMissingCapability("interactive-transactions", "transaction");
+	},
+};
+```
+
 ## Where this is enforced
 
 - Specs: `openspec/specs/query-builder/spec.md` (chain surface, `sql`
@@ -828,7 +847,7 @@ concrete next step.
   `packages/query/src/db/fn.ts` (`db.fn`),
   `packages/query/src/driver/contract.ts` and
   `packages/query/src/driver/errors.ts` (capabilities,
-  `driver-missing-capability`),
+  `driver-missing-capability`, the exported `throwMissingCapability`),
   `packages/query/src/db/convert.ts` (`.notNullElements()` NULL
   fail-fast, and its own CTE column-state resolution),
   `packages/core/src/query/with.ts` (`withCte`, `w.as`, `w.asRecursive`,

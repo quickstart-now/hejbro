@@ -1,7 +1,13 @@
 import type { Driver, DriverCapabilityKey } from "./contract";
 
-/** Builds and throws the `driver-missing-capability`-coded, enriched plain `Error` (D57: new packages don't extend `HejbroError`) — a `function` declaration, not `const f = (): never => …`, so a caller after this line is actually narrowed (handoff note, g2/g3). */
-function throwMissingCapabilityError(
+/**
+ * Builds and throws the `driver-missing-capability`-coded, enriched plain
+ * `Error` (D57: new packages don't extend `HejbroError`) — a `function`
+ * declaration, not `const f = (): never => …`, so a caller after this line
+ * is actually narrowed. Exported (#490) so a driver package constructs
+ * this failure instead of copying its message text.
+ */
+export function throwMissingCapability(
 	capability: DriverCapabilityKey,
 	operation: string,
 ): never {
@@ -29,6 +35,6 @@ export const assertCapability = (
 	operation: string,
 ): void => {
 	if (!driver.capabilities[capability]) {
-		throwMissingCapabilityError(capability, operation);
+		throwMissingCapability(capability, operation);
 	}
 };

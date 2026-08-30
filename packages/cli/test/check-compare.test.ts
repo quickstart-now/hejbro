@@ -1,6 +1,15 @@
-import type { HejbroInput, Snapshot } from "@hejbro/core";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type {
+	HejbroDeclaration,
+	HejbroInput,
+	ObjectKind,
+	Snapshot,
+} from "@hejbro/core";
 import {
 	check,
+	createKindRegistry,
 	defineTrigger,
 	emptySnapshot,
 	generateMigration,
@@ -18,6 +27,7 @@ import {
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import { compareCatalog } from "../src/check/compare";
+import { EMPTY_INVENTORY, renderCheckReport } from "../src/commands/check";
 
 const app = schema("app");
 
@@ -423,6 +433,10 @@ describe("compareCatalog / 2.4 existence for every declared kind", () => {
 type LocalTableNode = {
 	readonly primaryKeyName?: string;
 	readonly foreignKeys: ReadonlyArray<{ readonly name: string }>;
+	readonly columns: ReadonlyArray<{
+		readonly name: string;
+		readonly uniqueName?: string;
+	}>;
 };
 
 const uuidColumnRow = (table: string, name: string) => ({
@@ -486,6 +500,18 @@ describe("compareCatalog / 2.5 table sub-object existence", () => {
 		expect(byIdentity.get("app.posts.posts_has_author")?.error.code).toBe(
 			"check-object-missing",
 		);
+		// Pins the constraint-kind description that reaches this message
+		// (task 2.6/G4) -- written independently here, never read from
+		// `compare.ts`'s own table, so swapping two rows of that table
+		// (e.g. "unique constraint" <-> "foreign key") is a real
+		// user-facing regression this test actually catches, not a
+		// tautology restating the table it's supposed to check.
+		expect(byIdentity.get(`app.posts.${fkName}`)?.error.message).toContain(
+			"foreign key",
+		);
+		expect(
+			byIdentity.get("app.posts.posts_has_author")?.error.message,
+		).toContain("check constraint");
 	});
 
 	it("reports a declared primary key the table does not have", () => {
@@ -512,5 +538,148 @@ describe("compareCatalog / 2.5 table sub-object existence", () => {
 		expect(findings).toHaveLength(1);
 		expect(findings[0]?.identity).toBe(`app.posts.${pkName}`);
 		expect(findings[0]?.error.code).toBe("check-object-missing");
+		// See the fk/check test's own comment above (task 2.6/G4) -- the
+		// literal "primary key" here is independent of `compare.ts`'s own
+		// table, so a swapped row is caught here, not just assumed fixed
+		// by the refactor that introduced the table.
+		expect(findings[0]?.error.message).toContain("primary key");
+	});
+
+	// No test in this file previously exercised the unique-constraint
+	// branch (task 2.6's own audit) -- added here so the refactor that
+	// collapses all four constraint wrappers into one has a real
+	// before/after witness for every one of them, not three out of four.
+	it("reports a declared unique constraint the table does not have", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			slug: text().unique(),
+		});
+		const snapshot = buildTestSnapshot([posts]);
+		const postsNode = snapshot.objects["table:app.posts"] as LocalTableNode;
+		const uniqueName = postsNode.columns.find(
+			(column) => column.name === "slug",
+		)?.uniqueName;
+		if (uniqueName === undefined) {
+			throw new Error(
+				"expected the built snapshot to declare a unique constraint",
+			);
+		}
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "posts", rls: false }],
+			columns: [
+				{
+					...uuidColumnRow("posts", "id"),
+					notNull: true,
+				},
+				{
+					...uuidColumnRow("posts", "slug"),
+					catalogType: "text",
+					notNull: false,
+				},
+			],
+			constraints: [
+				{
+					schema: "app",
+					table: "posts",
+					name: "posts_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+		};
+
+		const findings = compareCatalog(snapshot, catalog);
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe(`app.posts.${uniqueName}`);
+		expect(findings[0]?.error.code).toBe("check-object-missing");
+		// See the fk/check test's own comment above (task 2.6/G4).
+		expect(findings[0]?.error.message).toContain("unique constraint");
+	});
+});
+
+describe("a kind that declares itself uncomparable (#482, task 2.3)", () => {
+	const uncatalogableKind: ObjectKind<HejbroDeclaration> = {
+		kind: "toy-uncatalogable",
+		dependsOn: [],
+		owns: (d): d is HejbroDeclaration =>
+			d.declarationKind === "toy-uncatalogable",
+		serialize: () => ({}),
+		identify: () => "widget",
+		diff: () => [],
+		emit: () => [],
+		noCatalogObjectReason: "toy objects have no catalog counterpart.",
+	};
+
+	const registryWithUncatalogableKind = () => {
+		const registry = createKindRegistry();
+		registry.register(uncatalogableKind);
+		return registry;
+	};
+
+	const uncatalogableSnapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: { "toy-uncatalogable:widget": {} },
+	};
+
+	it("is stated in the coverage boundary and does not change the exit code", () => {
+		const registry = registryWithUncatalogableKind();
+		const findings = compareCatalog(
+			uncatalogableSnapshot,
+			emptyCatalog(),
+			registry,
+		);
+
+		// no finding at all -- never counted as a difference just because
+		// it was never compared, and never even a `check-not-compared`
+		// entry: this kind states, by design, that it has no catalog
+		// object, not that this particular run failed to compare one.
+		expect(findings).toEqual([]);
+
+		const report = renderCheckReport(findings, EMPTY_INVENTORY, registry);
+		expect(report.exitCode).toBe(0);
+		expect(report.stdout.join("\n")).toContain(
+			"toy objects have no catalog counterpart.",
+		);
+	});
+});
+
+describe("an unregistered kind is not-compared, never differs (#482, task 2.4)", () => {
+	it("a declared object of an unregistered kind is reported as not compared, with the reason, and the run cannot exit zero", () => {
+		const unregisteredSnapshot: Snapshot = {
+			formatVersion: 8,
+			dialect: "postgres",
+			objects: { "totally-made-up-kind:widget": {} },
+		};
+
+		// the default (core-only) registry never registered this kind --
+		// no test needs to construct one specially for this.
+		const findings = compareCatalog(unregisteredSnapshot, emptyCatalog());
+
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.identity).toBe("widget");
+		expect(findings[0]?.error.code).toBe("check-not-compared");
+
+		const report = renderCheckReport(findings, EMPTY_INVENTORY);
+		expect(report.exitCode).not.toBe(0);
+	});
+});
+
+describe("the CLI names no preset's kind (#482, task 2.2/2.3)", () => {
+	it("compare.ts routes by registry, never by a preset's own kind name", () => {
+		// A plain text scan, not a runtime probe: the whole point is that
+		// this source file never spells a preset's kind name at all, so
+		// there's nothing to exercise at runtime -- reading the file is
+		// the only way to check for an absence like this. Red until 2.3
+		// removes the hardcoded "supabase-storage-bucket" entry this scan
+		// currently still finds.
+		const compareSourcePath = join(
+			dirname(fileURLToPath(import.meta.url)),
+			"../src/check/compare.ts",
+		);
+		const compareSource = readFileSync(compareSourcePath, "utf8");
+		expect(compareSource).not.toMatch(/supabase/i);
 	});
 });

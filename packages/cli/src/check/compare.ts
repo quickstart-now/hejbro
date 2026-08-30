@@ -1,5 +1,13 @@
-import type { HejbroError, JsonValue, Snapshot, TypeNode } from "@hejbro/core";
+import type {
+	HejbroError,
+	JsonValue,
+	KindRegistry,
+	RegisteredObjectKind,
+	Snapshot,
+	TypeNode,
+} from "@hejbro/core";
 import {
+	createDefaultRegistry,
 	decodeExprNode,
 	hejbroError,
 	renderExpr,
@@ -35,6 +43,22 @@ export const differsFinding = (
 ): Finding => ({
 	identity,
 	error: hejbroError("check-object-differs", `${message} Next: ${next}`),
+});
+
+/**
+ * `check-not-compared`'s shape for this file (#482, task 2.4) -- a
+ * comparison that should have run and could not, never a difference:
+ * `expression.ts`'s own `notComparedFinding` is the same code for a
+ * different unrenderable-expression cause, kept separate rather than
+ * shared because the two reasons and `Next:` clauses never overlap.
+ */
+const notComparedFinding = (
+	identity: string,
+	message: string,
+	next: string,
+): Finding => ({
+	identity,
+	error: hejbroError("check-not-compared", `${message} Next: ${next}`),
 });
 
 // The kind node shapes below mirror packages/core/src/kinds/*.ts's own
@@ -327,75 +351,43 @@ const compareConstraintExistence = (
 	return [missingFinding(identity, describe)];
 };
 
-const comparePrimaryKey = (
-	schema: string,
-	table: string,
-	node: LocalTableSnapshot,
-	catalog: Catalog,
-): ReadonlyArray<Finding> => {
-	if (node.primaryKeyName === undefined) {
-		return [];
-	}
-	return compareConstraintExistence(
-		schema,
-		table,
-		"p",
-		"primary key",
-		node.primaryKeyName,
-		catalog,
-	);
+/**
+ * The four `pg_constraint` type letters `check` compares by existence
+ * only -- a four-row table, not four near-identical wrapper functions
+ * whose entire body was one `(type letter, description)` pair passed to
+ * {@link compareConstraintExistence} (task 2.6).
+ */
+type ConstraintKind = "p" | "u" | "f" | "c";
+
+const CONSTRAINT_KIND_DESCRIPTIONS: Readonly<Record<ConstraintKind, string>> = {
+	p: "primary key",
+	u: "unique constraint",
+	f: "foreign key",
+	c: "check constraint",
 };
 
-const compareUniqueConstraints = (
-	schema: string,
-	table: string,
-	columns: ReadonlyArray<LocalColumnSnapshot>,
-	catalog: Catalog,
-): ReadonlyArray<Finding> =>
-	columns.flatMap((column) => {
-		if (column.uniqueName === undefined) {
-			return [];
-		}
-		return compareConstraintExistence(
-			schema,
-			table,
-			"u",
-			"unique constraint",
-			column.uniqueName,
-			catalog,
-		);
-	});
+/** `[]` for an absent optional name, `[name]` otherwise -- a guard clause, not a ternary (house style), so a single name and a name list feed {@link compareConstraintsByName} the same shape. */
+const optionalName = (name: string | undefined): ReadonlyArray<string> => {
+	if (name === undefined) {
+		return [];
+	}
+	return [name];
+};
 
-const compareForeignKeys = (
+const compareConstraintsByName = (
 	schema: string,
 	table: string,
-	foreignKeys: ReadonlyArray<LocalForeignKeySnapshot>,
+	type: ConstraintKind,
+	names: ReadonlyArray<string>,
 	catalog: Catalog,
 ): ReadonlyArray<Finding> =>
-	foreignKeys.flatMap((foreignKey) =>
+	names.flatMap((name) =>
 		compareConstraintExistence(
 			schema,
 			table,
-			"f",
-			"foreign key",
-			foreignKey.name,
-			catalog,
-		),
-	);
-
-const compareChecks = (
-	schema: string,
-	table: string,
-	checks: ReadonlyArray<LocalCheckSnapshot>,
-	catalog: Catalog,
-): ReadonlyArray<Finding> =>
-	checks.flatMap((check) =>
-		compareConstraintExistence(
-			schema,
-			table,
-			"c",
-			"check constraint",
-			check.name,
+			type,
+			CONSTRAINT_KIND_DESCRIPTIONS[type],
+			name,
 			catalog,
 		),
 	);
@@ -435,20 +427,34 @@ const compareTable = (
 		...table.columns.flatMap((column) =>
 			compareColumn(table.schema, table.name, column, catalog),
 		),
-		...comparePrimaryKey(table.schema, table.name, table, catalog),
-		...compareUniqueConstraints(
+		...compareConstraintsByName(
 			table.schema,
 			table.name,
-			table.columns,
+			"p",
+			optionalName(table.primaryKeyName),
 			catalog,
 		),
-		...compareForeignKeys(
+		...compareConstraintsByName(
 			table.schema,
 			table.name,
-			table.foreignKeys ?? [],
+			"u",
+			table.columns.flatMap((column) => optionalName(column.uniqueName)),
 			catalog,
 		),
-		...compareChecks(table.schema, table.name, table.checks ?? [], catalog),
+		...compareConstraintsByName(
+			table.schema,
+			table.name,
+			"f",
+			(table.foreignKeys ?? []).map((foreignKey) => foreignKey.name),
+			catalog,
+		),
+		...compareConstraintsByName(
+			table.schema,
+			table.name,
+			"c",
+			(table.checks ?? []).map((check) => check.name),
+			catalog,
+		),
 		...compareIndexes(table.schema, table.name, table.indexes ?? [], catalog),
 	];
 };
@@ -683,9 +689,6 @@ const compareGrant = (
 	);
 };
 
-/** No catalog object backs a Supabase storage bucket (a row the Storage API service owns, not this database's own migrations) -- same reasoning as scripts/verify-supabase-image.sh's skip_storage_kind. */
-const compareStorageBucket = (): ReadonlyArray<Finding> => [];
-
 type Comparator = (
 	identity: string,
 	node: JsonValue,
@@ -719,26 +722,46 @@ const KIND_COMPARATORS: Readonly<Record<string, Comparator>> = {
 		compareTableScopedExistence(identity, node, "trigger", catalog.triggers),
 	rls: compareRls,
 	grant: compareGrant,
-	"supabase-storage-bucket": compareStorageBucket,
 };
 
 const kindOfKey = (key: string): string => key.slice(0, key.indexOf(":"));
 const identityOfKey = (key: string): string => key.slice(key.indexOf(":") + 1);
+
+/** Every registered kind, by name -- built once per `compareCatalog` call, never per entry, so a large declaration set doesn't re-derive this on every object. */
+type KindLookup = ReadonlyMap<string, RegisteredObjectKind>;
+
+const kindLookupOf = (registry: KindRegistry): KindLookup =>
+	new Map(registry.list().map((kind) => [kind.kind, kind]));
 
 const compareEntry = (
 	key: string,
 	node: JsonValue,
 	catalog: Catalog,
 	snapshot: Snapshot,
+	kinds: KindLookup,
 ): ReadonlyArray<Finding> => {
 	const kind = kindOfKey(key);
 	const identity = identityOfKey(key);
+	// #482: a kind that declares it has no catalog object, ever, is
+	// compared against nothing -- `check` states this in its own
+	// coverage-boundary section (renderCheckReport) instead, and this is
+	// not a `Finding` at all: not a difference, and not a
+	// `check-not-compared` either (that code names a comparison that
+	// *should* have run and could not; this kind states none ever could).
+	if (kinds.get(kind)?.noCatalogObjectReason !== undefined) {
+		return [];
+	}
 	const comparator = KIND_COMPARATORS[kind];
 	if (comparator === undefined) {
+		// #482: an unregistered kind was never actually compared -- stating
+		// it as a difference would be a false claim about a comparison that
+		// never ran. `check-not-compared` (not `check-object-differs`)
+		// keeps the exit code from ever reading `0` for a run that skipped
+		// this object, without claiming the database disagrees.
 		return [
-			differsFinding(
+			notComparedFinding(
 				identity,
-				`declared object "${key}" has an unrecognized kind "${kind}".`,
+				`declared object "${key}" has an unrecognized kind "${kind}" and could not be compared.`,
 				"check for a typo in the declaration, or update hejbro if this is a new kind.",
 			),
 		];
@@ -751,11 +774,20 @@ const compareEntry = (
  * object by object -- pure, no I/O (group 1's `readCatalog` already ran).
  * Refuses an empty declaration set outright (spec: "every comparison
  * would be vacuous, which is never a real pass") rather than reporting a
- * vacuous "no differences".
+ * vacuous "no differences". `registry` (#482, task 2.3) is optional and
+ * additive, the same pattern as `ObjectKind`'s own optional members --
+ * defaults to the core-only registry, so a caller (test or otherwise)
+ * that never registers a preset kind sees no behavior change. A caller
+ * that forgets to pass its real registry does not silently drop a
+ * preset kind's objects from the report either (task 2.4): every one of
+ * them falls to the unregistered-kind path, `check-not-compared`, which
+ * forbids exit `0` -- a forgotten argument surfaces loudly as "could not
+ * answer", never as a clean pass that skipped something.
  */
 export const compareCatalog = (
 	snapshot: Snapshot,
 	catalog: Catalog,
+	registry: KindRegistry = createDefaultRegistry(),
 ): ReadonlyArray<Finding> => {
 	const entries = Object.entries(snapshot.objects);
 	if (entries.length === 0) {
@@ -764,7 +796,8 @@ export const compareCatalog = (
 			"hejbro check received a declaration set with 0 declared objects -- every comparison would be vacuous, which is never a real pass. Next: confirm the entry pattern in hejbro.config.ts matches real declaration files that export table()/schema()/... declarations.",
 		);
 	}
+	const kinds = kindLookupOf(registry);
 	return entries.flatMap(([key, node]) =>
-		compareEntry(key, node, catalog, snapshot),
+		compareEntry(key, node, catalog, snapshot, kinds),
 	);
 };

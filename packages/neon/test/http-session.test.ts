@@ -1,4 +1,6 @@
 import type { DriverSession } from "@hejbro/query";
+import { throwMissingCapability } from "@hejbro/query";
+import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { neon, neonConfig } from "@neondatabase/serverless";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildHttpDriver } from "../src/http";
@@ -166,18 +168,37 @@ describe("HTTP session batch", () => {
 		});
 	});
 
-	it("calling transaction directly throws the missing-capability error and sends nothing", async () => {
+	it("the one-shot driver's refusal is the query layer's own error (#490)", async () => {
 		const calls = stubSuccess([EMPTY_RESULT]);
 		const sql = neon(CONNECTION_STRING);
 		const driver = buildHttpDriver(sql);
+
+		// Calls the exported thrower with the exact arguments the driver's
+		// own `transaction` member is expected to use, so the assertion
+		// below is pinned to `@hejbro/query`'s current wording rather than
+		// to a literal copy that could silently drift from it.
+		const expected = (() => {
+			try {
+				throwMissingCapability("interactive-transactions", "transaction");
+			} catch (error) {
+				return error as {
+					code: string;
+					capability: string;
+					operation: string;
+					message: string;
+				};
+			}
+		})();
 
 		await expect(
 			driver.transaction(async (session) =>
 				session.execute({ sql: "select 1", params: [], kind: "sql" }),
 			),
 		).rejects.toMatchObject({
-			code: "driver-missing-capability",
-			capability: "interactive-transactions",
+			code: expected.code,
+			capability: expected.capability,
+			operation: expected.operation,
+			message: expected.message,
 		});
 		expect(calls).toHaveLength(0);
 	});
@@ -207,5 +228,45 @@ describe("HTTP session batch", () => {
 		await expect(
 			driver.execute({ sql: "select 1", params: [], kind: "sql" }),
 		).rejects.toThrow(/connection to database failed/);
+	});
+});
+
+describe("buildHttpDriver conforms to the driver contract (#481, task 1.7)", () => {
+	it("conforms to the driver contract", async () => {
+		// session-state:false (task 2.3, D95/D96): the obligation is that
+		// the pins ride with every execution -- captured the same way this
+		// file's own "sends both pins and the caller's statement as one
+		// batch" test above already does, via the HTTP batch this driver
+		// actually sent.
+		const calls = stubSuccess([
+			EMPTY_RESULT,
+			EMPTY_RESULT,
+			{
+				fields: [{ name: "greeting", dataTypeID: TEXT_OID }],
+				rows: [["hello"]],
+			},
+		]);
+		const sql = neon(CONNECTION_STRING);
+		const driver = buildHttpDriver(sql);
+
+		await driver.execute({
+			sql: "select $1 as greeting",
+			params: ["hello"],
+			kind: "sql",
+		});
+
+		const [call] = calls;
+		expect(call).toBeDefined();
+		const recorded = (call?.body.queries ?? []).map((q) => ({
+			sql: q.query,
+			params: q.params,
+		}));
+
+		expect(() =>
+			assertSessionStateConformance(driver.capabilities, {
+				recordedForOneExecute: recorded,
+				callerStatement: { sql: "select $1 as greeting", params: ["hello"] },
+			}),
+		).not.toThrow();
 	});
 });

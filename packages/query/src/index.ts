@@ -4,8 +4,11 @@
  * minimum to resolve this package: `db`, every chain member's own stage
  * types, `compile()`, the dual-use `sql` escape hatch (new here — group 7
  * decision ①, the `hejbro` facade re-exports this one, task 7.9), driver
- * contract types, `DbContext`/`ScopedDb`/`Tx`, and the result-row types
- * every one of them resolves through. The test-only conversion internals
+ * contract types, `DbContext`/`ScopedDb`/`Tx`, the result-row types every
+ * one of them resolves through, and `throwMissingCapability` (#490 — the
+ * driver contract's own missing-capability failure, so a driver package
+ * constructs it instead of copying its message text). The test-only
+ * conversion internals
  * (`resolveColumnState`/`columnPlanForResult`/`convertRow`/
  * `ColumnPlanEntry`, `db/convert.ts`) are never re-exported here —
  * `test/exports.test.ts` pins both halves.
@@ -51,6 +54,7 @@ export type {
 	DriverRow,
 	DriverSession,
 } from "./driver/contract";
+export { throwMissingCapability } from "./driver/errors";
 export type { SqlExpr } from "./sql";
 export { sql } from "./sql";
 export type { ReturningRow } from "./types/returning";

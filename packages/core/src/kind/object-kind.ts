@@ -116,4 +116,26 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 	 * predating this field) is simply never checked, unaffected.
 	 */
 	readonly requiredKeys?: ReadonlyArray<string>;
+	/**
+	 * `noCatalogObjectReason` (#482, task 2.1) — states that no catalog
+	 * object ever backs this kind's declared objects, and why (e.g.
+	 * `@hejbro/supabase`'s storage bucket kind: the Storage API owns that
+	 * row, not this database's own migrations). Named for what its value
+	 * *is*, the same way `requiredKeys`'s value is keys and
+	 * `siblingChanges`'s value is changes — a predicate-shaped name
+	 * (`notCatalogComparable`) paired with a prose value would build a
+	 * naming/value mismatch into the type itself. This is the kind-level
+	 * fact only; `hejbro check` (a CLI concern, not this interface's) is
+	 * what turns a declared reason into a coverage-boundary statement,
+	 * comparing nothing for the kind and never counting one of its
+	 * objects as a difference just because it was never compared.
+	 * Optional and additive, the same way `siblingChanges` (D74),
+	 * `nextSnapshot` (D78), and `requiredKeys` (D79) widened this
+	 * interface: a kind that doesn't set it is compared exactly as it
+	 * always was. Data, not a function: a comparator that ran its own
+	 * logic here would drag `hejbro check`'s catalog and finding types
+	 * across the preset boundary for a need no kind has yet — tracked as
+	 * #508, decided when one does.
+	 */
+	readonly noCatalogObjectReason?: string;
 }

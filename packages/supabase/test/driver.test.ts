@@ -1,6 +1,7 @@
 import { roleName, schema, table, uuid } from "@hejbro/core";
 import type { Driver, DriverSession } from "@hejbro/query";
 import { db } from "@hejbro/query";
+import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { describe, expect, it, vi } from "vitest";
 import { asAnon, asUser } from "../src/context";
 import { supabaseDriver } from "../src/driver";
@@ -110,5 +111,48 @@ describe("task 4.7 (a') union wiring proof -- driver-contributed roles on a gran
 		} catch (error) {
 			expect(error).toHaveProperty("code", "undeclared-role");
 		}
+	});
+});
+
+describe("supabaseDriver(driver) conforms to the driver contract (#481, task 1.7)", () => {
+	it("conforms to the driver contract", async () => {
+		// `supabaseDriver` is a pure passthrough decorator (this file's own
+		// "passes every wrapped driver member through unchanged" test
+		// above) -- production usage always wraps a real Postgres
+		// connection (session-state:true), so this fixture's own
+		// `setupSession` actually records something, unlike `fakeDriver`'s
+		// no-op above (which would fail the true tier's obligation if
+		// checked, correctly: it never sends anything).
+		const recorded: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
+		const underlying: Driver = {
+			capabilities: { "interactive-transactions": true, "session-state": true },
+			execute: vi.fn(async () => []),
+			transaction: vi.fn(async (callback) =>
+				callback({ execute: vi.fn(async () => []) }),
+			),
+			setupSession: vi.fn(async (session: DriverSession) => {
+				const rows = await session.execute({
+					sql: "set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+					params: [],
+					kind: "sql",
+				});
+				void rows;
+			}),
+		};
+		const wrapped = supabaseDriver(underlying);
+		const recordingSession: DriverSession = {
+			execute: vi.fn(async (compiled) => {
+				recorded.push({ sql: compiled.sql, params: compiled.params });
+				return [];
+			}),
+		};
+
+		await wrapped.setupSession(recordingSession);
+
+		expect(() =>
+			assertSessionStateConformance(wrapped.capabilities, {
+				recordedForSetupSession: recorded,
+			}),
+		).not.toThrow();
 	});
 });

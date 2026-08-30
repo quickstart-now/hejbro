@@ -2,9 +2,9 @@ import type {
 	CompileResult,
 	Driver,
 	DriverCapabilities,
-	DriverCapabilityKey,
 	DriverRow,
 } from "@hejbro/query";
+import { throwMissingCapability } from "@hejbro/query";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { intervalPassthroughTypes } from "./type-overrides";
 
@@ -42,25 +42,6 @@ const PIN_STATEMENTS: ReadonlyArray<string> = [
 	"set intervalstyle to 'postgres'",
 	"set bytea_output to 'hex'",
 ];
-
-/**
- * Builds and throws the `driver-missing-capability`-coded, enriched plain
- * `Error` -- the same code and wording `@hejbro/query`'s own guard throws
- * (`packages/query/src/driver/errors.ts`, not re-exported publicly), kept
- * byte-identical here rather than diverging just because this driver has
- * no access to the original.
- */
-function throwMissingCapability(
-	capability: DriverCapabilityKey,
-	operation: string,
-): never {
-	throw Object.assign(
-		new Error(
-			`this driver does not declare the "${capability}" capability, needed for ${operation}. Next: use a driver whose capabilities record sets "${capability}": true, or avoid ${operation} on this driver.`,
-		),
-		{ code: "driver-missing-capability", capability, operation },
-	);
-}
 
 /**
  * The last entry of a batch result (task 2.2) -- `results` always holds

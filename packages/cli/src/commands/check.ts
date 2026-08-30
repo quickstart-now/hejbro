@@ -1,5 +1,11 @@
-import type { JsonValue, Snapshot } from "@hejbro/core";
+import type {
+	JsonValue,
+	KindRegistry,
+	RegisteredObjectKind,
+	Snapshot,
+} from "@hejbro/core";
 import {
+	createDefaultRegistry,
 	generateMigration,
 	parseSnapshot,
 	requiredKeysByKind,
@@ -63,6 +69,27 @@ const COVERAGE_BOUNDARY_LINES: ReadonlyArray<string> = [
 	"a declared object is checked for existence even where its contents are not otherwise compared.",
 	"check's reads are not a single snapshot: opening no transaction is what keeps this command free of any driver capability, and a schema changing while check runs can produce a torn report.",
 ];
+
+/** `[]` when `kind` has no declared reason, its one boundary line otherwise -- the `flatMap` callback below stays a guard clause, house style bans ternaries. */
+const boundaryLineFor = (kind: RegisteredObjectKind): ReadonlyArray<string> => {
+	if (kind.noCatalogObjectReason === undefined) {
+		return [];
+	}
+	return [
+		`check does not compare ${kind.kind} objects: ${kind.noCatalogObjectReason}`,
+	];
+};
+
+/**
+ * One boundary line per registered kind that declares
+ * `noCatalogObjectReason` (#482, task 2.3) -- the CLI states no preset's
+ * kind by name anywhere else; this is the one place a kind's own declared
+ * reason reaches the report, sourced from the registry rather than a
+ * hardcoded list.
+ */
+const kindCoverageBoundaryLines = (
+	registry: KindRegistry,
+): ReadonlyArray<string> => registry.list().flatMap(boundaryLineFor);
 
 /**
  * Three answers, not two (4.5, spec Req1) -- "the database disagrees"
@@ -162,21 +189,31 @@ const summaryLine = (
  * proves the real findings a live server produces). `inventory` is
  * required (4.5, o2): a defaulted one is exactly how 4.4's own gap
  * happened -- an omission no test can notice, because the default keeps
- * every existing call site green.
+ * every existing call site green. `registry` (#482, task 2.3) is optional
+ * and additive, defaulting to the core-only registry the same way
+ * `compareCatalog`'s own does -- an existing call site that never
+ * registers a preset kind sees the same three static boundary lines it
+ * always did. This default's own safety is narrower than
+ * `compareCatalog`'s: forgetting it here only drops informational
+ * boundary text, never the exit code -- that guarantee comes from
+ * `compareCatalog` already having turned an unregistered preset kind
+ * into a `check-not-compared` finding (task 2.4) before `findings` ever
+ * reaches this function.
  */
 export const renderCheckReport = (
 	findings: ReadonlyArray<Finding>,
 	inventory: Inventory,
+	registry: KindRegistry = createDefaultRegistry(),
 ): CheckReport => {
+	const boundaryLines = [
+		...COVERAGE_BOUNDARY_LINES,
+		...kindCoverageBoundaryLines(registry),
+	];
 	const inventoryFooter = inventoryLines(inventory);
 	if (findings.length === 0) {
 		return {
 			exitCode: 0,
-			stdout: [
-				...COVERAGE_BOUNDARY_LINES,
-				...inventoryFooter,
-				"check: no differences.",
-			],
+			stdout: [...boundaryLines, ...inventoryFooter, "check: no differences."],
 			stderr: null,
 		};
 	}
@@ -188,7 +225,7 @@ export const renderCheckReport = (
 	);
 	return {
 		exitCode,
-		stdout: [...COVERAGE_BOUNDARY_LINES, ...inventoryFooter],
+		stdout: [...boundaryLines, ...inventoryFooter],
 		stderr: renderDiagnostics(
 			diagnostics,
 			summaryLine(exitCode, disagreementCount, notComparedCount),
@@ -245,14 +282,18 @@ export const declaredCheckConstraints = (
  * 3) -- merged into one findings list. Takes `session`, not a full
  * `Driver`, so a test injects a fake one with no real I/O at all;
  * `runCheck` passes its own already-open `Driver` (which structurally
- * satisfies `DriverSession`).
+ * satisfies `DriverSession`). `registry`'s default forwards straight to
+ * `compareCatalog`'s own -- same optional-and-safe reasoning documented
+ * there (task 2.4 turns a forgotten registry into a loud
+ * `check-not-compared`, never a silent skip).
  */
 export const compareCheckAgainstCatalog = async (
 	snapshot: Snapshot,
 	catalog: Catalog,
 	session: DriverSession,
+	registry: KindRegistry = createDefaultRegistry(),
 ): Promise<ReadonlyArray<Finding>> => {
-	const tableFindings = compareCatalog(snapshot, catalog);
+	const tableFindings = compareCatalog(snapshot, catalog, registry);
 	const expressionFindingLists = await Promise.all(
 		declaredCheckConstraints(snapshot).map((constraint) =>
 			compareCheckConstraint(
@@ -355,9 +396,10 @@ export const runCheck = async (
 					snapshot,
 					catalog,
 					driver,
+					registry,
 				);
 				const inventory = buildInventory(snapshot, catalog);
-				return renderCheckReport(findings, inventory);
+				return renderCheckReport(findings, inventory, registry);
 			},
 			importer,
 		);
