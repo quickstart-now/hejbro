@@ -5,7 +5,8 @@
 ### Requirement: A db handle can register an execution-context provider
 A db handle SHALL accept, at construction, an execution-context
 provider: a resolver consulted once per execution that yields the
-context that execution runs under. When a provider is registered, every
+context that execution runs under, and optionally a fallback context
+applied when the resolver yields none. When a provider is registered, every
 execution surface the handle exposes — statement execution, every
 thenable chain member, every declared-function call, and the transaction
 API — SHALL run under the resolved context, applied by the same generic
@@ -14,9 +15,9 @@ handle constructed without a provider SHALL behave exactly as it does
 today: no context applied, no wrapping transaction opened.
 
 The provider SHALL be generic. The query layer SHALL NOT name any
-platform's role or setting: the resolved context is a value the caller
-supplies, so a preset contributes its existing context builders
-unchanged and no new mechanism.
+platform's role or setting: both the resolved context and the fallback
+context are values the caller supplies, so a preset contributes its
+existing context builders unchanged and no new mechanism.
 
 #### Scenario: Every surface on a provider handle runs under the resolved context
 - **WHEN** a statement execution, a chain member, a declared-function
@@ -42,8 +43,7 @@ unchanged and no new mechanism.
 
 #### Scenario: A preset supplies context values, not mechanism
 - **WHEN** a provider is registered whose resolver returns the Supabase
-  preset's `asUser(claims)` for a request carrying verified claims and
-  its `asAnon()` otherwise
+  preset's `asUser(claims)` and whose fallback is its `asAnon()`
 - **THEN** both contexts apply through the generic mechanism, and the
   preset contributes no code beyond those existing builders
 
@@ -93,27 +93,56 @@ wrapping transaction's own `begin`.
   explicit path raises, and the driver receives nothing at all — not
   even `begin`
 
-### Requirement: A provider that yields no context fails closed
-A registered provider's resolver SHALL yield a context; the type SHALL
-NOT admit a missing one. A caller who bypasses the type and yields no
-context SHALL receive an explicit, coded failure before any statement is
-sent — the execution SHALL NOT proceed under whatever role the
-connection already holds. There is no unscoped path out of a handle that
-has a provider registered.
+### Requirement: A registered fallback is validated when the handle is constructed
+A fallback context is a value known at construction, so its role SHALL
+be validated then — synchronously, through the same declared-role
+whitelist and the same fail-closed check `db.as(context)` applies, and
+before the handle is returned. An undeclared fallback role SHALL fail at
+construction rather than surviving until the first request that happens
+to resolve to no context, which in a system that mostly serves
+identified traffic can be long after deploy.
 
-A resolver that throws SHALL propagate its error unchanged. A failure to
-determine identity is not the same claim as an absence of identity, and
-an execution SHALL NOT proceed on either.
+#### Scenario: An undeclared fallback role fails at construction
+- **WHEN** a handle is constructed with a provider whose fallback
+  context names a role in none of the four sources
+- **THEN** construction fails immediately with the same undeclared-role
+  error the explicit path raises, before any execution
 
-#### Scenario: A resolver yielding nothing sends nothing
-- **WHEN** a resolver that bypasses the type yields no context
+### Requirement: An execution never proceeds without a context
+Once a provider is registered, no execution on that handle SHALL run
+without a context applied — there is no unscoped path out of such a
+handle.
+
+When the resolver yields no context and a fallback is registered, the
+fallback SHALL be applied. When the resolver yields no context and no
+fallback is registered, the execution SHALL fail with an explicit, coded
+error before any statement is sent; it SHALL NOT proceed under whatever
+role the connection already holds. Registering no fallback is therefore
+how a caller says "no identity, no query", and it costs them no value
+they have to invent.
+
+A resolver that throws SHALL propagate its error unchanged and SHALL NOT
+fall back. A failure to determine identity is not the same claim as an
+absence of identity, and treating the first as the second would grant
+the fallback's access on an error path.
+
+#### Scenario: An absent resolution applies the registered fallback
+- **WHEN** the resolver yields no context on a handle whose provider
+  registered a fallback
+- **THEN** the execution runs under that fallback context, and never
+  under an unset role
+
+#### Scenario: An absent resolution with no fallback sends nothing
+- **WHEN** the resolver yields no context on a handle whose provider
+  registered no fallback
 - **THEN** the execution fails with an explicit coded error, and no
   statement reaches the database — the statement is never sent unscoped
 
 #### Scenario: A throwing resolver sends nothing
 - **WHEN** the resolver throws
-- **THEN** that exact error propagates to the caller and no statement
-  reaches the database
+- **THEN** that exact error propagates to the caller, no fallback is
+  applied even when one is registered, and no statement reaches the
+  database
 
 ### Requirement: A provider handle requires the interactive-transaction capability
 Executing on a handle with a registered provider, against a driver

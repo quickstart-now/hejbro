@@ -18,14 +18,18 @@ Files: `packages/query/src/db/db.ts`,
 `packages/query/test/db/context-provider.test.ts` (new),
 `packages/query/test/exports.test.ts`.
 
-- [ ] 1.1 (~9m) [design] The option and its fail-closed floor. The
-      shape is settled by owner decision: `context` is a resolver
-      returning a context, non-nullable — no fallback field. What this
-      task still settles is the *error shape* for a caller who bypasses
-      the type and yields nothing: its code and its message text, which
-      are contract. Red: `context-provider.test.ts` — "a handle built
-      without a provider issues no context statements" and "a resolver
-      yielding nothing fails closed before any statement is sent".
+- [ ] 1.1 (~10m) [design] The option and its construction-time check.
+      The shape is settled by owner decision: `context` is a resolver
+      plus an **optional** fallback context. A registered fallback's
+      role is validated at construction through the existing
+      `assertDeclaredRole` against `Declarations.roles` — the survey
+      confirmed the whitelist is complete and acyclic at that point, so
+      the check has a real home. What this task still settles is the
+      *error shape* for "resolver yielded nothing and no fallback was
+      registered": its code and message text, which are contract. Red:
+      `context-provider.test.ts` — "rejects an undeclared fallback role
+      when the handle is constructed" and "a resolver yielding nothing
+      with no fallback fails closed before any statement is sent".
 - [ ] 1.2 (~8m) The resolution primitive: one context-applied
       transaction per execution, built by reusing `applyContext` and
       validating the resolved role before `driver.transaction` is
@@ -49,12 +53,14 @@ Files: `packages/query/src/db/db.ts`,
       never cached; one `transaction(callback)` resolves once, not per
       statement. Red: same file — "two executions call the resolver
       twice" and "one transaction calls the resolver once".
-- [ ] 1.5 (~7m) Precedence and the error path: `db.as(context)` never
-      consults the resolver, and a throwing resolver propagates
-      unchanged without sending anything. Red: same file — "an explicit
-      as() never calls the resolver" (asserts a call count of 0, not
-      just the applied context) and "a throwing resolver sends
-      nothing".
+- [ ] 1.5 (~8m) Precedence and the error path: `db.as(context)` never
+      consults the resolver; a resolver yielding nothing applies a
+      registered fallback; a throwing resolver propagates unchanged,
+      applies no fallback even when one is registered, and sends
+      nothing. Red: same file — "an explicit as() never calls the
+      resolver" (asserts a call count of 0, not just the applied
+      context), "an absent resolution applies the registered fallback",
+      and "a throwing resolver does not fall back".
 - [ ] 1.6 (~9m) Capability ordering — `assertCapability` runs before the
       resolver, so the failure belongs to the driver alone — plus the
       public type on the `@hejbro/query` barrel and its export pin. Red:
