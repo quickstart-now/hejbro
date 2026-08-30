@@ -94,7 +94,7 @@ Files: `packages/supabase/test/context-provider.test.ts` (new),
 Files: `packages/cli/src/index.ts`, `packages/cli/test/exports.test.ts`,
 `.changeset/*.md`, `README.md`, `openspec/task-times.csv`.
 
-- [ ] 3.1 (~9m) Re-export the provider type from the `hejbro` facade
+- [x] 3.1 (~9m) Re-export the provider type from the `hejbro` facade
       with its export pin, and land the bookkeeping: one `minor`
       changeset (D59, the five published packages are a fixed group),
       README CRAP block (`pnpm check:crap`), task-time rows plus their
