@@ -441,3 +441,14 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-30,refactor-traversal-debt,3.x-rework,3,0,5,0,"clock-stamped 02:50:28Z-02:55:24Z; review rework: shared vitest alias (hejbroSourceAlias, all four packages) across both configs instead of a copied two-package pair, tsconfig.json allowImportingTsExtensions + include; verified with the reviewer's own probe method (throw at each of the four src/index.ts in turn, both test commands run, each throw fired, then restored and cmp-diffed clean); also fixed issue #514's self-contradictory onUpdate count (measured 1, body said two)"
 2026-08-30,refactor-traversal-debt,4.1,4,9,6,0,"clock-stamped 02:42:26Z-02:48:26Z; one patch changeset (fixed-group), follow-up issue (i)=#515 filed under #412, task-times.csv rows added, README crap/tasktime badges regenerated (TURBO_FORCE=1)"
 2026-08-30,refactor-traversal-debt,4.2,4,6,1,0,"clock-stamped 02:48:55Z-02:49:55Z (last of three gh api comment timestamps); closing-record comments posted on #472/#473/#474 (not closed -- merge is the lead's decision), each citing its measured correction and follow-up issue number"
+2026-08-30,align-spec-corpus,1.1,g1,10,14,1,tripwire fired; owner ruled guard-in-change
+2026-08-30,align-spec-corpus,1.2,g1,8,4,0,all four scenario families already bound in convert.test.ts
+2026-08-30,align-spec-corpus,1.3,g1,5,3,0,canonicalizeInterval tests confirmed delta as written
+2026-08-30,align-spec-corpus,1.4,g1,8,7,0,parity held; two chain equality tests added
+2026-08-30,align-spec-corpus,2.1,g2,10,9,0,determinism test added; four scenarios already bound
+2026-08-30,align-spec-corpus,2.2,g2,8,7,0,migration-file.test + check:next-marker cover everything
+2026-08-30,align-spec-corpus,2.3,g2,10,12,0,doc home was the skill reference not README; delta corrected
+2026-08-30,align-spec-corpus,3.1,g3,6,5,0,config rule + provider intro; README needed a neon table row too
+2026-08-30,align-spec-corpus,3.2,g3,5,3,0,two Purpose sections
+2026-08-30,align-spec-corpus,3.3,g3,8,8,0,blackbox entry
+2026-08-30,align-spec-corpus,review-1,review,15,22,0,one-shot reviewer round: M1-M5 + L1-L7 fixes (banner-marker ownership move, set-op/recursive split content restored, boundary wording)

@@ -99,6 +99,12 @@ depends on *who* the user is, key the policy on `auth.uid()` (or
 `auth.jwt()`) explicitly — never assume a role-only policy is safe just
 because the mode might be wrong.
 
+The same timing rule covers a bad token: a token's validity is checked
+by the database when identity is first read (`auth.uid()`/`auth.jwt()`),
+not when the context is applied. Applying a context carrying a malformed
+or unverifiable token succeeds; the failure surfaces at the first policy
+or expression that resolves identity.
+
 ### Transaction-local scope, not `jwt_session_init`
 
 `pg_session_jwt` ships its own `auth.jwt_session_init(jwt)` helper, which

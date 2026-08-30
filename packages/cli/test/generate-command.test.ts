@@ -285,3 +285,37 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		);
 	});
 });
+
+describe("generate determinism (align-spec-corpus 2.1)", () => {
+	it("same declarations against the same snapshot produce byte-identical migration SQL and snapshot bytes", async () => {
+		const other = await createCliFixtureDir();
+		const outputsOf = async (dir: string) => {
+			const entries = await readdir(join(dir, "migrations"));
+			const [sqlName] = entries.filter((name) => name.endsWith(".sql")).sort();
+			expect(sqlName).toBeDefined();
+			const migration = await readFile(
+				join(dir, "migrations", sqlName as string),
+				"utf8",
+			);
+			const snapshot = await readFile(
+				join(dir, "hejbro.snapshot.json"),
+				"utf8",
+			);
+			return { migration, snapshot };
+		};
+		try {
+			for (const dir of [cwd, other]) {
+				await runCli(dir, ["init"]);
+				await writeFixtureFile(dir, "src/app.schema.ts", SCHEMA_SOURCE);
+				const result = await runCli(dir, ["generate"]);
+				expect(result.exitCode).toBe(0);
+			}
+			const first = await outputsOf(cwd);
+			const second = await outputsOf(other);
+			expect(second.migration).toBe(first.migration);
+			expect(second.snapshot).toBe(first.snapshot);
+		} finally {
+			await removeCliFixtureDir(other);
+		}
+	});
+});

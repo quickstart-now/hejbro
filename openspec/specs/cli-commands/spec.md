@@ -4,9 +4,8 @@
 
 The hejbro CLI's user-facing commands as contracts: what each command
 does, when it refuses to run, and what its report must tell the user.
-Currently covers `baseline`, the command that adopts a database hejbro
-did not create by emitting an ordinary first migration that must be
-registered as applied rather than run.
+Covers `baseline` (adopting a database hejbro did not create) and
+`check` (comparing declarations against a live database's catalog).
 
 ## Requirements
 

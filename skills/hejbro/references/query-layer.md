@@ -118,8 +118,12 @@ const withComments = await handle
 
 An insert chain also has `.onConflictDoNothing(...target columns)` and
 `.onConflictDoUpdate({ target: [...], set: {...} })`, mirroring core's
-own `insert(...).onConflictDoNothing()`/`.onConflictDoUpdate()` stages —
-an upsert is still an `insert` chain, not a separate entry point.
+own `insert(...).onConflictDoNothing(posts.slug)`/`.onConflictDoUpdate()`
+stages — an upsert is still an `insert` chain, not a separate entry
+point. The conflict target must name at least one declared column: an
+empty target fails fast with `empty-conflict-target` (Postgres rejects
+`on conflict ()`), and the target-less `on conflict do nothing` form is
+written through the `sql` escape hatch.
 
 A `returning()` (and a function's own returned-row projection) is under
 the same rule as `select` — always an explicit column list, never

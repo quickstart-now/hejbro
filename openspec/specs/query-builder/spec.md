@@ -2,9 +2,10 @@
 
 ## Purpose
 
-Lets users build typed SQL statements (select, insert, update, delete)
-against their declared schema and compile them purely to previewable
-SQL text plus parameters, without touching a database.
+Lets users build typed SQL statements against their declared schema —
+select, insert, update, delete, set operations, window functions, CTEs
+(recursive included), and nested reads — and compile them purely to
+previewable SQL text plus parameters, without touching a database.
 
 ## Requirements
 
