@@ -17,13 +17,8 @@ Refs:
 - packages/query/test/db/db.test.ts @ blob 166e1d6371580dfef8ed14fd1b7330f7a01c549a
 - packages/query/test/types/chain-types.test.ts @ blob 14d85770ef36048f4e108a3dc04b781245aee409
 - README.md @ blob b7dba96771ff029d8399e32ca6b7bae5f74ee4ac
-- skills/hejbro/references/query-layer.md @ blob 5eee95a5c0d6161603a0b901221c82733d395502
+- skills/hejbro/references/query-layer.md @ blob 63650455b52c662ce25222855b503fe2ffd115a5
 - skills/hejbro/SKILL.md @ blob aa69f02f8be689fc08dd9125f362af5567ffa583
-
-(Archive note: the five change-directory paths above were moved by
-`openspec archive` to `openspec/changes/archive/2026-08-31-extend-query-runtime/`
-and the pins re-pathed in the same PR; the blob SHAs are unchanged —
-what moved is the path, not the content.)
 
 (Taken from `git rev-parse HEAD:<path>` immediately after the group-6
 commit (`0bda08f`), each cross-checked against `git hash-object
@@ -82,6 +77,41 @@ the planner's own conventions-section addition on `tasks.md`, "stop
 until a state can be explained," landing in the same commit): only
 `openspec/changes/extend-query-runtime/tasks.md` gained content this
 round; the other nineteen paths re-verified unchanged, all `ok`.
+
+Re-pinned a sixth time, after `openspec archive extend-query-runtime`
+merged this change's OpenSpec artifacts into the main specs and moved
+its own change directory. **The archive moved this change's OpenSpec
+artifacts; the pins below carry their post-archive paths. The blob SHAs
+are unchanged — only the paths moved** (`openspec/changes/
+extend-query-runtime/{issues,measurement,proposal,tasks,specs/
+query-execution/spec}.md` → `openspec/changes/archive/
+2026-08-31-extend-query-runtime/` + same five filenames), verified by
+`git hash-object` on each file at its new path returning the identical
+hash it had before the move. Fourteen of the remaining fifteen paths
+(all outside `openspec/changes/`) are unaffected by an archive and
+re-verified unchanged, all `ok`. The fifteenth,
+`skills/hejbro/references/query-layer.md`, did change content this
+round — not by hand, but caught by `pnpm test` failing for real:
+`packages/skills/test/links.test.ts` reddened on
+`openspec/changes/extend-query-runtime/measurement.md`, a path this
+same file cited that the archive had just moved out from under it (a
+citation this entry's own drafting had already flagged as needing this
+exact fix, in a comment left for exactly this moment — see the
+"Startup schema assertion" section's own "Not supported" entry). A
+second, related citation in the same file's "Where this is enforced"
+list (a separate pointer at the pre-archive change delta, with its own
+note reading "this change has not archived yet ... this citation
+should move with them") was also updated, folding it into the existing
+`openspec/specs/query-execution/spec.md` citation now that the
+scenarios live there. Both fixes verified the same way every claim in
+this file is: `pnpm --filter @hejbro/skills test` reddened first
+(`missing` array containing exactly the stale path), then passed clean
+after the fix — a real gate catching a real staleness, not a
+self-report. This is a form of staleness the squash-merge pin
+discipline above did not anticipate: a squash preserves paths and
+changes blob content (or not at all); an archive preserves blob content
+and changes paths — the opposite failure mode, closed the same way, by
+checking rather than assuming.
 
 **The commit SHAs cited in this entry resolve on the pre-squash branch
 only** (`feat-extend-query-runtime`); after this change's squash merge
@@ -170,8 +200,10 @@ did. One did not.
   per-object finding survived intact.
 - **Group 4** — the #303 measurement. No product code — the group's own
   header states this. Full account in
-  `openspec/changes/extend-query-runtime/measurement.md`; summarized in
-  "The decision that nothing shipped" below.
+  `openspec/changes/archive/2026-08-31-extend-query-runtime/measurement.md`
+  (this change's own post-archive path — see the Refs re-pin note above
+  for the pre-archive path this moved from); summarized in "The
+  decision that nothing shipped" below.
 - **Group 5** — never opened. Conditional on group 4's own measurement
   clearing its pre-registered rule; it did not, so the driver-contract
   capability delta, the four tasks under it, and any change to
