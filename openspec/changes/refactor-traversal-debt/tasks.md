@@ -414,6 +414,19 @@ optimization** — lose it and the engine re-encodes fields that did not
 change. A fold that rebuilds nodes unconditionally flips those rows and
 nothing else in the suite notices.
 
+**Know what neither baseline can see.** The example corpus contains 10
+of the 15 node kinds; `not`, `plpgsqlRef`, `rawSql`, `selectExpr`, and
+**`window`** never occur in it. So the split is: a child list that is
+*missing* is caught by the compile probe (the mapped type demands every
+kind), but a child list that is *wrong* is caught by nothing here — a
+registry returning `[fn, ...partitionBy]` for `window` and silently
+dropping `orderBy` compiles clean, and no golden or retarget row moves.
+`window` is both the most complex node (three child groups) and the
+issue's own headline example, so this is the likeliest place to be
+wrong. That gap is closed in-repo by 2.1's exhaustive iteration, not by
+these baselines; the baselines deliberately stay measurements of real
+artifacts rather than of invented ones.
+
 Re-measure with the **byte-identical probe patch** used for the base run,
 in the same order (`pnpm build --force` again after applying the probe,
 then `TURBO_FORCE=1 pnpm check-types --continue`) — skipping the rebuild
