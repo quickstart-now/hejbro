@@ -614,13 +614,18 @@ mathematical guarantee for every distribution. Attaching the same
 certainty to both claims would let the empirical one travel as if it
 were structural.
 
-**Correction (reviewer-verified): unanimous agreement across all four
-estimators is achievable in principle — the pre-registered rule is not
-unsatisfiable — this record's own collected data simply does not reach
-it.** An earlier draft of this section said unanimity was "structurally
-unreachable" because `MAD` always clears and `range` never does; that
-overclaimed. Two pieces of evidence, both checked against real data
-rather than asserted, correct it:
+**Correction (reviewer-verified), stated precisely: unanimous agreement
+across all four estimators has not been achieved, even once, under this
+record's own actual statistic — the evidence that it is achievable in
+principle comes from a *different* statistic, not from `decide()`
+itself.** An earlier draft of this section said unanimity was
+"structurally unreachable" because `MAD` always clears and `range`
+never does; that overclaimed in one direction. The correct statement is
+narrower than "unanimity is achievable and this record shows it" — it
+is: achievability is supported by *indirect* evidence only, and that
+distinction is load-bearing (see "Why this is indirect, not direct"
+below). Two pieces of evidence, both checked against real data rather
+than asserted, establish this:
 
 - The old harness's 8 runs, with the sign-reversed run C removed (the
   run already flagged in "(i)/(ii)/(iii)" above as best explained by
@@ -653,6 +658,42 @@ unreachable for this rule. What limits this record's own conclusion is
 this specific data's own dispersion (partly explained by the order
 effect quantified above), not an unsatisfiable rule.
 
+**Why this is indirect, not direct evidence, and why that gap matters
+more than the reviewer's original "confirmed once" framing suggested:**
+`decide()`'s spread estimators (`iqrOf`/`madOf`/`stdDevOf`/`rangeOf`,
+`prepared-statement.bench.integration.test.ts`) compute dispersion
+directly on the raw-millisecond `improvements` array, one run's
+absolute (unnamed − prepared) delta against another's, with no per-run
+normalization step — `input.medianMs` (a single, external,
+cross-run baseline) is used **only** for the separate relative-
+improvement condition (`relativeThresholdMs = input.medianMs *
+(percent / 100)`), never to rescale the improvements before the spread
+estimators see them. The percent-based existence proof above instead
+divides *each run's own* improvement by *that run's own* baseline
+before computing spread across runs. These are not the same quantity
+expressed in different units — comparing two millisecond quantities
+against each other (as `decide()`'s spread condition does) is already
+scale-invariant against any single shared baseline, so re-expressing
+both sides in "percent of one shared median" would not change a single
+verdict in this record. What the percent-based proof actually changes
+is *which* runs get treated as more/less variable: normalizing each
+run to its own baseline removes the variance contributed by baseline
+drift between runs (old run D's 1.9578ms baseline, roughly double every
+other run's, inflates its own raw-ms improvement even before
+considering the underlying effect) — raw-ms spread does not remove
+that. This is a genuine, substantive modeling choice, not a units bug,
+and it is exactly the choice between old run D counting as a large,
+spread-inflating outlier (raw ms, `decide()`'s own view) or a much
+smaller, unremarkable one (per-run percent). **This record does not
+resolve that choice**, and does not change `decide()` to make it,
+because doing so now — after already seeing that it would move this
+exact dataset's own estimators toward agreement — would be a
+results-informed rule change, the same pattern this fragment's
+pre-registration exists to prevent. It is named here as an open
+question for a future fragment (per-run baseline normalization for the
+spread condition, not just the relative condition) to settle with the
+owner before, not after, that fragment's own data exists.
+
 **What would change the answer, corrected accordingly: not a bigger
 sample of this same measurement, and not "a larger effect or a rule
 that names one estimator" alone — reduced dispersion.** Concretely:
@@ -668,20 +709,34 @@ estimator's own sampling error without changing why `range`/`SD` are
 inflated relative to `IQR`/`MAD` in the first place.
 
 **How thin this is, and the pre-registered re-review trigger (owner
-decision):** the rule's own reachability has been confirmed exactly
-once, on a 6-or-7-point subset of one dataset from one workload, not
-shown to be generally achievable. This protocol is expected to carry
-into future measurement fragments (starting with #301 Nile); the
-reachability finding above should get stronger with each fragment that
-reaches unanimity. **If three measurement fragments in a row fail to
-reach unanimity across all four estimators, that triggers a review with
-the owner of the estimator set, the 2× multiplier, or both.** The
-number is fixed now, not chosen after such a run of misses exists, for
-the same reason every other rule in this record was fixed before its
-own numbers existed: two misses could plausibly be coincidence, and
-waiting past three risks losing confidence in the rule itself before
-ever revisiting it. This fragment's single miss is not that signal by
-itself — it is fragment one of a possible run, not fragment three.
+decision):** stated at full precision (see "Why this is indirect, not
+direct evidence" above) — under `decide()`'s own actual statistic,
+**this rule has not been shown reachable even once**, in any dataset
+this record collected; the best any subset achieved under `decide()`
+itself is 3 of 4 (old runs, C and D excluded). The only support for
+"this rule is satisfiable in principle" is indirect: a different,
+per-run-normalized statistic, on a 7-point subset, reaches 4 of 4. That
+is thinner than "confirmed once," and the re-review trigger below is
+counted against `decide()`'s own statistic accordingly — a future
+fragment reaching unanimity under a *different* statistic would not
+count toward it. This protocol is expected to carry into future
+measurement fragments (starting with #301 Nile); the reachability
+finding should get stronger with each fragment that reaches unanimity
+**under `decide()` itself**. **If three measurement fragments in a row
+fail to reach unanimity across all four estimators (again, under
+`decide()`'s own statistic), that triggers a review with the owner of
+the estimator set, the 2× multiplier, whether the spread condition
+should normalize each run to its own baseline before computing spread
+(the open question above), or more than one of these.** The number is
+fixed now, not chosen after such a run of misses exists, for the same
+reason every other rule in this record was fixed before its own
+numbers existed: two misses could plausibly be coincidence, and waiting
+past three risks losing confidence in the rule itself before ever
+revisiting it. This fragment's single miss is not that signal by
+itself — it is fragment one of a possible run, not fragment three, and
+by the stricter accounting above it is also, so far, the *only* data
+point on file, direct or indirect, that this exact rule has ever been
+run against.
 
 ## Conclusion
 
