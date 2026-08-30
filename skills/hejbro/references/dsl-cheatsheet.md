@@ -95,7 +95,13 @@ declaring the same column through both fails at declaration time:
 **Column-level**: `ownerId: uuid().notNull().references(() => users.id)`
 — one declaration feeds both the generated DDL and the query layer's
 relation types. The target must share the column's type family, and the
-thunk defers evaluation (import-order safety).
+thunk defers evaluation (import-order safety). It cannot express a
+referential action — no `onDelete`, no `onUpdate` (#514). A column that
+needs one uses the `extras.foreignKeys` form **only** — declaring the
+same column through both fails at declaration time
+(`invalid-duplicate-foreign-key`: the constraint would emit twice), so
+this is not "add extras alongside `.references()` for the action", it
+is one form or the other, per column.
 
 **`extras.foreignKeys`**: an array of `{ columns, references: { table?,
 columns }, onDelete?, onUpdate? }` — `columns` names this table's own
