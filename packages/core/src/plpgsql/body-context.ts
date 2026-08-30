@@ -4,6 +4,7 @@ import { throwHejbroError } from "../error";
 import type { ColumnRef, Condition, Expr, QueryNode } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
+import type { SqlTypeFamily } from "../expr/type-family";
 import type { DeleteFinal, InsertFinal, UpdateFinal } from "../query/mutate";
 import type { SelectLimited } from "../query/select";
 import { stableJson } from "../snapshot/stable-json";
@@ -20,6 +21,7 @@ import {
 	openRecordingSession,
 } from "./recording-session";
 import { assertValidLocalName } from "./reserved";
+import { isRefusedReturnFamily } from "./return-family";
 
 /** A value `ctx.raise()` accepts for one `%` placeholder. */
 export type RaiseArg = Expr | string | number | boolean | Date | null;
@@ -161,6 +163,8 @@ type RecordingState = {
 	readonly identity: string;
 	readonly declaredAt: string | null;
 	readonly returnKind: ReturnKind;
+	/** The declared scalar `returns` type's family — `null` for a setof or trigger declaration, which returns no scalar expression to check. */
+	readonly scalarReturnFamily: SqlTypeFamily | null;
 	/** set the moment any return statement is recorded, at any nesting depth — a scalar function that never sets it has no way to produce its value. */
 	readonly returned: { current: boolean };
 	readonly declarations: Array<PlpgsqlVarDeclaration>;
@@ -443,6 +447,16 @@ const recordReturnExpr = (state: RecordingState, value: Expr): void => {
 			state.declaredAt,
 		);
 	}
+	if (
+		state.scalarReturnFamily !== null &&
+		isRefusedReturnFamily(state.scalarReturnFamily, value.family)
+	) {
+		throwHejbroError(
+			"scalar-return-family-mismatch",
+			`ctx.return() in ${state.identity} received a ${value.family} expression, but this declaration returns a ${state.scalarReturnFamily} type. Postgres accepts the CREATE and every call then fails to convert the returned value. Next: return a ${state.scalarReturnFamily} expression, or declare a ${value.family} "returns" type.`,
+			state.declaredAt,
+		);
+	}
 	pushStatement(state, { stmtKind: "returnExpr", expr: value.exprNode });
 };
 
@@ -674,12 +688,14 @@ export const createRecordingContext = (
 	identity: string,
 	declaredAt: string | null,
 	returnKind: ReturnKind,
+	scalarReturnFamily: SqlTypeFamily | null,
 ): { readonly ctx: BodyContext; readonly finish: () => FunctionBody } => {
 	openRecordingSession();
 	const state: RecordingState = {
 		identity,
 		declaredAt,
 		returnKind,
+		scalarReturnFamily,
 		returned: { current: false },
 		declarations: [],
 		declaredNames: new Set(),
@@ -747,12 +763,14 @@ const recordOnce = (
 	identity: string,
 	declaredAt: string | null,
 	returnKind: ReturnKind,
+	scalarReturnFamily: SqlTypeFamily | null,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
 	const { ctx, finish } = createRecordingContext(
 		identity,
 		declaredAt,
 		returnKind,
+		scalarReturnFamily,
 	);
 	try {
 		run(ctx);
@@ -774,10 +792,23 @@ export const recordBodyWithGuard = (
 	identity: string,
 	declaredAt: string | null,
 	returnKind: ReturnKind,
+	scalarReturnFamily: SqlTypeFamily | null,
 	run: (ctx: BodyContext) => void,
 ): FunctionBody => {
-	const firstBody = recordOnce(identity, declaredAt, returnKind, run);
-	const secondBody = recordOnce(identity, declaredAt, returnKind, run);
+	const firstBody = recordOnce(
+		identity,
+		declaredAt,
+		returnKind,
+		scalarReturnFamily,
+		run,
+	);
+	const secondBody = recordOnce(
+		identity,
+		declaredAt,
+		returnKind,
+		scalarReturnFamily,
+		run,
+	);
 
 	if (stableJson(firstBody) !== stableJson(secondBody)) {
 		throwHejbroError(

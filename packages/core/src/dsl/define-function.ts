@@ -2,6 +2,7 @@ import { captureDeclarationSite } from "../declaration-site";
 import { throwHejbroError } from "../error";
 import type { Expr } from "../expr/ast";
 import { expr } from "../expr/ast";
+import type { SqlTypeFamily } from "../expr/type-family";
 import { familyOfTypeNode } from "../expr/type-family";
 import type { FunctionBody } from "../plpgsql/body-ast";
 import type { BodyContext } from "../plpgsql/body-context";
@@ -198,6 +199,16 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 	return { declarations, refs };
 };
 
+/** The declared `returns` family `ctx.return(<expr>)` is cross-checked against — `null` for a setof or trigger declaration, which returns no scalar expression. */
+const scalarReturnFamilyOf = (
+	returns: FunctionDeclaration["returns"],
+): SqlTypeFamily | null => {
+	if (returns.returnsKind === "scalar") {
+		return familyOfTypeNode(returns.typeNode);
+	}
+	return null;
+};
+
 /** The schema name a `defineFunction` owner argument resolves to, whichever form it was given. */
 const schemaNameOf = (owner: SchemaDeclaration | string): string => {
 	if (typeof owner === "string") {
@@ -249,6 +260,7 @@ export const defineFunction = <
 		identity,
 		declaredAt,
 		returns.returnsKind,
+		scalarReturnFamilyOf(returns),
 		(ctx) => body(ctx, refs),
 	);
 
