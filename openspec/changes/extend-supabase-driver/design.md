@@ -247,8 +247,10 @@ review:
 
 ## The wrapped driver's checkout pin (#531)
 
-Measured in review, on the landed code: one `execute()` through this
-path puts six statements on the wire, in this order.
+Measured in review, on the landed code, by building
+`poolerDriver(pgDriver(pool))` over a stub pool that records every
+`client.query` call, then calling `execute()` once and reading the
+record. One `execute()` puts six statements on the wire, in this order.
 
 ```
 1  set intervalstyle to 'postgres'; set bytea_output to 'hex'   <- the wrapped driver's session-scoped pin
@@ -260,11 +262,34 @@ path puts six statements on the wire, in this order.
 ```
 
 Statement 1 is the vanilla driver's own once-per-checkout pin, and it
-still runs. The reason is that the vanilla driver resolves its
-session-setup member on **its own object**, so a decorator that returns a
-new object — the shape every preset decorator in this repository uses —
-is never consulted. Replacing the member on the decorated value therefore
-cannot suppress it.
+still runs. The reason is one line —
+`packages/pg/src/driver.ts:204`, `const ensurePinned = checkoutGuard(() =>
+driver.setupSession)`: the *member* is read late, but the *object* it is
+read from is captured, and it is the vanilla driver's own object. A
+decorator that returns a new object — the shape every preset decorator in
+this repository uses — is therefore never consulted, and replacing the
+member on the decorated value cannot suppress the pin.
+
+**This is not a claim that the vanilla driver is broken.** Its own
+documentation describes the case it supports as a decorator that replaces
+the member *after the factory returns* — that is, by assigning onto the
+returned object, in place — and for that pattern the late-bound read
+works exactly as documented. What this change uses is a different
+pattern: build a new object from the old one. Both are "decorators" in
+ordinary usage, and only one of them is covered.
+
+The gap is therefore in the **contract's wording**, not in an
+implementation. `driver-contract`'s requirement *Vanilla driver pins
+IntervalStyle at checkout* says the hook is invoked "through the driver
+value's own hook member — late-bound, so a decorator that replaces or
+wraps that member takes effect on every subsequent checkout", and its
+scenario *A wrapped session-setup hook takes effect at checkout* says the
+same. Neither distinguishes assigning onto the driver value from building
+a new value out of it, and every preset in this repository does the
+latter. Whoever takes #531 decides which of the two the contract means —
+narrowing the sentence, or making the vanilla driver resolve through the
+value it hands back — but the starting point is a sentence that covers
+one pattern while the repository's presets use the other.
 
 This is recorded rather than fixed, for two reasons. It belongs to
 another package, and this path's correctness does not rest on it: the
@@ -273,10 +298,8 @@ statement 5. What statement 1 costs is one round trip per physical
 checkout and a session setting left on a pooled backend — a state this
 change stopped depending on, which is different from a state it removed.
 
-The gap between that behavior and the contract's own wording (which reads
-as though replacing the member takes effect at every subsequent checkout)
-is filed as #531. This section is the evidence that issue points at, so
-it stays in this document through archiving.
+This section is the evidence #531 points at, so it stays in this document
+through archiving.
 
 ## Tasks that had no failing stage
 

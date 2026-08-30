@@ -11,7 +11,9 @@ import { anonRole, authenticatedRole, serviceRole } from "./roles";
  * file's own runtime check then rejects as unrecognized (or the
  * reverse) -- exactly the confusing-failure shape a third preset
  * (Nile) would be the first to hit. Deriving the type from this array
- * makes that drift a structural impossibility rather than a discipline.
+ * makes the natural edit path drift-free -- a new endpoint has exactly
+ * one place to go -- though not drift-proof against someone deliberately
+ * widening the derived type on its own.
  */
 const RECOGNIZED_ENDPOINTS = ["session", "transaction-pooler"] as const;
 
