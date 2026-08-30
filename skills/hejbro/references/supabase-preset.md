@@ -56,6 +56,10 @@ const poolerModeDriver = supabaseDriver(
 | Direct connection, or Supabase's session-mode pooler | omitted, or `"session"` | `true` | `true` |
 | Supabase's transaction-mode pooler (Supavisor, port 6543) | `"transaction-pooler"` | `true` | `false` |
 
+On the session path the capability set is whatever the wrapped driver
+declares — these values are `pgDriver`'s. The pooler path is the only
+one where this preset replaces them.
+
 Omitting the option means `"session"` — an existing one-argument call's
 behavior and capability declaration are unchanged by this option's
 existence.
@@ -71,9 +75,13 @@ The two directions cost differently, and only one of them is silent:
   expects. Nothing fails loudly, because nothing failed by the driver
   contract's own definition — session state really did read `true`, and
   it really did stop being true between two transactions.
-- **`"transaction-pooler"` against a session-keeping endpoint** costs one
-  extra `SET LOCAL` pair sent per execution, and nothing else. Declaring
-  the pooler path is safe on any endpoint; the reverse is not.
+- **`"transaction-pooler"` against a session-keeping endpoint** wraps
+  every single-statement execution in its own `BEGIN`/`COMMIT` and sends
+  the two `SET LOCAL` pins inside it — four extra statements per
+  execution, and a statement that used to run in autocommit now running
+  in an explicit transaction. Nothing else changes: the values still
+  arrive in the same shapes. Declaring the pooler path is safe on any
+  endpoint; the reverse is not.
 
 This preset does not detect which endpoint a connection string actually
 points at, and never will as a substitute for declaring `endpoint`
@@ -83,7 +91,9 @@ declaring capabilities as data exists to prevent. It also does not change
 prepared-statement behavior under the pooler: that is the underlying
 client library's own configuration, not a capability this driver reads,
 though it is one more thing that behaves differently once you switch
-endpoints.
+endpoints. Need client-level options — disabling prepared statements
+under the pooler, a pool size — construct the pool yourself and pass it
+to `pgDriver(pool)`; the same `endpoint` option applies.
 
 ## Roles and auth helpers
 
