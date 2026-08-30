@@ -67,15 +67,13 @@ statements — and drop+add column for the two transitions Postgres
 cannot alter in place with universal grammar: a generated expression
 change, and converting an existing plain column to a generated one.
 Converting an existing plain column to a generated one SHALL fail
-fast with an explicit error directing the two-step path (drop the
-column in one generate, re-add it as generated in the next) — the
-existing confirmation mechanism keys on dropped NAMES, which this
-transition never produces, so a loud guard with an explicit user
-action is the honest contract (amended at group 2 close from the
-original confirmation-gated wording; the guard reuses the
-`unsupported-column-alter` diagnostic). A generated column's own
-drop+add (an expression change) carries no confirmation, because its
-data is derivable by construction.
+fast with the `unsupported-column-alter` diagnostic directing the
+two-step path (drop the column in one generate, re-add it as generated
+in the next) — the destructive-change confirmation mechanism keys on
+dropped NAMES, which this transition never produces, so a loud guard
+with an explicit user action is the honest contract. A generated
+column's own drop+add (an expression change) carries no confirmation,
+because its data is derivable by construction.
 
 #### Scenario: Declaring the three variants emits the full grammar
 - **WHEN** a table declares `total: numeric().generatedAlwaysAs(sql`
@@ -123,17 +121,16 @@ snapshot fields, same diff behavior — so the two declaration forms are
 interchangeable for the database. A column-level reference SHALL
 additionally carry its target at the TypeScript type level, so the
 query layer can derive relations from it without any second
-declaration. Self-referencing foreign keys, composite (multi-column)
-foreign keys, and `onDelete`/`onUpdate` actions SHALL remain on the
-`extras` path — `.references()` takes no options in v1, and a
-declaration needing them uses `extras`. Declaring `.references()` and
-an `extras` foreign key over the same column SHALL fail at declaration
-time with an explicit error naming the column, never a silent
-double-emit. A table's foreign keys SHALL emit and snapshot in one
-canonical, declaration-form-independent order (sorted by local
-columns, then target identity) — so mixing the two forms in one
-table, or converting a foreign key from one form to the other,
-changes neither the generated DDL nor the snapshot.
+declaration. `.references()` takes no options; self-referencing foreign
+keys, composite (multi-column) foreign keys, and `onDelete`/`onUpdate`
+actions live on the `extras` path, and a declaration needing them uses
+`extras`. Declaring `.references()` and an `extras` foreign key over
+the same column SHALL fail at declaration time with an explicit error
+naming the column, never a silent double-emit. A table's foreign keys
+SHALL emit and snapshot in one canonical, declaration-form-independent
+order (sorted by local columns, then target identity) — so mixing the
+two forms in one table, or converting a foreign key from one form to
+the other, changes neither the generated DDL nor the snapshot.
 
 #### Scenario: A column-level reference emits the same DDL as extras
 - **WHEN** a table declares `ownerId: uuid().notNull().references(()

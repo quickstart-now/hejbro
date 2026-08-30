@@ -155,6 +155,13 @@ consumed — the statement simply renders twice, which Postgres accepts and
 hejbro therefore does not refuse. Judgment happens when recording ends,
 because nothing consumed after that point can reach the generated body.
 
+The criterion is consumption, never syntax. Holding a builder in a
+variable, returning one from a helper function, or collecting several in
+an array is not what fails; a builder nothing ever consumed is. A helper
+called from a body whose result is passed to `ctx.execute` consumes its
+builder like any other call, and a body that builds an array of
+statements and executes each of them consumes all of them.
+
 Detection SHALL be gated on an open recording session. The same builder
 factories serve `@hejbro/query`'s runtime chain, which builds statements
 on every executed query and is not declaring anything; outside a
@@ -186,7 +193,7 @@ The guard covers what a body builds, not what a body is handed.
 
 #### Scenario: A failure names a form the body actually accepts
 - **WHEN** a body builds a set operation, which no body statement can
-  carry today — `ctx.return`, `ctx.row` and `ctx.execute` all take a
+  carry — `ctx.return`, `ctx.row` and `ctx.execute` all take a
   select, an insert, an update or a delete
 - **THEN** the failure says the body has no statement that carries a set
   operation, instead of pointing at `ctx.execute`, which would send the
@@ -211,13 +218,6 @@ The guard covers what a body builds, not what a body is handed.
   branch (`ctx.return(flag ? update(…) : deleteFrom(…))`), which
   expresses the same thing and drops nothing
 
-The criterion is consumption, never syntax. Holding a builder in a
-variable, returning one from a helper function, or collecting several in
-an array is not what fails; a builder nothing ever consumed is. A helper
-called from a body whose result is passed to `ctx.execute` consumes its
-builder like any other call, and a body that builds an array of
-statements and executes each of them consumes all of them.
-
 #### Scenario: A builder from a helper is consumed like any other
 - **WHEN** a body calls a helper that constructs a statement and passes
   the result to `ctx.execute`
@@ -225,11 +225,13 @@ statements and executes each of them consumes all of them.
   does not matter, only that something consumed it
 
 ### Requirement: A trigger body returns a row, never a query
-A trigger body that returns a query SHALL fail at declaration time. The
-shape check fires only for a scalar-returning declaration today, so a
-query returned from a trigger body renders `return query …` inside a
-`returns trigger` function — SQL Postgres rejects at CREATE, which is the
-same failure the scalar case already prevents.
+A trigger body that returns a query SHALL fail at declaration time with a
+named error whose `Next:` clause names the trigger's own form — execute
+the statement for its effect, then return the trigger row. This is the
+trigger-specific case of the return-shape requirement ("A body's return
+shape is decided by the declaration"), stated separately because its
+diagnostic and remedy are the trigger's own; it adds no shape the general
+rule does not already refuse.
 
 #### Scenario: A query returned from a trigger body is refused
 - **WHEN** a trigger body returns a query

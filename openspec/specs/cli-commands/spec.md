@@ -4,8 +4,10 @@
 
 The hejbro CLI's user-facing commands as contracts: what each command
 does, when it refuses to run, and what its report must tell the user.
-Covers `baseline` (adopting a database hejbro did not create) and
-`check` (comparing declarations against a live database's catalog).
+Covers `baseline` (adopting a database hejbro did not create), `check`
+(comparing declarations against a live database's catalog), `generate`
+(deterministic migration generation), and `verify` (offline
+migration-chain integrity).
 
 ## Requirements
 
@@ -17,17 +19,19 @@ that already exist and must be registered as applied rather than run.
 
 `baseline` SHALL refuse unless the project has no migrations and an empty
 snapshot, naming `generate` as what to run instead — a baseline is by
-definition the first migration of an adopted database.
+definition the first migration of an adopted database. This refusal
+SHALL fail with the error code `baseline-not-first` and a non-zero exit
+code.
 
 `baseline` SHALL also refuse when the run would produce no changes: the
 emptiness guard above has already established that the snapshot is
 empty, so nothing to adopt means the declarations loaded but exported
-nothing. It SHALL fail with `baseline-nothing-to-adopt` and a non-zero
-exit code, naming the declaration entry points as what to check —
-never the `generate` path's "no changes — snapshot already matches your
-declarations" success line, which is both untrue here and an exit 0 that
-hides a mistake. `generate`'s own no-change line and exit 0 are
-unaffected.
+nothing. It SHALL fail with the error code `baseline-nothing-to-adopt`
+and a non-zero exit code, naming the declaration entry points as what to
+check — never the `generate` path's "no changes — snapshot already
+matches your declarations" success line, which is both untrue here and
+an exit 0 that hides a mistake. `generate`'s own no-change line and
+exit 0 are unaffected.
 
 `baseline` SHALL accept only the flags a first migration can use. Rename
 and drop-confirmation flags are not among them — a baseline diffs against
@@ -71,14 +75,15 @@ they match the live schema stays a separate step.
 #### Scenario: A baseline is refused on an existing chain
 - **WHEN** `hejbro baseline` runs on a project that already has
   migrations or a non-empty snapshot
-- **THEN** it fails with `baseline-not-first`, naming `hejbro generate`
-  as the command for a change to an already-adopted project
+- **THEN** it fails with the error code `baseline-not-first` and a
+  non-zero exit code, naming `hejbro generate` as the command for a
+  change to an already-adopted project
 
 #### Scenario: A baseline with nothing to adopt is refused
 - **WHEN** `hejbro baseline` runs on a project whose declarations load
   but export nothing
-- **THEN** it fails with `baseline-nothing-to-adopt` and a non-zero exit
-  code, writing no migration and no snapshot
+- **THEN** it fails with the error code `baseline-nothing-to-adopt` and a
+  non-zero exit code, writing no migration and no snapshot
 
 #### Scenario: The baseline flag surface excludes renames and drops
 - **WHEN** `hejbro baseline --help` runs
@@ -90,28 +95,6 @@ they match the live schema stays a separate step.
 - **THEN** it fails with a hejbro-coded error stating that a baseline
   diffs against an empty snapshot and naming `hejbro generate` instead,
   before any declaration is loaded or any file written
-
-### Requirement: The baseline banner marker is machine-readable
-The `-- baseline:` banner line marks a migration that must be registered
-as applied rather than run, and its only consumer is a tool deciding
-which of the two to do. That decision SHALL NOT require string-matching
-the banner: hejbro SHALL expose a parser for the marker publicly,
-alongside the parsers for the banner's hash-chain and version lines.
-
-The parser SHALL read the marker by its own known prefix only, leaving
-unknown banner lines ignored, so an older hejbro reading a newer file
-stays unaffected.
-
-The machine contract is the `-- baseline:` prefix; the guidance that
-follows the colon is prose for humans and MAY change. A parser that
-matched the whole line would return `false` for every migration written
-before such a wording change — and a `false` here tells an apply tool to
-*run* a migration that must only be registered.
-
-#### Scenario: A baseline migration is identified by its marker
-- **WHEN** a tool parses a migration file written by `hejbro baseline`
-- **THEN** the exported parser reports the marker as present, and reports
-  it absent for a migration written by `hejbro generate`
 
 ### Requirement: Declarations can be checked against a live database
 The CLI SHALL provide a `check` command that compares the declared
@@ -138,8 +121,23 @@ against the snapshot; `check` asks whether the snapshot describes the
 database that actually exists. Folding them together would make one
 failure mean two unrelated things.
 
-`check` SHALL compare, per declared object: existence by identity, and
-for a column its type, its `notNull`, and its default.
+What `check` compares, per declared object, is the following — this list
+is the complete comparison surface, and a comparison added later SHALL be
+added to it:
+
+- existence, by identity
+- for a column: its type, its `notNull`, and its default
+- for an expression-bearing object (a check constraint, an index
+  predicate, a generated column): the expression, through the server's
+  own rendering (its own requirement below)
+- for a check constraint additionally: whether the database enforces it
+  (`NOT VALID` is reported even when the expression matches)
+- for a grant declared over *all tables in a schema*: the tables the
+  declarations cover, not every table the schema happens to contain (a
+  table hejbro does not declare is inventory, never a finding: hejbro
+  cannot emit a migration for it, so reporting it as a difference would
+  hand the user a failure with no fix — and the grant hejbro does emit
+  is a one-shot statement that never covered that table either)
 
 Its exit code SHALL distinguish three answers, because "the database
 disagrees with you" and "I could not find out" are different facts and a
@@ -153,23 +151,16 @@ A run that could not compare something SHALL NOT exit zero. A checker
 that answers "no differences" when it never looked is the failure this
 command exists to end.
 
-Where a column differs on more than one of those axes, `check` SHALL
-report all of them from one run. Reporting only the first would make the
-user fix it, run again, and meet a second difference in the same column
-— the tool drip-feeding what it already knew.
-
-A declaration that grants over *all tables in a schema* SHALL be compared
-against the tables the declarations cover, not against every table the
-schema happens to contain. A table hejbro does not declare is inventory,
-never a finding: hejbro cannot emit a migration for it, so reporting it
-as a difference would hand the user a failure with no fix — and the
-grant hejbro does emit is a one-shot statement that never covered that
-table either.
+Where a column differs on more than one axis, `check` SHALL report all
+of them from one run. Reporting only the first would make the user fix
+it, run again, and meet a second difference in the same column — the
+tool drip-feeding what it already knew.
 
 `check` SHALL refuse to report a clean result for an empty declaration
 set: zero declared objects means every comparison is vacuous, which is
 never a real pass and is almost always the wrong path or entry point. It
-SHALL fail with a distinct code from an ordinary difference.
+SHALL fail with its own error code, distinct from an ordinary
+difference's, and exit two.
 
 #### Scenario: A column whose real type differs is reported
 - **WHEN** a declaration types a column `text` and the database has it as
@@ -185,8 +176,9 @@ SHALL fail with a distinct code from an ordinary difference.
 #### Scenario: An empty declaration set is refused
 - **WHEN** `hejbro check` runs against declarations that load but export
   nothing
-- **THEN** it fails with its own code rather than reporting zero
-  differences, naming the declaration entry points as what to check
+- **THEN** it fails with its own error code and exit code two rather than
+  reporting zero differences, naming the declaration entry points as what
+  to check
 
 ### Requirement: What the catalog says does not depend on who is asking
 `check` SHALL read the catalog in a way that does not depend on the
@@ -422,3 +414,57 @@ decision to surface.
 - **WHEN** `hejbro check` runs in a project without the driver package
 - **THEN** it fails with a hejbro-coded error naming the package to
   install, not a module-resolution stack trace
+
+### Requirement: Migrations are generated deterministically from declarations
+The CLI SHALL provide a `generate` command that diffs the declarations
+against the last snapshot and writes exactly two artifacts: the next
+migration file (carrying only what changed) and the updated snapshot.
+Generation SHALL be deterministic: the same declarations against the
+same snapshot SHALL produce byte-identical migration SQL and
+byte-identical snapshot bytes, run anywhere, with no database
+connection. A run that finds no difference SHALL write nothing, report
+"no changes — snapshot already matches your declarations", and exit
+zero. `generate`'s flag surface carries the rename flags (identifying a
+rename that would otherwise diff as drop-plus-add) and the
+drop-confirmation flags (confirming a destructive change by the dropped
+object's name); those flags are `generate`'s own, which is why a
+baseline refuses them.
+
+#### Scenario: Only the difference is emitted
+- **WHEN** one column is added to an already-snapshotted declaration and
+  `hejbro generate` runs
+- **THEN** the new migration contains the `alter table … add column`
+  for that column and nothing else, and the snapshot is updated
+
+#### Scenario: Generation is deterministic
+- **WHEN** `hejbro generate` runs twice from the same declarations and
+  the same prior snapshot (the first run's outputs discarded)
+- **THEN** both runs produce byte-identical migration SQL and
+  byte-identical snapshot bytes
+
+#### Scenario: No difference writes nothing
+- **WHEN** `hejbro generate` runs and the snapshot already matches the
+  declarations
+- **THEN** no migration and no snapshot are written, the no-change line
+  is reported, and the exit code is zero
+
+### Requirement: The migration chain on disk is verifiable
+The CLI SHALL provide a `verify` command that checks, without a
+database, that the migration directory and the snapshot still agree:
+every migration's banner hash chain is intact and in order, and the
+snapshot's recorded hash matches the parsed-and-re-rendered snapshot —
+so a hand-edited migration, a hand-edited snapshot, or a missing or
+reordered file is reported as a mismatch naming the artifact, and an
+untouched chain passes. `verify` SHALL accept the chain a `baseline`
+starts exactly as one `generate` starts.
+
+#### Scenario: An untouched chain passes
+- **WHEN** `hejbro verify` runs over migrations and a snapshot that
+  hejbro wrote and nothing edited
+- **THEN** it passes with exit code zero
+
+#### Scenario: A hand-edited artifact is reported
+- **WHEN** a migration file or the snapshot is edited by hand and
+  `hejbro verify` runs
+- **THEN** it fails naming the artifact whose hash no longer matches,
+  with a non-zero exit code
