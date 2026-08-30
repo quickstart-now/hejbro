@@ -21,6 +21,13 @@ Conventions that apply to every group:
   with `git status --porcelain`, not asserted. A mutation planted in a
   file this change is otherwise forbidden to touch is the case that
   matters: an unreverted one ships as a behaviour change.
+- A record is produced, not transcribed. Numbers copied by hand into a
+  document can drift from the run that made them, and the drift emits no
+  signal: the arithmetic stays correct and the document stays plausible.
+  Where a document cannot be generated, it carries what lets a reader
+  tie it back — the command, the run's timestamp, and the sample count
+  it claims — and the claimed count is asserted against the collected
+  one in the harness itself.
 - A gate that **rewrites** a file is judged by the diff it leaves
   behind, not by its own exit code — `check:crap` and `check:tasktime`
   both rewrite README, so a green run with `README.md` still modified
@@ -36,9 +43,22 @@ Conventions that apply to every group:
   decoration. A suspicion is not a claim: stating it as a hypothesis and
   closing it against the source before reporting is the procedure, not a
   lapse. What this rule counts is a claim that left the desk unverified.
-  An observation and its attribution are two claims, and the rule covers
-  both: a failure that was really seen can still be blamed on the wrong
-  cause, and the wrong cause travels further than the observation does.
+  An observation is one claim and what gets built on it is another, and
+  the rule covers both. A failure that was really seen can still be
+  blamed on the wrong cause; a behaviour that was really seen once can
+  still be written up as one the tests hold. Both travel further than
+  the observation did, and neither announces that it outran its
+  evidence.
+- A group whose output is a number gets the reviewer's prediction on the
+  record before the measurement runs. The prediction is never evidence
+  and never affects the verdict; it exists so that the reviewer's own
+  leniency toward an expected result — or severity toward an unexpected
+  one — becomes detectable afterward. Restraint is not reusable, a
+  device is. The same holds for any distinction registered in advance:
+  if the case it anticipated never arises, it cost a sentence and served
+  as a negative control; the ones that look like over-engineering
+  beforehand are indistinguishable from the ones that later decide an
+  outcome.
 - A `[design]` task settles a contract, and a contract's shape is half
   types. Every `[design]` task therefore names at least one **type-level**
   mutation alongside its runtime one — a value mutation cannot make a
@@ -263,19 +283,72 @@ postgres:17 (Docker), plus `pnpm check`, `pnpm check-types`,
 No product code in this group. The rule is fixed before the numbers
 exist: the session path, at least 1000 iterations, median and spread
 reported, and prepared statements ship only if the improvement exceeds
-twice the run-to-run spread **and** is at least 5% of the median.
+twice the run-to-run spread **and** is at least 5% of the median. Both
+comparisons are made in **percent**, since the second is already
+relative and a rule cannot answer in two units.
 
-- [ ] 4.0 (~6m) The instrument is checked before it is trusted: the
+"Spread" was left unspecified, and an unspecified parameter gets chosen
+after the data is in — so it is specified now, as invariance: the
+improvement clears the bar under **every** spread estimator reported
+(interquartile range, median absolute deviation, standard deviation,
+full range), or it does not clear it. Two reasons. A result that flips
+with the choice of estimator is not "exceeding" anything, which is what
+the rule asks. And ambiguity a pre-registration failed to remove is
+resolved against the side arguing to ship, because shipping here costs
+every driver a compile break.
+
+The two outputs of this group carry different burdens. The shipping
+decision needs only one estimator to miss — the rule ships on unanimity,
+so a single miss settles it, and the group closes either way. The
+record's wording needs all four to miss before it may say the
+improvement was insufficient; short of that it says the estimators
+disagreed and the data cannot answer. "Cannot answer" is not a
+deadlock: it decides nothing about this change and everything about
+what a future reader is told, and those are the opposite instruction
+about whether to try again.
+
+"Run-to-run spread" means the variation between **independent runs of
+the harness**, at least five of them, not the jitter between iterations
+inside one run. The distinction decides the outcome: within-run jitter
+is systematically smaller, so using it as the denominator would let
+almost any improvement clear "twice the spread". The record states how
+many independent runs the spread came from.
+
+"Independent" means at least a separate process invocation. Five runs
+inside one process share a warm pool, a warm cache and a warm JIT, and
+their agreement measures that warmth rather than the machine's real
+variability — the same shrinking denominator, one level up. The record
+says what each run shared and what it started fresh, so a later reader
+can tell whether the spread was underestimated.
+
+The two paths are measured **interleaved or in alternating order**, and
+the record says which. Always running them in the same order banks
+every warm-up gain on whichever goes second, and that is precisely the
+question this group exists to answer.
+
+- [x] 4.0 (~6m) The instrument is checked before it is trusted: the
       harness is first pointed at two conditions whose difference is not
       in doubt, and it has to report that difference. A harness that
       cannot see a manufactured gap cannot be believed about a real one,
       and this group's whole output is a comparison. Red:
       `packages/pg/test/prepared-statement.bench.integration.test.ts`
       (new) — "the harness separates two deliberately different
-      workloads". What makes it red: feed it the same workload twice and
-      the separation assertion fails.
+      workloads, and does not separate one from itself". Both directions
+      are checked through **the same decision function this group's rule
+      names**, not through a looser "the medians differ": a instrument
+      validated by one test and used by another is two instruments. What
+      makes it red: feed it the same workload twice and the
+      no-difference direction fails; push the rule's threshold to an
+      absurd value and the difference direction fails — if that second
+      operation changes nothing, the check is not running the rule.
+      The two workloads run **through the harness**, not as arrays fed
+      to the function: a harness that times the wrong window — setup
+      included, or two paths that are secretly the same send — produces
+      honest arithmetic on dishonest numbers, and only a workload whose
+      difference is physically real (one side deliberately slowed at the
+      server) can catch that.
       Files: that test.
-- [ ] 4.1 (~8m) Prepared-vs-unnamed measurement over the session path:
+- [x] 4.1 (~9m) Prepared-vs-unnamed measurement over the session path:
       the same statement executed as today's unnamed text query and as a
       named prepared statement, N ≥ 1000, median and spread reported,
       the command printed so the run is reproducible. Red:
@@ -285,16 +358,25 @@ twice the run-to-run spread **and** is at least 5% of the median.
       red: return a single sample instead of the distribution and the
       spread assertion fails.
       Files: that test.
-- [ ] 4.2 (~7m) Compile-cost measurement: recompiling a statement versus
+- [x] 4.2 (~7m) Compile-cost measurement: recompiling a statement versus
       reusing a cached compile, same reporting shape. Quantifies the
       cost only — no caching surface ships in this change. Red: same
       file — "reports the compile cost per execution". What makes it
       red: measure a single compile instead of the per-execution
       repetition and the per-execution figure collapses to zero.
       Files: that test.
-- [ ] 4.3 (~6m) The numbers are recorded with the exact command,
+- [x] 4.3 (~6m) The numbers are recorded with the exact command,
       iteration count, median and spread, and the decision rule is
-      applied to them in writing.
+      applied to them **by the decision function itself**, with its
+      output recorded — a verdict reached by looking at the numbers and
+      judging them sufficient is not reproducible, and a negative
+      verdict reached that way is indistinguishable from simply deciding
+      not to do the work. The record also states the conditions
+      the numbers were taken under, the exclusive container window among
+      them: a timing figure taken while something else competed for the
+      machine does not announce itself as wrong — it just reads as a
+      slower number — so the window is part of the measurement, not a
+      note about it.
       Files: `openspec/changes/extend-query-runtime/measurement.md`
       (new).
 
@@ -302,11 +384,20 @@ Gates: `pnpm --filter @hejbro/pg test:integration` against a real
 postgres:17 (Docker), plus `pnpm check`, `pnpm check-types`,
 `pnpm test` (all with `TURBO_FORCE=1`).
 
-## 5. The capability — conditional on group 4
+## 5. The capability — not activated
 
-Started only if group 4's numbers clear the rule in group 4's header,
-and only after that outcome is confirmed. The `driver-contract` delta
-spec is written at that point; these tasks are provisional until then.
+**Group 4's measurement did not clear the rule, so this group does not
+run.** The improvement cleared the bar under two spread estimators and
+missed it under two others, which is the definition of not exceeding
+the run-to-run spread; one of eight runs was a 22.5% regression. No
+capability key is added, no `driver-contract` delta is written, and the
+one-line additions the exhaustive capability record would have forced on
+the other drivers are not needed. The tasks below stay unticked as the
+record of what the measurement decided against, not as work outstanding.
+
+This is the measurement doing its job. The numbers are in
+`measurement.md`; a later change with a different workload or driver
+path can reopen the question from them.
 
 - [ ] 5.1 (~8m) [design] The capability key's name and its fail-closed
       semantics. Possible outcomes and their Files — every outcome
@@ -356,8 +447,12 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test` (all with
       runtime entry adds. What makes it red: add the export without the
       reference entry.
       Files: `skills/hejbro/references/query-layer.md`.
-- [ ] 6.2 (~6m) Release hygiene: one changeset (`minor`), the task-time
-      rows, the README badges.
+- [ ] 6.2 (~6m) Release hygiene: one changeset (`minor` — the assertion
+      is a new capability, and a new public surface must not ride out in
+      a patch), the task-time rows, the README badges. The changeset's
+      prose covers the assertion only: prepared statements never
+      shipped, and a release note is the easiest place for something
+      that did not ship to look as if it had.
       Files: `.changeset/*.md`, `openspec/task-times.csv`, `README.md`.
 
 Gates: `pnpm check`, `pnpm check-types`, `pnpm test`,
@@ -367,5 +462,5 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test`,
 
 ## Totals
 
-Groups 1–4 and 6: 18 tasks (4 + 7 + 1 + 4 + 2). Group 5 adds 4 more if
-the measurement earns it.
+18 tasks (4 + 7 + 1 + 4 + 2). Group 5's four are not counted and never
+ran: the measurement they were conditional on decided against them.

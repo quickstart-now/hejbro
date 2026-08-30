@@ -223,7 +223,7 @@ describe("assertSchema / live witness (group 3, task 3.1)", () => {
 		try {
 			const handle: AssertSchemaHandle = { schema: { widgets }, driver };
 
-			expect.assertions(2);
+			expect.assertions(3);
 			try {
 				await assertSchema(handle);
 			} catch (error) {
@@ -233,6 +233,19 @@ describe("assertSchema / live witness (group 3, task 3.1)", () => {
 				expect((error as { readonly message?: unknown }).message).toContain(
 					"live_assert.widgets",
 				);
+				// Group 3 follow-up (review finding): the umbrella code alone
+				// doesn't prove the per-object finding travels intact -- this
+				// was previously only visible in a diagnostic dump quoted in a
+				// report, never asserted.
+				expect(
+					(
+						error as {
+							readonly findings?: ReadonlyArray<{
+								readonly error: { readonly code: string };
+							}>;
+						}
+					).findings?.[0]?.error.code,
+				).toBe("check-object-missing");
 			}
 		} finally {
 			await driver.client.end();
