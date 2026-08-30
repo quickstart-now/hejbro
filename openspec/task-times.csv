@@ -464,3 +464,7 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-30,extend-supabase-driver,2.3,g2,6,1,0,clock 14:48:39-14:49:04; roles already survived the spread - no red stage existed
 2026-08-30,extend-supabase-driver,2.4,g2,6,2,0,clock 14:49:04-14:50:34; unknown-pooler-mode at construction; non-reach of execution path pinned
 2026-08-30,extend-supabase-driver,2.5,g2,5,1,0,clock 14:50:34-14:51:40; type-only exports; red was tsc-level not vitest
+2026-08-30,extend-supabase-driver,3.1,g3,9,2,0,clock 14:56:14-14:58:03; covers 3.2's edit too - one section written in one pass
+2026-08-30,extend-supabase-driver,3.2,g3,8,0,0,no separate stamp; landed inside 3.1's edit as a subsection
+2026-08-30,extend-supabase-driver,3.3,g3,5,1,0,clock 14:58:03-14:59:00; single added paragraph in the query-layer reference
+2026-08-30,extend-supabase-driver,3.4,g3,5,1,0,clock 14:59:00-14:59:36; minor changeset; fixed group of six confirmed by changeset status
