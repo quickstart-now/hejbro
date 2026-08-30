@@ -33,6 +33,29 @@ instability it produced (the pre-rewrite verdict flipping across passes)
 is part of the evidence for "cannot determine," not a defect to explain
 away.
 
+**Was the overage pre-justified or post-hoc?** Post-hoc: the decision to
+run past 5 was made *after* seeing the single-estimator verdict flip
+between the first two passes, not stated as a contingency before either
+pass ran. That is why it is named a violation above rather than
+described as a planned protocol adjustment — the honest label, even
+though the outcome below shows it did not change the answer.
+
+**Would stopping at the cap have changed the conclusion?** No.
+Re-applying the current, correct four-estimator `decide()` to Pass A
+alone (N=5, the first pass run, the cap this instruction allowed)
+already returns `shipWorthy: false` with the same 2-of-4 estimator
+split every later pass and the pooled 50 also show (see the invariance
+table below — "New A" is that same pass). Every one of the seven
+datasets in this record — including the one the 5-run cap alone would
+have produced — lands in the same "cannot determine, no ship" place.
+The overage therefore produced additional *information* (the pass-to-
+pass instability that is itself part of the evidence below, and the
+order-effect quantification that explains it) without producing a
+different *verdict* than stopping at the cap would have. That is the
+overage's actual defense, and simultaneously the evidence that it was
+not necessary: both are recorded here rather than only the favorable
+half.
+
 ## Conditions
 
 - Command: `pnpm --filter @hejbro/pg test:integration -- prepared-statement.bench`
@@ -54,6 +77,42 @@ away.
   the two windows above. Manual runs made before the first window was
   coordinated are reported in "the old harness" section below for
   comparison only — never as the basis for the verdict.
+- **Gate-verification window (data not adopted): 18:20:36 UTC –
+  18:25:11 UTC**, 2026-08-30. After this round's code changes (the
+  cross-pass pooled-analysis block, the naming-convention renames), the
+  full `pnpm --filter @hejbro/pg test:integration` suite was re-run
+  under a fresh exclusive Docker window to confirm the changed file
+  actually runs clean under its real configuration — a gate-passing
+  claim without this would rest on the Docker-free `-t` filtered run
+  from an earlier round only. This window's own numbers are a gate
+  check, not a new data collection: they are **not** folded into any
+  table, verdict, or estimator computation in this record — the
+  verdict above is fixed from the two windows already listed. They are,
+  however, looked at (never discarded unseen) and compared for
+  consistency: 4.1 (N=20) in this window reported an improvement
+  median of 0.06859ms against an unnamed baseline of 0.85141ms
+  (relative 8.056%), `decide()` returning `shipWorthy: false` with the
+  identical split every other dataset in this record shows (`MAD`/`SD`
+  exceed, `IQR`/`range` do not). This sits inside the 6.59%–10.36%
+  range every other dataset in this record already reports, and
+  reproduces the same estimator-split shape — consistent with, not
+  contradicting, the recorded conclusion. Had it landed meaningfully
+  outside that range, or produced a different split shape, that would
+  itself be new information (run-to-run variation larger than this
+  record already accounts for) and would have been reported to the
+  planner rather than silently noted; neither happened.
+
+**Naming note (for the diff reviewer):** the cross-pass pooled-analysis
+block's local constants were first written `TOTAL_RUNS_ACROSS_PASSES`
+and `PASSES` (SCREAMING_CASE, matching this file's module-level
+constants like `ITERATIONS`). `pnpm check` (Biome's
+`useNamingConvention`) rejected both: SCREAMING_CASE is accepted for
+module-scope constants but not for a `const` declared inside a
+`describe`/`it` body, which this repository's existing convention
+already follows one level up (`IndependentRuns` in 4.1's own
+`describe`, unrelated to this round, is PascalCase for the identical
+reason). Renamed to `TotalRunsAcrossPasses` and `Passes` to match; no
+behavior change, format-only.
 
 ## The decision rule (fixed before the numbers exist)
 
@@ -301,17 +360,39 @@ tempted.
      (which always measured unnamed first, never alternated) had no
      way to detect or control for. Computed directly from the 50 new
      runs' own per-run order labels: runs measured **unnamed-first**
-     (n=26) show a mean improvement of **0.0832ms**; runs measured
-     **prepared-first** (n=24) show a mean improvement of **0.0424ms**
-     — essentially half. Whichever shape is measured *second* within a
-     run reads faster, consistent with a within-run warm-up advantage
-     (connection/plan/buffer-cache warming) accruing to the second
-     measurement regardless of which shape it is. The old harness
-     always measured `prepared` second — so this same warm-up
-     advantage, uncontrolled, would have inflated its reported
-     improvement. This is directly consistent with the old harness's
-     10.36% relative improvement sitting above every new, order-
-     balanced pass (6.59%–8.38%, pooled 7.53%).
+     (n=26) show a mean improvement of **0.083188ms**; runs measured
+     **prepared-first** (n=24) show a mean improvement of **0.042383ms**.
+     Whichever shape is measured *second* within a run reads faster,
+     consistent with a within-run warm-up advantage (connection/plan/
+     buffer-cache warming) accruing to the second measurement regardless
+     of which shape it is. The old harness always measured `prepared`
+     second — so this same warm-up advantage, uncontrolled, would have
+     inflated its reported improvement. This is directly consistent with
+     the old harness's 10.36% relative improvement sitting above every
+     new, order-balanced pass (6.59%–8.38%, pooled 7.53%).
+
+     **Quantified against the effect this record is trying to measure**
+     (owner/review requirement — this is not a side observation, it
+     changes what the "cannot determine" verdict means): the order gap
+     itself is **0.040805ms** (unnamed-first mean minus prepared-first
+     mean), a **1.9628×** ratio between the two, and **63.61%** of the
+     pooled improvement median (0.040805 / 0.064150). A confound of
+     roughly two-thirds the size of the signal being measured, present
+     in every run and accumulating entirely onto one side whenever order
+     is not alternated (exactly the old harness's own protocol), is not
+     a minor caveat — it is large enough, on its own, to explain why an
+     un-order-controlled measurement would read meaningfully higher than
+     an order-balanced one, independent of any claim about the
+     underlying prepared-statement effect itself.
+
+     **Balance check:** the midpoint of the two order-conditioned means,
+     (0.083188 + 0.042383) / 2 = **0.062786ms**, sits within 0.0014ms of
+     the pooled improvement median (0.064150ms) computed from all 50
+     runs together. This is the evidence that the alternating-order
+     protocol actually balanced the two conditions — the pooled figure
+     is not secretly dominated by one order, which is what would be
+     expected if, for example, more than half the 50 runs happened to
+     land on one order by chance (they do not: 26 vs 24, close to even).
 
 **On balance: both (i) and (iii) apply; (ii) is ruled out.** The old
 harness's *judgment method* (single estimator, no invariance
@@ -324,6 +405,20 @@ correction moves the conclusion toward shipping: if anything, (iii)
 means the old 10.36% figure *overstates* the effect, so the bar the new
 data still does not clear was, if anything, easier to clear under the
 old (biased-high) numbers than under the corrected ones.
+
+**Why this makes "cannot determine" a quantitative finding, not a
+hedge:** a measurement whose dominant confound (the order effect) is
+comparable in magnitude to two-thirds of the effect it is trying to
+detect is not a measurement precise enough for an invariance rule to
+resolve either way. Read together with the invariance table above (2-
+to-3-of-4 estimators agreeing, never all four, in all seven datasets),
+the picture is consistent rather than coincidental: an effect sitting
+close to a confound of this size is exactly the regime in which
+different spread estimators — more or less sensitive to the tails a
+confound this large would produce — are expected to disagree with each
+other. "Cannot determine" describes that regime accurately; "the effect
+is insufficient" would claim more precision than a measurement with a
+confound this large can support.
 
 **Repo-wide methodological lesson (per owner pre-approval, for the
 planner to escalate separately, outside this fragment):**
