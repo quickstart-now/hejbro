@@ -85,8 +85,9 @@ Files: `packages/supabase/test/context-provider.test.ts` (new),
 - [ ] 2.2 (~7m) The skill reference documents the provider surface (a
       changed public surface is a changed user contract, AGENTS.md):
       registration, that an explicit `as()` wins, that the resolver runs
-      once per execution uncached, and that a throwing resolver does not
-      fall back. Files: `skills/hejbro/references/`.
+      once per execution uncached, and that a throwing resolver
+      propagates unchanged rather than degrading to an uncontexted
+      execution. Files: `skills/hejbro/references/`.
 
 ## 3. Facade re-export and release bookkeeping
 
@@ -108,3 +109,17 @@ Files: `packages/cli/src/index.ts`, `packages/cli/test/exports.test.ts`,
 - Mutation evidence for the load-bearing claim: with
   `assertDeclaredRole`'s body made a no-op, the provider-path tests go
   red. If they stay green, a second validation path exists.
+- G1's tests were largely written alongside rather than before the
+  implementation (reported, not discovered). Each of its four remaining
+  claims is therefore substantiated by its own mutation, run one at a
+  time and reverted: capability assertion moved after the resolver
+  (1.6), the resolver's result cached across executions (1.4), the
+  provider wired to `execute` only (1.3), and the empty-resolution
+  check removed (1.1). A claim whose mutation leaves every test green
+  is a test that guards nothing, and is reported as such rather than
+  quietly repaired.
+- The provider path keeps the db handle's nested-transaction guard.
+  `query-execution`'s requirement is scoped to "the transaction API on
+  the db handle", which a provider handle still is — and the underlying
+  hazard is unchanged, since the provider path also takes a second
+  connection out of the pool on re-entry.

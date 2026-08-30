@@ -225,6 +225,27 @@ describe("db() context provider -- 1.4 cadence: once per execution, never cached
 	});
 });
 
+describe("db() context provider -- 1.2 nested-transaction guard is not silently dropped", () => {
+	it("a provider handle rejects a nested db.transaction the same way an unprovided one does", async () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = makeHandle(driver, () => ({
+			role: roleName("grant_reader"),
+		}));
+
+		await expect(
+			handle.transaction(async () => {
+				// reaching back to the outer handle's own `transaction` member
+				// from inside its already-open callback -- query-execution's
+				// nested-transaction requirement names "the db handle", which a
+				// registered provider does not change; reentry here would open
+				// a second connection out of the pool exactly like the
+				// unprovided path, so the same guard must fire.
+				await handle.transaction(async () => {});
+			}),
+		).rejects.toMatchObject({ code: "nested-transaction-unsupported" });
+	});
+});
+
 describe("db() context provider -- 1.5 precedence and the error path", () => {
 	it("an explicit as() never calls the resolver", async () => {
 		const { driver } = recordingTransactionalDriver();
