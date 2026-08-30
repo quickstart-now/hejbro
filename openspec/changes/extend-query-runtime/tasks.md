@@ -4,6 +4,20 @@ Estimates are pure work minutes. Groups are file-disjoint slices; group 5
 is conditional on group 4's measurement and MUST NOT be started before
 its outcome is decided.
 
+Conventions that apply to every group:
+
+- The gate set is `pnpm check`, `pnpm check-types`, `pnpm test`,
+  `pnpm check:bans`, and `openspec validate extend-query-runtime
+  --strict`, all under `TURBO_FORCE=1`. `check:bans` is not optional:
+  since the ban list moved out of Biome, it is the only machine check
+  for `let` and loop forms.
+- A `[design]` task settles a contract, and a contract's shape is half
+  types. Every `[design]` task therefore names at least one **type-level**
+  mutation alongside its runtime one — a value mutation cannot make a
+  widened generic red.
+- The task ticks in this file and the rows in `openspec/task-times.csv`
+  are written at group boundaries and travel in that group's own commit.
+
 Two facts shape the layout:
 
 - The live-comparison machinery (catalog reader, comparison, inventory)
@@ -18,7 +32,10 @@ Two facts shape the layout:
 - [ ] 1.1 (~7m) [design] The handle retains the full declaration list.
       The design part is the retained member's name and shape, and
       whether it joins the public handle type or stays an internal
-      assembly surface. Possible outcomes and their Files:
+      assembly surface. The settlement is not complete until both the
+      name and the typing are confirmed with the owner; task 1.3 is
+      where the settled typing becomes machine-checked, so this task
+      stays open until then. Possible outcomes and their Files:
       (a) a new public member on the handle type — Files:
       `packages/query/src/db/db.ts`,
       `packages/query/test/db/db.test.ts`;
@@ -40,28 +57,44 @@ Two facts shape the layout:
       entries through a shallow-clone helper and the identity assertion
       fails while every other assertion still passes.
       Files: `packages/query/src/db/db.ts`, that test.
+- [ ] 1.3 (~6m) The retained member's *type* is pinned, not only its
+      value. A widened member is invisible to every runtime assertion,
+      and this member exists so the assertion can read declared types
+      off it. Red: `packages/query/test/types/chain-types.test.ts` —
+      "the handle's retained schema keeps the module's own type". What
+      makes it red: widen the member to `Record<string, unknown>` — the
+      type assertion fails while all runtime tests stay green.
+      Files: that test.
+- [ ] 1.4 (~5m) The declared-role set is pinned exhaustively, matching
+      the delta's "exactly what they were" wording; today only two
+      memberships are asserted, so an extra role passes unnoticed. Red:
+      `packages/query/test/db/db.test.ts` — the role assertion compares
+      the whole sorted set. What makes it red: inject one extra role
+      into the classifier.
+      Files: `packages/query/src/db/db.ts`, that test.
 
-Gates: `pnpm check`, `pnpm check-types`, `pnpm test` (all with
-`TURBO_FORCE=1`), `openspec validate extend-query-runtime --strict`.
+Gates: the standard set above. Group files:
+`packages/query/src/db/db.ts`, `packages/query/test/db/db.test.ts`,
+`packages/query/test/types/chain-types.test.ts`.
 
 ## 2. The assertion
 
-- [ ] 2.1 (~10m) [design] The public surface: the function's name,
-      parameter order, its options object, what it resolves to, and the
-      diagnostic code it throws. Settled with the owner before code.
-      Possible outcomes and their Files — every outcome touches
-      `packages/cli/src/assert-schema.ts` (new) and
-      `packages/cli/test/assert-schema.test.ts` (new); additionally:
-      (a) a free function taking the handle — no further files;
-      (b) a free function taking handle and options separately — no
-      further files;
-      (c) a curried factory returning an assertion bound to a registry
-      — plus `packages/cli/test/exports.test.ts`.
-      Red: `packages/cli/test/assert-schema.test.ts` — "a matching
+- [ ] 2.1 (~10m) [design] The public surface. **Settled with the owner**:
+      a free function `assertSchema(handle, options?)` resolving to a
+      report; `options` carries the registry and the opt-out for
+      uncompared declarations; a divergence throws under its own code
+      and an uncompared declaration throws under a second, distinct one;
+      the findings the comparison already produces travel on the error,
+      and their message text is reused, never rewritten. This task
+      lands that surface. Red:
+      `packages/cli/test/assert-schema.test.ts` (new) — "a matching
       database passes" and "a missing declared table throws naming it",
-      both driven by a fixture session that returns canned catalog rows.
-      What makes it red: drop the declared table from the fixture's
-      catalog rows and the passing case throws.
+      both driven by a fixture session returning canned catalog rows.
+      What makes it red (runtime): drop the declared table from the
+      fixture's catalog rows and the passing case throws. What makes it
+      red (type): widen the report's type to `unknown` — the report's
+      own type assertion fails while both runtime cases stay green.
+      Files: `packages/cli/src/assert-schema.ts` (new), that test.
 - [ ] 2.2 (~8m) The failure is one coded diagnostic carrying a finding
       per object with a `Next:` clause — the shape the live-comparison
       machinery already produces, reused rather than re-derived. Red:
@@ -70,13 +103,15 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test` (all with
       join the findings into a single message string and the per-object
       assertion fails.
       Files: `packages/cli/src/assert-schema.ts`, that test.
-- [ ] 2.3 (~7m) The coverage boundary: declarations no registry kind
-      owns are named as not compared, on the failing and the passing
-      path alike. Red: `packages/cli/test/assert-schema.test.ts` — "a
-      declaration outside the registry is named as not compared" and
-      "the boundary is reported when nothing diverged". What makes it
-      red: filter unowned declarations out silently before comparing and
-      both assertions fail.
+- [ ] 2.3 (~8m) "Could not answer" is not success: a declaration no
+      registry kind owns fails the assertion under its own code, distinct
+      from a real divergence's, and the opt-out changes only whether it
+      throws — the names stay in what the caller receives either way.
+      Red: `packages/cli/test/assert-schema.test.ts` — "an uncompared
+      declaration fails under its own code" and "opting out still names
+      it". What makes it red: reuse the divergence code for both and the
+      first assertion fails; drop the names from the opted-out report and
+      the second does.
       Files: `packages/cli/src/assert-schema.ts`, that test.
 - [ ] 2.4 (~6m) The registry is an explicit parameter defaulting to the
       generic Postgres registry. Red:
@@ -216,5 +251,5 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test`,
 
 ## Totals
 
-Groups 1–4 and 6: 14 tasks (2 + 6 + 1 + 3 + 2). Group 5 adds 4 more if
+Groups 1–4 and 6: 16 tasks (4 + 6 + 1 + 3 + 2). Group 5 adds 4 more if
 the measurement earns it.

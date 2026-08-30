@@ -62,6 +62,14 @@ counted as matching. The boundary SHALL be reported whether or not
 anything diverged, so a caller can tell "nothing differed" apart from
 "nothing was looked at".
 
+"Could not answer" SHALL NOT be success. When nothing diverged but some
+declaration could not be compared, the assertion SHALL fail by default,
+under its own code, and its remedy SHALL name supplying the registry
+that owns the declaration. A caller MAY opt out of that failure, and
+opting out SHALL change only whether the assertion throws: the
+not-compared declarations SHALL still be named in what the caller
+receives.
+
 #### Scenario: A declaration outside the registry is named as not compared
 - **WHEN** the schema module contains a declaration whose kind the
   supplied registry does not own
@@ -74,11 +82,17 @@ anything diverged, so a caller can tell "nothing differed" apart from
 - **THEN** the previously not-compared declaration is compared like any
   other, and no longer appears on the boundary report
 
-#### Scenario: The boundary is reported on the passing path too
+#### Scenario: Nothing diverged, but something could not be compared
 - **WHEN** every compared object matches and some declaration was out of
   the registry's reach
-- **THEN** the caller is still told what was not compared, rather than
-  receiving a bare success
+- **THEN** the assertion fails under its own code, distinct from the
+  code a real divergence raises, naming each uncompared declaration and
+  the registry that would cover it
+
+#### Scenario: Opting out changes the failure, not the report
+- **WHEN** the caller opts out of failing on uncompared declarations
+- **THEN** the assertion completes, and what it hands back still names
+  every declaration it could not compare
 
 ### Requirement: The assertion never reaches the filesystem
 The assertion SHALL be usable from a deployed application, not only from
