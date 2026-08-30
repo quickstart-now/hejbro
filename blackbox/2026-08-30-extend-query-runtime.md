@@ -17,7 +17,7 @@ Refs:
 - packages/query/test/db/db.test.ts @ blob 166e1d6371580dfef8ed14fd1b7330f7a01c549a
 - packages/query/test/types/chain-types.test.ts @ blob 14d85770ef36048f4e108a3dc04b781245aee409
 - README.md @ blob b7dba96771ff029d8399e32ca6b7bae5f74ee4ac
-- skills/hejbro/references/query-layer.md @ blob 4171cc4a5a1fcda36d6901ac817958ae4859bff4
+- skills/hejbro/references/query-layer.md @ blob 5eee95a5c0d6161603a0b901221c82733d395502
 - skills/hejbro/SKILL.md @ blob aa69f02f8be689fc08dd9125f362af5567ffa583
 
 (Archive note: the five change-directory paths above were moved by
