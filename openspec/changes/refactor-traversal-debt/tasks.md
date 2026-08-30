@@ -153,7 +153,10 @@ planner edits it, the implementer never does, and ticks are applied only
 after a group's verdict passes — riding along in the implementer's next
 commit. So this file appearing in *any* handoff tag is expected and is
 never an ownership violation; it is the one path by which a planner edit
-reaches the branch.
+reaches the branch. `pnpm-lock.yaml` is the same kind of exception for a
+different reason: it is a generated consequence of a dependency a group
+legitimately owns, so it travels with that group rather than belonging
+to one.
 
 Groups 1–3 are parallel-safe, but one implementer works them serially in
 this order: **3.1 first**, then group 1, group 2, the rest of group 3,
@@ -422,14 +425,26 @@ three structural tables and wrongly folded one codec map" also totals 9:
    `RetargetExprNodeHandlers`. Total lands on **9**; **below 9 is
    suspicion, not success**, and above 9 means the fold is incomplete.
 
-**The golden corpus cannot see task 2.4, so it does not count as that
-task's proof.** All 14 cases in `packages/core/test/golden/cases` and
-all 9 committed `examples/postgres` migrations run declaration →
-migration; **none of them exercises a rename**, and rename is the only
-path through `retargetExprNode`. Breaking 2.4 outright would still leave
-the golden comparison at 0 bytes. The one existing rename check
-(`examples/cli-smoke/test/e2e.test.ts:305-319`) is a `some(text => …)`
-containment assertion over a single-column rename, not a byte golden.
+**The golden corpus barely sees task 2.4, so it is weak proof for it.**
+*(Corrected during group 4: this section first claimed **zero** golden
+cases exercise a rename. That was wrong — recorded here rather than
+quietly fixed, because the retarget baseline was justified by it.)*
+Measured: `rg -ln "RenameSpec" packages/core/test/golden/cases` returns
+**one** case, `table-index-methods`, whose step 2 passes a `RenameSpec`
+to `generateMigration` and byte-compares the resulting
+`alter table … rename column` in `expected/step-2.sql`. The CLI's
+`--rename` builds the same `RenameSpec` array for the same function
+(`packages/cli/src/commands/generate.ts:528`), so that path *is* covered
+at byte level. The committed example migrations remain at zero
+(`rg -ln -i "rename" examples/*/migrations` → no match).
+
+What that one case does **not** cover is what 2.4 risks. Its rename
+targets `email`, while its only expressions (`index(...).where(isNull(
+t.deletedAt))`) reference a different column — so they take the
+*unchanged* path, and an unchanged node re-encoded deterministically
+still produces identical bytes. A golden therefore cannot distinguish
+"returned the same reference" from "rebuilt an identical clone", which
+is precisely the property `retarget.ts:276` depends on.
 
 So group 2's output proof is **golden 0 bytes _plus_ a retarget baseline
 at 0 bytes**, the latter taken by running `applyRenameSpecs` over a real
@@ -610,12 +625,16 @@ fastest-growing surface has no user-viewpoint usage anywhere.
       nulls). It must also record that the obvious workaround is closed:
       `dsl/table.ts:1205-1207` makes the two forms mutually exclusive
       per column, so this is not "use the other form for the action
-      part" but a genuine either/or; and (iii) the golden corpus has no
-      rename case — 0 of 14 golden cases and 0 of 9 committed example
-      migrations exercise `--rename`, so a user-facing CLI capability
-      has no byte-level coverage and the only check is a containment
-      assertion in `examples/cli-smoke`. Found while building group 2's
-      proof; it is a coverage gap, not this change's to fix. Issue (ii)
+      part" but a genuine either/or; and (iii) **on hold pending the
+      lead's call** — its original premise ("0 of 14 golden cases
+      exercise a rename") was disproved during group 4: one case,
+      `table-index-methods`, covers `--rename`'s code path at byte
+      level. What survives is narrower and may not warrant an issue at
+      all: one rename case out of 14, none carrying an expression that
+      the rename actually retargets, and no assertion anywhere on the
+      reference-identity property. File nothing until the reshaped claim
+      is approved — an issue filed on a premise that was already
+      corrected is worse than no issue. Issue (ii)
       also records why
       it is not being fixed now: extending the surface is proposal work,
       and the 0.2.0 gate is not being widened. Both are shaped so the
@@ -624,10 +643,15 @@ fastest-growing surface has no user-viewpoint usage anywhere.
       `pnpm check:tasktime` — both need `TURBO_FORCE=1`, since a plain
       run replays cross-worktree cache and fails as if the gate were
       broken). Files: `.changeset/`, `README.md`.
-- [ ] 4.2 `~6m` Close #472 quoting the `29 → 31` correction **with the
-      command that measured it** and the note that the two combined-
-      message guards were preserved rather than split; close #473
-      citing follow-up (i); close #474 citing follow-up (ii) and stating
-      plainly that 3.4 was measured impossible rather than skipped. Every
-      residue leaves this change owning an issue number. Files: none
-      (issue operations).
+- [ ] 4.2 `~6m` **Post** the closing records as comments — do not close
+      the issues. On #472: the `29 → 31` correction **with the command
+      that measured it**, and that the two combined-message guards were
+      preserved rather than split. On #473: follow-up (i)'s number, plus
+      the honest scope note that the fold went 12 → 9 rather than the
+      issue's hoped 10 → 4, and why. On #474: follow-up (ii)'s number and
+      that 3.4 was **measured impossible, not skipped**. Every residue
+      leaves this change owning an issue number.
+      The issues close when the PR merges, which is the lead's step —
+      closing them from here would mark work done that is not yet in
+      `dev`, and a failed merge would leave the tracker lying. Files:
+      none (issue operations).
