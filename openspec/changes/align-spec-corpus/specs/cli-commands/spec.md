@@ -1,5 +1,17 @@
 # cli-commands Delta
 
+## REMOVED Requirements
+
+### Requirement: The baseline banner marker is machine-readable
+**Reason**: Single ownership — the migration file's banner lines (hash
+chain, version, baseline marker) are one format contract, now owned by
+the `migration-format` capability this change seeds; cli-commands keeps
+command behavior only.
+**Migration**: Continues in `migration-format`'s "A migration's banner
+carries machine-readable chain and version lines", which carries the
+prefix-only parsing rule, the unknown-line tolerance, the
+prose-may-change boundary, and the marker-identification scenario.
+
 ## MODIFIED Requirements
 
 ### Requirement: A database hejbro did not create can be adopted

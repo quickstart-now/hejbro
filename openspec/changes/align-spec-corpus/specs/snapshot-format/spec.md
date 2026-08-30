@@ -71,9 +71,10 @@ snapshot form — mutations never reach a snapshot.
 - **THEN** the two snapshots are identical and the diff is empty
 
 #### Scenario: Existing snapshots do not move
-- **WHEN** the snapshot of a declaration containing no CTE is taken before
-  and after this change
-- **THEN** the two are byte-identical, and `formatVersion` is unchanged
+- **WHEN** a declaration containing no CTE is snapshotted
+- **THEN** its encoded form carries no `with`-related key at all — the
+  vocabulary's presence leaves every other declaration's bytes untouched
+  — and `formatVersion` is unchanged
 
 ### Requirement: An order term's nulls placement is recorded additive-compact
 An `OrderByTerm`'s encoded form SHALL carry a `nulls` key only when an

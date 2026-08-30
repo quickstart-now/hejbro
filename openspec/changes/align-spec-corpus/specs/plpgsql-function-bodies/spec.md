@@ -82,7 +82,7 @@ The guard covers what a body builds, not what a body is handed.
 
 #### Scenario: A failure names a form the body actually accepts
 - **WHEN** a body builds a set operation, which no body statement can
-  carry today — `ctx.return`, `ctx.row` and `ctx.execute` all take a
+  carry — `ctx.return`, `ctx.row` and `ctx.execute` all take a
   select, an insert, an update or a delete
 - **THEN** the failure says the body has no statement that carries a set
   operation, instead of pointing at `ctx.execute`, which would send the

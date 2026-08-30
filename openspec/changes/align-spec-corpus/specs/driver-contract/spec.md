@@ -15,7 +15,7 @@ these declarations instead of probing behavior at runtime.
 
 ### Requirement: The capability set is exhaustive and statically checked
 The driver capability set SHALL be a fixed, enumerated set of named
-capabilities — today exactly two: interactive transactions and session
+capabilities — exactly two: interactive transactions and session
 state — never an open-ended list, and never a bare index signature.
 Extending the set is a spec change to this requirement, not a driver's
 own addition. A driver value's capability declaration SHALL name every

@@ -92,8 +92,8 @@ only — zero product behavior changes.
 
 ## Impact
 
-- `openspec/specs/**` — all twelve existing capability specs plus two
-  new ones. No package source, no generated SQL, no CLI behavior, no
+- `openspec/specs/**` — nine of the twelve existing capability specs
+  plus two new ones. No package source, no generated SQL, no CLI behavior, no
   test expectations change: every edit either records already-shipped
   behavior or removes narrative that never was contract.
 - `openspec/config.yaml` — one added rule (P6 recurrence prevention).

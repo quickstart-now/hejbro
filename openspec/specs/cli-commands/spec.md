@@ -4,9 +4,8 @@
 
 The hejbro CLI's user-facing commands as contracts: what each command
 does, when it refuses to run, and what its report must tell the user.
-Covers `baseline` (adopting a database hejbro did not create), `check`
-(comparing declarations against a live database's catalog), and the
-seeded contracts for `generate` and `verify`.
+Covers `baseline` (adopting a database hejbro did not create) and
+`check` (comparing declarations against a live database's catalog).
 
 ## Requirements
 

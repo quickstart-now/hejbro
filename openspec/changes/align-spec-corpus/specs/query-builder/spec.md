@@ -335,14 +335,20 @@ list the same key set in a different order, before either branch reaches
 the server, naming both branches' own key order and the first position at
 which they disagree.
 
-The guard is build-time by necessity on both sides of the boundary it
-covers. The type layer cannot see order (`keyof` has no order), and
-Postgres matches set-operation branches by POSITION, not by name, so a
-matching-set, different-order pair is legal SQL to the server too — and
-silently corrupts data instead of erroring (measured on postgres:17.11:
-unioning `{email, city}` against `{city, email}` returns rows with the
-`email` output column holding a city value and the `city` column holding
-an email, reproduced in both a bare `select` and a `create view`).
+Branch compatibility divides between two mechanisms, each covering what
+the other cannot see: a key SET mismatch is caught by the type layer,
+and a genuine TYPE divergence between two branches' same-named column
+is caught by the server itself (`42804`, "UNION types uuid and text
+cannot be matched" — measured, SQLSTATE captured). Neither catches a
+branch pair whose keys match in SET but not in ORDER — which is what
+this guard exists for, and why it is build-time by necessity. The type
+layer cannot see order (`keyof` has no order), and Postgres matches
+set-operation branches by POSITION, not by name, so a matching-set,
+different-order pair is legal SQL to the server too — and silently
+corrupts data instead of erroring (measured on postgres:17.11: unioning
+`{email, city}` against `{city, email}` returns rows with the `email`
+output column holding a city value and the `city` column holding an
+email, reproduced in both a bare `select` and a `create view`).
 `except` and `intersect` corrupt the same way, not only `union` —
 `except` is the worst of the three: a position-mismatched comparison can
 still return one plausible-looking row, so nothing about the result
@@ -407,7 +413,11 @@ conflict target SHALL name at least one declared column of the inserted
 table, rendered through the identifier quoting rule; an empty target
 SHALL fail fast at build time with `empty-conflict-target` — Postgres
 rejects `on conflict ()` at parse time, so the clause must not be
-constructible into broken SQL. `onConflictDoUpdate`'s `set` SHALL accept
+constructible into broken SQL. The target-less form Postgres itself
+accepts (`on conflict do nothing`, matching any conflict) is
+deliberately not part of the vocabulary: a target is required, and a
+statement needing the bare form is written through the `sql` escape
+hatch. `onConflictDoUpdate`'s `set` SHALL accept
 exactly what an update's `set` accepts for that table — declared write
 types, `Expr` included — with every value reaching the database as a
 bind parameter. `returning` SHALL remain available after either conflict
@@ -436,4 +446,6 @@ stage and reports the rows the statement actually returned.
 - **WHEN** `onConflictDoNothing()` is called with no columns, or
   `onConflictDoUpdate` with an empty `target`
 - **THEN** the call fails at build time with `empty-conflict-target`,
-  naming the fix, and `on conflict ()` is never rendered
+  naming the fix, so `on conflict ()` is never reachable through the
+  public builder or chain stages — the guard runs at construction, the
+  same boundary the set-operation key-order guard draws

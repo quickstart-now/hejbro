@@ -13,11 +13,16 @@ Every migration file hejbro writes SHALL open with a banner of comment
 lines that carry, each under its own known prefix: the hash-chain line
 (this migration's own content hash chained onto its predecessor's, the
 chain `verify` checks), the format-version line, and — on a baseline
-migration only — the `-- baseline:` marker line. hejbro SHALL expose
-public parsers for these lines. Each parser SHALL read its line by its
-own known prefix only and ignore unknown banner lines, so an older
-hejbro reading a newer file stays unaffected; the machine contract is
-the prefix, and any prose after it is for humans and MAY change.
+migration only — the `-- baseline:` marker line, whose only consumer is
+a tool deciding whether to run the migration or register it as applied.
+hejbro SHALL expose public parsers for these lines, so that decision
+never requires string-matching the banner. Each parser SHALL read its
+line by its own known prefix only and ignore unknown banner lines, so
+an older hejbro reading a newer file stays unaffected; the machine
+contract is the prefix, and any prose after it is for humans and MAY
+change — a parser that matched the whole line would report the marker
+absent after a wording change, and a false "absent" tells an apply tool
+to *run* a migration that must only be registered.
 
 #### Scenario: The banner chains onto the predecessor
 - **WHEN** two migrations are generated in sequence and the second's
@@ -36,3 +41,8 @@ the prefix, and any prose after it is for humans and MAY change.
   releases
 - **THEN** the parsers' results for files written before and after the
   change are identical
+
+#### Scenario: A baseline migration is identified by its marker
+- **WHEN** a tool parses a migration file written by `hejbro baseline`
+- **THEN** the exported parser reports the marker as present, and reports
+  it absent for a migration written by `hejbro generate`

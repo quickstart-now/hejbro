@@ -724,4 +724,20 @@ describe("stage parity: every core builder stage reaches the chain (align-spec-c
 			compile(select(posts).distinct()),
 		);
 	});
+
+	it("groupBy/having compile byte-identically to the core builder", () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = db({ posts }, driver);
+		const chainCompiled = handle
+			.select({ status: posts.status }, posts)
+			.groupBy(posts.status)
+			.having(eq(posts.status, "published"))
+			.compile();
+		const coreCompiled = compile(
+			select({ status: posts.status }, posts)
+				.groupBy(posts.status)
+				.having(eq(posts.status, "published")),
+		);
+		expect(chainCompiled).toEqual(coreCompiled);
+	});
 });

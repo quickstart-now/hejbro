@@ -124,11 +124,6 @@ regardless of branding.
   whose base type is `number`, with `.$type<string>()`)
 - **THEN** the declaration fails to type-check
 
-#### Scenario: A brand narrows the write as well as the read
-- **WHEN** a `jsonb().$type<T>()` column is written a value that is not a
-  `T`
-- **THEN** it fails to type-check
-
 ### Requirement: Set-operation branches must be row-compatible, and the result types honestly
 A set-operation combinator SHALL fail to type-check when the two
 branches' result rows carry different key sets.
@@ -272,6 +267,17 @@ relaxation is justified by measurement: a key nullable in the recursive
 term where the anchor's is not is accepted by postgres:17 (`pg_typeof`
 stays the anchor's type on every row), and a same-family declared-type
 divergence resolving through the anchor's own type is accepted too.
+
+The relaxation approves exactly those two measured divergences and
+nothing wider. In particular it is no license for a recursive term to
+compute a shared key with an aggregate or a window function: an
+aggregate in the recursive term is refused outright by Postgres
+(`42P19`, "aggregate functions are not allowed in a recursive query's
+recursive term", measured), and the measured window construct
+(`row_number() over ()`, whose value does not advance with the
+recursion) never terminates rather than returning a row — neither is
+evidence the category is safe, and this requirement makes no such
+claim.
 
 The elision leaves a known, measured residue: an anchor projecting a
 non-null value and a recursive term projecting a nullable value for the
