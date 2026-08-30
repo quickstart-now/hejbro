@@ -4,9 +4,9 @@ Refs:
 - .changeset/harden-query-surface.md @ blob 94d6a67525724cc5ae2b4edac51b788e527b5160
 - AGENTS.md @ blob 3b1a4f58a628cd3929d1e4eaa4834ec843617ed7
 - README.md @ blob 9de4fc3c625840eaec1622614b81f4854b537ee5
-- openspec/changes/add-context-provider/proposal.md @ blob 69eceb37d85834d7a472498182a4c3a8924f7231
-- openspec/changes/add-context-provider/specs/rls-execution-context/spec.md @ blob 6a9bbc18576d1b86cf29e9d194d49bcc20208a5e
-- openspec/changes/add-context-provider/tasks.md @ blob ed54b487ccd20cef187cc4b0831b657b50edbccc
+- openspec/changes/archive/2026-08-31-add-context-provider/proposal.md @ blob 69eceb37d85834d7a472498182a4c3a8924f7231
+- openspec/changes/archive/2026-08-31-add-context-provider/specs/rls-execution-context/spec.md @ blob 6a9bbc18576d1b86cf29e9d194d49bcc20208a5e
+- openspec/changes/archive/2026-08-31-add-context-provider/tasks.md @ blob ed54b487ccd20cef187cc4b0831b657b50edbccc
 - openspec/task-times.csv @ blob f0e5f4f5327d3d52159a1a4b7be777f505f93060
 - packages/cli/test/exports.test.ts @ blob ea3cbff3cf1e1bc37dfd91dfddf310ab849c1925
 - packages/query/src/db/context.ts @ blob b5e81d870771dca9aa81ec1b930023ea166109aa
@@ -29,11 +29,11 @@ line of the same file (the D106 cycle line, #539) while this change's
 branch held the five→six fix, so the merged file is a new blob
 joining both edits — the first measured case of a pin dying to a
 concurrent same-file edit rather than to a squash or an archive move.
-The three
-`openspec/changes/add-context-provider/` paths above will move when
-this change archives; the pins are to be re-pathed in the archive PR,
-blobs unchanged — the archive-vs-squash asymmetry recorded by the
-extend-query-runtime entry.)
+The three change-directory paths above were moved by `openspec
+archive` to `openspec/changes/archive/2026-08-31-add-context-provider/`
+and re-pathed in the archive PR as planned, blobs unchanged — the
+archive-vs-squash asymmetry recorded by the extend-query-runtime
+entry, this time anticipated rather than repaired after the fact.)
 
 # add-context-provider — the generic context provider (#318)
 
