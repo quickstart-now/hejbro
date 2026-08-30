@@ -1,6 +1,6 @@
 ---
 name: hejbro
-description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — when generating/verifying migrations, when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()), when writing typed queries against a declared schema (db(), the select/insert/update/deleteFrom chain, db.fn), when running a query under an RLS execution context (db.as, asUser/asAnon), or when adopting hejbro into an existing (brownfield) database.
+description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — when generating/verifying migrations, when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()), when writing typed queries against a declared schema (db(), the select/insert/update/deleteFrom chain, db.fn), when running a query under an RLS execution context (db.as, asUser/asAnon), when asserting at startup that the connected database actually matches its declarations (assertSchema), or when adopting hejbro into an existing (brownfield) database.
 version: 0.2.0
 license: MIT
 ---
@@ -30,5 +30,5 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 | `references/function-builder-pitfalls.md` | Writing a `defineFunction`/`defineTrigger` body, or debugging a `nondeterministic-body` error |
 | `references/generate-verify-workflow.md` | Running `generate`/`verify`, reading the banner, resolving an ambiguous rename, reading a warning |
 | `references/supabase-preset.md` | Using `@hejbro/supabase` — roles, auth helpers, storage buckets, preset warnings |
-| `references/query-layer.md` | Building a `db()` handle, chaining queries, calling `db.fn`, running under an RLS execution context, transactions, or query-layer errors |
+| `references/query-layer.md` | Building a `db()` handle, chaining queries, calling `db.fn`, running under an RLS execution context, transactions, asserting the connected database matches its declarations (`assertSchema`), or query-layer errors |
 | `references/brownfield-adoption.md` | Adopting hejbro into an existing (already-populated) database |
