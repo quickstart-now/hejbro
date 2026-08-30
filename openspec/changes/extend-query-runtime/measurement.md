@@ -667,17 +667,21 @@ is not on this list, because more independent runs narrow each
 estimator's own sampling error without changing why `range`/`SD` are
 inflated relative to `IQR`/`MAD` in the first place.
 
-**How thin this is:** the rule's own reachability has been confirmed
-exactly once, on a 6-or-7-point subset of one dataset from one
-workload, not shown to be generally achievable. This protocol is
-expected to carry into future measurement fragments (starting with
-#301 Nile); the reachability finding above should get stronger with
-each fragment that reaches unanimity and should prompt a review with
-the owner — of the estimator set, the 2× multiplier, or both — if
-several fragments in a row fail to, decided now rather than after such
-a run of misses exists, for the same reason every other rule in this
-record was fixed before its own numbers existed. A single miss (this
-fragment) is not that signal by itself.
+**How thin this is, and the pre-registered re-review trigger (owner
+decision):** the rule's own reachability has been confirmed exactly
+once, on a 6-or-7-point subset of one dataset from one workload, not
+shown to be generally achievable. This protocol is expected to carry
+into future measurement fragments (starting with #301 Nile); the
+reachability finding above should get stronger with each fragment that
+reaches unanimity. **If three measurement fragments in a row fail to
+reach unanimity across all four estimators, that triggers a review with
+the owner of the estimator set, the 2× multiplier, or both.** The
+number is fixed now, not chosen after such a run of misses exists, for
+the same reason every other rule in this record was fixed before its
+own numbers existed: two misses could plausibly be coincidence, and
+waiting past three risks losing confidence in the rule itself before
+ever revisiting it. This fragment's single miss is not that signal by
+itself — it is fragment one of a possible run, not fragment three.
 
 ## Conclusion
 
