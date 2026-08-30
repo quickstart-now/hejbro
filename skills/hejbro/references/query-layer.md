@@ -681,7 +681,12 @@ through `tx` on one held connection inside `begin`/`commit`, committing on
 a normal return and rolling back — with the thrown error propagating
 unchanged — when the callback throws. `tx` carries the same
 `select`/`insert`/`update`/`deleteFrom`/`fn` surface, resolving the exact
-same inferred types, as any other handle. **Nest on `tx`, not on the handle.** `tx.transaction(async (nested) =>
+same inferred types, as any other handle. **Nest on `tx`, not on the
+handle** — calling the *handle* (not `tx`) from inside the callback
+takes a second connection out of the pool: with no provider registered
+this is a plain, direct-to-driver send; with a provider registered, it
+is a genuine second transaction, with the resolver consulted again for
+it. `tx.transaction(async (nested) =>
 { ... })` brackets its callback with a `savepoint`, releases it on a
 normal return and rolls back to it — rethrowing the error unchanged — on
 a throw, all on the same connection. A rolled-back nested transaction
