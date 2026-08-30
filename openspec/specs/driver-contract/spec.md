@@ -216,6 +216,12 @@ capability it lacks.
 - **THEN** query building, compiling, and execution behave identically
   to the vanilla driver for every capability both drivers declare
 
+#### Scenario: Supabase driver plugs in unchanged on its pooled-transaction path
+- **WHEN** a db handle is created with the Supabase preset's driver
+  built for the endpoint that keeps no session between transactions
+- **THEN** query building, compiling, and execution behave identically
+  to the vanilla driver for every capability both drivers declare
+
 #### Scenario: Neon driver plugs in unchanged on its session path
 - **WHEN** a db handle is created with the Neon preset's driver built
   from a session-oriented client
@@ -248,12 +254,13 @@ capability it lacks.
 
 ### Requirement: A driver's capability set follows its connection path
 A provider whose client library offers more than one connection path
-SHALL declare the capability set of the path a given driver value was
-built for, fixed at construction from the client it was handed — never
-discovered by probing a connection, and never a single set that averages
-the paths. Choosing the path SHALL be the caller's existing decision
-(which client they constructed), not a second decision the driver asks
-them to repeat.
+**as distinguishable client values** SHALL declare the capability set of
+the path a given driver value was built for, fixed at construction from
+the client it was handed — never discovered by probing a connection, and
+never a single set that averages the paths. **Where the client value
+distinguishes the path,** choosing the path SHALL be the caller's
+existing decision (which client they constructed), not a second decision
+the driver asks them to repeat.
 
 #### Scenario: A session-path driver declares full capabilities
 - **WHEN** a driver is built from the provider's session-oriented client
@@ -280,7 +287,12 @@ statements it executes, by applying them as part of each execution rather
 than once per connection. Declaring `false` SHALL NOT be read as
 permission to let those settings go unapplied: the declaration describes
 persistence between executions, not whether the settings hold for the
-statement being run.
+statement being run. Where such a driver also declares interactive
+transactions `true`, the settings SHALL be applied with transaction-local
+scope inside the same transaction as the statements they cover, so that
+a settings statement can never land in a different transaction — and
+therefore on a different backing connection — from the statement it was
+meant to cover.
 
 #### Scenario: The settings travel with the statement
 - **WHEN** a driver declaring session state `false` executes a statement
@@ -292,6 +304,28 @@ statement being run.
 - **WHEN** such a driver's capabilities are examined
 - **THEN** session state still reads `false`, because state does not
   persist from one execution to the next
+
+#### Scenario: A driver that keeps transactions but not sessions carries its settings inside one
+- **WHEN** a driver declaring interactive transactions `true` and session
+  state `false` executes a single statement
+- **THEN** the settings are sent after that transaction has opened and
+  before the caller's statement, inside it — never before the
+  transaction begins, where a transaction-local setting would be
+  discarded without applying, and never in a transaction of their own,
+  where the endpoint's connection reuse could separate them from the
+  statement they cover
+
+#### Scenario: A caller's own transaction carries the settings as its first statements
+- **WHEN** such a driver runs a caller-supplied transaction callback
+- **THEN** the settings are applied as that transaction's first
+  statements, and the driver opens no second transaction around it
+
+#### Scenario: Values arrive in the vanilla shapes on the per-execution path
+- **WHEN** such a driver reads back values whose arrival shape the
+  session settings determine
+- **THEN** they arrive in the same shapes the vanilla driver produces,
+  because the settings were applied for that execution — a value's shape
+  never depends on how the settings reached the connection
 
 ### Requirement: The missing-capability error has one definition
 `@hejbro/query` SHALL export a thrower that constructs the driver
@@ -358,3 +392,59 @@ modify this requirement.
   found compliant
 - **THEN** its capabilities value reads exactly as it did before the
   check ran
+
+### Requirement: A provider whose paths are indistinguishable in the client value takes the path as a declaration
+Where a provider's connection paths differ in capability but are carried
+by the same client type — one client class pointed at a different
+endpoint — the driver SHALL take the path as an explicit statement made
+by the caller at construction. It SHALL NOT derive the path from the
+client value's own configuration: not from a connection string, a host,
+a port, or any other option the client carries. The declared path SHALL
+fix the capability set at construction, before any connection exists,
+and SHALL NOT be a single set that averages the endpoints. A driver
+SHALL NOT send any statement, open any connection, or otherwise consult
+the server to confirm or correct the declaration. Where no path is
+declared, the driver SHALL keep the capability set it declared before
+the option existed, so an existing caller's declaration is never changed
+by the arrival of a second path.
+
+A declared value the driver does not recognize SHALL be rejected when
+the driver value is constructed, with an explicit coded error naming the
+values that are recognized. It SHALL NOT fall back to any path,
+including the default one: a misspelled declaration that silently
+selects the session path would restore exactly the intermittent,
+error-free, wrong-value-shape failure the declaration exists to remove,
+and would do so for the caller who tried hardest to be explicit. The
+check runs once, where the driver is constructed, and never on the
+execution path.
+
+#### Scenario: A declared path fixes the capability set
+- **WHEN** a driver is built for a provider whose endpoints share one
+  client type, with the path stated at construction
+- **THEN** its capability set follows the stated path and is readable
+  before any connection is made
+
+#### Scenario: The declaration is not derived from the client's configuration
+- **WHEN** the client value carries a connection string, host, or port
+  that would reveal which endpoint it addresses
+- **THEN** the driver reads none of them, and the stated path alone
+  decides the capability set
+
+#### Scenario: A declared path is never confirmed against the server
+- **WHEN** a driver value built from a declared path executes a
+  statement
+- **THEN** nothing was sent to the server to confirm or correct the
+  declaration, and the declaration is not revised by anything observed
+  at run time
+
+#### Scenario: An undeclared path keeps the previous declaration
+- **WHEN** a driver is built without stating a path
+- **THEN** it declares exactly the capability set it declared before the
+  path could be stated at all
+
+#### Scenario: An unrecognized declared path is refused at construction
+- **WHEN** a driver is built with a path value the driver does not
+  recognize — a caller with no type checking, or a misspelling
+- **THEN** construction fails with a coded error listing the recognized
+  values, no driver value is produced, and no path is selected on the
+  caller's behalf
