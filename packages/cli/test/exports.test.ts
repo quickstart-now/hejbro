@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
  */
 import type {
 	AssertSchemaFinding,
+	ContextProvider,
 	Db,
 	DbContext,
 	DeclaredCteMarker,
@@ -23,7 +24,14 @@ import type {
 import * as hejbro from "../src/index";
 
 /** Referenced so the type-only import block above isn't flagged unused. */
-type _QueryTypesPresent = [Db, DbContext, ExecuteResult<never>, ScopedDb, Tx];
+type _QueryTypesPresent = [
+	ContextProvider,
+	Db,
+	DbContext,
+	ExecuteResult<never>,
+	ScopedDb,
+	Tx,
+];
 type _CoreTypesPresent = [DeclaredCteMarker];
 /**
  * `AssertSchemaFinding` (extend-query-runtime, owner decision: named on

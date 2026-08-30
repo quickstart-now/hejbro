@@ -268,6 +268,44 @@ function throwNestedTransactionUnsupported(): never {
 }
 
 /**
+ * The reentrant guard `db.transaction` has always carried (task 4.6),
+ * generalized over *how* a transaction's own session gets opened
+ * (add-context-provider): `open` is whatever opens one -- `driver
+ * .transaction` directly for the unscoped path, or a registered
+ * provider's own `providerRun` (which resolves/validates/applies the
+ * context, then calls `driver.transaction` itself) for the provider path.
+ * Either way, calling back into *this* built member while its own
+ * transaction is still open takes a **second connection out of the
+ * pool** -- the deadlock risk `nested-transaction-unsupported` exists to
+ * catch is a property of "this member opened a transaction and got
+ * called again", never of which opener it used, so one guard serves both
+ * rather than one being silently unguarded (query-execution's own
+ * "on the db handle" nested-transaction requirement is path-independent
+ * the same way `rls-execution-context`'s role-validation requirement is).
+ * `state` is one object per *built* member (per `createTransactionApi`/
+ * provider-wiring call, not per invocation of the returned function) --
+ * `const`-bound but its own field mutated, never reassigned.
+ */
+const guardNestedTransaction = (
+	open: <T>(callback: (session: DriverSession) => Promise<T>) => Promise<T>,
+): (<T>(callback: (session: DriverSession) => Promise<T>) => Promise<T>) => {
+	const state = { active: false };
+	return async <T>(
+		callback: (session: DriverSession) => Promise<T>,
+	): Promise<T> => {
+		if (state.active) {
+			throwNestedTransactionUnsupported();
+		}
+		state.active = true;
+		try {
+			return await open(callback);
+		} finally {
+			state.active = false;
+		}
+	};
+};
+
+/**
  * Builds the `transaction()` member `db()` assembles onto its handle
  * (task 4.6): begins one `BEGIN`/`COMMIT` via `driver.transaction`
  * (owner criterion, the driver itself decides commit-on-return vs.
@@ -278,12 +316,8 @@ function throwNestedTransactionUnsupported(): never {
  * handed back — every statement in the callback provably shares that one
  * connection, never a fresh one per statement.
  *
- * One `state` object per built member (not per call) — closed over by
- * the returned function, `const`-bound but its own field mutated, never
- * reassigned — tracks whether a transaction issued by *this* member is
- * currently open, so a callback that reaches back to this very member
- * and calls it again gets `nested-transaction-unsupported` before the
- * capability check or any send; a different `db()` handle's own
+ * The reentrant guard is {@link guardNestedTransaction} (shared with the
+ * provider path, add-context-provider) -- a different `db()` handle's own
  * `transaction()` is a different member with its own `state` and is
  * deliberately not guarded against here (it is a different connection
  * pool entirely, not a nesting of this one).
@@ -292,19 +326,30 @@ export const createTransactionApi = (
 	driver: Driver,
 	tables: Declarations["tables"],
 ): (<T>(callback: (tx: Tx) => Promise<T>) => Promise<T>) => {
-	const state = { active: false };
-	return async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> => {
-		if (state.active) {
-			throwNestedTransactionUnsupported();
-		}
-		assertCapability(driver, "interactive-transactions", "transaction");
-		state.active = true;
-		try {
-			return await driver.transaction(async (session: DriverSession) =>
-				callback(buildTx(session, tables)),
-			);
-		} finally {
-			state.active = false;
-		}
-	};
+	const guardedOpen = guardNestedTransaction(
+		<T>(callback: (session: DriverSession) => Promise<T>): Promise<T> => {
+			assertCapability(driver, "interactive-transactions", "transaction");
+			return driver.transaction(callback);
+		},
+	);
+	return async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> =>
+		guardedOpen((session) => callback(buildTx(session, tables)));
 };
+
+/**
+ * Wraps a registered provider's own `providerRun` (`context.ts`'s
+ * `createProviderRun`) with the exact same {@link guardNestedTransaction}
+ * `createTransactionApi` uses -- built once per handle (add-context-
+ * provider, task 1.2's re-work): a provider handle's `db.transaction`
+ * is still "the db handle"'s own transaction member, so it keeps the
+ * same nested-transaction guard, even though opening a session now goes
+ * through the provider's own context resolution/validation/application
+ * first, never a second, unguarded path.
+ */
+export const guardedProviderTransactionOpener = (
+	providerRun: <T>(
+		operation: string,
+		send: (session: DriverSession) => Promise<T>,
+	) => Promise<T>,
+): (<T>(callback: (session: DriverSession) => Promise<T>) => Promise<T>) =>
+	guardNestedTransaction((callback) => providerRun("transaction", callback));

@@ -13,15 +13,24 @@ import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
-import type { ChainApi } from "./chain";
+import type { ChainApi, ChainRun } from "./chain";
 import { createChainApi } from "./chain";
-import type { DbContext, ScopedDb } from "./context";
-import { createAsApi } from "./context";
+import type {
+	ContextProvider,
+	DbContext,
+	ProviderRun,
+	ScopedDb,
+} from "./context";
+import { createAsApi, createProviderRun } from "./context";
 import { executeOn } from "./execute";
 import { createFnApi } from "./fn";
 import type { FunctionsOf, TypedFnApi } from "./fn-types";
 import type { Tx } from "./transaction";
-import { createTransactionApi } from "./transaction";
+import {
+	buildTx,
+	createTransactionApi,
+	guardedProviderTransactionOpener,
+} from "./transaction";
 
 /**
  * A declared schema module, passed through exactly as its own exports
@@ -56,6 +65,15 @@ export type Schema = Readonly<Record<string, unknown>>;
  */
 export type DbOptions = {
 	readonly roles?: ReadonlyArray<Role>;
+	/**
+	 * A registered execution-context provider (add-context-provider): a
+	 * resolver consulted once per execution, applied through the exact
+	 * same mechanism `db.as(context)` uses (`./context.ts`'s
+	 * `createProviderRun`, sharing `assertDeclaredRole`/`applyContext`
+	 * with the explicit path -- never a second one). An explicit
+	 * `db.as(context)` call still always wins and never consults this.
+	 */
+	readonly context?: ContextProvider;
 };
 
 /**
@@ -310,6 +328,72 @@ const executeImpl = (
 	statement: CompileInput,
 ): Promise<ReadonlyArray<DriverRow>> => executeOn(driver, statement, tables);
 
+/** The operation name every provider-run call site on the unscoped handle shares for `assertCapability`'s error, except `transaction` (named separately below) -- mirrors `db.as(context)`'s own choice (`context.ts`'s `scopedRun("db.as", ...)`) of one shared name for chain/execute/fn. */
+const PROVIDER_OPERATION = "db.context";
+
+/**
+ * The `run` a handle's chain members and `db.fn` share (add-context-
+ * provider, task 1.3): with no provider registered, sends straight to
+ * `driver` (unchanged behavior); with one registered, every send goes
+ * through `providerRun` -- the single primitive that resolves, validates,
+ * and applies the context (`context.ts`'s `createProviderRun`) -- so a
+ * chain member and `db.fn` can never diverge on whether context applies.
+ */
+const providerChainRun = (
+	driver: Driver,
+	providerRun: ProviderRun | undefined,
+): ChainRun => {
+	if (providerRun === undefined) {
+		return (send) => send(driver);
+	}
+	return (send) => providerRun(PROVIDER_OPERATION, send);
+};
+
+/** `execute`'s own provider-aware body (task 1.3): the plain, direct-to-driver path when no provider is registered, or `providerRun`'s one primitive otherwise -- never a second validation/application path. */
+const executeWithProvider = (
+	driver: Driver,
+	tables: Declarations["tables"],
+	providerRun: ProviderRun | undefined,
+	statement: CompileInput,
+): Promise<ReadonlyArray<DriverRow>> => {
+	if (providerRun === undefined) {
+		return executeImpl(driver, tables, statement);
+	}
+	return providerRun(PROVIDER_OPERATION, (session) =>
+		executeOn(session, statement, tables),
+	);
+};
+
+/**
+ * `transaction`'s own provider-aware body (task 1.3, re-worked): with no
+ * provider, the existing `createTransactionApi` unchanged. With one
+ * registered, `providerRun` resolves and applies the context exactly
+ * *once* for the whole callback (task 1.4 -- the context applies to the
+ * transaction, not to each statement inside it), then hands the callback
+ * the same {@link buildTx} every other transactional surface in this
+ * package builds against -- wrapped in
+ * `transaction.ts`'s own {@link guardedProviderTransactionOpener}, so a
+ * provider handle's `db.transaction` keeps the exact same
+ * `nested-transaction-unsupported` reentrant guard the unprovided path
+ * has always had (query-execution's own nested-transaction requirement
+ * names "the db handle", not any particular opener -- a registered
+ * provider does not change which handle this member belongs to, and the
+ * guard exists because reentry opens a second connection out of the
+ * pool regardless of how the first one was opened).
+ */
+const transactionWithProvider = (
+	driver: Driver,
+	tables: Declarations["tables"],
+	providerRun: ProviderRun | undefined,
+): (<T>(callback: (tx: Tx) => Promise<T>) => Promise<T>) => {
+	if (providerRun === undefined) {
+		return createTransactionApi(driver, tables);
+	}
+	const guardedOpen = guardedProviderTransactionOpener(providerRun);
+	return async <T>(callback: (tx: Tx) => Promise<T>): Promise<T> =>
+		guardedOpen((session) => callback(buildTx(session, tables)));
+};
+
 /**
  * Builds a `db()` handle from a declared `schema` module and `driver`
  * (owner decision (c′)): `import * as schema from "./app.schema"; db(
@@ -352,6 +436,18 @@ export const db = <TSchema extends Schema>(
 	// classification (`isDeclarationKind(_, "function")` vs `extends
 	// FunctionDeclaration`) applied to the same `schema` object.
 	const typedFunctions = declarations.functions as FunctionsOf<TSchema>;
+	// undefined with no `context` option (every surface below then runs
+	// exactly as before this option existed) -- built once here, not per
+	// call, since `assertDeclaredRole`/`applyContext` reuse (the group's
+	// own invariant) needs exactly one `providerRun` all eight surfaces
+	// share, never one re-derived per surface (task 1.3).
+	const buildProviderRun = (): ProviderRun | undefined => {
+		if (options?.context === undefined) {
+			return undefined;
+		}
+		return createProviderRun(driver, declarations.roles, options.context);
+	};
+	const providerRun = buildProviderRun();
 	return {
 		// Spread first, not last (7.4 review finding): every explicit member
 		// below is this group's own established contract (task 4.x); a
@@ -362,26 +458,38 @@ export const db = <TSchema extends Schema>(
 		// a genuine `ChainApi` member that's missing from this object
 		// (structural excess from the spread is never a problem; silently
 		// losing an explicit member to it would be). Unscoped chains run
-		// directly on the driver, exactly like the unscoped `fn` member
-		// below -- driver already structurally satisfies DriverSession, no
-		// transaction to open.
-		...createChainApi((send) => send(driver), declarations.tables),
+		// directly on the driver with no provider registered, exactly like
+		// the unscoped `fn` member below -- driver already structurally
+		// satisfies DriverSession, no transaction to open; with a provider
+		// registered, both instead run through the one shared `providerRun`
+		// (task 1.3).
+		...createChainApi(
+			providerChainRun(driver, providerRun),
+			declarations.tables,
+		),
 		schema,
 		declarations,
 		driver,
 		execute: ((statement: CompileInput) =>
-			executeImpl(driver, declarations.tables, statement)) as Db["execute"],
-		transaction: createTransactionApi(driver, declarations.tables),
+			executeWithProvider(
+				driver,
+				declarations.tables,
+				providerRun,
+				statement,
+			)) as Db["execute"],
+		transaction: transactionWithProvider(
+			driver,
+			declarations.tables,
+			providerRun,
+		),
 		as: createAsApi<FunctionsOf<TSchema>, TSchema>(
 			driver,
 			declarations.tables,
 			typedFunctions,
 			declarations.roles,
 		),
-		// the unscoped db.fn runs directly on the driver -- no transaction to
-		// open, `driver` already structurally satisfies DriverSession.
 		fn: createFnApi(
-			(send) => send(driver),
+			providerChainRun(driver, providerRun),
 			declarations.tables,
 			declarations.functions,
 		) as TypedFnApi<FunctionsOf<TSchema>>,

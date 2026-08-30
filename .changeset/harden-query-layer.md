@@ -3,7 +3,7 @@
 ---
 
 Pre-0.2.0 hardening of the query layer (the `harden-query-layer`
-change; the fixed group moves all five packages, and this one
+change; the fixed group moves all six packages, and this one
 changeset covers the change's three landing PRs). Array columns of
 moded `bigint`/`numeric` and `interval` now convert element-wise to
 their declared read types, with `interval[]` and `numeric[]` arriving

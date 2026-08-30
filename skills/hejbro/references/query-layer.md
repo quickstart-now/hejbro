@@ -608,6 +608,72 @@ const asOwner = await handle.as(asUser({ sub: "00000000-0000-0000-0000-000000000
 const asGuest = await handle.as(asAnon()).select(posts);
 ```
 
+### Registering a context provider
+
+Wrapping every call site in `handle.as(...)` is explicit, but a forgotten
+wrap is silent: an unwrapped call doesn't fail, it just runs under
+whatever role the connection already holds. `db()`'s `context` option
+registers a resolver once, so every execution on that handle applies a
+context automatically — no per-call-site wrapping needed:
+
+```ts prelude=query-handle
+import { asAnon, asUser, supabaseDriver } from "@hejbro/supabase";
+
+// stand-in for the caller's own auth layer (supabase-js's getClaims(),
+// a Clerk session, an Auth0 session, ...) -- verification always stays
+// outside the query layer; the resolver only turns already-verified
+// claims into a context.
+declare function verifiedClaims(): Promise<{ sub: string } | undefined>;
+
+const contextualHandle = db({ posts }, supabaseDriver(driver), {
+	context: async () => {
+		const claims = await verifiedClaims();
+		return claims === undefined ? asAnon() : asUser(claims);
+	},
+});
+
+// applies the resolved context automatically -- no .as(...) at the call site
+await contextualHandle.select(posts);
+```
+
+The resolver is generic (it returns a plain `DbContext`, the same shape
+`db.as(...)` takes), so a preset contributes nothing beyond its existing
+context builders — `asUser`/`asAnon` above are unchanged, no
+provider-specific mechanism exists on `@hejbro/supabase`. A few
+properties hold regardless of driver or preset:
+
+- **An explicit `handle.as(context)` always wins**, and never consults
+  the registered resolver at all — a scoped chain, `execute`, or
+  `transaction` built from `.as(...)` behaves exactly as if no provider
+  were registered.
+- **The resolver runs once per execution, never cached** — two calls
+  resolve twice, and a `transaction(callback)` resolves once for the
+  whole callback, not once per statement inside it, because the context
+  applies to the transaction as a whole.
+- **The resolved role is validated through the same declared-role
+  whitelist** `db.as(...)` uses, fail-closed, before anything reaches the
+  database — an undeclared role never opens even the wrapping
+  transaction.
+- **The resolver's return type forbids yielding nothing.** A caller who
+  bypasses the type anyway (plain JS, an `any`) gets the coded
+  `context-provider-empty` failure instead of an unscoped send — there is
+  no path out of a handle with a registered provider that reaches the
+  database uncontexted.
+- **A throwing resolver propagates its exact error and applies no
+  context** — a failure to determine identity is not the same claim as
+  an absence of identity, so this never falls back to running
+  uncontexted.
+- **Registering a provider is an observable behavior change**: a
+  statement that previously ran directly against the driver now opens a
+  wrapping transaction (`begin`, the resolved role/settings, the
+  statement, `commit`) — the statement's own SQL and parameters are
+  unchanged, but the connection now sees a transaction it didn't before.
+- **The nested-transaction guard is unaffected by a registered
+  provider**: calling the handle's own `transaction()` again from inside
+  an already-open callback still fails with `nested-transaction-
+  unsupported`, exactly as it does with no provider — reentry opens a
+  second connection out of the pool either way.
+
 ## Transactions
 
 `handle.transaction(async (tx) => { ... })` runs every statement issued
@@ -615,7 +681,12 @@ through `tx` on one held connection inside `begin`/`commit`, committing on
 a normal return and rolling back — with the thrown error propagating
 unchanged — when the callback throws. `tx` carries the same
 `select`/`insert`/`update`/`deleteFrom`/`fn` surface, resolving the exact
-same inferred types, as any other handle. **Nest on `tx`, not on the handle.** `tx.transaction(async (nested) =>
+same inferred types, as any other handle. **Nest on `tx`, not on the
+handle** — calling the *handle* (not `tx`) from inside the callback
+takes a second connection out of the pool: with no provider registered
+this is a plain, direct-to-driver send; with a provider registered, it
+is a genuine second transaction, with the resolver consulted again for
+it. `tx.transaction(async (nested) =>
 { ... })` brackets its callback with a `savepoint`, releases it on a
 normal return and rolls back to it — rethrowing the error unchanged — on
 a throw, all on the same connection. A rolled-back nested transaction
@@ -885,6 +956,7 @@ concrete next step.
 | `savepoint-rollback-failed` | A `ROLLBACK TO SAVEPOINT` itself failed. Its trigger differs by path, so the fact that triggered it lands on a differently-named property: after a callback threw, on `callbackError`; while recovering from a failing release (above), on `releaseError`. The rollback failure itself is always on `cause`. |
 | `undeclared-role` | `db.as({ role, ... })`'s role isn't in the declared whitelist. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |
+| `context-provider-empty` | A registered `context` provider's resolver yielded no context — only reachable by a caller who bypassed the resolver's non-nullable return type. |
 
 Writing your own `Driver` (a custom preset, or wrapping a client library
 `@hejbro/pg`/`@hejbro/supabase`/`@hejbro/neon` don't cover)? A member
@@ -937,8 +1009,14 @@ const yourDriver: Pick<Driver, "transaction"> = {
   `packages/query/src/db/execute.ts` (`query-execution-failed`, params
   never read), `packages/query/src/db/db.ts` (`db()`, the role union),
   `packages/query/src/db/context.ts` (`db.as`, `DbContext`, the role
-  whitelist, `SET LOCAL ROLE`/`set_config` rendering),
-  `packages/query/src/db/transaction.ts` (`nested-transaction-unsupported`),
+  whitelist, `SET LOCAL ROLE`/`set_config` rendering, `ContextProvider`,
+  `createProviderRun`, `context-provider-empty`),
+  `packages/query/src/db/transaction.ts` (`nested-transaction-unsupported`,
+  `guardNestedTransaction` -- shared by the unscoped and provider paths),
+  `packages/query/test/db/context-provider.test.ts`,
+  `packages/supabase/test/context-provider.test.ts` (the Supabase preset
+  contributes zero lines of `src/` for this feature -- its own context
+  builders were already enough),
   `packages/query/src/db/fn.ts` (`db.fn`),
   `packages/query/src/driver/contract.ts` and
   `packages/query/src/driver/errors.ts` (capabilities,
