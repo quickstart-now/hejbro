@@ -38,15 +38,30 @@ the same class of staleness the enforce-driver-contract entry's own
 "Re-pinned a second time" note closes, caught the same way, before
 handing the SHA off rather than after.
 
-Re-pinned a third time, after `feat(cli): name the finding type on the
-public surface` (`aa6f6e6`, the `SKILL.md` index/description round,
-owner-authorized separately from the `AssertSchemaFinding` decision
-above -- same header, distinct commit): only `skills/hejbro/SKILL.md`
+Re-pinned a third time, after `docs(skills): point the index and
+description at the assertion` (`9219fb3`, the `SKILL.md`
+index/description round, owner-authorized separately from the
+`AssertSchemaFinding` decision above -- its title duplicated the prior
+commit's exactly, flagged in review, and reworded to this one to name
+what the commit actually touched): only `skills/hejbro/SKILL.md`
 gained content this round (a new path for this file, added to the list
 above rather than replacing an existing entry) -- the other twenty
 paths were re-verified unchanged and still match their own most recent
 pin. Same method: `git hash-object` against `git rev-parse
 HEAD:<path>`, all `ok`.
+
+**The commit SHAs cited in this entry resolve on the pre-squash branch
+only** (`feat-extend-query-runtime`); after this change's squash merge
+and branch deletion, none of them -- including the ones above -- remain
+resolvable. The durable anchors are the blob pins in the `Refs:` list
+above, which survive because the squash commit's own tree carries the
+same content, addressed the same way, independent of which commits
+produced it. Commit SHAs are still cited throughout this entry, on
+balance, because the round-by-round narrative is organized by commit
+and removing the SHAs would make "which round" ambiguous without
+making anything more durable; a reader who tries `git show <sha>` after
+the squash and finds nothing can at least tell why from this note,
+which a silently-absent SHA could not.
 
 This file's own path is not included, since it cannot pin
 its own hash; the drafting note below has the same reasoning
