@@ -468,6 +468,21 @@ the case. Both checked a **proxy** for the property — a name, a line —
 rather than the property. Before asserting that something exists or does
 not, confirm the command inspects the thing itself.
 
+**The same command can be the property for one claim and a proxy for
+another.** `git diff --name-only` omitting a path means the two trees
+hold the *same blob* there — so for a claim about **file contents**
+(goldens unchanged, snapshots unchanged, no spec delta) the absence *is*
+the property, since git builds that list from content hashes. But for a
+claim about **public API surface** it is only a proxy, because a
+package's surface is computed through barrels, not from its own files:
+`packages/cli/src/index.ts` re-exports `@hejbro/core` and
+`@hejbro/query` with `export *`, so one added line in **core's** barrel
+moves **two** packages' surfaces while the file list shows a single
+file. Surface must be measured where it is defined — the built
+`dist/*.d.ts` — not inferred from which files moved. (Core's own barrel
+has zero `export *`, which is why a new module cannot leak into its
+surface without editing it; that too is a fact to check, not assume.)
+
 So group 2's output proof is **golden 0 bytes _plus_ a retarget baseline
 at 0 bytes**, the latter taken by running `applyRenameSpecs` over a real
 example snapshot and recording: the generated rename SQL, the resulting
@@ -544,7 +559,7 @@ Closes #474. Measured at base: `db(`, `pgDriver`, `.over(`, `related(`,
 control: `table(` matches 8 times, so the search can match). The
 fastest-growing surface has no user-viewpoint usage anywhere.
 
-- [ ] 3.1 [design] `~7m` **Runs first, before group 1.** Measure
+- [x] 3.1 [design] `~7m` **Runs first, before group 1.** Measure
       whether `.references()` and the long `extras.foreignKeys` form
       render **byte-identical** SQL for one existing example FK. This is
       the plan's one task with no red test, deliberately: it is a
@@ -554,7 +569,7 @@ fastest-growing surface has no user-viewpoint usage anywhere.
       would rewrite a committed migration, which is not a refactor and
       leaves this change. Report the rendered SQL of both forms
       verbatim, not a verdict. Files: none (measurement only).
-- [ ] 3.2 `~9m` A reporting query, declared and compiled from the user's
+- [x] 3.2 `~9m` A reporting query, declared and compiled from the user's
       seat. Red: `examples/postgres/test/query.test.ts` » "the reporting
       query compiles to the expected SQL and parameters" — fails until
       the query exists. Uses **only already-exported** surface (a join
@@ -562,7 +577,7 @@ fastest-growing surface has no user-viewpoint usage anywhere.
       would make this a contract change. Stays a pure in-process test so
       `pnpm test` still needs no Docker. Files:
       `examples/postgres/src/reporting.query.ts` (new), the new test.
-- [ ] 3.3 `~9m` The same query actually executes against Postgres. Red:
+- [x] 3.3 `~9m` The same query actually executes against Postgres. Red:
       the roundtrip-style script gains a step that runs the query
       through `pgDriver` against the Docker instance and asserts rows —
       fails until `@hejbro/pg` is a dependency of the example and the
@@ -595,7 +610,7 @@ fastest-growing surface has no user-viewpoint usage anywhere.
       `related()` was to be demonstrated here, so it stays
       undemonstrable in `examples/` until this is resolved separately —
       3.2's scenario deliberately does not depend on it.
-- [ ] 3.5 `~7m` Record the limitation 3.1 uncovered in the cheatsheet,
+- [x] 3.5 `~7m` Record the limitation 3.1 uncovered in the cheatsheet,
       citing the follow-up issue number. **File follow-up issue (ii)
       before starting this task** — 4.1 files the other two, but this one
       is a prerequisite here, not a closing chore: a cheatsheet line
@@ -624,7 +639,7 @@ fastest-growing surface has no user-viewpoint usage anywhere.
 
 ## 4. Closing record
 
-- [ ] 4.1 `~9m` One `patch` changeset (groups 1 and 2 both touch
+- [x] 4.1 `~9m` One `patch` changeset (groups 1 and 2 both touch
       `@hejbro/core`; the five published packages are a fixed group, so
       naming one moves all five); **two** follow-up issues filed under
       #412 via the issue script — (i) everything in this repository that
@@ -664,7 +679,7 @@ fastest-growing surface has no user-viewpoint usage anywhere.
       `pnpm check:tasktime` — both need `TURBO_FORCE=1`, since a plain
       run replays cross-worktree cache and fails as if the gate were
       broken). Files: `.changeset/`, `README.md`.
-- [ ] 4.2 `~6m` **Post** the closing records as comments — do not close
+- [x] 4.2 `~6m` **Post** the closing records as comments — do not close
       the issues. On #472: the `29 → 31` correction **with the command
       that measured it**, and that the two combined-message guards were
       preserved rather than split. On #473: follow-up (i)'s number, plus
