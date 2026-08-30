@@ -318,3 +318,25 @@ describe("db() context provider -- 1.6 capability ordering", () => {
 		expect(driver.transaction).not.toHaveBeenCalled();
 	});
 });
+
+describe("db() context provider -- non-execution members stay uncontexted", () => {
+	it("a provider handle's own driver member stays uncontexted", async () => {
+		// `handle.driver` is not an execution surface (the survey's own
+		// eight-surface count never included it) -- the schema assertion
+		// takes exactly this path to read the catalog, and it must keep
+		// doing so uncontexted: a resolved application role would make
+		// catalog reads report divergence that reflects the role's own
+		// visibility rather than the schema (rls-execution-context delta).
+		const { driver, sentPerTransaction, topLevelSent } =
+			recordingTransactionalDriver();
+		const resolver = vi.fn(() => ({ role: roleName("grant_reader") }));
+		const handle = makeHandle(driver, resolver);
+
+		await handle.driver.execute({ sql: "select 1", params: [], kind: "sql" });
+
+		expect(resolver).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(sentPerTransaction).toHaveLength(0);
+		expect(topLevelSent).toHaveLength(1);
+	});
+});
