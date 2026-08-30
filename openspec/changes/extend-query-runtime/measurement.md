@@ -275,17 +275,81 @@ regenerates it — that data was never re-run under the current code).
 redesigned-harness passes, and the pooled 50 — fails the invariance
 criterion.** Every one clears the relative-improvement condition
 comfortably. `range` fails to clear twice-its-own-spread in all seven;
-`IQR` fails in five of seven; `MAD` clears it in all seven; `SD` clears
-it in five of seven. The spread-condition split is **consistently
-2-of-4 to 3-of-4 estimators agreeing, never all 4** — not one dataset,
-including the pooled one, produced unanimous agreement in either
-direction on the spread condition. The **ship** decision (which
-requires all four to agree) is therefore unanimous across every dataset
-collected, including the pooled application: **no**. The **miss**
-characterization is not unanimous at the per-estimator level in any
-single dataset — this is why the header states the verdict as "cannot
-determine," not "insufficient". See "(i)/(ii)/(iii)" below for what
+`MAD` clears it in all seven — these two ends are stable across every
+dataset. `IQR`/`SD` are what actually vary, and the *exact* pattern is
+not one shape repeated seven times — three distinct shapes appear:
+
+- `{iqr: yes, mad: yes, sd: no, range: no}` — **Old** and **New A**
+  only.
+- `{iqr: no, mad: yes, sd: yes, range: no}` — **New B, D, E, and the
+  pooled 50**. This is also the shape the gate-verification window's
+  own (unadopted) N=20 re-run reproduced, in "Conditions" above — so
+  the gate run matches this specific new-harness majority shape, not
+  the old harness's shape, and not New A's.
+- `{iqr: yes, mad: yes, sd: yes, range: no}` — **New C** alone: three
+  of four, the closest any dataset in this table comes to unanimity.
+
+Reporting this as "2-of-4 to 3-of-4, consistently" understates what is
+actually going on: the two middle estimators (`IQR`, `SD`) trade places
+between the old harness's shape and the new harness's majority shape,
+which is itself consistent with the order effect (quantified above)
+changing the improvement distribution's shape between the two
+harnesses, not just its center. The **ship** decision (which requires
+all four to agree) is nonetheless unanimous across every dataset
+collected, including the pooled application and the gate-verification
+re-run: **no**. The **miss** characterization is not unanimous at the
+per-estimator level in any single dataset — this is why the header
+states the verdict as "cannot determine," not "insufficient". Whether
+that unanimity gap is a property of this rule in general or of this
+specific data is addressed in "What would change the answer" below —
+in short, of this data (unanimity is achievable in principle; a
+data-derived case is shown there). See "(i)/(ii)/(iii)" below for what
 this does and does not mean for this record.
+
+## Raw improvement samples, per dataset
+
+For independent re-computation (the pooled/per-pass values above are
+already the committed harness's own output, but reproducing them from
+scratch — rather than trusting that output — needs the raw samples,
+not just their summary statistics). All values in milliseconds,
+`unnamed median − prepared median` per run, in run order; each new-
+harness array is copied verbatim from the literal constants in
+`prepared-statement.bench.integration.test.ts`'s cross-pass
+pooled-analysis block (`Passes`), which are themselves `grep`-extracted
+from the saved per-pass logs (byte-verified against those logs before
+this round's own use of them, see "Pooled application" below):
+
+```
+Old (8, /tmp — pre-window, manual; excluded run C is the sign reversal):
+[0.1186, 0.0792, -0.1960, 0.2374, 0.0858, 0.0821, 0.1145, 0.0754]
+
+New A (5, /tmp/bench-41-real3.log):
+[0.0775, 0.0150, 0.0630, 0.0501, 0.1093]
+
+New B (5, /tmp/bench-41-real4.log):
+[0.0567, 0.0400, 0.0920, 0.0264, 0.0752]
+
+New C (10, /tmp/bench-41-final.log):
+[0.0638, 0.0423, 0.0927, 0.0437, 0.0758, 0.0576, 0.0819, 0.0489, 0.0700, 0.0153]
+
+New D (10, /tmp/bench-41-final2.log):
+[0.0723, 0.0430, 0.0716, 0.0396, 0.0905, 0.0462, 0.0928, 0.0340, 0.0778, 0.0335]
+
+New E (20, /tmp/bench-41-FINAL20.log):
+[0.0790, 0.0639, 0.1150, 0.0346, 0.0823, 0.0552, 0.0837, 0.0644, 0.0741, 0.0675,
+ 0.0918, 0.0301, 0.0990, 0.0390, 0.1040, 0.0478, 0.0792, 0.0381, 0.0919, 0.0410]
+
+New, pooled (50): New A ++ New B ++ New C ++ New D ++ New E, concatenated
+in that order (A first, E last) -- exactly what `Passes.flatMap(...)`
+does in the committed test.
+```
+
+Per-run unnamed-median baselines (needed to reproduce each row's own
+relative-percent column and the "old" row's per-run analysis in "What
+would change the answer" below) are already itemized in the old-8 table
+above and in the pass-level table in "4.1" above (baseline = median of
+that pass's own `unnamedMediansMs`, also a literal constant in the same
+test block).
 
 ## Pooled application vs. per-pass robustness check
 
@@ -530,28 +594,90 @@ would overstate what this record shows.
 
 ## What would change the answer
 
-The estimator split above is not noise a bigger sample would resolve.
-Ranking the four estimators' own magnitude, smallest to largest, on
-each of the seven datasets: `MAD` is the smallest and `range` the
-largest in **all seven**, with no exception. That ordering is exactly
-why the ship decision is robust (`MAD` always clears, `range` never
-does, so unanimity is structurally unreachable) and exactly why more
-runs are unlikely to change it: `IQR` and `SD` are the two estimators
-that sit in between and occasionally swap places (`SD` exceeds `IQR` in
-2 of the 7 datasets, old and New A), which is what produces the
-observed 2-of-4/3-of-4 splits — but neither ever approaches `MAD` or
-`range`'s own position. Pooling more independent runs narrows each
-estimator's own sampling error without moving this relative ordering,
-because the ordering follows from the shape of the improvement
-distribution itself (a right-skewed, moderate-outlier distribution,
-which is exactly the shape that makes `range` overstate and `MAD`
-understate spread relative to `IQR`/`SD`), not from how few samples
-were collected. What **would** change the answer is not more of this
-same measurement: either the underlying effect becoming large enough
-to clear even `range`'s inflated spread (a different workload, or a
-driver path where the win is larger than ~7% of the median), or the
-pre-registered rule itself naming one estimator instead of requiring
-invariance across all four.
+**`range` is largest by construction; `MAD` being smallest is an
+observation, not a theorem — the two claims have different status and
+should not be read as equally certain.** `range ≥ IQR` and `range ≥
+MAD` hold for *any* sample, always, with no exception possible: `IQR`
+is the width of the middle 50% of the sorted sample, necessarily no
+wider than the full min-to-max span, and every individual deviation
+from the median is itself bounded by that same span, so the median of
+those deviations (`MAD`) cannot exceed it either. `range` also came out
+larger than `SD` in every one of the seven datasets here, consistent
+with (though this record does not assert as a general theorem for
+every possible sample) the standard bound relating a bounded sample's
+spread to its own range. `MAD` being the *smallest* of the four,
+however, is empirical: it is a property of this particular,
+right-skewed, moderate-outlier improvement distribution (`MAD`
+downweights outliers more than `IQR`/`SD` do for a distribution shaped
+like this one), observed in all seven datasets collected, not a
+mathematical guarantee for every distribution. Attaching the same
+certainty to both claims would let the empirical one travel as if it
+were structural.
+
+**Correction (reviewer-verified): unanimous agreement across all four
+estimators is achievable in principle — the pre-registered rule is not
+unsatisfiable — this record's own collected data simply does not reach
+it.** An earlier draft of this section said unanimity was "structurally
+unreachable" because `MAD` always clears and `range` never does; that
+overclaimed. Two pieces of evidence, both checked against real data
+rather than asserted, correct it:
+
+- The old harness's 8 runs, with the sign-reversed run C removed (the
+  run already flagged in "(i)/(ii)/(iii)" above as best explained by
+  shared process state, not a real measurement), analyzed as each run's
+  own improvement expressed as a percentage of that run's own baseline
+  (a different, per-run-normalized statistic from the raw-ms spread
+  `decide()` computes against one external baseline — reported here for
+  exactly this existence-proof purpose, not folded into the invariance
+  table above or the verdict): median 11.35%, `IQR` 2.85pp (2× =
+  5.69pp), `MAD` 1.60pp (2× = 3.20pp), `SD` 2.00pp (2× = 4.00pp), and
+  `range` 5.21pp (2× = 10.43pp) — **all four estimators clear the bar**.
+  Unanimity is not a contradiction in terms for this shape of rule; a
+  real 7-point subset of this record's own data achieves it.
+- Using `decide()` itself (the actual function, raw-ms improvements,
+  not the percent-normalized statistic above): removing both run C
+  (sign-reversed) *and* run D (baseline 1.9578ms, roughly double every
+  other run's ~0.75–0.87ms baseline — independently unusual enough that
+  excluding it is not a result-informed choice made to reach a
+  particular answer) from the old 8 leaves 6 runs whose `decide()`
+  result is `{iqr: true, mad: true, sd: true, range: false}` — **three
+  of four**, the closest any dataset in this record comes to unanimity
+  under the harness's own real computation, one estimator (`range`)
+  short.
+
+Both pieces point the same direction: as the two runs already
+independently flagged as likely contaminated by shared process state
+are removed, the estimators move *toward* agreement rather than staying
+fixed — which would not happen if unanimity were mathematically
+unreachable for this rule. What limits this record's own conclusion is
+this specific data's own dispersion (partly explained by the order
+effect quantified above), not an unsatisfiable rule.
+
+**What would change the answer, corrected accordingly: not a bigger
+sample of this same measurement, and not "a larger effect or a rule
+that names one estimator" alone — reduced dispersion.** Concretely:
+removing or controlling the specific confounds this record identifies
+(the order effect, and whatever produced runs like old run C and old
+run D) would shrink `range` and `SD` — the two estimators driving the
+misses above — toward `IQR`/`MAD`'s own tighter, and already-passing,
+readings. A different workload or driver path with a larger effect
+would also work, as would the rule naming one estimator instead of
+requiring invariance across four; but "measure more of the same thing"
+is not on this list, because more independent runs narrow each
+estimator's own sampling error without changing why `range`/`SD` are
+inflated relative to `IQR`/`MAD` in the first place.
+
+**How thin this is:** the rule's own reachability has been confirmed
+exactly once, on a 6-or-7-point subset of one dataset from one
+workload, not shown to be generally achievable. This protocol is
+expected to carry into future measurement fragments (starting with
+#301 Nile); the reachability finding above should get stronger with
+each fragment that reaches unanimity and should prompt a review with
+the owner — of the estimator set, the 2× multiplier, or both — if
+several fragments in a row fail to, decided now rather than after such
+a run of misses exists, for the same reason every other rule in this
+record was fixed before its own numbers existed. A single miss (this
+fragment) is not that signal by itself.
 
 ## Conclusion
 
@@ -592,5 +718,7 @@ file's own protocol — pre-registered rule, ≥5 independent process runs
 pooled rather than cherry-picked, order alternation, invariance across
 four spread estimators — from the repo-wide lesson above about
 in-process-repeated, order-fixed benchmarks, and from "What would
-change the answer" above: not more runs of this same workload, but a
-larger effect or a rule that names one estimator.
+change the answer" above: not more runs of this same workload, but
+reduced dispersion (controlling the confounds this record identifies),
+a larger underlying effect, or a rule that names one estimator instead
+of requiring invariance across four.
