@@ -297,9 +297,10 @@ package's own tests rather than inferred from a green kit:
   **one transaction** — a pin in a different transaction would be
   worthless and would still satisfy the kit;
 - that the pins are sent **after** the transaction opens — a
-  transaction-local setting issued before `BEGIN` is not an error the
-  kit could see either, and it silently does nothing, which is exactly
-  the failure this path exists to remove.
+  transaction-local setting issued outside a transaction block warns and
+  is discarded, which is PostgreSQL's documented behavior rather than a
+  measurement of this change's own, and it produces exactly the silent
+  no-effect this path exists to remove.
 
 The second is invisible to any session-level observation by
 construction, because the statement that opens the transaction is not

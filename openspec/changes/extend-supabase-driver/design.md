@@ -186,10 +186,14 @@ properties, not one:
 2. That the pins are sent **after** the transaction opens. This one is
    invisible to any session-level observation by construction, because
    `BEGIN` is not among the statements such an observation records. It
-   matters because a transaction-local setting issued before `BEGIN`
-   does nothing at all — it warns and is discarded — so the following
-   two orderings are indistinguishable at the session surface and both
-   pass the kit:
+   matters because a transaction-local setting issued outside a
+   transaction block does nothing at all — it warns and is discarded.
+   That last fact is **PostgreSQL's own documented behavior, cited here,
+   not something this change measured**: the measurement record above
+   covers the endpoint's session handling and nothing else, and this
+   sentence is not one of its results. What follows from it is that the
+   two orderings below are indistinguishable at the session surface and
+   both pass the kit:
 
    | actually sent | recorded at the session surface | effect |
    |---|---|---|
