@@ -3,7 +3,7 @@ Refs:
 - openspec/changes/enforce-driver-contract/proposal.md @ blob b605a3cbcd43dc77f34dff6685eaaa621800cf8f
 - openspec/changes/enforce-driver-contract/specs/cli-commands/spec.md @ blob 2cb56b99abf9b2751d78d174ba033659499ef098
 - openspec/changes/enforce-driver-contract/specs/driver-contract/spec.md @ blob f3c76127096ce6a9e961b4b9522038fd458b6377
-- openspec/changes/enforce-driver-contract/tasks.md @ blob ccfe2f8b38c57ad04881ddcd447b89d7bfe850ea
+- openspec/changes/enforce-driver-contract/tasks.md @ blob ec2586fbf371d8b7959b0a2e420fd932261739a1
 - openspec/task-times.csv @ blob f961b2322da60904f08280ce3db0d2ea95a356aa
 - packages/cli/src/check/compare.ts @ blob 7d6a3d48a7a8682e4d0c2d31b3cda692a35102fc
 - packages/cli/src/commands/check.ts @ blob 93c8e2bbdf9bf1cdb85558945d479efee16b0820
@@ -27,10 +27,16 @@ Refs:
 - packages/supabase/test/storage-bucket-kind.test.ts @ blob 4eecb1c5b1c286722e26f3927f7eaa0912ed85ae
 - packages/supabase/tsconfig.json @ blob 8c31a03f139b6bd2095caf2f48239e9581a01442
 - packages/supabase/vitest.config.ts @ blob 3f09b63262aeeaadc8f7acdf82ba1c7343e94f8b
-- README.md @ blob 4277fcd6bbd435d6cb9bfa2260992d04636e3a8f
+- README.md @ blob 097a8fca464e7e090777a6f101c98786327f7886
 - scripts/check-bans.mjs @ blob c51e2e1959b0202a0d8ea96e726805b4b363c627
 - skills/hejbro/references/dsl-cheatsheet.md @ blob 385c06ee0ede87ad745893151630bf9ce9f6a328
 - skills/hejbro/references/query-layer.md @ blob fc1765f91397a443c14e6327d1de717a31324607
+
+(Re-pinned a second time: the README task-time badge refresh commit
+(`docs: refresh readme task-time badges`) touched both `README.md` and
+`tasks.md` after the previous pin was taken — the same class of
+staleness the first re-pin closed, caught the same way, before handing
+the SHA off rather than after.)
 
 (Drafting note, recorded rather than silently omitted: this entry is
 written by the implementer session from committed artifacts —
