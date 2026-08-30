@@ -1,6 +1,6 @@
 import type { SchemaDeclaration } from "../dsl/schema";
-import { throwHejbroError } from "../error";
 import { createOrDropDiff } from "../kind/diff-helpers";
+import { requireNext, requirePrevious } from "../kind/emit-helpers";
 import type {
 	ChangeOperation,
 	KindChange,
@@ -182,13 +182,7 @@ const emitCreate = (
 	change: KindChange,
 	siblingChanges: ReadonlyArray<KindChange>,
 ): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"sequence create change is missing its next snapshot.",
-		);
-	}
-	const nextSnapshot = asSequenceSnapshot(change.next);
+	const nextSnapshot = asSequenceSnapshot(requireNext(change));
 	if (ownedColumnAddedToExistingTable(nextSnapshot, siblingChanges)) {
 		return [
 			statement(createSequenceSql(nextSnapshot)),
@@ -204,13 +198,7 @@ const emitCreate = (
 
 /** {@link sequenceKind}'s `emit`, `"drop"` case: drop the column's default, then the sequence itself, both on `predrop` (#193, see the doc comment above {@link sequenceKind}). */
 const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"sequence drop change is missing its previous snapshot.",
-		);
-	}
-	const previousSnapshot = asSequenceSnapshot(change.previous);
+	const previousSnapshot = asSequenceSnapshot(requirePrevious(change));
 	return [
 		predropStatement(dropDefaultSql(previousSnapshot)),
 		predropStatement(dropSequenceSql(previousSnapshot)),
@@ -218,15 +206,9 @@ const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
 };
 
 /** {@link sequenceKind}'s `emit`, `"alter"` case: only the base type can change once the sequence already exists. */
-const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"sequence alter change is missing its next snapshot.",
-		);
-	}
-	return [statement(alterBaseTypeSql(asSequenceSnapshot(change.next)))];
-};
+const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(alterBaseTypeSql(asSequenceSnapshot(requireNext(change)))),
+];
 
 /**
  * One handler per {@link ChangeOperation}, same technique used across this

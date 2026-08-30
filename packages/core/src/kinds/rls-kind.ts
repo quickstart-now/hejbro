@@ -1,6 +1,6 @@
 import type { RlsDeclaration } from "../dsl/rls";
-import { throwHejbroError } from "../error";
 import { createOrDropDiff, sameJson } from "../kind/diff-helpers";
+import { requireNext, requirePrevious } from "../kind/emit-helpers";
 import type {
 	ChangeOperation,
 	KindChange,
@@ -65,13 +65,7 @@ const disableStatementSql = (snapshot: RlsSnapshot): string =>
 
 /** {@link rlsKind}'s `emit`, `"create"` case: enable RLS, and force it too when the declaration asks for that. */
 const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"rls create change is missing its next snapshot.",
-		);
-	}
-	const nextSnapshot = asRlsSnapshot(change.next);
+	const nextSnapshot = asRlsSnapshot(requireNext(change));
 	if (rlsForce(nextSnapshot)) {
 		return [
 			statement(enableStatementSql(nextSnapshot)),
@@ -82,26 +76,14 @@ const emitCreate = (change: KindChange): ReadonlyArray<SqlStatement> => {
 };
 
 /** {@link rlsKind}'s `emit`, `"alter"` case: only `force` can change once RLS is already enabled. */
-const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.next === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"rls alter change is missing its next snapshot.",
-		);
-	}
-	return [statement(forceStatementSql(asRlsSnapshot(change.next)))];
-};
+const emitAlter = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(forceStatementSql(asRlsSnapshot(requireNext(change)))),
+];
 
 /** {@link rlsKind}'s `emit`, `"drop"` case: disable RLS. */
-const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => {
-	if (change.previous === null) {
-		return throwHejbroError(
-			"invalid-kind-change",
-			"rls drop change is missing its previous snapshot.",
-		);
-	}
-	return [statement(disableStatementSql(asRlsSnapshot(change.previous)))];
-};
+const emitDrop = (change: KindChange): ReadonlyArray<SqlStatement> => [
+	statement(disableStatementSql(asRlsSnapshot(requirePrevious(change)))),
+];
 
 /**
  * One handler per {@link ChangeOperation}, same technique used across this

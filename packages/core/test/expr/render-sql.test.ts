@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
+import {
+	exprChildren,
+	replaceExprChildren,
+} from "../../src/expr/expr-children";
 import type { ExprNode, SelectNode, SetOpNode } from "../../src/index";
-import { renderExpr, renderSelect, renderSetOp } from "../../src/index";
+import {
+	collectColumnRefs,
+	renderExpr,
+	renderSelect,
+	renderSetOp,
+} from "../../src/index";
+import { buildUnrelatedCase, REACHABLE_NODE_KINDS } from "./reachable-kinds";
 
 const publishedAt: ExprNode = {
 	nodeKind: "columnRef",
@@ -220,5 +230,48 @@ describe("nulls placement renders in all three order-by positions (#470)", () =>
 		expect(renderSetOp(combined)).toContain(
 			'order by "published_at" desc nulls last',
 		);
+	});
+});
+
+/**
+ * #473 2.3: collectColumnRefs no longer restates ExprNode child positions
+ * in its own handler table — it recurses through expr-children.ts's
+ * registry, with `columnRef` as its one base case beyond the fold (a
+ * column ref has no children; it *is* the thing being collected). This
+ * proves the fold mechanically: for every reachable node kind, a distinct
+ * columnRef is planted at each position `exprChildren` reports (via
+ * `replaceExprChildren`, never a hand-derived position), and
+ * `collectColumnRefs` must report it. `exists`/`selectExpr` report zero
+ * positions here on purpose (their `query` is a `SelectNode`, out of this
+ * registry's vocabulary) — collectColumnRefs stopping at a subquery
+ * boundary is existing, unrelated behavior (a subquery validates its own
+ * scope when rendered), not something this fold changes.
+ */
+describe("collectColumnRefs reaches every position expr-children.ts's registry reports (#473 2.3)", () => {
+	REACHABLE_NODE_KINDS.forEach((kind) => {
+		const node = buildUnrelatedCase(kind);
+		const children = exprChildren(node);
+
+		children.forEach((_child, position) => {
+			it(`${kind}: a columnRef planted at child position ${position} is collected`, () => {
+				const marker: ExprNode = {
+					nodeKind: "columnRef",
+					schemaName: "app",
+					tableName: "marker_table",
+					columnName: "marker_column",
+				};
+				const childAt = (index: number, original: ExprNode): ExprNode => {
+					if (index === position) {
+						return marker;
+					}
+					return original;
+				};
+				const withMarker = replaceExprChildren(
+					node,
+					children.map((child, index) => childAt(index, child)),
+				);
+				expect(collectColumnRefs(withMarker)).toContainEqual(marker);
+			});
+		});
 	});
 });

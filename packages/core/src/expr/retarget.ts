@@ -1,28 +1,19 @@
 import { arrayWithIdentityPreserved } from "../array-identity";
 import type {
-	BetweenNode,
-	ComparisonNode,
 	ExistsNode,
 	ExprNode,
 	FromNode,
-	FunctionCallNode,
-	InListNode,
 	JoinNode,
-	LogicalNode,
-	NotNode,
-	NullTestNode,
 	OrderByTerm,
 	ProjectionNode,
 	SelectExprNode,
 	SelectNode,
 	SetOpNode,
-	SqlTemplateChunk,
-	SqlTemplateNode,
 	TableRefNode,
-	WindowNode,
 	WithEntryNode,
 	WithNode,
 } from "./ast";
+import { exprChildren, replaceExprChildren } from "./expr-children";
 import { replaceSelectChildExprs, selectChildExprs } from "./select-children";
 
 /**
@@ -74,8 +65,6 @@ const retargetTableRef = (
 	}
 	return { schemaName: target.newSchema, tableName: target.newTable };
 };
-
-const retargetUnchanged = (node: ExprNode): ExprNode => node;
 
 /**
  * A rename never rewrites a CTE reference (proposal, "A CTE is a
@@ -153,111 +142,6 @@ const retargetColumnRef = (
 		tableName: target.newTable,
 		columnName,
 	};
-};
-
-const retargetComparison = (
-	node: ComparisonNode,
-	target: RenameTarget,
-): ExprNode => {
-	const left = retargetExprNode(node.left, target);
-	const right = retargetExprNode(node.right, target);
-	if (left === node.left && right === node.right) {
-		return node;
-	}
-	return { ...node, left, right };
-};
-
-const retargetLogical = (node: LogicalNode, target: RenameTarget): ExprNode => {
-	const operands = node.operands.map((operand) =>
-		retargetExprNode(operand, target),
-	);
-	if (operands.every((operand, i) => operand === node.operands[i])) {
-		return node;
-	}
-	return { ...node, operands };
-};
-
-const retargetNot = (node: NotNode, target: RenameTarget): ExprNode => {
-	const operand = retargetExprNode(node.operand, target);
-	if (operand === node.operand) {
-		return node;
-	}
-	return { ...node, operand };
-};
-
-const retargetNullTest = (
-	node: NullTestNode,
-	target: RenameTarget,
-): ExprNode => {
-	const operand = retargetExprNode(node.operand, target);
-	if (operand === node.operand) {
-		return node;
-	}
-	return { ...node, operand };
-};
-
-const retargetInList = (node: InListNode, target: RenameTarget): ExprNode => {
-	const operand = retargetExprNode(node.operand, target);
-	const values = node.values.map((value) => retargetExprNode(value, target));
-	if (
-		operand === node.operand &&
-		values.every((value, i) => value === node.values[i])
-	) {
-		return node;
-	}
-	return { ...node, operand, values };
-};
-
-const retargetBetween = (node: BetweenNode, target: RenameTarget): ExprNode => {
-	const operand = retargetExprNode(node.operand, target);
-	const lowerBound = retargetExprNode(node.lowerBound, target);
-	const upperBound = retargetExprNode(node.upperBound, target);
-	if (
-		operand === node.operand &&
-		lowerBound === node.lowerBound &&
-		upperBound === node.upperBound
-	) {
-		return node;
-	}
-	return { ...node, operand, lowerBound, upperBound };
-};
-
-const retargetFunctionCall = (
-	node: FunctionCallNode,
-	target: RenameTarget,
-): ExprNode => {
-	const args = node.args.map((arg) => retargetExprNode(arg, target));
-	if (args.every((arg, i) => arg === node.args[i])) {
-		return node;
-	}
-	return { ...node, args };
-};
-
-const retargetSqlTemplateChunk = (
-	chunk: SqlTemplateChunk,
-	target: RenameTarget,
-): SqlTemplateChunk => {
-	if (chunk.chunkKind === "text") {
-		return chunk;
-	}
-	const expr = retargetExprNode(chunk.expr, target);
-	if (expr === chunk.expr) {
-		return chunk;
-	}
-	return { ...chunk, expr };
-};
-
-const retargetSqlTemplate = (
-	node: SqlTemplateNode,
-	target: RenameTarget,
-): ExprNode => {
-	const chunks = node.chunks.map((chunk) =>
-		retargetSqlTemplateChunk(chunk, target),
-	);
-	if (chunks.every((chunk, i) => chunk === node.chunks[i])) {
-		return node;
-	}
-	return { ...node, chunks };
 };
 
 /**
@@ -382,12 +266,6 @@ const retargetOrderByTerm = (
 	}
 	return { ...term, expr };
 };
-
-/** `true` when every entry of `items` is the exact same reference as its `originals` counterpart — used directly where only the boolean matters (the window-function identifier check below), not the array itself (see `arrayWithIdentityPreserved`, `array-identity.ts`, for that). */
-const sameByIndex = <T>(
-	items: ReadonlyArray<T>,
-	originals: ReadonlyArray<T>,
-): boolean => items.every((item, index) => item === originals[index]);
 
 /** `query` itself when none of its three identifier fields changed, else a fresh node carrying the retargeted ones — the base {@link retargetSelectNode} runs its generic expression pass over. */
 const selectNodeWithIdentifiers = (
@@ -534,30 +412,6 @@ const retargetExists = (node: ExistsNode, target: RenameTarget): ExprNode => {
 	return { ...node, query };
 };
 
-/**
- * `window`'s three child positions are plain sibling expressions, not a
- * subquery — `fn` reuses {@link retargetFunctionCall} directly (its own
- * `nodeKind` is already narrowed to `functionCall`, so the concrete result
- * is always a `FunctionCallNode` even though the function's own return
- * type is the shared `ExprNode`), `partitionBy`/`orderBy` walk generically
- * like every other composite node above.
- */
-const retargetWindow = (node: WindowNode, target: RenameTarget): ExprNode => {
-	const fn = retargetFunctionCall(node.fn, target) as FunctionCallNode;
-	const partitionBy = node.partitionBy.map((expr) =>
-		retargetExprNode(expr, target),
-	);
-	const orderBy = node.orderBy.map((term) => retargetOrderByTerm(term, target));
-	if (
-		fn === node.fn &&
-		sameByIndex(partitionBy, node.partitionBy) &&
-		sameByIndex(orderBy, node.orderBy)
-	) {
-		return node;
-	}
-	return { ...node, fn, partitionBy, orderBy };
-};
-
 const retargetSelectExpr = (
 	node: SelectExprNode,
 	target: RenameTarget,
@@ -570,48 +424,43 @@ const retargetSelectExpr = (
 };
 
 /**
- * One handler per {@link ExprNode} `nodeKind` for {@link retargetExprNode}
- * — a mapped type over the full `nodeKind` union, not a hand-written list,
- * so a missing handler is a `tsc` error the same way a `switch`'s
- * `default: assertNever(node)` would have been (verified directly with a
- * scratch dummy-variant edit, #154 PR2). Placed at the end of the file,
- * after every handler it references: unlike a function body (which only
- * runs when called), this object literal is evaluated at module load, so
- * every value it names must already be an initialized const by then.
+ * Walks every `ExprNode` reachable from `node` (including into an
+ * `exists()`'s own `SelectNode`) rewriting `ColumnRefNode`/`TableRefNode`
+ * matches for `target`. Returns `node` unchanged (same reference) when
+ * nothing matched, so a caller can cheaply check `retargeted !== node` to
+ * decide whether re-encoding is needed.
+ *
+ * Three special cases, everything else folds onto {@link exprChildren}/
+ * {@link replaceExprChildren} (`expr-children.ts`, #473):
+ * - `columnRef` rewrites its own identity fields (`schemaName`/
+ *   `tableName`/`columnName`) — it has no children to recurse into; the
+ *   thing needing renaming is the node itself ({@link retargetColumnRef}).
+ * - `exists`/`selectExpr` each embed a whole `SelectNode`, not a list of
+ *   `ExprNode` children — retargeting one means calling
+ *   {@link retargetSelectNode} on that embedded query, not replacing a
+ *   children array (`retargetExists`/`retargetSelectExpr` above).
+ * - Every other kind's identity-preserving rebuild — recurse into
+ *   `exprChildren(node)`, then hand the retargeted results to
+ *   `replaceExprChildren`, which already returns `node` itself when
+ *   every child came back unchanged — is exactly what
+ *   `replaceExprChildren`'s own per-kind `replace` functions do, so no
+ *   third layer of "did anything change" checking is needed here.
  */
-type RetargetExprNodeHandlers = {
-	readonly [K in ExprNode["nodeKind"]]: (
-		node: Extract<ExprNode, { readonly nodeKind: K }>,
-		target: RenameTarget,
-	) => ExprNode;
-};
-
-const retargetExprNodeHandlers: RetargetExprNodeHandlers = {
-	literal: retargetUnchanged,
-	rawSql: retargetUnchanged,
-	plpgsqlRef: retargetUnchanged,
-	columnRef: retargetColumnRef,
-	comparison: retargetComparison,
-	logical: retargetLogical,
-	not: retargetNot,
-	nullTest: retargetNullTest,
-	inList: retargetInList,
-	between: retargetBetween,
-	functionCall: retargetFunctionCall,
-	sqlTemplate: retargetSqlTemplate,
-	exists: retargetExists,
-	selectExpr: retargetSelectExpr,
-	window: retargetWindow,
-};
-
-/** Walks every `ExprNode` reachable from `node` (including into an `exists()`'s own `SelectNode`) rewriting `ColumnRefNode`/`TableRefNode` matches for `target`. Returns `node` unchanged (same reference) when nothing matched, so a caller can cheaply check `retargeted !== node` to decide whether re-encoding is needed. */
 export const retargetExprNode = (
 	node: ExprNode,
 	target: RenameTarget,
 ): ExprNode => {
-	const handler = retargetExprNodeHandlers[node.nodeKind] as (
-		node: ExprNode,
-		target: RenameTarget,
-	) => ExprNode;
-	return handler(node, target);
+	if (node.nodeKind === "columnRef") {
+		return retargetColumnRef(node, target);
+	}
+	if (node.nodeKind === "exists") {
+		return retargetExists(node, target);
+	}
+	if (node.nodeKind === "selectExpr") {
+		return retargetSelectExpr(node, target);
+	}
+	const children = exprChildren(node).map((child) =>
+		retargetExprNode(child, target),
+	);
+	return replaceExprChildren(node, children);
 };
