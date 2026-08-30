@@ -83,23 +83,23 @@ provider-preset rule exists to catch.
   (registration, precedence under an explicit `as()`, per-execution
   resolution, validation and capability timing, and the no-uncontexted-
   execution guarantee).
-- `query-execution`: narrows "A db handle executes built statements" to
-  say what it has always meant. Its "what is sent SHALL be exactly the
-  statement's pure `compile()` output" is a fidelity claim about the
-  caller's own statement — never rewritten, re-rendered, or
-  re-parameterized — not an exclusivity claim about the connection.
-  `db.as(context)` already precedes statements with role and setting
-  statements, so the exclusive reading is already false in the approved
-  corpus. A provider makes that reading tempting on the *unscoped*
-  handle for the first time, which is why the distinction is written
-  down rather than left to be re-derived by whoever next reads the
-  sentence. The original scenario is carried over verbatim; one
-  scenario is added.
+No `query-execution` delta (owner decision). The provider adds no
+execution surface, changes no inferred type, and leaves `Declarations`
+as built. Its "what is sent SHALL be exactly the statement's pure
+`compile()` output" is a fidelity claim about the caller's own statement
+— never rewritten, re-rendered, or re-parameterized — not an
+exclusivity claim about the connection: `db.as(context)` already
+precedes statements with role and setting statements, so the exclusive
+reading is already false in the approved corpus and needs no amendment
+to stay so.
 
-The behavior change itself — that registering a provider makes a
-previously unwrapped execution transaction-wrapped, observably on the
-connection — is stated in the `rls-execution-context` delta, where
-context application belongs.
+The behavior change that reading would otherwise obscure — that
+registering a provider makes a previously unwrapped execution
+transaction-wrapped, observably — is stated as its own scenario in the
+`rls-execution-context` delta, together with the fact that the
+statement's own SQL and parameters are untouched by the wrapping. If an
+adversarial reading of `query-execution`'s sentence is raised later,
+that scenario is the answer.
 
 ## Impact
 
@@ -161,30 +161,32 @@ unauthenticated request runs as. The cost is a second field that
 whose correct behavior is "no identity, no query" — they must invent a
 fallback they never want applied, or throw from `resolve` anyway.
 
-**Settled: (A), with the fallback optional** (owner decision). The
-choice turned on one fact that neither shape's ergonomics had surfaced:
-a fallback is a value known at construction, so its role can be
-validated *there* — synchronously, through the same whitelist and the
-same fail-closed check `db.as(context)` already applies. Under (B) there
-is nothing to validate until a request arrives, so a typo'd anonymous
-role stays latent until the first request that resolves to no context —
-in a system that mostly serves identified traffic, long after deploy.
-That is the class of latent failure this project converts to loud ones,
-so (A) wins on it.
+**Settled: (B)** (owner decision, final). Two things decided it.
 
-Verified before adopting, not assumed: the whitelist is complete at the
-point `db()` reads its options — `declarations.roles` folds all four
-sources synchronously before the handle is assembled, and nothing in
-that computation depends on the `context` option, so there is no cycle
-and there is a real place to put the check.
+A required `fallback` field is dead surface for a caller whose correct
+behavior is "no identity, no query": they would have to invent a value
+they never want applied (D104 — type information no user can read is
+dead surface). Such a resolver simply throws, and a throwing resolver
+propagates without any fallback being consulted.
 
-Making the fallback **optional** dissolves the objection that sent the
-first recommendation to (B). A caller whose correct behavior is "no
-identity, no query" registers no fallback and invents nothing; their
-resolver yielding none is then a coded, fail-closed failure at
-execution. A caller who does register one gets the early validation. No
-one is handed a field they must fill with a value they never want
-applied (D104: type information no user can read is dead surface).
+(A)'s advantage was that a fallback is a value known at construction, so
+its role could be validated there rather than on the first request that
+resolves to none. That advantage was measured and found narrow. The
+whitelist *is* complete at that point — `declarations.roles` folds all
+four sources synchronously before the handle is assembled, with no
+dependency on the `context` option and so no cycle — so the check was
+buildable. But a preset's own `asAnon()` carries a driver-contributed
+role, which is always in the whitelist and has nothing to catch; the
+exposure narrows to a caller hand-writing an anonymous role, and that
+caller still fails **loudly**, on the same fail-closed check, at the
+first request that reaches it. Later-but-loud is not the failure class
+this project converts; silent is. Moving a loud failure earlier did not
+justify the surface.
+
+Decisively, (B) keeps "yields no context" unrepresentable in the *type*.
+(A) with an optional fallback would have demoted that guarantee to a
+runtime check — paying dead surface and losing the compile-time
+property at once.
 
 Provisional detail ②'s intent holds as a property of the layer rather
 than of the caller's diligence: once a provider is registered, an
