@@ -14,9 +14,10 @@ member types: 6 numeric, 5 datetime, 3 text, 3 net, 2 json, 2 array, …)
 × 43 returned sample expressions (each family represented by several
 member types and by adversarial values chosen to *cross* families),
 create `probe_fn() returns <decl>` with body `begin return <src>; end`,
-call it, record ok / SQLSTATE. 1075 probes + 8 targeted round-2 probes;
-raw results in `probe/results.csv`. Same-family cells double as the
-positive control (every family's identity cell succeeds).
+call it, record ok / SQLSTATE. 1075 probes + 8 targeted round-2 probes
+(6 new cells; 2 re-probed round-1 cells and failed again, changing no
+verdict); raw results in `probe/results.csv`. Same-family cells double
+as the positive control (every family's identity cell succeeds).
 
 **Adversarial samples that changed the outcome** (each would have been
 "obviously always-fail" by recall):
@@ -59,8 +60,12 @@ accepted, same-family diagonal always accepted):
 
 49 refused pairs. `text` and `bytea` rows are empty — a text- or
 bytea-family `returns` accepts every probed family (text IO always
-succeeds; bytea input accepts any string in escape format). `unknown` is
-exempt on either side by construction (no static claim to check).
+succeeds; bytea input accepts any string in escape format). One
+text-family member does not share that argument: an `enum` return
+accepts only its own labels and was not probed — it stays unrefused on
+the under-refusal (safe) side, not by the IO-conversion argument.
+`unknown` is exempt on either side by construction (no static claim to
+check).
 
 **Grammar arguments** (why an all-fail cell is value-*independent*, not a
 sampling accident — one per returned family, since refusal rides on the

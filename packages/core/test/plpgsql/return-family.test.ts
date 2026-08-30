@@ -94,6 +94,9 @@ describe("scalar return family cross-check (#478)", () => {
 	});
 
 	it("a text-returning declaration accepts every family", () => {
+		expect(
+			sqlTypeFamilies.filter((family) => isRefusedReturnFamily("text", family)),
+		).toHaveLength(0);
 		const fn = defineFunction(
 			app,
 			"flag_text",
@@ -106,6 +109,11 @@ describe("scalar return family cross-check (#478)", () => {
 	});
 
 	it("a bytea-returning declaration accepts every family", () => {
+		expect(
+			sqlTypeFamilies.filter((family) =>
+				isRefusedReturnFamily("bytea", family),
+			),
+		).toHaveLength(0);
 		const fn = defineFunction(
 			app,
 			"raw_of",

@@ -19,7 +19,9 @@ partial addresses like `42.5`). An expression of unknown family (a `sql`
 fragment) SHALL never be refused, a same-family pair SHALL never be
 refused, and a declaration whose `returns` family is text or bytea SHALL
 never refuse — both accept every family through Postgres's IO
-conversion.
+conversion (an enum return, though text-family, accepts only its own
+labels; it stays unrefused on the safe side rather than by that
+argument).
 
 The check is family-granular by construction: an expression carries only
 its coarse type family, so a within-family mismatch (`returns: time()`
