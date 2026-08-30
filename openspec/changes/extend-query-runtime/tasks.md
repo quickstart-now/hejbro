@@ -48,7 +48,10 @@ Conventions that apply to every group:
   blamed on the wrong cause; a behaviour that was really seen once can
   still be written up as one the tests hold. Both travel further than
   the observation did, and neither announces that it outran its
-  evidence.
+  evidence. A summary is a third: this change produced three of them
+  where the document and the arithmetic were right and the sentence
+  relaying them was not. Whoever compresses a result owns the
+  compression.
 - A group whose output is a number gets the reviewer's prediction on the
   record before the measurement runs. The prediction is never evidence
   and never affects the verdict; it exists so that the reviewer's own
@@ -441,19 +444,27 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test` (all with
 
 ## 6. Wrap-up
 
-- [ ] 6.1 (~8m) The published surface's documentation: the assertion in
+- [x] 6.1 (~8m) The published surface's documentation: the assertion in
       the query reference, and the capability if group 5 ran. Red: the
       skill's own surface check — the reference names every export the
       runtime entry adds. What makes it red: add the export without the
       reference entry.
       Files: `skills/hejbro/references/query-layer.md`.
-- [ ] 6.2 (~6m) Release hygiene: one changeset (`minor` — the assertion
+- [x] 6.2 (~6m) Release hygiene: one changeset (`minor` — the assertion
       is a new capability, and a new public surface must not ride out in
       a patch), the task-time rows, the README badges. The changeset's
       prose covers the assertion only: prepared statements never
       shipped, and a release note is the easiest place for something
       that did not ship to look as if it had.
       Files: `.changeset/*.md`, `openspec/task-times.csv`, `README.md`.
+- [x] 6.3 (~9m) The flight-recorder entry, since this change was driven
+      by owner decisions throughout: what was asked, what was built, and
+      why — including the decisions that were reversed (the measurement
+      verdict's own rule, the error-vocabulary illustration, the
+      unanimity overclaim) and the one that decided nothing shipped.
+      Red: none — this is a record, and the check on it is that a reader
+      can reconstruct why the capability half is absent without asking
+      anyone. Files: `blackbox/<entry>.md`.
 
 Gates: `pnpm check`, `pnpm check-types`, `pnpm test`,
 `pnpm check:crap`, `pnpm check:tasktime` (all with `TURBO_FORCE=1`),
@@ -462,5 +473,5 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test`,
 
 ## Totals
 
-18 tasks (4 + 7 + 1 + 4 + 2). Group 5's four are not counted and never
+19 tasks (4 + 7 + 1 + 4 + 3). Group 5's four are not counted and never
 ran: the measurement they were conditional on decided against them.

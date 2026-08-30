@@ -708,6 +708,40 @@ is not on this list, because more independent runs narrow each
 estimator's own sampling error without changing why `range`/`SD` are
 inflated relative to `IQR`/`MAD` in the first place.
 
+**How much reduction: `range` is the binding estimator in every one of
+the seven datasets (see the invariance table above — the other three
+sometimes clear the bar, `range` never does), so `range < median / 2`
+is the concrete, computable target.** Recomputed directly from the raw
+arrays in "Raw improvement samples" above (never transcribed from a
+relayed table -- independently re-derived here, same numbers, own
+computation):
+
+| Dataset | median | actual range | required range (median / 2) | excess (actual / required) |
+|---|---|---|---|---|
+| Old (8) | 0.083950ms | 0.433400ms | 0.041975ms | **10.33×** |
+| New A (5) | 0.063000ms | 0.094300ms | 0.031500ms | **2.99×** |
+| New B (5) | 0.056700ms | 0.065600ms | 0.028350ms | **2.31×** |
+| New C (10) | 0.060700ms | 0.077400ms | 0.030350ms | **2.55×** |
+| New D (10) | 0.058900ms | 0.059300ms | 0.029450ms | **2.01×** (closest) |
+| New E (20) | 0.070800ms | 0.084900ms | 0.035400ms | **2.40×** |
+| Pooled (50) | 0.064150ms | 0.100000ms | 0.032075ms | **3.12×** |
+
+`range` would need to shrink by a **minimum of roughly 2×** (New D,
+the closest dataset collected) and **typically 2.3×–3.1×** across the
+other new-harness datasets to clear this one estimator alone (the old
+harness's 10.33× is far off, consistent with its own known
+contamination). This turns "reduced dispersion" into a concrete target
+rather than a direction: the order-effect gap quantified above
+(0.040805ms) is itself smaller than several of these datasets' own
+actual range (e.g. New A's 0.0943ms, New E's 0.0849ms, pooled's
+0.1000ms), so removing the order effect alone, while it would help (it
+is part of what produces `range` in the first place), is not obviously
+sufficient by itself to close a 2×–3× gap — a future fragment attempting
+this again should not assume controlling the order effect alone gets
+there, and should plan to either combine it with other dispersion
+reductions (a quieter machine, more workload isolation) or accept that
+the gap may require a larger underlying effect instead.
+
 **How thin this is, and the pre-registered re-review trigger (owner
 decision):** stated at full precision (see "Why this is indirect, not
 direct evidence" above) — under `decide()`'s own actual statistic,
