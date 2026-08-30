@@ -661,8 +661,11 @@ properties hold regardless of driver or preset:
   database uncontexted. The handle's non-execution members are outside
   that promise and stay uncontexted on purpose: `handle.driver` is public,
   and `assertSchema` reads the catalog through it without consulting the
-  resolver, because catalog reads performed under a resolved application
-  role would report that role's visibility as schema divergence.
+  resolver. That is deliberate: the assertion runs where there is no
+  request identity to resolve, and its catalog reads are role-independent
+  anyway, so applying a context would buy nothing while adding a failure
+  mode — a resolved role outside the declared whitelist would fail the
+  assertion for a reason unrelated to the schema.
 - **A throwing resolver propagates its exact error and applies no
   context** — a failure to determine identity is not the same claim as
   an absence of identity, so this never falls back to running

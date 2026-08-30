@@ -5,7 +5,7 @@ Refs:
 - AGENTS.md @ blob 3b1a4f58a628cd3929d1e4eaa4834ec843617ed7
 - README.md @ blob 9de4fc3c625840eaec1622614b81f4854b537ee5
 - openspec/changes/add-context-provider/proposal.md @ blob 69eceb37d85834d7a472498182a4c3a8924f7231
-- openspec/changes/add-context-provider/specs/rls-execution-context/spec.md @ blob f90f3a206c92384ec5f172547e41951d4eba39fd
+- openspec/changes/add-context-provider/specs/rls-execution-context/spec.md @ blob 6a9bbc18576d1b86cf29e9d194d49bcc20208a5e
 - openspec/changes/add-context-provider/tasks.md @ blob ed54b487ccd20cef187cc4b0831b657b50edbccc
 - openspec/task-times.csv @ blob f0e5f4f5327d3d52159a1a4b7be777f505f93060
 - packages/cli/test/exports.test.ts @ blob ea3cbff3cf1e1bc37dfd91dfddf310ab849c1925
@@ -17,7 +17,7 @@ Refs:
 - packages/query/test/exports.test.ts @ blob 0b7ddf95a9adc79fba8a6d0be97fd8226b78c46c
 - packages/supabase/test/context-provider.test.ts @ blob fa3972a2c57d1a1b0520f9d24ef09655c71c4787
 - skills/hejbro/SKILL.md @ blob df6fc914f00ebfe836406662ad992b16f83c3928
-- skills/hejbro/references/query-layer.md @ blob 9ae79b2d1a7e06a04024dad4ffa3269986bb2d8e
+- skills/hejbro/references/query-layer.md @ blob af2901a68cf3ccead58b606912dfb4f874c7298d
 
 (Taken from `git hash-object <path>` on the closing working tree, after
 the review verdict and before the closing commit. Three pins — the

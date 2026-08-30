@@ -106,9 +106,13 @@ That subject is exact, not shorthand. A handle also exposes members that
 are not execution surfaces — its `driver`, and the schema assertion that
 takes one — and statements issued through those SHALL continue to reach
 the database without a context, never consulting the resolver. For the
-assertion that is the correct behavior: catalog reads performed under a
-resolved application role would report divergence that reflects the
-role's visibility rather than the schema.
+assertion that is the correct behavior, though not because a context
+would hide catalog rows — the reads it performs are role-independent by
+construction. The reason is that the assertion runs where there is no
+request and therefore no identity to attribute: routing it through a
+provider would force the resolver to invent one or throw, and a resolved
+role outside the declared whitelist would fail the assertion for a
+reason that has nothing to do with the schema.
 
 A resolver that throws SHALL propagate its error unchanged. A failure to
 determine identity is not the same claim as an absence of identity, and
