@@ -21,19 +21,6 @@ exactly the statement's pure `compile()` output.
   to the previewed compile output, and the resolved rows carry the
   inferred result type
 
-### Requirement: Callback-scoped transactions
-The db handle SHALL provide a transaction API that runs a callback's
-statements on one connection inside `begin`/`commit`, rolling back when
-the callback throws, and requiring the driver's interactive-transaction
-capability.
-
-#### Scenario: Commit on success, rollback on throw
-- **WHEN** a transaction callback completes normally
-- **THEN** its statements are committed atomically
-- **WHEN** the callback throws
-- **THEN** the transaction is rolled back and the thrown error
-  propagates to the caller unchanged
-
 ### Requirement: Nested transactions are rejected, not silently flattened
 Calling the transaction API **on the db handle** again from inside an
 already-open callback of that same member SHALL fail immediately with an
@@ -54,7 +41,7 @@ handle's own transaction API as the way to nest.
 ### Requirement: Database errors propagate with context
 Execution failures reported by the database SHALL surface to the caller
 carrying the driver's underlying error as the cause; the query layer
-SHALL NOT swallow, retry, or reinterpret them in v1. The thrown error's
+SHALL NOT swallow, retry, or reinterpret them. The thrown error's
 message SHALL lead with the driver's own message — the reason survives
 where long text is truncated — followed by the executed statement's
 parameterized SQL text (every value already a bind-parameter
@@ -97,64 +84,6 @@ database's report and is carried faithfully, not scrubbed.
 - **THEN** the thrown error's message names the absence of a driver
   message and still carries the statement's parameterized SQL text
 
-### Requirement: Result values are converted to their declared type
-A row value returned for a column with a declared type carrying its own
-runtime conversion (numeric width mode, `interval`) SHALL be converted
-to that declared TypeScript shape before the caller receives it — and
-for an array column of such a type, the conversion SHALL apply to each
-element, producing an array of the declared element shape (a SQL `NULL`
-element passes through as `null`, exactly as a `NULL` scalar does). For
-a column declared `.notNullElements()`, a `NULL` element arriving at
-all SHALL be treated as a conversion failure — the declared element
-type excludes `null` because a CHECK enforces it, so an arriving `NULL`
-means the constraint no longer holds (e.g. dropped out-of-band) and the
-declared type must fail loudly rather than lie silently. A value that
-fails to convert — an unconvertible element included — or a declared
-column entirely absent from the driver's row, SHALL fail fast with an
-explicit error naming the column, rather than surfacing as an
-unconverted value or a silent `undefined`. An array column's raw value
-that does not match the arrival shape its declared element type's
-driver contract promises SHALL likewise be treated as a conversion
-failure — fail fast naming the column, never guessed at or coerced
-into the expected shape. Whether the failure is an unconvertible
-element, an arrival-shape mismatch, unparsable array-literal text, or a
-`NULL` element where the declaration forbids one, the column's whole
-value SHALL fail — never a partial array standing in for it.
-
-#### Scenario: Declared numeric/interval columns arrive converted
-- **WHEN** a select resolves a column declared with a numeric width mode
-  or as `interval`
-- **THEN** the value the caller receives matches that declared mode's
-  TypeScript type (not the driver's raw text)
-
-#### Scenario: Array columns arrive converted element-wise
-- **WHEN** a select resolves an array column whose element type carries
-  a runtime conversion (a moded `bigint`/`numeric` array, or an
-  `interval` array)
-- **THEN** the caller receives an array whose every non-null element
-  has the declared element shape, and every `NULL` element is `null`
-
-#### Scenario: An unconvertible or missing declared column fails fast
-- **WHEN** a declared column's value — any array element included —
-  cannot be converted to its declared type, or the declared column is
-  entirely absent from the driver's row
-- **THEN** the call rejects with an explicit error naming that column
-
-#### Scenario: An array arrival-shape mismatch fails fast, never partially converted
-- **WHEN** an array column's raw value does not match the arrival shape
-  its declared element type's driver contract promises (for example, a
-  raw array-literal text value for an element type that is contracted
-  to arrive as an already-parsed array, or the reverse)
-- **THEN** the call rejects with an explicit error naming that column,
-  and the caller never receives a partial array for it
-
-#### Scenario: A NULL element under notNullElements fails fast
-- **WHEN** a select resolves a `.notNullElements()` column whose raw
-  driver value contains a `NULL` element (the backing CHECK was dropped
-  or bypassed out-of-band)
-- **THEN** the call rejects with an explicit error naming that column,
-  and the caller never receives a `null` typed as the bare element type
-
 ### Requirement: Statement typing and the chain surface are uniform across every execution surface
 The same thenable `select`/`insert`/`update`/`deleteFrom` chain entry
 points, built from one shared factory, SHALL exist with identical
@@ -163,9 +92,7 @@ and the `tx` a `transaction()` callback receives — and every one of
 those surfaces SHALL resolve a statement's inferred result types
 identically, `execute` included. Applying a context can never cover
 one of these surfaces while missing another, and no surface
-under-promises the types the others resolve. (Renamed from "The chain
-surface is uniform…": the requirement broadened — with #326 closed,
-uniformity covers `execute`'s own typing, not only the chain members.)
+under-promises the types the others resolve.
 
 #### Scenario: A scoped chain runs inside its context-applied transaction
 - **WHEN** a chain member is awaited on a `db.as(context)` handle
@@ -183,7 +110,7 @@ uniformity covers `execute`'s own typing, not only the chain members.)
   member is also available on
 - **THEN** it resolves the statement's inferred result type — the same
   type `db.execute` and the chain member resolve — at both `tx`
-  creation sites (the previously tracked #326 asymmetry is closed)
+  creation sites
 
 ### Requirement: Row-conversion internals are not part of the public contract
 The primitives that resolve a driver row's per-column conversion plan
@@ -357,6 +284,11 @@ the release failure as its cause. The error SHALL advise rethrowing inside
 the nested callback rather than swallowing, since a swallowed statement
 error is what puts the subtransaction in this state.
 
+If the recovery rollback itself fails, the rollback-failure path SHALL
+take over — that failure is about the connection, not about this one
+savepoint — raising the savepoint-rollback-failure error carrying both
+failures.
+
 #### Scenario: A swallowed statement error surfaces at release
 - **WHEN** a nested callback swallows a statement error and returns
   normally
@@ -366,15 +298,11 @@ error is what puts the subtransaction in this state.
   swallowed error as the cause of the state and rethrow as the fix —
   never a bare `query-execution-failed`
 
-If the recovery rollback itself fails, the existing rollback-failure path
-SHALL take over — that failure is about the connection, not about this
-one savepoint.
-
 #### Scenario: A failing recovery rollback falls through
 - **WHEN** the release fails and the rollback attempted to recover from
   it also fails
-- **THEN** the existing savepoint-rollback-failure error is raised,
-  carrying both failures
+- **THEN** the savepoint-rollback-failure error is raised, carrying both
+  failures
 
 ### Requirement: The chain declares CTEs too
 The chain surface SHALL offer `with()` as its own root, producing the same
@@ -396,3 +324,85 @@ without one, brands and conversions included.
   conversion
 - **THEN** the value arrives converted, as it would in an unwrapped
   statement
+
+### Requirement: Transactions are callback-scoped
+The db handle SHALL provide a transaction API that runs a callback's
+statements on one connection inside `begin`/`commit`, rolling back when
+the callback throws, and requiring the driver's interactive-transaction
+capability.
+
+#### Scenario: Commit on success
+- **WHEN** a transaction callback completes normally
+- **THEN** its statements are committed atomically
+
+#### Scenario: Rollback on throw
+- **WHEN** a transaction callback throws
+- **THEN** the transaction is rolled back and the thrown error
+  propagates to the caller unchanged
+
+### Requirement: Scalar result values convert to their declared type
+A row value returned for a column with a declared type carrying its own
+runtime conversion (numeric width mode, `interval`) SHALL be converted
+to that declared TypeScript shape before the caller receives it. A value
+that fails to convert, or a declared column entirely absent from the
+driver's row, SHALL fail fast with an explicit error naming the column,
+rather than surfacing as an unconverted value or a silent `undefined`.
+
+#### Scenario: Declared numeric/interval columns arrive converted
+- **WHEN** a select resolves a column declared with a numeric width mode
+  or as `interval`
+- **THEN** the value the caller receives matches that declared mode's
+  TypeScript type (not the driver's raw text)
+
+#### Scenario: An unconvertible or missing declared column fails fast
+- **WHEN** a declared column's value cannot be converted to its declared
+  type, or the declared column is entirely absent from the driver's row
+- **THEN** the call rejects with an explicit error naming that column
+
+### Requirement: Array results convert element-wise and arrive in the contracted shape
+For an array column whose declared element type carries its own runtime
+conversion, the conversion SHALL apply to each element, producing an
+array of the declared element shape (a SQL `NULL` element passes through
+as `null`, exactly as a `NULL` scalar does). An array column's raw value
+that does not match the arrival shape its declared element type's driver
+contract promises SHALL be treated as a conversion failure — fail fast
+naming the column, never guessed at or coerced into the expected shape.
+For a column declared `.notNullElements()`, a `NULL` element arriving at
+all SHALL be treated as a conversion failure — the declared element type
+excludes `null` because a CHECK enforces it, so an arriving `NULL` means
+the constraint no longer holds (e.g. dropped out-of-band) and the
+declared type must fail loudly rather than lie silently.
+
+#### Scenario: Array columns arrive converted element-wise
+- **WHEN** a select resolves an array column whose element type carries
+  a runtime conversion (a moded `bigint`/`numeric` array, or an
+  `interval` array)
+- **THEN** the caller receives an array whose every non-null element
+  has the declared element shape, and every `NULL` element is `null`
+
+#### Scenario: An array arrival-shape mismatch fails fast, never partially converted
+- **WHEN** an array column's raw value does not match the arrival shape
+  its declared element type's driver contract promises (for example, a
+  raw array-literal text value for an element type that is contracted
+  to arrive as an already-parsed array, or the reverse)
+- **THEN** the call rejects with an explicit error naming that column,
+  and the caller never receives a partial array for it
+
+#### Scenario: A NULL element under notNullElements fails fast
+- **WHEN** a select resolves a `.notNullElements()` column whose raw
+  driver value contains a `NULL` element (the backing CHECK was dropped
+  or bypassed out-of-band)
+- **THEN** the call rejects with an explicit error naming that column,
+  and the caller never receives a `null` typed as the bare element type
+
+### Requirement: A failed conversion fails the whole column value
+Whether the failure is an unconvertible element, an arrival-shape
+mismatch, unparsable array-literal text, or a `NULL` element where the
+declaration forbids one, the column's whole value SHALL fail — never a
+partial array standing in for it.
+
+#### Scenario: No partial value survives a failed conversion
+- **WHEN** one element of an array column's raw value fails to convert
+  while the others would succeed
+- **THEN** the call rejects naming the column, and no partially
+  converted array is delivered
