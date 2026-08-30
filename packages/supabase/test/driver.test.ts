@@ -4,6 +4,7 @@ import { db } from "@hejbro/query";
 import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { describe, expect, it, vi } from "vitest";
 import { asAnon, asUser } from "../src/context";
+import type { SupabaseDriverEndpoint } from "../src/driver";
 import { supabaseDriver } from "../src/driver";
 import { anonRole, authenticatedRole, serviceRole } from "../src/roles";
 
@@ -69,6 +70,30 @@ describe("supabaseDriver(driver) decorator", () => {
 	});
 });
 
+describe("supabaseDriver(driver) one-argument call is unchanged by the endpoint option (task 2.2, regression lock)", () => {
+	it("declares the same capabilities as the wrapped driver -- no options argument at all, not even omitted-but-typed", () => {
+		const driver = fakeDriver();
+
+		const wrapped = supabaseDriver(driver);
+
+		expect(wrapped.capabilities).toBe(driver.capabilities);
+		expect(wrapped.capabilities).toEqual({
+			"interactive-transactions": true,
+			"session-state": true,
+		});
+	});
+
+	it("contributes the same three roles one-argument callers always got", () => {
+		const wrapped = supabaseDriver(fakeDriver());
+
+		expect(wrapped.contributedRoles).toEqual([
+			anonRole,
+			authenticatedRole,
+			serviceRole,
+		]);
+	});
+});
+
 describe("task 4.7 (a') union wiring proof -- driver-contributed roles on a grant-less schema", () => {
 	it("driver-contributed roles unlock asUser/asAnon on a grant-less schema; undeclared roles stay rejected", async () => {
 		const app = schema("app");
@@ -111,6 +136,68 @@ describe("task 4.7 (a') union wiring proof -- driver-contributed roles on a gran
 		} catch (error) {
 			expect(error).toHaveProperty("code", "undeclared-role");
 		}
+	});
+});
+
+describe("supabaseDriver(driver, options) endpoint option (task 2.1)", () => {
+	it("endpoint: 'transaction-pooler' produces the pooled-transaction capability pair", () => {
+		const wrapped = supabaseDriver(fakeDriver(), {
+			endpoint: "transaction-pooler",
+		});
+
+		expect(wrapped.capabilities).toEqual({
+			"interactive-transactions": true,
+			"session-state": false,
+		});
+	});
+});
+
+describe("supabaseDriver(driver, { endpoint: 'transaction-pooler' }) still contributes Supabase's three roles (task 2.3)", () => {
+	it("contributedRoles survives the pooler path's capability replacement", () => {
+		const wrapped = supabaseDriver(fakeDriver(), {
+			endpoint: "transaction-pooler",
+		});
+
+		expect(wrapped.contributedRoles).toEqual([
+			anonRole,
+			authenticatedRole,
+			serviceRole,
+		]);
+	});
+});
+
+describe("supabaseDriver(driver, options) rejects an unrecognized endpoint value (task 2.4)", () => {
+	it("throws the unknown-pooler-mode error at construction, naming the recognized endpoint values -- the only check a caller without type checking gets", () => {
+		// simulates a caller with no type checking (plain JS, or an `any`
+		// upstream) sending a misspelled value straight through -- `as
+		// unknown as` here, never `any`, so this file's own source stays
+		// within the house ban.
+		const misspelled = "transactoin" as unknown as SupabaseDriverEndpoint;
+
+		try {
+			supabaseDriver(fakeDriver(), { endpoint: misspelled });
+			expect.unreachable(
+				"supabaseDriver should have thrown for an unrecognized endpoint value",
+			);
+		} catch (error) {
+			expect(error).toHaveProperty("code", "unknown-pooler-mode");
+			const message = (error as Error).message;
+			expect(message).toContain('"transactoin"');
+			expect(message).toContain("session");
+			expect(message).toContain("transaction-pooler");
+			expect(message).toMatch(/Next:/);
+		}
+	});
+
+	it("never reaches the execution path -- the wrapped driver's own members are never called for a rejected value", () => {
+		const misspelled = "transactoin" as unknown as SupabaseDriverEndpoint;
+		const driver = fakeDriver();
+
+		expect(() => supabaseDriver(driver, { endpoint: misspelled })).toThrow();
+
+		expect(driver.execute).not.toHaveBeenCalled();
+		expect(driver.transaction).not.toHaveBeenCalled();
+		expect(driver.setupSession).not.toHaveBeenCalled();
 	});
 });
 
