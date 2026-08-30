@@ -2,7 +2,8 @@
 
 Three groups. Every file has exactly one owner — no file appears in two
 groups. Everything lands in `packages/supabase`, except group 3
-(`skills/hejbro/references/supabase-preset.md`, `.changeset/`).
+(`skills/hejbro/references/supabase-preset.md`, one line in
+`skills/hejbro/references/query-layer.md`, `.changeset/`).
 **No file under `packages/core`, `packages/query`, `packages/cli`, or
 `packages/pg` is edited** — if a task appears to need one, that is the
 interface failing and it goes back to the planner, not into the diff.
@@ -25,7 +26,7 @@ redundancy: neither check subsumes the other.
 
 ## 1. The pooled-transaction path
 
-- [ ] 1.1 (~7m) `poolerDriver(driver)` in a new module — **module-internal,
+- [x] 1.1 (~7m) `poolerDriver(driver)` in a new module — **module-internal,
       not exported from the package entry**: the factory option (group 2)
       is the single way a caller reaches this path, and this package's own
       tests import the module directly, which is why isolation testing is
@@ -38,7 +39,7 @@ redundancy: neither check subsumes the other.
       returned driver's `capabilities` equals that pair and fails — the
       module does not exist. Files: `packages/supabase/src/pooler.ts`,
       `packages/supabase/test/pooler.test.ts`.
-- [ ] 1.2 (~8m) The transaction-local pin statements, as an explicit
+- [x] 1.2 (~8m) The transaction-local pin statements, as an explicit
       constant in this module — **restated here, not delegated** to the
       wrapped driver's session-setup member, because that member sends
       session-scoped `SET`, which is the failure this path exists to
@@ -52,14 +53,14 @@ redundancy: neither check subsumes the other.
       when this constant is edited. Red: `pooler.test.ts` asserts the
       exact pin statements sent for one execution, in order, and fails —
       nothing sends them. Files: those two.
-- [ ] 1.3 (~8m) `transaction(callback)`: the pins are sent as the
+- [x] 1.3 (~8m) `transaction(callback)`: the pins are sent as the
       transaction's **first** statements, on the same session the
       callback receives, and the driver opens no second transaction
       around the caller's. Red: `pooler.test.ts` asserts the recorded
       session statements for one `transaction()` call begin with the pins
       and that the wrapped driver's `transaction` was entered exactly
       once; it fails because the pins are absent. Files: those two.
-- [ ] 1.4 (~9m) `execute(compiled)`: opens its own transaction through
+- [x] 1.4 (~9m) `execute(compiled)`: opens its own transaction through
       the wrapped driver, sends the pins, then the caller's statement,
       and returns the caller's rows — never the pins' own empty results.
       Carries the **value-shape assertions 1.2 names as its drift
@@ -70,13 +71,13 @@ redundancy: neither check subsumes the other.
       asserts both the returned rows and those two shapes, and fails
       because `execute` currently passes straight through unpinned.
       Files: those two.
-- [ ] 1.5 (~6m) The session-setup member on this path. Whatever 1.2
+- [x] 1.5 (~6m) The session-setup member on this path. Whatever 1.2
       decides, the vanilla driver still invokes this member once per
       checked-out client, late-bound, so its content on this path is a
       deliberate choice and is asserted rather than left incidental. Red:
       `pooler.test.ts` asserts what `setupSession` sends on this path and
       fails against the inherited implementation. Files: those two.
-- [ ] 1.6 (~10m) The two properties the conformance kit cannot see,
+- [x] 1.6 (~10m) The two properties the conformance kit cannot see,
       asserted against a fixture that records the transaction control
       too — the level the kit's observation deliberately excludes. The
       assertion is **positional against the envelope**: for one
@@ -91,7 +92,7 @@ redundancy: neither check subsumes the other.
       to exist, so check it holds before moving on — if both go green or
       both go red, this test is guarding nothing and that is a report,
       not a fix to improvise. Files: those two.
-- [ ] 1.7 (~6m) The conformance kit, called for this path's declared
+- [x] 1.7 (~6m) The conformance kit, called for this path's declared
       tier, with the observation taken at the driver-session surface.
       Red: `pooler.test.ts` calls `assertSessionStateConformance` with
       this driver's capabilities and one execution's recorded statements
@@ -144,21 +145,44 @@ redundancy: neither check subsumes the other.
 
 ## 3. What users read
 
-- [ ] 3.1 (~9m) The endpoint-to-capability mapping in the Supabase skill
-      reference: which connection path maps to which capability values,
-      and the one-line construction each takes. Red: no unit test covers
-      prose; the check is that the reference currently documents one
-      construction and would leave a pooler user with no correct answer.
-      Files: `skills/hejbro/references/supabase-preset.md`.
+Two repository gates own this group's correctness, and both are reasons
+it lands last: `packages/skills/test/links.test.ts` checks every source
+path a reference page cites, and
+`packages/skills/test/snippet-compile.test.ts` type-checks every `ts`
+block on the page against this repository's real source — so a snippet
+showing the new option is red until group 2 has landed.
+
+- [ ] 3.1 (~9m) A new "Connecting" section in the Supabase preset
+      reference — the page that currently documents this preset and says
+      nothing about drivers or endpoints. It carries the
+      endpoint-to-capability mapping: which Supabase connection path maps
+      to which capability values, and the construction each takes, as a
+      `ts` block. Red: `pnpm --filter @hejbro/skills test` fails
+      `snippet-compile` for the new block until group 2 lands, and the
+      section is otherwise unverifiable prose — that failure is the
+      signal the page and the code agree. Files:
+      `skills/hejbro/references/supabase-preset.md`.
 - [ ] 3.2 (~8m) The failure a wrong declaration produces, in the two
-      halves a reader needs: declaring the session path on a
-      transaction-mode endpoint loses the pins intermittently — under
-      load, in a value's shape, with no error — and declaring the pooler
-      path on a session endpoint costs one extra statement per execution
-      and nothing else. The asymmetry is the actionable part: one
-      direction is a silent data-shape bug, the other is a small cost.
+      halves a reader needs, in the same section: declaring the session
+      path on a transaction-mode endpoint loses the pins intermittently —
+      under load, in a value's shape, with no error — while declaring the
+      pooler path on a session endpoint costs one extra statement per
+      execution and nothing else. The asymmetry is the actionable part:
+      one direction is a silent data-shape bug, the other is a small
+      cost. Closes with what this change deliberately does not do
+      (detect the endpoint; change prepared-statement behavior), so a
+      reader meets those at their source rather than as a surprise.
       Files: that file.
-- [ ] 3.3 (~5m) The changeset: `minor`, naming this package, one file.
+- [ ] 3.3 (~5m) One pointer line in the query-layer reference, where the
+      driver surface is actually documented today, sending a reader to
+      the section 3.1 creates. Without it a reader who starts from the
+      driver's own page has no route to the mapping. Red: no test covers
+      a missing cross-reference; the check is that the page introduces
+      `supabaseDriver` and would leave its options unexplained. Files:
+      `skills/hejbro/references/query-layer.md` — **the one file in this
+      change outside this package's ownership; keep the diff to that
+      single line.**
+- [ ] 3.4 (~5m) The changeset: `minor`, naming this package, one file.
       Red: `pnpm changeset status` fails the PR gate without it. Files:
       `.changeset/<name>.md`.
 

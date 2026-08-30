@@ -203,11 +203,26 @@ properties, not one:
    The second row is precisely the failure this path exists to remove.
 
 The kit's blind spot is not asserted from reading the kit alone — task
-1.6 demonstrates it, and the demonstration is recorded here when it
-lands: a fixture that emits the pins before the transaction opens is run
-through both checks, and the result recorded is which one passed and
-which one failed. If both agree, the second check is guarding nothing
-and this section says so instead.
+1.6 demonstrated it. A hand-built capture in which the pins precede the
+statement that opens the transaction was run through both checks:
+
+- handed to the kit as a session-surface observation, it **passes** —
+  the conformance check raises nothing;
+- asserted positionally against the envelope, the same capture **fails**
+  — the first pin's index is below the opening statement's.
+
+The contrast holds, so the second check is not redundant with the first:
+it is the only one of the two that can see this failure. Had both agreed,
+the second check would have been guarding nothing and this section would
+say that instead.
+
+One honest note about the same group: the kit call itself (1.7) never had
+a failing stage. By the time it was written, the behavior it checks had
+already been built by the tasks before it, so it went green on arrival.
+That does not make it worthless — it is the regression lock for a tier
+obligation this driver now carries — but it is a check that was written
+after its subject rather than before it, and the group's own record says
+so rather than implying a red-green cycle that did not happen.
 
 Both properties are therefore asserted directly in this package's tests,
 against a capture that **does** show the envelope, and the assertion is
