@@ -36,6 +36,9 @@ Conventions that apply to every group:
   decoration. A suspicion is not a claim: stating it as a hypothesis and
   closing it against the source before reporting is the procedure, not a
   lapse. What this rule counts is a claim that left the desk unverified.
+  An observation and its attribution are two claims, and the rule covers
+  both: a failure that was really seen can still be blamed on the wrong
+  cause, and the wrong cause travels further than the observation does.
 - A `[design]` task settles a contract, and a contract's shape is half
   types. Every `[design]` task therefore names at least one **type-level**
   mutation alongside its runtime one — a value mutation cannot make a
@@ -242,7 +245,7 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test` (all with
 
 ## 3. The live witness
 
-- [ ] 3.1 (~9m) Against a real postgres:17: the assertion passes on a
+- [x] 3.1 (~9m) Against a real postgres:17: the assertion passes on a
       database built from the declarations, then an object is dropped
       directly in the database and the assertion throws naming it. Red:
       `packages/cli/test/assert-schema-live.integration.test.ts` (new)
@@ -262,6 +265,16 @@ exist: the session path, at least 1000 iterations, median and spread
 reported, and prepared statements ship only if the improvement exceeds
 twice the run-to-run spread **and** is at least 5% of the median.
 
+- [ ] 4.0 (~6m) The instrument is checked before it is trusted: the
+      harness is first pointed at two conditions whose difference is not
+      in doubt, and it has to report that difference. A harness that
+      cannot see a manufactured gap cannot be believed about a real one,
+      and this group's whole output is a comparison. Red:
+      `packages/pg/test/prepared-statement.bench.integration.test.ts`
+      (new) — "the harness separates two deliberately different
+      workloads". What makes it red: feed it the same workload twice and
+      the separation assertion fails.
+      Files: that test.
 - [ ] 4.1 (~8m) Prepared-vs-unnamed measurement over the session path:
       the same statement executed as today's unnamed text query and as a
       named prepared statement, N ≥ 1000, median and spread reported,
@@ -354,5 +367,5 @@ Gates: `pnpm check`, `pnpm check-types`, `pnpm test`,
 
 ## Totals
 
-Groups 1–4 and 6: 17 tasks (4 + 7 + 1 + 3 + 2). Group 5 adds 4 more if
+Groups 1–4 and 6: 18 tasks (4 + 7 + 1 + 4 + 2). Group 5 adds 4 more if
 the measurement earns it.
