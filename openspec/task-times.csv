@@ -459,3 +459,8 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-08-30,extend-supabase-driver,1.5,g1,6,1,0,clock 14:37:00-14:37:46; session-setup member becomes a no-op on this path
 2026-08-30,extend-supabase-driver,1.6,g1,10,2,0,clock 14:37:46-14:39:45; envelope-level positional assert; kit-blind-spot contrast demonstrated
 2026-08-30,extend-supabase-driver,1.7,g1,6,1,0,clock 14:39:45-14:40:16; conformance kit green on arrival - no red stage existed
+2026-08-30,extend-supabase-driver,2.1,g2,7,1,0,clock 14:47:11-14:48:03; endpoint string union + options type + dispatch
+2026-08-30,extend-supabase-driver,2.2,g2,6,1,0,clock 14:48:03-14:48:39; regression lock only - no red stage existed
+2026-08-30,extend-supabase-driver,2.3,g2,6,1,0,clock 14:48:39-14:49:04; roles already survived the spread - no red stage existed
+2026-08-30,extend-supabase-driver,2.4,g2,6,2,0,clock 14:49:04-14:50:34; unknown-pooler-mode at construction; non-reach of execution path pinned
+2026-08-30,extend-supabase-driver,2.5,g2,5,1,0,clock 14:50:34-14:51:40; type-only exports; red was tsc-level not vitest

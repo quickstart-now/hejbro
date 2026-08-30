@@ -101,7 +101,7 @@ redundancy: neither check subsumes the other.
 
 ## 2. The factory option
 
-- [ ] 2.1 (~7m) `supabaseDriver`'s optional second parameter: an options
+- [x] 2.1 (~7m) `supabaseDriver`'s optional second parameter: an options
       object whose endpoint key takes a **string union naming the
       endpoint kind**, never a boolean — a boolean's name becomes a lie
       the moment a third endpoint exists, and the union reads at the call
@@ -112,18 +112,18 @@ redundancy: neither check subsumes the other.
       the pooled-transaction capability pair and fails — the factory
       takes one argument. Files: `packages/supabase/src/driver.ts`,
       `packages/supabase/test/driver.test.ts`.
-- [ ] 2.2 (~6m) The one-argument call is unchanged: same contributed
+- [x] 2.2 (~6m) The one-argument call is unchanged: same contributed
       roles, same capability declaration as before this change, same
       pass-through of every other member. Red: `driver.test.ts` pins the
       existing behavior against the new signature and fails if the option
       object is made required or the default path's declaration moves.
       Files: those two.
-- [ ] 2.3 (~6m) Supabase's three contributed roles survive the pooler
+- [x] 2.3 (~6m) Supabase's three contributed roles survive the pooler
       path — the preset's own contribution is not lost by the capability
       replacement. Red: `driver.test.ts` asserts `contributedRoles` on
       the pooler-path driver and fails if the pooler module returns
       before the roles are applied. Files: those two.
-- [ ] 2.4 (~6m) An unrecognized endpoint value is refused **where the
+- [x] 2.4 (~6m) An unrecognized endpoint value is refused **where the
       driver is constructed**, with a coded error (`unknown-pooler-mode`)
       whose `Next:` clause lists the values that are recognized. This is
       not a redundant check on top of the type: it is the only check a
@@ -135,13 +135,15 @@ redundancy: neither check subsumes the other.
       asserts the code and the listed values for a misspelled value and
       fails — the value currently falls through to the default. Files:
       those two.
-- [ ] 2.5 (~5m) The package entry exports the option's own type where a
+- [x] 2.5 (~5m) The package entry exports the option's own type where a
       caller needs to name it, and nothing else new — the pooler driver
-      itself stays module-internal (1.1). Red: the entry's export
-      assertion fails for the newly public type. Files:
-      `packages/supabase/src/index.ts`, this package's existing entry or
-      exports test (its real filename is confirmed at the task, and this
-      line is corrected to match rather than a new file being created).
+      itself stays module-internal (1.1). Red: `tsc` fails the entry's
+      type-export assertion (`TS2305`/`TS2724`) — vitest alone stays
+      green, because the assertion is type-level; the query package's own
+      exports test carries the same asymmetry. Files:
+      `packages/supabase/src/index.ts`,
+      `packages/supabase/test/smoke.test.ts` — this package's existing
+      entry test, extended rather than replaced by a new file.
 
 ## 3. What users read
 

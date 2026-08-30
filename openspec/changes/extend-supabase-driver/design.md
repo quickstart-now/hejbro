@@ -216,13 +216,34 @@ it is the only one of the two that can see this failure. Had both agreed,
 the second check would have been guarding nothing and this section would
 say that instead.
 
-One honest note about the same group: the kit call itself (1.7) never had
-a failing stage. By the time it was written, the behavior it checks had
-already been built by the tasks before it, so it went green on arrival.
-That does not make it worthless — it is the regression lock for a tier
-obligation this driver now carries — but it is a check that was written
-after its subject rather than before it, and the group's own record says
-so rather than implying a red-green cycle that did not happen.
+## Tasks that had no failing stage
+
+Three of this change's twelve implementation tasks never went red, and
+the record says so rather than implying a cycle that did not happen:
+
+- **1.7** (the conformance-kit call) — the behavior it checks had already
+  been built by the tasks before it.
+- **2.2** (the one-argument call is unchanged) — a regression lock by
+  construction; the behavior it pins is the behavior that existed before
+  the change.
+- **2.3** (contributed roles survive the pooler path) — the roles are
+  applied after the spread, so the property held the moment the option
+  dispatched at all.
+
+None of the three is worthless: each is the lock that makes a later
+change to this code fail loudly. But none is TDD either, and the reason
+is visible in hindsight — a task whose subject is *"this existing
+property still holds"* cannot start from a failing test unless the
+property is deliberately broken first. That is a planning lesson, not an
+implementation failure: such tasks should be written as regression locks
+from the start, with their trigger named (what edit would make them
+red), instead of carrying a red-first instruction they cannot honor.
+
+2.5 is a fourth case with a different shape: it did have a failing stage,
+but only under `tsc` (`TS2305`/`TS2724`), because the assertion is
+type-level and vitest does not type-check. The same asymmetry exists in
+the query package's own exports test, so it is a property of the
+assertion's medium rather than of this task.
 
 Both properties are therefore asserted directly in this package's tests,
 against a capture that **does** show the envelope, and the assertion is
