@@ -30,6 +30,14 @@ replay another worktree's logs, and "the gates passed here" stops being
 a true sentence. A gate run is quoted with its own summary output;
 `Cached: 0 cached, N total` is what makes a turbo gate evidence.
 
+`pnpm check:crap` needs the same forcing, measured: run plain, it failed
+on `hejbro#test:coverage` with 5 of 11 tasks replayed from cache; run with
+`TURBO_FORCE=1`, the same command passed with 0 cached. `turbo.json`
+already marks `test:coverage` itself uncacheable (a coverage report keys
+on absolute paths, so a cross-worktree hit is a false result) — the hit
+arrives through the tasks *upstream* of it instead. A plain `check:crap`
+failure here is that replay, not a broken gate.
+
 Two CI gates are expected to fail until group 3 lands and are not a
 group 1/2 regression: `pnpm changeset status` (no changeset exists yet)
 and the README freshness pair (`pnpm check:crap`,
