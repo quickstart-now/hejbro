@@ -51,7 +51,12 @@ structural measurement**, both taken against a frozen base.
   (so `cmp` passed) yet left a `toContain("invalid-kind-change")`
   assertion green, because the wrapped string still contains the
   original. Count remaining occurrences to zero, or assert on the exact
-  property the test asserts on.
+  property the test asserts on. And cut that count **by structure, not by
+  fixed line numbers** — measured: a mutation shortened its file by three
+  lines, a `sed -n '179,190p'` window then spilled into the neighbouring
+  function, the removed token was still visible there, and a working
+  mutation was misread as "property not removed". The check was wrong,
+  not the mutation.
 
 ## Contract traps (found before code — do not rediscover these the hard way)
 
@@ -333,7 +338,7 @@ keeps its children. The registry stays **internal to `@hejbro/core`** —
 it is deliberately not added to `packages/core/src/index.ts`, because
 exporting it is the contract change this group refuses to make.
 
-- [ ] 2.1 [design] `~10m` The registry, read and replace. Red:
+- [x] 2.1 [design] `~10m` The registry, read and replace. Red:
       `packages/core/test/expr/expr-children.test.ts` » "every node
       kind reports its child expressions in render order, and rebuilding
       from them round-trips" — fails today because the module does not
@@ -354,20 +359,20 @@ exporting it is the contract change this group refuses to make.
       would rebuild the very hole that module was created to close, in
       the same file it happened in. Files:
       `packages/core/src/expr/expr-children.ts` (new), the new test.
-- [ ] 2.2 `~8m` Fold `walk.ts`'s two structural tables onto the
+- [x] 2.2 `~8m` Fold `walk.ts`'s two structural tables onto the
       registry — `someExprNodeHandlers` (`:73`) and
       `someDeepExprNodeHandlers` (`:162`), whose window entries are
       byte-identical to each other today. Red: extend
       `packages/core/test/expr/walk.test.ts` with a case that a new
       child position is seen by both walkers; it fails while each keeps
       its own table. Files: `packages/core/src/expr/walk.ts`.
-- [ ] 2.3 `~7m` Fold `render-sql.ts`'s `collectColumnRefsHandlers`
+- [x] 2.3 `~7m` Fold `render-sql.ts`'s `collectColumnRefsHandlers`
       (`:189`). Red: `packages/core/test/expr/render-sql.test.ts` case
       that a child position reaches `collectColumnRefs`. Note this
       function feeds the RLS validators, so validator output identity is
       part of this group's proof. Files:
       `packages/core/src/expr/render-sql.ts`.
-- [ ] 2.4 `~10m` Fold `retarget.ts`'s `retargetExprNodeHandlers`
+- [x] 2.4 `~10m` Fold `retarget.ts`'s `retargetExprNodeHandlers`
       (`:589`) onto the replace half, keeping `retargetColumnRef`
       special — the same shape `retargetSelectNode` already uses at
       `:452-455`. This is the riskiest fold: the per-kind functions hide
@@ -447,9 +452,37 @@ registry returning `[fn, ...partitionBy]` for `window` and silently
 dropping `orderBy` compiles clean, and no golden or retarget row moves.
 `window` is both the most complex node (three child groups) and the
 issue's own headline example, so this is the likeliest place to be
-wrong. That gap is closed in-repo by 2.1's exhaustive iteration, not by
-these baselines; the baselines deliberately stay measurements of real
-artifacts rather than of invented ones.
+wrong.
+
+**What actually closes that gap — measured, not assumed.** Three
+mutations were run against the finished fold (drop `orderBy` from
+`window`, `values` from `inList`, `operand` from `not`); they were caught
+by **4, 1, and 3** existing tests respectively, including for kinds the
+example corpus never contains. So the repository's behavior suite is the
+real net here, and the earlier claim that "a wrong child list is caught
+by nothing" was too pessimistic — it was true of the *baselines*, not of
+the repository.
+
+**But 2.1's iteration is not that net, and must not be described as
+one.** Its per-kind case is the round trip
+`replaceExprChildren(node, exprChildren(node)) === node`, which stays
+green when read *and* replace omit the same position — exactly the shape
+of all three mutations. In the `window` mutation all 19 iterated cases
+passed; the failure came from a hand-written order assertion. Precisely:
+the loop proves **read/replace consistency and that no kind is left
+unregistered**; **child-list correctness** is proved by the hand-written
+`window`/`sqlTemplate` assertions plus the behavior suite. Keeping those
+two claims apart is the same description-vs-assertion discipline this
+change applies everywhere else.
+
+Residual risk, stated at its true size: `selectExpr`/`exists` register
+**zero direct children** by design (their `query` is a `SelectNode`,
+outside this registry's vocabulary — descent belongs to
+`select-children.ts`, matching what the previous handler tables did).
+The corpus contains no `selectExpr`, so that decision is **backed by
+behavior tests and code, not by the execution comparison**. Say it that
+way in the verdict — "covered" would be the wrong word. `plpgsqlRef` and
+`rawSql` are leaves and carry no risk.
 
 **The probe re-measurement is the reviewer's step, not the
 implementer's.** It is a gate, and gates are never tasks; the
@@ -526,7 +559,11 @@ fastest-growing surface has no user-viewpoint usage anywhere.
       undemonstrable in `examples/` until this is resolved separately —
       3.2's scenario deliberately does not depend on it.
 - [ ] 3.5 `~7m` Record the limitation 3.1 uncovered in the cheatsheet,
-      citing the follow-up issue number. This documents behavior that
+      citing the follow-up issue number. **File follow-up issue (ii)
+      before starting this task** — 4.1 files the other two, but this one
+      is a prerequisite here, not a closing chore: a cheatsheet line
+      pointing at no issue number is the dangling-boundary problem this
+      repository already fixes elsewhere. This documents behavior that
       already exists, so it is not a contract change; it is included
       because the cheatsheet teaches `.references()` first while saying
       nothing about the limit, and that limit excludes **all 7** FKs in
