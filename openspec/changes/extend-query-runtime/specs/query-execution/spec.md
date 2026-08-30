@@ -128,43 +128,6 @@ that none of its objects is ever comparable carries that kind's reason
 and no comparison code at all — the two facts share a place in the
 report, not an identifier.
 
-The assertion throws the runtime layer's error shape — a plain error
-carrying a literal code and, where it translates another failure, that
-failure as its cause — not the declaration-time error type, which has no
-place to keep a cause and belongs to a different moment. A caller who
-already catches errors from executing statements catches these the same
-way.
-
-Every failure this assertion raises carries a `code`, and the `code` is
-what a caller reads. The error's class is not part of the contract: a
-propagated failure keeps whatever class it was raised with, because that
-is what propagating means, so a caller branching on class would see only
-half of them — and unifying the classes to "fix" that would undo the
-propagation the vocabulary rule requires.
-
-A reason carried in the report is quoted from the comparison verbatim,
-which means it may speak in terms of the command-line workflow — up to
-and including telling the reader to rerun that command. The report
-SHALL say so rather than edit the quotes: rewriting them would fork the
-wording silently, and an unattributed instruction to run a command the
-caller never ran is worse than an attributed one.
-
-A translated failure gets a code of the assertion's own naming, one per
-distinct failure it translates — an unreadable catalog is not the same
-fact as an unanswerable comparison and SHALL NOT borrow its code.
-
-What the assertion **throws** SHALL be in its own caller's vocabulary.
-A failure born on another surface — one whose code carries a command's
-name — SHALL be translated into the assertion's own code with the
-original preserved as its cause. A failure already in the caller's
-vocabulary — the snapshot builder's declaration diagnostic, a driver's
-own error — SHALL be propagated unchanged, because there is nothing to
-translate. Any new case is settled by one question: does that code name
-something this library's caller invokes? This is why the empty-module
-failure is rewrapped and the declaration-ownership failure is not, and
-it does not reach the finding codes the report carries as *data*, which
-keep their own names for the reason given above.
-
 #### Scenario: A declaration outside the registry is named as not compared
 - **WHEN** the schema module contains a declaration whose kind the
   supplied registry does not own
@@ -204,6 +167,58 @@ keep their own names for the reason given above.
 - **WHEN** the caller opts out of failing on uncompared declarations
 - **THEN** the assertion completes, and what it hands back still names
   every declaration it could not compare
+
+### Requirement: The assertion speaks in its caller's vocabulary
+What the assertion throws SHALL be in its own caller's vocabulary. A
+failure born on another surface — one whose code carries a command's
+name — SHALL be translated into a code of the assertion's own, with the
+original preserved as its cause. A failure already in the caller's
+vocabulary — the snapshot builder's declaration diagnostic, a driver's
+own error — SHALL be propagated unchanged, because there is nothing to
+translate. Any new case is settled by one question: does that code name
+something this library's caller invokes? This governs what the assertion
+*throws*; the finding codes its report carries as *data* keep their own
+names, for the reason the boundary requirement gives.
+
+Each distinct translated failure SHALL get its own code, never a
+borrowed one: an unreadable catalog is not the same fact as an
+unanswerable comparison, so it fails under
+`assert-schema-catalog-unreadable` and not under
+`assert-schema-not-compared`.
+
+The thrown error SHALL take the runtime layer's shape — a plain error
+carrying a literal code and, where it translates another failure, that
+failure as its cause — not the declaration-time error type, which has no
+place to keep a cause and belongs to a different moment. A caller who
+already catches errors from executing statements catches these the same
+way.
+
+Every failure the assertion raises SHALL carry a `code`, and the `code`
+is what a caller reads. The error's class is not part of the contract: a
+propagated failure keeps whatever class it was raised with, because that
+is what propagating means, so a caller branching on class would see only
+half of them — and unifying the classes to "fix" that would undo the
+propagation this requirement demands.
+
+A reason the report carries is quoted from the comparison verbatim,
+which means it may speak in terms of the command-line workflow — up to
+and including telling the reader to rerun that command. The report SHALL
+say so rather than edit the quotes: rewriting them would fork the
+wording silently, and an unattributed instruction to run a command the
+caller never ran is worse than an attributed one.
+
+#### Scenario: A failure already in the caller's vocabulary is left alone
+- **WHEN** the snapshot builder refuses a declaration no registered kind
+  owns
+- **THEN** the assertion lets that failure through exactly as raised —
+  same code, same class, and no cause added, because adding one would be
+  a repackaging
+
+#### Scenario: A failure named for a command is translated
+- **WHEN** the comparison refuses to read the catalog, under a code
+  naming the command-line check
+- **THEN** the assertion fails under its own catalog-unreadable code and
+  keeps the original failure as the cause
 
 #### Scenario: A module that declares nothing cannot answer either
 - **WHEN** the handle was built from a schema module carrying no
