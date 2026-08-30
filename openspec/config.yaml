@@ -22,6 +22,9 @@ operations:
     guidance:
       - Execute each task test-first (red test named on the task, minimal green, refactor)
       - A running task that overruns its estimate is never stopped or re-split — overruns correct the next estimate
+      - "Divergence tripwires — stop and escalate to the owner the moment any fires: a red test cannot be derived from the spec scenario; going green would contradict another delta scenario; settling a [design] detail would alter the approved contract. Divergence means the spec is presumed wrong until the owner rules"
+      - Repair in place after the owner rules — intent unchanged → update the artifacts (any-direction ripple) and continue this apply; intent changed or scope exploded → a new change (update preserves context, a new change provides clarity)
+      - Review is spec-bound — the reviewer reads the delta spec scenarios against the implementation (openspec show --diff); divergence found in review escalates like any tripwire
   archive:
     guidance:
       - Append one line per task to openspec/task-times.csv before archiving
