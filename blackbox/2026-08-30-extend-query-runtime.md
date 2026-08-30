@@ -1,10 +1,10 @@
 Refs:
 - .changeset/add-assert-schema.md @ blob 7bc31f24ea5178c7deef769333dfd60dd23cebed
-- openspec/changes/extend-query-runtime/issues.md @ blob 85f13d11267423908ff1bb25761d0d1bfc78f3fb
-- openspec/changes/extend-query-runtime/measurement.md @ blob 6c00be28cb949f8a960e1e0e7f497268300d531e
-- openspec/changes/extend-query-runtime/proposal.md @ blob 7be4ff7f4ce5e63dfc89d61e0c917cc699043c16
-- openspec/changes/extend-query-runtime/specs/query-execution/spec.md @ blob 5978643a1c18043d4585303f10c6c1c6f67c1f68
-- openspec/changes/extend-query-runtime/tasks.md @ blob 0d82cc9bdfc6e46e67a8e32eab75b1e46c5de450
+- openspec/changes/archive/2026-08-31-extend-query-runtime/issues.md @ blob 85f13d11267423908ff1bb25761d0d1bfc78f3fb
+- openspec/changes/archive/2026-08-31-extend-query-runtime/measurement.md @ blob 6c00be28cb949f8a960e1e0e7f497268300d531e
+- openspec/changes/archive/2026-08-31-extend-query-runtime/proposal.md @ blob 7be4ff7f4ce5e63dfc89d61e0c917cc699043c16
+- openspec/changes/archive/2026-08-31-extend-query-runtime/specs/query-execution/spec.md @ blob 5978643a1c18043d4585303f10c6c1c6f67c1f68
+- openspec/changes/archive/2026-08-31-extend-query-runtime/tasks.md @ blob 0d82cc9bdfc6e46e67a8e32eab75b1e46c5de450
 - openspec/task-times.csv @ blob 1ec762a4d764cd15705676a225f956ff48004a7c
 - packages/cli/src/assert-schema.ts @ blob fa351c6c902e02cfa8305bf1e023977c3141fc43
 - packages/cli/src/index.ts @ blob 3214e36aac733d70150bec904dd6cd2694126708
@@ -17,7 +17,7 @@ Refs:
 - packages/query/test/db/db.test.ts @ blob 166e1d6371580dfef8ed14fd1b7330f7a01c549a
 - packages/query/test/types/chain-types.test.ts @ blob 14d85770ef36048f4e108a3dc04b781245aee409
 - README.md @ blob b7dba96771ff029d8399e32ca6b7bae5f74ee4ac
-- skills/hejbro/references/query-layer.md @ blob 4171cc4a5a1fcda36d6901ac817958ae4859bff4
+- skills/hejbro/references/query-layer.md @ blob 63650455b52c662ce25222855b503fe2ffd115a5
 - skills/hejbro/SKILL.md @ blob aa69f02f8be689fc08dd9125f362af5567ffa583
 
 (Taken from `git rev-parse HEAD:<path>` immediately after the group-6
@@ -77,6 +77,41 @@ the planner's own conventions-section addition on `tasks.md`, "stop
 until a state can be explained," landing in the same commit): only
 `openspec/changes/extend-query-runtime/tasks.md` gained content this
 round; the other nineteen paths re-verified unchanged, all `ok`.
+
+Re-pinned a sixth time, after `openspec archive extend-query-runtime`
+merged this change's OpenSpec artifacts into the main specs and moved
+its own change directory. **The archive moved this change's OpenSpec
+artifacts; the pins below carry their post-archive paths. The blob SHAs
+are unchanged — only the paths moved** (`openspec/changes/
+extend-query-runtime/{issues,measurement,proposal,tasks,specs/
+query-execution/spec}.md` → `openspec/changes/archive/
+2026-08-31-extend-query-runtime/` + same five filenames), verified by
+`git hash-object` on each file at its new path returning the identical
+hash it had before the move. Fourteen of the remaining fifteen paths
+(all outside `openspec/changes/`) are unaffected by an archive and
+re-verified unchanged, all `ok`. The fifteenth,
+`skills/hejbro/references/query-layer.md`, did change content this
+round — not by hand, but caught by `pnpm test` failing for real:
+`packages/skills/test/links.test.ts` reddened on
+`openspec/changes/extend-query-runtime/measurement.md`, a path this
+same file cited that the archive had just moved out from under it (a
+citation this entry's own drafting had already flagged as needing this
+exact fix, in a comment left for exactly this moment — see the
+"Startup schema assertion" section's own "Not supported" entry). A
+second, related citation in the same file's "Where this is enforced"
+list (a separate pointer at the pre-archive change delta, with its own
+note reading "this change has not archived yet ... this citation
+should move with them") was also updated, folding it into the existing
+`openspec/specs/query-execution/spec.md` citation now that the
+scenarios live there. Both fixes verified the same way every claim in
+this file is: `pnpm --filter @hejbro/skills test` reddened first
+(`missing` array containing exactly the stale path), then passed clean
+after the fix — a real gate catching a real staleness, not a
+self-report. This is a form of staleness the squash-merge pin
+discipline above did not anticipate: a squash preserves paths and
+changes blob content (or not at all); an archive preserves blob content
+and changes paths — the opposite failure mode, closed the same way, by
+checking rather than assuming.
 
 **The commit SHAs cited in this entry resolve on the pre-squash branch
 only** (`feat-extend-query-runtime`); after this change's squash merge
@@ -165,8 +200,10 @@ did. One did not.
   per-object finding survived intact.
 - **Group 4** — the #303 measurement. No product code — the group's own
   header states this. Full account in
-  `openspec/changes/extend-query-runtime/measurement.md`; summarized in
-  "The decision that nothing shipped" below.
+  `openspec/changes/archive/2026-08-31-extend-query-runtime/measurement.md`
+  (this change's own post-archive path — see the Refs re-pin note above
+  for the pre-archive path this moved from); summarized in "The
+  decision that nothing shipped" below.
 - **Group 5** — never opened. Conditional on group 4's own measurement
   clearing its pre-registered rule; it did not, so the driver-contract
   capability delta, the four tasks under it, and any change to

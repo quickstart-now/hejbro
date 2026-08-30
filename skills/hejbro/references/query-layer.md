@@ -863,8 +863,8 @@ use the `sql` escape hatch, or wait for the tracked issue:
   statement's improvement over today's unnamed text query could not be
   shown, under a spread-estimator-invariant standard, to reliably exceed
   run-to-run measurement noise on the workload and machine measured
-  (`openspec/changes/extend-query-runtime/measurement.md`) — the
-  decision is scoped to that evidence, not a general claim about
+  (`openspec/changes/archive/2026-08-31-extend-query-runtime/measurement.md`)
+  — the decision is scoped to that evidence, not a general claim about
   prepared statements.
 
 ## Errors
@@ -912,7 +912,9 @@ const yourDriver: Pick<Driver, "transaction"> = {
   `withCte`'s entry/recursive-entry scenarios),
   `openspec/specs/query-execution/spec.md` (execution, error
   propagation, nested transactions, result conversion, a `WITH`
-  statement's own execution path),
+  statement's own execution path, declaration retention, and
+  `assertSchema`'s own scenarios — folded in by the
+  `extend-query-runtime` archive),
   `openspec/specs/query-type-inference/spec.md` (the recursive term's
   union-compatibility check against the anchor),
   `openspec/specs/driver-contract/spec.md` (capabilities),
@@ -921,11 +923,7 @@ const yourDriver: Pick<Driver, "transaction"> = {
   `openspec/specs/typed-function-execution/spec.md`,
   `openspec/specs/table-declaration/spec.md` (`.notNullElements()`'s
   backing CHECK),
-  `openspec/specs/value-utilities/spec.md` (`assertNoNulls`),
-  `openspec/changes/extend-query-runtime/specs/query-execution/spec.md`
-  (`assertSchema`'s own scenarios — this change has not archived yet;
-  once it does, these fold into `query-execution/spec.md` above and
-  this citation should move with them).
+  `openspec/specs/value-utilities/spec.md` (`assertNoNulls`).
 - Code: `packages/query/src/db/chain.ts` (`select`'s positional `from`
   argument, lines 374-398 — no `.from()` stage; `insert`/`update`/
   `deleteFrom`), `packages/query/src/sql.ts` (`sql`, `sql.raw`,
