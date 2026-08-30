@@ -179,7 +179,12 @@ describe("db()'s declaration retention (task 1.1/1.2, extend-query-runtime) -- t
 		expect(handle.declarations.tables.posts).toBe(posts);
 		expect(Object.keys(handle.declarations.functions)).toEqual(["helloWorld"]);
 		expect(handle.declarations.functions.helloWorld).toBe(helloWorld);
-		expect(handle.declarations.roles.has("grant_reader")).toBe(true);
-		expect(handle.declarations.roles.has("policy_reader")).toBe(true);
+		// The whole set, not membership checks (task 1.4): a `.has()` pair
+		// only proves those two roles are present, never that nothing else
+		// snuck in.
+		expect([...handle.declarations.roles].sort()).toEqual([
+			"grant_reader",
+			"policy_reader",
+		]);
 	});
 });

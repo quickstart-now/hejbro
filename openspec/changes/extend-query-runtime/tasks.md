@@ -29,7 +29,7 @@ Two facts shape the layout:
 
 ## 1. The handle keeps what it was built from
 
-- [ ] 1.1 (~7m) [design] The handle retains the full declaration list.
+- [x] 1.1 (~7m) [design] The handle retains the full declaration list.
       The design part is the retained member's name and shape, and
       whether it joins the public handle type or stays an internal
       assembly surface. The settlement is not complete until both the
@@ -49,7 +49,7 @@ Two facts shape the layout:
       that is neither a table nor a function". What makes it red:
       delete the retention assignment from the handle literal and the
       enum export is unreachable from the handle.
-- [ ] 1.2 (~6m) Retention is the module's own values, and classification
+- [x] 1.2 (~6m) Retention is the module's own values, and classification
       is unchanged. Red: `packages/query/test/db/db.test.ts` —
       "retained declarations are the module's own objects" (identity
       assertions, so a defensive copy fails it) plus tables/functions/
@@ -57,7 +57,7 @@ Two facts shape the layout:
       entries through a shallow-clone helper and the identity assertion
       fails while every other assertion still passes.
       Files: `packages/query/src/db/db.ts`, that test.
-- [ ] 1.3 (~6m) The retained member's *type* is pinned, not only its
+- [x] 1.3 (~6m) The retained member's *type* is pinned, not only its
       value. A widened member is invisible to every runtime assertion,
       and this member exists so the assertion can read declared types
       off it. Red: `packages/query/test/types/chain-types.test.ts` —
@@ -65,7 +65,7 @@ Two facts shape the layout:
       makes it red: widen the member to `Record<string, unknown>` — the
       type assertion fails while all runtime tests stay green.
       Files: that test.
-- [ ] 1.4 (~5m) The declared-role set is pinned exhaustively, matching
+- [x] 1.4 (~5m) The declared-role set is pinned exhaustively, matching
       the delta's "exactly what they were" wording; today only two
       memberships are asserted, so an extra role passes unnoticed. Red:
       `packages/query/test/db/db.test.ts` — the role assertion compares
@@ -81,12 +81,22 @@ Gates: the standard set above. Group files:
 
 - [ ] 2.1 (~10m) [design] The public surface. **Settled with the owner**:
       a free function `assertSchema(handle, options?)` resolving to a
-      report; `options` carries the registry and the opt-out for
-      uncompared declarations; a divergence throws under its own code
-      and an uncompared declaration throws under a second, distinct one;
+      report that keeps compared and uncompared declarations in separate
+      places — "not counted as matching" has to be observable, not just
+      asserted in prose; `options` carries the registry and the opt-out
+      for uncompared declarations; a divergence throws under
+      `assert-schema-diverged` and an uncompared declaration under
+      `assert-schema-not-compared`, while the per-object findings keep
+      the codes the comparison already gives them;
       the findings the comparison already produces travel on the error,
-      and their message text is reused, never rewritten. This task
-      lands that surface. Red:
+      and their message text is reused, never rewritten. The report's
+      own field names are part of this settled surface, not an
+      implementation choice made later, and no other task in this group
+      may introduce one: the two places are **`compared`** and
+      **`notCompared`**, an uncompared entry carrying the identity and
+      the reason in the comparison's existing finding vocabulary, a
+      compared entry carrying the identity alone. This task lands that
+      surface. Red:
       `packages/cli/test/assert-schema.test.ts` (new) — "a matching
       database passes" and "a missing declared table throws naming it",
       both driven by a fixture session returning canned catalog rows.

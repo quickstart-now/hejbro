@@ -58,14 +58,24 @@ The assertion SHALL compare declarations through an object-kind registry
 it is given, defaulting to the generic Postgres registry when the caller
 supplies none. A declaration that no kind in that registry owns SHALL be
 reported by name as not compared — never silently skipped, and never
-counted as matching. The boundary SHALL be reported whether or not
-anything diverged, so a caller can tell "nothing differed" apart from
-"nothing was looked at".
+counted as matching. What the caller receives SHALL keep the two apart:
+an object that was compared and an object that could not be SHALL
+occupy different places in it, so "not counted as matching" is
+observable rather than merely stated. The boundary SHALL be reported
+whether or not anything diverged, so a caller can tell "nothing
+differed" apart from "nothing was looked at".
 
 "Could not answer" SHALL NOT be success. When nothing diverged but some
-declaration could not be compared, the assertion SHALL fail by default,
-under its own code, and its remedy SHALL name supplying the registry
-that owns the declaration. A caller MAY opt out of that failure, and
+declaration could not be compared, the assertion SHALL fail by default
+under `assert-schema-not-compared` — distinct from
+`assert-schema-diverged`, which a real divergence raises — and its
+remedy SHALL name supplying the registry that owns the declaration.
+
+These two codes name the assertion's own outcome, not an object's. The
+per-object findings keep the codes the comparison already gives them —
+`assert-schema-not-compared` is the run-level statement of the very fact
+`hejbro check` reports per object as `check-not-compared`, and neither
+code replaces the other. A caller MAY opt out of that failure, and
 opting out SHALL change only whether the assertion throws: the
 not-compared declarations SHALL still be named in what the caller
 receives.
@@ -85,9 +95,9 @@ receives.
 #### Scenario: Nothing diverged, but something could not be compared
 - **WHEN** every compared object matches and some declaration was out of
   the registry's reach
-- **THEN** the assertion fails under its own code, distinct from the
-  code a real divergence raises, naming each uncompared declaration and
-  the registry that would cover it
+- **THEN** the assertion fails under `assert-schema-not-compared`, not
+  under the code a real divergence raises, naming each uncompared
+  declaration and the registry that would cover it
 
 #### Scenario: Opting out changes the failure, not the report
 - **WHEN** the caller opts out of failing on uncompared declarations

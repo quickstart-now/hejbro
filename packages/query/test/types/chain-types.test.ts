@@ -18,7 +18,7 @@ import type {
 	UpdateChainFilterable,
 	UpdateChainFinal,
 } from "../../src/db/chain";
-import type { ExecuteResult } from "../../src/db/db";
+import type { db, ExecuteResult } from "../../src/db/db";
 import type { Tx } from "../../src/db/transaction";
 import type { SqlExpr } from "../../src/sql";
 
@@ -31,6 +31,9 @@ const posts = table(app, "posts", {
 });
 
 type Posts = typeof posts;
+
+/** A minimal schema module (task 1.3, extend-query-runtime) -- only used to instantiate `db()`'s `TSchema` generic below, never called at runtime. */
+const appModule = { posts };
 
 /** A type-only handle on `Tx["execute"]`'s own generic signature (task 3.1) -- never assigned, never called at runtime, same technique `execute-result-type.test.ts` uses for `Db["execute"]`. */
 declare const txExecute: Tx["execute"];
@@ -159,5 +162,13 @@ describe("sql fragments are conditions everywhere the chain takes one (#386)", (
 		expectTypeOf<SqlExpr>().toExtend<
 			Parameters<SelectChainRelated<{ id: string }>["where"]>[0]
 		>();
+	});
+});
+
+describe("the handle's retained schema keeps the module's own type (task 1.3, extend-query-runtime)", () => {
+	it("handle.schema equals the schema module's own type, not a widened record", () => {
+		expectTypeOf<
+			ReturnType<typeof db<typeof appModule>>["schema"]
+		>().toEqualTypeOf<typeof appModule>();
 	});
 });
