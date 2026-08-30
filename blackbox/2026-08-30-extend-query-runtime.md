@@ -5,7 +5,7 @@ Refs:
 - openspec/changes/extend-query-runtime/proposal.md @ blob 7be4ff7f4ce5e63dfc89d61e0c917cc699043c16
 - openspec/changes/extend-query-runtime/specs/query-execution/spec.md @ blob 5978643a1c18043d4585303f10c6c1c6f67c1f68
 - openspec/changes/extend-query-runtime/tasks.md @ blob a6379d5a8b6513c866a569d1e1bf18ca28b65f4a
-- openspec/task-times.csv @ blob 558ed65318c5741ad2b1eb3da4c5792d4e42591e
+- openspec/task-times.csv @ blob 1ec762a4d764cd15705676a225f956ff48004a7c
 - packages/cli/src/assert-schema.ts @ blob fa351c6c902e02cfa8305bf1e023977c3141fc43
 - packages/cli/src/index.ts @ blob 3214e36aac733d70150bec904dd6cd2694126708
 - packages/cli/test/assert-schema-imports.test.ts @ blob ff182161c5ebcb33cc4e4891975209d74693dc80
@@ -16,30 +16,30 @@ Refs:
 - packages/query/src/db/db.ts @ blob 184b829b800dd9527b9727b55f1c3a694c3cf037
 - packages/query/test/db/db.test.ts @ blob 166e1d6371580dfef8ed14fd1b7330f7a01c549a
 - packages/query/test/types/chain-types.test.ts @ blob 14d85770ef36048f4e108a3dc04b781245aee409
-- README.md @ blob 99f5562c97121fd9384fb15f2965a64bfc2b15e7
-- skills/hejbro/references/query-layer.md @ blob 917eb5775f6d8fd9ba85c818291329109763c455
+- README.md @ blob b7dba96771ff029d8399e32ca6b7bae5f74ee4ac
+- skills/hejbro/references/query-layer.md @ blob 4171cc4a5a1fcda36d6901ac817958ae4859bff4
 - skills/hejbro/SKILL.md @ blob aa69f02f8be689fc08dd9125f362af5567ffa583
 
 (Taken from `git rev-parse HEAD:<path>` immediately after the group-6
-commit (`49aa375`), each cross-checked against `git hash-object
+commit (`0bda08f`), each cross-checked against `git hash-object
 <path>` on the same, clean working tree -- all 19 matched, `ok`, no
 mismatch.
 
 Re-pinned a second time, after `feat(cli): name the finding type on the
-public surface` (`5a27e59`, group 6 round 2 -- exporting
+public surface` (`63214ba`, group 6 round 2 -- exporting
 `AssertSchemaFinding`, an owner decision landing after the group-6
 commit above): five of the nineteen paths this round touched content
 `spec.md`, `assert-schema.ts`, `index.ts`, `exports.test.ts`,
 `query-layer.md`, so their hashes above are this round's, not the
 first commit's; the other fourteen are unchanged and still pin
-`49aa375`'s own content. Each of the five re-verified the same way
+`0bda08f`'s own content. Each of the five re-verified the same way
 (`git hash-object` against `git rev-parse HEAD:<path>`, all `ok`) --
 the same class of staleness the enforce-driver-contract entry's own
 "Re-pinned a second time" note closes, caught the same way, before
 handing the SHA off rather than after.
 
 Re-pinned a third time, after `docs(skills): point the index and
-description at the assertion` (`9219fb3`, the `SKILL.md`
+description at the assertion` (`a9cfecb`, the `SKILL.md`
 index/description round, owner-authorized separately from the
 `AssertSchemaFinding` decision above -- its title duplicated the prior
 commit's exactly, flagged in review, and reworded to this one to name
@@ -49,6 +49,27 @@ above rather than replacing an existing entry) -- the other twenty
 paths were re-verified unchanged and still match their own most recent
 pin. Same method: `git hash-object` against `git rev-parse
 HEAD:<path>`, all `ok`.
+
+Re-pinned a fourth time, after `git rebase upstream/dev` (`dev` had
+moved four commits since this branch's own base, unrelated changes --
+`extend-supabase-driver`, `check-scalar-return-family`). A rebase
+rewrites every commit on the branch, so **all commit SHAs cited above
+changed**, not just the most recent one -- `49aa375`→`0bda08f`,
+`5a27e59`→`63214ba`, `9219fb3`→`a9cfecb`, updated throughout this
+entry. Blob content changed for exactly the paths where a real merge
+happened: `openspec/task-times.csv` (interleaved append with the two
+unrelated changes' own rows -- resolved by keeping both sides, never
+choosing one over the other, since neither conflicted in substance) and
+`README.md` (task-time badges regenerated via `pnpm check:tasktime`
+after the merge, never hand-edited, so the counts reflect the merged
+ledger exactly). `skills/hejbro/references/query-layer.md` also picked
+up new content -- not from a conflict, but from a clean auto-merge:
+`extend-supabase-driver` added its own sentence to this file's
+"Building a handle" section, coexisting with this round's own edits
+without either side's diff intersecting. All twenty paths re-verified
+the same way, all `ok` (see the implementer's own report for the full
+`git hash-object`/`git rev-parse HEAD:<path>` output, sent alongside
+this commit rather than duplicated here).
 
 **The commit SHAs cited in this entry resolve on the pre-squash branch
 only** (`feat-extend-query-runtime`); after this change's squash merge
