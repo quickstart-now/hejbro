@@ -247,6 +247,19 @@ const resolveTableRef = (target: Table): TableRefNode => {
 	return { schemaName: meta.schema.schemaName, tableName: meta.tableName };
 };
 
+/** Postgres rejects `on conflict ()` at parse time, so an empty target must fail here, not compile. */
+const resolveConflictTarget = (
+	targetColumns: ReadonlyArray<ColumnRef>,
+): ReadonlyArray<string> => {
+	if (targetColumns.length === 0) {
+		return throwHejbroError(
+			"empty-conflict-target",
+			"onConflictDoNothing()/onConflictDoUpdate() received no conflict target columns — Postgres rejects `on conflict ()`. Next: name at least one declared column of the inserted table, e.g. onConflictDoNothing(posts.slug).",
+		);
+	}
+	return targetColumns.map((column) => column.sqlName);
+};
+
 const resolveColumnRef = (
 	target: Table,
 	tableRef: TableRefNode,
@@ -438,7 +451,7 @@ const makeInsertConflictable = <TTable extends Table>(
 			deriveReturnable({
 				...node,
 				onConflict: {
-					targetColumns: targetColumns.map((column) => column.sqlName),
+					targetColumns: resolveConflictTarget(targetColumns),
 					action: { actionKind: "nothing" },
 				},
 			}),
@@ -450,7 +463,7 @@ const makeInsertConflictable = <TTable extends Table>(
 			return deriveReturnable({
 				...node,
 				onConflict: {
-					targetColumns: config.target.map((column) => column.sqlName),
+					targetColumns: resolveConflictTarget(config.target),
 					action: {
 						actionKind: "update",
 						set: resolveSetEntries(target, tableRef, config.set),

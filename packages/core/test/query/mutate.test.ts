@@ -120,6 +120,18 @@ describe("mutation builders", () => {
 			'insert into "app"."posts" ("slug") values (\'hello\') on conflict ("slug") do nothing',
 		);
 	});
+	it("refuses an empty conflict target instead of rendering on conflict ()", () => {
+		// Postgres rejects `on conflict ()` at parse time; without a target the
+		// clause must not be constructible rather than compile into broken SQL.
+		expect(() =>
+			insert(posts).values({ slug: "hello" }).onConflictDoNothing(),
+		).toThrowError(expect.objectContaining({ code: "empty-conflict-target" }));
+		expect(() =>
+			insert(posts)
+				.values({ slug: "hello" })
+				.onConflictDoUpdate({ target: [], set: { slug: "renamed" } }),
+		).toThrowError(/Next: name at least one declared column/);
+	});
 	// Reviewer freeze finding: the three render handlers `literal.ts` added
 	// for `bigint`/`interval`/`array` (harden-query-layer #322 task 2.3) are
 	// reachable through nothing more than the two public exports every

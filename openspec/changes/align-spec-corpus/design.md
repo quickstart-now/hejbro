@@ -21,7 +21,14 @@ lines, blackbox entry).
 - **Non-Goals**: no product behavior change, no generated SQL change,
   no new features. If going green on any scenario would require
   changing package source behavior, that is a divergence tripwire —
-  stop and escalate, per config.yaml's apply guidance.
+  stop and escalate, per config.yaml's apply guidance. One escalation
+  fired and was ruled on (owner, 2026-08-30): task 1.1 measured that a
+  zero-target `onConflictDoNothing()` renders `on conflict ()` — SQL
+  Postgres rejects at parse time — and the owner chose to land the
+  fail-fast guard (`empty-conflict-target`) inside this change rather
+  than fork a bug issue. That guard is this change's single deliberate
+  behavior change; it makes `@hejbro/core` a changed published package,
+  so the PR carries a patch changeset.
 
 ## Decisions
 
@@ -62,6 +69,6 @@ lines, blackbox entry).
 ## Open Questions
 
 None blocking. Three contract details are settled inside `[design]`
-tasks during apply (on-conflict zero-target behavior, IntervalValue
-normalization example, chain `with()` root naming); each adjusts delta
-text only, never package source.
+tasks during apply — on-conflict zero-target behavior (settled: guard,
+see Non-Goals), IntervalValue normalization example, chain `with()`
+root naming.

@@ -38,6 +38,11 @@ only — zero product behavior changes.
   migration banner/hash-chain spec (P3); the on-conflict contract the
   chain stage list already references (P5); the implemented
   `IntervalValue` field contract (P11).
+- **One ruled-on behavior fix** (tripwire escalation, owner 2026-08-30):
+  a zero-target `onConflictDoNothing()`/`onConflictDoUpdate` rendered
+  invalid `on conflict ()` SQL; it now fails fast with
+  `empty-conflict-target`. The only source change in this change; patch
+  changeset included.
 - **Cleanups** (P13–P18): `orderBy` naming unification; error-code vs
   exit-code disambiguation; `check` comparison-axis consolidation; "v1"
   markers replaced by present-tense restriction statements; FILTER

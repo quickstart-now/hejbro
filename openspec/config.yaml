@@ -9,6 +9,8 @@ rules:
   proposal:
     - Open decisions are settled with the project owner before approval; approval gates implementation
     - Decision rationale goes to the design spec's owner-gated decision log (docs/specs/), not into openspec artifacts
+  specs:
+    - Delta specs state the present contract only — no issue numbers, change ids, measurement labels, or renaming narratives in requirement or scenario text; measured facts stay inline, unlabeled
   tasks:
     - Top-level groups are parallel-safe slices — no file overlap between groups
     - "Each top-level group gets a GitHub tracking issue (sub-issue of the change's issue): filed before the group's team starts, In Progress at start, closed when the group's PR merges — tasks.md stays the execution truth; the issue is the board-visible layer, and leaf tasks are never mirrored into issues"

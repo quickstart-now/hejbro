@@ -7,8 +7,9 @@ Guidance for AI coding agents working in this repository. Tool-agnostic:
 
 **hejbro** — declare everything in your Postgres database (tables, RLS,
 functions, triggers, views, grants) in TypeScript, generate deterministic
-migration SQL. Generic Postgres core + provider presets (Supabase first;
-Neon and Nile planned). MIT, built AI-natively under `quickstart-now`.
+migration SQL. Generic Postgres core + provider presets (Supabase and
+Neon shipped; Nile planned). MIT, built AI-natively under
+`quickstart-now`.
 
 ## Read first
 

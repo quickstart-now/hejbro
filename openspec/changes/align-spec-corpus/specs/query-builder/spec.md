@@ -403,13 +403,15 @@ An insert SHALL offer `onConflictDoNothing(...target)` and
 `onConflictDoUpdate({ target, set })` before `returning`, rendering
 Postgres's own `on conflict (<target columns>) do nothing` and
 `on conflict (<target columns>) do update set <assignments>` clauses. A
-conflict target SHALL name declared columns of the inserted table,
-rendered through the identifier quoting rule. `onConflictDoUpdate`'s
-`set` SHALL accept exactly what an update's `set` accepts for that table
-— declared write types, `Expr` included — with every value reaching the
-database as a bind parameter. `returning` SHALL remain available after
-either conflict stage and reports the rows the statement actually
-returned.
+conflict target SHALL name at least one declared column of the inserted
+table, rendered through the identifier quoting rule; an empty target
+SHALL fail fast at build time with `empty-conflict-target` — Postgres
+rejects `on conflict ()` at parse time, so the clause must not be
+constructible into broken SQL. `onConflictDoUpdate`'s `set` SHALL accept
+exactly what an update's `set` accepts for that table — declared write
+types, `Expr` included — with every value reaching the database as a
+bind parameter. `returning` SHALL remain available after either conflict
+stage and reports the rows the statement actually returned.
 
 #### Scenario: A do-nothing conflict clause renders and skips
 - **WHEN** an insert chains `onConflictDoNothing(col)` on a column with a
@@ -429,3 +431,9 @@ returned.
   through the core builder
 - **THEN** the two compile to byte-identical SQL and the same parameter
   order
+
+#### Scenario: An empty conflict target is refused, never rendered
+- **WHEN** `onConflictDoNothing()` is called with no columns, or
+  `onConflictDoUpdate` with an empty `target`
+- **THEN** the call fails at build time with `empty-conflict-target`,
+  naming the fix, and `on conflict ()` is never rendered

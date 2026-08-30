@@ -692,3 +692,36 @@ describe("scoped/tx chain result conversion (task 7.4 rework -- tables propagati
 		expect(typeof rows[0]?.amount).toBe("bigint");
 	});
 });
+
+describe("stage parity: every core builder stage reaches the chain (align-spec-corpus 1.4)", () => {
+	it("distinctOn/where/orderBy/limit/offset compile byte-identically to the core builder", () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver();
+		const handle = db({ posts }, driver);
+		const chainCompiled = handle
+			.select(posts)
+			.distinctOn(posts.status)
+			.where(eq(posts.status, "published"))
+			.orderBy(posts.status)
+			.limit(5)
+			.offset(10)
+			.compile();
+		const coreCompiled = compile(
+			select(posts)
+				.distinctOn(posts.status)
+				.where(eq(posts.status, "published"))
+				.orderBy(posts.status)
+				.limit(5)
+				.offset(10),
+		);
+		expect(chainCompiled).toEqual(coreCompiled);
+		expect(topLevelSent).toHaveLength(0);
+	});
+
+	it("bare distinct compiles byte-identically to the core builder", () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = db({ posts }, driver);
+		expect(handle.select(posts).distinct().compile()).toEqual(
+			compile(select(posts).distinct()),
+		);
+	});
+});
