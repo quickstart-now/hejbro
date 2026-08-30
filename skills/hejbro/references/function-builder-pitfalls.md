@@ -72,6 +72,16 @@ recorded via `ctx.if`, not evaluated in JS.
   otherwise accept the `CREATE` and raise "control reached end of function
   without RETURN" on the first call.
 
+  A scalar return's **type family** is checked too: returning an
+  expression whose family can never convert to the declared `returns`
+  family (a uuid column from `returns: integer()`, say) fails with
+  `scalar-return-family-mismatch` — Postgres accepts that `CREATE` and
+  every call then fails to convert the value. Only measured
+  always-failing pairs are refused: a pair Postgres accepts for some
+  values stays accepted (a numeric expression can be a valid date), a
+  `` sql`…` `` fragment is never family-checked, and `returns` of the
+  text or bytea family accepts every expression.
+
 ```ts
 import { defineFunction, schema, sql, table, uuid } from "hejbro";
 

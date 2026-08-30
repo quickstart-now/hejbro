@@ -1,0 +1,1083 @@
+bigint,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type bigint: "00000000-0000-0000-0000-000000000000"
+bigint,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type bigint: "00000000-0000-0000-0000-000000000000"
+bigint,'00:00:01'::interval,f,22P02,invalid input syntax for type bigint: "00:00:01"
+bigint,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type bigint: "08:00:2b:01:02:03"
+bigint,0::integer,t,,
+bigint,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type bigint: "10.0.0.0/8"
+bigint,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type bigint: "12:34:56+05"
+bigint,'12:34:56'::text,f,22P02,invalid input syntax for type bigint: "12:34:56"
+bigint,'12:34:56'::time,f,22P02,invalid input syntax for type bigint: "12:34:56"
+bigint,'123'::text,t,,
+bigint,'{1,2}'::text,f,22P02,invalid input syntax for type bigint: "{1,2}"
+bigint,'192.168.0.1'::inet,f,22P02,invalid input syntax for type bigint: "192.168.0.1"
+bigint,'192.168.0.1'::text,f,22P02,invalid input syntax for type bigint: "192.168.0.1"
+bigint,'1 day'::interval,f,22P02,invalid input syntax for type bigint: "1 day"
+bigint,'1 day'::text,f,22P02,invalid input syntax for type bigint: "1 day"
+bigint,1::integer,t,,
+bigint,'1'::json,t,,
+bigint,'1'::jsonb,t,,
+bigint,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type bigint: "1 year 2 mons"
+bigint,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type bigint: "2026-01-01 12:34:56+00"
+bigint,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type bigint: "2026-01-01 12:34:56"
+bigint,'2026-01-01'::date,f,22P02,invalid input syntax for type bigint: "2026-01-01"
+bigint,20260101::integer,t,,
+bigint,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type bigint: ""2026-01-01""
+bigint,'2026-01-01'::text,f,22P02,invalid input syntax for type bigint: "2026-01-01"
+bigint,2.5::real,t,,
+bigint,42.5::numeric,t,,
+bigint,9223372036854775807::bigint,t,,
+bigint,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type bigint: "{"a": 1}"
+bigint,'{"a":1}'::text,f,22P02,invalid input syntax for type bigint: "{"a":1}"
+bigint,'"abc"'::jsonb,f,22P02,invalid input syntax for type bigint: ""abc""
+bigint,'abc'::text,f,22P02,invalid input syntax for type bigint: "abc"
+bigint,'ab'::varchar(10),f,22P02,invalid input syntax for type bigint: "ab"
+bigint,array[1,2],f,22P02,invalid input syntax for type bigint: "{1,2}"
+bigint,array['a','b'],f,22P02,invalid input syntax for type bigint: "{a,b}"
+bigint,false,f,22P02,invalid input syntax for type bigint: "f"
+bigint,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type bigint: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+bigint,'{}'::integer[],f,22P02,invalid input syntax for type bigint: "{}"
+bigint,true,f,22P02,invalid input syntax for type bigint: "t"
+bigint,'true'::jsonb,f,22P02,invalid input syntax for type bigint: "true"
+bigint,'t'::text,f,22P02,invalid input syntax for type bigint: "t"
+bigint,'\x31'::bytea,f,22P02,invalid input syntax for type bigint: "\x31"
+bigint,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type bigint: "\xdeadbeef"
+boolean,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type boolean: "00000000-0000-0000-0000-000000000000"
+boolean,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type boolean: "00000000-0000-0000-0000-000000000000"
+boolean,'00:00:01'::interval,f,22P02,invalid input syntax for type boolean: "00:00:01"
+boolean,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type boolean: "08:00:2b:01:02:03"
+boolean,0::integer,t,,
+boolean,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type boolean: "10.0.0.0/8"
+boolean,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type boolean: "12:34:56+05"
+boolean,'12:34:56'::text,f,22P02,invalid input syntax for type boolean: "12:34:56"
+boolean,'12:34:56'::time,f,22P02,invalid input syntax for type boolean: "12:34:56"
+boolean,'123'::text,f,22P02,invalid input syntax for type boolean: "123"
+boolean,'{1,2}'::text,f,22P02,invalid input syntax for type boolean: "{1,2}"
+boolean,'192.168.0.1'::inet,f,22P02,invalid input syntax for type boolean: "192.168.0.1"
+boolean,'192.168.0.1'::text,f,22P02,invalid input syntax for type boolean: "192.168.0.1"
+boolean,'1 day'::interval,f,22P02,invalid input syntax for type boolean: "1 day"
+boolean,'1 day'::text,f,22P02,invalid input syntax for type boolean: "1 day"
+boolean,1::integer,t,,
+boolean,'1'::json,t,,
+boolean,'1'::jsonb,t,,
+boolean,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type boolean: "1 year 2 mons"
+boolean,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type boolean: "2026-01-01 12:34:56+00"
+boolean,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type boolean: "2026-01-01 12:34:56"
+boolean,'2026-01-01'::date,f,22P02,invalid input syntax for type boolean: "2026-01-01"
+boolean,20260101::integer,f,22P02,invalid input syntax for type boolean: "20260101"
+boolean,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type boolean: ""2026-01-01""
+boolean,'2026-01-01'::text,f,22P02,invalid input syntax for type boolean: "2026-01-01"
+boolean,2.5::real,f,22P02,invalid input syntax for type boolean: "2.5"
+boolean,42.5::numeric,f,22P02,invalid input syntax for type boolean: "42.5"
+boolean,9223372036854775807::bigint,f,22P02,invalid input syntax for type boolean: "9223372036854775807"
+boolean,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type boolean: "{"a": 1}"
+boolean,'{"a":1}'::text,f,22P02,invalid input syntax for type boolean: "{"a":1}"
+boolean,'"abc"'::jsonb,f,22P02,invalid input syntax for type boolean: ""abc""
+boolean,'abc'::text,f,22P02,invalid input syntax for type boolean: "abc"
+boolean,'ab'::varchar(10),f,22P02,invalid input syntax for type boolean: "ab"
+boolean,array[1,2],f,22P02,invalid input syntax for type boolean: "{1,2}"
+boolean,array['a','b'],f,22P02,invalid input syntax for type boolean: "{a,b}"
+boolean,false,t,,
+boolean,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type boolean: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+boolean,'{}'::integer[],f,22P02,invalid input syntax for type boolean: "{}"
+boolean,true,t,,
+boolean,'true'::jsonb,t,,
+boolean,'t'::text,t,,
+boolean,'\x31'::bytea,f,22P02,invalid input syntax for type boolean: "\x31"
+boolean,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type boolean: "\xdeadbeef"
+bytea,'00000000-0000-0000-0000-000000000000'::text,t,,
+bytea,'00000000-0000-0000-0000-000000000000'::uuid,t,,
+bytea,'00:00:01'::interval,t,,
+bytea,'08:00:2b:01:02:03'::macaddr,t,,
+bytea,0::integer,t,,
+bytea,'10.0.0.0/8'::cidr,t,,
+bytea,'12:34:56+05'::timetz,t,,
+bytea,'12:34:56'::text,t,,
+bytea,'12:34:56'::time,t,,
+bytea,'123'::text,t,,
+bytea,'{1,2}'::text,t,,
+bytea,'192.168.0.1'::inet,t,,
+bytea,'192.168.0.1'::text,t,,
+bytea,'1 day'::interval,t,,
+bytea,'1 day'::text,t,,
+bytea,1::integer,t,,
+bytea,'1'::json,t,,
+bytea,'1'::jsonb,t,,
+bytea,'1 year 2 mons'::interval,t,,
+bytea,'2026-01-01 12:34:56+00'::timestamptz,t,,
+bytea,'2026-01-01 12:34:56'::timestamp,t,,
+bytea,'2026-01-01'::date,t,,
+bytea,20260101::integer,t,,
+bytea,'"2026-01-01"'::jsonb,t,,
+bytea,'2026-01-01'::text,t,,
+bytea,2.5::real,t,,
+bytea,42.5::numeric,t,,
+bytea,9223372036854775807::bigint,t,,
+bytea,'{"a":1}'::jsonb,t,,
+bytea,'{"a":1}'::text,t,,
+bytea,'"abc"'::jsonb,t,,
+bytea,'abc'::text,t,,
+bytea,'ab'::varchar(10),t,,
+bytea,array[1,2],t,,
+bytea,array['a','b'],t,,
+bytea,false,t,,
+bytea,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,t,,
+bytea,'{}'::integer[],t,,
+bytea,true,t,,
+bytea,'true'::jsonb,t,,
+bytea,'t'::text,t,,
+bytea,'\x31'::bytea,t,,
+bytea,'\xdeadbeef'::bytea,t,,
+char(3),'00000000-0000-0000-0000-000000000000'::text,t,,
+char(3),'00000000-0000-0000-0000-000000000000'::uuid,t,,
+char(3),'00:00:01'::interval,t,,
+char(3),'08:00:2b:01:02:03'::macaddr,t,,
+char(3),0::integer,t,,
+char(3),'10.0.0.0/8'::cidr,t,,
+char(3),'12:34:56+05'::timetz,t,,
+char(3),'12:34:56'::text,t,,
+char(3),'12:34:56'::time,t,,
+char(3),'123'::text,t,,
+char(3),'{1,2}'::text,t,,
+char(3),'192.168.0.1'::inet,t,,
+char(3),'192.168.0.1'::text,t,,
+char(3),'1 day'::interval,t,,
+char(3),'1 day'::text,t,,
+char(3),1::integer,t,,
+char(3),'1'::json,t,,
+char(3),'1'::jsonb,t,,
+char(3),'1 year 2 mons'::interval,t,,
+char(3),'2026-01-01 12:34:56+00'::timestamptz,t,,
+char(3),'2026-01-01 12:34:56'::timestamp,t,,
+char(3),'2026-01-01'::date,t,,
+char(3),20260101::integer,t,,
+char(3),'"2026-01-01"'::jsonb,t,,
+char(3),'2026-01-01'::text,t,,
+char(3),2.5::real,t,,
+char(3),42.5::numeric,t,,
+char(3),9223372036854775807::bigint,t,,
+char(3),'{"a":1}'::jsonb,t,,
+char(3),'{"a":1}'::text,t,,
+char(3),'"abc"'::jsonb,t,,
+char(3),'abc'::text,t,,
+char(3),'ab'::varchar(10),t,,
+char(3),array[1,2],t,,
+char(3),array['a','b'],t,,
+char(3),false,t,,
+char(3),'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,t,,
+char(3),'{}'::integer[],t,,
+char(3),true,t,,
+char(3),'true'::jsonb,t,,
+char(3),'t'::text,t,,
+char(3),'\x31'::bytea,t,,
+char(3),'\xdeadbeef'::bytea,t,,
+cidr,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type cidr: "00000000-0000-0000-0000-000000000000"
+cidr,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type cidr: "00000000-0000-0000-0000-000000000000"
+cidr,'00:00:01'::interval,f,22P02,invalid input syntax for type cidr: "00:00:01"
+cidr,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type cidr: "08:00:2b:01:02:03"
+cidr,0::integer,t,,
+cidr,'10.0.0.0/8'::cidr,t,,
+cidr,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type cidr: "12:34:56+05"
+cidr,'12:34:56'::text,f,22P02,invalid input syntax for type cidr: "12:34:56"
+cidr,'12:34:56'::time,f,22P02,invalid input syntax for type cidr: "12:34:56"
+cidr,'123'::text,t,,
+cidr,'{1,2}'::text,f,22P02,invalid input syntax for type cidr: "{1,2}"
+cidr,'192.168.0.1'::inet,t,,
+cidr,'192.168.0.1'::text,t,,
+cidr,'1 day'::interval,f,22P02,invalid input syntax for type cidr: "1 day"
+cidr,'1 day'::text,f,22P02,invalid input syntax for type cidr: "1 day"
+cidr,1::integer,t,,
+cidr,'1'::json,t,,
+cidr,'1'::jsonb,t,,
+cidr,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type cidr: "1 year 2 mons"
+cidr,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type cidr: "2026-01-01 12:34:56+00"
+cidr,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type cidr: "2026-01-01 12:34:56"
+cidr,'2026-01-01'::date,f,22P02,invalid input syntax for type cidr: "2026-01-01"
+cidr,20260101::integer,f,22P02,invalid input syntax for type cidr: "20260101"
+cidr,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type cidr: ""2026-01-01""
+cidr,'2026-01-01'::text,f,22P02,invalid input syntax for type cidr: "2026-01-01"
+cidr,2.5::real,t,,
+cidr,42.5::numeric,t,,
+cidr,9223372036854775807::bigint,f,22P02,invalid input syntax for type cidr: "9223372036854775807"
+cidr,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type cidr: "{"a": 1}"
+cidr,'{"a":1}'::text,f,22P02,invalid input syntax for type cidr: "{"a":1}"
+cidr,'"abc"'::jsonb,f,22P02,invalid input syntax for type cidr: ""abc""
+cidr,'abc'::text,f,22P02,invalid input syntax for type cidr: "abc"
+cidr,'ab'::varchar(10),f,22P02,invalid input syntax for type cidr: "ab"
+cidr,array[1,2],f,22P02,invalid input syntax for type cidr: "{1,2}"
+cidr,array['a','b'],f,22P02,invalid input syntax for type cidr: "{a,b}"
+cidr,false,f,22P02,invalid input syntax for type cidr: "f"
+cidr,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type cidr: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+cidr,'{}'::integer[],f,22P02,invalid input syntax for type cidr: "{}"
+cidr,true,f,22P02,invalid input syntax for type cidr: "t"
+cidr,'true'::jsonb,f,22P02,invalid input syntax for type cidr: "true"
+cidr,'t'::text,f,22P02,invalid input syntax for type cidr: "t"
+cidr,'\x31'::bytea,f,22P02,invalid input syntax for type cidr: "\x31"
+cidr,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type cidr: "\xdeadbeef"
+date,'00000000-0000-0000-0000-000000000000'::text,f,22007,invalid input syntax for type date: "00000000-0000-0000-0000-000000000000"
+date,'00000000-0000-0000-0000-000000000000'::uuid,f,22007,invalid input syntax for type date: "00000000-0000-0000-0000-000000000000"
+date,'00:00:01'::interval,f,22007,invalid input syntax for type date: "00:00:01"
+date,'08:00:2b:01:02:03'::macaddr,f,22007,invalid input syntax for type date: "08:00:2b:01:02:03"
+date,0::integer,f,22008,date/time field value out of range: "0"
+date,'10.0.0.0/8'::cidr,f,22007,invalid input syntax for type date: "10.0.0.0/8"
+date,'12:34:56+05'::timetz,f,22007,invalid input syntax for type date: "12:34:56+05"
+date,'12:34:56'::text,f,22007,invalid input syntax for type date: "12:34:56"
+date,'12:34:56'::time,f,22007,invalid input syntax for type date: "12:34:56"
+date,'123'::text,f,22007,invalid input syntax for type date: "123"
+date,'{1,2}'::text,f,22007,invalid input syntax for type date: "{1,2}"
+date,'192.168.0.1'::inet,f,22007,invalid input syntax for type date: "192.168.0.1"
+date,'192.168.0.1'::text,f,22007,invalid input syntax for type date: "192.168.0.1"
+date,'1 day'::interval,f,22007,invalid input syntax for type date: "1 day"
+date,'1 day'::text,f,22007,invalid input syntax for type date: "1 day"
+date,1::integer,f,22007,invalid input syntax for type date: "1"
+date,'1'::json,f,22007,invalid input syntax for type date: "1"
+date,'1'::jsonb,f,22007,invalid input syntax for type date: "1"
+date,'1 year 2 mons'::interval,f,22007,invalid input syntax for type date: "1 year 2 mons"
+date,'2026-01-01 12:34:56+00'::timestamptz,t,,
+date,'2026-01-01 12:34:56'::timestamp,t,,
+date,'2026-01-01'::date,t,,
+date,20260101::integer,t,,
+date,'"2026-01-01"'::jsonb,t,,
+date,'2026-01-01'::text,t,,
+date,2.5::real,f,22007,invalid input syntax for type date: "2.5"
+date,42.5::numeric,f,22007,invalid input syntax for type date: "42.5"
+date,9223372036854775807::bigint,f,22008,date/time field value out of range: "9223372036854775807"
+date,'{"a":1}'::jsonb,f,22007,invalid input syntax for type date: "{"a": 1}"
+date,'{"a":1}'::text,f,22007,invalid input syntax for type date: "{"a":1}"
+date,'"abc"'::jsonb,f,22007,invalid input syntax for type date: ""abc""
+date,'abc'::text,f,22007,invalid input syntax for type date: "abc"
+date,'ab'::varchar(10),f,22007,invalid input syntax for type date: "ab"
+date,array[1,2],f,22007,invalid input syntax for type date: "{1,2}"
+date,array['a','b'],f,22007,invalid input syntax for type date: "{a,b}"
+date,false,f,22007,invalid input syntax for type date: "f"
+date,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22007,invalid input syntax for type date: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+date,'{}'::integer[],f,22007,invalid input syntax for type date: "{}"
+date,true,f,22007,invalid input syntax for type date: "t"
+date,'true'::jsonb,f,22007,invalid input syntax for type date: "true"
+date,'t'::text,f,22007,invalid input syntax for type date: "t"
+date,'\x31'::bytea,f,22007,invalid input syntax for type date: "\x31"
+date,'\xdeadbeef'::bytea,f,22007,invalid input syntax for type date: "\xdeadbeef"
+double precision,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type double precision: "00000000-0000-0000-0000-000000000000"
+double precision,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type double precision: "00000000-0000-0000-0000-000000000000"
+double precision,'00:00:01'::interval,f,22P02,invalid input syntax for type double precision: "00:00:01"
+double precision,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type double precision: "08:00:2b:01:02:03"
+double precision,0::integer,t,,
+double precision,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type double precision: "10.0.0.0/8"
+double precision,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type double precision: "12:34:56+05"
+double precision,'12:34:56'::text,f,22P02,invalid input syntax for type double precision: "12:34:56"
+double precision,'12:34:56'::time,f,22P02,invalid input syntax for type double precision: "12:34:56"
+double precision,'123'::text,t,,
+double precision,'{1,2}'::text,f,22P02,invalid input syntax for type double precision: "{1,2}"
+double precision,'192.168.0.1'::inet,f,22P02,invalid input syntax for type double precision: "192.168.0.1"
+double precision,'192.168.0.1'::text,f,22P02,invalid input syntax for type double precision: "192.168.0.1"
+double precision,'1 day'::interval,f,22P02,invalid input syntax for type double precision: "1 day"
+double precision,'1 day'::text,f,22P02,invalid input syntax for type double precision: "1 day"
+double precision,1::integer,t,,
+double precision,'1'::json,t,,
+double precision,'1'::jsonb,t,,
+double precision,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type double precision: "1 year 2 mons"
+double precision,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type double precision: "2026-01-01 12:34:56+00"
+double precision,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type double precision: "2026-01-01 12:34:56"
+double precision,'2026-01-01'::date,f,22P02,invalid input syntax for type double precision: "2026-01-01"
+double precision,20260101::integer,t,,
+double precision,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type double precision: ""2026-01-01""
+double precision,'2026-01-01'::text,f,22P02,invalid input syntax for type double precision: "2026-01-01"
+double precision,2.5::real,t,,
+double precision,42.5::numeric,t,,
+double precision,9223372036854775807::bigint,t,,
+double precision,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type double precision: "{"a": 1}"
+double precision,'{"a":1}'::text,f,22P02,invalid input syntax for type double precision: "{"a":1}"
+double precision,'"abc"'::jsonb,f,22P02,invalid input syntax for type double precision: ""abc""
+double precision,'abc'::text,f,22P02,invalid input syntax for type double precision: "abc"
+double precision,'ab'::varchar(10),f,22P02,invalid input syntax for type double precision: "ab"
+double precision,array[1,2],f,22P02,invalid input syntax for type double precision: "{1,2}"
+double precision,array['a','b'],f,22P02,invalid input syntax for type double precision: "{a,b}"
+double precision,false,f,22P02,invalid input syntax for type double precision: "f"
+double precision,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type double precision: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+double precision,'{}'::integer[],f,22P02,invalid input syntax for type double precision: "{}"
+double precision,true,f,22P02,invalid input syntax for type double precision: "t"
+double precision,'true'::jsonb,f,22P02,invalid input syntax for type double precision: "true"
+double precision,'t'::text,f,22P02,invalid input syntax for type double precision: "t"
+double precision,'\x31'::bytea,f,22P02,invalid input syntax for type double precision: "\x31"
+double precision,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type double precision: "\xdeadbeef"
+inet,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type inet: "00000000-0000-0000-0000-000000000000"
+inet,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type inet: "00000000-0000-0000-0000-000000000000"
+inet,'00:00:01'::interval,f,22P02,invalid input syntax for type inet: "00:00:01"
+inet,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type inet: "08:00:2b:01:02:03"
+inet,0::integer,f,22P02,invalid input syntax for type inet: "0"
+inet,'10.0.0.0/8'::cidr,t,,
+inet,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type inet: "12:34:56+05"
+inet,'12:34:56'::text,f,22P02,invalid input syntax for type inet: "12:34:56"
+inet,'12:34:56'::time,f,22P02,invalid input syntax for type inet: "12:34:56"
+inet,'123'::text,f,22P02,invalid input syntax for type inet: "123"
+inet,'{1,2}'::text,f,22P02,invalid input syntax for type inet: "{1,2}"
+inet,'192.168.0.1'::inet,t,,
+inet,'192.168.0.1'::text,t,,
+inet,'1 day'::interval,f,22P02,invalid input syntax for type inet: "1 day"
+inet,'1 day'::text,f,22P02,invalid input syntax for type inet: "1 day"
+inet,1::integer,f,22P02,invalid input syntax for type inet: "1"
+inet,'1'::json,f,22P02,invalid input syntax for type inet: "1"
+inet,'1'::jsonb,f,22P02,invalid input syntax for type inet: "1"
+inet,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type inet: "1 year 2 mons"
+inet,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type inet: "2026-01-01 12:34:56+00"
+inet,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type inet: "2026-01-01 12:34:56"
+inet,'2026-01-01'::date,f,22P02,invalid input syntax for type inet: "2026-01-01"
+inet,20260101::integer,f,22P02,invalid input syntax for type inet: "20260101"
+inet,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type inet: ""2026-01-01""
+inet,'2026-01-01'::text,f,22P02,invalid input syntax for type inet: "2026-01-01"
+inet,2.5::real,f,22P02,invalid input syntax for type inet: "2.5"
+inet,42.5::numeric,f,22P02,invalid input syntax for type inet: "42.5"
+inet,9223372036854775807::bigint,f,22P02,invalid input syntax for type inet: "9223372036854775807"
+inet,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type inet: "{"a": 1}"
+inet,'{"a":1}'::text,f,22P02,invalid input syntax for type inet: "{"a":1}"
+inet,'"abc"'::jsonb,f,22P02,invalid input syntax for type inet: ""abc""
+inet,'abc'::text,f,22P02,invalid input syntax for type inet: "abc"
+inet,'ab'::varchar(10),f,22P02,invalid input syntax for type inet: "ab"
+inet,array[1,2],f,22P02,invalid input syntax for type inet: "{1,2}"
+inet,array['a','b'],f,22P02,invalid input syntax for type inet: "{a,b}"
+inet,false,f,22P02,invalid input syntax for type inet: "f"
+inet,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type inet: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+inet,'{}'::integer[],f,22P02,invalid input syntax for type inet: "{}"
+inet,'{}'::integer[],f,22P02,invalid input syntax for type inet: "{}"
+inet,true,f,22P02,invalid input syntax for type inet: "t"
+inet,'true'::jsonb,f,22P02,invalid input syntax for type inet: "true"
+inet,'t'::text,f,22P02,invalid input syntax for type inet: "t"
+inet,'\x31'::bytea,f,22P02,invalid input syntax for type inet: "\x31"
+inet,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type inet: "\xdeadbeef"
+integer,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type integer: "00000000-0000-0000-0000-000000000000"
+integer,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type integer: "00000000-0000-0000-0000-000000000000"
+integer,'00:00:01'::interval,f,22P02,invalid input syntax for type integer: "00:00:01"
+integer,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type integer: "08:00:2b:01:02:03"
+integer,0::integer,t,,
+integer,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type integer: "10.0.0.0/8"
+integer,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type integer: "12:34:56+05"
+integer,'12:34:56'::text,f,22P02,invalid input syntax for type integer: "12:34:56"
+integer,'12:34:56'::time,f,22P02,invalid input syntax for type integer: "12:34:56"
+integer,'123'::text,t,,
+integer,'{1,2}'::text,f,22P02,invalid input syntax for type integer: "{1,2}"
+integer,'192.168.0.1'::inet,f,22P02,invalid input syntax for type integer: "192.168.0.1"
+integer,'192.168.0.1'::text,f,22P02,invalid input syntax for type integer: "192.168.0.1"
+integer,'1 day'::interval,f,22P02,invalid input syntax for type integer: "1 day"
+integer,'1 day'::text,f,22P02,invalid input syntax for type integer: "1 day"
+integer,1::integer,t,,
+integer,'1'::json,t,,
+integer,'1'::jsonb,t,,
+integer,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type integer: "1 year 2 mons"
+integer,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type integer: "2026-01-01 12:34:56+00"
+integer,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type integer: "2026-01-01 12:34:56"
+integer,'2026-01-01'::date,f,22P02,invalid input syntax for type integer: "2026-01-01"
+integer,20260101::integer,t,,
+integer,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type integer: ""2026-01-01""
+integer,'2026-01-01'::text,f,22P02,invalid input syntax for type integer: "2026-01-01"
+integer,2.5::real,t,,
+integer,42.5::numeric,t,,
+integer,9223372036854775807::bigint,f,22003,integer out of range
+integer,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type integer: "{"a": 1}"
+integer,'{"a":1}'::text,f,22P02,invalid input syntax for type integer: "{"a":1}"
+integer,'"abc"'::jsonb,f,22P02,invalid input syntax for type integer: ""abc""
+integer,'abc'::text,f,22P02,invalid input syntax for type integer: "abc"
+integer,'ab'::varchar(10),f,22P02,invalid input syntax for type integer: "ab"
+integer,array[1,2],f,22P02,invalid input syntax for type integer: "{1,2}"
+integer,array['a','b'],f,22P02,invalid input syntax for type integer: "{a,b}"
+integer,false,f,22P02,invalid input syntax for type integer: "f"
+integer,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type integer: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+integer,'{}'::integer[],f,22P02,invalid input syntax for type integer: "{}"
+integer,true,f,22P02,invalid input syntax for type integer: "t"
+integer,'true'::jsonb,f,22P02,invalid input syntax for type integer: "true"
+integer,'t'::text,f,22P02,invalid input syntax for type integer: "t"
+integer,'\x31'::bytea,f,22P02,invalid input syntax for type integer: "\x31"
+integer,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type integer: "\xdeadbeef"
+integer[],'00000000-0000-0000-0000-000000000000'::text,f,22P02,malformed array literal: "00000000-0000-0000-0000-000000000000"
+integer[],'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,malformed array literal: "00000000-0000-0000-0000-000000000000"
+integer[],'00:00:01'::interval,f,22P02,malformed array literal: "00:00:01"
+integer[],'08:00:2b:01:02:03'::macaddr,f,22P02,malformed array literal: "08:00:2b:01:02:03"
+integer[],0::integer,f,22P02,malformed array literal: "0"
+integer[],'10.0.0.0/8'::cidr,f,22P02,malformed array literal: "10.0.0.0/8"
+integer[],'12:34:56+05'::timetz,f,22P02,malformed array literal: "12:34:56+05"
+integer[],'12:34:56'::text,f,22P02,malformed array literal: "12:34:56"
+integer[],'12:34:56'::time,f,22P02,malformed array literal: "12:34:56"
+integer[],'123'::text,f,22P02,malformed array literal: "123"
+integer[],'[1, 2]'::jsonb,f,22P02,malformed array literal: "[1, 2]"
+integer[],'{1,2}'::text,t,,
+integer[],'192.168.0.1'::inet,f,22P02,malformed array literal: "192.168.0.1"
+integer[],'192.168.0.1'::text,f,22P02,malformed array literal: "192.168.0.1"
+integer[],'1 day'::interval,f,22P02,malformed array literal: "1 day"
+integer[],'1 day'::text,f,22P02,malformed array literal: "1 day"
+integer[],1::integer,f,22P02,malformed array literal: "1"
+integer[],'1'::json,f,22P02,malformed array literal: "1"
+integer[],'1'::jsonb,f,22P02,malformed array literal: "1"
+integer[],'1 year 2 mons'::interval,f,22P02,malformed array literal: "1 year 2 mons"
+integer[],'2026-01-01 12:34:56+00'::timestamptz,f,22P02,malformed array literal: "2026-01-01 12:34:56+00"
+integer[],'2026-01-01 12:34:56'::timestamp,f,22P02,malformed array literal: "2026-01-01 12:34:56"
+integer[],'2026-01-01'::date,f,22P02,malformed array literal: "2026-01-01"
+integer[],20260101::integer,f,22P02,malformed array literal: "20260101"
+integer[],'"2026-01-01"'::jsonb,f,22P02,malformed array literal: ""2026-01-01""
+integer[],'2026-01-01'::text,f,22P02,malformed array literal: "2026-01-01"
+integer[],2.5::real,f,22P02,malformed array literal: "2.5"
+integer[],42.5::numeric,f,22P02,malformed array literal: "42.5"
+integer[],9223372036854775807::bigint,f,22P02,malformed array literal: "9223372036854775807"
+integer[],'{"a":1}'::jsonb,f,22P02,malformed array literal: "{"a": 1}"
+integer[],'{"a":1}'::text,f,22P02,malformed array literal: "{"a":1}"
+integer[],'"abc"'::jsonb,f,22P02,malformed array literal: ""abc""
+integer[],'abc'::text,f,22P02,malformed array literal: "abc"
+integer[],'ab'::varchar(10),f,22P02,malformed array literal: "ab"
+integer[],array[1,2],t,,
+integer[],array['a','b'],f,22P02,invalid input syntax for type integer: "a"
+integer[],false,f,22P02,malformed array literal: "f"
+integer[],'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,malformed array literal: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+integer[],'{}'::integer[],t,,
+integer[],'{}'::jsonb,t,,
+integer[],true,f,22P02,malformed array literal: "t"
+integer[],'true'::jsonb,f,22P02,malformed array literal: "true"
+integer[],'t'::text,f,22P02,malformed array literal: "t"
+integer[],'\x31'::bytea,f,22P02,malformed array literal: "\x31"
+integer[],'\xdeadbeef'::bytea,f,22P02,malformed array literal: "\xdeadbeef"
+interval,'00000000-0000-0000-0000-000000000000'::text,f,22007,invalid input syntax for type interval: "00000000-0000-0000-0000-000000000000"
+interval,'00000000-0000-0000-0000-000000000000'::uuid,f,22007,invalid input syntax for type interval: "00000000-0000-0000-0000-000000000000"
+interval,'00:00:01'::interval,t,,
+interval,'08:00:2b:01:02:03'::macaddr,f,22007,invalid input syntax for type interval: "08:00:2b:01:02:03"
+interval,0::integer,t,,
+interval,'10.0.0.0/8'::cidr,f,22007,invalid input syntax for type interval: "10.0.0.0/8"
+interval,'12:34:56+05'::timetz,f,22007,invalid input syntax for type interval: "12:34:56+05"
+interval,'12:34:56'::text,t,,
+interval,'12:34:56'::time,t,,
+interval,'123'::text,t,,
+interval,'{1,2}'::text,f,22007,invalid input syntax for type interval: "{1,2}"
+interval,'192.168.0.1'::inet,f,22007,invalid input syntax for type interval: "192.168.0.1"
+interval,'192.168.0.1'::text,f,22007,invalid input syntax for type interval: "192.168.0.1"
+interval,'1 day'::interval,t,,
+interval,'1 day'::text,t,,
+interval,1::integer,t,,
+interval,'1'::json,t,,
+interval,'1'::jsonb,t,,
+interval,'1 year 2 mons'::interval,t,,
+interval,'2026-01-01 12:34:56+00'::timestamptz,f,22007,invalid input syntax for type interval: "2026-01-01 12:34:56+00"
+interval,'2026-01-01 12:34:56'::timestamp,f,22007,invalid input syntax for type interval: "2026-01-01 12:34:56"
+interval,'2026-01-01'::date,f,22007,invalid input syntax for type interval: "2026-01-01"
+interval,20260101::integer,t,,
+interval,'"2026-01-01"'::jsonb,f,22007,invalid input syntax for type interval: ""2026-01-01""
+interval,'2026-01-01'::text,f,22007,invalid input syntax for type interval: "2026-01-01"
+interval,2.5::real,t,,
+interval,42.5::numeric,t,,
+interval,9223372036854775807::bigint,f,22015,interval field value out of range: "9223372036854775807"
+interval,'{"a":1}'::jsonb,f,22007,invalid input syntax for type interval: "{"a": 1}"
+interval,'{"a":1}'::text,f,22007,invalid input syntax for type interval: "{"a":1}"
+interval,'"abc"'::jsonb,f,22007,invalid input syntax for type interval: ""abc""
+interval,'abc'::text,f,22007,invalid input syntax for type interval: "abc"
+interval,'ab'::varchar(10),f,22007,invalid input syntax for type interval: "ab"
+interval,array[1,2],f,22007,invalid input syntax for type interval: "{1,2}"
+interval,array['a','b'],f,22007,invalid input syntax for type interval: "{a,b}"
+interval,false,f,22007,invalid input syntax for type interval: "f"
+interval,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22007,invalid input syntax for type interval: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+interval,'{}'::integer[],f,22007,invalid input syntax for type interval: "{}"
+interval,true,f,22007,invalid input syntax for type interval: "t"
+interval,'true'::jsonb,f,22007,invalid input syntax for type interval: "true"
+interval,'t'::text,f,22007,invalid input syntax for type interval: "t"
+interval,'\x31'::bytea,f,22007,invalid input syntax for type interval: "\x31"
+interval,'\xdeadbeef'::bytea,f,22007,invalid input syntax for type interval: "\xdeadbeef"
+json,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type json
+json,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type json
+json,'00:00:01'::interval,f,22P02,invalid input syntax for type json
+json,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type json
+json,0::integer,t,,
+json,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type json
+json,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type json
+json,'12:34:56'::text,f,22P02,invalid input syntax for type json
+json,'12:34:56'::time,f,22P02,invalid input syntax for type json
+json,'123'::text,t,,
+json,'{1,2}'::text,f,22P02,invalid input syntax for type json
+json,'192.168.0.1'::inet,f,22P02,invalid input syntax for type json
+json,'192.168.0.1'::text,f,22P02,invalid input syntax for type json
+json,'1 day'::interval,f,22P02,invalid input syntax for type json
+json,'1 day'::text,f,22P02,invalid input syntax for type json
+json,1::integer,t,,
+json,'1'::json,t,,
+json,'1'::jsonb,t,,
+json,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type json
+json,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type json
+json,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type json
+json,'2026-01-01'::date,f,22P02,invalid input syntax for type json
+json,20260101::integer,t,,
+json,'"2026-01-01"'::jsonb,t,,
+json,'2026-01-01'::text,f,22P02,invalid input syntax for type json
+json,2.5::real,t,,
+json,42.5::numeric,t,,
+json,9223372036854775807::bigint,t,,
+json,'{"a":1}'::jsonb,t,,
+json,'{"a":1}'::text,t,,
+json,'"abc"'::jsonb,t,,
+json,'abc'::text,f,22P02,invalid input syntax for type json
+json,'ab'::varchar(10),f,22P02,invalid input syntax for type json
+json,array[1,2],f,22P02,invalid input syntax for type json
+json,array['a','b'],f,22P02,invalid input syntax for type json
+json,false,f,22P02,invalid input syntax for type json
+json,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type json
+json,'{}'::integer[],t,,
+json,'t'::boolean,f,22P02,invalid input syntax for type json
+json,true,f,22P02,invalid input syntax for type json
+json,'true'::jsonb,t,,
+json,'t'::text,f,22P02,invalid input syntax for type json
+json,'\x31'::bytea,f,22P02,invalid input syntax for type json
+json,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type json
+jsonb,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type json
+jsonb,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type json
+jsonb,'00:00:01'::interval,f,22P02,invalid input syntax for type json
+jsonb,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type json
+jsonb,0::integer,t,,
+jsonb,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type json
+jsonb,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type json
+jsonb,'12:34:56'::text,f,22P02,invalid input syntax for type json
+jsonb,'12:34:56'::time,f,22P02,invalid input syntax for type json
+jsonb,'123'::text,t,,
+jsonb,'{1,2}'::text,f,22P02,invalid input syntax for type json
+jsonb,'192.168.0.1'::inet,f,22P02,invalid input syntax for type json
+jsonb,'192.168.0.1'::text,f,22P02,invalid input syntax for type json
+jsonb,'1 day'::interval,f,22P02,invalid input syntax for type json
+jsonb,'1 day'::text,f,22P02,invalid input syntax for type json
+jsonb,1::integer,t,,
+jsonb,'1'::json,t,,
+jsonb,'1'::jsonb,t,,
+jsonb,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type json
+jsonb,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type json
+jsonb,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type json
+jsonb,'2026-01-01'::date,f,22P02,invalid input syntax for type json
+jsonb,20260101::integer,t,,
+jsonb,'"2026-01-01"'::jsonb,t,,
+jsonb,'2026-01-01'::text,f,22P02,invalid input syntax for type json
+jsonb,2.5::real,t,,
+jsonb,42.5::numeric,t,,
+jsonb,9223372036854775807::bigint,t,,
+jsonb,'{"a":1}'::jsonb,t,,
+jsonb,'{"a":1}'::text,t,,
+jsonb,'"abc"'::jsonb,t,,
+jsonb,'abc'::text,f,22P02,invalid input syntax for type json
+jsonb,'ab'::varchar(10),f,22P02,invalid input syntax for type json
+jsonb,array[1,2],f,22P02,invalid input syntax for type json
+jsonb,array['a','b'],f,22P02,invalid input syntax for type json
+jsonb,false,f,22P02,invalid input syntax for type json
+jsonb,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type json
+jsonb,'{}'::integer[],t,,
+jsonb,true,f,22P02,invalid input syntax for type json
+jsonb,'true'::jsonb,t,,
+jsonb,'t'::text,f,22P02,invalid input syntax for type json
+jsonb,'\x31'::bytea,f,22P02,invalid input syntax for type json
+jsonb,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type json
+macaddr,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type macaddr: "00000000-0000-0000-0000-000000000000"
+macaddr,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type macaddr: "00000000-0000-0000-0000-000000000000"
+macaddr,'00:00:01'::interval,f,22P02,invalid input syntax for type macaddr: "00:00:01"
+macaddr,'08:00:2b:01:02:03'::macaddr,t,,
+macaddr,0::integer,f,22P02,invalid input syntax for type macaddr: "0"
+macaddr,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type macaddr: "10.0.0.0/8"
+macaddr,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type macaddr: "12:34:56+05"
+macaddr,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type macaddr: "12:34:56+05"
+macaddr,'12:34:56'::text,f,22P02,invalid input syntax for type macaddr: "12:34:56"
+macaddr,'12:34:56'::time,f,22P02,invalid input syntax for type macaddr: "12:34:56"
+macaddr,'123'::text,f,22P02,invalid input syntax for type macaddr: "123"
+macaddr,'{1,2}'::text,f,22P02,invalid input syntax for type macaddr: "{1,2}"
+macaddr,'192.168.0.1'::inet,f,22P02,invalid input syntax for type macaddr: "192.168.0.1"
+macaddr,'192.168.0.1'::text,f,22P02,invalid input syntax for type macaddr: "192.168.0.1"
+macaddr,'1 day'::interval,f,22P02,invalid input syntax for type macaddr: "1 day"
+macaddr,'1 day'::text,f,22P02,invalid input syntax for type macaddr: "1 day"
+macaddr,1::integer,f,22P02,invalid input syntax for type macaddr: "1"
+macaddr,'1'::json,f,22P02,invalid input syntax for type macaddr: "1"
+macaddr,'1'::jsonb,f,22P02,invalid input syntax for type macaddr: "1"
+macaddr,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type macaddr: "1 year 2 mons"
+macaddr,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type macaddr: "2026-01-01 12:34:56+00"
+macaddr,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type macaddr: "2026-01-01 12:34:56"
+macaddr,'2026-01-01'::date,t,,
+macaddr,20260101::integer,f,22P02,invalid input syntax for type macaddr: "20260101"
+macaddr,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type macaddr: ""2026-01-01""
+macaddr,'2026-01-01'::text,t,,
+macaddr,2.5::real,f,22P02,invalid input syntax for type macaddr: "2.5"
+macaddr,42.5::numeric,f,22P02,invalid input syntax for type macaddr: "42.5"
+macaddr,9223372036854775807::bigint,f,22P02,invalid input syntax for type macaddr: "9223372036854775807"
+macaddr,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type macaddr: "{"a": 1}"
+macaddr,'{"a":1}'::text,f,22P02,invalid input syntax for type macaddr: "{"a":1}"
+macaddr,'"abc"'::jsonb,f,22P02,invalid input syntax for type macaddr: ""abc""
+macaddr,'abc'::text,f,22P02,invalid input syntax for type macaddr: "abc"
+macaddr,'ab'::varchar(10),f,22P02,invalid input syntax for type macaddr: "ab"
+macaddr,array[1,2],f,22P02,invalid input syntax for type macaddr: "{1,2}"
+macaddr,array['a','b'],f,22P02,invalid input syntax for type macaddr: "{a,b}"
+macaddr,false,f,22P02,invalid input syntax for type macaddr: "f"
+macaddr,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type macaddr: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+macaddr,'{}'::integer[],f,22P02,invalid input syntax for type macaddr: "{}"
+macaddr,true,f,22P02,invalid input syntax for type macaddr: "t"
+macaddr,'true'::jsonb,f,22P02,invalid input syntax for type macaddr: "true"
+macaddr,'t'::text,f,22P02,invalid input syntax for type macaddr: "t"
+macaddr,'\x31'::bytea,f,22P02,invalid input syntax for type macaddr: "\x31"
+macaddr,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type macaddr: "\xdeadbeef"
+numeric,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type numeric: "00000000-0000-0000-0000-000000000000"
+numeric,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type numeric: "00000000-0000-0000-0000-000000000000"
+numeric,'00:00:01'::interval,f,22P02,invalid input syntax for type numeric: "00:00:01"
+numeric,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type numeric: "08:00:2b:01:02:03"
+numeric,0::integer,t,,
+numeric,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type numeric: "10.0.0.0/8"
+numeric,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type numeric: "12:34:56+05"
+numeric,'12:34:56'::text,f,22P02,invalid input syntax for type numeric: "12:34:56"
+numeric,'12:34:56'::time,f,22P02,invalid input syntax for type numeric: "12:34:56"
+numeric,'123'::text,t,,
+numeric,'{1,2}'::text,f,22P02,invalid input syntax for type numeric: "{1,2}"
+numeric,'192.168.0.1'::inet,f,22P02,invalid input syntax for type numeric: "192.168.0.1"
+numeric,'192.168.0.1'::text,f,22P02,invalid input syntax for type numeric: "192.168.0.1"
+numeric,'1 day'::interval,f,22P02,invalid input syntax for type numeric: "1 day"
+numeric,'1 day'::text,f,22P02,invalid input syntax for type numeric: "1 day"
+numeric,1::integer,t,,
+numeric,'1'::json,t,,
+numeric,'1'::jsonb,t,,
+numeric,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type numeric: "1 year 2 mons"
+numeric,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type numeric: "2026-01-01 12:34:56+00"
+numeric,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type numeric: "2026-01-01 12:34:56"
+numeric,'2026-01-01'::date,f,22P02,invalid input syntax for type numeric: "2026-01-01"
+numeric,20260101::integer,t,,
+numeric,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type numeric: ""2026-01-01""
+numeric,'2026-01-01'::text,f,22P02,invalid input syntax for type numeric: "2026-01-01"
+numeric,2.5::real,t,,
+numeric,42.5::numeric,t,,
+numeric,9223372036854775807::bigint,t,,
+numeric,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type numeric: "{"a": 1}"
+numeric,'{"a":1}'::text,f,22P02,invalid input syntax for type numeric: "{"a":1}"
+numeric,'"abc"'::jsonb,f,22P02,invalid input syntax for type numeric: ""abc""
+numeric,'abc'::text,f,22P02,invalid input syntax for type numeric: "abc"
+numeric,'ab'::varchar(10),f,22P02,invalid input syntax for type numeric: "ab"
+numeric,array[1,2],f,22P02,invalid input syntax for type numeric: "{1,2}"
+numeric,array['a','b'],f,22P02,invalid input syntax for type numeric: "{a,b}"
+numeric,false,f,22P02,invalid input syntax for type numeric: "f"
+numeric,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type numeric: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+numeric,'{}'::integer[],f,22P02,invalid input syntax for type numeric: "{}"
+numeric,true,f,22P02,invalid input syntax for type numeric: "t"
+numeric,'true'::jsonb,f,22P02,invalid input syntax for type numeric: "true"
+numeric,'t'::text,f,22P02,invalid input syntax for type numeric: "t"
+numeric,'\x31'::bytea,f,22P02,invalid input syntax for type numeric: "\x31"
+numeric,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type numeric: "\xdeadbeef"
+real,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type real: "00000000-0000-0000-0000-000000000000"
+real,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type real: "00000000-0000-0000-0000-000000000000"
+real,'00:00:01'::interval,f,22P02,invalid input syntax for type real: "00:00:01"
+real,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type real: "08:00:2b:01:02:03"
+real,0::integer,t,,
+real,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type real: "10.0.0.0/8"
+real,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type real: "12:34:56+05"
+real,'12:34:56'::text,f,22P02,invalid input syntax for type real: "12:34:56"
+real,'12:34:56'::time,f,22P02,invalid input syntax for type real: "12:34:56"
+real,'123'::text,t,,
+real,'{1,2}'::text,f,22P02,invalid input syntax for type real: "{1,2}"
+real,'192.168.0.1'::inet,f,22P02,invalid input syntax for type real: "192.168.0.1"
+real,'192.168.0.1'::text,f,22P02,invalid input syntax for type real: "192.168.0.1"
+real,'1 day'::interval,f,22P02,invalid input syntax for type real: "1 day"
+real,'1 day'::text,f,22P02,invalid input syntax for type real: "1 day"
+real,1::integer,t,,
+real,'1'::json,t,,
+real,'1'::jsonb,t,,
+real,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type real: "1 year 2 mons"
+real,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type real: "2026-01-01 12:34:56+00"
+real,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type real: "2026-01-01 12:34:56"
+real,'2026-01-01'::date,f,22P02,invalid input syntax for type real: "2026-01-01"
+real,20260101::integer,t,,
+real,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type real: ""2026-01-01""
+real,'2026-01-01'::text,f,22P02,invalid input syntax for type real: "2026-01-01"
+real,2.5::real,t,,
+real,42.5::numeric,t,,
+real,9223372036854775807::bigint,t,,
+real,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type real: "{"a": 1}"
+real,'{"a":1}'::text,f,22P02,invalid input syntax for type real: "{"a":1}"
+real,'"abc"'::jsonb,f,22P02,invalid input syntax for type real: ""abc""
+real,'abc'::text,f,22P02,invalid input syntax for type real: "abc"
+real,'ab'::varchar(10),f,22P02,invalid input syntax for type real: "ab"
+real,array[1,2],f,22P02,invalid input syntax for type real: "{1,2}"
+real,array['a','b'],f,22P02,invalid input syntax for type real: "{a,b}"
+real,false,f,22P02,invalid input syntax for type real: "f"
+real,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type real: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+real,'{}'::integer[],f,22P02,invalid input syntax for type real: "{}"
+real,true,f,22P02,invalid input syntax for type real: "t"
+real,'true'::jsonb,f,22P02,invalid input syntax for type real: "true"
+real,'t'::text,f,22P02,invalid input syntax for type real: "t"
+real,'\x31'::bytea,f,22P02,invalid input syntax for type real: "\x31"
+real,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type real: "\xdeadbeef"
+smallint,'00000000-0000-0000-0000-000000000000'::text,f,22P02,invalid input syntax for type smallint: "00000000-0000-0000-0000-000000000000"
+smallint,'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,invalid input syntax for type smallint: "00000000-0000-0000-0000-000000000000"
+smallint,'00:00:01'::interval,f,22P02,invalid input syntax for type smallint: "00:00:01"
+smallint,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type smallint: "08:00:2b:01:02:03"
+smallint,0::integer,t,,
+smallint,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type smallint: "10.0.0.0/8"
+smallint,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type smallint: "12:34:56+05"
+smallint,'12:34:56'::text,f,22P02,invalid input syntax for type smallint: "12:34:56"
+smallint,'12:34:56'::time,f,22P02,invalid input syntax for type smallint: "12:34:56"
+smallint,'123'::text,t,,
+smallint,'{1,2}'::text,f,22P02,invalid input syntax for type smallint: "{1,2}"
+smallint,'192.168.0.1'::inet,f,22P02,invalid input syntax for type smallint: "192.168.0.1"
+smallint,'192.168.0.1'::text,f,22P02,invalid input syntax for type smallint: "192.168.0.1"
+smallint,'1 day'::interval,f,22P02,invalid input syntax for type smallint: "1 day"
+smallint,'1 day'::text,f,22P02,invalid input syntax for type smallint: "1 day"
+smallint,1::integer,t,,
+smallint,'1'::json,t,,
+smallint,'1'::jsonb,t,,
+smallint,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type smallint: "1 year 2 mons"
+smallint,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type smallint: "2026-01-01 12:34:56+00"
+smallint,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type smallint: "2026-01-01 12:34:56"
+smallint,'2026-01-01'::date,f,22P02,invalid input syntax for type smallint: "2026-01-01"
+smallint,20260101::integer,f,22003,smallint out of range
+smallint,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type smallint: ""2026-01-01""
+smallint,'2026-01-01'::text,f,22P02,invalid input syntax for type smallint: "2026-01-01"
+smallint,2.5::real,t,,
+smallint,42.5::numeric,t,,
+smallint,9223372036854775807::bigint,f,22003,smallint out of range
+smallint,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type smallint: "{"a": 1}"
+smallint,'{"a":1}'::text,f,22P02,invalid input syntax for type smallint: "{"a":1}"
+smallint,'"abc"'::jsonb,f,22P02,invalid input syntax for type smallint: ""abc""
+smallint,'abc'::text,f,22P02,invalid input syntax for type smallint: "abc"
+smallint,'ab'::varchar(10),f,22P02,invalid input syntax for type smallint: "ab"
+smallint,array[1,2],f,22P02,invalid input syntax for type smallint: "{1,2}"
+smallint,array['a','b'],f,22P02,invalid input syntax for type smallint: "{a,b}"
+smallint,false,f,22P02,invalid input syntax for type smallint: "f"
+smallint,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,invalid input syntax for type smallint: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+smallint,'{}'::integer[],f,22P02,invalid input syntax for type smallint: "{}"
+smallint,true,f,22P02,invalid input syntax for type smallint: "t"
+smallint,'true'::jsonb,f,22P02,invalid input syntax for type smallint: "true"
+smallint,'t'::text,f,22P02,invalid input syntax for type smallint: "t"
+smallint,'\x31'::bytea,f,22P02,invalid input syntax for type smallint: "\x31"
+smallint,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type smallint: "\xdeadbeef"
+text,'00000000-0000-0000-0000-000000000000'::text,t,,
+text,'00000000-0000-0000-0000-000000000000'::uuid,t,,
+text,'00:00:01'::interval,t,,
+text,'08:00:2b:01:02:03'::macaddr,t,,
+text,0::integer,t,,
+text,'10.0.0.0/8'::cidr,t,,
+text,'12:34:56+05'::timetz,t,,
+text,'12:34:56'::text,t,,
+text,'12:34:56'::time,t,,
+text,'123'::text,t,,
+text,'{1,2}'::text,t,,
+text,'192.168.0.1'::inet,t,,
+text,'192.168.0.1'::text,t,,
+text,'1 day'::interval,t,,
+text,'1 day'::text,t,,
+text,1::integer,t,,
+text,'1'::json,t,,
+text,'1'::jsonb,t,,
+text,'1 year 2 mons'::interval,t,,
+text,'2026-01-01 12:34:56+00'::timestamptz,t,,
+text,'2026-01-01 12:34:56'::timestamp,t,,
+text,'2026-01-01'::date,t,,
+text,20260101::integer,t,,
+text,'"2026-01-01"'::jsonb,t,,
+text,'2026-01-01'::text,t,,
+text,2.5::real,t,,
+text,42.5::numeric,t,,
+text,9223372036854775807::bigint,t,,
+text,'{"a":1}'::jsonb,t,,
+text,'{"a":1}'::text,t,,
+text,'"abc"'::jsonb,t,,
+text,'abc'::text,t,,
+text,'ab'::varchar(10),t,,
+text,array[1,2],t,,
+text,array['a','b'],t,,
+text,false,t,,
+text,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,t,,
+text,'{}'::integer[],t,,
+text,true,t,,
+text,'true'::jsonb,t,,
+text,'t'::text,t,,
+text,'\x31'::bytea,t,,
+text,'\xdeadbeef'::bytea,t,,
+text[],'00000000-0000-0000-0000-000000000000'::text,f,22P02,malformed array literal: "00000000-0000-0000-0000-000000000000"
+text[],'00000000-0000-0000-0000-000000000000'::uuid,f,22P02,malformed array literal: "00000000-0000-0000-0000-000000000000"
+text[],'00:00:01'::interval,f,22P02,malformed array literal: "00:00:01"
+text[],'08:00:2b:01:02:03'::macaddr,f,22P02,malformed array literal: "08:00:2b:01:02:03"
+text[],0::integer,f,22P02,malformed array literal: "0"
+text[],'10.0.0.0/8'::cidr,f,22P02,malformed array literal: "10.0.0.0/8"
+text[],'12:34:56+05'::timetz,f,22P02,malformed array literal: "12:34:56+05"
+text[],'12:34:56'::text,f,22P02,malformed array literal: "12:34:56"
+text[],'12:34:56'::time,f,22P02,malformed array literal: "12:34:56"
+text[],'123'::text,f,22P02,malformed array literal: "123"
+text[],'{1,2}'::text,t,,
+text[],'192.168.0.1'::inet,f,22P02,malformed array literal: "192.168.0.1"
+text[],'192.168.0.1'::text,f,22P02,malformed array literal: "192.168.0.1"
+text[],'1 day'::interval,f,22P02,malformed array literal: "1 day"
+text[],'1 day'::text,f,22P02,malformed array literal: "1 day"
+text[],1::integer,f,22P02,malformed array literal: "1"
+text[],'1'::json,f,22P02,malformed array literal: "1"
+text[],'1'::jsonb,f,22P02,malformed array literal: "1"
+text[],'1 year 2 mons'::interval,f,22P02,malformed array literal: "1 year 2 mons"
+text[],'2026-01-01 12:34:56+00'::timestamptz,f,22P02,malformed array literal: "2026-01-01 12:34:56+00"
+text[],'2026-01-01 12:34:56'::timestamp,f,22P02,malformed array literal: "2026-01-01 12:34:56"
+text[],'2026-01-01'::date,f,22P02,malformed array literal: "2026-01-01"
+text[],20260101::integer,f,22P02,malformed array literal: "20260101"
+text[],'"2026-01-01"'::jsonb,f,22P02,malformed array literal: ""2026-01-01""
+text[],'2026-01-01'::text,f,22P02,malformed array literal: "2026-01-01"
+text[],2.5::real,f,22P02,malformed array literal: "2.5"
+text[],42.5::numeric,f,22P02,malformed array literal: "42.5"
+text[],9223372036854775807::bigint,f,22P02,malformed array literal: "9223372036854775807"
+text[],'{"a":1}'::jsonb,f,22P02,malformed array literal: "{"a": 1}"
+text[],'{"a":1}'::text,f,22P02,malformed array literal: "{"a":1}"
+text[],'"abc"'::jsonb,f,22P02,malformed array literal: ""abc""
+text[],'abc'::text,f,22P02,malformed array literal: "abc"
+text[],'ab'::varchar(10),f,22P02,malformed array literal: "ab"
+text[],array[1,2],t,,
+text[],array['a','b'],t,,
+text[],false,f,22P02,malformed array literal: "f"
+text[],'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22P02,malformed array literal: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+text[],'{}'::integer[],t,,
+text[],'{}'::jsonb,t,,
+text[],true,f,22P02,malformed array literal: "t"
+text[],'true'::jsonb,f,22P02,malformed array literal: "true"
+text[],'t'::text,f,22P02,malformed array literal: "t"
+text[],'\x31'::bytea,f,22P02,malformed array literal: "\x31"
+text[],'\xdeadbeef'::bytea,f,22P02,malformed array literal: "\xdeadbeef"
+time,'00000000-0000-0000-0000-000000000000'::text,f,22007,invalid input syntax for type time: "00000000-0000-0000-0000-000000000000"
+time,'00000000-0000-0000-0000-000000000000'::uuid,f,22007,invalid input syntax for type time: "00000000-0000-0000-0000-000000000000"
+time,'00:00:01'::interval,t,,
+time,'08:00:2b:01:02:03'::macaddr,f,22007,invalid input syntax for type time: "08:00:2b:01:02:03"
+time,0::integer,f,22007,invalid input syntax for type time: "0"
+time,'10.0.0.0/8'::cidr,f,22007,invalid input syntax for type time: "10.0.0.0/8"
+time,'12:34:56+05'::timetz,t,,
+time,'12:34:56'::text,t,,
+time,'12:34:56'::time,t,,
+time,'123'::text,f,22007,invalid input syntax for type time: "123"
+time,'{1,2}'::text,f,22007,invalid input syntax for type time: "{1,2}"
+time,'192.168.0.1'::inet,f,22007,invalid input syntax for type time: "192.168.0.1"
+time,'192.168.0.1'::text,f,22007,invalid input syntax for type time: "192.168.0.1"
+time,'1 day'::interval,t,,
+time,'1 day'::text,f,22007,invalid input syntax for type time: "1 day"
+time,1::integer,f,22007,invalid input syntax for type time: "1"
+time,'1'::json,f,22007,invalid input syntax for type time: "1"
+time,'1'::jsonb,f,22007,invalid input syntax for type time: "1"
+time,'1 year 2 mons'::interval,t,,
+time,'2026-01-01 12:34:56+00'::timestamptz,t,,
+time,'2026-01-01 12:34:56'::timestamp,t,,
+time,'2026-01-01'::date,f,22007,invalid input syntax for type time: "2026-01-01"
+time,20260101::integer,f,22007,invalid input syntax for type time: "20260101"
+time,'"2026-01-01"'::jsonb,f,22007,invalid input syntax for type time: ""2026-01-01""
+time,'2026-01-01'::text,f,22007,invalid input syntax for type time: "2026-01-01"
+time,2.5::real,f,22007,invalid input syntax for type time: "2.5"
+time,42.5::numeric,f,22007,invalid input syntax for type time: "42.5"
+time,9223372036854775807::bigint,f,22007,invalid input syntax for type time: "9223372036854775807"
+time,'{"a":1}'::jsonb,f,22007,invalid input syntax for type time: "{"a": 1}"
+time,'{"a":1}'::text,f,22007,invalid input syntax for type time: "{"a":1}"
+time,'"abc"'::jsonb,f,22007,invalid input syntax for type time: ""abc""
+time,'abc'::text,f,22007,invalid input syntax for type time: "abc"
+time,'ab'::varchar(10),f,22007,invalid input syntax for type time: "ab"
+time,array[1,2],f,22007,invalid input syntax for type time: "{1,2}"
+time,array['a','b'],f,22007,invalid input syntax for type time: "{a,b}"
+time,false,f,22007,invalid input syntax for type time: "f"
+time,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22023,time zone "ffffffff-ffff-ffff-ffff-ffffffffffff" not recognized
+time,'{}'::integer[],f,22007,invalid input syntax for type time: "{}"
+time,true,f,22007,invalid input syntax for type time: "t"
+time,'true'::jsonb,f,22007,invalid input syntax for type time: "true"
+time,'t'::text,f,22007,invalid input syntax for type time: "t"
+time,'\x31'::bytea,f,22007,invalid input syntax for type time: "\x31"
+time,'\xdeadbeef'::bytea,f,22007,invalid input syntax for type time: "\xdeadbeef"
+timestamp,'00000000-0000-0000-0000-000000000000'::text,f,22007,invalid input syntax for type timestamp: "00000000-0000-0000-0000-000000000000"
+timestamp,'00000000-0000-0000-0000-000000000000'::uuid,f,22007,invalid input syntax for type timestamp: "00000000-0000-0000-0000-000000000000"
+timestamp,'00:00:01'::interval,f,22007,invalid input syntax for type timestamp: "00:00:01"
+timestamp,'08:00:2b:01:02:03'::macaddr,f,22007,invalid input syntax for type timestamp: "08:00:2b:01:02:03"
+timestamp,0::integer,f,22008,date/time field value out of range: "0"
+timestamp,'10.0.0.0/8'::cidr,f,22007,invalid input syntax for type timestamp: "10.0.0.0/8"
+timestamp,'12:34:56+05'::timetz,f,22007,invalid input syntax for type timestamp: "12:34:56+05"
+timestamp,'12:34:56'::text,f,22007,invalid input syntax for type timestamp: "12:34:56"
+timestamp,'12:34:56'::time,f,22007,invalid input syntax for type timestamp: "12:34:56"
+timestamp,'123'::text,f,22007,invalid input syntax for type timestamp: "123"
+timestamp,'{1,2}'::text,f,22007,invalid input syntax for type timestamp: "{1,2}"
+timestamp,'192.168.0.1'::inet,f,22007,invalid input syntax for type timestamp: "192.168.0.1"
+timestamp,'192.168.0.1'::text,f,22007,invalid input syntax for type timestamp: "192.168.0.1"
+timestamp,'1 day'::interval,f,22007,invalid input syntax for type timestamp: "1 day"
+timestamp,'1 day'::text,f,22007,invalid input syntax for type timestamp: "1 day"
+timestamp,1::integer,f,22007,invalid input syntax for type timestamp: "1"
+timestamp,'1'::json,f,22007,invalid input syntax for type timestamp: "1"
+timestamp,'1'::jsonb,f,22007,invalid input syntax for type timestamp: "1"
+timestamp,'1 year 2 mons'::interval,f,22007,invalid input syntax for type timestamp: "1 year 2 mons"
+timestamp,'2026-01-01 12:34:56+00'::timestamptz,t,,
+timestamp,'2026-01-01 12:34:56'::timestamp,t,,
+timestamp,'2026-01-01'::date,t,,
+timestamp,20260101::integer,t,,
+timestamp,'"2026-01-01"'::jsonb,t,,
+timestamp,'2026-01-01'::text,t,,
+timestamp,2.5::real,f,22007,invalid input syntax for type timestamp: "2.5"
+timestamp,42.5::numeric,f,22007,invalid input syntax for type timestamp: "42.5"
+timestamp,9223372036854775807::bigint,f,22008,date/time field value out of range: "9223372036854775807"
+timestamp,'{"a":1}'::jsonb,f,22007,invalid input syntax for type timestamp: "{"a": 1}"
+timestamp,'{"a":1}'::text,f,22007,invalid input syntax for type timestamp: "{"a":1}"
+timestamp,'"abc"'::jsonb,f,22007,invalid input syntax for type timestamp: ""abc""
+timestamp,'abc'::text,f,22007,invalid input syntax for type timestamp: "abc"
+timestamp,'ab'::varchar(10),f,22007,invalid input syntax for type timestamp: "ab"
+timestamp,array[1,2],f,22007,invalid input syntax for type timestamp: "{1,2}"
+timestamp,array['a','b'],f,22007,invalid input syntax for type timestamp: "{a,b}"
+timestamp,false,f,22007,invalid input syntax for type timestamp: "f"
+timestamp,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22007,invalid input syntax for type timestamp: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+timestamp,'{}'::integer[],f,22007,invalid input syntax for type timestamp: "{}"
+timestamp,true,f,22007,invalid input syntax for type timestamp: "t"
+timestamp,'true'::jsonb,f,22007,invalid input syntax for type timestamp: "true"
+timestamp,'t'::text,f,22007,invalid input syntax for type timestamp: "t"
+timestamp,'\x31'::bytea,f,22007,invalid input syntax for type timestamp: "\x31"
+timestamp,'\xdeadbeef'::bytea,f,22007,invalid input syntax for type timestamp: "\xdeadbeef"
+timestamptz,'00000000-0000-0000-0000-000000000000'::text,f,22007,invalid input syntax for type timestamp with time zone: "00000000-0000-0000-0000-000000000000"
+timestamptz,'00000000-0000-0000-0000-000000000000'::uuid,f,22007,invalid input syntax for type timestamp with time zone: "00000000-0000-0000-0000-000000000000"
+timestamptz,'00:00:01'::interval,f,22007,invalid input syntax for type timestamp with time zone: "00:00:01"
+timestamptz,'08:00:2b:01:02:03'::macaddr,f,22007,invalid input syntax for type timestamp with time zone: "08:00:2b:01:02:03"
+timestamptz,0::integer,f,22008,date/time field value out of range: "0"
+timestamptz,'10.0.0.0/8'::cidr,f,22007,invalid input syntax for type timestamp with time zone: "10.0.0.0/8"
+timestamptz,'12:34:56+05'::timetz,f,22007,invalid input syntax for type timestamp with time zone: "12:34:56+05"
+timestamptz,'12:34:56'::text,f,22007,invalid input syntax for type timestamp with time zone: "12:34:56"
+timestamptz,'12:34:56'::time,f,22007,invalid input syntax for type timestamp with time zone: "12:34:56"
+timestamptz,'123'::text,f,22007,invalid input syntax for type timestamp with time zone: "123"
+timestamptz,'{1,2}'::text,f,22007,invalid input syntax for type timestamp with time zone: "{1,2}"
+timestamptz,'192.168.0.1'::inet,f,22007,invalid input syntax for type timestamp with time zone: "192.168.0.1"
+timestamptz,'192.168.0.1'::text,f,22007,invalid input syntax for type timestamp with time zone: "192.168.0.1"
+timestamptz,'1 day'::interval,f,22007,invalid input syntax for type timestamp with time zone: "1 day"
+timestamptz,'1 day'::text,f,22007,invalid input syntax for type timestamp with time zone: "1 day"
+timestamptz,1::integer,f,22007,invalid input syntax for type timestamp with time zone: "1"
+timestamptz,'1'::json,f,22007,invalid input syntax for type timestamp with time zone: "1"
+timestamptz,'1'::jsonb,f,22007,invalid input syntax for type timestamp with time zone: "1"
+timestamptz,'1 year 2 mons'::interval,f,22007,invalid input syntax for type timestamp with time zone: "1 year 2 mons"
+timestamptz,'2026-01-01 12:34:56+00'::timestamptz,t,,
+timestamptz,'2026-01-01 12:34:56'::timestamp,t,,
+timestamptz,'2026-01-01'::date,t,,
+timestamptz,20260101::integer,t,,
+timestamptz,'"2026-01-01"'::jsonb,t,,
+timestamptz,'2026-01-01'::text,t,,
+timestamptz,2.5::real,f,22007,invalid input syntax for type timestamp with time zone: "2.5"
+timestamptz,42.5::numeric,f,22007,invalid input syntax for type timestamp with time zone: "42.5"
+timestamptz,9223372036854775807::bigint,f,22008,date/time field value out of range: "9223372036854775807"
+timestamptz,'{"a":1}'::jsonb,f,22007,invalid input syntax for type timestamp with time zone: "{"a": 1}"
+timestamptz,'{"a":1}'::text,f,22007,invalid input syntax for type timestamp with time zone: "{"a":1}"
+timestamptz,'"abc"'::jsonb,f,22007,invalid input syntax for type timestamp with time zone: ""abc""
+timestamptz,'abc'::text,f,22007,invalid input syntax for type timestamp with time zone: "abc"
+timestamptz,'ab'::varchar(10),f,22007,invalid input syntax for type timestamp with time zone: "ab"
+timestamptz,array[1,2],f,22007,invalid input syntax for type timestamp with time zone: "{1,2}"
+timestamptz,array['a','b'],f,22007,invalid input syntax for type timestamp with time zone: "{a,b}"
+timestamptz,false,f,22007,invalid input syntax for type timestamp with time zone: "f"
+timestamptz,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22007,invalid input syntax for type timestamp with time zone: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+timestamptz,'{}'::integer[],f,22007,invalid input syntax for type timestamp with time zone: "{}"
+timestamptz,true,f,22007,invalid input syntax for type timestamp with time zone: "t"
+timestamptz,'true'::jsonb,f,22007,invalid input syntax for type timestamp with time zone: "true"
+timestamptz,'t'::text,f,22007,invalid input syntax for type timestamp with time zone: "t"
+timestamptz,'\x31'::bytea,f,22007,invalid input syntax for type timestamp with time zone: "\x31"
+timestamptz,'\xdeadbeef'::bytea,f,22007,invalid input syntax for type timestamp with time zone: "\xdeadbeef"
+timetz,'00000000-0000-0000-0000-000000000000'::text,f,22007,invalid input syntax for type time with time zone: "00000000-0000-0000-0000-000000000000"
+timetz,'00000000-0000-0000-0000-000000000000'::uuid,f,22007,invalid input syntax for type time with time zone: "00000000-0000-0000-0000-000000000000"
+timetz,'00:00:01'::interval,t,,
+timetz,'08:00:2b:01:02:03'::macaddr,f,22007,invalid input syntax for type time with time zone: "08:00:2b:01:02:03"
+timetz,0::integer,f,22007,invalid input syntax for type time with time zone: "0"
+timetz,'10.0.0.0/8'::cidr,f,22007,invalid input syntax for type time with time zone: "10.0.0.0/8"
+timetz,'12:34:56+05'::timetz,t,,
+timetz,'12:34:56'::text,t,,
+timetz,'12:34:56'::time,t,,
+timetz,'123'::text,f,22007,invalid input syntax for type time with time zone: "123"
+timetz,'{1,2}'::text,f,22007,invalid input syntax for type time with time zone: "{1,2}"
+timetz,'192.168.0.1'::inet,f,22007,invalid input syntax for type time with time zone: "192.168.0.1"
+timetz,'192.168.0.1'::text,f,22007,invalid input syntax for type time with time zone: "192.168.0.1"
+timetz,'1 day'::interval,f,22007,invalid input syntax for type time with time zone: "1 day"
+timetz,'1 day'::text,f,22007,invalid input syntax for type time with time zone: "1 day"
+timetz,1::integer,f,22007,invalid input syntax for type time with time zone: "1"
+timetz,'1'::json,f,22007,invalid input syntax for type time with time zone: "1"
+timetz,'1'::jsonb,f,22007,invalid input syntax for type time with time zone: "1"
+timetz,'1 year 2 mons'::interval,f,22007,invalid input syntax for type time with time zone: "1 year 2 mons"
+timetz,'2026-01-01 12:34:56+00'::timestamptz,t,,
+timetz,'2026-01-01 12:34:56'::timestamp,t,,
+timetz,'2026-01-01'::date,f,22007,invalid input syntax for type time with time zone: "2026-01-01"
+timetz,20260101::integer,f,22007,invalid input syntax for type time with time zone: "20260101"
+timetz,'"2026-01-01"'::jsonb,f,22007,invalid input syntax for type time with time zone: ""2026-01-01""
+timetz,'2026-01-01'::text,f,22007,invalid input syntax for type time with time zone: "2026-01-01"
+timetz,2.5::real,f,22007,invalid input syntax for type time with time zone: "2.5"
+timetz,42.5::numeric,f,22007,invalid input syntax for type time with time zone: "42.5"
+timetz,9223372036854775807::bigint,f,22007,invalid input syntax for type time with time zone: "9223372036854775807"
+timetz,'{"a":1}'::jsonb,f,22007,invalid input syntax for type time with time zone: "{"a": 1}"
+timetz,'{"a":1}'::text,f,22007,invalid input syntax for type time with time zone: "{"a":1}"
+timetz,'"abc"'::jsonb,f,22007,invalid input syntax for type time with time zone: ""abc""
+timetz,'abc'::text,f,22007,invalid input syntax for type time with time zone: "abc"
+timetz,'ab'::varchar(10),f,22007,invalid input syntax for type time with time zone: "ab"
+timetz,array[1,2],f,22007,invalid input syntax for type time with time zone: "{1,2}"
+timetz,array['a','b'],f,22007,invalid input syntax for type time with time zone: "{a,b}"
+timetz,false,f,22007,invalid input syntax for type time with time zone: "f"
+timetz,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,f,22023,time zone "ffffffff-ffff-ffff-ffff-ffffffffffff" not recognized
+timetz,'{}'::integer[],f,22007,invalid input syntax for type time with time zone: "{}"
+timetz,true,f,22007,invalid input syntax for type time with time zone: "t"
+timetz,'true'::jsonb,f,22007,invalid input syntax for type time with time zone: "true"
+timetz,'t'::text,f,22007,invalid input syntax for type time with time zone: "t"
+timetz,'\x31'::bytea,f,22007,invalid input syntax for type time with time zone: "\x31"
+timetz,'\xdeadbeef'::bytea,f,22007,invalid input syntax for type time with time zone: "\xdeadbeef"
+uuid,'"00000000-0000-0000-0000-000000000000"'::jsonb,f,22P02,invalid input syntax for type uuid: ""00000000-0000-0000-0000-000000000000""
+uuid,'00000000-0000-0000-0000-000000000000'::text,t,,
+uuid,'00000000-0000-0000-0000-000000000000'::uuid,t,,
+uuid,'00:00:01'::interval,f,22P02,invalid input syntax for type uuid: "00:00:01"
+uuid,'08:00:2b:01:02:03'::macaddr,f,22P02,invalid input syntax for type uuid: "08:00:2b:01:02:03"
+uuid,0::integer,f,22P02,invalid input syntax for type uuid: "0"
+uuid,'10.0.0.0/8'::cidr,f,22P02,invalid input syntax for type uuid: "10.0.0.0/8"
+uuid,'12:34:56+05'::timetz,f,22P02,invalid input syntax for type uuid: "12:34:56+05"
+uuid,'12:34:56'::text,f,22P02,invalid input syntax for type uuid: "12:34:56"
+uuid,'12:34:56'::time,f,22P02,invalid input syntax for type uuid: "12:34:56"
+uuid,'123'::text,f,22P02,invalid input syntax for type uuid: "123"
+uuid,'{1,2}'::text,f,22P02,invalid input syntax for type uuid: "{1,2}"
+uuid,'192.168.0.1'::inet,f,22P02,invalid input syntax for type uuid: "192.168.0.1"
+uuid,'192.168.0.1'::text,f,22P02,invalid input syntax for type uuid: "192.168.0.1"
+uuid,'1 day'::interval,f,22P02,invalid input syntax for type uuid: "1 day"
+uuid,'1 day'::text,f,22P02,invalid input syntax for type uuid: "1 day"
+uuid,1::integer,f,22P02,invalid input syntax for type uuid: "1"
+uuid,'1'::json,f,22P02,invalid input syntax for type uuid: "1"
+uuid,'1'::jsonb,f,22P02,invalid input syntax for type uuid: "1"
+uuid,'1 year 2 mons'::interval,f,22P02,invalid input syntax for type uuid: "1 year 2 mons"
+uuid,'2026-01-01 12:34:56+00'::timestamptz,f,22P02,invalid input syntax for type uuid: "2026-01-01 12:34:56+00"
+uuid,'2026-01-01 12:34:56'::timestamp,f,22P02,invalid input syntax for type uuid: "2026-01-01 12:34:56"
+uuid,'2026-01-01'::date,f,22P02,invalid input syntax for type uuid: "2026-01-01"
+uuid,20260101::integer,f,22P02,invalid input syntax for type uuid: "20260101"
+uuid,'"2026-01-01"'::jsonb,f,22P02,invalid input syntax for type uuid: ""2026-01-01""
+uuid,'2026-01-01'::text,f,22P02,invalid input syntax for type uuid: "2026-01-01"
+uuid,2.5::real,f,22P02,invalid input syntax for type uuid: "2.5"
+uuid,42.5::numeric,f,22P02,invalid input syntax for type uuid: "42.5"
+uuid,9223372036854775807::bigint,f,22P02,invalid input syntax for type uuid: "9223372036854775807"
+uuid,'{"a":1}'::jsonb,f,22P02,invalid input syntax for type uuid: "{"a": 1}"
+uuid,'{"a":1}'::text,f,22P02,invalid input syntax for type uuid: "{"a":1}"
+uuid,'"abc"'::jsonb,f,22P02,invalid input syntax for type uuid: ""abc""
+uuid,'abc'::text,f,22P02,invalid input syntax for type uuid: "abc"
+uuid,'ab'::varchar(10),f,22P02,invalid input syntax for type uuid: "ab"
+uuid,array[1,2],f,22P02,invalid input syntax for type uuid: "{1,2}"
+uuid,array['a','b'],f,22P02,invalid input syntax for type uuid: "{a,b}"
+uuid,false,f,22P02,invalid input syntax for type uuid: "f"
+uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,t,,
+uuid,'{}'::integer[],f,22P02,invalid input syntax for type uuid: "{}"
+uuid,to_jsonb('00000000-0000-0000-0000-000000000000'::text),f,22P02,invalid input syntax for type uuid: ""00000000-0000-0000-0000-000000000000""
+uuid,true,f,22P02,invalid input syntax for type uuid: "t"
+uuid,'true'::jsonb,f,22P02,invalid input syntax for type uuid: "true"
+uuid,'t'::text,f,22P02,invalid input syntax for type uuid: "t"
+uuid,'\x31'::bytea,f,22P02,invalid input syntax for type uuid: "\x31"
+uuid,'\xdeadbeef'::bytea,f,22P02,invalid input syntax for type uuid: "\xdeadbeef"
+varchar(10),'00000000-0000-0000-0000-000000000000'::text,t,,
+varchar(10),'00000000-0000-0000-0000-000000000000'::uuid,t,,
+varchar(10),'00:00:01'::interval,t,,
+varchar(10),'08:00:2b:01:02:03'::macaddr,t,,
+varchar(10),0::integer,t,,
+varchar(10),'10.0.0.0/8'::cidr,t,,
+varchar(10),'12:34:56+05'::timetz,t,,
+varchar(10),'12:34:56'::text,t,,
+varchar(10),'12:34:56'::time,t,,
+varchar(10),'123'::text,t,,
+varchar(10),'{1,2}'::text,t,,
+varchar(10),'192.168.0.1'::inet,t,,
+varchar(10),'192.168.0.1'::text,t,,
+varchar(10),'1 day'::interval,t,,
+varchar(10),'1 day'::text,t,,
+varchar(10),1::integer,t,,
+varchar(10),'1'::json,t,,
+varchar(10),'1'::jsonb,t,,
+varchar(10),'1 year 2 mons'::interval,t,,
+varchar(10),'2026-01-01 12:34:56+00'::timestamptz,t,,
+varchar(10),'2026-01-01 12:34:56'::timestamp,t,,
+varchar(10),'2026-01-01'::date,t,,
+varchar(10),20260101::integer,t,,
+varchar(10),'"2026-01-01"'::jsonb,t,,
+varchar(10),'2026-01-01'::text,t,,
+varchar(10),2.5::real,t,,
+varchar(10),42.5::numeric,t,,
+varchar(10),9223372036854775807::bigint,t,,
+varchar(10),'{"a":1}'::jsonb,t,,
+varchar(10),'{"a":1}'::text,t,,
+varchar(10),'"abc"'::jsonb,t,,
+varchar(10),'abc'::text,t,,
+varchar(10),'ab'::varchar(10),t,,
+varchar(10),array[1,2],t,,
+varchar(10),array['a','b'],t,,
+varchar(10),false,t,,
+varchar(10),'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,t,,
+varchar(10),'{}'::integer[],t,,
+varchar(10),true,t,,
+varchar(10),'true'::jsonb,t,,
+varchar(10),'t'::text,t,,
+varchar(10),'\x31'::bytea,t,,
+varchar(10),'\xdeadbeef'::bytea,t,,
