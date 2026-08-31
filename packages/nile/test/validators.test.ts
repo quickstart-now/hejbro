@@ -223,3 +223,67 @@ describe("What the platform accepts is untouched, and no other preset's output c
 		expect(result.errors).toEqual([]);
 	});
 });
+
+describe("every refusal names a way forward (preset-validation: 'gives the caller a way forward'), lead-flagged gap (#568 in-flight)", () => {
+	it("all six refusal kinds' error messages carry a 'Next: ' clause -- one loop, so a new validator is covered automatically", () => {
+		const widgets = table(
+			app,
+			"widgets",
+			{
+				id: bigserial().primaryKey(),
+				tenantId: uuid().notNull(),
+				status: uuid().notNull(),
+			},
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("widgets_read")
+						.for("select")
+						.to("reader")
+						.using(eq(t.id, t.id)),
+				}),
+			}),
+		);
+		const helloWorld = defineFunction(
+			app,
+			"hello_world",
+			{ returns: widgets },
+			(ctx) => {
+				ctx.return(select(widgets));
+			},
+		);
+		const guard = defineTrigger(
+			widgets,
+			{ name: "guard", timing: "before", events: ["insert"], forEach: "row" },
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const grants = grant(app).usage.to(roleName("reader"));
+
+		const result = generateMigration({
+			declarations: [app, widgets, helloWorld, guard, ...grants.grants],
+			previousSnapshot: emptySnapshot,
+			validators: allValidators,
+		});
+
+		// six distinct codes confirms every kind actually fired, not just
+		// "some errors happened to carry Next:" -- rls-unsupported fires
+		// twice here (the RLS declaration itself, and its one policy),
+		// serial-in-tenant-table once (the bigserial primary key).
+		const codes = result.errors.map((error) => error.code);
+		expect(new Set(codes)).toEqual(
+			new Set([
+				"nile-rls-unsupported",
+				"nile-function-unsupported",
+				"nile-trigger-unsupported",
+				"nile-grant-unsupported",
+				"nile-serial-in-tenant-table",
+			]),
+		);
+		expect(result.errors.length).toBeGreaterThanOrEqual(6);
+		result.errors.forEach((error) => {
+			expect(error.message).toContain("Next: ");
+		});
+	});
+});
