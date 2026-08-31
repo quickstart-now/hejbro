@@ -77,22 +77,34 @@ Files: `packages/nile/src/driver.ts`, `packages/nile/test/driver.test.ts`
 - [x] 2.5 (6m) The manifest declares no Nile client dependency. Failing
       test: the package manifest carries no `@niledatabase/*` entry in any
       dependency field.
-- [ ] 2.6 (5m) `[design]` `nileDriver`'s signature — what it decorates and
-      how the base is handed to it.
+- [x] 2.6 (5m) `[design]` `nileDriver`'s signature — what it decorates and
+      how the base is handed to it. **Settled: `nileDriver(driver: Driver):
+      Driver`, no options argument** (lead ruling) — Nile has no known
+      branching axis the way Supabase's session/transaction-pooler split
+      does; an options bag with nothing to put in it would document a
+      parameter with no first user. A second argument can be added
+      additively if one is ever needed.
 
 ## 3. The tenant context and its rendering (#565)
-Files: `packages/nile/src/context.ts`, `packages/nile/test/context.test.ts`
+Files: `packages/nile/src/context.ts`, `packages/nile/test/context.test.ts`,
+`packages/nile/src/driver.ts` (additive — wires this group's rendering onto
+the decorator built in group 2, lead-approved addition to this group's file
+list)
 
 - [ ] 3.1 (8m) The context builder produces a role-less context carrying
       the tenant. Failing test: the returned context names no role and its
       settings identify the tenant.
 - [ ] 3.2 (9m) The rendering emits `SET LOCAL` for the tenant, first —
-      **observed at execution level**, not only by calling the rendering.
-      Failing test: through a `db()` handle over a recording base, the
-      transcript's first statement inside the transaction is the tenant
-      setting in `SET LOCAL` form (a direct `renderContext` call alone
-      would make "first inside the transaction" an inference rather than
-      an observation).
+      **observed at execution level**, not only by calling the rendering
+      — and wires this rendering onto `nileDriver`'s output
+      (`packages/nile/src/driver.ts`, one `renderContext` property plus its
+      import), since the driver owns its own rendering (#553's own
+      contract) and group 2 built the decorator before this rendering
+      existed to attach. Failing test: through a `db()` handle over a
+      recording base, the transcript's first statement inside the
+      transaction is the tenant setting in `SET LOCAL` form (a direct
+      `renderContext` call alone would make "first inside the transaction"
+      an inference rather than an observation).
 - [ ] 3.3 (7m) The user setting follows the tenant setting when a user is
       named, observed in the same transcript. Failing test: order mutant —
       swapping the two is caught.
