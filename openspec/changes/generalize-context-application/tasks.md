@@ -201,7 +201,7 @@ Files: `packages/query/src/index.ts`, `packages/query/src/db/context.ts`,
       and rebuilding `@hejbro/query`'s dist reproduces both `tsc`
       failures (`exports.test.ts` and `packages/pg`'s own check-types),
       restoring the export and rebuilding clears both.
-- [ ] 6.2 (blocking, F2) `README.md`'s task-time badges were stale on a
+- [x] 6.2 (blocking, F2) `README.md`'s task-time badges were stale on a
       clean tree (`pnpm check:tasktime` would still rewrite them,
       failing CI's node-24-leg diff check). Re-run after group 6's own
       ledger row landed, so the badges and the CSV point at the same
