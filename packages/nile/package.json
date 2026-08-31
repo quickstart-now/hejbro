@@ -45,6 +45,7 @@
 		"@hejbro/query": "workspace:*"
 	},
 	"devDependencies": {
+		"@hejbro/pg": "workspace:*",
 		"@vitest/coverage-v8": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",

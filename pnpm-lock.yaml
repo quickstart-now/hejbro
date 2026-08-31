@@ -198,6 +198,9 @@ importers:
         specifier: workspace:*
         version: link:../query
     devDependencies:
+      '@hejbro/pg':
+        specifier: workspace:*
+        version: link:../pg
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)

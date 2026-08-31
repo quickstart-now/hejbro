@@ -196,20 +196,20 @@ est_frozen: 15m (re-estimated at G3 close from observed 0.1-0.3x, held
 higher than the other groups -- Docker pull/boot and container round trips
 run in real time and do not compress at agent speed)
 
-- [ ] 5.1 (8m) Integration wiring mirroring `packages/neon`: a separate
+- [x] 5.1 (8m) Integration wiring mirroring `packages/neon`: a separate
       vitest config, a `test:integration` script, excluded from the
       default `pnpm test` and from CI. Failing test: the default run does
       not execute the integration file.
-- [ ] 5.2 (7m) The image is pinned by full digest
+- [x] 5.2 (7m) The image is pinned by full digest
       (`ghcr.io/niledatabase/testingcontainer@sha256:188a7230d9f39e615bc584d90e8ec6f4754d0ef298701a1d6811d394f3d35696`),
       with the measurement command and the floor-not-ceiling caveat in the
       file, and a comment stating that a digest change means
       re-measurement.
-- [ ] 5.3 (7m) Absent Docker is an explicit failure, never a silent pass.
+- [x] 5.3 (7m) Absent Docker is an explicit failure, never a silent pass.
       Failing test: with the daemon unreachable, the run fails and says
       why — a skip reporting success would reproduce, in our own suite,
       the failure mode this preset exists to prevent.
-- [ ] 5.4 (9m) Witness A, **pre-registered before the run**: an
+- [x] 5.4 (9m) Witness A, **pre-registered before the run**: an
       adversarial tenant value is refused by our own UUID check (our
       half, already asserted in 3.5), and a syntactically valid UUID that
       names no tenant produces **one of two outcomes** — the server
@@ -217,10 +217,10 @@ run in real time and do not compress at agent speed)
       Record which one occurs and assert that; do not promise the refusal
       in advance. Whichever it is, the claim under test is that a value we
       did not intend cannot silently widen the scope.
-- [ ] 5.5 (9m) Witness B: after a context transaction, the next
+- [x] 5.5 (9m) Witness B: after a context transaction, the next
       transaction on the same connection does not observe the previous
       tenant — the server-side half of "leaves nothing behind".
-- [ ] 5.6 (8m) Witness C, if it stays cheap: rows are actually scoped to
+- [x] 5.6 (8m) Witness C, if it stays cheap: rows are actually scoped to
       the tenant our rendering applied — the end-to-end proof of the
       first-statement constraint that motivated #553.
 
