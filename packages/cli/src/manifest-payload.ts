@@ -160,4 +160,4 @@ export const buildManifestPayload = (
  * two.
  */
 export const serializeManifestPayload = (payload: ManifestPayload): string =>
-	stableJson(payload as JsonValue);
+	stableJson(payload);

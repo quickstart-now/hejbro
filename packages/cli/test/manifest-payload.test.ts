@@ -92,6 +92,20 @@ describe("buildManifestPayload", () => {
 		expect(payload.roles).toEqual(["anon", "authenticated"]);
 	});
 
+	it("carries roles sorted, not in declaration order (G5's byte-identical-sync SHALL rests on this)", () => {
+		const zebraGrant = grant(app).usage.to("zebra");
+		const appleGrant = grant(app).usage.to("apple");
+
+		const declarations: ReadonlyArray<HejbroInput> = [
+			app,
+			zebraGrant,
+			appleGrant,
+		];
+
+		const payload = buildManifestPayload(declarations, new Map());
+		expect(payload.roles).toEqual(["apple", "zebra"]);
+	});
+
 	it("carries no export name for a trigger-synthesized function", () => {
 		const posts = table(app, "posts", {
 			id: uuid().primaryKey(),
