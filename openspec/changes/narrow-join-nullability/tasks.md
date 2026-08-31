@@ -169,6 +169,19 @@ Files: `packages/query/src/types/select-result.ts`,
       assertions, and confirmed the existing `any`-flows-in assertion
       (added in g2-r1) already covers the frozen contract's `any` clause.
 
+- [ ] 2.6 **Defect, found during group 3.** The narrowing arm returns
+      `ColumnTsType<origin>` directly, but that mapping carries no
+      nullability — `SelectColumnResult` is what pairs it with
+      `IsColumnNotNull`, and the frozen contract named
+      `SelectColumnResult` for exactly this reason. As shipped, a
+      **nullable** column that meets all four narrowing conditions loses
+      its `| null`: the one arm that was supposed to narrow honestly is
+      the one that lies. Group 2's tests never crossed "nullable column"
+      with "actually narrowing" — every narrowing case used a `notNull`
+      column, and every nullable case was untracked or a member. Red: a
+      nullable column projected against a tracked set that does not
+      contain it, expected `string | null`. (6 min)
+
 ## 3. The chain surface and `execute` carry it through (#548)
 
 Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
@@ -177,11 +190,11 @@ Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
 `packages/query/test/types/returning.test.ts`,
 `packages/query/test/db/execute-result-type.test.ts`.
 
-- [ ] 3.1 Thread the second parameter through the chain stage types;
+- [x] 3.1 Thread the second parameter through the chain stage types;
       `db.select(...)` starts at `never`. Red: a chain type test where
       the awaited row of `db.select({ t: posts.titleRequired }, posts)`
       is expected `{ t: string }`. (10 min)
-- [ ] 3.2 Accumulate on the chain's `leftJoin`, not its `innerJoin`.
+- [x] 3.2 Accumulate on the chain's `leftJoin`, not its `innerJoin`.
       Red: after `.leftJoin(comments, on)` the comments-sourced field is
       `| null` while the posts-sourced field is not, and the `innerJoin`
       form narrows both. (10 min)
@@ -202,11 +215,25 @@ Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
       **definitively empty**, and widening it was the one place this
       change left information on the table (G2 review). Red:
       `returning({ t: posts.titleRequired })`'s field expected
-      `string`, actual `string | null`. (10 min)
+      `string`, actual `string | null` — a **new** case, since
+      `returning.test.ts`'s existing object projections all use a
+      nullable column and read identically either way. Only the object
+      branch changes; the whole-table branch never consulted the set.
+      Expect one knock-on in `execute-result-type.test.ts` (a
+      `DeleteFinal` projection of a `primaryKey` column asserted as
+      `string | null`) — that assertion becoming wrong is this task's
+      point, not a regression, and it moves with the raw error quoted.
+      (10 min)
 - [ ] 3.6 [design] Confirm and record that no chain member drops the set
       silently — the set-op combinators resolve their row type before
       combining, and `related()` is untracked by decision, not by
-      accident. (6 min)
+      accident. Two branches of a `union`/`intersect`/`except` can carry
+      **different** left-joined sets, and this is the one path in the
+      change where a mistake would narrow rather than widen: if one
+      branch's set were applied to the other, a nullable field could be
+      typed non-null. Pin it with a test — each branch resolves its own
+      row first, so a field non-null on one side and nullable on the
+      other combines to nullable. (6 min)
 
 ## 4. Surface documentation and release artifacts (#549)
 

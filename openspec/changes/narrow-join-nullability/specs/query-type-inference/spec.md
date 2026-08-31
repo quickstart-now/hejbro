@@ -57,10 +57,12 @@ nullability, as they always have.
 A `returning()` projection SHALL follow the declaration too, with no
 left-join widening applied — **on the stated premise that a mutation
 carries no join grammar**: `insert`/`update`/`deleteFrom` offer no
-`leftJoin` and no `UPDATE … FROM`, so the set of left-joined tables at
-that position is not unknown but definitively empty. A change that
-gives mutations a join grammar must revisit this paragraph; the premise
-is written down so that it cannot be broken silently.
+`leftJoin` and no `UPDATE … FROM`, and the statement nodes behind them
+have no field that could hold one, so the set of left-joined tables at
+that position is not unknown but definitively empty. The premise rests
+on the node shapes rather than on which methods happen to be offered,
+because a method can be added quietly while a new node field cannot. A
+change that gives mutations a join grammar must revisit this paragraph.
 
 #### Scenario: Projection drives the row type
 - **WHEN** a select projects a subset of a declared table's columns

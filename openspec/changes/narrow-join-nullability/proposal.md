@@ -125,8 +125,9 @@ left-joined table set, which no stage type carries today
    `ExecuteResult`. Nested reads, `withCte`/CTE references, `defineView`
    and `related()` are explicitly out and stay wide — narrowing them is
    follow-up material, not this change. **Extended by one position
-   during group 3** (owner ruling, after the group 2 review): a
-   `returning()` projection narrows as well. The boundary's own logic is
+   during group 3** (owner ruling, exercised under standing delegation
+   by the lead session, after the group 2 review): a `returning()`
+   projection narrows as well. The boundary's own logic is
    "a position that cannot see the statement's joins must not narrow",
    and a mutation is not such a position — it has no join grammar to
    see, so its set is definitively empty rather than unknown. Leaving it
