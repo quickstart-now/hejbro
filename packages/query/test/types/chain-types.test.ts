@@ -300,6 +300,24 @@ declare const rightBranchTracked: SelectChainLimited<
 >;
 type RightRow = Awaited<typeof rightBranchTracked>[number];
 
+/**
+ * The mirror placement (reviewer-flagged): the first test below fixes
+ * left=never (narrows)/right=Posts (stays nullable) -- a mutant that
+ * drops the RIGHT branch's own null is caught there, but a mutant that
+ * drops the LEFT branch's own null passes the whole suite undetected
+ * unless the placement is also exercised in reverse. Same left-joined
+ * values, opposite sides.
+ */
+declare const leftBranchTracked: SelectChainLimited<
+	{ readonly t: Posts["status"] },
+	Posts
+>;
+declare const rightBranchNever: SelectChainLimited<
+	{ readonly t: Posts["status"] },
+	never
+>;
+type RightRowNever = Awaited<typeof rightBranchNever>[number];
+
 // Tracked at `Comments`, deliberately NOT `Posts` (the projected field's
 // own source table): a member match (tracked = Posts) stays nullable
 // either way, indistinguishable from an untracked drop -- the same
@@ -328,6 +346,13 @@ describe("a set-op combinator's two branches each keep their OWN left-joined set
 	it("left narrows (never), right stays nullable (posts itself left-joined): union() keeps the field nullable", () => {
 		type UnionRow = Awaited<
 			ReturnType<typeof leftBranchNever.union<RightRow>>
+		>[number];
+		expectTypeOf<UnionRow["t"]>().toEqualTypeOf<string | null>();
+	});
+
+	it("the mirror placement: left stays nullable (posts itself left-joined), right narrows (never) -- union() still keeps the field nullable", () => {
+		type UnionRow = Awaited<
+			ReturnType<typeof leftBranchTracked.union<RightRowNever>>
 		>[number];
 		expectTypeOf<UnionRow["t"]>().toEqualTypeOf<string | null>();
 	});
