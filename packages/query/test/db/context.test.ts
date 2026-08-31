@@ -10,8 +10,8 @@ import {
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { defaultContextRendering } from "../../src/db/context";
 import type { DbContext } from "../../src/db/context";
+import { defaultContextRendering } from "../../src/db/context";
 import { db } from "../../src/db/db";
 import type {
 	ContextRendering,
@@ -67,9 +67,9 @@ describe("defaultContextRendering (task 2.1, #555 -- extracted from applyContext
 	});
 
 	it("returns just the role statement when there are no settings", () => {
-		expect(
-			defaultContextRendering({ role: roleName("grant_reader") }),
-		).toEqual([{ sql: 'set local role "grant_reader"', params: [], kind: "sql" }]);
+		expect(defaultContextRendering({ role: roleName("grant_reader") })).toEqual(
+			[{ sql: 'set local role "grant_reader"', params: [], kind: "sql" }],
+		);
 	});
 });
 
@@ -111,7 +111,10 @@ describe("the rendering is a pure value, not an effect (task 2.3, #555)", () => 
 		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
 
 		expect(calls).toEqual([{ role: roleName("grant_reader") }]);
-		expect(sentPerTransaction[0]?.[0]).toEqual({ sql: "custom pin", params: [] });
+		expect(sentPerTransaction[0]?.[0]).toEqual({
+			sql: "custom pin",
+			params: [],
+		});
 	});
 });
 
@@ -172,7 +175,10 @@ describe("contributed statements are sent one at a time, in the rendering's own 
 						// sequential (awaited) send preserves order regardless of
 						// each call's own delay; a concurrent send would let the
 						// second (faster) resolve, and be recorded, first.
-						const delay = compiled.params[0] === "app.claim1" ? 20 : 0;
+						const delays: Readonly<Record<string, number>> = {
+							"app.claim1": 20,
+						};
+						const delay = delays[String(compiled.params[0])] ?? 0;
 						await new Promise((resolve) => setTimeout(resolve, delay));
 						order.push(compiled.params[0] ?? compiled.sql);
 						return [];
@@ -236,7 +242,6 @@ describe("DbContext and the rendering's context type are the same type (task 2.1
 
 	it("a DbContext value is assignable straight to a driver's renderContext, with no cast", () => {
 		const context: DbContext = { role: roleName("grant_reader") };
-		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture -- compiling without a cast is the assertion.
 		const driver: Driver = {
 			capabilities: { "interactive-transactions": true, "session-state": true },
 			execute: async () => [],

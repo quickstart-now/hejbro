@@ -168,7 +168,9 @@ const settingStatement = (key: string, value: string): CompileResult => ({
  * `Array.prototype.filter`'s own idiom for "maybe one item".
  */
 const roleStatements = (role: Role | undefined): ReadonlyArray<CompileResult> =>
-	[role].filter((value): value is Role => value !== undefined).map(roleStatement);
+	[role]
+		.filter((value): value is Role => value !== undefined)
+		.map(roleStatement);
 
 /**
  * The query layer's own default context-rendering contribution (task
