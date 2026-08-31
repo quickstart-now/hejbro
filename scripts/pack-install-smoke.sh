@@ -202,6 +202,8 @@ assert_license_content() {
   license_file="$install_dir/LICENSE"
   [ -s "$license_file" ] || fail "$license_file is missing or empty"
   grep -q "Apache License" "$license_file" || fail "$license_file does not contain the expected Apache License text"
+  notice_file="$install_dir/NOTICE"
+  [ -s "$notice_file" ] || fail "$notice_file is missing or empty (Apache-2.0 section 4(d) obligation travels with the tarball)"
 }
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/core"
 assert_license_content "$SCRATCH_DIR/node_modules/hejbro"

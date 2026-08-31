@@ -25,7 +25,7 @@ Refs:
 - packages/supabase/NOTICE @ blob 9066b7c4d796cc6261529dfd6feca8e55ff06c20
 - packages/supabase/package.json @ blob f188eedee7d6ca76364eb15d07e2f6c34beefe64
 - README.md @ blob 5829a09f0647e91151277e0b29ea3a4985d3b4b3
-- scripts/pack-install-smoke.sh @ blob d4e771ec5a3e1680e7d53826f268e08c96dbf9f7
+- scripts/pack-install-smoke.sh @ blob 380227f650c798b73cb3aea4dc24b519f26e6f80 (re-pinned after the one-shot review: assertion 1c also requires a non-empty installed NOTICE)
 - skills/hejbro/SKILL.md @ blob 295788626e38adc8f2d4d208a991b55a51f427ec
 
 (Taken from `git hash-object <path>` on the working tree before the
@@ -99,6 +99,18 @@ Prepared on a branch off dev immediately; merged after #301
 (`add-nile-preset`) so the seventh package's `LICENSE`, `NOTICE`,
 manifest, and smoke line are covered in the same sweep instead of
 breaking the nile branch's smoke in between.
+
+## The one-shot review
+
+PASS with one optional MINOR, adopted: assertion 1c now also requires the
+installed `NOTICE` to be non-empty — the file is a downstream Apache
+obligation, and until then a zero-byte `NOTICE` would have passed every
+assertion. The reviewer also caught a defect in the review brief itself:
+the residual-`MIT` sweep was specified as `git grep -E '\bMIT\b'`, and
+git's POSIX-ERE engine does not support `\b`, so that axis would have
+passed vacuously; re-run with `-w` it found 27 hits on the base and 10 at
+the head, all intended. Every factual claim in D107 was checked against
+the registries rather than assumed.
 
 ## Method notes
 
