@@ -157,3 +157,31 @@ describe("Driver.contextRequired (task 1.3, #554 -- the context-mandatory declar
 		expectTypeOf(driver.contextRequired).toEqualTypeOf<true | undefined>();
 	});
 });
+
+describe("roleLessPlatform and contextRequired are not capabilities (task 1.4, #554)", () => {
+	it("DriverCapabilities still requires exactly the two keys (regression control, unaffected by the new driver declarations)", () => {
+		const capabilities: DriverCapabilities = {
+			"interactive-transactions": true,
+			"session-state": false,
+		};
+		expectTypeOf(capabilities).toEqualTypeOf<DriverCapabilities>();
+	});
+
+	it("naming roleLessPlatform inside a capabilities object literal is a compile error (type mutant: the declaration must not widen DriverCapabilities)", () => {
+		const _extra: DriverCapabilities = {
+			"interactive-transactions": true,
+			"session-state": true,
+			// @ts-expect-error "roleLessPlatform" was never declared as a capability key.
+			roleLessPlatform: true,
+		};
+	});
+
+	it("naming contextRequired inside a capabilities object literal is a compile error (type mutant: the declaration must not widen DriverCapabilities)", () => {
+		const _extra: DriverCapabilities = {
+			"interactive-transactions": true,
+			"session-state": true,
+			// @ts-expect-error "contextRequired" was never declared as a capability key.
+			contextRequired: true,
+		};
+	});
+});
