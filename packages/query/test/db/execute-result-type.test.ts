@@ -115,6 +115,16 @@ describe("db.execute infers the left-joined set from the core stage (narrow-join
 });
 
 describe("the untracked boundary holds at a nested read's own subselect (narrow-join-nullability, task 3.4)", () => {
+	it("the SAME object-projection field (`{ b: Comments['body'] }`) narrows to non-null at top level, but stays nullable once nested -- the top-level half of the contrast below", () => {
+		// Same outer set (never) and same projected field as the nested
+		// case right below -- the only difference is "nested or not", so
+		// this pins the top-level half of the THEN that test's own comment
+		// describes, for the identical projection.
+		type Stage = SelectLimited<{ readonly b: Comments["body"] }, never>;
+		type Row = ExecuteRows<Stage>[number];
+		expectTypeOf<Row["b"]>().toEqualTypeOf<string>();
+	});
+
 	it("a nested jsonArrayFrom's own object-projection field stays nullable even though the OUTER statement's left-joined set is the fully-tracked empty set (never) -- if the outer set leaked in, this would WRONGLY narrow", () => {
 		// NestedOrExprResult (select-result.ts) recurses into SelectResult<TSub>
 		// with no second argument at all -- structurally incapable of

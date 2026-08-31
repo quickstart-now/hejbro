@@ -112,31 +112,51 @@ change that gives mutations a join grammar must revisit this paragraph.
 
 ### Requirement: A left join is what widens a projected field's nullability
 A select's builder stages SHALL carry, at the type level, the set of
-tables joined with `leftJoin`, and a projected field whose source table
-is in that set SHALL type as possibly `null` regardless of the column's
-own `notNull` — a left join is exactly the construct that produces NULLs
-for a column the declaration calls non-null. `innerJoin` SHALL NOT widen
-anything: it emits no such row.
+tables joined with `leftJoin`, and an **object-projection** field whose
+source table is in that set SHALL type as possibly `null` regardless of
+the column's own `notNull` — a left join is exactly the construct that
+produces NULLs for a column the declaration calls non-null. `innerJoin`
+SHALL NOT widen anything: it emits no such row. Everything in this
+requirement is scoped to object-projection fields; a whole-table
+projection is the statement's own `from` table and keeps declared
+nullability regardless of what was joined (the previous requirement
+owns that case).
 
-Where the join set is **not** carried, every projected field SHALL stay
-widened to nullable, exactly as before this requirement existed. That is
-the fail-safe direction: a position that cannot see the statement's
-joins must never narrow. Row types resolved without a statement's join
-set — a nested read's subselect (`jsonArrayFrom`/`jsonObjectFrom`), a
-CTE body, a view body, `related()`, and any hand-written use of the
-result-type utility — therefore keep the old widening, and this
-requirement makes no claim about them.
+The stages carry the set through the exported names `leftJoinedBrand`,
+`UntrackedJoins` and `LeftJoinedBrand`, and the row type is computed by
+the exported `SelectResult`. Naming them here is what makes them a
+contract rather than an accident of a re-export: all four reach users
+through `hejbro`, and the skill documents them.
+
+Where the join set is **not** carried, an **object-projection** field
+SHALL stay widened to nullable, exactly as that field was before this
+requirement existed. That is the fail-safe direction: a position that
+cannot see the statement's joins must never narrow. Row types resolved
+without a statement's join set — a nested read's subselect
+(`jsonArrayFrom`/`jsonObjectFrom`), a CTE body, a view body, and any
+hand-written use of `SelectResult` — therefore keep the old widening for
+those fields. Whole-table rows in those same
+positions — a `jsonArrayFrom(select(table))` element, a `related()` row
+— were never widened and are unaffected: they carry declared
+nullability, there and everywhere.
+
+What decides this is the **projection's form, not the position**. The
+whole-table branch never consults the join set anywhere, so listing
+positions alone would be wrong twice over: one position can give both
+answers (a nested subselect widens `select({…}, table)` and does not
+widen `select(table)`), and `related()` — a whole-table row by
+construction — never widens at all.
 
 A table's identity at the type level is **structural**: a declared table
 is its column map, and nothing in it carries the table's name. Two
 tables declared with identical column maps are therefore
-indistinguishable here, and a projected field of one is widened when the
-other is left-joined. The same holds for a statement that left-joins its
-own `from` table (a self-join): the two sides are not distinguished. In
-both cases the error is toward **widening** — a field is nullable that
-could have stayed non-null. A left-joined column can never be narrowed
-by such a collision, which is what makes the imprecision acceptable
-rather than a lie.
+indistinguishable here, and an object-projection field of one is widened
+when the other is left-joined. The same holds for a statement that
+left-joins its own `from` table (a self-join): the two sides are not
+distinguished. In both cases the error is toward **widening** — a field
+is nullable that could have stayed non-null. A left-joined column can
+never be narrowed by such a collision, which is what makes the
+imprecision acceptable rather than a lie.
 
 #### Scenario: A left-joined table's column is nullable
 - **WHEN** a select projects a `notNull` column of a table the same
@@ -154,12 +174,19 @@ rather than a lie.
   `innerJoin`
 - **THEN** both fields type as their declared non-null types
 
-#### Scenario: A row type resolved without the join set stays widened
-- **WHEN** a projection's row type is resolved in a position that does
-  not carry the statement's left-joined set — a nested read's subselect,
-  a CTE body, a view body, or `related()`
-- **THEN** every projected field types as possibly `null`, the same
-  widening that applied before joins were tracked
+#### Scenario: An object projection resolved without the join set stays widened
+- **WHEN** an **object** projection's row type is resolved in a position
+  that does not carry the statement's left-joined set — a nested read's
+  subselect, a CTE body, a view body, or a hand-written `SelectResult`
+- **THEN** each of its fields types as possibly `null`, the same
+  widening those fields had before joins were tracked
+
+#### Scenario: Whole-table rows in those positions keep their declaration
+- **WHEN** the same positions carry a **whole-table** row instead — a
+  `jsonArrayFrom(select(table))` element, or a `related()` row
+- **THEN** each column types as it declares, `notNull` columns non-null
+  included: those rows were never widened, and this requirement does not
+  widen them now
 
 ## MODIFIED Requirements
 
@@ -247,3 +274,77 @@ disproves on the first partition.
   over a `notNull` column, with no `default` argument
 - **THEN** the field types as possibly `null`, because the first row of
   each partition has no preceding row to read
+
+### Requirement: Nested read types equal the declared read types
+A row read through `jsonArrayFrom`/`jsonObjectFrom` or `related()`
+SHALL surface each column with exactly the TypeScript type the same
+column has in a top-level select — a `bigint`-mode column reads
+`bigint`, a datetime column reads `Date`, an `interval` column reads
+the structured value, arrays keep their element nullability — never
+the JSON-mediated shape (`number`/`string`). "Exactly the same type"
+holds **up to the untracked-position widening of object-projection
+fields**: a nested subselect does not carry the outer statement's
+left-joined set, so a field projected there as an expression keeps the
+`| null` every object-projection field carried before joins were
+tracked, while the same projection awaited at top level narrows. A
+whole-table nested row is unaffected and agrees column for column, which
+is the case this requirement's own scenario tests. A `jsonArrayFrom`
+projection key SHALL type as `ReadonlyArray<Row>` (empty array when no
+child matches, never `null`); a `jsonObjectFrom` or forward `related()`
+key SHALL type as `Row | null`. `related()` keys SHALL be derived at
+the type level from the declared foreign-key edges — reverse keys from
+the schema map's table names, forward keys from the FK column name
+with one trailing `Id` stripped — so autocomplete offers exactly the
+derivable relations and nothing else.
+
+#### Scenario: Nested and top-level types agree column by column
+- **WHEN** `comments.createdAt` (`timestamptz`) and `posts.viewCount`
+  (`bigint`) are read once at top level and once inside a nested read
+- **THEN** both positions type `createdAt: Date` and
+  `viewCount: bigint` — identical
+
+#### Scenario: An object-projected field is nullable inside a nested read
+- **WHEN** the same object projection of a `notNull` column is awaited at
+  top level and read through `jsonArrayFrom`
+- **THEN** the top-level field types non-null and the nested one types as
+  possibly `null` — the nested position cannot see the outer statement's
+  joins, so it keeps the widening rather than narrowing on a guess
+
+#### Scenario: Collection and single-row shapes
+- **WHEN** a select projects a `jsonArrayFrom` key and a forward
+  `related()` key
+- **THEN** the first types `ReadonlyArray<Row>` and the second
+  `Row | null`
+
+#### Scenario: Relation keys are derived, not invented
+- **WHEN** `posts.ownerId` declares `.references(() => users.id)` and
+  `comments.postId` references `posts.id`
+- **THEN** `related()` on `posts` accepts exactly the keys `owner`
+  (single row) and `comments` (collection), and any other key fails to
+  type-check
+
+### Requirement: A CTE reference carries its query's row type
+A CTE reference SHALL expose one column per projected field of its own
+query, named by that field's key, and typed as that field reads back —
+including computed fields. "As that field reads back" means **as it
+reads back through the reference**, which for an object-projected column
+is the widened type: a CTE body does not carry its own left-joined set
+outward, so a direct-column field reachable through the reference stays
+nullable even where awaiting the same statement on its own narrows it.
+A field projected as an aggregate or a window function SHALL keep the
+read type its brand declares, so `over(rowNumber(), …) as rn` is
+available outside the CTE as the same type it would have been inside it.
+
+A field the CTE does not project SHALL NOT be reachable through the
+reference, even when the CTE's own source table declares it.
+
+#### Scenario: A computed field is filtered on outside the CTE
+- **WHEN** a CTE projects a window function under an alias and the body
+  statement filters on that alias
+- **THEN** the statement type-checks and the alias carries the window
+  function's own read type
+
+#### Scenario: An unprojected column is not reachable
+- **WHEN** the body statement references a column of the CTE's source table
+  that the CTE does not project
+- **THEN** it does not type-check
