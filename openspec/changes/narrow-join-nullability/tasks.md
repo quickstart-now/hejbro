@@ -277,7 +277,7 @@ Files: `skills/hejbro/references/query-layer.md`,
 `.changeset/narrow-join-nullability.md`, `openspec/task-times.csv`,
 `README.md`.
 
-- [ ] 4.1 Replace the `#307` paragraph in
+- [x] 4.1 Replace the `#307` paragraph in
       `skills/hejbro/references/query-layer.md:429` with the landed
       rule: what narrows, what does not (aggregates, window functions,
       anything not a direct column reference), and which positions stay
@@ -288,7 +288,7 @@ Files: `skills/hejbro/references/query-layer.md`,
       not they were meant to (G1 review). One line each, framed as what
       they are — inference plumbing a user reads in a hover and never
       writes. (10 min)
-- [ ] 4.2 Add the `minor` changeset, write the durations into
+- [x] 4.2 Add the `minor` changeset, write the durations into
       `openspec/task-times.csv`, and refresh the README badges
       (`pnpm check:crap`, `pnpm check:tasktime`). (8 min)
 
