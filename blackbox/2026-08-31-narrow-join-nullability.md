@@ -1,9 +1,9 @@
 Refs:
 - .changeset/narrow-join-nullability.md @ blob 5143f4270981a28185fc2fb9e1ebbc7450e85a1e
 - README.md @ blob b111764a19270a043a54dc60f390f6d8b4b506ff
-- openspec/changes/narrow-join-nullability/proposal.md @ blob 428a0db9fdee39ab1a2752808872422e6e8acea2
-- openspec/changes/narrow-join-nullability/specs/query-type-inference/spec.md @ blob e89832a7efb86f35ec48918009540dfda64e2d3b
-- openspec/changes/narrow-join-nullability/tasks.md @ blob e13fa8e98958ffc15923fcabb528483b271be136
+- openspec/changes/archive/2026-08-31-narrow-join-nullability/proposal.md @ blob 428a0db9fdee39ab1a2752808872422e6e8acea2
+- openspec/changes/archive/2026-08-31-narrow-join-nullability/specs/query-type-inference/spec.md @ blob e89832a7efb86f35ec48918009540dfda64e2d3b
+- openspec/changes/archive/2026-08-31-narrow-join-nullability/tasks.md @ blob e13fa8e98958ffc15923fcabb528483b271be136
 - openspec/task-times.csv @ blob 88cf9f8616e518b3f2f474eb6b16148e7e581b70
 - packages/core/src/index.ts @ blob 747021dfe4178360ec0a2b1cc3f5123b386336f6
 - packages/core/src/query/left-joined.ts @ blob c61e4f12a72521b83171e1661c538bdf0fb4179f
@@ -26,13 +26,14 @@ re-pinned after the G4 review's two documentation completions, and
 five entries — the delta spec, the changeset, the skill reference,
 both result-type test files (one of them, the nested-read suite, is
 new to the list) — were re-pinned once more after the D106 correction
-round; see "The D106 gate" below. The three
-`openspec/changes/narrow-join-nullability/` paths will move when this
-change archives; the pins are to be re-pathed in the archive PR, blobs
-unchanged. Pins die three ways — squash preserves them, an archive
-kills the path, a concurrent same-file edit on dev kills the blob —
-so the archive PR re-verifies all twenty path-fixed before merging,
-per the standing pre-commit sweep rule.)
+round; see "The D106 gate" below. The three change-directory paths
+were then moved by `openspec archive` to
+`openspec/changes/archive/2026-08-31-narrow-join-nullability/` and
+re-pathed here in the same PR, blobs unchanged — anticipated, as with
+the two archives before it. Pins die three ways — squash preserves
+them, an archive kills the path, a concurrent same-file edit on dev
+kills the blob — and all twenty were re-verified path-fixed after the
+move, per the standing pre-commit sweep rule.)
 
 # narrow-join-nullability — left joins stop lying (#307)
 
