@@ -15,11 +15,13 @@ The third preset measured that assumption and it does not hold. On Nile:
 - `set local role "X"` is a **silent no-op** — the server answers
   `WARNING: GUC 'role' cannot be changed and the current setting is kept`,
   not an error. It also **blocks** the tenant setting that follows it.
+  `[MEASURED, container-only]`
 - `select set_config('nile.tenant_id', …, true)` is **permanently
   rejected**: `ERROR: changing nile.tenant_id within a transaction is only
   allowed before any queries are performed` — and `set_config` is itself a
   query, so no ordering rescues it. The one working form is `SET LOCAL
   nile.tenant_id`, sent as the **first statement after `BEGIN`**.
+  `[MEASURED, container-only]`
 - `DbContext.role` is mandatory and Nile has **zero application roles** to
   name. This is not a gap that closes later. Nile's own compatibility page
   lists `CREATE ROLE` as unsupported ("Developer roles can be supported in
@@ -27,6 +29,7 @@ The third preset measured that assumption and it does not hold. On Nile:
   design assigns policy bundles to principals over an HTTP API
   (`POST /workspaces/{workspace}/access/policies`) — so a role never
   becomes SQL a declaration could emit, on the roadmap either.
+  `[DOC + first-party design]`
 
 Every one of these is a fact about a platform, and the contract has no way
 to hear it. That is the definition of the wrong seam: `@hejbro/query`

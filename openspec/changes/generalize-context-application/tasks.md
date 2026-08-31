@@ -214,7 +214,7 @@ Files: `packages/query/src/index.ts`, `packages/query/src/db/context.ts`,
       assertion, pinning that the refusal is the query layer's own gate
       (the boundary invariant the delta scenario names), not the
       driver's own redundant defense.
-- [ ] 6.4 (recommended, adopted) The proposal's first evidence list
+- [x] 6.4 (recommended, adopted) The proposal's first evidence list
       (silent no-op / permanent rejection / zero roles) carried no
       confidence tag, unlike the security section's two ([MEASURED,
       container-only] / [Confirmed three ways]) -- inconsistent tagging
