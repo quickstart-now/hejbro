@@ -48,17 +48,27 @@ describe("syncedTable (2.4)", () => {
 		// table's relation keys must survive at the query layer).
 		expect(meta.foreignKeys).toHaveLength(1);
 		expect(meta.foreignKeys[0]?.references.tableName).toBe("users");
-		// numeric mode
-		expectTypeOf(posts.amount).not.toBeNever();
-		// non-null array elements and enum values are carried at the type
-		// level via the same column builders `table()` uses — see
-		// `types/column-builder-factories.ts`'s own coverage for the
-		// underlying guarantee; here we pin that `syncedTable()` doesn't
-		// lose them on the way in.
+		// numeric mode: `bigint({ mode: "bigint" })` reads back as `bigint`,
+		// not the family's default `string` — the mode survives the same
+		// `columnState` the type layer reads its `ColumnReadType` from.
+		expect(
+			meta.columns.find((c) => c.columnKey === "amount")?.columnState.mode,
+		).toBe("bigint");
+		// non-null array elements
 		expect(
 			meta.columns.find((c) => c.columnKey === "tags")?.columnState
 				.notNullElements,
 		).toBe(true);
+		// enum values: the column's `typeNode` still names the exact enum
+		// `status` was declared against, so the declared value union
+		// (`"draft" | "published"`) is still what the type layer reads.
+		const statusTypeNode = meta.columns.find((c) => c.columnKey === "status")
+			?.columnState.typeNode;
+		expect(statusTypeNode).toMatchObject({
+			typeName: "enum",
+			enumSchema: "app",
+			enumName: "post_status",
+		});
 	});
 
 	it("a usage table is an ordinary queryable table", () => {

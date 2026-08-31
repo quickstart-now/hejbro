@@ -10,6 +10,12 @@ its own failing test demands, never exports for a later group),
 group 3's per-command guard lands in it too). Every other file belongs
 to exactly one group.
 
+A row whose red test is a **type** assertion is red only under
+`check-types`; the test runner executes `expectTypeOf` as a no-op and
+reports it passing however false it is. Where such a row crosses a
+package boundary, the reading package resolves the other through its
+built output, so a build has to precede the check.
+
 Two questions are asked of every row of every three-column table below,
 because this change has already been caught by both. **Does the test's
 subject match the scenario's?** — a scenario about what an *existing*
@@ -103,6 +109,7 @@ package and nowhere else, and `packages/query/src` stays untouched).
 | " | Querying through the module is unaffected — structural half | `core/test/dsl/usage-table.test.ts > a usage table is an ordinary queryable table` |
 | " | " — query half (core cannot import the query package) | `query/test/types/usage-table.test.ts > a usage table keeps its relation keys and write inputs` |
 | " (regression pin, unchanged test) | — the pre-existing runtime refusal still reaches its input | `core/test/existing-table.test.ts > hard-errors when passed as a declaration` |
+| " (public surface) | The general table type no longer satisfies the input | `core/test/types/declared-table.test.ts > the published input type takes a declared table and refuses a bare one` |
 | A synced module reproduces the consumer-visible type layer | Result keys match the declaring repository | `core/test/dsl/usage-table.test.ts > carries the TypeScript key of each column` |
 | " | Element nullability / numeric mode / relation keys / enum values match | `core/test/dsl/usage-table.test.ts > carries mode, non-null elements, references and enum values` |
 
@@ -188,8 +195,16 @@ Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
 | Configuration asks each command only for what it needs | A consuming repository needs none of them | `cli/test/config.test.ts > accepts a configuration without the migration-authoring fields` |
 | " | A migration-authoring command names the field it needs | `cli/test/config-required.test.ts > names the missing field before any work` |
 
-- [ ] 3.1 `[design]` Settle how the loader preserves each declaration's
-      module export name. Start from
+- [ ] 3.1 `[design]` How the loader preserves each declaration's module
+      export name. *Settled:* the loader keeps returning the same array
+      and returns an `exportNames: Map<HejbroInput, string>` beside it,
+      keyed by identity — additive, so every existing caller is
+      untouched, which is the lesson group 2 paid for. A `Map` rather
+      than a `WeakMap`: the payload builder needs to enumerate it (to
+      check that every table it carries has a name), and its lifetime is
+      one CLI run, so there is no leak axis to protect against. A
+      declaration that was never exported simply has no key, which is
+      how the synthesized-function scenario holds. Start from
       `cli/test/loader.test.ts > preserves the module export name for
       each table`. ~8m
 - [ ] 3.2 Collect the carried choices from the loaded declarations,
@@ -204,13 +219,20 @@ Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
       snapshot's stable serialization. Start from
       `cli/test/manifest-payload.test.ts > serializes with the
       snapshot's own stable serialization`. ~8m
-- [ ] 3.4 `[design]` Settle the relaxation scope, then make the three
-      migration-authoring fields optional. Start from
-      `cli/test/config.test.ts > accepts a configuration without the
-      migration-authoring fields`. ~6m
-- [ ] 3.5 Per-command coded refusal, raised before any work. Start from
-      `cli/test/config-required.test.ts > names the missing field before
-      any work`. ~8m
+- [ ] 3.4 `[design]` The relaxation scope. *Settled:* the three
+      migration-authoring fields become optional and each command that
+      needs one refuses by name; `entry` is **not** relaxed — a
+      consuming repository still reads declarations, and the fact that
+      the module does not exist before the first sync belongs to the
+      question of where that module's path comes from, which group 5
+      owns. Start from `cli/test/config.test.ts > accepts a
+      configuration without the migration-authoring fields`. ~6m
+- [ ] 3.5 Per-command coded refusal, raised before any work. Whether it
+      reuses the existing config diagnostic or takes a code of its own
+      follows the repository's existing habit — read how other codes
+      treat a per-field failure before choosing, and record the basis in
+      one line. Start from `cli/test/config-required.test.ts > names the
+      missing field before any work`. ~8m
 
 ## 4. Emission wiring and monotonicity — `est_frozen: 36m` — issue #582
 
@@ -365,7 +387,10 @@ it; that gate is the task's red signal.
       property in numbers, and the CI drift-check workflow template.
       Gate: `pnpm check:diagnostic-xref` (every code the guide cites
       must exist). ~10m
-- [ ] 7.2 The skill reference and its row in the References table.
+- [ ] 7.2 The skill reference and its row in the References table,
+      including the one-word migration for a reader who annotates
+      declarations as `Table[]`: the migration input now asks for
+      `DeclaredTable`.
       Gate: the skill documents the public surface this change adds —
       absent, the surface ships undocumented. ~8m
 - [ ] 7.3 One `minor` changeset naming any member of the fixed group —

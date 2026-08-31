@@ -310,7 +310,12 @@ demonstrated elsewhere.
   `skills/hejbro`, `docs/guide`, `scripts/pack-install-smoke.sh`.
   **No file under `packages/query`, `packages/pg`, `packages/supabase`,
   `packages/neon` or `packages/nile` is edited.**
-- **Breaking**: none. The emission is opt-in, and with it off, core's 50
+- **Breaking, one type-level consequence**: the migration input now
+  requires a table that carries declaration authority, so a user who
+  collects declarations through the bare `Table` type — `const list:
+  Table[] = [posts]` — no longer type-checks at the call. The remedy is
+  the exported `DeclaredTable`, and it is a one-word change. Nothing
+  else moves: the emission is opt-in, and with it off, core's 50
   golden `.sql` files and every committed example chain are
   byte-identical — the same shape the `-- hejbro: <version>` banner line
   already demonstrates (present in examples, absent from all 50
