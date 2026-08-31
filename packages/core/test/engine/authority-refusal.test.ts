@@ -1,0 +1,72 @@
+import { describe, expect, it } from "vitest";
+import { schema } from "../../src/dsl/schema";
+import { syncedTable } from "../../src/dsl/usage-table";
+import { generateMigration } from "../../src/engine/generate";
+import { HejbroError } from "../../src/error";
+import { emptySnapshot } from "../../src/snapshot/snapshot";
+import { uuid } from "../../src/types/column-builder-factories";
+
+const app = schema("app");
+
+// `HejbroInput` already refuses a `syncedTable()` value at the type level
+// (see `test/types/declared-table.test.ts`'s 2.3). Every test below casts
+// past that on purpose: the runtime chokepoint exists specifically for a
+// caller the type layer never saw — a JS project, or a config file
+// `jiti` loads without a compile step (our own CLI loader does exactly
+// that) — so reaching it here requires the same bypass those callers
+// have by construction, not a test convenience.
+describe("refuses a table that carries no migration authority (2.5 — runtime layer)", () => {
+	it("is a coded runtime refusal", () => {
+		const usage = syncedTable("app", "posts", { id: uuid().primaryKey() });
+		expect.assertions(2);
+		try {
+			generateMigration({
+				// biome-ignore lint/suspicious/noExplicitAny: simulating a caller the type layer never saw (a JS project, or jiti-loaded config)
+				declarations: [app, usage as any],
+				previousSnapshot: emptySnapshot,
+			});
+		} catch (error) {
+			expect(error).toBeInstanceOf(HejbroError);
+			expect((error as HejbroError).code).toBe("synced-table-declared");
+		}
+	});
+
+	it("the refusal names the absent authority, not a provenance", () => {
+		const usage = syncedTable("app", "posts", { id: uuid().primaryKey() });
+		expect.assertions(2);
+		try {
+			generateMigration({
+				// biome-ignore lint/suspicious/noExplicitAny: simulating a caller the type layer never saw
+				declarations: [app, usage as any],
+				previousSnapshot: emptySnapshot,
+			});
+		} catch (error) {
+			const message = (error as HejbroError).message;
+			expect(message).toContain("carries no migration authority");
+			expect(message).toMatch(/\bNext:/);
+		}
+	});
+
+	it("a hand-written usage table is refused with no origin in the message", () => {
+		// "hand-written" = `syncedTable()` called directly by a user, not
+		// through `hejbro sync`'s generated module — G2 builds no carrier
+		// for where a value came from (that's group 5's job), so the
+		// message is identical either way: it names only what it observed.
+		const usage = syncedTable("app", "posts", { id: uuid().primaryKey() });
+		expect.assertions(3);
+		try {
+			generateMigration({
+				// biome-ignore lint/suspicious/noExplicitAny: simulating a caller the type layer never saw
+				declarations: [app, usage as any],
+				previousSnapshot: emptySnapshot,
+			});
+		} catch (error) {
+			const message = (error as HejbroError).message;
+			// states the observation, offers the sync command only as an
+			// example ("for example") -- never asserts it as fact.
+			expect(message).toContain("for example");
+			expect(message).not.toMatch(/\bwas (created|synced|generated) by\b/);
+			expect(message).not.toContain("authority: ");
+		}
+	});
+});

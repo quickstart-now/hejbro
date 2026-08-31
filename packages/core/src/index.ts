@@ -50,6 +50,7 @@ export { roleName } from "./dsl/role";
 export type { SchemaDeclaration } from "./dsl/schema";
 export { schema } from "./dsl/schema";
 export type {
+	DeclaredTable,
 	ForeignKeyAction,
 	ForeignKeyDeclaration,
 	ForeignKeyInput,
@@ -60,6 +61,7 @@ export type {
 	IndexMethod,
 	IndexNulls,
 	Table,
+	TableAuthority,
 	TableColumns,
 	TableDeclaration,
 	TableExtras,
@@ -73,6 +75,7 @@ export {
 	tableMeta,
 	toSnakeCase,
 } from "./dsl/table";
+export { syncedTable } from "./dsl/usage-table";
 export type { ChainEntry, ChainReport } from "./engine/chain";
 export { checkChain } from "./engine/chain";
 export { diffSnapshots } from "./engine/diff-engine";

@@ -25,9 +25,11 @@ a manifest format higher than the reader knows is refused, the export
 name of a declared function is a carried fact, a foreign key whose
 target is outside the manifest derives no relation, and an embedded
 snapshot format the reader refuses carries this reader's own remedy.
-Group 3 moved 40m → 46m, group 5 moved 47m → 63m, and group 6 moved
-26m → 28m. A re-freeze is only ever a spec change, never a task running
-long. Durations land per task in `openspec/task-times.csv`, measured
+Group 3 moved 40m → 46m, group 5 moved 47m → 69m, and group 6 moved
+26m → 28m. Group 5's last step (63m → 69m) is the one re-freeze that is
+not a spec change: a requirement's second half turned out to be
+unreachable from the group that owns the first, and covering it needed a
+task rather than a sentence. A re-freeze is never a task running long. Durations land per task in `openspec/task-times.csv`, measured
 with `date -u` at task start and end.
 
 ## 1. Manifest emission in core — `est_frozen: 47m` — issue #579
@@ -46,7 +48,7 @@ Files: `packages/core/src/sql/manifest.ts` (new),
 | " | A reader that does not know the line is unaffected | `core/test/migration-file.test.ts > an unknown banner line is ignored` |
 | The emitted manifest statements are deterministic | Two runs separated in time are byte-identical | `core/test/manifest.test.ts > two renders with different clocks are byte-identical` |
 | " | The statements name no clock and no file | `core/test/manifest.test.ts > the insert carries no timestamp and no file name` |
-| " | The line is readable by its prefix — and what it yields is a format, never a coerced non-number | `core/test/migration-file.test.ts > a non-integer banner manifest format is rejected, not coerced` |
+| " (parser hardening) | The line is readable by its prefix | `core/test/migration-file.test.ts > a non-integer banner manifest format is rejected, not coerced` |
 
 - [x] 1.1 `[design]` Settle the emitted SQL: table DDL (column set,
       identity ordering column, two format columns, payload column
@@ -83,6 +85,9 @@ Files: `packages/core/src/sql/manifest.ts` (new),
 
 Files: `packages/core/src/dsl/table.ts`,
 `packages/core/src/dsl/usage-table.ts` (new),
+`packages/core/src/dsl/existing-table.ts` (return type only — it is
+authored here, so it carries the brand and its existing runtime refusal
+keeps working unchanged),
 `packages/core/src/engine/generate.ts` (shared, additive),
 `packages/core/src/index.ts`.
 
@@ -93,34 +98,65 @@ Files: `packages/core/src/dsl/table.ts`,
 | " | The refusal states what it observed | `core/test/engine/authority-refusal.test.ts > the refusal names the absent authority, not a provenance` |
 | " | A table with no origin is refused without one | `core/test/engine/authority-refusal.test.ts > a hand-written usage table is refused with no origin in the message` |
 | " | Querying through the module is unaffected | `core/test/dsl/usage-table.test.ts > a usage table is an ordinary queryable table` |
+| " (regression pin, unchanged test) | — the pre-existing runtime refusal still reaches its input | `core/test/existing-table.test.ts > hard-errors when passed as a declaration` |
 | A synced module reproduces the consumer-visible type layer | Result keys match the declaring repository | `core/test/dsl/usage-table.test.ts > carries the TypeScript key of each column` |
 | " | Element nullability / numeric mode / relation keys / enum values match | `core/test/dsl/usage-table.test.ts > carries mode, non-null elements, references and enum values` |
 
-- [ ] 2.1 `[design]` The brand's shape and the usage constructor's name.
-      *Settled:* a required phantom on the intersection, so an unbranded
-      table is not assignable and `Table` itself is unchanged; plus
-      `origin: "declared" | "synced"` on the declaration, a union rather
-      than a boolean so a third source does not break it; constructor
-      named `syncedTable`. Start from
+- [x] 2.1 `[design]` The brand's shape and the usage constructor's name.
+      *Settled:* a type parameter carried inside the `tableMeta` member,
+      **not** an intersection — measured, a required phantom key changes
+      what `table()` returns and breaks core's own type-checks and the
+      query package's type tests, because the extra key reaches every
+      mapped type that reads `keyof Table`. The parameter's default is
+      the **whole union**, so every existing `Table<X>` still accepts
+      both kinds and no other package moves; the narrowing happens in
+      one place, `HejbroInput`. Bare `Table` is a type users write in
+      their own annotations, so a default of `"declared"` would make a
+      consumer's own helpers reject the very tables they synced — and
+      that failure would surface in their code, not in ours. `DeclaredTable<TColumns>` is the named
+      alias for the declared side. Plus
+      `authority: "declared" | "usage"` on the declaration — a union
+      rather than a boolean so a third constructor does not break it.
+      The brand says the value was **authored in this repository**, not
+      that the table is migratable: `existingTable` is authored here too
+      and carries it, and its own refusal stays the separate runtime
+      rule it already is. The value avoids `"synced"` because a
+      hand-called `syncedTable()` would make that word false while
+      `"usage"` stays true. The word `origin` is reserved for the
+      delta's other meaning, the manifest row a module carries.
+      Constructor named `syncedTable`. Start from
       `core/test/types/declared-table.test.ts > the declaration
       constructor yields a branded table`. ~10m
-- [ ] 2.2 Brand the declaration constructor without changing `Table`;
+- [x] 2.2 Brand the declaration constructor without changing `Table`;
       pin the unchanged type with an equivalence assertion. Start from
       `core/test/types/declared-table.test.ts > Table is structurally
       unchanged`. ~8m
-- [ ] 2.3 Narrow the migration input type to the branded form. Start
+- [x] 2.3 Narrow the migration input type to the branded form. Start
       from `core/test/types/declared-table.test.ts > a usage table is not
       assignable to the migration input`. ~6m
-- [ ] 2.4 The usage constructor, carrying columns, numeric mode,
+- [x] 2.4 The usage constructor, carrying columns, numeric mode,
       non-null elements, TypeScript keys, export name and references.
       Start from `core/test/dsl/usage-table.test.ts > carries the
       TypeScript key of each column`. ~10m
-- [ ] 2.5 `[design]` The refusal's code name and its single chokepoint.
+- [x] 2.5 `[design]` The refusal's code name and its single chokepoint.
       *Settled:* `synced-table-declared`, raised where `existingTable`
-      is already refused; keyed on the absent brand, never on
-      provenance; the message states the observation (no migration
-      authority) and names an origin only where the declaration carries
-      one. Start from
+      is already refused; refuse on `authority === "usage"` and treat an
+      absent value as declared — a declaration built by hand rather than
+      through a constructor was still authored here, and refusing it
+      would break callers this change never meant to touch; the type
+      layer is what makes that safe, since the usage constructor always
+      writes the value. Keyed on the brand, never on provenance; the message states the observation (no migration
+      authority) and offers `sync` output only as an example. This group
+      builds **no carrier** for an origin and therefore never names one —
+      the `kind` field says which constructor ran, not where the value
+      came from, and quoting it as provenance is the error this seal
+      exists to prevent. The carrier is settled in group 5. The runtime
+      refusal keeps its **own** failing test, separate from the
+      type-level one: once the input type is narrowed, this guard is
+      reachable only from a caller the types never saw — a JavaScript
+      project, or a config loaded without compilation — and a single
+      test covering both layers would let either one rot unnoticed.
+      Start from
       `core/test/engine/authority-refusal.test.ts > refuses a table that
       carries no migration authority`. ~8m
 
@@ -201,7 +237,7 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
       reads. Start from `cli/test/verify-manifest.test.ts > reports a
       chain that stopped carrying its manifests`. ~7m
 
-## 5. The `sync` command — `est_frozen: 63m` — issue #583
+## 5. The `sync` command — `est_frozen: 69m` — issue #583
 
 Files: `packages/cli/src/commands/sync.ts` (new),
 `packages/cli/src/sync/*` (new), `packages/cli/src/main.ts`,
@@ -216,6 +252,7 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | Type brands do not cross the boundary | A branded column reads as its unbranded type | `cli/test/sync-emit.test.ts > emits no brand for a branded column` |
 | Role names travel with the module and the consumer opts in | Supplied roles are accepted | `cli/test/sync-emit.test.ts > exports the manifest's role names in branded form` |
 | A synced module carries its freshness stamp as a value | The stamp is importable | `cli/test/sync-emit.test.ts > exports the identity of its manifest row` |
+| A synced module holds no migration authority | The refusal states what it observed — the half group 2 cannot reach | `cli/test/sync-refusal.test.ts > generating from an emitted module names the manifest row it came from` |
 | A synced module carries tables and enums, not functions | A synced module emits no function declarations | `cli/test/sync-emit.test.ts > emits tables and enums and no function declaration` |
 | A reference to a table the schema does not own has no relation | A relation to an unmanaged target is absent | `cli/test/sync-emit.test.ts > derives no relation for a reference to an unmanaged table` |
 | A synced module is a function of the row it was made from | Two syncs of the same row are byte-identical | `cli/test/sync-emit.test.ts > two syncs of the same row write byte-identical modules` |
@@ -232,8 +269,10 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | The command can check without writing | Checking leaves the module untouched | `cli/test/sync-states.test.ts > check mode writes nothing and exits non-zero` |
 | The schema filter is reserved, not silently ignored | The reserved filter is refused | `cli/test/sync-states.test.ts > refuses the reserved schema filter` |
 
-- [ ] 5.1 `[design]` Settle the module's file name, header, and the
-      names of its exported stamp and role list. Start from
+- [ ] 5.1 `[design]` Settle the module's file name, header, the names of
+      its exported stamp and role list, and how the manifest row a
+      module carries reaches a refusal that wants to name it — the
+      carrier group 2 deliberately did not build. Start from
       `cli/test/sync-emit.test.ts > writes one module and nothing else`.
       ~8m
 - [ ] 5.2 Register the command, its value-taking flags and its help
@@ -260,6 +299,11 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       this reader's own remedy when the embedded snapshot format is
       refused. Start from `cli/test/sync-states.test.ts > refuses a
       higher manifest format without parsing the payload`. ~10m
+- [ ] 5.9 Carry the manifest row an emitted module came from as far as
+      the refusal, so the half of the contract group 2 could not reach —
+      naming an origin where one exists — gets its own failing test.
+      Start from `cli/test/sync-refusal.test.ts > generating from an
+      emitted module names the manifest row it came from`. ~6m
 - [ ] 5.8 `[design]` Settle how a foreign key whose target is outside
       the manifest is emitted, then derive no relation for such an edge
       while keeping the column. Start from `cli/test/sync-emit.test.ts >
@@ -313,10 +357,12 @@ it; that gate is the task's red signal.
 - [ ] 7.2 The skill reference and its row in the References table.
       Gate: the skill documents the public surface this change adds —
       absent, the surface ships undocumented. ~8m
-- [ ] 7.3 One `minor` changeset, and a database-free `sync`
-      reachability assertion in the pack-install smoke. Gate:
-      `changeset status`, then `scripts/pack-install-smoke.sh`
-      assertion 3. ~6m
+- [ ] 7.3 One `minor` changeset naming any member of the fixed group —
+      `@hejbro/core` is the package this change actually moves, and the
+      group versions together, so one name is enough — plus a
+      database-free `sync` reachability assertion in the pack-install
+      smoke. Gate: `changeset status`, then
+      `scripts/pack-install-smoke.sh` assertion 3. ~6m
 
 ## 8. The two-repository witness — `est_frozen: 25m` — issue #586
 
