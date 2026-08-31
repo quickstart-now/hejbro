@@ -114,6 +114,34 @@ describe("the rendering is a pure value, not an effect (task 2.3, #555)", () => 
 	});
 });
 
+describe("a role-less context (task 2.4, #555)", () => {
+	it("fails before any I/O on an ordinary driver -- no transaction opens", () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = db(appSchema, driver);
+
+		try {
+			handle.as({});
+			expect.unreachable("db.as should have thrown for a role-less context");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "context-role-missing");
+		}
+
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+
+	it("proceeds on a role-less driver, and no role statement is emitted", async () => {
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
+			roleLessPlatform: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({}).execute(select(posts));
+
+		const sqlSent = sentPerTransaction[0]?.map((sent) => sent.sql) ?? [];
+		expect(sqlSent.some((sql) => sql.includes("set local role"))).toBe(false);
+	});
+});
+
 describe("db.as(context) -- UX scenario (2): an existing declared role (grant) works with no db() options set", () => {
 	it("applies SET LOCAL ROLE for a grant-declared role and runs the statement in the same transaction", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();

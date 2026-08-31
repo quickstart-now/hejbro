@@ -15,13 +15,16 @@ import { buildTx } from "./transaction";
 /**
  * `db.as(context)`'s own argument: the role to run under, plus optional
  * session settings (Supabase's JWT-claim `set_config` calls are the
- * motivating case, group 6) applied alongside it. `role` must already be
- * in {@link Declarations}`.roles` — the 4-source whitelist `db()` itself
- * computed (grant/policy/`roles` option/`driver.contributedRoles`) —
- * this type says nothing about validity on its own.
+ * motivating case, group 6) applied alongside it. `role` is optional
+ * (task 2.4, #555): a context naming one must already be in
+ * {@link Declarations}`.roles` — the 4-source whitelist `db()` itself
+ * computed (grant/policy/`roles` option/`driver.contributedRoles`) — this
+ * type says nothing about validity on its own — and a context naming
+ * none is only admitted on a driver that declares its platform role-less
+ * (`Driver.roleLessPlatform`); on any other driver it is refused.
  */
 export type DbContext = {
-	readonly role: Role;
+	readonly role?: Role;
 	readonly settings?: Readonly<Record<string, string>>;
 };
 
@@ -109,6 +112,38 @@ const assertDeclaredRole = (
 ): void => {
 	if (!declaredRoles.has(role)) {
 		throwUndeclaredRole(role, declaredRoles);
+	}
+};
+
+/** Builds and throws the `context-role-missing`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3, task 2.9). Never joins the `undeclared-role` family (task 2.9's own settled reasoning): that error's body lists the declared roles as the fix, which is meaningless when no role was named at all -- the fix here is naming one, or using a driver whose platform has none. */
+function throwContextRoleMissing(): never {
+	throw Object.assign(
+		new Error(
+			'A context named no role, and this driver has not declared its platform role-less. Next: name a role in the context ("role") the platform-appropriate way, or use a driver that declares Driver.roleLessPlatform.',
+		),
+		{ code: "context-role-missing" },
+	);
+}
+
+/**
+ * Validates `context.role` against `driver`/`declaredRoles` (task 2.4,
+ * #555): a named role is always checked against the whitelist,
+ * regardless of `driver.roleLessPlatform` -- that declaration grants no
+ * exemption from it (task 2.5). A role-less context is admitted only on
+ * a driver declaring its platform role-less; on any other driver it is
+ * refused with `context-role-missing`, before any I/O.
+ */
+const assertContextRole = (
+	driver: Driver,
+	role: Role | undefined,
+	declaredRoles: ReadonlySet<string>,
+): void => {
+	if (role !== undefined) {
+		assertDeclaredRole(role, declaredRoles);
+		return;
+	}
+	if (driver.roleLessPlatform !== true) {
+		throwContextRoleMissing();
 	}
 };
 
@@ -214,7 +249,7 @@ export const createProviderRun = (
 		if (context === undefined || context === null) {
 			throwProviderContextEmpty();
 		}
-		assertDeclaredRole(context.role, declaredRoles);
+		assertContextRole(driver, context.role, declaredRoles);
 		return driver.transaction(async (session) => {
 			await applyContext(driver, session, context);
 			return send(session);
@@ -247,7 +282,7 @@ export const createAsApi = <
 	declaredRoles: Declarations["roles"],
 ): ((context: DbContext) => ScopedDb<TFunctions, TSchema>) => {
 	return (context: DbContext): ScopedDb<TFunctions, TSchema> => {
-		assertDeclaredRole(context.role, declaredRoles);
+		assertContextRole(driver, context.role, declaredRoles);
 		/**
 		 * Opens one fresh, context-applied transaction and runs `send` on
 		 * it — the single primitive `execute`/`fn`/`transaction` (task 4.7

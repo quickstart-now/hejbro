@@ -55,7 +55,7 @@ Files: `packages/query/src/db/context.ts`,
 - [x] 2.3 (6m) The rendering is a value, not an effect. Failing test: the
       rendering is called with no session in scope and sends nothing; the
       query layer's own send path carries every statement.
-- [ ] 2.4 (9m) `DbContext.role` becomes optional; a role-less context is
+- [x] 2.4 (9m) `DbContext.role` becomes optional; a role-less context is
       refused unless the driver declares a role-less platform. Failing
       test: role-less context on an ordinary driver fails before any I/O
       and no transaction opens; on a role-less driver it proceeds and no
