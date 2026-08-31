@@ -217,14 +217,21 @@ between them. It SHALL NOT name a cause it did not observe.
   nothing about why the schema moved
 
 ### Requirement: Each way a manifest can fail a reader is named separately
-A reader of a manifest meets five distinct situations, and SHALL report
-each with its own code and its own remedy. Four of them are failures
-this requirement owns: the database has no manifest table; the table
+A reader of a manifest meets six distinct situations, and SHALL report
+each under its own code and with its own remedy. Four are failures this
+requirement owns: the database has no manifest table; the table
 exists but holds no row; the table holds rows but none matches the
 module's stamp; and the newest row declares a manifest format higher
-than the reader knows. The fifth — a matching row with newer rows after it — is
-the counted distance owned by the requirement on judging freshness by
-comparison.
+than the reader knows. The fifth — a matching row with newer rows after
+it — is the counted distance owned by the requirement on judging
+freshness by comparison. The sixth — an embedded snapshot format the
+reader refuses — is owned by the requirement on format skew.
+
+Six codes, because each remedy addresses a different actor: the owning
+repository enables emission, applies a migration, or regenerates one;
+the consumer re-syncs or changes its own hejbro. A situation reported
+under another's code sends its reader to the wrong repository, and
+leaves a caller branching on message text instead of on a code.
 
 Each demands a different action, which is why one code cannot serve
 them. An absent table means emission was never enabled in the owning
@@ -255,11 +262,12 @@ nothing to give.
 - **THEN** it fails with a code distinct from a counted distance,
   because no distance can be computed
 
-#### Scenario: The five codes are five
+#### Scenario: The six situations are told apart
 - **WHEN** the same reader meets an absent table, an empty table, an
-  unmatched stamp, a manifest format higher than it knows, and a matched
-  stamp with newer rows after it
-- **THEN** it reports five different codes
+  unmatched stamp, a manifest format higher than it knows, an embedded
+  snapshot format it refuses, and a matched stamp with newer rows after
+  it
+- **THEN** it reports six distinct codes, each carrying its own remedy
 
 ### Requirement: A manifest format higher than the reader knows is refused
 Format skew is asymmetric, because the manifest format only ever gains
@@ -301,10 +309,11 @@ interpreted.
 #### Scenario: An embedded snapshot format the reader refuses names the two repositories
 - **WHEN** the newest manifest row carries an embedded snapshot format
   the reader refuses
-- **THEN** the failure carries this reader's remedy — match the
-  consumer's hejbro to the one that generated the migration, or
-  regenerate the migration with the newer one — and never the guidance
-  written for a snapshot file on disk, which the consumer does not have
+- **THEN** the failure carries its own code and this reader's remedy —
+  match the consumer's hejbro to the one that generated the migration,
+  or regenerate the migration with the newer one — and never the
+  guidance written for a snapshot file on disk, which the consumer does
+  not have
 
 #### Scenario: Format skew is not reported as staleness
 - **WHEN** a reader meets a manifest format it does not know

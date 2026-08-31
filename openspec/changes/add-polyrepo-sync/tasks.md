@@ -10,6 +10,13 @@ its own failing test demands, never exports for a later group),
 group 3's per-command guard lands in it too). Every other file belongs
 to exactly one group.
 
+Two questions are asked of every row of every three-column table below,
+because this change has already been caught by both. **Does the test's
+subject match the scenario's?** — a scenario about what an *existing*
+reader does is not pinned by a test about what the *new* one does.
+**Which universal is this new scenario a member of?** — a sentence that
+counts has to move whenever a requirement is added beside it.
+
 Estimates are agent execution minutes and are frozen per group at
 `est_frozen`; overruns correct the next group's estimate, never this
 one's. Three groups carry a re-freeze, and the reason is recorded rather
@@ -200,10 +207,11 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | Each way a manifest can fail a reader is named separately | A database with no manifest table says so | `cli/test/sync-states.test.ts > distinguishes an absent manifest table` |
 | " | An empty manifest table says so | `cli/test/sync-states.test.ts > distinguishes an empty manifest table` |
 | " | A stamp with no matching row says so | `cli/test/sync-states.test.ts > distinguishes a stamp with no matching row` |
-| " | The five codes are five | `cli/test/sync-states.test.ts > reports five distinct codes for the five situations` |
+| " | The six situations are told apart | `cli/test/sync-states.test.ts > reports six distinct codes, each with its own remedy` |
 | A manifest format higher than the reader knows is refused | A higher manifest format is refused | `cli/test/sync-states.test.ts > refuses a higher manifest format without parsing the payload` |
 | " | A lower manifest format is read | `cli/test/sync-states.test.ts > reads a lower manifest format whose snapshot format it accepts` |
 | " | An embedded snapshot format the reader refuses names the two repositories | `cli/test/sync-states.test.ts > a refused embedded snapshot format carries this reader's remedy` |
+| " (reader hardening) | The six situations are told apart | `cli/test/sync-states.test.ts > a non-numeric manifest format is refused as unknown, never read` |
 | " | Format skew is not reported as staleness | `cli/test/sync-states.test.ts > format skew never advises re-syncing` |
 | The command can check without writing | Checking leaves the module untouched | `cli/test/sync-states.test.ts > check mode writes nothing and exits non-zero` |
 | The schema filter is reserved, not silently ignored | The reserved filter is refused | `cli/test/sync-states.test.ts > refuses the reserved schema filter` |
@@ -252,7 +260,8 @@ Files: `packages/cli/src/assert-schema.ts`,
 | " | A stale module fails with a counted distance | `cli/test/assert-schema-manifest.test.ts > fails naming both rows and the distance` |
 | " | The failure claims no cause | `cli/test/assert-schema-manifest.test.ts > the failure text asserts no cause` |
 | The database owns the order of manifest rows | Distance is counted, not inferred from time | `cli/test/assert-schema-manifest.test.ts > counts rows rather than comparing timestamps` |
-| Each way a manifest can fail a reader is named separately | A database with no manifest table / an empty table / an unmatched stamp / an unknown format | `cli/test/assert-schema-manifest.test.ts > distinguishes the five situations` |
+| Each way a manifest can fail a reader is named separately | A database with no manifest table / an empty table / an unmatched stamp / a higher manifest format / a refused snapshot format | `cli/test/assert-schema-manifest.test.ts > distinguishes the six situations` |
+| " (reader hardening) | The six situations are told apart | `cli/test/assert-schema-manifest.test.ts > a non-numeric manifest format is refused as unknown, never read` |
 | A manifest format higher than the reader knows is refused | Format skew is not reported as staleness | `cli/test/assert-schema-manifest.test.ts > format skew is not staleness` |
 | " | An embedded snapshot format the reader refuses names the two repositories | `cli/test/assert-schema-manifest.test.ts > a refused embedded snapshot format names both repositories` |
 | " (import discipline) | — | `cli/test/assert-schema-imports.test.ts` stays green |
@@ -261,10 +270,9 @@ Files: `packages/cli/src/assert-schema.ts`,
       the handle's driver. Start from
       `cli/test/assert-schema-manifest.test.ts > passes when the stamp
       matches the newest row`. ~8m
-- [ ] 6.2 `[design]` Settle the failure text's upper bound and whether a
-      refused embedded snapshot format reuses the snapshot reader's code
-      with this reader's message or gets its own, then count the distance
-      by rows rather than by time. Start from
+- [ ] 6.2 `[design]` Settle the failure text's upper bound and the code
+      name for a refused embedded snapshot format, then count the
+      distance by rows rather than by time. Start from
       `cli/test/assert-schema-manifest.test.ts > fails naming both rows
       and the distance`. ~10m
 - [ ] 6.3 The five situations, translated into this surface's own code
