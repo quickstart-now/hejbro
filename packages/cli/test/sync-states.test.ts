@@ -6,6 +6,7 @@ import {
 	emptySnapshot,
 	generateMigration,
 	HEJBRO_SNAPSHOT_VERSION,
+	MANIFEST_FORMAT,
 	schema,
 	table,
 	uuid,
@@ -23,10 +24,7 @@ import {
 	serializeManifestPayload,
 } from "../src/manifest-payload";
 import type { SyncDriverConnection } from "../src/sync/connection";
-import {
-	READER_MANIFEST_FORMAT,
-	readManifestState,
-} from "../src/sync/manifest-state";
+import { readManifestState } from "../src/sync/manifest-state";
 import { SYNCED_MODULE_MARKER } from "../src/sync/write";
 
 const app = schema("app");
@@ -287,7 +285,7 @@ describe("readManifestState (5.6, 5.7)", () => {
 	});
 
 	it("refuses a higher manifest format without parsing the payload", async () => {
-		const row = rowWithManifestFormat(1, READER_MANIFEST_FORMAT + 1);
+		const row = rowWithManifestFormat(1, MANIFEST_FORMAT + 1);
 		// A payload this reader would refuse to parse for an unrelated
 		// reason (shape) -- if the format gate ran *after* parsing, this
 		// would surface as payload-invalid instead.
@@ -300,12 +298,12 @@ describe("readManifestState (5.6, 5.7)", () => {
 
 		expect(state).toEqual({
 			situation: "format-unsupported",
-			rowFormat: READER_MANIFEST_FORMAT + 1,
+			rowFormat: MANIFEST_FORMAT + 1,
 		});
 	});
 
 	it("reads a lower manifest format whose snapshot format it accepts", async () => {
-		const row = rowWithManifestFormat(1, READER_MANIFEST_FORMAT - 1);
+		const row = rowWithManifestFormat(1, MANIFEST_FORMAT - 1);
 
 		const state = await readManifestState(
 			fakeSessionWithAnswers({ newest: [row] }),
@@ -360,7 +358,7 @@ describe("readManifestState (5.6, 5.7)", () => {
 			),
 			readManifestState(
 				fakeSessionWithAnswers({
-					newest: [rowWithManifestFormat(1, READER_MANIFEST_FORMAT + 1)],
+					newest: [rowWithManifestFormat(1, MANIFEST_FORMAT + 1)],
 				}),
 				null,
 			),
@@ -432,7 +430,7 @@ describe("hejbro sync -- manifest states reach coded diagnostics", () => {
 			cwd,
 			["--url", "postgres://fake"],
 			buildFakeImporterWithRows([
-				rowWithManifestFormat(1, READER_MANIFEST_FORMAT + 1),
+				rowWithManifestFormat(1, MANIFEST_FORMAT + 1),
 			]),
 		);
 
@@ -472,7 +470,7 @@ describe("hejbro sync -- manifest states reach coded diagnostics", () => {
 			cwd,
 			["--url", "postgres://fake"],
 			buildFakeImporterWithRows([
-				rowWithManifestFormat(1, READER_MANIFEST_FORMAT + 1),
+				rowWithManifestFormat(1, MANIFEST_FORMAT + 1),
 			]),
 		);
 
@@ -493,7 +491,7 @@ describe("hejbro sync -- manifest states reach coded diagnostics", () => {
 			[
 				"format-unsupported",
 				buildFakeImporterWithRows([
-					rowWithManifestFormat(1, READER_MANIFEST_FORMAT + 1),
+					rowWithManifestFormat(1, MANIFEST_FORMAT + 1),
 				]),
 			],
 			[

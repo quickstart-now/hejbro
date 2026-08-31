@@ -1,5 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import { HEJBRO_SNAPSHOT_VERSION, throwHejbroError } from "@hejbro/core";
+import {
+	HEJBRO_SNAPSHOT_VERSION,
+	MANIFEST_FORMAT,
+	throwHejbroError,
+} from "@hejbro/core";
 import { defineCommand } from "citty";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
@@ -11,10 +15,7 @@ import { withSyncConnection } from "../sync/connection";
 import type { ManifestDocument } from "../sync/emit";
 import { buildSyncedModuleSource } from "../sync/emit";
 import type { ManifestState } from "../sync/manifest-state";
-import {
-	READER_MANIFEST_FORMAT,
-	readManifestState,
-} from "../sync/manifest-state";
+import { readManifestState } from "../sync/manifest-state";
 import { writeSyncedModule } from "../sync/write";
 
 const SYNC_DESCRIPTION =
@@ -180,7 +181,7 @@ const throwForManifestState = (state: ManifestState): ManifestDocument => {
 		const rowFormatText = formatUnsupportedRowFormatText(state.rowFormat);
 		return throwHejbroError(
 			"sync-manifest-format-unsupported",
-			`hejbro sync's newest manifest row declares manifest format ${rowFormatText}, which this build (knows format ${READER_MANIFEST_FORMAT}) does not support. Next: upgrade hejbro to a version that supports this manifest format.`,
+			`hejbro sync's newest manifest row declares manifest format ${rowFormatText}, which this build (knows format ${MANIFEST_FORMAT}) does not support. Next: upgrade hejbro to a version that supports this manifest format.`,
 		);
 	}
 	if (state.situation === "payload-invalid") {

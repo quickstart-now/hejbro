@@ -9,9 +9,6 @@ import {
 } from "../manifest-read";
 import type { ManifestDocument } from "./emit";
 
-/** The format `sync`'s own reader knows how to interpret -- re-exported under this reader's own name rather than every call site importing core's `MANIFEST_FORMAT` directly, so a future reader-specific override (never expected, but not this reader's call to rule out) has one place to land. */
-export const READER_MANIFEST_FORMAT = MANIFEST_FORMAT;
-
 const manifestColumnFactSchema = z.object({
 	key: z.string(),
 	mode: z.enum(["bigint", "number", "string"]).nullable(),
@@ -213,7 +210,7 @@ export type ManifestState =
  * row is in hand). `manifest_format` is checked before the payload is
  * ever parsed (schema-sync delta, "A manifest format higher than the
  * reader knows is refused"): a format higher than {@link
- * READER_MANIFEST_FORMAT} is refused without calling {@link
+ * MANIFEST_FORMAT} is refused without calling {@link
  * parseManifestPayload} at all, so a payload this reader cannot
  * understand is never interpreted.
  */
@@ -221,7 +218,7 @@ const classifyFoundRow = (
 	row: ManifestRow,
 	distance: number,
 ): ManifestState => {
-	if (row.manifestFormat > READER_MANIFEST_FORMAT) {
+	if (row.manifestFormat > MANIFEST_FORMAT) {
 		return { situation: "format-unsupported", rowFormat: row.manifestFormat };
 	}
 	const payloadResult = parseManifestPayload(row.manifest);
