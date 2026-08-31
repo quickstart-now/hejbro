@@ -4,7 +4,39 @@ import type {
 	SelectJoinable,
 	UntrackedJoins,
 } from "../../src/index";
-import { eq, schema, select, table, text, uuid } from "../../src/index";
+import {
+	eq,
+	leftJoinedBrand,
+	schema,
+	select,
+	table,
+	text,
+	uuid,
+} from "../../src/index";
+
+/**
+ * Extracts exactly what a stage's own phantom carries — the same
+ * `NonNullable`-on-`infer` consumption pattern `OriginColumn`/`ReadAsType`
+ * (`select-result.ts`) already establish. This is the only way this file
+ * can test the CARRIER's own presence: comparing two fully-applied stage
+ * types instead (`toEqualTypeOf<SelectJoinable<P, X>>()`) cannot tell a
+ * working carrier from one dropped out of `SelectLimited`'s own shape --
+ * measured directly (temporarily removing `& LeftJoinedBrand<TLeftJoined>`
+ * from `SelectLimited`): with `TLeftJoined` then unused anywhere in the
+ * whole stage family's structure, every instantiation of that family
+ * collapses to the identical type regardless of the second type argument
+ * on EITHER side of the comparison, so a whole-stage `toEqualTypeOf`
+ * passed vacuously. Extracting the property directly does not have that
+ * blind spot: an absent carrier still infers `unknown` here (the same
+ * documented absent-carrier behavior `OriginColumn` already has), which is
+ * a concrete, wrong answer on the TRACKED path below (where the working
+ * answer is the joined table, not `unknown`).
+ */
+type LeftJoinedOf<T> = T extends {
+	readonly [leftJoinedBrand]?: infer TLeftJoined;
+}
+	? NonNullable<TLeftJoined>
+	: never;
 
 const app = schema("app");
 const posts = table(app, "posts", {
@@ -39,6 +71,16 @@ describe("leftJoin accumulates the joined table, innerJoin does not (task 1.3)",
 		);
 		expectTypeOf(joined).toEqualTypeOf<
 			SelectJoinable<typeof posts, typeof comments>
+		>();
+	});
+
+	it("the carrier itself resolves to exactly the joined table on the tracked path (catches a carrier dropped from SelectLimited's own shape, which the whole-stage comparison above cannot -- see LeftJoinedOf's own doc comment)", () => {
+		const joined = select(posts).leftJoin(
+			comments,
+			eq(posts.id, comments.postId),
+		);
+		expectTypeOf<LeftJoinedOf<typeof joined>>().toEqualTypeOf<
+			typeof comments
 		>();
 	});
 
