@@ -68,8 +68,17 @@ export const readNewestManifestRow = async (
 	return manifestRowSchema.parse(row);
 };
 
-/** Same table, ordered oldest-first by `seq` -- for a caller that needs to search for a specific row (by stamp) among every row, or count how many rows follow one, neither of which "the newest row" alone can answer. Throws (never swallows) both when the table itself doesn't exist (a real driver error, e.g. Postgres's `42P01`) and when a row's own columns don't validate (zod) -- distinguishing "no table", "no rows", and "a row this reader cannot make sense of" is a caller concern, same as {@link readNewestManifestRow}'s own boundary. */
-const ALL_MANIFEST_ROWS_QUERY = {
+/**
+ * The row whose `snapshot_hash` matches `stamp`, or `null` when none does
+ * -- targeted (`where`, not a full-table fetch), because the manifest is
+ * an append-only history with no row-count ceiling: a reader comparing a
+ * consumer's own stamp against it has no reason to ever hold more than
+ * the one row it's looking for in memory at once. `seq` travels with
+ * this row (unlike {@link readNewestManifestRow}'s) because a caller that
+ * searches by stamp is exactly the caller that goes on to ask how many
+ * rows follow it ({@link countManifestRowsAfter}).
+ */
+const MANIFEST_ROW_BY_STAMP_QUERY = (stamp: string) => ({
 	sql: [
 		"select",
 		'\t"seq" as "seq",',
@@ -78,17 +87,45 @@ const ALL_MANIFEST_ROWS_QUERY = {
 		'\t"snapshot_hash" as "snapshotHash",',
 		'\t"manifest" as "manifest"',
 		'from "hejbro"."schema_manifest"',
-		'order by "seq" asc',
+		'where "snapshot_hash" = $1',
 	].join("\n"),
-	params: [],
+	params: [stamp],
 	kind: "sql" as const,
+});
+
+export const findManifestRowByStamp = async (
+	session: DriverSession,
+	stamp: string,
+): Promise<ManifestRowWithSeq | null> => {
+	const rows: ReadonlyArray<DriverRow> = await session.execute(
+		MANIFEST_ROW_BY_STAMP_QUERY(stamp),
+	);
+	const [row] = rows;
+	if (row === undefined) {
+		return null;
+	}
+	return manifestRowWithSeqSchema.parse(row);
 };
 
-export const readManifestRows = async (
+const manifestRowCountSchema = z.object({
+	// Postgres's own `count(*)` returns `bigint`, which node-postgres
+	// hands back as a numeric string rather than a JS `number` (a bigint
+	// can exceed `Number.MAX_SAFE_INTEGER`) -- accepted as either here and
+	// coerced, since a manifest's own row count is never in that range.
+	count: z.union([z.number(), z.string()]),
+});
+
+/** How many rows come after `seq` -- a `count`, never a fetch of the rows themselves, for the same append-only-history reason {@link findManifestRowByStamp} is targeted rather than a full-table read. */
+export const countManifestRowsAfter = async (
 	session: DriverSession,
-): Promise<ReadonlyArray<ManifestRowWithSeq>> => {
-	const rows: ReadonlyArray<DriverRow> = await session.execute(
-		ALL_MANIFEST_ROWS_QUERY,
-	);
-	return rows.map((row) => manifestRowWithSeqSchema.parse(row));
+	seq: number,
+): Promise<number> => {
+	const rows: ReadonlyArray<DriverRow> = await session.execute({
+		sql: 'select count(*) as "count" from "hejbro"."schema_manifest" where "seq" > $1',
+		params: [seq],
+		kind: "sql",
+	});
+	const [row] = rows;
+	const parsed = manifestRowCountSchema.parse(row);
+	return Number(parsed.count);
 };

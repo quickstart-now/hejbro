@@ -10,17 +10,20 @@ import {
 	table,
 	uuid,
 } from "@hejbro/core";
-import type { DriverCapabilities, DriverSession } from "@hejbro/query";
+import type {
+	CompileResult,
+	DriverCapabilities,
+	DriverRow,
+	DriverSession,
+} from "@hejbro/query";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runSync } from "../src/commands/sync";
 import {
 	buildManifestPayload,
 	serializeManifestPayload,
 } from "../src/manifest-payload";
-import type { ManifestRowWithSeq } from "../src/manifest-read";
 import type { SyncDriverConnection } from "../src/sync/connection";
 import {
-	classifyManifestRows,
 	READER_MANIFEST_FORMAT,
 	readManifestState,
 } from "../src/sync/manifest-state";
@@ -61,7 +64,38 @@ const buildFakeManifestRow = (
 	};
 };
 
-/** `assertConnected`'s own probe and the real read both go through this one `execute` -- fine for every test here, since none inspects the probe's own query text (`sync-connection.test.ts` already pins that). */
+/**
+ * Routes a fake `execute` by the query's own text -- `manifest-read.ts`'s
+ * three real queries never overlap in shape (`select 1`, `count(*)`, a
+ * `where "snapshot_hash"` search, and the plain newest-row select each
+ * have a distinguishing substring), so a fake built this way answers
+ * each targeted query correctly instead of returning the same canned
+ * array regardless of what was asked -- required now that `sync`'s
+ * reader issues more than one query shape (5.6/5.7 review: no full-table
+ * fetch, targeted queries only).
+ */
+type FakeManifestAnswers = {
+	readonly newest?: ReadonlyArray<Record<string, unknown>>;
+	readonly byStamp?: ReadonlyArray<Record<string, unknown>>;
+	readonly countAfter?: number;
+};
+
+const routedExecute =
+	(answers: FakeManifestAnswers) =>
+	async (compiled: CompileResult): Promise<ReadonlyArray<DriverRow>> => {
+		if (compiled.sql === "select 1") {
+			return [];
+		}
+		if (compiled.sql.includes("count(*)")) {
+			return [{ count: answers.countAfter ?? 0 }];
+		}
+		if (compiled.sql.includes('where "snapshot_hash"')) {
+			return answers.byStamp ?? [];
+		}
+		return answers.newest ?? [];
+	};
+
+/** `assertConnected`'s own probe and every real read go through this one `execute`, routed by query text. */
 const buildFakeConnection = (
 	execute: SyncDriverConnection["execute"],
 ): SyncDriverConnection => ({
@@ -79,7 +113,7 @@ const buildFakeConnection = (
 const buildFakeImporterWithRows = (
 	rows: ReadonlyArray<Record<string, unknown>>,
 ) => {
-	const connection = buildFakeConnection(async () => rows);
+	const connection = buildFakeConnection(routedExecute({ newest: rows }));
 	return async () => ({ pgDriver: () => connection });
 };
 
@@ -104,10 +138,10 @@ const buildFakeImporterThatThrows = (error: unknown) => {
 };
 
 /** A bare `DriverSession` (no pool to close), for the pure-reader tests below that call `readManifestState` directly rather than going through `runSync`/`withSyncConnection`. */
-const fakeSessionWithRows = (
-	rows: ReadonlyArray<Record<string, unknown>>,
+const fakeSessionWithAnswers = (
+	answers: FakeManifestAnswers,
 ): DriverSession => ({
-	execute: async () => rows,
+	execute: routedExecute(answers),
 });
 
 const fakeSessionThatThrows = (error: unknown): DriverSession => ({
@@ -221,7 +255,13 @@ const rowWithSnapshotFormatVersion = (
 	return { ...row, manifest: JSON.stringify(mutatedPayload) };
 };
 
-describe("classifyManifestRows / readManifestState (5.6, 5.7)", () => {
+// Every scenario below is written against `readManifestState` -- the
+// *reader* -- not against `runSync`: the schema-sync delta's own
+// scenarios ("A reader of a manifest meets seven distinct situations")
+// name a reader as their subject, and `sync` is only one of the two
+// surfaces (group 6's `assertSchema` is the other) that meets it
+// (ps-planner review).
+describe("readManifestState (5.6, 5.7)", () => {
 	it("distinguishes an absent manifest table", async () => {
 		const state = await readManifestState(
 			fakeSessionThatThrows(undefinedTableError()),
@@ -231,28 +271,30 @@ describe("classifyManifestRows / readManifestState (5.6, 5.7)", () => {
 		expect(state).toEqual({ situation: "missing" });
 	});
 
-	it("distinguishes an empty manifest table", () => {
-		expect(classifyManifestRows([], null)).toEqual({ situation: "empty" });
+	it("distinguishes an empty manifest table", async () => {
+		const state = await readManifestState(fakeSessionWithAnswers({}), null);
+
+		expect(state).toEqual({ situation: "empty" });
 	});
 
-	it("distinguishes a stamp with no matching row", () => {
-		const state = classifyManifestRows(
-			[buildFakeManifestRow(1) as unknown as ManifestRowWithSeq],
+	it("distinguishes a stamp with no matching row", async () => {
+		const state = await readManifestState(
+			fakeSessionWithAnswers({ byStamp: [] }),
 			"sha256:does-not-exist",
 		);
 
 		expect(state).toEqual({ situation: "stamp-unmatched" });
 	});
 
-	it("refuses a higher manifest format without parsing the payload", () => {
+	it("refuses a higher manifest format without parsing the payload", async () => {
 		const row = rowWithManifestFormat(1, READER_MANIFEST_FORMAT + 1);
 		// A payload this reader would refuse to parse for an unrelated
 		// reason (shape) -- if the format gate ran *after* parsing, this
 		// would surface as payload-invalid instead.
 		const brokenRow = { ...row, manifest: "not json at all" };
 
-		const state = classifyManifestRows(
-			[brokenRow as unknown as ManifestRowWithSeq],
+		const state = await readManifestState(
+			fakeSessionWithAnswers({ newest: [brokenRow] }),
 			null,
 		);
 
@@ -262,33 +304,33 @@ describe("classifyManifestRows / readManifestState (5.6, 5.7)", () => {
 		});
 	});
 
-	it("reads a lower manifest format whose snapshot format it accepts", () => {
+	it("reads a lower manifest format whose snapshot format it accepts", async () => {
 		const row = rowWithManifestFormat(1, READER_MANIFEST_FORMAT - 1);
 
-		const state = classifyManifestRows(
-			[row as unknown as ManifestRowWithSeq],
+		const state = await readManifestState(
+			fakeSessionWithAnswers({ newest: [row] }),
 			null,
 		);
 
 		expect(state.situation).toBe("found");
 	});
 
-	it("refuses a payload that does not answer its own format", () => {
+	it("refuses a payload that does not answer its own format", async () => {
 		const row = rowWithManifestText(1, "not json at all");
 
-		const state = classifyManifestRows(
-			[row as unknown as ManifestRowWithSeq],
+		const state = await readManifestState(
+			fakeSessionWithAnswers({ newest: [row] }),
 			null,
 		);
 
 		expect(state.situation).toBe("payload-invalid");
 	});
 
-	it("a refused embedded snapshot format carries this reader's remedy", () => {
+	it("a refused embedded snapshot format carries this reader's remedy", async () => {
 		const row = rowWithSnapshotFormatVersion(1, HEJBRO_SNAPSHOT_VERSION + 1);
 
-		const state = classifyManifestRows(
-			[row as unknown as ManifestRowWithSeq],
+		const state = await readManifestState(
+			fakeSessionWithAnswers({ newest: [row] }),
 			null,
 		);
 
@@ -298,62 +340,48 @@ describe("classifyManifestRows / readManifestState (5.6, 5.7)", () => {
 	it("a row whose manifest_format column is not an integer is refused as unknown, never read", async () => {
 		const row = rowWithManifestFormat(1, 1.5);
 
-		const state = await readManifestState(fakeSessionWithRows([row]), null);
+		const state = await readManifestState(
+			fakeSessionWithAnswers({ newest: [row] }),
+			null,
+		);
 
 		expect(state).toEqual({ situation: "format-unsupported", rowFormat: null });
 	});
 
 	it("reports seven distinct codes, each with its own remedy", async () => {
-		const currentRow = buildFakeManifestRow(1);
-		const staleRows = [buildFakeManifestRow(1), buildFakeManifestRow(2)];
+		const matchedRow = buildFakeManifestRow(1);
 
 		const situations = await Promise.all([
 			readManifestState(fakeSessionThatThrows(undefinedTableError()), null),
-			Promise.resolve(classifyManifestRows([], null)),
-			Promise.resolve(
-				classifyManifestRows(
-					[currentRow as unknown as ManifestRowWithSeq],
-					"sha256:does-not-exist",
-				),
+			readManifestState(fakeSessionWithAnswers({}), null),
+			readManifestState(
+				fakeSessionWithAnswers({ byStamp: [] }),
+				"sha256:does-not-exist",
 			),
-			Promise.resolve(
-				classifyManifestRows(
-					[
-						rowWithManifestFormat(
-							1,
-							READER_MANIFEST_FORMAT + 1,
-						) as unknown as ManifestRowWithSeq,
+			readManifestState(
+				fakeSessionWithAnswers({
+					newest: [rowWithManifestFormat(1, READER_MANIFEST_FORMAT + 1)],
+				}),
+				null,
+			),
+			readManifestState(
+				fakeSessionWithAnswers({
+					newest: [rowWithManifestText(1, "not json at all")],
+				}),
+				null,
+			),
+			readManifestState(
+				fakeSessionWithAnswers({
+					newest: [
+						rowWithSnapshotFormatVersion(1, HEJBRO_SNAPSHOT_VERSION + 1),
 					],
-					null,
-				),
+				}),
+				null,
 			),
-			Promise.resolve(
-				classifyManifestRows(
-					[
-						rowWithManifestText(
-							1,
-							"not json at all",
-						) as unknown as ManifestRowWithSeq,
-					],
-					null,
-				),
-			),
-			Promise.resolve(
-				classifyManifestRows(
-					[
-						rowWithSnapshotFormatVersion(
-							1,
-							HEJBRO_SNAPSHOT_VERSION + 1,
-						) as unknown as ManifestRowWithSeq,
-					],
-					null,
-				),
-			),
-			Promise.resolve(
-				classifyManifestRows(
-					staleRows as unknown as ReadonlyArray<ManifestRowWithSeq>,
-					staleRows[0]?.snapshotHash ?? null,
-				),
+			// The seventh: a stamp that matches, with rows after it.
+			readManifestState(
+				fakeSessionWithAnswers({ byStamp: [matchedRow], countAfter: 1 }),
+				matchedRow.snapshotHash,
 			),
 		]);
 
@@ -433,7 +461,7 @@ describe("hejbro sync -- manifest states reach coded diagnostics", () => {
 		);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("sync-manifest-snapshot-format-refused");
+		expect(result.stderr).toContain("sync-snapshot-format-unsupported");
 		// Never the snapshot reader's own file-oriented remedy -- the
 		// consumer has no snapshot file on disk to delete or reset.
 		expect(result.stderr).not.toContain("hejbro init");
@@ -493,5 +521,39 @@ describe("hejbro sync -- manifest states reach coded diagnostics", () => {
 
 		expect(codes.every((code) => code !== null)).toBe(true);
 		expect(new Set(codes).size).toBe(scenarios.length);
+	});
+
+	it("never leaks core's own file-oriented remedy when a core error is forwarded unwrapped", async () => {
+		// Guards against the exact regression ps-planner's review named:
+		// wrapping `tryParseEmbeddedSnapshot`'s catch removed, so core's
+		// raw `unsupported-snapshot-version` error would reach this
+		// consumer verbatim under its own code and its own (disk-file-
+		// oriented) wording. Checked both directions: a *lower* embedded
+		// snapshot format is core's "older" message (the one that
+		// actually says `hejbro init`/"delete"), and a *higher* one is a
+		// differently-worded "newer" message that names neither word --
+		// asserting on the code itself, not on wording specific to one
+		// direction, is what makes this catch the regression regardless
+		// of which direction produced it (a lower-only wording check
+		// missed the higher-format case entirely on the first pass here).
+		const higherResult = await runSync(
+			cwd,
+			["--url", "postgres://fake"],
+			buildFakeImporterWithRows([
+				rowWithSnapshotFormatVersion(1, HEJBRO_SNAPSHOT_VERSION + 1),
+			]),
+		);
+		const lowerResult = await runSync(
+			cwd,
+			["--url", "postgres://fake"],
+			buildFakeImporterWithRows([
+				rowWithSnapshotFormatVersion(1, HEJBRO_SNAPSHOT_VERSION - 1),
+			]),
+		);
+
+		expect(higherResult.stderr).not.toContain("unsupported-snapshot-version");
+		expect(lowerResult.stderr).not.toContain("unsupported-snapshot-version");
+		expect(lowerResult.stderr).not.toContain("hejbro init");
+		expect(lowerResult.stderr).not.toContain("delete");
 	});
 });

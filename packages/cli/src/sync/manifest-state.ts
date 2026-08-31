@@ -1,19 +1,16 @@
-import { HejbroError, parseSnapshot } from "@hejbro/core";
+import { HejbroError, MANIFEST_FORMAT, parseSnapshot } from "@hejbro/core";
 import type { DriverSession } from "@hejbro/query";
 import { z } from "zod";
-import type { ManifestRowWithSeq } from "../manifest-read";
-import { readManifestRows } from "../manifest-read";
+import type { ManifestRow } from "../manifest-read";
+import {
+	countManifestRowsAfter,
+	findManifestRowByStamp,
+	readNewestManifestRow,
+} from "../manifest-read";
 import type { ManifestDocument } from "./emit";
 
-/**
- * The format `sync`'s own reader knows how to interpret (`sql/manifest.ts`'s
- * `MANIFEST_FORMAT`, restated here) -- not yet exported from core's public
- * surface (flagged, pending owner confirmation), so this is a second copy
- * of the same fact rather than a re-export. If core's own value ever
- * changes without this one moving too, a real manifest row would compare
- * against the wrong number.
- */
-export const READER_MANIFEST_FORMAT = 1;
+/** The format `sync`'s own reader knows how to interpret -- re-exported under this reader's own name rather than every call site importing core's `MANIFEST_FORMAT` directly, so a future reader-specific override (never expected, but not this reader's call to rule out) has one place to land. */
+export const READER_MANIFEST_FORMAT = MANIFEST_FORMAT;
 
 const manifestColumnFactSchema = z.object({
 	key: z.string(),
@@ -61,7 +58,7 @@ type PayloadParseResult =
 	| {
 			readonly ok: false;
 			readonly reason: "snapshot-format";
-			readonly detail: string;
+			readonly embeddedFormatVersion: number | null;
 	  };
 
 const tryParseJson = (
@@ -77,6 +74,58 @@ const tryParseJson = (
 /** `unsupported-snapshot-version` is core's own code for a snapshot format this reader is too old or too new for -- distinct from every other way `parseSnapshot` can fail (`invalid-snapshot`, a genuine shape problem), which folds into the same "payload does not answer its own format" situation as every other shape mismatch here. */
 const isSnapshotFormatError = (error: unknown): error is HejbroError =>
 	error instanceof HejbroError && error.code === "unsupported-snapshot-version";
+
+/** The embedded snapshot's own claimed `formatVersion`, read directly rather than through core's error text -- `unknown` when the value isn't even a number, which the caller still has enough to report ("an unrecognized format") without needing the exact figure. */
+const embeddedFormatVersionOf = (snapshotValue: unknown): number | null => {
+	if (typeof snapshotValue !== "object" || snapshotValue === null) {
+		return null;
+	}
+	const version = (snapshotValue as { readonly formatVersion?: unknown })
+		.formatVersion;
+	if (typeof version !== "number") {
+		return null;
+	}
+	return version;
+};
+
+const tryParseEmbeddedSnapshot = (
+	snapshotValue: unknown,
+):
+	| { readonly ok: true; readonly snapshot: ManifestDocument["snapshot"] }
+	| {
+			readonly ok: false;
+			readonly reason: "shape";
+			readonly detail: string;
+	  }
+	| {
+			readonly ok: false;
+			readonly reason: "snapshot-format";
+			readonly embeddedFormatVersion: number | null;
+	  } => {
+	try {
+		const snapshot = parseSnapshot(JSON.stringify(snapshotValue));
+		return { ok: true, snapshot };
+	} catch (error) {
+		if (isSnapshotFormatError(error)) {
+			// Never `error.message` here: core's own text is written for a
+			// snapshot *file on disk* (it says `hejbro init`/"delete this
+			// file"), which this consumer has no such file to act on
+			// (ps-planner review) -- the caller builds its own remedy from
+			// the version number alone.
+			return {
+				ok: false,
+				reason: "snapshot-format",
+				embeddedFormatVersion: embeddedFormatVersionOf(snapshotValue),
+			};
+		}
+		return {
+			ok: false,
+			reason: "shape",
+			detail:
+				"the embedded snapshot does not match the shape this manifest format promises",
+		};
+	}
+};
 
 /**
  * Parses and validates a manifest row's `manifest` column against the
@@ -127,46 +176,16 @@ export const parseManifestPayload = (
 	};
 };
 
-const tryParseEmbeddedSnapshot = (
-	snapshotValue: unknown,
-):
-	| { readonly ok: true; readonly snapshot: ManifestDocument["snapshot"] }
-	| {
-			readonly ok: false;
-			readonly reason: "shape" | "snapshot-format";
-			readonly detail: string;
-	  } => {
-	try {
-		const snapshot = parseSnapshot(JSON.stringify(snapshotValue));
-		return { ok: true, snapshot };
-	} catch (error) {
-		if (isSnapshotFormatError(error)) {
-			return {
-				ok: false,
-				reason: "snapshot-format",
-				detail: error.message,
-			};
-		}
-		return {
-			ok: false,
-			reason: "shape",
-			detail:
-				"the embedded snapshot does not match the shape this manifest format promises",
-		};
-	}
-};
-
 /**
  * All seven situations a manifest reader meets (schema-sync delta) --
- * `"found"` carries `distance` (how many rows this session read follow
- * the matched one) so a caller owning the freshness-by-comparison
- * requirement (group 6) can tell a current module (`distance === 0`)
- * from a stale one without a second classifier: the mechanics are the
- * same reader's, only the vocabulary a caller puts on `distance > 0`
- * differs. `sync`'s own five (missing/empty/stamp-unmatched/format-
- * unsupported/payload-invalid) and the format-skew requirement's
- * embedded-snapshot refusal are each their own variant so a caller gives
- * each its own code and remedy.
+ * `"found"` carries `distance` (how many rows follow the matched one) so
+ * a caller owning the freshness-by-comparison requirement (group 6) can
+ * tell a current module (`distance === 0`) from a stale one without a
+ * second classifier: the mechanics are the same reader's, only the
+ * vocabulary a caller puts on `distance > 0` differs. `sync`'s own five
+ * (missing/empty/stamp-unmatched/format-unsupported/payload-invalid) and
+ * the format-skew requirement's embedded-snapshot refusal are each their
+ * own variant so a caller gives each its own code and remedy.
  */
 export type ManifestState =
 	| { readonly situation: "missing" }
@@ -177,72 +196,52 @@ export type ManifestState =
 			readonly rowFormat: number | null;
 	  }
 	| { readonly situation: "payload-invalid"; readonly detail: string }
-	| { readonly situation: "snapshot-format-refused"; readonly detail: string }
+	| {
+			readonly situation: "snapshot-format-refused";
+			readonly embeddedFormatVersion: number | null;
+	  }
 	| {
 			readonly situation: "found";
 			readonly document: ManifestDocument;
 			readonly distance: number;
 	  };
 
-/** The row matching `expectedStamp`, or the newest row when `expectedStamp` is `null` -- a plain (write) `sync` run has no prior stamp to match, so it always reads the newest; a caller that does (not yet wired into any command this round) searches every row instead. */
-const targetRow = (
-	rows: ReadonlyArray<ManifestRowWithSeq>,
-	expectedStamp: string | null,
-): ManifestRowWithSeq | undefined => {
-	if (expectedStamp === null) {
-		return rows.at(-1);
-	}
-	return rows.find((row) => row.snapshotHash === expectedStamp);
-};
-
 /**
- * Classifies an already-fetched set of manifest rows into one of the
- * seven situations a manifest reader meets (schema-sync delta) -- pure,
- * so every situation but "missing" (which needs the query itself to have
- * thrown, `readManifestState`'s own job) is unit-testable with no
- * database at all. `manifest_format` is checked before the payload is
+ * Classifies a single already-found row's own format and payload -- pure,
+ * and shared by both entry points below (a newest-row read and a
+ * stamp-matched read reach the exact same format/payload rules once a
+ * row is in hand). `manifest_format` is checked before the payload is
  * ever parsed (schema-sync delta, "A manifest format higher than the
  * reader knows is refused"): a format higher than {@link
  * READER_MANIFEST_FORMAT} is refused without calling {@link
  * parseManifestPayload} at all, so a payload this reader cannot
  * understand is never interpreted.
  */
-export const classifyManifestRows = (
-	rows: ReadonlyArray<ManifestRowWithSeq>,
-	expectedStamp: string | null,
+const classifyFoundRow = (
+	row: ManifestRow,
+	distance: number,
 ): ManifestState => {
-	if (rows.length === 0) {
-		return { situation: "empty" };
+	if (row.manifestFormat > READER_MANIFEST_FORMAT) {
+		return { situation: "format-unsupported", rowFormat: row.manifestFormat };
 	}
-	const target = targetRow(rows, expectedStamp);
-	if (target === undefined) {
-		return { situation: "stamp-unmatched" };
-	}
-	if (target.manifestFormat > READER_MANIFEST_FORMAT) {
-		return {
-			situation: "format-unsupported",
-			rowFormat: target.manifestFormat,
-		};
-	}
-	const payloadResult = parseManifestPayload(target.manifest);
+	const payloadResult = parseManifestPayload(row.manifest);
 	if (!payloadResult.ok) {
 		if (payloadResult.reason === "snapshot-format") {
 			return {
 				situation: "snapshot-format-refused",
-				detail: payloadResult.detail,
+				embeddedFormatVersion: payloadResult.embeddedFormatVersion,
 			};
 		}
 		return { situation: "payload-invalid", detail: payloadResult.detail };
 	}
-	const distance = rows.filter((row) => row.seq > target.seq).length;
 	return {
 		situation: "found",
 		distance,
-		document: { ...payloadResult.document, snapshotHash: target.snapshotHash },
+		document: { ...payloadResult.document, snapshotHash: row.snapshotHash },
 	};
 };
 
-/** Postgres's own SQLSTATE for "no such relation" -- the one way `readManifestRows` throwing means "no manifest table", as opposed to a genuinely unexpected driver failure (a dropped connection mid-query, say), which this rethrows rather than misreport as "missing". */
+/** Postgres's own SQLSTATE for "no such relation" -- the one way either read below throwing means "no manifest table", as opposed to a genuinely unexpected driver failure (a dropped connection mid-query, say), which this rethrows rather than misreport as "missing". */
 const isUndefinedTableError = (error: unknown): boolean =>
 	typeof error === "object" &&
 	error !== null &&
@@ -250,19 +249,41 @@ const isUndefinedTableError = (error: unknown): boolean =>
 	(error as { readonly code?: unknown }).code === "42P01";
 
 /**
- * Reads every manifest row through the handed session and classifies the
- * result -- the one place `readManifestRows`'s own two ways of throwing
- * (the table doesn't exist; a row's own columns don't validate) become
- * two of the seven named situations, alongside every situation {@link
- * classifyManifestRows} derives from the rows themselves.
+ * Reads the manifest through the handed session and classifies the
+ * result into one of the seven situations a manifest reader meets
+ * (schema-sync delta) -- `expectedStamp: null` (a plain `sync` write,
+ * which has no prior stamp to match) reads the newest row and never
+ * counts a distance (there is nothing to be after the newest); a real
+ * stamp (not yet wired into any command this round -- group 6's own
+ * job) searches for the matching row and counts what follows it.
+ * Targeted queries throughout ({@link findManifestRowByStamp}, {@link
+ * countManifestRowsAfter}), never a full-table fetch: the manifest is an
+ * append-only history with no row-count ceiling.
+ *
+ * A table that is genuinely empty reports as `"stamp-unmatched"` rather
+ * than `"empty"` when `expectedStamp` is given (distinguishing the two
+ * would need an extra existence check this reader doesn't make) --
+ * `"empty"` is reserved for the `expectedStamp: null` path, where it is
+ * exactly what a `null` result means.
  */
 export const readManifestState = async (
 	session: DriverSession,
 	expectedStamp: string | null,
 ): Promise<ManifestState> => {
 	try {
-		const rows = await readManifestRows(session);
-		return classifyManifestRows(rows, expectedStamp);
+		if (expectedStamp === null) {
+			const row = await readNewestManifestRow(session);
+			if (row === null) {
+				return { situation: "empty" };
+			}
+			return classifyFoundRow(row, 0);
+		}
+		const row = await findManifestRowByStamp(session, expectedStamp);
+		if (row === null) {
+			return { situation: "stamp-unmatched" };
+		}
+		const distance = await countManifestRowsAfter(session, row.seq);
+		return classifyFoundRow(row, distance);
 	} catch (error) {
 		if (isUndefinedTableError(error)) {
 			return { situation: "missing" };

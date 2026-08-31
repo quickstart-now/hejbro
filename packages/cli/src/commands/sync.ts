@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { throwHejbroError } from "@hejbro/core";
+import { HEJBRO_SNAPSHOT_VERSION, throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
@@ -144,6 +144,15 @@ const formatUnsupportedRowFormatText = (rowFormat: number | null): string => {
 	return String(rowFormat);
 };
 
+const embeddedSnapshotFormatText = (
+	embeddedFormatVersion: number | null,
+): string => {
+	if (embeddedFormatVersion === null) {
+		return "in an unrecognized form";
+	}
+	return String(embeddedFormatVersion);
+};
+
 /** `MANIFEST-STATE-FINAL` (raise the five 5.6 owns): a manifest row's own SQLSTATE-driven absence, its emptiness, an unmatched stamp, a format higher than this reader knows, and a payload that doesn't answer its own format -- each named separately (schema-sync delta, "Each way a manifest can fail a reader is named separately"), because each sends its reader to a different remedy. The two situations this command does *not* raise here (a matched stamp with newer rows after it; a refused embedded snapshot format) are format-skew's own -- `snapshot-format-refused` still gets its own code below, since parsing the payload is this command's own job even though the *requirement* it fails under is format-skew's, not this one's. */
 const throwForManifestState = (state: ManifestState): ManifestDocument => {
 	if (state.situation === "found") {
@@ -181,9 +190,20 @@ const throwForManifestState = (state: ManifestState): ManifestDocument => {
 		);
 	}
 	// state.situation === "snapshot-format-refused"
+	//
+	// A distinct noun from "sync-manifest-format-unsupported" (#4) on
+	// purpose (ps-planner review): the manifest's own format and the
+	// snapshot it embeds are two different formats that move
+	// independently, and a shared noun would read as two variants of the
+	// same problem rather than two different ones. The message states
+	// only the embedded version and this build's own, never core's raw
+	// `unsupported-snapshot-version` text (that message tells a reader to
+	// `hejbro init`/delete a snapshot *file on disk*, which this consumer
+	// doesn't have) -- and names both repositories, since either one's
+	// hejbro could be the one that needs to move.
 	return throwHejbroError(
-		"sync-manifest-snapshot-format-refused",
-		`hejbro sync's newest manifest row embeds a snapshot format this build refuses: ${state.detail}. Next: match this consumer's hejbro to the one that generated the migration, or regenerate the migration with this build's hejbro.`,
+		"sync-snapshot-format-unsupported",
+		`hejbro sync's newest manifest row embeds a snapshot format ${embeddedSnapshotFormatText(state.embeddedFormatVersion)}, which this build (knows format ${HEJBRO_SNAPSHOT_VERSION}) does not support. Next: match this consumer's hejbro to the one that generated the migration in the repository that owns this schema, or regenerate that migration with this build's hejbro.`,
 	);
 };
 
