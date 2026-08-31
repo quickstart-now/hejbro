@@ -132,10 +132,11 @@ PL/pgSQL builder compiler for functions and triggers is the novel part.
 | `@hejbro/pg` | Vanilla node-postgres driver for `@hejbro/query` |
 | `@hejbro/supabase` | Supabase provider preset (auth helpers, storage buckets, role presets) + a `@hejbro/query` driver decorator |
 | `@hejbro/neon` | Neon provider preset (auth surface over `pg_session_jwt`) + a `@hejbro/query` driver for both Neon connection paths |
+| `@hejbro/nile` | Nile provider preset (`asTenant` context builder, platform-refusal validators) + a `@hejbro/query` driver decorator |
 | `@hejbro/skills` | Agent skills that teach coding agents the hejbro workflow |
 
-Generic Postgres at the core; provider presets for Supabase and Neon on the
-same extension interface, with Nile planned.
+Generic Postgres at the core; provider presets for Supabase, Neon, and
+Nile on the same extension interface.
 
 ## Query layer
 

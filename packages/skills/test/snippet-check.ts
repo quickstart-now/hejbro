@@ -15,6 +15,7 @@ const allowedImportPaths: Record<string, string[]> = {
 	"@hejbro/pg": ["packages/pg/src/index.ts"],
 	"@hejbro/supabase": ["packages/supabase/src/index.ts"],
 	"@hejbro/neon": ["packages/neon/src/index.ts"],
+	"@hejbro/nile": ["packages/nile/src/index.ts"],
 };
 
 Object.entries(allowedImportPaths).forEach(([name, targets]) => {

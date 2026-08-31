@@ -31,5 +31,7 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 | `references/function-builder-pitfalls.md` | Writing a `defineFunction`/`defineTrigger` body, or debugging a `nondeterministic-body` error |
 | `references/generate-verify-workflow.md` | Running `generate`/`verify`, reading the banner, resolving an ambiguous rename, reading a warning |
 | `references/supabase-preset.md` | Using `@hejbro/supabase` — roles, auth helpers, storage buckets, preset warnings |
+| `references/neon-preset.md` | Using `@hejbro/neon` — `neonDriver`, roles, auth helpers, the two authentication modes |
+| `references/nile-preset.md` | Using `@hejbro/nile` — `nileDriver`, `asTenant`, the declarations this preset refuses and their evidence grades |
 | `references/query-layer.md` | Building a `db()` handle, chaining queries, calling `db.fn`, running under an RLS execution context, transactions, asserting the connected database matches its declarations (`assertSchema`), or query-layer errors |
 | `references/brownfield-adoption.md` | Adopting hejbro into an existing (already-populated) database |

@@ -230,23 +230,23 @@ Files: `skills/hejbro/references/nile-preset.md`, `skills/hejbro/SKILL.md`,
 `packages/skills/test/nile-preset-doc.test.ts` (new)
 est_frozen: 9m (re-estimated at G3 close from observed 0.1-0.3x)
 
-- [ ] 6.1 (10m) `references/nile-preset.md`: the context builder, the two
+- [x] 6.1 (10m) `references/nile-preset.md`: the context builder, the two
       declarations, the values it refuses and why (with each refusal's
       evidence grade), the platform's refusal of `COMMENT` recorded as a
       platform fact hejbro cannot currently declare, and the base-driver
       shape this decorator does **not** support.
-- [ ] 6.2 (7m) A repository test asserting the documentation obligation
+- [x] 6.2 (7m) A repository test asserting the documentation obligation
       the spec states — that the unsupported base shape is stated where
       users read — in the shape `packages/skills/test/`'s existing
       documentation tests already use. Failing test: delete the sentence
       and watch it fail.
-- [ ] 6.3 (6m) `SKILL.md`'s References table gains the nile row — and the
+- [x] 6.3 (6m) `SKILL.md`'s References table gains the nile row — and the
       missing `neon-preset.md` row, which ships today with no index entry
       and is one line of the same table.
-- [ ] 6.4 (5m) `.claude/rules/provider-preset.md`: `packages/nile/**` joins
+- [x] 6.4 (5m) `.claude/rules/provider-preset.md`: `packages/nile/**` joins
       the `paths:` frontmatter, or the boundary rule never loads for this
       package. Failing test: the rule's own path list names the package.
-- [ ] 6.5 (9m) `README.md`'s packages table gains the row, and the two
+- [x] 6.5 (9m) `README.md`'s packages table gains the row, and the two
       "Nile planned" sentences — `README.md` (lines 137-138) and
       `AGENTS.md`'s project summary — stop being true when this preset
       ships.
