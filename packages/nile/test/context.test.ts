@@ -299,3 +299,27 @@ describe("the rendering refuses a context it cannot apply, before producing any 
 		).toThrow();
 	});
 });
+
+describe("the preset never reaches the query layer's own empty-rendering refusal (harden-context-boundary task 2.1, #591)", () => {
+	it("refuses a context carrying no tenant setting before producing a statement", async () => {
+		const { driver, sentPerTransaction } = recordingBase();
+		const handle = db(appSchema, nileDriver(driver));
+
+		// a context naming no tenant setting at all -- the shape
+		// query-layer's own context-rendering-empty guard would otherwise
+		// catch downstream (`packages/query/src/db/context.ts`'s
+		// applyContext), except this preset's rendering already refuses it
+		// on the missing tenant value before returning anything, so the
+		// query layer's newer refusal is never reached.
+		await expect(handle.as({}).execute(select(widgets))).rejects.toMatchObject({
+			code: "nile-context-value-invalid",
+			field: "tenant",
+		});
+
+		// the transaction db.as(context) opened unconditionally carries
+		// zero statements -- the rendering threw while applyContext still
+		// held the (never-produced) statement array, so session.execute is
+		// never called at all, on this path or the query layer's own.
+		expect(sentPerTransaction).toEqual([[]]);
+	});
+});

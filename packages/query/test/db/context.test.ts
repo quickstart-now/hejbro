@@ -1,4 +1,5 @@
 import {
+	defineFunction,
 	eq,
 	grant,
 	rls,
@@ -42,7 +43,16 @@ const posts = table(
 
 const readerGrant = grant(app).usage.to("grant_reader");
 
-const appSchema = { posts, readerGrant };
+const helloWorld = defineFunction(
+	app,
+	"hello_world",
+	{ returns: posts },
+	(ctx) => {
+		ctx.return(select(posts));
+	},
+);
+
+const appSchema = { posts, readerGrant, helloWorld };
 
 describe("defaultContextRendering (task 2.1, #555 -- extracted from applyContext, byte-identical to today's sequence)", () => {
 	it("returns the role statement, then one set_config per setting, in declaration order", () => {
@@ -525,5 +535,25 @@ describe("db.as(context) -- capability check before any send", () => {
 
 		expect(driver.transaction).not.toHaveBeenCalled();
 		expect(driver.execute).not.toHaveBeenCalled();
+	});
+});
+
+describe("db.as(context) -- the operation named on a missing-capability refusal (task 1.6, #590)", () => {
+	it("names the caller's surface on the scoped path", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+		});
+		const handle = db(appSchema, driver);
+		const scoped = handle.as({ role: roleName("grant_reader") });
+
+		await expect(scoped.execute(select(posts))).rejects.toMatchObject({
+			operation: "db.execute",
+		});
+		await expect(scoped.select(posts)).rejects.toMatchObject({
+			operation: "db.select",
+		});
+		await expect(scoped.fn.helloWorld({})).rejects.toMatchObject({
+			operation: "db.fn",
+		});
 	});
 });

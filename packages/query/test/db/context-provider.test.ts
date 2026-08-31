@@ -192,10 +192,13 @@ describe("db() context provider -- 1.3 surface coverage (eight execution entry p
 		},
 		// fn.ts's own path (confirmed while doing this task, per tasks.md
 		// 1.3): `createFnApi`'s `run` parameter fully abstracts over
-		// "direct to driver" vs "context-scoped" the same way chain.ts's
-		// `run` does (fn.ts:373-386), so wiring the same `providerChainRun`
-		// primitive into both `createChainApi` and `createFnApi` (db.ts)
-		// covers this surface with no fn.ts-specific code at all.
+		// "direct to driver" vs "context-scoped" the same way each chain
+		// member's own resolved run does (fn.ts:373-386) -- `db.ts` hands
+		// both `createChainApi` and `createFnApi` the same
+		// `providerChainRun` factory (harden-context-boundary task 1.5),
+		// `createChainApi` calling it once per member and `createFnApi`
+		// once for `"db.fn"`, so this surface needs no fn.ts-specific code
+		// at all.
 		{ name: "fn", run: (handle) => handle.fn.listPublished({}) },
 	];
 
@@ -337,6 +340,26 @@ describe("db() context provider -- 1.6 capability ordering", () => {
 
 		expect(resolver).not.toHaveBeenCalled();
 		expect(renderCalls).toHaveLength(0);
+	});
+});
+
+describe("db() context provider -- the operation named on a missing-capability refusal (task 1.7, #590)", () => {
+	it("names the caller's surface when the capability is missing", async () => {
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+		});
+		const resolver = vi.fn(() => ({ role: roleName("grant_reader") }));
+		const handle = makeHandle(driver, resolver);
+
+		await expect(handle.execute(select(posts))).rejects.toMatchObject({
+			operation: "db.execute",
+		});
+		await expect(handle.select(posts)).rejects.toMatchObject({
+			operation: "db.select",
+		});
+		await expect(handle.fn.listPublished({})).rejects.toMatchObject({
+			operation: "db.fn",
+		});
 	});
 });
 

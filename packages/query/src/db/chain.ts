@@ -71,6 +71,19 @@ export type ChainRun = <T>(
 ) => Promise<T>;
 
 /**
+ * What `createChainApi` takes instead of one shared {@link ChainRun}
+ * (harden-context-boundary task 1.5): called once per chain member with
+ * that member's own operation name (`db.select`, `db.insert`, …), so a
+ * refusal downstream (`context-required`, `driver-missing-capability`)
+ * names the surface the caller actually invoked rather than one name
+ * standing in for all of them. A factory that ignores its argument (as
+ * `transaction.ts`'s `buildTx` does — a `tx` member sends straight
+ * through an already-open session, gaining no token at all) is exactly
+ * as legal as one that uses it.
+ */
+export type ChainRunFactory = (operation: string) => ChainRun;
+
+/**
  * A select chain's terminal shape: awaiting it resolves the declared row
  * type ({@link SelectResult}, task 3.10/4.11 reused, never re-derived);
  * `.compile()` is a pure preview — byte-identical to `compile()` of the
@@ -872,10 +885,11 @@ export type ChainApi<TSchema = Record<string, unknown>> = {
 };
 
 export const createChainApi = (
-	run: ChainRun,
+	runFor: ChainRunFactory,
 	tables: Declarations["tables"],
 ): ChainApi => ({
 	select: ((projection: SelectProjection, from?: Table) => {
+		const run = runFor("db.select");
 		const base = makeDistinctableChain(
 			run,
 			coreSelect(projection, from),
@@ -899,13 +913,25 @@ export const createChainApi = (
 	}) as ChainApi["select"],
 	insert: (target) => ({
 		values: (rows) =>
-			makeInsertConflictableChain(run, coreInsert(target).values(rows), tables),
+			makeInsertConflictableChain(
+				runFor("db.insert"),
+				coreInsert(target).values(rows),
+				tables,
+			),
 	}),
 	update: (target) => ({
 		set: (values) =>
-			makeUpdateFilterableChain(run, coreUpdate(target).set(values), tables),
+			makeUpdateFilterableChain(
+				runFor("db.update"),
+				coreUpdate(target).set(values),
+				tables,
+			),
 	}),
 	deleteFrom: (target) =>
-		makeDeleteFilterableChain(run, coreDeleteFrom(target), tables),
-	with: (build) => makeWithChain(run, coreWithCte(build), tables),
+		makeDeleteFilterableChain(
+			runFor("db.deleteFrom"),
+			coreDeleteFrom(target),
+			tables,
+		),
+	with: (build) => makeWithChain(runFor("db.with"), coreWithCte(build), tables),
 });
