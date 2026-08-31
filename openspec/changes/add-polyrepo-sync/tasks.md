@@ -30,18 +30,23 @@ counts has to move whenever a requirement is added beside it.
 
 Estimates are agent execution minutes and are frozen per group at
 `est_frozen`; overruns correct the next group's estimate, never this
-one's. Three groups carry a re-freeze, and the reason is recorded rather
+one's. Four groups carry a re-freeze, and the reason is recorded rather
 than absorbed: the delta gained requirements after the first freeze —
 a manifest format higher than the reader knows is refused, the export
 name of a declared function is a carried fact, a foreign key whose
-target is outside the manifest derives no relation, and an embedded
-snapshot format the reader refuses carries this reader's own remedy.
-Group 3 moved 40m → 46m, group 5 moved 47m → 69m, and group 6 moved
-26m → 28m. Group 5's last step (63m → 69m) is the one re-freeze that is
-not a spec change: a requirement's second half turned out to be
-unreachable from the group that owns the first, and covering it needed a
-task rather than a sentence. A re-freeze is never a task running long. Durations land per task in `openspec/task-times.csv`, measured
-with `date -u` at task start and end.
+target is outside the manifest derives no relation, an embedded
+snapshot format the reader refuses carries this reader's own remedy,
+and a payload that does not answer its own format is a situation of its
+own rather than a cast. Group 3 moved 40m → 46m, group 5 moved
+47m → 93m, group 6 moved 26m → 30m, and group 7 moved 24m → 26m. One of group 5's steps
+(63m → 69m) is the one re-freeze that is not a spec change: a
+requirement's second half turned out to be unreachable from the group
+that owns the first, and covering it needed a task rather than a
+sentence. A re-freeze is never a task running long — an estimate moves
+only when the work it estimates does, so that the ratio of actual to
+estimate keeps measuring execution rather than scope. Durations land
+per task in `openspec/task-times.csv`, measured with `date -u` at task
+start and end.
 
 ## 1. Manifest emission in core — `est_frozen: 47m` — issue #579
 
@@ -279,7 +284,7 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
       reads. Start from `cli/test/verify-manifest.test.ts > reports a
       chain that stopped carrying its manifests`. ~7m
 
-## 5. The `sync` command — `est_frozen: 78m` — issue #583
+## 5. The `sync` command — `est_frozen: 93m` — issue #583
 
 Files: `packages/cli/src/commands/sync.ts` (new),
 `packages/cli/src/sync/*` (new), `packages/cli/src/main.ts`,
@@ -305,11 +310,12 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | Each way a manifest can fail a reader is named separately | A database with no manifest table says so | `cli/test/sync-states.test.ts > distinguishes an absent manifest table` |
 | " | An empty manifest table says so | `cli/test/sync-states.test.ts > distinguishes an empty manifest table` |
 | " | A stamp with no matching row says so | `cli/test/sync-states.test.ts > distinguishes a stamp with no matching row` |
-| " | The six situations are told apart | `cli/test/sync-states.test.ts > reports six distinct codes, each with its own remedy` |
+| " | A payload that does not answer its format says so | `cli/test/sync-states.test.ts > refuses a payload that does not answer its own format` |
+| " | The seven situations are told apart | `cli/test/sync-states.test.ts > reports seven distinct codes, each with its own remedy` |
 | A manifest format higher than the reader knows is refused | A higher manifest format is refused | `cli/test/sync-states.test.ts > refuses a higher manifest format without parsing the payload` |
 | " | A lower manifest format is read | `cli/test/sync-states.test.ts > reads a lower manifest format whose snapshot format it accepts` |
 | " | An embedded snapshot format the reader refuses names the two repositories | `cli/test/sync-states.test.ts > a refused embedded snapshot format carries this reader's remedy` |
-| " (reader hardening) | The six situations are told apart | `cli/test/sync-states.test.ts > a row whose manifest_format column is not an integer is refused as unknown, never read` |
+| " (reader hardening) | The seven situations are told apart | `cli/test/sync-states.test.ts > a row whose manifest_format column is not an integer is refused as unknown, never read` |
 | " | Format skew is not reported as staleness | `cli/test/sync-states.test.ts > format skew never advises re-syncing` |
 | The command can check without writing | Checking leaves the module untouched | `cli/test/sync-states.test.ts > check mode writes nothing and exits non-zero` |
 | The schema filter is reserved, not silently ignored | The reserved filter is refused | `cli/test/sync-states.test.ts > refuses the reserved schema filter` |
@@ -327,6 +333,12 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       one reader, shared with the startup path, free of `node:*` so that
       path can import it. Start from `cli/test/manifest-read.test.ts >
       reads the newest row and nothing else`. ~5m
+- [x] 5.12 The comparison mode that writes nothing, with an exit status
+      that separates agreement from staleness; and the reserved schema
+      filter, parsed and refused so a caller never believes a filter
+      applied. Start from `cli/test/sync-states.test.ts > check mode
+      writes nothing and exits non-zero`, then `> refuses the reserved
+      schema filter`. ~8m
 - [x] 5.3 Connection entry, dynamic driver import, and both coded
       refusals. Start from `cli/test/sync-connection.test.ts > names what
       to supply when no connection is given`. ~8m
@@ -335,20 +347,22 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       `cli/test/sync-emit.test.ts > reproduces the carried choices of the
       manifest`, then `> emits tables and enums and no function
       declaration`. ~10m
-- [ ] 5.5 Export the role list and the stamp, and pin the module as a
+- [x] 5.5 Export the role list and the stamp, and pin the module as a
       function of its row (two syncs byte-identical, no clock value in
       the header). Start from `cli/test/sync-emit.test.ts > two syncs of
       the same row write byte-identical modules`. ~8m
-- [ ] 5.6 `[design]` Settle the five codes and their remedies, then
-      raise the four this command owns. Start from
+- [ ] 5.6 `[design]` Settle the seven codes and their remedies, then
+      raise the five this command owns — including a payload validated
+      against its format rather than cast, and the absent-versus-empty
+      pair that a raw error currently collapses. Start from
       `cli/test/sync-states.test.ts > distinguishes an absent manifest
-      table`. ~8m
+      table`. ~10m
 - [ ] 5.7 Refuse a higher manifest format before the payload is parsed;
       read a lower one whose snapshot format is acceptable; and carry
       this reader's own remedy when the embedded snapshot format is
       refused. Start from `cli/test/sync-states.test.ts > refuses a
       higher manifest format without parsing the payload`. ~10m
-- [ ] 5.10 Read a manifest whose table has a column whose position and
+- [x] 5.10 Read a manifest whose table has a column whose position and
       declaration order disagree, and attach each fact to the column it
       names. Group 3 pins the emitting half against a stand-in ordering;
       this is the half where a real snapshot, a re-added column and a
@@ -360,12 +374,12 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       naming an origin where one exists — gets its own failing test.
       Start from `cli/test/sync-refusal.test.ts > generating from an
       emitted module names the manifest row it came from`. ~6m
-- [ ] 5.8 `[design]` Settle how a foreign key whose target is outside
+- [x] 5.8 `[design]` Settle how a foreign key whose target is outside
       the manifest is emitted, then derive no relation for such an edge
       while keeping the column. Start from `cli/test/sync-emit.test.ts >
       derives no relation for a reference to an unmanaged table`. ~6m
 
-## 6. Freshness at startup — `est_frozen: 28m` — issue #584
+## 6. Freshness at startup — `est_frozen: 30m` — issue #584
 
 Files: `packages/cli/src/assert-schema.ts`,
 `packages/cli/src/manifest-read.ts` (new).
@@ -376,8 +390,8 @@ Files: `packages/cli/src/assert-schema.ts`,
 | " | A stale module fails with a counted distance | `cli/test/assert-schema-manifest.test.ts > fails naming both rows and the distance` |
 | " | The failure claims no cause | `cli/test/assert-schema-manifest.test.ts > the failure text asserts no cause` |
 | The database owns the order of manifest rows | Distance is counted, not inferred from time | `cli/test/assert-schema-manifest.test.ts > counts rows rather than comparing timestamps` |
-| Each way a manifest can fail a reader is named separately | A database with no manifest table / an empty table / an unmatched stamp / a higher manifest format / a refused snapshot format | `cli/test/assert-schema-manifest.test.ts > distinguishes the six situations` |
-| " (reader hardening) | The six situations are told apart | `cli/test/assert-schema-manifest.test.ts > a row whose manifest_format column is not an integer is refused as unknown, never read` |
+| Each way a manifest can fail a reader is named separately | A database with no manifest table / an empty table / an unmatched stamp / a higher manifest format / an unparsable payload / a refused snapshot format | `cli/test/assert-schema-manifest.test.ts > distinguishes the seven situations` |
+| " (reader hardening) | The seven situations are told apart | `cli/test/assert-schema-manifest.test.ts > a row whose manifest_format column is not an integer is refused as unknown, never read` |
 | A manifest format higher than the reader knows is refused | Format skew is not reported as staleness | `cli/test/assert-schema-manifest.test.ts > format skew is not staleness` |
 | " | An embedded snapshot format the reader refuses names the two repositories | `cli/test/assert-schema-manifest.test.ts > a refused embedded snapshot format names both repositories` |
 | " (import discipline) | — | `cli/test/assert-schema-imports.test.ts` stays green |
@@ -392,12 +406,15 @@ Files: `packages/cli/src/assert-schema.ts`,
       distance by rows rather than by time. Start from
       `cli/test/assert-schema-manifest.test.ts > fails naming both rows
       and the distance`. ~10m
-- [ ] 6.3 The five situations, translated into this surface's own code
-      vocabulary, including format skew as its own outcome. Start from
-      `cli/test/assert-schema-manifest.test.ts > distinguishes the five
-      situations`. ~10m
+- [ ] 6.3 The seven situations, translated into this surface's own code
+      vocabulary, including format skew and an unparsable payload as
+      outcomes of their own. This surface meets the same seven the
+      command does, because it reads the same rows through the same
+      reader; only the vocabulary it reports them in differs. Start from
+      `cli/test/assert-schema-manifest.test.ts > distinguishes the seven
+      situations`. ~12m
 
-## 7. Documentation and release plumbing — `est_frozen: 24m` — issue #585
+## 7. Documentation and release plumbing — `est_frozen: 26m` — issue #585
 
 Files: `docs/guide/polyrepo.md` (new),
 `skills/hejbro/references/polyrepo-sync.md` (new),
@@ -408,9 +425,13 @@ No unit test covers prose. Each task names the gate that fails without
 it; that gate is the task's red signal.
 
 - [ ] 7.1 The guide: what crosses the boundary, what does not, the size
-      property in numbers, and the CI drift-check workflow template.
-      Gate: `pnpm check:diagnostic-xref` (every code the guide cites
-      must exist). ~10m
+      property in numbers, the CI drift-check workflow template, and all
+      seven reader situations with the repository each remedy sends the
+      reader to. The xref gate runs one way only — it checks that every
+      code the guide cites exists, never that every code is cited — so a
+      code added late stays undocumented unless the guide enumerates
+      them deliberately. Gate: `pnpm check:diagnostic-xref`, plus a
+      count of the guide's rows against the delta's enumeration. ~12m
 - [ ] 7.2 The skill reference and its row in the References table,
       including the one-word migration for a reader who annotates
       declarations as `Table[]`: the migration input now asks for

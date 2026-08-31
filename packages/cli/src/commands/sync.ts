@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
@@ -32,6 +33,16 @@ const SYNC_ARGS = {
 		type: "boolean",
 		description:
 			"overwrite a destination that isn't a file `hejbro sync` wrote",
+	},
+	check: {
+		type: "boolean",
+		description:
+			"compare without writing; exits non-zero when the destination is stale",
+	},
+	schema: {
+		type: "string",
+		description:
+			"reserved for a future release -- passing it refuses rather than silently syncing the whole manifest",
 	},
 } as const;
 
@@ -83,15 +94,57 @@ const resolveDestination = (
 	);
 };
 
+/** `--schema` is parsed but never consulted for anything but this refusal (schema-sync delta, "The schema filter is reserved, not silently ignored") -- accepting it silently would let a caller believe a filter applied when the whole manifest was written regardless. Checked before any I/O, so passing it never even opens a connection. */
+const refuseSchemaFilter = (schemaFlag: string | undefined): void => {
+	if (schemaFlag === undefined) {
+		return;
+	}
+	throwHejbroError(
+		"sync-schema-filter-unsupported",
+		`--schema is not supported yet -- this release of hejbro sync always reads the whole manifest. Next: drop --schema and rerun, or split into separate databases if you need separate schemas synced independently.`,
+	);
+};
+
+type SyncOutcome =
+	| { readonly mode: "wrote" }
+	| { readonly mode: "check-current" }
+	| { readonly mode: "check-stale" };
+
+/**
+ * `--check`'s own comparison (schema-sync delta, "The command can check
+ * without writing"): the module `sync` would write is built exactly as a
+ * real run would, then compared byte-for-byte against what is already at
+ * `destination` -- never hashed, and never derived from the destination
+ * file's own exported stamp (which would need loading it as code; a
+ * synced module is proven byte-identical for the same manifest row
+ * (5.5), so a plain text comparison already answers the same question a
+ * stamp comparison would, without executing anything at `destination`).
+ * Absent entirely counts as stale: there is nothing yet to be current
+ * with.
+ */
+const compareToDestination = (
+	destination: string,
+	source: string,
+): SyncOutcome => {
+	if (existsSync(destination) && readFileSync(destination, "utf8") === source) {
+		return { mode: "check-current" };
+	}
+	return { mode: "check-stale" };
+};
+
 /**
  * `hejbro sync`'s own thin orchestration: resolve the destination,
  * connect, read the newest manifest row (`manifest-read.ts`, the one
  * reader groups 5 and 6 share), rebuild the module source
- * (`sync/emit.ts`) and write it (`sync/write.ts`). What a manifest row's
- * absence, an unmatched stamp, or a format the reader doesn't know each
- * mean is not yet classified here -- that is group 5's own `[design]`
- * task (5.6/5.7), not this one's; today those surface as an uncaught
- * failure rather than a hejbro-coded diagnostic.
+ * (`sync/emit.ts`), then either write it (`sync/write.ts`) or, under
+ * `--check`, only compare. What a manifest row's absence, an unmatched
+ * stamp, or a format the reader doesn't know each mean is not yet
+ * classified here -- that is group 5's own `[design]` task (5.6/5.7),
+ * not this one's; today those surface as an uncaught failure rather
+ * than a hejbro-coded diagnostic. Likewise, `row.manifest` is parsed
+ * with no shape validation of its own (5.6's own debt: a matching
+ * manifest_format with a corrupted payload is not yet its own coded
+ * refusal).
  */
 export const runSync = async (
 	cwd: string,
@@ -101,26 +154,56 @@ export const runSync = async (
 	const normalized = normalizeEqualsFlags(rawArgs);
 	const urlFlag = lastFlagValue(normalized, "--url");
 	const outFlag = lastFlagValue(normalized, "--out");
+	const schemaFlag = lastFlagValue(normalized, "--schema");
 	const force = rawArgs.includes("--force");
+	const check = rawArgs.includes("--check");
 	try {
+		refuseSchemaFilter(schemaFlag);
 		const { config } = await loadConfig(cwd, undefined);
 		const destination = resolveDestination(outFlag, config.entry);
-		await withSyncConnection(
+		const outcome = await withSyncConnection(
 			urlFlag,
 			process.env,
-			async (driver) => {
+			async (driver): Promise<SyncOutcome> => {
 				const row = await readNewestManifestRow(driver);
 				if (row === null) {
 					throw new Error(
 						"hejbro sync found no manifest row in this database -- no migration has emitted one yet.",
 					);
 				}
-				const document = JSON.parse(row.manifest) as ManifestDocument;
+				const payload = JSON.parse(row.manifest) as Omit<
+					ManifestDocument,
+					"snapshotHash"
+				>;
+				const document: ManifestDocument = {
+					...payload,
+					snapshotHash: row.snapshotHash,
+				};
 				const source = buildSyncedModuleSource(document);
+				if (check) {
+					return compareToDestination(destination, source);
+				}
 				writeSyncedModule(destination, source, force);
+				return { mode: "wrote" };
 			},
 			importer,
 		);
+		if (outcome.mode === "check-stale") {
+			return {
+				exitCode: 1,
+				stdout: [
+					`"${destination}" is stale -- rerun \`hejbro sync\` without --check to update it.`,
+				],
+				stderr: null,
+			};
+		}
+		if (outcome.mode === "check-current") {
+			return {
+				exitCode: 0,
+				stdout: [`"${destination}" is current.`],
+				stderr: null,
+			};
+		}
 		return {
 			exitCode: 0,
 			stdout: [`hejbro sync wrote "${destination}".`],
