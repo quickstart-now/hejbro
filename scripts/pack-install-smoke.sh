@@ -310,7 +310,7 @@ if (typeof neonAuth !== 'function') {
 ") || fail "@hejbro/neon's own exports did not resolve (neonAuth import failed)"
 echo "   ok"
 
-echo "== assertion 5: @hejbro/nile's preset is REGISTERED, not merely imported -- generate loads it through its own config, so a broken entry point fails here specifically (task 1.4, #563). Unlike @hejbro/neon (assertion 4), @hejbro/nile ships a real Preset bundle to register (proposal.md: not out of scope) -- a bare value import would be a weaker check than what this package actually offers, so this mirrors assertion 3's registration shape instead. A dedicated schema file, entry glob, migrations dir, and snapshot path (never app.schema.ts/migrations/hejbro.snapshot.json, assertion 3's own) keep this independent of assertion 3 and of whatever group 4 later teaches the preset's validators to refuse -- a plain tenant-aware table with no RLS/function/trigger/grant declaration stays valid regardless"
+echo "== assertion 5: @hejbro/nile's preset is REGISTERED, not merely imported -- generate loads it through its own config, so a broken entry point fails here specifically (task 1.4, #563). Unlike @hejbro/neon (assertion 4), @hejbro/nile ships a real Preset bundle to register (proposal.md: not out of scope) -- a bare value import would be a weaker check than what this package actually offers, so this mirrors assertion 3's registration shape instead. A dedicated schema file, entry glob, migrations dir, and snapshot path (never app.schema.ts/migrations/hejbro.snapshot.json, assertion 3's own) keep this independent of assertion 3 and of whatever group 4 later teaches the preset's validators to refuse -- a tenant-aware table with a composite (id, tenant_id) primary key and no RLS/function/trigger/grant declaration stays valid regardless (the fifth validator added after G5's own live-witness measurement refuses a lone id primary key on a tenant-aware table, so this fixture's own primary key had to become composite)"
 cat > "$SCRATCH_DIR/src/nile.schema.ts" <<'EOF'
 import { schema, table, text, uuid } from "hejbro";
 
@@ -318,7 +318,7 @@ export const nileApp = schema("nile_app");
 
 export const items = table(nileApp, "items", {
 	id: uuid().primaryKey().defaultRandom(),
-	tenant_id: uuid().notNull(),
+	tenant_id: uuid().primaryKey(),
 	name: text().notNull(),
 });
 EOF
