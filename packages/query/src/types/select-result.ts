@@ -1,5 +1,6 @@
 import type {
 	ColumnBuilder,
+	ColumnRefNode,
 	columnOriginBrand,
 	Expr,
 	IntervalValue,
@@ -8,6 +9,7 @@ import type {
 	SelectProjection,
 	SqlTypeFamily,
 	Table,
+	UntrackedJoins,
 } from "@hejbro/core";
 import type { ColumnTsType } from "./column-map";
 
@@ -115,12 +117,18 @@ type FamilyReadType<TFamily extends SqlTypeFamily> = TFamily extends
  *   declaration source (or `TMeta` itself) so this branch can recover
  *   full richness instead.
  */
-export type SelectResult<TProjection extends SelectProjection> =
+export type SelectResult<
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+> =
 	TProjection extends Table<infer TColumns>
 		? { readonly [K in keyof TColumns]: SelectColumnResult<TColumns[K]> }
 		: TProjection extends Record<string, Expr>
 			? {
-					readonly [K in keyof TProjection]: NestedOrExprResult<TProjection[K]>;
+					readonly [K in keyof TProjection]: NestedOrExprResult<
+						TProjection[K],
+						TLeftJoined
+					>;
 				}
 			: never;
 
@@ -133,14 +141,14 @@ export type SelectResult<TProjection extends SelectProjection> =
  * grandchildren compose for free. Everything else keeps the flat
  * family-widened fallback (#311's known gap, unchanged here).
  */
-type NestedOrExprResult<TValue> =
+type NestedOrExprResult<TValue, TLeftJoined> =
 	TValue extends NestedReadMarker<infer TMode, infer TSub>
 		? [TMode] extends ["jsonArray"]
 			? ReadonlyArray<SelectResult<TSub>>
 			: [TMode] extends ["jsonObject"]
 				? SelectResult<TSub> | null
 				: ReadonlyArray<SelectResult<TSub>> | SelectResult<TSub> | null
-		: ProjectedColumnResult<TValue>;
+		: ProjectedColumnResult<TValue, TLeftJoined>;
 
 /**
  * The declared column a projected value came from, recovered through the
@@ -169,28 +177,145 @@ type OriginColumn<TValue> = TValue extends {
 	: never;
 
 /**
- * One object-projection field's type (#311). A projected *declared
- * column* resolves to its own declared read type — numeric mode, array
- * element, the `$type` brand, the whole {@link ColumnTsType} mapping —
- * instead of the family-wide union {@link FamilyReadType} had to use
- * when a `ColumnRef` was assumed to carry nothing but its family.
- *
- * **Nullability stays widened**, deliberately, for both arms. A
- * projection's type is fixed at `select()` time, before `.leftJoin()`
- * is chained onto it, so a `notNull` column projected out of a
- * left-joined table really can arrive `null` and this layer cannot yet
- * see which tables were left-joined (#307). Recovering the declared
- * *type* is sound on its own; recovering the declared *nullability*
- * without that information would make this the first type in the
- * package that lies.
+ * The origin's OWN column map — `OriginColumn`'s same brand walk, but
+ * stopping at `TColumns` instead of indexing into `TColumns[TKey]`
+ * (narrow-join-nullability, task 2.3): the column map is what identifies
+ * WHICH table a column came from, for {@link ColumnMapIsLeftJoinedMember}
+ * to compare against the tracked set's own tables.
  */
-type ProjectedColumnResult<TValue> = [OriginColumn<TValue>] extends [never]
+type OriginColumnMap<TValue> = TValue extends {
+	readonly [columnOriginBrand]?: infer TOrigin;
+}
+	? NonNullable<TOrigin> extends {
+			readonly columns: infer TColumns;
+			readonly key: infer TKey;
+		}
+		? TKey extends keyof TColumns
+			? TColumns
+			: never
+		: never
+	: never;
+
+/**
+ * One object-projection field's type (#311, narrowed per narrow-join-
+ * nullability groups 2.1-2.3). A projected *declared column* resolves to
+ * its own declared read type — numeric mode, array element, the `$type`
+ * brand, the whole {@link ColumnTsType} mapping — instead of the
+ * family-wide union {@link FamilyReadType} had to use when a `ColumnRef`
+ * was assumed to carry nothing but its family.
+ *
+ * **Nullability narrows only when every one of four conditions holds**
+ * (the frozen contract): the value is a direct column reference
+ * ({@link IsDirectColumnRef}) — this is what excludes `min`/`max`/
+ * `over(...)`, which preserve the origin brand through `Aggregated` but
+ * widen `exprNode` past `ColumnRefNode` in doing so; the origin brand is
+ * present at all ({@link OriginColumn} resolving something other than
+ * `never`); the left-joined set is tracked
+ * ({@link IsTrackedLeftJoinedSet}); and the origin's OWN column map
+ * matches no member of that set ({@link ColumnMapIsLeftJoinedMember}) —
+ * a column literally sourced from a left-joined table really can arrive
+ * `null` no matter what it declares. Any one condition failing keeps the
+ * field `| null`, the same widened answer this type has always given —
+ * narrowing is additive, never a replacement for the widened default.
+ */
+type ProjectedColumnResult<TValue, TLeftJoined> = [
+	OriginColumn<TValue>,
+] extends [never]
 	? [ReadAsType<TValue>] extends [never]
 		? TValue extends Expr<infer TFamily>
 			? FamilyReadType<TFamily> | null
 			: never
 		: ReadAsType<TValue> | null
-	: ColumnTsType<OriginColumn<TValue>> | null;
+	: IsDirectColumnRef<TValue> extends true
+		? IsTrackedLeftJoinedSet<TLeftJoined> extends true
+			? ColumnMapIsLeftJoinedMember<
+					OriginColumnMap<TValue>,
+					TLeftJoined
+				> extends true
+				? ColumnTsType<OriginColumn<TValue>> | null
+				: ColumnTsType<OriginColumn<TValue>>
+			: ColumnTsType<OriginColumn<TValue>> | null
+		: ColumnTsType<OriginColumn<TValue>> | null;
+
+/**
+ * `true` when `TColumns` (a projected field's OWN origin column map)
+ * matches at least one member of the tracked left-joined set
+ * (narrow-join-nullability, task 2.3) — the field's source table really
+ * was left-joined, so even a `notNull` column stays nullable. `false`,
+ * including for `TLeftJoined = never` (the empty tracked set: nothing was
+ * left-joined, so nothing can match).
+ *
+ * `TLeftJoined extends Table<infer TMemberColumns> ? … : false` on a
+ * naked `TLeftJoined` distributes over a union of tables one member at a
+ * time, producing a union of booleans — `Extract<…, true>` is what turns
+ * "was any member's result `true`" into a single boolean, since `boolean
+ * extends true` is itself `false` (a union is not its own member).
+ * `never` distributes to `never` (conditional types short-circuit there),
+ * and `Extract<never, true>` is `never`, landing on the `false` arm below
+ * — exactly the empty-tracked-set case.
+ *
+ * The membership comparison itself is mutual `extends` (structural
+ * equality), not one-directional (task 2.5, settled against a
+ * measurement): one-directional `[TColumns] extends [TMemberColumns]`
+ * treats a table whose column map is a structural SUPERSET of a tracked
+ * table's as a match too — a superset always structurally extends its own
+ * subset — which over-widens a field from a table that was never actually
+ * left-joined (measured directly: a `commentsWithExtra` table carrying
+ * every one of `comments`'s own columns plus one more wrongly matched
+ * `comments` under one-directional `extends`, and stopped matching once
+ * this became mutual). Over-widening is still the fail-safe direction,
+ * never a lie, but it is avoidable imprecision here, not a soundness
+ * trade-off, so there is no reason to accept it.
+ */
+type ColumnMapEquals<TLeft, TRight> = [TLeft] extends [TRight]
+	? [TRight] extends [TLeft]
+		? true
+		: false
+	: false;
+
+type ColumnMapIsLeftJoinedMember<TColumns, TLeftJoined> = [
+	Extract<
+		TLeftJoined extends Table<infer TMemberColumns>
+			? ColumnMapEquals<TColumns, TMemberColumns>
+			: false,
+		true
+	>,
+] extends [never]
+	? false
+	: true;
+
+/**
+ * `true` only for a raw column reference, `false` for anything built
+ * through {@link Aggregated} (`min`/`max`/`over(...)`, `expr/aggregate.ts`
+ * and `expr/window.ts`) even though the origin brand survives that
+ * wrapping too (narrow-join-nullability, task 2.2) — `Aggregated<TExpr> =
+ * Omit<TExpr, "exprNode" | "sqlName"> & { readonly exprNode: ExprNode }`
+ * keeps every other property (including the origin brand) but replaces
+ * `exprNode`'s own type with the WIDE `ExprNode` union, so only a value
+ * whose `exprNode` is still narrowly typed as {@link ColumnRefNode}
+ * (a real `ColumnRef`, never widened) passes this check.
+ */
+type IsDirectColumnRef<TValue> = TValue extends {
+	readonly exprNode: ColumnRefNode;
+}
+	? true
+	: false;
+
+/**
+ * `true` when `TLeftJoined` is a tracked left-joined set, `false` for
+ * {@link UntrackedJoins} itself (narrow-join-nullability, task 2.1) — the
+ * frozen contract's own membership test (`[UntrackedJoins] extends
+ * [TLeftJoined]`), inverted. Measured (G1 review): `unknown` is not the
+ * only type this resolves `false` for — `any` does too, since `any`
+ * absorbs both directions of an `extends` check — so a set that somehow
+ * arrives as `any` is judged untracked, which stays the fail-safe
+ * direction (widen, never narrow on missing information).
+ */
+type IsTrackedLeftJoinedSet<TLeftJoined> = [UntrackedJoins] extends [
+	TLeftJoined,
+]
+	? false
+	: true;
 
 /**
  * The read type an expression declares for itself (#416's `count`), or
@@ -199,8 +324,13 @@ type ProjectedColumnResult<TValue> = [OriginColumn<TValue>] extends [never]
  * from "does not".
  *
  * Ordered AFTER the origin brand above, and it never competes with it —
- * a declared column is more precise than any self-declared type, and an
- * aggregate over one produces a new expression that carries no origin.
+ * a declared column is more precise than any self-declared type. "An
+ * aggregate over one produces a new expression that carries no origin" is
+ * true of `count()` alone (its own `expr()` rebuild carries nothing from
+ * its operand) — `min`/`max`/`over(...)` preserve the origin brand through
+ * `Aggregated`'s `Omit`, which is the entire reason {@link
+ * IsDirectColumnRef} exists to exclude them elsewhere (narrow-join-
+ * nullability, task 2.2 correction).
  */
 type ReadAsType<TValue> = TValue extends { readonly [readAsBrand]?: infer T }
 	? NonNullable<T> extends never

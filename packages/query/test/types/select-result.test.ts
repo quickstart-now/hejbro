@@ -4,7 +4,9 @@ import {
 	type count,
 	json,
 	jsonb,
-	type max,
+	lag,
+	max,
+	over,
 	pgEnum,
 	schema,
 	serial,
@@ -46,6 +48,37 @@ const posts = table(shop, "posts", {
 });
 
 type Posts = typeof posts;
+
+// Two more tables for task 2.3's membership check, with DELIBERATELY
+// different column maps (not just different names on the same shape) --
+// a structural collision here would make the membership test prove
+// nothing, since two column maps that happen to be structurally
+// identical are the same TYPE to TypeScript regardless of which table()
+// call produced them.
+const comments = table(shop, "comments", {
+	id: uuid().primaryKey(),
+	postId: uuid().notNull(),
+	body: text().notNull(),
+});
+
+const reactions = table(shop, "reactions", {
+	id: uuid().primaryKey(),
+	targetId: uuid().notNull(),
+	kind: text().notNull(),
+	weight: bigint({ mode: "number" }).notNull(),
+});
+
+// task 2.5: `comments`'s own column map, structurally, plus one extra
+// column -- a genuine structural SUPERSET of `comments`, not merely a
+// different shape. This is what a one-directional `extends` membership
+// check cannot tell apart from `comments` itself (a superset always
+// structurally extends its own subset).
+const commentsWithExtra = table(shop, "comments_with_extra", {
+	id: uuid().primaryKey(),
+	postId: uuid().notNull(),
+	body: text().notNull(),
+	extra: text(),
+});
 
 describe("select-result (D1/D3/D5, task 3.10) -- whole-table projection", () => {
 	it("field consumption matrix: each TMeta field the result type actually reads", () => {
@@ -172,12 +205,14 @@ describe("select-result -- object projection (task 3.10)", () => {
 		}>();
 	});
 
-	it("nullability stays widened until #307 -- a left join can null any projected column", () => {
-		// The one axis a projection still cannot know: the projection type is
-		// fixed at select() time, before .leftJoin() is chained, so a
-		// notNull-sourced column must still read as nullable. Narrowing this
-		// without tracking left-joined tables would be the first type in this
-		// package to lie.
+	it("the one-argument form stays fully widened by default (narrow-join-nullability, task 2.4) -- #307 is landed (2.1-2.3 above), but ONLY when a caller actually supplies TLeftJoined", () => {
+		// Not a residual gap: `TLeftJoined` defaults to `UntrackedJoins`
+		// (`unknown`), and `IsTrackedLeftJoinedSet<unknown>` is `false` by
+		// construction (the frozen contract's own "untracked wins"), so a
+		// caller who never names the second argument -- exactly this
+		// one-argument form -- gets the pre-#307 widening unchanged. Only
+		// `@hejbro/query`'s chain surface (G3) is positioned to know which
+		// tables a statement actually left-joined and pass that set in.
 		type Proj = SelectResult<{ readonly t: typeof posts.titleRequired }>;
 		expectTypeOf<Proj>().toEqualTypeOf<{ readonly t: string | null }>();
 	});
@@ -187,6 +222,68 @@ describe("select-result -- object projection (task 3.10)", () => {
 		expectTypeOf<Proj>().toEqualTypeOf<{
 			readonly n: number | bigint | string | null;
 		}>();
+	});
+});
+
+describe("select-result narrows per field when the left-joined set is tracked (narrow-join-nullability, task 2.1)", () => {
+	it("a direct notNull column narrows to non-null when the tracked set is never (nothing left-joined)", () => {
+		type Proj = SelectResult<{ readonly t: typeof posts.titleRequired }, never>;
+		expectTypeOf<Proj["t"]>().toEqualTypeOf<string>();
+	});
+});
+
+describe("narrowing is restricted to a direct column reference (narrow-join-nullability, task 2.2)", () => {
+	// Both max(...) and over(lag(...), ...) resolve through the SAME
+	// `Aggregated<TExpr>` mechanism (`expr/aggregate.ts`/`expr/window.ts`):
+	// the origin brand survives (Omit only strips `exprNode`/`sqlName`),
+	// but the re-added `exprNode` is the WIDE `ExprNode` union, not
+	// `ColumnRefNode` -- exactly the shape 2.1's own narrowing (keyed only
+	// on the origin brand's presence) could not tell apart from a real
+	// column reference.
+	const aggregated = { m: max(posts.amountRequired) };
+	const windowed = {
+		w: over(lag(posts.titleRequired), {
+			partitionBy: [posts.id],
+			orderBy: [posts.id],
+		}),
+	};
+
+	it("max(notNull column) stays nullable even when the tracked set is never", () => {
+		type Proj = SelectResult<typeof aggregated, never>;
+		expectTypeOf<Proj["m"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("over(lag(notNull column), spec) stays nullable even when the tracked set is never", () => {
+		type Proj = SelectResult<typeof windowed, never>;
+		expectTypeOf<Proj["w"]>().toEqualTypeOf<string | null>();
+	});
+});
+
+describe("narrowing checks the origin's OWN table against the tracked set (narrow-join-nullability, task 2.3)", () => {
+	const projected = { b: comments.body };
+
+	it("a notNull column stays nullable when its OWN table is the tracked set (comments was left-joined)", () => {
+		type Proj = SelectResult<typeof projected, typeof comments>;
+		expectTypeOf<Proj["b"]>().toEqualTypeOf<string | null>();
+	});
+
+	it("the same notNull column narrows when a DIFFERENT table is the tracked set (reactions was left-joined, not comments)", () => {
+		type Proj = SelectResult<typeof projected, typeof reactions>;
+		expectTypeOf<Proj["b"]>().toEqualTypeOf<string>();
+	});
+});
+
+describe("membership uses mutual equality, not one-directional extends (narrow-join-nullability, task 2.5)", () => {
+	it("a structurally-superset table does not match the tracked table it structurally extends", () => {
+		// `commentsWithExtra`'s own column map structurally extends
+		// `comments`'s (superset extends subset), but they are different
+		// tables. A one-directional `[origin] extends [member]` check would
+		// wrongly call this a match and over-widen; only `comments` was
+		// actually left-joined here, so a field from `commentsWithExtra`
+		// must still narrow.
+		const projected = { b: commentsWithExtra.body };
+		type Proj = SelectResult<typeof projected, typeof comments>;
+		expectTypeOf<Proj["b"]>().toEqualTypeOf<string>();
 	});
 });
 

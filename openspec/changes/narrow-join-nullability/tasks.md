@@ -50,10 +50,16 @@ export type LeftJoinedBrand<TLeftJoined> = {
   statement has left-joined nothing. `never | TJoined` is `TJoined`, so
   accumulation needs no special first case.
 - **Untracked wins over any union**: a set is untracked when
-  `[UntrackedJoins] extends [TLeftJoined]` — true exactly when the set is
-  `unknown`, since nothing else accepts `unknown`. A default-typed stage
-  that is then left-joined stays untracked because the union absorbs, not
-  because a matcher special-cases it.
+  `[UntrackedJoins] extends [TLeftJoined]`. Measured truth table
+  (G1 review, `tsc` directly): `never`, `{}`, `object`, `null`, a `Table`
+  and a union of `Table`s all resolve **false**; `unknown` resolves
+  **true**; and so does **`any`** — `any` is a second accepting type, not
+  an exception to be waved away. The consequence is benign and is stated
+  rather than discovered later: a set that arrives as `any` is judged
+  untracked and its fields widen, which is the fail-safe direction. A
+  default-typed stage that is then left-joined stays untracked because
+  the union absorbs (`unknown | T` is `unknown`), not because a matcher
+  special-cases it — that half is independently confirmed.
 - **An absent carrier reads as untracked, deliberately.** The phantom is
   optional, so a type that carries no brand at all infers `unknown` — the
   same value the untracked sentinel has. Losing the carrier therefore
@@ -116,11 +122,11 @@ Files: `packages/core/src/query/left-joined.ts` (new),
 Files: `packages/query/src/types/select-result.ts`,
 `packages/query/test/types/select-result.test.ts`.
 
-- [ ] 2.1 Add the second parameter and thread it into the
+- [x] 2.1 Add the second parameter and thread it into the
       object-projection branch. Red: `SelectResult<{ t: typeof
       posts.titleRequired }, never>` expected `{ t: string }`, actual
       `string | null`. (10 min)
-- [ ] 2.2 Restrict narrowing to direct column references. Red:
+- [x] 2.2 Restrict narrowing to direct column references. Red:
       `SelectResult<{ m: ReturnType<typeof max<typeof
       posts.amountRequired>> }, never>` and the same for
       `over(lag(posts.titleRequired), spec)` must both stay `| null`
@@ -132,19 +138,19 @@ Files: `packages/query/src/types/select-result.ts`,
       carries no origin" is true of `count()` alone — `min`/`max` and
       `over(lag(…))` preserve the origin brand, which is the whole
       reason this task exists. (10 min)
-- [ ] 2.3 Match a field's origin column map against the tracked set.
+- [x] 2.3 Match a field's origin column map against the tracked set.
       This file's fixtures are one table (`posts`) — add two more with
       **deliberately different column maps** (a structural collision
       would make the test prove nothing) and name the divergence in a
       comment. Red: a second table's `notNull` field is `| null` when
       that table is the tracked set, and is not when a third,
       non-joined table is. (10 min)
-- [ ] 2.4 Pin the untracked default and rewrite the legacy test that
+- [x] 2.4 Pin the untracked default and rewrite the legacy test that
       asserted the blanket widening (`select-result.test.ts:175`,
       "nullability stays widened until #307") into its replacement. Red:
       `SelectResult<{ t: typeof posts.titleRequired }>` — one argument —
       stays `string | null`. (6 min)
-- [ ] 2.5 [design] Settle the set-membership helper's shape (mutual
+- [x] 2.5 [design] Settle the set-membership helper's shape (mutual
       `extends` versus an `Equals`-style comparison) and the arm order in
       `ProjectedColumnResult`, and rewrite that type's doc comment: it
       currently states the constraint this change removes ("this layer
@@ -191,7 +197,13 @@ Files: `skills/hejbro/references/query-layer.md`,
       `skills/hejbro/references/query-layer.md:429` with the landed
       rule: what narrows, what does not (aggregates, window functions,
       anything not a direct column reference), and which positions stay
-      widened because they do not carry the set. (10 min)
+      widened because they do not carry the set. Cover the three new
+      names too: `packages/cli/src/index.ts` re-exports all of
+      `@hejbro/core`, so `leftJoinedBrand`/`UntrackedJoins`/
+      `LeftJoinedBrand` reach the user-facing `hejbro` package whether or
+      not they were meant to (G1 review). One line each, framed as what
+      they are — inference plumbing a user reads in a hover and never
+      writes. (10 min)
 - [ ] 4.2 Add the `minor` changeset, write the durations into
       `openspec/task-times.csv`, and refresh the README badges
       (`pnpm check:crap`, `pnpm check:tasktime`). (8 min)
