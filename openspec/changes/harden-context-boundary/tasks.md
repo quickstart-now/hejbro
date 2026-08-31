@@ -172,26 +172,26 @@ est_frozen: 26m. Files: `packages/nile/test/context.test.ts`,
 `.changeset/harden-context-boundary.md`, `openspec/task-times.csv`,
 `README.md`.
 
-- [ ] 2.1 Pin the preset defense that exists but is unspecified: a
+- [x] 2.1 Pin the preset defense that exists but is unspecified: a
   context carrying no tenant setting is refused by the preset's own
   rendering before any statement is produced, so the preset never
   reaches the query layer's new refusal. ~6m. Red:
   `packages/nile/test/context.test.ts` →
   `refuses a context carrying no tenant setting before producing a statement`.
   Files: `packages/nile/test/context.test.ts`.
-- [ ] 2.2 Rewrite the skill where it promises the old behavior: the
+- [x] 2.2 Rewrite the skill where it promises the old behavior: the
   boundary-cases paragraph (an empty rendering and `db.as({})` are no
   longer "worth knowing" boundaries but refusals on a context-mandatory
   driver), the `context-required` description, and a new error-table row
   for `context-rendering-empty`. ~8m. Red: none — documentation; the
   claim it makes is the one tasks 1.1-1.4 left green. Files:
   `skills/hejbro/references/query-layer.md`.
-- [ ] 2.3 Update the skill's `driver-missing-capability` row, whose
+- [x] 2.3 Update the skill's `driver-missing-capability` row, whose
   operation examples (`a transaction, a db.as context`) name the old
   vocabulary, and the "Writing your own `Driver`" note that tells driver
   authors which token to pass. ~6m. Red: none — documentation. Files:
   `skills/hejbro/references/query-layer.md`.
-- [ ] 2.4 Add the `minor` changeset naming the new refusal and the
+- [x] 2.4 Add the `minor` changeset naming the new refusal and the
   operation renaming, and write this group's own rows to
   `openspec/task-times.csv`, re-stamping the task-time badges (`pnpm
   check:tasktime`) in the same commit. Group 1's rows and the CRAP block
