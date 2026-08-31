@@ -12,7 +12,7 @@ Refs:
 - packages/skills/test/nile-preset-doc.test.ts @ blob 266b9d65debf75ca951a63c06020e4edd1e0734b
 - skills/hejbro/references/nile-preset.md @ blob 95aa894daf3232868c8c049c2f044f6c9fe67490
 - openspec/changes/refuse-nile-identity-columns/evaluation.md @ blob 75e1cec9b32f61e5797d04d7cd1876d2a5a6f4c2 (added in the D106 correction round)
-- packages/nile/test/integration/nile.integration.test.ts @ blob 18904f777a3b1815ba582a6aee8ba7ebc82d8801 (added in the D106 correction round)
+- packages/nile/test/integration/nile.integration.test.ts @ blob 29c1d1737ee668445151a613fe611d192dec2015 (added in the D106 correction round)
 - .changeset/fix-nile-identity-witness.md @ blob 0d05d78b2a82a41e3d2f0843aad81ca2c849c9b0 (added in the D106 correction round)
 
 (Taken from `git hash-object <path>` on the working tree before this

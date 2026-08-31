@@ -336,7 +336,7 @@ describe("nileDriver + a real db() handle against Nile's official testing contai
 		[
 			"a serial column",
 			'create table "app"."m_serial" (tenant_id uuid not null, seq serial)',
-			/./,
+			/type serial is not supported for tenant-aware table/,
 		],
 		[
 			"a primary key that excludes tenant_id",
