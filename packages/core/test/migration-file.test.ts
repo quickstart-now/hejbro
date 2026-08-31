@@ -13,6 +13,7 @@ import {
 	migrationVersionOf,
 	parseBannerBaseline,
 	parseBannerHashes,
+	parseBannerManifestFormat,
 	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,
@@ -195,6 +196,30 @@ describe("renderBanner", () => {
 
 	it("omits the version line when no version is given", () => {
 		expect(renderBanner([createChange])).not.toContain("-- hejbro:");
+	});
+});
+
+describe("parseBannerManifestFormat", () => {
+	it("parses the manifest format line by its prefix", () => {
+		const sql = renderBanner(
+			[createChange],
+			undefined,
+			undefined,
+			undefined,
+			1,
+		);
+		expect(parseBannerManifestFormat(sql)).toBe(1);
+		expect(sql).toContain("-- + table app.posts [new]");
+	});
+
+	it("an unknown banner line is ignored", () => {
+		const sql =
+			"-- hejbro migration\n-- some-future-line: unknown\n-- + table app.posts [new]";
+		expect(parseBannerManifestFormat(sql)).toBeNull();
+	});
+
+	it("returns null for a banner rendered with no manifest format", () => {
+		expect(parseBannerManifestFormat(renderBanner([createChange]))).toBeNull();
 	});
 });
 

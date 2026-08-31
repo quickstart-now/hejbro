@@ -13,6 +13,8 @@ import { tableIdentity } from "../kinds/table-snapshot";
 import type { Snapshot } from "../snapshot/snapshot";
 import { buildSnapshot } from "../snapshot/snapshot";
 import { compareKeys } from "../sort";
+import type { ManifestOptions } from "../sql/manifest";
+import { MANIFEST_FORMAT, renderManifestStatements } from "../sql/manifest";
 import type { BannerHashes } from "../sql/migration-file";
 import { renderBanner } from "../sql/migration-file";
 import type { SqlStatement } from "../sql/statement";
@@ -138,6 +140,8 @@ type GenerateMigrationOptions = {
 	readonly baseline?: boolean;
 	/** preset-supplied pure checks run over the built snapshot + normalized declarations (D37); error severity joins `errors` and short-circuits like rename errors. */
 	readonly validators?: ReadonlyArray<Validator>;
+	/** opts into the schema-manifest capability — the bootstrap + insert render after every other statement, from an already-serialized payload and hash the CLI supplies; core neither serializes nor hashes. Absent ⇒ not one character of manifest SQL is rendered. */
+	readonly manifest?: ManifestOptions;
 };
 
 type GenerateMigrationResult = {
@@ -247,6 +251,16 @@ type EmittedStatement = {
  * (D71/#154 ratchet-5) so this comparator's own `if` doesn't fold into
  * that function's complexity.
  */
+/** The banner's `-- hejbro-manifest: <format>` argument: {@link MANIFEST_FORMAT} when the capability is opted into, `undefined` otherwise — kept as its own named step (not an inline ternary, banned in this codebase's own source). */
+const manifestBannerFormat = (
+	manifest: ManifestOptions | undefined,
+): number | undefined => {
+	if (manifest === undefined) {
+		return undefined;
+	}
+	return MANIFEST_FORMAT;
+};
+
 const sortPredropStatements = (
 	emittedStatements: ReadonlyArray<EmittedStatement>,
 	registry: KindRegistry,
@@ -366,11 +380,13 @@ export const generateMigration = (
 			options.bannerHashes,
 			options.hejbroVersion,
 			options.baseline,
+			manifestBannerFormat(options.manifest),
 		),
 		...plan.renameStatements,
 		...predropStatements.map((entry) => entry.statement.sql),
 		...mainStatements.map((entry) => entry.statement.sql),
 		...deferredStatements.map((entry) => entry.statement.sql),
+		...renderManifestStatements(options.manifest),
 	].join("\n\n");
 
 	return {
