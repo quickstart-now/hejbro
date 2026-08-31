@@ -1,6 +1,7 @@
 import type { CteRowEnvironment, Expr } from "@hejbro/core";
 import {
 	bigint,
+	columnRef,
 	type count,
 	json,
 	jsonb,
@@ -232,6 +233,18 @@ describe("select-result narrows per field when the left-joined set is tracked (n
 	});
 });
 
+describe("`any` flowing into the left-joined set is judged untracked (narrow-join-nullability, task 2.4, frozen contract's `any` clause)", () => {
+	// The membership matcher must not be optimized around "untracked means
+	// literally `unknown`" -- `any` accepts (and is accepted by) every
+	// `extends` check, so `[UntrackedJoins] extends [any]` is also `true`.
+	// Fail-safe direction either way: a set that arrives as `any` widens.
+	it("a notNull column stays nullable when the tracked set is any", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: the frozen contract's own any-flows-in-untracked case, not a house `any`.
+		type Proj = SelectResult<{ readonly t: typeof posts.titleRequired }, any>;
+		expectTypeOf<Proj["t"]>().toEqualTypeOf<string | null>();
+	});
+});
+
 describe("narrowing is restricted to a direct column reference (narrow-join-nullability, task 2.2)", () => {
 	// Both max(...) and over(lag(...), ...) resolve through the SAME
 	// `Aggregated<TExpr>` mechanism (`expr/aggregate.ts`/`expr/window.ts`):
@@ -257,6 +270,22 @@ describe("narrowing is restricted to a direct column reference (narrow-join-null
 		type Proj = SelectResult<typeof windowed, never>;
 		expectTypeOf<Proj["w"]>().toEqualTypeOf<string | null>();
 	});
+
+	it("an origin-less expression stays at its family fallback even when the tracked set is never (reviewer-flagged condition 2: no origin brand means nothing to narrow, tracked or not)", () => {
+		// Condition 2 (the frozen contract's own four) isolated from
+		// condition 1: a hand-built `columnRef()` DOES satisfy condition 1
+		// (its `exprNode` is a real `ColumnRefNode`, so `IsDirectColumnRef`
+		// is `true`) but was never stamped with `columnOriginBrand` --
+		// nothing produced it from a table's own `TableColumns`. A mutant
+		// that dropped condition 2 (narrowing on `IsDirectColumnRef` alone)
+		// would narrow this to `string`; the honest answer is the flat
+		// family fallback, since there is no declared column to recover.
+		const handBuilt = {
+			n: columnRef("app", "posts", "slug", { typeName: "text" }),
+		};
+		type Proj = SelectResult<typeof handBuilt, never>;
+		expectTypeOf<Proj["n"]>().toEqualTypeOf<string | null>();
+	});
 });
 
 describe("narrowing checks the origin's OWN table against the tracked set (narrow-join-nullability, task 2.3)", () => {
@@ -270,6 +299,12 @@ describe("narrowing checks the origin's OWN table against the tracked set (narro
 	it("the same notNull column narrows when a DIFFERENT table is the tracked set (reactions was left-joined, not comments)", () => {
 		type Proj = SelectResult<typeof projected, typeof reactions>;
 		expectTypeOf<Proj["b"]>().toEqualTypeOf<string>();
+	});
+
+	it("a self left-join stays nullable -- the projection's own from-table left-joined against itself is still a match (reviewer-flagged structural-collision case: widening is the correct answer here, narrowing would be the violation)", () => {
+		const projectedPosts = { t: posts.titleRequired };
+		type Proj = SelectResult<typeof projectedPosts, typeof posts>;
+		expectTypeOf<Proj["t"]>().toEqualTypeOf<string | null>();
 	});
 });
 

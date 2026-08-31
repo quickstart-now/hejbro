@@ -217,3 +217,10 @@ Files: `skills/hejbro/references/query-layer.md`,
       sentinel"`.
       Groups 2-4 are per-task rows with `clock-stamped <start>-<end>` in
       the notes, the `enforce-driver-contract` precedent.
+
+      Group 2's stamps, recorded here so they survive to this task
+      (2026-08-31, all UTC): 2.1 `00:47:10-00:49:17`, 2.2
+      `00:49:17-00:52:38`, 2.3 `00:53:42-00:56:11`, 2.4
+      `00:56:22-00:57:18`, 2.5 `00:57:18-01:00:02`. Estimates were
+      10/10/10/6/8; every one came in far under, which is a calibration
+      fact for the CSV to carry, not a number to round up.
