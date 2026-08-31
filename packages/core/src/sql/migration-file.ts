@@ -211,7 +211,7 @@ const baselineLines = (
 	return [BASELINE_LINE];
 };
 
-/** The `-- hejbro-manifest: <format>` line, when this migration carries manifest statements — `[]` otherwise (baseline migrations and manifest-free migrations render neither the line nor the statements). */
+/** The `-- hejbro-manifest: <format>` line, when `manifestFormat` is given — `[]` when it is `undefined`, so a migration rendered without it carries not one character of this line. */
 const manifestLines = (
 	manifestFormat: number | undefined,
 ): ReadonlyArray<string> => {
@@ -287,11 +287,10 @@ export const parseBannerVersion = (fileContent: string): string | null => {
 
 /**
  * Reads a migration file's `-- hejbro-manifest: <format>` line, or `null`
- * when the line is absent — every migration generated without the
- * schema-manifest capability, or with it generated for a baseline. Reads
- * by {@link MANIFEST_PREFIX} only, so an older hejbro reading a newer
- * file's other unknown lines stays unaffected, matching every other
- * parser here.
+ * when the line is absent — every migration rendered without the
+ * schema-manifest capability opted in. Reads by {@link MANIFEST_PREFIX}
+ * only, so an older hejbro reading a newer file's other unknown lines
+ * stays unaffected, matching every other parser here.
  */
 export const parseBannerManifestFormat = (
 	fileContent: string,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { generateMigration } from "../src/engine/generate";
@@ -75,9 +75,16 @@ describe("renderManifestStatements", () => {
 	});
 
 	it("two renders with different clocks are byte-identical", () => {
-		const first = renderManifestStatements(manifestOptions);
-		const second = renderManifestStatements(manifestOptions);
-		expect(first).toEqual(second);
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(new Date(Date.UTC(2026, 0, 1)));
+			const first = renderManifestStatements(manifestOptions);
+			vi.setSystemTime(new Date(Date.UTC(2030, 11, 31)));
+			const second = renderManifestStatements(manifestOptions);
+			expect(first).toEqual(second);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("the insert carries no timestamp and no file name", () => {
@@ -130,6 +137,8 @@ describe("renderManifestStatements", () => {
 });
 
 describe("MANIFEST_FORMAT", () => {
+	// [design] pin, not a delta SHALL: the initial value is a 1.1 design
+	// decision, not a spec-mandated constant.
 	it("starts at 1", () => {
 		expect(MANIFEST_FORMAT).toBe(1);
 	});

@@ -240,6 +240,16 @@ type EmittedStatement = {
 	readonly statement: SqlStatement;
 };
 
+/** The banner's `-- hejbro-manifest: <format>` argument: {@link MANIFEST_FORMAT} when the capability is opted into, `undefined` otherwise — kept as its own named step (not an inline ternary, banned in this codebase's own source). */
+const manifestBannerFormat = (
+	manifest: ManifestOptions | undefined,
+): number | undefined => {
+	if (manifest === undefined) {
+		return undefined;
+	}
+	return MANIFEST_FORMAT;
+};
+
 /**
  * `predrop`-stage statements, ordered by descending kind-dependency rank
  * — the same reasoning `diffSnapshots` already applies to genuine `drop`
@@ -251,16 +261,6 @@ type EmittedStatement = {
  * (D71/#154 ratchet-5) so this comparator's own `if` doesn't fold into
  * that function's complexity.
  */
-/** The banner's `-- hejbro-manifest: <format>` argument: {@link MANIFEST_FORMAT} when the capability is opted into, `undefined` otherwise — kept as its own named step (not an inline ternary, banned in this codebase's own source). */
-const manifestBannerFormat = (
-	manifest: ManifestOptions | undefined,
-): number | undefined => {
-	if (manifest === undefined) {
-		return undefined;
-	}
-	return MANIFEST_FORMAT;
-};
-
 const sortPredropStatements = (
 	emittedStatements: ReadonlyArray<EmittedStatement>,
 	registry: KindRegistry,

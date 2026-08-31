@@ -221,6 +221,23 @@ describe("parseBannerManifestFormat", () => {
 	it("returns null for a banner rendered with no manifest format", () => {
 		expect(parseBannerManifestFormat(renderBanner([createChange]))).toBeNull();
 	});
+
+	it("a reader that knows only the pre-existing banner lines reads its own value, unaffected by the manifest line (delta: 'A reader that does not know the line is unaffected')", () => {
+		const sql = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.2.0",
+			true,
+			1,
+		);
+		expect(parseBannerVersion(sql)).toBe("0.2.0");
+		expect(parseBannerHashes(sql)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:bbbb",
+		});
+		expect(parseBannerBaseline(sql)).toBe(true);
+		expect(parseBannerManifestFormat(sql)).toBe(1);
+	});
 });
 
 describe("parseBannerHashes", () => {
