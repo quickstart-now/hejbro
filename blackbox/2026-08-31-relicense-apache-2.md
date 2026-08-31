@@ -1,6 +1,6 @@
 Refs:
 - .changeset/relicense-apache-2.md @ blob f0064149fa58e742713e50e2af40a0ca73dd9efd
-- AGENTS.md @ blob 56a81a76372627805f15144b4e737e2620bdcf2a
+- AGENTS.md @ blob 145030248294d8cd17cdd54b378eeda87701b217 (re-pinned after rebasing onto dev 72a99e93: the same sentence had gained "and Nile shipped" from #301, merged with the Apache-2.0 wording)
 - docs/specs/2026-08-19-hejbro-design.md @ blob 71767bcfcbd48f54062dbdf7544159084afbeb12
 - LICENSE @ blob d645695673349e3947e8e5ae42332d0ac3164cd7
 - NOTICE @ blob 9066b7c4d796cc6261529dfd6feca8e55ff06c20
@@ -14,6 +14,9 @@ Refs:
 - packages/neon/LICENSE @ blob d645695673349e3947e8e5ae42332d0ac3164cd7
 - packages/neon/NOTICE @ blob 9066b7c4d796cc6261529dfd6feca8e55ff06c20
 - packages/neon/package.json @ blob 450b6f32b648512624ce487fd9eb48a463ca64e2
+- packages/nile/LICENSE @ blob d645695673349e3947e8e5ae42332d0ac3164cd7 (added after #301 merged: the seventh package)
+- packages/nile/NOTICE @ blob 9066b7c4d796cc6261529dfd6feca8e55ff06c20 (added after #301 merged)
+- packages/nile/package.json @ blob 8103362015e8d2ad330c29435d2d3b84d92e7b17 (added after #301 merged: license field and NOTICE in files)
 - packages/pg/LICENSE @ blob d645695673349e3947e8e5ae42332d0ac3164cd7
 - packages/pg/NOTICE @ blob 9066b7c4d796cc6261529dfd6feca8e55ff06c20
 - packages/pg/package.json @ blob 3ecaea36cfb331dac097a38a65367dd04acf8599
@@ -25,7 +28,7 @@ Refs:
 - packages/supabase/NOTICE @ blob 9066b7c4d796cc6261529dfd6feca8e55ff06c20
 - packages/supabase/package.json @ blob f188eedee7d6ca76364eb15d07e2f6c34beefe64
 - README.md @ blob 5829a09f0647e91151277e0b29ea3a4985d3b4b3
-- scripts/pack-install-smoke.sh @ blob 380227f650c798b73cb3aea4dc24b519f26e6f80 (re-pinned after the one-shot review: assertion 1c also requires a non-empty installed NOTICE)
+- scripts/pack-install-smoke.sh @ blob bcac1ec8b67190da120df8c4e931d7aaf4f6ac48 (re-pinned twice: the one-shot review's NOTICE assertion, then the rebase onto 72a99e93 merging #301's nile tarball line with the NOTICE column)
 - skills/hejbro/SKILL.md @ blob 295788626e38adc8f2d4d208a991b55a51f427ec
 
 (Taken from `git hash-object <path>` on the working tree before each
@@ -34,8 +37,8 @@ itself is not pinned.
 Pins die three ways — squash preserves them, an archive kills the
 path, a concurrent same-file edit on dev kills the blob — so every
 later commit re-verifies all of them. The nile package's LICENSE,
-NOTICE, and manifest join this change after #301 merges and are
-pinned when that commit lands.)
+NOTICE, and manifest joined this change once #301 had merged, in the
+commit that rebased the branch onto dev `72a99e93`.)
 
 
 # relicense-apache-2 — from MIT to the Apache License 2.0 (#570)
@@ -129,7 +132,13 @@ Apache-2.0` pairing.
 Prepared on a branch off dev immediately; merged after #301
 (`add-nile-preset`) so the seventh package's `LICENSE`, `NOTICE`,
 manifest, and smoke line are covered in the same sweep instead of
-breaking the nile branch's smoke in between.
+breaking the nile branch's smoke in between. The rebase onto
+`72a99e93` met two conflicts, both expected — the AGENTS.md sentence
+that #301 had changed from "Nile planned" to "Nile shipped" and that
+this change had changed from MIT to Apache-2.0, and the smoke's tarball
+assertion block where #301 added the nile line and this change added
+the NOTICE column — and was resolved by keeping both edits. The seven
+packages then passed the smoke together.
 
 ## The one-shot review
 
