@@ -177,6 +177,51 @@ Files: `openspec/changes/generalize-context-application/**`,
       today (group 4's pin records the sequence). Contract text only —
       the implementation belongs to the preset that needs it.
 
+## 6. Review round 1 (#553, all groups)
+Files: `packages/query/src/index.ts`, `packages/query/src/db/context.ts`,
+`packages/query/test/exports.test.ts`, `packages/pg/test/driver.test.ts`,
+`openspec/changes/generalize-context-application/specs/driver-contract/spec.md`,
+`openspec/changes/generalize-context-application/proposal.md`,
+`openspec/task-times.csv`, `README.md`
+
+- [x] 6.1 (blocking, F1) The default rendering was not reachable by a
+      driver package: `@hejbro/query`'s public entry exported only
+      `compile`/`db`/`sql`/`throwMissingCapability` — a module-level
+      `export const` in `db/context.ts` is not reachability across the
+      package boundary, and the spec's own SHALL (driver-contract, "A
+      driver may contribute how a context becomes statements") was
+      unmet. Fixed as one set: `defaultContextRendering` (value) and
+      `ContextRendering` (type) exported from `index.ts`; a new delta
+      scenario ("The default rendering is importable from the package
+      entry") appended verbatim to the requirement's scenario list;
+      `exports.test.ts` pins the public-entry export; `packages/pg/test/
+      driver.test.ts` proves a driver package composing it via the
+      public specifier `@hejbro/query` (never a deep import) -- verified
+      as a real gate, not a cosmetic one: reverting the `index.ts` export
+      and rebuilding `@hejbro/query`'s dist reproduces both `tsc`
+      failures (`exports.test.ts` and `packages/pg`'s own check-types),
+      restoring the export and rebuilding clears both.
+- [ ] 6.2 (blocking, F2) `README.md`'s task-time badges were stale on a
+      clean tree (`pnpm check:tasktime` would still rewrite them,
+      failing CI's node-24-leg diff check). Re-run after group 6's own
+      ledger row landed, so the badges and the CSV point at the same
+      moment; `README.md` committed alongside.
+- [ ] 6.3 (recommended, adopted) The neon HTTP boundary test asserted
+      only `code`/`capability`, which the driver's own hardcoded
+      `throwMissingCapability` call and the query layer's own
+      `assertCapability` gate both satisfy identically -- unable to tell
+      which layer actually refused. Added an `operation: "db.as"`
+      assertion, pinning that the refusal is the query layer's own gate
+      (the boundary invariant the delta scenario names), not the
+      driver's own redundant defense.
+- [ ] 6.4 (recommended, adopted) The proposal's first evidence list
+      (silent no-op / permanent rejection / zero roles) carried no
+      confidence tag, unlike the security section's two ([MEASURED,
+      container-only] / [Confirmed three ways]) -- inconsistent tagging
+      inside one document misreads as inconsistent strength. Tagged all
+      three: the first two `[MEASURED, container-only]`, the role-count
+      claim `[DOC + first-party design]`.
+
 ## Verification (definition of done, not a task)
 `pnpm check`, `pnpm check-types`, `pnpm test` with `TURBO_FORCE=1` in the
 review worktree; `pnpm check:crap`; no file under `packages/core` in the

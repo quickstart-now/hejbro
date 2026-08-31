@@ -5,9 +5,14 @@
  * types, `compile()`, the dual-use `sql` escape hatch (new here — group 7
  * decision ①, the `hejbro` facade re-exports this one, task 7.9), driver
  * contract types, `DbContext`/`ScopedDb`/`Tx`, the result-row types every
- * one of them resolves through, and `throwMissingCapability` (#490 — the
+ * one of them resolves through, `throwMissingCapability` (#490 — the
  * driver contract's own missing-capability failure, so a driver package
- * constructs it instead of copying its message text). The test-only
+ * constructs it instead of copying its message text), and
+ * `defaultContextRendering`/`ContextRendering` (#554/#555 review F1 —
+ * the default rendering's own spec requirement, "reachable by a driver
+ * package", needs a public-entry export; a module-level `export const`
+ * one file down is not reachability across the package boundary). The
+ * test-only
  * conversion internals
  * (`resolveColumnState`/`columnPlanForResult`/`convertRow`/
  * `ColumnPlanEntry`, `db/convert.ts`) are never re-exported here —
@@ -38,6 +43,7 @@ export type {
 	WithChainTerminal,
 } from "./db/chain";
 export type { ContextProvider, DbContext, ScopedDb } from "./db/context";
+export { defaultContextRendering } from "./db/context";
 export type {
 	Db,
 	DbOptions,
@@ -48,6 +54,7 @@ export type {
 export { db } from "./db/db";
 export type { Tx } from "./db/transaction";
 export type {
+	ContextRendering,
 	Driver,
 	DriverCapabilities,
 	DriverCapabilityKey,

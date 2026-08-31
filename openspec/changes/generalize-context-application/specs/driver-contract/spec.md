@@ -67,6 +67,12 @@ what makes that placement sufficient.
 - **THEN** it still names exactly the two fixed capabilities, and the
   context-rendering contribution is not among them
 
+#### Scenario: The default rendering is importable from the package entry
+- **WHEN** a driver package imports the default rendering from
+  `@hejbro/query`'s public entry point
+- **THEN** the import resolves to the rendering the query layer itself
+  applies, and no deep or internal module path is required
+
 ### Requirement: A driver declares whether its platform has roles
 A driver SHALL be able to declare that its platform has no roles a
 context could name. The declaration SHALL be data on the driver value,

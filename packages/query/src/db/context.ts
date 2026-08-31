@@ -180,9 +180,12 @@ const roleStatements = (role: Role | undefined): ReadonlyArray<CompileResult> =>
  * contribution point existed: `SET LOCAL ROLE` first, then one
  * parameterized `select set_config($1, $2, true)` per setting entry, in
  * declaration order. A pure mapping, never a side effect (spec: "The
- * contribution SHALL be a pure mapping") -- exported so a driver package
- * can compose it with its own statements rather than restate this
- * sequence (spec: "reachable by a driver package").
+ * contribution SHALL be a pure mapping") -- exported here, and
+ * re-exported from `@hejbro/query`'s public entry point (`index.ts`,
+ * #554/#555 review F1), so a driver package can compose it with its own
+ * statements rather than restate this sequence (spec: "reachable by a
+ * driver package" -- a module-level export one file down is not
+ * reachability across the package boundary; the public specifier is).
  */
 export const defaultContextRendering: ContextRendering = (context) => [
 	...roleStatements(context.role),
