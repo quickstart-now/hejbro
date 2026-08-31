@@ -37,7 +37,7 @@ Files: `packages/nile/{package.json,tsconfig.json,tsdown.config.ts,vitest.config
       test: the smoke's dependency-count guard, which fails by design the
       moment a seventh published package exists. **The guard itself is not
       edited** — it is the tripwire, and its message names what to update.
-- [ ] 1.4 (8m) A nile-specific entry assertion that **registers the
+- [x] 1.4 (8m) A nile-specific entry assertion that **registers the
       preset** in the scratch config and lets `generate` load it — not a
       bare value import. Neon's block imports one value *because* that
       preset ships no bundle to register; copying it here would substitute
