@@ -108,13 +108,11 @@ describe("Driver.renderContext (task 1.1, #554 -- the context-rendering contribu
 	});
 
 	it("the rendering's return type is exactly ReadonlyArray<CompileResult> -- extracted with infer, never compared as a whole object", () => {
-		type ExtractReturn<T> = T extends (...args: never[]) => infer R
-			? R
-			: never;
+		type ExtractReturn<T> = T extends (...args: never[]) => infer R ? R : never;
 		type Rendering = NonNullable<Driver["renderContext"]>;
-		expectTypeOf<
-			ExtractReturn<Rendering>
-		>().toEqualTypeOf<ReadonlyArray<CompileResult>>();
+		expectTypeOf<ExtractReturn<Rendering>>().toEqualTypeOf<
+			ReadonlyArray<CompileResult>
+		>();
 	});
 });
 
@@ -131,7 +129,7 @@ describe("Driver.roleLessPlatform (task 1.2, #554 -- the role-less-platform decl
 		expect(driver.roleLessPlatform).toBe(true);
 	});
 
-	it("a driver that omits the declaration reads as undefined -- absence means \"this platform has roles\"", () => {
+	it('a driver that omits the declaration reads as undefined -- absence means "this platform has roles"', () => {
 		const driver: Driver = { ...baseDriver };
 		expect(driver.roleLessPlatform).toBeUndefined();
 		expectTypeOf(driver.roleLessPlatform).toEqualTypeOf<true | undefined>();
