@@ -14,7 +14,10 @@ narrowed a field it could now narrow) keeps compiling — only code that
 asserted a now-provably-non-null field was still `| null` can break.
 
 Aggregates and window functions stay nullable regardless of any join
-(an empty aggregate or a partition boundary can still produce `null`),
-and a nested read, a CTE body, a view body, and `related()` stay at the
-pre-narrowing, always-nullable behavior, since none of them sees the
-surrounding statement's own joins.
+(an empty aggregate or a partition boundary can still produce `null`).
+So do **object-projection** fields read in a position that cannot see
+the surrounding statement's joins — inside a nested read, a CTE body, a
+view body, or a hand-written `SelectResult`. Whole-table rows in those
+same positions are untouched: a `jsonArrayFrom(select(table))` element
+and a `related()` row carry declared nullability exactly as they always
+have.

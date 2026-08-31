@@ -56,7 +56,7 @@ describe("nested read result types (add-relational-reads task 3.1)", () => {
 		} | null>();
 	});
 
-	it("nesting recurses: a grandchild read keeps its shape", () => {
+	it("nesting recurses: a grandchild read keeps its shape, and an object-projected column narrows at top level but stays nullable once nested (narrow-join-nullability, task 3.4)", () => {
 		const projection = {
 			id: posts.id,
 			comments: jsonArrayFrom(
@@ -71,11 +71,27 @@ describe("nested read result types (add-relational-reads task 3.1)", () => {
 				).where(eq(comments.postId, posts.id)),
 			),
 		};
-		type Row = SelectResult<typeof projection>;
+		// `never` (tracked, nothing left-joined) on the OUTER statement --
+		// deliberate: if this leaked into the nested subselect below, a
+		// tracked-empty set would wrongly narrow `Comment["id"]` to
+		// non-null (comments is not a member of the empty set either).
+		type Row = SelectResult<typeof projection, never>;
 		type Comment = Row["comments"][number];
 		expectTypeOf<Comment["author"]>().toEqualTypeOf<{
 			readonly id: string;
 			readonly title: string;
 		} | null>();
+
+		// comments.id is primaryKey() (implied notNull). The SAME
+		// object-projection key narrows to non-null at top level (nothing
+		// left-joined), but stays `| null` once projected inside this
+		// nested subselect -- NestedOrExprResult recurses into
+		// SelectResult<TSub> with no second argument at all, so the
+		// outer statement's left-joined set can never reach a nested
+		// position. A nested read cannot see the outer statement's joins,
+		// so it must always widen here, never narrow.
+		type TopLevel = SelectResult<{ readonly id: typeof comments.id }, never>;
+		expectTypeOf<TopLevel["id"]>().toEqualTypeOf<string>();
+		expectTypeOf<Comment["id"]>().toEqualTypeOf<string | null>();
 	});
 });
