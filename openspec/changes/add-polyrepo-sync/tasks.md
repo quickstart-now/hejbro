@@ -351,13 +351,13 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       function of its row (two syncs byte-identical, no clock value in
       the header). Start from `cli/test/sync-emit.test.ts > two syncs of
       the same row write byte-identical modules`. ~8m
-- [ ] 5.6 `[design]` Settle the seven codes and their remedies, then
+- [x] 5.6 `[design]` Settle the seven codes and their remedies, then
       raise the five this command owns — including a payload validated
       against its format rather than cast, and the absent-versus-empty
       pair that a raw error currently collapses. Start from
       `cli/test/sync-states.test.ts > distinguishes an absent manifest
       table`. ~10m
-- [ ] 5.7 Refuse a higher manifest format before the payload is parsed;
+- [x] 5.7 Refuse a higher manifest format before the payload is parsed;
       read a lower one whose snapshot format is acceptable; and carry
       this reader's own remedy when the embedded snapshot format is
       refused. Start from `cli/test/sync-states.test.ts > refuses a
@@ -369,7 +369,7 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       consumer meet. Start from `cli/test/sync-emit.test.ts > attaches
       each column fact to the column it names, not the one at its
       position`. ~4m
-- [ ] 5.9 Carry the manifest row an emitted module came from as far as
+- [x] 5.9 Carry the manifest row an emitted module came from as far as
       the refusal, so the half of the contract group 2 could not reach —
       naming an origin where one exists — gets its own failing test.
       Start from `cli/test/sync-refusal.test.ts > generating from an

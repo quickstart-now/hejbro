@@ -349,6 +349,7 @@ const tableSourceLines = (
 	tableSnapshot: TableSnapshot,
 	payload: ManifestPayload,
 	emittedByIdentity: ReadonlyMap<string, EmittedTable>,
+	origin: string,
 ): ReadonlyArray<string> => {
 	const tableFact = tableFactFor(payload, tableSnapshot);
 	const foreignKeysBySource = foreignKeysBySourceColumn(tableSnapshot);
@@ -366,6 +367,7 @@ const tableSourceLines = (
 		"\t{",
 		...columnLines,
 		"\t},",
+		`\t{ origin: "${origin}" },`,
 		");",
 	];
 };
@@ -438,7 +440,12 @@ export const buildSyncedModuleSource = (document: ManifestDocument): string => {
 	const schemaLines = distinctSchemaNames(enums).map(schemaDeclarationLine);
 	const enumLines = enums.map(enumDeclarationLine);
 	const tableBlocks = tables.map((tableSnapshot) =>
-		tableSourceLines(tableSnapshot, document, emittedByIdentity).join("\n"),
+		tableSourceLines(
+			tableSnapshot,
+			document,
+			emittedByIdentity,
+			document.snapshotHash,
+		).join("\n"),
 	);
 	const stampAndRoleLines = [
 		stampDeclarationLine(document.snapshotHash),

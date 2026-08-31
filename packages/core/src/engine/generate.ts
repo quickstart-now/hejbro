@@ -95,6 +95,14 @@ const synthesizeSequenceDeclarations = (
 const isTableDeclaration = (input: AnyInput): input is TableDeclaration =>
 	!isTable(input) && input.declarationKind === "table";
 
+/** `""` when a usage table carries no origin (a hand-written escapee, D87 polyrepo-sync 5.9) -- the refusal below names one only when the value has one to name. */
+const syncedTableOriginClause = (origin: string | undefined): string => {
+	if (origin === undefined) {
+		return "";
+	}
+	return ` It was synced from manifest row ${origin}.`;
+};
+
 const resolveTableDeclarations = (
 	meta: TableDeclaration,
 ): ReadonlyArray<HejbroDeclaration> => {
@@ -116,9 +124,17 @@ const resolveTableDeclarations = (
 	// saw — a JS project, or a config file `jiti` loads without a compile
 	// step (our own CLI loader does exactly that).
 	if (meta.authority === "usage") {
+		// D87 polyrepo-sync, 5.9: `origin` (when the value carries one --
+		// `syncedTable()`'s own optional 4th argument) names the manifest
+		// row this table was synced from; a hand-written usage table
+		// carries none, and the refusal supplies none either. `origin` is
+		// never read to *decide* the refusal (that stays `authority`
+		// alone) -- only to *name* the table once the refusal already
+		// fired.
+		const originClause = syncedTableOriginClause(meta.origin);
 		return throwHejbroError(
 			"synced-table-declared",
-			`table "${meta.schema.schemaName}"."${meta.tableName}" carries no migration authority — for example, a module written by \`hejbro sync\`. Next: declare it with table() in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
+			`table "${meta.schema.schemaName}"."${meta.tableName}" carries no migration authority — for example, a module written by \`hejbro sync\`.${originClause} Next: declare it with table() in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
 			meta.declaredAt,
 		);
 	}

@@ -90,6 +90,9 @@ describe("buildSyncedModuleSource", () => {
 		// export names travel from the sidecar.
 		expect(source).toContain("export const users = syncedTable(");
 		expect(source).toContain("export const posts = syncedTable(");
+		// origin carrier (5.9): the manifest row's own stamp, so a later
+		// refusal can name which row a table carries no authority from.
+		expect(source).toContain(`{ origin: "${TEST_SNAPSHOT_HASH}" }`);
 	});
 
 	it("emits tables and enums and no function declaration", () => {
