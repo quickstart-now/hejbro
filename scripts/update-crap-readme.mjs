@@ -16,7 +16,8 @@
 // catches a stale block after a real change) without making it
 // permanently red. The previous numbers are parsed back out of the
 // rendered sentence itself (not kept in a second stored copy), so there
-// is exactly one place they live.
+// is exactly one place they live -- and that place is the sentence as
+// *committed* (`git show HEAD:README.md`), not the working copy (#574).
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -109,7 +110,15 @@ const highest = results
 	.toFixed(2);
 
 const readme = readFileSync(README_PATH, "utf8");
-const previous = parsePreviousBlock(readme);
+// The baseline is the *committed* README, never the working tree: a run
+// before committing leaves a fresh stamp in the working copy, and reading
+// that copy back as "previous" would make every later run merely confirm
+// it -- the badge then points at a commit that never carried those
+// numbers (#574). HEAD's copy is what CI's `git diff --exit-code` compares
+// against, so it is the only baseline that keeps that check meaningful.
+const committedReadme = () =>
+	execFileSync("git", ["show", "HEAD:README.md"], { cwd: REPO_ROOT }).toString();
+const previous = parsePreviousBlock(committedReadme());
 const numbersUnchanged =
 	previous !== null &&
 	previous.scanned === scanned &&
