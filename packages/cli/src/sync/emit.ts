@@ -17,10 +17,15 @@ import type { ManifestPayload } from "../manifest-payload";
 import { SYNCED_MODULE_MARKER } from "./write";
 
 /** The manifest payload's own shape (group 3), plus the snapshot it embeds
- * (group 4) — this is what a parsed manifest row's `manifest` column
- * actually deserializes to. */
+ * (group 4), plus the row's own `snapshot_hash` column (group 5, 5.5) —
+ * this is what a parsed manifest row, reassembled with its own stamp,
+ * carries. `snapshotHash` lives on the row itself, not inside the
+ * `manifest` payload column (`sql/manifest.ts`'s own boundary), so a
+ * caller assembling this type combines both columns rather than reading
+ * one field out of the parsed JSON. */
 export type ManifestDocument = ManifestPayload & {
 	readonly snapshot: Snapshot;
+	readonly snapshotHash: string;
 };
 
 /** An enum type as materialized in a snapshot (`kinds/enum-kind.ts`'s own,
@@ -379,15 +384,32 @@ const distinctSchemaNames = (
 const schemaDeclarationLine = (schemaName: string): string =>
 	`const ${schemaName}Schema = schema("${schemaName}");`;
 
+/** The manifest row's own `snapshot_hash` column, restated verbatim as an
+ * exported value (schema-sync delta, "A synced module carries its
+ * freshness stamp as a value") -- never recomputed by re-hashing the
+ * embedded snapshot, which would be a second way to derive the same fact
+ * with its own chance to disagree with the row a freshness check reads. */
+const stampDeclarationLine = (snapshotHash: string): string =>
+	`export const hejbroStamp = "${snapshotHash}";`;
+
+/** Every role name the manifest carries, in the branded form the
+ * execution context requires (schema-sync delta, "Role names travel with
+ * the module and the consumer opts in") -- `roleName` is the single
+ * sanctioned brand constructor (core's own), never re-implemented here. */
+const rolesDeclarationLine = (roles: ReadonlyArray<string>): string =>
+	`export const hejbroRoles = [${roles.map((role) => `roleName("${role}")`).join(", ")}];`;
+
 /**
- * Builds the module source `hejbro sync` writes (5.4's own scope: table
- * and enum declarations, and nothing else — no function declaration, no
- * stamp, no role export; those are group 5's later tasks). Declaration
- * order never matters for `.references(() => …)` — it's a lazy callback,
- * evaluated only when a query actually runs, long after every `const` in
- * the module has initialized — so tables are emitted in the manifest's
- * own snapshot order and relations resolve regardless of which side
- * comes first.
+ * Builds the module source `hejbro sync` writes: table and enum
+ * declarations (5.4), no function declaration (a synced module never
+ * carries one, this version), and the row's own stamp and role list
+ * (5.5). Declaration order never matters for `.references(() => …)` —
+ * it's a lazy callback, evaluated only when a query actually runs, long
+ * after every `const` in the module has initialized — so tables are
+ * emitted in the manifest's own snapshot order and relations resolve
+ * regardless of which side comes first. Pure and clock-free throughout:
+ * every value comes from `document`, so two calls with the same document
+ * write byte-identical source.
  */
 export const buildSyncedModuleSource = (document: ManifestDocument): string => {
 	const tables = tableSnapshots(document.snapshot);
@@ -418,6 +440,10 @@ export const buildSyncedModuleSource = (document: ManifestDocument): string => {
 	const tableBlocks = tables.map((tableSnapshot) =>
 		tableSourceLines(tableSnapshot, document, emittedByIdentity).join("\n"),
 	);
+	const stampAndRoleLines = [
+		stampDeclarationLine(document.snapshotHash),
+		rolesDeclarationLine(document.roles),
+	];
 
 	// Every column-builder factory this module could possibly call,
 	// imported unconditionally — the generated source is not meant to be
@@ -430,6 +456,7 @@ export const buildSyncedModuleSource = (document: ManifestDocument): string => {
 		"char",
 		"numeric",
 		"pgEnum",
+		"roleName",
 		"schema",
 		"syncedGenerated",
 		"syncedHasDefault",
@@ -451,6 +478,7 @@ export const buildSyncedModuleSource = (document: ManifestDocument): string => {
 	return [
 		...header,
 		"",
+		...blankAfter(stampAndRoleLines),
 		...blankAfter(schemaLines),
 		...blankAfter(enumLines),
 		tableBlocks.join("\n\n"),
