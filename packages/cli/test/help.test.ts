@@ -54,6 +54,15 @@ describe("hejbro --help", () => {
 		expect(checkRow).toHaveLength(1);
 	});
 
+	it("lists the sync command", async () => {
+		const result = await runHelp(cwd, ["--help"]);
+		const commands = result.stdout.split("COMMANDS")[1] ?? "";
+		const syncRow = commands
+			.split("\n")
+			.filter((line) => line.trimStart().startsWith("sync"));
+		expect(syncRow).toHaveLength(1);
+	});
+
 	it("renders each subcommand on one line in COMMANDS", async () => {
 		const result = await runHelp(cwd, ["--help"]);
 		const commands = result.stdout.split("COMMANDS")[1] ?? "";
