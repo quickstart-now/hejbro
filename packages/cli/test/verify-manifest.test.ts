@@ -129,4 +129,21 @@ describe("hejbro verify (manifest monotonicity)", () => {
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(0);
 	});
+
+	it("a chain that begins carrying manifests midway is not reported", async () => {
+		// M1 has no manifest, M2 and M3 do — adopting emission partway
+		// through a chain's history is legitimate (schema-manifest delta,
+		// "A chain that starts carrying midway is not a gap"): the leading
+		// absence is indistinguishable from where emission was turned on,
+		// so reporting it would call a normal adoption a regression.
+		await writeSchema(SCHEMA_V1);
+		await runCli(cwd, ["generate"]);
+		await writeSchema(SCHEMA_V2);
+		await runCli(cwd, ["generate", "--manifest"]);
+		await writeSchema(SCHEMA_V3);
+		await runCli(cwd, ["generate", "--manifest"]);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+	});
 });

@@ -199,9 +199,16 @@ rows that follow it.
 Once a migration chain contains a migration that carries manifest
 statements, hejbro SHALL refuse to generate a migration for that chain
 with manifest emission disabled, with a coded error whose remedy is to
-enable emission again. Verification SHALL report the same condition for
-a chain on disk, so that removing the statements by hand is caught
-without a database.
+enable emission again. Verification SHALL report a **gap** — a migration
+that carries no manifest statements while both an earlier and a later
+one do — so that removing the statements by hand is caught without a
+database.
+
+Detection begins at the first migration that carries them, because a
+chain legitimately starts carrying manifests at whatever point emission
+was enabled: a leading migration without them is indistinguishable from
+that beginning, and reporting it would call a normal adoption a
+regression.
 
 Silently stopping would leave the database's newest manifest row
 describing an older schema while every freshness check downstream
@@ -214,10 +221,17 @@ reported agreement — a stale answer that reads as a fresh one.
   no migration is written
 
 #### Scenario: A hand-edited chain is caught without a database
-- **WHEN** the manifest statements are removed from a migration in a
-  chain whose later migrations carry them, and verification runs
+- **WHEN** the manifest statements are removed from a migration that
+  lies between two that carry them, and verification runs
 - **THEN** verification reports the chain as no longer carrying its
   manifests
+
+#### Scenario: A chain that starts carrying midway is not a gap
+- **WHEN** the earlier migrations of a chain carry no manifest
+  statements and every migration from some point onward carries them,
+  and verification runs
+- **THEN** it reports nothing: that is emission having been enabled at
+  that point
 
 #### Scenario: Enabling again succeeds
 - **WHEN** generation runs for that chain with manifest emission enabled

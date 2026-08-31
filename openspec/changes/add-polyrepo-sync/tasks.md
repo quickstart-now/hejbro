@@ -253,6 +253,7 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
 | " | The baseline report says what is missing | `cli/test/generate-manifest.test.ts > the baseline report names the absent row` |
 | A chain that carries manifests keeps carrying them | Generating with emission turned back off is refused | `cli/test/manifest-chain.test.ts > refuses generation when the chain carries manifests and emission is off` |
 | " | A hand-edited chain is caught without a database | `cli/test/verify-manifest.test.ts > reports a chain that stopped carrying its manifests` |
+| " | A chain that starts carrying midway is not a gap | `cli/test/verify-manifest.test.ts > a chain that begins carrying manifests midway is not reported` |
 | " | Enabling again succeeds | `cli/test/manifest-chain.test.ts > generation proceeds when emission is enabled` |
 
 - [x] 4.1 Configuration flag, and `generate` handing the payload to the
