@@ -285,10 +285,14 @@ export const parseBannerVersion = (fileContent: string): string | null => {
 	return versionLine.slice(VERSION_PREFIX.length);
 };
 
+const MANIFEST_FORMAT_VALUE = /^\d+$/;
+
 /**
  * Reads a migration file's `-- hejbro-manifest: <format>` line, or `null`
  * when the line is absent — every migration rendered without the
- * schema-manifest capability opted in. Reads by {@link MANIFEST_PREFIX}
+ * schema-manifest capability opted in — or when its value isn't a plain
+ * non-negative integer, so a hand-edited or truncated line reports as
+ * absent rather than as `NaN` or `0`. Reads by {@link MANIFEST_PREFIX}
  * only, so an older hejbro reading a newer file's other unknown lines
  * stays unaffected, matching every other parser here.
  */
@@ -301,7 +305,11 @@ export const parseBannerManifestFormat = (
 	if (manifestLine === undefined) {
 		return null;
 	}
-	return Number(manifestLine.slice(MANIFEST_PREFIX.length));
+	const value = manifestLine.slice(MANIFEST_PREFIX.length);
+	if (!MANIFEST_FORMAT_VALUE.test(value)) {
+		return null;
+	}
+	return Number(value);
 };
 
 /**

@@ -137,8 +137,9 @@ describe("renderManifestStatements", () => {
 });
 
 describe("MANIFEST_FORMAT", () => {
-	// [design] pin, not a delta SHALL: the initial value is a 1.1 design
-	// decision, not a spec-mandated constant.
+	// [design] pin, not a delta SHALL: `1` is the value settled by task 1.2's
+	// [design] ratification (the `-- hejbro-manifest: 1` banner line), not a
+	// spec-mandated constant.
 	it("starts at 1", () => {
 		expect(MANIFEST_FORMAT).toBe(1);
 	});

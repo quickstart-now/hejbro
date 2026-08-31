@@ -222,6 +222,15 @@ describe("parseBannerManifestFormat", () => {
 		expect(parseBannerManifestFormat(renderBanner([createChange]))).toBeNull();
 	});
 
+	it("a non-integer banner manifest format is rejected, not coerced", () => {
+		expect(
+			parseBannerManifestFormat("-- hejbro migration\n-- hejbro-manifest: x"),
+		).toBeNull();
+		expect(
+			parseBannerManifestFormat("-- hejbro migration\n-- hejbro-manifest: "),
+		).toBeNull();
+	});
+
 	it("a reader that knows only the pre-existing banner lines reads its own value, unaffected by the manifest line (delta: 'A reader that does not know the line is unaffected')", () => {
 		const sql = renderBanner(
 			[createChange],
