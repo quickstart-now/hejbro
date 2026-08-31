@@ -15,10 +15,12 @@ Estimates are agent execution minutes and are frozen per group at
 one's. Three groups carry a re-freeze, and the reason is recorded rather
 than absorbed: the delta gained requirements after the first freeze —
 a manifest format higher than the reader knows is refused, the export
-name of a declared function is a carried fact, and a foreign key whose
-target is outside the manifest derives no relation. Group 3 moved
-40m → 46m, group 5 moved 47m → 60m, and group 6's scope grew. A
-re-freeze is only ever a spec change, never a task running long. Durations land per task in `openspec/task-times.csv`, measured
+name of a declared function is a carried fact, a foreign key whose
+target is outside the manifest derives no relation, and an embedded
+snapshot format the reader refuses carries this reader's own remedy.
+Group 3 moved 40m → 46m, group 5 moved 47m → 63m, and group 6 moved
+26m → 28m. A re-freeze is only ever a spec change, never a task running
+long. Durations land per task in `openspec/task-times.csv`, measured
 with `date -u` at task start and end.
 
 ## 1. Manifest emission in core — `est_frozen: 44m` — issue #579
@@ -176,7 +178,7 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
       reads. Start from `cli/test/verify-manifest.test.ts > reports a
       chain that stopped carrying its manifests`. ~7m
 
-## 5. The `sync` command — `est_frozen: 60m` — issue #583
+## 5. The `sync` command — `est_frozen: 63m` — issue #583
 
 Files: `packages/cli/src/commands/sync.ts` (new),
 `packages/cli/src/sync/*` (new), `packages/cli/src/main.ts`,
@@ -200,7 +202,8 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | " | A stamp with no matching row says so | `cli/test/sync-states.test.ts > distinguishes a stamp with no matching row` |
 | " | The five codes are five | `cli/test/sync-states.test.ts > reports five distinct codes for the five situations` |
 | A manifest format higher than the reader knows is refused | A higher manifest format is refused | `cli/test/sync-states.test.ts > refuses a higher manifest format without parsing the payload` |
-| " | A lower manifest format is read | `cli/test/sync-states.test.ts > reads a lower manifest format and treats its absent facts as absent` |
+| " | A lower manifest format is read | `cli/test/sync-states.test.ts > reads a lower manifest format whose snapshot format it accepts` |
+| " | An embedded snapshot format the reader refuses names the two repositories | `cli/test/sync-states.test.ts > a refused embedded snapshot format carries this reader's remedy` |
 | " | Format skew is not reported as staleness | `cli/test/sync-states.test.ts > format skew never advises re-syncing` |
 | The command can check without writing | Checking leaves the module untouched | `cli/test/sync-states.test.ts > check mode writes nothing and exits non-zero` |
 | The schema filter is reserved, not silently ignored | The reserved filter is refused | `cli/test/sync-states.test.ts > refuses the reserved schema filter` |
@@ -228,15 +231,17 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       raise the four this command owns. Start from
       `cli/test/sync-states.test.ts > distinguishes an absent manifest
       table`. ~8m
-- [ ] 5.7 Refuse an unknown manifest format in both directions, before
-      the payload is parsed. Start from `cli/test/sync-states.test.ts >
-      refuses a higher manifest format without parsing the payload`. ~7m
+- [ ] 5.7 Refuse a higher manifest format before the payload is parsed;
+      read a lower one whose snapshot format is acceptable; and carry
+      this reader's own remedy when the embedded snapshot format is
+      refused. Start from `cli/test/sync-states.test.ts > refuses a
+      higher manifest format without parsing the payload`. ~10m
 - [ ] 5.8 `[design]` Settle how a foreign key whose target is outside
       the manifest is emitted, then derive no relation for such an edge
       while keeping the column. Start from `cli/test/sync-emit.test.ts >
       derives no relation for a reference to an unmanaged table`. ~6m
 
-## 6. Freshness at startup — `est_frozen: 26m` — issue #584
+## 6. Freshness at startup — `est_frozen: 28m` — issue #584
 
 Files: `packages/cli/src/assert-schema.ts`,
 `packages/cli/src/manifest-read.ts` (new).
@@ -249,16 +254,19 @@ Files: `packages/cli/src/assert-schema.ts`,
 | The database owns the order of manifest rows | Distance is counted, not inferred from time | `cli/test/assert-schema-manifest.test.ts > counts rows rather than comparing timestamps` |
 | Each way a manifest can fail a reader is named separately | A database with no manifest table / an empty table / an unmatched stamp / an unknown format | `cli/test/assert-schema-manifest.test.ts > distinguishes the five situations` |
 | A manifest format higher than the reader knows is refused | Format skew is not reported as staleness | `cli/test/assert-schema-manifest.test.ts > format skew is not staleness` |
+| " | An embedded snapshot format the reader refuses names the two repositories | `cli/test/assert-schema-manifest.test.ts > a refused embedded snapshot format names both repositories` |
 | " (import discipline) | — | `cli/test/assert-schema-imports.test.ts` stays green |
 
 - [ ] 6.1 Read the stamp from the handle's schema and the row through
       the handle's driver. Start from
       `cli/test/assert-schema-manifest.test.ts > passes when the stamp
       matches the newest row`. ~8m
-- [ ] 6.2 `[design]` Settle the failure text's upper bound, then count
-      the distance by rows rather than by time. Start from
+- [ ] 6.2 `[design]` Settle the failure text's upper bound and whether a
+      refused embedded snapshot format reuses the snapshot reader's code
+      with this reader's message or gets its own, then count the distance
+      by rows rather than by time. Start from
       `cli/test/assert-schema-manifest.test.ts > fails naming both rows
-      and the distance`. ~8m
+      and the distance`. ~10m
 - [ ] 6.3 The five situations, translated into this surface's own code
       vocabulary, including format skew as its own outcome. Start from
       `cli/test/assert-schema-manifest.test.ts > distinguishes the five

@@ -142,8 +142,8 @@ A row SHALL be self-contained: reading it SHALL require no other row.
 #### Scenario: A brand is not among the carried facts
 - **WHEN** a schema declaring a `$type` brand is emitted as a manifest
   row
-- **THEN** the row carries no brand information, and the five carried
-  facts are unaffected
+- **THEN** the row carries no brand information, and the carried facts
+  are unaffected
 
 #### Scenario: The carried choices survive the round trip
 - **WHEN** a schema declaring a numeric column with a non-default mode,

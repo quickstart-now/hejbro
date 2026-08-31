@@ -81,7 +81,9 @@ TypeScript keys rather than the SQL column names; an array column's
 element nullability follows the declared constraint; a numeric column's
 visible type follows its declared mode; a relation key derived from a
 foreign key matches the owning repository's, in both directions; and an
-enum column types as its declared values rather than as a string.
+enum column types as its declared values rather than as a string. The
+relation property holds for edges whose target the manifest carries;
+an edge pointing outside it is governed by its own requirement.
 
 #### Scenario: Result keys match the declaring repository
 - **WHEN** a table whose TypeScript keys differ from its SQL column
@@ -269,15 +271,20 @@ row and treat the facts that format does not carry as absent, exactly as
 it treats any fact a manifest does not hold.
 
 Refusing downward as well would couple the two repositories in the wrong
-direction: every consumer upgrading hejbro would require the owning
-repository to regenerate a migration before syncing again, for a format
-whose changes are additions the reader can simply not find.
+direction for a format whose changes are additions the reader can simply
+not find.
 
-The two format values stay independent. A reader decides on
-`manifest_format` from the row's own column, before parsing the payload,
-so that a payload it cannot understand is never interpreted; the
-embedded snapshot's own version is then governed by the snapshot
-reader's rules, which are its own.
+What that asymmetry buys is exact, and no larger: independence across a
+bump that moves **only** the manifest format — a sidecar gaining a fact.
+It buys nothing across a snapshot format bump. The embedded snapshot's
+version is governed by the snapshot reader's own rules, which refuse in
+both directions, so when the snapshot format moves the two repositories
+must speak the same snapshot format: the consumer's hejbro and the
+hejbro that generated the migration have to agree.
+
+A reader decides on `manifest_format` from the row's own column, before
+parsing the payload, so that a payload it cannot understand is never
+interpreted.
 
 #### Scenario: A higher manifest format is refused
 - **WHEN** the newest manifest row declares a manifest format higher
@@ -287,9 +294,17 @@ reader's rules, which are its own.
 
 #### Scenario: A lower manifest format is read
 - **WHEN** the newest manifest row declares a manifest format lower than
-  the reader knows
+  the reader knows, and an embedded snapshot format the reader accepts
 - **THEN** the reader reads it, and the facts that format does not carry
   are absent rather than an error
+
+#### Scenario: An embedded snapshot format the reader refuses names the two repositories
+- **WHEN** the newest manifest row carries an embedded snapshot format
+  the reader refuses
+- **THEN** the failure carries this reader's remedy — match the
+  consumer's hejbro to the one that generated the migration, or
+  regenerate the migration with the newer one — and never the guidance
+  written for a snapshot file on disk, which the consumer does not have
 
 #### Scenario: Format skew is not reported as staleness
 - **WHEN** a reader meets a manifest format it does not know
