@@ -47,6 +47,14 @@ built by hand, bypassing `asTenant` entirely, and that path must be
 checked too — duplicating the check in the builder would just be a
 second, driftable copy of it).
 
+The same rendering also refuses a context it cannot apply at all, before
+producing any statement: one that names a role, or one carrying a
+setting outside the platform's own `nile.tenant_id`/`nile.user_id` keys.
+Both fail with `nile-context-unsupported` — the platform has no role to
+apply a role statement to, and silently dropping it would leave the
+tenant setting behind it blocked too, so the rendering refuses instead
+of ignoring.
+
 A tenant-aware table needs no special syntax — an ordinary `table(...)`
 with a `tenant_id uuid` column is all Nile's platform requires: *"You can
 create a tenant aware table in Nile by creating a table with a
