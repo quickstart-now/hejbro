@@ -6,6 +6,7 @@ import type {
 	HejbroError,
 	RenameAmbiguity,
 	RenameSpec,
+	Snapshot,
 } from "@hejbro/core";
 import {
 	deriveSlug,
@@ -33,7 +34,12 @@ import {
 } from "../flags";
 import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
+import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
+import {
+	buildManifestPayload,
+	serializeManifestPayload,
+} from "../manifest-payload";
 import { buildRegistry, configValidators } from "../presets";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
@@ -73,6 +79,11 @@ const GENERATE_ARGS = {
 		type: "string",
 		description:
 			"confirm a genuine drop (not a rename): <schema>.<table>.<column>, or <schema>.<table> for a whole table (repeatable)",
+	},
+	manifest: {
+		type: "boolean",
+		description:
+			"emit a schema manifest row alongside the migration (opt-in; a baseline never emits one, no matter this flag)",
 	},
 } as const;
 
@@ -508,6 +519,66 @@ const reportHead = (
 	];
 };
 
+/**
+ * Assembles the schema-manifest options `generateMigration` embeds
+ * as-is (core neither serializes nor hashes, `sql/manifest.ts`'s own
+ * boundary): the sidecar facts (`manifest-payload.ts`, group 3) plus
+ * this run's own snapshot, serialized with the snapshot's stable
+ * serialization; the hash follows the same `sha256:` convention this
+ * file already uses for its banner's own chain hashes, not a second
+ * rule for the same kind of value.
+ */
+const manifestOptions = (
+	declarations: LoadedDeclarations,
+	snapshot: Snapshot,
+): { readonly payload: string; readonly snapshotHash: string } => {
+	const sidecar = buildManifestPayload(declarations, declarations.exportNames);
+	const payloadWithSnapshot = { ...sidecar, snapshot };
+	return {
+		payload: serializeManifestPayload(payloadWithSnapshot),
+		snapshotHash: `sha256:${sha256Hex(renderSnapshot(snapshot))}`,
+	};
+};
+
+/** `undefined` unless emission was requested and this isn't a baseline —
+ * a baseline is registered as applied rather than run, so any manifest
+ * statements inside it would never execute (schema-manifest delta, "A
+ * baseline migration carries no manifest row"); the CLI suppresses it
+ * here rather than core refusing it, since it's this run's own choice
+ * of mode, not a property of the declarations or the snapshot. */
+const resolveManifestOptions = (
+	mode: GenerateMode,
+	manifestEnabled: boolean,
+	declarations: LoadedDeclarations,
+	snapshot: Snapshot,
+): ReturnType<typeof manifestOptions> | undefined => {
+	if (mode === "baseline") {
+		return undefined;
+	}
+	if (!manifestEnabled) {
+		return undefined;
+	}
+	return manifestOptions(declarations, snapshot);
+};
+
+/** The extra report line a baseline prints when manifest emission was
+ * requested but suppressed (schema-manifest delta, "the baseline report
+ * SHALL state that the database will hold no manifest row until the
+ * next generated migration is applied") — `[]` otherwise, so a normal
+ * baseline report is unchanged. */
+const baselineManifestNote = (
+	mode: GenerateMode,
+	manifestEnabled: boolean,
+): ReadonlyArray<string> => {
+	if (mode !== "baseline" || !manifestEnabled) {
+		return [];
+	}
+	return [
+		"",
+		"--manifest was passed, but a baseline migration is registered as applied, never run, so it carries no manifest statements. No manifest row will exist until the next migration generated with --manifest is applied.",
+	];
+};
+
 export const runGenerate = async (
 	cwd: string,
 	argv: ReadonlyArray<string>,
@@ -523,6 +594,7 @@ export const runGenerate = async (
 	// normalization point means a flag added later doesn't need its own.
 	const rawArgs = normalizeEqualsFlags(argv);
 	const parsedArgv = parseGenerateArgv(rawArgs);
+	const manifestEnabled = rawArgs.includes("--manifest");
 	const fallbackIdentity = parsedArgv.configFlag ?? "hejbro.config.ts";
 	try {
 		assertBaselineFlagsApplicable(mode, rawArgs);
@@ -590,6 +662,12 @@ export const runGenerate = async (
 
 			const parentHash = `sha256:${sha256Hex(renderSnapshot(previousSnapshot))}`;
 			const currentHash = `sha256:${sha256Hex(renderSnapshot(firstPass.snapshot))}`;
+			const manifest = resolveManifestOptions(
+				mode,
+				manifestEnabled,
+				declarations,
+				firstPass.snapshot,
+			);
 			const finalPass = generateMigration({
 				declarations,
 				previousSnapshot,
@@ -600,6 +678,10 @@ export const runGenerate = async (
 				baseline: mode === "baseline",
 				registry,
 				validators,
+				// `manifest` is only spread when present — under
+				// `exactOptionalPropertyTypes`, an explicit `manifest:
+				// undefined` is a different type than the key's own absence.
+				...(manifest !== undefined && { manifest }),
 			});
 
 			const migrationsDirPath = join(cwd, config.migrationsDir);
@@ -624,6 +706,7 @@ export const runGenerate = async (
 				exitCode: 0,
 				stdout: [
 					...reportHead(mode, declarations.length, migrationRelativePath),
+					...baselineManifestNote(mode, manifestEnabled),
 					...warningSummaryLines(finalPass.warnings),
 					banner ?? "",
 				],

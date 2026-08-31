@@ -255,14 +255,14 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
 | " | A hand-edited chain is caught without a database | `cli/test/verify-manifest.test.ts > reports a chain that stopped carrying its manifests` |
 | " | Enabling again succeeds | `cli/test/manifest-chain.test.ts > generation proceeds when emission is enabled` |
 
-- [ ] 4.1 Configuration flag, and `generate` handing the payload to the
+- [x] 4.1 Configuration flag, and `generate` handing the payload to the
       renderer. Start from `cli/test/generate-manifest.test.ts > enabled
       emission appends the statements to the difference`. ~8m
-- [ ] 4.2 Byte-identical output with emission off, and the payload's
+- [x] 4.2 Byte-identical output with emission off, and the payload's
       embedded snapshot pinned equal to the snapshot written beside it.
       Start from `cli/test/generate-manifest.test.ts > disabled emission
       is byte-identical`. ~7m
-- [ ] 4.3 Baseline emits none, and reports the absent row. Start from
+- [x] 4.3 Baseline emits none, and reports the absent row. Start from
       `cli/test/generate-manifest.test.ts > a baseline carries no
       manifest statements`. ~7m
 - [ ] 4.4 Monotonicity refusal in `generate`, reading the chain's last
@@ -273,7 +273,7 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
       reads. Start from `cli/test/verify-manifest.test.ts > reports a
       chain that stopped carrying its manifests`. ~7m
 
-## 5. The `sync` command — `est_frozen: 69m` — issue #583
+## 5. The `sync` command — `est_frozen: 73m` — issue #583
 
 Files: `packages/cli/src/commands/sync.ts` (new),
 `packages/cli/src/sync/*` (new), `packages/cli/src/main.ts`,
@@ -287,6 +287,7 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | A synced module reproduces the consumer-visible type layer | Result keys / element nullability / numeric mode / relation keys / enum values match | `cli/test/sync-emit.test.ts > reproduces the carried choices of the manifest` |
 | Type brands do not cross the boundary | A branded column reads as its unbranded type | `cli/test/sync-emit.test.ts > emits no brand for a branded column` |
 | Role names travel with the module and the consumer opts in | Supplied roles are accepted | `cli/test/sync-emit.test.ts > exports the manifest's role names in branded form` |
+| A re-added column keeps its own facts | " — read half (group 3 pins the emitted half) | `cli/test/sync-emit.test.ts > attaches each column fact to the column it names, not the one at its position` |
 | A synced module carries its freshness stamp as a value | The stamp is importable | `cli/test/sync-emit.test.ts > exports the identity of its manifest row` |
 | A synced module holds no migration authority | The refusal states what it observed — the half group 2 cannot reach | `cli/test/sync-refusal.test.ts > generating from an emitted module names the manifest row it came from` |
 | A synced module carries tables and enums, not functions | A synced module emits no function declarations | `cli/test/sync-emit.test.ts > emits tables and enums and no function declaration` |
@@ -335,6 +336,13 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       this reader's own remedy when the embedded snapshot format is
       refused. Start from `cli/test/sync-states.test.ts > refuses a
       higher manifest format without parsing the payload`. ~10m
+- [ ] 5.10 Read a manifest whose table has a column whose position and
+      declaration order disagree, and attach each fact to the column it
+      names. Group 3 pins the emitting half against a stand-in ordering;
+      this is the half where a real snapshot, a re-added column and a
+      consumer meet. Start from `cli/test/sync-emit.test.ts > attaches
+      each column fact to the column it names, not the one at its
+      position`. ~4m
 - [ ] 5.9 Carry the manifest row an emitted module came from as far as
       the refusal, so the half of the contract group 2 could not reach —
       naming an origin where one exists — gets its own failing test.
