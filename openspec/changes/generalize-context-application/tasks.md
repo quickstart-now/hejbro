@@ -20,7 +20,7 @@ Files: `packages/query/src/driver/contract.ts`,
       test: a driver value carrying a rendering type-checks, and the
       return type extracted with `infer` is `ReadonlyArray<CompileResult>`
       — extraction assertion, never a whole-object type compare.
-- [ ] 1.2 (6m) Role-less-platform declaration. Failing test: the
+- [x] 1.2 (6m) Role-less-platform declaration. Failing test: the
       declaration is readable as data on the value; a driver that omits
       it is typed and read as "this platform has roles".
 - [ ] 1.3 (6m) Context-mandatory declaration. Failing test: readable

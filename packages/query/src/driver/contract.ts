@@ -133,4 +133,13 @@ export type Driver = DriverSession & {
 	 * {@link contributedRoles}: most drivers declare none.
 	 */
 	readonly renderContext?: ContextRendering;
+	/**
+	 * Declares that this platform has no roles a context could name (task
+	 * 1.2, #554) — fixed data on the driver value, never discovered by
+	 * querying the server. Absence means the opposite: "this platform has
+	 * roles", so no existing driver changes meaning by staying silent. A
+	 * context that names a role is still validated against the whitelist
+	 * regardless of this declaration (group 2's job, not this contract's).
+	 */
+	readonly roleLessPlatform?: true;
 };

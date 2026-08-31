@@ -117,3 +117,23 @@ describe("Driver.renderContext (task 1.1, #554 -- the context-rendering contribu
 		>().toEqualTypeOf<ReadonlyArray<CompileResult>>();
 	});
 });
+
+describe("Driver.roleLessPlatform (task 1.2, #554 -- the role-less-platform declaration)", () => {
+	const baseDriver: Omit<Driver, "contributedRoles"> = {
+		capabilities: { "interactive-transactions": true, "session-state": true },
+		execute: async () => [],
+		transaction: async (callback) => callback({ execute: async () => [] }),
+		setupSession: async () => {},
+	};
+
+	it("a driver may declare its platform has no roles -- readable back as data, no connection made to produce it", () => {
+		const driver: Driver = { ...baseDriver, roleLessPlatform: true };
+		expect(driver.roleLessPlatform).toBe(true);
+	});
+
+	it("a driver that omits the declaration reads as undefined -- absence means \"this platform has roles\"", () => {
+		const driver: Driver = { ...baseDriver };
+		expect(driver.roleLessPlatform).toBeUndefined();
+		expectTypeOf(driver.roleLessPlatform).toEqualTypeOf<true | undefined>();
+	});
+});
