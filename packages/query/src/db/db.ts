@@ -169,11 +169,32 @@ const rolesOf = (
  *
  * - Any `select()` builder stage (`select(table)`/`.where()`/
  *   `.orderBy()`/`.limit()`/a join all structurally extend
- *   `SelectLimited`, core's `query/select.ts`) carries `projectionInput`,
- *   so {@link SelectResult}<TProjection> (task 3.10) resolves the
- *   declared row shape — whole-table richness (numeric mode,
- *   `IntervalValue`, `notNull`) included, object-projection's own
- *   narrower, honest widening included.
+ *   `SelectLimited`, core's `query/select.ts`) carries `projectionInput`
+ *   AND the left-joined set core's own `leftJoin` accumulated (narrow-
+ *   join-nullability, task 3.3), so {@link SelectResult}<TProjection,
+ *   TLeftJoined> (task 2.1) resolves the declared row shape — whole-table
+ *   richness (numeric mode, `IntervalValue`, `notNull`) included, and an
+ *   object-projection field narrows per-column once its own source table
+ *   is provably not among the left-joined ones.
+ *
+ *   `infer TLeftJoined` yields the phantom's own optional-property type,
+ *   `… | undefined`, stripped here with `Exclude<TLeftJoined,
+ *   undefined>` — deliberately NOT the builtin `NonNullable`, which is
+ *   `T & {}` as of the TypeScript version this package builds against.
+ *   Measured: `NonNullable<unknown>` is `{}`, not `unknown`, so for a
+ *   stage that never called `leftJoin` at all (the untracked default),
+ *   `NonNullable` would hand `SelectResult` `{}` instead of `unknown` —
+ *   `IsTrackedLeftJoinedSet`'s own `[UntrackedJoins] extends
+ *   [TLeftJoined]` check would then read `[unknown] extends [{}]`
+ *   (false) instead of `[unknown] extends [unknown]` (true), flipping
+ *   "untracked" to "tracked" and narrowing every object-projection field
+ *   of every plain `db.execute(select(...))` call regardless of whether
+ *   anything was actually left-joined — a false narrowing (a lie), not
+ *   the fail-safe direction every other failure mode in this change
+ *   takes. `Exclude<T, undefined> = T extends undefined ? never : T`
+ *   does not have this defect: measured against `unknown`, `never`, a
+ *   single `Table`, and a `Table | Table` union (each with and without
+ *   `| undefined`), it returns every one of them unchanged.
  * - An `insert()`/`update()`/`deleteFrom()` chain (any stage —
  *   `InsertConflictable`/`InsertReturnable`/`InsertFinal` and their
  *   update/delete equivalents all structurally carry `TTable`/
@@ -196,8 +217,11 @@ const rolesOf = (
  *   always has.
  */
 export type ExecuteResult<TStatement> =
-	TStatement extends SelectLimited<infer TProjection extends SelectProjection>
-		? ReadonlyArray<SelectResult<TProjection>>
+	TStatement extends SelectLimited<
+		infer TProjection extends SelectProjection,
+		infer TLeftJoined
+	>
+		? ReadonlyArray<SelectResult<TProjection, Exclude<TLeftJoined, undefined>>>
 		: TStatement extends InsertFinal<
 					infer TTable extends Table,
 					infer TReturning

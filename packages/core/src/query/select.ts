@@ -17,6 +17,7 @@ import { expr, resolveOrderTerm } from "../expr/ast";
 import { someExprNode } from "../expr/walk";
 import { markConsumed, noteBuilder } from "../plpgsql/recording-session";
 import type { TypeNode } from "../types/type-node";
+import type { LeftJoinedBrand, UntrackedJoins } from "./left-joined";
 import { assertSameSetOpKeyOrder } from "./set-op-key-order";
 import type { CteReference } from "./with";
 import { cteRowMeta, isCteReference } from "./with";
@@ -141,52 +142,84 @@ export type SetOpResult<TLeft, TRight> =
 		? { readonly [K in keyof TLeft]: TLeft[K] | TRight[K & keyof TRight] }
 		: never;
 
+/**
+ * Every select stage below takes `TLeftJoined` as its second parameter
+ * (narrow-join-nullability) — defaulted to {@link UntrackedJoins} so every
+ * existing one-argument use (`SelectLimited<Posts>`, a bare core type
+ * import, …) keeps resolving the untracked, fail-safe widening unchanged.
+ * Only {@link SelectLimited} carries {@link LeftJoinedBrand} in its own
+ * shape; every other stage below inherits it through its own intersection
+ * with `SelectLimited` (directly or transitively) — a type parameter only
+ * the brand's owner needs to restate structurally, not nine copies of it.
+ */
 export type SelectLimited<
 	TProjection extends SelectProjection = SelectProjection,
+	TLeftJoined = UntrackedJoins,
 > = {
 	readonly selectQuery: SelectNode;
 	readonly fromTable: FromSource;
 	readonly projectionInput: TProjection;
-} & SetOpCombinators<TProjection>;
+} & SetOpCombinators<TProjection> &
+	LeftJoinedBrand<TLeftJoined>;
 export type SelectOffsetted<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectLimited<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectLimited<TProjection, TLeftJoined>;
 export type SelectOrdered<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectLimited<TProjection> & {
-	limit(count: number): SelectLimitedThenOffset<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectLimited<TProjection, TLeftJoined> & {
+	limit(count: number): SelectLimitedThenOffset<TProjection, TLeftJoined>;
 	/** `offset` without a `limit` is legal SQL and useful on its own. */
-	offset(count: number): SelectOffsetted<TProjection>;
+	offset(count: number): SelectOffsetted<TProjection, TLeftJoined>;
 };
 export type SelectLimitedThenOffset<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectLimited<TProjection> & {
-	offset(count: number): SelectOffsetted<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectLimited<TProjection, TLeftJoined> & {
+	offset(count: number): SelectOffsetted<TProjection, TLeftJoined>;
 };
 /** After `having`: `order by`/`limit`/`offset` still follow, `group by` and a second `having` do not. */
 export type SelectHaving<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectOrdered<TProjection> & {
-	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectOrdered<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectOrdered<TProjection, TLeftJoined> & {
+	orderBy(
+		...terms: ReadonlyArray<OrderTermInput>
+	): SelectOrdered<TProjection, TLeftJoined>;
 };
 export type SelectGrouped<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectHaving<TProjection> & {
+	TLeftJoined = UntrackedJoins,
+> = SelectHaving<TProjection, TLeftJoined> & {
 	/** Filters GROUPS, after aggregation — `where` filters rows before it. */
-	having(condition: Condition): SelectHaving<TProjection>;
+	having(condition: Condition): SelectHaving<TProjection, TLeftJoined>;
 };
 export type SelectFiltered<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectOrdered<TProjection> & {
-	orderBy(...terms: ReadonlyArray<OrderTermInput>): SelectOrdered<TProjection>;
-	groupBy(...terms: ReadonlyArray<Expr>): SelectGrouped<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectOrdered<TProjection, TLeftJoined> & {
+	orderBy(
+		...terms: ReadonlyArray<OrderTermInput>
+	): SelectOrdered<TProjection, TLeftJoined>;
+	groupBy(
+		...terms: ReadonlyArray<Expr>
+	): SelectGrouped<TProjection, TLeftJoined>;
 };
 export type SelectJoinable<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectFiltered<TProjection> & {
-	innerJoin(joined: Table, on: Condition): SelectJoinable<TProjection>;
-	leftJoin(joined: Table, on: Condition): SelectJoinable<TProjection>;
-	where(condition: Condition): SelectFiltered<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectFiltered<TProjection, TLeftJoined> & {
+	innerJoin<TJoined extends Table>(
+		joined: TJoined,
+		on: Condition,
+	): SelectJoinable<TProjection, TLeftJoined>;
+	/** Accumulates `TJoined` into the left-joined set (narrow-join-nullability) — `innerJoin` above takes the same generic but leaves `TLeftJoined` unchanged, since an inner join can never null a row. */
+	leftJoin<TJoined extends Table>(
+		joined: TJoined,
+		on: Condition,
+	): SelectJoinable<TProjection, TLeftJoined | TJoined>;
+	where(condition: Condition): SelectFiltered<TProjection, TLeftJoined>;
 };
 /**
  * What `select()` itself returns: a joinable stage that can still take
@@ -196,9 +229,12 @@ export type SelectJoinable<
  */
 export type SelectDistinctable<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectJoinable<TProjection> & {
-	distinct(): SelectJoinable<TProjection>;
-	distinctOn(...columns: ReadonlyArray<Expr>): SelectJoinable<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectJoinable<TProjection, TLeftJoined> & {
+	distinct(): SelectJoinable<TProjection, TLeftJoined>;
+	distinctOn(
+		...columns: ReadonlyArray<Expr>
+	): SelectJoinable<TProjection, TLeftJoined>;
 };
 
 const tableRefOf = (target: Table): TableRefNode => {
@@ -338,7 +374,10 @@ const assertNoWindowFunction = (
 	}
 };
 
-const makeStages = <TProjection extends SelectProjection>(
+const makeStages = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	query: SelectNode,
 	fromTable: FromSource,
 	projectionInput: TProjection,
@@ -346,7 +385,8 @@ const makeStages = <TProjection extends SelectProjection>(
 	// STAGE TYPES are what hide the ones SQL wouldn't allow next. The
 	// intersection here is what lets `groupBy` return a grouped stage
 	// without a second builder that would have to stay in sync.
-): SelectJoinable<TProjection> & SelectGrouped<TProjection> => {
+): SelectJoinable<TProjection, TLeftJoined> &
+	SelectGrouped<TProjection, TLeftJoined> => {
 	// Every transition below builds its next `SelectNode` via `{ ...query,
 	// … }` and recurses through this same `derive` — the one place that
 	// pairs "this new node was produced" with "the node it was spread from
@@ -354,15 +394,32 @@ const makeStages = <TProjection extends SelectProjection>(
 	// automatically instead of needing its own registration call.
 	const derive = (next: SelectNode) => {
 		noteBuilder(next, query);
-		return makeStages(next, fromTable, projectionInput);
+		return makeStages<TProjection, TLeftJoined>(
+			next,
+			fromTable,
+			projectionInput,
+		);
 	};
 	return {
 		selectQuery: query,
 		fromTable,
 		projectionInput,
 		...setOpCombinators(() => query, projectionInput),
-		innerJoin: (joined, on) => derive(appendJoin(query, "inner", joined, on)),
-		leftJoin: (joined, on) => derive(appendJoin(query, "left", joined, on)),
+		innerJoin: <TJoined extends Table>(joined: TJoined, on: Condition) =>
+			derive(appendJoin(query, "inner", joined, on)),
+		// The runtime object built by `derive` never varies by `TJoined` --
+		// only the DECLARED return type does (the accumulated union,
+		// `TLeftJoined | TJoined`, frozen contract task 1.3). `derive`'s own
+		// signature fixes it at `TLeftJoined` alone, so this is the one spot
+		// that widens the declared type at the boundary (the `columnOriginBrand`/
+		// `makeChainThen` cast-at-boundary precedent) rather than making every
+		// stage builder generic over a union it never actually inspects.
+		leftJoin: <TJoined extends Table>(joined: TJoined, on: Condition) =>
+			derive(appendJoin(query, "left", joined, on)) as SelectJoinable<
+				TProjection,
+				TLeftJoined | TJoined
+			> &
+				SelectGrouped<TProjection, TLeftJoined | TJoined>,
 		where: (condition) => {
 			assertNoWindowFunction("where", [condition.exprNode]);
 			return derive({ ...query, where: condition.exprNode });
@@ -403,20 +460,27 @@ const makeStages = <TProjection extends SelectProjection>(
  * between `select` and the projection, so the chain allows it exactly
  * once, first).
  */
-const makeDistinctableStages = <TProjection extends SelectProjection>(
+const makeDistinctableStages = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	query: SelectNode,
 	fromTable: FromSource,
 	projectionInput: TProjection,
-): SelectDistinctable<TProjection> => {
+): SelectDistinctable<TProjection, TLeftJoined> => {
 	// Same pairing as `makeStages`'s own `derive` (#423): `distinct`/
 	// `distinctOn` are each a transition off `query`, not off whatever
 	// `makeStages` builds from it, so this stage gets its own.
 	const derive = (next: SelectNode) => {
 		noteBuilder(next, query);
-		return makeStages(next, fromTable, projectionInput);
+		return makeStages<TProjection, TLeftJoined>(
+			next,
+			fromTable,
+			projectionInput,
+		);
 	};
 	return {
-		...makeStages(query, fromTable, projectionInput),
+		...makeStages<TProjection, TLeftJoined>(query, fromTable, projectionInput),
 		distinct: () => derive({ ...query, distinct: { distinctKind: "all" } }),
 		distinctOn: (...columns) => {
 			if (columns.length === 0) {
@@ -483,12 +547,16 @@ const resolveProjection = (
  * Starts a `select` query. `select(table)` projects every declared column
  * (an explicit list, not `*`, so `add column` stays deterministic);
  * `select({ alias: expr, … }, table)` projects an object of expressions —
- * `table` is required in that form since it can't be inferred.
+ * `table` is required in that form since it can't be inferred. Starts at
+ * `never` for {@link LeftJoinedBrand}'s own `TLeftJoined` (narrow-join-
+ * nullability, task 1.2) — a fresh statement has left-joined nothing, and
+ * `never | TJoined` is `TJoined`, so `leftJoin`'s own accumulation needs no
+ * special first case.
  */
 export const select = <TProjection extends SelectProjection>(
 	projection: TProjection,
 	from?: FromSource,
-): SelectDistinctable<TProjection> => {
+): SelectDistinctable<TProjection, never> => {
 	const { projectionNode, fromTable } = resolveProjection(projection, from);
 	const query: SelectNode = {
 		queryKind: "select",
@@ -504,7 +572,11 @@ export const select = <TProjection extends SelectProjection>(
 		distinct: null,
 	};
 	noteBuilder(query, null);
-	return makeDistinctableStages(query, fromTable, projection);
+	return makeDistinctableStages<TProjection, never>(
+		query,
+		fromTable,
+		projection,
+	);
 };
 
 /**
@@ -753,6 +825,27 @@ export type NestedReadMarker<
 	};
 };
 
+/**
+ * `subselect: SelectLimited<TProjection>` deliberately takes the bare,
+ * single-argument form (narrow-join-nullability, task 1.4) — `TLeftJoined`
+ * defaults to {@link UntrackedJoins} (`unknown`), so a tracked subselect
+ * passed here is still ACCEPTED (every tracked stage is assignable to the
+ * type top) and its own set is ABSORBED into the untracked default, never
+ * read. This is not a gap this file forgot to close: `jsonArrayFrom`/
+ * `jsonObjectFrom` produce a NEW `Expr`, not a `SelectResult`, so there is
+ * no field-per-column position on this expression's own type for a
+ * narrower nullability to land on even if the set WERE read here — only
+ * `@hejbro/query`'s later `SelectResult<TSub>` recursion (D102 cast+revive)
+ * reads the embedded projection, at which point it is exactly as if the
+ * nested `select()` had started fresh, and narrowing there would first
+ * have to prove which of ITS OWN joins (not this one's outer statement)
+ * were left ones. Reading the outer set here and narrowing on it anyway
+ * would be a lie a nested subselect's own rows never earned. `withCte`'s
+ * CTE body and `defineView`'s view body take the same bare form for the
+ * identical reason: each also produces a new declared shape (a CTE row
+ * environment, a view's own columns) from the inner select, not a
+ * passthrough of the inner stage's own type.
+ */
 const buildSelectExpr =
 	<TMode extends "jsonArray" | "jsonObject">(mode: TMode) =>
 	<TProjection extends SelectProjection>(

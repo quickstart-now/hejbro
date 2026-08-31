@@ -301,6 +301,8 @@ export type {
 export { fnv1aHex } from "./plpgsql/body-hash";
 export type { TriggerSnapshotShape } from "./plpgsql/render-body";
 export { renderFunctionSql, renderTriggerSql } from "./plpgsql/render-body";
+export type { LeftJoinedBrand, UntrackedJoins } from "./query/left-joined";
+export { leftJoinedBrand } from "./query/left-joined";
 export type {
 	DeleteFilterable,
 	DeleteFinal,

@@ -25,10 +25,24 @@ import type { SelectResult } from "./select-result";
  * `update()`/`delete()`'s actual `returning()` return type (group 4's
  * job, same deferral as {@link SelectResult}/`InsertInput`/
  * `UpdateInput`).
+ *
+ * The object-projection branch fixes `TLeftJoined` at `never`, not the
+ * one-argument (untracked) form (narrow-join-nullability, task 3.5) — a
+ * mutation's own set is never "unknown", it is DEFINITIVELY EMPTY:
+ * `InsertNode`/`UpdateNode`/`DeleteNode` (`expr/ast.ts`) carry no field a
+ * join could occupy, `query/mutate.ts` exposes no `.leftJoin`/`.innerJoin`
+ * builder method on any insert/update/delete stage, the chain's own
+ * `leftJoin` (`db/chain.ts`) exists only on the SELECT stage family, and
+ * the renderer (`expr/render-sql.ts`) never emits `USING` or `UPDATE …
+ * FROM` for these statement kinds. This is a premise about today's AST
+ * shape, not an assumption about the DSL surface — a method could be
+ * added carelessly, but a join clause cannot be rendered from a node with
+ * no field to hold one. If mutation join grammar is ever added, this
+ * `never` must be revisited alongside it.
  */
 export type ReturningRow<
 	TTable extends Table,
 	TProjection extends ReturningProjection | undefined = undefined,
 > = TProjection extends ReturningProjection
-	? SelectResult<TProjection>
+	? SelectResult<TProjection, never>
 	: SelectResult<TTable>;

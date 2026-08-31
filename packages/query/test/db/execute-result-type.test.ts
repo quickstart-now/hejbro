@@ -6,7 +6,16 @@ import type {
 	SelectLimited,
 	UpdateFinal,
 } from "@hejbro/core";
-import { bigint, interval, schema, table, text, uuid } from "@hejbro/core";
+// biome-ignore lint/style/useImportType: jsonArrayFrom is used only in a type position below via `typeof jsonArrayFrom<T>` (a real instantiation expression), which requires an actual value import -- `import type` has no runtime binding to reference.
+import {
+	bigint,
+	interval,
+	jsonArrayFrom,
+	schema,
+	table,
+	text,
+	uuid,
+} from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { CompileInput } from "../../src/compile/compile";
 import type { ScopedDb } from "../../src/db/context";
@@ -22,6 +31,13 @@ const posts = table(app, "posts", {
 });
 
 type Posts = typeof posts;
+
+const comments = table(app, "comments", {
+	id: uuid().primaryKey(),
+	body: text().notNull(),
+});
+
+type Comments = typeof comments;
 
 /**
  * A type-only handle on `Db["execute"]`'s own generic signature -- never
@@ -65,7 +81,11 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 
 		// #311: a projected declared column keeps its declared type (mode
 		// 'bigint' here), not the family-wide union. Nullability still
-		// widens -- a left join can null any projected column (#307).
+		// widens here -- #307 is landed (narrow-join-nullability), but only
+		// when ExecuteResult can see the set: this `Stage` uses the bare,
+		// one-argument `SelectLimited`/`InsertFinal` form, so `TLeftJoined`
+		// defaults to untracked and stays widened on purpose (the same
+		// fail-safe default `SelectResult`'s own task 2.4 pins).
 		expectTypeOf<Row>().toEqualTypeOf<{
 			readonly total: bigint | null;
 		}>();
@@ -77,6 +97,41 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 		expectTypeOf<ExecuteRows<QueryNode>>().toEqualTypeOf<
 			ReadonlyArray<Readonly<Record<string, unknown>>>
 		>();
+	});
+});
+
+describe("db.execute infers the left-joined set from the core stage (narrow-join-nullability, task 3.3)", () => {
+	it("no leftJoin at all (never): a notNull projected column narrows to non-null", () => {
+		type Stage = SelectLimited<{ readonly t: Posts["status"] }, never>;
+		type Row = ExecuteRows<Stage>[number];
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("the projected column's own table is left-joined: the field stays nullable", () => {
+		type Stage = SelectLimited<{ readonly t: Posts["status"] }, Posts>;
+		type Row = ExecuteRows<Stage>[number];
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string | null>();
+	});
+});
+
+describe("the untracked boundary holds at a nested read's own subselect (narrow-join-nullability, task 3.4)", () => {
+	it("a nested jsonArrayFrom's own object-projection field stays nullable even though the OUTER statement's left-joined set is the fully-tracked empty set (never) -- if the outer set leaked in, this would WRONGLY narrow", () => {
+		// NestedOrExprResult (select-result.ts) recurses into SelectResult<TSub>
+		// with no second argument at all -- structurally incapable of
+		// consulting the outer TLeftJoined, not merely defaulted to it.
+		// `never` (nothing left-joined at the outer level) is deliberate: a
+		// leak here would read as "tracked, comments is not a member" and
+		// WRONGLY narrow `b` to `string` -- the outer set must never reach
+		// this position at all, tracked-empty or not.
+		type NestedProjection = { readonly b: Comments["body"] };
+		type Stage = SelectLimited<
+			{
+				readonly nested: ReturnType<typeof jsonArrayFrom<NestedProjection>>;
+			},
+			never
+		>;
+		type Row = ExecuteRows<Stage>[number];
+		expectTypeOf<Row["nested"][number]["b"]>().toEqualTypeOf<string | null>();
 	});
 });
 
@@ -95,7 +150,11 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 
 		// #311: a projected declared column keeps its declared type (mode
 		// 'bigint' here), not the family-wide union. Nullability still
-		// widens -- a left join can null any projected column (#307).
+		// widens here -- #307 is landed (narrow-join-nullability), but only
+		// when ExecuteResult can see the set: this `Stage` uses the bare,
+		// one-argument `SelectLimited`/`InsertFinal` form, so `TLeftJoined`
+		// defaults to untracked and stays widened on purpose (the same
+		// fail-safe default `SelectResult`'s own task 2.4 pins).
 		expectTypeOf<Row>().toEqualTypeOf<{
 			readonly total: bigint | null;
 		}>();
@@ -110,13 +169,16 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 		expectTypeOf<ExecuteRows<UpdateStage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
 		>();
-		// object-projection widening (select-result.ts's own FamilyReadType
-		// branch, #311): a projected ColumnRef alone carries no notNull
-		// information, so even posts.id (declared primaryKey/notNull)
-		// widens to `| null` here -- the same honest widening the select-
-		// side object-projection test above already covers.
+		// A mutation's own left-joined set is always `never` (narrow-join-
+		// nullability, task 3.5): ReturningRow's object-projection branch
+		// fixes it there rather than taking the one-argument (untracked)
+		// form, since a mutation has no join grammar to carry an unknown
+		// set at all. `posts.id` (declared primaryKey/notNull) narrows to
+		// non-null here -- this assertion changing from `string | null` is
+		// this task's own point, not a regression (confirmed red before
+		// this fix landed, with that exact `string | null` on the left).
 		expectTypeOf<ExecuteRows<DeleteStage>[number]>().toEqualTypeOf<{
-			readonly id: string | null;
+			readonly id: string;
 		}>();
 	});
 });

@@ -23,6 +23,7 @@ import type {
 	SetOpNode,
 	SetOpStage,
 	Table,
+	UntrackedJoins,
 	UpdateFilterable,
 	UpdateFinal,
 	UpdateReturnable,
@@ -76,68 +77,137 @@ export type ChainRun = <T>(
  * equivalent core statement (task 7.3), zero driver interaction regardless
  * of how many stages were chained onto it.
  */
+/**
+ * Every chain select stage below takes `TLeftJoined` as its second
+ * parameter, mirroring core's own nine select stage types exactly
+ * (narrow-join-nullability) — defaulted to `UntrackedJoins` so an
+ * existing one-argument use of any of these names keeps resolving the
+ * untracked, fail-safe widening unchanged.
+ */
 export type SelectChainLimited<
 	TProjection extends SelectProjection = SelectProjection,
-> = PromiseLike<ReadonlyArray<SelectResult<TProjection>>> & {
+	TLeftJoined = UntrackedJoins,
+> = PromiseLike<ReadonlyArray<SelectResult<TProjection, TLeftJoined>>> & {
 	compile(): CompileResult;
 	/** The underlying statement — runtime surface a combinator on ANOTHER chain reads to take this side as a branch. */
 	readonly selectQuery: SelectNode;
-} & SetOpChainCombinators<SelectResult<TProjection>>;
+} & SetOpChainCombinators<SelectResult<TProjection, TLeftJoined>>;
 
 export type SelectChainOrdered<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectChainLimited<TProjection> & {
-	limit(count: number): SelectChainLimitedThenOffset<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectChainLimited<TProjection, TLeftJoined> & {
+	limit(count: number): SelectChainLimitedThenOffset<TProjection, TLeftJoined>;
 	/** `offset` without a `limit` is legal SQL and useful on its own. */
-	offset(count: number): SelectChainLimited<TProjection>;
+	offset(count: number): SelectChainLimited<TProjection, TLeftJoined>;
 };
 
 export type SelectChainLimitedThenOffset<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectChainLimited<TProjection> & {
-	offset(count: number): SelectChainLimited<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectChainLimited<TProjection, TLeftJoined> & {
+	offset(count: number): SelectChainLimited<TProjection, TLeftJoined>;
 };
 
 /** After `having`: `order by`/`limit`/`offset` still follow, `group by` and a second `having` do not. */
 export type SelectChainHaving<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectChainOrdered<TProjection> & {
+	TLeftJoined = UntrackedJoins,
+> = SelectChainOrdered<TProjection, TLeftJoined> & {
 	orderBy(
 		...terms: ReadonlyArray<OrderTermInput>
-	): SelectChainOrdered<TProjection>;
+	): SelectChainOrdered<TProjection, TLeftJoined>;
 };
 
 export type SelectChainGrouped<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectChainHaving<TProjection> & {
+	TLeftJoined = UntrackedJoins,
+> = SelectChainHaving<TProjection, TLeftJoined> & {
 	/** Filters GROUPS, after aggregation — `where` filters rows before it. */
-	having(condition: Condition): SelectChainHaving<TProjection>;
+	having(condition: Condition): SelectChainHaving<TProjection, TLeftJoined>;
 };
 
 export type SelectChainFiltered<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectChainOrdered<TProjection> & {
+	TLeftJoined = UntrackedJoins,
+> = SelectChainOrdered<TProjection, TLeftJoined> & {
 	orderBy(
 		...terms: ReadonlyArray<OrderTermInput>
-	): SelectChainOrdered<TProjection>;
-	groupBy(...terms: ReadonlyArray<Expr>): SelectChainGrouped<TProjection>;
+	): SelectChainOrdered<TProjection, TLeftJoined>;
+	groupBy(
+		...terms: ReadonlyArray<Expr>
+	): SelectChainGrouped<TProjection, TLeftJoined>;
 };
 
 export type SelectChainJoinable<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectChainFiltered<TProjection> & {
-	innerJoin(joined: Table, on: Condition): SelectChainJoinable<TProjection>;
-	leftJoin(joined: Table, on: Condition): SelectChainJoinable<TProjection>;
-	where(condition: Condition): SelectChainFiltered<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectChainFiltered<TProjection, TLeftJoined> & {
+	innerJoin<TJoined extends Table>(
+		joined: TJoined,
+		on: Condition,
+	): SelectChainJoinable<TProjection, TLeftJoined>;
+	/** Accumulates `TJoined` into the left-joined set (narrow-join-nullability), mirroring core's own `leftJoin` — `innerJoin` above takes the same generic but leaves `TLeftJoined` unchanged. */
+	leftJoin<TJoined extends Table>(
+		joined: TJoined,
+		on: Condition,
+	): SelectChainJoinable<TProjection, TLeftJoined | TJoined>;
+	where(condition: Condition): SelectChainFiltered<TProjection, TLeftJoined>;
 };
 
 /** What `db.select(...)` returns: joinable, and still able to take `distinct` — which SQL allows only between `select` and the projection, so the chain allows it first and exactly once (#437). */
 export type SelectChainDistinctable<
 	TProjection extends SelectProjection = SelectProjection,
-> = SelectChainJoinable<TProjection> & {
-	distinct(): SelectChainJoinable<TProjection>;
-	distinctOn(...columns: ReadonlyArray<Expr>): SelectChainJoinable<TProjection>;
+	TLeftJoined = UntrackedJoins,
+> = SelectChainJoinable<TProjection, TLeftJoined> & {
+	distinct(): SelectChainJoinable<TProjection, TLeftJoined>;
+	distinctOn(
+		...columns: ReadonlyArray<Expr>
+	): SelectChainJoinable<TProjection, TLeftJoined>;
 };
+
+/**
+ * Confirmed and recorded, not merely assumed (narrow-join-nullability,
+ * task 3.6 [design]): no chain member drops the left-joined set silently.
+ *
+ * - Every select stage transition (`where`/`orderBy`/`groupBy`/`having`/
+ *   `limit`/`offset`/`distinct`/`distinctOn`) forwards the SAME
+ *   `TLeftJoined` its own factory function received (`chain-types.test.ts`,
+ *   one assertion per transition, each independently mutation-verified) —
+ *   only `leftJoin` accumulates, and only `innerJoin` is exempted from
+ *   accumulation on purpose.
+ * - A set-op combinator (`union`/`intersect`/`except`, and their `All`
+ *   variants) resolves EACH branch's row type first — `TRow` in
+ *   {@link SetOpChainCombinators} is `SelectResult<TProjection,
+ *   TLeftJoined>`, already computed by the time the combinator runs — and
+ *   {@link SetOpResult} unions the two RESOLVED row types field-by-field.
+ *   There is no path from one branch's own `TLeftJoined` to the other's
+ *   fields, so two branches with different left-joined sets combine
+ *   correctly (a field non-null on one side and nullable on the other
+ *   unions to nullable, never the reverse) — this is the one place in the
+ *   whole change where a mistake would narrow instead of widen, which is
+ *   why it carries its own dedicated test rather than relying on the
+ *   per-stage ones above.
+ * - `related()` is untracked by decision, not by accident (add-relational-
+ *   reads, predates this change): its own declared return type merges
+ *   {@link SelectResult}<TTable> (the whole-table branch, which never
+ *   reads `TLeftJoined` at all, tracked or not) with `RelatedResult`'s own
+ *   independently-computed nested-read merge — neither half has anywhere
+ *   for this statement's own left-joined set to reach.
+ * - A caveat found while proving the above, not fixed by it: mutating an
+ *   internal chain FACTORY function's own signature (e.g. dropping
+ *   `TLeftJoined` from `makeJoinableChain`'s generic parameters) compiles
+ *   clean and is caught by no type test, because `createChainApi`'s own
+ *   `select` member ends in `as ChainApi["select"]` — a boundary cast
+ *   this package already relied on before this change, for a generic-
+ *   covariance mismatch unrelated to left-joined tracking (measured:
+ *   removing the cast surfaces the SAME mismatch with or without any
+ *   left-joined mutation applied). Chain TYPE correctness is what the
+ *   stage types above lock; the factory bodies that build the matching
+ *   runtime objects are trusted, not independently verified past that
+ *   cast — an honest limitation of this test suite, not a defect this
+ *   change introduced or is positioned to close.
+ */
 
 /** Any core builder stage `compile()`/`executeOn` already accept — every select/insert/update/delete stage structurally matches one of `CompileInput`'s `*Query` wrapper shapes. */
 type ChainStatement = CompileInput;
@@ -308,27 +378,37 @@ const chainSetOpCombinators = <TRow>(
 	};
 };
 
-const makeLimitedChain = <TProjection extends SelectProjection>(
+const makeLimitedChain = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	run: ChainRun,
-	stage: SelectLimited<TProjection>,
+	stage: SelectLimited<TProjection, TLeftJoined>,
 	tables: Declarations["tables"],
-): SelectChainLimited<TProjection> => ({
+): SelectChainLimited<TProjection, TLeftJoined> => ({
 	// the underlying statement rides along (runtime-only surface) so a
 	// set-op combinator on ANOTHER chain can read this side as a branch.
 	selectQuery: stage.selectQuery,
-	...makeChainTerminal<SelectResult<TProjection>>(run, stage, tables),
-	...chainSetOpCombinators<SelectResult<TProjection>>(
+	...makeChainTerminal<SelectResult<TProjection, TLeftJoined>>(
+		run,
+		stage,
+		tables,
+	),
+	...chainSetOpCombinators<SelectResult<TProjection, TLeftJoined>>(
 		run,
 		() => stage.selectQuery,
 		tables,
 	),
 });
 
-const makeOrderedChain = <TProjection extends SelectProjection>(
+const makeOrderedChain = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	run: ChainRun,
-	stage: SelectOrdered<TProjection>,
+	stage: SelectOrdered<TProjection, TLeftJoined>,
 	tables: Declarations["tables"],
-): SelectChainOrdered<TProjection> => ({
+): SelectChainOrdered<TProjection, TLeftJoined> => ({
 	...makeLimitedChain(run, stage, tables),
 	limit: (count) => ({
 		...makeLimitedChain(run, stage.limit(count), tables),
@@ -338,53 +418,68 @@ const makeOrderedChain = <TProjection extends SelectProjection>(
 	offset: (count) => makeLimitedChain(run, stage.offset(count), tables),
 });
 
-const makeFilteredChain = <TProjection extends SelectProjection>(
+const makeFilteredChain = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	run: ChainRun,
-	stage: SelectFiltered<TProjection>,
+	stage: SelectFiltered<TProjection, TLeftJoined>,
 	tables: Declarations["tables"],
-): SelectChainFiltered<TProjection> => ({
+): SelectChainFiltered<TProjection, TLeftJoined> => ({
 	...makeOrderedChain(run, stage, tables),
 	orderBy: (...terms) => makeOrderedChain(run, stage.orderBy(...terms), tables),
 	groupBy: (...terms) => makeGroupedChain(run, stage.groupBy(...terms), tables),
 });
 
-const makeHavingChain = <TProjection extends SelectProjection>(
+const makeHavingChain = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	run: ChainRun,
-	stage: SelectHaving<TProjection>,
+	stage: SelectHaving<TProjection, TLeftJoined>,
 	tables: Declarations["tables"],
-): SelectChainHaving<TProjection> => ({
+): SelectChainHaving<TProjection, TLeftJoined> => ({
 	...makeOrderedChain(run, stage, tables),
 	orderBy: (...terms) => makeOrderedChain(run, stage.orderBy(...terms), tables),
 });
 
-const makeGroupedChain = <TProjection extends SelectProjection>(
+const makeGroupedChain = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	run: ChainRun,
-	stage: SelectGrouped<TProjection>,
+	stage: SelectGrouped<TProjection, TLeftJoined>,
 	tables: Declarations["tables"],
-): SelectChainGrouped<TProjection> => ({
+): SelectChainGrouped<TProjection, TLeftJoined> => ({
 	...makeOrderedChain(run, stage, tables),
 	orderBy: (...terms) => makeOrderedChain(run, stage.orderBy(...terms), tables),
 	having: (condition) => makeHavingChain(run, stage.having(condition), tables),
 });
 
-const makeJoinableChain = <TProjection extends SelectProjection>(
+const makeJoinableChain = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	run: ChainRun,
-	stage: SelectJoinable<TProjection>,
+	stage: SelectJoinable<TProjection, TLeftJoined>,
 	tables: Declarations["tables"],
-): SelectChainJoinable<TProjection> => ({
+): SelectChainJoinable<TProjection, TLeftJoined> => ({
 	...makeFilteredChain(run, stage, tables),
-	innerJoin: (joined, on) =>
+	innerJoin: <TJoined extends Table>(joined: TJoined, on: Condition) =>
 		makeJoinableChain(run, stage.innerJoin(joined, on), tables),
-	leftJoin: (joined, on) =>
+	leftJoin: <TJoined extends Table>(joined: TJoined, on: Condition) =>
 		makeJoinableChain(run, stage.leftJoin(joined, on), tables),
 	where: (condition) => makeFilteredChain(run, stage.where(condition), tables),
 });
 
-const makeDistinctableChain = <TProjection extends SelectProjection>(
+const makeDistinctableChain = <
+	TProjection extends SelectProjection,
+	TLeftJoined = UntrackedJoins,
+>(
 	run: ChainRun,
-	stage: SelectDistinctable<TProjection>,
+	stage: SelectDistinctable<TProjection, TLeftJoined>,
 	tables: Declarations["tables"],
-): SelectChainDistinctable<TProjection> => ({
+): SelectChainDistinctable<TProjection, TLeftJoined> => ({
 	...makeJoinableChain(run, stage, tables),
 	distinct: () => makeJoinableChain(run, stage.distinct(), tables),
 	distinctOn: (...columns) =>
@@ -731,7 +826,7 @@ export type ChainApi<TSchema = Record<string, unknown>> = {
 	select<TProjection extends SelectProjection>(
 		projection: TProjection,
 		from?: Table,
-	): SelectChainDistinctable<TProjection> &
+	): SelectChainDistinctable<TProjection, never> &
 		(TProjection extends Table
 			? RelatedCapable<TSchema, TProjection>
 			: unknown);
