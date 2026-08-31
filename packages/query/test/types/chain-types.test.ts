@@ -3,12 +3,15 @@ import type {
 	InsertFinal,
 	IntervalValue,
 	SelectLimited,
+	SelectProjection,
+	Table,
 	UpdateFinal,
 } from "@hejbro/core";
 import { bigint, interval, schema, table, text, uuid } from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { CompileInput } from "../../src/compile/compile";
 import type {
+	ChainApi,
 	DeleteChainFilterable,
 	DeleteChainFinal,
 	InsertChainFinal,
@@ -32,8 +35,69 @@ const posts = table(app, "posts", {
 
 type Posts = typeof posts;
 
+const comments = table(app, "comments", {
+	id: uuid().primaryKey(),
+	postId: uuid().notNull(),
+	body: text().notNull(),
+});
+
 /** A minimal schema module (task 1.3, extend-query-runtime) -- only used to instantiate `db()`'s `TSchema` generic below, never called at runtime. */
 const appModule = { posts };
+
+/**
+ * A type-only handle on `ChainApi["select"]`'s own generic signature
+ * (narrow-join-nullability, task 3.1) -- never assigned, never called at
+ * runtime, the same `declare const` + instantiation-expression technique
+ * `txExecute` below already establishes. `SelectRow` extracts the awaited
+ * row for a given projection WITHOUT calling `.select()` at runtime (an
+ * actual call would need real arguments and a real `dbHandle`, neither of
+ * which exist here) -- `typeof chainSelect<TProjection>` is a pure type
+ * operation (TS 4.7+ instantiation expression), fully erased.
+ */
+declare const chainSelect: ChainApi<typeof appModule>["select"];
+type SelectRow<TProjection extends SelectProjection> = Awaited<
+	ReturnType<typeof chainSelect<TProjection>>
+>[number];
+
+/**
+ * A type-only handle on the JOINABLE chain stage a two-table projection
+ * produces (task 3.2) -- `declare const`, never assigned or called; only
+ * ever read through `typeof joinable.leftJoin<TJoined>`/`typeof
+ * joinable.innerJoin<TJoined>` instantiation expressions inside a `type`
+ * alias below, which erase completely (referencing `joinable` itself
+ * outside a type position would throw at runtime, since `declare const`
+ * produces no actual binding).
+ */
+declare const joinable: ReturnType<
+	typeof chainSelect<{
+		readonly fromPosts: typeof posts.status;
+		readonly fromComments: typeof comments.body;
+	}>
+>;
+type LeftJoinedChain<TJoined extends Table> = ReturnType<
+	typeof joinable.leftJoin<TJoined>
+>;
+type InnerJoinedChain<TJoined extends Table> = ReturnType<
+	typeof joinable.innerJoin<TJoined>
+>;
+
+/**
+ * A chain stage typed at the DEFAULT (untracked) `TLeftJoined` -- unlike
+ * `joinable` above, which starts at `never` via `chainSelect`'s own
+ * inference. `never | TJoined` and a buggy assignment mutant's `TJoined`
+ * alone are the SAME type, so `joinable`'s own leftJoin test above cannot
+ * tell a union accumulation apart from an assignment one (the exact G1
+ * core-level trap, reproduced and confirmed at this layer too before this
+ * test was added -- see the group's own completion report). This one
+ * starts already-untracked instead, where the two diverge.
+ */
+declare const untrackedJoinable: SelectChainJoinable<{
+	readonly fromPosts: typeof posts.status;
+	readonly fromComments: typeof comments.body;
+}>;
+type UntrackedThenLeftJoined<TJoined extends Table> = ReturnType<
+	typeof untrackedJoinable.leftJoin<TJoined>
+>;
 
 /** A type-only handle on `Tx["execute"]`'s own generic signature (task 3.1) -- never assigned, never called at runtime, same technique `execute-result-type.test.ts` uses for `Db["execute"]`. */
 declare const txExecute: Tx["execute"];
@@ -137,6 +201,32 @@ describe("chain await types equal execute types for select and returning mutatio
  * type-only assertions: the runtime path was always able to carry the
  * fragment, only the parameter types refused it.
  */
+describe("db.select's chain threads the left-joined set (narrow-join-nullability, task 3.1)", () => {
+	it("db.select(...) starts at never -- a direct notNull column narrows with no join at all", () => {
+		type Row = SelectRow<{ readonly t: typeof posts.status }>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+});
+
+describe("the chain's leftJoin accumulates the joined table, innerJoin does not (narrow-join-nullability, task 3.2)", () => {
+	it("after leftJoin(comments), the comments-sourced field is nullable while the posts-sourced field stays narrow", () => {
+		type Row = Awaited<LeftJoinedChain<typeof comments>>[number];
+		expectTypeOf<Row["fromPosts"]>().toEqualTypeOf<string>();
+		expectTypeOf<Row["fromComments"]>().toEqualTypeOf<string | null>();
+	});
+
+	it("innerJoin(comments) narrows both -- it never accumulates into the left-joined set", () => {
+		type Row = Awaited<InnerJoinedChain<typeof comments>>[number];
+		expectTypeOf<Row["fromPosts"]>().toEqualTypeOf<string>();
+		expectTypeOf<Row["fromComments"]>().toEqualTypeOf<string>();
+	});
+
+	it("a chain stage typed at the untracked default stays untracked after leftJoin (chain-level ratchet)", () => {
+		type Row = Awaited<UntrackedThenLeftJoined<typeof comments>>[number];
+		expectTypeOf<Row["fromPosts"]>().toEqualTypeOf<string | null>();
+	});
+});
+
 describe("sql fragments are conditions everywhere the chain takes one (#386)", () => {
 	it("type-checks in select where, join on, update where and delete where", () => {
 		// Assignability, in the direction that matters: a fragment goes INTO
