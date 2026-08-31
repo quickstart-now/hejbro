@@ -125,11 +125,16 @@ const committedReadme = () => {
 			stdio: ["ignore", "pipe", "pipe"],
 		}).toString();
 	} catch (error) {
-		const reason = error instanceof Error ? error.message : String(error);
 		throw new Error(
-			`update-crap-readme: cannot read README.md at HEAD (${reason.trim()}) -- the committed README is the baseline (#574); run inside the repository with README.md committed.`,
+			`update-crap-readme: cannot read README.md at HEAD (${failureReason(error)}) -- the committed README is the baseline (#574); run inside the repository with README.md committed.`,
 		);
 	}
+};
+const failureReason = (error) => {
+	if (error instanceof Error) {
+		return error.message.trim();
+	}
+	return String(error).trim();
 };
 const previous = parsePreviousBlock(committedReadme());
 const numbersUnchanged =
