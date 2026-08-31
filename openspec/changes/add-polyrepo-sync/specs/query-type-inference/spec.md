@@ -11,8 +11,8 @@ A schema module written for a repository that queries a schema it does
 not own is not such an artifact: it declares runtime values, and query
 types are inferred from those values exactly as they are inferred from
 hand-written declarations. What that module may contain, when it is
-written, and how its staleness is detected are stated by the capability
-that owns it.
+written, and how its staleness is detected are stated by the
+`schema-manifest` and `schema-sync` capabilities.
 
 #### Scenario: Declaration edit is immediately visible
 - **WHEN** a declared column's type changes in the schema source

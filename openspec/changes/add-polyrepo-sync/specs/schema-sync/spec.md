@@ -108,6 +108,34 @@ enum column types as its declared values rather than as a string.
 - **WHEN** an enum column is projected through a synced module
 - **THEN** its type is the union of the declared values
 
+### Requirement: A synced module carries tables and enums, not functions
+A synced module SHALL carry the schema's tables and the enums its
+columns use. Function declarations SHALL NOT be emitted in this version,
+so a consumer has no typed function surface from a synced schema.
+
+Their export names travel in the manifest even so, which is what lets a
+later version emit them without moving the manifest format — and moving
+that format is the expensive event, because a reader that meets a
+format higher than it knows refuses.
+
+#### Scenario: A synced module emits no function declarations
+- **WHEN** a schema declaring functions is synced
+- **THEN** the module carries its tables and enums, and no function
+  declaration
+
+### Requirement: A reference to a table the schema does not own has no relation
+A foreign key whose target is a table the owning repository declares as
+pre-existing rather than managing SHALL produce no relation key in a
+synced module, because the target is not in the manifest to be
+reconstructed. The columns and the constraint are unaffected; only the
+derived relation is absent.
+
+#### Scenario: A relation to an unmanaged target is absent
+- **WHEN** a table references a pre-existing table the schema does not
+  manage, and the schema is synced
+- **THEN** the referencing column is present and typed, and no relation
+  key is derived for that edge
+
 ### Requirement: Type brands do not cross the boundary
 A `$type` brand narrows a column's visible type in the declaring
 repository only. A manifest SHALL NOT carry brand information, and a
@@ -150,8 +178,11 @@ SHALL leave the existing rejection in force.
 ### Requirement: A synced module carries its freshness stamp as a value
 The module SHALL export the identity of the manifest row it was made
 from, as a value, so that a reader obtains it by importing the module
-rather than by reading the module's source. Any human-readable marking
-in the file is in addition to that value, never instead of it.
+rather than by reading the module's source. That identity is the
+snapshot hash the migration recorded — a value computed when the
+migration was generated, carried through the manifest row, and compared
+as a string. Any human-readable marking in the file is in addition to
+that value, never instead of it.
 
 #### Scenario: The stamp is importable
 - **WHEN** a synced module is imported
@@ -184,12 +215,13 @@ between them. It SHALL NOT name a cause it did not observe.
   nothing about why the schema moved
 
 ### Requirement: Each way a manifest can fail a reader is named separately
-A reader of a manifest meets four distinct situations, and SHALL report
-each with its own code and its own remedy. Three of them are failures
+A reader of a manifest meets five distinct situations, and SHALL report
+each with its own code and its own remedy. Four of them are failures
 this requirement owns: the database has no manifest table; the table
-exists but holds no row; and the table holds rows but none matches the
-module's stamp. The fourth — a matching row with newer rows after it —
-is the counted distance owned by the requirement on judging freshness by
+exists but holds no row; the table holds rows but none matches the
+module's stamp; and the newest row declares a manifest format higher
+than the reader knows. The fifth — a matching row with newer rows after it — is
+the counted distance owned by the requirement on judging freshness by
 comparison.
 
 Each demands a different action, which is why one code cannot serve
@@ -198,9 +230,12 @@ repository. An empty table means it was enabled and no migration has
 been applied since. An unmatched stamp means the module was made from a
 history this database does not have — a different database, or one whose
 manifest rows were removed — and re-syncing is a decision, not a repair.
-A database that has never carried a manifest is not a stale one, and
-reporting it as "behind" would send a reader to re-sync against a
-database that has nothing to give.
+A manifest format higher than the reader knows means the reader is the
+older version of hejbro, and the remedy is to change the tool, not the
+schema. A database
+that has never carried a manifest is not a stale one, and reporting it
+as "behind" would send a reader to re-sync against a database that has
+nothing to give.
 
 #### Scenario: A database with no manifest table says so
 - **WHEN** the freshness check or `sync` runs against a database with no
@@ -218,10 +253,48 @@ database that has nothing to give.
 - **THEN** it fails with a code distinct from a counted distance,
   because no distance can be computed
 
-#### Scenario: The four codes are four
+#### Scenario: The five codes are five
 - **WHEN** the same reader meets an absent table, an empty table, an
-  unmatched stamp and a matched stamp with newer rows after it
-- **THEN** it reports four different codes
+  unmatched stamp, a manifest format higher than it knows, and a matched
+  stamp with newer rows after it
+- **THEN** it reports five different codes
+
+### Requirement: A manifest format higher than the reader knows is refused
+Format skew is asymmetric, because the manifest format only ever gains
+fields. A reader that meets a manifest format **higher** than it knows
+SHALL refuse with its own coded error, naming the format it found, the
+format it knows, and the remedy — a newer hejbro, not a re-sync and not
+a schema change. A reader that meets a **lower** format SHALL read the
+row and treat the facts that format does not carry as absent, exactly as
+it treats any fact a manifest does not hold.
+
+Refusing downward as well would couple the two repositories in the wrong
+direction: every consumer upgrading hejbro would require the owning
+repository to regenerate a migration before syncing again, for a format
+whose changes are additions the reader can simply not find.
+
+The two format values stay independent. A reader decides on
+`manifest_format` from the row's own column, before parsing the payload,
+so that a payload it cannot understand is never interpreted; the
+embedded snapshot's own version is then governed by the snapshot
+reader's rules, which are its own.
+
+#### Scenario: A higher manifest format is refused
+- **WHEN** the newest manifest row declares a manifest format higher
+  than the reader knows
+- **THEN** the reader fails with a coded error naming both formats and
+  pointing at the tool version, and does not parse the payload
+
+#### Scenario: A lower manifest format is read
+- **WHEN** the newest manifest row declares a manifest format lower than
+  the reader knows
+- **THEN** the reader reads it, and the facts that format does not carry
+  are absent rather than an error
+
+#### Scenario: Format skew is not reported as staleness
+- **WHEN** a reader meets a manifest format it does not know
+- **THEN** it does not report the module as behind, and does not advise
+  re-syncing
 
 ### Requirement: The command can check without writing
 `sync` SHALL accept a mode that performs the freshness comparison and

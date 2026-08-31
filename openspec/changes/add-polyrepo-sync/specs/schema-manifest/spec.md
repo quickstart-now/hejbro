@@ -94,12 +94,43 @@ migration was applied first.
 
 ### Requirement: A manifest row carries what a database cannot be asked
 A manifest row SHALL carry the snapshot of the schema as of that
-migration, plus the facts that are not recoverable from the database or
-from the snapshot. Those facts are exactly five, and each is carried:
-the numeric mode of a numeric column, whether an array column's elements
-are constrained non-null, the TypeScript key of each column, the schema
-module's export name for each table, and the role names the schema
-declares in its grants and policies.
+migration, plus the declaration-time choices a consuming repository's
+type layer needs that are recoverable from neither the database nor the
+snapshot. Those choices are: **a column's numeric mode**, **whether an
+array column's elements are constrained non-null**, **a column's
+TypeScript key**, **the name each declaration was exported under** —
+for tables, because a reverse relation key is that name, and for
+functions, because a typed function call is keyed by it — and **the role
+names the schema declares in its grants and policies**. The export names
+of views, enums, schemas and grants are not carried, because none of
+them appears in a consuming repository's types.
+
+A declaration that was never a module export has no export name to
+carry: a function synthesized as part of a trigger definition is in the
+snapshot but was never exported, so nothing downstream can offer it as
+something the owning repository itself has.
+
+A function's export name is carried even though no reader emits function
+declarations yet. Carrying it now costs one entry in a map that is
+already being built; adding it later would move the manifest format, and
+a reader that meets a format higher than it knows refuses — so the cheap
+moment to carry a fact is before anything depends on not having it.
+
+Four kinds of declaration-time information are deliberately outside the
+set, each for its own reason: a column's declared length, precision and
+scale reach the snapshot through the type, so they are recoverable; the
+read type of a date, timestamp or serial column is fixed by its type
+rather than chosen, so there is nothing to record; the export names of
+views, enums, schemas and grants never appear in a consuming
+repository's types; and a relation key cannot be named by hand, so there
+is no alias to carry.
+
+One declaration-time choice is deliberately not carried. A `$type` brand
+leaves nothing readable where the migration is generated, since it
+changes a type and no value, and the TypeScript type it names does not
+exist in a consuming repository at all. Its absence is a contract,
+stated by the requirement that brands do not cross the boundary, not an
+omission.
 
 A row SHALL also carry two version numbers as separate values — the
 format of the manifest itself and the format of the snapshot it embeds —
@@ -108,13 +139,24 @@ apart would misjudge one when the other changed.
 
 A row SHALL be self-contained: reading it SHALL require no other row.
 
-#### Scenario: The five facts survive the round trip
+#### Scenario: A brand is not among the carried facts
+- **WHEN** a schema declaring a `$type` brand is emitted as a manifest
+  row
+- **THEN** the row carries no brand information, and the five carried
+  facts are unaffected
+
+#### Scenario: The carried choices survive the round trip
 - **WHEN** a schema declaring a numeric column with a non-default mode,
   an array column with non-null elements, columns whose TypeScript keys
-  differ from their SQL names, tables exported under names that differ
-  from their SQL names, and roles named in grants and policies is
-  emitted as a manifest row and read back
-- **THEN** all five facts are recovered exactly as declared
+  differ from their SQL names, tables and functions exported under names
+  that differ from their SQL names, and roles named in grants and
+  policies is emitted as a manifest row and read back
+- **THEN** every one of those choices is recovered exactly as declared
+
+#### Scenario: A synthesized trigger function carries no export name
+- **WHEN** a schema whose only function declarations come from trigger
+  definitions is emitted as a manifest row
+- **THEN** the row carries no export name for them
 
 #### Scenario: The two format versions are separate
 - **WHEN** a manifest row is read

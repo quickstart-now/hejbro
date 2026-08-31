@@ -27,11 +27,14 @@ or from both:
   `toSnakeCase` (`table.ts:192`) is one-way, so the SQL name cannot be
   turned back into it. Without it **every result row comes back with
   the wrong keys**.
-- **the schema module's export name for each table** — the reverse
-  relation key is `keyof TSchema`
-  (`packages/query/src/types/relations.ts:67-79`), and the loader
-  discards those names (`packages/cli/src/loader.ts:159-164`,
-  `Object.values`).
+- **the name each declaration was exported under** — a reverse relation
+  key is `keyof TSchema` (`packages/query/src/types/relations.ts:67-79`)
+  and a typed function call is keyed "exactly to the declarations
+  record's own export names" (`packages/query/src/db/fn-types.ts:136-137`),
+  yet the loader discards those names
+  (`packages/cli/src/loader.ts:159-164`, `Object.values`). Views, enums,
+  schemas and grants need no export name: none of them reaches a
+  consumer's types.
 - **role names** — the `db.as` whitelist is a union of four sources
   (`packages/query/src/db/db.ts:152-163`); a consumer holds no `grant`
   and no policy declaration, so two of the four are empty and every
@@ -334,7 +337,8 @@ demonstrated elsewhere.
    whether the payload column is `jsonb` (queryable by plain SQL —
    the owner's stated diagnostic requirement) or `text` (byte-preserving,
    required only if the design re-hashes the payload itself). The two
-   are mutually exclusive.
+   are mutually exclusive; settled as `text`, for the reason recorded
+   under Known limits.
 3. How the payload is quoted inside the emitted SQL. Core's only helper
    doubles single quotes (`packages/core/src/sql/literal.ts:2-3`), which
    leaves a backslash in the payload at the mercy of a server with
@@ -347,9 +351,17 @@ demonstrated elsewhere.
    unknown banner line is ignored or refused by today's parser.
 5. The refusal code for a synced module reaching `generate`, and which
    of the two candidate points owns it (single chokepoint).
-6. The three freshness codes and their remedies, including whether the
+6. The five freshness codes and their remedies, including whether the
    "no row yet" remedy prints the insert statement the baseline file
-   already contains.
+   already contains, and how the two format-skew directions are named.
+7. How a foreign key whose target is outside the manifest is emitted —
+   a schema that references a table it declares as pre-existing has an
+   edge whose other end the manifest does not contain. The leading
+   candidate keeps the column and omits only the derived relation.
+8. Which row a stamp matches when more than one row carries the same
+   snapshot hash — a schema reverted and then restored produces exactly
+   that. The leading candidate is the newest such row, which makes the
+   counted distance the smallest true one.
 7. The upper bound on what a drift failure's text may assert. What is
    detected is a hash mismatch and a row distance; the text may say
    that and nothing more — never a cause it did not observe.
@@ -464,6 +476,33 @@ scenarios that need a server — a chain applied from a later migration,
 a distance counted across rows applied within the same second — are
 paired here with the shape assertions that stand in the default run.
 
+## Known limits
+
+One is accepted rather than defended against, because the defense would
+cost more than the failure.
+
+- **A naive apply tool that splits on semicolons can mis-split the
+  dollar-quoted payload.** Tools that parse SQL — psql included — do not,
+  and psql is what the witness exercises. Working around the naive case
+  would mean giving up dollar quoting, which is the thing that makes the
+  payload safe to embed in the first place.
+
+The payload column is `text`, not `jsonb`, for one reason: `jsonb` does
+not preserve key order, so the stored row would stop being the snapshot
+bytes while `snapshot_hash` went on being the snapshot's hash — a row
+carrying the hash of something it does not contain. Diagnosing a stored
+manifest in plain SQL costs one `::jsonb` cast and is otherwise
+unaffected.
+
+The manifest table is invisible to `check`: that command compares
+declared schemas only, so an undeclared schema and everything in it is
+never reported as drift. That invisibility is a consequence of a choice,
+not a property of the name — **the manifest table is deliberately not
+declared through the DSL.** Declaring it would put its schema into the
+declared set, and everything else that ever appears in that schema would
+begin reporting as unmanaged. Anyone converting the bootstrap from
+rendered SQL into declarations is changing this outcome too.
+
 ## Out of scope
 
 - **Carrying `$type` brands across the boundary** (#576) — the
@@ -476,6 +515,11 @@ paired here with the shape assertions that stand in the default run.
 - **Implementing `--schema`.** It is parsed and refused as reserved, so
   the flag's meaning is fixed now and its behavior can arrive without a
   surface change.
+- **Emitting function declarations into a synced module** (#587). The
+  approved consumer surface is the type layer of tables; a typed function
+  surface is a new scope, not a detail of this one. The manifest carries
+  function export names anyway, so that version needs no format change —
+  which is exactly why the fact is carried now rather than later.
 - **Applying migrations** (D12), including any command that would write
   the manifest row itself.
 - **A version-pin flag** (`--at`). Owner-settled: pinning would make a

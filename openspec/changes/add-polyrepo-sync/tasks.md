@@ -1,8 +1,10 @@
 # Tasks: add-polyrepo-sync
 
-Groups run in order. Three files are **shared and unowned**: every group
+Groups run in order. Four files are **shared and unowned**: every group
 that touches one may only add to it, never restructure it —
 `packages/core/src/engine/generate.ts` (groups 1, 2),
+`packages/core/src/index.ts` (groups 2, 4 — each adds only the exports
+its own failing test demands, never exports for a later group),
 `packages/cli/src/commands/generate.ts` (groups 4, 5) and
 `packages/cli/src/commands/verify.ts` (group 4 only, listed because
 group 3's per-command guard lands in it too). Every other file belongs
@@ -10,7 +12,13 @@ to exactly one group.
 
 Estimates are agent execution minutes and are frozen per group at
 `est_frozen`; overruns correct the next group's estimate, never this
-one's. Durations land per task in `openspec/task-times.csv`, measured
+one's. Three groups carry a re-freeze, and the reason is recorded rather
+than absorbed: the delta gained requirements after the first freeze —
+a manifest format higher than the reader knows is refused, the export
+name of a declared function is a carried fact, and a foreign key whose
+target is outside the manifest derives no relation. Group 3 moved
+40m → 46m, group 5 moved 47m → 60m, and group 6's scope grew. A
+re-freeze is only ever a spec change, never a task running long. Durations land per task in `openspec/task-times.csv`, measured
 with `date -u` at task start and end.
 
 ## 1. Manifest emission in core — `est_frozen: 44m` — issue #579
@@ -21,39 +29,39 @@ Files: `packages/core/src/sql/manifest.ts` (new),
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
-| A migration can carry the schema it produced | Enabled emission appends the manifest statements | `core/test/sql/manifest.test.ts > appends the bootstrap and insert after the change statements` |
-| " | Disabled emission changes nothing | `core/test/sql/manifest.test.ts > renders nothing when no payload is supplied` |
-| The bootstrap is idempotent and precedes the insert | A chain applied from a later point succeeds | shape here: `core/test/sql/manifest.test.ts > the bootstrap is idempotent and comes first`; server in group 8 |
-| The payload is embedded so that it cannot be misread | A payload that could break out is refused | `core/test/sql/manifest.test.ts > refuses a payload containing its own terminator` |
-| A migration announces its manifest format in the banner | The line is readable by its prefix | `core/test/sql/migration-file.test.ts > parses the manifest format line by its prefix` |
-| " | A reader that does not know the line is unaffected | `core/test/sql/migration-file.test.ts > an unknown banner line is ignored` |
-| The emitted manifest statements are deterministic | Two runs separated in time are byte-identical | `core/test/sql/manifest.test.ts > two renders with different clocks are byte-identical` |
-| " | The statements name no clock and no file | `core/test/sql/manifest.test.ts > the insert carries no timestamp and no file name` |
+| A migration can carry the schema it produced | Enabled emission appends the manifest statements | `core/test/manifest.test.ts > appends the bootstrap and insert after the change statements` |
+| " | Disabled emission changes nothing | `core/test/manifest.test.ts > renders nothing when no payload is supplied` |
+| The bootstrap is idempotent and precedes the insert | A chain applied from a later point succeeds | shape here: `core/test/manifest.test.ts > the bootstrap is idempotent and comes first`; server in group 8 |
+| The payload is embedded so that it cannot be misread | A payload that could break out is refused | `core/test/manifest.test.ts > refuses a payload containing its own terminator` |
+| A migration announces its manifest format in the banner | The line is readable by its prefix | `core/test/migration-file.test.ts > parses the manifest format line by its prefix` |
+| " | A reader that does not know the line is unaffected | `core/test/migration-file.test.ts > an unknown banner line is ignored` |
+| The emitted manifest statements are deterministic | Two runs separated in time are byte-identical | `core/test/manifest.test.ts > two renders with different clocks are byte-identical` |
+| " | The statements name no clock and no file | `core/test/manifest.test.ts > the insert carries no timestamp and no file name` |
 
-- [ ] 1.1 `[design]` Settle the emitted SQL: table DDL (column set,
+- [x] 1.1 `[design]` Settle the emitted SQL: table DDL (column set,
       identity ordering column, two format columns, payload column
       type), the insert's column list, and the banner prefix. Start
-      from `core/test/sql/manifest.test.ts > appends the bootstrap and
+      from `core/test/manifest.test.ts > appends the bootstrap and
       insert after the change statements`. ~10m
-- [ ] 1.2 `[design]` Settle the payload's embedding form and its
+- [x] 1.2 `[design]` Settle the payload's embedding form and its
       fail-closed guard. Start from
-      `core/test/sql/manifest.test.ts > refuses a payload containing its
+      `core/test/manifest.test.ts > refuses a payload containing its
       own terminator`. ~8m
-- [ ] 1.3 Render the bootstrap and insert; render nothing when no
+- [x] 1.3 Render the bootstrap and insert; render nothing when no
       payload is supplied. Start from
-      `core/test/sql/manifest.test.ts > renders nothing when no payload
+      `core/test/manifest.test.ts > renders nothing when no payload
       is supplied`. ~8m
-- [ ] 1.4 Banner line and its prefix-only parser, beside the existing
+- [x] 1.4 Banner line and its prefix-only parser, beside the existing
       banner parsers. Start from
-      `core/test/sql/migration-file.test.ts > parses the manifest format
+      `core/test/migration-file.test.ts > parses the manifest format
       line by its prefix`. ~8m
-- [ ] 1.5 Append the statements to the engine's statement array behind
+- [x] 1.5 Append the statements to the engine's statement array behind
       the option; goldens stay byte-identical with it absent. Start from
-      `core/test/sql/manifest.test.ts > the bootstrap is idempotent and
+      `core/test/manifest.test.ts > the bootstrap is idempotent and
       comes first`. ~5m
-- [ ] 1.6 Determinism: the payload arrives pre-serialized and no value
+- [x] 1.6 Determinism: the payload arrives pre-serialized and no value
       is derived from a clock or a file name. Start from
-      `core/test/sql/manifest.test.ts > two renders with different clocks
+      `core/test/manifest.test.ts > two renders with different clocks
       are byte-identical`. ~5m
 
 ## 2. Migration authority as a type — `est_frozen: 42m` — issue #580
@@ -91,7 +99,7 @@ Files: `packages/core/src/dsl/table.ts`,
       `core/test/engine/authority-refusal.test.ts > refuses a table that
       carries no migration authority`. ~8m
 
-## 3. Sidecar collection and configuration — `est_frozen: 40m` — issue #581
+## 3. Sidecar collection and configuration — `est_frozen: 46m` — issue #581
 
 Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
 `packages/cli/src/manifest-payload.ts` (new),
@@ -100,8 +108,10 @@ Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
-| A manifest row carries what a database cannot be asked | The five facts survive the round trip | `cli/test/manifest-payload.test.ts > collects mode, non-null elements, TypeScript keys, export names and roles` |
+| A manifest row carries what a database cannot be asked | The carried choices survive the round trip | `cli/test/manifest-payload.test.ts > collects mode, non-null elements, TypeScript keys, table and function export names, and roles` |
+| " | A synthesized function has no export name | `cli/test/manifest-payload.test.ts > carries no export name for a trigger-synthesized function` |
 | " | The two format versions are separate | `cli/test/manifest-payload.test.ts > carries the manifest format and the snapshot format as separate values` |
+| " | A brand is not among the carried facts | `cli/test/manifest-payload.test.ts > carries no brand information` |
 | The emitted manifest statements are deterministic | Two runs separated in time are byte-identical | `cli/test/manifest-payload.test.ts > serializes with the snapshot's own stable serialization` |
 | Configuration asks each command only for what it needs | A consuming repository needs none of them | `cli/test/config.test.ts > accepts a configuration without the migration-authoring fields` |
 | " | A migration-authoring command names the field it needs | `cli/test/config-required.test.ts > names the missing field before any work` |
@@ -110,9 +120,14 @@ Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
       module export name. Start from
       `cli/test/loader.test.ts > preserves the module export name for
       each table`. ~8m
-- [ ] 3.2 Collect the five facts from the loaded declarations. Start
-      from `cli/test/manifest-payload.test.ts > collects mode, non-null
-      elements, TypeScript keys, export names and roles`. ~10m
+- [ ] 3.2 Collect the carried choices from the loaded declarations,
+      including the export name of every exported table and function.
+      Start from `cli/test/manifest-payload.test.ts > collects mode,
+      non-null elements, TypeScript keys, table and function export
+      names, and roles`. ~10m
+- [ ] 3.6 A declaration that was never a module export carries no export
+      name. Start from `cli/test/manifest-payload.test.ts > carries no
+      export name for a trigger-synthesized function`. ~6m
 - [ ] 3.3 Assemble the payload with both format versions and the
       snapshot's stable serialization. Start from
       `cli/test/manifest-payload.test.ts > serializes with the
@@ -161,7 +176,7 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
       reads. Start from `cli/test/verify-manifest.test.ts > reports a
       chain that stopped carrying its manifests`. ~7m
 
-## 5. The `sync` command — `est_frozen: 47m` — issue #583
+## 5. The `sync` command — `est_frozen: 60m` — issue #583
 
 Files: `packages/cli/src/commands/sync.ts` (new),
 `packages/cli/src/sync/*` (new), `packages/cli/src/main.ts`,
@@ -172,16 +187,21 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | A repository obtains a schema it does not own from the database | A schema arrives as one module | `cli/test/sync-emit.test.ts > writes one module and nothing else` |
 | " | No connection is a coded failure | `cli/test/sync-connection.test.ts > names what to supply when no connection is given` |
 | The database driver is an optional dependency | A missing driver is explained for the syncing command too | `cli/test/sync-connection.test.ts > names the driver package to install` |
-| A synced module reproduces the consumer-visible type layer | Result keys / element nullability / numeric mode / relation keys / enum values match | `cli/test/sync-emit.test.ts > reproduces the five facts of the manifest` |
+| A synced module reproduces the consumer-visible type layer | Result keys / element nullability / numeric mode / relation keys / enum values match | `cli/test/sync-emit.test.ts > reproduces the carried choices of the manifest` |
 | Type brands do not cross the boundary | A branded column reads as its unbranded type | `cli/test/sync-emit.test.ts > emits no brand for a branded column` |
 | Role names travel with the module and the consumer opts in | Supplied roles are accepted | `cli/test/sync-emit.test.ts > exports the manifest's role names in branded form` |
 | A synced module carries its freshness stamp as a value | The stamp is importable | `cli/test/sync-emit.test.ts > exports the identity of its manifest row` |
+| A synced module carries tables and enums, not functions | A synced module emits no function declarations | `cli/test/sync-emit.test.ts > emits tables and enums and no function declaration` |
+| A reference to a table the schema does not own has no relation | A relation to an unmanaged target is absent | `cli/test/sync-emit.test.ts > derives no relation for a reference to an unmanaged table` |
 | A synced module is a function of the row it was made from | Two syncs of the same row are byte-identical | `cli/test/sync-emit.test.ts > two syncs of the same row write byte-identical modules` |
 | " | The module names no clock | `cli/test/sync-emit.test.ts > the module carries no timestamp` |
 | Each way a manifest can fail a reader is named separately | A database with no manifest table says so | `cli/test/sync-states.test.ts > distinguishes an absent manifest table` |
 | " | An empty manifest table says so | `cli/test/sync-states.test.ts > distinguishes an empty manifest table` |
 | " | A stamp with no matching row says so | `cli/test/sync-states.test.ts > distinguishes a stamp with no matching row` |
-| " | The four codes are four | `cli/test/sync-states.test.ts > reports four distinct codes for the four situations` |
+| " | The five codes are five | `cli/test/sync-states.test.ts > reports five distinct codes for the five situations` |
+| A manifest format higher than the reader knows is refused | A higher manifest format is refused | `cli/test/sync-states.test.ts > refuses a higher manifest format without parsing the payload` |
+| " | A lower manifest format is read | `cli/test/sync-states.test.ts > reads a lower manifest format and treats its absent facts as absent` |
+| " | Format skew is not reported as staleness | `cli/test/sync-states.test.ts > format skew never advises re-syncing` |
 | The command can check without writing | Checking leaves the module untouched | `cli/test/sync-states.test.ts > check mode writes nothing and exits non-zero` |
 | The schema filter is reserved, not silently ignored | The reserved filter is refused | `cli/test/sync-states.test.ts > refuses the reserved schema filter` |
 
@@ -195,17 +215,26 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 - [ ] 5.3 Connection entry, dynamic driver import, and both coded
       refusals. Start from `cli/test/sync-connection.test.ts > names what
       to supply when no connection is given`. ~8m
-- [ ] 5.4 Read the newest row and emit usage-constructor calls carrying
-      the five facts. Start from `cli/test/sync-emit.test.ts >
-      reproduces the five facts of the manifest`. ~10m
+- [ ] 5.4 Read the newest row and emit usage-constructor calls for its
+      tables and enums — and for nothing else. Start from
+      `cli/test/sync-emit.test.ts > reproduces the carried choices of the
+      manifest`, then `> emits tables and enums and no function
+      declaration`. ~10m
 - [ ] 5.5 Export the role list and the stamp, and pin the module as a
       function of its row (two syncs byte-identical, no clock value in
       the header). Start from `cli/test/sync-emit.test.ts > two syncs of
       the same row write byte-identical modules`. ~8m
-- [ ] 5.6 `[design]` Settle the four codes and their remedies, then
-      raise the three this command owns. Start from
+- [ ] 5.6 `[design]` Settle the five codes and their remedies, then
+      raise the four this command owns. Start from
       `cli/test/sync-states.test.ts > distinguishes an absent manifest
       table`. ~8m
+- [ ] 5.7 Refuse an unknown manifest format in both directions, before
+      the payload is parsed. Start from `cli/test/sync-states.test.ts >
+      refuses a higher manifest format without parsing the payload`. ~7m
+- [ ] 5.8 `[design]` Settle how a foreign key whose target is outside
+      the manifest is emitted, then derive no relation for such an edge
+      while keeping the column. Start from `cli/test/sync-emit.test.ts >
+      derives no relation for a reference to an unmanaged table`. ~6m
 
 ## 6. Freshness at startup — `est_frozen: 26m` — issue #584
 
@@ -218,7 +247,8 @@ Files: `packages/cli/src/assert-schema.ts`,
 | " | A stale module fails with a counted distance | `cli/test/assert-schema-manifest.test.ts > fails naming both rows and the distance` |
 | " | The failure claims no cause | `cli/test/assert-schema-manifest.test.ts > the failure text asserts no cause` |
 | The database owns the order of manifest rows | Distance is counted, not inferred from time | `cli/test/assert-schema-manifest.test.ts > counts rows rather than comparing timestamps` |
-| Each way a manifest can fail a reader is named separately | A database with no manifest table / an empty table / an unmatched stamp | `cli/test/assert-schema-manifest.test.ts > distinguishes the four situations` |
+| Each way a manifest can fail a reader is named separately | A database with no manifest table / an empty table / an unmatched stamp / an unknown format | `cli/test/assert-schema-manifest.test.ts > distinguishes the five situations` |
+| A manifest format higher than the reader knows is refused | Format skew is not reported as staleness | `cli/test/assert-schema-manifest.test.ts > format skew is not staleness` |
 | " (import discipline) | — | `cli/test/assert-schema-imports.test.ts` stays green |
 
 - [ ] 6.1 Read the stamp from the handle's schema and the row through
@@ -229,9 +259,10 @@ Files: `packages/cli/src/assert-schema.ts`,
       the distance by rows rather than by time. Start from
       `cli/test/assert-schema-manifest.test.ts > fails naming both rows
       and the distance`. ~8m
-- [ ] 6.3 The four situations, translated into this surface's own code
-      vocabulary. Start from `cli/test/assert-schema-manifest.test.ts >
-      distinguishes the four situations`. ~10m
+- [ ] 6.3 The five situations, translated into this surface's own code
+      vocabulary, including format skew as its own outcome. Start from
+      `cli/test/assert-schema-manifest.test.ts > distinguishes the five
+      situations`. ~10m
 
 ## 7. Documentation and release plumbing — `est_frozen: 24m` — issue #585
 
