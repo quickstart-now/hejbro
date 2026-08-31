@@ -92,10 +92,18 @@ export type LeftJoinedBrand<TLeftJoined> = {
   (`unknown`, `never`, one `Table`, a union of `Table`s, each with
   `| undefined`) and preserves every one.
   `select-result.ts`'s own `OriginColumn`/`ReadAsType` keep
-  `NonNullable` and are safe by coincidence, not by design: they feed
-  the result into a "does it have this shape" check, which `{}` and
-  `unknown` both fail identically. Only a "is it exactly this type"
-  check — which is what tracking is — exposes the difference.
+  `NonNullable` and are unaffected, for a reason that had to be measured
+  twice before it was right: a value carrying no brand at all does not
+  reach `NonNullable` on that path, because TypeScript's **weak-type**
+  rule rejects the outer `extends { [brand]?: … }` test itself — a type
+  with no property in common with an all-optional target is not
+  assignable to it. (The first explanation offered here, that `{}` and
+  `unknown` both fail a later shape check identically, was wrong; the
+  file's own pre-existing comment claiming "every type structurally
+  satisfies the outer extends" was wrong in the same way and is
+  corrected with this change.) The difference between `{}` and
+  `unknown` therefore only ever surfaces in an "is it exactly this
+  type" test — which is what tracking is.
 
 Every task's red test is a **type test** (`expectTypeOf` /
 `@ts-expect-error`). Done for every task means the change's own gates
@@ -225,11 +233,11 @@ Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
       rule. Red: `db.execute(select({ t: posts.titleRequired }, posts))`
       expected non-null, and the `.leftJoin(...)` variant expected
       nullable. (8 min)
-- [ ] 3.4 Pin the untracked boundary at the chain: a nested read's
+- [x] 3.4 Pin the untracked boundary at the chain: a nested read's
       subselect, a `db.with` body, and `related()` all still type every
       projected field `| null`. Red: type tests asserting exactly that.
       (8 min)
-- [ ] 3.5 Narrow `returning()` too: `ReturningRow` resolves
+- [x] 3.5 Narrow `returning()` too: `ReturningRow` resolves
       `SelectResult<TProjection, never>`, not the one-argument form.
       A mutation chain has no join grammar at all — no `leftJoin`, no
       `UPDATE … FROM` — so the honest set there is not "unknown" but
@@ -245,7 +253,7 @@ Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
       `string | null`) — that assertion becoming wrong is this task's
       point, not a regression, and it moves with the raw error quoted.
       (10 min)
-- [ ] 3.6 [design] Confirm and record that no chain member drops the set
+- [x] 3.6 [design] Confirm and record that no chain member drops the set
       silently — the set-op combinators resolve their row type before
       combining, and `related()` is untracked by decision, not by
       accident. Two branches of a `union`/`intersect`/`except` can carry
