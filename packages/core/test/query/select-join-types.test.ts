@@ -14,7 +14,7 @@ const posts = table(app, "posts", {
 
 describe("left-joined tracking surface (narrow-join-nullability, task 1.1)", () => {
 	it("UntrackedJoins is exported from core's public surface, and is the type top (corrected mid-group after a measured TS2379 -- see the file's own doc comment)", () => {
-		expectTypeOf<UntrackedJoins>().toEqualTypeOf<unknown>();
+		expectTypeOf<UntrackedJoins>().toBeUnknown();
 	});
 });
 
@@ -48,5 +48,20 @@ describe("leftJoin accumulates the joined table, innerJoin does not (task 1.3)",
 			eq(posts.id, comments.postId),
 		);
 		expectTypeOf(joined).toEqualTypeOf<SelectJoinable<typeof posts, never>>();
+	});
+});
+
+describe("the untracked default survives leftJoin (task 1.3 ratchet, reviewer-flagged mutant)", () => {
+	// `never | TJoined` and (a buggy) `TJoined` alone are the SAME type, so
+	// every assertion above -- starting from select()'s own `never` -- could
+	// not tell a union accumulation apart from an assignment one. Starting
+	// from the DEFAULT (untracked) parameter is the one case where they
+	// diverge: `unknown | TJoined` stays `unknown` only if leftJoin's own
+	// declared return type is the union `TLeftJoined | TJoined`, not the
+	// narrower `TJoined` an assignment mutant would produce.
+	it("a stage typed at the untracked default stays untracked after leftJoin", () => {
+		const untracked: SelectJoinable<typeof posts> = select(posts);
+		const joined = untracked.leftJoin(comments, eq(posts.id, comments.postId));
+		expectTypeOf(joined).toEqualTypeOf<SelectJoinable<typeof posts, unknown>>();
 	});
 });

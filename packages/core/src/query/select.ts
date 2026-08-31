@@ -828,18 +828,23 @@ export type NestedReadMarker<
 /**
  * `subselect: SelectLimited<TProjection>` deliberately takes the bare,
  * single-argument form (narrow-join-nullability, task 1.4) — `TLeftJoined`
- * defaults to {@link UntrackedJoins}, so whatever join tracking the
- * subselect itself carries is erased here regardless of what it actually
- * is: `jsonArrayFrom`/`jsonObjectFrom` produce a NEW `Expr`, not a
- * `SelectResult`, so there is no field-per-column position left for a
- * narrower nullability to land on inside this expression's own type — only
+ * defaults to {@link UntrackedJoins} (`unknown`), so a tracked subselect
+ * passed here is still ACCEPTED (every tracked stage is assignable to the
+ * type top) and its own set is ABSORBED into the untracked default, never
+ * read. This is not a gap this file forgot to close: `jsonArrayFrom`/
+ * `jsonObjectFrom` produce a NEW `Expr`, not a `SelectResult`, so there is
+ * no field-per-column position on this expression's own type for a
+ * narrower nullability to land on even if the set WERE read here — only
  * `@hejbro/query`'s later `SelectResult<TSub>` recursion (D102 cast+revive)
  * reads the embedded projection, at which point it is exactly as if the
- * nested `select()` had started fresh. `withCte`'s CTE body and
- * `defineView`'s view body take the same bare form for the identical
- * reason: each also produces a new declared shape (a CTE row environment,
- * a view's own columns) from the inner select, not a passthrough of the
- * inner stage's own type.
+ * nested `select()` had started fresh, and narrowing there would first
+ * have to prove which of ITS OWN joins (not this one's outer statement)
+ * were left ones. Reading the outer set here and narrowing on it anyway
+ * would be a lie a nested subselect's own rows never earned. `withCte`'s
+ * CTE body and `defineView`'s view body take the same bare form for the
+ * identical reason: each also produces a new declared shape (a CTE row
+ * environment, a view's own columns) from the inner select, not a
+ * passthrough of the inner stage's own type.
  */
 const buildSelectExpr =
 	<TMode extends "jsonArray" | "jsonObject">(mode: TMode) =>

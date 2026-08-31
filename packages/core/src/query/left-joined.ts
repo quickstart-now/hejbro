@@ -4,6 +4,11 @@
  * left-joined set here because a type parameter no part of a type's
  * structure otherwise uses is erased for inference: `ExecuteResult`
  * (`@hejbro/query`) could not recover it otherwise.
+ *
+ * Public (task 1.4): `@hejbro/query`'s `ExecuteResult` and chain stage
+ * types (G2/G3) `infer` against this exact symbol-keyed property across
+ * the package boundary — a private symbol here would leave them no way to
+ * name the property they read.
  */
 export const leftJoinedBrand: unique symbol = Symbol("hejbro:left-joined");
 
@@ -26,6 +31,11 @@ export const leftJoinedBrand: unique symbol = Symbol("hejbro:left-joined");
  * — "untracked wins over any union" (the frozen contract) becomes a fact
  * the type checker enforces on its own, not a rule a downstream matcher
  * has to separately implement.
+ *
+ * Public (task 1.4): `@hejbro/query`'s `SelectResult` (G2) names this type
+ * directly to test set membership (`[UntrackedJoins] extends
+ * [TLeftJoined]`) — that comparison cannot be written against a type
+ * internal to this package.
  */
 export type UntrackedJoins = unknown;
 
@@ -35,6 +45,12 @@ export type UntrackedJoins = unknown;
  * `infer` against it yields `… | undefined` at the use site — the same
  * `NonNullable`-at-use-site shape `OriginBrand`/`ReadAsBrand` already
  * establish.
+ *
+ * Public (task 1.4): `SelectLimited` (this package) mixes this in by
+ * intersection, so it is already part of every select stage's public
+ * shape; `@hejbro/query`'s chain stage types (G3) mirror it structurally
+ * on their own thenable wrappers, which is only possible if the shape
+ * itself is nameable outside this package.
  */
 export type LeftJoinedBrand<TLeftJoined> = {
 	readonly [leftJoinedBrand]?: TLeftJoined;
