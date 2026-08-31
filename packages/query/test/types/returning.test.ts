@@ -55,3 +55,15 @@ describe("returning (D1/D3, task 3.13)", () => {
 		}>();
 	});
 });
+
+describe("returning() narrows too -- a mutation chain has no join grammar, so its set is definitively empty (narrow-join-nullability, task 3.5)", () => {
+	it("a notNull column projected through returning() narrows to non-null", () => {
+		type Row = ReturningRow<Posts, { readonly t: typeof posts.titleRequired }>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("a nullable column projected through returning() stays nullable -- narrowing is additive, not a blanket non-null promise (same class of defect task 2.6 fixed)", () => {
+		type Row = ReturningRow<Posts, { readonly t: typeof posts.title }>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string | null>();
+	});
+});

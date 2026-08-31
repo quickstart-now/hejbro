@@ -169,13 +169,16 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 		expectTypeOf<ExecuteRows<UpdateStage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
 		>();
-		// object-projection widening (select-result.ts's own FamilyReadType
-		// branch, #311): a projected ColumnRef alone carries no notNull
-		// information, so even posts.id (declared primaryKey/notNull)
-		// widens to `| null` here -- the same honest widening the select-
-		// side object-projection test above already covers.
+		// A mutation's own left-joined set is always `never` (narrow-join-
+		// nullability, task 3.5): ReturningRow's object-projection branch
+		// fixes it there rather than taking the one-argument (untracked)
+		// form, since a mutation has no join grammar to carry an unknown
+		// set at all. `posts.id` (declared primaryKey/notNull) narrows to
+		// non-null here -- this assertion changing from `string | null` is
+		// this task's own point, not a regression (confirmed red before
+		// this fix landed, with that exact `string | null` on the left).
 		expectTypeOf<ExecuteRows<DeleteStage>[number]>().toEqualTypeOf<{
-			readonly id: string | null;
+			readonly id: string;
 		}>();
 	});
 });
