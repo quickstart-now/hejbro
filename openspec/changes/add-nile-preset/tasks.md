@@ -138,6 +138,9 @@ list)
 ## 4. The validators (#566)
 Files: `packages/nile/src/validators.ts`, `packages/nile/test/validators.test.ts`,
 `packages/nile/src/preset.ts` (shared, additive)
+est_frozen: 9m (re-estimated at G3 close from observed 0.1-0.3x; original
+estimates below are kept, not overwritten -- this line separates
+estimating-habit error from execution error)
 
 - [ ] 4.1 (9m) RLS enablement and policies are refused at generate time
       with an explicit error naming the declaration **and attributing the
@@ -169,6 +172,9 @@ Files: `packages/nile/src/validators.ts`, `packages/nile/test/validators.test.ts
 Files: `packages/nile/test/integration/**`,
 `packages/nile/vitest.integration.config.ts`, `packages/nile/package.json`
 (one script line, additive)
+est_frozen: 15m (re-estimated at G3 close from observed 0.1-0.3x, held
+higher than the other groups -- Docker pull/boot and container round trips
+run in real time and do not compress at agent speed)
 
 - [ ] 5.1 (8m) Integration wiring mirroring `packages/neon`: a separate
       vitest config, a `test:integration` script, excluded from the
@@ -202,6 +208,7 @@ Files: `packages/nile/test/integration/**`,
 Files: `skills/hejbro/references/nile-preset.md`, `skills/hejbro/SKILL.md`,
 `.claude/rules/provider-preset.md`, `README.md`, `AGENTS.md`,
 `packages/skills/test/nile-preset-doc.test.ts` (new)
+est_frozen: 9m (re-estimated at G3 close from observed 0.1-0.3x)
 
 - [ ] 6.1 (10m) `references/nile-preset.md`: the context builder, the two
       declarations, the values it refuses and why (with each refusal's
@@ -227,6 +234,8 @@ Files: `skills/hejbro/references/nile-preset.md`, `skills/hejbro/SKILL.md`,
 ## 7. Spec, release record, ledger (#569)
 Files: `openspec/changes/add-nile-preset/**`, `.changeset/*.md`,
 `openspec/task-times.csv`, `README.md` (task-time badge only)
+est_frozen: 5m (re-estimated at G3 close from observed 0.1-0.3x; the
+remaining 7.4-7.6 sum, not the whole group -- 7.1-7.3 already landed)
 
 - [x] 7.1 (8m) `rls-execution-context` delta — the tenant rendering, its
       order, its value safety, its transaction-locality, and the two
