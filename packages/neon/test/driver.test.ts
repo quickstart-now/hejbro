@@ -1,3 +1,5 @@
+import { schema, select, table, uuid } from "@hejbro/core";
+import { db } from "@hejbro/query";
 import type { Pool as NeonPool } from "@neondatabase/serverless";
 import { neon, Pool } from "@neondatabase/serverless";
 import { describe, expect, it, vi } from "vitest";
@@ -307,5 +309,86 @@ describe("both connection paths use the same type-overrides module (task 6.4)", 
 		// Both paths resolve to the exact same object as each other, not
 		// just each equal to the imported constant by coincidence.
 		expect(httpConfigTypes).toBe(wsConfig.types);
+	});
+});
+
+describe("neonDriver(pool) + db.as(context) baseline pin, session path (task 4.3, #557 -- fixed before the context-application generalization lands, so a later change that moves this is caught here)", () => {
+	it("sends the pin, then the context statements, then the caller's statement, all inside one transaction -- the setting travels as a bind parameter", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = neonDriver(pool);
+		const app = schema("app");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const handle = db({ widgets }, driver);
+
+		await handle
+			.as({ role: authenticatedRole, settings: { "app.claim": "value" } })
+			.execute(select(widgets));
+
+		const texts = calls.map(sqlTextOf);
+		expect(texts).toHaveLength(6);
+		expect(texts[0]).toBe(
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+		);
+		expect(texts[1]).toBe("BEGIN");
+		// role first, then one set_config per setting, ahead of the
+		// caller's own statement -- driver.contributedRoles already unlocks
+		// authenticatedRole with no grant/RLS in the schema (task 3.5).
+		expect(texts[2]).toBe('set local role "authenticated"');
+		expect(texts[3]).toBe("select set_config($1, $2, true)");
+		expect(texts[4]).toContain("widgets");
+		expect(texts[5]).toBe("COMMIT");
+
+		const settingCall = calls.find(
+			(call): call is CapturedQueryConfig =>
+				typeof call !== "string" &&
+				call.text === "select set_config($1, $2, true)",
+		);
+		if (settingCall === undefined) {
+			throw new Error("the setting statement was never sent");
+		}
+		expect(settingCall.values).toEqual(["app.claim", "value"]);
+	});
+});
+
+describe("buildHttpDriver + db.as(context) still refused with missing-capability (task 4.3, #557 -- the boundary this change must not move: a context-rendering contribution point existing on the contract does not widen who may run a context)", () => {
+	it("db.as(context) on the HTTP driver fails with the same missing-capability error it failed with before, and never sends a request", async () => {
+		const sentBatches: Array<unknown> = [];
+		const fakeSql = Object.assign(
+			() => {
+				throw new Error("tagged-template form not used by this driver");
+			},
+			{
+				query: vi.fn(() => {
+					sentBatches.push("query");
+					return { queryData: {} };
+				}),
+				transaction: vi.fn(async (members: ReadonlyArray<unknown>) => {
+					sentBatches.push(members);
+					return members.map(() => []);
+				}),
+			},
+		) as unknown as HttpQueryable;
+		const driver = buildHttpDriver(fakeSql);
+		const app = schema("app");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		// `buildHttpDriver` is called directly here (bypassing `neonDriver`'s
+		// own WS-only `contributedRoles`, mirroring this file's existing
+		// "task 6.4" test above), so the role is declared explicitly through
+		// `db()`'s own `roles` option instead -- the point under test is the
+		// capability gate, not the role whitelist.
+		const handle = db({ widgets }, driver, { roles: [authenticatedRole] });
+
+		await expect(
+			handle.as({ role: authenticatedRole }).execute(select(widgets)),
+		).rejects.toMatchObject({
+			code: "driver-missing-capability",
+			capability: "interactive-transactions",
+		});
+
+		// nothing reached the fake sql client at all -- the query layer's
+		// own capability gate (assertCapability, called before the
+		// resolver/context is ever touched) refuses this before the
+		// driver's own transaction/query members are invoked.
+		expect(sentBatches).toHaveLength(0);
 	});
 });

@@ -123,7 +123,7 @@ Files: `packages/pg/test/driver.test.ts`,
       group 2 changes anything.
 - [x] 4.2 (7m) `@hejbro/supabase` pin: same, on its pooled-transaction
       path.
-- [ ] 4.3 (8m) `@hejbro/neon` pin: same on the session path; the HTTP
+- [x] 4.3 (8m) `@hejbro/neon` pin: same on the session path; the HTTP
       path still refuses a context with the missing-capability error —
       the boundary this change must not move.
 
