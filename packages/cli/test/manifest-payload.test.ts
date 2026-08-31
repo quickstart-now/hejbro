@@ -25,6 +25,12 @@ describe("buildManifestPayload", () => {
 		const users = table(app, "users", {
 			userId: uuid().primaryKey(),
 		});
+		// Column order is alphabetical (amount, id, tags) on purpose: this
+		// fixture is a control for "keys every column fact by the column's
+		// SQL name, not its position" below — a position-based join mutant
+		// only misattributes facts when declaration order and sorted order
+		// disagree, so this fixture must not (by coincidence or otherwise)
+		// be a differing-order case itself.
 		const posts = table(
 			app,
 			"posts",

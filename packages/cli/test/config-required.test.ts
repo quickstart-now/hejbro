@@ -169,6 +169,10 @@ describe("each command's guard runs before any work (G3-2)", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("history");
 		expect(result.stderr).toContain("migrationsDir");
+		// the fixture dir is not a git repository — if the guard were
+		// bypassed, runHistory's next check (isGitRepository) would have
+		// reached and left this trace instead.
+		expect(result.stderr).not.toContain("not-a-git-repository");
 	});
 
 	it("restore names migrationsDir and never reaches the migrations directory", async () => {
@@ -176,6 +180,8 @@ describe("each command's guard runs before any work (G3-2)", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("restore");
 		expect(result.stderr).toContain("migrationsDir");
+		// same fixture, same next-check trace runRestore would have left.
+		expect(result.stderr).not.toContain("not-a-git-repository");
 	});
 
 	it("check names snapshotPath and never reaches declaration loading", async () => {
