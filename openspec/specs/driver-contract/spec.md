@@ -55,11 +55,33 @@ declare, the query layer SHALL fail with an explicit error that names
 the missing capability and the operation, before sending anything to
 the database. Silent fallback to different semantics is forbidden.
 
+Where the query layer raises this failure for an execution a caller made
+through a db handle, the operation it names SHALL be the surface the
+caller invoked, spelled as the caller spells it — never the name of a
+construction option, and never one name standing in for several
+surfaces; the declared-function API counts as one surface with one
+token. The transaction API is excepted here as it is in the
+context-refusal requirement, and for the same reason: its token stays
+`transaction`, the spelling a driver's own thrower also uses, because
+this requirement's uniformity rule binds the two to match. Where a
+driver raises the failure for its own member, the
+operation SHALL be that member's name. The obligation covers the tokens
+this repository's own layers produce: the thrower is a public export, so
+a driver package outside this repository passes a token of its own
+choosing and the contract cannot mechanize that.
+
 #### Scenario: Transaction on a non-transactional driver
 - **WHEN** a transaction (or any feature built on transactions) is
   attempted on a driver that does not declare interactive transactions
 - **THEN** the call fails with an error identifying the missing
   capability, and no statement reaches the database
+
+#### Scenario: The refusal names the surface the caller invoked
+- **WHEN** a statement execution, a chain member, and a declared-function
+  call are each refused for a missing capability on a handle whose
+  driver cannot hold a transaction open
+- **THEN** each error names the surface its own caller invoked, and none
+  of them names an option given at the handle's construction
 
 ### Requirement: The contract carries a session-setup hook
 The driver contract SHALL include a session-setup hook, invoked once
@@ -483,6 +505,16 @@ caller's own — rather than in the transaction setup that runs earlier.
 The query layer SHALL preserve the order the rendering returns, which is
 what makes that placement sufficient.
 
+A rendering that returns no statement for a context is not an
+application of that context: nothing about the execution has been
+narrowed by it. Where the same driver declares a context mandatory, the
+query layer SHALL refuse that execution rather than run it, as the
+mandatory-context requirement states. Where the driver makes no such
+declaration, the empty result stays what it is and nothing is sent,
+because an execution on that driver was already permitted to carry no
+context at all. The query layer SHALL draw either conclusion from the
+number of statements returned alone, having inspected none of them.
+
 #### Scenario: A driver that must run the context first carries its own statements in the rendering
 - **WHEN** a driver whose platform requires the context to come first
   renders a context, and an execution runs under it
@@ -520,6 +552,13 @@ what makes that placement sufficient.
   `@hejbro/query`'s public entry point
 - **THEN** the import resolves to the rendering the query layer itself
   applies, and no deep or internal module path is required
+
+#### Scenario: An empty rendering is not an application of the context
+- **WHEN** a rendering returns no statement for a context, on a driver
+  that declares a context mandatory
+- **THEN** the execution is refused rather than run, and that conclusion
+  is reached from the number of statements returned, with none of them
+  inspected or rewritten
 
 ### Requirement: A driver declares whether its platform has roles
 A driver SHALL be able to declare that its platform has no roles a
