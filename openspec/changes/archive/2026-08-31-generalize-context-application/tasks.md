@@ -162,7 +162,7 @@ Files: `openspec/changes/generalize-context-application/**`,
 - [x] 5.4 (5m) One `minor` changeset; `openspec/task-times.csv` rows for
       every completed group; README task-time badge refresh
       (`pnpm check:tasktime`).
-- [ ] 5.5 (5m) Post-merge rounds are stamped too. Every round after the
+- [x] 5.5 (5m) Post-merge rounds are stamped too. Every round after the
       PR merges — the isolated spec-only review (D106), its corrections,
       and the archive move — carries its own `date -u` start/end stamp and
       its own `openspec/task-times.csv` row, written when that round ends

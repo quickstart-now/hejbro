@@ -7,7 +7,11 @@ optional `renderContext` on the driver contract turns a `DbContext`
 into an ordered list of compiled statements, replacing the query
 layer's own default (`set local role`, then one
 `select set_config($1, $2, true)` per setting) when a platform's own
-mechanism differs. `@hejbro/pg`, `@hejbro/supabase`, and `@hejbro/neon`
+mechanism differs. The default rendering itself is now exported —
+`defaultContextRendering` (value) and `ContextRendering` (type), both
+from `@hejbro/query`'s public entry — so a driver that needs the
+ordinary statements plus its own can compose them rather than restate
+the sequence. `@hejbro/pg`, `@hejbro/supabase`, and `@hejbro/neon`
 contribute no rendering and keep today's exact statement sequence,
 pinned as regression tests. `DbContext.role` is now optional: a
 context naming none is admitted only on a driver that declares its

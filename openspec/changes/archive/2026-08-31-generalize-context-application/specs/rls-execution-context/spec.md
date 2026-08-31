@@ -11,10 +11,10 @@ contributes none SHALL receive the default rendering (a `SET LOCAL ROLE`
 statement followed by one parameterized `set_config` call per setting).
 The query layer SHALL retain everything else: it validates the context,
 opens the wrapping transaction, and sends the rendered statements itself
-— first, in the given order, before any caller-supplied statement — so
-nothing persists on the connection afterwards. A contributing driver
-SHALL NOT send those statements itself, and SHALL NOT open a connection
-or a transaction of its own to apply a context.
+— first among the statements it sends, in the given order, ahead of the
+caller's own. A contributing driver SHALL NOT send those statements
+itself, and SHALL NOT open a connection or a transaction of its own to
+apply a context.
 
 The query layer SHALL NOT name any platform's setting key, statement
 form, or ordering rule: a platform whose context statements must be
@@ -32,8 +32,9 @@ own driver's contribution, never through a branch in the query layer.
 - **WHEN** a statement is executed under a context on a driver that
   contributes its own context rendering
 - **THEN** exactly that driver's statements are sent, in exactly its
-  order, as the first statements inside the wrapping transaction, and
-  the default rendering appears nowhere
+  order, as the first statements the query layer itself sends inside the
+  wrapping transaction, ahead of the caller's own — the default
+  rendering appears nowhere
 
 #### Scenario: A driver that contributes nothing gets today's statements
 - **WHEN** a statement is executed under a context on a driver that
@@ -63,9 +64,10 @@ rendering grants, never to role-identity validation).
 Omitting the role SHALL NOT be a way around this check. A context that
 names no role SHALL be admitted only where the active driver declares
 that its platform has no roles; on any other driver it SHALL be rejected
-before any statement is sent, with an explicit error — never admitted as
-a permissive default, and never silently applied as "whatever role the
-connection already holds".
+before any statement is sent, with an explicit, coded
+`context-role-missing` error — never admitted as a permissive default,
+and never silently applied as "whatever role the connection already
+holds".
 
 #### Scenario: An undeclared role is rejected before any send
 - **WHEN** `db.as(context)` is called with a role absent from every one
@@ -82,15 +84,17 @@ connection already holds".
 #### Scenario: A role-less context is not a whitelist bypass
 - **WHEN** `db.as(context)` is called with a context naming no role, on a
   driver that has not declared its platform role-less
-- **THEN** the call fails immediately, before any statement reaches the
-  database, and the execution does not proceed under the connection's
-  existing role
+- **THEN** the call fails immediately with the code
+  `context-role-missing`, before any statement reaches the database, and
+  the execution does not proceed under the connection's existing role
 
 #### Scenario: A role-less context is admitted where the platform has none
 - **WHEN** `db.as(context)` is called with a context naming no role, on a
   driver that declares its platform has no roles
 - **THEN** the call succeeds, no role statement is sent at all, and the
-  context's settings are applied through the driver's own rendering
+  context's settings are applied through the rendering in effect for
+  that driver — its own contribution, or the default rendering, which
+  accepts a role-less context
 
 ### Requirement: The role and settings reach the database safely
 In the default rendering, the role SHALL be applied via a `SET LOCAL
@@ -110,6 +114,15 @@ interpolates, and the safety of its rendering SHALL be verified in that
 driver's own package. Contributing a rendering SHALL NOT be a way to
 lower this bar.
 
+A contributed rendering SHALL carry the transaction-local obligation as
+well: its statements SHALL take effect only for the transaction the
+query layer opened for that execution — the scope the default rendering
+gets from `SET LOCAL` and a transaction-scoped `set_config` — so that
+nothing a context applied outlives that transaction on a pooled
+connection. Where its platform's statement forms scope differently,
+constraining them is the driver's own responsibility, and that its
+rendering does so SHALL be verified in that driver's own package.
+
 #### Scenario: An adversarial role is never inlined unescaped
 - **WHEN** a role name containing a double quote is applied
 - **THEN** the rendered `SET LOCAL ROLE` statement escapes the embedded
@@ -127,6 +140,15 @@ lower this bar.
 - **THEN** that driver's own package verifies what the rendering does
   with an adversarial value, and the query layer applies the statements
   as given without inspecting or rewriting them
+
+#### Scenario: A contributed rendering leaves nothing behind
+- **WHEN** an execution runs under a context on a contributing driver,
+  and a later statement runs on the same pooled connection without a
+  context
+- **THEN** the later statement observes none of the contributed
+  context's role or settings, because the contributed statements took
+  effect only for the transaction that carried them — verified in the
+  contributing driver's own package
 
 ## ADDED Requirements
 
