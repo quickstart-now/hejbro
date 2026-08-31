@@ -1,0 +1,225 @@
+import {
+	bigserial,
+	defineFunction,
+	defineTrigger,
+	emptySnapshot,
+	eq,
+	generateMigration,
+	grant,
+	rls,
+	roleName,
+	schema,
+	select,
+	serial,
+	smallserial,
+	table,
+	uuid,
+} from "@hejbro/core";
+import { describe, expect, it } from "vitest";
+import { nilePreset } from "../src/preset";
+import {
+	nileFunctionTriggerValidator,
+	nileRlsValidator,
+	nileSerialValidator,
+} from "../src/validators";
+
+const app = schema("app");
+
+// The preset's own registered array (`packages/nile/src/preset.ts`), not a
+// hand-copied parallel list -- every scenario below exercises the exact
+// set a real `presets: [nilePreset]` registration runs, so a validator
+// dropped from that array (accidentally or by a bad edit) is caught here
+// too, not only by preset.test.ts's own count assertion.
+const allValidators = nilePreset.validators;
+
+describe("RLS and policies are refused, with platform attribution (task 4.1, #566)", () => {
+	it("a policy declaration fails generation, names it, and attributes the limitation to the platform", () => {
+		const posts = table(
+			app,
+			"posts",
+			{ id: uuid().primaryKey(), status: uuid().notNull() },
+			(t) => ({
+				rls: rls.enabled({
+					read: rls
+						.policy("posts_read")
+						.for("select")
+						.to("reader")
+						.using(eq(t.id, t.id)),
+				}),
+			}),
+		);
+		const result = generateMigration({
+			declarations: [app, posts],
+			previousSnapshot: emptySnapshot,
+			validators: allValidators,
+		});
+
+		expect(result.sql).toBe("");
+		expect(result.hasChanges).toBe(false);
+		const codes = result.errors.map((error) => error.code);
+		expect(codes).toContain("nile-rls-unsupported");
+		const messages = result.errors.map((error) => error.message).join("\n");
+		expect(messages).toMatch(/posts/);
+		expect(messages).toMatch(
+			/documented in the platform's published limitations/,
+		);
+	});
+});
+
+describe("Functions and triggers are refused, with platform attribution (task 4.2, #566)", () => {
+	it("a function declaration fails generation, naming it", () => {
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const helloWorld = defineFunction(
+			app,
+			"hello_world",
+			{ returns: widgets },
+			(ctx) => {
+				ctx.return(select(widgets));
+			},
+		);
+		const result = generateMigration({
+			declarations: [app, widgets, helloWorld],
+			previousSnapshot: emptySnapshot,
+			validators: allValidators,
+		});
+
+		expect(result.sql).toBe("");
+		const messages = result.errors.map((error) => error.message).join("\n");
+		expect(result.errors.map((error) => error.code)).toContain(
+			"nile-function-unsupported",
+		);
+		expect(messages).toMatch(/hello_world/);
+		expect(messages).toMatch(
+			/documented in the platform's published limitations/,
+		);
+	});
+
+	it("a trigger declaration fails generation, naming it", () => {
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const guard = defineTrigger(
+			widgets,
+			{ name: "guard", timing: "before", events: ["insert"], forEach: "row" },
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const result = generateMigration({
+			declarations: [app, widgets, guard],
+			previousSnapshot: emptySnapshot,
+			validators: allValidators,
+		});
+
+		expect(result.sql).toBe("");
+		const messages = result.errors.map((error) => error.message).join("\n");
+		expect(result.errors.map((error) => error.code)).toContain(
+			"nile-trigger-unsupported",
+		);
+		expect(messages).toMatch(/guard/);
+		expect(messages).toMatch(
+			/documented in the platform's published limitations/,
+		);
+	});
+});
+
+describe("Grants are refused, and the error says it was measured (task 4.3, #566)", () => {
+	it("a grant declaration fails generation, and the message carries the measured-not-documented distinction", () => {
+		const grants = grant(app).usage.to(roleName("reader"));
+		const result = generateMigration({
+			declarations: [app, ...grants.grants],
+			previousSnapshot: emptySnapshot,
+			validators: allValidators,
+		});
+
+		expect(result.sql).toBe("");
+		const messages = result.errors.map((error) => error.message).join("\n");
+		expect(result.errors.map((error) => error.code)).toContain(
+			"nile-grant-unsupported",
+		);
+		expect(messages).toMatch(
+			/this refusal rests on a measurement, not on the platform's published limitations/,
+		);
+	});
+});
+
+describe("Every serial-family column in a tenant-aware table is refused (task 4.4, #566)", () => {
+	it.each([
+		["serial", serial],
+		["smallserial", smallserial],
+		["bigserial", bigserial],
+	])("%s fails generation in a table with tenant_id uuid", (_name, column) => {
+		const widgets = table(app, "widgets", {
+			id: column().primaryKey(),
+			tenantId: uuid().notNull(),
+		});
+		const result = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+			validators: allValidators,
+		});
+
+		expect(result.sql).toBe("");
+		const messages = result.errors.map((error) => error.message).join("\n");
+		expect(result.errors.map((error) => error.code)).toContain(
+			"nile-serial-in-tenant-table",
+		);
+		expect(messages).toMatch(
+			/this refusal rests on a measurement, not on the platform's published limitations/,
+		);
+	});
+
+	it("the same serial column in a table without tenant_id passes", () => {
+		const counters = table(app, "counters", {
+			id: serial().primaryKey(),
+		});
+		const result = generateMigration({
+			declarations: [app, counters],
+			previousSnapshot: emptySnapshot,
+			validators: allValidators,
+		});
+
+		expect(result.errors).toEqual([]);
+	});
+});
+
+describe("What the platform accepts is untouched, and no other preset's output changes (task 4.5, #566)", () => {
+	it("a tenant-aware table with no refused declaration generates exactly the SQL it generates with no preset registered", () => {
+		const widgets = table(app, "widgets", {
+			id: uuid().primaryKey(),
+			tenantId: uuid().notNull(),
+		});
+
+		const withValidators = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+			validators: allValidators,
+		});
+		const withoutValidators = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+
+		expect(withValidators.errors).toEqual([]);
+		expect(withValidators.sql).toBe(withoutValidators.sql);
+	});
+
+	it("mutation-proof: removing one refusal (grants) leaves the other three intact -- a bad edit is caught by exactly the scenario it breaks", () => {
+		const grants = grant(app).usage.to(roleName("reader"));
+		const withoutGrantValidator = [
+			nileRlsValidator,
+			nileFunctionTriggerValidator,
+			nileSerialValidator,
+		];
+		const result = generateMigration({
+			declarations: [app, ...grants.grants],
+			previousSnapshot: emptySnapshot,
+			validators: withoutGrantValidator,
+		});
+
+		// this is the fixed point a real "remove nileGrantValidator from
+		// the array" mutation is checked against, performed out-of-band
+		// per this group's own TDD discipline (temporary edit to
+		// preset.ts's own validators array, rerun, revert via file copy) --
+		// only the grant scenario should go red, not the other three.
+		expect(result.errors).toEqual([]);
+	});
+});

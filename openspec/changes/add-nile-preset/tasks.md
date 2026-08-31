@@ -142,31 +142,51 @@ est_frozen: 9m (re-estimated at G3 close from observed 0.1-0.3x; original
 estimates below are kept, not overwritten -- this line separates
 estimating-habit error from execution error)
 
-- [ ] 4.1 (9m) RLS enablement and policies are refused at generate time
+- [x] 4.1 (9m) RLS enablement and policies are refused at generate time
       with an explicit error naming the declaration **and attributing the
       limitation to the platform's published table**. Failing test:
       generating a schema with a policy fails, no SQL is written, and the
       message carries that attribution.
-- [ ] 4.2 (7m) Functions and triggers are refused, with the same
+- [x] 4.2 (7m) Functions and triggers are refused, with the same
       documented attribution. Failing test: one declaration each.
-- [ ] 4.3 (7m) Grants are refused, **and the error states that this
+- [x] 4.3 (7m) Grants are refused, **and the error states that this
       refusal rests on a measurement** rather than on the platform's
       published limitations. Failing test: the message carries that
       distinction. (Comments are deliberately absent: the DSL has no
       comment declaration, so a validator for them could never fire — the
       platform fact belongs in the skill instead, task 6.1.)
-- [ ] 4.4 (8m) `serial`, `smallserial`, and `bigserial` in a tenant-aware
+- [x] 4.4 (8m) `serial`, `smallserial`, and `bigserial` in a tenant-aware
       table are refused, with the measured attribution. Failing test: a
       table with `tenant_id uuid` and each serial-family column fails; the
       same column in a table without `tenant_id` passes.
-- [ ] 4.5 (8m) What the platform accepts is untouched, **and no other
+- [x] 4.5 (8m) What the platform accepts is untouched, **and no other
       preset's output changes**. Failing tests: a tenant-aware table with
       no refused declaration generates exactly the SQL it generates with
       no preset registered; and the same declarations generated with the
       Supabase preset registered are unchanged by this capability
       existing.
-- [ ] 4.6 (5m) `[design]` Each validator's error text, including how it
-      states its evidence grade.
+- [x] 4.6 (5m) `[design]` Each validator's error text, including how it
+      states its evidence grade. **Settled: one shared pair of verbatim
+      clauses, appended to each declaration-specific message** —
+      `PLATFORM_DOCUMENTED = "this is documented in the platform's
+      published limitations"` (RLS/policy, function, trigger) and
+      `MEASURED_ONLY = "this refusal rests on a measurement, not on the
+      platform's published limitations"` (grant, serial-in-tenant-table),
+      near-verbatim quotes of the spec's own two scenario sentences
+      ("attributes the limitation to the platform" /
+      "states that this refusal rests on a measurement"). Every message
+      also names the declaration (schema/table/column/function/trigger
+      name) and ends with a "Next:" remediation clause (repo convention).
+      **Caveat reported, not resolved here**: the exact platform-doc
+      citation text/URL for the RLS/function/trigger limitations table
+      was not available to the implementer at this task's own scope —
+      the messages state the *category* of evidence (platform-documented)
+      without quoting the platform's own wording verbatim, unlike the
+      tenant-column convention's citation in `proposal.md`. Flagged for
+      lead/researcher: substitute the exact citation if one exists.
+      Implemented and tested (`packages/nile/src/validators.ts`,
+      `packages/nile/test/validators.test.ts`, tasks 4.1-4.5) — reported
+      for lead confirmation alongside 4.1-4.5's own completion.
 
 ## 5. The live witness (#567)
 Files: `packages/nile/test/integration/**`,

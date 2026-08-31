@@ -4,6 +4,12 @@ import type {
 	Preset,
 	Validator,
 } from "@hejbro/core";
+import {
+	nileFunctionTriggerValidator,
+	nileGrantValidator,
+	nileRlsValidator,
+	nileSerialValidator,
+} from "./validators";
 
 /**
  * The Nile preset's own object kinds (task 1.2, #563) -- empty: the
@@ -16,12 +22,18 @@ import type {
 const nileKinds: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [];
 
 /**
- * The Nile preset's own validators (task 1.2, #563) -- empty here; group
- * 4 (#566) attaches the platform-refusal validators (RLS, functions,
- * triggers, grants, the tenant-aware serial family) additively, never by
- * replacing this array's own declaration site.
+ * The Nile preset's own validators (task 1.2/4.1-4.4, #563/#566) -- the
+ * platform-refusal set attached additively here, never by replacing this
+ * array's own declaration site: RLS/policies, functions/triggers, grants,
+ * and the tenant-aware serial family, each with its own evidence grade
+ * (`packages/nile/src/validators.ts`).
  */
-const nileValidators: ReadonlyArray<Validator> = [];
+const nileValidators: ReadonlyArray<Validator> = [
+	nileRlsValidator,
+	nileFunctionTriggerValidator,
+	nileGrantValidator,
+	nileSerialValidator,
+];
 
 /**
  * The Nile preset as a config-listable data object (D55):
