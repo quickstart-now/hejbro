@@ -422,12 +422,35 @@ not the family-wide `number | bigint | string`). A field built from
 anything else — a `sql` fragment, a computed expression — still resolves
 to its coarse SQL family, which is all such a value carries.
 
-Every object-projection field is nullable, including one from a
-`.notNull()` column. The projection's type is fixed at `select()` time,
-before `.leftJoin()` can be chained onto it, so a left join really can
-null any of them and this layer cannot yet see which tables were
-left-joined (tracked as #307). Whole-table selects and `returning()`
-without a projection are unaffected — they carry declared nullability.
+An object-projection field follows its declared nullability too, the same
+as a whole-table select: a projected `.notNull()` column types as non-null
+unless its own table was actually left-joined somewhere in the same
+statement, in which case it types as nullable — a left join really can
+null any column from the joined side, and the type follows that exactly,
+table by table, not as a blanket rule over every projected field. The same
+`returning()` narrowing applies to `insert`/`update`/`deleteFrom`, which
+is always non-null-exact regardless of joins: a mutation statement has no
+join grammar at all, so there is nothing for it to leave uncertain.
+
+An aggregate (`count`/`sum`/`avg`/`min`/`max`) or a window function
+(`over(lag(...), ...)` and friends) stays nullable regardless of any join
+— an aggregate over zero rows and a window function at a partition
+boundary can each genuinely produce `null`, independent of what table
+their argument came from, so narrowing them to their argument's own
+declared nullability would be a lie. A handful of positions stay at the
+pre-narrowing, always-nullable behavior because they do not see the
+surrounding statement's own joins at all: a nested read
+(`jsonArrayFrom`/`jsonObjectFrom`), a CTE's own body, a view's own body,
+and `related()`'s sugar all read their own declared columns through a
+fresh, independent projection.
+
+This inference is driven by a small amount of internal plumbing that
+tracks which tables a statement has left-joined: `leftJoinedBrand`,
+`UntrackedJoins`, and `LeftJoinedBrand` are visible in hover types on a
+select/chain stage (and, since `hejbro` re-exports all of `@hejbro/core`,
+importable from `hejbro` too) — nothing to import or call in ordinary
+use, and nothing that changes how `select`/`leftJoin`/`returning` are
+written.
 
 Insert input types require every `notNull`-without-default column and
 accept the rest as optional; update input types accept any column as
