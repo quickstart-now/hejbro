@@ -26,8 +26,9 @@ rendering, after the context statements. On a **supported base driver**
 inside the transaction as well. On a base that sends its own statements
 inside the transaction it opens — the shape this preset does not support
 — the tenant setting is still the first statement the query layer sends,
-and the platform refuses it; that is the failure the unsupported shape
-produces, not an exception to this requirement.
+and the platform refuses it (measured on its test container; its
+published limitations table does not state it); that is the failure the
+unsupported shape produces, not an exception to this requirement.
 
 #### Scenario: A tenant context renders the tenant setting first
 - **WHEN** an execution runs under a context built for a tenant
@@ -65,13 +66,22 @@ whitelist. The second declaration is what makes an uncontexted execution
 fail closed at hejbro's own layer, because on this platform a missing
 context widens visibility to every tenant rather than narrowing it.
 
-Declaring a context mandatory does not block the CLI's catalog read, and
-the reason is a property of where that read is issued rather than
-anything this preset enforces: it goes through the driver session
-directly, not through a `db()` execution surface, and the refusal applies
-to execution surfaces only. The preset states this consequence so that
-"the platform requires a context" is not read as "the schema check stops
+Declaring a context mandatory does not block the schema assertion a
+handle exposes: `assertSchema(handle)` reads through the handle's own
+`driver` member, which is not an execution surface and which the corpus
+already exempts. The preset states this consequence so that "the
+platform requires a context" is not read as "the schema assertion stops
 working".
+
+The preset's rendering SHALL refuse a context it cannot apply, before
+producing any statement: one that **names a role** — the platform has
+none, its role statement is silently ignored, and that statement
+additionally blocks the tenant setting behind it — or one carrying a
+**setting outside the platform's own tenant and user keys**. The refusal
+SHALL be an explicit coded error naming which part was unsupported, and
+SHALL NOT carry the value. Dropping either silently would run the
+caller's statements under whatever the connection already holds, which
+is exactly what the declared-role requirement forbids.
 
 #### Scenario: A role-less context is admitted on this driver
 - **WHEN** an execution runs under the preset's own context, which names
@@ -82,7 +92,9 @@ working".
 - **WHEN** a context naming a role outside the declared-role union is used
   on this driver
 - **THEN** it is refused before any statement is sent, exactly as it would
-  be on a driver that made no role-less declaration
+  be on a driver that made no role-less declaration; a role that *passes*
+  the whitelist is then refused by the rendering itself, because the
+  platform has no role to apply it to
 
 #### Scenario: An uncontexted execution is refused
 - **WHEN** a statement is executed on a handle built on this driver with
@@ -90,29 +102,45 @@ working".
 - **THEN** it fails with the query layer's `context-required` error before
   anything reaches the database
 
-#### Scenario: The CLI's catalog read still reaches the database
-- **WHEN** the schema check reads the catalog against a database served by
-  this driver
+#### Scenario: The schema assertion still reaches the database
+- **WHEN** `assertSchema(handle)` reads the catalog through a handle built
+  on this driver
 - **THEN** the read is issued and returns, because it goes through the
-  driver session directly rather than through a `db()` execution surface,
-  and the mandatory-context refusal therefore does not apply to it
+  handle's `driver` member rather than an execution surface, and the
+  mandatory-context refusal therefore does not apply to it
+
+#### Scenario: A context naming a role is refused, not dropped
+- **WHEN** a context that names a role — including one the declared-role
+  whitelist admits — is used on this driver
+- **THEN** the rendering fails with an explicit coded error before any
+  statement is produced; the wrapping transaction the query layer had
+  opened carries none, and the role is never silently ignored
+
+#### Scenario: A setting the platform cannot take is refused, not dropped
+- **WHEN** a context carries a setting key outside the platform's own
+  tenant and user settings
+- **THEN** the rendering fails with the same explicit coded error, naming
+  the key it cannot apply, before any statement is produced; the wrapping
+  transaction carries none
 
 ### Requirement: The Nile rendering constrains the values it interpolates
 `SET LOCAL` carries no bind parameter, so the tenant and user values are
 interpolated into statement text, and the driver — not the query layer —
 owns their safety. Both values are UUIDs on this platform. The rendering
 SHALL therefore refuse a value that is not a canonical UUID **before any
-statement is sent**, with an explicit coded error, and SHALL still apply
-the ordinary literal-quoting rule to the value it does interpolate. The
-safety of this rendering SHALL be verified in the preset's own package.
+statement is produced** — the wrapping transaction the query layer opens
+is already open when the rendering runs, and it carries none — with an
+explicit coded error, and SHALL still apply the ordinary literal-quoting
+rule to the value it does interpolate. The safety of this rendering SHALL
+be verified in the preset's own package.
 
 #### Scenario: A value that is not a UUID never becomes a statement
 - **WHEN** a context is built with a tenant value that is not a canonical
   UUID
-- **THEN** the failure is an explicit coded error raised before any
-  statement is produced, and no statement reaches the driver — the query
-  layer has already opened the wrapping transaction when the rendering
-  runs, and that transaction carries none
+- **THEN** the failure is an explicit coded error, `nile-context-value-invalid`,
+  raised before any statement is produced, and no statement reaches the
+  driver — the query layer has already opened the wrapping transaction
+  when the rendering runs, and that transaction carries none
 
 #### Scenario: An adversarial value never appears raw in the statement
 - **WHEN** a value carrying SQL syntax is passed as a tenant value
