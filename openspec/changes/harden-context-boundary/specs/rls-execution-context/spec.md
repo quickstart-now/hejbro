@@ -93,7 +93,8 @@ execution without narrowing anything.
 Every refusal this requirement raises SHALL name the surface the caller
 invoked — the statement execution, the chain member, the declared-
 function call, or the transaction API — spelled as the caller spells it,
-on the explicitly scoped path and the provider path alike. It SHALL NOT
+the transaction API excepted, on the explicitly scoped path and the
+provider path alike. It SHALL NOT
 name a construction option, and one name SHALL NOT stand in for several
 surfaces, so that a caller can map the error to the call site that
 produced it. The transaction API is the one exception, and it is
