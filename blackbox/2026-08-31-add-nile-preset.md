@@ -217,6 +217,57 @@ second of the two review rounds, which stays in reserve for a CI
 failure. That operating rule for the round cap is recorded here for
 reuse.
 
+## The D106 gate (PASS, with corrections before archive)
+
+The isolated spec-only review returned PASS — 0 blocking, 3 major, 8
+minor. No delta scenario contradicted shipped behavior; every one the
+evaluator could drive, it drove (25 rows). The findings were gaps
+between the spec, the public surface, and the corpus, and eleven of
+them were closed before archive rather than filed.
+
+The one that mattered was F3. The rendering *projected* the context
+instead of mapping it: a role that passed the declared-role whitelist
+was dropped without a `SET LOCAL ROLE`, and any setting outside the
+two Nile keys vanished without a statement or an error. That is the
+shape the corpus forbids for the role-less case — running under
+whatever role the connection already holds — reached through a named
+role instead. Applying the role is not an option on this platform (the
+role statement is ignored and blocks the tenant setting behind it), so
+the rendering now refuses what it cannot apply, before producing any
+statement, with `nile-context-unsupported` and a `field` naming the
+part; the value is never echoed. The piece review had not asked this
+question because the delta had not: every axis was about what the
+rendering *does* with the tenant and user keys, none about what it
+does with the rest of the context. A reader with only the spec asked
+"and the rest?" — which is what the stage exists for. The fix was
+mutated on both branches separately (role, foreign key): removing
+either refusal turns its own tests red, so "one of the two still
+holds" cannot pass.
+
+The other corrections: the query-layer skill still listed the Nile
+preset as unsupported (F1, a sweep this piece missed while editing the
+same file); none of the seven error codes was on the public surface
+(F2 — the skill's refusal table gained a code column and the delta pins
+each code, the same convention #553's correction round applied); the
+mandatory-context rationale named `hejbro check`, which builds its own
+`@hejbro/pg` driver and never sees this one (F4, below); "before any
+statement is sent" overstated what the scenario states precisely (F5);
+the changeset said "any driver" where the delta restricts the base
+(F6); the first-statement platform claim carried no evidence grade
+(F7 — measured, like the validator refusals); a trigger produced a
+second diagnostic for its own synthesized function with a `Next:`
+naming a declaration the user never wrote (F8, fixed by excluding
+trigger-owned functions by reference, not by name); identity columns
+are sequence-backed and unmeasured (F9, stated as such in the skill and
+queued as #573); the primary-key refusal now names the key's columns
+(F10); witness B now asserts `pg_backend_pid()` is unchanged, so it can
+no longer pass for the wrong reason (F11). The review ran the
+correction as the second of the two rounds because it touched source;
+a later text-only increment (pinning the new code in the delta, one
+skill sentence stating why a role is refused rather than ignored) was
+verified at reduced scope after the reviewer independently confirmed
+the classification from the diff.
+
 ## Attribution
 
 Decisions in the piece: the owner's two rulings above; the planner's
@@ -243,3 +294,34 @@ items, the freeze exceptions, the fifth validator, and the tag freeze.
   asked is not answered until the answer arrives, and when correcting a
   low-harm state, compare the cost of the fix with the cost of leaving
   it.
+
+Six of this entry's pins died before archive without this piece
+changing a byte: the relicense (#571) merged after #572 and edited
+`AGENTS.md`, `README.md`, the skill index, the smoke script, and the
+nile package's `LICENSE` and manifest. A pin proves content, not order;
+when two pieces touch the same file on the same day, the later merge
+kills the earlier pins, and re-pinning them with the cause annotated is
+the normal procedure. The lead pre-announced the six so the archive
+round's sweep would read them as expected rather than as an alarm.
+
+F4 was a joint error. The planner and the lead both concluded that a
+mandatory context does not block the CLI's schema check, and both cited
+`packages/cli/src/check/catalog.ts` as the reason. The conclusion was
+right; the reason was wrong: `hejbro check` builds its own `@hejbro/pg`
+driver and never sees a decorated one, so `contextRequired` is not in
+play there at all. The surface the reasoning fits is `assertSchema`
+reading through a handle's `driver` member, which the corpus already
+exempts. A correct conclusion on a wrong basis would have misled the
+next reader; the requirement and the scenario now name the right
+surface, and the internal path citation is gone from the skill.
+
+Two more operating rules came out of the last hour. The reviewer runs a
+text-only increment at reduced scope only after confirming the
+classification independently from the diff paths and, for a test file,
+from its non-comment lines — the classification sets the verification
+strength, so the verifier checks the premise. And the whitelist that
+defines an increment's scope travels in the same message as the tip
+SHA it applies to; anything sent earlier is an estimate. The second
+rule replaced two consecutive omissions in which instructions widened
+the scope after the list had gone out — the list was stale from the
+moment it was sent, and memory was the only thing keeping it current.
