@@ -1,10 +1,10 @@
 Refs:
-- openspec/changes/harden-context-boundary/proposal.md @ blob df7b3f7d686583bc2d02dbfb91499fdf97761c61
-- openspec/changes/harden-context-boundary/tasks.md @ blob f9edfd086dbbd58fad342b17cfe1e439e1f74e17
-- openspec/changes/harden-context-boundary/specs/rls-execution-context/spec.md @ blob e6acdf83e58817b483543d158fec8cdde2afca60
-- openspec/changes/harden-context-boundary/specs/driver-contract/spec.md @ blob 75a0bacbe50dad3e174b2b9032210f61e227446e
+- openspec/changes/archive/2026-09-01-harden-context-boundary/proposal.md @ blob df7b3f7d686583bc2d02dbfb91499fdf97761c61 (re-pathed, archive)
+- openspec/changes/archive/2026-09-01-harden-context-boundary/tasks.md @ blob f9edfd086dbbd58fad342b17cfe1e439e1f74e17 (re-pathed, archive)
+- openspec/changes/archive/2026-09-01-harden-context-boundary/specs/rls-execution-context/spec.md @ blob 74b87b728d711d905e9fad940e1ef44c08c57742 (re-pathed, archive) (re-pinned: D106 correction)
+- openspec/changes/archive/2026-09-01-harden-context-boundary/specs/driver-contract/spec.md @ blob 7c559dd336823c2c9400e690dbc95ab8b4fbaf55 (re-pathed, archive) (re-pinned: D106 correction)
 - .changeset/harden-context-boundary.md @ blob 8b2f5d2840bd9ab2d056a919ec925249dc185f52
-- openspec/task-times.csv @ blob 548d992c1de3b2c950f1a25f874011018813e44f
+- openspec/task-times.csv @ blob 1f792479a2a4599287cf1bbcbef6d1e66d0550fd (re-pinned: archive round)
 - README.md @ blob d522a764188b1a05810afd8759419fc381ee091a
 - packages/query/src/db/context.ts @ blob 8249a8a68e28dda9960d2a646cc481af70251d9a
 - packages/query/src/db/db.ts @ blob 4eb47e20dfe9d83b8c35ab81c57e2ad7ade48aa7
@@ -18,8 +18,9 @@ Refs:
 - packages/nile/test/context.test.ts @ blob edf81c444fbfbaeb6df650c3d1bea44beb5f1911
 - packages/neon/test/driver.test.ts @ blob 02ccc477a2b09b4e50edbb150c4a5a06ee6b0215
 - skills/hejbro/references/query-layer.md @ blob 93e5b14438fc1f51e09994861f7e4c80af101cfe
+- openspec/changes/archive/2026-09-01-harden-context-boundary/evaluation.md @ blob 52a7c7950d645b59cffc7f40b953391873066624 (added at the archive round)
 
-(Taken from `git hash-object <path>` on the working tree before this
+(Pins re-taken at the archive round; originally taken before this
 change's PR commit; the blackbox file itself is not pinned. The
 `openspec/changes/harden-context-boundary/` paths move when the change
 archives and are re-pathed then, blobs unchanged unless the D106 round

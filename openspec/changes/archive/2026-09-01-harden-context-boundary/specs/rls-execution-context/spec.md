@@ -93,13 +93,17 @@ execution without narrowing anything.
 Every refusal this requirement raises SHALL name the surface the caller
 invoked — the statement execution, the chain member, the declared-
 function call, or the transaction API — spelled as the caller spells it,
-the transaction API excepted, on the explicitly scoped path and the
-provider path alike. That covers both refusals this requirement raises:
-the one for an execution that carries no context, and the one for a
-context whose rendering produced nothing. It SHALL NOT name a
+the transaction API excepted. That covers both refusals this
+requirement raises: the one for an execution that carries no context,
+raised on the plain, provider-less handle — the only place it can
+structurally fire — and the one for a context whose rendering produced
+nothing, raised on the explicitly scoped path and the provider path
+alike. It SHALL NOT name a
 construction option, and one name SHALL NOT stand in for several
 surfaces, so that a caller can map the error to the call site that
-produced it. The transaction API is the one exception, and it is
+produced it. Each chain member is its own surface; the declared-function
+API is one surface and names its one token, `db.fn`, whichever
+declared function was called. The transaction API is the one exception, and it is
 deliberate: its refusal keeps the token `transaction`, the spelling the
 driver contract already shares across packages, because a driver outside
 the query layer raises the same failure with that token and the contract
@@ -155,7 +159,9 @@ caller's behalf.
 #### Scenario: A context carrying nothing does not satisfy the declaration
 - **WHEN** an execution names a context that carries neither a role nor
   a setting, on a driver that declares both a mandatory context and a
-  role-less platform
+  role-less platform and whose rendering in effect returns no statement
+  for it — a contributed rendering may instead refuse such a context
+  earlier, with its own code
 - **THEN** it is refused with that same coded error, rather than
   proceeding with no context statement at all
 

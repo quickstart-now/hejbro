@@ -12,7 +12,12 @@ Where the query layer raises this failure for an execution a caller made
 through a db handle, the operation it names SHALL be the surface the
 caller invoked, spelled as the caller spells it — never the name of a
 construction option, and never one name standing in for several
-surfaces. Where a driver raises the failure for its own member, the
+surfaces; the declared-function API counts as one surface with one
+token. The transaction API is excepted here as it is in the
+context-refusal requirement, and for the same reason: its token stays
+`transaction`, the spelling a driver's own thrower also uses, because
+this requirement's uniformity rule binds the two to match. Where a
+driver raises the failure for its own member, the
 operation SHALL be that member's name. The obligation covers the tokens
 this repository's own layers produce: the thrower is a public export, so
 a driver package outside this repository passes a token of its own
