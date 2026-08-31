@@ -84,22 +84,27 @@ never fire.
 #### Scenario: RLS and policies are refused
 - **WHEN** a schema declares row-level security or a policy and generation
   runs with the Nile preset registered
-- **THEN** generation fails naming that declaration
+- **THEN** generation fails naming that declaration, with the code
+  `nile-rls-unsupported`
 
 #### Scenario: Functions and triggers are refused
 - **WHEN** a schema declares a function or a trigger
-- **THEN** generation fails naming that declaration
+- **THEN** generation fails naming that declaration, with the code
+  `nile-function-unsupported` for a function and `nile-trigger-unsupported`
+  for a trigger
 
 #### Scenario: Grants are refused, and the error says it was measured
 - **WHEN** a schema declares a grant
 - **THEN** generation fails, and the error states that this refusal rests
-  on a measurement rather than on the platform's published limitations
+  on a measurement rather than on the platform's published limitations,
+  with the code `nile-grant-unsupported`
 
 #### Scenario: Every serial-family column in a tenant-aware table is refused
 - **WHEN** a table carrying a `tenant_id uuid` column declares a
   `serial`, `smallserial`, or `bigserial` column
 - **THEN** generation fails naming that column, and the error states that
-  this refusal rests on a measurement
+  this refusal rests on a measurement, with the code
+  `nile-serial-in-tenant-table`
 
 #### Scenario: A serial column outside a tenant-aware table is untouched
 - **WHEN** a table with no `tenant_id uuid` column declares a
@@ -112,7 +117,8 @@ never fire.
   key whose column set does not include `tenant_id`
 - **THEN** generation fails naming that table and its key, and the error
   states that this refusal rests on a measurement — the platform rejects
-  such a key on a tenant-aware table
+  such a key on a tenant-aware table — with the code
+  `nile-tenant-primary-key-missing`
 
 #### Scenario: A tenant-aware table itself is ordinary
 - **WHEN** a table declares a `tenant_id uuid` column and nothing the

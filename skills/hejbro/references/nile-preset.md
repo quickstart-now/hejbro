@@ -40,6 +40,21 @@ const tenantAndUserContext = asTenant(
 );
 ```
 
+`asTenant(...)` does not validate its arguments at construction — it
+stores them as given. Validation happens once, at first execution, when
+the rendering runs (a single source of truth: a `DbContext` can also be
+built by hand, bypassing `asTenant` entirely, and that path must be
+checked too — duplicating the check in the builder would just be a
+second, driftable copy of it).
+
+The same rendering also refuses a context it cannot apply at all, before
+producing any statement: one that names a role, or one carrying a
+setting outside the platform's own `nile.tenant_id`/`nile.user_id` keys.
+Both fail with `nile-context-unsupported` — the platform has no role to
+apply a role statement to, and silently dropping it would leave the
+tenant setting behind it blocked too, so the rendering refuses instead
+of ignoring.
+
 A tenant-aware table needs no special syntax — an ordinary `table(...)`
 with a `tenant_id uuid` column is all Nile's platform requires: *"You can
 create a tenant aware table in Nile by creating a table with a
@@ -58,10 +73,10 @@ from the platform at runtime:
   widens visibility to every tenant rather than narrowing it, so an
   uncontexted execution fails closed with the query layer's own
   `context-required` error before anything reaches the database. This
-  does **not** block `hejbro check`'s schema read: that read goes through
-  the driver session directly (`packages/cli/src/check/catalog.ts`), never
-  through a `db()` execution surface, so the mandatory-context refusal
-  never applies to it.
+  does **not** block the schema assertion a handle exposes:
+  `assertSchema(handle)` reads through the handle's own `driver` member,
+  which is not an execution surface and which the corpus already exempts,
+  so the mandatory-context refusal never applies to it.
 
 ## What this preset refuses, and why
 
@@ -69,14 +84,14 @@ Every refusal fails `hejbro generate` with an explicit error naming the
 declaration — never a silent drop, never rewritten SQL. Each error states
 its own evidence grade:
 
-| Declaration | Refused because | Evidence |
-| --- | --- | --- |
-| `rls.enabled(...)` / `rls.policy(...)` | the platform's policy engine is not yet available | platform-documented |
-| `defineFunction(...)` | user-defined functions are not supported | platform-documented |
-| `defineTrigger(...)` | triggers need UDF support, which isn't there yet | platform-documented |
-| `grant(...)` | attempted against Nile's testing container and refused | **measured only** — not in the platform's published table |
-| `serial` / `smallserial` / `bigserial` in a tenant-aware table (a table with a `tenant_id uuid` column) | attempted against Nile's testing container and refused | **measured only** — adjacent to, but not the same declaration as, the platform's documented `CREATE SEQUENCE` restriction for tenant tables |
-| A primary key on a tenant-aware table that excludes `tenant_id` | attempted against Nile's testing container (`create table` with a lone `id` primary key on a table also carrying `tenant_id uuid`) and refused: "primary key of tenant-aware table must have the tenant_id column" | **measured only** — not in the platform's published table |
+| Declaration | Refused because | Evidence | Code |
+| --- | --- | --- | --- |
+| `rls.enabled(...)` / `rls.policy(...)` | the platform's policy engine is not yet available | platform-documented | `nile-rls-unsupported` |
+| `defineFunction(...)` | user-defined functions are not supported | platform-documented | `nile-function-unsupported` |
+| `defineTrigger(...)` | triggers need UDF support, which isn't there yet | platform-documented | `nile-trigger-unsupported` |
+| `grant(...)` | attempted against Nile's testing container and refused | **measured only** — not in the platform's published table | `nile-grant-unsupported` |
+| `serial` / `smallserial` / `bigserial` in a tenant-aware table (a table with a `tenant_id uuid` column) | attempted against Nile's testing container and refused | **measured only** — adjacent to, but not the same declaration as, the platform's documented `CREATE SEQUENCE` restriction for tenant tables | `nile-serial-in-tenant-table` |
+| A primary key on a tenant-aware table that excludes `tenant_id` | attempted against Nile's testing container (`create table` with a lone `id` primary key on a table also carrying `tenant_id uuid`) and refused: "primary key of tenant-aware table must have the tenant_id column" | **measured only** — not in the platform's published table | `nile-tenant-primary-key-missing` |
 
 A `serial`-family column outside a tenant-aware table is untouched — the
 platform's restriction is scoped to tenant-aware tables, and this preset
@@ -86,7 +101,13 @@ container, so this preset makes no claim about it either way
 (**unmeasured**, not assumed safe). Column *order* within a primary key
 that does include `tenant_id` is likewise never asserted — only that
 `tenant_id` is one of its columns, the only fact the measurement actually
-supports. What the platform accepts is unaffected: a tenant-aware table
+supports. **An identity column** (`.generatedAlwaysAsIdentity()` /
+`.generatedByDefaultAsIdentity()`) in a tenant-aware table is untouched
+by this preset too — it achieves a similar auto-incrementing effect to
+the `serial` family through a different Postgres mechanism, but that
+shape was never exercised against the container either, so it stays
+**unmeasured** rather than assumed to share the `serial` family's own
+refusal. What the platform accepts is unaffected: a tenant-aware table
 with no refused declaration generates exactly the SQL it would with no
 preset registered, and registering this preset never changes what any
 other preset's output looks like.

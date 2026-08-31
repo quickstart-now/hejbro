@@ -268,7 +268,7 @@ remaining 7.4-7.6 sum, not the whole group -- 7.1-7.3 already landed)
 - [x] 7.4 (5m) One `minor` changeset.
 - [x] 7.5 (5m) `openspec/task-times.csv` rows for every completed group and
       the README task-time badge refresh (`pnpm check:tasktime`).
-- [ ] 7.6 (5m) Post-merge rounds are stamped too: the isolated spec-only
+- [x] 7.6 (5m) Post-merge rounds are stamped too: the isolated spec-only
       review, its corrections, and the archive move each carry their own
       `date -u` stamps and their own ledger row, written when that round
       ends rather than estimated afterwards.

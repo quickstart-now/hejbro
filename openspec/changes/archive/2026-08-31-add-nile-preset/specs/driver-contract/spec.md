@@ -51,7 +51,9 @@ else through unchanged:
 ### Requirement: The Nile decorator states which base drivers it supports
 A base driver whose own session statements are sent **inside the
 transaction it opens** would place those statements ahead of the tenant
-setting, which this platform refuses. The preset SHALL therefore support
+setting, which this platform refuses (measured on its test container;
+its published limitations table does not state it). The preset SHALL
+therefore support
 base drivers that pin their session at connection checkout — outside any
 transaction — and its documentation SHALL state the unsupported shape so
 a reader meets it before a database does.

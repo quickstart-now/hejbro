@@ -254,6 +254,16 @@ describe("nileDriver + a real db() handle against Nile's official testing contai
 			driver.current as ReturnType<typeof nileDriver>,
 		);
 
+		// captured before the scoped read, so the D106 F11 pid check below
+		// has a real baseline -- not an assumption about pool behavior.
+		const beforePid = await (
+			base.current as ReturnType<typeof pgDriver>
+		).execute({
+			sql: "select pg_backend_pid() as pid",
+			params: [],
+			kind: "sql",
+		});
+
 		await handle.as(asTenant(TENANT_A)).select(widgets);
 
 		// pool max is node-postgres's own default (>1) elsewhere, but this
@@ -266,11 +276,19 @@ describe("nileDriver + a real db() handle against Nile's official testing contai
 		// "tenant ... not found"/permission story the scoped path uses,
 		// not succeed.
 		const rows = await (base.current as ReturnType<typeof pgDriver>).execute({
-			sql: "select current_setting('nile.tenant_id', true) as v",
+			sql: "select current_setting('nile.tenant_id', true) as v, pg_backend_pid() as pid",
 			params: [],
 			kind: "sql",
 		});
 		expect(rows[0]?.v).toBeFalsy();
+		// D106 F11: without this, "no tenant survives" would be trivially
+		// true for the wrong reason if the pool had silently opened a
+		// second physical connection between the two reads -- a different
+		// backend was never going to see the first one's SET LOCAL either
+		// way, which would prove nothing about the setting's own
+		// transaction-local scope. Same backend pid confirms it's actually
+		// the setting expiring, not a connection swap.
+		expect(rows[0]?.pid).toBe(beforePid[0]?.pid);
 	});
 
 	it("witness C: rows are actually scoped to the tenant our rendering applied (task 5.6, cheap given the fixtures above)", async () => {

@@ -1,4 +1,4 @@
-import { schema, select, table, uuid } from "@hejbro/core";
+import { roleName, schema, select, table, uuid } from "@hejbro/core";
 import type { Driver, DriverRow, DriverSession } from "@hejbro/query";
 import { db } from "@hejbro/query";
 import { describe, expect, it, vi } from "vitest";
@@ -212,6 +212,89 @@ describe("a valid tenant value is quoted, not concatenated (task 3.6, #565)", ()
 		expect(() =>
 			nileContextRendering({
 				settings: { "nile.tenant_id": "1'; drop table widgets; --" },
+			}),
+		).toThrow();
+	});
+});
+
+describe("the rendering refuses a context it cannot apply, before producing any statement (D106 F3)", () => {
+	it("a context naming a role is refused, not silently ignored -- nothing is rendered", () => {
+		expect(() =>
+			nileContextRendering({
+				role: roleName("reader"),
+				settings: { "nile.tenant_id": TENANT_ID },
+			}),
+		).toThrow(
+			expect.objectContaining({
+				code: "nile-context-unsupported",
+				field: "role",
+			}),
+		);
+	});
+
+	it("a setting outside the platform's own tenant/user keys is refused, not silently dropped", () => {
+		expect(() =>
+			nileContextRendering({
+				settings: {
+					"nile.tenant_id": TENANT_ID,
+					"app.unrelated": "whatever",
+				},
+			}),
+		).toThrow(
+			expect.objectContaining({
+				code: "nile-context-unsupported",
+				field: "app.unrelated",
+			}),
+		);
+	});
+
+	it("observed at execution level: a role on the context never reaches the base, and the transaction that opened carries nothing", async () => {
+		const { driver, sentPerTransaction } = recordingBase();
+		// declared via db()'s own "roles" option -- this role passes the
+		// declared-role whitelist (query.ts's own assertContextRole), so
+		// reaching this rendering's own refusal is what this test proves,
+		// not the whitelist's already-covered rejection of an undeclared one.
+		const handle = db(appSchema, nileDriver(driver), {
+			roles: [roleName("reader")],
+		});
+
+		await expect(
+			handle
+				.as({
+					role: roleName("reader"),
+					settings: { "nile.tenant_id": TENANT_ID },
+				})
+				.select(widgets),
+		).rejects.toMatchObject({
+			code: "nile-context-unsupported",
+			field: "role",
+		});
+
+		// db.as(context) opens its own transaction unconditionally (same
+		// contract 3.5's own test already established) -- the one that did
+		// open carries zero statements, because the rendering threw before
+		// producing any.
+		expect(sentPerTransaction).toEqual([[]]);
+	});
+
+	it("mutation-proof: removing the role guard would let a role silently through -- confirmed against the current, checked behavior", () => {
+		// The mutation itself (deleting assertSupportedContext's role
+		// check in src/context.ts, rerunning, reverting via file copy) is
+		// performed and reported out-of-band per this group's own TDD
+		// discipline, not encoded as a second in-repo test. This test is
+		// the fixed point that mutation is checked against.
+		expect(() =>
+			nileContextRendering({
+				role: roleName("reader"),
+				settings: { "nile.tenant_id": TENANT_ID },
+			}),
+		).toThrow();
+	});
+
+	it("mutation-proof fixed point for the unsupported-setting guard", () => {
+		expect(() =>
+			nileContextRendering({
+				settings: { "nile.tenant_id": TENANT_ID, "app.unrelated": "x" },
 			}),
 		).toThrow();
 	});

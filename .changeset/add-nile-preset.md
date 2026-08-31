@@ -3,7 +3,8 @@
 ---
 
 Nile provider preset (#301), the seventh published package:
-`nileDriver(driver)` decorates any `@hejbro/query` driver, declaring
+`nileDriver(driver)` decorates a base driver that pins its session at
+checkout (see the skill for the unsupported shape), declaring
 `roleLessPlatform` and `contextRequired` and contributing a tenant
 context rendering (`SET LOCAL`, never `set_config`, the tenant setting
 first and the user setting after it when named). `asTenant(tenantId,
