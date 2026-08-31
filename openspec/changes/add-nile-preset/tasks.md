@@ -174,7 +174,7 @@ Files: `packages/nile/test/integration/**`,
 
 ## 6. Documentation surfaces (#568)
 Files: `skills/hejbro/references/nile-preset.md`, `skills/hejbro/SKILL.md`,
-`.claude/rules/provider-preset.md`, `README.md`,
+`.claude/rules/provider-preset.md`, `README.md`, `AGENTS.md`,
 `packages/skills/test/nile-preset-doc.test.ts` (new)
 
 - [ ] 6.1 (10m) `references/nile-preset.md`: the context builder, the two
@@ -193,9 +193,10 @@ Files: `skills/hejbro/references/nile-preset.md`, `skills/hejbro/SKILL.md`,
 - [ ] 6.4 (5m) `.claude/rules/provider-preset.md`: `packages/nile/**` joins
       the `paths:` frontmatter, or the boundary rule never loads for this
       package. Failing test: the rule's own path list names the package.
-- [ ] 6.5 (6m) `README.md`'s packages table gains the row, and the
-      "provider presets for Supabase and Neon … with Nile planned"
-      sentence (lines 137-138) stops being true.
+- [ ] 6.5 (9m) `README.md`'s packages table gains the row, and the two
+      "Nile planned" sentences — `README.md` (lines 137-138) and
+      `AGENTS.md`'s project summary — stop being true when this preset
+      ships.
 
 ## 7. Spec, release record, ledger (#569)
 Files: `openspec/changes/add-nile-preset/**`, `.changeset/*.md`,
