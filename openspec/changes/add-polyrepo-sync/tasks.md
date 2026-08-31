@@ -89,7 +89,10 @@ Files: `packages/core/src/dsl/table.ts`,
 authored here, so it carries the brand and its existing runtime refusal
 keeps working unchanged),
 `packages/core/src/engine/generate.ts` (shared, additive),
-`packages/core/src/index.ts`.
+`packages/core/src/index.ts`,
+`packages/query/test/types/usage-table.test.ts` (new — a test only; the
+promise that a usage table queries like any other is observable in that
+package and nowhere else, and `packages/query/src` stays untouched).
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
@@ -97,7 +100,8 @@ keeps working unchanged),
 | " | Generating from a synced module is refused | `core/test/engine/authority-refusal.test.ts > refuses a table that carries no migration authority` |
 | " | The refusal states what it observed | `core/test/engine/authority-refusal.test.ts > the refusal names the absent authority, not a provenance` |
 | " | A table with no origin is refused without one | `core/test/engine/authority-refusal.test.ts > a hand-written usage table is refused with no origin in the message` |
-| " | Querying through the module is unaffected | `core/test/dsl/usage-table.test.ts > a usage table is an ordinary queryable table` |
+| " | Querying through the module is unaffected — structural half | `core/test/dsl/usage-table.test.ts > a usage table is an ordinary queryable table` |
+| " | " — query half (core cannot import the query package) | `query/test/types/usage-table.test.ts > a usage table keeps its relation keys and write inputs` |
 | " (regression pin, unchanged test) | — the pre-existing runtime refusal still reaches its input | `core/test/existing-table.test.ts > hard-errors when passed as a declaration` |
 | A synced module reproduces the consumer-visible type layer | Result keys match the declaring repository | `core/test/dsl/usage-table.test.ts > carries the TypeScript key of each column` |
 | " | Element nullability / numeric mode / relation keys / enum values match | `core/test/dsl/usage-table.test.ts > carries mode, non-null elements, references and enum values` |
@@ -114,7 +118,14 @@ keeps working unchanged),
       their own annotations, so a default of `"declared"` would make a
       consumer's own helpers reject the very tables they synced — and
       that failure would surface in their code, not in ours. `DeclaredTable<TColumns>` is the named
-      alias for the declared side. Plus
+      alias for the declared side — but only where it is read by a few
+      call sites. **`table()`'s own return type must be written inline
+      as `Table<TColumns, "declared">`, never as the alias**: measured
+      by bisection, substituting the structurally identical alias in the
+      return type of a function the whole suite calls breaks core's
+      type-check in 48 places and nine unrelated test files. The reason
+      was not identified; the reproduction was. `existingTable()` takes
+      the inline form for the same reason. Plus
       `authority: "declared" | "usage"` on the declaration — a union
       rather than a boolean so a third constructor does not break it.
       The brand says the value was **authored in this repository**, not
