@@ -95,6 +95,25 @@ describe("a contributing driver's own rendering replaces the default (task 2.2, 
 	});
 });
 
+describe("the rendering is a pure value, not an effect (task 2.3, #555)", () => {
+	it("is called with only the context -- no session in scope -- and the statements it returns are exactly what the query layer sends, never something the rendering sent itself", async () => {
+		const calls: Array<unknown> = [];
+		const rendering: ContextRendering = (context) => {
+			calls.push(context);
+			return [{ sql: "custom pin", params: [], kind: "sql" }];
+		};
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
+			renderContext: rendering,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+
+		expect(calls).toEqual([{ role: roleName("grant_reader") }]);
+		expect(sentPerTransaction[0]?.[0]).toEqual({ sql: "custom pin", params: [] });
+	});
+});
+
 describe("db.as(context) -- UX scenario (2): an existing declared role (grant) works with no db() options set", () => {
 	it("applies SET LOCAL ROLE for a grant-declared role and runs the statement in the same transaction", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();

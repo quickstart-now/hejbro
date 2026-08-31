@@ -52,7 +52,7 @@ Files: `packages/query/src/db/context.ts`,
       Failing test: a contributing driver's statements are the first
       statements inside the transaction, in its order, and no default
       statement is sent at all.
-- [ ] 2.3 (6m) The rendering is a value, not an effect. Failing test: the
+- [x] 2.3 (6m) The rendering is a value, not an effect. Failing test: the
       rendering is called with no session in scope and sends nothing; the
       query layer's own send path carries every statement.
 - [ ] 2.4 (9m) `DbContext.role` becomes optional; a role-less context is
