@@ -202,7 +202,7 @@ export type Table<
  * inference breakage the type-parameter design exists to avoid, even
  * though the two forms are structurally identical. `existingTable`'s
  * return type carries the same constraint for the same reason. This
- * alias itself is safe to use as `HejbroInput` does.
+ * alias itself is safe where it is only read, as `HejbroInput` does.
  */
 export type DeclaredTable<
 	TColumns extends Record<string, ColumnBuilder> = Record<

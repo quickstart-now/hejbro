@@ -56,6 +56,12 @@ that origin; and what to do instead. Where the module carries none, the
 error SHALL NOT supply one: the refusal observes an absent brand, not a
 provenance, and a table written by hand is refused on the same grounds.
 
+Because a table's authority is part of its type, the general table type
+covers both kinds and therefore no longer satisfies the migration input
+on its own: a declaration list annotated with it SHALL fail to
+type-check, and the caller either drops the annotation and lets it be
+inferred or names the declared form.
+
 The refusal SHALL rest on the absence of authority in the values
 themselves, not on the file's name, its location, or any marker a user
 could add or remove.
@@ -72,7 +78,8 @@ could add or remove.
 
 #### Scenario: A table with no origin is refused without one
 - **WHEN** generation runs against a table that carries no migration
-  authority and no origin — one written by hand rather than synced
+  authority and belongs to no module carrying a manifest row — one
+  written by hand rather than synced
 - **THEN** it is refused on the same grounds, and the error supplies no
   origin
 
@@ -81,6 +88,12 @@ could add or remove.
 - **THEN** none of its tables carries migration authority, and the
   module contains no call to the declaration constructor that would
   confer it
+
+#### Scenario: The general table type no longer satisfies the input
+- **WHEN** a declaration list is annotated with the general table type
+  and passed to migration generation
+- **THEN** it fails to type-check, and annotating it with the declared
+  form instead succeeds
 
 #### Scenario: Querying through the module is unaffected
 - **WHEN** a query is built and compiled against a synced module
