@@ -94,18 +94,20 @@ Every refusal this requirement raises SHALL name the surface the caller
 invoked — the statement execution, the chain member, the declared-
 function call, or the transaction API — spelled as the caller spells it,
 the transaction API excepted, on the explicitly scoped path and the
-provider path alike. It SHALL NOT
-name a construction option, and one name SHALL NOT stand in for several
+provider path alike. That covers both refusals this requirement raises:
+the one for an execution that carries no context, and the one for a
+context whose rendering produced nothing. It SHALL NOT name a
+construction option, and one name SHALL NOT stand in for several
 surfaces, so that a caller can map the error to the call site that
 produced it. The transaction API is the one exception, and it is
 deliberate: its refusal keeps the token `transaction`, the spelling the
 driver contract already shares across packages, because a driver outside
 the query layer raises the same failure with that token and the contract
-requires the two to match. Refusing alike means refusing with the same code, from the
-same fail-closed timing — the identity `diagnostics` makes
-machine-readable, message prose being free to move; the operation a
-refusal names is the caller's own surface and therefore differs between
-them.
+requires the two to match. Refusing alike means refusing with the same
+code, from the same fail-closed timing — the identity `diagnostics`
+makes machine-readable, message prose being free to move; the operation
+a refusal names is the caller's own surface and therefore differs
+between them.
 
 This declaration exists because a platform can be fail-open without a
 context: where a missing context widens visibility instead of narrowing

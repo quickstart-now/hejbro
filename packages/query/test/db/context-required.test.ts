@@ -297,6 +297,39 @@ describe("a refusal names the surface the caller invoked (task 1.7, #590)", () =
 	});
 });
 
+describe("a refusal names the surface on an empty rendering too (task 1.9, #590)", () => {
+	it("names the surface on an empty-rendering refusal, scoped and provider alike", async () => {
+		const { driver } = recordingTransactionalDriver({
+			contextRequired: true,
+			renderContext: () => [],
+		});
+
+		const scopedHandle = db(appSchema, driver);
+		await expect(
+			scopedHandle
+				.as({ role: roleName("grant_reader") })
+				.execute(select(posts)),
+		).rejects.toMatchObject({
+			code: "context-rendering-empty",
+			operation: "db.execute",
+		});
+		await expect(
+			scopedHandle.as({ role: roleName("grant_reader") }).select(posts),
+		).rejects.toMatchObject({
+			code: "context-rendering-empty",
+			operation: "db.select",
+		});
+
+		const providerHandle = db(appSchema, driver, {
+			context: () => ({ role: roleName("grant_reader") }),
+		});
+		await expect(providerHandle.execute(select(posts))).rejects.toMatchObject({
+			code: "context-rendering-empty",
+			operation: "db.execute",
+		});
+	});
+});
+
 describe("a refusal names the surface the caller invoked (task 1.5, #590)", () => {
 	it("names each chain member separately", async () => {
 		const { driver } = recordingTransactionalDriver({ contextRequired: true });

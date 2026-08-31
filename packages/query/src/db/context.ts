@@ -95,13 +95,13 @@ function throwProviderContextEmpty(): never {
 	);
 }
 
-/** Builds and throws the `context-rendering-empty`-coded, enriched plain `Error` (D57, harden-context-boundary task 1.1) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). States the observation only: a mandatory-context declaration is not satisfied by a context whose rendering, in effect, applies nothing. */
-function throwContextRenderingEmpty(): never {
+/** Builds and throws the `context-rendering-empty`-coded, enriched plain `Error` (D57, harden-context-boundary task 1.1) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3). States the observation only: a mandatory-context declaration is not satisfied by a context whose rendering, in effect, applies nothing. `operation` names the surface the caller invoked (task 1.9): on a scoped handle this is the only refusal the mandatory-context requirement can raise at all, since `context-required` cannot fire where a context already exists by construction. */
+function throwContextRenderingEmpty(operation: string): never {
 	throw Object.assign(
 		new Error(
 			"the rendering in effect produced no statement for this context; a mandatory context that applies nothing is not applied. Next: fill the context with what the platform requires, or use a driver that does not require one.",
 		),
-		{ code: "context-rendering-empty" },
+		{ code: "context-rendering-empty", operation },
 	);
 }
 
@@ -214,17 +214,20 @@ export const defaultContextRendering: ContextRendering = (context) => [
  * `Promise.all` — these share one connection, and issuing them
  * concurrently would race on it, task 2.6). Every statement here goes
  * through `sendCompiled` (task 4.5's `query-execution-failed` contract),
- * never a bespoke error path.
+ * never a bespoke error path. `operation` is threaded through only to
+ * name an empty-rendering refusal's surface (task 1.9) -- it never
+ * reaches a statement or the rendering itself.
  */
 const applyContext = async (
 	driver: Driver,
 	session: DriverSession,
 	context: DbContext,
+	operation: string,
 ): Promise<void> => {
 	const rendering = driver.renderContext ?? defaultContextRendering;
 	const statements = rendering(context);
 	if (statements.length === 0 && driver.contextRequired === true) {
-		throwContextRenderingEmpty();
+		throwContextRenderingEmpty(operation);
 	}
 	await statements.reduce<Promise<void>>(
 		(previous, statement) =>
@@ -268,7 +271,7 @@ export const createProviderRun = (
 		}
 		assertContextRole(driver, context.role, declaredRoles);
 		return driver.transaction(async (session) => {
-			await applyContext(driver, session, context);
+			await applyContext(driver, session, context, operation);
 			return send(session);
 		});
 	};
@@ -315,7 +318,7 @@ export const createAsApi = <
 		): Promise<T> => {
 			assertCapability(driver, "interactive-transactions", operation);
 			return driver.transaction(async (session) => {
-				await applyContext(driver, session, context);
+				await applyContext(driver, session, context, operation);
 				return send(session);
 			});
 		};

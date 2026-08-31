@@ -15,7 +15,7 @@ outside this table is added.
 | 2. rls: same clause's placement half — after the rendering ran, before any caller statement, the opened transaction carrying none | rls: A context whose rendering produces nothing is refused (placement half) | `packages/query/test/db/context-required.test.ts` → `sends no caller statement and leaves the opened transaction carrying none` |
 | 3. rls: same clause's default-rendering instance — a context carrying neither role nor setting | rls: A context carrying nothing does not satisfy the declaration | `packages/query/test/db/context-required.test.ts` → `refuses an entirely empty context on a role-less, context-mandatory driver` |
 | 4. rls: on a driver making no mandatory-context declaration, an empty rendering is still applied as given | rls: A driver that requires no context keeps applying nothing | `packages/query/test/db/context-required.test.ts` → `leaves a non-declaring driver's empty-rendering execution alone` |
-| 5. rls: every refusal names the surface the caller invoked, never a construction option | rls: A refusal names the surface the caller invoked | `packages/query/test/db/context-required.test.ts` → `names the surface the caller invoked on each refusal` |
+| 5. rls: every refusal names the surface the caller invoked, never a construction option — both refusals this requirement raises, on both paths | rls: A refusal names the surface the caller invoked | `packages/query/test/db/context-required.test.ts` → `names the surface the caller invoked on each refusal` (the uncontexted refusal) and → `names the surface on an empty-rendering refusal, scoped and provider alike` (the empty-rendering refusal, which is the only one a scoped handle can raise) |
 | 6. rls: same clause's chain half — one name SHALL NOT stand in for several surfaces | rls: A refusal names the surface the caller invoked (the two chain members do not share one name) | `packages/query/test/db/context-required.test.ts` → `names each chain member separately` |
 | 7. rls whitelist: admission by the role check is not admission by every check — a context it admits may still be refused downstream | pinned by row 3's scenario, which is that downstream refusal | `packages/query/test/db/context-required.test.ts` → `refuses an entirely empty context on a role-less, context-mandatory driver` (row 3's test) |
 | 8. driver-contract: the query layer's own missing-capability operation names the caller's surface; a driver's own names its member | driver-contract: The refusal names the surface the caller invoked | `packages/query/test/db/context-provider.test.ts` → `names the caller's surface when the capability is missing`, and `packages/query/test/db/context.test.ts` → `names the caller's surface on the scoped path` |
@@ -89,7 +89,7 @@ close-out commit — `pnpm check:tasktime` and, because this group adds a
 named function under `packages/query/src`, `TURBO_FORCE=1 pnpm
 check:crap` run after the code commit exists.
 
-- [ ] 1.1 [design] Add the `context-rendering-empty` thrower to
+- [x] 1.1 [design] Add the `context-rendering-empty` thrower to
   `context.ts`: code fixed by ruling, message states the observation only
   ("the rendering in effect produced no statement for this context; a
   mandatory context that applies nothing is not applied") and ends in a
@@ -99,24 +99,24 @@ check:crap` run after the code commit exists.
   `packages/query/test/db/context-required.test.ts` →
   `refuses a mandatory context whose contributed rendering produces no statement`
   (asserts `code` only). Files: `context.ts`, `context-required.test.ts`.
-- [ ] 1.2 Refuse in the apply path where — and only where — the driver
+- [x] 1.2 Refuse in the apply path where — and only where — the driver
   declares a context mandatory: count the rendering's output after it
   runs, before any caller statement is sent. ~7m. Red: same file →
   `sends no caller statement and leaves the opened transaction carrying none`.
   Files: `context.ts`, `context-required.test.ts`.
-- [ ] 1.3 Cover the default-rendering instance: an entirely empty context
+- [x] 1.3 Cover the default-rendering instance: an entirely empty context
   on a driver declaring both a mandatory context and a role-less
   platform. ~6m. Red: same file →
   `refuses an entirely empty context on a role-less, context-mandatory driver`.
   Files: `context.ts`, `context-required.test.ts`.
-- [ ] 1.4 Pin the two negatives the rule must not overreach into: a
+- [x] 1.4 Pin the two negatives the rule must not overreach into: a
   driver that makes no mandatory-context declaration still runs an
   empty-rendering execution, and a rendering returning one unreadable
   statement is accepted (the layer counts, it never inspects). ~8m. Red:
   same file → `leaves a non-declaring driver's empty-rendering execution alone`
   and `accepts a single unreadable statement — the layer counts, it does not read`.
   Files: `context.ts`, `context-required.test.ts`.
-- [ ] 1.5 [design] Make `createChainApi` take a per-member run factory
+- [x] 1.5 [design] Make `createChainApi` take a per-member run factory
   instead of one shared run, and update its three call sites (`db.ts`,
   `context.ts`, `transaction.ts` — the last passes the session straight
   through and gains no token), so a chain member's own name reaches the
@@ -124,7 +124,7 @@ check:crap` run after the code commit exists.
   `packages/query/test/db/context-required.test.ts` →
   `names each chain member separately`. Files: `chain.ts`, `db.ts`,
   `context.ts`, `transaction.ts`, `context-required.test.ts`.
-- [ ] 1.6 [design] Per-verb operation tokens on the explicitly scoped
+- [x] 1.6 [design] Per-verb operation tokens on the explicitly scoped
   path: replace the three shared `"db.as"` literals in `context.ts` with
   the caller's own surface names (`db.execute`, the chain member's own
   name, `db.fn`; `transaction` unchanged). ~7m. Red:
@@ -134,7 +134,7 @@ check:crap` run after the code commit exists.
   own missing-capability pin asserts the scoped operation token
   (`db.as`) and therefore moves with it; the token the preset's driver
   raises for itself (`transaction`) is untouched.
-- [ ] 1.7 [design] Per-verb tokens on the provider path: retire
+- [x] 1.7 [design] Per-verb tokens on the provider path: retire
   `PROVIDER_OPERATION` in `db.ts` and give `execute` and `fn` their own
   names. ~8m. Red:
   `packages/query/test/db/context-required.test.ts` →
@@ -152,6 +152,18 @@ check:crap` run after the code commit exists.
   only. ~6m. Red: none — comment-only; guarded by `pnpm check` and the
   suites the earlier tasks left green. Files: `db.ts`,
   `packages/query/test/db/chain.test.ts`, `context-provider.test.ts`.
+- [ ] 1.9 [design] Carry the surface name on the second refusal too:
+  `context-rendering-empty` currently ships `{ code }` alone, which
+  leaves the requirement's "on the explicitly scoped path … alike"
+  clause with nothing to satisfy it there — `context-required` cannot
+  fire on a scoped handle, since that handle has a context by
+  construction. Thread the operation already in scope at both call sites
+  into the thrower's enriched fields. ~6m. Red:
+  `packages/query/test/db/context-required.test.ts` →
+  `names the surface on an empty-rendering refusal, scoped and provider
+  alike` (three assertions: the scoped path's `db.execute`, a chain
+  member's `db.select`, the provider path's own surface). Files:
+  `context.ts`, `context-required.test.ts`.
 
 ## 2. Preset regression, user documentation, release artifacts (issue #591)
 
