@@ -157,9 +157,26 @@ type NestedOrExprResult<TValue, TLeftJoined> =
  * `.references()` reads. `never` for anything else: a computed `Expr`, a
  * `sql` fragment, a hand-built `columnRef()`.
  *
- * The brand is optional, so every type structurally satisfies the outer
- * `extends` — `TOrigin` infers as `unknown` when the property is absent,
- * and `NonNullable` strips the `| undefined` an actual brand carries.
+ * The brand is optional, so a value that genuinely carries it (every real
+ * declared column, stamped via `TableColumns`) satisfies the outer
+ * `extends` normally and `TOrigin` infers the brand's own value type.
+ *
+ * Measured (narrow-join-nullability, task 2.6's own investigation,
+ * correcting this comment's own prior claim that "every type structurally
+ * satisfies the outer extends"): a value that carries NONE of the target
+ * object type's properties — a hand-built `columnRef()`, a computed
+ * `Expr` — does NOT satisfy it, because a target consisting entirely of
+ * optional properties is a TypeScript "weak type", and a source sharing
+ * zero properties with a weak type is rejected outright (measured against
+ * a real `columnRef()` value, not a toy model). The conditional's `never`
+ * branch is reached THERE, before `NonNullable<TOrigin>` is ever
+ * evaluated — `NonNullable` only ever runs on a genuinely-present brand's
+ * own value, never on the absent case. This is unrelated to (and not
+ * protected by) the same mechanism that makes `IsTrackedLeftJoinedSet`
+ * vulnerable: `NonNullable<T> = T & {}` (TS 5.9) does collapse
+ * `NonNullable<unknown>` to `{}`, but that collapse never fires here,
+ * because `unknown` is never what flows into `NonNullable` in the first
+ * place.
  */
 type OriginColumn<TValue> = TValue extends {
 	readonly [columnOriginBrand]?: infer TOrigin;
@@ -328,8 +345,12 @@ type IsTrackedLeftJoinedSet<TLeftJoined> = [UntrackedJoins] extends [
 /**
  * The read type an expression declares for itself (#416's `count`), or
  * `never` when it declares none. Read exactly like {@link OriginColumn}:
- * the brand is optional, so `NonNullable` is what separates "carries one"
- * from "does not".
+ * a value carrying none of `{@link readAsBrand}`'s own properties fails
+ * the outer `extends` via the same weak-type rejection
+ * {@link OriginColumn}'s own doc comment measures — `NonNullable` below
+ * only ever runs on a genuinely-present brand's own value, never on
+ * `unknown`, so `NonNullable<T> = T & {}`'s `unknown`-collapse (the
+ * actual defect {@link IsTrackedLeftJoinedSet} has) cannot surface here.
  *
  * Ordered AFTER the origin brand above, and it never competes with it —
  * a declared column is more precise than any self-declared type. "An

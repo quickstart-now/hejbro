@@ -367,17 +367,58 @@ describe("a union tracked set (two leftJoin calls) distributes the membership ch
 	});
 });
 
-describe("a nullable column stays nullable when narrowing conditions are met (#546-fix, group-2 defect found during group 3)", () => {
+describe("a nullable column stays nullable when narrowing conditions are met (#546-fix, group-2 defect found during group 3, task 2.6)", () => {
 	// Group 2's own tests never crossed "nullable column" with "actually
 	// narrowing" -- every narrowing case (2.1/2.3/2.5/self-join/union) used
 	// a notNull column, and every nullable-column case (the object-
 	// projection describe block above) was either untracked or a tracked
-	// member, so this specific combination went unexercised. `posts.title`
-	// (nullable) + a tracked set that does not contain `posts` is exactly
-	// that combination.
-	it("posts.title (nullable) projected against a tracked, non-matching set stays string | null", () => {
+	// member, so this specific combination went unexercised. Reviewer-
+	// flagged scope expansion: four nullable SHAPES lose their `| null`
+	// differently through the bare `ColumnTsType` bug (a plain scalar, a
+	// numeric mode, a `$type` brand, and an array's own outer nullability
+	// are four separate code paths in `ColumnReadType`/`BaseTsType`), so
+	// one shape proves nothing about the other three.
+	it("a plain nullable scalar (text) stays string | null", () => {
 		type Proj = SelectResult<{ readonly t: typeof posts.title }, never>;
 		expectTypeOf<Proj["t"]>().toEqualTypeOf<string | null>();
+	});
+
+	it("a nullable numeric-mode column stays number | null", () => {
+		type Proj = SelectResult<{ readonly a: typeof posts.amount }, never>;
+		expectTypeOf<Proj["a"]>().toEqualTypeOf<number | null>();
+	});
+
+	it("a nullable $type-branded column stays Payload | null", () => {
+		type Proj = SelectResult<{ readonly p: typeof posts.payload }, never>;
+		expectTypeOf<Proj["p"]>().toEqualTypeOf<Payload | null>();
+	});
+
+	it("a nullable array column keeps its OWN outer null, on top of the array's own always-nullable elements", () => {
+		type Proj = SelectResult<{ readonly t: typeof posts.tags }, never>;
+		expectTypeOf<Proj["t"]>().toEqualTypeOf<ReadonlyArray<
+			string | null
+		> | null>();
+	});
+
+	it("control: a notNull column still narrows to the bare type, unaffected by this fix", () => {
+		type Proj = SelectResult<{ readonly t: typeof posts.titleRequired }, never>;
+		expectTypeOf<Proj["t"]>().toEqualTypeOf<string>();
+	});
+});
+
+describe("the ReadAsType and member-match arms stay nullable by construction -- made observable, not assumed (task 2.6)", () => {
+	it("ReadAsType arm (count()) stays bigint | null even under a tracked set", () => {
+		type Proj = SelectResult<
+			{ readonly total: ReturnType<typeof count> },
+			never
+		>;
+		expectTypeOf<Proj["total"]>().toEqualTypeOf<bigint | null>();
+	});
+
+	it("member-match arm (condition 4 true) stays string | null even though every other condition holds", () => {
+		const projected = { b: comments.body };
+		type Proj = SelectResult<typeof projected, typeof comments>;
+		expectTypeOf<Proj["b"]>().toEqualTypeOf<string | null>();
 	});
 });
 
