@@ -114,10 +114,19 @@ Files: `packages/query/src/db/db.ts`,
 - [x] 3.7 (5m) A driver without the declaration is unchanged. Failing
       test: uncontexted execution on an ordinary driver sends no context
       statement and opens no transaction.
-- [ ] 3.8 (5m) `[design]` The refusal's code/message and the exact
+- [x] 3.8 (5m) `[design]` The refusal's code/message and the exact
       surface list (settled leaning: every execution surface;
       `setupSession`/`assertSchema`-class members excluded, reusing the
-      "execution surface" wording already in the spec).
+      "execution surface" wording already in the spec). Confirmed as
+      implemented: code `context-required` (`throwContextRequired`,
+      `packages/query/src/db/db.ts`), message names the refused
+      `operation` and states `Next: call db.as(context) explicitly, or
+      register a context provider (db()'s "context" option)`. Surface
+      list is exactly the eight the provider survey already named
+      (select/insert/update/deleteFrom/with/fn/execute/transaction, all
+      reached through the one refusing seam) — `handle.driver` (the
+      schema assertion's own path) and `setupSession` (never exposed on
+      `Db` at all) are outside it, pinned by 3.5's reverse-evidence test.
 
 ## 4. Existing drivers keep their behavior (#557)
 Files: `packages/pg/test/driver.test.ts`,
