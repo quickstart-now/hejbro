@@ -43,7 +43,7 @@ Files: `packages/nile/{package.json,tsconfig.json,tsdown.config.ts,vitest.config
       preset ships no bundle to register; copying it here would substitute
       a weaker check. Failing test: break the package's `exports` map and
       watch this assertion, not another, fail.
-- [ ] 1.5 (5m) `.changeset/config.json`'s fixed group 6 → 7 and AGENTS.md's
+- [x] 1.5 (5m) `.changeset/config.json`'s fixed group 6 → 7 and AGENTS.md's
       "six published packages". Failing test: `pnpm check:fixed-group`,
       which compares the group against the published set in both
       directions.
