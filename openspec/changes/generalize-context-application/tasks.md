@@ -75,9 +75,15 @@ Files: `packages/query/src/db/context.ts`,
       Failing test: on a provider handle whose driver lacks the
       capability, the resolver records no call (observable side effect,
       not "an error was thrown").
-- [ ] 2.9 (5m) `[design]` Error code and message for the role-less
+- [x] 2.9 (5m) `[design]` Error code and message for the role-less
       refusal — whether it joins the `undeclared-role` family or gets its
-      own code.
+      own code. Settled by the lead ahead of 2.4 (pre-delivered so 2.4
+      wasn't blocked): its own code, `context-role-missing` — never
+      `undeclared-role`, whose message lists the declared roles as the
+      fix, meaningless when no role was named at all. Confirmed after
+      2.10: the throw site (`throwContextRoleMissing`,
+      `packages/query/src/db/context.ts`) reads `driver.roleLessPlatform`
+      on the merged `DbContext` type, unaffected by the type collapse.
 - [x] 2.10 (7m) Collapse the two context types into one. `DbContext`'s
       definition moves to `driver/contract.ts` (the lower layer, where the
       rendering signature needs it) and `db/context.ts` re-exports it;
