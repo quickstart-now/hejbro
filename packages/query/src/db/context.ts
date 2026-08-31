@@ -1,7 +1,7 @@
 import type { FunctionDeclaration, Role } from "@hejbro/core";
 import { quoteIdentifier } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
-import type { Driver, DriverSession } from "../driver/contract";
+import type { ContextRendering, Driver, DriverSession } from "../driver/contract";
 import { assertCapability } from "../driver/errors";
 import type { ChainApi } from "./chain";
 import { createChainApi } from "./chain";
@@ -123,6 +123,37 @@ const settingStatement = (key: string, value: string): CompileResult => ({
 	params: [key, value],
 	kind: "sql",
 });
+
+/**
+ * `defaultContextRendering`'s own role-statement slice (task 2.1, #555):
+ * empty when `context.role` is `undefined` -- a role-less context is only
+ * ever handed to this rendering once a driver has declared its platform
+ * role-less (task 2.4's job, not this function's), so this omission is
+ * the correct behavior for that case, not a gap. Filter+map, never a
+ * ternary (house style): the single-element-or-empty array is
+ * `Array.prototype.filter`'s own idiom for "maybe one item".
+ */
+const roleStatements = (role: Role | undefined): ReadonlyArray<CompileResult> =>
+	[role].filter((value): value is Role => value !== undefined).map(roleStatement);
+
+/**
+ * The query layer's own default context-rendering contribution (task
+ * 2.1, #555, spec: driver-contract "Contributing nothing keeps the
+ * existing statements") -- extracted from `applyContext`'s own sequence
+ * below, byte-identical to what every driver received before this
+ * contribution point existed: `SET LOCAL ROLE` first, then one
+ * parameterized `select set_config($1, $2, true)` per setting entry, in
+ * declaration order. A pure mapping, never a side effect (spec: "The
+ * contribution SHALL be a pure mapping") -- exported so a driver package
+ * can compose it with its own statements rather than restate this
+ * sequence (spec: "reachable by a driver package").
+ */
+export const defaultContextRendering: ContextRendering = (context) => [
+	...roleStatements(context.role),
+	...Object.entries(context.settings ?? {}).map(([key, value]) =>
+		settingStatement(key, value),
+	),
+];
 
 /**
  * Applies `context` on `session`: `SET LOCAL ROLE` first (identifier-quoted

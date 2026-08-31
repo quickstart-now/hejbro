@@ -44,7 +44,7 @@ Files: `packages/query/src/db/context.ts`,
 `packages/query/test/db/context.test.ts`,
 `packages/query/test/db/context-provider.test.ts`
 
-- [ ] 2.1 (9m) Extract today's sequence as an exported default rendering
+- [x] 2.1 (9m) Extract today's sequence as an exported default rendering
       (pure function). Failing test: it returns `set local role "…"`
       followed by one `select set_config($1, $2, true)` per setting in
       declaration order — byte-identical to what is sent today.

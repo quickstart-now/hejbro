@@ -10,6 +10,7 @@ import {
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, it, vi } from "vitest";
+import { defaultContextRendering } from "../../src/db/context";
 import { db } from "../../src/db/db";
 import type { Driver, DriverSession } from "../../src/driver/contract";
 import { recordingTransactionalDriver } from "./recording-driver";
@@ -37,6 +38,35 @@ const posts = table(
 const readerGrant = grant(app).usage.to("grant_reader");
 
 const appSchema = { posts, readerGrant };
+
+describe("defaultContextRendering (task 2.1, #555 -- extracted from applyContext, byte-identical to today's sequence)", () => {
+	it("returns the role statement, then one set_config per setting, in declaration order", () => {
+		const statements = defaultContextRendering({
+			role: roleName("grant_reader"),
+			settings: { "app.claim1": "v1", "app.claim2": "v2" },
+		});
+
+		expect(statements).toEqual([
+			{ sql: 'set local role "grant_reader"', params: [], kind: "sql" },
+			{
+				sql: "select set_config($1, $2, true)",
+				params: ["app.claim1", "v1"],
+				kind: "sql",
+			},
+			{
+				sql: "select set_config($1, $2, true)",
+				params: ["app.claim2", "v2"],
+				kind: "sql",
+			},
+		]);
+	});
+
+	it("returns just the role statement when there are no settings", () => {
+		expect(
+			defaultContextRendering({ role: roleName("grant_reader") }),
+		).toEqual([{ sql: 'set local role "grant_reader"', params: [], kind: "sql" }]);
+	});
+});
 
 describe("db.as(context) -- UX scenario (2): an existing declared role (grant) works with no db() options set", () => {
 	it("applies SET LOCAL ROLE for a grant-declared role and runs the statement in the same transaction", async () => {
