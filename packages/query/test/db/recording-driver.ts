@@ -21,6 +21,8 @@ export type RecordingTransactionalDriverOptions = {
 	readonly renderContext?: ContextRendering;
 	/** Declares this driver's platform has no roles a context could name (task 2.4, #555). */
 	readonly roleLessPlatform?: true;
+	/** Declares that no statement may run against this driver without an execution context (task 3.1, #556). */
+	readonly contextRequired?: true;
 };
 
 /** `{ contributedRoles }` when given a value, or `{}` when omitted -- avoids ever spreading an explicit `contributedRoles: undefined` (`exactOptionalPropertyTypes`); no ternary (house style), a guard clause per branch instead. */
@@ -51,6 +53,16 @@ const roleLessPlatformField = (
 		return {};
 	}
 	return { roleLessPlatform };
+};
+
+/** Same reasoning as {@link contributedRolesField}, for the context-mandatory declaration. */
+const contextRequiredField = (
+	contextRequired: true | undefined,
+): Pick<Driver, "contextRequired"> | Record<string, never> => {
+	if (contextRequired === undefined) {
+		return {};
+	}
+	return { contextRequired };
 };
 
 /**
@@ -101,6 +113,7 @@ export const recordingTransactionalDriver = (
 		...contributedRolesField(options.contributedRoles),
 		...renderContextField(options.renderContext),
 		...roleLessPlatformField(options.roleLessPlatform),
+		...contextRequiredField(options.contextRequired),
 	};
 	return { driver, sentPerTransaction, topLevelSent };
 };

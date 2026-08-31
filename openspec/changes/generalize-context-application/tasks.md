@@ -99,19 +99,19 @@ Files: `packages/query/src/db/db.ts`,
 `packages/query/test/db/context-required.test.ts` (new),
 `packages/query/test/db/db.test.ts`
 
-- [ ] 3.1 (8m) Uncontexted `execute` is refused. Failing test: a handle
+- [x] 3.1 (8m) Uncontexted `execute` is refused. Failing test: a handle
       with no provider on a context-mandatory driver fails with
       `context-required` and nothing reaches the driver.
-- [ ] 3.2 (7m) Every thenable chain member is refused alike.
-- [ ] 3.3 (6m) Every declared-function call is refused alike.
-- [ ] 3.4 (6m) The transaction API is refused alike.
-- [ ] 3.5 (7m) Non-execution members are unaffected. Failing test: the
+- [x] 3.2 (7m) Every thenable chain member is refused alike.
+- [x] 3.3 (6m) Every declared-function call is refused alike.
+- [x] 3.4 (6m) The transaction API is refused alike.
+- [x] 3.5 (7m) Non-execution members are unaffected. Failing test: the
       handle's own `driver` member (the schema assertion's path) still
       reaches the database uncontexted.
-- [ ] 3.6 (6m) A context satisfies the requirement. Failing test: the
+- [x] 3.6 (6m) A context satisfies the requirement. Failing test: the
       same handle under `db.as(context)`, and a provider handle on the
       same driver, both proceed.
-- [ ] 3.7 (5m) A driver without the declaration is unchanged. Failing
+- [x] 3.7 (5m) A driver without the declaration is unchanged. Failing
       test: uncontexted execution on an ordinary driver sends no context
       statement and opens no transaction.
 - [ ] 3.8 (5m) `[design]` The refusal's code/message and the exact
