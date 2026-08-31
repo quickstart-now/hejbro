@@ -23,7 +23,7 @@ Files: `packages/query/src/driver/contract.ts`,
 - [x] 1.2 (6m) Role-less-platform declaration. Failing test: the
       declaration is readable as data on the value; a driver that omits
       it is typed and read as "this platform has roles".
-- [ ] 1.3 (6m) Context-mandatory declaration. Failing test: readable
+- [x] 1.3 (6m) Context-mandatory declaration. Failing test: readable
       before any connection; omission leaves today's typing untouched.
 - [ ] 1.4 (7m) Neither addition joins the capability set. Failing test:
       `DriverCapabilities` still requires exactly the two keys, and a

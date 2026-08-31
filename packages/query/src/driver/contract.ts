@@ -142,4 +142,14 @@ export type Driver = DriverSession & {
 	 * regardless of this declaration (group 2's job, not this contract's).
 	 */
 	readonly roleLessPlatform?: true;
+	/**
+	 * Declares that no statement may run against this driver without an
+	 * execution context (task 1.3, #554) — fixed data on the driver value,
+	 * never inferred from the platform or an observed error. Absence
+	 * leaves existing behavior exactly as it is. The refusal this enables
+	 * belongs to the query layer (group 3's job, not this contract's): a
+	 * driver cannot satisfy this declaration on its own, since the point
+	 * is refusing before a statement exists to send.
+	 */
+	readonly contextRequired?: true;
 };

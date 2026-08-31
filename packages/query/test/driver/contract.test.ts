@@ -137,3 +137,23 @@ describe("Driver.roleLessPlatform (task 1.2, #554 -- the role-less-platform decl
 		expectTypeOf(driver.roleLessPlatform).toEqualTypeOf<true | undefined>();
 	});
 });
+
+describe("Driver.contextRequired (task 1.3, #554 -- the context-mandatory declaration)", () => {
+	const baseDriver: Omit<Driver, "contributedRoles"> = {
+		capabilities: { "interactive-transactions": true, "session-state": true },
+		execute: async () => [],
+		transaction: async (callback) => callback({ execute: async () => [] }),
+		setupSession: async () => {},
+	};
+
+	it("a driver may declare a context is mandatory -- readable back as data before any connection is made", () => {
+		const driver: Driver = { ...baseDriver, contextRequired: true };
+		expect(driver.contextRequired).toBe(true);
+	});
+
+	it("a driver that omits the declaration leaves today's typing untouched -- existing driver values keep satisfying Driver unchanged", () => {
+		const driver: Driver = { ...baseDriver };
+		expect(driver.contextRequired).toBeUndefined();
+		expectTypeOf(driver.contextRequired).toEqualTypeOf<true | undefined>();
+	});
+});
