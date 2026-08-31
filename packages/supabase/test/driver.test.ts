@@ -243,3 +243,37 @@ describe("supabaseDriver(driver) conforms to the driver contract (#481, task 1.7
 		).not.toThrow();
 	});
 });
+
+describe("supabaseDriver(driver, { endpoint: 'transaction-pooler' }) + db.as(context) baseline pin (task 4.2, #557 -- fixed before the context-application generalization lands, so a later change that moves this is caught here)", () => {
+	it("sends the same role + set_config sequence on the pooled-transaction path (session-state: false) as the default path, inside one transaction", async () => {
+		const app = schema("app");
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const grantlessSchema = { posts };
+		const { driver, sentPerTransaction } = recordingTransactionalDriver();
+		const pooled = supabaseDriver(driver, { endpoint: "transaction-pooler" });
+		const handle = db(grantlessSchema, pooled);
+
+		await handle.as(asAnon()).transaction(async () => {});
+
+		// the pooler's own transaction-local pins (pooler.ts's
+		// PIN_STATEMENTS) come first -- they are this path's own
+		// replacement for the session-scoped setupSession pin, sent inside
+		// the same transaction.transaction() call, ahead of everything
+		// else. Then the context's own statements -- role first, one
+		// set_config per setting -- exactly the sequence the default
+		// (session) path sends (task 4.7's own test above): the
+		// pooled-transaction capability pair only replaces session-state,
+		// never the context-application sequence itself
+		// (interactive-transactions is the only capability db.as(context)
+		// requires).
+		expect(sentPerTransaction[0]).toEqual([
+			{ sql: "set local intervalstyle to 'postgres'", params: [] },
+			{ sql: "set local bytea_output to 'hex'", params: [] },
+			{ sql: 'set local role "anon"', params: [] },
+			{
+				sql: "select set_config($1, $2, true)",
+				params: ["request.jwt.claims", '{"role":"anon"}'],
+			},
+		]);
+	});
+});
