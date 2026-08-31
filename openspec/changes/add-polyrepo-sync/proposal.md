@@ -529,6 +529,15 @@ rendered SQL into declarations is changing this outcome too.
   surface is a new scope, not a detail of this one. The manifest carries
   function export names anyway, so that version needs no format change —
   which is exactly why the fact is carried now rather than later.
+- **A supported path for writing usage declarations by hand.** The usage
+  constructor exists for the module `hejbro sync` writes, and its name
+  says where such a module comes from. This change builds no workflow,
+  no documentation and no guarantees around authoring one directly; a
+  repository that owns its schema declares it, and one that does not
+  syncs it. Hand-written usage declarations are neither built nor
+  refused nor special-cased here: a table without the declared brand
+  behaves the same whatever wrote it, and what that behaviour is, is a
+  requirement rather than a sentence in this paragraph.
 - **Applying migrations** (D12), including any command that would write
   the manifest row itself.
 - **A version-pin flag** (`--at`). Owner-settled: pinning would make a

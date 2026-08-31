@@ -229,6 +229,12 @@ describe("parseBannerManifestFormat", () => {
 		expect(
 			parseBannerManifestFormat("-- hejbro migration\n-- hejbro-manifest: "),
 		).toBeNull();
+		// trailing garbage after a leading digit: an unanchored digit test
+		// would accept this and then `Number("1x")` would silently produce
+		// `NaN`, reviving the coercion bug the two cases above already guard.
+		expect(
+			parseBannerManifestFormat("-- hejbro migration\n-- hejbro-manifest: 1x"),
+		).toBeNull();
 	});
 
 	it("a reader that knows only the pre-existing banner lines reads its own value, unaffected by the manifest line (delta: 'A reader that does not know the line is unaffected')", () => {

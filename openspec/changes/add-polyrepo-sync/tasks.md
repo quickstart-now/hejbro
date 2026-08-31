@@ -30,7 +30,7 @@ Group 3 moved 40m → 46m, group 5 moved 47m → 63m, and group 6 moved
 long. Durations land per task in `openspec/task-times.csv`, measured
 with `date -u` at task start and end.
 
-## 1. Manifest emission in core — `est_frozen: 44m` — issue #579
+## 1. Manifest emission in core — `est_frozen: 47m` — issue #579
 
 Files: `packages/core/src/sql/manifest.ts` (new),
 `packages/core/src/sql/migration-file.ts`,
@@ -46,6 +46,7 @@ Files: `packages/core/src/sql/manifest.ts` (new),
 | " | A reader that does not know the line is unaffected | `core/test/migration-file.test.ts > an unknown banner line is ignored` |
 | The emitted manifest statements are deterministic | Two runs separated in time are byte-identical | `core/test/manifest.test.ts > two renders with different clocks are byte-identical` |
 | " | The statements name no clock and no file | `core/test/manifest.test.ts > the insert carries no timestamp and no file name` |
+| " | The line is readable by its prefix — and what it yields is a format, never a coerced non-number | `core/test/migration-file.test.ts > a non-integer banner manifest format is rejected, not coerced` |
 
 - [x] 1.1 `[design]` Settle the emitted SQL: table DDL (column set,
       identity ordering column, two format columns, payload column
@@ -72,6 +73,11 @@ Files: `packages/core/src/sql/manifest.ts` (new),
       is derived from a clock or a file name. Start from
       `core/test/manifest.test.ts > two renders with different clocks
       are byte-identical`. ~5m
+- [x] 1.7 The banner parser rejects a format that is not an integer
+      rather than coercing it, so nothing downstream ever compares
+      against a value that is not a number. Start from
+      `core/test/migration-file.test.ts > a non-integer banner manifest
+      format is rejected, not coerced`. ~3m
 
 ## 2. Migration authority as a type — `est_frozen: 42m` — issue #580
 
@@ -84,12 +90,18 @@ Files: `packages/core/src/dsl/table.ts`,
 |---|---|---|
 | A synced module holds no migration authority | The module yields no authority-carrying declaration | `core/test/types/declared-table.test.ts > a usage table is not assignable to the migration input` |
 | " | Generating from a synced module is refused | `core/test/engine/authority-refusal.test.ts > refuses a table that carries no migration authority` |
+| " | The refusal states what it observed | `core/test/engine/authority-refusal.test.ts > the refusal names the absent authority, not a provenance` |
+| " | A table with no origin is refused without one | `core/test/engine/authority-refusal.test.ts > a hand-written usage table is refused with no origin in the message` |
 | " | Querying through the module is unaffected | `core/test/dsl/usage-table.test.ts > a usage table is an ordinary queryable table` |
 | A synced module reproduces the consumer-visible type layer | Result keys match the declaring repository | `core/test/dsl/usage-table.test.ts > carries the TypeScript key of each column` |
 | " | Element nullability / numeric mode / relation keys / enum values match | `core/test/dsl/usage-table.test.ts > carries mode, non-null elements, references and enum values` |
 
-- [ ] 2.1 `[design]` Settle the brand's shape and the usage
-      constructor's name and signature. Start from
+- [ ] 2.1 `[design]` The brand's shape and the usage constructor's name.
+      *Settled:* a required phantom on the intersection, so an unbranded
+      table is not assignable and `Table` itself is unchanged; plus
+      `origin: "declared" | "synced"` on the declaration, a union rather
+      than a boolean so a third source does not break it; constructor
+      named `syncedTable`. Start from
       `core/test/types/declared-table.test.ts > the declaration
       constructor yields a branded table`. ~10m
 - [ ] 2.2 Brand the declaration constructor without changing `Table`;
@@ -103,8 +115,12 @@ Files: `packages/core/src/dsl/table.ts`,
       non-null elements, TypeScript keys, export name and references.
       Start from `core/test/dsl/usage-table.test.ts > carries the
       TypeScript key of each column`. ~10m
-- [ ] 2.5 `[design]` Settle the refusal's code name and place it at the
-      single chokepoint. Start from
+- [ ] 2.5 `[design]` The refusal's code name and its single chokepoint.
+      *Settled:* `synced-table-declared`, raised where `existingTable`
+      is already refused; keyed on the absent brand, never on
+      provenance; the message states the observation (no migration
+      authority) and names an origin only where the declaration carries
+      one. Start from
       `core/test/engine/authority-refusal.test.ts > refuses a table that
       carries no migration authority`. ~8m
 
@@ -211,7 +227,7 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | A manifest format higher than the reader knows is refused | A higher manifest format is refused | `cli/test/sync-states.test.ts > refuses a higher manifest format without parsing the payload` |
 | " | A lower manifest format is read | `cli/test/sync-states.test.ts > reads a lower manifest format whose snapshot format it accepts` |
 | " | An embedded snapshot format the reader refuses names the two repositories | `cli/test/sync-states.test.ts > a refused embedded snapshot format carries this reader's remedy` |
-| " (reader hardening) | The six situations are told apart | `cli/test/sync-states.test.ts > a non-numeric manifest format is refused as unknown, never read` |
+| " (reader hardening) | The six situations are told apart | `cli/test/sync-states.test.ts > a row whose manifest_format column is not an integer is refused as unknown, never read` |
 | " | Format skew is not reported as staleness | `cli/test/sync-states.test.ts > format skew never advises re-syncing` |
 | The command can check without writing | Checking leaves the module untouched | `cli/test/sync-states.test.ts > check mode writes nothing and exits non-zero` |
 | The schema filter is reserved, not silently ignored | The reserved filter is refused | `cli/test/sync-states.test.ts > refuses the reserved schema filter` |
@@ -261,7 +277,7 @@ Files: `packages/cli/src/assert-schema.ts`,
 | " | The failure claims no cause | `cli/test/assert-schema-manifest.test.ts > the failure text asserts no cause` |
 | The database owns the order of manifest rows | Distance is counted, not inferred from time | `cli/test/assert-schema-manifest.test.ts > counts rows rather than comparing timestamps` |
 | Each way a manifest can fail a reader is named separately | A database with no manifest table / an empty table / an unmatched stamp / a higher manifest format / a refused snapshot format | `cli/test/assert-schema-manifest.test.ts > distinguishes the six situations` |
-| " (reader hardening) | The six situations are told apart | `cli/test/assert-schema-manifest.test.ts > a non-numeric manifest format is refused as unknown, never read` |
+| " (reader hardening) | The six situations are told apart | `cli/test/assert-schema-manifest.test.ts > a row whose manifest_format column is not an integer is refused as unknown, never read` |
 | A manifest format higher than the reader knows is refused | Format skew is not reported as staleness | `cli/test/assert-schema-manifest.test.ts > format skew is not staleness` |
 | " | An embedded snapshot format the reader refuses names the two repositories | `cli/test/assert-schema-manifest.test.ts > a refused embedded snapshot format names both repositories` |
 | " (import discipline) | — | `cli/test/assert-schema-imports.test.ts` stays green |
