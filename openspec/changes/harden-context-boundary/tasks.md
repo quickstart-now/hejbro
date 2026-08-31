@@ -143,7 +143,7 @@ check:crap` run after the code commit exists.
   `names the caller's surface when the capability is missing`. Files:
   `db.ts`, `fn.ts`, `context-required.test.ts`,
   `context-provider.test.ts`.
-- [ ] 1.8 Repair the comments that now say more than the code does: the
+- [x] 1.8 Repair the comments that now say more than the code does: the
   `db.ts` doc comment claiming the operation "names the surface that was
   refused, the same way `driver-missing-capability`'s own message does"
   (true only after 1.5-1.7, and its comparison was never true), and the
@@ -152,7 +152,7 @@ check:crap` run after the code commit exists.
   only. ~6m. Red: none — comment-only; guarded by `pnpm check` and the
   suites the earlier tasks left green. Files: `db.ts`,
   `packages/query/test/db/chain.test.ts`, `context-provider.test.ts`.
-- [ ] 1.9 [design] Carry the surface name on the second refusal too:
+- [x] 1.9 [design] Carry the surface name on the second refusal too:
   `context-rendering-empty` currently ships `{ code }` alone, which
   leaves the requirement's "on the explicitly scoped path … alike"
   clause with nothing to satisfy it there — `context-required` cannot
