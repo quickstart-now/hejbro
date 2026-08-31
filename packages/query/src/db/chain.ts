@@ -166,6 +166,49 @@ export type SelectChainDistinctable<
 	): SelectChainJoinable<TProjection, TLeftJoined>;
 };
 
+/**
+ * Confirmed and recorded, not merely assumed (narrow-join-nullability,
+ * task 3.6 [design]): no chain member drops the left-joined set silently.
+ *
+ * - Every select stage transition (`where`/`orderBy`/`groupBy`/`having`/
+ *   `limit`/`offset`/`distinct`/`distinctOn`) forwards the SAME
+ *   `TLeftJoined` its own factory function received (`chain-types.test.ts`,
+ *   one assertion per transition, each independently mutation-verified) —
+ *   only `leftJoin` accumulates, and only `innerJoin` is exempted from
+ *   accumulation on purpose.
+ * - A set-op combinator (`union`/`intersect`/`except`, and their `All`
+ *   variants) resolves EACH branch's row type first — `TRow` in
+ *   {@link SetOpChainCombinators} is `SelectResult<TProjection,
+ *   TLeftJoined>`, already computed by the time the combinator runs — and
+ *   {@link SetOpResult} unions the two RESOLVED row types field-by-field.
+ *   There is no path from one branch's own `TLeftJoined` to the other's
+ *   fields, so two branches with different left-joined sets combine
+ *   correctly (a field non-null on one side and nullable on the other
+ *   unions to nullable, never the reverse) — this is the one place in the
+ *   whole change where a mistake would narrow instead of widen, which is
+ *   why it carries its own dedicated test rather than relying on the
+ *   per-stage ones above.
+ * - `related()` is untracked by decision, not by accident (add-relational-
+ *   reads, predates this change): its own declared return type merges
+ *   {@link SelectResult}<TTable> (the whole-table branch, which never
+ *   reads `TLeftJoined` at all, tracked or not) with `RelatedResult`'s own
+ *   independently-computed nested-read merge — neither half has anywhere
+ *   for this statement's own left-joined set to reach.
+ * - A caveat found while proving the above, not fixed by it: mutating an
+ *   internal chain FACTORY function's own signature (e.g. dropping
+ *   `TLeftJoined` from `makeJoinableChain`'s generic parameters) compiles
+ *   clean and is caught by no type test, because `createChainApi`'s own
+ *   `select` member ends in `as ChainApi["select"]` — a boundary cast
+ *   this package already relied on before this change, for a generic-
+ *   covariance mismatch unrelated to left-joined tracking (measured:
+ *   removing the cast surfaces the SAME mismatch with or without any
+ *   left-joined mutation applied). Chain TYPE correctness is what the
+ *   stage types above lock; the factory bodies that build the matching
+ *   runtime objects are trusted, not independently verified past that
+ *   cast — an honest limitation of this test suite, not a defect this
+ *   change introduced or is positioned to close.
+ */
+
 /** Any core builder stage `compile()`/`executeOn` already accept — every select/insert/update/delete stage structurally matches one of `CompileInput`'s `*Query` wrapper shapes. */
 type ChainStatement = CompileInput;
 

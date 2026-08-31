@@ -15,6 +15,7 @@ import type {
 	DeleteChainFilterable,
 	DeleteChainFinal,
 	InsertChainFinal,
+	SelectChainDistinctable,
 	SelectChainJoinable,
 	SelectChainLimited,
 	SelectChainRelated,
@@ -42,6 +43,8 @@ const comments = table(app, "comments", {
 		.references(() => posts.id),
 	body: text().notNull(),
 });
+
+type Comments = typeof comments;
 
 /** A minimal schema module (task 1.3, extend-query-runtime) -- only used to instantiate `db()`'s `TSchema` generic below, never called at runtime. */
 const appModule = { posts };
@@ -278,6 +281,98 @@ describe("the untracked boundary holds at db.with and related() (narrow-join-nul
 				readonly body: string;
 			}>
 		>();
+	});
+});
+
+/**
+ * Type-only handles for task 3.6's set-op and stage-preservation tests
+ * (`declare const` is an ambient declaration -- module scope only, never
+ * inside a function body, which is why these live here and not inside
+ * their own `describe` callbacks).
+ */
+declare const leftBranchNever: SelectChainLimited<
+	{ readonly t: Posts["status"] },
+	never
+>;
+declare const rightBranchTracked: SelectChainLimited<
+	{ readonly t: Posts["status"] },
+	Posts
+>;
+type RightRow = Awaited<typeof rightBranchTracked>[number];
+
+// Tracked at `Comments`, deliberately NOT `Posts` (the projected field's
+// own source table): a member match (tracked = Posts) stays nullable
+// either way, indistinguishable from an untracked drop -- the same
+// self-match trap task 3.2's own ratchet test exists to avoid. Tracked at
+// a table the field does NOT come from, the correct answer is a genuine
+// narrow (`string`); a stage that silently drops to untracked would
+// wrongly widen back to `string | null`, which IS distinguishable.
+declare const tracked: SelectChainDistinctable<
+	{ readonly t: Posts["status"] },
+	Comments
+>;
+declare const trackedGrouped: ReturnType<typeof tracked.groupBy>;
+type TrackedRow<T extends PromiseLike<ReadonlyArray<unknown>>> =
+	Awaited<T>[number];
+
+describe("a set-op combinator's two branches each keep their OWN left-joined set (narrow-join-nullability, task 3.6, reviewer-elevated priority)", () => {
+	// The only non-fail-safe direction in this whole change: if one
+	// branch's set were applied to the other, a field that should stay
+	// nullable could come out non-null. Structurally this cannot happen --
+	// `chainSetOpCombinators<TRow>` is parameterized by each branch's own
+	// ALREADY-RESOLVED row type (`SelectResult<TProjection, TLeftJoined>`,
+	// computed before the combinator runs), and `SetOpResult<TLeft,TRight>`
+	// unions the two resolved row types field-by-field -- it is a row-level
+	// union, with no path back to either branch's own TLeftJoined to apply
+	// to the other. This test locks that observably.
+	it("left narrows (never), right stays nullable (posts itself left-joined): union() keeps the field nullable", () => {
+		type UnionRow = Awaited<
+			ReturnType<typeof leftBranchNever.union<RightRow>>
+		>[number];
+		expectTypeOf<UnionRow["t"]>().toEqualTypeOf<string | null>();
+	});
+});
+
+describe("every select chain stage transition preserves the left-joined set (narrow-join-nullability, task 3.6)", () => {
+	// Each stage member (where/orderBy/groupBy/having/limit/offset/distinct)
+	// forwards the SAME TLeftJoined its own factory function received --
+	// one assertion per transition, so a future edit that drops it at any
+	// single stage has a dedicated catcher (the exact class of gap task
+	// 2.6 found: a mutant that breaks only one stage never shows up in a
+	// suite that only ever exercises a different one).
+	it("distinct() preserves the set", () => {
+		type Row = TrackedRow<ReturnType<typeof tracked.distinct>>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("where() preserves the set", () => {
+		type Row = TrackedRow<ReturnType<typeof tracked.where>>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("groupBy() preserves the set", () => {
+		type Row = TrackedRow<ReturnType<typeof tracked.groupBy>>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("orderBy() preserves the set", () => {
+		type Row = TrackedRow<ReturnType<typeof tracked.orderBy>>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("having() preserves the set (via groupBy() first, since having() only exists after it)", () => {
+		type Row = TrackedRow<ReturnType<typeof trackedGrouped.having>>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("limit() preserves the set", () => {
+		type Row = TrackedRow<ReturnType<typeof tracked.limit>>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("offset() preserves the set", () => {
+		type Row = TrackedRow<ReturnType<typeof tracked.offset>>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
 	});
 });
 
