@@ -7,6 +7,7 @@ import type {
 import {
 	nileFunctionTriggerValidator,
 	nileGrantValidator,
+	nileIdentityValidator,
 	nileRlsValidator,
 	nileSerialValidator,
 	nileTenantPrimaryKeyValidator,
@@ -24,11 +25,12 @@ const nileKinds: ReadonlyArray<ObjectKind<HejbroDeclaration>> = [];
 
 /**
  * The Nile preset's own validators (task 1.2/4.1-4.4, #563/#566, plus a
- * fifth added after G5's own live-witness measurement, #567) -- the
+ * fifth added after G5's own live-witness measurement, #567, and a sixth
+ * after the identity measurement, #573) -- the
  * platform-refusal set attached additively here, never by replacing this
  * array's own declaration site: RLS/policies, functions/triggers, grants,
- * the tenant-aware serial family, and a tenant-aware table's primary key
- * excluding `tenant_id`, each with its own evidence grade
+ * the tenant-aware serial family, a tenant-aware table's primary key
+ * excluding `tenant_id`, and identity columns in tenant-aware tables, each with its own evidence grade
  * (`packages/nile/src/validators.ts`).
  */
 const nileValidators: ReadonlyArray<Validator> = [
@@ -37,6 +39,7 @@ const nileValidators: ReadonlyArray<Validator> = [
 	nileGrantValidator,
 	nileSerialValidator,
 	nileTenantPrimaryKeyValidator,
+	nileIdentityValidator,
 ];
 
 /**

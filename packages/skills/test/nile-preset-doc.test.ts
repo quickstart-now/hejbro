@@ -38,8 +38,12 @@ describe("nile-preset.md states each refusal's evidence grade, distinguished (pr
 		expect(REFERENCE).toMatch(/platform-documented/);
 	});
 
-	it("grants and the tenant-aware serial refusal are marked measured-only, not platform-documented", () => {
+	it("grants, the tenant-aware serial refusal and the tenant-aware identity refusal are marked measured-only, not platform-documented", () => {
 		expect(REFERENCE).toMatch(/\*\*measured only\*\*/);
+		expect(REFERENCE).toMatch(/nile-identity-in-tenant-table/);
+		expect(REFERENCE_FLAT).toMatch(
+			/IDENTITY columns are not supported for tenant-aware table/,
+		);
 		expect(REFERENCE_FLAT).toMatch(/not in the platform's published table/);
 	});
 

@@ -92,22 +92,21 @@ its own evidence grade:
 | `grant(...)` | attempted against Nile's testing container and refused | **measured only** — not in the platform's published table | `nile-grant-unsupported` |
 | `serial` / `smallserial` / `bigserial` in a tenant-aware table (a table with a `tenant_id uuid` column) | attempted against Nile's testing container and refused | **measured only** — adjacent to, but not the same declaration as, the platform's documented `CREATE SEQUENCE` restriction for tenant tables | `nile-serial-in-tenant-table` |
 | A primary key on a tenant-aware table that excludes `tenant_id` | attempted against Nile's testing container (`create table` with a lone `id` primary key on a table also carrying `tenant_id uuid`) and refused: "primary key of tenant-aware table must have the tenant_id column" | **measured only** — not in the platform's published table | `nile-tenant-primary-key-missing` |
+| An identity column (`.generatedAlwaysAsIdentity()` / `.generatedByDefaultAsIdentity()`) in a tenant-aware table | attempted against Nile's testing container and refused, for both kinds (`IDENTITY columns are not supported for tenant-aware table`, measured 2026-08-31) | **measured only** — not in the platform's published table | `nile-identity-in-tenant-table` |
 
 A `serial`-family column outside a tenant-aware table is untouched — the
 platform's restriction is scoped to tenant-aware tables, and this preset
 never widens it. **A tenant-aware table that declares no primary key at
-all is also untouched** — that shape was never exercised against the
-container, so this preset makes no claim about it either way
-(**unmeasured**, not assumed safe). Column *order* within a primary key
+all is accepted** — measured 2026-08-31 on the platform's own test
+container: `create table (tenant_id uuid not null, name text)` succeeds
+and takes rows under a tenant context, so this preset leaves it alone. Column *order* within a primary key
 that does include `tenant_id` is likewise never asserted — only that
 `tenant_id` is one of its columns, the only fact the measurement actually
-supports. **An identity column** (`.generatedAlwaysAsIdentity()` /
-`.generatedByDefaultAsIdentity()`) in a tenant-aware table is untouched
-by this preset too — it achieves a similar auto-incrementing effect to
-the `serial` family through a different Postgres mechanism, but that
-shape was never exercised against the container either, so it stays
-**unmeasured** rather than assumed to share the `serial` family's own
-refusal. What the platform accepts is unaffected: a tenant-aware table
+supports. **An identity column** in a tenant-aware table is refused (the row
+above) — it is sequence-backed like the `serial` family, and the
+platform refuses it with its own error rather than the serial one, so it
+carries its own code (`nile-identity-in-tenant-table`), measured on the
+same container on 2026-08-31 (#573). What the platform accepts is unaffected: a tenant-aware table
 with no refused declaration generates exactly the SQL it would with no
 preset registered, and registering this preset never changes what any
 other preset's output looks like.
