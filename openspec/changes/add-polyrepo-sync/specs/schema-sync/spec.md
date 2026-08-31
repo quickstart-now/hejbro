@@ -50,8 +50,11 @@ report noise as news.
 The module `sync` writes SHALL contain no call that yields a declaration
 carrying migration authority: its tables come from a usage constructor
 that cannot produce one. Generating migrations from a synced module
-SHALL fail with a coded error naming the module's origin and what to do
-instead.
+SHALL fail with a coded error naming what was observed — the table
+carries no migration authority — and, when the module carries an origin,
+that origin; and what to do instead. Where the module carries none, the
+error SHALL NOT supply one: the refusal observes an absent brand, not a
+provenance, and a table written by hand is refused on the same grounds.
 
 The refusal SHALL rest on the absence of authority in the values
 themselves, not on the file's name, its location, or any marker a user
@@ -61,6 +64,17 @@ could add or remove.
 - **WHEN** a synced module is used as the declaration entry point and
   migration generation runs
 - **THEN** generation fails with a coded error and writes nothing
+
+#### Scenario: The refusal states what it observed
+- **WHEN** that error is read
+- **THEN** it says the table carries no migration authority, and names
+  an origin only where the module carries one
+
+#### Scenario: A table with no origin is refused without one
+- **WHEN** generation runs against a table that carries no migration
+  authority and no origin — one written by hand rather than synced
+- **THEN** it is refused on the same grounds, and the error supplies no
+  origin
 
 #### Scenario: The module yields no authority-carrying declaration
 - **WHEN** a synced module's exports are inspected
