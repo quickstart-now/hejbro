@@ -36,6 +36,7 @@ import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
 import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
+import { assertManifestMonotonic } from "../manifest-chain";
 import {
 	buildManifestPayload,
 	serializeManifestPayload,
@@ -632,6 +633,11 @@ export const runGenerate = async (
 					config.migrationsDir,
 				);
 			}
+			assertManifestMonotonic(
+				join(cwd, config.migrationsDir),
+				listMigrationFiles(join(cwd, config.migrationsDir)),
+				manifestEnabled,
+			);
 			const firstPass = generateMigration({
 				declarations,
 				previousSnapshot,

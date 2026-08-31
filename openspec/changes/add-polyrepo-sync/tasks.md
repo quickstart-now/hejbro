@@ -265,11 +265,11 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
 - [x] 4.3 Baseline emits none, and reports the absent row. Start from
       `cli/test/generate-manifest.test.ts > a baseline carries no
       manifest statements`. ~7m
-- [ ] 4.4 Monotonicity refusal in `generate`, reading the chain's last
+- [x] 4.4 Monotonicity refusal in `generate`, reading the chain's last
       migration only. Start from `cli/test/manifest-chain.test.ts >
       refuses generation when the chain carries manifests and emission is
       off`. ~7m
-- [ ] 4.5 Monotonicity detection in `verify`, over the files it already
+- [x] 4.5 Monotonicity detection in `verify`, over the files it already
       reads. Start from `cli/test/verify-manifest.test.ts > reports a
       chain that stopped carrying its manifests`. ~7m
 

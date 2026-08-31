@@ -385,6 +385,7 @@ export {
 	migrationVersionOf,
 	parseBannerBaseline,
 	parseBannerHashes,
+	parseBannerManifestFormat,
 	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,

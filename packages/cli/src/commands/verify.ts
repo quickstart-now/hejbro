@@ -31,6 +31,7 @@ import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { sha256Hex } from "../hash";
 import { loadConfig, loadDeclarations } from "../loader";
+import { firstMigrationThatStoppedCarryingManifest } from "../manifest-chain";
 import { buildRegistry } from "../presets";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
 
@@ -442,23 +443,52 @@ type Check3Result = {
 	readonly outcome: CheckOutcome;
 };
 
-/** Check 3: every migration's hash-chain lines form one linked list. Only runs when the duplicate-version check passed (`runCheck3IfEligible`) — with two files sharing a version, "which one comes first" isn't defined, so a chain walk over them can't mean anything yet. `migrationsDirPath` reads the files; `migrationsDir` (config-relative) is what a diverged-migrations `rm`/`generate` suggestion should print. */
+/** The message for a chain that stopped carrying manifests partway
+ * through (schema-manifest delta, "A hand-edited chain is caught
+ * without a database") — no database read, over the same files check 3
+ * already opens. */
+const manifestChainInterruptedMessage = (
+	fileName: string,
+	migrationsDir: string,
+): string =>
+	`"${fileName}" no longer carries a schema manifest, but an earlier migration in ${migrationsDir} does — once a chain starts carrying manifests, every later migration must keep carrying one, or the database's newest manifest row silently describes an older schema. Next: recover "${fileName}" from version control if this was accidental, or regenerate this migration with --manifest.`;
+
+/** Check 3: every migration's hash-chain lines form one linked list, and (schema-manifest delta) no migration after the chain started carrying manifests stopped carrying one. Both run only when the duplicate-version check passed (`runCheck3IfEligible`) — with two files sharing a version, "which one comes first" isn't defined, so neither a chain walk nor a manifest-monotonicity scan over them can mean anything yet. `migrationsDirPath` reads the files; `migrationsDir` (config-relative) is what a suggestion should print. */
 const runCheck3 = (
 	migrationsDirPath: string,
 	migrationsDir: string,
 	fileNames: ReadonlyArray<string>,
 ): Check3Result => {
 	const report = checkChain(readChainEntries(migrationsDirPath, fileNames));
-	if (report.ok) {
-		return { report, outcome: { ok: true } };
+	if (!report.ok) {
+		return {
+			report,
+			outcome: {
+				ok: false,
+				error: hejbroError(
+					report.code,
+					chainErrorMessage(report, migrationsDir),
+				),
+			},
+		};
 	}
-	return {
-		report,
-		outcome: {
-			ok: false,
-			error: hejbroError(report.code, chainErrorMessage(report, migrationsDir)),
-		},
-	};
+	const manifestViolation = firstMigrationThatStoppedCarryingManifest(
+		migrationsDirPath,
+		fileNames,
+	);
+	if (manifestViolation !== null) {
+		return {
+			report,
+			outcome: {
+				ok: false,
+				error: hejbroError(
+					"manifest-chain-interrupted",
+					manifestChainInterruptedMessage(manifestViolation, migrationsDir),
+				),
+			},
+		};
+	}
+	return { report, outcome: { ok: true } };
 };
 
 /** `null` when the duplicate-version check failed (chain order is undefined until every version is unique); otherwise runs check 3. */
