@@ -144,9 +144,11 @@ with `nileDriver` is not a configuration this preset supports.
 `pnpm --filter @hejbro/nile test:integration` runs a Docker-gated suite
 against Nile's own official testing container
 (`ghcr.io/niledatabase/testingcontainer`, pinned by digest in
-`packages/nile/vitest.integration.config.ts`'s sibling test file). Three
-facts about the container, measured 2026-08-31, that anyone running it
-locally will hit:
+`packages/nile/vitest.integration.config.ts`'s sibling test file), and
+overridable via `HEJBRO_NILE_IMAGE`. Overriding the image means the run
+no longer measures the digest this file names; the measured-on-digest
+claims do not transfer to that run. Three facts about the container,
+measured 2026-08-31, that anyone running it locally will hit:
 
 - **Fixed credentials, not configurable through an env var the image
   documents**: user `00000000-0000-0000-0000-000000000000`, password

@@ -31,7 +31,9 @@ import { nileDriver } from "../../src/driver";
  * Every claim below is a floor, not a ceiling: the platform may have
  * widened since this digest was measured (2026-08-31) -- if the digest
  * ever changes, re-measure every scenario in this file, don't assume the
- * old answers still hold.
+ * old answers still hold. Overriding the image means the run no longer
+ * measures the digest this file names; the measured-on-digest claims do
+ * not transfer to that run.
  */
 const IMAGE =
 	process.env.HEJBRO_NILE_IMAGE ??

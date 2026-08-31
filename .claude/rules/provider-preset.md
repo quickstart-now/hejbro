@@ -28,3 +28,8 @@ reason to import across the boundary.
   `@hejbro/nile` the second — built with no core special case and no
   cross-preset import, confirming the interface generalizes past the two
   platforms it was drafted against.
+- The prohibition is on what a preset **ships and imports at runtime**;
+  a concrete hejbro driver may appear in a preset's `devDependencies` as
+  the **base driver of its own tests or live witness** — that is how a
+  decorator preset proves itself, and it never reaches the published
+  `dependencies`.
