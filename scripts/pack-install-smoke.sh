@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# #86 pack-install smoke: packs the six published packages
+# #86 pack-install smoke: packs the seven published packages
 # (@hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg,
 # @hejbro/neon -- @hejbro/query/@hejbro/pg promoted here in task 7.10
 # once 7.6/7.7 gave them real dist packaging; @hejbro/neon added in
-# add-neon-preset's task 8.2), installs the tarballs into a scratch project
+# add-neon-preset's task 8.2; @hejbro/nile added in add-nile-preset's
+# task 1.3, the seventh-package tripwire #484/#553 named), installs the
+# tarballs into a scratch project
 # with plain `npm install` (no workspace, no pnpm — the closest
 # simulation of a real consumer), and runs init/generate/verify there,
 # with the Supabase preset registered so more than just hejbro actually
@@ -100,6 +102,7 @@ SUPABASE_TGZ="$(ls "$PACK_DIR"/hejbro-supabase-*.tgz)"
 QUERY_TGZ="$(ls "$PACK_DIR"/hejbro-query-*.tgz)"
 PG_TGZ="$(ls "$PACK_DIR"/hejbro-pg-*.tgz)"
 NEON_TGZ="$(ls "$PACK_DIR"/hejbro-neon-*.tgz)"
+NILE_TGZ="$(ls "$PACK_DIR"/hejbro-nile-*.tgz)"
 
 echo "== scratch project: $SCRATCH_DIR"
 cat > "$SCRATCH_DIR/package.json" <<EOF
@@ -113,7 +116,8 @@ cat > "$SCRATCH_DIR/package.json" <<EOF
     "@hejbro/supabase": "file:$SUPABASE_TGZ",
     "@hejbro/query": "file:$QUERY_TGZ",
     "@hejbro/pg": "file:$PG_TGZ",
-    "@hejbro/neon": "file:$NEON_TGZ"
+    "@hejbro/neon": "file:$NEON_TGZ",
+    "@hejbro/nile": "file:$NILE_TGZ"
   }
 }
 EOF
@@ -167,6 +171,7 @@ assert_tarball_contains "$SUPABASE_TGZ" package.json LICENSE README.md dist/inde
 assert_tarball_contains "$QUERY_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 assert_tarball_contains "$PG_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 assert_tarball_contains "$NEON_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$NILE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 echo "   ok"
 
 echo "== assertion 1b: every file the tarball packed exists in the install tree"
@@ -186,6 +191,7 @@ assert_tarball_files_installed "$SUPABASE_TGZ" "$SCRATCH_DIR/node_modules/@hejbr
 assert_tarball_files_installed "$QUERY_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/query"
 assert_tarball_files_installed "$PG_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/pg"
 assert_tarball_files_installed "$NEON_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/neon"
+assert_tarball_files_installed "$NILE_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/nile"
 echo "   ok"
 
 echo "== assertion 1c: the installed LICENSE is real content, not a broken link"
@@ -203,6 +209,7 @@ assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/supabase"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/query"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/pg"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/neon"
+assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/nile"
 echo "   ok"
 
 echo "== assertion 2: no installed dependency string still says workspace:"
@@ -216,6 +223,7 @@ assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/supabase/package
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/query/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/pg/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/neon/package.json"
+assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/nile/package.json"
 echo "   ok"
 
 echo "== assertion 3: the hejbro binary runs init/generate/verify, with @hejbro/supabase's preset registered so more than just hejbro actually loads (hejbro's own dist re-exports @hejbro/core and @hejbro/query, and the registered preset loads @hejbro/supabase directly)"
@@ -302,4 +310,4 @@ if (typeof neonAuth !== 'function') {
 ") || fail "@hejbro/neon's own exports did not resolve (neonAuth import failed)"
 echo "   ok"
 
-echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg, @hejbro/neon install cleanly with npm and run init/generate/verify"
+echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg, @hejbro/neon, @hejbro/nile install cleanly with npm and run init/generate/verify"

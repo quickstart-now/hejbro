@@ -29,7 +29,7 @@ Files: `packages/nile/{package.json,tsconfig.json,tsdown.config.ts,vitest.config
 - [x] 1.2 (6m) A minimal preset bundle exported from the barrel, so the
       package has a real value to register. Failing test: importing the
       preset from the package entry yields a registrable bundle.
-- [ ] 1.3 (10m) Extend the pack-install smoke's hand-enumerated blocks:
+- [x] 1.3 (10m) Extend the pack-install smoke's hand-enumerated blocks:
       tarball resolution, scratch dependencies, assertion 1a
       (`assert_tarball_contains`), 1b (`assert_tarball_files_installed`),
       1c (`assert_license_content`), assertion 2
