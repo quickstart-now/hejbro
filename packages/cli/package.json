@@ -2,7 +2,7 @@
 	"name": "hejbro",
 	"version": "0.1.1",
 	"description": "TypeScript-native Postgres schema & RPC management. Declare everything in TypeScript, generate deterministic migration SQL.",
-	"license": "MIT",
+	"license": "Apache-2.0",
 	"type": "module",
 	"repository": {
 		"type": "git",
@@ -31,7 +31,8 @@
 		}
 	},
 	"files": [
-		"dist"
+		"dist",
+		"NOTICE"
 	],
 	"engines": {
 		"node": ">=22.18.0"

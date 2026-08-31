@@ -2,7 +2,7 @@
 	"name": "@hejbro/neon",
 	"version": "0.0.0",
 	"description": "Neon provider preset and driver for hejbro's query layer.",
-	"license": "MIT",
+	"license": "Apache-2.0",
 	"type": "module",
 	"exports": {
 		".": {
@@ -11,7 +11,8 @@
 		}
 	},
 	"files": [
-		"dist"
+		"dist",
+		"NOTICE"
 	],
 	"repository": {
 		"type": "git",
