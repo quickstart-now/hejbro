@@ -29,10 +29,15 @@ Files: `packages/query/src/driver/contract.ts`,
       `DriverCapabilities` still requires exactly the two keys, and a
       capabilities object naming either new property fails to type-check
       (type mutant, not a value assertion).
-- [ ] 1.5 (5m) `[design]` Final member names and signatures (settled
+- [x] 1.5 (5m) `[design]` Final member names and signatures (settled
       leaning: optional `Driver` members; rendering returns
       `ReadonlyArray<CompileResult>`; the two declarations are separate
-      properties, not implied by the rendering's presence).
+      properties, not implied by the rendering's presence). Settled:
+      `renderContext`, `roleLessPlatform`, `contextRequired`. The
+      rendering's parameter type is a temporary `ContextValue` declared in
+      `driver/contract.ts` (G1 cannot touch `db/context.ts`, and the
+      reverse import direction would be a layer inversion) — task 2.10
+      collapses it into `DbContext` once G2 owns `context.ts`.
 
 ## 2. Context application in the query layer (#555)
 Files: `packages/query/src/db/context.ts`,
@@ -73,6 +78,15 @@ Files: `packages/query/src/db/context.ts`,
 - [ ] 2.9 (5m) `[design]` Error code and message for the role-less
       refusal — whether it joins the `undeclared-role` family or gets its
       own code.
+- [ ] 2.10 (7m) Collapse the two context types into one. `DbContext`'s
+      definition moves to `driver/contract.ts` (the lower layer, where the
+      rendering signature needs it) and `db/context.ts` re-exports it;
+      the temporary `ContextValue` introduced in 1.1 is removed. Failing
+      test: the package exports exactly one context type name, the
+      rendering's parameter type and `db.as()`'s argument type are the
+      same type (`infer`-extracted comparison, not a whole-object
+      compare), and `index.ts`'s public export path for `DbContext` is
+      unchanged.
 
 ## 3. Context-required enforcement (#556)
 Files: `packages/query/src/db/db.ts`,

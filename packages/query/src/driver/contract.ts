@@ -3,13 +3,16 @@ import type { CompileResult } from "../compile/compile";
 
 /**
  * The context value a rendering contribution turns into statements
- * (#554/task 1.1). Declared independently of the query layer's own
- * execution-context type — this is the driver contract's own lower layer,
- * and it must not import from `db/` — but the two are kept structurally
- * identical on purpose, so any value the query layer resolves is already
- * assignable here with no adapter. `role` is optional from this layer's
- * first day: a rendering must already accept a role-less value before any
- * driver can declare its platform has no roles to name (task 1.2).
+ * (#554/task 1.1). **Temporary** (task 1.5's design settlement, task
+ * 2.10's cleanup): declared independently of the query layer's own
+ * `DbContext` only because group 1 cannot touch `db/context.ts` and the
+ * reverse import direction would be a layer inversion (`db/context.ts`
+ * already imports from here). Task 2.10 collapses the two into one type
+ * — `DbContext`'s own definition, moved to this file — once group 2 owns
+ * `context.ts`; this alias is not meant to survive that task. `role` is
+ * optional from this layer's first day: a rendering must already accept a
+ * role-less value before any driver can declare its platform has no
+ * roles to name (task 1.2).
  */
 export type ContextValue = {
 	readonly role?: Role;
