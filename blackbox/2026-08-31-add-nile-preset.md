@@ -1,28 +1,28 @@
 Refs:
-- .changeset/add-nile-preset.md @ blob 85a47b722ee51412ef0c2ee08d4850facf84e039
+- .changeset/add-nile-preset.md @ blob 4e8adaac24e8443aeb628989681f7d0476bb2ddb (re-pinned: D106 correction round F6)
 - .changeset/config.json @ blob e1a91a451d75eec6ebfaba9ff6e6f5410cfd77f7
 - .claude/rules/provider-preset.md @ blob c312df80ad4bd03afbb4b7bdf9f837b80373fd38
-- AGENTS.md @ blob 84804ea93660b1b860cf48c952dfa0735ac48c36
-- openspec/changes/add-nile-preset/proposal.md @ blob 6b664707703087d20fc0892f720eb01eb0345978
-- openspec/changes/add-nile-preset/specs/driver-contract/spec.md @ blob de611cab8426abccb5e1923bba2877d952fd98d4
-- openspec/changes/add-nile-preset/specs/preset-validation/spec.md @ blob 87c0715e5e7d7a1807dcd0cc1596b74d2d1f3d9d
-- openspec/changes/add-nile-preset/specs/rls-execution-context/spec.md @ blob 06383739c783f997e0eb35432e75bd635a1c177c
-- openspec/changes/add-nile-preset/tasks.md @ blob 3a98544e27b406685fa718b3b4e5322e559ce954
-- openspec/task-times.csv @ blob efbca6337719a0b479642a87c6c5eb0c313f5425
-- packages/nile/LICENSE @ blob 91bfc8d3fd5f41a85ea969de60cb3253c9dc8377
-- packages/nile/package.json @ blob 0bcebdc5021d91f9d3d2e8b1d656f314ce3ac669
+- AGENTS.md @ blob 145030248294d8cd17cdd54b378eeda87701b217 (re-pinned: #571 relicense edited this file after #572 merged -- concurrent-edit pin death, not a content change of this piece)
+- openspec/changes/archive/2026-08-31-add-nile-preset/proposal.md @ blob 6b664707703087d20fc0892f720eb01eb0345978 (re-pathed, archive; blob unchanged)
+- openspec/changes/archive/2026-08-31-add-nile-preset/specs/driver-contract/spec.md @ blob 328651c229eb1b8777b86cd5e94329752cb073cc (re-pathed, archive; re-pinned: D106 correction round F7)
+- openspec/changes/archive/2026-08-31-add-nile-preset/specs/preset-validation/spec.md @ blob 3bd75440ffdb9e1daba5510a742e29c8de2d218e (re-pathed, archive; re-pinned: D106 correction round F2)
+- openspec/changes/archive/2026-08-31-add-nile-preset/specs/rls-execution-context/spec.md @ blob 99ea6af17814c67466fb4a7390960b2abe7b8ee3 (re-pathed, archive; re-pinned: D106 correction round F2/F3/F4/F5/F7)
+- openspec/changes/archive/2026-08-31-add-nile-preset/tasks.md @ blob fa1388370ec48ff5ab1d6a9aea5980c10ed67a14 (re-pathed, archive; re-pinned: 7.6 checked)
+- openspec/task-times.csv @ blob 200403cae6d695f80eb45f6915f2768409f16e15 (re-pinned: D106 review + correction + archive-round ledger rows)
+- packages/nile/LICENSE @ blob d645695673349e3947e8e5ae42332d0ac3164cd7 (re-pinned: #571 relicense edited this file after #572 merged -- concurrent-edit pin death, not a content change of this piece)
+- packages/nile/package.json @ blob 8103362015e8d2ad330c29435d2d3b84d92e7b17 (re-pinned: #571 relicense edited this file after #572 merged -- concurrent-edit pin death, not a content change of this piece)
 - packages/nile/README.md @ blob dafb4e665b19ae81331c0e37ee921c8c1d4efa68
-- packages/nile/src/context.ts @ blob 4e4aa6274ab2502655ba599fc8286f7dbd2c5744
+- packages/nile/src/context.ts @ blob e078cc75a09603df779d9f9f9c4e5fe88d0e75cf (re-pinned: D106 correction round F3)
 - packages/nile/src/driver.ts @ blob af6c2ff39c08575883f985b7372edc93aa6bd449
 - packages/nile/src/index.ts @ blob ebd64a886830ab3929b9b880d48d639838878d51
 - packages/nile/src/preset.ts @ blob 3bbf568ce16a3f12e03110289e4d0cfe9df05f32
-- packages/nile/src/validators.ts @ blob 8a6540f246b2314e788c2b06d92aa8b4199b2d77
-- packages/nile/test/context.test.ts @ blob 8352f7ea52d04d4f6a2e685dc31561b7d25799f2
+- packages/nile/src/validators.ts @ blob 56a820b6db6b53057ce1b661f7b24fc2e8d6c496 (re-pinned: D106 correction round F8/F10)
+- packages/nile/test/context.test.ts @ blob 37ca30b78bcd63726d706a19796b5a40b7638871 (re-pinned: D106 correction round F3)
 - packages/nile/test/driver.test.ts @ blob 61d564feb5b7004363fd32541c1c74e9d2f88bb2
 - packages/nile/test/exports.test.ts @ blob 45cffb2bb91d040baa5b9474a3a31b0a9acceed9
-- packages/nile/test/integration/nile.integration.test.ts @ blob 9e8c8eea9072b99da01075d39f14f2deae742ea4
+- packages/nile/test/integration/nile.integration.test.ts @ blob 59ff07b92c1f4ceaca3176bd77c1475999ac4d76 (re-pinned: D106 correction round F11)
 - packages/nile/test/preset.test.ts @ blob c6935eb730505e76f566c5cf68970643a6d0d24b
-- packages/nile/test/validators.test.ts @ blob 251cad8e7a1bebcae8e03f1005ea4b7cf2089392
+- packages/nile/test/validators.test.ts @ blob 5e0c4e795534d834044924f3d1f4dd10d8250575 (re-pinned: D106 correction round F8/F10)
 - packages/nile/tsconfig.json @ blob aa088dcc2b5d56c3fb3265c3dc21dc67a2dc312c
 - packages/nile/tsdown.config.ts @ blob 2c54079c897adf725ff778fb15dc13adce558d43
 - packages/nile/vitest.config.ts @ blob d64031095d92c4104082384819fedcc2120d3fd4
@@ -31,20 +31,45 @@ Refs:
 - packages/skills/test/nile-preset-doc.test.ts @ blob 456ec1f50ff6237f9cb61bb8070d90b3877a5bed
 - packages/skills/test/snippet-check.ts @ blob 7d7694d474452cedfe4a485023c0a54703a15fad
 - pnpm-lock.yaml @ blob de48ad22db5756775e0f61f60ba11d4cbc75917c
-- README.md @ blob e7e175dc652eedeaf66f1c1c99bd77cff3d9f489
-- scripts/pack-install-smoke.sh @ blob 313b81f05e720af1dc966853b060959b634a1310
-- skills/hejbro/references/nile-preset.md @ blob ab814981a26bb64a8865bd924accff3ef27cb105
-- skills/hejbro/SKILL.md @ blob 5099d46542997d1f19a8fcb92117d261c57d22e4
+- README.md @ blob 394243e15687a33c287cee58193a8d38080fc358 (re-pinned: #571 relicense (license text) + D106 correction round's own crap/task-time badge refreshes -- mixed causation, not #571 alone)
+- scripts/pack-install-smoke.sh @ blob bcac1ec8b67190da120df8c4e931d7aaf4f6ac48 (re-pinned: #571 relicense edited this file after #572 merged -- concurrent-edit pin death, not a content change of this piece)
+- skills/hejbro/references/nile-preset.md @ blob 22fab6b3f0289ad5eacdb071b45c90a54c65a58a (re-pinned: D106 correction round F2/F4/F5/F9 + round-2 runtime-refusal paragraph)
+- skills/hejbro/references/query-layer.md @ blob 3dec5cb84dea2334f452333aeea27b6f61713e81 (new pin: touched only by this piece's own D106 correction round F1/F2-doc, was never in the original 36-pin set -- added, not re-pinned)
+- skills/hejbro/SKILL.md @ blob 7a8b971208b5c1f7cc380156bcba28bc9df159cd (re-pinned: #571 relicense edited this file after #572 merged -- concurrent-edit pin death, not a content change of this piece)
 
-(Taken from `git hash-object <path>` on the frozen tree at `b2dd6a5f`,
-before the blackbox commit; every file the branch touched against dev
-`c312410e`. The `openspec/changes/add-nile-preset/` paths will move when
-this change archives; those pins are re-pathed in the archive PR, blobs
-unchanged unless the D106 round corrects text — corrected files are
-re-pinned and annotated, as the #553 archive did. Pins die three ways —
-squash preserves them, an archive kills the path, a concurrent same-file
-edit on dev kills the blob — so every later commit re-verifies all of
-them, itemized by bucket rather than by count.)
+(Originally taken from `git hash-object <path>` on the frozen tree at
+`b2dd6a5f`, before the blackbox commit; every file the branch touched
+against dev `c312410e`. Re-pinned in the D106 correction + archive round
+(2026-08-31): the five `openspec/changes/add-nile-preset/` paths moved
+to `openspec/changes/archive/2026-08-31-add-nile-preset/` on archive —
+`proposal.md`'s blob is unchanged by the move, its three sibling spec
+deltas (`driver-contract`, `preset-validation`, `rls-execution-context`)
+carry the D106 correction-round text, `tasks.md` carries the 7.6
+checkbox. Eight further paths kept their location but not their blob
+this same round from this piece's own D106 corrections:
+`.changeset/add-nile-preset.md` (F6), `packages/nile/src/context.ts`
+(F3), `packages/nile/src/validators.ts` (F8/F10),
+`packages/nile/test/context.test.ts` (F3),
+`packages/nile/test/integration/nile.integration.test.ts` (F11),
+`packages/nile/test/validators.test.ts` (F8/F10),
+`skills/hejbro/references/nile-preset.md` (F2/F4/F5/F9 + the round-2
+runtime-refusal paragraph), and `openspec/task-times.csv` (the D106
+review, correction, and archive-round ledger rows). Six more paths kept
+their location but not their blob from `#571`'s relicense, which edited
+them on `dev` after `#572` merged and before this branch's own base —
+a concurrent-edit pin death, not a content change of this piece:
+`AGENTS.md`, `packages/nile/LICENSE`, `packages/nile/package.json`,
+`scripts/pack-install-smoke.sh`, `skills/hejbro/SKILL.md`, and
+`README.md` (mixed: `#571`'s license text plus this piece's own two
+badge-refresh commits). One path is a genuinely new pin, not a
+re-pin: `skills/hejbro/references/query-layer.md` was never touched by
+the piece before archive, only by this same D106 correction round
+(F1/F2-doc) — it was absent from the original 36-item list entirely.
+The remaining seventeen paths are unchanged, verified against this
+file's own prior pins before the correction commit. Pins die three
+ways — squash preserves them, an archive kills the path, a concurrent
+same-file edit on dev kills the blob — so every later commit
+re-verifies all thirty-seven, itemized by bucket rather than by count.)
 
 
 # add-nile-preset — the third preset, and the test the contract was waiting for (#301)
