@@ -1,3 +1,5 @@
+import { grant, roleName, schema, select, table, uuid } from "@hejbro/core";
+import { db } from "@hejbro/query";
 import { assertSessionStateConformance } from "@hejbro/query/testing/driver-conformance";
 import { Pool, types as pgTypes } from "pg";
 import { describe, expect, it, vi } from "vitest";
@@ -758,5 +760,48 @@ describe("pgDriver conforms to the driver contract (#481, task 1.7)", () => {
 				recordedForSetupSession: recorded,
 			}),
 		).not.toThrow();
+	});
+});
+
+describe("pgDriver + db.as(context) baseline pin (task 4.1, #557 -- fixed before the context-application generalization lands, so a later change that moves this is caught here)", () => {
+	const app = schema("app");
+	const items = table(app, "items", {
+		id: uuid().primaryKey(),
+	});
+	const itemsGrant = grant(app).usage.to("app_role");
+
+	it("sends the pin, the context statements, then the caller's statement, all inside one transaction -- the setting travels as a bind parameter, never inlined into the SQL text", async () => {
+		const { pool, calls } = stubPoolWithClient();
+		const driver = pgDriver(pool);
+		const handle = db({ items, itemsGrant }, driver);
+
+		await handle
+			.as({ role: roleName("app_role"), settings: { "app.claim": "value" } })
+			.execute(select(items));
+
+		const texts = calls.map(sqlTextOf);
+		expect(texts).toHaveLength(6);
+		expect(texts[0]).toBe(
+			"set intervalstyle to 'postgres'; set bytea_output to 'hex'",
+		);
+		expect(texts[1]).toBe("BEGIN");
+		// the context's own statements come first, in order, ahead of the
+		// caller's own statement -- role first, then one set_config per
+		// setting (spec: driver-contract, "Contributing nothing keeps the
+		// existing statements").
+		expect(texts[2]).toBe('set local role "app_role"');
+		expect(texts[3]).toBe("select set_config($1, $2, true)");
+		expect(texts[4]).toContain("items");
+		expect(texts[5]).toBe("COMMIT");
+
+		const settingCall = calls.find(
+			(call): call is CapturedQueryConfig =>
+				typeof call !== "string" &&
+				call.text === "select set_config($1, $2, true)",
+		);
+		if (settingCall === undefined) {
+			throw new Error("the setting statement was never sent");
+		}
+		expect(settingCall.values).toEqual(["app.claim", "value"]);
 	});
 });

@@ -118,7 +118,7 @@ Files: `packages/pg/test/driver.test.ts`,
 `packages/supabase/test/driver.test.ts`,
 `packages/neon/test/driver.test.ts`
 
-- [ ] 4.1 (7m) `@hejbro/pg` pin: a context on this driver sends exactly
+- [x] 4.1 (7m) `@hejbro/pg` pin: a context on this driver sends exactly
       today's statements, in today's order. Written and green **before**
       group 2 changes anything.
 - [ ] 4.2 (7m) `@hejbro/supabase` pin: same, on its pooled-transaction
