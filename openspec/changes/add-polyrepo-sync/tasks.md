@@ -254,6 +254,8 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
 | A chain that carries manifests keeps carrying them | Generating with emission turned back off is refused | `cli/test/manifest-chain.test.ts > refuses generation when the chain carries manifests and emission is off` |
 | " | A hand-edited chain is caught without a database | `cli/test/verify-manifest.test.ts > reports a chain that stopped carrying its manifests` |
 | " | A chain that starts carrying midway is not a gap | `cli/test/verify-manifest.test.ts > a chain that begins carrying manifests midway is not reported` |
+| " | Stripping the end of a chain is caught too | `cli/test/verify-manifest.test.ts > reports a chain whose last migration was stripped` |
+| The emitted manifest statements are deterministic | " (the recorded hash is the snapshot's) | `cli/test/generate-manifest.test.ts > the inserted snapshot hash is the one the banner records` |
 | " | Enabling again succeeds | `cli/test/manifest-chain.test.ts > generation proceeds when emission is enabled` |
 
 - [x] 4.1 Configuration flag, and `generate` handing the payload to the

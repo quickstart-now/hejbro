@@ -199,10 +199,11 @@ rows that follow it.
 Once a migration chain contains a migration that carries manifest
 statements, hejbro SHALL refuse to generate a migration for that chain
 with manifest emission disabled, with a coded error whose remedy is to
-enable emission again. Verification SHALL report a **gap** — a migration
-that carries no manifest statements while both an earlier and a later
-one do — so that removing the statements by hand is caught without a
-database.
+enable emission again. Verification SHALL report the first migration
+that carries none **after one that does**, so that removing the
+statements by hand is caught without a database — whether the removal
+leaves a hole in the middle of the chain or strips its end, since
+generation refuses to produce either.
 
 Detection begins at the first migration that carries them, because a
 chain legitimately starts carrying manifests at whatever point emission
@@ -225,6 +226,12 @@ reported agreement — a stale answer that reads as a fresh one.
   lies between two that carry them, and verification runs
 - **THEN** verification reports the chain as no longer carrying its
   manifests
+
+#### Scenario: Stripping the end of a chain is caught too
+- **WHEN** the manifest statements are removed from the last migration
+  of a chain whose earlier migrations carry them, and verification runs
+- **THEN** it reports that migration: generation would have refused to
+  write it that way, so the only way it got there was by hand
 
 #### Scenario: A chain that starts carrying midway is not a gap
 - **WHEN** the earlier migrations of a chain carry no manifest

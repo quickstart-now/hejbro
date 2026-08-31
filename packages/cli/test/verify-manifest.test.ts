@@ -110,6 +110,32 @@ describe("hejbro verify (manifest monotonicity)", () => {
 		expect(result.stderr).toContain(second);
 	});
 
+	it("reports a chain whose last migration was stripped", async () => {
+		await writeSchema(SCHEMA_V1);
+		await runCli(cwd, ["generate", "--manifest"]);
+		await writeSchema(SCHEMA_V2);
+		await runCli(cwd, ["generate", "--manifest"]);
+
+		const [first, second] = await sqlFileNames();
+		expect(first).toBeDefined();
+		expect(second).toBeDefined();
+
+		// The last migration is the one hand-edited this time — generation
+		// itself would have refused to write a chain ending this way
+		// (manifest-emission-required), so the only way it got there is by
+		// hand (schema-manifest delta, "Stripping the end of a chain is
+		// caught too").
+		const secondPath = join(cwd, "migrations", second as string);
+		const original = await readFile(secondPath, "utf8");
+		expect(original).toContain("-- hejbro-manifest: 1");
+		await writeFile(secondPath, stripManifestByHand(original));
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("manifest-chain-interrupted");
+		expect(result.stderr).toContain(second);
+	});
+
 	it("passes when every migration from the first manifest onward keeps carrying one", async () => {
 		await writeSchema(SCHEMA_V1);
 		await runCli(cwd, ["generate", "--manifest"]);

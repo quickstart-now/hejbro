@@ -124,6 +124,21 @@ describe("hejbro generate --manifest", () => {
 		expect(payload.snapshot).toEqual(JSON.parse(snapshotFileText));
 	});
 
+	it("the inserted snapshot hash is the one the banner records", async () => {
+		await writeSchema(SCHEMA_SOURCE);
+
+		const result = await runCli(cwd, ["generate", "--manifest"]);
+		expect(result.exitCode).toBe(0);
+
+		const migrationText = await soleMigrationText();
+		const bannerMatch = migrationText.match(/-- snapshot: (sha256:[0-9a-f]+)/);
+		const insertMatch = migrationText.match(
+			/insert into "hejbro"\."schema_manifest" \([^)]*\) values \(\d+, \d+, '([^']+)'/,
+		);
+		expect(bannerMatch?.[1]).toBeDefined();
+		expect(insertMatch?.[1]).toBe(bannerMatch?.[1]);
+	});
+
 	it("no difference writes nothing", async () => {
 		await writeSchema(SCHEMA_SOURCE);
 		await runCli(cwd, ["generate", "--manifest"]);
