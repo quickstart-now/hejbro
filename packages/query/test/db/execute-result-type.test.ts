@@ -65,7 +65,11 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 
 		// #311: a projected declared column keeps its declared type (mode
 		// 'bigint' here), not the family-wide union. Nullability still
-		// widens -- a left join can null any projected column (#307).
+		// widens here -- #307 is landed (narrow-join-nullability), but only
+		// when ExecuteResult can see the set: this `Stage` uses the bare,
+		// one-argument `SelectLimited`/`InsertFinal` form, so `TLeftJoined`
+		// defaults to untracked and stays widened on purpose (the same
+		// fail-safe default `SelectResult`'s own task 2.4 pins).
 		expectTypeOf<Row>().toEqualTypeOf<{
 			readonly total: bigint | null;
 		}>();
@@ -77,6 +81,20 @@ describe("Db.execute's resolved row type (task 4.11)", () => {
 		expectTypeOf<ExecuteRows<QueryNode>>().toEqualTypeOf<
 			ReadonlyArray<Readonly<Record<string, unknown>>>
 		>();
+	});
+});
+
+describe("db.execute infers the left-joined set from the core stage (narrow-join-nullability, task 3.3)", () => {
+	it("no leftJoin at all (never): a notNull projected column narrows to non-null", () => {
+		type Stage = SelectLimited<{ readonly t: Posts["status"] }, never>;
+		type Row = ExecuteRows<Stage>[number];
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string>();
+	});
+
+	it("the projected column's own table is left-joined: the field stays nullable", () => {
+		type Stage = SelectLimited<{ readonly t: Posts["status"] }, Posts>;
+		type Row = ExecuteRows<Stage>[number];
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string | null>();
 	});
 });
 
@@ -95,7 +113,11 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 
 		// #311: a projected declared column keeps its declared type (mode
 		// 'bigint' here), not the family-wide union. Nullability still
-		// widens -- a left join can null any projected column (#307).
+		// widens here -- #307 is landed (narrow-join-nullability), but only
+		// when ExecuteResult can see the set: this `Stage` uses the bare,
+		// one-argument `SelectLimited`/`InsertFinal` form, so `TLeftJoined`
+		// defaults to untracked and stays widened on purpose (the same
+		// fail-safe default `SelectResult`'s own task 2.4 pins).
 		expectTypeOf<Row>().toEqualTypeOf<{
 			readonly total: bigint | null;
 		}>();
