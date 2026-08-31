@@ -311,7 +311,7 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 | The command can check without writing | Checking leaves the module untouched | `cli/test/sync-states.test.ts > check mode writes nothing and exits non-zero` |
 | The schema filter is reserved, not silently ignored | The reserved filter is refused | `cli/test/sync-states.test.ts > refuses the reserved schema filter` |
 
-- [ ] 5.1 `[design]` Settle the module's file name, header, the names of
+- [x] 5.1 `[design]` Settle the module's file name, header, the names of
       its exported stamp and role list, and how the manifest row a
       module carries reaches a refusal that wants to name it — the
       carrier group 2 deliberately did not build. Start from
@@ -320,10 +320,10 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 - [ ] 5.2 Register the command, its value-taking flags and its help
       row. Start from `cli/test/help.test.ts > lists the sync command`.
       ~5m
-- [ ] 5.3 Connection entry, dynamic driver import, and both coded
+- [x] 5.3 Connection entry, dynamic driver import, and both coded
       refusals. Start from `cli/test/sync-connection.test.ts > names what
       to supply when no connection is given`. ~8m
-- [ ] 5.4 Read the newest row and emit usage-constructor calls for its
+- [x] 5.4 Read the newest row and emit usage-constructor calls for its
       tables and enums — and for nothing else. Start from
       `cli/test/sync-emit.test.ts > reproduces the carried choices of the
       manifest`, then `> emits tables and enums and no function
