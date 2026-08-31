@@ -45,6 +45,12 @@ describe("nile-preset.md states each refusal's evidence grade, distinguished (pr
 			/IDENTITY columns are not supported for tenant-aware table/,
 		);
 		expect(REFERENCE_FLAT).toMatch(/not in the platform's published table/);
+		// The grade must sit on the identity row itself (one table line), not
+		// merely somewhere in the file -- a row regraded to platform-documented
+		// would otherwise still pass the assertions above.
+		expect(REFERENCE).toMatch(
+			/^\| An identity column[^\n]*\| \*\*measured only\*\*[^\n]*\| `nile-identity-in-tenant-table` \|$/m,
+		);
 	});
 
 	it("cites the platform's own published limitations table verbatim, with its source URL and access date", () => {

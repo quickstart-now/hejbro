@@ -268,17 +268,18 @@ export const nileSerialValidator: Validator = (_snapshot, declarations) =>
  * `tenant_id` (task added after G5's own live-witness measurement, #567:
  * the platform's testing container rejected a `create table` whose
  * primary key was `id` alone on a table also carrying `tenant_id uuid`,
- * with "primary key of tenant-aware table must have the tenant_id
- * column"). Measured, never platform-documented -- this refusal is not
+ * with `primary key of tenant-aware table must have the "tenant_id"
+ * column`). Measured, never platform-documented -- this refusal is not
  * in the platform's published limitations table.
  *
  * Scope is exactly what was measured, no wider: a tenant-aware table
- * that declares **no** primary key at all is untouched here -- that
- * shape was never exercised against the container, so this validator
- * makes no claim about it (recorded as unmeasured in the preset's own
- * documentation, not assumed safe or unsafe). Column *order* within the
- * primary key is likewise never asserted -- only that `tenant_id` is
- * one of its columns, the only fact the measurement actually supports.
+ * that declares **no** primary key at all is untouched here -- measured
+ * accepted (#573: `create table (tenant_id uuid not null, name text)`
+ * succeeds on the container and takes rows under a tenant context; the
+ * live witness in test/integration re-measures it). Column *order*
+ * within the primary key is likewise never asserted -- only that
+ * `tenant_id` is one of its columns, the only fact the measurement
+ * actually supports.
  */
 export const nileTenantPrimaryKeyValidator: Validator = (
 	_snapshot,
@@ -319,7 +320,7 @@ const identityMessage = (
 	tableName: string,
 	columnName: string,
 ): string =>
-	`Nile's platform refuses an identity column ("${columnName}") in the tenant-aware table "${schemaName}"."${tableName}" -- ${MEASURED_ONLY} (measured 2026-08-31 on the platform's own test container: "IDENTITY columns are not supported for tenant-aware table", for both the ALWAYS and the BY DEFAULT kind). Next: use a uuid key (a uuid column with a default) instead of an identity column, or drop the tenant_id column if this table is not tenant-scoped.`;
+	`Nile's platform refuses an identity column ("${columnName}") in the tenant-aware table "${schemaName}"."${tableName}" -- ${MEASURED_ONLY} (the platform's own test container answers "IDENTITY columns are not supported for tenant-aware table", for both the ALWAYS and the BY DEFAULT kind). Next: for a key, use a uuid column with a default instead; for a counter, assign the value in application code or keep the sequence in a table without tenant_id; or drop the tenant_id column if this table is not tenant-scoped.`;
 
 /**
  * Refuses an identity column of either kind (`generated always as
