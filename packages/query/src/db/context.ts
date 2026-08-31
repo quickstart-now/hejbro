@@ -156,27 +156,28 @@ export const defaultContextRendering: ContextRendering = (context) => [
 ];
 
 /**
- * Applies `context` on `session`: `SET LOCAL ROLE` first (identifier-quoted
- * via core's public `quoteIdentifier` — `SET LOCAL ROLE` takes no bind
- * parameter, so quoting is the only defense, and it is a real one: an
- * embedded `"` is doubled, never passed through raw), then one
- * parameterized `select set_config($1, $2, true)` per setting entry, in
- * declaration order and one at a time (a `reduce`-chained sequential
- * await, not `Promise.all` — these share one connection, and issuing them
- * concurrently would race on it). Every statement here goes through
- * `sendCompiled` (task 4.5's `query-execution-failed` contract), never a
- * bespoke error path.
+ * Applies `context` on `session` (task 2.2, #555): `driver`'s own
+ * rendering when it contributes one, `defaultContextRendering` otherwise
+ * (spec: "Contributing nothing keeps the existing statements") — the
+ * driver's own rendering fully replaces the default, never runs
+ * alongside it. Every returned statement is sent one at a time, in the
+ * rendering's own order (a `reduce`-chained sequential await, not
+ * `Promise.all` — these share one connection, and issuing them
+ * concurrently would race on it, task 2.6). Every statement here goes
+ * through `sendCompiled` (task 4.5's `query-execution-failed` contract),
+ * never a bespoke error path.
  */
 const applyContext = async (
+	driver: Driver,
 	session: DriverSession,
 	context: DbContext,
 ): Promise<void> => {
-	await sendCompiled(session, roleStatement(context.role));
-	const settingEntries = Object.entries(context.settings ?? {});
-	await settingEntries.reduce<Promise<void>>(
-		(previous, [key, value]) =>
+	const rendering = driver.renderContext ?? defaultContextRendering;
+	const statements = rendering(context);
+	await statements.reduce<Promise<void>>(
+		(previous, statement) =>
 			previous.then(async () => {
-				await sendCompiled(session, settingStatement(key, value));
+				await sendCompiled(session, statement);
 			}),
 		Promise.resolve(),
 	);
@@ -215,7 +216,7 @@ export const createProviderRun = (
 		}
 		assertDeclaredRole(context.role, declaredRoles);
 		return driver.transaction(async (session) => {
-			await applyContext(session, context);
+			await applyContext(driver, session, context);
 			return send(session);
 		});
 	};
@@ -262,7 +263,7 @@ export const createAsApi = <
 		): Promise<T> => {
 			assertCapability(driver, "interactive-transactions", operation);
 			return driver.transaction(async (session) => {
-				await applyContext(session, context);
+				await applyContext(driver, session, context);
 				return send(session);
 			});
 		};

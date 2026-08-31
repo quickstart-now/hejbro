@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type {
+	ContextRendering,
 	Driver,
 	DriverRow,
 	DriverSession,
@@ -16,6 +17,10 @@ export type RecordingTransactionalDriverOptions = {
 	readonly contributedRoles?: ReadonlyArray<string>;
 	/** Rows every `execute()` call resolves to -- top-level and every transactional session alike (a fixture, not per-call scripting; tests that need a poisoned/varying row build a bespoke `Driver` instead, same as `context.test.ts`'s own fail-stop scenario). */
 	readonly rows?: ReadonlyArray<DriverRow>;
+	/** The driver's own context-rendering contribution (task 2.2, #555) -- omitted means the driver contributes none, so the query layer applies its own default rendering instead. */
+	readonly renderContext?: ContextRendering;
+	/** Declares this driver's platform has no roles a context could name (task 2.4, #555). */
+	readonly roleLessPlatform?: true;
 };
 
 /** `{ contributedRoles }` when given a value, or `{}` when omitted -- avoids ever spreading an explicit `contributedRoles: undefined` (`exactOptionalPropertyTypes`); no ternary (house style), a guard clause per branch instead. */
@@ -26,6 +31,26 @@ const contributedRolesField = (
 		return {};
 	}
 	return { contributedRoles };
+};
+
+/** Same reasoning as {@link contributedRolesField}, for the context-rendering contribution. */
+const renderContextField = (
+	renderContext: ContextRendering | undefined,
+): Pick<Driver, "renderContext"> | Record<string, never> => {
+	if (renderContext === undefined) {
+		return {};
+	}
+	return { renderContext };
+};
+
+/** Same reasoning as {@link contributedRolesField}, for the role-less-platform declaration. */
+const roleLessPlatformField = (
+	roleLessPlatform: true | undefined,
+): Pick<Driver, "roleLessPlatform"> | Record<string, never> => {
+	if (roleLessPlatform === undefined) {
+		return {};
+	}
+	return { roleLessPlatform };
 };
 
 /**
@@ -74,6 +99,8 @@ export const recordingTransactionalDriver = (
 		}),
 		setupSession: vi.fn(async () => {}),
 		...contributedRolesField(options.contributedRoles),
+		...renderContextField(options.renderContext),
+		...roleLessPlatformField(options.roleLessPlatform),
 	};
 	return { driver, sentPerTransaction, topLevelSent };
 };

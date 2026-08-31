@@ -48,7 +48,7 @@ Files: `packages/query/src/db/context.ts`,
       (pure function). Failing test: it returns `set local role "…"`
       followed by one `select set_config($1, $2, true)` per setting in
       declaration order — byte-identical to what is sent today.
-- [ ] 2.2 (9m) Apply the driver's rendering when it contributes one.
+- [x] 2.2 (9m) Apply the driver's rendering when it contributes one.
       Failing test: a contributing driver's statements are the first
       statements inside the transaction, in its order, and no default
       statement is sent at all.

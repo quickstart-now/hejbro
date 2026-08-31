@@ -12,7 +12,11 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { defaultContextRendering } from "../../src/db/context";
 import { db } from "../../src/db/db";
-import type { Driver, DriverSession } from "../../src/driver/contract";
+import type {
+	ContextRendering,
+	Driver,
+	DriverSession,
+} from "../../src/driver/contract";
 import { recordingTransactionalDriver } from "./recording-driver";
 
 const app = schema("app");
@@ -65,6 +69,29 @@ describe("defaultContextRendering (task 2.1, #555 -- extracted from applyContext
 		expect(
 			defaultContextRendering({ role: roleName("grant_reader") }),
 		).toEqual([{ sql: 'set local role "grant_reader"', params: [], kind: "sql" }]);
+	});
+});
+
+describe("a contributing driver's own rendering replaces the default (task 2.2, #555)", () => {
+	it("sends the driver's own rendering's statements first, in its order, and no default statement is sent at all", async () => {
+		const customRendering: ContextRendering = () => [
+			{ sql: "custom pin one", params: [], kind: "sql" },
+			{ sql: "custom pin two", params: [], kind: "sql" },
+		];
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
+			renderContext: customRendering,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+
+		const sqlSent = sentPerTransaction[0]?.map((sent) => sent.sql);
+		expect(sqlSent?.[0]).toBe("custom pin one");
+		expect(sqlSent?.[1]).toBe("custom pin two");
+		expect(sqlSent?.[2]).toContain("posts");
+		// no default statement anywhere -- the driver's own rendering fully
+		// replaces the default, never runs alongside it.
+		expect(sqlSent).not.toContain('set local role "grant_reader"');
 	});
 });
 
