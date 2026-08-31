@@ -29,4 +29,4 @@ The full README, design spec, decision log, and guides live in the
 
 ## License
 
-[MIT](LICENSE)
+[Apache-2.0](LICENSE)

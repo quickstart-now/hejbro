@@ -153,7 +153,7 @@ echo "== npm install (plain npm — no pnpm, no workspace lookup: SCRATCH_DIR is
 
 fail() { echo "FAILED: $1" >&2; exit 1; }
 
-echo "== assertion 1a: each tarball packs its required files (dist, LICENSE, README, and package.json)"
+echo "== assertion 1a: each tarball packs its required files (dist, LICENSE, NOTICE, README, and package.json)"
 # `<<<` (here-string), not a `|` pipe: the while loop stays in the current
 # shell, so `fail`'s `exit 1` aborts the whole script instead of just a
 # pipeline subshell.
@@ -165,13 +165,13 @@ assert_tarball_contains() {
     grep -qxF "$rel" <<< "$packed" || fail "$tgz does not pack '$rel'"
   done
 }
-assert_tarball_contains "$CORE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
-assert_tarball_contains "$CLI_TGZ" package.json LICENSE README.md dist/cli.js dist/cli.d.ts dist/index.js
-assert_tarball_contains "$SUPABASE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
-assert_tarball_contains "$QUERY_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
-assert_tarball_contains "$PG_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
-assert_tarball_contains "$NEON_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
-assert_tarball_contains "$NILE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$CORE_TGZ" package.json LICENSE NOTICE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$CLI_TGZ" package.json LICENSE NOTICE README.md dist/cli.js dist/cli.d.ts dist/index.js
+assert_tarball_contains "$SUPABASE_TGZ" package.json LICENSE NOTICE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$QUERY_TGZ" package.json LICENSE NOTICE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$PG_TGZ" package.json LICENSE NOTICE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$NEON_TGZ" package.json LICENSE NOTICE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$NILE_TGZ" package.json LICENSE NOTICE README.md dist/index.js dist/index.d.ts
 echo "   ok"
 
 echo "== assertion 1b: every file the tarball packed exists in the install tree"
@@ -201,7 +201,9 @@ assert_license_content() {
   install_dir="$1"
   license_file="$install_dir/LICENSE"
   [ -s "$license_file" ] || fail "$license_file is missing or empty"
-  grep -q "MIT License" "$license_file" || fail "$license_file does not contain the expected MIT License text"
+  grep -q "Apache License" "$license_file" || fail "$license_file does not contain the expected Apache License text"
+  notice_file="$install_dir/NOTICE"
+  [ -s "$notice_file" ] || fail "$notice_file is missing or empty (Apache-2.0 section 4(d) obligation travels with the tarball)"
 }
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/core"
 assert_license_content "$SCRATCH_DIR/node_modules/hejbro"

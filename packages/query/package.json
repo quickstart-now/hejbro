@@ -2,7 +2,7 @@
 	"name": "@hejbro/query",
 	"version": "0.0.0",
 	"description": "Typed query layer for hejbro: pure statement compiler on the schema DSL, driver contract, RLS execution context.",
-	"license": "MIT",
+	"license": "Apache-2.0",
 	"type": "module",
 	"exports": {
 		".": {
@@ -11,7 +11,8 @@
 		}
 	},
 	"files": [
-		"dist"
+		"dist",
+		"NOTICE"
 	],
 	"repository": {
 		"type": "git",

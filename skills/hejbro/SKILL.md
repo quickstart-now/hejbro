@@ -2,7 +2,7 @@
 name: hejbro
 description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — when generating/verifying migrations, when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()), when writing typed queries against a declared schema (db(), the select/insert/update/deleteFrom chain, db.fn), when running a query under an RLS execution context (db.as, asUser/asAnon) or registering a context provider so every execution applies one automatically, when asserting at startup that the connected database actually matches its declarations (assertSchema), or when adopting hejbro into an existing (brownfield) database.
 version: 0.2.0
-license: MIT
+license: Apache-2.0
 ---
 
 # hejbro
