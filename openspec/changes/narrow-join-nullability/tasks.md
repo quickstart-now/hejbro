@@ -81,8 +81,21 @@ export type LeftJoinedBrand<TLeftJoined> = {
   `ChainApi["select"]` returns `SelectChainDistinctable<TProjection,
   never>`.
 - The phantom is **optional**, so `infer TLeftJoined` yields
-  `… | undefined`; strip it with `NonNullable` at the use site (the
-  `OriginColumn`/`ReadAsType` precedent in `select-result.ts`).
+  `… | undefined`; strip it with **`Exclude<T, undefined>`** at the use
+  site — **not** `NonNullable`. Measured during group 3: TypeScript's
+  own `NonNullable<T>` is `T & {}`, so `NonNullable<unknown>` is `{}`,
+  and `[unknown] extends [{}]` is false — the untracked default would
+  flip to **tracked** and every projection reaching `db.execute` would
+  narrow whether or not a join exists. That is the change's first
+  failure mode that points at *lying* rather than widening, and the
+  contract caused it. `Exclude` was measured on all four shapes
+  (`unknown`, `never`, one `Table`, a union of `Table`s, each with
+  `| undefined`) and preserves every one.
+  `select-result.ts`'s own `OriginColumn`/`ReadAsType` keep
+  `NonNullable` and are safe by coincidence, not by design: they feed
+  the result into a "does it have this shape" check, which `{}` and
+  `unknown` both fail identically. Only a "is it exactly this type"
+  check — which is what tracking is — exposes the difference.
 
 Every task's red test is a **type test** (`expectTypeOf` /
 `@ts-expect-error`). Done for every task means the change's own gates
@@ -169,7 +182,7 @@ Files: `packages/query/src/types/select-result.ts`,
       assertions, and confirmed the existing `any`-flows-in assertion
       (added in g2-r1) already covers the frozen contract's `any` clause.
 
-- [ ] 2.6 **Defect, found during group 3.** The narrowing arm returns
+- [x] 2.6 **Defect, found during group 3.** The narrowing arm returns
       `ColumnTsType<origin>` directly, but that mapping carries no
       nullability — `SelectColumnResult` is what pairs it with
       `IsColumnNotNull`, and the frozen contract named
@@ -180,7 +193,15 @@ Files: `packages/query/src/types/select-result.ts`,
       with "actually narrowing" — every narrowing case used a `notNull`
       column, and every nullable case was untracked or a member. Red: a
       nullable column projected against a tracked set that does not
-      contain it, expected `string | null`. (6 min)
+      contain it, expected `string | null`. Cover the nullable shapes
+      that differ from each other, not one of them: a plain `text()`, a
+      numeric-mode column, a `$type`-branded column, and an array column
+      each lose their `| null` differently. Close the class while here —
+      the `ReadAsType` arm (`count()`) and the member-match arm under a
+      **tracked** set have no shipped assertion either; their values are
+      safe by construction (both add `| null` unconditionally), so one
+      assertion each is enough to make that safety observable rather
+      than assumed. (6 min)
 
 ## 3. The chain surface and `execute` carry it through (#548)
 
@@ -198,7 +219,7 @@ Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
       Red: after `.leftJoin(comments, on)` the comments-sourced field is
       `| null` while the posts-sourced field is not, and the `innerJoin`
       form narrows both. (10 min)
-- [ ] 3.3 Make `ExecuteResult` infer the set from the core stage
+- [x] 3.3 Make `ExecuteResult` infer the set from the core stage
       (`NonNullable` on the optional phantom) and update the two
       `#307` comments in `execute-result-type.test.ts` to the landed
       rule. Red: `db.execute(select({ t: posts.titleRequired }, posts))`
@@ -233,7 +254,14 @@ Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
       branch's set were applied to the other, a nullable field could be
       typed non-null. Pin it with a test — each branch resolves its own
       row first, so a field non-null on one side and nullable on the
-      other combines to nullable. (6 min)
+      other combines to nullable. Record one more thing found while
+      wiring the chain: `createChainApi`'s `select` member ends in an
+      `as ChainApi["select"]` boundary cast, so a mistake that drops the
+      generic parameter inside the factory is invisible to every type
+      test — the cast re-asserts the intended signature. That cast
+      predates this change and is not touched here; what belongs in the
+      record is that chain *type* correctness is pinned by the stage
+      types, never by the factory's own body. (6 min)
 
 ## 4. Surface documentation and release artifacts (#549)
 
