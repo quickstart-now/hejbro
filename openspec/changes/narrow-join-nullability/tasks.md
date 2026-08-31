@@ -158,10 +158,23 @@ Files: `packages/query/src/types/select-result.ts`,
       records what still holds — why only a direct column reference
       narrows, and why a structural collision can only widen. (8 min)
 
+      Reviewer-flagged G2 review round (test-only, no source change,
+      commit/tag `handoff/narrow-join-nullability-g2-r2`): closed a
+      test-suite gap the mutant sweep found — the mirror direction of
+      2.5's own superset/subset case (origin the subset, tracked member
+      the superset) had no assertion, so a reverse-only one-directional
+      membership check passed the whole suite. Also added: the union
+      tracked-set distribution case (two real `leftJoin` calls, not just
+      `never`/a single `Table`) with both-member and non-member
+      assertions, and confirmed the existing `any`-flows-in assertion
+      (added in g2-r1) already covers the frozen contract's `any` clause.
+
 ## 3. The chain surface and `execute` carry it through (#548)
 
 Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
+`packages/query/src/types/returning.ts`,
 `packages/query/test/types/chain-types.test.ts`,
+`packages/query/test/types/returning.test.ts`,
 `packages/query/test/db/execute-result-type.test.ts`.
 
 - [ ] 3.1 Thread the second parameter through the chain stage types;
@@ -182,7 +195,15 @@ Files: `packages/query/src/db/chain.ts`, `packages/query/src/db/db.ts`,
       subselect, a `db.with` body, and `related()` all still type every
       projected field `| null`. Red: type tests asserting exactly that.
       (8 min)
-- [ ] 3.5 [design] Confirm and record that no chain member drops the set
+- [ ] 3.5 Narrow `returning()` too: `ReturningRow` resolves
+      `SelectResult<TProjection, never>`, not the one-argument form.
+      A mutation chain has no join grammar at all — no `leftJoin`, no
+      `UPDATE … FROM` — so the honest set there is not "unknown" but
+      **definitively empty**, and widening it was the one place this
+      change left information on the table (G2 review). Red:
+      `returning({ t: posts.titleRequired })`'s field expected
+      `string`, actual `string | null`. (10 min)
+- [ ] 3.6 [design] Confirm and record that no chain member drops the set
       silently — the set-op combinators resolve their row type before
       combining, and `related()` is untracked by decision, not by
       accident. (6 min)

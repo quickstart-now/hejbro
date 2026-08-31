@@ -54,6 +54,14 @@ only a direct column reference is narrowed. Whole-table projections and
 `returning()` without a projection are unaffected and carry declared
 nullability, as they always have.
 
+A `returning()` projection SHALL follow the declaration too, with no
+left-join widening applied — **on the stated premise that a mutation
+carries no join grammar**: `insert`/`update`/`deleteFrom` offer no
+`leftJoin` and no `UPDATE … FROM`, so the set of left-joined tables at
+that position is not unknown but definitively empty. A change that
+gives mutations a join grammar must revisit this paragraph; the premise
+is written down so that it cannot be broken silently.
+
 #### Scenario: Projection drives the row type
 - **WHEN** a select projects a subset of a declared table's columns
 - **THEN** the statement's result type contains exactly those column
@@ -87,6 +95,12 @@ nullability, as they always have.
   SQL NULL for reasons the declaration does not govern (no rows to
   aggregate, a partition boundary), so it is not narrowed with the
   direct column reference
+
+#### Scenario: A returning projection follows the declaration
+- **WHEN** an insert, update or delete projects a `notNull` declared
+  column through `returning({ … })`
+- **THEN** the field types as the declared non-null type — a mutation
+  has no join grammar, so no left join can null it
 
 #### Scenario: Array element nullability follows the declaration
 - **WHEN** a table declares `tags: text().array()` and

@@ -124,7 +124,14 @@ left-joined table set, which no stage type carries today
 4. **Threading boundary**: core select stages, the chain stages, and
    `ExecuteResult`. Nested reads, `withCte`/CTE references, `defineView`
    and `related()` are explicitly out and stay wide — narrowing them is
-   follow-up material, not this change.
+   follow-up material, not this change. **Extended by one position
+   during group 3** (owner ruling, after the group 2 review): a
+   `returning()` projection narrows as well. The boundary's own logic is
+   "a position that cannot see the statement's joins must not narrow",
+   and a mutation is not such a position — it has no join grammar to
+   see, so its set is definitively empty rather than unknown. Leaving it
+   widened would have been the one place this change kept a widening it
+   had the information to remove.
 5. **Self-join of the `from` table is not tracked** (over-widening side).
    Stated, not solved.
 

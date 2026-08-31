@@ -320,6 +320,51 @@ describe("membership uses mutual equality, not one-directional extends (narrow-j
 		type Proj = SelectResult<typeof projected, typeof comments>;
 		expectTypeOf<Proj["b"]>().toEqualTypeOf<string>();
 	});
+
+	it("the mirror direction: a subset origin does not match a structurally-superset tracked table (reviewer-flagged asymmetry -- the previous case alone left a reverse one-directional extends undetected)", () => {
+		// The previous case fixed origin=superset, member=subset. A mutant
+		// that checks ONLY `[member] extends [origin]` (the reverse
+		// direction) happens to give the right answer there too -- it only
+		// diverges from mutual equality when the roles are swapped: origin
+		// the SUBSET, tracked member the SUPERSET. That reverse-only check
+		// would then see the superset member structurally extend the
+		// subset origin and wrongly call it a match.
+		type Proj = SelectResult<
+			{ readonly b: typeof comments.body },
+			typeof commentsWithExtra
+		>;
+		expectTypeOf<Proj["b"]>().toEqualTypeOf<string>();
+	});
+});
+
+describe("a union tracked set (two leftJoin calls) distributes the membership check over every member (narrow-join-nullability, task 2.5 reviewer round)", () => {
+	// `TLeftJoined extends Table<infer TMemberColumns> ? … : false`
+	// distributes over a naked union one member at a time (the frozen
+	// contract's own note in ColumnMapIsLeftJoinedMember's doc comment) --
+	// this was never previously exercised with an ACTUAL union, only
+	// `never`/a single `Table`. Two real left-joined tables is the actual
+	// shape `leftJoin(...).leftJoin(...)` produces.
+	type TrackedBoth = typeof comments | typeof reactions;
+	const projected = {
+		fromComments: comments.body,
+		fromReactions: reactions.kind,
+		fromPosts: posts.titleRequired,
+	};
+
+	it("a column from the FIRST union member stays nullable", () => {
+		type Proj = SelectResult<typeof projected, TrackedBoth>;
+		expectTypeOf<Proj["fromComments"]>().toEqualTypeOf<string | null>();
+	});
+
+	it("a column from the SECOND union member stays nullable", () => {
+		type Proj = SelectResult<typeof projected, TrackedBoth>;
+		expectTypeOf<Proj["fromReactions"]>().toEqualTypeOf<string | null>();
+	});
+
+	it("a column from a table NOT in the union narrows", () => {
+		type Proj = SelectResult<typeof projected, TrackedBoth>;
+		expectTypeOf<Proj["fromPosts"]>().toEqualTypeOf<string>();
+	});
 });
 
 describe("aggregate result types (#416)", () => {
