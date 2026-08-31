@@ -2,9 +2,13 @@
 
 Groups run in order. Five files are **shared and unowned**: every group
 that touches one may only add to it, never restructure it —
-`packages/core/src/engine/generate.ts` (groups 1, 2),
-`packages/core/src/index.ts` (groups 2, 4 — each adds only the exports
-its own failing test demands, never exports for a later group),
+`packages/core/src/engine/generate.ts` (groups 1, 2, 5 — group 5 names
+`origin` in the synced-table-declared refusal, the half group 2's own
+carrier-less refusal could not reach),
+`packages/core/src/index.ts` (groups 2, 4, 5 — each adds only the exports
+its own failing test demands, never exports for a later group; group
+5's `MANIFEST_FORMAT` re-export replaces a second copy of the same fact
+sync's own reader had been holding),
 `packages/cli/src/commands/generate.ts` (groups 3, 4, 5 — group 3 adds
 only a guard call), `packages/cli/src/snapshot-file.ts` (groups 3, 4)
 and
