@@ -8,6 +8,7 @@ Refs:
 - packages/nile/src/validators.ts @ blob b0676c1968cd1d5062777377f062cbdbadbb8004
 - packages/nile/test/preset.test.ts @ blob 6ce3149e3d860b800568fbaa8135ae04d0f85f3e
 - packages/nile/test/validators.test.ts @ blob 53b53fab0350de5c8f996e1e24bcc1ed7b64690a
+- README.md @ blob f6c7b84a82c7b8807ae930cbab413c1f14113eee (task-time badges regenerated after the ledger rows — added in the second commit; CI's single-leg tasktime gate caught the omission)
 - packages/skills/test/nile-preset-doc.test.ts @ blob 0b2ca5138362fd3b05c492640cf4e42ea42349ff
 - skills/hejbro/references/nile-preset.md @ blob 0a67ffa0242b5c41cfd77a0c9170c9ed05224b3f
 
