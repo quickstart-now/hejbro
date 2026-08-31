@@ -829,9 +829,7 @@ describe("defaultContextRendering is reachable from @hejbro/query's public entry
 		};
 		const handle = db({ items, itemsGrant }, wrapped);
 
-		await handle
-			.as({ role: roleName("app_role") })
-			.execute(select(items));
+		await handle.as({ role: roleName("app_role") }).execute(select(items));
 
 		const texts = calls.map(sqlTextOf);
 		expect(texts[2]).toBe('set local role "app_role"');
