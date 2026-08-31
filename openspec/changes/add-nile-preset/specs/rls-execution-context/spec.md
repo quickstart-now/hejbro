@@ -110,7 +110,9 @@ safety of this rendering SHALL be verified in the preset's own package.
 - **WHEN** a context is built with a tenant value that is not a canonical
   UUID
 - **THEN** the failure is an explicit coded error raised before any
-  statement is produced, and nothing reaches the driver
+  statement is produced, and no statement reaches the driver — the query
+  layer has already opened the wrapping transaction when the rendering
+  runs, and that transaction carries none
 
 #### Scenario: An adversarial value never appears raw in the statement
 - **WHEN** a value carrying SQL syntax is passed as a tenant value
