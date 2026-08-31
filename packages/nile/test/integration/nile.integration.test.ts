@@ -121,14 +121,15 @@ const app = schema("app");
  * carries one at all (`create table` with `tenant_id uuid, id uuid
  * primary key` fails with "primary key of tenant-aware table must have
  * the tenant_id column"; a composite `primary key (id, tenant_id)`
- * succeeds). Core's `table()` DSL has no composite-primary-key extras
- * surface today, so this table is declared for its typed `db()` handle
- * only (`widgets.id`/`widgets.tenantId`/`widgets.name`), and its DDL is
- * hand-written to satisfy the platform's own constraint -- the same
- * "schema/table setup is raw DDL through the driver directly, never
- * through db()" discipline `packages/pg`/`packages/neon`'s own witnesses
- * already use, here for a platform-specific reason instead of an
- * out-of-scope one.
+ * succeeds). Core's `table()` DSL **can** express a composite primary key
+ * (`.primaryKey()` on more than one column collects into one
+ * `constraint "..." primary key (...)` clause, confirmed by generating
+ * this exact shape) -- corrected after an earlier, wrong claim to the
+ * contrary in this file. Raw DDL is still used here for the same reason
+ * `packages/pg`/`packages/neon`'s own witnesses use it: schema/table
+ * setup is out of this group's scope, never through `db()`. This table
+ * is declared only for its typed `db()` handle (`widgets.id`/
+ * `widgets.tenantId`).
  */
 const widgets = table(app, "widgets", {
 	id: uuid().notNull(),
