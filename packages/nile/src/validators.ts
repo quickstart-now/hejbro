@@ -85,6 +85,9 @@ const serialMessage = (
 ): string =>
 	`Nile's platform refuses a serial-family column ("${columnName}") in the tenant-aware table "${schemaName}"."${tableName}" -- ${MEASURED_ONLY} (the platform's published table documents CREATE SEQUENCE as unsupported for tenant tables, an adjacent but not identical declaration). Next: use a uuid primary key instead, or drop the tenant_id column if this table is not tenant-scoped.`;
 
+const primaryKeyMessage = (schemaName: string, tableName: string): string =>
+	`Nile's platform refuses a primary key on the tenant-aware table "${schemaName}"."${tableName}" that excludes "tenant_id" -- ${MEASURED_ONLY}. Next: include tenant_id in the primary key.`;
+
 /**
  * Refuses RLS enablement and policies (task 4.1, #566, spec: "RLS and
  * policies are refused"). Both `declarationKind`s are checked
@@ -226,3 +229,50 @@ export const nileSerialValidator: Validator = (_snapshot, declarations) =>
 						),
 					),
 		);
+
+/**
+ * Refuses a primary key on a tenant-aware table that excludes
+ * `tenant_id` (task added after G5's own live-witness measurement, #567:
+ * the platform's testing container rejected a `create table` whose
+ * primary key was `id` alone on a table also carrying `tenant_id uuid`,
+ * with "primary key of tenant-aware table must have the tenant_id
+ * column"). Measured, never platform-documented -- this refusal is not
+ * in the platform's published limitations table.
+ *
+ * Scope is exactly what was measured, no wider: a tenant-aware table
+ * that declares **no** primary key at all is untouched here -- that
+ * shape was never exercised against the container, so this validator
+ * makes no claim about it (recorded as unmeasured in the preset's own
+ * documentation, not assumed safe or unsafe). Column *order* within the
+ * primary key is likewise never asserted -- only that `tenant_id` is
+ * one of its columns, the only fact the measurement actually supports.
+ */
+export const nileTenantPrimaryKeyValidator: Validator = (
+	_snapshot,
+	declarations,
+) =>
+	declarations
+		.filter(isTableDeclaration)
+		.filter(isTenantAwareTable)
+		.flatMap((table): ReadonlyArray<Diagnostic> => {
+			const primaryKeyColumns = table.columns.filter(
+				(column) => column.columnState.primaryKey,
+			);
+			if (primaryKeyColumns.length === 0) {
+				return [];
+			}
+			const includesTenantId = primaryKeyColumns.some(
+				(column) => column.columnName === "tenant_id",
+			);
+			if (includesTenantId) {
+				return [];
+			}
+			return [
+				diagnostic(
+					"error",
+					"nile-tenant-primary-key-missing",
+					primaryKeyMessage(table.schema.schemaName, table.tableName),
+					table.declaredAt,
+				),
+			];
+		});

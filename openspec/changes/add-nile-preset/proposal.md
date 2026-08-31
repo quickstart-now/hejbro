@@ -89,16 +89,22 @@ revisited here; both are applied.
   with an explicit error naming the declaration, the platform's answer,
   and what to do instead — detect + options + commands, never a silent
   rewrite. The set: RLS enablement and policies, functions, triggers,
-  grants, and the `serial`/`smallserial`/`bigserial` family in a
-  tenant-aware table. Each error's text records its evidence grade:
-  policies, functions and triggers are in the platform's published
-  limitations table; **grants are not, and are refused anyway**, and the
-  serial family is likewise measured (the published table documents
+  grants, the `serial`/`smallserial`/`bigserial` family in a tenant-aware
+  table, and a primary key on a tenant-aware table that omits
+  `tenant_id`. Each error's text records its evidence grade: policies,
+  functions and triggers are in the platform's published limitations
+  table; **grants are not, and are refused anyway**, and the serial
+  family is likewise measured (the published table documents
   `CREATE SEQUENCE` for tenant tables, which is adjacent but not the same
-  declaration). `COMMENT` is refused by the platform too, but hejbro has
-  no comment declaration for a validator to fire on — that fact is
-  recorded in the preset's documentation instead, because a validator
-  that can never fire is a spec sentence with no test behind it.
+  declaration). The tenant-aware primary key refusal is measured too —
+  found while building the live witness (#567): the platform rejects a
+  primary key on a tenant-aware table that excludes `tenant_id`, and
+  hejbro's own DSL can express exactly that (unlike `COMMENT`, which
+  hejbro has no declaration for at all). `COMMENT` is refused by the
+  platform too, but hejbro has no comment declaration for a validator to
+  fire on — that fact is recorded in the preset's documentation instead,
+  because a validator that can never fire is a spec sentence with no test
+  behind it.
 - **No new `ObjectKind` and no DSL change.** A tenant-aware table is an
   ordinary `CREATE TABLE` with a `tenant_id uuid` column — *"You can
   create a tenant aware table in Nile by creating a table with a

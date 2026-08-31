@@ -60,8 +60,9 @@ it is.
 ### Requirement: The Nile preset refuses what its platform rejects
 The Nile preset SHALL refuse, at generate time: row-level security
 enablement and policies, function declarations, trigger declarations,
-grants, and a `serial`, `smallserial`, or `bigserial` column in a
-tenant-aware table.
+grants, a `serial`, `smallserial`, or `bigserial` column in a
+tenant-aware table, and a primary key on a tenant-aware table whose
+column set does not include `tenant_id`.
 
 Each refusal SHALL carry its evidence. The platform's published
 limitations table documents the refusal of policies, functions and
@@ -70,7 +71,10 @@ platform. It does **not** list grants, and the platform refuses them
 anyway: that error SHALL say it rests on a measurement. The serial
 family is likewise measured — the published table documents
 `CREATE SEQUENCE` as unsupported for tenant tables, which is adjacent
-but not the same declaration — so its error SHALL say so too.
+but not the same declaration — so its error SHALL say so too. The
+tenant-aware primary key refusal is measured as well: a table carrying a
+`tenant_id uuid` column and a primary key whose columns exclude it is
+rejected by the platform's own container.
 
 The preset SHALL NOT refuse a declaration hejbro cannot express. Where
 the platform rejects something the DSL has no way to declare, the fact
@@ -102,6 +106,13 @@ never fire.
   serial-family column
 - **THEN** generation succeeds — the platform's restriction is about
   tenant-aware tables, and the preset does not widen it
+
+#### Scenario: A tenant-aware table whose primary key omits tenant_id is refused
+- **WHEN** a table carrying a `tenant_id uuid` column declares a primary
+  key whose column set does not include `tenant_id`
+- **THEN** generation fails naming that table and its key, and the error
+  states that this refusal rests on a measurement — the platform rejects
+  such a key on a tenant-aware table
 
 #### Scenario: A tenant-aware table itself is ordinary
 - **WHEN** a table declares a `tenant_id uuid` column and nothing the

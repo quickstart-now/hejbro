@@ -76,12 +76,19 @@ its own evidence grade:
 | `defineTrigger(...)` | triggers need UDF support, which isn't there yet | platform-documented |
 | `grant(...)` | attempted against Nile's testing container and refused | **measured only** — not in the platform's published table |
 | `serial` / `smallserial` / `bigserial` in a tenant-aware table (a table with a `tenant_id uuid` column) | attempted against Nile's testing container and refused | **measured only** — adjacent to, but not the same declaration as, the platform's documented `CREATE SEQUENCE` restriction for tenant tables |
+| A primary key on a tenant-aware table that excludes `tenant_id` | attempted against Nile's testing container (`create table` with a lone `id` primary key on a table also carrying `tenant_id uuid`) and refused: "primary key of tenant-aware table must have the tenant_id column" | **measured only** — not in the platform's published table |
 
 A `serial`-family column outside a tenant-aware table is untouched — the
 platform's restriction is scoped to tenant-aware tables, and this preset
-never widens it. What the platform accepts is unaffected: a tenant-aware
-table with no refused declaration generates exactly the SQL it would with
-no preset registered, and registering this preset never changes what any
+never widens it. **A tenant-aware table that declares no primary key at
+all is also untouched** — that shape was never exercised against the
+container, so this preset makes no claim about it either way
+(**unmeasured**, not assumed safe). Column *order* within a primary key
+that does include `tenant_id` is likewise never asserted — only that
+`tenant_id` is one of its columns, the only fact the measurement actually
+supports. What the platform accepts is unaffected: a tenant-aware table
+with no refused declaration generates exactly the SQL it would with no
+preset registered, and registering this preset never changes what any
 other preset's output looks like.
 
 ### The platform's own published limitations table
@@ -97,11 +104,11 @@ Verbatim, from Nile's own Postgres-compatibility documentation
 > | `CREATE FUNCTION` | User defined functions are not supported yet | Push the logic to the application |
 > | `CREATE TRIGGER` | Triggers are not supported yet since UDF support is not tdere | We hope to support real time events soon |
 
-`GRANT` and the `serial`/`smallserial`/`bigserial` refusal in a
-tenant-aware table are **not** in this table — both refusals rest on a
-measurement against Nile's official testing container instead (a floor,
-not a ceiling: the platform may have widened since this preset's own
-measurement).
+`GRANT`, the `serial`/`smallserial`/`bigserial` refusal in a tenant-aware
+table, and the tenant-aware primary key refusal are **not** in this table
+— all three refusals rest on a measurement against Nile's official
+testing container instead (a floor, not a ceiling: the platform may have
+widened since this preset's own measurement).
 
 ### `COMMENT`: refused by the platform, but no validator fires for it
 
@@ -131,3 +138,30 @@ its pins are sent as the first statements inside every transaction it
 opens, by design, to survive a pooled backend that doesn't keep session
 state between transactions. Decorating a transaction-mode pooler driver
 with `nileDriver` is not a configuration this preset supports.
+
+## Running the live witness locally
+
+`pnpm --filter @hejbro/nile test:integration` runs a Docker-gated suite
+against Nile's own official testing container
+(`ghcr.io/niledatabase/testingcontainer`, pinned by digest in
+`packages/nile/vitest.integration.config.ts`'s sibling test file). Three
+facts about the container, measured 2026-08-31, that anyone running it
+locally will hit:
+
+- **Fixed credentials, not configurable through an env var the image
+  documents**: user `00000000-0000-0000-0000-000000000000`, password
+  `password`, database `test`.
+- **The `test` database is provisioned asynchronously after the container
+  starts.** Its own internal first attempt fails ("connection refused")
+  before the platform's own control-plane server is up; the image
+  self-heals via a supervised retry a few seconds later. A readiness
+  check that only confirms Postgres itself is accepting TCP connections
+  (`pg_isready`) can report ready during exactly the window where the
+  `test` database still isn't reachable — poll a real query against the
+  target database instead.
+- **A single statement may name only one distinct tenant.** Both an
+  ordinary tenant-aware table (`insert ... values (...), (...)` naming
+  two different `tenant_id` values) and the platform's own `tenants`
+  registry table reject a multi-tenant statement with "cannot set
+  tenant_id more than once" — register or write for one tenant per
+  statement.
