@@ -383,6 +383,16 @@ describe("buildHttpDriver + db.as(context) still refused with missing-capability
 		).rejects.toMatchObject({
 			code: "driver-missing-capability",
 			capability: "interactive-transactions",
+			// pins which layer actually refused (review round 1, F-adjacent
+			// recommendation): the HTTP driver's own transaction() throws
+			// this exact same code/capability unconditionally too (its own
+			// hardcoded defense), so those two fields alone can't tell the
+			// query layer's own gate apart from the driver's redundant one.
+			// `operation` only ever comes from the query layer's own
+			// assertCapability call site (context.ts's `scopedRun("db.as",
+			// ...)`) -- the driver's own throwMissingCapability call names
+			// "transaction" instead (see http-session.test.ts).
+			operation: "db.as",
 		});
 
 		// nothing reached the fake sql client at all -- the query layer's

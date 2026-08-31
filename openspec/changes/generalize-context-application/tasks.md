@@ -206,7 +206,7 @@ Files: `packages/query/src/index.ts`, `packages/query/src/db/context.ts`,
       failing CI's node-24-leg diff check). Re-run after group 6's own
       ledger row landed, so the badges and the CSV point at the same
       moment; `README.md` committed alongside.
-- [ ] 6.3 (recommended, adopted) The neon HTTP boundary test asserted
+- [x] 6.3 (recommended, adopted) The neon HTTP boundary test asserted
       only `code`/`capability`, which the driver's own hardcoded
       `throwMissingCapability` call and the query layer's own
       `assertCapability` gate both satisfy identically -- unable to tell
