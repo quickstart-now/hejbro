@@ -27,9 +27,9 @@ Refs:
 - packages/supabase/LICENSE @ blob d645695673349e3947e8e5ae42332d0ac3164cd7
 - packages/supabase/NOTICE @ blob 9066b7c4d796cc6261529dfd6feca8e55ff06c20
 - packages/supabase/package.json @ blob f188eedee7d6ca76364eb15d07e2f6c34beefe64
-- README.md @ blob 5829a09f0647e91151277e0b29ea3a4985d3b4b3
+- README.md @ blob d22b3e9d9d8015cc5945e981003828b82a394109 (re-pinned after the rebase onto 72a99e93: #301 edited the packages table and the "Nile planned" sentence in the same file, auto-merged without conflict — the concurrent-edit way a pin dies)
 - scripts/pack-install-smoke.sh @ blob bcac1ec8b67190da120df8c4e931d7aaf4f6ac48 (re-pinned twice: the one-shot review's NOTICE assertion, then the rebase onto 72a99e93 merging #301's nile tarball line with the NOTICE column)
-- skills/hejbro/SKILL.md @ blob 295788626e38adc8f2d4d208a991b55a51f427ec
+- skills/hejbro/SKILL.md @ blob 7a8b971208b5c1f7cc380156bcba28bc9df159cd (re-pinned after the rebase onto 72a99e93: #301 added the nile and neon rows to the References table, auto-merged without conflict)
 
 (Taken from `git hash-object <path>` on the working tree before each
 commit of this change and re-verified before the next; the blackbox file
@@ -138,7 +138,12 @@ that #301 had changed from "Nile planned" to "Nile shipped" and that
 this change had changed from MIT to Apache-2.0, and the smoke's tarball
 assertion block where #301 added the nile line and this change added
 the NOTICE column — and was resolved by keeping both edits. The seven
-packages then passed the smoke together.
+packages then passed the smoke together. Two more files — README.md and the
+skill index — had been edited by #301 as well and auto-merged without a
+conflict, so their blobs moved silently; the pre-commit pin sweep caught
+both and they were re-pinned. The first re-pin commit was made before
+that sweep ran clean, which is the sweep's own rule broken once; the
+commit gate now requires zero mismatches.
 
 ## The one-shot review
 
