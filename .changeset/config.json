@@ -8,7 +8,8 @@
 			"@hejbro/supabase",
 			"@hejbro/query",
 			"@hejbro/pg",
-			"@hejbro/neon"
+			"@hejbro/neon",
+			"@hejbro/nile"
 		]
 	],
 	"access": "public",

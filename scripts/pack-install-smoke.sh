@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# #86 pack-install smoke: packs the six published packages
+# #86 pack-install smoke: packs the seven published packages
 # (@hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg,
 # @hejbro/neon -- @hejbro/query/@hejbro/pg promoted here in task 7.10
 # once 7.6/7.7 gave them real dist packaging; @hejbro/neon added in
-# add-neon-preset's task 8.2), installs the tarballs into a scratch project
+# add-neon-preset's task 8.2; @hejbro/nile added in add-nile-preset's
+# task 1.3, the seventh-package tripwire #484/#553 named), installs the
+# tarballs into a scratch project
 # with plain `npm install` (no workspace, no pnpm — the closest
 # simulation of a real consumer), and runs init/generate/verify there,
 # with the Supabase preset registered so more than just hejbro actually
@@ -100,6 +102,7 @@ SUPABASE_TGZ="$(ls "$PACK_DIR"/hejbro-supabase-*.tgz)"
 QUERY_TGZ="$(ls "$PACK_DIR"/hejbro-query-*.tgz)"
 PG_TGZ="$(ls "$PACK_DIR"/hejbro-pg-*.tgz)"
 NEON_TGZ="$(ls "$PACK_DIR"/hejbro-neon-*.tgz)"
+NILE_TGZ="$(ls "$PACK_DIR"/hejbro-nile-*.tgz)"
 
 echo "== scratch project: $SCRATCH_DIR"
 cat > "$SCRATCH_DIR/package.json" <<EOF
@@ -113,7 +116,8 @@ cat > "$SCRATCH_DIR/package.json" <<EOF
     "@hejbro/supabase": "file:$SUPABASE_TGZ",
     "@hejbro/query": "file:$QUERY_TGZ",
     "@hejbro/pg": "file:$PG_TGZ",
-    "@hejbro/neon": "file:$NEON_TGZ"
+    "@hejbro/neon": "file:$NEON_TGZ",
+    "@hejbro/nile": "file:$NILE_TGZ"
   }
 }
 EOF
@@ -167,6 +171,7 @@ assert_tarball_contains "$SUPABASE_TGZ" package.json LICENSE README.md dist/inde
 assert_tarball_contains "$QUERY_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 assert_tarball_contains "$PG_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 assert_tarball_contains "$NEON_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
+assert_tarball_contains "$NILE_TGZ" package.json LICENSE README.md dist/index.js dist/index.d.ts
 echo "   ok"
 
 echo "== assertion 1b: every file the tarball packed exists in the install tree"
@@ -186,6 +191,7 @@ assert_tarball_files_installed "$SUPABASE_TGZ" "$SCRATCH_DIR/node_modules/@hejbr
 assert_tarball_files_installed "$QUERY_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/query"
 assert_tarball_files_installed "$PG_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/pg"
 assert_tarball_files_installed "$NEON_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/neon"
+assert_tarball_files_installed "$NILE_TGZ" "$SCRATCH_DIR/node_modules/@hejbro/nile"
 echo "   ok"
 
 echo "== assertion 1c: the installed LICENSE is real content, not a broken link"
@@ -203,6 +209,7 @@ assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/supabase"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/query"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/pg"
 assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/neon"
+assert_license_content "$SCRATCH_DIR/node_modules/@hejbro/nile"
 echo "   ok"
 
 echo "== assertion 2: no installed dependency string still says workspace:"
@@ -216,6 +223,7 @@ assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/supabase/package
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/query/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/pg/package.json"
 assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/neon/package.json"
+assert_no_workspace_protocol "$SCRATCH_DIR/node_modules/@hejbro/nile/package.json"
 echo "   ok"
 
 echo "== assertion 3: the hejbro binary runs init/generate/verify, with @hejbro/supabase's preset registered so more than just hejbro actually loads (hejbro's own dist re-exports @hejbro/core and @hejbro/query, and the registered preset loads @hejbro/supabase directly)"
@@ -302,4 +310,64 @@ if (typeof neonAuth !== 'function') {
 ") || fail "@hejbro/neon's own exports did not resolve (neonAuth import failed)"
 echo "   ok"
 
-echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg, @hejbro/neon install cleanly with npm and run init/generate/verify"
+echo "== assertion 5: @hejbro/nile's preset is REGISTERED, not merely imported -- generate loads it through its own config, so a broken entry point fails here specifically (task 1.4, #563). Unlike @hejbro/neon (assertion 4), @hejbro/nile ships a real Preset bundle to register (proposal.md: not out of scope) -- a bare value import would be a weaker check than what this package actually offers, so this mirrors assertion 3's registration shape instead. A dedicated schema file, entry glob, migrations dir, and snapshot path (never app.schema.ts/migrations/hejbro.snapshot.json, assertion 3's own) keep this independent of assertion 3 and of whatever group 4 later teaches the preset's validators to refuse -- a tenant-aware table with a composite (id, tenant_id) primary key and no RLS/function/trigger/grant declaration stays valid regardless (the fifth validator added after G5's own live-witness measurement refuses a lone id primary key on a tenant-aware table, so this fixture's own primary key had to become composite)"
+cat > "$SCRATCH_DIR/src/nile.schema.ts" <<'EOF'
+import { schema, table, text, uuid } from "hejbro";
+
+export const nileApp = schema("nile_app");
+
+export const items = table(nileApp, "items", {
+	id: uuid().primaryKey().defaultRandom(),
+	tenant_id: uuid().primaryKey(),
+	name: text().notNull(),
+});
+EOF
+
+cat > "$SCRATCH_DIR/hejbro.config.ts" <<'EOF'
+import { defineConfig } from "hejbro";
+import { nilePreset } from "@hejbro/nile";
+
+export default defineConfig({
+	entry: ["src/nile.schema.ts"],
+	migrationsDir: "nile-migrations",
+	snapshotPath: "hejbro.nile-snapshot.json",
+	prefixStrategy: "timestamp",
+	presets: [nilePreset],
+});
+EOF
+
+# `hejbro init` always scaffolds the *standard* config/paths (its own
+# hardcoded content) -- rerunning it here would overwrite the custom
+# config just written. The empty-snapshot/migrations-dir half of what
+# `init` does is recreated directly instead, at this config's own paths.
+mkdir -p "$SCRATCH_DIR/nile-migrations"
+(cd "$SCRATCH_DIR" && node --input-type=module -e "
+import { writeFileSync } from 'node:fs';
+import { emptySnapshot, renderSnapshot } from '@hejbro/core';
+writeFileSync('hejbro.nile-snapshot.json', renderSnapshot(emptySnapshot));
+") || fail "could not seed hejbro.nile-snapshot.json (an empty snapshot) before the nile-preset generate run"
+
+(cd "$SCRATCH_DIR" && "$BIN" generate >/dev/null) || fail "hejbro generate exited non-zero with @hejbro/nile's preset registered"
+NILE_GENERATED_COUNT="$(find "$SCRATCH_DIR/nile-migrations" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')"
+[ "$NILE_GENERATED_COUNT" -eq 1 ] || fail "hejbro generate produced $NILE_GENERATED_COUNT migrations with @hejbro/nile's preset registered (expected 1)"
+(cd "$SCRATCH_DIR" && "$BIN" verify >/dev/null) || fail "hejbro verify exited non-zero on the nile-preset output"
+# The registration checks above prove @hejbro/nile's preset (kinds/
+# validators) is reachable through the installed exports map -- this line
+# proves nileDriver/asTenant are too, through the exports map specifically
+# (F1 recurrence, #553): a workspace alias in driver.test.ts/context.test.ts
+# resolving "../src/driver"/"../src/context" directly would never catch a
+# broken/narrowed "exports" field the way importing through the installed
+# package's own resolution here does (mirrors assertion 4's own node -e
+# form, applied to two names instead of one).
+(cd "$SCRATCH_DIR" && node --input-type=module -e "
+import { nileDriver, asTenant } from '@hejbro/nile';
+if (typeof nileDriver !== 'function') {
+  throw new Error('@hejbro/nile exported nileDriver is not a function: ' + typeof nileDriver);
+}
+if (typeof asTenant !== 'function') {
+  throw new Error('@hejbro/nile exported asTenant is not a function: ' + typeof asTenant);
+}
+") || fail "@hejbro/nile's own nileDriver/asTenant exports did not resolve through the installed package"
+echo "   ok"
+
+echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg, @hejbro/neon, @hejbro/nile install cleanly with npm and run init/generate/verify"

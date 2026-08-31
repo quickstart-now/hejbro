@@ -7,9 +7,8 @@ Guidance for AI coding agents working in this repository. Tool-agnostic:
 
 **hejbro** — declare everything in your Postgres database (tables, RLS,
 functions, triggers, views, grants) in TypeScript, generate deterministic
-migration SQL. Generic Postgres core + provider presets (Supabase and
-Neon shipped; Nile planned). MIT, built AI-natively under
-`quickstart-now`.
+migration SQL. Generic Postgres core + provider presets (Supabase, Neon,
+and Nile shipped). MIT, built AI-natively under `quickstart-now`.
 
 ## Read first
 
@@ -122,11 +121,11 @@ again.
   gate doesn't ask for one; use `pnpm changeset add --empty` if you want an
   explicit record anyway. Run `pnpm changeset` and answer its prompts; pick
   `minor` for a new capability, `patch` for a fix, and `major` is not used
-  before 1.0 (see the design spec's decision log). The six published
+  before 1.0 (see the design spec's decision log). The seven published
   packages (`@hejbro/core`, `hejbro`, `@hejbro/supabase`, `@hejbro/query`,
-  `@hejbro/pg`, `@hejbro/neon`) are a **fixed** group in
+  `@hejbro/pg`, `@hejbro/neon`, `@hejbro/nile`) are a **fixed** group in
   `.changeset/config.json` — they always version together, so a
-  changeset naming any one of them is enough to move all six.
+  changeset naming any one of them is enough to move all seven.
 
 ## Hard gates (owner approval required)
 

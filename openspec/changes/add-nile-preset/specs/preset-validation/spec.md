@@ -1,0 +1,122 @@
+# preset-validation (delta)
+
+## ADDED Requirements
+
+### Requirement: A preset refuses declarations its platform will not accept
+A provider preset whose platform rejects part of the DSL SHALL refuse
+those declarations at generate time, with an explicit error, rather than
+emitting SQL the platform will refuse. The error SHALL name the
+declaration that caused it, state what the platform does with it, and
+give the caller a way forward. The preset SHALL NOT silently drop,
+rewrite, or downgrade the declaration: a declaration that cannot be
+honored is a failure, not a no-op.
+
+This refusal is a property of the preset, not of the core DSL. The same
+declaration remains valid for platforms that accept it, and adding a
+preset SHALL NOT change what any other preset generates.
+
+#### Scenario: A refused declaration fails generation with an explicit error
+- **WHEN** a schema declares something the active preset's platform
+  rejects, and migration SQL is generated
+- **THEN** generation fails with an error naming that declaration and what
+  the platform does with it, and no SQL is written
+
+#### Scenario: A refused declaration is never silently dropped
+- **WHEN** the same schema is generated
+- **THEN** no output is produced that omits the declaration while
+  reporting success
+
+#### Scenario: An accepted declaration is untouched
+- **WHEN** a schema declares only what the platform accepts
+- **THEN** generation succeeds and the SQL is identical to what the same
+  declarations produce with no preset registered
+
+#### Scenario: Another preset's output is unchanged
+- **WHEN** the same declarations are generated with a different preset
+  registered
+- **THEN** the refusal does not apply and that preset's output is
+  unchanged by this capability existing
+
+### Requirement: A refusal states the evidence behind it
+Where a preset refuses a declaration because the platform was **measured**
+to reject it rather than because the platform documents the rejection, the
+error SHALL say so. A refusal whose only basis is a measurement against a
+specific build is a floor, not a ceiling: the platform may have widened
+since, and a user reading the error deserves to know which kind of claim
+it is.
+
+#### Scenario: A measured-only refusal names its basis
+- **WHEN** a preset refuses a declaration whose rejection is not in the
+  platform's published limitations
+- **THEN** the error states that the refusal rests on a measurement, not
+  on the platform's documentation
+
+#### Scenario: A documented refusal cites the platform
+- **WHEN** a preset refuses a declaration the platform documents as
+  unsupported
+- **THEN** the error attributes the limitation to the platform rather than
+  to a measurement
+
+### Requirement: The Nile preset refuses what its platform rejects
+The Nile preset SHALL refuse, at generate time: row-level security
+enablement and policies, function declarations, trigger declarations,
+grants, a `serial`, `smallserial`, or `bigserial` column in a
+tenant-aware table, and a primary key on a tenant-aware table whose
+column set does not include `tenant_id`.
+
+Each refusal SHALL carry its evidence. The platform's published
+limitations table documents the refusal of policies, functions and
+triggers, and those errors SHALL attribute the limitation to the
+platform. It does **not** list grants, and the platform refuses them
+anyway: that error SHALL say it rests on a measurement. The serial
+family is likewise measured — the published table documents
+`CREATE SEQUENCE` as unsupported for tenant tables, which is adjacent
+but not the same declaration — so its error SHALL say so too. The
+tenant-aware primary key refusal is measured as well: a table carrying a
+`tenant_id uuid` column and a primary key whose columns exclude it is
+rejected by the platform's own container.
+
+The preset SHALL NOT refuse a declaration hejbro cannot express. Where
+the platform rejects something the DSL has no way to declare, the fact
+belongs in the preset's documentation, not in a validator that could
+never fire.
+
+#### Scenario: RLS and policies are refused
+- **WHEN** a schema declares row-level security or a policy and generation
+  runs with the Nile preset registered
+- **THEN** generation fails naming that declaration
+
+#### Scenario: Functions and triggers are refused
+- **WHEN** a schema declares a function or a trigger
+- **THEN** generation fails naming that declaration
+
+#### Scenario: Grants are refused, and the error says it was measured
+- **WHEN** a schema declares a grant
+- **THEN** generation fails, and the error states that this refusal rests
+  on a measurement rather than on the platform's published limitations
+
+#### Scenario: Every serial-family column in a tenant-aware table is refused
+- **WHEN** a table carrying a `tenant_id uuid` column declares a
+  `serial`, `smallserial`, or `bigserial` column
+- **THEN** generation fails naming that column, and the error states that
+  this refusal rests on a measurement
+
+#### Scenario: A serial column outside a tenant-aware table is untouched
+- **WHEN** a table with no `tenant_id uuid` column declares a
+  serial-family column
+- **THEN** generation succeeds — the platform's restriction is about
+  tenant-aware tables, and the preset does not widen it
+
+#### Scenario: A tenant-aware table whose primary key omits tenant_id is refused
+- **WHEN** a table carrying a `tenant_id uuid` column declares a primary
+  key whose column set does not include `tenant_id`
+- **THEN** generation fails naming that table and its key, and the error
+  states that this refusal rests on a measurement — the platform rejects
+  such a key on a tenant-aware table
+
+#### Scenario: A tenant-aware table itself is ordinary
+- **WHEN** a table declares a `tenant_id uuid` column and nothing the
+  platform refuses
+- **THEN** generation succeeds and emits the same `CREATE TABLE` it would
+  emit with no preset registered — tenant-awareness needs no special
+  syntax
