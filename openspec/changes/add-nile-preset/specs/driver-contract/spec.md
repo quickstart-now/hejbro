@@ -42,6 +42,12 @@ else through unchanged:
 - **THEN** it declares no dependency — runtime, peer, or optional — on a
   Nile client package
 
+#### Scenario: The decorator, the builder, and the preset are importable from the package entry
+- **WHEN** a consumer imports `nileDriver`, `asTenant`, and the preset
+  bundle from `@hejbro/nile`'s public entry point
+- **THEN** each resolves to the value the package's own tests exercise,
+  and no deep or internal module path is required
+
 ### Requirement: The Nile decorator states which base drivers it supports
 A base driver whose own session statements are sent **inside the
 transaction it opens** would place those statements ahead of the tenant

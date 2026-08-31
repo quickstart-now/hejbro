@@ -351,6 +351,23 @@ writeFileSync('hejbro.nile-snapshot.json', renderSnapshot(emptySnapshot));
 NILE_GENERATED_COUNT="$(find "$SCRATCH_DIR/nile-migrations" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')"
 [ "$NILE_GENERATED_COUNT" -eq 1 ] || fail "hejbro generate produced $NILE_GENERATED_COUNT migrations with @hejbro/nile's preset registered (expected 1)"
 (cd "$SCRATCH_DIR" && "$BIN" verify >/dev/null) || fail "hejbro verify exited non-zero on the nile-preset output"
+# The registration checks above prove @hejbro/nile's preset (kinds/
+# validators) is reachable through the installed exports map -- this line
+# proves nileDriver/asTenant are too, through the exports map specifically
+# (F1 recurrence, #553): a workspace alias in driver.test.ts/context.test.ts
+# resolving "../src/driver"/"../src/context" directly would never catch a
+# broken/narrowed "exports" field the way importing through the installed
+# package's own resolution here does (mirrors assertion 4's own node -e
+# form, applied to two names instead of one).
+(cd "$SCRATCH_DIR" && node --input-type=module -e "
+import { nileDriver, asTenant } from '@hejbro/nile';
+if (typeof nileDriver !== 'function') {
+  throw new Error('@hejbro/nile exported nileDriver is not a function: ' + typeof nileDriver);
+}
+if (typeof asTenant !== 'function') {
+  throw new Error('@hejbro/nile exported asTenant is not a function: ' + typeof asTenant);
+}
+") || fail "@hejbro/nile's own nileDriver/asTenant exports did not resolve through the installed package"
 echo "   ok"
 
 echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg, @hejbro/neon, @hejbro/nile install cleanly with npm and run init/generate/verify"
