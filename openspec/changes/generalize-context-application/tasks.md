@@ -67,7 +67,7 @@ Files: `packages/query/src/db/context.ts`,
       Failing test: contributed statements are sent one at a time on the
       one session, in order, before the caller's statement (order mutant,
       not a value mutant).
-- [ ] 2.7 (7m) The capability gate does not move. Failing test: a driver
+- [x] 2.7 (7m) The capability gate does not move. Failing test: a driver
       that contributes a rendering and declares interactive transactions
       `false` is still refused a context with the missing-capability
       error, and the rendering is never invoked.

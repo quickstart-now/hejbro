@@ -196,6 +196,28 @@ describe("contributed statements are sent one at a time, in the rendering's own 
 	});
 });
 
+describe("the capability gate does not move for a contributing driver (task 2.7, #555)", () => {
+	it("a driver that contributes a rendering but declares interactive-transactions false is still refused with missing-capability, and the rendering is never invoked", async () => {
+		const renderCalls: Array<unknown> = [];
+		const rendering: ContextRendering = (context) => {
+			renderCalls.push(context);
+			return [];
+		};
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			renderContext: rendering,
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+		).rejects.toThrow(/interactive-transactions/);
+
+		expect(renderCalls).toHaveLength(0);
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+});
+
 describe("db.as(context) -- UX scenario (2): an existing declared role (grant) works with no db() options set", () => {
 	it("applies SET LOCAL ROLE for a grant-declared role and runs the statement in the same transaction", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();
