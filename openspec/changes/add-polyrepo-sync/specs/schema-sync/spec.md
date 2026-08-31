@@ -269,17 +269,23 @@ between them. It SHALL NOT name a cause it did not observe.
   nothing about why the schema moved
 
 ### Requirement: Each way a manifest can fail a reader is named separately
-A reader of a manifest meets six distinct situations, and SHALL report
-each under its own code and with its own remedy. Four are failures this
+A reader of a manifest meets seven distinct situations, and SHALL report
+each under its own code and with its own remedy. Five are failures this
 requirement owns: the database has no manifest table; the table
 exists but holds no row; the table holds rows but none matches the
-module's stamp; and the newest row declares a manifest format higher
-than the reader knows. The fifth — a matching row with newer rows after
-it — is the counted distance owned by the requirement on judging
-freshness by comparison. The sixth — an embedded snapshot format the
-reader refuses — is owned by the requirement on format skew.
+module's stamp; the newest row declares a manifest format higher than
+the reader knows; and the row's payload does not answer the shape its
+own format promises — corrupted, hand-edited, or written by something
+that is not this tool. A payload SHALL be validated before it is read,
+not cast: the row's columns are already checked, and trusting what is
+inside them is the same boundary left half-open, through which damaged
+data leaves as a module whose types look sound. The sixth — a matching
+row with newer rows after it — is the counted distance owned by the
+requirement on judging freshness by comparison. The seventh — an
+embedded snapshot format the reader refuses — is owned by the
+requirement on format skew.
 
-Six codes, because each remedy addresses a different actor: the owning
+Seven codes, because each remedy addresses a different actor: the owning
 repository enables emission, applies a migration, or regenerates one;
 the consumer re-syncs or changes its own hejbro. A situation reported
 under another's code sends its reader to the wrong repository, and
@@ -293,7 +299,11 @@ history this database does not have — a different database, or one whose
 manifest rows were removed — and re-syncing is a decision, not a repair.
 A manifest format higher than the reader knows means the reader is the
 older version of hejbro, and the remedy is to change the tool, not the
-schema. A database
+schema. A payload that does not answer its own format means the row is
+not what this tool wrote — the remedy names the owning repository,
+where the row is regenerated, or the other tool that wrote it, and the
+report says what was found without naming a cause it cannot observe. A
+database
 that has never carried a manifest is not a stale one, and reporting it
 as "behind" would send a reader to re-sync against a database that has
 nothing to give.
@@ -314,12 +324,18 @@ nothing to give.
 - **THEN** it fails with a code distinct from a counted distance,
   because no distance can be computed
 
-#### Scenario: The six situations are told apart
+#### Scenario: A payload that does not answer its format says so
+- **WHEN** the newest row declares a manifest format the reader knows
+  but its payload does not have the shape that format promises
+- **THEN** it fails with its own code, naming what it found rather than
+  why, and no module is written
+
+#### Scenario: The seven situations are told apart
 - **WHEN** the same reader meets an absent table, an empty table, an
-  unmatched stamp, a manifest format higher than it knows, an embedded
-  snapshot format it refuses, and a matched stamp with newer rows after
-  it
-- **THEN** it reports six distinct codes, each carrying its own remedy
+  unmatched stamp, a manifest format higher than it knows, a payload
+  that does not answer its format, an embedded snapshot format it
+  refuses, and a matched stamp with newer rows after it
+- **THEN** it reports seven distinct codes, each carrying its own remedy
 
 ### Requirement: A manifest format higher than the reader knows is refused
 Format skew is asymmetric, because the manifest format only ever gains

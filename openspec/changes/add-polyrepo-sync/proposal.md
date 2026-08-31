@@ -117,6 +117,15 @@ needs no release, no registry, and no second distribution channel.
   constructor** call per table, an exported role list, and an exported
   stamp. `--check` compares without writing. `--schema` parses and
   refuses as reserved.
+- **The payload is validated, not cast.** The row's own columns are
+  checked before anything is read from them, and the document inside
+  the payload column is checked the same way rather than asserted into
+  shape. The boundary is one boundary: a row that carries a format
+  number this reader knows can still hold something that is not what
+  that format promises — hand-edited, truncated, or written by another
+  tool — and an unchecked cast turns exactly that into a module whose
+  types look sound. It gets its own code, distinct from format skew,
+  which is the different question of a number the reader does not know.
 - **A synced module never calls `table()`.** The brand exists only where
   `table()` puts it, so a generated module that called it would hand
   itself the very authority this change removes. `sync` emits a usage
