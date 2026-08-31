@@ -9,8 +9,11 @@ its own failing test demands, never exports for a later group),
 only a guard call), `packages/cli/src/snapshot-file.ts` (groups 3, 4)
 and
 `packages/cli/src/commands/verify.ts` (group 4 only, listed because
-group 3's per-command guard lands in it too). Every other file belongs
-to exactly one group.
+group 3's per-command guard lands in it too) and
+`packages/cli/src/manifest-read.ts` (groups 5, 6 — one reader of the
+manifest table, because two would be free to disagree about the row
+they both parse; it stays free of `node:*` so the startup path can
+import it). Every other file belongs to exactly one group.
 
 A row whose red test is a **type** assertion is red only under
 `check-types`; the test runner executes `expectTypeOf` as a no-op and
@@ -317,9 +320,13 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       carrier group 2 deliberately did not build. Start from
       `cli/test/sync-emit.test.ts > writes one module and nothing else`.
       ~8m
-- [ ] 5.2 Register the command, its value-taking flags and its help
+- [x] 5.2 Register the command, its value-taking flags and its help
       row. Start from `cli/test/help.test.ts > lists the sync command`.
       ~5m
+- [x] 5.11 Read the newest manifest row through the handed session —
+      one reader, shared with the startup path, free of `node:*` so that
+      path can import it. Start from `cli/test/manifest-read.test.ts >
+      reads the newest row and nothing else`. ~5m
 - [x] 5.3 Connection entry, dynamic driver import, and both coded
       refusals. Start from `cli/test/sync-connection.test.ts > names what
       to supply when no connection is given`. ~8m
@@ -376,9 +383,10 @@ Files: `packages/cli/src/assert-schema.ts`,
 | " (import discipline) | — | `cli/test/assert-schema-imports.test.ts` stays green |
 
 - [ ] 6.1 Read the stamp from the handle's schema and the row through
-      the handle's driver. Start from
+      the handle's driver, reusing group 5's reader rather than writing
+      a second one. Start from
       `cli/test/assert-schema-manifest.test.ts > passes when the stamp
-      matches the newest row`. ~8m
+      matches the newest row`. ~5m
 - [ ] 6.2 `[design]` Settle the failure text's upper bound and the code
       name for a refused embedded snapshot format, then count the
       distance by rows rather than by time. Start from
