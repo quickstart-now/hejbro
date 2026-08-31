@@ -730,6 +730,45 @@ properties hold regardless of driver or preset:
   unsupported`, exactly as it does with no provider — reentry opens a
   second connection out of the pool either way.
 
+### Driver-owned context application
+
+`db.as(context)` and a registered provider validate and apply `context`
+identically regardless of driver — but *how* a context becomes
+statements is something each driver can own.
+
+**`role` is optional.** `DbContext` is `{ role?, settings? }`: a context
+naming a role is validated against the declared whitelist exactly as
+before. A context naming **no** role is admitted only when the active
+driver declares its own platform has no roles a context could name;
+omitting `role` on an ordinary driver still fails, with
+`context-role-missing`. **Omitting `role` is never a whitelist bypass**
+— it is admitted only on a driver that opted in, and a named role is
+still checked against the whitelist on every driver, role-less or not.
+
+**A driver may declare three things about how it takes a context**, as
+plain data on the driver value, fixed before any connection exists:
+
+- its own rendering — a pure function from a context to the statements
+  that apply it, replacing the query layer's own default (`set local
+  role`, then one `select set_config(...)` per setting) when the
+  platform's own context mechanism differs;
+- that its platform has no roles (above);
+- that no statement may run against it without a context at all — see
+  `context-required` below.
+
+**`context-required`** fires when a driver declares a context mandatory
+and an execution surface (`select`/`insert`/`update`/`deleteFrom`/
+`with`/`fn`/`execute`/`transaction`) is reached with no context resolved
+— before anything is sent. `Next: call db.as(context) explicitly, or
+register a context provider (db()'s "context" option).` `handle.driver`
+(the schema-assertion path) is unaffected — it was never one of the
+execution surfaces this promise covers.
+
+**The query layer names no platform's statement form.** `@hejbro/query`
+knows only "role, then settings" as its own default; a platform whose
+context mechanism looks different expresses that entirely through its
+own driver's rendering, never through a special case here.
+
 ## Transactions
 
 `handle.transaction(async (tx) => { ... })` runs every statement issued
@@ -1011,6 +1050,8 @@ concrete next step.
 | `savepoint-release-failed` | A nested transaction's callback returned normally, but its `RELEASE SAVEPOINT` failed (a statement error was swallowed inside the callback instead of rethrown, leaving the subtransaction aborted) — the release failure is on `cause`. |
 | `savepoint-rollback-failed` | A `ROLLBACK TO SAVEPOINT` itself failed. Its trigger differs by path, so the fact that triggered it lands on a differently-named property: after a callback threw, on `callbackError`; while recovering from a failing release (above), on `releaseError`. The rollback failure itself is always on `cause`. |
 | `undeclared-role` | `db.as({ role, ... })`'s role isn't in the declared whitelist. |
+| `context-role-missing` | A context named no role, and the active driver hasn't declared its platform role-less — omitting `role` is not a whitelist bypass; it is admitted only on a driver that opted in (`Driver.roleLessPlatform`). |
+| `context-required` | The active driver declared a context mandatory, and an execution surface (`select`/`insert`/`update`/`deleteFrom`/`with`/`fn`/`execute`/`transaction`) was reached with none resolved — before anything was sent. `handle.driver` (the schema-assertion path) is unaffected. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |
 | `context-provider-empty` | A registered `context` provider's resolver yielded no context — only reachable by a caller who bypassed the resolver's non-nullable return type. |
 

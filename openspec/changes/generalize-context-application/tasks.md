@@ -156,7 +156,7 @@ Files: `openspec/changes/generalize-context-application/**`,
       two declarations, and the requirement that contributing does not
       widen who may run a context. *Landed at change setup from the
       approved draft.*
-- [ ] 5.3 (9m) Skill update — `DbContext.role` optional, the two new
+- [x] 5.3 (9m) Skill update — `DbContext.role` optional, the two new
       driver declarations, and the sentence that the query layer names no
       platform's statement form. Same PR as the surface change.
 - [ ] 5.4 (5m) One `minor` changeset; `openspec/task-times.csv` rows for
