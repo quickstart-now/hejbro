@@ -1,4 +1,9 @@
-import type { HejbroDeclaration, ObjectKind, Preset, Validator } from "@hejbro/core";
+import type {
+	HejbroDeclaration,
+	ObjectKind,
+	Preset,
+	Validator,
+} from "@hejbro/core";
 
 /**
  * The Nile preset's own object kinds (task 1.2, #563) -- empty: the
