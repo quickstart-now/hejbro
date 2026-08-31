@@ -1,17 +1,17 @@
 Refs:
 - .changeset/refuse-nile-identity-columns.md @ blob 200e6c92442d38e0f26d82b5a54fe2d4a11b124e
-- openspec/changes/refuse-nile-identity-columns/proposal.md @ blob 481c567c5cb07b9260a8b1aa7bb0b10837e79fae
-- openspec/changes/refuse-nile-identity-columns/specs/preset-validation/spec.md @ blob e03e77c5c014b8061e1855a4bd945bbfcbeee108
-- openspec/changes/refuse-nile-identity-columns/tasks.md @ blob f6983a5091d1e440811d8f2722873855067029e7
-- openspec/task-times.csv @ blob 87a81d647b3634ab05cc9e4de358c0d4185f7718
+- openspec/changes/archive/2026-08-31-refuse-nile-identity-columns/proposal.md @ blob 481c567c5cb07b9260a8b1aa7bb0b10837e79fae (re-pathed, archive)
+- openspec/changes/archive/2026-08-31-refuse-nile-identity-columns/specs/preset-validation/spec.md @ blob e03e77c5c014b8061e1855a4bd945bbfcbeee108 (re-pathed, archive)
+- openspec/changes/archive/2026-08-31-refuse-nile-identity-columns/tasks.md @ blob f6983a5091d1e440811d8f2722873855067029e7 (re-pathed, archive)
+- openspec/task-times.csv @ blob c046bd6f29810240aad1211f29080b888005d66d
 - packages/nile/src/preset.ts @ blob 9d7ad1b82b45d7e8c51b74205e96479c99b0b1b0
 - packages/nile/src/validators.ts @ blob e475b0b3dc6bb4ddbcd560164a11e6f97a6d9113
 - packages/nile/test/preset.test.ts @ blob 6ce3149e3d860b800568fbaa8135ae04d0f85f3e
 - packages/nile/test/validators.test.ts @ blob 4239ff114fe442de6445c2883e0051f5ac81285d
-- README.md @ blob cf233d418d29e9f2f57ced2b1815c20574130577 (task-time badges and the CRAP block regenerated after the ledger rows and the new validator function — two follow-up commits; CI's single-leg README gates caught both omissions; re-pinned after the correction round's own CRAP restamp)
+- README.md @ blob d183c190e19f01a4fe3154682708f8c3ccac880c (task-time badges and the CRAP block regenerated after the ledger rows and the new validator function — two follow-up commits; CI's single-leg README gates caught both omissions; re-pinned after the correction round's own CRAP restamp)
 - packages/skills/test/nile-preset-doc.test.ts @ blob 266b9d65debf75ca951a63c06020e4edd1e0734b
 - skills/hejbro/references/nile-preset.md @ blob 95aa894daf3232868c8c049c2f044f6c9fe67490
-- openspec/changes/refuse-nile-identity-columns/evaluation.md @ blob 75e1cec9b32f61e5797d04d7cd1876d2a5a6f4c2 (added in the D106 correction round)
+- openspec/changes/archive/2026-08-31-refuse-nile-identity-columns/evaluation.md @ blob 75e1cec9b32f61e5797d04d7cd1876d2a5a6f4c2 (re-pathed, archive) (added in the D106 correction round)
 - packages/nile/test/integration/nile.integration.test.ts @ blob 29c1d1737ee668445151a613fe611d192dec2015 (added in the D106 correction round)
 - .changeset/fix-nile-identity-witness.md @ blob 0d05d78b2a82a41e3d2f0843aad81ca2c849c9b0 (added in the D106 correction round)
 
