@@ -6,11 +6,15 @@ import { asHejbroError } from "../errors";
 import { normalizeEqualsFlags } from "../flags";
 import { identityFromMessage } from "../identity";
 import { loadConfig } from "../loader";
-import { readNewestManifestRow } from "../manifest-read";
 import type { SyncDriverImporter } from "../sync/connection";
 import { withSyncConnection } from "../sync/connection";
 import type { ManifestDocument } from "../sync/emit";
 import { buildSyncedModuleSource } from "../sync/emit";
+import type { ManifestState } from "../sync/manifest-state";
+import {
+	READER_MANIFEST_FORMAT,
+	readManifestState,
+} from "../sync/manifest-state";
 import { writeSyncedModule } from "../sync/write";
 
 const SYNC_DESCRIPTION =
@@ -37,7 +41,7 @@ const SYNC_ARGS = {
 	check: {
 		type: "boolean",
 		description:
-			"compare without writing; exits non-zero when the destination is stale",
+			"compare without writing; exits non-zero when the destination differs from what sync would write now",
 	},
 	schema: {
 		type: "string",
@@ -108,19 +112,20 @@ const refuseSchemaFilter = (schemaFlag: string | undefined): void => {
 type SyncOutcome =
 	| { readonly mode: "wrote" }
 	| { readonly mode: "check-current" }
-	| { readonly mode: "check-stale" };
+	| { readonly mode: "check-differs" };
 
 /**
  * `--check`'s own comparison (schema-sync delta, "The command can check
  * without writing"): the module `sync` would write is built exactly as a
  * real run would, then compared byte-for-byte against what is already at
- * `destination` -- never hashed, and never derived from the destination
- * file's own exported stamp (which would need loading it as code; a
- * synced module is proven byte-identical for the same manifest row
- * (5.5), so a plain text comparison already answers the same question a
- * stamp comparison would, without executing anything at `destination`).
- * Absent entirely counts as stale: there is nothing yet to be current
- * with.
+ * `destination` -- never hashed, and never loaded as code. This answers
+ * "would running `sync` right now produce something different", which is
+ * a **different** question from freshness-by-stamp (group 6's own): the
+ * same manifest row can render differently across a hejbro version that
+ * changed the emitter's own output, with no schema change at all, so a
+ * byte difference here is never reported as the schema having moved --
+ * only that this destination isn't what a sync would write right now.
+ * Absent entirely counts as differing: there is nothing yet to match.
  */
 const compareToDestination = (
 	destination: string,
@@ -129,22 +134,66 @@ const compareToDestination = (
 	if (existsSync(destination) && readFileSync(destination, "utf8") === source) {
 		return { mode: "check-current" };
 	}
-	return { mode: "check-stale" };
+	return { mode: "check-differs" };
+};
+
+const formatUnsupportedRowFormatText = (rowFormat: number | null): string => {
+	if (rowFormat === null) {
+		return "an unrecognized value";
+	}
+	return String(rowFormat);
+};
+
+/** `MANIFEST-STATE-FINAL` (raise the five 5.6 owns): a manifest row's own SQLSTATE-driven absence, its emptiness, an unmatched stamp, a format higher than this reader knows, and a payload that doesn't answer its own format -- each named separately (schema-sync delta, "Each way a manifest can fail a reader is named separately"), because each sends its reader to a different remedy. The two situations this command does *not* raise here (a matched stamp with newer rows after it; a refused embedded snapshot format) are format-skew's own -- `snapshot-format-refused` still gets its own code below, since parsing the payload is this command's own job even though the *requirement* it fails under is format-skew's, not this one's. */
+const throwForManifestState = (state: ManifestState): ManifestDocument => {
+	if (state.situation === "found") {
+		return state.document;
+	}
+	if (state.situation === "missing") {
+		return throwHejbroError(
+			"sync-manifest-missing",
+			'hejbro sync found no "hejbro"."schema_manifest" table in this database -- no migration has ever emitted a manifest row. Next: in the repository that owns this schema, enable manifest emission (`hejbro generate --manifest`) and apply the resulting migration.',
+		);
+	}
+	if (state.situation === "empty") {
+		return throwHejbroError(
+			"sync-manifest-empty",
+			'hejbro sync found "hejbro"."schema_manifest", but it holds no row -- manifest emission was enabled, but no migration carrying one has been applied yet. Next: in the repository that owns this schema, apply a migration generated with `hejbro generate --manifest`.',
+		);
+	}
+	if (state.situation === "stamp-unmatched") {
+		return throwHejbroError(
+			"sync-manifest-stamp-unmatched",
+			"hejbro sync's own stamp doesn't match any row in this database's manifest -- this looks like a different database, or one whose manifest rows were removed. Next: confirm this is the right database, then rerun `hejbro sync` (without --check) if adopting its current state is what you want -- re-syncing here is a decision, not a repair.",
+		);
+	}
+	if (state.situation === "format-unsupported") {
+		const rowFormatText = formatUnsupportedRowFormatText(state.rowFormat);
+		return throwHejbroError(
+			"sync-manifest-format-unsupported",
+			`hejbro sync's newest manifest row declares manifest format ${rowFormatText}, which this build (knows format ${READER_MANIFEST_FORMAT}) does not support. Next: upgrade hejbro to a version that supports this manifest format.`,
+		);
+	}
+	if (state.situation === "payload-invalid") {
+		return throwHejbroError(
+			"sync-manifest-payload-invalid",
+			`hejbro sync's newest manifest row declares a manifest format this build knows, but ${state.detail}. Next: in the repository that owns this schema, regenerate the migration that wrote this row, or check whether some other tool wrote it.`,
+		);
+	}
+	// state.situation === "snapshot-format-refused"
+	return throwHejbroError(
+		"sync-manifest-snapshot-format-refused",
+		`hejbro sync's newest manifest row embeds a snapshot format this build refuses: ${state.detail}. Next: match this consumer's hejbro to the one that generated the migration, or regenerate the migration with this build's hejbro.`,
+	);
 };
 
 /**
  * `hejbro sync`'s own thin orchestration: resolve the destination,
- * connect, read the newest manifest row (`manifest-read.ts`, the one
- * reader groups 5 and 6 share), rebuild the module source
- * (`sync/emit.ts`), then either write it (`sync/write.ts`) or, under
- * `--check`, only compare. What a manifest row's absence, an unmatched
- * stamp, or a format the reader doesn't know each mean is not yet
- * classified here -- that is group 5's own `[design]` task (5.6/5.7),
- * not this one's; today those surface as an uncaught failure rather
- * than a hejbro-coded diagnostic. Likewise, `row.manifest` is parsed
- * with no shape validation of its own (5.6's own debt: a matching
- * manifest_format with a corrupted payload is not yet its own coded
- * refusal).
+ * connect, read every manifest row and classify the result
+ * (`sync/manifest-state.ts`, atop `manifest-read.ts`'s shared reader),
+ * rebuild the module source (`sync/emit.ts`) once a row is actually
+ * found, then either write it (`sync/write.ts`) or, under `--check`,
+ * only compare.
  */
 export const runSync = async (
 	cwd: string,
@@ -165,20 +214,8 @@ export const runSync = async (
 			urlFlag,
 			process.env,
 			async (driver): Promise<SyncOutcome> => {
-				const row = await readNewestManifestRow(driver);
-				if (row === null) {
-					throw new Error(
-						"hejbro sync found no manifest row in this database -- no migration has emitted one yet.",
-					);
-				}
-				const payload = JSON.parse(row.manifest) as Omit<
-					ManifestDocument,
-					"snapshotHash"
-				>;
-				const document: ManifestDocument = {
-					...payload,
-					snapshotHash: row.snapshotHash,
-				};
+				const state = await readManifestState(driver, null);
+				const document = throwForManifestState(state);
 				const source = buildSyncedModuleSource(document);
 				if (check) {
 					return compareToDestination(destination, source);
@@ -188,11 +225,11 @@ export const runSync = async (
 			},
 			importer,
 		);
-		if (outcome.mode === "check-stale") {
+		if (outcome.mode === "check-differs") {
 			return {
 				exitCode: 1,
 				stdout: [
-					`"${destination}" is stale -- rerun \`hejbro sync\` without --check to update it.`,
+					`"${destination}" is not what \`hejbro sync\` would write right now -- rerun without --check to update it.`,
 				],
 				stderr: null,
 			};
