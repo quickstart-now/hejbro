@@ -111,9 +111,13 @@ describe("Functions and triggers are refused, with platform attribution (task 4.
 
 		expect(result.sql).toBe("");
 		const messages = result.errors.map((error) => error.message).join("\n");
-		expect(result.errors.map((error) => error.code)).toContain(
+		// exactly one diagnostic (D106 F8) -- the trigger's own synthesized
+		// function (core's resolveDeclarations fan-out) must not also be
+		// refused as a separate, unrelated function declaration.
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors.map((error) => error.code)).toEqual([
 			"nile-trigger-unsupported",
-		);
+		]);
 		expect(messages).toMatch(/guard/);
 		expect(messages).toMatch(
 			/documented in the platform's published limitations/,
@@ -245,6 +249,8 @@ describe("A tenant-aware table's primary key must include tenant_id (added after
 			"nile-tenant-primary-key-missing",
 		]);
 		expect(result.errors[0]?.message).toMatch(/widgets/);
+		// D106 F10: the message states the declared key's own column set.
+		expect(result.errors[0]?.message).toMatch(/primary key \(id\)/);
 		expect(result.errors[0]?.message).toMatch(
 			/this refusal rests on a measurement, not on the platform's published limitations/,
 		);

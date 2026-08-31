@@ -85,8 +85,12 @@ const serialMessage = (
 ): string =>
 	`Nile's platform refuses a serial-family column ("${columnName}") in the tenant-aware table "${schemaName}"."${tableName}" -- ${MEASURED_ONLY} (the platform's published table documents CREATE SEQUENCE as unsupported for tenant tables, an adjacent but not identical declaration). Next: use a uuid primary key instead, or drop the tenant_id column if this table is not tenant-scoped.`;
 
-const primaryKeyMessage = (schemaName: string, tableName: string): string =>
-	`Nile's platform refuses a primary key on the tenant-aware table "${schemaName}"."${tableName}" that excludes "tenant_id" -- ${MEASURED_ONLY}. Next: include tenant_id in the primary key.`;
+const primaryKeyMessage = (
+	schemaName: string,
+	tableName: string,
+	primaryKeyColumnNames: ReadonlyArray<string>,
+): string =>
+	`Nile's platform refuses a primary key on the tenant-aware table "${schemaName}"."${tableName}" that excludes "tenant_id" -- the declared key is primary key (${primaryKeyColumnNames.join(", ")}) -- ${MEASURED_ONLY}. Next: include tenant_id in the primary key.`;
 
 /**
  * Refuses RLS enablement and policies (task 4.1, #566, spec: "RLS and
@@ -126,43 +130,72 @@ export const nileRlsValidator: Validator = (_snapshot, declarations) => [
 ];
 
 /**
+ * `defineTrigger`'s own `resolveDeclarations` fan-out (core's
+ * `generate.ts`) expands one trigger into `[functionDeclaration,
+ * triggerDeclaration]` -- the trigger's own synthesized PL/pgSQL
+ * implementation function rides along as a real, top-level
+ * `FunctionDeclaration`. Reference equality (never name matching, which
+ * a same-named user function could collide with) against every
+ * `TriggerDeclaration.functionDeclaration` in the same declaration set
+ * identifies it (D106 F8) -- excluded from {@link nileFunctionTriggerValidator}'s
+ * own function half so one `defineTrigger()` call produces exactly one
+ * diagnostic (`nile-trigger-unsupported`), not two.
+ */
+const triggerOwnedFunctions = (
+	declarations: ReadonlyArray<HejbroDeclaration>,
+): ReadonlySet<FunctionDeclaration> =>
+	new Set(
+		declarations
+			.filter(isTriggerDeclaration)
+			.map((triggerDeclaration) => triggerDeclaration.functionDeclaration),
+	);
+
+/**
  * Refuses functions and triggers (task 4.2, #566, spec: "Functions and
- * triggers are refused"), the platform-documented attribution.
+ * triggers are refused"), the platform-documented attribution. A
+ * trigger's own synthesized function is excluded from the function half
+ * (D106 F8) -- it is refused once, as the trigger it actually is.
  */
 export const nileFunctionTriggerValidator: Validator = (
 	_snapshot,
 	declarations,
-) => [
-	...declarations
-		.filter(isFunctionDeclaration)
-		.map(
-			(functionDeclaration): Diagnostic =>
-				diagnostic(
-					"error",
-					"nile-function-unsupported",
-					functionMessage(
-						functionDeclaration.schemaName,
-						functionDeclaration.functionName,
+) => {
+	const ownedByATrigger = triggerOwnedFunctions(declarations);
+	return [
+		...declarations
+			.filter(isFunctionDeclaration)
+			.filter(
+				(functionDeclaration) => !ownedByATrigger.has(functionDeclaration),
+			)
+			.map(
+				(functionDeclaration): Diagnostic =>
+					diagnostic(
+						"error",
+						"nile-function-unsupported",
+						functionMessage(
+							functionDeclaration.schemaName,
+							functionDeclaration.functionName,
+						),
+						functionDeclaration.declaredAt,
 					),
-					functionDeclaration.declaredAt,
-				),
-		),
-	...declarations
-		.filter(isTriggerDeclaration)
-		.map(
-			(triggerDeclaration): Diagnostic =>
-				diagnostic(
-					"error",
-					"nile-trigger-unsupported",
-					triggerMessage(
-						triggerDeclaration.schemaName,
-						triggerDeclaration.tableName,
-						triggerDeclaration.triggerName,
+			),
+		...declarations
+			.filter(isTriggerDeclaration)
+			.map(
+				(triggerDeclaration): Diagnostic =>
+					diagnostic(
+						"error",
+						"nile-trigger-unsupported",
+						triggerMessage(
+							triggerDeclaration.schemaName,
+							triggerDeclaration.tableName,
+							triggerDeclaration.triggerName,
+						),
+						triggerDeclaration.declaredAt,
 					),
-					triggerDeclaration.declaredAt,
-				),
-		),
-];
+			),
+	];
+};
 
 /**
  * Refuses grants (task 4.3, #566, spec: "Grants are refused, and the
@@ -271,7 +304,11 @@ export const nileTenantPrimaryKeyValidator: Validator = (
 				diagnostic(
 					"error",
 					"nile-tenant-primary-key-missing",
-					primaryKeyMessage(table.schema.schemaName, table.tableName),
+					primaryKeyMessage(
+						table.schema.schemaName,
+						table.tableName,
+						primaryKeyColumns.map((column) => column.columnName),
+					),
 					table.declaredAt,
 				),
 			];

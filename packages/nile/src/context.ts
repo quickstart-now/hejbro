@@ -61,6 +61,49 @@ const validatedValue = (field: "tenant" | "user", value: string): string => {
 	return value;
 };
 
+/**
+ * The only two setting keys this rendering can apply -- {@link
+ * TENANT_SETTING_KEY}/{@link USER_SETTING_KEY}, restated as a set so
+ * {@link assertSupportedContext} can check membership without a loop.
+ */
+const SUPPORTED_SETTING_KEYS: ReadonlySet<string> = new Set([
+	TENANT_SETTING_KEY,
+	USER_SETTING_KEY,
+]);
+
+/** Builds and throws the `nile-context-unsupported`-coded, enriched plain `Error` (D57, D106 F3) -- `field` is either the fixed string `"role"` or the unsupported setting's own key name, never the *value* of any setting (that stays out of the message/properties the same way an adversarial UUID does, task 3.5's own discipline). */
+function throwUnsupportedNileContext(field: string): never {
+	throw Object.assign(
+		new Error(
+			`Nile's platform has no roles and only two settings this preset's rendering can apply ("${TENANT_SETTING_KEY}", "${USER_SETTING_KEY}") -- this context named "${field}", which the rendering cannot apply. Next: remove it; a role-less context naming only the tenant (and, optionally, the user) setting is what this platform accepts.`,
+		),
+		{ code: "nile-context-unsupported", field },
+	);
+}
+
+/**
+ * Refuses a context this rendering cannot apply, before producing any
+ * statement (D106 F3, spec: "The preset's rendering SHALL refuse a
+ * context it cannot apply, before producing any statement") -- a named
+ * role (this platform has none; silently ignoring it would run the
+ * caller's statements under whatever role the connection already holds,
+ * and would additionally block the tenant setting behind it), or a
+ * setting key outside {@link SUPPORTED_SETTING_KEYS}. Called first inside
+ * {@link nileContextRendering}'s own body, ahead of the array literal
+ * that would otherwise start producing statements.
+ */
+const assertSupportedContext = (context: DbContext): void => {
+	if (context.role !== undefined) {
+		throwUnsupportedNileContext("role");
+	}
+	const unsupportedKey = Object.keys(context.settings ?? {}).find(
+		(key) => !SUPPORTED_SETTING_KEYS.has(key),
+	);
+	if (unsupportedKey !== undefined) {
+		throwUnsupportedNileContext(unsupportedKey);
+	}
+};
+
 /** One `SET LOCAL key = 'value'` statement (tasks 3.2/3.4/3.6, #565) -- `SET LOCAL`, never session-scoped `SET` (task 3.4's "transaction-local by form") and never `set_config` (task 3.4's own requirement); the value is quoted through {@link quoteStringLiteral}, never raw-concatenated (task 3.6), since `SET LOCAL` takes no bind parameter (`params` is always empty here). */
 const settingStatement = (key: string, value: string): CompileResult => ({
 	sql: `set local ${key} = ${quoteStringLiteral(value)}`,
@@ -91,10 +134,13 @@ const userStatements = (
  * own `ContextRendering` requirement), wired onto `nileDriver`'s output
  * in `driver.ts` (task 3.2, lead-approved group-3 addition to that file).
  */
-export const nileContextRendering: ContextRendering = (context) => [
-	settingStatement(
-		TENANT_SETTING_KEY,
-		validatedValue("tenant", context.settings?.[TENANT_SETTING_KEY] ?? ""),
-	),
-	...userStatements(context.settings?.[USER_SETTING_KEY]),
-];
+export const nileContextRendering: ContextRendering = (context) => {
+	assertSupportedContext(context);
+	return [
+		settingStatement(
+			TENANT_SETTING_KEY,
+			validatedValue("tenant", context.settings?.[TENANT_SETTING_KEY] ?? ""),
+		),
+		...userStatements(context.settings?.[USER_SETTING_KEY]),
+	];
+};
