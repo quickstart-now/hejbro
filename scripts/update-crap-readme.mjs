@@ -16,7 +16,8 @@
 // catches a stale block after a real change) without making it
 // permanently red. The previous numbers are parsed back out of the
 // rendered sentence itself (not kept in a second stored copy), so there
-// is exactly one place they live.
+// is exactly one place they live -- and that place is the sentence as
+// *committed* (`git show HEAD:README.md`), not the working copy (#574).
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -109,7 +110,33 @@ const highest = results
 	.toFixed(2);
 
 const readme = readFileSync(README_PATH, "utf8");
-const previous = parsePreviousBlock(readme);
+// The baseline is the *committed* README, never the working tree: a run
+// before committing leaves a fresh stamp in the working copy, and reading
+// that copy back as "previous" would make every later run merely confirm
+// it -- the badge then points at a commit that never carried those
+// numbers (#574). HEAD's copy is what CI's `git diff --exit-code` compares
+// against, so it is the only baseline that keeps that check meaningful --
+// which also means every run, the no-op one included, needs a repository
+// with README.md committed (a `git archive` export tree cannot run this).
+const committedReadme = () => {
+	try {
+		return execFileSync("git", ["show", "HEAD:README.md"], {
+			cwd: REPO_ROOT,
+			stdio: ["ignore", "pipe", "pipe"],
+		}).toString();
+	} catch (error) {
+		throw new Error(
+			`update-crap-readme: cannot read README.md at HEAD (${failureReason(error)}) -- the committed README is the baseline (#574); run inside the repository with README.md committed.`,
+		);
+	}
+};
+const failureReason = (error) => {
+	if (error instanceof Error) {
+		return error.message.trim();
+	}
+	return String(error).trim();
+};
+const previous = parsePreviousBlock(committedReadme());
 const numbersUnchanged =
 	previous !== null &&
 	previous.scanned === scanned &&
@@ -117,7 +144,8 @@ const numbersUnchanged =
 	previous.highest === highest;
 
 // `computeFresh` is a thunk, not a value, so the unchanged path never
-// shells out to `git rev-parse` (or reformats today's date) at all.
+// shells out to `git rev-parse` (or reformats today's date); the one git
+// call every path makes is the HEAD baseline read above.
 const stampFor = (unchanged, previousValue, computeFresh) => {
 	if (unchanged) {
 		return previousValue;
@@ -141,9 +169,15 @@ const withBadge = replaceBetween(
 	badgeMarkdown(scanned, violationCount),
 );
 
+// Three outcomes, not two: numbers unchanged and the file already says so;
+// numbers unchanged but the working copy carried a different stamp (the
+// #574 case -- the block is restored from HEAD); numbers changed.
 const changeVerb = () => {
-	if (numbersUnchanged) {
+	if (numbersUnchanged && withBadge === readme) {
 		return "unchanged (numbers match)";
+	}
+	if (numbersUnchanged) {
+		return "restored from HEAD (numbers match)";
 	}
 	return "refreshed";
 };
