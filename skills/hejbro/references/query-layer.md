@@ -1022,8 +1022,6 @@ surface, unchanged, before either of these is ever reached.
 These read naturally as query-builder features but aren't there yet —
 use the `sql` escape hatch, or wait for the tracked issue:
 
-- `@hejbro/nile` preset (#301) — `@hejbro/pg` (vanilla), `@hejbro/supabase`,
-  and `@hejbro/neon` exist today.
 - Prepared-statement caching (#303) — every execution compiles and sends
   fresh. Measured, not shipped: a session-scoped named prepared
   statement's improvement over today's unnamed text query could not be
@@ -1053,6 +1051,8 @@ concrete next step.
 | `context-role-missing` | A context named no role, and the active driver hasn't declared its platform role-less — omitting `role` is not a whitelist bypass; it is admitted only on a driver that opted in (`Driver.roleLessPlatform`). |
 | `context-required` | The active driver declared a context mandatory, and an execution surface (`select`/`insert`/`update`/`deleteFrom`/`with`/`fn`/`execute`/`transaction`) was reached with none resolved — before anything was sent. `handle.driver` (the schema-assertion path) is unaffected. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |
+| `nile-context-value-invalid` | `@hejbro/nile`'s rendering refused a tenant/user value that isn't a canonical UUID, before producing any statement — see `references/nile-preset.md`. |
+| `nile-context-unsupported` | `@hejbro/nile`'s rendering refused a context naming a role, or carrying a setting outside its own tenant/user keys — this platform has neither — before producing any statement. |
 | `context-provider-empty` | A registered `context` provider's resolver yielded no context — only reachable by a caller who bypassed the resolver's non-nullable return type. |
 
 Writing your own `Driver` (a custom preset, or wrapping a client library
