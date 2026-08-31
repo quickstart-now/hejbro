@@ -3,17 +3,21 @@ Refs:
 - openspec/changes/refuse-nile-identity-columns/proposal.md @ blob 481c567c5cb07b9260a8b1aa7bb0b10837e79fae
 - openspec/changes/refuse-nile-identity-columns/specs/preset-validation/spec.md @ blob e03e77c5c014b8061e1855a4bd945bbfcbeee108
 - openspec/changes/refuse-nile-identity-columns/tasks.md @ blob f6983a5091d1e440811d8f2722873855067029e7
-- openspec/task-times.csv @ blob 95bdb14db383d78628365fcef37361891ec080b5
+- openspec/task-times.csv @ blob 87a81d647b3634ab05cc9e4de358c0d4185f7718
 - packages/nile/src/preset.ts @ blob 9d7ad1b82b45d7e8c51b74205e96479c99b0b1b0
-- packages/nile/src/validators.ts @ blob b0676c1968cd1d5062777377f062cbdbadbb8004
+- packages/nile/src/validators.ts @ blob e475b0b3dc6bb4ddbcd560164a11e6f97a6d9113
 - packages/nile/test/preset.test.ts @ blob 6ce3149e3d860b800568fbaa8135ae04d0f85f3e
-- packages/nile/test/validators.test.ts @ blob 1aa6e209948ba1b6890c4bcf5790760740cf9ae1
-- README.md @ blob 298f54d4e337ace309c8f1bda47627963377059a (task-time badges and the CRAP block regenerated after the ledger rows and the new validator function — two follow-up commits; CI's single-leg README gates caught both omissions)
-- packages/skills/test/nile-preset-doc.test.ts @ blob 18e732fe399603ce4866cdc4100c204a8b49b84e
-- skills/hejbro/references/nile-preset.md @ blob 0a67ffa0242b5c41cfd77a0c9170c9ed05224b3f
+- packages/nile/test/validators.test.ts @ blob 4239ff114fe442de6445c2883e0051f5ac81285d
+- README.md @ blob cf233d418d29e9f2f57ced2b1815c20574130577 (task-time badges and the CRAP block regenerated after the ledger rows and the new validator function — two follow-up commits; CI's single-leg README gates caught both omissions; re-pinned after the correction round's own CRAP restamp)
+- packages/skills/test/nile-preset-doc.test.ts @ blob 266b9d65debf75ca951a63c06020e4edd1e0734b
+- skills/hejbro/references/nile-preset.md @ blob 95aa894daf3232868c8c049c2f044f6c9fe67490
+- openspec/changes/refuse-nile-identity-columns/evaluation.md @ blob 75e1cec9b32f61e5797d04d7cd1876d2a5a6f4c2 (added in the D106 correction round)
+- packages/nile/test/integration/nile.integration.test.ts @ blob 29c1d1737ee668445151a613fe611d192dec2015 (added in the D106 correction round)
+- .changeset/fix-nile-identity-witness.md @ blob 0d05d78b2a82a41e3d2f0843aad81ca2c849c9b0 (added in the D106 correction round)
 
 (Taken from `git hash-object <path>` on the working tree before this
-change's single commit; the blackbox file itself is not pinned. The
+change's first commit and re-taken in the D106 correction round; the
+blackbox file itself is not pinned. The
 `openspec/changes/refuse-nile-identity-columns/` paths move when the
 change archives and are re-pathed then, blobs unchanged unless the D106
 round corrects text. Pins die three ways — squash preserves them, an
@@ -86,6 +90,41 @@ still not claimed.
   error) and the paragraph that had carried both "unmeasured" notes now
   states the two measurements; the docs test pins the row's tokens.
 - One `minor` changeset for the fixed group.
+
+## D106 gate (after the merge, before the archive)
+
+The isolated spec-only review ran against the dev squash `59a77470`
+from a `git archive` export with no `.git` and with `proposal.md`,
+`tasks.md`, `blackbox/`, `docs/`, the change archive and the task-time
+ledger removed; the evaluator (a fable session, not a team member)
+probed the built `@hejbro/nile` nineteen times with every turbo summary
+at 0 cached. Verdict **PASS — 0 blocking / 1 major / 6 minor**; the
+report ships as `evaluation.md` beside the change and moves with it into
+the archive.
+
+The major finding (F1) was the evidence claim itself: the requirement
+says both identity kinds are refused and the keyless table is accepted
+"as measured", but the Docker-gated live witness — whose header promises
+to re-measure every scenario in the file when the image digest moves —
+carried neither shape, nor the serial and tenant-less-primary-key claims
+inherited from the prior change. The correction round added a fifth
+witness: the four measured refusals re-measured as raw DDL against the
+pinned digest (serial, tenant-less primary key, identity of each kind
+with the platform's verbatim text) and the keyless table accepting a row
+under a tenant context. Its first run paid for itself: the inherited
+primary-key quotation had dropped the server's own quotes around
+`"tenant_id"`, so the witness failed on the verbatim match and the
+quotation was corrected in the skill and the validator comment — a
+measured claim that no test re-measures drifts exactly this quietly.
+The minors were folded into the same round: the
+skill's "all three" paragraph now counts four and names the witness (F2);
+the primary-key validator's comment no longer calls the keyless shape
+unmeasured (F3); the identity message dropped its embedded date and
+states a way forward for a non-key counter as well as for a key (F4,
+F7); the "outside a tenant-aware table" test binds both identity kinds
+(F5); and the doc test asserts the evidence grade on the identity row
+itself rather than anywhere in the file (F6). A `patch` changeset
+records the message change.
 
 ## Method notes
 

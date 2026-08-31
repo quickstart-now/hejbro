@@ -91,7 +91,7 @@ its own evidence grade:
 | `defineTrigger(...)` | triggers need UDF support, which isn't there yet | platform-documented | `nile-trigger-unsupported` |
 | `grant(...)` | attempted against Nile's testing container and refused | **measured only** — not in the platform's published table | `nile-grant-unsupported` |
 | `serial` / `smallserial` / `bigserial` in a tenant-aware table (a table with a `tenant_id uuid` column) | attempted against Nile's testing container and refused | **measured only** — adjacent to, but not the same declaration as, the platform's documented `CREATE SEQUENCE` restriction for tenant tables | `nile-serial-in-tenant-table` |
-| A primary key on a tenant-aware table that excludes `tenant_id` | attempted against Nile's testing container (`create table` with a lone `id` primary key on a table also carrying `tenant_id uuid`) and refused: "primary key of tenant-aware table must have the tenant_id column" | **measured only** — not in the platform's published table | `nile-tenant-primary-key-missing` |
+| A primary key on a tenant-aware table that excludes `tenant_id` | attempted against Nile's testing container (`create table` with a lone `id` primary key on a table also carrying `tenant_id uuid`) and refused: `primary key of tenant-aware table must have the "tenant_id" column` | **measured only** — not in the platform's published table | `nile-tenant-primary-key-missing` |
 | An identity column (`.generatedAlwaysAsIdentity()` / `.generatedByDefaultAsIdentity()`) in a tenant-aware table | attempted against Nile's testing container and refused, for both kinds (`IDENTITY columns are not supported for tenant-aware table`, measured 2026-08-31) | **measured only** — not in the platform's published table | `nile-identity-in-tenant-table` |
 
 A `serial`-family column outside a tenant-aware table is untouched — the
@@ -125,10 +125,13 @@ Verbatim, from Nile's own Postgres-compatibility documentation
 > | `CREATE TRIGGER` | Triggers are not supported yet since UDF support is not tdere | We hope to support real time events soon |
 
 `GRANT`, the `serial`/`smallserial`/`bigserial` refusal in a tenant-aware
-table, and the tenant-aware primary key refusal are **not** in this table
-— all three refusals rest on a measurement against Nile's official
-testing container instead (a floor, not a ceiling: the platform may have
-widened since this preset's own measurement).
+table, the tenant-aware primary key refusal, and the tenant-aware identity
+column refusal are **not** in this table — all four refusals rest on a
+measurement against Nile's official testing container instead (a floor,
+not a ceiling: the platform may have widened since this preset's own
+measurement). The package's Docker-gated integration suite re-measures
+each of the four, and the no-primary-key acceptance, against the pinned
+container image.
 
 ### `COMMENT`: refused by the platform, but no validator fires for it
 
