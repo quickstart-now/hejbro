@@ -117,7 +117,9 @@ const readme = readFileSync(README_PATH, "utf8");
 // numbers (#574). HEAD's copy is what CI's `git diff --exit-code` compares
 // against, so it is the only baseline that keeps that check meaningful.
 const committedReadme = () =>
-	execFileSync("git", ["show", "HEAD:README.md"], { cwd: REPO_ROOT }).toString();
+	execFileSync("git", ["show", "HEAD:README.md"], {
+		cwd: REPO_ROOT,
+	}).toString();
 const previous = parsePreviousBlock(committedReadme());
 const numbersUnchanged =
 	previous !== null &&
