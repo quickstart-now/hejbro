@@ -500,9 +500,13 @@ export const db = <TSchema extends Schema>(
 	// seam instead of the plain pass-through -- an explicit `db.as(context)`
 	// never consults `providerRun` at all (`context.ts`'s own `createAsApi`),
 	// so it is unaffected either way (task 3.6's other half).
-	const providerRun =
-		buildProviderRun() ??
-		(driver.contextRequired === true ? refusingProviderRun : undefined);
+	const contextRequiredFallback = (): ProviderRun | undefined => {
+		if (driver.contextRequired === true) {
+			return refusingProviderRun;
+		}
+		return undefined;
+	};
+	const providerRun = buildProviderRun() ?? contextRequiredFallback();
 	return {
 		// Spread first, not last (7.4 review finding): every explicit member
 		// below is this group's own established contract (task 4.x); a

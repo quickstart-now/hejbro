@@ -11,8 +11,8 @@ import {
 	uuid,
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
-import { db } from "../../src/db/db";
 import type { Db } from "../../src/db/db";
+import { db } from "../../src/db/db";
 import { recordingTransactionalDriver } from "./recording-driver";
 
 const app = schema("app");
