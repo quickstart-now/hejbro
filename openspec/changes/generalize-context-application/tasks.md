@@ -160,6 +160,13 @@ Files: `openspec/changes/generalize-context-application/**`,
       rather than estimated afterwards. A round whose duration was never
       stamped stays out of the ledger, so the row has to be created while
       the clock is still readable.
+- [x] 5.6 (5m) `driver-contract` delta addendum: a driver whose platform
+      requires the context to precede every other statement carries its
+      own session statements in its rendering (after the context, before
+      the caller) rather than in transaction setup. Measured motivation:
+      the shipped pooler driver's own pins precede the context statements
+      today (group 4's pin records the sequence). Contract text only —
+      the implementation belongs to the preset that needs it.
 
 ## Verification (definition of done, not a task)
 `pnpm check`, `pnpm check-types`, `pnpm test` with `TURBO_FORCE=1` in the
