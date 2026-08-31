@@ -69,11 +69,24 @@ est_frozen: 56m. Files: `packages/query/src/db/context.ts`,
 `packages/query/test/db/context.test.ts`,
 `packages/query/test/db/context-provider.test.ts`,
 `packages/query/test/db/context-required.test.ts`,
-`packages/query/test/db/chain.test.ts`.
+`packages/query/test/db/chain.test.ts`,
+`packages/neon/test/driver.test.ts`.
+
+Close-out files, sequential: `openspec/task-times.csv` and `README.md`
+are written by both groups, one after the other, never concurrently —
+they are the exception to this change's no-file-overlap rule and are
+listed in both headers for that reason.
 
 Order matters inside this group: 1.5 settles the run factory's shape, so
 1.6 and 1.7 name their surfaces against a signature that is already
 fixed rather than reworking one.
+
+Close-out (process, not a task — its ledger row carries `est_min=0`):
+when the group's code is committed, write this group's per-task rows to
+`openspec/task-times.csv`, then re-stamp both README blocks in one
+close-out commit — `pnpm check:tasktime` and, because this group adds a
+named function under `packages/query/src`, `TURBO_FORCE=1 pnpm
+check:crap` run after the code commit exists.
 
 - [ ] 1.1 [design] Add the `context-rendering-empty` thrower to
   `context.ts`: code fixed by ruling, message states the observation only
@@ -116,7 +129,10 @@ fixed rather than reworking one.
   name, `db.fn`; `transaction` unchanged). ~7m. Red:
   `packages/query/test/db/context.test.ts` →
   `names the caller's surface on the scoped path`. Files: `context.ts`,
-  `context.test.ts`.
+  `context.test.ts`, `packages/neon/test/driver.test.ts` — the preset's
+  own missing-capability pin asserts the scoped operation token
+  (`db.as`) and therefore moves with it; the token the preset's driver
+  raises for itself (`transaction`) is untouched.
 - [ ] 1.7 [design] Per-verb tokens on the provider path: retire
   `PROVIDER_OPERATION` in `db.ts` and give `execute` and `fn` their own
   names. ~8m. Red:
@@ -163,12 +179,10 @@ est_frozen: 26m. Files: `packages/nile/test/context.test.ts`,
   authors which token to pass. ~6m. Red: none — documentation. Files:
   `skills/hejbro/references/query-layer.md`.
 - [ ] 2.4 Add the `minor` changeset naming the new refusal and the
-  operation renaming, write one `openspec/task-times.csv` row per task
-  above, and re-stamp both README blocks in the same commit — the
-  task-time badges (`pnpm check:tasktime`) and the CRAP block
-  (`TURBO_FORCE=1 pnpm check:crap`, run after group 1's code is
-  committed, since the new named function moves it and CI blocks on
-  `git diff --exit-code README.md` in a single matrix leg). ~6m. Red:
-  none — release artifacts; those two commands are the gate. Files:
-  `.changeset/harden-context-boundary.md`, `openspec/task-times.csv`,
-  `README.md`.
+  operation renaming, and write this group's own rows to
+  `openspec/task-times.csv`, re-stamping the task-time badges (`pnpm
+  check:tasktime`) in the same commit. Group 1's rows and the CRAP block
+  landed with group 1's own close-out; this task does not revisit them.
+  ~6m. Red: none — release artifacts; `pnpm check:tasktime` is the gate.
+  Files: `.changeset/harden-context-boundary.md`,
+  `openspec/task-times.csv`, `README.md`.
