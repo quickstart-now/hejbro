@@ -13,7 +13,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import type { ContextProvider } from "../../src/db/context";
 import { db } from "../../src/db/db";
-import type { Driver } from "../../src/driver/contract";
+import type { ContextRendering, Driver } from "../../src/driver/contract";
 import { recordingTransactionalDriver } from "./recording-driver";
 
 const app = schema("app");
@@ -316,6 +316,27 @@ describe("db() context provider -- 1.6 capability ordering", () => {
 
 		expect(resolver).not.toHaveBeenCalled();
 		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+
+	it("a contributing driver's own rendering is never invoked either, when the capability is missing (task 2.8, #555 -- extends the test above, written before the rendering contribution point existed)", async () => {
+		const renderCalls: Array<unknown> = [];
+		const rendering: ContextRendering = (context) => {
+			renderCalls.push(context);
+			return [];
+		};
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			renderContext: rendering,
+		});
+		const resolver = vi.fn(() => ({ role: roleName("grant_reader") }));
+		const handle = makeHandle(driver, resolver);
+
+		await expect(handle.execute(select(posts))).rejects.toThrow(
+			/interactive-transactions/,
+		);
+
+		expect(resolver).not.toHaveBeenCalled();
+		expect(renderCalls).toHaveLength(0);
 	});
 });
 

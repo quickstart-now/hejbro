@@ -71,7 +71,7 @@ Files: `packages/query/src/db/context.ts`,
       that contributes a rendering and declares interactive transactions
       `false` is still refused a context with the missing-capability
       error, and the rendering is never invoked.
-- [ ] 2.8 (6m) The capability is still asserted before the resolver.
+- [x] 2.8 (6m) The capability is still asserted before the resolver.
       Failing test: on a provider handle whose driver lacks the
       capability, the resolver records no call (observable side effect,
       not "an error was thrown").
