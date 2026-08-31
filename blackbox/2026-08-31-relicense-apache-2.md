@@ -28,8 +28,9 @@ Refs:
 - scripts/pack-install-smoke.sh @ blob 380227f650c798b73cb3aea4dc24b519f26e6f80 (re-pinned after the one-shot review: assertion 1c also requires a non-empty installed NOTICE)
 - skills/hejbro/SKILL.md @ blob 295788626e38adc8f2d4d208a991b55a51f427ec
 
-(Taken from `git hash-object <path>` on the working tree before the
-single commit of this change; the blackbox file itself is not pinned.
+(Taken from `git hash-object <path>` on the working tree before each
+commit of this change and re-verified before the next; the blackbox file
+itself is not pinned.
 Pins die three ways — squash preserves them, an archive kills the
 path, a concurrent same-file edit on dev kills the blob — so every
 later commit re-verifies all of them. The nile package's LICENSE,
@@ -57,6 +58,36 @@ session, made the decision after asking for the background.
    every commit on dev has a single human author, so relicensing needs
    no third-party consent.
 3. "Let's go with Apache. Proceed with #570 as filed."
+ 4. "But if I am on Apache and Drizzle is Apache too — is it actually
+   fine for me to build an ORM with AI?" — answered in three layers,
+   with a measurement first: the shipped source (`packages/*/src`)
+   carries no Drizzle code, dependency, or third-party license header;
+   the seven mentions of the name are design comments about mirroring an
+   option's shape (`mode: 'bigint' | 'number'`) or recording a deliberate
+   difference (`$type<T>()`). Layer one: licenses govern copying code,
+   not building a tool in the same category, and API shape is not
+   protected (Google v. Oracle); with both projects on Apache-2.0 even
+   the compatibility question is moot, and the attribution duties would
+   arise only if code were actually copied. Layer two: AI output has two
+   distinct risks — memorized training data (rare for ordinary code, and
+   lowered structurally by spec-first work: red test from a delta,
+   implementation, review, mutation) and copyrightability (the US
+   Copyright Office and Korea's guidance protect the human-directed
+   parts; the decision log and this directory are the record of that
+   direction); Anthropic's commercial terms assign output rights to the
+   customer, with plan-dependent indemnity the owner should confirm.
+   Layer three: do not use the Drizzle name or marks in hejbro's own
+   branding, and if a specific algorithm is ever knowingly ported from an
+   Apache project it becomes a derivative — keep its headers and NOTICE
+   and log the decision. Not legal advice; a lawyer's pass is sensible
+   once commercial exposure grows. Nothing in the current structure is
+   blocked.
+5. "Did you review the license blackbox entry too?" — the one-shot
+   reviewer had verified only its pins (28/28); the body had not been
+   read against the conventions by anyone but its author. This section
+   and the two fixes around it (inputs 4–5 added under the
+   non-summarized rule; the pin note corrected from "single commit" to
+   per-commit) are the result of that question.
 
 ## What the decision rested on
 
@@ -111,6 +142,10 @@ git's POSIX-ERE engine does not support `\b`, so that axis would have
 passed vacuously; re-run with `-w` it found 27 hits on the base and 10 at
 the head, all intended. Every factual claim in D107 was checked against
 the registries rather than assumed.
+The reviewer also disclosed that its first `npm pack --dry-run` ran the
+packages' `prepack` build and rewrote the gitignored `dist/` before it
+added `--ignore-scripts`; no tracked file or git state changed, and the
+reported pack results come from the clean re-run.
 
 ## Method notes
 
