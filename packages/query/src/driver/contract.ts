@@ -1,4 +1,31 @@
+import type { Role } from "@hejbro/core";
 import type { CompileResult } from "../compile/compile";
+
+/**
+ * The context value a rendering contribution turns into statements
+ * (#554/task 1.1). Declared independently of the query layer's own
+ * execution-context type — this is the driver contract's own lower layer,
+ * and it must not import from `db/` — but the two are kept structurally
+ * identical on purpose, so any value the query layer resolves is already
+ * assignable here with no adapter. `role` is optional from this layer's
+ * first day: a rendering must already accept a role-less value before any
+ * driver can declare its platform has no roles to name (task 1.2).
+ */
+export type ContextValue = {
+	readonly role?: Role;
+	readonly settings?: Readonly<Record<string, string>>;
+};
+
+/**
+ * A pure mapping from a {@link ContextValue} to the statements that apply
+ * it — never a side effect, never a connection, never a lookup (spec:
+ * driver-contract, "A driver may contribute how a context becomes
+ * statements"). The query layer is the only caller, and it is the only
+ * thing that ever sends what this returns.
+ */
+export type ContextRendering = (
+	context: ContextValue,
+) => ReadonlyArray<CompileResult>;
 
 /**
  * The two capabilities a driver may or may not support (owner decision ①,
@@ -98,4 +125,12 @@ export type Driver = DriverSession & {
 	 * slot, group 6 is the first to populate it.
 	 */
 	readonly contributedRoles?: ReadonlyArray<string>;
+	/**
+	 * This platform's own way of turning a context into statements (task
+	 * 1.1, #554) — a driver that contributes nothing is applied the query
+	 * layer's default rendering instead (group 2's job, not this
+	 * contract's). Optional and additive, same shape as
+	 * {@link contributedRoles}: most drivers declare none.
+	 */
+	readonly renderContext?: ContextRendering;
 };

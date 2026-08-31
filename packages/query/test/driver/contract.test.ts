@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import type { CompileResult } from "../../src/compile/compile";
 import type {
 	Driver,
 	DriverCapabilities,
@@ -82,5 +83,37 @@ describe("Driver.contributedRoles (task 4.7's role-contribution slot, batch C re
 			"authenticated",
 			"service_role",
 		]);
+	});
+});
+
+describe("Driver.renderContext (task 1.1, #554 -- the context-rendering contribution)", () => {
+	const baseDriver: Omit<Driver, "contributedRoles"> = {
+		capabilities: { "interactive-transactions": true, "session-state": true },
+		execute: async () => [],
+		transaction: async (callback) => callback({ execute: async () => [] }),
+		setupSession: async () => {},
+	};
+
+	it("a driver may declare a context-rendering contribution -- the assignment itself is the assertion, no cast needed", () => {
+		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture -- compiling without a cast is the assertion.
+		const driver: Driver = {
+			...baseDriver,
+			renderContext: () => [],
+		};
+	});
+
+	it("a driver may omit renderContext entirely (positive control -- most drivers contribute no rendering)", () => {
+		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture -- compiling without a cast is the assertion.
+		const driver: Driver = { ...baseDriver };
+	});
+
+	it("the rendering's return type is exactly ReadonlyArray<CompileResult> -- extracted with infer, never compared as a whole object", () => {
+		type ExtractReturn<T> = T extends (...args: never[]) => infer R
+			? R
+			: never;
+		type Rendering = NonNullable<Driver["renderContext"]>;
+		expectTypeOf<
+			ExtractReturn<Rendering>
+		>().toEqualTypeOf<ReadonlyArray<CompileResult>>();
 	});
 });

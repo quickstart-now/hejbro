@@ -16,7 +16,7 @@ Base: `f9c16be042fa15955e4f4ed9630fed643d88a792`.
 Files: `packages/query/src/driver/contract.ts`,
 `packages/query/test/driver/contract.test.ts`
 
-- [ ] 1.1 (8m) Optional context-rendering member on `Driver`. Failing
+- [x] 1.1 (8m) Optional context-rendering member on `Driver`. Failing
       test: a driver value carrying a rendering type-checks, and the
       return type extracted with `infer` is `ReadonlyArray<CompileResult>`
       — extraction assertion, never a whole-object type compare.
@@ -133,6 +133,13 @@ Files: `openspec/changes/generalize-context-application/**`,
 - [ ] 5.4 (5m) One `minor` changeset; `openspec/task-times.csv` rows for
       every completed group; README task-time badge refresh
       (`pnpm check:tasktime`).
+- [ ] 5.5 (5m) Post-merge rounds are stamped too. Every round after the
+      PR merges — the isolated spec-only review (D106), its corrections,
+      and the archive move — carries its own `date -u` start/end stamp and
+      its own `openspec/task-times.csv` row, written when that round ends
+      rather than estimated afterwards. A round whose duration was never
+      stamped stays out of the ledger, so the row has to be created while
+      the clock is still readable.
 
 ## Verification (definition of done, not a task)
 `pnpm check`, `pnpm check-types`, `pnpm test` with `TURBO_FORCE=1` in the
