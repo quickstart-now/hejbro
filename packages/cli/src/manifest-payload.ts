@@ -18,16 +18,27 @@ const isDeclaredTable = (value: HejbroInput): value is DeclaredTable =>
 	isTable(value);
 
 type ManifestColumnFact = {
-	readonly columnKey: string;
+	readonly key: string;
 	readonly mode: NumericMode | null;
 	readonly notNullElements: boolean;
 };
+
+/**
+ * Keyed by the column's SQL name (`columnName`), never by array position
+ * (schema-manifest delta, `COLKEY-FINAL=by-sql-name`): a snapshot orders
+ * columns physically and a declaration orders them as written, and the
+ * two agree only until a column is dropped and re-added (D81 moves the
+ * re-added column to the end of physical order) — a reader that joined
+ * facts to columns by position would, from that point on, attach every
+ * fact to the wrong column while every value still looked well-typed.
+ */
+type ManifestColumns = { readonly [sqlName: string]: ManifestColumnFact };
 
 type ManifestTableFact = {
 	readonly schemaName: string;
 	readonly tableName: string;
 	readonly exportName: string | null;
-	readonly columns: ReadonlyArray<ManifestColumnFact>;
+	readonly columns: ManifestColumns;
 };
 
 type ManifestFunctionFact = {
@@ -62,10 +73,17 @@ export type ManifestPayload = {
 const columnFact = (
 	column: ReturnType<typeof getTableMeta>["columns"][number],
 ): ManifestColumnFact => ({
-	columnKey: column.columnKey,
+	key: column.columnKey,
 	mode: column.columnState.mode,
 	notNullElements: column.columnState.notNullElements === true,
 });
+
+const columnsBySqlName = (
+	columns: ReturnType<typeof getTableMeta>["columns"],
+): ManifestColumns =>
+	Object.fromEntries(
+		columns.map((column) => [column.columnName, columnFact(column)]),
+	);
 
 const tableFact = (
 	table: DeclaredTable,
@@ -76,7 +94,7 @@ const tableFact = (
 		schemaName: meta.schema.schemaName,
 		tableName: meta.tableName,
 		exportName: exportNames.get(table) ?? null,
-		columns: meta.columns.map(columnFact),
+		columns: columnsBySqlName(meta.columns),
 	};
 };
 

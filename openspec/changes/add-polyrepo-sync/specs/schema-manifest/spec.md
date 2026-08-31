@@ -105,6 +105,14 @@ names the schema declares in its grants and policies**. The export names
 of views, enums, schemas and grants are not carried, because none of
 them appears in a consuming repository's types.
 
+Every fact that belongs to a column SHALL be carried against that
+column's SQL name, never against its position. The snapshot records
+columns in the table's physical order and a declaration lists them in
+the order they were written; those two agree until a column is dropped
+and re-added, and a reader that joined them by position would from then
+on attach each fact to the wrong column while every type still looked
+right.
+
 A declaration that was never a module export has no export name to
 carry: a function synthesized as part of a trigger definition is in the
 snapshot but was never exported, so nothing downstream can offer it as
@@ -151,7 +159,15 @@ A row SHALL be self-contained: reading it SHALL require no other row.
   differ from their SQL names, tables and functions exported under names
   that differ from their SQL names, and roles named in grants and
   policies is emitted as a manifest row and read back
-- **THEN** every one of those choices is recovered exactly as declared
+- **THEN** every one of those choices is recovered exactly as declared,
+  each against the SQL name of the column it belongs to
+
+#### Scenario: A re-added column keeps its own facts
+- **WHEN** a table whose physical column order differs from its
+  declaration order — one column having been dropped and added again —
+  is emitted as a manifest row and read back
+- **THEN** each column's facts are the ones it was declared with, not
+  the ones belonging to whatever column sits at the same position
 
 #### Scenario: A synthesized trigger function carries no export name
 - **WHEN** a schema whose only function declarations come from trigger

@@ -29,8 +29,8 @@ describe("buildManifestPayload", () => {
 			app,
 			"posts",
 			{
-				id: uuid().primaryKey(),
 				amount: bigint({ mode: "bigint" }).notNull(),
+				id: uuid().primaryKey(),
 				tags: text().array().notNullElements(),
 			},
 			() => ({
@@ -74,11 +74,11 @@ describe("buildManifestPayload", () => {
 			tableName: "posts",
 			exportName: "posts",
 		});
-		expect(postsFact?.columns).toEqual([
-			{ columnKey: "id", mode: null, notNullElements: false },
-			{ columnKey: "amount", mode: "bigint", notNullElements: false },
-			{ columnKey: "tags", mode: null, notNullElements: true },
-		]);
+		expect(postsFact?.columns).toEqual({
+			id: { key: "id", mode: null, notNullElements: false },
+			amount: { key: "amount", mode: "bigint", notNullElements: false },
+			tags: { key: "tags", mode: null, notNullElements: true },
+		});
 
 		const functionFact = payload.functions.find(
 			(f) => f.functionName === "total_posts",
@@ -150,9 +150,53 @@ describe("buildManifestPayload", () => {
 			.tables[0];
 		const plainFact = buildManifestPayload([app, plain], new Map()).tables[0];
 
-		expect(
-			brandedFact?.columns.find((c) => c.columnKey === "metadata"),
-		).toEqual(plainFact?.columns.find((c) => c.columnKey === "metadata"));
+		expect(brandedFact?.columns.metadata).toEqual(plainFact?.columns.metadata);
+	});
+
+	it("keys every column fact by the column's SQL name, not its position", () => {
+		// Control: declaration order already matches sorted (stand-in
+		// physical) order, so a position-based join would coincidentally
+		// still read correctly here — this fixture alone can't tell the two
+		// implementations apart.
+		const ordered = table(app, "widgets", {
+			aa: uuid().primaryKey(),
+			bb: text().array().notNullElements(),
+		});
+		// Differing: simulates a column dropped and re-added (D81 moves a
+		// re-added column to the end of physical order) — "title" is
+		// declared before "id" here, so a join keyed by array position
+		// against a differently-ordered list would attach "id"'s facts to
+		// "title" and vice versa, even though every value still type-checks.
+		const reordered = table(app, "posts", {
+			title: text().array().notNullElements(),
+			id: uuid().primaryKey(),
+		});
+
+		const orderedFact = buildManifestPayload([app, ordered], new Map())
+			.tables[0];
+		const reorderedFact = buildManifestPayload([app, reordered], new Map())
+			.tables[0];
+
+		expect(orderedFact?.columns.aa).toEqual({
+			key: "aa",
+			mode: null,
+			notNullElements: false,
+		});
+		expect(orderedFact?.columns.bb).toEqual({
+			key: "bb",
+			mode: null,
+			notNullElements: true,
+		});
+		expect(reorderedFact?.columns.id).toEqual({
+			key: "id",
+			mode: null,
+			notNullElements: false,
+		});
+		expect(reorderedFact?.columns.title).toEqual({
+			key: "title",
+			mode: null,
+			notNullElements: true,
+		});
 	});
 });
 

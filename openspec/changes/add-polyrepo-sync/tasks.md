@@ -191,6 +191,7 @@ Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
 |---|---|---|
 | A manifest row carries what a database cannot be asked | The carried choices survive the round trip | `cli/test/manifest-payload.test.ts > collects mode, non-null elements, TypeScript keys, table and function export names, and roles` |
 | " | A synthesized function has no export name | `cli/test/manifest-payload.test.ts > carries no export name for a trigger-synthesized function` |
+| " | A re-added column keeps its own facts | `cli/test/manifest-payload.test.ts > keys every column fact by the column's SQL name, not its position` |
 | " | The two format versions are separate — *owned by group 1: both are columns the renderer writes, not payload fields* | `core/test/manifest.test.ts > renders the exact bootstrap and insert text` |
 | " | A brand is not among the carried facts | `cli/test/manifest-payload.test.ts > carries no brand information` |
 | The emitted manifest statements are deterministic | Two runs separated in time are byte-identical | `cli/test/manifest-payload.test.ts > serializes with the snapshot's own stable serialization` |
