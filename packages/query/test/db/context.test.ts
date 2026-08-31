@@ -142,6 +142,22 @@ describe("a role-less context (task 2.4, #555)", () => {
 	});
 });
 
+describe("a named role stays validated even on a role-less driver (task 2.5, #555)", () => {
+	it("an undeclared role is refused on a role-less driver too -- the declaration grants no exemption from the whitelist", () => {
+		const { driver } = recordingTransactionalDriver({ roleLessPlatform: true });
+		const handle = db(appSchema, driver);
+
+		try {
+			handle.as({ role: roleName("totally-undeclared-role") });
+			expect.unreachable("db.as should have thrown");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "undeclared-role");
+		}
+
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+});
+
 describe("db.as(context) -- UX scenario (2): an existing declared role (grant) works with no db() options set", () => {
 	it("applies SET LOCAL ROLE for a grant-declared role and runs the statement in the same transaction", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();

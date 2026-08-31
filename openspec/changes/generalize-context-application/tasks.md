@@ -60,7 +60,7 @@ Files: `packages/query/src/db/context.ts`,
       test: role-less context on an ordinary driver fails before any I/O
       and no transaction opens; on a role-less driver it proceeds and no
       role statement is emitted.
-- [ ] 2.5 (6m) A named role stays validated everywhere. Failing test: a
+- [x] 2.5 (6m) A named role stays validated everywhere. Failing test: a
       named role outside the four-source union is refused on a role-less
       driver too — the declaration grants no exemption.
 - [ ] 2.6 (7m) Ordering and serialization survive the generalization.
