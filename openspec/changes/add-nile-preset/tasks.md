@@ -91,10 +91,10 @@ Files: `packages/nile/src/context.ts`, `packages/nile/test/context.test.ts`,
 the decorator built in group 2, lead-approved addition to this group's file
 list)
 
-- [ ] 3.1 (8m) The context builder produces a role-less context carrying
+- [x] 3.1 (8m) The context builder produces a role-less context carrying
       the tenant. Failing test: the returned context names no role and its
       settings identify the tenant.
-- [ ] 3.2 (9m) The rendering emits `SET LOCAL` for the tenant, first —
+- [x] 3.2 (9m) The rendering emits `SET LOCAL` for the tenant, first —
       **observed at execution level**, not only by calling the rendering
       — and wires this rendering onto `nileDriver`'s output
       (`packages/nile/src/driver.ts`, one `renderContext` property plus its
@@ -105,21 +105,35 @@ list)
       transaction is the tenant setting in `SET LOCAL` form (a direct
       `renderContext` call alone would make "first inside the transaction"
       an inference rather than an observation).
-- [ ] 3.3 (7m) The user setting follows the tenant setting when a user is
+- [x] 3.3 (7m) The user setting follows the tenant setting when a user is
       named, observed in the same transcript. Failing test: order mutant —
       swapping the two is caught.
-- [ ] 3.4 (6m) `set_config` appears nowhere in the rendering. Failing
+- [x] 3.4 (6m) `set_config` appears nowhere in the rendering. Failing
       test: no returned statement is a `set_config` call, for either
       setting (mutation: reintroduce one and watch it fail).
-- [ ] 3.5 (9m) A value that is not a canonical UUID is refused before any
+- [x] 3.5 (9m) A value that is not a canonical UUID is refused before any
       statement exists, with a coded error. Failing test: an adversarial
       value produces the error, nothing is rendered, and the raw value
       never appears as a substring of any statement.
-- [ ] 3.6 (6m) A valid value is carried through the literal-quoting rule
+- [x] 3.6 (6m) A valid value is carried through the literal-quoting rule
       rather than raw concatenation. Failing test: quoting is applied to
       the rendered value.
-- [ ] 3.7 (5m) `[design]` The user axis of the builder — second argument
-      or second builder — and the coded error's name for 3.5.
+- [x] 3.7 (5m) `[design]` The user axis of the builder — second argument
+      or second builder — and the coded error's name for 3.5. **Settled:
+      `asTenant(tenantId, userId?)`, a second (optional) argument, not a
+      second builder** — the platform's own ordering rule (tenant before
+      user) holds either way, and a second builder would need its own
+      name and its own way of still requiring the tenant, for no
+      behavioral gain over an optional parameter on the one builder
+      already named for the mandatory axis. **Error code:
+      `nile-context-value-invalid`, discriminated by a `field: "tenant" |
+      "user"` property** — one code covers both axes (mirrors
+      `context-required`'s own `operation` property, `driver-conformance-
+      violation`'s `tier`), rather than two separate codes for what is the
+      same failure shape on two settings. Implemented and tested
+      (`packages/nile/src/context.ts`, `packages/nile/test/context.test.ts`,
+      tasks 3.1-3.6) — reported for lead confirmation alongside 3.1-3.6's
+      own completion.
 
 ## 4. The validators (#566)
 Files: `packages/nile/src/validators.ts`, `packages/nile/test/validators.test.ts`,

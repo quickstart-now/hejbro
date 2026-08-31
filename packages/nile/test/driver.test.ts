@@ -121,15 +121,31 @@ describe("nileDriver(driver) forwards execute/transaction/setupSession untouched
 		expect(wrapped.setupSession).toBe(driver.setupSession);
 	});
 
-	it("every base member the contract carries passes through by reference except the two platform declarations this decorator adds", () => {
+	it("every base member the contract carries passes through by reference, except the three fields this decorator itself owns", () => {
+		// renderContext joined roleLessPlatform/contextRequired here in
+		// group 3 (task 3.2, lead-approved addition to this group's own
+		// file list): the driver owns its own rendering (#553's own
+		// contract), so a base driver's own renderContext (if it carries
+		// one at all) is never the platform's own -- this decorator always
+		// substitutes nileContextRendering for it, the same as it always
+		// substitutes its own two declarations.
+		const baseRenderContext = () => [];
 		const { driver } = recordingBase({
-			renderContext: () => [],
+			renderContext: baseRenderContext,
 		});
 		const wrapped = nileDriver(driver);
+		const ownFields: ReadonlySet<keyof Driver> = new Set([
+			"renderContext",
+			"roleLessPlatform",
+			"contextRequired",
+		]);
 
-		(Object.keys(driver) as ReadonlyArray<keyof Driver>).forEach((key) => {
-			expect(wrapped[key]).toBe(driver[key]);
-		});
+		(Object.keys(driver) as ReadonlyArray<keyof Driver>)
+			.filter((key) => !ownFields.has(key))
+			.forEach((key) => {
+				expect(wrapped[key]).toBe(driver[key]);
+			});
+		expect(wrapped.renderContext).not.toBe(baseRenderContext);
 	});
 });
 
@@ -142,11 +158,7 @@ describe("nileDriver(driver) forwards capabilities unchanged (task 2.2, #564)", 
 	});
 
 	it("a base without interactive transactions still refuses a context, and the rendering is never invoked", async () => {
-		const rendering = vi.fn(() => []);
-		const { driver } = recordingBase({
-			interactiveTransactions: false,
-			renderContext: rendering,
-		});
+		const { driver } = recordingBase({ interactiveTransactions: false });
 		const wrapped = nileDriver(driver);
 		const handle = db(appSchema, wrapped);
 
@@ -154,13 +166,21 @@ describe("nileDriver(driver) forwards capabilities unchanged (task 2.2, #564)", 
 			handle.as({ settings: {} }).execute(select(widgets)),
 		).rejects.toMatchObject({ code: "driver-missing-capability" });
 
-		expect(rendering).not.toHaveBeenCalled();
+		// the rendering (nileContextRendering, since group 3 -- task 3.2)
+		// only ever runs inside a transaction the base opens; proving the
+		// base's own transaction was never called is proof enough that the
+		// rendering was never reached, without needing a way to spy on the
+		// module-level export directly.
 		expect(driver.transaction).not.toHaveBeenCalled();
 	});
 });
 
 describe("nileDriver(driver) sends nothing of its own ahead of the caller's transaction callback (task 2.3, #564)", () => {
 	it("the in-transaction transcript starts with the context's own rendering, and carries no base-driver statement ahead of it -- a base that pins at connection checkout stays supported", async () => {
+		// nileDriver always supplies its own renderContext since group 3
+		// (task 3.2) -- this is the real nileContextRendering now, not a
+		// stub, so the expected statement below is that rendering's actual
+		// SET LOCAL output for this tenant value.
 		const tenantSetting: SentStatement = {
 			sql: "set local nile.tenant_id = '11111111-1111-1111-1111-111111111111'",
 			params: [],
@@ -170,7 +190,6 @@ describe("nileDriver(driver) sends nothing of its own ahead of the caller's tran
 			params: [],
 		};
 		const { driver, sentPerTransaction, checkoutPins } = recordingBase({
-			renderContext: () => [{ ...tenantSetting, kind: "sql" }],
 			checkoutPin,
 		});
 		const wrapped = nileDriver(driver);
@@ -238,15 +257,7 @@ describe("nileDriver's two platform declarations (task 2.4, #564)", () => {
 	});
 
 	it("a role-less context actually runs and reaches the base -- the platform declares itself role-less, and this context names no role", async () => {
-		const { driver, sentPerTransaction } = recordingBase({
-			renderContext: () => [
-				{
-					sql: "set local nile.tenant_id = '11111111-1111-1111-1111-111111111111'",
-					params: [],
-					kind: "sql",
-				},
-			],
-		});
+		const { driver, sentPerTransaction } = recordingBase();
 		const wrapped = nileDriver(driver);
 		const handle = db(appSchema, wrapped);
 
