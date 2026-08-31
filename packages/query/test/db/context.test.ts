@@ -158,6 +158,44 @@ describe("a named role stays validated even on a role-less driver (task 2.5, #55
 	});
 });
 
+describe("contributed statements are sent one at a time, in the rendering's own order (task 2.6, #555 -- order mutant, not a value mutant)", () => {
+	it("each statement is only sent after the previous one resolves -- a Promise.all-style send would let a faster later statement finish first and record out of order", async () => {
+		const order: Array<unknown> = [];
+		const driver: Driver = {
+			capabilities: { "interactive-transactions": true, "session-state": true },
+			execute: vi.fn(async () => []),
+			transaction: vi.fn(async (callback) => {
+				const session: DriverSession = {
+					execute: vi.fn(async (compiled) => {
+						// the first setting resolves slower than the second -- a
+						// sequential (awaited) send preserves order regardless of
+						// each call's own delay; a concurrent send would let the
+						// second (faster) resolve, and be recorded, first.
+						const delay = compiled.params[0] === "app.claim1" ? 20 : 0;
+						await new Promise((resolve) => setTimeout(resolve, delay));
+						order.push(compiled.params[0] ?? compiled.sql);
+						return [];
+					}),
+				};
+				return callback(session);
+			}),
+			setupSession: vi.fn(async () => {}),
+		};
+		const handle = db(appSchema, driver);
+
+		await handle
+			.as({
+				role: roleName("grant_reader"),
+				settings: { "app.claim1": "v1", "app.claim2": "v2" },
+			})
+			.execute(select(posts));
+
+		expect(order[0]).toBe('set local role "grant_reader"');
+		expect(order[1]).toBe("app.claim1");
+		expect(order[2]).toBe("app.claim2");
+	});
+});
+
 describe("db.as(context) -- UX scenario (2): an existing declared role (grant) works with no db() options set", () => {
 	it("applies SET LOCAL ROLE for a grant-declared role and runs the statement in the same transaction", async () => {
 		const { driver, sentPerTransaction } = recordingTransactionalDriver();

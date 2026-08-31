@@ -63,7 +63,7 @@ Files: `packages/query/src/db/context.ts`,
 - [x] 2.5 (6m) A named role stays validated everywhere. Failing test: a
       named role outside the four-source union is refused on a role-less
       driver too — the declaration grants no exemption.
-- [ ] 2.6 (7m) Ordering and serialization survive the generalization.
+- [x] 2.6 (7m) Ordering and serialization survive the generalization.
       Failing test: contributed statements are sent one at a time on the
       one session, in order, before the caller's statement (order mutant,
       not a value mutant).
