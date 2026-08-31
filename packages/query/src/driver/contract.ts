@@ -1,4 +1,36 @@
+import type { Role } from "@hejbro/core";
 import type { CompileResult } from "../compile/compile";
+
+/**
+ * `db.as(context)`'s own argument, and the shape a rendering contribution
+ * turns into statements (#554/#555, task 2.10) — one type, declared here
+ * because the driver contract is the lower layer (`db/context.ts` already
+ * imports from this module; the reverse direction would be a layer
+ * inversion) and re-exported from `db/context.ts` for its public-surface
+ * home (`@hejbro/query`'s own index still exports it from there, path
+ * unchanged). `role` is optional: a context naming one must already be in
+ * the caller's declared-role whitelist (`db/context.ts`'s own
+ * `assertContextRole`, which this contract has no visibility into); a
+ * context naming none is only admitted on a driver that declares its
+ * platform role-less (`Driver.roleLessPlatform` below) — a rendering must
+ * already accept that role-less shape before any driver can declare it
+ * (task 1.2).
+ */
+export type DbContext = {
+	readonly role?: Role;
+	readonly settings?: Readonly<Record<string, string>>;
+};
+
+/**
+ * A pure mapping from a {@link DbContext} to the statements that apply
+ * it — never a side effect, never a connection, never a lookup (spec:
+ * driver-contract, "A driver may contribute how a context becomes
+ * statements"). The query layer is the only caller, and it is the only
+ * thing that ever sends what this returns.
+ */
+export type ContextRendering = (
+	context: DbContext,
+) => ReadonlyArray<CompileResult>;
 
 /**
  * The two capabilities a driver may or may not support (owner decision ①,
@@ -98,4 +130,31 @@ export type Driver = DriverSession & {
 	 * slot, group 6 is the first to populate it.
 	 */
 	readonly contributedRoles?: ReadonlyArray<string>;
+	/**
+	 * This platform's own way of turning a context into statements (task
+	 * 1.1, #554) — a driver that contributes nothing is applied the query
+	 * layer's default rendering instead (group 2's job, not this
+	 * contract's). Optional and additive, same shape as
+	 * {@link contributedRoles}: most drivers declare none.
+	 */
+	readonly renderContext?: ContextRendering;
+	/**
+	 * Declares that this platform has no roles a context could name (task
+	 * 1.2, #554) — fixed data on the driver value, never discovered by
+	 * querying the server. Absence means the opposite: "this platform has
+	 * roles", so no existing driver changes meaning by staying silent. A
+	 * context that names a role is still validated against the whitelist
+	 * regardless of this declaration (group 2's job, not this contract's).
+	 */
+	readonly roleLessPlatform?: true;
+	/**
+	 * Declares that no statement may run against this driver without an
+	 * execution context (task 1.3, #554) — fixed data on the driver value,
+	 * never inferred from the platform or an observed error. Absence
+	 * leaves existing behavior exactly as it is. The refusal this enables
+	 * belongs to the query layer (group 3's job, not this contract's): a
+	 * driver cannot satisfy this declaration on its own, since the point
+	 * is refusing before a statement exists to send.
+	 */
+	readonly contextRequired?: true;
 };

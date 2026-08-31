@@ -13,6 +13,7 @@ import type {
 	CompileKind,
 	CompileResult,
 	ContextProvider,
+	ContextRendering,
 	Db,
 	DbContext,
 	DbOptions,
@@ -53,6 +54,7 @@ type _AgreedTypesPresent = [
 	CompileKind,
 	CompileResult,
 	ContextProvider,
+	ContextRendering,
 	Db,
 	DbContext,
 	DbOptions,
@@ -105,7 +107,7 @@ type _ColumnPlanEntryNeverReExported = ColumnPlanEntry;
  * -- both are the header's own words, restated as assertions.
  */
 describe("@hejbro/query public barrel (task 7.8)", () => {
-	it("exposes exactly the agreed runtime value exports -- db, compile, sql, throwMissingCapability", () => {
+	it("exposes exactly the agreed runtime value exports -- db, compile, sql, throwMissingCapability, defaultContextRendering", () => {
 		// Exact-set equality (not just "contains") -- the task's own
 		// contract is "matches the agreed list": this fails just as hard
 		// on an accidental future *addition* (e.g. a stray `convertRows`
@@ -113,9 +115,17 @@ describe("@hejbro/query public barrel (task 7.8)", () => {
 		expect(Object.keys(barrel).sort()).toEqual([
 			"compile",
 			"db",
+			"defaultContextRendering",
 			"sql",
 			"throwMissingCapability",
 		]);
+	});
+
+	it("the default context rendering is exported (#554/#555 review F1 -- reachable by a driver package at the public entry, never a deep import)", () => {
+		expect(typeof barrel.defaultContextRendering).toBe("function");
+		// role-less input, no settings -- the empty-array shape a role-less
+		// platform's own composed rendering depends on being able to see.
+		expect(barrel.defaultContextRendering({})).toEqual([]);
 	});
 
 	it("the missing-capability thrower is exported (#490 -- presets construct, never copy, the user-facing text)", () => {

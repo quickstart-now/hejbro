@@ -355,6 +355,30 @@ const executeImpl = (
 /** The operation name every provider-run call site on the unscoped handle shares for `assertCapability`'s error, except `transaction` (named separately below) -- mirrors `db.as(context)`'s own choice (`context.ts`'s `scopedRun("db.as", ...)`) of one shared name for chain/execute/fn. */
 const PROVIDER_OPERATION = "db.context";
 
+/** Builds and throws the `context-required`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3, task 3.8). `operation` names the surface that was refused, the same way `driver-missing-capability`'s own message does. */
+function throwContextRequired(operation: string): never {
+	throw Object.assign(
+		new Error(
+			`this driver requires an execution context for ${operation}, and none was provided. Next: call db.as(context) explicitly, or register a context provider (db()'s "context" option).`,
+		),
+		{ code: "context-required", operation },
+	);
+}
+
+/**
+ * The single seam every context-mandatory refusal shares (task 3.1-3.4,
+ * #556): a {@link ProviderRun} that refuses `operation` immediately,
+ * before `send` is ever consulted -- installed in `providerRun`'s own
+ * "no provider registered" slot below, so every execution surface that
+ * already shares that seam (chain/fn via {@link providerChainRun},
+ * `execute`, `transaction`) refuses alike with no further wiring per
+ * surface. Coverage comes from the structure the provider mechanism
+ * already established, not from a check repeated at each call site.
+ */
+const refusingProviderRun: ProviderRun = async (operation) => {
+	throwContextRequired(operation);
+};
+
 /**
  * The `run` a handle's chain members and `db.fn` share (add-context-
  * provider, task 1.3): with no provider registered, sends straight to
@@ -471,7 +495,18 @@ export const db = <TSchema extends Schema>(
 		}
 		return createProviderRun(driver, declarations.roles, options.context);
 	};
-	const providerRun = buildProviderRun();
+	// A registered provider always wins (task 3.6); with none registered,
+	// a context-mandatory driver (task 3.1-3.4, #556) gets the refusing
+	// seam instead of the plain pass-through -- an explicit `db.as(context)`
+	// never consults `providerRun` at all (`context.ts`'s own `createAsApi`),
+	// so it is unaffected either way (task 3.6's other half).
+	const contextRequiredFallback = (): ProviderRun | undefined => {
+		if (driver.contextRequired === true) {
+			return refusingProviderRun;
+		}
+		return undefined;
+	};
+	const providerRun = buildProviderRun() ?? contextRequiredFallback();
 	return {
 		// Spread first, not last (7.4 review finding): every explicit member
 		// below is this group's own established contract (task 4.x); a

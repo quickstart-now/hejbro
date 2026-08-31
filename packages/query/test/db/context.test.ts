@@ -9,9 +9,15 @@ import {
 	text,
 	uuid,
 } from "@hejbro/core";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import type { DbContext } from "../../src/db/context";
+import { defaultContextRendering } from "../../src/db/context";
 import { db } from "../../src/db/db";
-import type { Driver, DriverSession } from "../../src/driver/contract";
+import type {
+	ContextRendering,
+	Driver,
+	DriverSession,
+} from "../../src/driver/contract";
 import { recordingTransactionalDriver } from "./recording-driver";
 
 const app = schema("app");
@@ -37,6 +43,218 @@ const posts = table(
 const readerGrant = grant(app).usage.to("grant_reader");
 
 const appSchema = { posts, readerGrant };
+
+describe("defaultContextRendering (task 2.1, #555 -- extracted from applyContext, byte-identical to today's sequence)", () => {
+	it("returns the role statement, then one set_config per setting, in declaration order", () => {
+		const statements = defaultContextRendering({
+			role: roleName("grant_reader"),
+			settings: { "app.claim1": "v1", "app.claim2": "v2" },
+		});
+
+		expect(statements).toEqual([
+			{ sql: 'set local role "grant_reader"', params: [], kind: "sql" },
+			{
+				sql: "select set_config($1, $2, true)",
+				params: ["app.claim1", "v1"],
+				kind: "sql",
+			},
+			{
+				sql: "select set_config($1, $2, true)",
+				params: ["app.claim2", "v2"],
+				kind: "sql",
+			},
+		]);
+	});
+
+	it("returns just the role statement when there are no settings", () => {
+		expect(defaultContextRendering({ role: roleName("grant_reader") })).toEqual(
+			[{ sql: 'set local role "grant_reader"', params: [], kind: "sql" }],
+		);
+	});
+});
+
+describe("a contributing driver's own rendering replaces the default (task 2.2, #555)", () => {
+	it("sends the driver's own rendering's statements first, in its order, and no default statement is sent at all", async () => {
+		const customRendering: ContextRendering = () => [
+			{ sql: "custom pin one", params: [], kind: "sql" },
+			{ sql: "custom pin two", params: [], kind: "sql" },
+		];
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
+			renderContext: customRendering,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+
+		const sqlSent = sentPerTransaction[0]?.map((sent) => sent.sql);
+		expect(sqlSent?.[0]).toBe("custom pin one");
+		expect(sqlSent?.[1]).toBe("custom pin two");
+		expect(sqlSent?.[2]).toContain("posts");
+		// no default statement anywhere -- the driver's own rendering fully
+		// replaces the default, never runs alongside it.
+		expect(sqlSent).not.toContain('set local role "grant_reader"');
+	});
+});
+
+describe("the rendering is a pure value, not an effect (task 2.3, #555)", () => {
+	it("is called with only the context -- no session in scope -- and the statements it returns are exactly what the query layer sends, never something the rendering sent itself", async () => {
+		const calls: Array<unknown> = [];
+		const rendering: ContextRendering = (context) => {
+			calls.push(context);
+			return [{ sql: "custom pin", params: [], kind: "sql" }];
+		};
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
+			renderContext: rendering,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({ role: roleName("grant_reader") }).execute(select(posts));
+
+		expect(calls).toEqual([{ role: roleName("grant_reader") }]);
+		expect(sentPerTransaction[0]?.[0]).toEqual({
+			sql: "custom pin",
+			params: [],
+		});
+	});
+});
+
+describe("a role-less context (task 2.4, #555)", () => {
+	it("fails before any I/O on an ordinary driver -- no transaction opens", () => {
+		const { driver } = recordingTransactionalDriver();
+		const handle = db(appSchema, driver);
+
+		try {
+			handle.as({});
+			expect.unreachable("db.as should have thrown for a role-less context");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "context-role-missing");
+		}
+
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+
+	it("proceeds on a role-less driver, and no role statement is emitted", async () => {
+		const { driver, sentPerTransaction } = recordingTransactionalDriver({
+			roleLessPlatform: true,
+		});
+		const handle = db(appSchema, driver);
+
+		await handle.as({}).execute(select(posts));
+
+		const sqlSent = sentPerTransaction[0]?.map((sent) => sent.sql) ?? [];
+		expect(sqlSent.some((sql) => sql.includes("set local role"))).toBe(false);
+	});
+});
+
+describe("a named role stays validated even on a role-less driver (task 2.5, #555)", () => {
+	it("an undeclared role is refused on a role-less driver too -- the declaration grants no exemption from the whitelist", () => {
+		const { driver } = recordingTransactionalDriver({ roleLessPlatform: true });
+		const handle = db(appSchema, driver);
+
+		try {
+			handle.as({ role: roleName("totally-undeclared-role") });
+			expect.unreachable("db.as should have thrown");
+		} catch (error) {
+			expect(error).toHaveProperty("code", "undeclared-role");
+		}
+
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+});
+
+describe("contributed statements are sent one at a time, in the rendering's own order (task 2.6, #555 -- order mutant, not a value mutant)", () => {
+	it("each statement is only sent after the previous one resolves -- a Promise.all-style send would let a faster later statement finish first and record out of order", async () => {
+		const order: Array<unknown> = [];
+		const driver: Driver = {
+			capabilities: { "interactive-transactions": true, "session-state": true },
+			execute: vi.fn(async () => []),
+			transaction: vi.fn(async (callback) => {
+				const session: DriverSession = {
+					execute: vi.fn(async (compiled) => {
+						// the first setting resolves slower than the second -- a
+						// sequential (awaited) send preserves order regardless of
+						// each call's own delay; a concurrent send would let the
+						// second (faster) resolve, and be recorded, first.
+						const delays: Readonly<Record<string, number>> = {
+							"app.claim1": 20,
+						};
+						const delay = delays[String(compiled.params[0])] ?? 0;
+						await new Promise((resolve) => setTimeout(resolve, delay));
+						order.push(compiled.params[0] ?? compiled.sql);
+						return [];
+					}),
+				};
+				return callback(session);
+			}),
+			setupSession: vi.fn(async () => {}),
+		};
+		const handle = db(appSchema, driver);
+
+		await handle
+			.as({
+				role: roleName("grant_reader"),
+				settings: { "app.claim1": "v1", "app.claim2": "v2" },
+			})
+			.execute(select(posts));
+
+		expect(order[0]).toBe('set local role "grant_reader"');
+		expect(order[1]).toBe("app.claim1");
+		expect(order[2]).toBe("app.claim2");
+	});
+});
+
+describe("the capability gate does not move for a contributing driver (task 2.7, #555)", () => {
+	it("a driver that contributes a rendering but declares interactive-transactions false is still refused with missing-capability, and the rendering is never invoked", async () => {
+		const renderCalls: Array<unknown> = [];
+		const rendering: ContextRendering = (context) => {
+			renderCalls.push(context);
+			return [];
+		};
+		const { driver } = recordingTransactionalDriver({
+			interactiveTransactions: false,
+			renderContext: rendering,
+		});
+		const handle = db(appSchema, driver);
+
+		await expect(
+			handle.as({ role: roleName("grant_reader") }).execute(select(posts)),
+		).rejects.toThrow(/interactive-transactions/);
+
+		expect(renderCalls).toHaveLength(0);
+		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+});
+
+describe("DbContext and the rendering's context type are the same type (task 2.10, #554/#555 -- the type merge)", () => {
+	it("the rendering's parameter type, extracted with infer, is DbContext -- never a whole-object compare", () => {
+		type RenderingParam<T> = T extends (context: infer C) => unknown
+			? C
+			: never;
+		expectTypeOf<RenderingParam<ContextRendering>>().toEqualTypeOf<DbContext>();
+	});
+
+	it("the temporary ContextValue alias from #554/task 1.1 is gone -- exactly one context type name survives the merge", () => {
+		// @ts-expect-error ContextValue was removed by task 2.10's merge -- DbContext (re-exported from db/context) is the package's only context type now.
+		const _neverImported: import("../../src/driver/contract").ContextValue =
+			undefined as never;
+		void _neverImported;
+	});
+
+	it("a DbContext value is assignable straight to a driver's renderContext, with no cast", () => {
+		const context: DbContext = { role: roleName("grant_reader") };
+		const driver: Driver = {
+			capabilities: { "interactive-transactions": true, "session-state": true },
+			execute: async () => [],
+			transaction: async (callback) => callback({ execute: async () => [] }),
+			setupSession: async () => {},
+			renderContext: (renderedContext) => {
+				expectTypeOf(renderedContext).toEqualTypeOf<DbContext>();
+				return [];
+			},
+		};
+		driver.renderContext?.(context);
+	});
+});
 
 describe("db.as(context) -- UX scenario (2): an existing declared role (grant) works with no db() options set", () => {
 	it("applies SET LOCAL ROLE for a grant-declared role and runs the statement in the same transaction", async () => {

@@ -1,7 +1,12 @@
 import type { FunctionDeclaration, Role } from "@hejbro/core";
 import { quoteIdentifier } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
-import type { Driver, DriverSession } from "../driver/contract";
+import type {
+	ContextRendering,
+	DbContext,
+	Driver,
+	DriverSession,
+} from "../driver/contract";
 import { assertCapability } from "../driver/errors";
 import type { ChainApi } from "./chain";
 import { createChainApi } from "./chain";
@@ -13,17 +18,14 @@ import type { Tx } from "./transaction";
 import { buildTx } from "./transaction";
 
 /**
- * `db.as(context)`'s own argument: the role to run under, plus optional
- * session settings (Supabase's JWT-claim `set_config` calls are the
- * motivating case, group 6) applied alongside it. `role` must already be
- * in {@link Declarations}`.roles` — the 4-source whitelist `db()` itself
- * computed (grant/policy/`roles` option/`driver.contributedRoles`) —
- * this type says nothing about validity on its own.
+ * `db.as(context)`'s own argument (task 2.10, #554/#555): re-exported
+ * from the driver contract, its own canonical home now that the two
+ * context types are one -- see {@link DbContext}'s own tsdoc there for
+ * the full shape/validation story. Kept here too, at this public-surface
+ * path, so `@hejbro/query`'s own `index.ts` export line
+ * (`export type { ... DbContext ... } from "./db/context"`) never moves.
  */
-export type DbContext = {
-	readonly role: Role;
-	readonly settings?: Readonly<Record<string, string>>;
-};
+export type { DbContext } from "../driver/contract";
 
 /**
  * `db()`'s `context` option (add-context-provider, owner-settled shape
@@ -112,6 +114,38 @@ const assertDeclaredRole = (
 	}
 };
 
+/** Builds and throws the `context-role-missing`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3, task 2.9). Never joins the `undeclared-role` family (task 2.9's own settled reasoning): that error's body lists the declared roles as the fix, which is meaningless when no role was named at all -- the fix here is naming one, or using a driver whose platform has none. */
+function throwContextRoleMissing(): never {
+	throw Object.assign(
+		new Error(
+			'A context named no role, and this driver has not declared its platform role-less. Next: name a role in the context ("role") the platform-appropriate way, or use a driver that declares Driver.roleLessPlatform.',
+		),
+		{ code: "context-role-missing" },
+	);
+}
+
+/**
+ * Validates `context.role` against `driver`/`declaredRoles` (task 2.4,
+ * #555): a named role is always checked against the whitelist,
+ * regardless of `driver.roleLessPlatform` -- that declaration grants no
+ * exemption from it (task 2.5). A role-less context is admitted only on
+ * a driver declaring its platform role-less; on any other driver it is
+ * refused with `context-role-missing`, before any I/O.
+ */
+const assertContextRole = (
+	driver: Driver,
+	role: Role | undefined,
+	declaredRoles: ReadonlySet<string>,
+): void => {
+	if (role !== undefined) {
+		assertDeclaredRole(role, declaredRoles);
+		return;
+	}
+	if (driver.roleLessPlatform !== true) {
+		throwContextRoleMissing();
+	}
+};
+
 const roleStatement = (role: Role): CompileResult => ({
 	sql: `set local role ${quoteIdentifier(role)}`,
 	params: [],
@@ -125,27 +159,64 @@ const settingStatement = (key: string, value: string): CompileResult => ({
 });
 
 /**
- * Applies `context` on `session`: `SET LOCAL ROLE` first (identifier-quoted
- * via core's public `quoteIdentifier` — `SET LOCAL ROLE` takes no bind
- * parameter, so quoting is the only defense, and it is a real one: an
- * embedded `"` is doubled, never passed through raw), then one
+ * `defaultContextRendering`'s own role-statement slice (task 2.1, #555):
+ * empty when `context.role` is `undefined` -- a role-less context is only
+ * ever handed to this rendering once a driver has declared its platform
+ * role-less (task 2.4's job, not this function's), so this omission is
+ * the correct behavior for that case, not a gap. Filter+map, never a
+ * ternary (house style): the single-element-or-empty array is
+ * `Array.prototype.filter`'s own idiom for "maybe one item".
+ */
+const roleStatements = (role: Role | undefined): ReadonlyArray<CompileResult> =>
+	[role]
+		.filter((value): value is Role => value !== undefined)
+		.map(roleStatement);
+
+/**
+ * The query layer's own default context-rendering contribution (task
+ * 2.1, #555, spec: driver-contract "Contributing nothing keeps the
+ * existing statements") -- extracted from `applyContext`'s own sequence
+ * below, byte-identical to what every driver received before this
+ * contribution point existed: `SET LOCAL ROLE` first, then one
  * parameterized `select set_config($1, $2, true)` per setting entry, in
- * declaration order and one at a time (a `reduce`-chained sequential
- * await, not `Promise.all` — these share one connection, and issuing them
- * concurrently would race on it). Every statement here goes through
- * `sendCompiled` (task 4.5's `query-execution-failed` contract), never a
- * bespoke error path.
+ * declaration order. A pure mapping, never a side effect (spec: "The
+ * contribution SHALL be a pure mapping") -- exported here, and
+ * re-exported from `@hejbro/query`'s public entry point (`index.ts`,
+ * #554/#555 review F1), so a driver package can compose it with its own
+ * statements rather than restate this sequence (spec: "reachable by a
+ * driver package" -- a module-level export one file down is not
+ * reachability across the package boundary; the public specifier is).
+ */
+export const defaultContextRendering: ContextRendering = (context) => [
+	...roleStatements(context.role),
+	...Object.entries(context.settings ?? {}).map(([key, value]) =>
+		settingStatement(key, value),
+	),
+];
+
+/**
+ * Applies `context` on `session` (task 2.2, #555): `driver`'s own
+ * rendering when it contributes one, `defaultContextRendering` otherwise
+ * (spec: "Contributing nothing keeps the existing statements") — the
+ * driver's own rendering fully replaces the default, never runs
+ * alongside it. Every returned statement is sent one at a time, in the
+ * rendering's own order (a `reduce`-chained sequential await, not
+ * `Promise.all` — these share one connection, and issuing them
+ * concurrently would race on it, task 2.6). Every statement here goes
+ * through `sendCompiled` (task 4.5's `query-execution-failed` contract),
+ * never a bespoke error path.
  */
 const applyContext = async (
+	driver: Driver,
 	session: DriverSession,
 	context: DbContext,
 ): Promise<void> => {
-	await sendCompiled(session, roleStatement(context.role));
-	const settingEntries = Object.entries(context.settings ?? {});
-	await settingEntries.reduce<Promise<void>>(
-		(previous, [key, value]) =>
+	const rendering = driver.renderContext ?? defaultContextRendering;
+	const statements = rendering(context);
+	await statements.reduce<Promise<void>>(
+		(previous, statement) =>
 			previous.then(async () => {
-				await sendCompiled(session, settingStatement(key, value));
+				await sendCompiled(session, statement);
 			}),
 		Promise.resolve(),
 	);
@@ -182,9 +253,9 @@ export const createProviderRun = (
 		if (context === undefined || context === null) {
 			throwProviderContextEmpty();
 		}
-		assertDeclaredRole(context.role, declaredRoles);
+		assertContextRole(driver, context.role, declaredRoles);
 		return driver.transaction(async (session) => {
-			await applyContext(session, context);
+			await applyContext(driver, session, context);
 			return send(session);
 		});
 	};
@@ -215,7 +286,7 @@ export const createAsApi = <
 	declaredRoles: Declarations["roles"],
 ): ((context: DbContext) => ScopedDb<TFunctions, TSchema>) => {
 	return (context: DbContext): ScopedDb<TFunctions, TSchema> => {
-		assertDeclaredRole(context.role, declaredRoles);
+		assertContextRole(driver, context.role, declaredRoles);
 		/**
 		 * Opens one fresh, context-applied transaction and runs `send` on
 		 * it — the single primitive `execute`/`fn`/`transaction` (task 4.7
@@ -231,7 +302,7 @@ export const createAsApi = <
 		): Promise<T> => {
 			assertCapability(driver, "interactive-transactions", operation);
 			return driver.transaction(async (session) => {
-				await applyContext(session, context);
+				await applyContext(driver, session, context);
 				return send(session);
 			});
 		};
