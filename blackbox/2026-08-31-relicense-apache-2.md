@@ -58,7 +58,7 @@ session, made the decision after asking for the background.
    every commit on dev has a single human author, so relicensing needs
    no third-party consent.
 3. "Let's go with Apache. Proceed with #570 as filed."
- 4. "But if I am on Apache and Drizzle is Apache too — is it actually
+4. "But if I am on Apache and Drizzle is Apache too — is it actually
    fine for me to build an ORM with AI?" — answered in three layers,
    with a measurement first: the shipped source (`packages/*/src`)
    carries no Drizzle code, dependency, or third-party license header;
