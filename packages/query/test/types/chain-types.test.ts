@@ -37,12 +37,17 @@ type Posts = typeof posts;
 
 const comments = table(app, "comments", {
 	id: uuid().primaryKey(),
-	postId: uuid().notNull(),
+	postId: uuid()
+		.notNull()
+		.references(() => posts.id),
 	body: text().notNull(),
 });
 
 /** A minimal schema module (task 1.3, extend-query-runtime) -- only used to instantiate `db()`'s `TSchema` generic below, never called at runtime. */
 const appModule = { posts };
+
+/** A second schema module carrying the `comments` -> `posts` foreign key, so `RelationKeysOf` derives a real relation for the task 3.4 `related()` boundary test below. */
+const appModuleWithRelations = { posts, comments };
 
 /**
  * A type-only handle on `ChainApi["select"]`'s own generic signature
@@ -57,6 +62,22 @@ const appModule = { posts };
 declare const chainSelect: ChainApi<typeof appModule>["select"];
 type SelectRow<TProjection extends SelectProjection> = Awaited<
 	ReturnType<typeof chainSelect<TProjection>>
+>[number];
+
+/** Same technique, for the `with` and `related()` boundary tests (task 3.4). */
+declare const chainWith: ChainApi<typeof appModule>["with"];
+type WithRow<TProjection extends SelectProjection> = Awaited<
+	ReturnType<typeof chainWith<TProjection>>
+>[number];
+
+declare const chainSelectWithRelations: ChainApi<
+	typeof appModuleWithRelations
+>["select"];
+declare const relatedMethod: ReturnType<
+	typeof chainSelectWithRelations<Posts>
+>["related"];
+type RelatedRow<TSpec extends Readonly<Record<string, true>>> = Awaited<
+	ReturnType<typeof relatedMethod<TSpec>>
 >[number];
 
 /**
@@ -224,6 +245,39 @@ describe("the chain's leftJoin accumulates the joined table, innerJoin does not 
 	it("a chain stage typed at the untracked default stays untracked after leftJoin (chain-level ratchet)", () => {
 		type Row = Awaited<UntrackedThenLeftJoined<typeof comments>>[number];
 		expectTypeOf<Row["fromPosts"]>().toEqualTypeOf<string | null>();
+	});
+});
+
+describe("the untracked boundary holds at db.with and related() (narrow-join-nullability, task 3.4)", () => {
+	it("a db.with(...) body's own notNull column stays nullable, even though the callback's own return type has nowhere to carry a left-joined set at all", () => {
+		// `ChainApi["with"]`'s callback is declared to return the bare,
+		// one-argument `SelectLimited<TProjection> | SetOpStage<TProjection>`
+		// (chain.ts) -- a body that calls `.leftJoin(...)` still structurally
+		// satisfies that return type (a tracked stage is assignable to the
+		// untracked position, the same back-compat direction G1 measured),
+		// but the TLeftJoined it accumulated is never captured anywhere in
+		// `WithChainTerminal`, which threads only `SelectResult<TProjection>`
+		// (one argument) through to the awaited row.
+		type Row = WithRow<{ readonly t: Posts["status"] }>;
+		expectTypeOf<Row["t"]>().toEqualTypeOf<string | null>();
+	});
+
+	it("related()'s own SelectResult<TTable> half keeps full per-column richness regardless (whole-table branch never consults TLeftJoined), and the RelatedResult half doesn't leak a narrower merge", () => {
+		type Row = RelatedRow<{ readonly comments: true }>;
+		// The parent table's own columns: full richness, unaffected by this
+		// change (whole-table SelectResult never reads TLeftJoined) --
+		// `status` is notNull and narrows regardless.
+		expectTypeOf<Row["status"]>().toEqualTypeOf<string>();
+		// The merged relation: an array of the related table's own rows,
+		// each with full per-column richness too (the related child is read
+		// via its own nested select, not through this statement's joins).
+		expectTypeOf<Row["comments"]>().toEqualTypeOf<
+			ReadonlyArray<{
+				readonly id: string;
+				readonly postId: string;
+				readonly body: string;
+			}>
+		>();
 	});
 });
 

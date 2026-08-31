@@ -6,7 +6,16 @@ import type {
 	SelectLimited,
 	UpdateFinal,
 } from "@hejbro/core";
-import { bigint, interval, schema, table, text, uuid } from "@hejbro/core";
+// biome-ignore lint/style/useImportType: jsonArrayFrom is used only in a type position below via `typeof jsonArrayFrom<T>` (a real instantiation expression), which requires an actual value import -- `import type` has no runtime binding to reference.
+import {
+	bigint,
+	interval,
+	jsonArrayFrom,
+	schema,
+	table,
+	text,
+	uuid,
+} from "@hejbro/core";
 import { describe, expectTypeOf, it } from "vitest";
 import type { CompileInput } from "../../src/compile/compile";
 import type { ScopedDb } from "../../src/db/context";
@@ -22,6 +31,13 @@ const posts = table(app, "posts", {
 });
 
 type Posts = typeof posts;
+
+const comments = table(app, "comments", {
+	id: uuid().primaryKey(),
+	body: text().notNull(),
+});
+
+type Comments = typeof comments;
 
 /**
  * A type-only handle on `Db["execute"]`'s own generic signature -- never
@@ -95,6 +111,27 @@ describe("db.execute infers the left-joined set from the core stage (narrow-join
 		type Stage = SelectLimited<{ readonly t: Posts["status"] }, Posts>;
 		type Row = ExecuteRows<Stage>[number];
 		expectTypeOf<Row["t"]>().toEqualTypeOf<string | null>();
+	});
+});
+
+describe("the untracked boundary holds at a nested read's own subselect (narrow-join-nullability, task 3.4)", () => {
+	it("a nested jsonArrayFrom's own object-projection field stays nullable even though the OUTER statement's left-joined set is the fully-tracked empty set (never) -- if the outer set leaked in, this would WRONGLY narrow", () => {
+		// NestedOrExprResult (select-result.ts) recurses into SelectResult<TSub>
+		// with no second argument at all -- structurally incapable of
+		// consulting the outer TLeftJoined, not merely defaulted to it.
+		// `never` (nothing left-joined at the outer level) is deliberate: a
+		// leak here would read as "tracked, comments is not a member" and
+		// WRONGLY narrow `b` to `string` -- the outer set must never reach
+		// this position at all, tracked-empty or not.
+		type NestedProjection = { readonly b: Comments["body"] };
+		type Stage = SelectLimited<
+			{
+				readonly nested: ReturnType<typeof jsonArrayFrom<NestedProjection>>;
+			},
+			never
+		>;
+		type Row = ExecuteRows<Stage>[number];
+		expectTypeOf<Row["nested"][number]["b"]>().toEqualTypeOf<string | null>();
 	});
 });
 
