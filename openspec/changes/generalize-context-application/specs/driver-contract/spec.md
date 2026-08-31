@@ -8,9 +8,9 @@ contribution: a driver MAY turn an execution context into an ordered list
 of compiled statements. The contribution SHALL be a pure mapping from the
 context value to statements — it SHALL NOT send anything, open a
 connection, hold a session, or consult the server — and the query layer
-SHALL be the one that sends the returned statements, as the first
-statements inside the transaction it opens for that execution, in the
-order given.
+SHALL be the one that sends the returned statements, first among the
+statements it sends inside the transaction it opens for that execution,
+ahead of the caller's own, in the order given.
 
 The contribution SHALL NOT be represented as a driver capability: the
 capability set stays exactly the two named capabilities, and this is a
@@ -53,8 +53,9 @@ what makes that placement sufficient.
 #### Scenario: The query layer sends what the driver returned
 - **WHEN** an execution runs under a context on a contributing driver
 - **THEN** the statements the driver returned are the first statements
-  inside that execution's transaction, in the driver's own order, sent
-  through the query layer's own execution path
+  the query layer itself sends inside that execution's transaction,
+  ahead of the caller's own, in the driver's own order, sent through the
+  query layer's own execution path
 
 #### Scenario: Contributing nothing keeps the existing statements
 - **WHEN** an execution runs under a context on a driver that contributes

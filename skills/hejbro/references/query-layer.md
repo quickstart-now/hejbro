@@ -1022,8 +1022,8 @@ surface, unchanged, before either of these is ever reached.
 These read naturally as query-builder features but aren't there yet —
 use the `sql` escape hatch, or wait for the tracked issue:
 
-- `@hejbro/neon` and `@hejbro/nile` presets (#300, #301) — only
-  `@hejbro/pg` (vanilla) and `@hejbro/supabase` exist today.
+- `@hejbro/nile` preset (#301) — `@hejbro/pg` (vanilla), `@hejbro/supabase`,
+  and `@hejbro/neon` exist today.
 - Prepared-statement caching (#303) — every execution compiles and sends
   fresh. Measured, not shipped: a session-scoped named prepared
   statement's improvement over today's unnamed text query could not be
@@ -1073,6 +1073,41 @@ const yourDriver: Pick<Driver, "transaction"> = {
 	},
 };
 ```
+
+Contributing how your platform takes a context is the same shape: three
+optional members on `Driver`, all plain data, none of them capabilities.
+
+- `renderContext?: ContextRendering` — a pure function from a `DbContext`
+  to the statements that apply it, replacing the default rendering
+  entirely when present.
+- `roleLessPlatform?: true` — declare this when your platform has no
+  roles a context could name; a role-less context is refused on every
+  driver that omits it.
+- `contextRequired?: true` — declare this when running without a context
+  must never be allowed (a fail-open platform is the motivating case);
+  every execution surface then refuses uncontexted with
+  `context-required`.
+
+`@hejbro/query`'s public entry exports the default rendering itself —
+`defaultContextRendering` (value) and `ContextRendering` (type) — so a
+driver that needs the ordinary statements plus its own can compose them
+rather than restate the sequence:
+
+```ts
+import type { ContextRendering } from "@hejbro/query";
+import { defaultContextRendering } from "@hejbro/query";
+
+const yourRendering: ContextRendering = (context) => [
+	...defaultContextRendering(context),
+	{ sql: "select your_platform_pin()", params: [], kind: "sql" },
+];
+```
+
+Two boundary cases worth knowing before they surprise you: an empty
+rendering applies zero statements — a driver that returns none for a
+context sends none. And `db.as({})` satisfies a `contextRequired`
+driver: the requirement is that an execution *has* a context, not that
+the context carries anything.
 
 ## Where this is enforced
 
