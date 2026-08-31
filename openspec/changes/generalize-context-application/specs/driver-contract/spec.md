@@ -24,6 +24,26 @@ The default rendering SHALL be reachable by a driver package, so a driver
 whose platform needs the ordinary statements plus its own can compose
 them rather than restate them.
 
+The statements the query layer sends first are first **among its own**:
+a driver may already send session statements of its own inside the
+transaction it opens, before the query layer sends anything (a
+transaction-mode pooler pinning output formats is the shipped example,
+and its pins do precede the context statements today). Where a platform
+requires the context to precede every other statement in the
+transaction, its driver SHALL carry those session statements in its own
+rendering — after the context statements it renders and before the
+caller's own — rather than in the transaction setup that runs earlier.
+The query layer SHALL preserve the order the rendering returns, which is
+what makes that placement sufficient.
+
+#### Scenario: A driver that must run the context first carries its own statements in the rendering
+- **WHEN** a driver whose platform requires the context to come first
+  renders a context, and an execution runs under it
+- **THEN** its rendering's own session statements arrive after the
+  context statements and before the caller's statement, in the order the
+  rendering returned them, and the driver's transaction setup sends
+  nothing ahead of them
+
 #### Scenario: The contribution is a pure mapping
 - **WHEN** a contributing driver's rendering is called with a context, in
   a test with no database
