@@ -115,11 +115,22 @@ const readme = readFileSync(README_PATH, "utf8");
 // that copy back as "previous" would make every later run merely confirm
 // it -- the badge then points at a commit that never carried those
 // numbers (#574). HEAD's copy is what CI's `git diff --exit-code` compares
-// against, so it is the only baseline that keeps that check meaningful.
-const committedReadme = () =>
-	execFileSync("git", ["show", "HEAD:README.md"], {
-		cwd: REPO_ROOT,
-	}).toString();
+// against, so it is the only baseline that keeps that check meaningful --
+// which also means every run, the no-op one included, needs a repository
+// with README.md committed (a `git archive` export tree cannot run this).
+const committedReadme = () => {
+	try {
+		return execFileSync("git", ["show", "HEAD:README.md"], {
+			cwd: REPO_ROOT,
+			stdio: ["ignore", "pipe", "pipe"],
+		}).toString();
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		throw new Error(
+			`update-crap-readme: cannot read README.md at HEAD (${reason.trim()}) -- the committed README is the baseline (#574); run inside the repository with README.md committed.`,
+		);
+	}
+};
 const previous = parsePreviousBlock(committedReadme());
 const numbersUnchanged =
 	previous !== null &&
@@ -128,7 +139,8 @@ const numbersUnchanged =
 	previous.highest === highest;
 
 // `computeFresh` is a thunk, not a value, so the unchanged path never
-// shells out to `git rev-parse` (or reformats today's date) at all.
+// shells out to `git rev-parse` (or reformats today's date); the one git
+// call every path makes is the HEAD baseline read above.
 const stampFor = (unchanged, previousValue, computeFresh) => {
 	if (unchanged) {
 		return previousValue;
@@ -152,9 +164,15 @@ const withBadge = replaceBetween(
 	badgeMarkdown(scanned, violationCount),
 );
 
+// Three outcomes, not two: numbers unchanged and the file already says so;
+// numbers unchanged but the working copy carried a different stamp (the
+// #574 case -- the block is restored from HEAD); numbers changed.
 const changeVerb = () => {
-	if (numbersUnchanged) {
+	if (numbersUnchanged && withBadge === readme) {
 		return "unchanged (numbers match)";
+	}
+	if (numbersUnchanged) {
+		return "restored from HEAD (numbers match)";
 	}
 	return "refreshed";
 };
