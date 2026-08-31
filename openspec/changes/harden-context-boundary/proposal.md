@@ -234,9 +234,12 @@ existing `context-provider-empty`, which means something else).
 
 - **Affected code**: `packages/query/src/db/` only (`context.ts`,
   `db.ts`, `chain.ts`, `fn.ts`), plus a regression test in
-  `packages/nile/test/`. No file under `packages/core` is touched. No
-  public type changes; the observable change is error behavior and error
-  prose.
+  `packages/nile/test/` and one pin update in `packages/neon/test/`
+  (measured during implementation: that suite asserts the scoped
+  operation token `db.as`, which the renaming moves — the token the
+  preset's own driver raises, `transaction`, is untouched). No file
+  under `packages/core` is touched. No public type changes; the
+  observable change is error behavior and error prose.
 - **Affected docs**: `skills/hejbro/references/query-layer.md` in the
   same PR (the boundary-cases paragraph, the `context-required`
   description and error-table row, and — under `both-errors` — the

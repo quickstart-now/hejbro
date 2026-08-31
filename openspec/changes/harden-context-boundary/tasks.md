@@ -5,8 +5,8 @@
 Every added clause, the scenario that makes it testable, and the red
 test the task starts from. Every added clause has a row; a row may be
 driven by more than one test, and a scenario may span two rows when its
-halves are pinned separately. One row is a regression pin for behavior
-that already ships and adds no clause — it is marked as such. Nothing
+halves are pinned separately. Two rows are regression pins for behavior
+that already ships and add no clause — they are marked as such. Nothing
 outside this table is added.
 
 | Added clause | Scenario | Red test |
@@ -21,6 +21,7 @@ outside this table is added.
 | 8. driver-contract: the query layer's own missing-capability operation names the caller's surface; a driver's own names its member | driver-contract: The refusal names the surface the caller invoked | `packages/query/test/db/context-provider.test.ts` → `names the caller's surface when the capability is missing`, and `packages/query/test/db/context.test.ts` → `names the caller's surface on the scoped path` |
 | 9. driver-contract: an empty rendering is not an application; the conclusion is drawn from the count alone, none inspected | driver-contract: An empty rendering is not an application of the context — this scenario spans two tests: its *refused* half is pinned by row 1's test, its *count-not-read* half by the test named here | `packages/query/test/db/context-required.test.ts` → `accepts a single unreadable statement — the layer counts, it does not read` |
 | 10. *(regression pin — no added clause)* the preset's own rendering refuses a context carrying no tenant setting, so the preset never reaches the query layer's new refusal | shipped: rls "The Nile rendering constrains the values it interpolates" | `packages/nile/test/context.test.ts` → `refuses a context carrying no tenant setting before producing a statement` |
+| 11. *(regression pin — no added clause)* a one-shot preset driver still refuses a scoped context with the query layer's own missing-capability error, distinguishable from the driver's own refusal; the scoped token it asserts moves to `db.execute` while the driver's own stays `transaction` | row 8's scenario is the one that moves this pin | `packages/neon/test/driver.test.ts` → `db.as(context) on the HTTP driver fails with the same missing-capability error it failed with before, and never sends a request` |
 
 **Check 1 — subject match.** Rows 1-4, 7, 9 and 10 have the *execution*
 as their subject, and each red test drives an execution through the

@@ -540,8 +540,10 @@ describe("chain surface uniformity across unscoped/scoped/tx (task 7.4)", () => 
 	//
 	// Named per the planner/reviewer's own W1-W4 wiring-point table
 	// (measured against a pre-buildTx-refactor tree, `706fd1c`):
-	//   W1 db.ts's unscoped handle -- (send) => send(driver)
-	//   W2 context.ts's `db.as(ctx)` scoped handle -- (send) => scopedRun("db.as", send)
+	//   W1 db.ts's unscoped handle -- providerChainRun's own factory
+	//   W2 context.ts's `db.as(ctx)` scoped handle -- (operation) => (send) =>
+	//      scopedRun(operation, send), each chain member's own per-verb name
+	//      (harden-context-boundary task 1.5)
 	//   W3 context.ts's `db.as(ctx).transaction(cb)` tx -- (send) => send(session)
 	//   W4 transaction.ts's `db.transaction(cb)` tx -- (send) => send(session)
 	// W3/W4 no longer read as two hand-written `const tx: Tx = {...}`

@@ -13,7 +13,7 @@ import type { CompileInput } from "../compile/compile";
 import type { Driver, DriverRow } from "../driver/contract";
 import type { ReturningRow } from "../types/returning";
 import type { SelectResult } from "../types/select-result";
-import type { ChainApi, ChainRun } from "./chain";
+import type { ChainApi, ChainRunFactory } from "./chain";
 import { createChainApi } from "./chain";
 import type {
 	ContextProvider,
@@ -352,10 +352,7 @@ const executeImpl = (
 	statement: CompileInput,
 ): Promise<ReadonlyArray<DriverRow>> => executeOn(driver, statement, tables);
 
-/** The operation name every provider-run call site on the unscoped handle shares for `assertCapability`'s error, except `transaction` (named separately below) -- mirrors `db.as(context)`'s own choice (`context.ts`'s `scopedRun("db.as", ...)`) of one shared name for chain/execute/fn. */
-const PROVIDER_OPERATION = "db.context";
-
-/** Builds and throws the `context-required`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3, task 3.8). `operation` names the surface that was refused, the same way `driver-missing-capability`'s own message does. */
+/** Builds and throws the `context-required`-coded, enriched plain `Error` (D57) — a `function` declaration, not `const f = (): never => …` (handoff note, g2/g3, task 3.8). `operation` names the surface the caller invoked, spelled as the caller spells it (harden-context-boundary task 1.7): every call site passes its own per-verb token, never a shared placeholder. */
 function throwContextRequired(operation: string): never {
 	throw Object.assign(
 		new Error(
@@ -390,11 +387,11 @@ const refusingProviderRun: ProviderRun = async (operation) => {
 const providerChainRun = (
 	driver: Driver,
 	providerRun: ProviderRun | undefined,
-): ChainRun => {
+): ChainRunFactory => {
 	if (providerRun === undefined) {
-		return (send) => send(driver);
+		return () => (send) => send(driver);
 	}
-	return (send) => providerRun(PROVIDER_OPERATION, send);
+	return (operation) => (send) => providerRun(operation, send);
 };
 
 /** `execute`'s own provider-aware body (task 1.3): the plain, direct-to-driver path when no provider is registered, or `providerRun`'s one primitive otherwise -- never a second validation/application path. */
@@ -407,7 +404,7 @@ const executeWithProvider = (
 	if (providerRun === undefined) {
 		return executeImpl(driver, tables, statement);
 	}
-	return providerRun(PROVIDER_OPERATION, (session) =>
+	return providerRun("db.execute", (session) =>
 		executeOn(session, statement, tables),
 	);
 };
@@ -548,7 +545,7 @@ export const db = <TSchema extends Schema>(
 			declarations.roles,
 		),
 		fn: createFnApi(
-			providerChainRun(driver, providerRun),
+			providerChainRun(driver, providerRun)("db.fn"),
 			declarations.tables,
 			declarations.functions,
 		) as TypedFnApi<FunctionsOf<TSchema>>,
