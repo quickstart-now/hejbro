@@ -78,8 +78,9 @@ producing any statement: one that **names a role** — the platform has
 none, its role statement is silently ignored, and that statement
 additionally blocks the tenant setting behind it — or one carrying a
 **setting outside the platform's own tenant and user keys**. The refusal
-SHALL be an explicit coded error naming which part was unsupported, and
-SHALL NOT carry the value. Dropping either silently would run the
+SHALL be an explicit coded error, `nile-context-unsupported`, whose
+`field` names which part was unsupported, and SHALL NOT carry the value.
+Dropping either silently would run the
 caller's statements under whatever the connection already holds, which
 is exactly what the declared-role requirement forbids.
 
@@ -112,16 +113,17 @@ is exactly what the declared-role requirement forbids.
 #### Scenario: A context naming a role is refused, not dropped
 - **WHEN** a context that names a role — including one the declared-role
   whitelist admits — is used on this driver
-- **THEN** the rendering fails with an explicit coded error before any
-  statement is produced; the wrapping transaction the query layer had
-  opened carries none, and the role is never silently ignored
+- **THEN** the rendering fails with an explicit coded error,
+  `nile-context-unsupported`, before any statement is produced; the
+  wrapping transaction the query layer had opened carries none, and the
+  role is never silently ignored
 
 #### Scenario: A setting the platform cannot take is refused, not dropped
 - **WHEN** a context carries a setting key outside the platform's own
   tenant and user settings
-- **THEN** the rendering fails with the same explicit coded error, naming
-  the key it cannot apply, before any statement is produced; the wrapping
-  transaction carries none
+- **THEN** the rendering fails with the same explicit coded error,
+  `nile-context-unsupported`, naming the key it cannot apply, before any
+  statement is produced; the wrapping transaction carries none
 
 ### Requirement: The Nile rendering constrains the values it interpolates
 `SET LOCAL` carries no bind parameter, so the tenant and user values are
