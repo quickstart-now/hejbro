@@ -367,6 +367,20 @@ describe("a union tracked set (two leftJoin calls) distributes the membership ch
 	});
 });
 
+describe("a nullable column stays nullable when narrowing conditions are met (#546-fix, group-2 defect found during group 3)", () => {
+	// Group 2's own tests never crossed "nullable column" with "actually
+	// narrowing" -- every narrowing case (2.1/2.3/2.5/self-join/union) used
+	// a notNull column, and every nullable-column case (the object-
+	// projection describe block above) was either untracked or a tracked
+	// member, so this specific combination went unexercised. `posts.title`
+	// (nullable) + a tracked set that does not contain `posts` is exactly
+	// that combination.
+	it("posts.title (nullable) projected against a tracked, non-matching set stays string | null", () => {
+		type Proj = SelectResult<{ readonly t: typeof posts.title }, never>;
+		expectTypeOf<Proj["t"]>().toEqualTypeOf<string | null>();
+	});
+});
+
 describe("aggregate result types (#416)", () => {
 	it("count reads as bigint, not the numeric family's union", () => {
 		type Proj = SelectResult<{ readonly total: ReturnType<typeof count> }>;

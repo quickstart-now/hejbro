@@ -217,6 +217,14 @@ type OriginColumnMap<TValue> = TValue extends {
  * `null` no matter what it declares. Any one condition failing keeps the
  * field `| null`, the same widened answer this type has always given —
  * narrowing is additive, never a replacement for the widened default.
+ *
+ * The narrowed arm resolves through {@link SelectColumnResult} — the SAME
+ * `IsColumnNotNull`-paired mapping the whole-table branch above uses —
+ * not the bare {@link ColumnTsType} the other three arms fall back to
+ * (task 2.6, a defect found during group 3): `ColumnTsType` alone carries
+ * no nullability for a scalar column, so a **nullable** column that met
+ * all four conditions above used to lose its `| null` even though it can
+ * still arrive `null` on its own declared terms, independent of any join.
  */
 type ProjectedColumnResult<TValue, TLeftJoined> = [
 	OriginColumn<TValue>,
@@ -233,7 +241,7 @@ type ProjectedColumnResult<TValue, TLeftJoined> = [
 					TLeftJoined
 				> extends true
 				? ColumnTsType<OriginColumn<TValue>> | null
-				: ColumnTsType<OriginColumn<TValue>>
+				: SelectColumnResult<OriginColumn<TValue>>
 			: ColumnTsType<OriginColumn<TValue>> | null
 		: ColumnTsType<OriginColumn<TValue>> | null;
 
