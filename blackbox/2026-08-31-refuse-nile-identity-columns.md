@@ -7,9 +7,9 @@ Refs:
 - packages/nile/src/preset.ts @ blob 9d7ad1b82b45d7e8c51b74205e96479c99b0b1b0
 - packages/nile/src/validators.ts @ blob b0676c1968cd1d5062777377f062cbdbadbb8004
 - packages/nile/test/preset.test.ts @ blob 6ce3149e3d860b800568fbaa8135ae04d0f85f3e
-- packages/nile/test/validators.test.ts @ blob 53b53fab0350de5c8f996e1e24bcc1ed7b64690a
+- packages/nile/test/validators.test.ts @ blob 1aa6e209948ba1b6890c4bcf5790760740cf9ae1
 - README.md @ blob 298f54d4e337ace309c8f1bda47627963377059a (task-time badges and the CRAP block regenerated after the ledger rows and the new validator function — two follow-up commits; CI's single-leg README gates caught both omissions)
-- packages/skills/test/nile-preset-doc.test.ts @ blob 0b2ca5138362fd3b05c492640cf4e42ea42349ff
+- packages/skills/test/nile-preset-doc.test.ts @ blob 18e732fe399603ce4866cdc4100c204a8b49b84e
 - skills/hejbro/references/nile-preset.md @ blob 0a67ffa0242b5c41cfd77a0c9170c9ed05224b3f
 
 (Taken from `git hash-object <path>` on the working tree before this

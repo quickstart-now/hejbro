@@ -289,13 +289,18 @@ describe("A tenant-aware table's primary key must include tenant_id (added after
 			id: uuid(),
 			tenantId: uuid().notNull(),
 		});
-		const result = generateMigration({
+		const withValidators = generateMigration({
 			declarations: [app, widgets],
 			previousSnapshot: emptySnapshot,
 			validators: allValidators,
 		});
+		const withoutValidators = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+		});
 
-		expect(result.errors).toEqual([]);
+		expect(withValidators.errors).toEqual([]);
+		expect(withValidators.sql).toBe(withoutValidators.sql);
 	});
 
 	it("mutation-proof: removing this validator leaves the lone-id-primary-key scenario passing, and only that scenario", () => {
