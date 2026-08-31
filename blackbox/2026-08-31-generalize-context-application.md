@@ -1,11 +1,11 @@
 Refs:
-- .changeset/generalize-context-application.md @ blob 45d570d9c3e1941c29501c4a1f07119ce33e4a41
+- .changeset/generalize-context-application.md @ blob 751680b8eac3f7240ff482543eddf8dede226aff (re-pinned, correction round: F5 export mention added)
 - README.md @ blob ad87f4372793c5e39f4fa9b959dbde12465e417a
-- openspec/changes/generalize-context-application/proposal.md @ blob f4410978b0901a5b023b85676a9755d75fadfc93
-- openspec/changes/generalize-context-application/specs/driver-contract/spec.md @ blob 48a94a3a2b2501fdec3440d06271d488dbdfa650
-- openspec/changes/generalize-context-application/specs/rls-execution-context/spec.md @ blob c53e963b3548a542ee3b47e2ac607b245535afd5
-- openspec/changes/generalize-context-application/tasks.md @ blob 08625d28c3feef7ec60b05eb1170b95452499c7c
-- openspec/task-times.csv @ blob 761b778869f25f4e8e568436786c23fde439bcab
+- openspec/changes/archive/2026-08-31-generalize-context-application/proposal.md @ blob f4410978b0901a5b023b85676a9755d75fadfc93 (re-pathed, archive; blob unchanged)
+- openspec/changes/archive/2026-08-31-generalize-context-application/specs/driver-contract/spec.md @ blob 7791ef57b231bc3826e83ab002116dd66f775dc0 (re-pathed, archive; re-pinned, correction round: F1③④)
+- openspec/changes/archive/2026-08-31-generalize-context-application/specs/rls-execution-context/spec.md @ blob 1e3c0c8ace1da93136e36fc9eaf4b1a2cb0269c6 (re-pathed, archive; re-pinned, correction round: F1①②/F2/F3b/F3c/F4)
+- openspec/changes/archive/2026-08-31-generalize-context-application/tasks.md @ blob 90444d4389c444c30bb02f756a2c9e2ac1eacc05 (re-pathed, archive; re-pinned, correction round: 5.5 checked)
+- openspec/task-times.csv @ blob f0e5514da13ff65c42904ae731a3b803f1d5cd76 (re-pinned, correction round: D106 + archive-round ledger rows)
 - packages/neon/test/driver.test.ts @ blob edbb81f594ad112dbfb7cb38492231ae3b5d5b65
 - packages/pg/test/driver.test.ts @ blob ed5c3cea081d8609ae757251eddff52cc4e5aca0
 - packages/query/src/db/context.ts @ blob ab894816422c346430bbac5826963db0ffb91a28
@@ -19,16 +19,26 @@ Refs:
 - packages/query/test/driver/contract.test.ts @ blob 7dcb2d7f58352d81bf7f2d78be511bda73d28ad2
 - packages/query/test/exports.test.ts @ blob 3b8db25d59f4dda21526fe91c05b56c095652370
 - packages/supabase/test/driver.test.ts @ blob e985caf9fea2cd073b27ff81be59296d08811968
-- skills/hejbro/references/query-layer.md @ blob cb70f7144ac24f07503b9f38ab0f0078d1635b02
+- skills/hejbro/references/query-layer.md @ blob e894a4e06a97febaccc78cc40ece15a808c2f3ec (re-pinned, correction round: F5/F8)
 
-(Taken from `git hash-object <path>` on the frozen tree at `5bcb5310`,
-before the blackbox commit. The four
-`openspec/changes/generalize-context-application/` paths will move
-when this change archives; the pins are to be re-pathed in the archive
-PR, blobs unchanged. Pins die three ways — squash preserves them, an
-archive kills the path, a concurrent same-file edit on dev kills the
-blob — so every later commit re-verifies all twenty-one path-fixed,
-per the standing pre-commit sweep rule.)
+(Originally taken from `git hash-object <path>` on the frozen tree at
+`5bcb5310`, before the blackbox commit. Re-pinned in the D106
+correction + archive round (2026-08-31): the four
+`openspec/changes/generalize-context-application/` paths moved to
+`openspec/changes/archive/2026-08-31-generalize-context-application/`
+on archive — `proposal.md`'s blob is unchanged by the move,
+`specs/driver-contract/spec.md`/`specs/rls-execution-context/spec.md`
+carry the D106 correction-round text, `tasks.md` carries the 5.5
+checkbox. Three further paths kept their location but not their blob
+this same round: `.changeset/generalize-context-application.md` (F5),
+`skills/hejbro/references/query-layer.md` (F5/F8), and
+`openspec/task-times.csv` (the D106 and archive-round ledger rows).
+`README.md` and the remaining thirteen paths are unchanged, verified
+against this file's own prior pins before the correction commit. Pins
+die three ways — squash preserves them, an archive kills the path, a
+concurrent same-file edit on dev kills the blob — so every later
+commit re-verifies all twenty-one path-fixed, per the standing
+pre-commit sweep rule.)
 
 
 # generalize-context-application — the driver owns the sentence (#553)
