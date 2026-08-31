@@ -87,4 +87,21 @@ describe("syncedTable (2.4)", () => {
 			renderSelect(select(usage).where(eq(usage.title, "x")).selectQuery),
 		).toContain('where "app"."posts"."title" =');
 	});
+
+	it("carries the manifest row it was made from, when the caller supplies one", () => {
+		const withOrigin = syncedTable(
+			"app",
+			"posts",
+			{ id: uuid().primaryKey() },
+			{ origin: "sha256:abcdef" },
+		);
+		expect(getTableMeta(withOrigin).origin).toBe("sha256:abcdef");
+	});
+
+	it("carries no origin when the caller supplies none — same as a hand-built usage table", () => {
+		const withoutOrigin = syncedTable("app", "posts", {
+			id: uuid().primaryKey(),
+		});
+		expect(getTableMeta(withoutOrigin).origin).toBeUndefined();
+	});
 });

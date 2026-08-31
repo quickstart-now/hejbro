@@ -138,6 +138,17 @@ export type TableDeclaration = {
 	 * `"usage"`, never an absent value.
 	 */
 	readonly authority?: TableAuthority;
+	/**
+	 * The manifest row a `syncedTable()` output was made from, if the
+	 * caller supplied one — the same string a synced module exports as
+	 * its freshness stamp (schema-manifest delta's own `snapshot_hash`),
+	 * never a new format computed here. A different axis from
+	 * {@link authority}: `authority` says which constructor built this
+	 * value (always present, what a refusal judges); `origin` says which
+	 * manifest row it came from (present only when known, what a refusal
+	 * may go on to name). `table()`/`existingTable()` never set it.
+	 */
+	readonly origin?: string;
 	readonly declaredAt: string | null;
 };
 

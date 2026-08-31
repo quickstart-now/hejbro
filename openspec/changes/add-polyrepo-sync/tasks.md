@@ -276,7 +276,7 @@ Files: `packages/cli/src/commands/generate.ts` (shared, additive),
       reads. Start from `cli/test/verify-manifest.test.ts > reports a
       chain that stopped carrying its manifests`. ~7m
 
-## 5. The `sync` command — `est_frozen: 73m` — issue #583
+## 5. The `sync` command — `est_frozen: 78m` — issue #583
 
 Files: `packages/cli/src/commands/sync.ts` (new),
 `packages/cli/src/sync/*` (new), `packages/cli/src/main.ts`,
@@ -286,8 +286,10 @@ Files: `packages/cli/src/commands/sync.ts` (new),
 |---|---|---|
 | A repository obtains a schema it does not own from the database | A schema arrives as one module | `cli/test/sync-emit.test.ts > writes one module and nothing else` |
 | " | No connection is a coded failure | `cli/test/sync-connection.test.ts > names what to supply when no connection is given` |
+| " | A file that is not a synced module is not overwritten | `cli/test/sync-emit.test.ts > refuses to overwrite a file it did not write` |
 | The database driver is an optional dependency | A missing driver is explained for the syncing command too | `cli/test/sync-connection.test.ts > names the driver package to install` |
 | A synced module reproduces the consumer-visible type layer | Result keys / element nullability / numeric mode / relation keys / enum values match | `cli/test/sync-emit.test.ts > reproduces the carried choices of the manifest` |
+| " | Write inputs follow what the database does for a column | `query/test/types/usage-table.test.ts > a defaulted column is optional and a computed one is absent from writes` |
 | Type brands do not cross the boundary | A branded column reads as its unbranded type | `cli/test/sync-emit.test.ts > emits no brand for a branded column` |
 | Role names travel with the module and the consumer opts in | Supplied roles are accepted | `cli/test/sync-emit.test.ts > exports the manifest's role names in branded form` |
 | A re-added column keeps its own facts | " — read half (group 3 pins the emitted half) | `cli/test/sync-emit.test.ts > attaches each column fact to the column it names, not the one at its position` |

@@ -14,11 +14,24 @@ The module SHALL be the command's only output. `sync` SHALL NOT write a
 snapshot, a migration, or anything else that belongs to a repository
 holding migration authority.
 
+Where the destination already holds a file that is not a synced module,
+`sync` SHALL refuse rather than overwrite it, naming the path and
+offering both ways forward: a different destination, or an explicit
+instruction to overwrite. A hand-written file replaced without warning
+is the same silent wrong answer this capability exists to remove, moved
+from a type to a working tree.
+
 #### Scenario: A schema arrives as one module
 - **WHEN** `sync` runs against a database whose newest manifest row
   describes a schema
 - **THEN** one module is written describing that schema, and no other
   file is created or modified
+
+#### Scenario: A file that is not a synced module is not overwritten
+- **WHEN** `sync` would write over a file that carries no synced
+  module's marks
+- **THEN** it fails with a coded error naming the path, and the file is
+  unchanged; overwriting happens only when the caller asks for it
 
 #### Scenario: No connection is a coded failure
 - **WHEN** `sync` runs with neither the URL argument nor the environment
@@ -102,13 +115,17 @@ could add or remove.
 
 ### Requirement: A synced module reproduces the consumer-visible type layer
 Types read through a synced module SHALL equal the types read through
-the declarations the manifest was made from. Five properties carry
+the declarations the manifest was made from. Six properties carry
 across and each is observable: a result row's keys are the declared
 TypeScript keys rather than the SQL column names; an array column's
 element nullability follows the declared constraint; a numeric column's
 visible type follows its declared mode; a relation key derived from a
 foreign key matches the owning repository's, in both directions; and an
-enum column types as its declared values rather than as a string. The
+enum column types as its declared values rather than as a string; and a
+column's write input follows what the database does for it — one the
+database fills is optional on insert, one it computes is absent from
+writes altogether, and an identity column that yields to a supplied
+value is optional rather than absent. The
 relation property holds for edges whose target the manifest carries;
 an edge pointing outside it is governed by its own requirement.
 
@@ -132,6 +149,14 @@ an edge pointing outside it is governed by its own requirement.
   that holds the foreign key, and from the side that does not
 - **THEN** both keys are the ones the owning repository's declarations
   produce
+
+#### Scenario: Write inputs follow what the database does for a column
+- **WHEN** a table with a defaulted column, a computed column and an
+  identity column that yields to a supplied value is written through a
+  synced module
+- **THEN** the defaulted and identity columns are optional in the insert
+  input, the computed column is absent from it, and the same insert
+  type-checks identically against the owning repository's declarations
 
 #### Scenario: Enum columns keep their values
 - **WHEN** an enum column is projected through a synced module

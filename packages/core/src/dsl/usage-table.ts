@@ -28,6 +28,14 @@ export const syncedTable = <TColumns extends Record<string, ColumnBuilder>>(
 	schemaName: string,
 	tableName: string,
 	columns: TColumns,
+	options?: {
+		/** The manifest row this table was read from — the same string a
+		 * synced module exports as its freshness stamp. Optional: a
+		 * hand-built usage table (a test fixture, or a caller the type
+		 * layer never saw) carries none, which is exactly how its refusal
+		 * ends up naming no origin either. */
+		readonly origin?: string;
+	},
 ): Table<TColumns, "usage"> => {
 	const declaredAt = captureDeclarationSite();
 	assertSqlName(schemaName, "schema", declaredAt);
@@ -51,6 +59,7 @@ export const syncedTable = <TColumns extends Record<string, ColumnBuilder>>(
 		rls: null,
 		existing: false,
 		authority: "usage",
+		...(options?.origin !== undefined && { origin: options.origin }),
 		declaredAt,
 	};
 
