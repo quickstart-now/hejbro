@@ -51,21 +51,21 @@ Files: `packages/nile/{package.json,tsconfig.json,tsdown.config.ts,vitest.config
 ## 2. The decorator driver (#564)
 Files: `packages/nile/src/driver.ts`, `packages/nile/test/driver.test.ts`
 
-- [ ] 2.1 (8m) `nileDriver(base)` returns a driver that forwards `execute`,
+- [x] 2.1 (8m) `nileDriver(base)` returns a driver that forwards `execute`,
       `transaction`, and `setupSession` to the base. Failing test: a
       recording base sees exactly what the caller sent, and nothing else.
-- [ ] 2.2 (7m) Capabilities pass through unchanged. Failing test: a base
+- [x] 2.2 (7m) Capabilities pass through unchanged. Failing test: a base
       declaring `interactive-transactions: false` still reads `false`
       through the decorator, and a context on it fails with the
       missing-capability error while the rendering is never invoked.
-- [ ] 2.3 (9m) The decorator sends nothing of its own before the caller's
+- [x] 2.3 (9m) The decorator sends nothing of its own before the caller's
       transaction callback, **and a base that pins at connection checkout
       stays supported**. Failing test: with a recording base whose
       `setupSession` applies its settings, the transcript inside the
       transaction starts with the tenant setting and carries no
       base-driver statement ahead of it (covers the delta's "A base that
       pins at checkout is supported").
-- [ ] 2.4 (9m) `roleLessPlatform` and `contextRequired` are declared, and
+- [x] 2.4 (9m) `roleLessPlatform` and `contextRequired` are declared, and
       what each one does is observed at execution level. Failing tests:
       both readable as data before any connection; a named role outside
       the union is still refused; an uncontexted execution is refused with
@@ -74,7 +74,7 @@ Files: `packages/nile/src/driver.ts`, `packages/nile/test/driver.test.ts`
       reaches the base; and **a catalog-shaped read issued through the
       handle's `driver` member still reaches the base**, which is what
       makes the mandatory context safe for the schema check.
-- [ ] 2.5 (6m) The manifest declares no Nile client dependency. Failing
+- [x] 2.5 (6m) The manifest declares no Nile client dependency. Failing
       test: the package manifest carries no `@niledatabase/*` entry in any
       dependency field.
 - [ ] 2.6 (5m) `[design]` `nileDriver`'s signature — what it decorates and
