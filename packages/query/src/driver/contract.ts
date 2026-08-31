@@ -2,32 +2,34 @@ import type { Role } from "@hejbro/core";
 import type { CompileResult } from "../compile/compile";
 
 /**
- * The context value a rendering contribution turns into statements
- * (#554/task 1.1). **Temporary** (task 1.5's design settlement, task
- * 2.10's cleanup): declared independently of the query layer's own
- * `DbContext` only because group 1 cannot touch `db/context.ts` and the
- * reverse import direction would be a layer inversion (`db/context.ts`
- * already imports from here). Task 2.10 collapses the two into one type
- * — `DbContext`'s own definition, moved to this file — once group 2 owns
- * `context.ts`; this alias is not meant to survive that task. `role` is
- * optional from this layer's first day: a rendering must already accept a
- * role-less value before any driver can declare its platform has no
- * roles to name (task 1.2).
+ * `db.as(context)`'s own argument, and the shape a rendering contribution
+ * turns into statements (#554/#555, task 2.10) — one type, declared here
+ * because the driver contract is the lower layer (`db/context.ts` already
+ * imports from this module; the reverse direction would be a layer
+ * inversion) and re-exported from `db/context.ts` for its public-surface
+ * home (`@hejbro/query`'s own index still exports it from there, path
+ * unchanged). `role` is optional: a context naming one must already be in
+ * the caller's declared-role whitelist (`db/context.ts`'s own
+ * `assertContextRole`, which this contract has no visibility into); a
+ * context naming none is only admitted on a driver that declares its
+ * platform role-less (`Driver.roleLessPlatform` below) — a rendering must
+ * already accept that role-less shape before any driver can declare it
+ * (task 1.2).
  */
-export type ContextValue = {
+export type DbContext = {
 	readonly role?: Role;
 	readonly settings?: Readonly<Record<string, string>>;
 };
 
 /**
- * A pure mapping from a {@link ContextValue} to the statements that apply
+ * A pure mapping from a {@link DbContext} to the statements that apply
  * it — never a side effect, never a connection, never a lookup (spec:
  * driver-contract, "A driver may contribute how a context becomes
  * statements"). The query layer is the only caller, and it is the only
  * thing that ever sends what this returns.
  */
 export type ContextRendering = (
-	context: ContextValue,
+	context: DbContext,
 ) => ReadonlyArray<CompileResult>;
 
 /**

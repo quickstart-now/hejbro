@@ -9,8 +9,9 @@ import {
 	text,
 	uuid,
 } from "@hejbro/core";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { defaultContextRendering } from "../../src/db/context";
+import type { DbContext } from "../../src/db/context";
 import { db } from "../../src/db/db";
 import type {
 	ContextRendering,
@@ -215,6 +216,38 @@ describe("the capability gate does not move for a contributing driver (task 2.7,
 
 		expect(renderCalls).toHaveLength(0);
 		expect(driver.transaction).not.toHaveBeenCalled();
+	});
+});
+
+describe("DbContext and the rendering's context type are the same type (task 2.10, #554/#555 -- the type merge)", () => {
+	it("the rendering's parameter type, extracted with infer, is DbContext -- never a whole-object compare", () => {
+		type RenderingParam<T> = T extends (context: infer C) => unknown
+			? C
+			: never;
+		expectTypeOf<RenderingParam<ContextRendering>>().toEqualTypeOf<DbContext>();
+	});
+
+	it("the temporary ContextValue alias from #554/task 1.1 is gone -- exactly one context type name survives the merge", () => {
+		// @ts-expect-error ContextValue was removed by task 2.10's merge -- DbContext (re-exported from db/context) is the package's only context type now.
+		const _neverImported: import("../../src/driver/contract").ContextValue =
+			undefined as never;
+		void _neverImported;
+	});
+
+	it("a DbContext value is assignable straight to a driver's renderContext, with no cast", () => {
+		const context: DbContext = { role: roleName("grant_reader") };
+		// biome-ignore lint/correctness/noUnusedVariables: type-only fixture -- compiling without a cast is the assertion.
+		const driver: Driver = {
+			capabilities: { "interactive-transactions": true, "session-state": true },
+			execute: async () => [],
+			transaction: async (callback) => callback({ execute: async () => [] }),
+			setupSession: async () => {},
+			renderContext: (renderedContext) => {
+				expectTypeOf(renderedContext).toEqualTypeOf<DbContext>();
+				return [];
+			},
+		};
+		driver.renderContext?.(context);
 	});
 });
 

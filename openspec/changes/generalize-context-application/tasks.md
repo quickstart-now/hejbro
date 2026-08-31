@@ -78,7 +78,7 @@ Files: `packages/query/src/db/context.ts`,
 - [ ] 2.9 (5m) `[design]` Error code and message for the role-less
       refusal — whether it joins the `undeclared-role` family or gets its
       own code.
-- [ ] 2.10 (7m) Collapse the two context types into one. `DbContext`'s
+- [x] 2.10 (7m) Collapse the two context types into one. `DbContext`'s
       definition moves to `driver/contract.ts` (the lower layer, where the
       rendering signature needs it) and `db/context.ts` re-exports it;
       the temporary `ContextValue` introduced in 1.1 is removed. Failing

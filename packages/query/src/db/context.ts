@@ -1,7 +1,12 @@
 import type { FunctionDeclaration, Role } from "@hejbro/core";
 import { quoteIdentifier } from "@hejbro/core";
 import type { CompileInput, CompileResult } from "../compile/compile";
-import type { ContextRendering, Driver, DriverSession } from "../driver/contract";
+import type {
+	ContextRendering,
+	DbContext,
+	Driver,
+	DriverSession,
+} from "../driver/contract";
 import { assertCapability } from "../driver/errors";
 import type { ChainApi } from "./chain";
 import { createChainApi } from "./chain";
@@ -13,20 +18,14 @@ import type { Tx } from "./transaction";
 import { buildTx } from "./transaction";
 
 /**
- * `db.as(context)`'s own argument: the role to run under, plus optional
- * session settings (Supabase's JWT-claim `set_config` calls are the
- * motivating case, group 6) applied alongside it. `role` is optional
- * (task 2.4, #555): a context naming one must already be in
- * {@link Declarations}`.roles` — the 4-source whitelist `db()` itself
- * computed (grant/policy/`roles` option/`driver.contributedRoles`) — this
- * type says nothing about validity on its own — and a context naming
- * none is only admitted on a driver that declares its platform role-less
- * (`Driver.roleLessPlatform`); on any other driver it is refused.
+ * `db.as(context)`'s own argument (task 2.10, #554/#555): re-exported
+ * from the driver contract, its own canonical home now that the two
+ * context types are one -- see {@link DbContext}'s own tsdoc there for
+ * the full shape/validation story. Kept here too, at this public-surface
+ * path, so `@hejbro/query`'s own `index.ts` export line
+ * (`export type { ... DbContext ... } from "./db/context"`) never moves.
  */
-export type DbContext = {
-	readonly role?: Role;
-	readonly settings?: Readonly<Record<string, string>>;
-};
+export type { DbContext } from "../driver/contract";
 
 /**
  * `db()`'s `context` option (add-context-provider, owner-settled shape
