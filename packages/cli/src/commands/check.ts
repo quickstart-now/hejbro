@@ -21,6 +21,7 @@ import { withCheckConnection } from "../check/driver";
 import { compareCheckConstraint } from "../check/expression";
 import type { Inventory } from "../check/inventory";
 import { buildInventory } from "../check/inventory";
+import { requireConfigFields } from "../config-required";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { normalizeEqualsFlags } from "../flags";
@@ -376,10 +377,11 @@ export const runCheck = async (
 	const urlFlag = lastFlagValue(normalizeEqualsFlags(argv), "--url");
 	try {
 		const { config, configPath } = await loadConfig(cwd, undefined);
+		requireConfigFields(config, "check", ["snapshotPath"]);
 		const declarations = await loadDeclarations(configPath, config);
 		const registry = buildRegistry(config);
 		const diskSnapshot = parseSnapshot(
-			readSnapshotFileText(cwd, config),
+			readSnapshotFileText(cwd, config, "check"),
 			requiredKeysByKind(registry),
 		);
 		const snapshot = generateMigration({

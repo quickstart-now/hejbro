@@ -18,6 +18,7 @@ import {
 	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
+import { requireConfigFields } from "../config-required";
 import type { Diagnostic } from "../diagnostics";
 import {
 	fromHejbroError,
@@ -531,6 +532,11 @@ export const runGenerate = async (
 			parsedArgv.confirmDropValues.map(parseConfirmDropFlag);
 
 		const { config, configPath } = await loadConfig(cwd, parsedArgv.configFlag);
+		requireConfigFields(config, mode, [
+			"migrationsDir",
+			"snapshotPath",
+			"prefixStrategy",
+		]);
 		const declarations = await loadDeclarations(configPath, config);
 
 		// Nested, not the outer catch: a `malformed-snapshot-node` error
@@ -542,7 +548,7 @@ export const runGenerate = async (
 		try {
 			const registry = buildRegistry(config);
 			const previousSnapshot = parseSnapshot(
-				readSnapshotFileText(cwd, config),
+				readSnapshotFileText(cwd, config, mode),
 				requiredKeysByKind(registry),
 			);
 			const validators = configValidators(config);

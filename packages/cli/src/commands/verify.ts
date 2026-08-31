@@ -25,6 +25,7 @@ import {
 } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { HejbroConfig } from "../config";
+import { requireConfigFields } from "../config-required";
 import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
@@ -367,11 +368,11 @@ type Check1Result = {
 /** Check 1 (always runs): the snapshot file exists and parses (including each entry's own required keys, D79/#159) — a missing file reuses generate's own snapshot-not-found/snapshot-lost branch (readSnapshotFileText, shared to avoid drift), a malformed one surfaces core's invalid-snapshot. Never throws — every failure mode becomes a CheckOutcome so check 3 still runs independently. */
 const runCheck1 = (
 	cwd: string,
-	config: HejbroConfig,
+	config: HejbroConfig & { readonly snapshotPath: string },
 	registry: KindRegistry,
 ): Check1Result => {
 	try {
-		const diskText = readSnapshotFileText(cwd, config);
+		const diskText = readSnapshotFileText(cwd, config, "verify");
 		parseSnapshot(diskText, requiredKeysByKind(registry));
 		return { diskText, outcome: { ok: true } };
 	} catch (error) {
@@ -571,6 +572,11 @@ export const runVerify = async (
 	const fix = argv.includes("--fix");
 	try {
 		const { config, configPath } = await loadConfig(cwd, undefined);
+		requireConfigFields(config, "verify", [
+			"migrationsDir",
+			"snapshotPath",
+			"prefixStrategy",
+		]);
 		const declarations = await loadDeclarations(configPath, config);
 		const registry = buildRegistry(config);
 

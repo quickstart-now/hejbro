@@ -1,11 +1,13 @@
 # Tasks: add-polyrepo-sync
 
-Groups run in order. Four files are **shared and unowned**: every group
+Groups run in order. Five files are **shared and unowned**: every group
 that touches one may only add to it, never restructure it —
 `packages/core/src/engine/generate.ts` (groups 1, 2),
 `packages/core/src/index.ts` (groups 2, 4 — each adds only the exports
 its own failing test demands, never exports for a later group),
-`packages/cli/src/commands/generate.ts` (groups 4, 5) and
+`packages/cli/src/commands/generate.ts` (groups 3, 4, 5 — group 3 adds
+only a guard call), `packages/cli/src/snapshot-file.ts` (groups 3, 4)
+and
 `packages/cli/src/commands/verify.ts` (group 4 only, listed because
 group 3's per-command guard lands in it too). Every other file belongs
 to exactly one group.
@@ -189,13 +191,13 @@ Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
 |---|---|---|
 | A manifest row carries what a database cannot be asked | The carried choices survive the round trip | `cli/test/manifest-payload.test.ts > collects mode, non-null elements, TypeScript keys, table and function export names, and roles` |
 | " | A synthesized function has no export name | `cli/test/manifest-payload.test.ts > carries no export name for a trigger-synthesized function` |
-| " | The two format versions are separate | `cli/test/manifest-payload.test.ts > carries the manifest format and the snapshot format as separate values` |
+| " | The two format versions are separate — *owned by group 1: both are columns the renderer writes, not payload fields* | `core/test/manifest.test.ts > renders the exact bootstrap and insert text` |
 | " | A brand is not among the carried facts | `cli/test/manifest-payload.test.ts > carries no brand information` |
 | The emitted manifest statements are deterministic | Two runs separated in time are byte-identical | `cli/test/manifest-payload.test.ts > serializes with the snapshot's own stable serialization` |
 | Configuration asks each command only for what it needs | A consuming repository needs none of them | `cli/test/config.test.ts > accepts a configuration without the migration-authoring fields` |
 | " | A migration-authoring command names the field it needs | `cli/test/config-required.test.ts > names the missing field before any work` |
 
-- [ ] 3.1 `[design]` How the loader preserves each declaration's module
+- [x] 3.1 `[design]` How the loader preserves each declaration's module
       export name. *Settled:* the loader keeps returning the same array
       and returns an `exportNames: Map<HejbroInput, string>` beside it,
       keyed by identity — additive, so every existing caller is
@@ -207,19 +209,19 @@ Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
       how the synthesized-function scenario holds. Start from
       `cli/test/loader.test.ts > preserves the module export name for
       each table`. ~8m
-- [ ] 3.2 Collect the carried choices from the loaded declarations,
+- [x] 3.2 Collect the carried choices from the loaded declarations,
       including the export name of every exported table and function.
       Start from `cli/test/manifest-payload.test.ts > collects mode,
       non-null elements, TypeScript keys, table and function export
       names, and roles`. ~10m
-- [ ] 3.6 A declaration that was never a module export carries no export
+- [x] 3.6 A declaration that was never a module export carries no export
       name. Start from `cli/test/manifest-payload.test.ts > carries no
       export name for a trigger-synthesized function`. ~6m
-- [ ] 3.3 Assemble the payload with both format versions and the
+- [x] 3.3 Assemble the payload with both format versions and the
       snapshot's stable serialization. Start from
       `cli/test/manifest-payload.test.ts > serializes with the
       snapshot's own stable serialization`. ~8m
-- [ ] 3.4 `[design]` The relaxation scope. *Settled:* the three
+- [x] 3.4 `[design]` The relaxation scope. *Settled:* the three
       migration-authoring fields become optional and each command that
       needs one refuses by name; `entry` is **not** relaxed — a
       consuming repository still reads declarations, and the fact that
@@ -227,7 +229,7 @@ Files: `packages/cli/src/loader.ts`, `packages/cli/src/config.ts`,
       question of where that module's path comes from, which group 5
       owns. Start from `cli/test/config.test.ts > accepts a
       configuration without the migration-authoring fields`. ~6m
-- [ ] 3.5 Per-command coded refusal, raised before any work. Whether it
+- [x] 3.5 Per-command coded refusal, raised before any work. Whether it
       reuses the existing config diagnostic or takes a code of its own
       follows the repository's existing habit — read how other codes
       treat a per-field failure before choosing, and record the basis in
