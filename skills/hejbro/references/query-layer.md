@@ -432,6 +432,17 @@ table by table, not as a blanket rule over every projected field. The same
 is always non-null-exact regardless of joins: a mutation statement has no
 join grammar at all, so there is nothing for it to leave uncertain.
 
+Two tables with identical column declarations are the same type to
+TypeScript — a declared table *is* its own column map, and nothing else
+distinguishes one from another at the type level. Left-joining one of
+them widens a column projected from the other, structurally-identical
+table too (and a table left-joined against itself is the same case: the
+statement's own source table now also counts as "left-joined"). This
+only ever widens — a column that should narrow stays `| null` instead —
+never the reverse, but it is worth knowing the reason a `| null` you
+expected to be gone is still there: two tables happening to share a
+column shape, not a bug.
+
 An aggregate (`count`/`sum`/`avg`/`min`/`max`) or a window function
 (`over(lag(...), ...)` and friends) stays nullable regardless of any join
 — an aggregate over zero rows and a window function at a partition
@@ -441,8 +452,12 @@ declared nullability would be a lie. A handful of positions stay at the
 pre-narrowing, always-nullable behavior because they do not see the
 surrounding statement's own joins at all: a nested read
 (`jsonArrayFrom`/`jsonObjectFrom`), a CTE's own body, a view's own body,
-and `related()`'s sugar all read their own declared columns through a
-fresh, independent projection.
+`related()`'s sugar, and a hand-written use of the `SelectResult`
+row-type utility itself (importable from `hejbro`, re-exported from
+`@hejbro/query`) — writing `SelectResult<Projection>` by hand to spell
+out a row type names only the projection, not the statement it came
+from, so that position cannot know which tables were left-joined either
+and stays widened, same as the others.
 
 This inference is driven by a small amount of internal plumbing that
 tracks which tables a statement has left-joined: `leftJoinedBrand`,

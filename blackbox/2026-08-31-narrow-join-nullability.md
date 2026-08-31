@@ -17,10 +17,12 @@ Refs:
 - packages/query/test/types/chain-types.test.ts @ blob dc79eac2c0dfd691269f40e6960b01f41fe2ab4b
 - packages/query/test/types/returning.test.ts @ blob eaa73ee6357ed296f95bfd09b0db218abfdd28ca
 - packages/query/test/types/select-result.test.ts @ blob 1c5573c33caec441533a63e4cc9e49bea008f4c9
-- skills/hejbro/references/query-layer.md @ blob 5fd85f2c19c8d5cb5d6451cf96a64b4445ca64a2
+- skills/hejbro/references/query-layer.md @ blob 692ea56c76b344554a24214c8c310c7984481651
 
 (Taken from `git hash-object <path>` on the frozen closing tree at
-`617c60d`, before the blackbox commit. The three
+`617c60d`, before the blackbox commit; the query-layer reference was
+re-pinned once more after the G4 review's two documentation
+completions landed. The three
 `openspec/changes/narrow-join-nullability/` paths will move when this
 change archives; the pins are to be re-pathed in the archive PR, blobs
 unchanged. Pins die three ways — squash preserves them, an archive
