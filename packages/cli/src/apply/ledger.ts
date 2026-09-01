@@ -165,3 +165,30 @@ export const recordAppliedMigration = async (
 		[filename],
 	);
 };
+
+/**
+ * [group 5, task 5.3] Empties the ledger -- every row, not a selected
+ * subset: `reset` drops every declared object, so nothing this tool
+ * applied is still standing afterward, and the next `migrate` run SHALL
+ * apply the chain from its beginning (spec). There is no partial state
+ * to express, so there is nothing to select.
+ *
+ * Deletes rows, never the table: `reset` destroys only what the
+ * declarations describe (spec, "A reset destroys only what the
+ * declarations manage"), and the ledger table is hejbro's own
+ * bookkeeping, not a declared object -- the same reasoning that keeps
+ * `reset` off a project's unmanaged inventory keeps it off this table
+ * too. A ledger that was never bootstrapped (42P01) is already empty of
+ * rows in every sense that matters here, so this is a silent no-op for
+ * it, the same leniency `readLedger` already extends to an absent table.
+ */
+export const clearLedger = async (session: DriverSession): Promise<void> => {
+	try {
+		await exec(session, `delete from ${QUALIFIED_LEDGER_TABLE}`);
+	} catch (error) {
+		if (isUndefinedTableError(error)) {
+			return;
+		}
+		throw error;
+	}
+};

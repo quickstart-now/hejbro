@@ -2,6 +2,7 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import {
 	bootstrapLedger,
+	clearLedger,
 	readLedger,
 	recordAppliedMigration,
 } from "../src/apply/ledger";
@@ -71,6 +72,16 @@ const makeInMemoryLedgerSession = (): { readonly session: DriverSession } => {
 					);
 				}
 				return rows.map((filename) => ({ filename }));
+			}
+			if (sql.startsWith("delete from")) {
+				if (!bootstrapped) {
+					throw Object.assign(
+						new Error('relation "hejbro.migration_ledger" does not exist'),
+						{ code: UNDEFINED_TABLE },
+					);
+				}
+				rows.length = 0;
+				return [];
 			}
 			throw new Error(
 				`unexpected statement sent to the fake ledger: ${compiled.sql}`,
@@ -163,5 +174,28 @@ describe("recordAppliedMigration / 1.4", () => {
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.sql.toLowerCase()).toMatch(/^insert into/);
 		expect(calls[0]?.params).toEqual(["0001_adopt.sql"]);
+	});
+});
+
+describe("clearLedger / 5.3", () => {
+	it("clears every row in the ledger", async () => {
+		const { session } = makeInMemoryLedgerSession();
+		await bootstrapLedger(session);
+		await recordAppliedMigration(session, "0001_init.sql");
+		await recordAppliedMigration(session, "0002_add_column.sql");
+
+		await clearLedger(session);
+		const state = await readLedger(session);
+
+		// Rows are gone, but the table itself still is one -- reset (group
+		// 5) destroys only what the declarations describe, and this table
+		// is hejbro's own bookkeeping, not a declared object.
+		expect(state).toEqual({ exists: true, applied: [] });
+	});
+
+	it("does nothing when the ledger was never bootstrapped", async () => {
+		const session = makeUnbootstrappedSession();
+
+		await expect(clearLedger(session)).resolves.toBeUndefined();
 	});
 });

@@ -238,20 +238,34 @@ the core hard gate does not fire.
 ## 5. `reset`
 
 Files: `packages/cli/src/apply/reset.ts`,
-`packages/cli/test/apply-reset.test.ts`.
+`packages/cli/test/apply-reset.test.ts`, and `apply/ledger.ts` with its
+test — group 1's files, reopened here because clearing the ledger has no
+home anywhere else and the groups run one at a time.
 
-- [ ] 5.1 (~9m) [design] What reset drops: only what hejbro manages.
+Reset empties the ledger's rows and leaves its table standing: the table
+lives in hejbro's own schema and no declaration describes it, so the
+same requirement that stops reset from dropping a user's unmanaged table
+stops it from dropping this one.
+
+- [x] 5.1 (~9m) [design] What reset drops: only what hejbro manages.
       `check` already reports unmanaged objects as inventory on the
       stated grounds that a project may legitimately leave them, so a
       reset that dropped them would destroy what this tool says in its
       own specification that it does not own. Red:
       `apply-reset.test.ts` — "drops only declared objects", "leaves an
       unmanaged table standing".
-- [ ] 5.2 (~9m) [design] The confirmation it demands and the refusal
-      when it is absent, following `generate`'s idiom of confirming a
-      destructive change by the dropped object's name. Red: same file —
-      "refuses without confirmation, naming what it would drop".
-- [ ] 5.3 (~8m) The ledger after a reset: rows for the dropped
+- [x] 5.2 (~9m) [design] The confirmation it demands and the refusal
+      when it is absent. This task's first draft said to follow
+      `generate`'s idiom of confirming by the dropped object's name;
+      measurement narrowed that — `generate`'s drop confirmation exists
+      for rename-versus-drop ambiguity, not for destruction in general,
+      and naming every object is impractical here. What carries over is
+      the principle, not the flag: the user types something they could
+      not have typed by reflex, and the refusal names what would be
+      dropped and exactly what to type. One confirmation is enough; the
+      enumerating is the refusal's job. Red: same file — "refuses
+      without confirmation, naming what it would drop".
+- [x] 5.3 (~8m) The ledger after a reset: rows for the dropped
       migrations go, and the run that follows re-applies from the start.
       Red: same file — "a reset empties the ledger for what it dropped".
 
