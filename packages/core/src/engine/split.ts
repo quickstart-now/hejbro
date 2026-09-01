@@ -4,8 +4,8 @@ import type { JsonValue } from "../snapshot/stable-json";
 
 /**
  * [task 13.1, #625] `value` narrowed to a plain JSON object, or `null` for
- * anything else (a JSON scalar, an array, or `null` itself) -- the one
- * "is this a plain object" test this file needed three times
+ * anything else (a JSON scalar, an array, `null`, or `undefined` itself)
+ * -- the one "is this a plain object" test this file needed three times
  * (`enumValuesOf`, `isMatchingLiteral`, `referencesAnyLiteral`), each
  * previously writing out the same three-way check
  * (`null`/`typeof !== "object"`/`Array.isArray`) inline and then casting
@@ -15,16 +15,24 @@ import type { JsonValue } from "../snapshot/stable-json";
  * inline in the first place (the cast site and the check site stayed
  * next to each other on purpose) -- a narrowing return removes the cast
  * along with the check, at every call site at once.
+ *
+ * [task 13.5, #625] Still a three-way test, not four, even though the
+ * parameter accepts `undefined` (a caller reads an optional record key
+ * under `noUncheckedIndexedAccess` and hands the result straight through)
+ * -- a fourth, explicit `value === undefined` arm would only restate what
+ * `typeof value !== "object"` already covers: `typeof undefined` is the
+ * string `"undefined"`, never `"object"`, so that branch already returns
+ * `null` for it. Writing the redundant arm out anyway was this task's own
+ * false start, measured and reverted rather than kept for symmetry with
+ * the type signature -- a fourth guard that duplicates a fact the second
+ * one already states is not "the same test done four ways" becoming
+ * clearer by being spelled out; it is one more term for a reader (and for
+ * this file's own complexity walker) to confirm changes nothing.
  */
 const asJsonRecord = (
 	value: JsonValue | null | undefined,
 ): Record<string, JsonValue> | null => {
-	if (
-		value === null ||
-		value === undefined ||
-		typeof value !== "object" ||
-		Array.isArray(value)
-	) {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) {
 		return null;
 	}
 	return value as Record<string, JsonValue>;

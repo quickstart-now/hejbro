@@ -702,6 +702,41 @@ Files: `packages/core/src/engine/split.ts`,
       Red: `check-crap` lists `addedEnumValues` at 7.03; green: the gate
       exits 0 with an empty list, which is this group's actual finish
       line.
+- [x] 13.5 (~6m) [design] `asJsonRecord`, the helper 13.1 extracted, is
+      now the highest value in the whole scan at **exactly 5.00**
+      (complexity 5, coverage 100%). It passes only because the gate's
+      comparison is strict, and only while its coverage stays perfect —
+      the next uncovered branch added to it breaks a gate its author
+      never touched. Group 13 wrote "aim below the line, not at it" and
+      then left its own helper on the line; 13.4 had just measured what
+      that costs (5.01, a hundredth over). The finish line for this group
+      is therefore not "exits 0 today" but "exits 0 with room": green
+      that survives coverage jitter (lead, #625).
+      Only complexity moves this — coverage is already 100%. The guard is
+      one three-term test (`null`, `typeof`, `Array.isArray`), so the
+      shape to weigh is whether a single expression can say "a plain
+      JSON object" without saying it three ways.
+      **The task carries its own decision rule** (lead, #625), settled by
+      whoever opens the code, with no round trip: *does a natural
+      reduction exist?* If the function holds a real simplification — a
+      duplicated decision point, a branch that need not be there, a
+      change that makes the code better and smaller — take it, and the
+      gate's maximum drops below the line. If it is an atomic predicate
+      and the only available reduction is splitting it for the metric's
+      sake, **leave it** and write the position down here: accepted
+      deliberately, because trading a clear guard for an obscure one to
+      move a number is gaming the metric, and a gate defeated that way
+      stops measuring what it was put there to measure — this change's
+      own subject, planted in the code instead of found in it.
+      Either branch is a finished task. What is not optional is that the
+      decision and its reason are recorded, which is the whole point of
+      the ruling: the failure mode being prevented is a future reader
+      meeting this at 5.00 with no note saying anyone had looked.
+      Red: `check-crap` reports `asJsonRecord` at 5.00 as the scan's
+      maximum; green (branch one): the maximum is below 5 and the suite
+      is unchanged (97 files, 1449 tests); green (branch two): the
+      maximum is still 5.00 and this task says why that was the right
+      answer.
 
 ## Verification
 
