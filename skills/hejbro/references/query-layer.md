@@ -764,6 +764,13 @@ register a context provider (db()'s "context" option).` `handle.driver`
 (the schema-assertion path) is unaffected — it was never one of the
 execution surfaces this promise covers.
 
+Naming a context isn't enough on its own: the same mandatory-context
+declaration also fails a context whose rendering — its own contribution,
+or the default rendering — applies zero statements, with
+`context-rendering-empty` instead of `context-required`. That refusal
+can only happen after the rendering has run, inside the transaction the
+query layer already opened; see the error table below.
+
 **The query layer names no platform's statement form.** `@hejbro/query`
 knows only "role, then settings" as its own default; a platform whose
 context mechanism looks different expresses that entirely through its
@@ -1042,7 +1049,7 @@ concrete next step.
 |---|---|
 | `query-execution-failed` | The driver rejected an executed statement (e.g. a constraint violation) — the message leads with the driver's own message (a cause with no usable message is named as such), followed by the parameterized SQL text. The query layer itself never writes the statement's parameter *values* onto the error — the SQL stays parameterized; text the database echoes inside its own error message or fields is the database's report, carried faithfully. |
 | `result-conversion-failed` | A returned column's value couldn't convert to its declared type (an unconvertible/missing column, an array arrival-shape mismatch, or a `NULL` element under `.notNullElements()`). |
-| `driver-missing-capability` | An operation (a transaction, a `db.as` context) needs a capability the active driver doesn't declare `true` — a capability explicitly declared `false` fails exactly like an undeclared one, never attempted. The capability set itself is fixed and exhaustive: a driver's own declaration must name every one of them, and omitting one, or naming one outside the set, fails to type-check rather than defaulting silently — this is a compile-time guarantee, checked before this runtime error's own path is ever reached. |
+| `driver-missing-capability` | An operation — `db.execute`, `db.select`, `db.insert`, `db.update`, `db.deleteFrom`, `db.with`, `db.fn`, or `transaction` — needs a capability the active driver doesn't declare `true`. Every one of those names the caller's own surface except `transaction`, which stays one shared token on purpose: the driver contract requires a driver's own thrower to raise that identical value for its own member. A capability explicitly declared `false` fails exactly like an undeclared one, never attempted. The capability set itself is fixed and exhaustive: a driver's own declaration must name every one of them, and omitting one, or naming one outside the set, fails to type-check rather than defaulting silently — this is a compile-time guarantee, checked before this runtime error's own path is ever reached. |
 | `nested-transaction-unsupported` | The db handle's `transaction()` was called again from inside its own already-open callback — nest with `tx.transaction(...)` instead. |
 | `concurrent-nested-transaction` | A second nested transaction was started on the same `tx` while the first was still in flight — await one before starting the next. |
 | `savepoint-release-failed` | A nested transaction's callback returned normally, but its `RELEASE SAVEPOINT` failed (a statement error was swallowed inside the callback instead of rethrown, leaving the subtransaction aborted) — the release failure is on `cause`. |
@@ -1050,6 +1057,7 @@ concrete next step.
 | `undeclared-role` | `db.as({ role, ... })`'s role isn't in the declared whitelist. |
 | `context-role-missing` | A context named no role, and the active driver hasn't declared its platform role-less — omitting `role` is not a whitelist bypass; it is admitted only on a driver that opted in (`Driver.roleLessPlatform`). |
 | `context-required` | The active driver declared a context mandatory, and an execution surface (`select`/`insert`/`update`/`deleteFrom`/`with`/`fn`/`execute`/`transaction`) was reached with none resolved — before anything was sent. `handle.driver` (the schema-assertion path) is unaffected. |
+| `context-rendering-empty` | The active driver declared a context mandatory, and the rendering in effect for it — its own contribution, or the default rendering — produced no statement for the context at hand; the transaction the query layer had already opened carries none. Fires after the rendering runs, from the number of statements it returned alone, never from reading them. The `operation` field names the surface the caller invoked, on the scoped path and the provider path alike. |
 | `claims-subject-missing` | `@hejbro/supabase`'s `asUser(claims)` was called without a `sub` claim. |
 | `nile-context-value-invalid` | `@hejbro/nile`'s rendering refused a tenant/user value that isn't a canonical UUID, before producing any statement — see `references/nile-preset.md`. |
 | `nile-context-unsupported` | `@hejbro/nile`'s rendering refused a context naming a role, or carrying a setting outside its own tenant/user keys — this platform has neither — before producing any statement. |
@@ -1074,6 +1082,12 @@ const yourDriver: Pick<Driver, "transaction"> = {
 };
 ```
 
+Pass your own member's name as `operation` — `"transaction"` above,
+because this is the driver's own `transaction` member — the same rule
+the query layer follows for its own refusals, so a driver's message and
+the query layer's stay one vocabulary rather than two that could drift
+apart.
+
 Contributing how your platform takes a context is the same shape: three
 optional members on `Driver`, all plain data, none of them capabilities.
 
@@ -1086,7 +1100,8 @@ optional members on `Driver`, all plain data, none of them capabilities.
 - `contextRequired?: true` — declare this when running without a context
   must never be allowed (a fail-open platform is the motivating case);
   every execution surface then refuses uncontexted with
-  `context-required`.
+  `context-required`, and a context whose rendering applies nothing
+  refuses too, with `context-rendering-empty`.
 
 `@hejbro/query`'s public entry exports the default rendering itself —
 `defaultContextRendering` (value) and `ContextRendering` (type) — so a
@@ -1103,11 +1118,14 @@ const yourRendering: ContextRendering = (context) => [
 ];
 ```
 
-Two boundary cases worth knowing before they surprise you: an empty
-rendering applies zero statements — a driver that returns none for a
-context sends none. And `db.as({})` satisfies a `contextRequired`
-driver: the requirement is that an execution *has* a context, not that
-the context carries anything.
+Two cases that used to pass silently now refuse, on a `contextRequired`
+driver: a contributed rendering that returns zero statements, and a
+default-rendered context that carries neither role nor setting (`db.as(
+{})` included) — both fail with `context-rendering-empty`, because the
+requirement is that an execution *applies* a context, not merely that it
+names one. On a driver that does **not** declare a context mandatory,
+neither case changes: an empty rendering still applies zero statements,
+and nothing is refused.
 
 ## Where this is enforced
 

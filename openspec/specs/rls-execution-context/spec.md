@@ -75,6 +75,12 @@ before any statement is sent, with an explicit, coded
 and never silently applied as "whatever role the connection already
 holds".
 
+A context this check admits can still be refused downstream. Where the
+active driver also declares a context mandatory and the rendering in
+effect produces no statement for that context, the mandatory-context
+requirement refuses the execution: admission by this check is not
+admission by every check.
+
 #### Scenario: An undeclared role is rejected before any send
 - **WHEN** `db.as(context)` is called with a role absent from every one
   of the four sources
@@ -531,6 +537,47 @@ handle's non-execution members — its `driver`, and the schema assertion
 that takes one — SHALL be unaffected, exactly as they are unaffected by a
 registered provider.
 
+That satisfaction SHALL NOT be vacuous. A context satisfies the
+declaration only where the rendering in effect for that driver — its own
+contribution, or the default rendering — produces at least one statement
+for it. Where the rendering produces none, the context applied nothing,
+and the execution SHALL be refused with an explicit coded error,
+`context-rendering-empty`, after the rendering has run and before any
+caller-supplied statement is sent; the wrapping transaction the query
+layer had already opened carries none. The query layer SHALL reach that
+conclusion from the number of statements the rendering returned, never by
+inspecting or rewriting them.
+
+The refusal belongs to the declaration and to nothing else. On a driver
+that makes no mandatory-context declaration, a context whose rendering
+produces no statement SHALL still be applied as given — that is, nothing
+is sent — because an execution on that driver was already permitted to
+run with no context at all, so refusing it would withdraw a permitted
+execution without narrowing anything.
+
+Every refusal this requirement raises SHALL name the surface the caller
+invoked — the statement execution, the chain member, the declared-
+function call, or the transaction API — spelled as the caller spells it,
+the transaction API excepted. That covers both refusals this
+requirement raises: the one for an execution that carries no context,
+raised on the plain, provider-less handle — the only place it can
+structurally fire — and the one for a context whose rendering produced
+nothing, raised on the explicitly scoped path and the provider path
+alike. It SHALL NOT name a
+construction option, and one name SHALL NOT stand in for several
+surfaces, so that a caller can map the error to the call site that
+produced it. Each chain member is its own surface; the declared-function
+API is one surface and names its one token, `db.fn`, whichever
+declared function was called. The transaction API is the one exception, and it is
+deliberate: its refusal keeps the token `transaction`, the spelling the
+driver contract already shares across packages, because a driver outside
+the query layer raises the same failure with that token and the contract
+requires the two to match. Refusing alike means refusing with the same
+code, from the same fail-closed timing — the identity `diagnostics`
+makes machine-readable, message prose being free to move; the operation
+a refusal names is the caller's own surface and therefore differs
+between them.
+
 This declaration exists because a platform can be fail-open without a
 context: where a missing context widens visibility instead of narrowing
 it, an unapplied context is a data-exposure outcome, not a no-op, and the
@@ -565,6 +612,37 @@ caller's behalf.
   such declaration
 - **THEN** it runs exactly as it does today, with no context statement
   and no wrapping transaction
+
+#### Scenario: A context whose rendering produces nothing is refused
+- **WHEN** an execution runs under a context on a driver that declares a
+  context mandatory, and the rendering in effect for that driver returns
+  no statement for that context
+- **THEN** the execution fails with the coded error
+  `context-rendering-empty`, no caller-supplied statement is sent, and
+  the transaction the query layer had opened carries none
+
+#### Scenario: A context carrying nothing does not satisfy the declaration
+- **WHEN** an execution names a context that carries neither a role nor
+  a setting, on a driver that declares both a mandatory context and a
+  role-less platform and whose rendering in effect returns no statement
+  for it — a contributed rendering may instead refuse such a context
+  earlier, with its own code
+- **THEN** it is refused with that same coded error, rather than
+  proceeding with no context statement at all
+
+#### Scenario: A driver that requires no context keeps applying nothing
+- **WHEN** an execution runs under a context whose rendering produces no
+  statement, on a driver that makes no mandatory-context declaration
+- **THEN** it proceeds exactly as it does today, no context statement is
+  sent, and no refusal is raised
+
+#### Scenario: A refusal names the surface the caller invoked
+- **WHEN** a statement execution, a `select` chain, an `insert` chain, a
+  declared-function call, and a transaction callback are each refused
+  uncontexted on such a handle
+- **THEN** each error names the surface its own caller invoked, the two
+  chain members do not share one name, and none of them names a
+  construction option or a single name standing in for several surfaces
 
 ### Requirement: The Nile preset renders a tenant context
 The Nile preset SHALL provide a context builder that names a tenant, and

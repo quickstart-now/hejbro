@@ -247,7 +247,7 @@ export const buildTx = (
 	tables: Declarations["tables"],
 	counter: SavepointCounter = { next: 1 },
 ): Tx => ({
-	...createChainApi((send) => send(session), tables),
+	...createChainApi(() => (send) => send(session), tables),
 	// executeOn's own runtime return is always the plain DriverRow shape --
 	// this cast is ExecuteResult's compile-time-only narrowing of that same
 	// value, never a distinct runtime reshape (same reasoning as db.ts's own

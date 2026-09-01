@@ -389,10 +389,12 @@ describe("buildHttpDriver + db.as(context) still refused with missing-capability
 			// hardcoded defense), so those two fields alone can't tell the
 			// query layer's own gate apart from the driver's redundant one.
 			// `operation` only ever comes from the query layer's own
-			// assertCapability call site (context.ts's `scopedRun("db.as",
-			// ...)`) -- the driver's own throwMissingCapability call names
-			// "transaction" instead (see http-session.test.ts).
-			operation: "db.as",
+			// assertCapability call site (context.ts's `scopedRun`) -- the
+			// scoped path names the caller's own surface (`db.execute` here,
+			// since the caller invoked `.execute()`; harden-context-boundary
+			// task 1.6's per-verb naming); the driver's own thrower still
+			// names "transaction" instead (see http-session.test.ts).
+			operation: "db.execute",
 		});
 
 		// nothing reached the fake sql client at all -- the query layer's
