@@ -288,18 +288,40 @@ stops it from dropping this one.
 ## 6. Raising a database from a snapshot
 
 Files: `packages/cli/src/apply/raise.ts`,
-`packages/cli/test/apply-raise.test.ts`.
+`packages/cli/test/apply-raise.test.ts`, and `apply/execute.ts` with its
+test — group 3's, reopened here because raising reuses the apply path
+and that path names `migrate` in its failure advice. A second caller is
+what turned a hardcoded command name into a defect; the fix is to take
+it as a required argument, not a defaulted one, so a new caller is asked
+what to advise rather than inheriting the wrong answer. The names
+themselves stay unwritten here — 7.1 settles them, and a name written
+down early is a string pin waiting to break.
 
-- [ ] 6.1 (~9m) [design] The input contract: a snapshot SQL file and an
+- [x] 6.1 (~9m) [design] The input contract: a snapshot SQL file and an
       empty database. Generalized on purpose — that a consumer
       repository's vendored file is the usual source is a convention and
       a config default, not a coupling. Red: `apply-raise.test.ts` —
       "applies a snapshot file to an empty database".
-- [ ] 6.2 (~8m) The refusal when the database is not empty. Raising over
+- [x] 6.2 (~8m) **Two layers, and a third case that is not a gap.**
+      The ledger answers cheaply for a database hejbro has applied to;
+      it cannot answer for one holding objects with no ledger, because
+      nothing here reads the catalog. The transaction covers that: the
+      run is one transaction, so an object the snapshot would recreate
+      collides, nothing is left behind, and the server's "already
+      exists" is translated into this command's own words. Both layers
+      are tested, the second with a **colliding** object.
+      An object that does *not* collide — a table of someone else's that
+      this snapshot never creates — passes, and that is the contract
+      rather than a hole in it: the requirement refuses a database that
+      holds *declared* objects, and an object no declaration describes
+      is one this product elsewhere reports as inventory and leaves
+      alone. Do not add a catalog scan to chase it; that would read the
+      shape of a database to decide, which is the thing this change does
+      not do. The refusal when the database is not empty. Raising over
       an existing schema is not this command's job and failing halfway
       through someone's data is the worst way to say so. Red: same file
       — "refuses a database that already has declared objects".
-- [ ] 6.3 (~8m) What the ledger says about a raised database — the
+- [x] 6.3 (~8m) What the ledger says about a raised database — the
       baseline-shaped question: the database exists, and no migration
       was applied to make it. Red: same file — "records how the database
       was raised".
@@ -453,9 +475,16 @@ strings) moved to group 4, which owns that file.
       `generate-verify-workflow.md`'s section on a partway failure keeps
       its first two clauses and loses its conclusion;
       `brownfield-adoption.md` stops calling registration "your
-      pipeline's mechanism". `README.md`'s command list is deliberately
-      untouched — it is illustrative and already omits commands, so it
-      never claimed to be exhaustive. Files: those three.
+      pipeline's mechanism". Two more, both from the split: `generate`
+      writes **two** migrations where Postgres's transaction semantics
+      require a boundary, which is user-facing behaviour the skill has
+      to state; and `@hejbro/core` gains one exported entry point that
+      returns a run's migrations, which the skill documents because a
+      public surface this change adds and the skill does not describe is
+      a broken user contract rather than a docs nit. `README.md`'s
+      command list is deliberately untouched — it is illustrative and
+      already omits commands, so it never claimed to be exhaustive.
+      Files: those three skill files.
 - [ ] 10.4 (~7m) Changeset (`minor`), task-time rows, README badges.
       Files: `.changeset/*.md`, `openspec/task-times.csv`, `README.md`.
 - [ ] 10.5 (~9m) The `blackbox/` entry (D89). What the owner asked for,

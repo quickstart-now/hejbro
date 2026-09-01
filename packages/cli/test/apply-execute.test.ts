@@ -60,11 +60,18 @@ const okMigration: Migration = {
 	sql: 'create table "app"."t" (id integer);',
 };
 
+// `applyMigration` has no production caller yet -- group 7 wires
+// `migrate`, group 6 wires `raise` -- so `nextCommand` has no "the" real
+// value here either; a fixture stands in for whichever command a real
+// caller passes (required, never defaulted -- see execute.ts's own doc
+// comment on why).
+const NEXT_COMMAND = "hejbro migrate";
+
 describe("applyMigration / 3.1", () => {
 	it("sends the migration as one parameterless statement", async () => {
 		const { driver, calls } = makeFakeDriver();
 
-		await applyMigration(driver, okMigration);
+		await applyMigration(driver, okMigration, NEXT_COMMAND);
 
 		const migrationCall = calls.find((call) => call.sql === okMigration.sql);
 		expect(migrationCall).toBeDefined();
@@ -74,7 +81,7 @@ describe("applyMigration / 3.1", () => {
 	it("writes the ledger row inside the same transaction", async () => {
 		const { driver, calls, sessionCount } = makeFakeDriver();
 
-		await applyMigration(driver, okMigration);
+		await applyMigration(driver, okMigration, NEXT_COMMAND);
 
 		// Exactly one transaction() call -- the lock, the migration, and the
 		// ledger row all went through the one session it hands the callback.
@@ -102,7 +109,7 @@ describe("applyMigration / 3.2", () => {
 		});
 
 		await expect(
-			applyMigration(driver, failingMigration),
+			applyMigration(driver, failingMigration, NEXT_COMMAND),
 		).rejects.toMatchObject({ code: "migrate-failed" });
 	});
 
@@ -114,7 +121,9 @@ describe("applyMigration / 3.2", () => {
 			}),
 		});
 
-		await expect(applyMigration(driver, failingMigration)).rejects.toThrow();
+		await expect(
+			applyMigration(driver, failingMigration, NEXT_COMMAND),
+		).rejects.toThrow();
 
 		const ledgerCall = calls.find((call) =>
 			call.sql.toLowerCase().includes("insert into"),
@@ -134,7 +143,7 @@ describe("applyMigration / 3.3", () => {
 		});
 
 		try {
-			await applyMigration(driver, migration);
+			await applyMigration(driver, migration, NEXT_COMMAND);
 			throw new Error("expected applyMigration to reject");
 		} catch (error) {
 			const message = (error as Error).message;
@@ -143,6 +152,7 @@ describe("applyMigration / 3.3", () => {
 			expect(message).toContain("42P07");
 			expect(message).toContain('relation "t2_a" already exists');
 			expect(message).toMatch(/Next:/);
+			expect(message).toContain(NEXT_COMMAND);
 		}
 	});
 
@@ -157,7 +167,7 @@ describe("applyMigration / 3.3", () => {
 		});
 
 		try {
-			await applyMigration(driver, migration);
+			await applyMigration(driver, migration, NEXT_COMMAND);
 			throw new Error("expected applyMigration to reject");
 		} catch (error) {
 			const message = (error as Error).message;
@@ -174,7 +184,7 @@ describe("applyMigration / 3.4", () => {
 	it("takes a transaction-scoped lock, inside the same transaction as the migration and before it", async () => {
 		const { driver, calls, sessionCount } = makeFakeDriver();
 
-		await applyMigration(driver, okMigration);
+		await applyMigration(driver, okMigration, NEXT_COMMAND);
 
 		expect(sessionCount.count).toBe(1);
 		const lockIndex = calls.findIndex((call) =>
@@ -196,7 +206,9 @@ describe("applyMigration / 3.5", () => {
 		};
 		const { driver, calls } = makeFakeDriver();
 
-		await expect(applyMigration(driver, migration)).rejects.toMatchObject({
+		await expect(
+			applyMigration(driver, migration, NEXT_COMMAND),
+		).rejects.toMatchObject({
 			code: "migrate-transaction-control",
 		});
 		// Refused before anything was sent -- no transaction was even opened.
@@ -214,7 +226,9 @@ $$ language plpgsql;`,
 		};
 		const { driver } = makeFakeDriver();
 
-		await expect(applyMigration(driver, migration)).resolves.toBeUndefined();
+		await expect(
+			applyMigration(driver, migration, NEXT_COMMAND),
+		).resolves.toBeUndefined();
 	});
 
 	it("ignores begin/commit/rollback that appear only in a `--` comment", async () => {
@@ -224,7 +238,9 @@ $$ language plpgsql;`,
 		};
 		const { driver } = makeFakeDriver();
 
-		await expect(applyMigration(driver, migration)).resolves.toBeUndefined();
+		await expect(
+			applyMigration(driver, migration, NEXT_COMMAND),
+		).resolves.toBeUndefined();
 	});
 
 	it("is not confused by an escaped quote inside a string literal", async () => {
@@ -234,24 +250,34 @@ $$ language plpgsql;`,
 		};
 		const { driver } = makeFakeDriver();
 
-		await expect(applyMigration(driver, migration)).resolves.toBeUndefined();
+		await expect(
+			applyMigration(driver, migration, NEXT_COMMAND),
+		).resolves.toBeUndefined();
 	});
 
 	it("refuses begin and rollback the same way as commit", async () => {
 		const { driver: driverBegin } = makeFakeDriver();
 		await expect(
-			applyMigration(driverBegin, {
-				fileName: "0009_begin.sql",
-				sql: "begin;\ncreate table t (id int);",
-			}),
+			applyMigration(
+				driverBegin,
+				{
+					fileName: "0009_begin.sql",
+					sql: "begin;\ncreate table t (id int);",
+				},
+				NEXT_COMMAND,
+			),
 		).rejects.toMatchObject({ code: "migrate-transaction-control" });
 
 		const { driver: driverRollback } = makeFakeDriver();
 		await expect(
-			applyMigration(driverRollback, {
-				fileName: "0010_rollback.sql",
-				sql: "create table t (id int);\nrollback;",
-			}),
+			applyMigration(
+				driverRollback,
+				{
+					fileName: "0010_rollback.sql",
+					sql: "create table t (id int);\nrollback;",
+				},
+				NEXT_COMMAND,
+			),
 		).rejects.toMatchObject({ code: "migrate-transaction-control" });
 	});
 });

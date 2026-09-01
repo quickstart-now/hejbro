@@ -1,4 +1,4 @@
-import { throwHejbroError } from "@hejbro/core";
+import { hejbroError, throwHejbroError } from "@hejbro/core";
 import type { CompileResult, Driver } from "@hejbro/query";
 import { recordAppliedMigration } from "./ledger";
 
@@ -189,8 +189,17 @@ const assertNoTransactionControl = (migration: Migration): void => {
 /** Postgres's own code for "this transaction refuses to use a value this same transaction just added to an enum type" (PG12+; measured on 17). */
 const UNSAFE_NEW_ENUM_VALUE = "55P04";
 
-/** The database's own `.code`, when the failure carries one as a plain string -- never assumed, since not every failure this module sees originates from a driver (e.g. a bug inside this module itself would throw a bare `Error` with no `.code`). */
-const driverErrorCode = (error: unknown): string | null => {
+/**
+ * The database's own `.code`, when the failure carries one as a plain
+ * string -- never assumed, since not every failure this module sees
+ * originates from a driver (e.g. a bug inside this module itself would
+ * throw a bare `Error` with no `.code`). Exported: [G6, #612] `raise.ts`
+ * reuses this exact classification on `error.cause` (see
+ * {@link throwApplyFailure}'s own doc comment) rather than re-deriving
+ * it, or worse, re-parsing a rendered message for the code this already
+ * read structurally.
+ */
+export const driverErrorCode = (error: unknown): string | null => {
 	if (error === null || typeof error !== "object" || !("code" in error)) {
 		return null;
 	}
@@ -201,8 +210,8 @@ const driverErrorCode = (error: unknown): string | null => {
 	return null;
 };
 
-/** The database's own reason text, never an empty string -- mirrors `check/error-message.ts`'s own `describeDriverError` (not exported there, so re-derived here rather than reaching into that module's private surface; both read the same driver error shape). */
-const driverErrorReason = (error: unknown): string => {
+/** The database's own reason text, never an empty string -- mirrors `check/error-message.ts`'s own `describeDriverError` (not exported there, so re-derived here rather than reaching into that module's private surface; both read the same driver error shape). Exported for the same reason as {@link driverErrorCode}. */
+export const driverErrorReason = (error: unknown): string => {
 	if (error instanceof Error && error.message !== "") {
 		return error.message;
 	}
@@ -213,7 +222,8 @@ const driverErrorReason = (error: unknown): string => {
 	return String(error);
 };
 
-const codeSuffix = (code: string | null): string => {
+/** `" (CODE)"`, or `""` when there is no code -- exported alongside {@link driverErrorCode}/{@link driverErrorReason} so a caller building its own message from `error.cause` renders the code the identical way this module does. */
+export const codeSuffix = (code: string | null): string => {
 	if (code === null) {
 		return "";
 	}
@@ -221,24 +231,54 @@ const codeSuffix = (code: string | null): string => {
 };
 
 /**
- * [design, task 3.3] Names the file, carries the database's own code and
- * message unsummarized, and ends with `Next:`. `55P04` gets its own
- * translation (spec): the file was written before this change's
- * generator started separating an enum-value addition from its use, and
- * the remedy is to regenerate so the split happens.
+ * [design, task 3.3; parameterized for G6, #612] Names the file, carries
+ * the database's own code and message unsummarized, and ends with
+ * `Next:`. `nextCommand` is the exact command a caller should rerun once
+ * the failure above is fixed -- required, not defaulted: `applyMigration`
+ * has no production caller yet (group 7 wires `migrate`, group 6 wires
+ * `raise`), so a default would be a silent channel for the wrong command
+ * name to ship the moment a second caller appears, the same shape of gap
+ * `@hejbro/core`'s public surface just closed in the G4 rework.
+ *
+ * `55P04` gets its own translation (spec): the file was written before
+ * this change's generator started separating an enum-value addition from
+ * its use, and the remedy is to regenerate so the split happens. That is
+ * the ONLY named exception this module's own failure spec (task 3.3)
+ * lists -- an "already exists" failure has no sentence here (owner/lead
+ * review, #612: only `raise` owns one, and it belongs in `raise.ts`, not
+ * folded into this shared, caller-agnostic path), so it stays on the
+ * fully generic branch below like any other unclassified error.
+ *
+ * The thrown error's own `error` argument is attached as `.cause`
+ * (standard `Error` field) on every branch -- not to serve this module's
+ * own two cases, which already read everything they need before
+ * throwing, but so a caller that DOES need to classify the raw failure
+ * further (`raise.ts`, for its own already-exists translation) can do so
+ * structurally, on `error.cause`, rather than by re-parsing this
+ * function's own rendered message text.
  */
-const throwApplyFailure = (fileName: string, error: unknown): never => {
+const throwApplyFailure = (
+	fileName: string,
+	nextCommand: string,
+	error: unknown,
+): never => {
 	const code = driverErrorCode(error);
 	const reason = driverErrorReason(error);
 	if (code === UNSAFE_NEW_ENUM_VALUE) {
-		return throwHejbroError(
-			"migrate-unsafe-new-enum-value",
-			`applying "${fileName}" failed${codeSuffix(code)}: ${reason}. This migration adds a value to an enum type and uses that value in the same transaction -- it was written before this change's generator started separating those statements. Next: regenerate your migrations (the enum change will land in its own migration), then rerun \`hejbro migrate\`.`,
+		throw Object.assign(
+			hejbroError(
+				"migrate-unsafe-new-enum-value",
+				`applying "${fileName}" failed${codeSuffix(code)}: ${reason}. This migration adds a value to an enum type and uses that value in the same transaction -- it was written before this change's generator started separating those statements. Next: regenerate your migrations (the enum change will land in its own migration), then rerun \`${nextCommand}\`.`,
+			),
+			{ cause: error },
 		);
 	}
-	return throwHejbroError(
-		"migrate-failed",
-		`applying "${fileName}" failed${codeSuffix(code)}: ${reason}. Next: fix what the error above describes, then rerun \`hejbro migrate\`.`,
+	throw Object.assign(
+		hejbroError(
+			"migrate-failed",
+			`applying "${fileName}" failed${codeSuffix(code)}: ${reason}. Next: fix what the error above describes, then rerun \`${nextCommand}\`.`,
+		),
+		{ cause: error },
 	);
 };
 
@@ -253,11 +293,15 @@ const throwApplyFailure = (fileName: string, error: unknown): never => {
  * swallows it to translate it -- rollback itself is the driver's
  * guarantee, proved against a real server by group 8's live witness, not
  * by this module); the translation into a coded diagnostic (3.3) happens
- * once, outside the transaction, on whatever escaped it.
+ * once, outside the transaction, on whatever escaped it. `nextCommand`
+ * names the command a caller should rerun once a failure is fixed (G6,
+ * #612) -- passed straight through to {@link throwApplyFailure}, never
+ * assumed.
  */
 export const applyMigration = async (
 	driver: Driver,
 	migration: Migration,
+	nextCommand: string,
 ): Promise<void> => {
 	assertNoTransactionControl(migration);
 	try {
@@ -267,6 +311,6 @@ export const applyMigration = async (
 			await recordAppliedMigration(session, migration.fileName);
 		});
 	} catch (error) {
-		throwApplyFailure(migration.fileName, error);
+		throwApplyFailure(migration.fileName, nextCommand, error);
 	}
 };

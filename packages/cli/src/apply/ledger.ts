@@ -48,12 +48,28 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
  *   alternative. Both are legal shapes; 7.2 picks.
  * - `reset-not-confirmed` (group 5, task 5.2) -- `reset` refused without
  *   the confirmation it requires; names what would have been dropped.
- * - `db-up-not-empty` (group 6, task 6.2) -- refuses raising a snapshot
- *   into a database that already holds declared objects. Prefix is the
- *   placeholder command name `tasks.md`'s own file list uses
- *   (`commands/db-up.ts`) -- the real command name is group 7's
- *   `[design]` (7.1, proposal's `⟦DESIGN⟧`); this code's prefix moves
- *   with whatever 7.1 settles on.
+ * - `raise-not-empty` (group 6, task 6.2) -- `raise` refuses a database
+ *   that already holds declared objects (spec). Two layers report the
+ *   identical fact under this one code, discovered two different ways:
+ *   (1) a cheap precheck, before the apply transaction ever opens, when
+ *   the ledger already records at least one applied migration; (2) from
+ *   inside that same transaction, when the ledger could not have known --
+ *   a database with a colliding object but no ledger row (set up by
+ *   another tool, or by hand) -- surfaced as the server's own already-
+ *   exists failure (Postgres's `duplicate_*` family, class 42),
+ *   translated rather than left as a raw driver dump. This translation is
+ *   `raise`-owned, not shared with `migrate` (owner/lead review, #612):
+ *   the same server code means a different next step by caller (`raise`:
+ *   "point at an empty database"; `migrate`: investigate why the ledger
+ *   and the database disagree), and only `raise` has a spec sentence to
+ *   translate it into -- `migrate`'s own already-exists failures stay on
+ *   `execute.ts`'s fully generic `migrate-failed` path, same as any other
+ *   unclassified error, until (if ever) a future group's own delta text
+ *   earns that translation its own place. Prefix is `apply/raise.ts`'s
+ *   own module name, not the placeholder command name `tasks.md`'s file
+ *   list uses (`commands/db-up.ts`) -- the real command name is still
+ *   group 7's `[design]` (7.1, proposal's `⟦DESIGN⟧`); this code's prefix
+ *   moves with whatever 7.1 settles on, same as originally noted here.
  * - No code for "a second runner waits" (DD) -- waiting is not a
  *   failure. Task 7.4 names "a lock held by another runner" only as "a
  *   candidate" for its own exit-code answer, not a settled one; no code
