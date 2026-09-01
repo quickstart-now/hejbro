@@ -1829,16 +1829,30 @@ baseline to remove from regardless of header shape — the archive tool's
 own dry-run output never lists a removal for either, before or after
 this fix.
 
-**Fix applied here, not deferred to the archive step**: both headers
-corrected in this change's own delta files
-(`cli-commands/spec.md`/`query-type-inference/spec.md`), each carrying
-a one-line note explaining why. This makes the manual-removal
-contingency unnecessary — `openspec archive add-polyrepo-sync -y` now
-removes both on its own — but the archiver should still **read the
-totals line before confirming**: expect `- 2` (not `- 0`), and expect
+**Fix applied at the source, not a manual archive-time step**: the root
+cause is a delta-format mismatch (the tool's own REMOVED-matching
+respects `### Requirement: <title>`, not `### Removed: <title>`), and
+where the tool has a format it respects, the delta is corrected to that
+format rather than a person doing by hand what the CLI already does —
+both headers corrected in this change's own delta files
+(`cli-commands/spec.md`/`query-type-inference/spec.md`, title text
+unchanged), each carrying a one-line note explaining why. Confirmed by
+a real dry run, not assumed: `openspec archive add-polyrepo-sync -y`
+in an isolated worktree, reverted after, reported `- 2 removed`, and a
+grep of the resulting rollup specs confirmed zero remaining hits for
 `cli-commands`'s own "The database driver is an optional dependency"
-and `query-type-inference`'s own "No generated type artifacts" to be
-absent from `openspec/specs/` afterward. If either check fails, stop
-before committing the archive — something about this tool's own
-matching changed since this note was written, and that is worth a new
-finding, not a silent workaround.
+and `query-type-inference`'s own "No generated type artifacts".
+
+**Before the real archive, re-run this exact check** — this is a
+confirmation of a fix already made, not a manual removal to perform:
+1. `openspec validate add-polyrepo-sync --strict` passes.
+2. `openspec archive add-polyrepo-sync -y` reports `- 2` in its totals
+   line, not `- 0`.
+3. `grep -rn "The database driver is an optional dependency"
+   openspec/specs/cli-commands/spec.md` and `grep -rn "No generated
+   type artifacts" openspec/specs/query-type-inference/spec.md` both
+   return nothing.
+
+If any of the three fails, stop before committing the archive —
+something about this tool's own matching changed since this note was
+written, and that is worth a new finding, not a silent workaround.

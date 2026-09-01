@@ -149,9 +149,11 @@ this fix.
 headers corrected to `### Requirement: <title>` in this change's own
 delta files, each carrying a one-line note. `openspec archive
 add-polyrepo-sync -y` now removes both on its own; tasks.md's own
-closing section records the two-line verification an archiver should
-still perform (expect `- 2`, expect both old requirements absent from
-`openspec/specs/` afterward) rather than trusting the fix silently.
+closing section records the three-point confirmation an archiver should
+still run before committing (`openspec validate --strict` passes, the
+totals line reads `- 2`, both old requirement titles are absent from
+`openspec/specs/` afterward) — a check on a fix already made, never a
+manual removal to perform.
 
 ## m8 and m12: the rebuttal evidence, inlined (it lived only in a gitignored file)
 
@@ -204,6 +206,16 @@ silently apply zero removals. The corrected statement: **`openspec
 validate --strict` accepts a REMOVED section's presence, but `openspec
 archive` does not apply one whose header doesn't match the shipped
 title's own tag — confirmed by running archive for real, not assumed.**
-Removal is therefore an explicit, verified step in this change's own
-archive procedure (tasks.md's closing section), not a claim resting on
-validate having passed.
+The lead's own ruling on which fix that calls for: where the tool
+respects a format (`### Requirement: <title>`, the same tag ADDED/
+MODIFIED entries use), the delta is corrected to that format rather
+than a person doing by hand what the CLI already does — never adopt a
+manual step for something a format fix already closes. Both REMOVED
+headers were corrected at the source; `openspec archive
+add-polyrepo-sync -y` now applies both removals on its own, confirmed
+by running it for real in an isolated worktree (reverted after):
+`- 2 removed`, both old requirements gone from the rollup specs
+afterward. What remains in tasks.md's closing section is a
+*confirmation* an archiver runs before committing — validate passes,
+the totals line reads `- 2`, both old titles are absent — never a
+removal a person performs by hand.
