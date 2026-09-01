@@ -10,6 +10,7 @@ import type {
 } from "@hejbro/core";
 import {
 	deriveSlug,
+	emptySnapshot,
 	generateMigration,
 	hejbroError,
 	migrationFileName,
@@ -28,6 +29,11 @@ import {
 } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import {
+	buildExportDescription,
+	serializeExportDescription,
+} from "../export/description";
+import { writeExport } from "../export/write";
+import {
 	normalizeEqualsFlags,
 	parseConfirmDropFlag,
 	parseRenameFlag,
@@ -36,11 +42,6 @@ import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
 import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
-import { assertManifestMonotonic } from "../manifest-chain";
-import {
-	buildManifestPayload,
-	serializeManifestPayload,
-} from "../manifest-payload";
 import { buildRegistry, configValidators } from "../presets";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
@@ -85,6 +86,11 @@ const GENERATE_ARGS = {
 		type: "boolean",
 		description:
 			"emit a schema manifest row alongside the migration (opt-in; a baseline never emits one, no matter this flag)",
+	},
+	export: {
+		type: "boolean",
+		description:
+			"write a schema export (description, squashed SQL, format record) into .hejbro/export/ alongside the migration (opt-in)",
 	},
 } as const;
 
@@ -533,10 +539,13 @@ const manifestOptions = (
 	declarations: LoadedDeclarations,
 	snapshot: Snapshot,
 ): { readonly payload: string; readonly snapshotHash: string } => {
-	const sidecar = buildManifestPayload(declarations, declarations.exportNames);
+	const sidecar = buildExportDescription(
+		declarations,
+		declarations.exportNames,
+	);
 	const payloadWithSnapshot = { ...sidecar, snapshot };
 	return {
-		payload: serializeManifestPayload(payloadWithSnapshot),
+		payload: serializeExportDescription(payloadWithSnapshot),
 		snapshotHash: `sha256:${sha256Hex(renderSnapshot(snapshot))}`,
 	};
 };
@@ -580,6 +589,26 @@ const baselineManifestNote = (
 	];
 };
 
+/**
+ * The squashed SQL for the export's `snapshot.sql` (schema-export spec,
+ * "The export includes the SQL that raises the schema"): a full create
+ * script is exactly what `generateMigration` already emits when it diffs
+ * against nothing, so this reuses that same call rather than a second
+ * SQL-rendering path — no banner (this isn't a migration file), no
+ * renames or confirmed drops possible against an empty snapshot.
+ */
+const squashedSql = (
+	declarations: LoadedDeclarations,
+	registry: ReturnType<typeof buildRegistry>,
+	validators: ReturnType<typeof configValidators>,
+): string =>
+	generateMigration({
+		declarations,
+		previousSnapshot: emptySnapshot,
+		registry,
+		validators,
+	}).sql;
+
 export const runGenerate = async (
 	cwd: string,
 	argv: ReadonlyArray<string>,
@@ -596,6 +625,7 @@ export const runGenerate = async (
 	const rawArgs = normalizeEqualsFlags(argv);
 	const parsedArgv = parseGenerateArgv(rawArgs);
 	const manifestEnabled = rawArgs.includes("--manifest");
+	const exportEnabled = rawArgs.includes("--export");
 	const fallbackIdentity = parsedArgv.configFlag ?? "hejbro.config.ts";
 	try {
 		assertBaselineFlagsApplicable(mode, rawArgs);
@@ -633,11 +663,6 @@ export const runGenerate = async (
 					config.migrationsDir,
 				);
 			}
-			assertManifestMonotonic(
-				join(cwd, config.migrationsDir),
-				listMigrationFiles(join(cwd, config.migrationsDir)),
-				manifestEnabled,
-			);
 			const firstPass = generateMigration({
 				declarations,
 				previousSnapshot,
@@ -705,6 +730,17 @@ export const runGenerate = async (
 				join(cwd, config.snapshotPath),
 				renderSnapshot(finalPass.snapshot),
 			);
+			if (exportEnabled) {
+				const description = buildExportDescription(
+					declarations,
+					declarations.exportNames,
+				);
+				writeExport(
+					cwd,
+					{ ...description, snapshot: finalPass.snapshot },
+					squashedSql(declarations, registry, validators),
+				);
+			}
 
 			const migrationRelativePath = join(config.migrationsDir, fileName);
 			const [banner] = finalPass.sql.split("\n\n");

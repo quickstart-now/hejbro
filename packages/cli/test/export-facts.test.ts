@@ -3,10 +3,12 @@ import {
 	bigint,
 	defineFunction,
 	defineTrigger,
+	defineView,
 	grant,
 	literal,
 	rls,
 	schema,
+	select,
 	sql,
 	table,
 	text,
@@ -14,14 +16,14 @@ import {
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import {
-	buildManifestPayload,
-	serializeManifestPayload,
-} from "../src/manifest-payload";
+	buildExportDescription,
+	serializeExportDescription,
+} from "../src/export/description";
 
 const app = schema("app");
 
-describe("buildManifestPayload", () => {
-	it("collects mode, non-null elements, TypeScript keys, table and function export names, and roles", () => {
+describe("buildExportDescription", () => {
+	it("every declaration-time choice is recovered", () => {
 		const users = table(app, "users", {
 			userId: uuid().primaryKey(),
 		});
@@ -72,9 +74,9 @@ describe("buildManifestPayload", () => {
 			[totalPosts, "totalPosts"],
 		]);
 
-		const payload = buildManifestPayload(declarations, exportNames);
+		const description = buildExportDescription(declarations, exportNames);
 
-		const postsFact = payload.tables.find((t) => t.tableName === "posts");
+		const postsFact = description.tables.find((t) => t.tableName === "posts");
 		expect(postsFact).toMatchObject({
 			schemaName: "app",
 			tableName: "posts",
@@ -86,7 +88,7 @@ describe("buildManifestPayload", () => {
 			tags: { key: "tags", mode: null, notNullElements: true },
 		});
 
-		const functionFact = payload.functions.find(
+		const functionFact = description.functions.find(
 			(f) => f.functionName === "total_posts",
 		);
 		expect(functionFact).toEqual({
@@ -95,10 +97,10 @@ describe("buildManifestPayload", () => {
 			exportName: "totalPosts",
 		});
 
-		expect(payload.roles).toEqual(["anon", "authenticated"]);
+		expect(description.roles).toEqual(["anon", "authenticated"]);
 	});
 
-	it("carries roles sorted, not in declaration order (G5's byte-identical-sync SHALL rests on this)", () => {
+	it("carries roles sorted, not in declaration order", () => {
 		const zebraGrant = grant(app).usage.to("zebra");
 		const appleGrant = grant(app).usage.to("apple");
 
@@ -108,11 +110,11 @@ describe("buildManifestPayload", () => {
 			appleGrant,
 		];
 
-		const payload = buildManifestPayload(declarations, new Map());
-		expect(payload.roles).toEqual(["apple", "zebra"]);
+		const description = buildExportDescription(declarations, new Map());
+		expect(description.roles).toEqual(["apple", "zebra"]);
 	});
 
-	it("carries no export name for a trigger-synthesized function", () => {
+	it("a trigger's function carries no export name", () => {
 		const posts = table(app, "posts", {
 			id: uuid().primaryKey(),
 			title: text().notNull(),
@@ -133,16 +135,16 @@ describe("buildManifestPayload", () => {
 		const declarations: ReadonlyArray<HejbroInput> = [app, posts, trigger];
 		const exportNames = new Map<HejbroInput, string>([[posts, "posts"]]);
 
-		const payload = buildManifestPayload(declarations, exportNames);
+		const description = buildExportDescription(declarations, exportNames);
 
-		const triggerFunctionFact = payload.functions.find(
+		const triggerFunctionFact = description.functions.find(
 			(f) => f.functionName === trigger.functionDeclaration.functionName,
 		);
 		expect(triggerFunctionFact).toBeDefined();
 		expect(triggerFunctionFact?.exportName).toBeNull();
 	});
 
-	it("carries no brand information", () => {
+	it("a brand is not among the carried facts", () => {
 		const branded = table(app, "widgets", {
 			id: uuid().primaryKey(),
 			metadata: text().$type<"note">(),
@@ -152,14 +154,14 @@ describe("buildManifestPayload", () => {
 			metadata: text(),
 		});
 
-		const brandedFact = buildManifestPayload([app, branded], new Map())
+		const brandedFact = buildExportDescription([app, branded], new Map())
 			.tables[0];
-		const plainFact = buildManifestPayload([app, plain], new Map()).tables[0];
+		const plainFact = buildExportDescription([app, plain], new Map()).tables[0];
 
 		expect(brandedFact?.columns.metadata).toEqual(plainFact?.columns.metadata);
 	});
 
-	it("keys every column fact by the column's SQL name, not its position", () => {
+	it("facts follow the column's name, not its position", () => {
 		// Control: declaration order already matches sorted (stand-in
 		// physical) order, so a position-based join would coincidentally
 		// still read correctly here — this fixture alone can't tell the two
@@ -178,9 +180,9 @@ describe("buildManifestPayload", () => {
 			id: uuid().primaryKey(),
 		});
 
-		const orderedFact = buildManifestPayload([app, ordered], new Map())
+		const orderedFact = buildExportDescription([app, ordered], new Map())
 			.tables[0];
-		const reorderedFact = buildManifestPayload([app, reordered], new Map())
+		const reorderedFact = buildExportDescription([app, reordered], new Map())
 			.tables[0];
 
 		expect(orderedFact?.columns.aa).toEqual({
@@ -204,9 +206,57 @@ describe("buildManifestPayload", () => {
 			notNullElements: true,
 		});
 	});
+
+	it("the export states what it does not carry", () => {
+		// A view and a function with a typed argument, together: the export
+		// has never had a branch for either's extra shape (R2-G2 2.8's own
+		// boundary decision) — a view yields no fact at all, and a
+		// function's fact carries only its names, never an argument.
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			status: text().notNull(),
+		});
+		const openPosts = defineView(app, "open_posts", select(posts));
+		const postsByStatus = defineFunction(
+			app,
+			"posts_by_status",
+			{ args: { status: text() }, returns: posts },
+			(ctx, args) => {
+				ctx.return(select(posts).where(sql`${posts.status} = ${args.status}`));
+			},
+		);
+
+		const declarations: ReadonlyArray<HejbroInput> = [
+			app,
+			posts,
+			openPosts,
+			postsByStatus,
+		];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[postsByStatus, "postsByStatus"],
+		]);
+
+		const description = buildExportDescription(declarations, exportNames);
+
+		expect(description.tables.some((t) => t.tableName === "open_posts")).toBe(
+			false,
+		);
+		expect(description.tables).toHaveLength(1);
+
+		const functionFact = description.functions.find(
+			(f) => f.functionName === "posts_by_status",
+		);
+		expect(functionFact).toEqual({
+			schemaName: "app",
+			functionName: "posts_by_status",
+			exportName: "postsByStatus",
+		});
+		expect(functionFact).not.toHaveProperty("args");
+	});
 });
 
-describe("serializeManifestPayload", () => {
+describe("serializeExportDescription", () => {
 	it("serializes with the snapshot's own stable serialization", () => {
 		const posts = table(app, "posts", {
 			id: uuid().primaryKey(),
@@ -214,15 +264,15 @@ describe("serializeManifestPayload", () => {
 		});
 		const declarations: ReadonlyArray<HejbroInput> = [app, posts];
 		const exportNames = new Map<HejbroInput, string>([[posts, "posts"]]);
-		const payload = buildManifestPayload(declarations, exportNames);
+		const description = buildExportDescription(declarations, exportNames);
 
-		const first = serializeManifestPayload(payload);
-		const second = serializeManifestPayload(payload);
+		const first = serializeExportDescription(description);
+		const second = serializeExportDescription(description);
 		expect(first).toBe(second);
 		// tab-indented, sorted-key JSON with a trailing newline — stableJson's
 		// own signature, not a second, ad hoc serialization rule.
 		expect(first.endsWith("\n")).toBe(true);
 		expect(first).toContain('\t"tables"');
-		expect(JSON.parse(first)).toEqual(payload);
+		expect(JSON.parse(first)).toEqual(description);
 	});
 });

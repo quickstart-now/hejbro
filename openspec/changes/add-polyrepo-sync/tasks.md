@@ -549,56 +549,64 @@ implementer's observation that its own generated-code emitter still
 named the four withdrawn symbols by string, with no gate in this repo
 able to catch it), not a task running long.
 
-## R2-G2 — The export directory — `est_frozen: 60m` — #595
+## R2-G2 — The export directory — `est_frozen: 66m` — #595
 
 Files: `packages/cli/src/export/*` (new),
-`packages/cli/src/manifest-payload.ts` → renamed to the export's
-description builder, `packages/cli/src/commands/generate.ts` (shared).
+`packages/cli/src/manifest-payload.ts` → renamed to
+`packages/cli/src/export/description.ts`, `packages/cli/src/commands/
+generate.ts` (shared), `packages/cli/src/commands/verify.ts` (2.9 only),
+`packages/cli/src/manifest-chain.ts` (deleted, 2.9).
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
 | A repository publishes the schema it declares | Generating writes the export | `cli/test/export-write.test.ts > writes the description, the SQL and the format record` |
 | " | The export needs no database | `cli/test/export-write.test.ts > writes the export with no database reachable` |
 | " | A repository without the export is unchanged | `cli/test/export-write.test.ts > migration and snapshot are byte-identical with the export disabled` |
-| The export is a function of the declarations | Two runs separated in time are byte-identical | `cli/test/export-determinism.test.ts > two runs with different clocks are byte-identical` |
-| " | The export names no clock and no machine | `cli/test/export-determinism.test.ts > no timestamp, host name or absolute path` |
+| The export is a function of the declarations | Two runs separated in time are byte-identical | `cli/test/export-determinism.test.ts > two runs separated in time are byte-identical` |
+| " | The export names no clock and no machine | `cli/test/export-determinism.test.ts > the export names no clock, no host name, and no absolute path` |
 | The export carries what the schema alone does not say | The carried choices survive the round trip | `cli/test/export-facts.test.ts > every declaration-time choice is recovered` |
 | " | A re-added column keeps its own facts | `cli/test/export-facts.test.ts > facts follow the column's name, not its position` |
 | " | A synthesized trigger function carries no export name | `cli/test/export-facts.test.ts > a trigger's function carries no export name` |
-| " | A brand is not among the carried facts | `cli/test/export-facts.test.ts > a branded column carries no brand` |
+| " | A brand is not among the carried facts | `cli/test/export-facts.test.ts > a brand is not among the carried facts` |
 | The export records the formats it is written in | The two format versions are separate | `cli/test/export-write.test.ts > description and snapshot formats are distinct values` |
-| The export includes the SQL that raises the schema | The squashed SQL is complete on its own | `cli/test/export-sql.test.ts > the squashed SQL creates the declared schema` |
+| The export includes the SQL that raises the schema | The squashed SQL is complete on its own | `cli/test/export-sql.integration.test.ts > applies cleanly to an empty database and the schema it declares is there` |
 | " | The squashed SQL is not a migration | `cli/test/export-sql.test.ts > listing migrations does not yield the export's SQL` |
 
-- [ ] 2.1 `[design]` Settle the export's shape on disk: directory name,
+- [x] 2.1 `[design]` Settle the export's shape on disk: directory name,
       the three file names, and the name of the format record — which
       must not be `manifest`, since that word now belongs to the
       apply-engine ledger. Start from
       `cli/test/export-write.test.ts > writes the description, the SQL
       and the format record`. ~8m
-- [ ] 2.2 Assemble the description from the declarations and the
+      **Decision:** directory `.hejbro/export/`; files `schema.json`
+      (description + embedded snapshot), `snapshot.sql` (squashed SQL),
+      `format.json` (the format record — plain, says what it is, no
+      collision with the apply-engine's own future vocabulary).
+- [x] 2.2 Assemble the description from the declarations and the
       snapshot, reusing the existing sidecar builder. Start from
       `cli/test/export-facts.test.ts > every declaration-time choice is
       recovered`. ~8m
-- [ ] 2.3 Carry facts against a column's SQL name, and prove it with a
+- [x] 2.3 Carry facts against a column's SQL name, and prove it with a
       table whose physical order differs from its declaration order.
       Start from `cli/test/export-facts.test.ts > facts follow the
       column's name, not its position`. ~8m
-- [ ] 2.4 The format record, with the description's own version and the
+- [x] 2.4 The format record, with the description's own version and the
       snapshot's kept separate. Start from `cli/test/export-write.test.ts
       > description and snapshot formats are distinct values`. ~6m
-- [ ] 2.5 The squashed SQL, taken from the generation call that already
-      computes it and discards it, written outside the migrations
+- [x] 2.5 The squashed SQL, taken from a `generateMigration` call against
+      an empty snapshot (the same shape `generate` already knows how to
+      make; no second SQL-rendering path), written outside the migrations
       directory. Start from `cli/test/export-sql.test.ts > listing
       migrations does not yield the export's SQL`. ~8m
-- [ ] 2.6 Determinism: no clock, no host, no absolute path, one
+- [x] 2.6 Determinism: no clock, no host, no absolute path, one
       serializer. Start from `cli/test/export-determinism.test.ts > two
-      runs with different clocks are byte-identical`. ~7m
-- [ ] 2.7 Wire the export into generation behind its option; with it
-      off, the migration and snapshot are byte-identical to today's.
-      Start from `cli/test/export-write.test.ts > migration and snapshot
-      are byte-identical with the export disabled`. ~7m
-- [ ] 2.8 `[design]` Settle whether the three facts the new promise
+      runs separated in time are byte-identical`. ~7m
+- [x] 2.7 Wire the export into generation behind its own `--export` flag
+      (`--manifest`'s own pattern); with it off, the migration and
+      snapshot are byte-identical to today's. Start from
+      `cli/test/export-write.test.ts > migration and snapshot are
+      byte-identical with the export disabled`. ~7m
+- [x] 2.8 `[design]` Settle whether the three facts the new promise
       needs — a view's column types, a function's structural signature,
       a function argument's TypeScript key — are carried in this
       version. The third cannot be: the declaration does not keep it and
@@ -606,6 +614,29 @@ description builder, `packages/cli/src/commands/generate.ts` (shared).
       Record the boundary and what a consumer sees at it. Start from
       `cli/test/export-facts.test.ts > the export states what it does
       not carry`. ~8m
+      **Decision: none of the three, this version.** A view yields no
+      fact at all (unchanged scope from the sidecar this reuses); a
+      function's fact carries only its names, never a signature. A
+      consumer sees no view entry and no function argument/return
+      information — never a partial or guessed one — documented on
+      `ExportDescription` itself.
+- [x] 2.9 Withdraw the monotonicity gate: delete `manifest-chain.ts` +
+      the `generate.ts`/`verify.ts` wiring + the tests that exercised it
+      (`manifest-chain.test.ts`, `verify-manifest.test.ts`, and the one
+      `generate-manifest.test.ts` case that depended on it). The delta
+      disposed of this requirement as **Ends** ("against a committed
+      file that state cannot arise"); left in place by G1 only because it
+      crossed that group's own file boundary. ~6m
+
+**Re-freeze: 60m → 66m.** Reason: no task covered retiring the
+monotonicity gate itself — a planning-gap correction, not a task running
+long (2.9 added). The live-database proof for "the squashed SQL is
+complete on its own" moved to a new `export-sql.integration.test.ts`
+(docker-gated, mirrors `assert-schema-live.integration.test.ts`) rather
+than `export-sql.test.ts` as the delta packet named it — proving SQL
+actually creates a schema needs a real database, and the default
+`pnpm test`/CI run must stay database-free; `export-sql.test.ts` keeps
+only the migrations-directory scenario, which needs no database.
 
 ## R2-G3 — The schema repository's own check — `est_frozen: 30m` — #596
 

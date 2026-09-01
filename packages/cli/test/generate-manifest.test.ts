@@ -160,17 +160,6 @@ describe("hejbro generate --manifest", () => {
 		expect(result.exitCode).toBe(0);
 		expect(await sqlFileNames()).toHaveLength(2);
 	});
-
-	it("refuses a later change without --manifest once the chain carries one (wiring for manifest-chain.ts)", async () => {
-		await writeSchema(SCHEMA_SOURCE);
-		await runCli(cwd, ["generate", "--manifest"]);
-		await writeSchema(SECOND_COLUMN_SCHEMA_SOURCE);
-
-		const result = await runCli(cwd, ["generate"]);
-		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("manifest-emission-required");
-		expect(await sqlFileNames()).toHaveLength(1);
-	});
 });
 
 describe("hejbro baseline --manifest", () => {
