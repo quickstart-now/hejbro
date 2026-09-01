@@ -1596,25 +1596,54 @@ compile for real.
       round trip needs a real git remote and stays R2-G9's own job.
       Passed on the first run.
 
-## R2-G9 — The two-repository witness — `est_frozen: 27m` — #602
+## R2-G9 — The two-repository witness — **moved to the apply-engine change (#603)** — #602
 
-Files: `packages/cli/test/integration/polyrepo.integration.test.ts`
-(new) and its fixtures. Sequenced after the apply-engine change: a
-consumer that cannot raise a database cannot close its loop.
+**Lead decision (PS-PIVOT-R3-09): this group is not built in
+add-polyrepo-sync.** 9.2's own requirement — "the consumer raises a
+database from the vendored SQL and runs a typed query through the
+contract" — is *applying*: raising a database from SQL is exactly what
+#603 exists to do, and that change builds its own harness for it
+regardless. Building a second one here, sequenced only to be thrown
+away or duplicated once #603 lands, would be the harness-level instance
+of the "second copy of the same fact" shape this change has repeatedly
+cut elsewhere (R2-G6's own 6.11/6.12 split, R2-G7's own reused
+diagnostics). The board reflects this: #601 is closed, and #602 is now
+a sub-issue of #603, not of #314.
 
-**No live-execution proof exists in this change before this group
-lands** — recorded explicitly so a later reader can reconstruct why:
-R2-G6's own 6.11 (load a real emitted contract, run a real query
-end to end against a live database) was relocated here rather than
-duplicated (planner-directed, R2-G6's own re-freeze note carries the
-history) — a second Docker harness next to this group's own would have
-been the harness-level instance of the "second copy of the same fact"
-shape this change has repeatedly cut. Until R2-G9 lands (sequenced
-after the apply engine), the entire change's live-execution coverage is
-mocked-driver only (`@hejbro/query`'s own `recordingTransactionalDriver`
-suite) plus a real-`tsc`, no-database round trip (`examples/cli-smoke`'s
+**The row-conversion proof's own path, so a later reader can follow
+it across both hops**: R2-G6's own 6.11 ("load a real emitted contract,
+run a real query end to end against a live database") was first
+relocated to this group's own 9.2 (planner-directed, R2-G6's own
+re-freeze note carries that history) rather than duplicating a second
+Docker harness in `@hejbro/query`. Now the same proof moves a second
+time, whole, to #603 — the group that absorbed it never got to build
+it, but the requirement it was answering (real row conversion —
+`numeric`/`bigint`/`timestamptz` off a real driver's own wire format,
+never SQL identity, which 6.5's own parity test already proved, or the
+async pipeline, already exercised end to end against a mock in
+6.3/6.4/6.7) travels intact to wherever #603 ends up proving it.
+
+**No live-execution proof exists in this change** — recorded exactly as
+it was when this group still lived here, with its destination updated:
+this change's entire live-execution coverage is mocked-driver only
+(`@hejbro/query`'s own `recordingTransactionalDriver` suite) plus a
+real-`tsc`, no-database round trip (`examples/cli-smoke`'s
 `vendored-contract.test.ts`, R2-G5 6.12) — both real proofs of their
-own claims, neither a live query.
+own claims, neither a live query. The live query itself now comes from
+**#603**, not from a future group of this change.
+
+**`est_frozen: 27m` moves with the work, to #603 — it no longer counts
+toward this change's own total.** `openspec/task-times.csv` is
+untouched: R2-G9 never ran, so it never had a row, and every other row
+stays exactly as measured.
+
+Files and tasks below are kept as the record of what was planned here,
+not built here, and not deleted — a later reader (in this change or in
+#603) can see the original shape without reconstructing it from a
+closed issue.
+
+Files (as planned, never created): `packages/cli/test/integration/
+polyrepo.integration.test.ts` and its fixtures.
 
 - [ ] 9.1 A fixture schema repository generates, exports and commits;
       a fixture consumer links and vendors from it over a local remote.
@@ -1637,10 +1666,11 @@ own claims, neither a live query.
       sees it as a diff. Start from `polyrepo.integration.test.ts >
       staleness is advice and the update is a diff`. ~8m
 
-**Re-freeze: 25m → 27m (planner-directed).** 9.2 absorbs R2-G6's own
-6.11 (relocated here rather than duplicated) — +2m, not the full 6m
-6.11 once carried: 9.2 already owned raising the database and running a
-typed query; the only genuinely new scope this absorption adds is the
-row-conversion assertion (`numeric`/`bigint`/`timestamptz` off a real
-driver) that 6.11's own text named but this group's own Docker gate is
-the one place it can actually be proven without a second harness.
+**Re-freeze history kept for the record: 25m → 27m (planner-directed,
+before the move to #603).** 9.2 absorbed R2-G6's own 6.11 (relocated
+here rather than duplicated) — +2m, not the full 6m 6.11 once carried:
+9.2 already owned raising the database and running a typed query; the
+only genuinely new scope this absorption added was the row-conversion
+assertion (`numeric`/`bigint`/`timestamptz` off a real driver) that
+6.11's own text named. That 27m, and the row-conversion scope it
+covers, is what now travels to #603.
