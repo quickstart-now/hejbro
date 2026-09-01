@@ -156,6 +156,32 @@ const isHejbroInput = (value: unknown): value is HejbroInput => {
 	);
 };
 
+/**
+ * Whether a loaded module is a vendored contract (schema-vendoring
+ * spec, "Generating from a vendored contract is refused") — judged by
+ * the one export every contract this tool ever writes always carries
+ * (`contract/emit.ts`'s `contractMetadata`), never by the file's own
+ * name or path (planner-confirmed): a signal a project could rename or
+ * relocate would make the refusal easy to defeat by accident, where the
+ * export's own presence cannot be. `contractMetadata` itself carries no
+ * `declarationKind`, so it was already silently excluded from
+ * `collectDeclarations` before this check existed — this check runs
+ * first specifically so the refusal names *why* nothing was found,
+ * instead of falling through to the generic `entry-not-found`/"exports
+ * nothing" diagnostics, neither of which mentions a contract at all.
+ */
+const hasContractMetadataExport = (moduleNamespace: unknown): boolean =>
+	typeof moduleNamespace === "object" &&
+	moduleNamespace !== null &&
+	"contractMetadata" in moduleNamespace;
+
+/** Refuses `filePath` as a declaration entry point, naming the repository that owns the schema — mirrors the wording the migration-authority refusal already used for the same idea (`engine/generate.ts`'s `synced-table-declared`), applied here to the file level rather than one table's own value. */
+const refuseVendoredContractAsEntry = (filePath: string | undefined): never =>
+	throwHejbroError(
+		"vendored-contract-declared",
+		`"${filePath ?? "(unknown file)"}" is a vendored contract (hejbro vendor wrote it) — it carries no declarations, only types and metadata for reading and writing through what's already there. Next: declare the schema with table() in the repository that owns it, or remove this file from hejbro.config.ts's entry patterns if it was matched by accident.`,
+	);
+
 /** A module's declarations, paired with the export name each was found
  * under — the map's key is the declaration's own identity, so a
  * declaration exported under no name (there is none for a plain module
@@ -263,6 +289,10 @@ export const loadDeclarations = async (
 			),
 		),
 	);
+	const vendoredContractIndex = modules.findIndex(hasContractMetadataExport);
+	if (vendoredContractIndex !== -1) {
+		refuseVendoredContractAsEntry(sortedMatches[vendoredContractIndex]);
+	}
 	const collected = modules.map((moduleNamespace) =>
 		collectDeclarations(moduleNamespace as object),
 	);

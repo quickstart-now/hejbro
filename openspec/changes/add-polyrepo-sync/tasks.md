@@ -897,8 +897,9 @@ Files: `packages/cli/src/contract/*` (new),
 `packages/cli/src/commands/vendor.ts` (shared with R2-G4 — 5.11 only
 adds the contract-emission call and the lock's third hash, never
 touches R2-G4's own read/write paths), `packages/cli/src/loader.ts`
-(shared with the already-shipped group 3 — 5.12 only adds a refusal
-branch, additive, never touches that group's own export-name collection).
+(planner-assigned to this group, 5.12 — the old group 3 that once
+touched it is already closed, so this is a plain addition, not a
+shared file).
 
 **Scope, settled before this group started:** 5.10 keeps only
 determinism and the absence of a clock — the "prove it by loading and
@@ -1083,23 +1084,32 @@ rather than importing it", confirmed to mean exactly this.
       one a consumer's own code imports), so excluding it from `--check`
       would leave the most likely tamper outside the gate the scenario
       exists to close.
-- [ ] 5.12 A vendored contract cannot author migrations, refused by
+- [x] 5.12 A vendored contract cannot author migrations, refused by
       name. **Discovered gap, not in the original task list**: the
       SHALL/scenario table above already names this group's own
       "A consumer holds a contract, not declarations" requirement
       (`contract-authority.test.ts`, both its scenarios), but no task
-      5.1–5.11 implements it — an oversight found while implementing,
-      not a design ambiguity. "The contract yields no declaration" needs
-      no new code (a `contractMetadata`/`createDb` export carries no
-      `declarationKind`, so `loader.ts`'s existing `isHejbroInput` guard
-      already excludes every contract export — only a test is needed).
-      "Generating from a vendored contract is refused... naming the
-      owning repository" does need new code: today that same file
-      degrades to the generic `entry-not-found`/"exports nothing"
-      diagnostic, not one naming the owning repository specifically.
-      Touches `loader.ts`, owned by the already-shipped group 3 — held
-      pending planner confirmation before writing the refusal branch,
-      since it crosses a completed group's file. ~7m
+      5.1–5.11 implemented it — the fifth planning gap this change has
+      surfaced, and the first of the "scenario listed, no task closes
+      it" shape rather than "task running long". `loader.ts` had no
+      owner in R2 (the old group 3 that once owned it is already closed)
+      — **planner-assigned to this group**, `est_frozen 81m → 88m`.
+      Start from `cli/test/contract-authority.test.ts > nothing in the
+      contract can be passed to generation`. ~7m
+      **Judged by what a contract always carries, never by what a user
+      could rename or relocate (planner's own design note, echoing the
+      overwrite guard's "the check is textual, on the value, never the
+      path" principle):** `loader.ts`'s new `hasContractMetadataExport`
+      checks for the `contractMetadata` export itself — the one thing
+      every file `hejbro vendor` ever writes always carries — not the
+      file's name or its `.hejbro/vendor/` location. A matching module
+      refuses immediately with the new `vendored-contract-declared`
+      code, before falling through to the generic `entry-not-found`/
+      "exports nothing" diagnostics, neither of which names a
+      repository. "The contract yields no declaration" needed no
+      separate guard: `contractMetadata`/`createDb` carry no
+      `declarationKind`, so the existing `isHejbroInput` filter already
+      excluded them — the new check only makes the *reason* specific.
 
 **Re-freeze: 75m → 81m → 88m.** First move (75→81, before this group
 started): 5.11 added for the vendor↔contract wiring the original list
