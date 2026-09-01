@@ -1118,7 +1118,7 @@ implementation for a real gap in the delta's own scenario table that no
 task closed — an oversight in the task list itself, not a task running
 long.
 
-## R2-G6 — The name-keyed client — `est_frozen: 102m` — #599
+## R2-G6 — The name-keyed client — `est_frozen: 96m` — #599
 
 Files: `packages/query/src/client/*` (new),
 `packages/query/test/client/*` (new),
@@ -1248,24 +1248,28 @@ happens here.
       read built output — so the build precedes the check. Start from
       `query/test/client/select.test.ts`'s type assertions, verified
       under `check-types` after a build. ~8m
-- [ ] 6.11 The execution proof 5.10 deferred here: load a real emitted
-      contract and run a real query through it end to end (this is the
-      first point in the change where a client exists to run one
-      against). Start from
-      `query/test/client/execution.integration.test.ts > runs a real
-      query against a live database through a vendored contract`. ~6m
-      **Partially satisfied, flagged rather than claimed done.** The full
-      async execution path (table synthesis → `db()` → compile → a real
-      driver's `execute` → row conversion → resolve) is exercised for
-      real in `select.test.ts`/`write.test.ts`/`roles.test.ts`, and
-      `examples/cli-smoke`'s new round-trip test (6.12) proves a real
-      `hejbro vendor` output against the real installed package — but
-      neither runs a query against a **live Postgres** the way
-      `check-live.integration.test.ts`'s own Docker-gated pattern does.
-      Building that (its own container lifecycle, ~150 lines of
-      precedent to mirror) is a bigger scope item than this task's own
-      6m estimate affords — held pending planner direction rather than
-      either skipped silently or built without confirmation.
+- [ ] 6.11 **Moved to R2-G9 9.2 — not skipped, relocated.** The execution
+      proof 5.10 deferred here (load a real emitted contract, run a real
+      query through it end to end against a live database) belongs where
+      the full loop is already alive: R2-G9's own Docker-gated
+      `polyrepo.integration.test.ts` raises a real database from vendored
+      SQL and queries it through the contract (9.2). Building a second
+      Docker harness here, next to that one, would be the harness-level
+      instance of exactly the "second copy of the same fact" shape this
+      change has repeatedly cut (planner's own framing) — flagged rather
+      than built without confirmation (see the prior commit's own note,
+      superseded by this one), and the planner's own call was to move it,
+      not duplicate it. The full async execution path minus a live
+      Postgres — table synthesis → `db()` → compile → a real driver's
+      `execute` → row conversion → resolve — is still exercised for real
+      in `select.test.ts`/`write.test.ts`/`roles.test.ts`/
+      `parity.test.ts`, and `examples/cli-smoke`'s round-trip test (6.12)
+      proves a real `hejbro vendor` output against the real installed
+      package via a real `tsc --strict` — neither needs a live database,
+      so neither is redone at 9.2; 9.2's own addition is specifically
+      what mocks *cannot* prove: real row conversion off a real driver's
+      wire format (see R2-G9 9.2's own updated note). Time moves with
+      the task, both groups' own re-freeze notes below.
 - [x] 6.12 Replace R2-G5's placeholder `createDb` body
       (`packages/cli/src/contract/emit.ts`'s `CREATE_DB_FACTORY`) with a
       real call into this group's own client — the third "group A built
@@ -1289,11 +1293,17 @@ happens here.
       packages/cli's own aliased-source unit tests structurally cannot
       give.
 
-**Re-freeze: 90m → 96m → 102m, both before this group started.** First
-move (90→96): 6.11 added for the execution proof 5.10 deferred here.
-Second move (96→102): 6.12 added for the placeholder-replacement seam
-R2-G5 knowingly left open and reported, but that no task closed — the
-sixth planning gap this change has surfaced.
+**Re-freeze: 90m → 96m → 102m → 96m.** First move (90→96, before this
+group started): 6.11 added for the execution proof 5.10 deferred here.
+Second move (96→102, before this group started): 6.12 added for the
+placeholder-replacement seam R2-G5 knowingly left open and reported, but
+that no task closed — the sixth planning gap this change has surfaced.
+Third move (102→96, planner-directed, after 6.1-6.10/6.12 landed): 6.11
+relocated to R2-G9 9.2, where a live database loop already exists —
+building a second Docker harness in this package would duplicate that
+proof, not add to it. R2-G9's own re-freeze carries the matching +2m
+(not the full 6m: 9.2 already had its own estimate for the parts of
+this proof it always owned).
 
 ## R2-G7 — The consumer's check — `est_frozen: 45m` — #600
 
@@ -1358,21 +1368,51 @@ Files: `docs/guide/polyrepo.md` (new),
       plus a database-free reachability assertion for the new commands
       in the pack-install smoke. Gate: `changeset status`. ~6m
 
-## R2-G9 — The two-repository witness — `est_frozen: 25m` — #602
+## R2-G9 — The two-repository witness — `est_frozen: 27m` — #602
 
 Files: `packages/cli/test/integration/polyrepo.integration.test.ts`
 (new) and its fixtures. Sequenced after the apply-engine change: a
 consumer that cannot raise a database cannot close its loop.
+
+**No live-execution proof exists in this change before this group
+lands** — recorded explicitly so a later reader can reconstruct why:
+R2-G6's own 6.11 (load a real emitted contract, run a real query
+end to end against a live database) was relocated here rather than
+duplicated (planner-directed, R2-G6's own re-freeze note carries the
+history) — a second Docker harness next to this group's own would have
+been the harness-level instance of the "second copy of the same fact"
+shape this change has repeatedly cut. Until R2-G9 lands (sequenced
+after the apply engine), the entire change's live-execution coverage is
+mocked-driver only (`@hejbro/query`'s own `recordingTransactionalDriver`
+suite) plus a real-`tsc`, no-database round trip (`examples/cli-smoke`'s
+`vendored-contract.test.ts`, R2-G5 6.12) — both real proofs of their
+own claims, neither a live query.
 
 - [ ] 9.1 A fixture schema repository generates, exports and commits;
       a fixture consumer links and vendors from it over a local remote.
       Start from `polyrepo.integration.test.ts > vendors from a real
       git remote`. ~9m
 - [ ] 9.2 The consumer raises a database from the vendored SQL and runs
-      a typed query through the contract. Start from
+      a typed query through the contract — absorbing R2-G6's own 6.11
+      (relocated, not duplicated). What a live run must confirm that a
+      mock cannot: **row conversion**, not SQL identity — a `numeric`/
+      `bigint`/`timestamptz` column actually arriving as the contract's
+      promised type from a real driver's own wire format, not a mock's
+      hand-fed JS value. SQL sameness is already 6.5's own parity proof;
+      the async execution pipeline itself is already exercised end to
+      end against a mock (6.3/6.4/6.7); only the driver's real decoding
+      is something no unit test can stand in for. Start from
       `polyrepo.integration.test.ts > queries the raised database
-      through the contract`. ~8m
+      through the contract`. ~10m
 - [ ] 9.3 The schema repository changes, and the consumer's check
       reports staleness without failing, then vendors the change and
       sees it as a diff. Start from `polyrepo.integration.test.ts >
       staleness is advice and the update is a diff`. ~8m
+
+**Re-freeze: 25m → 27m (planner-directed).** 9.2 absorbs R2-G6's own
+6.11 (relocated here rather than duplicated) — +2m, not the full 6m
+6.11 once carried: 9.2 already owned raising the database and running a
+typed query; the only genuinely new scope this absorption adds is the
+row-conversion assertion (`numeric`/`bigint`/`timestamptz` off a real
+driver) that 6.11's own text named but this group's own Docker gate is
+the one place it can actually be proven without a second harness.
