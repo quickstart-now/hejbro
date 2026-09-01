@@ -547,6 +547,54 @@ Files: `packages/cli/src/apply/execute.ts` and its test,
       it — a defence nobody remembers is a defence nobody keeps. Files:
       `apply-ledger.test.ts`.
 
+## 12. Registering a baseline instead of running it
+
+Found in group 10, while editing the skill sentence that says
+registering a baseline is the user's pipeline's job. The delta requires
+the apply path to record a baseline as applied **without executing its
+statements**, and to read the marker through the exported parser — and
+nothing in `packages/cli/src` calls that parser. `migrate` sends every
+pending file's SQL, so a baseline meets `already exists` on its first
+statement: the opposite of the scenario.
+
+**No task owned it.** Task 1.4's red was named "registers a baseline
+without executing its statements" and its body proved only that
+`recordAppliedMigration` takes no SQL to send. The name claimed the
+behaviour; the body proved the function's shape. That is the same defect
+this change spent its life finding in other people's tests, and here it
+hid an entire unimplemented requirement.
+
+Files: `packages/cli/src/commands/verify.ts` (the chain reader),
+`packages/cli/src/apply/plan.ts` and its test,
+`packages/cli/src/commands/migrate.ts` and its test,
+`packages/cli/test/apply-live.integration.test.ts`.
+
+- [x] 12.1 (~9m) [design] The plan learns which entries are baselines.
+      The marker is a banner line and the exported parser reads it by
+      prefix; the chain reader already opens every file. Where the flag
+      is carried is the design part — `ChainEntry` lives in core and is
+      shared with `verify`, so widening it there is a cross-package
+      change, while carrying it beside the plan's own entries is not.
+      Red: `apply-plan.test.ts` — "marks a baseline entry as registerable
+      rather than pending".
+- [x] 12.2 (~8m) `migrate` registers a baseline: no statement from that
+      file reaches the database, the ledger records it, and the report
+      says it registered rather than applied — a user who sees "applied"
+      for a file that was never run has been told something false. Red:
+      `migrate-command.test.ts` — "records a baseline without sending
+      its statements", "reports it as registered, not applied".
+- [x] 12.3 (~9m) The live witness: a chain whose first migration carries
+      the baseline marker, applied to a database that already has those
+      objects. Without the repair this fails on the first statement, so
+      the test can fail for the right reason — **record that red's own
+      output** (the server's first-statement `already exists`) in the
+      commit message. It is the contrast evidence for what 1.4's red
+      never produced: a name that claimed the behaviour beside a body
+      that only proved a function's shape, and a requirement that stayed
+      unimplemented behind it. Red:
+      `apply-live.integration.test.ts` — "registers a baseline against a
+      database that already has its objects".
+
 ## Verification
 
 - **At archive time, read the rolled-up main specs and confirm they say

@@ -19,7 +19,7 @@ import { asHejbroError } from "../errors";
 import { normalizeEqualsFlags } from "../flags";
 import { loadConfig } from "../loader";
 import { listMigrationFiles } from "../snapshot-file";
-import { readChainEntries } from "./verify";
+import { readBaselineFileNames, readChainEntries } from "./verify";
 
 const MIGRATE_DESCRIPTION =
 	"Apply the migrations on disk that the database's ledger does not yet record, in chain order.";
@@ -111,9 +111,44 @@ const alreadyAppliedReportLines = (
 	];
 };
 
+/**
+ * [task 12.2, #624] Names each baseline migration this run itself
+ * registered -- its own bucket, separate from {@link appliedReportLines}:
+ * no statement of this file's ever reached the database (`execute.ts`'s
+ * own `baseline` skip, task 12.2), so calling it "applied" would tell the
+ * user something false about a file that was only ever run once, by
+ * whatever adopted the database in the first place.
+ */
+const registeredReportLines = (
+	registered: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	if (registered.length === 0) {
+		return [];
+	}
+	return [
+		`migrate: registered ${registered.length} baseline migration(s) (statements not executed):`,
+		...registered.map((fileName) => ` - ${fileName}`),
+	];
+};
+
+/** [task 12.2, #624] {@link alreadyAppliedReportLines}'s own counterpart for a baseline file another run registered first -- kept as its own bucket for the same reason {@link registeredReportLines} is: "applied" would still be false for a file whose statements were never sent, by either run. */
+const alreadyRegisteredReportLines = (
+	alreadyRegistered: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	if (alreadyRegistered.length === 0) {
+		return [];
+	}
+	return [
+		`migrate: ${alreadyRegistered.length} baseline migration(s) another run already registered while this one waited:`,
+		...alreadyRegistered.map((fileName) => ` - ${fileName}`),
+	];
+};
+
 const failureResult = (
 	appliedSoFar: ReadonlyArray<string>,
 	alreadyAppliedSoFar: ReadonlyArray<string>,
+	registeredSoFar: ReadonlyArray<string>,
+	alreadyRegisteredSoFar: ReadonlyArray<string>,
 	failedFileName: string,
 	error: unknown,
 ): MigrateResult => {
@@ -122,7 +157,9 @@ const failureResult = (
 		exitCode: 1,
 		stdout: [
 			...appliedSoFarLines(appliedSoFar),
+			...registeredReportLines(registeredSoFar),
 			...alreadyAppliedReportLines(alreadyAppliedSoFar),
+			...alreadyRegisteredReportLines(alreadyRegisteredSoFar),
 		],
 		stderr: renderDiagnostics(
 			[fromHejbroError(hejbroErr, failedFileName)],
@@ -132,30 +169,36 @@ const failureResult = (
 };
 
 /**
- * [task 7.5; two buckets since task 11.2, #620] Applies `remaining` in
- * chain order, recursively (house style bans loops): a failure stops the
- * run immediately, leaving every migration applied before it applied and
- * recorded (`applyMigration`'s own per-file transaction already
- * committed each one, so "stops at the first failure" is this function's
- * own control flow, not a rollback of work already done) -- this is the
- * run-level property the delta scenario asks for and that only this loop
- * can express (no other task owns it, per tasks.md's own note on where
- * the gap was). Takes `Migration[]`, already read from disk -- this
- * function itself touches no filesystem (mirrors `execute.ts`'s own
- * `Migration` doc comment), so it is testable directly with a fake
- * `Driver`, no temp directory needed.
+ * [task 7.5; two buckets since task 11.2, #620; four since task 12.2,
+ * #624] Applies `remaining` in chain order, recursively (house style
+ * bans loops): a failure stops the run immediately, leaving every
+ * migration applied before it applied and recorded (`applyMigration`'s
+ * own per-file transaction already committed each one, so "stops at the
+ * first failure" is this function's own control flow, not a rollback of
+ * work already done) -- this is the run-level property the delta
+ * scenario asks for and that only this loop can express (no other task
+ * owns it, per tasks.md's own note on where the gap was). Takes
+ * `Migration[]`, already read from disk -- this function itself touches
+ * no filesystem (mirrors `execute.ts`'s own `Migration` doc comment), so
+ * it is testable directly with a fake `Driver`, no temp directory
+ * needed.
  *
- * `appliedSoFar`/`alreadyAppliedSoFar` are two separate accumulators, not
- * one: `applyMigration`'s own per-file outcome (task 11.1) says which
- * bucket a given file belongs in, and both are reported (task 11.2) when
- * the run finishes, whether it finishes by exhausting `remaining` or by
- * failing partway through.
+ * Four accumulators, not one: `applyMigration`'s own per-file outcome
+ * (task 11.1) says whether this call did the work or found it already
+ * done, and `next.baseline` (read from the same `Migration` the caller
+ * already built from `plan.baselineFileNames`, task 12.1) says whether
+ * that work was sending DDL or registering without it. The cross product
+ * of those two facts is exactly four buckets, and all four are reported
+ * (tasks 11.2/12.2) when the run finishes, whether it finishes by
+ * exhausting `remaining` or by failing partway through.
  */
 export const applyFrom = async (
 	driver: Driver,
 	remaining: ReadonlyArray<Migration>,
 	appliedSoFar: ReadonlyArray<string>,
 	alreadyAppliedSoFar: ReadonlyArray<string> = [],
+	registeredSoFar: ReadonlyArray<string> = [],
+	alreadyRegisteredSoFar: ReadonlyArray<string> = [],
 ): Promise<MigrateResult> => {
 	const [next, ...rest] = remaining;
 	if (next === undefined) {
@@ -163,29 +206,59 @@ export const applyFrom = async (
 			exitCode: 0,
 			stdout: [
 				...appliedSoFarLines(appliedSoFar),
+				...registeredReportLines(registeredSoFar),
 				...alreadyAppliedReportLines(alreadyAppliedSoFar),
+				...alreadyRegisteredReportLines(alreadyRegisteredSoFar),
 			],
 			stderr: null,
 		};
 	}
 	try {
 		const outcome = await applyMigration(driver, next, MIGRATE_COMMAND);
+		if (outcome === "already-applied" && next.baseline === true) {
+			return applyFrom(
+				driver,
+				rest,
+				appliedSoFar,
+				alreadyAppliedSoFar,
+				registeredSoFar,
+				[...alreadyRegisteredSoFar, next.fileName],
+			);
+		}
 		if (outcome === "already-applied") {
-			return applyFrom(driver, rest, appliedSoFar, [
-				...alreadyAppliedSoFar,
-				next.fileName,
-			]);
+			return applyFrom(
+				driver,
+				rest,
+				appliedSoFar,
+				[...alreadyAppliedSoFar, next.fileName],
+				registeredSoFar,
+				alreadyRegisteredSoFar,
+			);
+		}
+		if (next.baseline === true) {
+			return applyFrom(
+				driver,
+				rest,
+				appliedSoFar,
+				alreadyAppliedSoFar,
+				[...registeredSoFar, next.fileName],
+				alreadyRegisteredSoFar,
+			);
 		}
 		return applyFrom(
 			driver,
 			rest,
 			[...appliedSoFar, next.fileName],
 			alreadyAppliedSoFar,
+			registeredSoFar,
+			alreadyRegisteredSoFar,
 		);
 	} catch (error) {
 		return failureResult(
 			appliedSoFar,
 			alreadyAppliedSoFar,
+			registeredSoFar,
+			alreadyRegisteredSoFar,
 			next.fileName,
 			error,
 		);
@@ -246,6 +319,10 @@ export const runMigrate = async (
 		const migrationsDirPath = join(cwd, config.migrationsDir);
 		const fileNames = listMigrationFiles(migrationsDirPath);
 		const chain = readChainEntries(migrationsDirPath, fileNames);
+		const baselineFileNames = readBaselineFileNames(
+			migrationsDirPath,
+			fileNames,
+		);
 
 		return await withCheckConnection(
 			urlFlag,
@@ -255,7 +332,7 @@ export const runMigrate = async (
 				assertInteractiveTransactions(driver, MIGRATE_COMMAND);
 				await bootstrapLedger(driver);
 				const ledgerState = await readLedger(driver);
-				const plan = planApply(chain, ledgerState);
+				const plan = planApply(chain, ledgerState, baselineFileNames);
 				if (!plan.ok) {
 					return planFailureResult(plan);
 				}
@@ -266,6 +343,7 @@ export const runMigrate = async (
 					(fileName) => ({
 						fileName,
 						sql: readFileSync(join(migrationsDirPath, fileName), "utf8"),
+						baseline: plan.baselineFileNames.has(fileName),
 					}),
 				);
 				return await applyFrom(driver, migrations, []);

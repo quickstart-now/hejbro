@@ -2,10 +2,11 @@ import { hejbroError, throwHejbroError } from "@hejbro/core";
 import type { CompileResult, Driver } from "@hejbro/query";
 import { isMigrationRecorded, recordAppliedMigration } from "./ledger";
 
-/** One migration ready to apply -- the filename the ledger keys on (G1) and the file's own SQL text, already read from disk by the caller (group 7's job; this module touches no filesystem). */
+/** One migration ready to apply -- the filename the ledger keys on (G1) and the file's own SQL text, already read from disk by the caller (group 7's job; this module touches no filesystem). `baseline` (task 12.2, #624) marks a file the caller already knows carries the `-- baseline:` marker (`commands/verify.ts`'s own `readBaselineFileNames`) -- optional, defaulting to an ordinary migration, so every existing caller/fixture that never mentions one keeps meaning exactly what it did before this field existed. */
 export type Migration = {
 	readonly fileName: string;
 	readonly sql: string;
+	readonly baseline?: boolean;
 };
 
 const exec = (
@@ -326,6 +327,19 @@ export type ApplyOutcome = "applied" | "already-applied";
  * `nextCommand` names the command a caller should rerun once a failure
  * is fixed (G6, #612) -- passed straight through to
  * {@link throwApplyFailure}, never assumed.
+ *
+ * [task 12.2, #624] `migration.baseline === true` skips the DDL send
+ * entirely -- still inside the same lock, still after the same
+ * already-recorded recheck above, but the statement that carries it
+ * never reaches the database (spec: "A baseline is registered rather
+ * than run"; the object it describes already exists, so sending it would
+ * only meet the server's own already-exists refusal, group 12's own live
+ * witness, task 12.3). This call still reports `"applied"` either way --
+ * "did this call itself do the ledger work, or find it already done" is
+ * the only distinction `ApplyOutcome` makes; "applied vs. registered" is
+ * a report-wording decision `migrate.ts` makes from the same
+ * `baselineFileNames` set it already read to build this `Migration`, not
+ * a fact this module re-derives.
  */
 export const applyMigration = async (
 	driver: Driver,
@@ -339,7 +353,9 @@ export const applyMigration = async (
 			if (await isMigrationRecorded(session, migration.fileName)) {
 				return "already-applied";
 			}
-			await session.execute(exec(migration.sql, []));
+			if (migration.baseline !== true) {
+				await session.execute(exec(migration.sql, []));
+			}
 			await recordAppliedMigration(session, migration.fileName);
 			return "applied";
 		});

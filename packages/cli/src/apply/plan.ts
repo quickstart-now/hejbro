@@ -45,7 +45,22 @@ export type Disagreement = {
  * disagrees with it.
  */
 export type PlanResult =
-	| { readonly ok: true; readonly pending: ReadonlyArray<string> }
+	| {
+			readonly ok: true;
+			readonly pending: ReadonlyArray<string>;
+			/**
+			 * [task 12.1, #624] The subset of `pending` (by filename) that
+			 * carries the `-- baseline:` marker -- these SHALL be registered
+			 * in the ledger without sending their statements (spec: "A
+			 * baseline is registered rather than run"), never applied like an
+			 * ordinary pending file. `pending` itself is unchanged in meaning
+			 * (still every migration the ledger does not yet record, in
+			 * chain order) -- a baseline file is not excluded from it, since
+			 * it genuinely is not yet recorded; this set is how a caller
+			 * tells the two apart within that one list.
+			 */
+			readonly baselineFileNames: ReadonlySet<string>;
+	  }
 	| {
 			readonly ok: false;
 			readonly reason: "chain-invalid";
@@ -154,10 +169,16 @@ const outOfOrderDisagreements = (
  * when the two agree, or every way they disagree when they don't. No
  * filesystem, no driver -- `chain` and `ledger` are already read by the
  * caller (group 7's job); this function only compares what it is given.
+ * `baselineFileNames` (task 12.1, #624) is the same kind of caller-read
+ * input as `chain`/`ledger` -- read by `commands/verify.ts`'s own
+ * `readBaselineFileNames` -- and defaults to empty so every existing
+ * caller/fixture that never mentions a baseline keeps meaning exactly
+ * what it did before this parameter existed.
  */
 export const planApply = (
 	chain: ReadonlyArray<ChainEntry>,
 	ledger: LedgerState,
+	baselineFileNames: ReadonlySet<string> = new Set(),
 ): PlanResult => {
 	const chainReport = checkChain(chain);
 	if (!chainReport.ok) {
@@ -188,10 +209,15 @@ export const planApply = (
 		return { ok: false, reason: "ledger-disagreement", disagreements };
 	}
 
+	const pending = chain
+		.filter((entry) => !applied.has(entry.fileName))
+		.map((entry) => entry.fileName);
+
 	return {
 		ok: true,
-		pending: chain
-			.filter((entry) => !applied.has(entry.fileName))
-			.map((entry) => entry.fileName),
+		pending,
+		baselineFileNames: new Set(
+			pending.filter((fileName) => baselineFileNames.has(fileName)),
+		),
 	};
 };

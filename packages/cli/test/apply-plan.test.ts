@@ -30,6 +30,7 @@ describe("planApply / 2.1", () => {
 		expect(result).toEqual({
 			ok: true,
 			pending: ["0003_third.sql", "0002_fourth.sql"],
+			baselineFileNames: new Set(),
 		});
 	});
 
@@ -40,7 +41,56 @@ describe("planApply / 2.1", () => {
 
 		const result = planApply(chain, { exists: false });
 
-		expect(result).toEqual({ ok: true, pending: ["0001_init.sql"] });
+		expect(result).toEqual({
+			ok: true,
+			pending: ["0001_init.sql"],
+			baselineFileNames: new Set(),
+		});
+	});
+});
+
+describe("planApply / 12.1 (#624)", () => {
+	it("marks a baseline entry as registerable rather than pending", () => {
+		const chain: ReadonlyArray<ChainEntry> = [
+			{ fileName: "0001_baseline.sql", parent: "root", current: "h1" },
+			{ fileName: "0002_add_column.sql", parent: "h1", current: "h2" },
+		];
+
+		const result = planApply(
+			chain,
+			NOT_APPLIED,
+			new Set(["0001_baseline.sql"]),
+		);
+
+		if (!result.ok) {
+			throw new Error("expected a successful plan");
+		}
+		// Still named as pending -- it genuinely is not yet in the ledger --
+		// but also carried in its own set, so a caller (migrate.ts) can tell
+		// it apart from an ordinary pending file.
+		expect(result.pending).toEqual([
+			"0001_baseline.sql",
+			"0002_add_column.sql",
+		]);
+		expect(result.baselineFileNames).toEqual(new Set(["0001_baseline.sql"]));
+	});
+
+	it("never marks an already-recorded baseline as pending, even though it was one", () => {
+		const chain: ReadonlyArray<ChainEntry> = [
+			{ fileName: "0001_baseline.sql", parent: "root", current: "h1" },
+		];
+
+		const result = planApply(
+			chain,
+			applied(["0001_baseline.sql"]),
+			new Set(["0001_baseline.sql"]),
+		);
+
+		if (!result.ok) {
+			throw new Error("expected a successful plan");
+		}
+		expect(result.pending).toEqual([]);
+		expect(result.baselineFileNames).toEqual(new Set());
 	});
 });
 

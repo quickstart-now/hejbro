@@ -18,6 +18,7 @@ describe("renderStatusReport / 7.6", () => {
 		const plan: Extract<PlanResult, { readonly ok: true }> = {
 			ok: true,
 			pending: ["0001_a.sql", "0002_b.sql"],
+			baselineFileNames: new Set(),
 		};
 
 		const result = renderStatusReport(plan);
@@ -34,6 +35,7 @@ describe("renderStatusReport / 7.6", () => {
 		const plan: Extract<PlanResult, { readonly ok: true }> = {
 			ok: true,
 			pending: [],
+			baselineFileNames: new Set(),
 		};
 
 		const result = renderStatusReport(plan);

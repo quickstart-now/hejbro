@@ -193,6 +193,77 @@ describe("applyFrom / 11.2 (#620)", () => {
 	});
 });
 
+describe("applyFrom / 12.2 (#624)", () => {
+	const baselineMigration: Migration = {
+		fileName: "0001_baseline.sql",
+		sql: 'create table "app"."adopted" (id integer);',
+		baseline: true,
+	};
+
+	it("registers a baseline without sending its statements, and reports it as registered, not applied", async () => {
+		const { driver, calls } = makeFakeDriver();
+
+		const result = await applyFrom(driver, [baselineMigration], []);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: registered 1 baseline migration(s) (statements not executed):",
+			" - 0001_baseline.sql",
+		]);
+		// The user who sees "applied" for a file that was never run has
+		// been told something false (tasks.md 12.2's own words) --
+		// pinned directly: the report never uses that word for this file.
+		expect(result.stdout.join("\n")).not.toContain("applied");
+		// Never sent -- the whole point of registering rather than running.
+		expect(calls.some((call) => call.sql === baselineMigration.sql)).toBe(
+			false,
+		);
+		const ledgerInsertCall = calls.find((call) =>
+			call.sql.toLowerCase().includes("insert into"),
+		);
+		expect(ledgerInsertCall?.params).toEqual([baselineMigration.fileName]);
+	});
+
+	it("keeps a baseline's own bucket separate from an ordinary migration applied in the same run", async () => {
+		const { driver } = makeFakeDriver();
+
+		const result = await applyFrom(driver, [baselineMigration, migrationA], []);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0001_a.sql",
+			"migrate: registered 1 baseline migration(s) (statements not executed):",
+			" - 0001_baseline.sql",
+		]);
+	});
+
+	it("reports a baseline another run already registered in its own bucket, distinct from an ordinary already-applied one", async () => {
+		const recheckFindsBaseline = (
+			call: CompileResult,
+		): ReadonlyArray<DriverRow> | undefined => {
+			if (isRecheckFor(call, baselineMigration.fileName)) {
+				return [{ "?column?": 1 }];
+			}
+			return undefined;
+		};
+		const { driver, calls } = makeFakeDriver({
+			rowsWhen: recheckFindsBaseline,
+		});
+
+		const result = await applyFrom(driver, [baselineMigration], []);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: 1 baseline migration(s) another run already registered while this one waited:",
+			" - 0001_baseline.sql",
+		]);
+		expect(calls.some((call) => call.sql === baselineMigration.sql)).toBe(
+			false,
+		);
+	});
+});
+
 describe("runMigrate / 7.4 exit codes (via applyFrom)", () => {
 	it("exits zero with nothing to apply", () => {
 		expect(NOTHING_TO_APPLY_LINE).toContain("nothing to apply");

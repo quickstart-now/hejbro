@@ -499,6 +499,79 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 	});
 
 	/**
+	 * [task 12.3, #624] The requirement group 12 found unimplemented
+	 * (migration-apply spec, "A baseline is registered rather than run"):
+	 * a chain whose first migration carries the `-- baseline:` marker,
+	 * applied to a database that already has the objects that migration
+	 * would create -- exactly the brownfield-adoption shape
+	 * `brownfield-adoption.md` describes. Before 12.1/12.2's own repair,
+	 * this test failed for the right reason: `migrate` sent the baseline
+	 * file's DDL like any other pending file, and the server refused it on
+	 * the first statement (measured on this exact fixture, pre-repair:
+	 * `error[apply-failed]: applying "..." failed (42P06): schema "app"
+	 * already exists`) -- the opposite of the scenario ("no statement from
+	 * that migration is sent"). Red, and its own contrast
+	 * with task 1.4's red (tasks.md's own group 12 note): 1.4's red name
+	 * claimed this behavior and its body proved only a function's shape;
+	 * this one is the server itself refusing the wrong thing.
+	 */
+	describe("12.3 registering a baseline against a database that already has its objects", () => {
+		const database = "baselinedb";
+		let cwd = "";
+
+		beforeAll(async () => {
+			cwd = await createCliFixtureDir();
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SEED_SCHEMA_SOURCE);
+			const baselined = await runCli(cwd, ["baseline"]);
+			if (baselined.exitCode !== 0) {
+				throw new Error(
+					`fixture setup's own \`hejbro baseline\` failed: ${baselined.stderr}`,
+				);
+			}
+
+			// Simulates an already-adopted database: the object the baseline
+			// migration would create already exists, set up directly rather
+			// than through hejbro (mirroring how a real brownfield database
+			// got its objects -- never through this tool).
+			psqlCommand(container, "postgres", `create database ${database};`);
+			psqlCommand(container, database, 'create schema "app";');
+			psqlCommand(
+				container,
+				database,
+				'create table "app"."seed" (id uuid primary key default gen_random_uuid());',
+			);
+		}, 60_000);
+
+		afterAll(async () => {
+			await removeCliFixtureDir(cwd);
+		});
+
+		it("registers a baseline against a database that already has its objects", async () => {
+			const result = await runCli(cwd, ["migrate", "--url", hostUrl(database)]);
+
+			// The repair's own proof: sending the baseline file's DDL against
+			// objects that already exist would fail (42P07, measured above,
+			// pre-repair) -- exit 0 here means it genuinely was not sent.
+			expect(result.exitCode).toBe(0);
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const rows = await driver.execute({
+					sql: 'select "filename" from "hejbro"."migration_ledger" order by "id"',
+					params: [],
+					kind: "sql",
+				});
+				const fileNames = rows.map((row) => String(row.filename));
+				expect(fileNames).toHaveLength(1);
+				expect(fileNames[0]).toMatch(/\.sql$/);
+			} finally {
+				await driver.client.end();
+			}
+		});
+	});
+
+	/**
 	 * [Measurement protocol] Two facts hejbro's own design decisions rest
 	 * on, proven against a real server rather than assumed -- neither is a
 	 * live witness of hejbro's OWN code path (its own guards already keep

@@ -18,6 +18,7 @@ import {
 	findDuplicateVersionGroups,
 	generateMigration,
 	hejbroError,
+	parseBannerBaseline,
 	parseBannerHashes,
 	parseSnapshot,
 	planDuplicateVersionFix,
@@ -284,6 +285,30 @@ export const readChainEntries = (
 		}
 		return [{ fileName, parent: hashes.parent, current: hashes.current }];
 	});
+
+/**
+ * [task 12.1, #624] Which of `fileNames` carry the `-- baseline:` marker
+ * (`parseBannerBaseline`, read by prefix, never by string-matching the
+ * banner — same reasoning as {@link readChainEntries}'s own hash read).
+ * A second pass over the same directory rather than folding the flag
+ * into `ChainEntry` itself: `ChainEntry` is `@hejbro/core`'s own type,
+ * shared with `checkChain`'s hash-chain walk, so widening it here would
+ * be a cross-package change for a fact only the apply path needs.
+ * `planApply` (`apply/plan.ts`) takes this as its own, plan-local
+ * parameter instead — the chain reader already opens every file once for
+ * its hash lines; this opens them a second time for one more marker,
+ * cheap for migration-file-sized text.
+ */
+export const readBaselineFileNames = (
+	migrationsDirPath: string,
+	fileNames: ReadonlyArray<string>,
+): ReadonlySet<string> =>
+	new Set(
+		fileNames.filter((fileName) => {
+			const text = readFileSync(join(migrationsDirPath, fileName), "utf8");
+			return parseBannerBaseline(text);
+		}),
+	);
 
 /** `applyDuplicateVersionFixes`'s running state: `fileNames` is the current directory listing (rewritten in step as earlier groups' renames land, so a later group's plan sees a fixed group's new, higher versions too), `lines` collects every `<before> -> <after>` line printed to stdout, oldest first. */
 type FixOutcome = {
