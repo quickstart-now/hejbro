@@ -430,20 +430,20 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 		});
 
 		// The spec's own guarantee here (migration-apply, "A second runner
-		// waits"): "one applies while the other waits, and neither applies
-		// a migration the other has already applied" -- it does NOT promise
-		// both processes exit 0. Measured, not assumed (first draft of this
-		// test asserted `[0, 0]` and was wrong): the loser's own `pending`
-		// plan is computed before the winner's commit lands, so by the time
-		// it acquires the lock the migration is already there -- it
-		// genuinely re-attempts already-applied DDL and gets the server's
-		// own already-exists refusal (`apply-failed`), not a graceful
-		// no-op. Reported to the planner (DD's own still-open question,
-		// `ledger.ts`: no code minted for "a second runner waits", task 7.4
-		// names a lock only as an exit-code candidate, not settled) --
-		// asserted here as what the spec actually promises, not smoothed
-		// over to what a nicer contract might have said.
-		it("a second runner waits for the first, and neither applies a migration the other already has", async () => {
+		// waits"): "one applies while the other waits; the one that waited
+		// then applies only what the ledger does not record at the moment
+		// it holds the lock, and neither run fails". This test's own first
+		// draft asserted exactly that (`[0, 0]`) and was measured wrong at
+		// the time -- the implementation computed each runner's `pending`
+		// plan before the lock, so the loser re-attempted DDL the winner
+		// had already committed and took the server's own already-exists
+		// refusal. That gap is task 11.1's own fix (#620): `applyMigration`
+		// now rechecks the ledger for this exact filename inside the same
+		// lock and the same transaction it just acquired, before sending
+		// anything -- so there is no window left in which the loser's plan
+		// can still be stale by the time it acts. This test is the original
+		// draft, restored now that the implementation can actually meet it.
+		it("a second runner waits for the first; the one that waited applies only what the ledger does not yet record, and neither run fails", async () => {
 			await writeFixtureFile(cwd, "src/app.schema.ts", ENUM_V3_SOURCE);
 			const generated = await runCli(cwd, ["generate"]);
 			expect(generated.exitCode).toBe(0);
@@ -458,10 +458,25 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 				runCli(cwd, ["migrate", "--url", hostUrl(database)]),
 			]);
 
-			// Exactly one runner actually applied it; the lock serialized
-			// them rather than letting both through concurrently.
-			expect(results.filter((r) => r.exitCode === 0)).toHaveLength(1);
-			expect(results.filter((r) => r.exitCode !== 0)).toHaveLength(1);
+			// Neither run fails (task 11.1) -- the lock still serializes them,
+			// but the one that waited now finds the file already recorded and
+			// reports that instead of re-sending DDL.
+			expect(results.every((result) => result.exitCode === 0)).toBe(true);
+
+			// The report tells the two runs apart (task 11.2): exactly one of
+			// them applied the file itself, and exactly one of them found it
+			// already applied while it waited -- never both silent about it,
+			// never both claiming to have applied it.
+			const appliedCount = results.filter((result) =>
+				result.stdout.includes("migrate: applied 1 migration(s):"),
+			).length;
+			const waitedCount = results.filter((result) =>
+				result.stdout.includes(
+					"migrate: 1 migration(s) another run already applied while this one waited:",
+				),
+			).length;
+			expect(appliedCount).toBe(1);
+			expect(waitedCount).toBe(1);
 
 			const driver = pgDriver(hostUrl(database));
 			try {

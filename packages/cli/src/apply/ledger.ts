@@ -217,6 +217,40 @@ export const readLedger = async (
 };
 
 /**
+ * [task 11.1, #620] True when the ledger already records `filename` --
+ * meant to be read from inside the caller's own transaction, after that
+ * transaction holds `execute.ts`'s advisory lock, so nothing can insert
+ * the row between this read and whatever the caller decides next (that
+ * ordering guarantee lives in the caller, not here; this function is
+ * just the targeted read). A single-row probe (`limit 1`), not a reuse
+ * of `readLedger`'s full-table read -- the caller only ever needs one
+ * filename's answer, and the caller already holds a lock a full-table
+ * read has no need to widen. Table absence reads as "not recorded"
+ * (mirrors `readLedger`'s own `{exists:false}` leniency): a caller
+ * reaching this always ran `bootstrapLedger` first, so the table is
+ * expected to exist, but this function claims nothing stronger than what
+ * it can itself observe.
+ */
+export const isMigrationRecorded = async (
+	session: DriverSession,
+	filename: string,
+): Promise<boolean> => {
+	try {
+		const rows = await exec(
+			session,
+			`select 1 from ${QUALIFIED_LEDGER_TABLE} where "filename" = $1 limit 1`,
+			[filename],
+		);
+		return rows.length > 0;
+	} catch (error) {
+		if (isUndefinedTableError(error)) {
+			return false;
+		}
+		throw error;
+	}
+};
+
+/**
  * Records one migration as applied, identified by its full filename --
  * never its version prefix alone (spec: `verify`'s own duplicate message
  * is why; a tool keyed on the prefix can only ever apply one of a

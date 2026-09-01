@@ -71,7 +71,7 @@ export type MigrateResult = {
 export const NOTHING_TO_APPLY_LINE =
 	"migrate: nothing to apply -- the ledger already records every migration on disk.";
 
-/** Names each migration this run applied, in the order it applied them (task 7.5) -- callers only reach this with a non-empty list; the 0-pending case has its own line above. */
+/** Names each migration this run itself applied, in the order it applied them (task 7.5) -- callers only reach this with a non-empty list; the 0-pending case has its own line above. */
 const appliedReportLines = (
 	applied: ReadonlyArray<string>,
 ): ReadonlyArray<string> => [
@@ -89,15 +89,41 @@ const appliedSoFarLines = (
 	return appliedReportLines(appliedSoFar);
 };
 
+/**
+ * [task 11.2, #620] Names each migration this run found already recorded
+ * by another run, by the time it got the advisory lock (`execute.ts`'s
+ * own `"already-applied"` outcome, task 11.1) -- a separate bucket from
+ * {@link appliedReportLines}, not folded into it: this run sent no DDL
+ * and wrote no ledger row for these, so calling them "applied" here
+ * would claim credit this run's own transaction never took. Silence
+ * about this bucket would leave a user staring at a pending file that
+ * both runs agreed on and wondering why the report never mentions it.
+ */
+const alreadyAppliedReportLines = (
+	alreadyApplied: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	if (alreadyApplied.length === 0) {
+		return [];
+	}
+	return [
+		`migrate: ${alreadyApplied.length} migration(s) another run already applied while this one waited:`,
+		...alreadyApplied.map((fileName) => ` - ${fileName}`),
+	];
+};
+
 const failureResult = (
 	appliedSoFar: ReadonlyArray<string>,
+	alreadyAppliedSoFar: ReadonlyArray<string>,
 	failedFileName: string,
 	error: unknown,
 ): MigrateResult => {
 	const hejbroErr = asHejbroError(error);
 	return {
 		exitCode: 1,
-		stdout: appliedSoFarLines(appliedSoFar),
+		stdout: [
+			...appliedSoFarLines(appliedSoFar),
+			...alreadyAppliedReportLines(alreadyAppliedSoFar),
+		],
 		stderr: renderDiagnostics(
 			[fromHejbroError(hejbroErr, failedFileName)],
 			null,
@@ -106,37 +132,64 @@ const failureResult = (
 };
 
 /**
- * [task 7.5] Applies `remaining` in chain order, recursively (house style
- * bans loops): a failure stops the run immediately, leaving every
- * migration applied before it applied and recorded (`applyMigration`'s
- * own per-file transaction already committed each one, so "stops at the
- * first failure" is this function's own control flow, not a rollback of
- * work already done) -- this is the run-level property the delta scenario
- * asks for and that only this loop can express (no other task owns it,
- * per tasks.md's own note on where the gap was). Takes `Migration[]`,
- * already read from disk -- this function itself touches no filesystem
- * (mirrors `execute.ts`'s own `Migration` doc comment), so it is testable
- * directly with a fake `Driver`, no temp directory needed.
+ * [task 7.5; two buckets since task 11.2, #620] Applies `remaining` in
+ * chain order, recursively (house style bans loops): a failure stops the
+ * run immediately, leaving every migration applied before it applied and
+ * recorded (`applyMigration`'s own per-file transaction already
+ * committed each one, so "stops at the first failure" is this function's
+ * own control flow, not a rollback of work already done) -- this is the
+ * run-level property the delta scenario asks for and that only this loop
+ * can express (no other task owns it, per tasks.md's own note on where
+ * the gap was). Takes `Migration[]`, already read from disk -- this
+ * function itself touches no filesystem (mirrors `execute.ts`'s own
+ * `Migration` doc comment), so it is testable directly with a fake
+ * `Driver`, no temp directory needed.
+ *
+ * `appliedSoFar`/`alreadyAppliedSoFar` are two separate accumulators, not
+ * one: `applyMigration`'s own per-file outcome (task 11.1) says which
+ * bucket a given file belongs in, and both are reported (task 11.2) when
+ * the run finishes, whether it finishes by exhausting `remaining` or by
+ * failing partway through.
  */
 export const applyFrom = async (
 	driver: Driver,
 	remaining: ReadonlyArray<Migration>,
 	appliedSoFar: ReadonlyArray<string>,
+	alreadyAppliedSoFar: ReadonlyArray<string> = [],
 ): Promise<MigrateResult> => {
 	const [next, ...rest] = remaining;
 	if (next === undefined) {
 		return {
 			exitCode: 0,
-			stdout: appliedReportLines(appliedSoFar),
+			stdout: [
+				...appliedSoFarLines(appliedSoFar),
+				...alreadyAppliedReportLines(alreadyAppliedSoFar),
+			],
 			stderr: null,
 		};
 	}
 	try {
-		await applyMigration(driver, next, MIGRATE_COMMAND);
+		const outcome = await applyMigration(driver, next, MIGRATE_COMMAND);
+		if (outcome === "already-applied") {
+			return applyFrom(driver, rest, appliedSoFar, [
+				...alreadyAppliedSoFar,
+				next.fileName,
+			]);
+		}
+		return applyFrom(
+			driver,
+			rest,
+			[...appliedSoFar, next.fileName],
+			alreadyAppliedSoFar,
+		);
 	} catch (error) {
-		return failureResult(appliedSoFar, next.fileName, error);
+		return failureResult(
+			appliedSoFar,
+			alreadyAppliedSoFar,
+			next.fileName,
+			error,
+		);
 	}
-	return applyFrom(driver, rest, [...appliedSoFar, next.fileName]);
 };
 
 /** Every way `planApply` refuses (chain-invalid or a ledger disagreement) answers `2` -- neither is the database refusing a migration; both are hejbro's own precondition that there is nothing yet to safely send. */

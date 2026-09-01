@@ -116,8 +116,9 @@ connection pool and not of the contract.
 
 #### Scenario: A second runner waits
 - **WHEN** two `migrate` runs start against the same database at once
-- **THEN** one applies while the other waits, and neither applies a
-  migration the other has already applied
+- **THEN** one applies while the other waits; the one that waited then
+  applies only what the ledger does not record at the moment it holds
+  the lock, and neither run fails
 
 #### Scenario: A failed run releases its lock
 - **WHEN** an apply run fails inside its transaction

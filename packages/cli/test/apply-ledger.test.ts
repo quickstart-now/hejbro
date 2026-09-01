@@ -130,6 +130,21 @@ describe("bootstrapLedger / 1.2", () => {
 	});
 });
 
+describe("bootstrapLedger / 11.3 (#620)", () => {
+	it('declares "filename" not null unique -- a second insert of the same filename is impossible however the application logic gets there, independent of task 11.1\'s own in-transaction recheck (a defence nobody remembers is a defence nobody keeps)', async () => {
+		const { session, calls } = makeRecordingSession();
+
+		await bootstrapLedger(session);
+
+		const tableStatement = calls.find((call) =>
+			call.sql.toLowerCase().includes("create table"),
+		);
+		expect(tableStatement?.sql).toMatch(
+			/"filename"\s+text\s+not null\s+unique/i,
+		);
+	});
+});
+
 describe("readLedger / 1.3", () => {
 	it("an absent ledger table reads as no applied migrations", async () => {
 		const session = makeUnbootstrappedSession();

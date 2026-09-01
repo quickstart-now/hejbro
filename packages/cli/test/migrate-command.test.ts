@@ -3,6 +3,7 @@ import type {
 	CompileResult,
 	Driver,
 	DriverCapabilities,
+	DriverRow,
 	DriverSession,
 } from "@hejbro/query";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -22,11 +23,15 @@ import {
 } from "./support/cli-runner";
 
 type FailWhen = (compiled: CompileResult) => boolean;
+type RowsWhen = (
+	compiled: CompileResult,
+) => ReadonlyArray<DriverRow> | undefined;
 
-/** Mirrors `apply-execute.test.ts`'s own fake driver -- records every statement, `failWhen` makes exactly one fail. */
+/** Mirrors `apply-execute.test.ts`'s own fake driver -- records every statement, `failWhen` makes exactly one fail, `rowsWhen` (task 11.2) answers a specific `select` (the ledger recheck) with rows of its own choosing so a test can make `applyMigration` resolve `"already-applied"` for a given file. */
 const makeFakeDriver = (options?: {
 	readonly failWhen?: FailWhen;
 	readonly failError?: unknown;
+	readonly rowsWhen?: RowsWhen;
 	readonly capabilities?: DriverCapabilities;
 }): { readonly driver: Driver; readonly calls: CompileResult[] } => {
 	const calls: CompileResult[] = [];
@@ -36,7 +41,7 @@ const makeFakeDriver = (options?: {
 			if (options?.failWhen?.(compiled) === true) {
 				throw options?.failError ?? new Error("fake failure");
 			}
-			return [];
+			return options?.rowsWhen?.(compiled) ?? [];
 		},
 	};
 	const driver: Driver = {
@@ -95,6 +100,96 @@ describe("applyFrom / 7.5", () => {
 		// fail on -- proves the run really did stop, not just report as if.
 		expect(calls.some((call) => call.sql === migrationB.sql)).toBe(true);
 		expect(calls.filter((call) => call.sql === migrationA.sql)).toHaveLength(1);
+	});
+});
+
+/** `true` when `call` is the ledger recheck (a `select` naming this filename in its params) -- shared by 11.2's tests below, each of which decides its own set of "already recorded" filenames. */
+const isRecheckFor = (call: CompileResult, fileName: string): boolean =>
+	call.sql.toLowerCase().includes("select") && call.params.includes(fileName);
+
+describe("applyFrom / 11.2 (#620)", () => {
+	it("reports a migration another run already applied in its own bucket, separate from what this run applied", async () => {
+		const recheckFindsB = (
+			call: CompileResult,
+		): ReadonlyArray<DriverRow> | undefined => {
+			if (isRecheckFor(call, migrationB.fileName)) {
+				return [{ "?column?": 1 }];
+			}
+			return undefined;
+		};
+		const { driver, calls } = makeFakeDriver({ rowsWhen: recheckFindsB });
+
+		const result = await applyFrom(driver, [migrationA, migrationB], []);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0001_a.sql",
+			"migrate: 1 migration(s) another run already applied while this one waited:",
+			" - 0002_b.sql",
+		]);
+		// Never sent 0002_b.sql's own DDL -- the recheck inside the lock
+		// found it recorded first (execute.ts's own task 11.1).
+		expect(calls.some((call) => call.sql === migrationB.sql)).toBe(false);
+	});
+
+	it("reports every migration as already-applied when another run finished the whole pending set first", async () => {
+		const recheckFindsBoth = (
+			call: CompileResult,
+		): ReadonlyArray<DriverRow> | undefined => {
+			if (
+				isRecheckFor(call, migrationA.fileName) ||
+				isRecheckFor(call, migrationB.fileName)
+			) {
+				return [{ "?column?": 1 }];
+			}
+			return undefined;
+		};
+		const { driver } = makeFakeDriver({ rowsWhen: recheckFindsBoth });
+
+		const result = await applyFrom(driver, [migrationA, migrationB], []);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toEqual([
+			"migrate: 2 migration(s) another run already applied while this one waited:",
+			" - 0001_a.sql",
+			" - 0002_b.sql",
+		]);
+	});
+
+	it("still reports the already-applied bucket when a later migration in the same run fails", async () => {
+		const migrationC: Migration = {
+			fileName: "0003_c.sql",
+			sql: 'create table "app"."c" (id integer);',
+		};
+		const recheckFindsA = (
+			call: CompileResult,
+		): ReadonlyArray<DriverRow> | undefined => {
+			if (isRecheckFor(call, migrationA.fileName)) {
+				return [{ "?column?": 1 }];
+			}
+			return undefined;
+		};
+		const { driver } = makeFakeDriver({
+			rowsWhen: recheckFindsA,
+			failWhen: (call) => call.sql === migrationC.sql,
+			failError: Object.assign(new Error("syntax error"), { code: "42601" }),
+		});
+
+		const result = await applyFrom(
+			driver,
+			[migrationA, migrationB, migrationC],
+			[],
+		);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stdout).toEqual([
+			"migrate: applied 1 migration(s):",
+			" - 0002_b.sql",
+			"migrate: 1 migration(s) another run already applied while this one waited:",
+			" - 0001_a.sql",
+		]);
+		expect(result.stderr).toContain("0003_c.sql");
 	});
 });
 

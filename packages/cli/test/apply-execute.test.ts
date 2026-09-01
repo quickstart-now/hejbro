@@ -1,4 +1,9 @@
-import type { CompileResult, Driver, DriverSession } from "@hejbro/query";
+import type {
+	CompileResult,
+	Driver,
+	DriverRow,
+	DriverSession,
+} from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import type { Migration } from "../src/apply/execute";
 import {
@@ -7,6 +12,9 @@ import {
 } from "../src/apply/execute";
 
 type FailWhen = (compiled: CompileResult) => boolean;
+type RowsWhen = (
+	compiled: CompileResult,
+) => ReadonlyArray<DriverRow> | undefined;
 
 /**
  * A fake `Driver` whose `transaction()` runs the callback against one
@@ -15,11 +23,15 @@ type FailWhen = (compiled: CompileResult) => boolean;
  * *what* is sent, *in what order*, and *through how many transactions*,
  * without a real database. `failWhen` lets a test make exactly one
  * statement fail, so the migration statement's own failure can be
- * distinguished from the lock's or the ledger row's.
+ * distinguished from the lock's or the ledger row's. `rowsWhen` (task
+ * 11.1) lets a test answer a specific `select` (the ledger recheck)
+ * with rows of its own choosing -- everything else still answers `[]`,
+ * the same default every earlier test already relies on.
  */
 const makeFakeDriver = (options?: {
 	readonly failWhen?: FailWhen;
 	readonly failError?: unknown;
+	readonly rowsWhen?: RowsWhen;
 }): {
 	readonly driver: Driver;
 	readonly calls: CompileResult[];
@@ -33,7 +45,7 @@ const makeFakeDriver = (options?: {
 			if (options?.failWhen?.(compiled) === true) {
 				throw options?.failError ?? new Error("fake failure");
 			}
-			return [];
+			return options?.rowsWhen?.(compiled) ?? [];
 		},
 	});
 	const driver: Driver = {
@@ -198,6 +210,68 @@ describe("applyMigration / 3.4", () => {
 	});
 });
 
+describe("applyMigration / 11.1 (#620)", () => {
+	it('reports "applied" on the ordinary path -- the ledger recheck finds nothing', async () => {
+		const { driver } = makeFakeDriver();
+
+		await expect(
+			applyMigration(driver, okMigration, NEXT_COMMAND),
+		).resolves.toBe("applied");
+	});
+
+	it("rechecks the ledger inside the lock, before sending the migration's own SQL", async () => {
+		const { driver, calls } = makeFakeDriver();
+
+		await applyMigration(driver, okMigration, NEXT_COMMAND);
+
+		const lockIndex = calls.findIndex((call) =>
+			call.sql.includes("pg_advisory_xact_lock"),
+		);
+		const recheckIndex = calls.findIndex(
+			(call) =>
+				call.sql.toLowerCase().includes("select") &&
+				call.params.includes(okMigration.fileName),
+		);
+		const migrationIndex = calls.findIndex(
+			(call) => call.sql === okMigration.sql,
+		);
+		expect(recheckIndex).toBeGreaterThan(lockIndex);
+		expect(migrationIndex).toBeGreaterThan(recheckIndex);
+	});
+
+	it('restores the witness\'s own original red: when the ledger already records this filename by the time the lock is held, this call sends no DDL, writes no second row, and reports "already-applied" instead of failing', async () => {
+		const raced: Migration = {
+			fileName: "0011_raced.sql",
+			sql: 'alter type "app"."mood" add value \'great\';',
+		};
+		const recheckFindsRaced = (
+			call: CompileResult,
+		): ReadonlyArray<DriverRow> | undefined => {
+			if (
+				call.sql.toLowerCase().includes("select") &&
+				call.params.includes(raced.fileName)
+			) {
+				return [{ "?column?": 1 }];
+			}
+			return undefined;
+		};
+		const { driver, calls } = makeFakeDriver({
+			rowsWhen: recheckFindsRaced,
+		});
+
+		await expect(applyMigration(driver, raced, NEXT_COMMAND)).resolves.toBe(
+			"already-applied",
+		);
+
+		const migrationCall = calls.find((call) => call.sql === raced.sql);
+		expect(migrationCall).toBeUndefined();
+		const ledgerInsertCall = calls.find((call) =>
+			call.sql.toLowerCase().includes("insert into"),
+		);
+		expect(ledgerInsertCall).toBeUndefined();
+	});
+});
+
 describe("applyMigration / 3.5", () => {
 	it("refuses a migration containing its own transaction control, naming the statement", async () => {
 		const migration: Migration = {
@@ -226,9 +300,9 @@ $$ language plpgsql;`,
 		};
 		const { driver } = makeFakeDriver();
 
-		await expect(
-			applyMigration(driver, migration, NEXT_COMMAND),
-		).resolves.toBeUndefined();
+		await expect(applyMigration(driver, migration, NEXT_COMMAND)).resolves.toBe(
+			"applied",
+		);
 	});
 
 	it("ignores begin/commit/rollback that appear only in a `--` comment", async () => {
@@ -238,9 +312,9 @@ $$ language plpgsql;`,
 		};
 		const { driver } = makeFakeDriver();
 
-		await expect(
-			applyMigration(driver, migration, NEXT_COMMAND),
-		).resolves.toBeUndefined();
+		await expect(applyMigration(driver, migration, NEXT_COMMAND)).resolves.toBe(
+			"applied",
+		);
 	});
 
 	it("is not confused by an escaped quote inside a string literal", async () => {
@@ -250,9 +324,9 @@ $$ language plpgsql;`,
 		};
 		const { driver } = makeFakeDriver();
 
-		await expect(
-			applyMigration(driver, migration, NEXT_COMMAND),
-		).resolves.toBeUndefined();
+		await expect(applyMigration(driver, migration, NEXT_COMMAND)).resolves.toBe(
+			"applied",
+		);
 	});
 
 	it("refuses begin and rollback the same way as commit", async () => {

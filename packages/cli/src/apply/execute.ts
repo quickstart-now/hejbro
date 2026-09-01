@@ -1,6 +1,6 @@
 import { hejbroError, throwHejbroError } from "@hejbro/core";
 import type { CompileResult, Driver } from "@hejbro/query";
-import { recordAppliedMigration } from "./ledger";
+import { isMigrationRecorded, recordAppliedMigration } from "./ledger";
 
 /** One migration ready to apply -- the filename the ledger keys on (G1) and the file's own SQL text, already read from disk by the caller (group 7's job; this module touches no filesystem). */
 export type Migration = {
@@ -283,34 +283,67 @@ const throwApplyFailure = (
 };
 
 /**
+ * [task 11.1, design, #620] What one `applyMigration` call actually did:
+ * `"applied"` when this call itself sent the DDL and wrote the ledger
+ * row; `"already-applied"` when, by the time this call got the advisory
+ * lock, another runner's own transaction had already recorded the same
+ * filename -- so this call sent nothing and wrote nothing. Not an
+ * exception: the requirement calls two concurrent runners the ordinary
+ * case (spec, "A second runner waits"), and the waiting runner finding
+ * the file already done is that ordinary case's own ordinary outcome,
+ * not a failure a caller must catch. A string union rather than a
+ * boolean or an object: every existing caller of this function (`raise`)
+ * already ignores the resolved value entirely, so the shape only has to
+ * read clearly at its one new caller (`migrate`, task 11.2), which is
+ * exactly what a plain two-member union does.
+ */
+export type ApplyOutcome = "applied" | "already-applied";
+
+/**
  * Applies one migration: refuses first if it carries its own transaction
- * control (3.5), otherwise sends its whole text as one parameterless
- * statement inside `transaction()` (3.1) -- the advisory lock (3.4) and
- * the ledger row (G1's `recordAppliedMigration`) go out on the same
- * session, so both are scoped to the same transaction. Any failure
- * inside the callback propagates unmodified to the driver, whose own
- * `transaction()` contract rolls back and rethrows (this module never
- * swallows it to translate it -- rollback itself is the driver's
- * guarantee, proved against a real server by group 8's live witness, not
- * by this module); the translation into a coded diagnostic (3.3) happens
- * once, outside the transaction, on whatever escaped it. `nextCommand`
- * names the command a caller should rerun once a failure is fixed (G6,
- * #612) -- passed straight through to {@link throwApplyFailure}, never
- * assumed.
+ * control (3.5), otherwise takes the advisory lock (3.4) and, still
+ * inside that same lock and that same transaction, re-reads the ledger
+ * for this exact filename before sending anything (task 11.1, #620) --
+ * the plan a caller computed to decide "this file is pending" was
+ * necessarily read *before* the lock, so by the time this call actually
+ * holds it, another runner may have applied and committed the very same
+ * file. Checking and applying inside one lock and one transaction closes
+ * that gap structurally: nothing can insert the row between this read
+ * and this call's own decision, so there is no window left for a second
+ * check to race against. When the row is already there, the transaction
+ * closes having sent no DDL and written nothing, and this call reports
+ * `"already-applied"` rather than repeating work the winner already did
+ * (which is what surfaced this gap in the first place: the server's own
+ * refusal of DDL a winner already applied, group 8's witness, restored
+ * below as task 11.1's own red).
+ *
+ * Any failure inside the callback still propagates unmodified to the
+ * driver, whose own `transaction()` contract rolls back and rethrows
+ * (this module never swallows it to translate it -- rollback itself is
+ * the driver's guarantee, proved against a real server by group 8's live
+ * witness, not by this module); the translation into a coded diagnostic
+ * (3.3) happens once, outside the transaction, on whatever escaped it.
+ * `nextCommand` names the command a caller should rerun once a failure
+ * is fixed (G6, #612) -- passed straight through to
+ * {@link throwApplyFailure}, never assumed.
  */
 export const applyMigration = async (
 	driver: Driver,
 	migration: Migration,
 	nextCommand: string,
-): Promise<void> => {
+): Promise<ApplyOutcome> => {
 	assertNoTransactionControl(migration);
 	try {
-		await driver.transaction(async (session) => {
+		return await driver.transaction(async (session) => {
 			await session.execute(LOCK_STATEMENT);
+			if (await isMigrationRecorded(session, migration.fileName)) {
+				return "already-applied";
+			}
 			await session.execute(exec(migration.sql, []));
 			await recordAppliedMigration(session, migration.fileName);
+			return "applied";
 		});
 	} catch (error) {
-		throwApplyFailure(migration.fileName, nextCommand, error);
+		return throwApplyFailure(migration.fileName, nextCommand, error);
 	}
 };

@@ -509,6 +509,44 @@ strings) moved to group 4, which owns that file.
       revived and rejected; and a proposal line claiming core was
       untouched after the ruling that touched it. Files: that entry.
 
+## 11. The concurrent-runner repair
+
+Found by group 8's witness, after every group above had landed. It
+crosses three slices — `apply/execute.ts` (group 3), the `migrate`
+report (group 7), and the live witness (group 8) — because a defect
+found by running the whole thing does not respect a boundary drawn over
+files. Reopening those three is recorded here rather than pretended
+away.
+
+Files: `packages/cli/src/apply/execute.ts` and its test,
+`packages/cli/src/commands/migrate.ts` and its test,
+`packages/cli/test/apply-live.integration.test.ts`.
+
+- [x] 11.1 (~9m) [design] The plan is computed before the lock, so the
+      loser's copy is stale by the time it gets in: it re-applies what
+      the winner already applied and takes the server's refusal, exiting
+      non-zero on a run where nothing is wrong. The requirement calls
+      two runners "the ordinary case", and an ordinary case that fails
+      half the time is a hole in the implementation, not a case the
+      spec declined to cover. **Recheck the ledger inside the lock's own
+      transaction**: if the row is already there, close that transaction
+      without sending DDL and move on. Check and apply then share one
+      lock and one transaction, so nothing can change between them.
+      Red: the witness's own first draft, restored — it asserted both
+      runners exit zero, which was the right contract written before the
+      implementation could meet it. Files: `execute.ts`, its test, the
+      witness.
+- [x] 11.2 (~8m) The report tells the two apart: what this run applied,
+      and what another run applied while this one waited. Both end at
+      zero; silence about the second would leave a user wondering why a
+      migration they expected to apply is missing from the report.
+      Files: `migrate.ts`, its test.
+- [x] 11.3 (~2m) The second layer was already there: the ledger's
+      `filename` column is declared `not null unique`, so a double
+      insert is impossible whatever the logic does. Confirm it and pin
+      it — a defence nobody remembers is a defence nobody keeps. Files:
+      `apply-ledger.test.ts`.
+
 ## Verification
 
 - **At archive time, read the rolled-up main specs and confirm they say
