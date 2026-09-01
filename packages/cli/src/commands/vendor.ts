@@ -22,11 +22,7 @@ import {
 	writeLock,
 } from "../vendor/lock";
 import { readSourceFile } from "../vendor/source-file";
-import {
-	assertBoundaryAtCheck,
-	warnIfLocalSource,
-	warnIfNonDefaultRef,
-} from "../vendor/state";
+import { assertBoundaryAtCheck, warnIfNonDefaultRef } from "../vendor/state";
 
 const VENDOR_DESCRIPTION =
 	"Fetch the linked source's schema export and pin it (writes the description, the squashed SQL, the contract and the lock).";
@@ -66,15 +62,6 @@ const requireLinkedSource = (cwd: string): string => {
 	return sourceFile.source;
 };
 
-const linkedSourceOrNull = (
-	sourceFile: { readonly source: string } | null,
-): string | null => {
-	if (sourceFile === null) {
-		return null;
-	}
-	return sourceFile.source;
-};
-
 const requireVendoredLock = (cwd: string): VendorLock => {
 	const lock = readLock(cwd);
 	if (lock === null) {
@@ -108,13 +95,9 @@ const runVendorCheck = (
 	strictFlag: boolean | undefined,
 ): VendorResult => {
 	const lock = requireVendoredLock(cwd);
-	const linkedSource = linkedSourceOrNull(readSourceFile(cwd));
 	const warnings: string[] = [];
-	assertBoundaryAtCheck(
-		linkedSource,
-		lockResolvedBy(lock),
-		strictFlag,
-		(message) => warnings.push(message),
+	assertBoundaryAtCheck(lockResolvedBy(lock), strictFlag, (message: string) =>
+		warnings.push(message),
 	);
 	const schemaText = readFileSync(vendorSchemaPath(cwd), "utf8");
 	const sqlText = readFileSync(vendorSqlPath(cwd), "utf8");
@@ -150,9 +133,9 @@ const buildContractOrigin = (
 
 /**
  * Refuses to move an existing lock's commit forward when the remote no
- * longer has the commit it currently names (schema-vendoring spec,
- * member 7 of the eleven: "The lock names a commit the remote no longer
- * has" — force-pushed, garbage-collected, or rewritten history). The
+ * longer has the commit it currently names (schema-vendoring spec, one
+ * of the ten named failures: "The lock names a commit the remote no
+ * longer has" — force-pushed, garbage-collected, or rewritten history). The
  * remedy is a decision, not a repair: `--force` is the same deliberate
  * override the destination-file guard already uses, reused here rather
  * than inventing a second one. Only reachable at `vendor` time (the
@@ -186,15 +169,14 @@ const runVendorUpdate = (
 	ref: string | undefined,
 	force: boolean,
 ): VendorResult => {
-	// Members 10/11 at `vendor` itself are always advisory ("warned
-	// locally"/"advisory locally") -- a local source or an explicit --ref
-	// is the caller's own deliberate choice on their own machine, never
-	// blocked here; `vendor --check` (`assertBoundaryAtCheck`) is the
-	// boundary that can actually fail on either.
+	// A non-default-ref lock is always advisory at `vendor` itself
+	// ("advisory locally") -- an explicit --ref is the caller's own
+	// deliberate choice on their own machine, never blocked here;
+	// `vendor --check` (`assertBoundaryAtCheck`) is the boundary that can
+	// actually fail on it.
 	const resolvedBy = resolvedByFor(ref);
 	const warnings: string[] = [];
-	warnIfLocalSource(source, (message) => warnings.push(message));
-	warnIfNonDefaultRef(resolvedBy, (message) => warnings.push(message));
+	warnIfNonDefaultRef(resolvedBy, (message: string) => warnings.push(message));
 	// Runs *after* `resolveExport` below succeeds, deliberately: that
 	// call already proves the remote itself is reachable
 	// (`vendor-remote-unreachable` would already have fired otherwise),
@@ -317,7 +299,7 @@ export const vendorCommand = defineCommand({
 		strict: {
 			type: "boolean",
 			description:
-				"with --check, fail (rather than warn) on a local source or a non-default-branch lock; defaults to failing outside an interactive terminal",
+				"with --check, fail (rather than warn) on a non-default-branch lock; defaults to failing outside an interactive terminal",
 		},
 	},
 	run: async (ctx) => {

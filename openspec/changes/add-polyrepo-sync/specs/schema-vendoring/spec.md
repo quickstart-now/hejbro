@@ -162,15 +162,15 @@ than inventing a target it cannot describe.
 - **THEN** the column is present and no relation is derived from it
 
 ### Requirement: Each way vendoring can fail is named separately
-A consumer's toolchain meets **eleven** distinct situations, and SHALL
+A consumer's toolchain meets **ten** distinct situations, and SHALL
 report each under its own code with its own remedy. They are: no source
 is linked; the remote cannot be reached; the ref does not resolve; the
 resolved commit carries no export; the export does not answer its own
 format; the export's format is newer than this toolchain knows; the
 lock names a commit the remote no longer has; the vendored files
 disagree with the lock; the destination holds a file this tool did not
-write; a local replacement is active where it is forbidden; and the
-lock was resolved from somewhere other than the default branch.
+write; and the lock was resolved from somewhere other than the default
+branch.
 
 A situation earns its own code when its remedy sends the reader
 somewhere another remedy does not — to the consuming repository, to the
@@ -180,12 +180,15 @@ reporting one under another's code sends someone to fix what they do
 not own.
 
 Being behind the newest commit is not among them: a lock that names an
-older commit is doing its job, and staleness is reported as advice.
+older commit is doing its job, and staleness is reported as advice. Nor
+is an active local replacement: that situation belongs to `replace`
+(a committed source overridden locally by an uncommitted, gitignored
+file), and this change does not build `replace` — no caller can reach
+it yet. It returns to this enumeration when `replace` lands.
 
-#### Scenario: The eleven situations are told apart
-- **WHEN** a toolchain meets each of the eleven in turn
-- **THEN** it reports eleven distinct codes, each carrying its own
-  remedy
+#### Scenario: The ten situations are told apart
+- **WHEN** a toolchain meets each of the ten in turn
+- **THEN** it reports ten distinct codes, each carrying its own remedy
 
 #### Scenario: A commit with no export names the other repository
 - **WHEN** the resolved commit carries no export

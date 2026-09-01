@@ -33,7 +33,7 @@ beforeEach(async () => {
 	cwd = await createCliFixtureDir();
 	await writeExport(remote);
 	remote.commit("export v1", "2026-01-01T10:00:00Z");
-	await runCli(cwd, ["link", `file://${remote.cwd}`]);
+	await runCli(cwd, ["link", remote.cwd]);
 	await runCli(cwd, ["vendor"]);
 });
 
