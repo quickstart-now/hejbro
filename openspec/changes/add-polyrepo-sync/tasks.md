@@ -25,12 +25,20 @@ reports it passing however false it is. Where such a row crosses a
 package boundary, the reading package resolves the other through its
 built output, so a build has to precede the check.
 
-Two questions are asked of every row of every three-column table below,
-because this change has already been caught by both. **Does the test's
-subject match the scenario's?** — a scenario about what an *existing*
-reader does is not pinned by a test about what the *new* one does.
-**Which universal is this new scenario a member of?** — a sentence that
-counts has to move whenever a requirement is added beside it.
+Three questions are asked of every row of every three-column table
+below, because this change has already been caught by each. **Does the
+test's subject match the scenario's?** — a scenario about what an
+*existing* reader does is not pinned by a test about what the *new* one
+does. **Which universal is this new scenario a member of?** — a
+sentence that counts has to move whenever a requirement is added beside
+it. **Which word did the vocabulary ruling move?** — `sync`, `pull` and
+`manifest` each changed meaning or owner, and a sentence using one in
+its old sense is wrong even when everything around it is right; no gate
+reads for it, so the check is a search run before the packet is handed
+over, not a rule to remember.
+
+And a fourth rule, because R2 begins by deleting: **a scenario that
+leaves a requirement is named as removed, with where it went.**
 
 Estimates are agent execution minutes and are frozen per group at
 `est_frozen`; overruns correct the next group's estimate, never this
@@ -482,3 +490,366 @@ through the built CLI.
       distance, including two rows applied within the same second. Start
       from `cli/test/integration/polyrepo.integration.test.ts > counts
       the distance across rows applied in the same second`. ~7m
+
+---
+
+## Shared and unowned files (R2)
+
+`packages/core/src/index.ts` (R2-G1 removes, R2-G2 adds) ·
+`packages/cli/src/commands/generate.ts` (R2-G2, R2-G3) ·
+`packages/cli/src/git.ts` (R2-G4 only, listed because every git
+subprocess in the package goes through it) ·
+`packages/cli/src/config.ts` (R2-G4, R2-G7).
+Every other file belongs to exactly one group.
+
+## R2-G1 — Withdrawing what lost its reader — `est_frozen: 20m` — #594
+
+Files: `packages/core/src/dsl/usage-table.ts` (deleted),
+`packages/core/src/dsl/table.ts`, `packages/core/src/index.ts`,
+`packages/query/test/types/usage-table.test.ts` (deleted).
+
+- [ ] 1.1 Delete the usage-table constructor and the three write-fact
+      helpers, and remove their exports. Start from the type test that
+      asserts they exist: it is deleted in the same step, and the
+      failing signal is `check-types` over the packages that imported
+      them. ~6m
+- [ ] 1.2 `[design]` Decide whether the authority brand's **declared**
+      side survives on its own ground. It narrows what generation
+      accepts, which is a property of the repository that authors
+      migrations and does not depend on what a consumer holds. Settle
+      *keep* or *withdraw* with the reason recorded in one line, then
+      execute it. Start from
+      `core/test/types/declared-table.test.ts`. ~8m
+- [ ] 1.3 Remove the origin carrier and the origin clause of the
+      refusal, keeping the refusal itself. Start from
+      `core/test/engine/authority-refusal.test.ts > the refusal names
+      what it observed`. ~6m
+
+## R2-G2 — The export directory — `est_frozen: 60m` — #595
+
+Files: `packages/cli/src/export/*` (new),
+`packages/cli/src/manifest-payload.ts` → renamed to the export's
+description builder, `packages/cli/src/commands/generate.ts` (shared).
+
+| SHALL (delta) | Scenario | Red test |
+|---|---|---|
+| A repository publishes the schema it declares | Generating writes the export | `cli/test/export-write.test.ts > writes the description, the SQL and the format record` |
+| " | The export needs no database | `cli/test/export-write.test.ts > writes the export with no database reachable` |
+| " | A repository without the export is unchanged | `cli/test/export-write.test.ts > migration and snapshot are byte-identical with the export disabled` |
+| The export is a function of the declarations | Two runs separated in time are byte-identical | `cli/test/export-determinism.test.ts > two runs with different clocks are byte-identical` |
+| " | The export names no clock and no machine | `cli/test/export-determinism.test.ts > no timestamp, host name or absolute path` |
+| The export carries what the schema alone does not say | The carried choices survive the round trip | `cli/test/export-facts.test.ts > every declaration-time choice is recovered` |
+| " | A re-added column keeps its own facts | `cli/test/export-facts.test.ts > facts follow the column's name, not its position` |
+| " | A synthesized trigger function carries no export name | `cli/test/export-facts.test.ts > a trigger's function carries no export name` |
+| " | A brand is not among the carried facts | `cli/test/export-facts.test.ts > a branded column carries no brand` |
+| The export records the formats it is written in | The two format versions are separate | `cli/test/export-write.test.ts > description and snapshot formats are distinct values` |
+| The export includes the SQL that raises the schema | The squashed SQL is complete on its own | `cli/test/export-sql.test.ts > the squashed SQL creates the declared schema` |
+| " | The squashed SQL is not a migration | `cli/test/export-sql.test.ts > listing migrations does not yield the export's SQL` |
+
+- [ ] 2.1 `[design]` Settle the export's shape on disk: directory name,
+      the three file names, and the name of the format record — which
+      must not be `manifest`, since that word now belongs to the
+      apply-engine ledger. Start from
+      `cli/test/export-write.test.ts > writes the description, the SQL
+      and the format record`. ~8m
+- [ ] 2.2 Assemble the description from the declarations and the
+      snapshot, reusing the existing sidecar builder. Start from
+      `cli/test/export-facts.test.ts > every declaration-time choice is
+      recovered`. ~8m
+- [ ] 2.3 Carry facts against a column's SQL name, and prove it with a
+      table whose physical order differs from its declaration order.
+      Start from `cli/test/export-facts.test.ts > facts follow the
+      column's name, not its position`. ~8m
+- [ ] 2.4 The format record, with the description's own version and the
+      snapshot's kept separate. Start from `cli/test/export-write.test.ts
+      > description and snapshot formats are distinct values`. ~6m
+- [ ] 2.5 The squashed SQL, taken from the generation call that already
+      computes it and discards it, written outside the migrations
+      directory. Start from `cli/test/export-sql.test.ts > listing
+      migrations does not yield the export's SQL`. ~8m
+- [ ] 2.6 Determinism: no clock, no host, no absolute path, one
+      serializer. Start from `cli/test/export-determinism.test.ts > two
+      runs with different clocks are byte-identical`. ~7m
+- [ ] 2.7 Wire the export into generation behind its option; with it
+      off, the migration and snapshot are byte-identical to today's.
+      Start from `cli/test/export-write.test.ts > migration and snapshot
+      are byte-identical with the export disabled`. ~7m
+- [ ] 2.8 `[design]` Settle whether the three facts the new promise
+      needs — a view's column types, a function's structural signature,
+      a function argument's TypeScript key — are carried in this
+      version. The third cannot be: the declaration does not keep it and
+      the conversion is one-way, so carrying it is a change to the DSL.
+      Record the boundary and what a consumer sees at it. Start from
+      `cli/test/export-facts.test.ts > the export states what it does
+      not carry`. ~8m
+
+## R2-G3 — The schema repository's own check — `est_frozen: 30m` — #596
+
+Files: `packages/cli/src/commands/verify.ts`,
+`packages/cli/src/export-compare.ts` (new).
+
+| SHALL (delta) | Scenario | Red test |
+|---|---|---|
+| A committed export matches the declarations beside it | A stale export is reported | `cli/test/verify-export.test.ts > reports an export written before the last declaration change` |
+| " | A current export passes | `cli/test/verify-export.test.ts > a regenerated export passes` |
+
+- [ ] 3.1 Compare by regenerating the description in memory and
+      comparing bytes, so the check and the writer cannot disagree about
+      what "matching" means. Start from `cli/test/verify-export.test.ts
+      > reports an export written before the last declaration change`.
+      ~9m
+- [ ] 3.2 The failure names the command that regenerates, and asserts
+      nothing about why the export is stale. Start from
+      `cli/test/verify-export.test.ts > the failure names the command,
+      not a cause`. ~6m
+- [ ] 3.3 A repository with no export at all is not reported as stale —
+      the check applies where an export exists. Start from
+      `cli/test/verify-export.test.ts > a repository without an export
+      is not reported`. ~7m
+- [ ] 3.4 Wire into `verify` beside the existing chain checks, without
+      changing their output. Start from `cli/test/verify.test.ts >
+      existing chain diagnostics are unchanged`. ~8m
+
+## R2-G4 — `link` and `vendor` — `est_frozen: 72m` — #597
+
+Files: `packages/cli/src/git.ts` (remote functions added),
+`packages/cli/src/vendor/*` (new),
+`packages/cli/src/commands/{link,vendor,outdated}.ts` (new),
+`packages/cli/src/config.ts` (shared).
+
+| SHALL (delta) | Scenario | Red test |
+|---|---|---|
+| A repository obtains a schema it does not own over git | Linking records the repository alone | `cli/test/link.test.ts > records the repository and no branch` |
+| " | Vendoring pins what it read | `cli/test/vendor.test.ts > writes the contract and description and records the commit` |
+| " | A one-off ref does not stick | `cli/test/vendor.test.ts > --ref does not persist and the lock records its origin` |
+| " | Checking needs no network | `cli/test/vendor-check.test.ts > checks with the remote unreachable` |
+| Vendoring never overwrites a file it did not write | A hand-written file is not overwritten | `cli/test/vendor-write.test.ts > refuses a destination it did not write` |
+| The check compares without writing | Checking leaves the files untouched | `cli/test/vendor-check.test.ts > exits non-zero and writes nothing` |
+| " | A matching set passes quietly | `cli/test/vendor-check.test.ts > a matching set exits zero` |
+
+- [ ] 4.1 Resolve the remote's symbolic HEAD and its commit in one
+      call, through the file that owns every git subprocess. Start from
+      `cli/test/git-remote.test.ts > resolves the default branch and its
+      commit`. ~8m
+- [ ] 4.2 Read one path at one commit without a working tree, so a
+      locked commit can be read directly. Start from
+      `cli/test/git-remote.test.ts > reads a file at a given commit`.
+      ~9m
+- [ ] 4.3 `link`: record the source repository, and nothing else. Start
+      from `cli/test/link.test.ts > records the repository and no
+      branch`. ~6m
+- [ ] 4.4 `vendor`: write the contract, the description and the lock,
+      recording the commit and the ref it was resolved from. Start from
+      `cli/test/vendor.test.ts > writes the contract and description and
+      records the commit`. ~9m
+- [ ] 4.5 The lock also records the description's format version. Start
+      from `cli/test/vendor.test.ts > the lock records the description
+      format version`. ~6m
+- [ ] 4.6 `--ref` overrides one run and does not persist. Start from
+      `cli/test/vendor.test.ts > --ref does not persist and the lock
+      records its origin`. ~7m
+- [ ] 4.7 Carry the overwrite guard over: a textual marker, checked
+      without loading the file as code, with a fixture that contains a
+      comment so the check has something to discriminate against. Start
+      from `cli/test/vendor-write.test.ts > refuses a destination it did
+      not write`. ~7m
+- [ ] 4.8 `vendor --check`: compare against the lock, offline, writing
+      nothing. Start from `cli/test/vendor-check.test.ts > exits
+      non-zero and writes nothing`. ~8m
+- [ ] 4.9 `outdated`: report a newer commit as advice, exiting zero.
+      Start from `cli/test/outdated.test.ts > reports a newer commit
+      without failing`. ~6m
+- [ ] 4.10 A machine without `git` is told so, rather than shown a
+      subprocess failure — the same shape the missing-driver diagnostic
+      already uses. Start from `cli/test/vendor.test.ts > a missing git
+      binary is a coded failure`. ~6m
+
+**Re-freeze: 70m → 72m.** Decomposing this group surfaced the
+missing-`git` diagnostic, which the delta requires and no task covered.
+A scope correction, not a task running long.
+
+## R2-G5 — The emitted contract — `est_frozen: 75m` — #598
+
+Files: `packages/cli/src/contract/*` (new).
+
+| SHALL (delta) | Scenario | Red test |
+|---|---|---|
+| The vendored contract is a function of the commit | Two runs against one commit are byte-identical | `cli/test/contract-emit.test.ts > two runs write byte-identical files` |
+| " | The contract names no clock | `cli/test/contract-emit.test.ts > carries no timestamp` |
+| The contract names the point it was generated from | The origin is readable | `cli/test/contract-emit.test.ts > exports the commit and export identity` |
+| A consumer holds a contract, not declarations | The contract yields no declaration | `cli/test/contract-authority.test.ts > nothing in the contract can be passed to generation` |
+| " | Generating from a vendored contract is refused | `cli/test/contract-authority.test.ts > refuses and names the owning repository` |
+| The contract reproduces the consumer-visible type layer | Row keys match the declaring repository | `cli/test/types/contract-types.test.ts > row keys are the declared TypeScript keys` |
+| " | Element nullability follows the declaration | `cli/test/types/contract-types.test.ts > non-null elements are not nullable` |
+| " | Numeric mode follows the declaration | `cli/test/types/contract-types.test.ts > numeric mode follows the declaration` |
+| " | Enum columns keep their values | `cli/test/types/contract-types.test.ts > an enum types as its values` |
+| " | Write inputs follow what the database does | `cli/test/types/contract-types.test.ts > defaulted optional, computed absent, identity optional` |
+| " | A branded column reads as its unbranded type | `cli/test/types/contract-types.test.ts > a brand does not cross` |
+| Role names travel with the contract | Supplied roles are accepted | `cli/test/contract-roles.test.ts > the exported roles are accepted` |
+| " | Omitting the roles leaves the rejection in force | `cli/test/contract-roles.test.ts > an unlisted role is still rejected` |
+| A reference to a table the schema does not own has no relation | A relation to an unmanaged target is absent | `cli/test/contract-emit.test.ts > no relation is derived for an unmanaged target` |
+
+- [ ] 5.1 `[design]` Settle the contract's file layout and the shape of
+      the interface — one file or several, and what the metadata
+      constant holds. Start from `cli/test/contract-emit.test.ts > two
+      runs write byte-identical files`. ~9m
+- [ ] 5.2 Emit the row, insert and update shapes per table from the
+      description. Start from `cli/test/types/contract-types.test.ts >
+      row keys are the declared TypeScript keys`. ~9m
+- [ ] 5.3 Write optionality decided at emission: defaulted optional,
+      computed absent, identity-by-default optional. Start from
+      `cli/test/types/contract-types.test.ts > defaulted optional,
+      computed absent, identity optional`. ~8m
+- [ ] 5.4 Element nullability, numeric mode and enum values, each from
+      its carried fact. Start from `cli/test/types/contract-types.test.ts
+      > non-null elements are not nullable`. ~8m
+- [ ] 5.5 Brands do not cross. Start from
+      `cli/test/types/contract-types.test.ts > a brand does not cross`.
+      ~5m
+- [ ] 5.6 The metadata constant and the factory, with the binding done
+      inside the generated module so no type parameter reaches the
+      caller. Start from `cli/test/contract-emit.test.ts > the factory
+      takes only a connection`. ~9m
+- [ ] 5.7 The origin stamp as an exported value. Start from
+      `cli/test/contract-emit.test.ts > exports the commit and export
+      identity`. ~6m
+- [ ] 5.8 The exported role list. Start from
+      `cli/test/contract-roles.test.ts > the exported roles are
+      accepted`. ~6m
+- [ ] 5.9 No relation for an unmanaged target. Start from
+      `cli/test/contract-emit.test.ts > no relation is derived for an
+      unmanaged target`. ~6m
+- [ ] 5.10 Determinism and the absence of a clock; the emitted module
+      is proved by loading and running it, not by matching strings.
+      Start from `cli/test/contract-emit.test.ts > two runs write
+      byte-identical files`. ~9m
+
+## R2-G6 — The name-keyed client — `est_frozen: 90m` — #599
+
+Files: `packages/query/src/client/*` (new),
+`packages/query/test/client/*` (new).
+
+**The one group with no comparable predecessor.** Its estimate is the
+least trustworthy in this change, and a re-freeze, if one happens,
+happens here.
+
+- [ ] 6.1 `[design]` Settle what the client takes and how much of the
+      existing chain and compiler it reuses: whether the metadata
+      constant feeds the same statement compiler with names where table
+      values used to be, or a parallel path. This decides the size of
+      everything below it. Start from `query/test/client/select.test.ts
+      > selects and types rows from the contract`, which is where the
+      choice first becomes observable. ~10m
+- [ ] 6.2 `[design]` Settle the surface: what `createDb(conn)` returns
+      and how a table is reached on it, in the shape the contract
+      already teaches. Start from the same test as 6.1 — the two
+      decisions are settled together and first observed there. ~9m
+- [ ] 6.3 Select against a named table, typed from the contract. Start
+      from `query/test/client/select.test.ts > selects and types rows
+      from the contract`. ~10m
+- [ ] 6.4 Insert and update, honouring the write optionality the
+      contract emitted. Start from `query/test/client/write.test.ts >
+      rejects a computed column in an insert`. ~10m
+- [ ] 6.5 The compiled SQL equals what the declaration-based path
+      compiles for the same query. Start from
+      `query/test/client/parity.test.ts > compiles to the same SQL as
+      the declaration path`. ~10m
+- [ ] 6.6 Relations, where the contract carries them. Start from
+      `query/test/client/relations.test.ts > follows a carried
+      relation`. ~9m
+- [ ] 6.7 The role whitelist reaches the client from the contract's
+      exported list. Start from `query/test/client/roles.test.ts >
+      accepts a role the contract exports`. ~8m
+- [ ] 6.8 Errors name the contract, not internals: a table that is not
+      in the contract fails saying so. Start from
+      `query/test/client/errors.test.ts > names a table absent from the
+      contract`. ~8m
+- [ ] 6.9 The existing declaration-based surface is untouched. Start
+      from the query package's existing suites, run unchanged. ~8m
+- [ ] 6.10 The type-level claims in this group are evidenced by
+      `check-types`, not by the test runner, and the cross-package pins
+      read built output — so the build precedes the check. Start from
+      `query/test/client/select.test.ts`'s type assertions, verified
+      under `check-types` after a build. ~8m
+
+## R2-G7 — The consumer's check — `est_frozen: 45m` — #600
+
+Files: `packages/cli/src/vendor/state.ts` (new),
+`packages/cli/src/config.ts` (shared).
+
+| SHALL (delta) | Scenario | Red test |
+|---|---|---|
+| Each way vendoring can fail is named separately | The eleven situations are told apart | `cli/test/vendor-states.test.ts > reports eleven distinct codes` |
+| " | A commit with no export names the other repository | `cli/test/vendor-states.test.ts > names the owning repository` |
+| " | A lock naming a lost commit is not silently moved | `cli/test/vendor-states.test.ts > fails and leaves the lock unchanged` |
+| " | Being behind is advice, not failure | `cli/test/vendor-states.test.ts > staleness does not fail the check` |
+| A description format newer than the reader is refused | A newer format is refused with the command that fixes it | `cli/test/vendor-states.test.ts > refuses a newer format and names the upgrade` |
+| " | An older format is read | `cli/test/vendor-states.test.ts > reads an older format with absent facts absent` |
+| The schema filter is reserved | The reserved filter is refused | `cli/test/vendor-states.test.ts > refuses the reserved schema filter` |
+
+- [ ] 7.1 `[design]` Settle the eleven codes and their remedies, and
+      decide whether the two boundary situations — a local replacement
+      active, and a lock resolved from a non-default ref — are one code
+      or two. They differ in remedy, which argues for two; the boundary
+      rule below may collapse them. If they collapse, the delta's count
+      and every sentence citing it move in the same edit. Start from
+      `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
+      ~10m
+- [ ] 7.2 `[design]` Settle how a run that must fail is told from one
+      that may warn. This repository has no precedent for reading a CI
+      environment variable, and its habit is an explicit flag first with
+      an inferred fallback. Record the basis in one line. Start from
+      `cli/test/vendor-states.test.ts > a replacement warns locally and
+      fails at the boundary`. ~9m
+- [ ] 7.3 Validate the vendored description against its format rather
+      than casting it, and raise the situations reading owns. Start from
+      `cli/test/vendor-states.test.ts > refuses a description that does
+      not answer its format`. ~9m
+- [ ] 7.4 Format skew, refused upward with the upgrade command named
+      and read downward. Start from `cli/test/vendor-states.test.ts >
+      refuses a newer format and names the upgrade`. ~9m
+- [ ] 7.5 The enumeration test runs the reader against each situation
+      and compares the codes themselves, not their labels. Start from
+      `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
+      ~8m
+
+## R2-G8 — Documentation, skill and changeset — `est_frozen: 26m` — #601
+
+Files: `docs/guide/polyrepo.md` (new),
+`skills/hejbro/references/polyrepo.md` (new), `skills/hejbro/SKILL.md`,
+`.changeset/*.md` (new), `scripts/pack-install-smoke.sh`.
+
+- [ ] 8.1 The guide's body: what crosses and what does not, the command
+      surface, and the boundary between local freedom and committed
+      state. Gate: `pnpm check:diagnostic-xref`. ~6m
+- [ ] 8.1b The guide's failure table: **all eleven, each with the
+      repository its remedy sends the reader to**. The cross-reference
+      gate runs one way only — it checks that cited codes exist, never
+      that every code is cited — so the enumeration is deliberate and
+      its completeness is checked by counting the table's rows against
+      the delta's list. ~6m
+- [ ] 8.2 The skill reference and its row in the References table,
+      including the one-line migration for a reader who annotated
+      declarations with the general table type. ~8m
+- [ ] 8.3 One `minor` changeset naming any member of the fixed group,
+      plus a database-free reachability assertion for the new commands
+      in the pack-install smoke. Gate: `changeset status`. ~6m
+
+## R2-G9 — The two-repository witness — `est_frozen: 25m` — #602
+
+Files: `packages/cli/test/integration/polyrepo.integration.test.ts`
+(new) and its fixtures. Sequenced after the apply-engine change: a
+consumer that cannot raise a database cannot close its loop.
+
+- [ ] 9.1 A fixture schema repository generates, exports and commits;
+      a fixture consumer links and vendors from it over a local remote.
+      Start from `polyrepo.integration.test.ts > vendors from a real
+      git remote`. ~9m
+- [ ] 9.2 The consumer raises a database from the vendored SQL and runs
+      a typed query through the contract. Start from
+      `polyrepo.integration.test.ts > queries the raised database
+      through the contract`. ~8m
+- [ ] 9.3 The schema repository changes, and the consumer's check
+      reports staleness without failing, then vendors the change and
+      sees it as a diff. Start from `polyrepo.integration.test.ts >
+      staleness is advice and the update is a diff`. ~8m

@@ -1,25 +1,47 @@
 # query-type-inference (delta)
 
-## MODIFIED Requirements
+## REMOVED Requirements
 
-### Requirement: No generated type artifacts
-Query typing SHALL work purely at the TypeScript type level from the
-declaration values. The toolchain SHALL NOT generate `.d.ts` or any
-other on-disk type artifacts for queries.
+### Removed: No generated type artifacts
+**Ends, and is replaced by the requirement below.** It said query
+typing works purely at the type level from declaration values, and that
+the toolchain writes no on-disk type artifact for queries. The settled
+design makes a committed, generated contract the way a consuming
+repository learns its types, so the prohibition is not narrowed or
+qualified — it no longer describes the product.
 
-A schema module written for a repository that queries a schema it does
-not own is not such an artifact: it declares runtime values, and query
-types are inferred from those values exactly as they are inferred from
-hand-written declarations. What that module may contain, when it is
-written, and how its staleness is detected are stated by the
-`schema-manifest` and `schema-sync` capabilities.
+Its reasoning is preserved where it still holds: a repository that
+**owns** its schema still queries through its declarations, with no
+generation step between editing one and seeing the type change.
+
+## ADDED Requirements
+
+### Requirement: A repository's own declarations still type its queries directly
+In the repository that declares a schema, query types SHALL come from
+the declarations at the type level, with no generated artifact between
+them. Editing a declared column's type SHALL change dependent query
+types in the same type-check run.
 
 #### Scenario: Declaration edit is immediately visible
 - **WHEN** a declared column's type changes in the schema source
 - **THEN** dependent query result types change in the same type-check
   run with no generation step in between
 
-#### Scenario: A synced module infers rather than declares types
-- **WHEN** a query is written against a module obtained from a database
-- **THEN** its result types come from the module's values in the same
-  type-check run, and no type artifact accompanies the module
+### Requirement: A consuming repository's types come from a committed contract
+A repository that does not own the schema SHALL obtain its types from a
+generated contract committed to that repository, and querying through
+it SHALL produce the same types the owning repository sees.
+
+The contract is generated, committed, and reviewed as a diff. That is
+the point rather than a cost: a type that changes because someone
+edited a schema elsewhere becomes a reviewable line in a pull request
+instead of an invisible shift at the end of an inference chain.
+
+#### Scenario: A vendored contract types a query
+- **WHEN** a query is written against a vendored contract
+- **THEN** its result type matches what the same query yields against
+  the owning repository's declarations
+
+#### Scenario: A schema change arrives as a diff
+- **WHEN** the source schema changes and the consumer vendors it
+- **THEN** the change appears as a modification to committed files
