@@ -111,6 +111,29 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": [
+				"packages/skills/test/fixtures/preludes/polyrepo-contract.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"useNamingConvention": {
+							"level": "error",
+							"options": {
+								"strictCase": false,
+								"conventions": [
+									{
+										"selector": { "kind": "typeMember" },
+										"match": ".*"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
 		}
 	]
 }

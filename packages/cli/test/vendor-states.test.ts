@@ -103,18 +103,22 @@ const rewriteRemoteHistory = async (remote: GitFixture): Promise<void> => {
 };
 
 /**
- * R2-G7: the ten named failure situations (`.agents/
+ * R2-G7: the eleven named failure situations (`.agents/
  * r2-failure-enumeration.md`) — this file covers the members that
- * needed genuinely new code (5, 6, and the reserved schema filter);
+ * needed genuinely new code (5, 6, 11, and the reserved schema filter);
  * members already covered by earlier groups' own tests (1, 3, 4, 8, 9)
- * are not re-tested here. A local replacement (a committed source
- * pointing at a local path) is deliberately NOT one of the ten: that
- * situation belongs to `replace`, which this change does not build, and
- * a committed local path is itself a legitimate configuration (a
- * monorepo-neighbor checkout) — this whole file's own fixtures rely on
- * exactly that shape.
+ * are not re-tested here. Two things that look like they belong are
+ * deliberately excluded: a local replacement (a committed source
+ * pointing at a local path) belongs to `replace`, which this change
+ * does not build, and a committed local path is itself a legitimate
+ * configuration this whole file's own fixtures rely on; a missing
+ * `git` binary (`vendor-git-missing`) is scoped out entirely — a
+ * different requirement (`cli-commands`, "An external tool is an
+ * optional dependency") already owns it, and this enumeration only
+ * counts failures in the process of obtaining and checking a vendored
+ * schema, not whether the tool that process depends on exists at all.
  */
-describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
+describe("hejbro vendor — the eleven named failure situations (R2-G7)", () => {
 	it("refuses a description that does not answer its own format (member 5)", async () => {
 		await writeExportFiles(
 			remote,
@@ -198,6 +202,13 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 		expect(result.stderr).toContain("vendor-schema-filter-reserved");
 	});
 
+	it("names the remedy when --check runs before anything has ever been vendored", async () => {
+		const result = await runCli(cwd, ["vendor", "--check"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("vendor-not-yet-vendored");
+		expect(result.stderr).toContain("hejbro vendor");
+	});
+
 	describe("member: the lock was resolved from a non-default ref", () => {
 		it("an explicit --ref is advisory at vendor, then refused at vendor --check by default, and only warns with --no-strict", async () => {
 			await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
@@ -241,13 +252,16 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 
 	/**
 	 * 7.5: compares the codes themselves, not their labels -- a
-	 * consolidated run of all ten, each in its own fixture, asserting the
-	 * ten diagnostic *codes* are pairwise distinct. Wording can drift
-	 * harmlessly; two situations quietly sharing one code cannot (this
-	 * codebase has had that exact regression escape a label-only
-	 * comparison before).
+	 * consolidated run of all eleven, each in its own fixture, asserting
+	 * the eleven diagnostic *codes* are pairwise distinct. Wording can
+	 * drift harmlessly; two situations quietly sharing one code cannot
+	 * (this codebase has had that exact regression escape a label-only
+	 * comparison before). This test only proves the eleven are distinct
+	 * *from each other* -- it says nothing about a twelfth `vendor-*`
+	 * code appearing uncounted; the ownership-audit test below closes
+	 * that gap.
 	 */
-	it("reports ten distinct codes", async () => {
+	it("reports eleven distinct codes", async () => {
 		const extractCode = (stderr: string): string | null => {
 			const match = stderr.match(/error\[([a-z0-9-]+)\]/);
 			if (match === null) {
@@ -365,6 +379,8 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 					await runCli(dir, ["vendor", "--ref", "v1"]);
 					return runCli(dir, ["vendor", "--check"]);
 				}),
+			// 11. A check is asked for before anything has ever been vendored.
+			() => withFixture((dir) => runCli(dir, ["vendor", "--check"])),
 		];
 
 		const codes = await Promise.all(scenarios.map((scenario) => scenario()));
@@ -379,7 +395,8 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 			"vendor-check-mismatch",
 			"vendor-destination-not-vendored",
 			"vendor-lock-non-default-ref",
+			"vendor-not-yet-vendored",
 		]);
-		expect(new Set(codes).size).toBe(10);
+		expect(new Set(codes).size).toBe(11);
 	});
 });

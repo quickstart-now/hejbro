@@ -1305,7 +1305,7 @@ proof, not add to it. R2-G9's own re-freeze carries the matching +2m
 (not the full 6m: 9.2 already had its own estimate for the parts of
 this proof it always owned).
 
-## R2-G7 — The consumer's check — `est_frozen: 45m → 80m` — #600
+## R2-G7 — The consumer's check — `est_frozen: 45m → 94m` — #600
 
 Files: `packages/cli/src/vendor/state.ts` (new),
 `packages/cli/src/commands/vendor.ts`, `packages/cli/src/vendor/lock.ts`,
@@ -1315,12 +1315,12 @@ is `hejbro.config.ts`'s own shape, D30, and turned out unrelated to this
 group's boundary logic; the original file list assumed a connection that
 wasn't there).
 
-**Re-freeze: 45m → 80m** (actual: 80m across 7.1/7.2/7.3/7.5 including
-two mid-implementation corrections, 7.4 left structurally partial).
-Planner-attributed, in three parts, so the ledger separates
-implementation pace from coordination cost (the three parts overlap
-the underlying task-times.csv rows rather than partitioning them
-exactly — a rough split by cause, not a re-audit of the row totals):
+**Re-freeze: 45m → 94m** (actual: 94m across 7.1/7.2/7.3/7.5 including
+three mid-implementation corrections, 7.4 left structurally partial).
+Planner-attributed, in four parts, so the ledger separates
+implementation pace from coordination cost (the parts overlap the
+underlying task-times.csv rows rather than partitioning them exactly —
+a rough split by cause, not a re-audit of the row totals):
 - **+19m — planning underestimate.** Two members (2's other half, and
   7) needed genuinely new code with no task row of their own,
   discovered while wiring the rest of the group; ordinary scope growth
@@ -1332,9 +1332,20 @@ exactly — a rough split by cause, not a re-audit of the row totals):
   message.** The `file://` fixture question was answered twice,
   oppositely, because two messages crossed in transit and each
   answered a different snapshot of the same state.
+- **+14m — a final-review finding, not a planner-approval error this
+  time.** A full-repo count of shipped `vendor-*` codes (13) against
+  the enumeration's own claimed count (10, at the time) surfaced a real
+  gap this implementer's own work had left uncaught: the enumeration
+  test proved its eleven — later ten — members distinct from each
+  other, but nothing ever checked the count against the actual code
+  set. This one is implementation pace, not coordination cost — the
+  gap was in the code and tests this group shipped, not in a design
+  decision handed down and later reversed.
 
-The last two are recorded as the planner's own coordination cost, not
-this implementer's pace, per the planner's own request. 7.1's own
+The middle two are recorded as the planner's own coordination cost, not
+this implementer's pace, per the planner's own request; the last is
+recorded as this implementer's own gap, for the same reason in reverse.
+7.1's own
 design needed a real correction after landing: a local replacement was
 found not to be reachable by any caller in this change at all (see
 7.1's own note below) and was dropped from the enumeration entirely —
@@ -1343,7 +1354,7 @@ count was cited.
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
-| Each way vendoring can fail is named separately | The ten situations are told apart | `cli/test/vendor-states.test.ts > reports ten distinct codes` |
+| Each way vendoring can fail is named separately | The eleven situations are told apart | `cli/test/vendor-states.test.ts > reports eleven distinct codes` |
 | " | A commit with no export names the other repository | `cli/test/vendor-states.test.ts > names the owning repository` |
 | " | A lock naming a lost commit is not silently moved | `cli/test/vendor-states.test.ts > fails and leaves the lock unchanged` |
 | " | Being behind is advice, not failure | `cli/test/vendor-states.test.ts > staleness does not fail the check` |
@@ -1434,6 +1445,45 @@ count was cited.
       + `branch -D`/`-m` + `reflog expire` + `gc --prune=now`), not a
       mocked failure — the old commit object is actually gone from the
       fixture repo.
+      **Corrected again, final-review finding (F-1b/F-1c, planner token
+      `PS-FINAL-FIX-01`): ten becomes eleven — not by resurrecting the
+      removed local-replacement member, but because a full-repo count
+      found the shipped `vendor-*` codes (13) didn't match the
+      enumeration's own count (10).** Two gaps, two different fixes:
+      `vendor-git-missing` was never a member at all — it already had an
+      owner (`cli-commands`'s "An external tool is an optional
+      dependency", scenario "A missing git is explained") and simply
+      wasn't grep-able from the enumeration's own text, so the
+      requirement now states its own scope explicitly ("obtaining and
+      checking a vendored schema", not "whether the tool it depends on
+      exists"). `vendor-not-yet-vendored` ("a check is asked for before
+      anything has ever been vendored") was a genuine miss: reachable
+      (a real test already reached it, via `outdated`), with its own
+      remedy (run `vendor`) — it satisfies this enumeration's own
+      qualifying rule squarely and had simply never been counted. New
+      dedicated test (`names the remedy when --check runs before
+      anything has ever been vendored`) plus an 11th enumeration
+      scenario. **New: `vendor-code-ownership.test.ts`**, the
+      reviewer-requested regression guard for the actual root cause —
+      not "the count was wrong" but "nobody was checking the count
+      against the real code set". Scans `packages/cli/src` for every
+      `vendor-*` code exactly like `check-diagnostic-xref.mjs` scans for
+      DEFINED codes, and asserts a hand-maintained ownership map (a)
+      covers every code the source can throw and (b) carries no stale
+      entry for a code the source can no longer throw — bidirectional,
+      so a future addition on either side goes red until someone assigns
+      it an owner, the same "size, not just distinctness" gap
+      `reports eleven distinct codes` was already flagged (in its own
+      updated comment) as never having covered. Also: `biome.json`
+      gained a path-scoped override for
+      `packages/skills/test/fixtures/preludes/polyrepo-contract.ts` (a
+      `typeMember` naming-convention exemption, the same shape as the
+      existing `packages/query/src/client/**` precedent) — that fixture
+      reproduces Supabase's own generated `Database` shape on purpose
+      (R2-G8 8.2's own prelude), and renaming its PascalCase members to
+      satisfy this repo's own convention would defeat the fixture's
+      entire point; the rationale is recorded as a comment in the
+      fixture itself, not just here.
 - [x] 7.2 `[design]` Settle how a run that must fail is told from one
       that may warn. This repository has no precedent for reading a CI
       environment variable, and its habit is an explicit flag first with
@@ -1492,21 +1542,27 @@ count was cited.
       and compares the codes themselves, not their labels. Start from
       `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
       ~8m
-      `vendor-states.test.ts > reports ten distinct codes` (written
+      `vendor-states.test.ts > reports eleven distinct codes` (written
       against eleven fixtures, corrected to ten alongside 7.1's own
-      correction): ten independent fixtures (one per member), each run
-      through the real built CLI, `error[<code>]` extracted from
-      `stderr` by regex and compared as an ordered array against the ten
+      mid-implementation correction, corrected back to eleven — a
+      different eleventh member — in the final-review pass, F-1b):
+      eleven independent fixtures (one per member), each run through
+      the real built CLI, `error[<code>]` extracted from `stderr` by
+      regex and compared as an ordered array against the eleven
       expected code *strings* — never against the surrounding message
-      text — plus a `Set` size check (10) guarding against two members
+      text — plus a `Set` size check (11) guarding against two members
       quietly sharing one code, the exact regression a label-only
-      comparison has missed before (planner's own note). Members
-      1/3/4/8/9 get a purpose-built fixture here too, rather than
-      reusing another file's test, so this one test is a genuine
-      end-to-end cross-check independent of every other file's own
+      comparison has missed before (planner's own note). This test's
+      own comment now names what it does *not* cover too: distinctness
+      among the eleven, never whether a twelfth code exists uncounted —
+      that gap is `vendor-code-ownership.test.ts`'s job (see 7.1's own
+      final-review note). Members 1/3/4/8/9 get a purpose-built fixture
+      here too, rather than reusing another file's test, so this one
+      test is a genuine end-to-end cross-check independent of every
+      other file's own
       coverage.
 
-## R2-G8 — Documentation, skill and changeset — `est_frozen: 26m → 38m` — #601
+## R2-G8 — Documentation, skill and changeset — `est_frozen: 26m → 44m` — #601
 
 Files: `docs/guide/polyrepo.md` (new),
 `skills/hejbro/references/polyrepo.md` (new), `skills/hejbro/SKILL.md`,
@@ -1515,14 +1571,19 @@ in the original file list — needed once the skill's own snippet-compile
 gate, #373, caught the first draft's doc example), `.changeset/*.md`
 (new), `scripts/pack-install-smoke.sh`.
 
-**Re-freeze: 26m → 38m** (actual: 38m across 8.1/8.1b/8.2/8.3). The
-owner's mid-task addendum (the three-way boundary section, planner
-relay PS-PIVOT) landed inside 8.1 rather than as separate scope, and
-8.2's own gate (`@hejbro/skills`'s real TS type-check of every doc
-snippet) caught a genuine drift on the first run — the fix (a proper
-prelude fixture) cost real time neither task's own estimate carried,
-since neither anticipated the guide's own code examples needing to
-compile for real.
+**Re-freeze: 26m → 44m** (actual: 44m across 8.1/8.1b/8.2/8.3, plus a
+final-review correction). The owner's mid-task addendum (the three-way
+boundary section, planner relay PS-PIVOT) landed inside 8.1 rather than
+as separate scope, and 8.2's own gate (`@hejbro/skills`'s real TS
+type-check of every doc snippet) caught a genuine drift on the first
+run — the fix (a proper prelude fixture) cost real time neither task's
+own estimate carried, since neither anticipated the guide's own code
+examples needing to compile for real. **+6m, final-review finding
+(F-1b, planner token `PS-FINAL-FIX-01`, paired with R2-G7's own +14m
+for the same finding)**: the guide's failure table and the skill's own
+wording both moved from ten to eleven once `vendor-not-yet-vendored`
+was recognized as a genuine member — this implementer's own gap, not a
+planner-approval reversal, so it's counted as pace here too.
 
 - [x] 8.1 The guide's body: what crosses and what does not, the command
       surface, and the boundary between local freedom and committed
@@ -1548,21 +1609,23 @@ compile for real.
       `vendor` is the only command needing network for the normal
       build/type-check path; and the schema repository's own half
       (`generate --export`, `verify`'s opt-in export-match check).
-- [x] 8.1b The guide's failure table: **all ten, each with the
+- [x] 8.1b The guide's failure table: **all eleven, each with the
       repository its remedy sends the reader to**. The cross-reference
       gate runs one way only — it checks that cited codes exist, never
       that every code is cited — so the enumeration is deliberate and
       its completeness is checked by counting the table's rows against
       the delta's list. ~6m
-      Ten rows, counted against `schema-vendoring/spec.md`'s own
-      requirement list — 7 send the reader back to the consumer's own
-      repository, 2 (`vendor-export-missing`/`vendor-export-invalid`)
-      to the schema repository, and 1
-      (`vendor-export-format-unsupported`) to the consumer's own
-      toolchain specifically (upgrade hejbro) rather than its
-      repository's files. Also notes, in the same table's footer, that a
-      local replacement is deliberately absent (belongs to `replace`,
-      which this change does not build) and that staleness is
+      Eleven rows (updated from ten in the final-review pass, F-1b, once
+      `vendor-not-yet-vendored` was recognized as a genuine eleventh
+      member — see R2-G7 7.1's own updated note), counted against
+      `schema-vendoring/spec.md`'s own requirement list — 8 send the
+      reader back to the consumer's own repository, 2
+      (`vendor-export-missing`/`vendor-export-invalid`) to the schema
+      repository, and 1 (`vendor-export-format-unsupported`) to the
+      consumer's own toolchain specifically (upgrade hejbro) rather than
+      its repository's files. Also notes, in the same table's footer,
+      that a local replacement is deliberately absent (belongs to
+      `replace`, which this change does not build) and that staleness is
       `outdated`'s advisory, not a failure.
 - [x] 8.2 The skill reference and its row in the References table,
       including the one-line migration for a reader who annotated
@@ -1570,7 +1633,7 @@ compile for real.
       `skills/hejbro/references/polyrepo.md` (new) — the same
       alias-vs-vendor decision as the guide's own, agent-directive and
       terse rather than narrative; explicitly does not restate the
-      ten-code table (points at the guide instead, "two copies of the
+      eleven-code table (points at the guide instead, "two copies of the
       same list is exactly the kind of drift this project avoids
       elsewhere"). `SKILL.md` gained: a `description` clause naming this
       trigger, two new numbered gotchas (11: alias-vs-vendor by

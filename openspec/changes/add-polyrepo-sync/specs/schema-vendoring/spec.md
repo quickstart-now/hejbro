@@ -162,15 +162,24 @@ than inventing a target it cannot describe.
 - **THEN** the column is present and no relation is derived from it
 
 ### Requirement: Each way vendoring can fail is named separately
-A consumer's toolchain meets **ten** distinct situations, and SHALL
-report each under its own code with its own remedy. They are: no source
-is linked; the remote cannot be reached; the ref does not resolve; the
-resolved commit carries no export; the export does not answer its own
-format; the export's format is newer than this toolchain knows; the
-lock names a commit the remote no longer has; the vendored files
-disagree with the lock; the destination holds a file this tool did not
-write; and the lock was resolved from somewhere other than the default
-branch.
+This enumeration is scoped to the process of **obtaining and checking**
+a vendored schema — `link`, `vendor`, `vendor --check`, `outdated`.
+Whether the external tool that process depends on (`git`) is even
+present is a different question with a different owner: `cli-commands`'
+"An external tool is an optional dependency" already covers it (`git`
+missing SHALL be reported as a coded failure there, not counted again
+here).
+
+A consumer's toolchain meets **eleven** distinct situations within that
+scope, and SHALL report each under its own code with its own remedy.
+They are: no source is linked; the remote cannot be reached; the ref
+does not resolve; the resolved commit carries no export; the export
+does not answer its own format; the export's format is newer than this
+toolchain knows; the lock names a commit the remote no longer has; the
+vendored files disagree with the lock; the destination holds a file
+this tool did not write; the lock was resolved from somewhere other
+than the default branch; and a check is asked for before anything has
+ever been vendored.
 
 A situation earns its own code when its remedy sends the reader
 somewhere another remedy does not — to the consuming repository, to the
@@ -186,9 +195,10 @@ is an active local replacement: that situation belongs to `replace`
 file), and this change does not build `replace` — no caller can reach
 it yet. It returns to this enumeration when `replace` lands.
 
-#### Scenario: The ten situations are told apart
-- **WHEN** a toolchain meets each of the ten in turn
-- **THEN** it reports ten distinct codes, each carrying its own remedy
+#### Scenario: The eleven situations are told apart
+- **WHEN** a toolchain meets each of the eleven in turn
+- **THEN** it reports eleven distinct codes, each carrying its own
+  remedy
 
 #### Scenario: A commit with no export names the other repository
 - **WHEN** the resolved commit carries no export
@@ -198,6 +208,12 @@ it yet. It returns to this enumeration when `replace` lands.
 #### Scenario: A lock naming a lost commit is not silently moved
 - **WHEN** the lock names a commit the remote no longer has
 - **THEN** vendoring fails, and the lock is unchanged
+
+#### Scenario: Checking before ever vendoring names the remedy
+- **WHEN** `vendor --check` runs against a repository that has never
+  run `vendor`
+- **THEN** it fails naming `vendor` as the command to run first, rather
+  than failing on a missing file with no such guidance
 
 #### Scenario: Being behind is advice, not failure
 - **WHEN** the lock names an older commit than the default branch's tip

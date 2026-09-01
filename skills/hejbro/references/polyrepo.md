@@ -3,7 +3,7 @@
 Read this when a consuming repository needs types for a schema it does
 not declare — deciding whether to vendor at all, running
 `link`/`vendor`/`vendor --check`/`outdated`, writing code against a
-generated `contract.ts`, or debugging one of the ten coded vendoring
+generated `contract.ts`, or debugging one of the eleven coded vendoring
 failures. Full narrative: `docs/guide/polyrepo.md`.
 
 ## Decide by repository boundary first — do not reach for `vendor` by default
@@ -58,15 +58,19 @@ authority brand landed; the wide `Table` type still exists (used across
 this package's own generic constraints) but no longer satisfies
 whatever specifically requires a real declaration.
 
-## The ten failure codes
+## The eleven failure codes
 
 Every situation names its own code and tells you which repository the
 remedy is in — most stay in yours, two (`vendor-export-missing`,
 `vendor-export-invalid`) send you to the schema repository, one
 (`vendor-export-format-unsupported`) tells you to upgrade `hejbro`
-itself. Full table: `docs/guide/polyrepo.md`'s own failure table — do
-not restate it here; two copies of the same ten-item list is exactly
-the kind of drift this project avoids elsewhere.
+itself. Scoped to obtaining and checking a vendored schema — a missing
+`git` binary (`vendor-git-missing`) is a real coded failure but belongs
+to a different, already-owned requirement (`cli-commands`'s own
+"external tool is an optional dependency"), not this count. Full table:
+`docs/guide/polyrepo.md`'s own failure table — do not restate it here;
+two copies of the same eleven-item list is exactly the kind of drift
+this project avoids elsewhere.
 
 ## `--strict` and non-interactive runs
 

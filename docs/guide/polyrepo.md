@@ -171,12 +171,17 @@ by having an export directory at all) — the schema repository's own
 guarantee that its default branch's export is trustworthy for every
 consumer vendoring from it.
 
-## Ten named ways vendoring can fail
+## Eleven named ways vendoring can fail
 
 Each is its own code with its own remedy, and the remedy is what
-decides which repository gets a separate code: some send you back to
-your own repository, one sends you to the repository that owns the
-schema, one sends you to upgrade hejbro itself.
+decides which repository gets a separate code: most send you back to
+your own repository, two send you to the repository that owns the
+schema, one sends you to upgrade hejbro itself. Scoped to the process
+of obtaining and checking a vendored schema (`link`/`vendor`/`vendor
+--check`/`outdated`) — whether the `git` binary those commands depend
+on is even installed is a different, already-owned question (a missing
+`git` is its own coded failure, `error[vendor-git-missing]`, but it
+isn't counted here).
 
 | Situation | Code | Remedy sends you to |
 |---|---|---|
@@ -190,10 +195,11 @@ schema, one sends you to upgrade hejbro itself.
 | The vendored files disagree with the lock | `error[vendor-check-mismatch]` | Your repository — re-run `vendor`, or revert the hand edit |
 | The destination holds a file this tool did not write | `error[vendor-destination-not-vendored]` | Your repository — move/remove the file, or `--force` |
 | The lock was resolved from somewhere other than the default branch | `error[vendor-lock-non-default-ref]` | Your repository — re-vendor from the default branch, or accept it deliberately (`--no-strict` at the boundary) |
+| `vendor --check` runs before anything has ever been vendored | `error[vendor-not-yet-vendored]` | Your repository — run `hejbro vendor` first |
 
 A local replacement — an uncommitted, gitignored override of the
-committed source used for local iteration — is not among these ten: it
-belongs to a `replace` mechanism this change does not build. A
+committed source used for local iteration — is not among these eleven:
+it belongs to a `replace` mechanism this change does not build. A
 *committed* source that happens to be a local filesystem path (case 3
 above) is not that situation; it's an ordinary, first-class
 configuration.

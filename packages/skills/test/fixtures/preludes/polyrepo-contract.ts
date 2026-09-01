@@ -7,7 +7,12 @@
 // `createDb(conn)` bound to it via `createNameKeyedDb`. `pgDriver(...)`
 // only constructs a `Pool`; it never connects until a statement actually
 // runs, so this type-checks with no live database (same reasoning as
-// query-handle.ts's own prelude).
+// query-handle.ts's own prelude). Its `Database` interface's PascalCase
+// members (`Tables`/`Row`/`Insert`/`Update`/...) are exempted from this
+// repo's own naming convention in `biome.json` -- this fixture exists to
+// reproduce someone else's convention (Supabase's own generated `Database`
+// shape, which `emitContract` deliberately mirrors), and renaming the keys
+// to satisfy our own rule would defeat the fixture's entire point.
 import { pgDriver } from "@hejbro/pg";
 import type { Driver } from "hejbro";
 import { createNameKeyedDb } from "hejbro";
