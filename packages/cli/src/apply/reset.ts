@@ -1,8 +1,8 @@
 import type { KindChange, KindRegistry, Snapshot } from "@hejbro/core";
 import {
 	diffSnapshots,
-	emitStatementsSql,
 	emptySnapshot,
+	generateMigrations,
 	throwHejbroError,
 } from "@hejbro/core";
 import type { Driver } from "@hejbro/query";
@@ -91,6 +91,49 @@ export const currentDatabaseName = async (driver: Driver): Promise<string> => {
 };
 
 /**
+ * [G4 rework, #610] Reset's own DDL, built by reusing `generateMigrations`
+ * with an empty declaration set rather than reimplementing the
+ * predrop/main/deferred emit loop here. This is not a workaround: a reset
+ * genuinely IS the migration that drops everything -- "declare nothing"
+ * against the live snapshot diffs to exactly what `planReset` above
+ * already computes independently (`diffSnapshots(currentSnapshot,
+ * emptySnapshot, registry)`), so going through the real pipeline makes
+ * reset's own identity legible in the code instead of hiding it behind a
+ * second, hand-rolled emitter that could drift from the one `generate`
+ * uses (the reason `emitStatementsSql` was a shared helper in the first
+ * place, before this rework took it off the public surface). The banner
+ * this carries (harmless SQL comments -- `-- hejbro migration`, one
+ * `-- drop <kind> <identity>` line per change) is a side effect of that
+ * reuse, not something reset asks for; it is pinned as an intentional,
+ * observed change to reset's own DDL text in apply-reset.test.ts.
+ *
+ * A drop-only run can never trigger `engine/split.ts`'s own condition (it
+ * adds no enum value, ever), so exactly one migration comes back today --
+ * but that is a property of *today's* split trigger, not of this
+ * function, so it is asserted rather than assumed: a future split
+ * condition that a drop-only run COULD trigger must fail loudly here
+ * rather than silently run half of reset, which is the exact failure
+ * mode this whole rework exists to close off.
+ */
+const resetMigrationSql = (
+	currentSnapshot: Snapshot,
+	registry: KindRegistry,
+): string => {
+	const result = generateMigrations({
+		declarations: [],
+		previousSnapshot: currentSnapshot,
+		registry,
+	});
+	if (result.migrations.length !== 1) {
+		return throwHejbroError(
+			"reset-migration-not-singular",
+			`reset's own migration run produced ${result.migrations.length} file(s), not exactly one -- a drop-only run was expected to never need a transaction boundary. Next: this is a hejbro bug -- file an issue with your declarations and the database's current schema.`,
+		);
+	}
+	return result.migrations[0]?.sql as string;
+};
+
+/**
  * Returns a database to the state before any migration was applied
  * (spec): drops every declared object (5.1) inside one transaction,
  * refusing first without an exact confirmation bound to the live
@@ -112,17 +155,8 @@ export const applyReset = async (
 	assertResetConfirmed(databaseName, changes, confirmed);
 	await driver.transaction(async (session) => {
 		if (changes.length > 0) {
-			// COUPLING NOTE (flagged for the G4 rework): `emitStatementsSql`
-			// is group 4's own export, and the lead's ruling there moves
-			// split assembly into `generateMigration` itself, taking this
-			// symbol off @hejbro/core's public surface (0 new symbols is
-			// the point of that rework). This call site has to move to
-			// whatever core exposes instead when that lands -- it cannot
-			// stay as a public-surface call once the export is gone.
-			const sql = emitStatementsSql(changes, changes, emptySnapshot, registry);
-			if (sql !== "") {
-				await session.execute({ sql, params: [], kind: "sql" });
-			}
+			const sql = resetMigrationSql(currentSnapshot, registry);
+			await session.execute({ sql, params: [], kind: "sql" });
 		}
 		await clearLedger(session);
 	});

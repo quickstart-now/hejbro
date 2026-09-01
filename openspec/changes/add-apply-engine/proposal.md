@@ -1005,6 +1005,19 @@ rather than rediscovered:
   separates "could not reach" from "could not read" by construction.
   This change promotes it rather than writing a second one — see DF for
   what its `check-`-prefixed codes cost.
+- **Public API**: `@hejbro/core` gains **one** exported entry point — the
+  one that generates a run's migrations, however many the run needs.
+  That number was first ruled at zero: the split's internals were to
+  stay unexported and the CLI was to receive whatever core produced.
+  Measurement revised it. `generateMigration`'s result is read directly
+  by more than forty files across the preset and driver packages and the
+  examples, so changing its shape was not a contained edit; keeping the
+  old shape *and* adding an array beside it would have handed a
+  split run's first half to every existing caller as if it were the
+  whole run. So the old entry point keeps its exact contract for the
+  runs it can express, refuses with a coded error the runs it cannot,
+  and names the new entry point as what to call instead. One symbol,
+  not four, and no caller is silently given half of an answer.
 - **Breaking**: none for existing commands. `migrate` is new surface.
 - **Changeset**: `minor` — a new capability (D59; the seven published
   packages move together).

@@ -5,23 +5,16 @@ import type {
 	ConfirmDropSpec,
 	Diagnostic as CoreDiagnostic,
 	HejbroError,
-	KindChange,
-	KindRegistry,
 	RenameAmbiguity,
 	RenameSpec,
 	Snapshot,
-	SplitDecision,
 } from "@hejbro/core";
 import {
-	applySplitChangesOnly,
 	deriveSlug,
-	emitStatementsSql,
-	generateMigration,
+	generateMigrations,
 	hejbroError,
 	migrationFileName,
 	parseSnapshot,
-	planSplit,
-	renderBanner,
 	renderSnapshot,
 	requiredKeysByKind,
 	throwHejbroError,
@@ -490,148 +483,110 @@ const assertBaselineIsFirst = (
 type MigrationFileNameOptions = Parameters<typeof migrationFileName>[0];
 
 /**
- * [design, task 4.4] The second split file's own naming options, distinct
- * from the first's under every prefix strategy -- measured: `index` is
- * the only one of the three that resolves from a count, so bumping
- * `previousCount` a second time is enough there; `timestamp`/`unix`
- * derive their whole prefix from the clock alone, at one-second
- * resolution, so a second `previousCount` bump changes nothing for them
- * and the clock itself has to move. `verify` refuses a chain whose
+ * One migration `generateMigrations` returned. Structural, not imported:
+ * [G4 rework, #610] `@hejbro/core`'s public surface re-exports only the two
+ * entry points themselves, never their result types (the "0 new symbols
+ * beyond `generateMigrations` itself" ruling) -- so this reads the shape
+ * off the function's own return type instead of naming it.
+ */
+type GeneratedMigration = ReturnType<
+	typeof generateMigrations
+>["migrations"][number];
+
+/**
+ * [design, task 4.4, generalized for #610] Every migration after the
+ * first needs naming options distinct from its predecessors' under every
+ * prefix strategy -- measured: `index` is the only one of the three that
+ * resolves from a count, so bumping `previousCount` once per predecessor
+ * is enough there; `timestamp`/`unix` derive their whole prefix from the
+ * clock alone, at one-second resolution, so the clock itself has to move
+ * by one second per predecessor instead. `verify` refuses a chain whose
  * migrations share a version -- and does more than fail: chain linearity
  * and the tip check are skipped, so a version collision here would
  * disable the very checks that would describe it.
  */
-const secondSplitFileNameOptions = (
+const fileNameOptionsForIndex = (
 	first: MigrationFileNameOptions,
+	index: number,
 ): MigrationFileNameOptions => {
+	if (index === 0) {
+		return first;
+	}
 	if (first.strategy === "index") {
-		return { ...first, previousCount: first.previousCount + 1 };
+		return { ...first, previousCount: first.previousCount + index };
 	}
 	return {
 		...first,
-		generatedAt: new Date(first.generatedAt.getTime() + 1000),
+		generatedAt: new Date(first.generatedAt.getTime() + index * 1000),
 	};
 };
 
-/** One split file's banner + statements, `"\n\n"`-joined -- `""` from {@link emitStatementsSql} contributes nothing (never a lone blank line), matching `generateMigration`'s own join rule for the same reason (`engine/generate.ts`'s `nonEmptyPart`). */
-const buildSplitMigrationSql = (
-	changesToEmit: ReadonlyArray<KindChange>,
-	siblingChanges: ReadonlyArray<KindChange>,
-	snapshot: Snapshot,
-	registry: KindRegistry,
-	bannerHashes: BannerHashes,
-	hejbroVersion: string,
-): string => {
-	const banner = renderBanner(changesToEmit, bannerHashes, hejbroVersion);
-	const statementsSql = emitStatementsSql(
-		changesToEmit,
-		siblingChanges,
-		snapshot,
-		registry,
-	);
-	if (statementsSql === "") {
-		return banner;
-	}
-	return `${banner}\n\n${statementsSql}`;
-};
+/**
+ * `bannerHashes[i].parent` chains from the *previous* migration's own
+ * snapshot -- `previousSnapshot` itself for the first migration, the
+ * prior migration's own `snapshot` for every one after it -- matching
+ * `generateMigrations`' own `bannerHashes` contract (index-aligned, D33's
+ * hash chain). Hashing itself stays here; core never hashes.
+ */
+const bannerHashesForMigrations = (
+	previousSnapshot: Snapshot,
+	migrations: ReadonlyArray<GeneratedMigration>,
+): ReadonlyArray<BannerHashes> =>
+	migrations.map((migration, index) => {
+		const parentSnapshot = migrations[index - 1]?.snapshot ?? previousSnapshot;
+		return {
+			parent: `sha256:${sha256Hex(renderSnapshot(parentSnapshot))}`,
+			current: `sha256:${sha256Hex(renderSnapshot(migration.snapshot))}`,
+		};
+	});
 
-type SplitFiles = {
-	readonly firstRelativePath: string;
-	readonly secondRelativePath: string;
-	readonly firstSql: string;
-	readonly secondSql: string;
+type WrittenMigration = {
+	readonly relativePath: string;
+	readonly sql: string;
 };
 
 /**
- * [task 4.3/4.4/4.5] Builds both split migrations' SQL and file paths --
- * writing nothing itself (the caller still owns `mkdirSync`/
- * `writeFileSync`, matching the unsplit path's own shape). `siblingChanges`
- * (D74) and `snapshot` (D78) are the *whole* run's own values for both
- * halves, unchanged from what an unsplit run would have passed -- so
- * splitting itself changes no kind's own emit decision (approved
- * architecture note, G4 check-in).
+ * [task 4.3/4.4/4.5, generalized for #610] One relative path + its own
+ * SQL (banner included -- `generateMigrations` already assembled it) per
+ * migration the run needs -- writing nothing itself (the caller still owns
+ * `mkdirSync`/`writeFileSync`, matching the pre-#610 shape).
  */
-const buildSplitFiles = (
-	decision: Extract<SplitDecision, { readonly split: true }>,
-	previousSnapshot: Snapshot,
-	finalSnapshot: Snapshot,
-	registry: KindRegistry,
+const buildWrittenMigrations = (
+	migrations: ReadonlyArray<GeneratedMigration>,
 	migrationsDir: string,
 	firstFileNameOptions: MigrationFileNameOptions,
 	nameOverride: string | undefined,
-	hejbroVersion: string,
-): SplitFiles => {
-	const allChanges = [...decision.enumChanges, ...decision.restChanges];
-	const intermediateSnapshot = applySplitChangesOnly(
-		previousSnapshot,
-		decision.enumChanges,
-	);
-	const firstHashes: BannerHashes = {
-		parent: `sha256:${sha256Hex(renderSnapshot(previousSnapshot))}`,
-		current: `sha256:${sha256Hex(renderSnapshot(intermediateSnapshot))}`,
-	};
-	const secondHashes: BannerHashes = {
-		parent: firstHashes.current,
-		current: `sha256:${sha256Hex(renderSnapshot(finalSnapshot))}`,
-	};
-
-	const firstSlug = nameOverride ?? deriveSlug(decision.enumChanges);
-	const secondSlug = nameOverride ?? deriveSlug(decision.restChanges);
-	const firstFileName = migrationFileName({
-		...firstFileNameOptions,
-		slug: firstSlug,
+): ReadonlyArray<WrittenMigration> =>
+	migrations.map((migration, index) => {
+		const slug = nameOverride ?? deriveSlug(migration.changes);
+		const fileName = migrationFileName({
+			...fileNameOptionsForIndex(firstFileNameOptions, index),
+			slug,
+		});
+		return {
+			relativePath: join(migrationsDir, fileName),
+			sql: migration.sql,
+		};
 	});
-	const secondFileName = migrationFileName({
-		...secondSplitFileNameOptions(firstFileNameOptions),
-		slug: secondSlug,
-	});
-
-	return {
-		firstRelativePath: join(migrationsDir, firstFileName),
-		secondRelativePath: join(migrationsDir, secondFileName),
-		firstSql: buildSplitMigrationSql(
-			decision.enumChanges,
-			allChanges,
-			finalSnapshot,
-			registry,
-			firstHashes,
-			hejbroVersion,
-		),
-		secondSql: buildSplitMigrationSql(
-			decision.restChanges,
-			allChanges,
-			finalSnapshot,
-			registry,
-			secondHashes,
-			hejbroVersion,
-		),
-	};
-};
-
-/** [task 4.6] The split report's opening lines -- both files named, never just one (the pre-split report printed exactly one `wrote` line and one banner). Baseline never reaches here: a baseline's every change is a `create` (never `alter`), which {@link planSplit} never splits on. */
-const splitReportHead = (
-	declarationCount: number,
-	files: SplitFiles,
-): ReadonlyArray<string> => [
-	"hejbro generate",
-	`loaded ${declarationCount} declarations`,
-	`wrote ${files.firstRelativePath}`,
-	`wrote ${files.secondRelativePath}`,
-];
 
 /**
- * The report's opening lines. A baseline's differ because the next step
- * differs and getting it wrong is expensive: running a baseline migration
- * against the database it describes fails on the first `create`, and
- * "already exists" is a confusing way to learn that the file was never
- * meant to be run.
+ * The report's opening lines: one `wrote` line per migration the run
+ * needed (never just the first -- the pre-#610 split path already printed
+ * two). A baseline never reaches more than one: a baseline's every change
+ * is a `create` (never `alter`), which `engine/split.ts`'s own condition
+ * never splits on. A baseline's lines differ beyond that because the next
+ * step differs and getting it wrong is expensive: running a baseline
+ * migration against the database it describes fails on the first
+ * `create`, and "already exists" is a confusing way to learn that the file
+ * was never meant to be run.
  */
 const reportHead = (
 	mode: GenerateMode,
 	declarationCount: number,
-	migrationRelativePath: string,
+	writtenMigrations: ReadonlyArray<WrittenMigration>,
 ): ReadonlyArray<string> => {
 	if (mode === "baseline") {
+		const migrationRelativePath = writtenMigrations[0]?.relativePath ?? "";
 		return [
 			"hejbro baseline",
 			`loaded ${declarationCount} declarations`,
@@ -644,7 +599,7 @@ const reportHead = (
 	return [
 		"hejbro generate",
 		`loaded ${declarationCount} declarations`,
-		`wrote ${migrationRelativePath}`,
+		...writtenMigrations.map((written) => `wrote ${written.relativePath}`),
 	];
 };
 
@@ -695,7 +650,11 @@ export const runGenerate = async (
 					config.migrationsDir,
 				);
 			}
-			const firstPass = generateMigration({
+			// [task 4.1, generalized for #610] First pass, no `bannerHashes` --
+			// learns each migration's own `changes`/`snapshot` (one entry, or
+			// two where `engine/split.ts`'s own condition needs a transaction
+			// boundary), which is what hashing the chain below needs.
+			const firstPass = generateMigrations({
 				declarations,
 				previousSnapshot,
 				renames,
@@ -726,90 +685,57 @@ export const runGenerate = async (
 			const migrationsDirPath = join(cwd, config.migrationsDir);
 			const previousCount = listMigrationFiles(migrationsDirPath).length;
 
-			// [task 4.1] Decided from `firstPass.changes` alone -- the same
-			// diff a baseline or an unsplit run already computed, no second
-			// pass needed to know whether to split.
-			const splitDecision = planSplit(firstPass.changes);
-			if (splitDecision.split) {
-				const files = buildSplitFiles(
-					splitDecision,
-					previousSnapshot,
-					firstPass.snapshot,
-					registry,
-					config.migrationsDir,
-					{
-						strategy: config.prefixStrategy,
-						generatedAt: now(),
-						previousCount,
-						slug: "",
-					},
-					parsedArgv.name,
-					CLI_VERSION,
-				);
-				mkdirSync(migrationsDirPath, { recursive: true });
-				writeFileSync(
-					join(cwd, files.firstRelativePath),
-					`${files.firstSql}\n`,
-				);
-				writeFileSync(
-					join(cwd, files.secondRelativePath),
-					`${files.secondSql}\n`,
-				);
-				writeFileSync(
-					join(cwd, config.snapshotPath),
-					renderSnapshot(firstPass.snapshot),
-				);
-
-				const [firstBanner] = files.firstSql.split("\n\n");
-				const [secondBanner] = files.secondSql.split("\n\n");
-				return {
-					exitCode: 0,
-					stdout: [
-						...splitReportHead(declarations.length, files),
-						...warningSummaryLines(firstPass.warnings),
-						firstBanner ?? "",
-						secondBanner ?? "",
-					],
-					stderr: warningStderr(firstPass.warnings, fallbackIdentity),
-				};
-			}
-
-			const parentHash = `sha256:${sha256Hex(renderSnapshot(previousSnapshot))}`;
-			const currentHash = `sha256:${sha256Hex(renderSnapshot(firstPass.snapshot))}`;
-			const finalPass = generateMigration({
+			const finalPass = generateMigrations({
 				declarations,
 				previousSnapshot,
 				renames,
 				confirmedDrops,
-				bannerHashes: { parent: parentHash, current: currentHash },
+				bannerHashes: bannerHashesForMigrations(
+					previousSnapshot,
+					firstPass.migrations,
+				),
 				hejbroVersion: CLI_VERSION,
 				baseline: mode === "baseline",
 				registry,
 				validators,
 			});
 
-			const slug = parsedArgv.name ?? deriveSlug(finalPass.changes);
-			const fileName = migrationFileName({
-				strategy: config.prefixStrategy,
-				generatedAt: now(),
-				previousCount,
-				slug,
-			});
+			const writtenMigrations = buildWrittenMigrations(
+				finalPass.migrations,
+				config.migrationsDir,
+				{
+					strategy: config.prefixStrategy,
+					generatedAt: now(),
+					previousCount,
+					slug: "",
+				},
+				parsedArgv.name,
+			);
+			// `finalPass.migrations` is never `[]` here: `firstPass.hasChanges`
+			// is already `true`, and `finalPass` runs the identical pipeline
+			// (same `declarations`/`previousSnapshot`/`renames`/
+			// `confirmedDrops`) with only banner metadata added -- metadata
+			// `runPipeline`/`planSplit` never read -- so it diffs to the same
+			// non-empty `migrations` `firstPass` already proved.
+			const finalSnapshot = finalPass.migrations.at(-1)?.snapshot as Snapshot;
+
 			mkdirSync(migrationsDirPath, { recursive: true });
-			writeFileSync(join(migrationsDirPath, fileName), `${finalPass.sql}\n`);
+			writtenMigrations.map((written) =>
+				writeFileSync(join(cwd, written.relativePath), `${written.sql}\n`),
+			);
 			writeFileSync(
 				join(cwd, config.snapshotPath),
-				renderSnapshot(finalPass.snapshot),
+				renderSnapshot(finalSnapshot),
 			);
 
-			const migrationRelativePath = join(config.migrationsDir, fileName);
-			const [banner] = finalPass.sql.split("\n\n");
 			return {
 				exitCode: 0,
 				stdout: [
-					...reportHead(mode, declarations.length, migrationRelativePath),
+					...reportHead(mode, declarations.length, writtenMigrations),
 					...warningSummaryLines(finalPass.warnings),
-					banner ?? "",
+					...writtenMigrations.map(
+						(written) => written.sql.split("\n\n")[0] ?? "",
+					),
 				],
 				stderr: warningStderr(finalPass.warnings, fallbackIdentity),
 			};

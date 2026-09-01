@@ -58,6 +58,15 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
  *   failure. Task 7.4 names "a lock held by another runner" only as "a
  *   candidate" for its own exit-code answer, not a settled one; no code
  *   is minted for it here.
+ * - `migration-requires-split` (group 4 rework, #610) -- the one code in
+ *   this list `@hejbro/core` itself raises, not this package: a
+ *   `generateMigration` run that adds an enum value and emits it inside
+ *   the same transaction cannot be expressed as one migration file, so
+ *   it is refused with a `Next:` naming `generateMigrations` (the entry
+ *   point that returns the one-or-two-file split) rather than silently
+ *   returning half the run. Listed here anyway -- centralizing "every
+ *   code born through `hejbroError` gets its shape from one list" was
+ *   always about the code, not about which package throws it.
  */
 
 const LEDGER_SCHEMA = "hejbro";

@@ -181,6 +181,22 @@ the core hard gate does not fire.
 - [x] 4.2 (~9m) The intermediate snapshot: the previous snapshot with
       the enum entry replaced, hashed like any other. Red: same file —
       "the first file's snapshot hash is the second file's parent hash".
+- [x] 4.3r (~9m) Where the run is assembled, revised after the group
+      first landed. The split was built with the CLI calling core's
+      pieces, which put four internal symbols on the package's public
+      index; the ruling was to move the assembly into core so none of
+      them needed exporting. Then a count changed the ruling: more than
+      forty files across the preset and driver packages and the examples
+      read `generateMigration`'s result fields directly, so reshaping
+      that result was not a contained edit, and adding an array beside
+      the old fields would have served a split run's first half to every
+      existing caller as the whole run. So core gains **one** entry
+      point that returns a run's migrations, the old one keeps its
+      contract for runs it can express and refuses — coded, naming the
+      new one — the runs it cannot, and the four internals come back off
+      the index. Red: `split.test.ts` — "the single-migration entry
+      point refuses a run that must split, naming the entry point that
+      can".
 - [x] 4.3 (~9m) Two emissions from one run, each with its own change set
       so each derives its own slug and its own banner. The final
       snapshot's bytes are identical to what the unsplit run produces —
@@ -461,6 +477,15 @@ strings) moved to group 4, which owns that file.
   worth doing rather than assuming: nobody has measured whether
   `MODIFIED` applies cleanly either. Compare the resulting main spec
   against the delta by diff, not by eye.
+- **Then run the corpus check, not just the change's own.** After
+  archiving, `openspec validate --specs --strict` reads every capability
+  in the corpus; the change-level `validate --strict` does not, and a
+  sibling piece found the difference the hard way — two newly created
+  capabilities whose deltas carried no Purpose prose were rolled up with
+  the tool's own `TBD` placeholder, and only the corpus run said so.
+  This change's new capability ships its Purpose in the delta, so the
+  placeholder cannot appear here; the corpus run is what makes that a
+  checked fact rather than a belief about a tool.
 - `pnpm check`, `pnpm check-types`, `pnpm test`, `pnpm check:bans`,
   `pnpm check:crap`, `pnpm check:tasktime` — with `TURBO_FORCE=1` in any
   isolated worktree, because the turbo cache is shared across worktrees

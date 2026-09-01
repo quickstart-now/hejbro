@@ -4,7 +4,11 @@ import { pgEnum } from "../src/dsl/pg-enum";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
 import { diffSnapshots } from "../src/engine/diff-engine";
-import { emitStatementsSql } from "../src/engine/generate";
+import {
+	emitStatementsSql,
+	generateMigration,
+	generateMigrations,
+} from "../src/engine/generate";
 import { applySplitChangesOnly, planSplit } from "../src/engine/split";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { select } from "../src/query/select";
@@ -303,5 +307,106 @@ describe("split reconstruction / 4.3", () => {
 		const combinedParts = [firstSql, secondSql].filter((part) => part !== "");
 
 		expect(combinedParts.join("\n\n")).toBe(unsplitSql);
+	});
+});
+
+describe("generateMigrations / G4 rework (#610)", () => {
+	it("returns one migration per transaction boundary the run needs", () => {
+		const mood = pgEnum(app, "mood", ["ok"]);
+		const t = table(app, "t", { id: uuid().primaryKey() });
+		const previousSnapshot = buildSnapshot(
+			[app, mood, getTableMeta(t)],
+			registry,
+			emptySnapshot,
+		);
+
+		const moodV2 = pgEnum(app, "mood", ["ok", "great"]);
+		const t2 = table(app, "t", {
+			id: uuid().primaryKey(),
+			flag: moodV2.column().default("great"),
+		});
+
+		const result = generateMigrations({
+			declarations: [app, moodV2, getTableMeta(t2)],
+			previousSnapshot,
+			registry,
+		});
+
+		expect(result.hasChanges).toBe(true);
+		expect(result.migrations).toHaveLength(2);
+		expect(result.migrations[0]?.changes.map((c) => c.kind)).toEqual(["enum"]);
+		expect(result.migrations[0]?.sql).toContain("alter type");
+		expect(result.migrations[1]?.changes.map((c) => c.kind)).toEqual(["table"]);
+		expect(result.migrations[1]?.sql).toContain("alter table");
+		// The second (final) file's own snapshot is what an unsplit run of
+		// the identical declarations would have arrived at too -- splitting
+		// the *file* never changes the *declared* end state. This run can't
+		// be diffed against `generateMigration`'s own output for the same
+		// declarations, because that entry point refuses exactly this run
+		// (proved separately below) -- so the expected end state is built
+		// directly instead, the same way `buildSnapshot` is used everywhere
+		// else in this file.
+		const expectedFinalSnapshot = buildSnapshot(
+			[app, moodV2, getTableMeta(t2)],
+			registry,
+			previousSnapshot,
+		);
+		expect(result.migrations[1]?.snapshot).toEqual(expectedFinalSnapshot);
+	});
+
+	it("returns one migration, unchanged, for an ordinary run", () => {
+		const mood = pgEnum(app, "mood", ["ok"]);
+		const t = table(app, "t", { id: uuid().primaryKey() });
+		const previousSnapshot = buildSnapshot(
+			[app, mood, getTableMeta(t)],
+			registry,
+			emptySnapshot,
+		);
+
+		const t2 = table(app, "t", {
+			id: uuid().primaryKey(),
+			label: text(),
+		});
+
+		const result = generateMigrations({
+			declarations: [app, mood, getTableMeta(t2)],
+			previousSnapshot,
+			registry,
+		});
+
+		expect(result.migrations).toHaveLength(1);
+	});
+});
+
+describe("generateMigration / G4 rework (#610)", () => {
+	it("refuses a run that needs a transaction boundary, naming generateMigrations as the next step", () => {
+		const mood = pgEnum(app, "mood", ["ok"]);
+		const t = table(app, "t", { id: uuid().primaryKey() });
+		const previousSnapshot = buildSnapshot(
+			[app, mood, getTableMeta(t)],
+			registry,
+			emptySnapshot,
+		);
+
+		const moodV2 = pgEnum(app, "mood", ["ok", "great"]);
+		const t2 = table(app, "t", {
+			id: uuid().primaryKey(),
+			flag: moodV2.column().default("great"),
+		});
+
+		try {
+			generateMigration({
+				declarations: [app, moodV2, getTableMeta(t2)],
+				previousSnapshot,
+				registry,
+			});
+			throw new Error("expected generateMigration to throw");
+		} catch (error) {
+			expect((error as { code?: string }).code).toBe(
+				"migration-requires-split",
+			);
+			expect((error as Error).message).toContain("generateMigrations");
+			expect((error as Error).message).toMatch(/Next:/);
+		}
 	});
 });

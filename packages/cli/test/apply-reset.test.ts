@@ -122,8 +122,37 @@ describe("planReset / 5.1", () => {
 				(call.sql.toLowerCase().includes("drop") ||
 					call.sql.toLowerCase().includes("create")),
 		);
-		expect(ddlCalls.some((call) => call.sql.includes("managed"))).toBe(true);
+		// Targets the actual DROP statement's own quoted identifier, not
+		// just any substring match -- [G4 rework, #610] reset's DDL now
+		// carries a migration banner too (see the test below), and that
+		// banner's own identity line (`-- - table app.managed`) would
+		// satisfy a bare `.includes("managed")` on its own, proving nothing
+		// about whether real DDL for it was ever emitted.
+		expect(
+			ddlCalls.some((call) => call.sql.includes('drop table "app"."managed"')),
+		).toBe(true);
 		expect(ddlCalls.some((call) => call.sql.includes("unmanaged"))).toBe(false);
+	});
+
+	// [G4 rework, #610] reset now builds its DDL by reusing
+	// `generateMigrations` (declarations: [] against the live snapshot) --
+	// the same pipeline `generate` itself runs -- rather than a
+	// reset-only emitter. That reuse's own side effect: the SQL text
+	// reset sends now opens with a migration banner (harmless SQL
+	// comments), which it never did before. Pinned here as the
+	// intentional, observed shape of that change, not merely asserted to
+	// be harmless.
+	it("carries a migration banner ahead of its DDL, a side effect of reusing generateMigrations", async () => {
+		const { driver, calls } = makeFakeDriver();
+
+		await applyReset(driver, managedSnapshot, registry, "testdb:2");
+
+		const ddlCall = calls.find((call) =>
+			call.sql.toLowerCase().includes("drop table"),
+		);
+		expect(ddlCall?.sql.startsWith("-- hejbro migration")).toBe(true);
+		expect(ddlCall?.sql).toContain("-- - table app.managed");
+		expect(ddlCall?.sql).toContain('drop table "app"."managed"');
 	});
 });
 
