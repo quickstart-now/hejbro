@@ -499,7 +499,10 @@ through the built CLI.
 `packages/cli/src/commands/generate.ts` (R2-G2, R2-G3) ·
 `packages/cli/src/git.ts` (R2-G4 only, listed because every git
 subprocess in the package goes through it) ·
-`packages/cli/src/config.ts` (R2-G4, R2-G7).
+`packages/cli/src/config.ts` (R2-G7 — R2-G4 turned out not to need it,
+see that group's own note) ·
+`packages/cli/src/commands/vendor.ts` (R2-G4 writes it, R2-G5 only adds
+the contract file on top, 5.11).
 Every other file belongs to exactly one group.
 
 ## R2-G1 — Withdrawing what lost its reader — `est_frozen: 38m` — #594
@@ -700,57 +703,101 @@ squashed-SQL builder rather than two).
 ## R2-G4 — `link` and `vendor` — `est_frozen: 77m` — #597
 
 Files: `packages/cli/src/git.ts` (remote functions added),
-`packages/cli/src/vendor/*` (new),
-`packages/cli/src/commands/{link,vendor,outdated}.ts` (new),
-`packages/cli/src/config.ts` (shared),
-`packages/core/test/migration-file.test.ts` (4.11 only).
+`packages/cli/src/vendor/*` (new — includes `write.ts`, adopted from
+the withdrawn `sync/write.ts` via `git mv`, see 4.7),
+`packages/cli/src/commands/{link,vendor,outdated}.ts` (new —
+`commands/vendor.ts` is shared with R2-G5, which only adds),
+`packages/core/test/migration-file.test.ts` (4.11 only). `config.ts`
+turned out not to need a change (4.10's own note) — dropped from this
+list rather than left stale.
+
+**This group writes the description, the squashed SQL and the lock —
+never the contract file.** The delta's "Vendoring pins what it read"
+scenario names the contract too, but that names the *finished* feature;
+this group's own red tests assert only what it writes, and the contract
+half of that scenario is closed by R2-G5 (5.11).
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
 | A repository obtains a schema it does not own over git | Linking records the repository alone | `cli/test/link.test.ts > records the repository and no branch` |
-| " | Vendoring pins what it read | `cli/test/vendor.test.ts > writes the contract and description and records the commit` |
+| " | Vendoring pins what it read | `cli/test/vendor.test.ts > writes the description and the squashed SQL and records the commit` |
 | " | A one-off ref does not stick | `cli/test/vendor.test.ts > --ref does not persist and the lock records its origin` |
 | " | Checking needs no network | `cli/test/vendor-check.test.ts > checks with the remote unreachable` |
 | Vendoring never overwrites a file it did not write | A hand-written file is not overwritten | `cli/test/vendor-write.test.ts > refuses a destination it did not write` |
 | The check compares without writing | Checking leaves the files untouched | `cli/test/vendor-check.test.ts > exits non-zero and writes nothing` |
 | " | A matching set passes quietly | `cli/test/vendor-check.test.ts > a matching set exits zero` |
 
-- [ ] 4.1 Resolve the remote's symbolic HEAD and its commit in one
+- [x] 4.1 Resolve the remote's symbolic HEAD and its commit in one
       call, through the file that owns every git subprocess. Start from
       `cli/test/git-remote.test.ts > resolves the default branch and its
       commit`. ~8m
-- [ ] 4.2 Read one path at one commit without a working tree, so a
+      `git ls-remote --symref <remote> HEAD`, one round trip, so a caller
+      never reads a branch name and its commit from two calls that could
+      race a push in between.
+- [x] 4.2 Read one path at one commit without a working tree, so a
       locked commit can be read directly. Start from
       `cli/test/git-remote.test.ts > reads a file at a given commit`.
       ~9m
-- [ ] 4.3 `link`: record the source repository, and nothing else. Start
+      A throwaway bare repository per call, `git fetch --filter=blob:none
+      --depth=1 <remote> <commit>` then `git show <commit>:<path>` — any
+      reachable commit, not only the branch tip (`git archive --remote`
+      cannot do this and GitHub refuses it outright).
+- [x] 4.3 `link`: record the source repository, and nothing else. Start
       from `cli/test/link.test.ts > records the repository and no
       branch`. ~6m
-- [ ] 4.4 `vendor`: write the contract, the description and the lock,
-      recording the commit and the ref it was resolved from. Start from
-      `cli/test/vendor.test.ts > writes the contract and description and
-      records the commit`. ~9m
-- [ ] 4.5 The lock also records the description's format version. Start
+- [x] 4.4 `vendor`: write the description and the squashed SQL and the
+      lock, recording the commit and the ref it was resolved from
+      (R2-G5's 5.11 adds the contract file on top, once it exists).
+      Start from `cli/test/vendor.test.ts > writes the description and
+      the squashed SQL and records the commit`. ~9m
+      **Self-determined layout** (asked, no objection raised): consumer
+      side is `.hejbro/vendor/{schema.json,snapshot.sql,lock.json}`,
+      symmetric to the schema repository's own `.hejbro/export/`.
+      `schema.json`/`snapshot.sql` are kept byte-identical to what was
+      fetched — never wrapped or marked — so a consumer can diff them
+      directly against the upstream export.
+- [x] 4.5 The lock also records the description's format version. Start
       from `cli/test/vendor.test.ts > the lock records the description
       format version`. ~6m
-- [ ] 4.6 `--ref` overrides one run and does not persist. Start from
+- [x] 4.6 `--ref` overrides one run and does not persist. Start from
       `cli/test/vendor.test.ts > --ref does not persist and the lock
       records its origin`. ~7m
-- [ ] 4.7 Carry the overwrite guard over: a textual marker, checked
+- [x] 4.7 Carry the overwrite guard over: a textual marker, checked
       without loading the file as code, with a fixture that contains a
       comment so the check has something to discriminate against. Start
       from `cli/test/vendor-write.test.ts > refuses a destination it did
       not write`. ~7m
-- [ ] 4.8 `vendor --check`: compare against the lock, offline, writing
+      Adopted `sync/write.ts` → `vendor/write.ts` (`git mv`), renamed
+      `SYNCED_MODULE_MARKER` → `VENDOR_LOCK_MARKER` and the error code
+      `sync-destination-not-synced` → `vendor-destination-not-vendored`.
+      JSON can't carry a comment marker the way a generated TS module
+      could, so the guard now protects `lock.json` alone (a top-level
+      `"generatedBy": "hejbro vendor"` field, checked as a substring) —
+      `lock.json` is always a hejbro-only format, unlike
+      `schema.json`/`snapshot.sql`, which stay unmarked raw copies (4.4).
+      `readVendorLock` enforces the same check before ever trusting an
+      existing lock's `source`, not only `link`'s own write path.
+- [x] 4.8 `vendor --check`: compare against the lock, offline, writing
       nothing. Start from `cli/test/vendor-check.test.ts > exits
       non-zero and writes nothing`. ~8m
-- [ ] 4.9 `outdated`: report a newer commit as advice, exiting zero.
+      The lock also carries a sha256 of each vendored file's content —
+      what makes an offline comparison possible at all without
+      re-fetching or re-diffing against the remote.
+- [x] 4.9 `outdated`: report a newer commit as advice, exiting zero.
       Start from `cli/test/outdated.test.ts > reports a newer commit
       without failing`. ~6m
-- [ ] 4.10 A machine without `git` is told so, rather than shown a
+- [x] 4.10 A machine without `git` is told so, rather than shown a
       subprocess failure — the same shape the missing-driver diagnostic
       already uses. Start from `cli/test/vendor.test.ts > a missing git
       binary is a coded failure`. ~6m
+      Shared `vendor/git-diagnostic.ts` (`vendor` and `outdated`, the two
+      commands that ever reach a remote) rather than one copy per
+      command; the diagnostic text is asserted directly in a subprocess
+      test with `PATH` stripped, not inferred from a type passing.
+      `packages/cli/src/config.ts` needed no change: `link`/`vendor`/
+      `outdated` read no `hejbro.config.ts` field at all (the three
+      migration-authoring fields were already optional, and these
+      commands have no reason to ask for any of them).
 - [x] 4.11 Restore the forward-compatibility regression guard 2.10
       removed along with `parseBannerManifestFormat`: a banner line no
       current parser recognizes at all must not break the parsers that

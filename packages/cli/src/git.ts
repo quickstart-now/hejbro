@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { sha256Hex } from "./hash";
 
@@ -296,6 +297,124 @@ export const remoteUrl = (cwd: string): string | null => {
 		return null;
 	}
 	return trimmed;
+};
+
+/** `true` for the one error `execFileSync("git", ...)` raises when the
+ * `git` binary itself can't be found on `PATH` — Node's own `ENOENT`,
+ * distinct from git running and exiting non-zero (a bad remote, an
+ * unresolvable ref). Callers use this to tell "git is not installed"
+ * from every other git failure, since a coded diagnostic needs to name
+ * the right one (R2-G4, "A machine without git is told so"). */
+export const isGitBinaryMissing = (error: unknown): boolean =>
+	error !== null &&
+	typeof error === "object" &&
+	(error as NodeJS.ErrnoException).code === "ENOENT";
+
+/** The remote's default branch and the commit it currently points at —
+ * one `git ls-remote --symref` call answers both, so a caller never
+ * reads a branch name from one round trip and its commit from another
+ * (which could race against a push in between). Branch is intent,
+ * commit is truth (R2-G4): everything except a deliberate update reads
+ * a pinned commit, and this is the one place a branch name is read at
+ * all. `remote` is a URL or a filesystem path (a local bare repository
+ * works identically, which is how this is tested without a network). */
+export type RemoteHead = {
+	readonly branch: string;
+	readonly commit: string;
+};
+
+const SYMREF_PREFIX = "ref: refs/heads/";
+
+export const resolveRemoteHead = (cwd: string, remote: string): RemoteHead => {
+	const stdout = runGitOrThrow(cwd, ["ls-remote", "--symref", remote, "HEAD"]);
+	const lines = stdout.split("\n").filter((line) => line !== "");
+	const refLine = lines.find((line) => line.startsWith(SYMREF_PREFIX));
+	const commitLine = lines.find((line) => !line.startsWith("ref: "));
+	const [branch] = (refLine ?? "").slice(SYMREF_PREFIX.length).split("\t");
+	const [commit] = (commitLine ?? "").split("\t");
+	if (
+		refLine === undefined ||
+		commitLine === undefined ||
+		branch === undefined ||
+		commit === undefined ||
+		branch === "" ||
+		commit === ""
+	) {
+		throw new Error(
+			`could not resolve "${remote}"'s default branch from \`git ls-remote --symref\` output: ${JSON.stringify(stdout)}`,
+		);
+	}
+	return { branch, commit };
+};
+
+/** Resolves one named ref (a branch or a tag) to its commit —
+ * `--ref`'s own one-off override (R2-G4, 4.6). `undefined` when the
+ * remote has no such ref, so a caller can name it in a coded refusal
+ * rather than crash on `git ls-remote`'s own empty, silent success. */
+export const resolveRemoteRef = (
+	cwd: string,
+	remote: string,
+	ref: string,
+): string | undefined => {
+	const stdout = runGitOrThrow(cwd, ["ls-remote", remote, ref]);
+	const [line] = stdout.split("\n").filter((entry) => entry !== "");
+	if (line === undefined) {
+		return undefined;
+	}
+	const [commit] = line.split("\t");
+	return commit;
+};
+
+/**
+ * Reads one path's raw bytes at one commit of `remote`, without ever
+ * creating a working tree for it — a throwaway bare repository fetches
+ * only that commit (`--filter=blob:none --depth=1`, a blobless partial
+ * clone: tree and commit metadata arrive up front, the one blob this
+ * reads arrives on demand from the same call), then `git show` reads it
+ * directly. `commit` can be any commit the remote still has reachable —
+ * not only the branch tip — which is what lets a pinned lock stay
+ * readable after the branch has moved on (`git archive --remote` cannot
+ * do this at all; GitHub refuses it outright). `null` when `commit`
+ * carries no file at `path` (the caller tells that apart from "commit
+ * doesn't exist" itself, checked separately).
+ */
+export const readFileAtRemoteCommit = (
+	remote: string,
+	commit: string,
+	path: string,
+): Buffer | null => {
+	const scratchDir = mkdtempSync(join(tmpdir(), "hejbro-vendor-"));
+	try {
+		execFileSync("git", ["init", "--bare", "--quiet", scratchDir], {
+			env: GIT_ENV,
+			stdio: ["ignore", "ignore", "ignore"],
+		});
+		execFileSync(
+			"git",
+			[
+				"-C",
+				scratchDir,
+				"fetch",
+				"--quiet",
+				"--filter=blob:none",
+				"--depth=1",
+				remote,
+				commit,
+			],
+			{ env: GIT_ENV, stdio: ["ignore", "ignore", "ignore"] },
+		);
+		try {
+			return execFileSync(
+				"git",
+				["-C", scratchDir, "show", `${commit}:${path}`],
+				{ env: GIT_ENV, stdio: ["ignore", "pipe", "ignore"] },
+			);
+		} catch {
+			return null;
+		}
+	} finally {
+		rmSync(scratchDir, { recursive: true, force: true });
+	}
 };
 
 /** Writes every one of `paths` (cwd-relative) to its state at `sha`, via `git checkout <sha> -- <path...>` -- git itself creates any missing parent directory. */
