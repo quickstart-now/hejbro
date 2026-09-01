@@ -693,8 +693,8 @@ bytes to the export's and the mirror's.
   can agree by luck.
 - **Determinism is now load-bearing in a way it was not.** Both
   artifacts are committed and reviewed as diffs; an emitter that
-  reorders its output on a different machine turns every unrelated pull
-  into a review of noise.
+  reorders its output on a different machine turns every unrelated
+  pull request into a review of noise.
 
 If the mirror carries both flat types and table values, one further
 property is pre-registered: **the two expressions of a column's type
