@@ -446,13 +446,13 @@ them and corrected from the actuals. The group's own re-freeze history
 travels with it: 25m → 27m, when 9.2 absorbed a row-conversion
 assertion from elsewhere in that change.
 
-- [ ] 9.1 (~9m) The fixture consumer repository and the vendored SQL it
+- [x] 9.1 (~9m) The fixture consumer repository and the vendored SQL it
       receives. Starts only after `upstream/dev` has been merged in —
       this branch forked before the sibling change landed, so the
       vendoring machinery it needs is not here until then. Red:
       `two-repo.integration.test.ts` — "a consumer repository vendors
       the schema it was given".
-- [ ] 9.2 (~10m) The consumer raises its database from that SQL and runs
+- [x] 9.2 (~10m) The consumer raises its database from that SQL and runs
       a typed query through the emitted contract — the live execution
       the sibling change no longer has anywhere else. This task also
       carries the row conversion absorbed from that change: `numeric`,
@@ -461,7 +461,7 @@ assertion from elsewhere in that change.
       driver cannot establish. Red: same file — "a consumer raises its
       database and queries it through the contract", "numeric, bigint
       and timestamptz arrive as the contract's types".
-- [ ] 9.3 (~8m) The freshness diff: the vendored copy against what the
+- [x] 9.3 (~8m) The freshness diff: the vendored copy against what the
       producer would emit now. Red: same file — "reports a vendored copy
       that has fallen behind".
 
