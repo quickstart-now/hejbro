@@ -55,9 +55,11 @@ export const assertBoundaryAtCheck = (
 	if (resolvedBy === "default-branch") {
 		return;
 	}
-	const message = `${NON_DEFAULT_REF_MESSAGE} ${strictNamedSuffix}`;
 	if (resolveStrictMode(strictFlag)) {
-		throwHejbroError("vendor-lock-non-default-ref", message);
+		throwHejbroError(
+			"vendor-lock-non-default-ref",
+			`${NON_DEFAULT_REF_MESSAGE} Next: run \`hejbro vendor\` to re-pin from the default branch, or pass \`--no-strict\` to accept this pinned ref for this run.`,
+		);
 	}
-	onWarn(message);
+	onWarn(`${NON_DEFAULT_REF_MESSAGE} ${strictNamedSuffix}`);
 };

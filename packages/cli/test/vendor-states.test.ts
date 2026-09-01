@@ -225,7 +225,7 @@ describe("hejbro vendor — the eleven named failure situations (R2-G7)", () => 
 			const checked = await runCli(cwd, ["vendor", "--check"]);
 			expect(checked.exitCode).toBe(1);
 			expect(checked.stderr).toContain("vendor-lock-non-default-ref");
-			expect(checked.stderr).toContain("--strict");
+			expect(checked.stderr).toContain("hejbro vendor");
 			expect(checked.stderr).toContain("--no-strict");
 
 			const lenientCheck = await runCli(cwd, [
