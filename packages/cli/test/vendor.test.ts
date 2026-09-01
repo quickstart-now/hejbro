@@ -62,7 +62,7 @@ describe("hejbro vendor", () => {
 	it("writes the description and the squashed SQL and records the commit", async () => {
 		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
 		const commit = remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(0);
@@ -73,13 +73,15 @@ describe("hejbro vendor", () => {
 		expect(lock.commit).toBe(commit);
 		expect(lock.resolvedFrom).toBe("main");
 		expect(lock.source).toBeUndefined();
-		expect(await readSourceFile()).toEqual({ source: remote.cwd });
+		expect(await readSourceFile()).toEqual({
+			source: `file://${remote.cwd}`,
+		});
 	});
 
 	it("vendor also writes the contract file", async () => {
 		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(0);
@@ -96,7 +98,7 @@ describe("hejbro vendor", () => {
 	it("the lock records the description format version", async () => {
 		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		await runCli(cwd, ["vendor"]);
 
@@ -115,7 +117,7 @@ describe("hejbro vendor", () => {
 		);
 		const headCommit = remote.commit("export v2", "2026-01-02T10:00:00Z");
 		expect(taggedCommit).not.toBe(headCommit);
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const refRun = await runCli(cwd, ["vendor", "--ref", "v1"]);
 		expect(refRun.exitCode).toBe(0);
@@ -139,7 +141,7 @@ describe("hejbro vendor", () => {
 	it("refuses naming the other repository when the commit carries no export", async () => {
 		await writeFile(join(remote.cwd, "readme.txt"), "no export here\n");
 		remote.commit("no export here", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(1);
@@ -152,7 +154,7 @@ describe("hejbro vendor", () => {
 		// `link` itself never shells out to git -- linking with a normal
 		// PATH first, then stripping git for the `vendor` call, isolates
 		// the failure to exactly the command this task is about.
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor"], {
 			// biome-ignore lint/style/useNamingConvention: PATH is the POSIX environment variable itself, not a naming choice of this codebase's own

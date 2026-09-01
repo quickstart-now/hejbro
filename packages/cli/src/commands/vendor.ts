@@ -10,9 +10,10 @@ import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
 import { resolveExport } from "../vendor/fetch";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
-import type { VendorLock } from "../vendor/lock";
+import type { LockResolvedBy, VendorLock } from "../vendor/lock";
 import {
 	assertLockWritable,
+	lockResolvedBy,
 	readLock,
 	vendorContractPath,
 	vendorDirPath,
@@ -21,6 +22,11 @@ import {
 	writeLock,
 } from "../vendor/lock";
 import { readSourceFile } from "../vendor/source-file";
+import {
+	assertBoundaryAtCheck,
+	warnIfLocalSource,
+	warnIfNonDefaultRef,
+} from "../vendor/state";
 
 const VENDOR_DESCRIPTION =
 	"Fetch the linked source's schema export and pin it (writes the description, the squashed SQL, the contract and the lock).";
@@ -42,6 +48,13 @@ const flagValue = (
 	return argv[index + 1];
 };
 
+const resolvedByFor = (ref: string | undefined): LockResolvedBy => {
+	if (ref === undefined) {
+		return "default-branch";
+	}
+	return "explicit-ref";
+};
+
 const requireLinkedSource = (cwd: string): string => {
 	const sourceFile = readSourceFile(cwd);
 	if (sourceFile === null) {
@@ -49,6 +62,15 @@ const requireLinkedSource = (cwd: string): string => {
 			"vendor-source-not-linked",
 			"hejbro vendor needs a linked source. Next: run `hejbro link <repository>` first.",
 		);
+	}
+	return sourceFile.source;
+};
+
+const linkedSourceOrNull = (
+	sourceFile: { readonly source: string } | null,
+): string | null => {
+	if (sourceFile === null) {
+		return null;
 	}
 	return sourceFile.source;
 };
@@ -64,8 +86,36 @@ const requireVendoredLock = (cwd: string): VendorLock => {
 	return lock;
 };
 
-const runVendorCheck = (cwd: string): VendorResult => {
+/** `["${N} warning(s) — see below"]` when there are warnings, else `[]` — same O3 shape `generate` already uses, so a stdout-only consumer still learns a warning fired. */
+const warningSummaryLines = (
+	warnings: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	if (warnings.length === 0) {
+		return [];
+	}
+	return [`${warnings.length} warning(s) — see below`];
+};
+
+const warningStderr = (warnings: ReadonlyArray<string>): string | null => {
+	if (warnings.length === 0) {
+		return null;
+	}
+	return warnings.join("\n\n");
+};
+
+const runVendorCheck = (
+	cwd: string,
+	strictFlag: boolean | undefined,
+): VendorResult => {
 	const lock = requireVendoredLock(cwd);
+	const linkedSource = linkedSourceOrNull(readSourceFile(cwd));
+	const warnings: string[] = [];
+	assertBoundaryAtCheck(
+		linkedSource,
+		lockResolvedBy(lock),
+		strictFlag,
+		(message) => warnings.push(message),
+	);
 	const schemaText = readFileSync(vendorSchemaPath(cwd), "utf8");
 	const sqlText = readFileSync(vendorSqlPath(cwd), "utf8");
 	const contractText = readFileSync(vendorContractPath(cwd), "utf8");
@@ -76,8 +126,8 @@ const runVendorCheck = (cwd: string): VendorResult => {
 	if (matches) {
 		return {
 			exitCode: 0,
-			stdout: ["vendor --check: up to date"],
-			stderr: null,
+			stdout: ["vendor --check: up to date", ...warningSummaryLines(warnings)],
+			stderr: warningStderr(warnings),
 		};
 	}
 	return throwHejbroError(
@@ -136,6 +186,15 @@ const runVendorUpdate = (
 	ref: string | undefined,
 	force: boolean,
 ): VendorResult => {
+	// Members 10/11 at `vendor` itself are always advisory ("warned
+	// locally"/"advisory locally") -- a local source or an explicit --ref
+	// is the caller's own deliberate choice on their own machine, never
+	// blocked here; `vendor --check` (`assertBoundaryAtCheck`) is the
+	// boundary that can actually fail on either.
+	const resolvedBy = resolvedByFor(ref);
+	const warnings: string[] = [];
+	warnIfLocalSource(source, (message) => warnings.push(message));
+	warnIfNonDefaultRef(resolvedBy, (message) => warnings.push(message));
 	// Runs *after* `resolveExport` below succeeds, deliberately: that
 	// call already proves the remote itself is reachable
 	// (`vendor-remote-unreachable` would already have fired otherwise),
@@ -156,6 +215,7 @@ const runVendorUpdate = (
 	writeFileSync(vendorContractPath(cwd), contractText);
 	writeLock(cwd, {
 		resolvedFrom: fetched.ref,
+		resolvedBy,
 		commit: fetched.commit,
 		descriptionFormat: fetched.format.descriptionFormat,
 		schemaHash: sha256Hex(fetched.schemaText),
@@ -164,8 +224,11 @@ const runVendorUpdate = (
 	});
 	return {
 		exitCode: 0,
-		stdout: [`vendored ${fetched.commit} (${fetched.ref})`],
-		stderr: null,
+		stdout: [
+			`vendored ${fetched.commit} (${fetched.ref})`,
+			...warningSummaryLines(warnings),
+		],
+		stderr: warningStderr(warnings),
 	};
 };
 
@@ -185,6 +248,19 @@ const assertNoSchemaFilter = (argv: ReadonlyArray<string>): void => {
 	);
 };
 
+/** `--strict`/`--no-strict` always win; with neither, `resolveStrictMode`
+ * (`tty.ts`) infers from the terminal. Named, not inferred from a `-`
+ * prefix scan, since `--no-strict` must never be read as `strict: true`. */
+const strictFlagValue = (argv: ReadonlyArray<string>): boolean | undefined => {
+	if (argv.includes("--strict")) {
+		return true;
+	}
+	if (argv.includes("--no-strict")) {
+		return false;
+	}
+	return undefined;
+};
+
 export const runVendor = (
 	cwd: string,
 	argv: ReadonlyArray<string>,
@@ -192,8 +268,9 @@ export const runVendor = (
 	const fallbackIdentity = "vendor";
 	try {
 		assertNoSchemaFilter(argv);
+		const strictFlag = strictFlagValue(argv);
 		if (argv.includes("--check")) {
-			return runVendorCheck(cwd);
+			return runVendorCheck(cwd, strictFlag);
 		}
 		// `hejbro.lock` is entirely vendor's own file (4.13: `link` never
 		// touches it) -- its guard runs first, before any dependent work
@@ -236,6 +313,11 @@ export const vendorCommand = defineCommand({
 		force: {
 			type: "boolean",
 			description: "overwrite a hejbro.lock this tool did not write",
+		},
+		strict: {
+			type: "boolean",
+			description:
+				"with --check, fail (rather than warn) on a local source or a non-default-branch lock; defaults to failing outside an interactive terminal",
 		},
 	},
 	run: async (ctx) => {

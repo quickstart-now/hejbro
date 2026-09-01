@@ -42,15 +42,31 @@ export const lockPath = (cwd: string): string => join(cwd, LOCK_FILE_NAME);
  * touch, being the one file a consumer's own code imports). Carries no
  * source — that is the sibling `hejbro.json`'s own, single fact.
  */
+/**
+ * Whether the lock's commit came from the remote's default branch or
+ * from an explicit `--ref` (member 11 of the eleven: "the lock was
+ * resolved from somewhere other than the default branch"). A
+ * discriminant string, not a boolean — a boolean can only say "pinned",
+ * this says *what happened*.
+ */
+export type LockResolvedBy = "default-branch" | "explicit-ref";
+
 export type VendorLock = {
 	readonly generatedBy: "hejbro vendor";
 	readonly resolvedFrom?: string;
+	readonly resolvedBy?: LockResolvedBy;
 	readonly commit?: string;
 	readonly descriptionFormat?: number;
 	readonly schemaHash?: string;
 	readonly sqlHash?: string;
 	readonly contractHash?: string;
 };
+
+/** Asymmetric-tolerant, matching the format-skew rule (member 6): a lock
+ * written before this field existed carries no opinion, and an absent
+ * opinion reads as `"default-branch"` rather than breaking. */
+export const lockResolvedBy = (lock: VendorLock): LockResolvedBy =>
+	lock.resolvedBy ?? "default-branch";
 
 /** `vendor`'s own guard: refuses to claim `hejbro.lock` when it already
  * exists and isn't one this tool wrote, unless `force`. */

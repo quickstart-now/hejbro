@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { CliRun } from "./support/cli-runner";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -118,7 +119,7 @@ describe("hejbro vendor — the eleven named failure situations (R2-G7)", () => 
 			'{"descriptionFormat":1,"snapshotFormat":8}',
 		);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(1);
@@ -132,7 +133,7 @@ describe("hejbro vendor — the eleven named failure situations (R2-G7)", () => 
 			'{"descriptionFormat":99,"snapshotFormat":8}',
 		);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(1);
@@ -157,7 +158,7 @@ describe("hejbro vendor — the eleven named failure situations (R2-G7)", () => 
 	it("refuses to move the lock past a commit the remote no longer has (member 7)", async () => {
 		await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
 		const lostCommit = remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 		const firstVendor = await runCli(cwd, ["vendor"]);
 		expect(firstVendor.exitCode).toBe(0);
 		expect((await readLock()).commit).toBe(lostCommit);
@@ -185,10 +186,248 @@ describe("hejbro vendor — the eleven named failure situations (R2-G7)", () => 
 			'{"descriptionFormat":1,"snapshotFormat":8}',
 		);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor", "--schema", "app"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("vendor-schema-filter-reserved");
+	});
+
+	describe("member 10: a local replacement is active where it is forbidden", () => {
+		it("a bare local path warns at vendor, then fails at vendor --check by default, and only warns with --no-strict", async () => {
+			await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
+			remote.commit("export v1", "2026-01-01T10:00:00Z");
+			// A bare filesystem path -- no URI scheme -- is the local-path
+			// direction of the bidirectional test.
+			await runCli(cwd, ["link", remote.cwd]);
+
+			const vendored = await runCli(cwd, ["vendor"]);
+			expect(vendored.exitCode).toBe(0);
+			expect(vendored.stderr).toContain("local filesystem path");
+			expect(vendored.stderr).not.toContain("vendor-local-source-active");
+
+			const checked = await runCli(cwd, ["vendor", "--check"]);
+			expect(checked.exitCode).toBe(1);
+			expect(checked.stderr).toContain("vendor-local-source-active");
+			expect(checked.stderr).toContain("--strict");
+			expect(checked.stderr).toContain("--no-strict");
+
+			const lenientCheck = await runCli(cwd, [
+				"vendor",
+				"--check",
+				"--no-strict",
+			]);
+			expect(lenientCheck.exitCode).toBe(0);
+			expect(lenientCheck.stderr).toContain("local filesystem path");
+		});
+
+		it("a URL-scheme source (the remote direction) never triggers it, even at the boundary", async () => {
+			await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
+			remote.commit("export v1", "2026-01-01T10:00:00Z");
+			// `file://` carries an explicit scheme -- the remote-URL
+			// direction of the bidirectional test, even though it still
+			// resolves to a path on this machine.
+			await runCli(cwd, ["link", `file://${remote.cwd}`]);
+			await runCli(cwd, ["vendor"]);
+
+			const checked = await runCli(cwd, ["vendor", "--check"]);
+			expect(checked.exitCode).toBe(0);
+			expect(checked.stderr).toBe("");
+		});
+	});
+
+	describe("member 11: the lock was resolved from a non-default ref", () => {
+		it("an explicit --ref is advisory at vendor, then refused at vendor --check by default, and only warns with --no-strict", async () => {
+			await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
+			remote.commit("export v1", "2026-01-01T10:00:00Z");
+			execFileSync("git", ["tag", "v1"], { cwd: remote.cwd });
+			await runCli(cwd, ["link", `file://${remote.cwd}`]);
+
+			const vendored = await runCli(cwd, ["vendor", "--ref", "v1"]);
+			expect(vendored.exitCode).toBe(0);
+			expect(vendored.stderr).toContain("not the remote's default branch");
+			expect(vendored.stderr).not.toContain("vendor-lock-non-default-ref");
+			expect((await readLock()).resolvedBy).toBe("explicit-ref");
+
+			const checked = await runCli(cwd, ["vendor", "--check"]);
+			expect(checked.exitCode).toBe(1);
+			expect(checked.stderr).toContain("vendor-lock-non-default-ref");
+			expect(checked.stderr).toContain("--strict");
+			expect(checked.stderr).toContain("--no-strict");
+
+			const lenientCheck = await runCli(cwd, [
+				"vendor",
+				"--check",
+				"--no-strict",
+			]);
+			expect(lenientCheck.exitCode).toBe(0);
+			expect(lenientCheck.stderr).toContain("not the remote's default branch");
+		});
+
+		it("the default branch never triggers it, even at the boundary", async () => {
+			await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
+			remote.commit("export v1", "2026-01-01T10:00:00Z");
+			await runCli(cwd, ["link", `file://${remote.cwd}`]);
+			await runCli(cwd, ["vendor"]);
+			expect((await readLock()).resolvedBy).toBe("default-branch");
+
+			const checked = await runCli(cwd, ["vendor", "--check"]);
+			expect(checked.exitCode).toBe(0);
+			expect(checked.stderr).toBe("");
+		});
+	});
+
+	/**
+	 * 7.5: compares the codes themselves, not their labels -- a
+	 * consolidated run of all eleven, each in its own fixture, asserting
+	 * the eleven diagnostic *codes* are pairwise distinct. Wording can
+	 * drift harmlessly; two situations quietly sharing one code cannot
+	 * (this codebase has had that exact regression escape a label-only
+	 * comparison before).
+	 */
+	it("reports eleven distinct codes", async () => {
+		const extractCode = (stderr: string): string | null => {
+			const match = stderr.match(/error\[([a-z0-9-]+)\]/);
+			if (match === null) {
+				return null;
+			}
+			return match[1] ?? null;
+		};
+
+		const withFixture = async (
+			run: (dir: string, fixtureRemote: GitFixture) => Promise<CliRun>,
+		): Promise<string | null> => {
+			const dir = await createCliFixtureDir();
+			const fixtureRemote = await createGitFixture();
+			try {
+				const result = await run(dir, fixtureRemote);
+				return extractCode(result.stderr);
+			} finally {
+				await removeCliFixtureDir(dir);
+				await fixtureRemote.cleanup();
+			}
+		};
+
+		const scenarios: ReadonlyArray<() => Promise<string | null>> = [
+			// 1. No source is linked.
+			() => withFixture((dir) => runCli(dir, ["vendor"])),
+			// 2. The remote cannot be reached or does not exist.
+			() =>
+				withFixture(async (dir) => {
+					await runCli(dir, ["link", "/no/such/path/on/this/machine"]);
+					return runCli(dir, ["vendor"]);
+				}),
+			// 3. The ref does not resolve.
+			() =>
+				withFixture(async (dir, fixtureRemote) => {
+					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
+					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
+					return runCli(dir, ["vendor", "--ref", "no-such-ref"]);
+				}),
+			// 4. The resolved commit carries no export.
+			() =>
+				withFixture(async (dir, fixtureRemote) => {
+					await writeFile(
+						join(fixtureRemote.cwd, "readme.txt"),
+						"no export here\n",
+					);
+					fixtureRemote.commit("no export here", "2026-01-01T10:00:00Z");
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
+					return runCli(dir, ["vendor"]);
+				}),
+			// 5. The export is present but does not answer its own format.
+			() =>
+				withFixture(async (dir, fixtureRemote) => {
+					await writeExportFiles(
+						fixtureRemote,
+						'{"table":[],"functions":[],"roles":[]}',
+						VALID_FORMAT,
+					);
+					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
+					return runCli(dir, ["vendor"]);
+				}),
+			// 6. The IR format is newer than this toolchain knows.
+			() =>
+				withFixture(async (dir, fixtureRemote) => {
+					await writeExportFiles(
+						fixtureRemote,
+						VALID_SCHEMA,
+						'{"descriptionFormat":99,"snapshotFormat":8}',
+					);
+					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
+					return runCli(dir, ["vendor"]);
+				}),
+			// 7. The lock names a commit the remote no longer has.
+			() =>
+				withFixture(async (dir, fixtureRemote) => {
+					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
+					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
+					await runCli(dir, ["vendor"]);
+					await rewriteRemoteHistory(fixtureRemote);
+					return runCli(dir, ["vendor"]);
+				}),
+			// 8. The vendored files disagree with the lock.
+			() =>
+				withFixture(async (dir, fixtureRemote) => {
+					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
+					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
+					await runCli(dir, ["vendor"]);
+					await writeFile(
+						join(dir, ".hejbro", "vendor", "schema.json"),
+						'{"tables":[],"functions":[],"roles":[],"snapshot":{"formatVersion":8,"dialect":"postgres","objects":{}},"hand-edited":true}',
+					);
+					return runCli(dir, ["vendor", "--check"]);
+				}),
+			// 9. The destination holds a file this tool did not write.
+			() =>
+				withFixture(async (dir) => {
+					await writeFile(
+						join(dir, "hejbro.lock"),
+						'{\n\t"commit": "0000000000000000000000000000000000000000",\n\t"resolvedFrom": "main"\n}\n',
+					);
+					return runCli(dir, ["vendor"]);
+				}),
+			// 10. A local replacement is active where it is forbidden.
+			() =>
+				withFixture(async (dir, fixtureRemote) => {
+					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
+					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
+					await runCli(dir, ["link", fixtureRemote.cwd]);
+					await runCli(dir, ["vendor"]);
+					return runCli(dir, ["vendor", "--check"]);
+				}),
+			// 11. The lock was resolved from somewhere other than the default
+			// branch.
+			() =>
+				withFixture(async (dir, fixtureRemote) => {
+					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
+					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
+					execFileSync("git", ["tag", "v1"], { cwd: fixtureRemote.cwd });
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
+					await runCli(dir, ["vendor", "--ref", "v1"]);
+					return runCli(dir, ["vendor", "--check"]);
+				}),
+		];
+
+		const codes = await Promise.all(scenarios.map((scenario) => scenario()));
+		expect(codes).toEqual([
+			"vendor-source-not-linked",
+			"vendor-remote-unreachable",
+			"vendor-ref-not-found",
+			"vendor-export-missing",
+			"vendor-export-invalid",
+			"vendor-export-format-unsupported",
+			"vendor-lock-commit-lost",
+			"vendor-check-mismatch",
+			"vendor-destination-not-vendored",
+			"vendor-local-source-active",
+			"vendor-lock-non-default-ref",
+		]);
+		expect(new Set(codes).size).toBe(11);
 	});
 });
