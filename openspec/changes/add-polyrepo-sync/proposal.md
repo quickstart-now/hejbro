@@ -4,24 +4,26 @@ This revises the change rather than replacing it: the intent — a
 consuming repository gets the schema's types — is unchanged, and the
 mechanism is replaced.
 
-Five owner judgements govern this revision. One of them is not about
+Five settled directions govern this revision. One of them is not about
 polyrepo at all and stands above the rest: **hejbro manages a database's
 schema and access from declarations; it is not a tool that reaches into
 live infrastructure and works from what it finds there.** The others
 follow that line — the polyrepo channel becomes git rather than a
 database; **D12 is revised in full**, so applying migrations is
 first-class including production; **verifying that a database has the
-declared shape is not built**; and deriving declarations from an
-existing database is allowed once, as a way in, and never as a habit.
+declared shape is not built**; and reading an existing database is kept
+as a **fallback**, not as a second channel — the same generator, fed by
+inference instead of by declarations.
 
 The identity judgement explains why the others are consistent rather
 than merely simultaneous. Applying is writing in the declared
-direction, and a ledger of what this tool itself applied is a record of
-its own writes — neither is introspection. Verifying a database's shape
-reads the infrastructure to decide what is true, and is out. Deriving
-declarations from a database does too, which is why it is confined to a
-single run that ends with declarations in place: it is how a project
-enters this model, not how it lives in it.
+direction, and a ledger of what this tool itself applied is a record
+of its own writes — neither is introspection. Verifying a database's
+shape reads the infrastructure to decide what is true, and is out.
+Reading a database to *start* — or to serve a consumer whose schema
+repository does not use this tool yet — does the same, which is why
+it is a marked fallback with a stated loss rather than a peer of the
+git channel.
 
 ## Why the mechanism changes
 
@@ -38,12 +40,30 @@ three principles the owner settled on are all file-shaped: **every
 truth is a committed file**, **every check is a single command with an
 exit code**, **every error message names the next command**.
 
+### Why the database is not the truth here, even though it is a database
+
+A tool that owns applying makes the database the *output* of the
+declarations on every normal path. Carrying a hotfix from the
+database to consumers is therefore not fidelity to the truth; it is
+the quiet propagation of drift. The consumer's contract would follow
+the hotfixed database, the schema repository would not know, and the
+next apply would either revert the hotfix or fail — with no warning
+to anyone in between.
+
+Drift is a detection problem rather than a channel problem. One half
+of the detection is settled here: the contract carries the point it
+was generated from, which costs nothing and makes the comparison
+possible. The other half — a consumer actually performing that
+comparison against a database — is an open gate below, because it
+touches the ruling that a database's shape is not verified.
+
 ## What the owner settled
 
-- `hejbro link <repo>` records the source **repository only**. `pull`
-  resolves the remote's symbolic HEAD, vendors the export, and writes
-  `hejbro.lock` (`commit`, `resolvedFrom`); `--ref` overrides one pull
-  and does not stick. Branch is intent, commit is truth.
+- `hejbro link <repo>` records the source **repository only**. `vendor`
+  resolves the remote's symbolic HEAD, writes the IR and the contract
+  into the repository, and records `hejbro.lock` (`commit`,
+  `resolvedFrom`); `--ref` overrides one run and does not stick. Branch
+  is intent, commit is truth.
 - What crosses is an **IR**, not declarations and not another
   language's finished mirror: a Go repository would otherwise need Node
   to read a schema, and a schema repository would otherwise have to
@@ -367,6 +387,14 @@ its reasoning by this section and needs a disposition: redefined
 against the export, absorbed here, or left standing. **[to be stated in
 the final draft]**
 
+- **An object this repository does not own.** An application that joins
+  a platform-owned table has nothing to join against: the export
+  describes what the schema repository declares, and that table is not
+  declared. What is needed is a declaration that produces **no
+  migration** but does produce types and metadata. This is missing
+  regardless of which channel carries the schema, so it is recorded
+  here and belongs in its own change.
+
 ## Owner gates, in the order they must be answered
 
 D12 is answered (revised in full). The rest, in dependency order:
@@ -388,15 +416,33 @@ D12 is answered (revised in full). The rest, in dependency order:
    `manifest.json` in the export directory. Two artifacts, one word —
    separated now, or conflated in specs and code later.
 
-   The consumer command is **`vendor`**, settled. `pull` was the
-   obvious name and is the wrong one: in the two tools whose users and
-   training data we inherit, `pull` means *introspect the database and
-   write declarations from it* — precisely what the identity ruling
-   excludes. A name that teaches the opposite of what it does would
-   have cost exactly what the Supabase-shaped contract was chosen to
-   buy. `vendor` says what happens, and has its own precedent in the
-   module ecosystem this channel is modelled on. `link`, `--ref` and
-   the lock keep their meanings.
+   The command surface, settled:
+
+   ```
+   hejbro link github.com/org/schema   # register the source once
+   hejbro vendor                       # write the IR and contract, pin the lock
+   hejbro vendor --update              # move to the newest commit (the one networked command)
+   hejbro vendor --check               # verify against the lock (offline, CI)
+   hejbro outdated                     # is there a newer commit (advisory)
+   hejbro pull --db-url <url>          # the database fallback, with its warning
+   ```
+
+   The verb stays `vendor` and the satellites follow package-manager
+   habit. `vendor` names what happens — the IR is copied into the
+   repository and pinned — and this revision is what earns the name:
+   with the IR itself committed, the word describes the artifact
+   rather than the intent. The precedent it borrows from is the module
+   ecosystem this channel is modelled on. `pull` is free to mean the
+   database fallback, which is what the tools that trained everyone's
+   expectations already use it for, so the one name that would have
+   fought prior knowledge now agrees with it. `outdated`, `--check` and
+   `--update` say to a package manager's user exactly what they say
+   here.
+
+   One property of the surface is worth stating because it is the
+   point of the vendored IR: **`--update` is the only command that
+   needs the network.** Everything else — checking, regenerating,
+   type-checking — runs from committed files.
 5. **The DSL becomes a statically parseable subset — decided now,
    built later.** Today's DSL is executed: callbacks and thunks mean a
    reader must run TypeScript to learn a schema. The constraint cannot
@@ -413,20 +459,33 @@ D12 is answered (revised in full). The rest, in dependency order:
    left as an intention, with sub-second generation as the target and
    the reason — no daemon — recorded beside it.
 
-**Already decided, recorded so it is not re-proposed:** a one-time
-`import` deriving declarations from an existing database is **allowed
-as an on-ramp only**. An existing project has to get into this model
-somehow, and reading its database once is the only way in. After that
-run the declarations are the truth and the identity ruling governs the
-normal loop; re-running it habitually is not a supported path. That
-discouragement is carried by the design and the documentation, not by a
-prevention mechanism — the tool detects that declarations already exist,
-refuses to overwrite them, and names the flag that would, which is the
-same shape as the overwrite guard this change already built. It lives
-in its own change, sharing no file or contract with this one.
+**The database path, stated honestly.** An external review of the
+two channels found the briefing's premise — that both produce the
+same artifact — does not hold here. A catalog cannot supply three
+things the declarations decide: the TypeScript key each column is
+read under, the argument names of a function, and the value-conversion
+policy this client applies. The first two are guesses that quietly
+change the contract's identity, and a name collision has to be
+resolved by the generator rather than by the author. The third is
+worse in a polyrepo: three applications each reading the same
+database can settle on different handling for `numeric`, `bigint` and
+`timestamptz`, because the policy is inferred separately in each. A
+tool with no such policy does not have this problem; a full client
+does.
 
-Beyond that on-ramp, no feature in this change or its successors takes
-a live catalog reading as the basis for a judgement.
+So the honest description is not "a second channel" but **a catalog
+reading composed with the generator the git channel already uses**:
+`pull --db-url` is the import heuristics feeding the same emitter,
+and it inherits exactly the losses import already accepts. It exists
+because one situation genuinely needs it — a repository adopting this
+model, or a consumer that must connect before the schema repository
+uses this tool at all — and it says so when it runs, naming what was
+inferred and what to do instead once the other side is linked.
+
+Beyond that marked fallback, no feature takes a live catalog reading
+as a source of truth for the declared schema. The fallback does
+generate from one, and announces it; that is the difference between
+a path with a stated loss and a path that pretends there is none.
 
 The one gate still recorded without a recommendation: whether
 `generate`'s speed becomes a stated requirement, since declining watch
@@ -456,11 +515,15 @@ the others and cited by them:
 4. D12's revision: applying is first-class, production included.
 5. A database's shape is not verified against the declarations.
 6. The vocabulary split between the database row and the export file.
+7. **The database path is a marked fallback.** The import heuristics
+   composed with the shared generator, carrying a stated loss and
+   announcing it. It is never a second channel, and its existence
+   does not license reading a catalog anywhere else.
 
 ## Open decisions (`[design]`)
 
 1. **The fate of the sync command** — removed, or retained as an
-   internal step of `pull`.
+   internal step of `vendor`.
 2. **How CI is told apart from a local run**, since replace and `--ref`
    warn locally and fail in CI. Inferring from the environment is
    invisible; a flag is visible but forgettable exactly where it
@@ -481,9 +544,17 @@ the others and cited by them:
    naming a commit the remote does not have. The count is redone across
    delta, verification table and task text together — this change has
    already paid four times for a counting sentence left behind.
-5. **The vendored set** — emitted mirror, `snapshot.sql`, the IR, the
-   lock: which a consumer commits, and which is derivable.
+5. **Whether the consumer also commits the squashed schema SQL**,
+   which only matters once `db up` exists and therefore rides with the
+   apply engine.
 6. **Whether the banner's manifest line is repurposed or retired.**
+7. **A consumer-side comparison against the applied-migration ledger**,
+   which answers *the database is at 0041, this contract is 0042* with
+   the command that fixes it. **Owner gate**: whether this is
+   compatible with the judgement that a database's shape is not
+   verified — comparing a ledger rather than inspecting a shape, which
+   the identity ruling permits, but it also presumes the consumer role
+   may read that table.
 
 ## What happens to the groups already done or planned
 
@@ -538,22 +609,29 @@ measured actuals of the completed groups rather than against intuition.
 2. **The export directory** — the IR assembled from declarations
    including the three facts nobody has needed yet, the squashed schema
    SQL generation already computes and discards, and the export's own
-   manifest. Determinism is this group's property. `est_frozen: 55m`
+   manifest. Determinism is this group's property. `est_frozen: 60m`
 3. **The schema repository's own check** — that the committed export
    matches the declarations, which turns "the default branch's export
    is valid" into a contract. Replaces the monotonicity gate, whose
    failure mode no longer exists. `est_frozen: 30m`
 4. **`link` and `vendor`** — symbolic-HEAD resolution, fetching one
    commit's export, the lock, and the overwrite guard carried over
-   intact. `est_frozen: 60m`
+   intact. The consumer commits the contract file, the IR and the
+   lock, so that checking, regenerating and type-checking all run from
+   committed files and only `--update` needs the network. The lock
+   records the IR format version alongside the commit. `est_frozen: 70m`
 5. **The emitted contract** — the `Database` interface, the metadata
-   constant, the factory. `est_frozen: 70m`
+   constant, the factory. The contract file also carries the point it
+   was generated from — the migration head it corresponds to, or the
+   IR's hash. `est_frozen: 75m`
 6. **The name-keyed client in the query package** — the layer the
    metadata contract needs. `est_frozen: 90m`
 7. **The consumer's check** — a lock naming a commit the remote lacks,
    a ref resolved from somewhere other than the default branch, an
-   active local replacement, and the local-versus-CI boundary.
-   `est_frozen: 40m`
+   active local replacement, and the local-versus-CI boundary. A
+   toolchain too old to read the vendored IR fails with the version it
+   needs and the command that installs it, rather than with a parse
+   error. `est_frozen: 45m`
 8. **Documentation, skill and changeset.** `est_frozen: 26m`
 9. **The two-repository witness**, after the apply engine.
    `est_frozen: 25m`
@@ -580,9 +658,21 @@ reason will be recorded rather than absorbed.
   reads a contract file; whether the repository that owns the schema
   eventually queries through one too, rather than through its
   declarations, is a real question and a later one.
-- **The onboarding `import`.** Allowed, but its own change: it shares
-  no file and no contract with anything here, and it is the one place
-  where the truth flows the other way for a single run.
+- **The database path belongs to the `import` change**, not to this
+  one: the catalog-to-IR inference is built once there and serves
+  both entry points — the one-time adoption and the standing
+  fallback. This change owns only the statement of what that path is
+  and what it costs. What remains genuinely deferred is the lossless
+  variant: storing the real IR beside the applied-migration ledger so
+  the fallback stops inferring, which would also give drift detection
+  for free — and which still would not make it primary, since the
+  credential requirement and the ambiguity of *which* database
+  survive it.
+- **A bot that runs `outdated` and opens the update pull request.**
+  `outdated` itself is a settled command; what remains is automating
+  it. Manual updating is documented as intent, not as a gap.
+- **A second transport over the package registry.** The owner chose
+  the git-native channel only; this is a later, additive option.
 
 ## Measurement protocol, pre-registered
 
