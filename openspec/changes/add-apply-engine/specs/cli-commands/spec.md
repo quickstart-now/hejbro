@@ -198,6 +198,23 @@ line SHALL NOT collapse them into one file.
 - **THEN** no migration and no snapshot are written, the no-change line
   is reported, and the exit code is zero
 
+#### Scenario: The export is written by the same run
+- **WHEN** generation runs with the export enabled and finds a
+  difference
+- **THEN** the export is written from the same declarations that
+  produced the migration
+
+#### Scenario: A no-difference run still produces a first export
+- **WHEN** generation runs with the export enabled, the snapshot already
+  matches the declarations, and no export has ever been written
+- **THEN** the export is written anyway, from the current declarations
+
+#### Scenario: A no-difference run refreshes an existing export
+- **WHEN** generation runs with the export enabled, the snapshot already
+  matches the declarations, and an export already exists
+- **THEN** the export is rewritten to match the current declarations,
+  not left as whatever it previously held
+
 #### Scenario: A run that crosses a transaction boundary writes two migrations
 - **WHEN** a run adds a value to an existing enum type and adds a column
   defaulting to that value
