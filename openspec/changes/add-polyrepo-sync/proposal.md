@@ -1,23 +1,27 @@
-Moves into `openspec/changes/add-polyrepo-sync/proposal.md` in place
-once the lead and the owner approve. This revises that change rather
-than replacing it: the intent — a consuming repository gets the
-schema's types — is unchanged, and the mechanism is replaced.
+# Proposal: add-polyrepo-sync
 
-Four owner judgements govern this revision. One of them is not about
+This revises the change rather than replacing it: the intent — a
+consuming repository gets the schema's types — is unchanged, and the
+mechanism is replaced.
+
+Five owner judgements govern this revision. One of them is not about
 polyrepo at all and stands above the rest: **hejbro manages a database's
 schema and access from declarations; it is not a tool that reaches into
-live infrastructure and works from what it finds there.** The other
-three follow that line — the polyrepo channel becomes git rather than a
+live infrastructure and works from what it finds there.** The others
+follow that line — the polyrepo channel becomes git rather than a
 database; **D12 is revised in full**, so applying migrations is
-first-class including production; and **verifying that a database has
-the declared shape is not built**.
+first-class including production; **verifying that a database has the
+declared shape is not built**; and deriving declarations from an
+existing database is allowed once, as a way in, and never as a habit.
 
-The identity judgement explains why the other three are consistent
-rather than merely simultaneous. Applying is writing in the declared
+The identity judgement explains why the others are consistent rather
+than merely simultaneous. Applying is writing in the declared
 direction, and a ledger of what this tool itself applied is a record of
-its own writes — neither is introspection. Verifying a database's shape,
-and deriving declarations from an existing database, both read the
-infrastructure to decide what is true, and both are out.
+its own writes — neither is introspection. Verifying a database's shape
+reads the infrastructure to decide what is true, and is out. Deriving
+declarations from a database does too, which is why it is confined to a
+single run that ends with declarations in place: it is how a project
+enters this model, not how it lives in it.
 
 ## Why the mechanism changes
 
@@ -488,32 +492,71 @@ revision is approved. Completed groups keep their ticks and their
 ledger rows — the work happened, and the record of how long it took
 stays true regardless of what its output becomes.
 
-| Was | What becomes of it |
-|---|---|
-| **G1 — manifest emission in core** | The SQL rendering and its quoting guard end with the row. The payload assembly survives as the export's body. The banner line is a `[design]`: repurposed as an export marker, or retired. |
-| **G2 — migration authority as a type** | The usage side loses its reader with the fork and is withdrawn before merge. The declared side is re-examined on its own ground: narrowing what generation accepts is a schema-repository property and does not depend on what a consumer holds. Nothing is published, so either outcome costs a diff. |
-| **G3 — sidecar collection and configuration** | The sidecar *moves*: it is the part of the IR the snapshot does not carry. The optional-config work survives untouched and is needed more, since a consumer repository has no migrations directory. |
-| **G4 — emission wiring and monotonicity** | The monotonicity gate's failure mode cannot occur once the truth is a committed file. A different gate replaces it: the schema repository's own check that its export matches its declarations. |
-| **G5 — the sync command** | The overwrite guard and the snapshot-to-source type mapping survive. The origin carrier goes with the usage constructor it rides on. The connection path, the state classifier and most of the emitter end with the database channel. |
-| **G6 — freshness at startup** | Purpose dissolved by the judgement that a database's shape is not verified. Closes. |
-| **G7 — documentation and release** | Redefined against the new surface; reissued. |
-| **G8 — two-repository witness** | Redefined, and sequenced after the apply engine, since the consumer's loop cannot close without it. |
+**G1 — manifest emission in core.** The SQL rendering and its quoting
+guard end with the row. The payload assembly survives as the export's
+body. The banner line is a `[design]`: repurposed as an export marker,
+or retired.
+
+**G2 — migration authority as a type.** The usage side loses its reader
+and is withdrawn before merge. The declared side is re-examined on its
+own ground: narrowing what generation accepts is a schema-repository
+property and does not depend on what a consumer holds. Nothing is
+published, so either outcome costs a diff.
+
+**G3 — sidecar collection and configuration.** The sidecar *moves*: it
+is the part of the IR the snapshot does not carry. The optional-config
+work survives untouched and is needed more, since a consumer repository
+has no migrations directory.
+
+**G4 — emission wiring and monotonicity.** The monotonicity gate's
+failure mode cannot occur once the truth is a committed file. A
+different gate replaces it: the schema repository's own check that its
+export matches its declarations.
+
+**G5 — the sync command.** The overwrite guard and the
+snapshot-to-source type mapping survive. The origin carrier goes with
+the usage constructor it rides on. The connection path, the state
+classifier and most of the emitter end with the database channel.
+
+**G6 — freshness at startup.** Purpose dissolved by the judgement that
+a database's shape is not verified. Closes.
+
+**G7 — documentation and release.** Redefined against the new surface;
+reissued.
+
+**G8 — two-repository witness.** Redefined, and sequenced after the
+apply engine, since the consumer's loop cannot close without it.
 
 The groups this change holds, with estimates frozen now that the shape
 is settled. The numbers are agent execution minutes, set against the
 measured actuals of the completed groups rather than against intuition.
 
-| # | Group | `est_frozen` |
-|---|---|---|
-| 1 | **Withdrawing what lost its reader** — the write-fact helpers, the usage-table constructor, the usage side of the brand, the origin carrier; and the re-examination of whether the declared side still stands on its own ground | 20m |
-| 2 | **The export directory** — the IR assembled from declarations including the three facts nobody has needed yet, the squashed schema SQL generation already computes and discards, and the export's own manifest. Determinism is this group's property | 55m |
-| 3 | **The schema repository's own check** — that the committed export matches the declarations, which turns "the default branch's export is valid" into a contract. Replaces the monotonicity gate, whose failure mode no longer exists | 30m |
-| 4 | **`link` and `vendor`** — symbolic-HEAD resolution, fetching one commit's export, the lock, and the overwrite guard carried over intact | 60m |
-| 5 | **The emitted contract** — the `Database` interface, the metadata constant, the factory | 70m |
-| 6 | **The name-keyed client in the query package** — the layer the metadata contract needs | 90m |
-| 7 | **The consumer's check** — a lock naming a commit the remote lacks, a ref resolved from somewhere other than the default branch, an active local replacement, and the local-versus-CI boundary | 40m |
-| 8 | **Documentation, skill and changeset** | 26m |
-| 9 | **The two-repository witness**, after the apply engine | 25m |
+1. **Withdrawing what lost its reader** — the write-fact helpers, the
+   usage-table constructor, the usage side of the brand, the origin
+   carrier; and the re-examination of whether the declared side still
+   stands on its own ground. `est_frozen: 20m`
+2. **The export directory** — the IR assembled from declarations
+   including the three facts nobody has needed yet, the squashed schema
+   SQL generation already computes and discards, and the export's own
+   manifest. Determinism is this group's property. `est_frozen: 55m`
+3. **The schema repository's own check** — that the committed export
+   matches the declarations, which turns "the default branch's export
+   is valid" into a contract. Replaces the monotonicity gate, whose
+   failure mode no longer exists. `est_frozen: 30m`
+4. **`link` and `vendor`** — symbolic-HEAD resolution, fetching one
+   commit's export, the lock, and the overwrite guard carried over
+   intact. `est_frozen: 60m`
+5. **The emitted contract** — the `Database` interface, the metadata
+   constant, the factory. `est_frozen: 70m`
+6. **The name-keyed client in the query package** — the layer the
+   metadata contract needs. `est_frozen: 90m`
+7. **The consumer's check** — a lock naming a commit the remote lacks,
+   a ref resolved from somewhere other than the default branch, an
+   active local replacement, and the local-versus-CI boundary.
+   `est_frozen: 40m`
+8. **Documentation, skill and changeset.** `est_frozen: 26m`
+9. **The two-repository witness**, after the apply engine.
+   `est_frozen: 25m`
 
 Group 6 carries the most uncertainty and is the one to watch: it is the
 only group with no comparable predecessor, and its reuse of the
