@@ -6,8 +6,11 @@ The hejbro CLI's user-facing commands as contracts: what each command
 does, when it refuses to run, and what its report must tell the user.
 Covers `baseline` (adopting a database hejbro did not create), `check`
 (comparing declarations against a live database's catalog), `generate`
-(deterministic migration generation), and `verify` (offline
-migration-chain integrity).
+(deterministic migration generation), `verify` (offline migration-chain
+integrity), `migrate` (applying pending migrations to a live database),
+`status` (reporting what the ledger records and what is pending),
+`reset` (destroying only what the declarations manage), and `raise`
+(standing an empty database up from a vendored snapshot SQL file).
 
 ## Requirements
 

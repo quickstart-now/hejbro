@@ -12,16 +12,21 @@ snapshot file only (`packages/core/src/engine/generate.ts`); `hejbro
 verify` "re-derives the whole chain from checked-out files only — no
 live database" (`docs/guide/getting-started.md`), running its five
 checks against `packages/cli/src/commands/verify.ts`'s own files-only
-inputs. Applying a migration to a database is out of scope for hejbro
-itself (D12, `docs/specs/2026-08-19-hejbro-design.md`) — an external
-pipeline does that. `hejbro check` (`packages/cli/src/commands/check.ts`)
-is the one command that does read a live database — read-only, no
-transaction, no migration ever applied — comparing your declarations
-against its catalog object by object; see "Checking a declaration
-against the real schema" below. Adopting hejbro into an existing
-database therefore starts from the same declared-truth model as a
-greenfield project; there is no step where `generate`/`verify`/
-`baseline` inspect your database for you.
+inputs. Applying migrations to a database is hejbro's own command
+surface (D12, amended — `docs/specs/2026-08-19-hejbro-design.md`):
+`hejbro migrate` applies pending migrations, `hejbro status` reports
+what the ledger records, `hejbro reset` destroys only what the
+declarations manage, and `hejbro raise` stands an empty database up
+from a snapshot SQL file — see `generate-verify-workflow.md` for
+`migrate`'s own transactional guarantee. `hejbro check`
+(`packages/cli/src/commands/check.ts`) is the one command among these
+that only reads — no transaction, no migration ever applied — comparing
+your declarations against its catalog object by object; see "Checking a
+declaration against the real schema" below. Adopting hejbro into an
+existing database therefore starts from the same declared-truth model as
+a greenfield project; there is no step where `generate`/`verify` inspect
+your database for you, and `baseline` doesn't either — it only writes a
+file, the same way `generate` does.
 
 ## Adoption procedure
 
@@ -39,13 +44,19 @@ greenfield project; there is no step where `generate`/`verify`/
    -- baseline: these objects already exist — register this migration as applied, do not run it
    ```
 
-3. **Register that file as applied in your apply pipeline without running
-   it.** Running it against the already-populated database fails on the
-   first statement (`relation "..." already exists`), and "already
-   exists" is a confusing way to learn the file was never meant to be
-   run — which is why the marker and the command's own report say so
-   before you get there. hejbro does not apply migrations (D12), so
-   recording "applied" is your pipeline's mechanism, whatever it is.
+3. **Run `hejbro migrate` against the live database.** It reads the same
+   `-- baseline:` marker step 2 wrote and registers that file in the
+   ledger *without sending its statements* — the objects it would create
+   already exist, so nothing is run, and the report says so explicitly
+   ("registered 1 baseline migration(s) (statements not executed)"),
+   never "applied". Any apply tool you used *before* this existed
+   (`supabase db push`, a raw `psql -f migration.sql`, a hand-written
+   `insert` into your own tracking table, …) worked the same way in
+   spirit — running the file against the already-populated database
+   fails on the first statement (`relation "..." already exists`), which
+   is exactly the confusing way not to learn a file was never meant to
+   be run. `hejbro migrate` is now the one way to register it correctly
+   without meeting that failure at all.
 4. From that point on, every further `hejbro generate` behaves exactly as
    it does in a greenfield project, emitting only what changed.
    `hejbro baseline` refuses to run a second time
@@ -140,8 +151,10 @@ live database has drifted from what's declared. A manual schema change
 made directly against the database is invisible to `verify`, but not to
 `hejbro check` — rerun it (a scheduled CI job, or before a release) to
 catch that drift; it is the one command built to answer exactly that
-question. `hejbro baseline` (above) covers the registration half of
-#385. The other half — introspection-assisted seeding, where hejbro
+question. `hejbro baseline` (above) writes the marker, and `hejbro
+migrate` (step 3) does the actual registration — together they cover the
+registration half of #385. The other half — introspection-assisted
+seeding, where hejbro
 reads a live schema or a dump and writes starter declarations for you —
 does not exist: step 1 is still yours to write, and "Checking a
 declaration against the real schema" above is still how you confirm you
@@ -153,13 +166,18 @@ got it right.
   `docs/guide/getting-started.md` (`verify`'s files-only re-derivation).
 - Code: `packages/core/src/engine/generate.ts` (diff is
   snapshot-only, no live connection), `packages/cli/src/commands/verify.ts`
-  (the five file-only checks), `packages/core/src/dsl/existing-table.ts`
+  (the five file-only checks, and `readBaselineFileNames`, which reads
+  the `-- baseline:` marker for `migrate`), `packages/core/src/dsl/existing-table.ts`
   (`existingTable`, `existing-table-declared`), `packages/cli/src/commands/check.ts`
   (the three-way exit code, the coverage-boundary statement, the
   inventory section), `packages/cli/src/check/catalog.ts` (the read-only
   catalog queries), `packages/cli/src/check/driver.ts` (`--url`/
   `DATABASE_URL` resolution, `@hejbro/pg` declared as no dependency
-  kind at all).
+  kind at all), `packages/cli/src/apply/plan.ts` (`baselineFileNames`,
+  the subset of pending migrations `migrate` registers rather than
+  applies), `packages/cli/src/apply/execute.ts` (`applyMigration` skips
+  sending a baseline file's SQL), `packages/cli/src/commands/migrate.ts`
+  (the "registered ... (statements not executed)" report line).
 - Gates: every path cited above is checked by
   `packages/skills/test/links.test.ts`; the `ts` block on this page is
   type-checked against this repo's real source by

@@ -474,17 +474,17 @@ Files: `openspec/specs/cli-commands/spec.md` (Purpose only),
 `packages/` is edited here — the one that was (the `baseline` report's
 strings) moved to group 4, which owns that file.
 
-- [ ] 10.1 (~7m) The main spec's `Purpose` for `cli-commands`, edited
+- [x] 10.1 (~7m) The main spec's `Purpose` for `cli-commands`, edited
       directly. OpenSpec deltas cannot carry a Purpose for an existing
       capability, and this file's Purpose has already gone stale once
       and needed its own change to repair. Files: that spec.
-- [ ] 10.2 (~9m) The decision log: D12 amended across all four of its
+- [x] 10.2 (~9m) The decision log: D12 amended across all four of its
       places in one edit — index row, log entry, invariant summary,
       out-of-scope list — plus the two new entries (the ledger-reading
       boundary, and the supported-Postgres floor). Numbers are assigned
       by the lead at merge time; a sibling change in flight may claim
       the next one. Files: the design spec.
-- [ ] 10.3 (~9m) `skills/hejbro`: rule 7's "the one command that does
+- [x] 10.3 (~9m) `skills/hejbro`: rule 7's "the one command that does
       read a live database" is false the moment this ships;
       `generate-verify-workflow.md`'s section on a partway failure keeps
       its first two clauses and loses its conclusion;
@@ -499,9 +499,16 @@ strings) moved to group 4, which owns that file.
       command list is deliberately untouched — it is illustrative and
       already omits commands, so it never claimed to be exhaustive.
       Files: those three skill files.
-- [ ] 10.4 (~7m) Changeset (`minor`), task-time rows, README badges.
+- [x] 10.4 (~7m) The changeset — `minor`, a new capability; the seven
+      published packages move together, so naming one is enough. **The
+      task-time rows and the README badges are not here**: both ledgers
+      are written once, by the lead, at PR close-out. One writer is what
+      keeps two piece branches from colliding on the same file, and a
+      row added per group would drag a README regeneration along with
+      it — a gate that fails on one CI leg long after the change looks
+      green locally.
       Files: `.changeset/*.md`, `openspec/task-times.csv`, `README.md`.
-- [ ] 10.5 (~9m) The `blackbox/` entry (D89). What the owner asked for,
+- [x] 10.5 (~9m) The `blackbox/` entry (D89). What the owner asked for,
       what was built, and what this change got wrong as plainly as what
       it got right: a premise inherited as measured fact that was
       PostgreSQL 11's rule; a design announced as settled and then found
