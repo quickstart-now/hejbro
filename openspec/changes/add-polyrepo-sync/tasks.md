@@ -1305,10 +1305,26 @@ proof, not add to it. R2-G9's own re-freeze carries the matching +2m
 (not the full 6m: 9.2 already had its own estimate for the parts of
 this proof it always owned).
 
-## R2-G7 — The consumer's check — `est_frozen: 45m` — #600
+## R2-G7 — The consumer's check — `est_frozen: 45m → 64m` — #600
 
 Files: `packages/cli/src/vendor/state.ts` (new),
-`packages/cli/src/config.ts` (shared).
+`packages/cli/src/commands/vendor.ts`, `packages/cli/src/vendor/lock.ts`,
+`packages/cli/src/vendor/git-diagnostic.ts`, `packages/cli/src/git.ts`,
+`packages/cli/src/tty.ts` — not `packages/cli/src/config.ts` (that file
+is `hejbro.config.ts`'s own shape, D30, and turned out unrelated to this
+group's boundary logic; the original file list assumed a connection that
+wasn't there).
+
+**Re-freeze: 45m → 64m** (actual so far: 60m across 7.1/7.2/7.3/7.5, 7.4
+left structurally partial). Two members (2's other half, and 7) needed
+genuinely new code with no task row of their own, discovered while
+wiring the rest of the group; 7.1/7.2's design also needed a real
+mid-implementation correction (see 7.2's own note) after a reported
+conflict between the approved read-time heuristic and this suite's own
+established local-git-fixture convention — resolved by reading the
+enumeration's "warned locally"/"failed at the boundary" wording as the
+existing `vendor`/`vendor --check` split rather than adding a second,
+TTY-gated failure mode to the write command.
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
@@ -1320,7 +1336,7 @@ Files: `packages/cli/src/vendor/state.ts` (new),
 | " | An older format is read | `cli/test/vendor-states.test.ts > reads an older format with absent facts absent` |
 | The schema filter is reserved | The reserved filter is refused | `cli/test/vendor-states.test.ts > refuses the reserved schema filter` |
 
-- [ ] 7.1 `[design]` Settle the eleven codes and their remedies, and
+- [x] 7.1 `[design]` Settle the eleven codes and their remedies, and
       decide whether the two boundary situations — a local replacement
       active, and a lock resolved from a non-default ref — are one code
       or two. They differ in remedy, which argues for two; the boundary
@@ -1328,15 +1344,20 @@ Files: `packages/cli/src/vendor/state.ts` (new),
       and every sentence citing it move in the same edit. Start from
       `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
       ~10m
-      **Partially settled, planner-approved:** 10 and 11 stay separate
-      codes (`vendor-local-source-active`/`vendor-lock-non-default-ref`,
-      names not yet final) — the shapes they inspect are structurally
-      different (10 reads the connection source's own shape, 11 reads
-      the lock's `resolvedBy`), matching the enumeration's own remedy
-      split. `resolvedBy: "default-branch" | "explicit-ref"` is the new
-      lock field for 11, asymmetric-tolerant: an old lock missing it
-      reads as `"default-branch"` and never breaks (same discipline as
-      the format-skew rule, member 6).
+      **Settled, planner-approved:** 10 and 11 stay separate codes
+      (`vendor-local-source-active`/`vendor-lock-non-default-ref`) — the
+      shapes they inspect are structurally different (10 reads the
+      connection source's own shape, 11 reads the lock's `resolvedBy`),
+      matching the enumeration's own remedy split. `resolvedBy:
+      "default-branch" | "explicit-ref"` is the new lock field for 11,
+      asymmetric-tolerant: an old lock missing it reads as
+      `"default-branch"` and never breaks (same discipline as the
+      format-skew rule, member 6). New `packages/cli/src/vendor/state.ts`
+      houses both: `isLocalSource` (the one-line rule — no URI scheme and
+      no scp-like host prefix means local), `warnIfLocalSource`/
+      `warnIfNonDefaultRef` (always-advisory, used at `vendor` itself —
+      see 7.2), and `assertBoundaryAtCheck` (the strict/warn split, used
+      at `vendor --check`).
       **Two members closed as genuinely new code, found while wiring
       the rest of this group** (neither had its own task row — both
       fell under this task's "settle the codes" umbrella): member 2's
@@ -1367,25 +1388,45 @@ Files: `packages/cli/src/vendor/state.ts` (new),
       + `branch -D`/`-m` + `reflog expire` + `gc --prune=now`), not a
       mocked failure — the old commit object is actually gone from the
       fixture repo.
-- [ ] 7.2 `[design]` Settle how a run that must fail is told from one
+- [x] 7.2 `[design]` Settle how a run that must fail is told from one
       that may warn. This repository has no precedent for reading a CI
       environment variable, and its habit is an explicit flag first with
       an inferred fallback. Record the basis in one line. Start from
       `cli/test/vendor-states.test.ts > a replacement warns locally and
       fails at the boundary`. ~9m
-      **Mechanism added, not yet wired**: `tty.ts` gained
-      `resolveStrictMode(flag)`, mirroring `shouldUseLinks`'s own
-      explicit-flag-first shape — `--strict`/`--no-strict` always win;
-      with neither, a non-interactive terminal (CI, or piped output)
-      defaults to failing (nobody is watching to notice a warning
-      scroll by) and an interactive one defaults to warning. `isInteractive`
-      exported from `tty.ts` for this. Tested in both directions in
-      `tty.test.ts`. **Not yet wired into `vendor`** — see the design
-      question raised to the planner about member 10's own trigger
-      condition risking a false positive against every existing
-      local-git-fixture test in this suite (`link <local temp dir>` is
-      how `vendor.test.ts`/`vendor-states.test.ts`/etc. all vendor
-      today); flagged rather than guessed past.
+      **Mechanism**: `tty.ts` gained `resolveStrictMode(flag)`, mirroring
+      `shouldUseLinks`'s own explicit-flag-first shape — `--strict`/
+      `--no-strict` always win; with neither, a non-interactive terminal
+      (CI, or piped output) defaults to failing and an interactive one
+      defaults to warning. Tested in both directions in `tty.test.ts`.
+      **Where it applies, settled after a real conflict was found and
+      reported**: reading `vendor`/`vendor --check` literally as "warned
+      *locally*" vs. "failed at *the boundary*" — this repository's own
+      words, not an invented split — `vendor --check` is already the
+      established boundary gate (member 8's own note: offline, and the
+      command CI relies on), so members 10/11 at plain `vendor` are
+      *always* advisory (`warnIfLocalSource`/`warnIfNonDefaultRef`,
+      never throw — a local source or an explicit `--ref` on your own
+      machine is a deliberate choice, not a surprise) and only
+      `vendor --check` applies `resolveStrictMode` to actually fail. This
+      was chosen over gating plain `vendor` by TTY too, which was found
+      to conflict directly with this suite's own established fixture
+      convention (every existing vendor test links a local temp
+      directory as its "remote") and would have failed ~28 passing call
+      sites for a reason unrelated to what they test. Existing fixtures
+      across `vendor.test.ts`/`vendor-check.test.ts`/`outdated.test.ts`/
+      `vendor-states.test.ts` were still moved from a bare path to
+      `file://<path>` (an explicit scheme, one line of the rule below)
+      for the 8 call sites that link a fixture remote, since that is the
+      more accurate fixture anyway (a real schema repository is named by
+      a URL, never a bare path a developer happened to type).
+      One-line rule (`vendor/state.ts`'s own comment): *a source is a
+      local replacement exactly when it carries no URI scheme and no
+      scp-like host prefix — anything with an explicit scheme, including
+      `file://`, names a real repository reference on purpose.* Tested
+      bidirectionally (`vendor-states.test.ts`, member 10's own describe
+      block): a bare path fails `vendor --check` by default, a
+      `file://`-scheme source never does, even at the boundary.
 - [x] 7.3 Validate the vendored description against its format rather
       than casting it, and raise the situations reading owns. Start from
       `cli/test/vendor-states.test.ts > refuses a description that does
@@ -1419,10 +1460,21 @@ Files: `packages/cli/src/vendor/state.ts` (new),
       — `validateExport`'s own comment records this rather than
       claiming the scenario is proven. Closes for real the day format
       `2` ships.
-- [ ] 7.5 The enumeration test runs the reader against each situation
+- [x] 7.5 The enumeration test runs the reader against each situation
       and compares the codes themselves, not their labels. Start from
       `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
       ~8m
+      `vendor-states.test.ts > reports eleven distinct codes`: eleven
+      independent fixtures (one per member), each run through the real
+      built CLI, `error[<code>]` extracted from `stderr` by regex and
+      compared as an ordered array against the eleven expected code
+      *strings* — never against the surrounding message text — plus a
+      `Set` size check (11) guarding against two members quietly sharing
+      one code, the exact regression a label-only comparison has missed
+      before (planner's own note). Members 1/3/4/8/9 get a purpose-built
+      fixture here too, rather than reusing another file's test, so this
+      one test is a genuine end-to-end cross-check independent of every
+      other file's own coverage.
 
 ## R2-G8 — Documentation, skill and changeset — `est_frozen: 26m` — #601
 
