@@ -319,3 +319,23 @@ describe("generate determinism (align-spec-corpus 2.1)", () => {
 		}
 	});
 });
+
+describe("hejbro baseline — report strings (task 4.8)", () => {
+	// This project's own apply engine (`add-apply-engine`) gave the report
+	// a real "hejbro command that registers it" to name, and a real
+	// "hejbro command that compares declarations against a live database"
+	// (`hejbro check`, already shipped) -- replacing the old prose that
+	// pointed at an external pipeline and a two-path pg_dump comparison.
+	it("the baseline report names hejbro's own apply command", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_SOURCE);
+
+		const result = await runCli(cwd, ["baseline"]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("hejbro migrate");
+		expect(result.stdout).toContain("hejbro check");
+		expect(result.stdout).not.toContain("apply tool");
+		expect(result.stdout).not.toContain("pg_dump");
+	});
+});

@@ -151,13 +151,22 @@ Files: `packages/core/src/engine/split.ts`,
 `packages/core/src/engine/generate.ts`,
 `packages/core/test/split.test.ts`,
 `packages/cli/src/commands/generate.ts`,
-`packages/cli/test/generate-split.test.ts`.
+`packages/cli/test/generate-split.test.ts`,
+`packages/cli/src/history-table.ts`, `packages/cli/src/history-state.ts`
+and their tests — added to this group because 4.7's repair lands there
+and no other group owns those files. Also
+`packages/cli/test/restore-command.test.ts` and
+`packages/cli/test/baseline-command.test.ts`: both pin, as strings,
+messages this group rewrites. Whoever changes a user-facing string owns
+the tests that hold it — and those tests are invisible to the compiler
+and to every gate, so the group that finds them is the group that
+changed the string.
 
 Core stays pure: the split reads the declarations and the snapshot it is
 already given. No filesystem, no database, no new runtime dependency, so
 the core hard gate does not fire.
 
-- [ ] 4.1 (~10m) [design] The split condition, computed rather than
+- [x] 4.1 (~10m) [design] The split condition, computed rather than
       listed: does a value this run adds to an enum appear in any
       expression node this run emits, outside a function body? A list of
       surfaces was the alternative and it inherits every slot nobody
@@ -169,23 +178,23 @@ the core hard gate does not fire.
       adds an enum value and defaults a column to it", "does not split
       when the value is referenced only inside a function body", "does
       not split when the enum type is created in the same run".
-- [ ] 4.2 (~9m) The intermediate snapshot: the previous snapshot with
+- [x] 4.2 (~9m) The intermediate snapshot: the previous snapshot with
       the enum entry replaced, hashed like any other. Red: same file —
       "the first file's snapshot hash is the second file's parent hash".
-- [ ] 4.3 (~9m) Two emissions from one run, each with its own change set
+- [x] 4.3 (~9m) Two emissions from one run, each with its own change set
       so each derives its own slug and its own banner. The final
       snapshot's bytes are identical to what the unsplit run produces —
       measured, and worth pinning, because it is what keeps `verify`'s
       tip check true. Red: same file — "emits two migrations whose
       banners chain", "produces the same final snapshot bytes as an
       unsplit run".
-- [ ] 4.4 (~9m) [design] Version separation, as a requirement rather
+- [x] 4.4 (~9m) [design] Version separation, as a requirement rather
       than an implementation detail. Two of the three prefix strategies
       derive the version from the clock at one-second resolution, so
       giving the second file `count + 1` fixes only the index strategy —
       measured on all three. Red: `generate-split.test.ts` — "the two
       files have different versions under every prefix strategy".
-- [ ] 4.5 (~8m) `--name` with a split. Measured: both files take the
+- [x] 4.5 (~8m) `--name` with a split. Measured: both files take the
       name, so under the clock strategies their whole paths are one
       string. That the second write would then replace the first, with
       nothing left for `verify` to object to, is deduced rather than
@@ -199,10 +208,10 @@ the core hard gate does not fire.
       is the exact failure this task exists for). Red:
       `generate-split.test.ts` — "a named split writes two files with
       different versions".
-- [ ] 4.6 (~8m) The report names both files. It currently prints one
+- [x] 4.6 (~8m) The report names both files. It currently prints one
       path and one banner. Red: same file — "reports both migrations
       when a run splits".
-- [ ] 4.7 (~8m) [design] What `history` calls the pair. The first file's
+- [x] 4.7 (~8m) [design] What `history` calls the pair. The first file's
       banner names a snapshot never written to disk, so `history` reads
       it as `lost` — a word documented as the trace of a squash merge
       folding intermediate state away. The existing co-add machinery
@@ -211,7 +220,7 @@ the core hard gate does not fire.
       may not cost is silence, because the diagnostic would then be
       lying about a healthy chain. Red: `generate-split.test.ts` —
       "history explains a split pair without calling it an accident".
-- [ ] 4.8 (~7m) The `baseline` report's own strings, which live in this
+- [x] 4.8 (~7m) The `baseline` report's own strings, which live in this
       same file: they name an external apply tool ("register … in your
       apply tool"), and they advise a two-path `pg_dump` comparison that
       `hejbro check` has since replaced. The function's doc comment
@@ -221,7 +230,7 @@ the core hard gate does not fire.
       groups editing one file is the thing group boundaries exist to
       prevent. Red: `packages/cli/test/generate-command.test.ts` — "the
       baseline report names hejbro's own apply command".
-- [ ] 4.9 (~9m) `verify --fix` against a split pair. It renames files to
+- [x] 4.9 (~9m) `verify --fix` against a split pair. It renames files to
       resolve duplicate versions, and a rename landing between two
       halves of one run would break the chain they form. Red: same file
       — "verify --fix leaves a split pair's chain intact".
@@ -308,10 +317,17 @@ reports nothing, which reads as agreement.
       is a candidate for one of its own. Red: same file — "exits zero
       with nothing to apply", "exits non-zero when a migration failed",
       "distinguishes a run that could not act".
-- [ ] 7.5 (~8m) `migrate`'s report: what it applied, in order, and what
+- [ ] 7.5 (~10m) `migrate`'s report: what it applied, in order, and what
       it did not. A run that applied nothing says so rather than
-      printing nothing. Red: same file — "names each migration it
-      applied", "says so when there was nothing to apply".
+      printing nothing. **This task also owns the run-level behaviour**:
+      the engine applies one migration, so "a run stops at the first
+      failing migration, leaving the ones before it applied and
+      recorded" is a property of the loop that lives here and of no
+      other task — the delta scenario had no owner until group 3 scoped
+      execution to a single migration and the gap became visible. Red:
+      same file — "names each migration it applied", "says so when there
+      was nothing to apply", "stops at the first failing migration and
+      keeps the ones before it".
 - [ ] 7.6 (~8m) The status command's report: applied, pending, and the
       disagreements group 2 produces. Red: `status-command.test.ts` —
       "reports pending migrations", "reports a ledger row with no file".
@@ -422,6 +438,15 @@ strings) moved to group 4, which owns that file.
 
 ## Verification
 
+- **At archive time, read the rolled-up main specs and confirm they say
+  what these deltas meant.** A sibling piece measured `openspec archive`
+  applying none of its `REMOVED` requirements while `validate` stayed
+  green — so passing validation and being applied are two different
+  facts. This change's deltas are `MODIFIED` and `ADDED` only, which is
+  not the shape that failed there, and that is exactly why the check is
+  worth doing rather than assuming: nobody has measured whether
+  `MODIFIED` applies cleanly either. Compare the resulting main spec
+  against the delta by diff, not by eye.
 - `pnpm check`, `pnpm check-types`, `pnpm test`, `pnpm check:bans`,
   `pnpm check:crap`, `pnpm check:tasktime` — with `TURBO_FORCE=1` in any
   isolated worktree, because the turbo cache is shared across worktrees

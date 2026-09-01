@@ -59,8 +59,10 @@ describe("hejbro baseline", () => {
 			expect(result.stdout).toContain(
 				"This migration describes objects your database already has.",
 			);
-			expect(result.stdout).toContain("register");
-			expect(result.stdout).toContain("as APPLIED");
+			// [task 4.8] The report names hejbro's own apply command, not a
+			// step the reader has to arrange in an external pipeline.
+			expect(result.stdout).toContain("hejbro migrate");
+			expect(result.stdout).toContain("hejbro check");
 
 			const sql = await soleMigration(cwd);
 			expect(sql).toContain(

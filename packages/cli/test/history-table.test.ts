@@ -96,7 +96,7 @@ describe("renderHistoryTable", () => {
 		);
 	});
 
-	it("renders a squash-merge lost note naming the survivor migration", () => {
+	it("renders a lost-group note naming the survivor migration, asserting no cause (task 4.7)", () => {
 		const sharedCommit = commit(
 			"cccccccccccccccccccccccccccccccccccccccc",
 			"2026-01-03",
@@ -124,7 +124,7 @@ describe("renderHistoryTable", () => {
 			migrationsDirRelative: "migrations",
 		});
 		expect(output).toContain(
-			"note: migrations 2 and 3 were added together in commit ccccccc — only migration 3's declaration state exists in git (squash merge lost migration 2's). Closest available: `hejbro restore 3`.",
+			"note: migrations 2 and 3 were added together in commit ccccccc — only migration 3's declaration state exists in git. Closest available: `hejbro restore 3`.",
 		);
 	});
 

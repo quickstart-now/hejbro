@@ -165,6 +165,16 @@ hejbro emits no other kind of function body. Creating an enum type and
 using its values in the same run does not satisfy it either — the
 restriction applies to values added to a type that already existed.
 
+The test is by the value's spelling, and it over-approximates: a string
+literal elsewhere in the same run that happens to read the same as the
+added value causes a split it did not need. That is deliberate. A
+literal carries no type of its own, so distinguishing "this enum's
+value" from "a string that looks like it" would mean inferring the type
+of every expression — and the two failures are not symmetric: an
+unnecessary split costs one extra migration that applies cleanly, while
+a missed one costs a migration that passes every check hejbro has and
+fails against the database.
+
 Where a run is split, the migrations it writes SHALL carry distinct
 versions under every prefix strategy, and SHALL each carry their own
 banner so the chain they form verifies. A name supplied on the command

@@ -87,7 +87,7 @@ export {
 	planDuplicateVersionFix,
 } from "./engine/duplicate-version-fix";
 export type { HejbroInput } from "./engine/generate";
-export { generateMigration } from "./engine/generate";
+export { emitStatementsSql, generateMigration } from "./engine/generate";
 export type { Preset } from "./engine/preset";
 export { presetValidators, registerPresets } from "./engine/preset";
 export type {
@@ -101,6 +101,8 @@ export type {
 	TableRenameSpec,
 } from "./engine/rename-plan";
 export { planRenames } from "./engine/rename-plan";
+export type { SplitDecision } from "./engine/split";
+export { applySplitChangesOnly, planSplit } from "./engine/split";
 export type {
 	Diagnostic,
 	DiagnosticSeverity,

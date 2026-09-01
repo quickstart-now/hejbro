@@ -268,6 +268,55 @@ const sortPredropStatements = (
 };
 
 /**
+ * [task 4.3] Emits `changesToEmit`'s own SQL -- predrop, then main, then
+ * deferred, `"\n\n"`-joined, `""` when `changesToEmit` is empty (never a
+ * lone blank line: this function contributes nothing to an outer join in
+ * that case, the same way the original inline spread contributed zero
+ * array elements rather than one empty one). `siblingChanges`/`snapshot`
+ * are read-only context (D74/D78) -- a caller emitting one *subset* of a
+ * run's changes (the generator's split, `engine/split.ts`) still passes
+ * the run's *whole* `changes`/final `snapshot` here, so every kind's
+ * `emit` sees exactly what it would have seen unsplit, and splitting
+ * itself changes no kind's own decision. Extracted from
+ * {@link generateMigration} (task 4.3) so the split path reuses this
+ * exact logic instead of a second copy that could drift from it.
+ */
+export const emitStatementsSql = (
+	changesToEmit: ReadonlyArray<KindChange>,
+	siblingChanges: ReadonlyArray<KindChange>,
+	snapshot: Snapshot,
+	registry: KindRegistry,
+): string => {
+	const emittedStatements: ReadonlyArray<EmittedStatement> =
+		changesToEmit.flatMap((change) =>
+			registry
+				.get(change.kind)
+				.emit(change, siblingChanges, snapshot)
+				.map((statement) => ({ change, statement })),
+		);
+	const predropStatements = sortPredropStatements(emittedStatements, registry);
+	const mainStatements = emittedStatements.filter(
+		(entry) => entry.statement.stage === "main",
+	);
+	const deferredStatements = emittedStatements.filter(
+		(entry) => entry.statement.stage === "deferred",
+	);
+	return [
+		...predropStatements.map((entry) => entry.statement.sql),
+		...mainStatements.map((entry) => entry.statement.sql),
+		...deferredStatements.map((entry) => entry.statement.sql),
+	].join("\n\n");
+};
+
+/** `[text]` unless `text` is `""`, in which case `[]` -- lets a caller splice {@link emitStatementsSql}'s result into an outer `"\n\n"`-joined array without contributing a spurious empty segment when there was nothing to emit. */
+const nonEmptyPart = (text: string): ReadonlyArray<string> => {
+	if (text === "") {
+		return [];
+	}
+	return [text];
+};
+
+/**
  * Runs the full pipeline: build the next snapshot from `declarations`,
  * resolve `renames`/`confirmedDrops` against `previousSnapshot` (rule A;
  * `errors` non-empty short-circuits with `sql: ""`), diff the rewritten
@@ -341,23 +390,11 @@ export const generateMigration = (
 	// tableKind uses it to re-grant a newly created table under a standing
 	// schema-wide grant (#121), which siblingChanges can't cover (the grant
 	// itself has no change in this diff).
-	const emittedStatements: ReadonlyArray<EmittedStatement> = changes.flatMap(
-		(change) =>
-			resolved.registry
-				.get(change.kind)
-				.emit(change, changes, snapshot)
-				.map((statement) => ({ change, statement })),
-	);
-
-	const predropStatements = sortPredropStatements(
-		emittedStatements,
+	const statementsSql = emitStatementsSql(
+		changes,
+		changes,
+		snapshot,
 		resolved.registry,
-	);
-	const mainStatements = emittedStatements.filter(
-		(entry) => entry.statement.stage === "main",
-	);
-	const deferredStatements = emittedStatements.filter(
-		(entry) => entry.statement.stage === "deferred",
 	);
 
 	const sql = [
@@ -368,9 +405,7 @@ export const generateMigration = (
 			options.baseline,
 		),
 		...plan.renameStatements,
-		...predropStatements.map((entry) => entry.statement.sql),
-		...mainStatements.map((entry) => entry.statement.sql),
-		...deferredStatements.map((entry) => entry.statement.sql),
+		...nonEmptyPart(statementsSql),
 	].join("\n\n");
 
 	return {

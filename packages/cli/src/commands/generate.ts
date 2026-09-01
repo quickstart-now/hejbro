@@ -1,18 +1,27 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
+	BannerHashes,
 	ConfirmDropSpec,
 	Diagnostic as CoreDiagnostic,
 	HejbroError,
+	KindChange,
+	KindRegistry,
 	RenameAmbiguity,
 	RenameSpec,
+	Snapshot,
+	SplitDecision,
 } from "@hejbro/core";
 import {
+	applySplitChangesOnly,
 	deriveSlug,
+	emitStatementsSql,
 	generateMigration,
 	hejbroError,
 	migrationFileName,
 	parseSnapshot,
+	planSplit,
+	renderBanner,
 	renderSnapshot,
 	requiredKeysByKind,
 	throwHejbroError,
@@ -478,6 +487,138 @@ const assertBaselineIsFirst = (
 	);
 };
 
+type MigrationFileNameOptions = Parameters<typeof migrationFileName>[0];
+
+/**
+ * [design, task 4.4] The second split file's own naming options, distinct
+ * from the first's under every prefix strategy -- measured: `index` is
+ * the only one of the three that resolves from a count, so bumping
+ * `previousCount` a second time is enough there; `timestamp`/`unix`
+ * derive their whole prefix from the clock alone, at one-second
+ * resolution, so a second `previousCount` bump changes nothing for them
+ * and the clock itself has to move. `verify` refuses a chain whose
+ * migrations share a version -- and does more than fail: chain linearity
+ * and the tip check are skipped, so a version collision here would
+ * disable the very checks that would describe it.
+ */
+const secondSplitFileNameOptions = (
+	first: MigrationFileNameOptions,
+): MigrationFileNameOptions => {
+	if (first.strategy === "index") {
+		return { ...first, previousCount: first.previousCount + 1 };
+	}
+	return {
+		...first,
+		generatedAt: new Date(first.generatedAt.getTime() + 1000),
+	};
+};
+
+/** One split file's banner + statements, `"\n\n"`-joined -- `""` from {@link emitStatementsSql} contributes nothing (never a lone blank line), matching `generateMigration`'s own join rule for the same reason (`engine/generate.ts`'s `nonEmptyPart`). */
+const buildSplitMigrationSql = (
+	changesToEmit: ReadonlyArray<KindChange>,
+	siblingChanges: ReadonlyArray<KindChange>,
+	snapshot: Snapshot,
+	registry: KindRegistry,
+	bannerHashes: BannerHashes,
+	hejbroVersion: string,
+): string => {
+	const banner = renderBanner(changesToEmit, bannerHashes, hejbroVersion);
+	const statementsSql = emitStatementsSql(
+		changesToEmit,
+		siblingChanges,
+		snapshot,
+		registry,
+	);
+	if (statementsSql === "") {
+		return banner;
+	}
+	return `${banner}\n\n${statementsSql}`;
+};
+
+type SplitFiles = {
+	readonly firstRelativePath: string;
+	readonly secondRelativePath: string;
+	readonly firstSql: string;
+	readonly secondSql: string;
+};
+
+/**
+ * [task 4.3/4.4/4.5] Builds both split migrations' SQL and file paths --
+ * writing nothing itself (the caller still owns `mkdirSync`/
+ * `writeFileSync`, matching the unsplit path's own shape). `siblingChanges`
+ * (D74) and `snapshot` (D78) are the *whole* run's own values for both
+ * halves, unchanged from what an unsplit run would have passed -- so
+ * splitting itself changes no kind's own emit decision (approved
+ * architecture note, G4 check-in).
+ */
+const buildSplitFiles = (
+	decision: Extract<SplitDecision, { readonly split: true }>,
+	previousSnapshot: Snapshot,
+	finalSnapshot: Snapshot,
+	registry: KindRegistry,
+	migrationsDir: string,
+	firstFileNameOptions: MigrationFileNameOptions,
+	nameOverride: string | undefined,
+	hejbroVersion: string,
+): SplitFiles => {
+	const allChanges = [...decision.enumChanges, ...decision.restChanges];
+	const intermediateSnapshot = applySplitChangesOnly(
+		previousSnapshot,
+		decision.enumChanges,
+	);
+	const firstHashes: BannerHashes = {
+		parent: `sha256:${sha256Hex(renderSnapshot(previousSnapshot))}`,
+		current: `sha256:${sha256Hex(renderSnapshot(intermediateSnapshot))}`,
+	};
+	const secondHashes: BannerHashes = {
+		parent: firstHashes.current,
+		current: `sha256:${sha256Hex(renderSnapshot(finalSnapshot))}`,
+	};
+
+	const firstSlug = nameOverride ?? deriveSlug(decision.enumChanges);
+	const secondSlug = nameOverride ?? deriveSlug(decision.restChanges);
+	const firstFileName = migrationFileName({
+		...firstFileNameOptions,
+		slug: firstSlug,
+	});
+	const secondFileName = migrationFileName({
+		...secondSplitFileNameOptions(firstFileNameOptions),
+		slug: secondSlug,
+	});
+
+	return {
+		firstRelativePath: join(migrationsDir, firstFileName),
+		secondRelativePath: join(migrationsDir, secondFileName),
+		firstSql: buildSplitMigrationSql(
+			decision.enumChanges,
+			allChanges,
+			finalSnapshot,
+			registry,
+			firstHashes,
+			hejbroVersion,
+		),
+		secondSql: buildSplitMigrationSql(
+			decision.restChanges,
+			allChanges,
+			finalSnapshot,
+			registry,
+			secondHashes,
+			hejbroVersion,
+		),
+	};
+};
+
+/** [task 4.6] The split report's opening lines -- both files named, never just one (the pre-split report printed exactly one `wrote` line and one banner). Baseline never reaches here: a baseline's every change is a `create` (never `alter`), which {@link planSplit} never splits on. */
+const splitReportHead = (
+	declarationCount: number,
+	files: SplitFiles,
+): ReadonlyArray<string> => [
+	"hejbro generate",
+	`loaded ${declarationCount} declarations`,
+	`wrote ${files.firstRelativePath}`,
+	`wrote ${files.secondRelativePath}`,
+];
+
 /**
  * The report's opening lines. A baseline's differ because the next step
  * differs and getting it wrong is expensive: running a baseline migration
@@ -497,7 +638,7 @@ const reportHead = (
 			`wrote ${migrationRelativePath}`,
 			"",
 			"This migration describes objects your database already has.",
-			`Next: register ${migrationRelativePath} as APPLIED in your apply tool without running it, then confirm your declarations really match the live schema (a two-path pg_dump comparison is the check hejbro's own examples use). From here on, \`hejbro generate\` emits only what changes.`,
+			`Next: run \`hejbro migrate\` to register ${migrationRelativePath} as applied without running it, then run \`hejbro check\` to confirm your declarations match the live schema. From here on, \`hejbro generate\` emits only what changes.`,
 		];
 	}
 	return [
@@ -582,6 +723,57 @@ export const runGenerate = async (
 				};
 			}
 
+			const migrationsDirPath = join(cwd, config.migrationsDir);
+			const previousCount = listMigrationFiles(migrationsDirPath).length;
+
+			// [task 4.1] Decided from `firstPass.changes` alone -- the same
+			// diff a baseline or an unsplit run already computed, no second
+			// pass needed to know whether to split.
+			const splitDecision = planSplit(firstPass.changes);
+			if (splitDecision.split) {
+				const files = buildSplitFiles(
+					splitDecision,
+					previousSnapshot,
+					firstPass.snapshot,
+					registry,
+					config.migrationsDir,
+					{
+						strategy: config.prefixStrategy,
+						generatedAt: now(),
+						previousCount,
+						slug: "",
+					},
+					parsedArgv.name,
+					CLI_VERSION,
+				);
+				mkdirSync(migrationsDirPath, { recursive: true });
+				writeFileSync(
+					join(cwd, files.firstRelativePath),
+					`${files.firstSql}\n`,
+				);
+				writeFileSync(
+					join(cwd, files.secondRelativePath),
+					`${files.secondSql}\n`,
+				);
+				writeFileSync(
+					join(cwd, config.snapshotPath),
+					renderSnapshot(firstPass.snapshot),
+				);
+
+				const [firstBanner] = files.firstSql.split("\n\n");
+				const [secondBanner] = files.secondSql.split("\n\n");
+				return {
+					exitCode: 0,
+					stdout: [
+						...splitReportHead(declarations.length, files),
+						...warningSummaryLines(firstPass.warnings),
+						firstBanner ?? "",
+						secondBanner ?? "",
+					],
+					stderr: warningStderr(firstPass.warnings, fallbackIdentity),
+				};
+			}
+
 			const parentHash = `sha256:${sha256Hex(renderSnapshot(previousSnapshot))}`;
 			const currentHash = `sha256:${sha256Hex(renderSnapshot(firstPass.snapshot))}`;
 			const finalPass = generateMigration({
@@ -596,8 +788,6 @@ export const runGenerate = async (
 				validators,
 			});
 
-			const migrationsDirPath = join(cwd, config.migrationsDir);
-			const previousCount = listMigrationFiles(migrationsDirPath).length;
 			const slug = parsedArgv.name ?? deriveSlug(finalPass.changes);
 			const fileName = migrationFileName({
 				strategy: config.prefixStrategy,
