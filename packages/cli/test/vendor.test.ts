@@ -34,24 +34,6 @@ const writeExport = async (
 	await writeFile(join(dir, "format.json"), EXPORT_FORMAT_V1);
 };
 
-/** Writes `hejbro.config.ts` directly with `schemaSource` set --
- * `link` itself no longer writes any file (owner decision: the source
- * belongs in this committed config surface), so a consuming-repository
- * fixture sets the field itself, the same way a real project would
- * after following `link`'s own printed instruction. */
-const writeConsumerConfig = (cwd: string, source: string): Promise<void> =>
-	writeFile(
-		join(cwd, "hejbro.config.ts"),
-		`import { defineConfig } from "hejbro";
-
-export default defineConfig({
-	entry: ["src/**/*.schema.ts"],
-	schemaSource: "${source}",
-	presets: [],
-});
-`,
-	);
-
 let remote: GitFixture;
 let cwd: string;
 
@@ -75,7 +57,7 @@ describe("hejbro vendor", () => {
 	it("writes the description and the squashed SQL and records the commit", async () => {
 		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
 		const commit = remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await writeConsumerConfig(cwd, remote.cwd);
+		await runCli(cwd, ["link", remote.cwd]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(0);
@@ -85,15 +67,13 @@ describe("hejbro vendor", () => {
 		const lock = await readLock();
 		expect(lock.commit).toBe(commit);
 		expect(lock.resolvedFrom).toBe("main");
-		// The lock never carries the source -- that's `hejbro.config.ts`'s
-		// own field (intent), never the resolved-truth file.
-		expect(lock).not.toHaveProperty("source");
+		expect(lock.source).toBe(remote.cwd);
 	});
 
 	it("the lock records the description format version", async () => {
 		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await writeConsumerConfig(cwd, remote.cwd);
+		await runCli(cwd, ["link", remote.cwd]);
 
 		await runCli(cwd, ["vendor"]);
 
@@ -112,7 +92,7 @@ describe("hejbro vendor", () => {
 		);
 		const headCommit = remote.commit("export v2", "2026-01-02T10:00:00Z");
 		expect(taggedCommit).not.toBe(headCommit);
-		await writeConsumerConfig(cwd, remote.cwd);
+		await runCli(cwd, ["link", remote.cwd]);
 
 		const refRun = await runCli(cwd, ["vendor", "--ref", "v1"]);
 		expect(refRun.exitCode).toBe(0);
@@ -127,8 +107,7 @@ describe("hejbro vendor", () => {
 		expect((await readLock()).resolvedFrom).toBe("main");
 	});
 
-	it("refuses when no source is configured", async () => {
-		await runCli(cwd, ["init"]);
+	it("refuses when no source is linked", async () => {
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("vendor-source-not-linked");
@@ -137,7 +116,7 @@ describe("hejbro vendor", () => {
 	it("refuses naming the other repository when the commit carries no export", async () => {
 		await writeFile(join(remote.cwd, "readme.txt"), "no export here\n");
 		remote.commit("no export here", "2026-01-01T10:00:00Z");
-		await writeConsumerConfig(cwd, remote.cwd);
+		await runCli(cwd, ["link", remote.cwd]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(1);
@@ -147,7 +126,10 @@ describe("hejbro vendor", () => {
 	it("a missing git binary is a coded failure", async () => {
 		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await writeConsumerConfig(cwd, remote.cwd);
+		// `link` itself never shells out to git -- linking with a normal
+		// PATH first, then stripping git for the `vendor` call, isolates
+		// the failure to exactly the command this task is about.
+		await runCli(cwd, ["link", remote.cwd]);
 
 		const result = await runCli(cwd, ["vendor"], {
 			// biome-ignore lint/style/useNamingConvention: PATH is the POSIX environment variable itself, not a naming choice of this codebase's own

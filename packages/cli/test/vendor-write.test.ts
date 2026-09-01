@@ -41,24 +41,20 @@ describe("vendor never overwrites a file it did not write", () => {
 		expect(result.stderr).toContain("vendor-destination-not-vendored");
 	});
 
-	it("vendor --force overwrites a hand-written lock", async () => {
+	it("link --force overwrites a hand-written lock, and vendor proceeds normally after", async () => {
 		await writeFile(join(cwd, "hejbro.lock"), HAND_WRITTEN_LOCK);
-		await writeFile(
-			join(cwd, "hejbro.config.ts"),
-			`import { defineConfig } from "hejbro";
 
-export default defineConfig({
-	entry: ["src/**/*.schema.ts"],
-	schemaSource: "https://example.com/org/schema.git",
-	presets: [],
-});
-`,
-		);
+		const forced = await runCli(cwd, [
+			"link",
+			"--force",
+			"https://example.com/org/schema.git",
+		]);
+		expect(forced.exitCode).toBe(0);
 
-		// Fails for an unrelated reason (the source isn't a real reachable
-		// repository), never the overwrite guard -- --force let it past
-		// the hand-written lock and on to actually trying to fetch.
-		const result = await runCli(cwd, ["vendor", "--force"]);
+		// vendor now reads a lock this tool actually wrote -- it fails for
+		// an unrelated reason (the source isn't a real reachable
+		// repository), never the overwrite guard.
+		const result = await runCli(cwd, ["vendor"]);
 		expect(result.stderr).not.toContain("vendor-destination-not-vendored");
 	});
 });

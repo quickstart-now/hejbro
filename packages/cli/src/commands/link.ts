@@ -3,6 +3,7 @@ import { defineCommand } from "citty";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { identityFromMessage } from "../identity";
+import { assertLockWritable, writeLock } from "../vendor/lock";
 
 const LINK_DESCRIPTION =
 	"Record the git repository this project vendors its schema from.";
@@ -16,22 +17,20 @@ export type LinkResult = {
 /**
  * `link` records the source repository alone — no branch, no ref, no
  * commit (schema-vendoring spec, "Linking records the repository
- * alone"). The source lives in `hejbro.config.ts`'s own `schemaSource`
- * field (owner decision: intent belongs in the committed config
- * surface, never in the resolved `hejbro.lock`, and this project
- * already has one config file — a second one is exactly the
- * configuration-duplication risk this pivot's own review flagged).
- *
- * PROVISIONAL (R2-G4): this prints the field to add rather than editing
- * `hejbro.config.ts` itself — this package has no precedent for writing
- * back into a hand-authored TypeScript config, and mutating one safely
- * (preserving a caller's own formatting/comments) needs more than a
- * text-based insert. Awaiting a ruling on whether `link` should write
- * the file automatically; until then this is the safe default.
+ * alone") — into `hejbro.lock` at the repository root (owner decision):
+ * `source` is `link`'s own field there and `vendor` never touches it;
+ * `vendor` rewrites every other field (`commit`/`resolvedFrom`/
+ * `descriptionFormat`/the two hashes) on every run. Intent and truth
+ * stay separated by *who writes what*, in the same file, rather than by
+ * splitting them across two files.
  */
-export const runLink = (argv: ReadonlyArray<string>): LinkResult => {
+export const runLink = (
+	cwd: string,
+	argv: ReadonlyArray<string>,
+): LinkResult => {
 	const fallbackIdentity = "link";
 	try {
+		const force = argv.includes("--force");
 		const [source] = argv.filter((token) => !token.startsWith("-"));
 		if (source === undefined) {
 			throwHejbroError(
@@ -39,13 +38,11 @@ export const runLink = (argv: ReadonlyArray<string>): LinkResult => {
 				"hejbro link needs the source repository (a git URL or local path). Next: run `hejbro link <repository>`.",
 			);
 		}
+		assertLockWritable(cwd, force);
+		writeLock(cwd, { source });
 		return {
 			exitCode: 0,
-			stdout: [
-				`Next: add this to hejbro.config.ts and commit it:`,
-				``,
-				`  schemaSource: "${source}",`,
-			],
+			stdout: [`linked "${source}"`],
 			stderr: null,
 		};
 	} catch (error) {
@@ -74,9 +71,13 @@ export const linkCommand = defineCommand({
 				"the repository that owns the schema (a git URL or local path)",
 			required: false,
 		},
+		force: {
+			type: "boolean",
+			description: "overwrite a lock this tool did not write",
+		},
 	},
 	run: async (ctx) => {
-		const result = runLink(ctx.rawArgs);
+		const result = runLink(process.cwd(), ctx.rawArgs);
 		result.stdout.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);

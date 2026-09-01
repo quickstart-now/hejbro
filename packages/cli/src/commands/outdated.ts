@@ -4,7 +4,6 @@ import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { resolveRemoteHead } from "../git";
 import { identityFromMessage } from "../identity";
-import { loadConfig } from "../loader";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
 import { readLock } from "../vendor/lock";
 
@@ -23,26 +22,24 @@ export type OutdatedResult = {
  * are about not having anything to compare (no source linked, never
  * vendored), not about the comparison's own result.
  */
-export const runOutdated = async (cwd: string): Promise<OutdatedResult> => {
+export const runOutdated = (cwd: string): OutdatedResult => {
 	const fallbackIdentity = "outdated";
 	try {
-		const { config } = await loadConfig(cwd, undefined);
-		if (config.schemaSource === undefined) {
-			throwHejbroError(
-				"vendor-source-not-linked",
-				'hejbro outdated needs a source. Next: run `hejbro link <repository>` (or add "schemaSource" to hejbro.config.ts yourself).',
-			);
-		}
-		const source = config.schemaSource as string;
 		const lock = readLock(cwd);
 		if (lock === null) {
 			throwHejbroError(
-				"vendor-not-yet-vendored",
-				"hejbro outdated has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
+				"vendor-source-not-linked",
+				"hejbro outdated needs a linked source. Next: run `hejbro link <repository>` first.",
 			);
 		}
-		const head = withGitDiagnostic("outdated", source, () =>
-			resolveRemoteHead(cwd, source),
+		if (lock.commit === undefined) {
+			throwHejbroError(
+				"vendor-not-yet-vendored",
+				"hejbro outdated has nothing to compare against: this repository is linked but has never been vendored. Next: run `hejbro vendor` first.",
+			);
+		}
+		const head = withGitDiagnostic("outdated", lock.source, () =>
+			resolveRemoteHead(cwd, lock.source),
 		);
 		if (head.commit === lock.commit) {
 			return { exitCode: 0, stdout: ["up to date"], stderr: null };
@@ -74,7 +71,7 @@ export const outdatedCommand = defineCommand({
 		description: OUTDATED_DESCRIPTION,
 	},
 	run: async () => {
-		const result = await runOutdated(process.cwd());
+		const result = runOutdated(process.cwd());
 		result.stdout.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);
