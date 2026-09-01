@@ -3,7 +3,11 @@ import { checkCommand } from "./commands/check";
 import { baselineCommand, generateCommand } from "./commands/generate";
 import { historyCommand } from "./commands/history";
 import { initCommand } from "./commands/init";
+import { migrateCommand } from "./commands/migrate";
+import { raiseCommand } from "./commands/raise";
+import { resetCommand } from "./commands/reset";
 import { restoreCommand } from "./commands/restore";
+import { statusCommand } from "./commands/status";
 import { verifyCommand } from "./commands/verify";
 import { CLI_VERSION } from "./version";
 
@@ -33,5 +37,9 @@ export const main = defineCommand({
 		check: checkCommand,
 		history: historyCommand,
 		restore: restoreCommand,
+		migrate: migrateCommand,
+		status: statusCommand,
+		reset: resetCommand,
+		raise: raiseCommand,
 	},
 });

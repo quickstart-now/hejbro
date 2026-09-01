@@ -15,39 +15,82 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
  * that do, kept here so a code born there still gets its shape from one
  * place.
  *
- * - `migrate-ledger-orphan-row` (group 2, task 2.2) -- the ledger records
- *   a migration the repository does not contain.
- * - `migrate-ledger-out-of-order` (group 2, task 2.2) -- the ledger
+ * [design, task 7.2, settled] A prefix names the OPERATION a code belongs
+ * to, never the one command that happened to mint it first. `check-*`
+ * stays `check-*` because checking is the only thing `hejbro check` does
+ * -- command and operation coincide there. Applying does not coincide
+ * with any one command: `migrate`, `reset`, and `raise` all apply DDL
+ * inside a transaction, through the same `execute.ts` machinery, so a
+ * code that names one of them (a `migrate-`-prefixed one) is wrong the
+ * moment a second command can raise it -- `hejbro raise` failing under a
+ * code that names `migrate` is the exact defect this rule exists to
+ * refuse (owner/lead review, #613; the same defect `check-*` reused
+ * as-is would have shipped into `migrate`, task 7.2's own originating
+ * question). The apply-wide family is prefixed `apply-*`.
+ * Two carve-outs: a condition only ONE command can ever raise keeps that
+ * command's own name (`reset-*`, `raise-not-empty` -- no other command
+ * can raise them, so there is no mismatch to cause); a condition named
+ * for itself, not for any command, also stays as it is
+ * (`migration-requires-split`, core-owned).
+ *
+ * - `apply-ledger-orphan-row` (group 2, task 2.2) -- the ledger records
+ *   a migration the repository does not contain. `apply-*`, not
+ *   `migrate-*`: `status` reports this same fact and `migrate` refuses
+ *   with it -- two commands, one operation (reading the ledger against
+ *   the chain).
+ * - `apply-ledger-out-of-order` (group 2, task 2.2) -- the ledger
  *   records a migration the chain orders after one it does not record.
- *   Exactly these two: `tasks.md`'s 2.2 originally listed a third member
- *   ("a gap") beside them, flagged here as a discrepancy against the
- *   delta's own two scenarios and since corrected in `tasks.md` itself --
- *   a ledger holding 0001 and 0003 but not 0002 *is* the second member
- *   (a recorded migration the chain orders after an unrecorded one), not
- *   a separate state.
- * - `migrate-failed` (group 3, task 3.3) -- a migration failed to apply;
+ *   Same `apply-*` reasoning as its sibling above. Exactly these two:
+ *   `tasks.md`'s 2.2 originally listed a third member ("a gap") beside
+ *   them, flagged here as a discrepancy against the delta's own two
+ *   scenarios and since corrected in `tasks.md` itself -- a ledger
+ *   holding 0001 and 0003 but not 0002 *is* the second member (a
+ *   recorded migration the chain orders after an unrecorded one), not a
+ *   separate state.
+ * - `apply-failed` (group 3, task 3.3) -- a migration failed to apply;
  *   names the file and carries the database's own code and message.
- * - `migrate-unsafe-new-enum-value` (group 3, task 3.3) -- the database's
+ *   `apply-*`: `raise` reuses `execute.ts`'s `applyMigration` wholesale
+ *   (group 6) and this is its own generic failure path too.
+ * - `apply-unsafe-new-enum-value` (group 3, task 3.3) -- the database's
  *   `55P04` translated into hejbro's own terms (regenerate; the enum
- *   change lands in its own migration).
- * - `migrate-transaction-control` (group 3, task 3.5) -- a migration
+ *   change lands in its own migration). `apply-*` for the same reason as
+ *   `apply-failed`.
+ * - `apply-transaction-control` (group 3, task 3.5) -- a migration
  *   contains its own `begin`/`commit`/`rollback` and is refused before
- *   anything is sent.
- * - `migrate-missing-capability` (group 7, task 7.3) -- the driver does
- *   not declare `interactive-transactions`. Distinct from
- *   `@hejbro/query`'s own `driver-missing-capability` (not a
- *   `HejbroError`, D57: query-layer packages don't extend it) -- this is
- *   the CLI's own coded refusal, checked before `migrate` ever calls
- *   `transaction()`, not a catch of that lower-layer throw.
- * - Connection acquisition (group 7, task 7.2, `[design]`) -- **left
- *   open on purpose**, as an input to that task rather than a decision
- *   made here: reusing `packages/cli/src/check/driver.ts`'s codes as-is
- *   means `hejbro migrate` answers `error[check-connection-missing]`
- *   (proposal, fork DF); minting `migrate-connection-missing` /
- *   `migrate-driver-missing` / `migrate-connection-failed` is the
- *   alternative. Both are legal shapes; 7.2 picks.
+ *   anything is sent. `apply-*` for the same reason as `apply-failed`.
+ * - `apply-missing-capability` (group 7, task 7.3) -- the driver does not
+ *   declare `interactive-transactions`. Distinct from `@hejbro/query`'s
+ *   own `driver-missing-capability` (not a `HejbroError`, D57: query-
+ *   layer packages don't extend it) -- this is the CLI's own coded
+ *   refusal, checked before a transaction-needing command ever calls
+ *   `transaction()`, not a catch of that lower-layer throw. `apply-*`:
+ *   `migrate`, `reset`, and `raise` all need this capability; `status`
+ *   does not (it only reads).
+ * - `apply-connection-missing` / `apply-driver-missing` /
+ *   `apply-connection-failed` (group 7, task 7.2) -- connection
+ *   acquisition, mechanically shared with `check/driver.ts` (`--url`,
+ *   then `DATABASE_URL`, then a coded refusal; the driver imported
+ *   dynamically; a `select 1` probe) but under this apply-owned code
+ *   family, not `check-*`'s -- `check-*`'s own three codes (and their
+ *   message text, which also names `hejbro check` by name) are
+ *   untouched, since checking is still the operation that mints them.
+ *   `resolveConnectionString`/`loadCheckDriver`/`assertConnected`/
+ *   `withCheckConnection` take a required `commandName` (no default, the
+ *   same reason `execute.ts`'s own `nextCommand` is required) so the
+ *   message text names whichever of the four commands actually failed to
+ *   connect.
  * - `reset-not-confirmed` (group 5, task 5.2) -- `reset` refused without
  *   the confirmation it requires; names what would have been dropped.
+ *   Kept `reset-*`: no other command can raise this refusal.
+ * - `reset-migration-not-singular` (group 4 rework, #610) -- an internal
+ *   invariant, not a spec scenario: `reset`'s own DDL is built by
+ *   reusing `generateMigrations` with an empty declaration set
+ *   (`apply/reset.ts`'s `resetMigrationSql`), and a drop-only run can
+ *   never trigger `engine/split.ts`'s own transaction-boundary condition
+ *   today -- but that guarantee belongs to today's split trigger, not to
+ *   this function, so it is asserted (exactly one migration comes back)
+ *   rather than assumed. Kept `reset-*`: only `reset` ever calls
+ *   `resetMigrationSql`.
  * - `raise-not-empty` (group 6, task 6.2) -- `raise` refuses a database
  *   that already holds declared objects (spec). Two layers report the
  *   identical fact under this one code, discovered two different ways:
@@ -63,13 +106,18 @@ import type { CompileResult, DriverRow, DriverSession } from "@hejbro/query";
  *   "point at an empty database"; `migrate`: investigate why the ledger
  *   and the database disagree), and only `raise` has a spec sentence to
  *   translate it into -- `migrate`'s own already-exists failures stay on
- *   `execute.ts`'s fully generic `migrate-failed` path, same as any other
+ *   `execute.ts`'s fully generic `apply-failed` path, same as any other
  *   unclassified error, until (if ever) a future group's own delta text
  *   earns that translation its own place. Prefix is `apply/raise.ts`'s
- *   own module name, not the placeholder command name `tasks.md`'s file
- *   list uses (`commands/db-up.ts`) -- the real command name is still
- *   group 7's `[design]` (7.1, proposal's `⟦DESIGN⟧`); this code's prefix
- *   moves with whatever 7.1 settles on, same as originally noted here.
+ *   own module name, which 7.1 settled as the command's own name too
+ *   (`hejbro raise` -- the delta spec's own verb, "A database can be
+ *   raised from a snapshot SQL file"), so module, command, and code
+ *   prefix now agree; `tasks.md`'s file list still shows the placeholder
+ *   `commands/db-up.ts` it was written with.
+ * - `raise-file-missing` (group 7, task 7.7, `commands/raise.ts`) --
+ *   `--file` is required and has no default (unlike `generate`, `raise`
+ *   has no declaration entry to fall back to). Kept `raise-*`: only
+ *   `raise` takes this flag.
  * - No code for "a second runner waits" (DD) -- waiting is not a
  *   failure. Task 7.4 names "a lock held by another runner" only as "a
  *   candidate" for its own exit-code answer, not a settled one; no code

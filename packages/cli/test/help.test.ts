@@ -66,6 +66,41 @@ describe("hejbro --help", () => {
 		);
 		expect(commands).not.toContain("Renames are never confirmed interactively");
 	});
+
+	// [task 7.1] The four apply-engine commands this change adds, under
+	// the names 7.1 settled on -- `migrate`, `status`, `reset`, `raise`
+	// (`db-up`/`status`-as-placeholder never shipped as literal command
+	// names).
+	it("lists the new commands", async () => {
+		const result = await runHelp(cwd, ["--help"]);
+		const commands = result.stdout.split("COMMANDS")[1] ?? "";
+		const rows = commands.split("\n");
+		["migrate", "status", "reset", "raise"].forEach((name) => {
+			expect(
+				rows.filter((line) => line.trimStart().startsWith(name)),
+			).toHaveLength(1);
+		});
+	});
+
+	// [task 7.1] `history` is taken (git-derived: ok/lost/rewritten/
+	// uncommitted) -- the ledger's own report is a different command
+	// (`status`), never a second sense of the same word. Both rows exist,
+	// distinctly, and `status`'s own one-line description does not reuse
+	// "history" to describe what it reports.
+	it("does not rename history", async () => {
+		const result = await runHelp(cwd, ["--help"]);
+		const commands = result.stdout.split("COMMANDS")[1] ?? "";
+		const rows = commands.split("\n");
+		const historyRow = rows.filter((line) =>
+			line.trimStart().startsWith("history"),
+		);
+		const statusRow = rows.filter((line) =>
+			line.trimStart().startsWith("status"),
+		);
+		expect(historyRow).toHaveLength(1);
+		expect(statusRow).toHaveLength(1);
+		expect(statusRow[0]).not.toContain("history");
+	});
 });
 
 /**

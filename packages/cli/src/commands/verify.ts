@@ -245,8 +245,8 @@ const preconditionErrorResult = (
 	stderr: renderDiagnostics([errorDiagnostic(error, fallbackIdentity)], null),
 });
 
-/** Every migration file's hash-chain lines, in directory-sorted order — files with no hash lines at all (pre-Phase-5 history) are silently skipped, matching checkChain's "caller filters the unhashed prefix" contract. */
-const readChainEntries = (
+/** Every migration file's hash-chain lines, in directory-sorted order — files with no hash lines at all (pre-Phase-5 history) are silently skipped, matching checkChain's "caller filters the unhashed prefix" contract. Exported (G7, #613): `migrate`/`status` read the same chain this way rather than a second copy of this walk. */
+export const readChainEntries = (
 	migrationsDirPath: string,
 	fileNames: ReadonlyArray<string>,
 ): ReadonlyArray<ChainEntry> =>

@@ -179,6 +179,30 @@ are told apart rather than reported as one condition.
 - **THEN** that is reported with its own code and its own `Next:` line,
   and nothing is applied on top of it
 
+### Requirement: What the ledger holds can be read without applying anything
+The CLI SHALL provide a `status` command that reports, without changing
+the database: the migrations the ledger records as applied, the
+migrations on disk it does not record, and the disagreements the
+requirement above enumerates.
+
+`status` SHALL require no driver capability beyond reading, because it
+opens no transaction and applies nothing — the trade the apply path
+makes is not one this command needs to make. Its exit code SHALL
+distinguish a clean answer from one that found a disagreement, so a
+caller automating it can tell them apart without parsing the report.
+
+#### Scenario: Pending migrations are reported without being applied
+- **WHEN** `status` runs against a database whose ledger records the
+  first two migrations of a chain of four
+- **THEN** it names the two it records and the two it does not, and the
+  database is unchanged afterwards
+
+#### Scenario: A disagreement is reported by status too
+- **WHEN** the ledger records a migration the repository does not
+  contain and `status` runs
+- **THEN** it reports that disagreement with the same code the apply
+  path uses for it, and exits non-zero
+
 ### Requirement: A failure names the file, the database's own reason, and the next command
 When applying fails, the report SHALL name the migration that failed,
 carry the database's own error code and message, and end with a `Next:`
@@ -246,12 +270,12 @@ The ledger SHALL record how the database was raised, so a database
 created this way is not mistaken for one no migration has ever reached.
 
 #### Scenario: An empty database is raised from a snapshot file
-- **WHEN** the command runs against an empty database with a snapshot
-  SQL file
+- **WHEN** `raise` runs against an empty database with a snapshot SQL
+  file
 - **THEN** the schema the file describes exists afterwards and the
   ledger records how it was raised
 
 #### Scenario: A non-empty database is refused
-- **WHEN** the command runs against a database that already holds
-  declared objects
+- **WHEN** `raise` runs against a database that already holds declared
+  objects
 - **THEN** it refuses with a coded error and applies nothing

@@ -110,7 +110,7 @@ describe("applyMigration / 3.2", () => {
 
 		await expect(
 			applyMigration(driver, failingMigration, NEXT_COMMAND),
-		).rejects.toMatchObject({ code: "migrate-failed" });
+		).rejects.toMatchObject({ code: "apply-failed" });
 	});
 
 	it("a failed migration writes no ledger row", async () => {
@@ -147,7 +147,7 @@ describe("applyMigration / 3.3", () => {
 			throw new Error("expected applyMigration to reject");
 		} catch (error) {
 			const message = (error as Error).message;
-			expect((error as { code?: string }).code).toBe("migrate-failed");
+			expect((error as { code?: string }).code).toBe("apply-failed");
 			expect(message).toContain("0003_bad.sql");
 			expect(message).toContain("42P07");
 			expect(message).toContain('relation "t2_a" already exists');
@@ -172,7 +172,7 @@ describe("applyMigration / 3.3", () => {
 		} catch (error) {
 			const message = (error as Error).message;
 			expect((error as { code?: string }).code).toBe(
-				"migrate-unsafe-new-enum-value",
+				"apply-unsafe-new-enum-value",
 			);
 			expect(message).toMatch(/regenerate/i);
 			expect(message).toMatch(/Next:/);
@@ -209,7 +209,7 @@ describe("applyMigration / 3.5", () => {
 		await expect(
 			applyMigration(driver, migration, NEXT_COMMAND),
 		).rejects.toMatchObject({
-			code: "migrate-transaction-control",
+			code: "apply-transaction-control",
 		});
 		// Refused before anything was sent -- no transaction was even opened.
 		expect(calls).toHaveLength(0);
@@ -266,7 +266,7 @@ $$ language plpgsql;`,
 				},
 				NEXT_COMMAND,
 			),
-		).rejects.toMatchObject({ code: "migrate-transaction-control" });
+		).rejects.toMatchObject({ code: "apply-transaction-control" });
 
 		const { driver: driverRollback } = makeFakeDriver();
 		await expect(
@@ -278,7 +278,7 @@ $$ language plpgsql;`,
 				},
 				NEXT_COMMAND,
 			),
-		).rejects.toMatchObject({ code: "migrate-transaction-control" });
+		).rejects.toMatchObject({ code: "apply-transaction-control" });
 	});
 });
 

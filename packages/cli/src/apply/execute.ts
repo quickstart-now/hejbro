@@ -181,7 +181,7 @@ const assertNoTransactionControl = (migration: Migration): void => {
 		return;
 	}
 	throwHejbroError(
-		"migrate-transaction-control",
+		"apply-transaction-control",
 		`"${migration.fileName}" contains its own "${found}" statement, outside any string literal or function body. hejbro's generator never emits one; a hand-edited file can, and the consequences are silent rather than loud (a mid-file commit ends the transaction's atomicity with no error, and a failed begin poisons the pooled connection for the calls after it). Next: remove the statement from "${migration.fileName}" and rerun \`hejbro migrate\`.`,
 	);
 };
@@ -267,7 +267,7 @@ const throwApplyFailure = (
 	if (code === UNSAFE_NEW_ENUM_VALUE) {
 		throw Object.assign(
 			hejbroError(
-				"migrate-unsafe-new-enum-value",
+				"apply-unsafe-new-enum-value",
 				`applying "${fileName}" failed${codeSuffix(code)}: ${reason}. This migration adds a value to an enum type and uses that value in the same transaction -- it was written before this change's generator started separating those statements. Next: regenerate your migrations (the enum change will land in its own migration), then rerun \`${nextCommand}\`.`,
 			),
 			{ cause: error },
@@ -275,7 +275,7 @@ const throwApplyFailure = (
 	}
 	throw Object.assign(
 		hejbroError(
-			"migrate-failed",
+			"apply-failed",
 			`applying "${fileName}" failed${codeSuffix(code)}: ${reason}. Next: fix what the error above describes, then rerun \`${nextCommand}\`.`,
 		),
 		{ cause: error },

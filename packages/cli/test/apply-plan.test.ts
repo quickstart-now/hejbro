@@ -59,9 +59,7 @@ describe("planApply / 2.2", () => {
 		}
 		expect(result.disagreements).toHaveLength(1);
 		expect(result.disagreements[0]?.identity).toBe("0002_ghost.sql");
-		expect(result.disagreements[0]?.error.code).toBe(
-			"migrate-ledger-orphan-row",
-		);
+		expect(result.disagreements[0]?.error.code).toBe("apply-ledger-orphan-row");
 		expect(result.disagreements[0]?.error.message).toMatch(/Next:/);
 	});
 
@@ -83,7 +81,7 @@ describe("planApply / 2.2", () => {
 		expect(result.disagreements).toHaveLength(1);
 		expect(result.disagreements[0]?.identity).toBe("0003_add_index.sql");
 		expect(result.disagreements[0]?.error.code).toBe(
-			"migrate-ledger-out-of-order",
+			"apply-ledger-out-of-order",
 		);
 		expect(result.disagreements[0]?.error.message).toContain(
 			"0002_add_column.sql",
@@ -111,8 +109,8 @@ describe("planApply / 2.2", () => {
 		}
 		const codes = result.disagreements.map((d) => d.error.code).sort();
 		expect(codes).toEqual([
-			"migrate-ledger-orphan-row",
-			"migrate-ledger-out-of-order",
+			"apply-ledger-orphan-row",
+			"apply-ledger-out-of-order",
 		]);
 	});
 });

@@ -74,7 +74,7 @@ const chainInvalidMessage = (
 const orphanRowFinding = (filename: string): Disagreement => ({
 	identity: filename,
 	error: hejbroError(
-		"migrate-ledger-orphan-row",
+		"apply-ledger-orphan-row",
 		`the ledger records "${filename}" as applied, but no migration of that name exists on disk. Next: restore the file from version control if it was deleted by mistake, or resolve the mismatch by hand -- hejbro will not guess -- before rerunning \`hejbro migrate\`.`,
 	),
 });
@@ -93,7 +93,7 @@ const outOfOrderFinding = (
 ): Disagreement => ({
 	identity: filename,
 	error: hejbroError(
-		"migrate-ledger-out-of-order",
+		"apply-ledger-out-of-order",
 		`the ledger records "${filename}" as applied, but the chain orders it after "${unrecorded}", which the ledger does not record. Next: investigate how "${filename}" was applied without "${unrecorded}" -- hejbro's own \`migrate\` never does this -- before rerunning \`hejbro migrate\`.`,
 	),
 });

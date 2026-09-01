@@ -329,47 +329,52 @@ down early is a string pin waiting to break.
 ## 7. Command surface
 
 Files: `packages/cli/src/main.ts`,
-`packages/cli/src/commands/{migrate,status,reset,db-up}.ts`,
-`packages/cli/test/{migrate,status,reset,db-up}-command.test.ts`,
+`packages/cli/src/commands/{migrate,status,reset,raise}.ts`,
+`packages/cli/test/{migrate,status,reset,raise}-command.test.ts`,
 `packages/cli/test/help.test.ts`.
 
-`status` and `db-up` are placeholders in this list, not decisions: both
-names are settled by 7.1's `[design]`, and the files take whatever it
-settles on. A file list is not a place to pre-empt a naming decision by
-writing it down first.
+Those names were placeholders while 7.1 was open; 7.1 settled them as
+`status` and `raise`, and the list now carries the decision rather than
+a guess. `raise` is the word the delta spec already uses for the
+operation, so the command and the contract say the same thing.
 
 This group owns every line that calls the modules above. It exists
 because a fully built module that nothing calls passes all its tests and
 reports nothing, which reads as agreement.
 
-- [ ] 7.1 (~9m) [design] The command names, and whether status is its
+- [x] 7.1 (~9m) [design] The command names, and whether status is its
       own command. `history` is taken and means something else — it is
       git-derived, with states `ok`/`lost`/`rewritten`/`uncommitted` —
       so the ledger's report cannot borrow that word. Red: `help.test.ts`
       — "lists the new commands", "does not rename history".
-- [ ] 7.2 (~9m) [design] Connection acquisition, shared with `check`
+- [x] 7.2 (~9m) [design] Connection acquisition, shared with `check`
       rather than rebuilt: `--url`, then `DATABASE_URL`, then a coded
       refusal; the driver imported dynamically; a `select 1` probe that
       separates "could not reach" from "could not read" by construction.
       The [design] part is the codes: the existing ones are spelled
       `check-…`, so reused as-is `hejbro migrate` answers with
-      `error[check-connection-missing]`. Red:
+      `error[check-connection-missing]`. The problem runs both ways and
+      is settled here once, across every code this change touches:
+      the apply path minted `migrate-…` codes that raising a database
+      now raises too, so that command answers with a code named after a
+      different one. Decide the prefixes for the whole set rather than
+      per command as each meets the problem. Red:
       `migrate-command.test.ts` — "names the driver package when it is
       missing", "reports an unreachable database in its own words".
-- [ ] 7.3 (~8m) The capability this engine requires is stated and
+- [x] 7.3 (~8m) The capability this engine requires is stated and
       enforced: `@hejbro/neon`'s HTTP path declares
       `interactive-transactions: false` and its `transaction()` always
       throws, and its endpoint takes one statement per batch member, so
       it can carry neither half of this design. Red: same file —
       "refuses a driver without interactive transactions, naming the
       capability".
-- [ ] 7.4 (~9m) [design] `migrate`'s exit codes. `check` set the
+- [x] 7.4 (~9m) [design] `migrate`'s exit codes. `check` set the
       precedent that three answers are distinguishable; an engine's
       third answer is not a checker's, and a lock held by another runner
       is a candidate for one of its own. Red: same file — "exits zero
       with nothing to apply", "exits non-zero when a migration failed",
       "distinguishes a run that could not act".
-- [ ] 7.5 (~10m) `migrate`'s report: what it applied, in order, and what
+- [x] 7.5 (~10m) `migrate`'s report: what it applied, in order, and what
       it did not. A run that applied nothing says so rather than
       printing nothing. **This task also owns the run-level behaviour**:
       the engine applies one migration, so "a run stops at the first
@@ -380,12 +385,12 @@ reports nothing, which reads as agreement.
       same file — "names each migration it applied", "says so when there
       was nothing to apply", "stops at the first failing migration and
       keeps the ones before it".
-- [ ] 7.6 (~8m) The status command's report: applied, pending, and the
+- [x] 7.6 (~8m) The status command's report: applied, pending, and the
       disagreements group 2 produces. Red: `status-command.test.ts` —
       "reports pending migrations", "reports a ledger row with no file".
-- [ ] 7.7 (~7m) `reset` and the raise command reach their modules, with
+- [x] 7.7 (~7m) `reset` and the raise command reach their modules, with
       their flags and refusals wired. Red: `reset-command.test.ts`,
-      `db-up-command.test.ts` — "refuses without confirmation",
+      `raise-command.test.ts` — "refuses without confirmation",
       "refuses a non-empty database".
 
 ## 8. The live witness

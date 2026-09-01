@@ -58,14 +58,15 @@ change never asks the catalog what the schema looks like.
 - **`hejbro migrate`** — applies the migrations on disk that the
   database's ledger does not record, in chain order, recording each as
   it goes. Production included.
-- **`hejbro status`** ⟦DESIGN⟧ (name, and whether it is its own command)
-  — what the ledger records, what is pending, and where the chain on
-  disk and the ledger disagree.
+- **`hejbro status`** — what the ledger records, what is pending, and
+  where the chain on disk and the ledger disagree.
 - **`hejbro reset`** — the destructive path, whose refusal contract is
   the larger half of it (below).
-- **Standing an empty database up from a snapshot SQL file** ⟦DESIGN⟧
-  (name) — generalized deliberately: the command takes a snapshot SQL
-  file and an empty database. That a consumer repository's vendored file
+- **`hejbro raise`** — standing an empty database up from a snapshot SQL
+  file. The name is the spec's own word for the operation, so the
+  command and the contract say the same thing. Generalized
+  deliberately: it takes a snapshot SQL file and an empty database.
+  That a consumer repository's vendored file
   is the common source is a convention and a config default, not a
   coupling; this change builds nothing that depends on the sibling
   change's artifacts.
