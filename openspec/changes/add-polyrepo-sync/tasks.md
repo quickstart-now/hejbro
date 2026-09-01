@@ -1316,13 +1316,29 @@ group's boundary logic; the original file list assumed a connection that
 wasn't there).
 
 **Re-freeze: 45m → 80m** (actual: 80m across 7.1/7.2/7.3/7.5 including
-two mid-implementation corrections, 7.4 left structurally partial). Two
-members (2's other half, and 7) needed genuinely new code with no task
-row of their own, discovered while wiring the rest of the group. 7.1's
-own design also needed a real correction after landing: a local
-replacement was found not to be reachable by any caller in this change
-at all (see 7.1's own note below) and was dropped from the enumeration
-entirely — **eleven becomes ten**, in this same edit, everywhere the
+two mid-implementation corrections, 7.4 left structurally partial).
+Planner-attributed, in three parts, so the ledger separates
+implementation pace from coordination cost (the three parts overlap
+the underlying task-times.csv rows rather than partitioning them
+exactly — a rough split by cause, not a re-audit of the row totals):
+- **+19m — planning underestimate.** Two members (2's other half, and
+  7) needed genuinely new code with no task row of their own,
+  discovered while wiring the rest of the group; ordinary scope growth
+  against the original estimate, not a mistake by anyone.
+- **+15m — a planner approval error, corrected.** The first-approved
+  design for member 10 was itself wrong (see 7.1's own note below): it
+  had to be built, then found wrong, then removed.
+- **+5m — the same correction, corrected again across a crossed
+  message.** The `file://` fixture question was answered twice,
+  oppositely, because two messages crossed in transit and each
+  answered a different snapshot of the same state.
+
+The last two are recorded as the planner's own coordination cost, not
+this implementer's pace, per the planner's own request. 7.1's own
+design needed a real correction after landing: a local replacement was
+found not to be reachable by any caller in this change at all (see
+7.1's own note below) and was dropped from the enumeration entirely —
+**eleven becomes ten**, in this same edit, everywhere the
 count was cited.
 
 | SHALL (delta) | Scenario | Red test |
