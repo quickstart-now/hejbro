@@ -34,7 +34,7 @@ calibration this change was estimated against — `add-check-schema`, a
 Files: `packages/cli/src/apply/ledger.ts`,
 `packages/cli/test/apply-ledger.test.ts`.
 
-- [ ] 1.1 (~9m) [design] The table: schema, name, columns, and the key a
+- [x] 1.1 (~9m) [design] The table: schema, name, columns, and the key a
       row is found by. Settled here, not discovered: ordering is the
       database's (identity column, server-evaluated timestamp — never a
       value the engine supplies), and the key is the **full migration
@@ -43,19 +43,22 @@ Files: `packages/cli/src/apply/ledger.ts`,
       version prefix, not the full filename" can only ever apply one of
       a colliding pair. Red: `apply-ledger.test.ts` — "bootstrap renders
       the ledger table with a server-assigned order".
-- [ ] 1.2 (~8m) Bootstrap is idempotent and runs once per apply run, not
+- [x] 1.2 (~8m) Bootstrap is idempotent and runs once per apply run, not
       once per file. The inherited requirement said "every migration
       carries it" because no one knew where a chain would be started
-      from; an engine knows. Red: same file — "bootstrap applied twice
-      leaves one table and no error".
-- [ ] 1.3 (~9m) Reading the ledger: which migrations it records, in the
+      from; an engine knows. Red: same file — "the bootstrap statements
+      are written to be idempotent". The name says what a test without a
+      server can establish: that two applications leave one table is
+      Postgres's `if not exists` semantics, and group 8's live witness
+      is where that is shown.
+- [x] 1.3 (~9m) Reading the ledger: which migrations it records, in the
       database's order. A ledger table that does not exist is not an
       error — it is an empty ledger — and that is a distinct state from
       a table that exists and holds no rows, which is what a baseline
       registration produces. Red: same file — "an absent ledger table
       reads as no applied migrations", "an empty ledger table is not
       reported as an absent one".
-- [ ] 1.4 (~8m) Writing a row, and registering one without running the
+- [x] 1.4 (~8m) Writing a row, and registering one without running the
       file (the baseline path). Red: same file — "records an applied
       migration by filename", "registers a baseline without executing
       its statements".
@@ -74,11 +77,15 @@ database.
       by the chain, not by directory listing".
 - [ ] 2.2 (~9m) [design] Disagreements, as an enumeration whose members
       each earn their place by having a remedy no other member has: a
-      ledger row naming a migration the repository does not have; a
-      migration recorded out of order; a gap. Each carries a code and a
-      `Next:` line. Red: same file — "reports a ledger row with no file
-      on disk", "reports a recorded migration that the chain orders
-      after an unrecorded one".
+      ledger row naming a migration the repository does not have, and a
+      migration recorded out of order. Each carries a code and a
+      `Next:` line. A third member was listed here — "a gap" — and it is
+      not one: a ledger holding 0001 and 0003 but not 0002 *is* a
+      recorded migration the chain orders after an unrecorded one, the
+      same state under a second name. The delta spec enumerates two, and
+      the two are the members. Red: same file — "reports a ledger row
+      with no file on disk", "reports a recorded migration that the
+      chain orders after an unrecorded one".
 - [ ] 2.3 (~8m) The chain is verified before anything is applied.
       Applying a chain that does not verify is applying bytes nothing
       vouches for, and the check is offline and already written. Red:
