@@ -697,12 +697,13 @@ squashed-SQL builder rather than two).
       to before this group, pinned by the new "existing chain
       diagnostics are unchanged" test.
 
-## R2-G4 — `link` and `vendor` — `est_frozen: 72m` — #597
+## R2-G4 — `link` and `vendor` — `est_frozen: 77m` — #597
 
 Files: `packages/cli/src/git.ts` (remote functions added),
 `packages/cli/src/vendor/*` (new),
 `packages/cli/src/commands/{link,vendor,outdated}.ts` (new),
-`packages/cli/src/config.ts` (shared).
+`packages/cli/src/config.ts` (shared),
+`packages/core/test/migration-file.test.ts` (4.11 only).
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
@@ -750,10 +751,27 @@ Files: `packages/cli/src/git.ts` (remote functions added),
       subprocess failure — the same shape the missing-driver diagnostic
       already uses. Start from `cli/test/vendor.test.ts > a missing git
       binary is a coded failure`. ~6m
+- [x] 4.11 Restore the forward-compatibility regression guard 2.10
+      removed along with `parseBannerManifestFormat`: a banner line no
+      current parser recognizes at all must not break the parsers that
+      read the *other* lines. Distinct from `parseBannerHashes`'s own
+      "#229 unknown-line tolerance" test, which only proves that *other
+      known* prefixes (the version line) don't confuse a parser reading
+      its own — a genuinely fabricated, nobody-recognizes-it prefix is a
+      different, stronger claim (forward compatibility, required by the
+      shipped `migration-format` spec), and after 2.10 no test in
+      `packages/core/test` used one any more. Start from
+      `core/test/migration-file.test.ts > every current parser still
+      reads its own line with a fabricated, nobody-recognizes-it line
+      mixed in`. Not a spec change — restores coverage for already-shipped
+      behavior. ~5m
 
-**Re-freeze: 70m → 72m.** Decomposing this group surfaced the
-missing-`git` diagnostic, which the delta requires and no task covered.
-A scope correction, not a task running long.
+**Re-freeze: 70m → 72m → 77m.** First move (70→72): decomposing this
+group surfaced the missing-`git` diagnostic, which the delta requires
+and no task covered. Second move (72→77): 2.10's own removal of
+`parseBannerManifestFormat` took its sibling test's forward-compatibility
+fixture with it, without a replacement — found and confirmed during
+R2-G3's review exchange, not a task running long (4.11 added).
 
 ## R2-G5 — The emitted contract — `est_frozen: 75m` — #598
 
