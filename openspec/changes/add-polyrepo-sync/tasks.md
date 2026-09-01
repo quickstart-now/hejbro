@@ -1305,7 +1305,7 @@ proof, not add to it. R2-G9's own re-freeze carries the matching +2m
 (not the full 6m: 9.2 already had its own estimate for the parts of
 this proof it always owned).
 
-## R2-G7 — The consumer's check — `est_frozen: 45m → 75m` — #600
+## R2-G7 — The consumer's check — `est_frozen: 45m → 80m` — #600
 
 Files: `packages/cli/src/vendor/state.ts` (new),
 `packages/cli/src/commands/vendor.ts`, `packages/cli/src/vendor/lock.ts`,
@@ -1315,8 +1315,8 @@ is `hejbro.config.ts`'s own shape, D30, and turned out unrelated to this
 group's boundary logic; the original file list assumed a connection that
 wasn't there).
 
-**Re-freeze: 45m → 75m** (actual: 75m across 7.1/7.2/7.3/7.5 including a
-mid-implementation correction, 7.4 left structurally partial). Two
+**Re-freeze: 45m → 80m** (actual: 80m across 7.1/7.2/7.3/7.5 including
+two mid-implementation corrections, 7.4 left structurally partial). Two
 members (2's other half, and 7) needed genuinely new code with no task
 row of their own, discovered while wiring the rest of the group. 7.1's
 own design also needed a real correction after landing: a local
@@ -1343,32 +1343,42 @@ count was cited.
       and every sentence citing it move in the same edit. Start from
       `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
       ~10m
-      **Corrected mid-implementation, planner-directed: "a local
-      replacement is active" is dropped, not collapsed with the other —
-      eleven becomes ten.** The first approval (10/11 stay separate,
-      judged from a committed `source`'s own shape) was itself wrong:
-      "a local replacement" is a `replace`-shaped situation — an
-      uncommitted, gitignored override sitting *beside* the committed
-      source, per the owner's own design — and this change does not
-      build `replace` in any R2 group. A committed `source` that happens
-      to be a local filesystem path is a legitimate, ordinary
-      configuration (a monorepo-neighbor checkout), not that situation —
-      and this whole test file's own fixtures rely on exactly that shape
-      (confirmed by running them: ~28 existing call sites use one). The
-      enumeration's own qualifying rule ("a situation earns a place only
-      if it is reachable by some caller in this change") settles it:
-      unreachable, so not a member. Building a flag to make it reachable
-      (inverted priority — enumerating what doesn't exist yet) and
-      gating a legitimate configuration to make room for the check
+      **Corrected mid-implementation, planner-directed, twice (the first
+      correction pass itself needed re-correcting): "a local replacement
+      is active" is dropped, not collapsed with the other — eleven
+      becomes ten.** The first approval (10/11 stay separate, judged from
+      a committed `source`'s own shape) was itself wrong, and not merely
+      unreachable but actively harmful the way it was first coded: the
+      owner's own design names a local path as a **first-class,
+      legitimate source** (a monorepo consumer commits `hejbro link
+      ../schema`, and that repository's own CI has that neighbor checkout
+      too) — "a local replacement" is a *different*, `replace`-shaped
+      situation instead: an uncommitted, gitignored override sitting
+      *beside* the committed source. This change builds no `replace` in
+      any R2 group, so per the enumeration's own qualifying rule ("a
+      situation earns a place only if it is reachable by some caller in
+      this change") it is not a member at all. The scheme-based
+      heuristic this task first shipped could not tell the two apart —
+      it would have failed a legitimate monorepo consumer's CI (`vendor
+      --check` defaults to strict outside a TTY) for committing exactly
+      the configuration the owner designed for. Building a flag to make
+      the situation reachable (inverted priority — enumerating what
+      doesn't exist yet) and gating the legitimate configuration instead
       (breaking real workflows for an unreached situation) were both
-      rejected as symptom treatment. Removed: `vendor-local-source-active`,
-      `vendor/state.ts`'s `isLocalSource`/`warnIfLocalSource`, the
-      matching describe block and enumeration-test scenario, and the
-      `file://`-scheme fixture change that had worked around it. Records
-      the absence in the delta spec (`schema-vendoring/spec.md`) the same
-      way R2-G9's own header records a different absence — a later reader
-      can reconstruct why, and it returns to the enumeration when
-      `replace` lands.
+      rejected as symptom treatment; the first fixture workaround
+      (`file://`-scheme sources in this suite's own tests) was masking
+      exactly that harm; production code cannot be handed the equivalent
+      escape hatch a fixture can. Removed for good:
+      `vendor-local-source-active`, `vendor/state.ts`'s
+      `isLocalSource`/`warnIfLocalSource`, and the matching describe
+      block and enumeration-test scenario. The `file://`-scheme fixture
+      change is **kept, but as an incidental improvement, not a
+      workaround** — a real schema repository is named by a URL, so it
+      is simply the more realistic fixture, now that nothing depends on
+      it to avoid a false positive. Records the absence in the delta
+      spec (`schema-vendoring/spec.md`) the same way R2-G9's own header
+      records a different absence — a later reader can reconstruct why,
+      and it returns to the enumeration when `replace` lands.
       **Settled and kept**: the lock-resolved-from-a-non-default-ref
       situation stays, since `--ref` is real and reachable today.
       `resolvedBy: "default-branch" | "explicit-ref"` is its lock field,

@@ -124,7 +124,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 			'{"descriptionFormat":1,"snapshotFormat":8}',
 		);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(1);
@@ -138,7 +138,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 			'{"descriptionFormat":99,"snapshotFormat":8}',
 		);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor"]);
 		expect(result.exitCode).toBe(1);
@@ -163,7 +163,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 	it("refuses to move the lock past a commit the remote no longer has (member 7)", async () => {
 		await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
 		const lostCommit = remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 		const firstVendor = await runCli(cwd, ["vendor"]);
 		expect(firstVendor.exitCode).toBe(0);
 		expect((await readLock()).commit).toBe(lostCommit);
@@ -191,7 +191,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 			'{"descriptionFormat":1,"snapshotFormat":8}',
 		);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
-		await runCli(cwd, ["link", remote.cwd]);
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 		const result = await runCli(cwd, ["vendor", "--schema", "app"]);
 		expect(result.exitCode).toBe(1);
@@ -203,7 +203,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 			await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
 			remote.commit("export v1", "2026-01-01T10:00:00Z");
 			execFileSync("git", ["tag", "v1"], { cwd: remote.cwd });
-			await runCli(cwd, ["link", remote.cwd]);
+			await runCli(cwd, ["link", `file://${remote.cwd}`]);
 
 			const vendored = await runCli(cwd, ["vendor", "--ref", "v1"]);
 			expect(vendored.exitCode).toBe(0);
@@ -229,7 +229,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 		it("the default branch never triggers it, even at the boundary", async () => {
 			await writeExportFiles(remote, VALID_SCHEMA, VALID_FORMAT);
 			remote.commit("export v1", "2026-01-01T10:00:00Z");
-			await runCli(cwd, ["link", remote.cwd]);
+			await runCli(cwd, ["link", `file://${remote.cwd}`]);
 			await runCli(cwd, ["vendor"]);
 			expect((await readLock()).resolvedBy).toBe("default-branch");
 
@@ -284,7 +284,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 				withFixture(async (dir, fixtureRemote) => {
 					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
 					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
-					await runCli(dir, ["link", fixtureRemote.cwd]);
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
 					return runCli(dir, ["vendor", "--ref", "no-such-ref"]);
 				}),
 			// 4. The resolved commit carries no export.
@@ -295,7 +295,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 						"no export here\n",
 					);
 					fixtureRemote.commit("no export here", "2026-01-01T10:00:00Z");
-					await runCli(dir, ["link", fixtureRemote.cwd]);
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
 					return runCli(dir, ["vendor"]);
 				}),
 			// 5. The export is present but does not answer its own format.
@@ -307,7 +307,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 						VALID_FORMAT,
 					);
 					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
-					await runCli(dir, ["link", fixtureRemote.cwd]);
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
 					return runCli(dir, ["vendor"]);
 				}),
 			// 6. The IR format is newer than this toolchain knows.
@@ -319,7 +319,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 						'{"descriptionFormat":99,"snapshotFormat":8}',
 					);
 					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
-					await runCli(dir, ["link", fixtureRemote.cwd]);
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
 					return runCli(dir, ["vendor"]);
 				}),
 			// 7. The lock names a commit the remote no longer has.
@@ -327,7 +327,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 				withFixture(async (dir, fixtureRemote) => {
 					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
 					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
-					await runCli(dir, ["link", fixtureRemote.cwd]);
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
 					await runCli(dir, ["vendor"]);
 					await rewriteRemoteHistory(fixtureRemote);
 					return runCli(dir, ["vendor"]);
@@ -337,7 +337,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 				withFixture(async (dir, fixtureRemote) => {
 					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
 					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
-					await runCli(dir, ["link", fixtureRemote.cwd]);
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
 					await runCli(dir, ["vendor"]);
 					await writeFile(
 						join(dir, ".hejbro", "vendor", "schema.json"),
@@ -361,7 +361,7 @@ describe("hejbro vendor — the ten named failure situations (R2-G7)", () => {
 					await writeExportFiles(fixtureRemote, VALID_SCHEMA, VALID_FORMAT);
 					fixtureRemote.commit("export v1", "2026-01-01T10:00:00Z");
 					execFileSync("git", ["tag", "v1"], { cwd: fixtureRemote.cwd });
-					await runCli(dir, ["link", fixtureRemote.cwd]);
+					await runCli(dir, ["link", `file://${fixtureRemote.cwd}`]);
 					await runCli(dir, ["vendor", "--ref", "v1"]);
 					return runCli(dir, ["vendor", "--check"]);
 				}),
