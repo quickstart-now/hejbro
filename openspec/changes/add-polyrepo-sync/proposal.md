@@ -1,561 +1,585 @@
-# Proposal: add-polyrepo-sync
+Moves into `openspec/changes/add-polyrepo-sync/proposal.md` in place
+once the lead and the owner approve. This revises that change rather
+than replacing it: the intent — a consuming repository gets the
+schema's types — is unchanged, and the mechanism is replaced.
 
-## Why
+Four owner judgements govern this revision. One of them is not about
+polyrepo at all and stands above the rest: **hejbro manages a database's
+schema and access from declarations; it is not a tool that reaches into
+live infrastructure and works from what it finds there.** The other
+three follow that line — the polyrepo channel becomes git rather than a
+database; **D12 is revised in full**, so applying migrations is
+first-class including production; and **verifying that a database has
+the declared shape is not built**.
 
-A schema lives in one repository; the services that query it live in
-others. Today a consumer repository has two options, and both are bad.
-It can import the declaration source — which hands it migration
-authority over a database it must never migrate — or it can hand-write
-types, which are wrong the moment the schema moves and no tool can tell
-you when.
+The identity judgement explains why the other three are consistent
+rather than merely simultaneous. Applying is writing in the declared
+direction, and a ledger of what this tool itself applied is a record of
+its own writes — neither is introspection. Verifying a database's shape,
+and deriving declarations from an existing database, both read the
+infrastructure to decide what is true, and both are out.
 
-Introspection cannot close the gap, because the database does not hold
-what the type layer needs. Measured against `ColumnSnapshot`'s complete
-field list (`packages/core/src/kinds/table-snapshot.ts:46-56`), five
-facts a consumer needs are absent from the database, from the snapshot,
-or from both:
+## Why the mechanism changes
 
-- **numeric `mode`** — never reaches `typeNode`, the generated SQL, or
-  the snapshot (`packages/core/src/types/column-builder.ts:27-28`), yet
-  it decides both the visible type and the runtime conversion
-  (`packages/query/src/db/convert.ts:718`).
-- **`notNullElements`** — the flag itself is never serialized
-  (`column-builder.ts:29-39`); without it every array element widens to
-  `T | null` and the fail-fast guard disappears.
-- **`columnKey`**, the column's TypeScript key — "TS-only meta, never
-  serialized" (`packages/core/src/dsl/table.ts:114`), and
-  `toSnakeCase` (`table.ts:192`) is one-way, so the SQL name cannot be
-  turned back into it. Without it **every result row comes back with
-  the wrong keys**.
-- **the name each declaration was exported under** — a reverse relation
-  key is `keyof TSchema` (`packages/query/src/types/relations.ts:67-79`)
-  and a typed function call is keyed "exactly to the declarations
-  record's own export names" (`packages/query/src/db/fn-types.ts:136-137`),
-  yet the loader discards those names
-  (`packages/cli/src/loader.ts:159-164`, `Object.values`). Views, enums,
-  schemas and grants need no export name: none of them reaches a
-  consumer's types.
-- **role names** — the `db.as` whitelist is a union of four sources
-  (`packages/query/src/db/db.ts:152-163`); a consumer holds no `grant`
-  and no policy declaration, so two of the four are empty and every
-  context is rejected fail-closed with no escape hatch.
+The approved version carried the schema **out of the database**. The
+settled design carries it **out of the repository**: the schema
+repository commits an export directory, and a consumer vendors it over
+git.
 
-So the schema has to travel, and the question is what carries it. This
-change makes the **database itself** the medium: each migration carries,
-inside its own SQL, an insert into an append-only manifest table, and a
-consumer repository runs `hejbro sync` against that database to obtain a
-schema module. The database is the one place both repositories already
-agree on, it is exactly as fresh as the schema it describes, and it
-needs no release, no registry, and no second distribution channel.
+The reason is not that the first mechanism failed — it worked, and its
+parts are measured and tested. It is that a database is not a file. It
+cannot be read, diffed, or reviewed by the agent doing the work, and an
+agent sandbox without a database could not obtain types at all. The
+three principles the owner settled on are all file-shaped: **every
+truth is a committed file**, **every check is a single command with an
+exit code**, **every error message names the next command**.
 
-## What Changes
+## What the owner settled
 
-- **Manifest emission, opt-in, rendered by core.** When enabled, a
-  generated migration carries an idempotent bootstrap
-  (`create schema if not exists` / `create table if not exists`) and one
-  insert into `hejbro.schema_manifest`. The payload is the snapshot plus
-  a type-meta sidecar plus role names plus a format version, serialized
-  by the same `stableJson` the snapshot itself uses
-  (`packages/core/src/snapshot/snapshot.ts:185-186`) so it inherits that
-  function's determinism rather than restating it, and minified onto a
-  single line. A banner line carrying the manifest format version rides
-  at the top of the file, machine-readable by its own prefix — the
-  format's own extension point, which requires every parser to read its
-  line by prefix and ignore unknown ones
-  (`openspec/specs/migration-format/spec.md:18-25`). `[design]` settles
-  the flag, the exact table shape, and the prefix.
-- **hejbro writes these statements and never executes them.** The user's
-  existing pipeline applies them, exactly as it applies every other
-  statement in the file. D12 is untouched, and no command in this change
-  acquires the authority to apply anything.
-- **The CLI supplies, core renders.** The payload and its hash arrive as
-  options on `generateMigration`, the way `hejbroVersion` already does
-  (`packages/core/src/engine/generate.ts:135`), and core appends the
-  statements to the array it already joins (`generate.ts:363-374`).
-  Hashing and connections stay CLI-owned (`engine/chain.ts:118-119`).
-  A CLI-side post-write would be caught — correctly — by
-  `examples/postgres/test/chain.test.ts:86-88`, which compares the
-  committed file against **core's** regenerated SQL.
-- **Nothing clock-derived reaches the emitted SQL.** Generation is
-  byte-deterministic (`openspec/specs/cli-commands/spec.md:418-431`),
-  so the insert supplies no timestamp (the column defaults to `now()`,
-  evaluated by the server at apply time) and **no migration id**: two of
-  the three prefix strategies are clock-derived
-  (`packages/core/src/sql/migration-file.ts:31-44`), and the file name
-  is not even computed until after the SQL is rendered
-  (`packages/cli/src/commands/generate.ts:587-607`). Ordering is owned
-  by the database instead — an identity `seq` column — which is also
-  what makes "behind by N" countable.
-- **Monotonicity.** Once a chain carries manifest statements, it keeps
-  carrying them: `generate` refuses with a coded error when the chain
-  has them and the current configuration does not, and `verify` detects
-  the same condition locally against a hand-edited chain. Turning the
-  option off silently would leave the database's newest manifest row
-  describing an older schema, and every freshness check downstream would
-  pass — the exact silent fail-open this change exists to remove.
-- **`DeclaredTable`: migration authority becomes a type.** `table()`
-  returns a branded declaration; the brand is an optional phantom member
-  on the intersection, so `Table` itself is unchanged and its hover
-  output is preserved (the technique is already in use —
-  `column-builder.ts:168-198`). `HejbroInput`
-  (`packages/core/src/engine/generate.ts:36`) narrows to the branded
-  form: measured, that is the single type-level chokepoint, and the
-  query layer needs only `Table` (`packages/query/src/db/db.ts:45`,
-  `:112-117`), so a synced module queries exactly as a declared one
-  does. A synced module reaching `generate` is refused by a coded
-  error at one structural point — the shape `existingTable` already
-  proves (`existing-table-declared`, `engine/generate.ts:83-89`).
-  `[design]` settles the code name and which of the two candidate
-  points owns the refusal. The brand is acquired by calling `table()`
-  and by nothing else, which is what makes the refusal a decision
-  rather than a heuristic.
-- **`hejbro sync`.** Entry is `--db-url` then `DATABASE_URL` then a
-  coded refusal, and the driver is a dynamic import declared as no
-  dependency kind at all — the `check` command's own contract
-  (`packages/cli/src/check/driver.ts:14-28`, `:30-31`). It reads the
-  newest manifest row and writes one schema module: one **usage
-  constructor** call per table, an exported role list, and an exported
-  stamp. `--check` compares without writing. `--schema` parses and
-  refuses as reserved.
-- **The payload is validated, not cast.** The row's own columns are
-  checked before anything is read from them, and the document inside
-  the payload column is checked the same way rather than asserted into
-  shape. The boundary is one boundary: a row that carries a format
-  number this reader knows can still hold something that is not what
-  that format promises — hand-edited, truncated, or written by another
-  tool — and an unchecked cast turns exactly that into a module whose
-  types look sound. It gets its own code, distinct from format skew,
-  which is the different question of a number the reader does not know.
-- **A synced module never calls `table()`.** The brand exists only where
-  `table()` puts it, so a generated module that called it would hand
-  itself the very authority this change removes. `sync` emits a usage
-  constructor instead — it yields a plain `Table`, carries everything a
-  consumer needs (columns, `mode`, `notNullElements`, the TypeScript
-  keys, the export name, references), and cannot produce a
-  `DeclaredTable`. `[design]` settles its name and whether it extends
-  the `existingTable` shape (a `Table` already built without migration
-  authority) or stands on its own. Nothing stops a consumer from
-  writing `table()` by hand; the guide says why not to.
-- **The stamp is an exported value, not a header comment.** Both
-  consumers must read it, and `assertSchema`'s import graph forbids
-  `node:*` (`packages/cli/test/assert-schema-imports.test.ts:23-27`,
-  specified at `openspec/specs/query-execution/spec.md:642-651`), so it
-  can never read its own source file. A human-readable header comment
-  rides on top; the contract is the value.
-- **Drift is three states, not one.** (i) no manifest table, (ii) the
-  table exists but holds no row for this chain — the state a `baseline`
-  adoption sits in, because a baseline migration is registered rather
-  than run (`openspec/specs/cli-commands/spec.md:14-17`, `:47-51`) —
-  and (iii) a row exists and newer rows follow it: *behind by N*. Each
-  state gets its own code and its own remedy.
-- **`assertSchema` gains the same three states without gaining a
-  hash.** The CLI's only hash function imports `node:crypto`
-  (`packages/cli/src/hash.ts:1`), which that import graph forbids, so
-  the check is a string comparison between the module's exported stamp
-  and the manifest row, plus a count of the rows after it. The handle
-  type is unchanged: the stamp arrives inside `handle.schema`, and the
-  query goes out through `handle.driver`.
-- **Roles ride the existing opt-in.** The synced module exports its role
-  list and the consumer passes it as `options.roles`. No file under
-  `packages/query` is edited and `rls-execution-context` is not
-  modified — measured, and the code states the reason itself
-  (`packages/query/src/db/db.ts:53-64`: auto-collecting string exports
-  "would let a *typo'd* role name coincidentally match one of them and
-  pass validation", while "opt-in via `roles` keeps that rejection
-  deterministic").
-- **Config becomes honest about who needs what.** `migrationsDir`,
-  `snapshotPath` and `prefixStrategy` are meaningless in a repository
-  with no migration authority; they become optional and the commands
-  that need them refuse with a coded error, the shape `baseline`
-  already uses to narrow its own flag surface
-  (`openspec/specs/cli-commands/spec.md:36-42`). `[design]` settles how
-  far the relaxation goes and what a consumer repository is asked for.
-- **The loader preserves export names**, because the reverse relation
-  key is one. `[design]` settles the shape.
-- **Documentation**: `docs/guide/polyrepo.md` with a CI drift-check
-  workflow template (triggered by change, never by schedule),
-  `skills/hejbro/references/polyrepo-sync.md`, and its row in
-  `skills/hejbro/SKILL.md`'s References table.
-- **One `minor` changeset**, and a `sync` reachability assertion in
-  `scripts/pack-install-smoke.sh`'s assertion 3 — a database-free
-  assertion, because that script has no server.
+- `hejbro link <repo>` records the source **repository only**. `pull`
+  resolves the remote's symbolic HEAD, vendors the export, and writes
+  `hejbro.lock` (`commit`, `resolvedFrom`); `--ref` overrides one pull
+  and does not stick. Branch is intent, commit is truth.
+- What crosses is an **IR**, not declarations and not another
+  language's finished mirror: a Go repository would otherwise need Node
+  to read a schema, and a schema repository would otherwise have to
+  know every consumer's language.
+- The emitted mirror is **flat** — `Row`/`Insert`/`Update` per table in
+  the shape Supabase's `Database` type already uses — plus runtime
+  metadata and a `createDb(conn)` factory. The generic binding is done
+  inside the generated module; no type parameter reaches the user.
+- **No watch mode**, which was already permanently out of scope. The
+  cost is a promise that `generate` stays fast enough that explicit
+  invocation is not felt.
+- **Applying is first-class** (D12 revised): `migrate`, `reset` in the
+  schema repository, `db up` in the consumer.
 
-## What crosses the boundary and what does not
+## Two arguments corrected in the conversation, and corrected here
 
-This section is a contract, not a caveat.
+Both corrections came from the owner. The reasoning that survives is
+the one this proposal cites.
 
-**Crosses**: the snapshot; the four facts the snapshot does not hold
-(`mode`, `notNullElements`, `columnKey`, the table's export name); role
-names; the manifest format version; the snapshot format version.
+1. **Not "emit because many languages."** The owner objected that a
+   project rarely mixes languages, and the argument was withdrawn and
+   replaced: a tool used by agents should teach **one pattern**, so
+   prior knowledge accumulates instead of splitting per codebase. The
+   multi-language case describes a *product* spanning single-language
+   repositories, not a mixed build.
+2. **Not "static types."** The claim was restated as: what matters is
+   that the artifact is **committed**. A static type that lives only in
+   a build cache is as invisible as an inferred one. This is the axis
+   on which this change collides with an existing requirement, below.
 
-**Does not cross**: `$type` brands. `.$type<T>()` is a runtime identity
-method whose only effect is on `TMeta`, leaving "no brand trace anywhere
-runtime-visible" (`column-builder.ts:424-429`) — so the generator cannot
-read the brand at emission time. The deeper reason is that a brand *is*
-a TypeScript type, and that type does not exist in the consumer
-repository at all. A synced consumer therefore sees a branded `json`/
-`jsonb` column as `unknown`, which is D97's own default for an unbranded
-one — the honest answer, not a degraded one. The guide and the skill say
-so, and say where to put code that needs the brand: in the
-schema-owning repository.
+## What the settled design does to this change's own premises
 
-There is a shape that would carry a brand — `$type<T>(name)` recording a
-name, the manifest carrying `{column → brandName}`, `sync` emitting
-`import type` against a consumer-supplied brand module, and a missing
-export failing closed. It is not impossible; what is unsettled is
-whether that module is the consumer-side override patch layer the owner
-rejected. That classification is filed as **#576** and is not decided
-here. The manifest format therefore carries a version field from the
-first row, so a `brands` field can be added later without a migration
-of its own.
+Three premises die, and each takes work with it. Stating this plainly
+is the point of the revision — the alternative is carrying code whose
+reason has quietly left.
 
-## Size, and why the payload is carried whole
+**The sidecar's problem stops existing.** The manifest row carried six
+declaration-time facts — numeric mode, array element nullability,
+TypeScript keys, export names for tables and functions, role names —
+because *a consumer read the schema out of a database, and a database
+cannot be asked for them*. The export is produced by reading the
+declarations, so those facts are in hand before anything is carried.
 
-A manifest row must be self-contained, because `sync` reads only the
-newest one. So every enabled migration carries the whole payload, and
-that is measurable rather than arguable. Against `examples/postgres`:
-the payload is ≈17.9 kB minified, which turns the smallest migration in
-that chain (417 B) into ≈18.3 kB — **44×** — and the whole chain
-(15.4 kB) into ≈177 kB — **11.5×**.
+**The size argument inverts.** This change measured the embedded
+payload at ≈44× the smallest migration it appears in and accepted that
+cost, because the payload was the consumer's only channel. With the
+consumer served by git, the same measurement argues the other way: a
+cost paid for a reader that no longer reads.
 
-The cost is accepted, for three reasons that are also measurable. The
-same content already ships on every generate: `hejbro.snapshot.json` is
-24.6 kB and changes in full whenever the schema does, so the manifest
-adds a second copy of an artifact reviewers already skip rather than a
-new class of noise — and a test pins that it *is* the same content, so a
-reviewer who reads the snapshot has read the payload. Minified, that
-copy is **one line** in a diff, while the DDL a reviewer actually reads
-stays above it, ahead of the marker. And the guide states the size
-property in numbers, so enabling the option is an informed act.
+**Runtime verification is not built.** The owner's third judgement
+removes the last independent reason for a manifest row: comparing a
+running database against a stamp. What may survive is not a check but a
+**ledger** — the record an apply engine reads to know what to run next.
+That is a question for the apply engine, not for this change, and it
+appears below as a dependency rather than as a requirement here.
 
-Three smaller payloads were measured and rejected.
+The already-shipped `check` catalog comparison is untouched: it is a
+separate change and this one adds nothing on top of it.
 
-**A consumer projection** — tables, columns, foreign keys, enums, view
-column lists, function signatures, roles, sidecar; policy bodies,
-grants, RLS nodes, triggers, checks and indexes dropped — is 6.9 kB,
-61.7% smaller, and still 17.5× the smallest migration. It does not
-change the character of the cost, and it buys that reduction at a poor
-price: 60% of the saving comes from policy bodies and table checks,
-which are large only because expressions are stored as structured nodes
-(D67/D70), not because a consumer has no use for them; it forecloses
-the static grant/RLS warnings D96 keeps open; it needs a second format
-with its own version axis and its own determinism tests, where reusing
-the snapshot's serializer costs zero lines; and it reopens a settled
-discipline — `check` and `assertSchema` must report what they did not
-compare, by name and reason (`openspec/specs/cli-commands/spec.md:284-308`),
-and a projection makes "absent from the manifest" a third category
-nobody has defined.
+## What survives, measured
 
-**Dropping only the expression nodes** — policy bodies and table checks,
-the two items that account for 60% of the projection's saving — is
-6.5 kB smaller and keeps every object the schema has. It is the smallest
-conceptual change of the three, and it is still rejected: the payload
-stops being the snapshot while `snapshot_hash` continues to be the
-snapshot's hash, so the row carries a hash of something it does not
-contain. Restoring that correspondence means hashing the payload
-separately, which adds a second integrity axis to save four kilobytes.
+Research read each artifact rather than reasoning about it. The
+plumbing changes; the knowledge of *what must be carried* survives
+almost entirely.
 
-**Reconstructing from the sidecar plus live introspection** — carrying
-only the four missing facts and reading the rest from the database — is
-smaller still and is rejected on principle. It reintroduces two sources
-for one truth, where the declarations say one thing and the catalog says
-another, which is the failure mode this project exists to remove and the
-one a result-shape type layer with an override patch already
-demonstrated elsewhere.
+- **The payload builder is the IR's body.** The document assembled
+  today is `{tables, functions, roles}` plus the snapshot, serialized
+  by the one stable serializer. The IR is not a new format to invent:
+  the snapshot is its subset, and the sidecar is the remainder. A
+  consumer-facing projection was measured at −61.7%, most of the saving
+  being policy bodies and table checks.
+- **`snapshot.sql` already exists and is thrown away.** Startup
+  assertion code already calls generation against an empty snapshot and
+  keeps only `.snapshot`, discarding the `.sql` that is exactly the
+  squashed schema a consumer would need. Baseline's "must be first"
+  rule lives in the CLI, not in the engine, so nothing blocks the call.
+- **Git is already a seam.** One file owns every git subprocess in the
+  CLI, `execFileSync` only, no dependency, with UTC forced for
+  determinism. Its thirteen functions are all local; the remote ones
+  are new, and the precedent for adding them is established.
+- **The overwrite guard, the loader's export names, and the optional
+  config fields** all survive as they are. The consumer repository has
+  no migrations directory and no snapshot path, which is precisely the
+  case the optional-field work was built for.
+- **The refusal that a vendored mirror cannot author migrations** keeps
+  its wording exactly — it already says *the repository that owns its
+  schema*. Whether the brand still has something to protect depends on
+  whether a `Table` value reaches the consumer at all, which the
+  emitted shape decides.
 
-## Capabilities
+What ends: the manifest's SQL rendering and its quoting guard, the
+chain-monotonicity gate (whose failure mode — a stale newest row read
+as fresh — cannot occur when the truth is a committed file), the
+database connection path in the consumer, and most of the module
+emitter, whose output shape is replaced.
 
-### New Capabilities
+## How git is spoken to, measured
 
-- **`schema-manifest`** — what a migration writes into the database
-  about itself: when it is written, what it contains, how it is ordered,
-  how the chain stays monotone, and what a reader may conclude from a
-  row. This is the positive contract for an on-disk-and-in-database
-  artifact, and it is the anchor for everything this change generates:
-  an exception carved out of a prohibition would not state what is
-  written, only what is permitted.
-- **`schema-sync`** — the boundary command: how a database becomes a
-  schema module, what that module contains and guarantees, the three
-  freshness states and their remedies, and what the module is forbidden
-  to do (migrate).
+Four approaches were tried against a real remote. Symbolic-HEAD
+resolution returns the default branch and its commit in one call, using
+credentials already on the machine. `git archive --remote` is refused
+by GitHub outright. A cone-mode sparse checkout brings root files along
+with the directory asked for. A blobless partial clone reading files by
+`show <sha>:<path>` is the cheapest and the most precise, and an
+arbitrary reachable commit can be fetched directly — which is what
+makes a lock file the build's truth in CI.
 
-### Modified Capabilities
+A constraint the owner set on this change's earlier round carries into
+the new emitter unchanged: parsing a snapshot node's object keys stays
+out of the pure core, which is why the reader restates an internal shape
+rather than importing it. The emitted mirror is produced where the
+files are, not in core.
 
-- **`cli-commands`** — the new command joins the command surface, and
-  the configuration fields that only a migration-authoring repository
-  needs become optional with per-command refusals.
-- **`query-type-inference`** — a **clarification**, not a carve-out. The
-  existing requirement forbids generating "`.d.ts` or any other on-disk
-  type artifacts **for queries**"
-  (`openspec/specs/query-type-inference/spec.md:323-326`), and a synced
-  module is not one: it is a module of runtime values, and query types
-  are still *inferred* from them, because a table's type is captured
-  from its argument literal (`packages/core/src/dsl/table.ts:1255-1260`).
-  Carving an exception out of a prohibition that never covered this
-  would license the artifact without describing it — the appearance of
-  a rule where there is none. So the prohibition stays whole and gains
-  one sentence placing the boundary module outside it, the existing
-  scenario stays untouched, and the load-bearing anchor is
-  `schema-manifest`'s and `schema-sync`'s positive requirements.
+## The requirement this change reverses
 
-### Explicitly not modified
+The existing requirement says query typing works purely at the type
+level and the toolchain generates no on-disk type artifacts for
+queries. This change's own delta did **not** weaken that sentence: it
+left it untouched and argued that a synced module is not such an
+artifact, because *it declares runtime values and query types are
+inferred from those values*.
 
-- **`rls-execution-context`** — the four-source union stands as
-  specified. A synced module supplies role names through the source the
-  specification already names ("a role the caller explicitly opted into
-  on the db handle itself"), so the whitelist's fail-closed guarantee is
-  used, not widened.
-- **`snapshot-format`** — the manifest embeds the snapshot; it does not
-  change it. No format version moves.
-- **`migration-format`** — the banner is unchanged in meaning. Whether
-  the monotonicity marker is a new banner line is `[design]`, and
-  `[design]` alone decides whether that touches this capability.
+The settled design emits flat interfaces. That justification stops
+being true — an emitted `interface` is a type declaration, not a value
+— and so does the accompanying scenario, which promises that no type
+artifact accompanies the module. The requirement is therefore removed
+and replaced, not modified, and the decision-log entry behind it is
+amended rather than clarified.
+
+The honest reading of the collision: the prohibition protected users
+from a codegen step they had no way to keep current. The new shape
+supplies exactly that missing piece — a check whose failure names the
+command that fixes it — but it does not make the old sentence partly
+true.
+
+## Structure: this change, and the apply engine beside it
+
+**Recommendation: the apply engine is a separate change, sequenced
+first, and this one depends on it.**
+
+The reason is ownership, not size. If the apply engine's ledger lives
+here, this change owns a contract whose reason belongs elsewhere — the
+exact failure this revision is correcting, where a sidecar outlived the
+channel that justified it. Kept apart, each change stands on its own
+and this one's delta only has to say that a consumer can raise a
+database from a pinned snapshot.
+
+The dependency is explicit: the consumer loop (`db up`) and the
+two-repository witness cannot close without apply, so those groups
+sequence after it, exactly as this change already handed a
+requirement's second half from one group to another.
+
+Both observations that would have overturned this were checked, and
+both fail.
+
+**Nothing records what has been applied today.** The search for such a
+device returns three things: baseline's report telling the user to
+register the file *in your apply tool*, the specification saying the
+same, and a timestamp column on the manifest row. The first two hand
+the job to something outside hejbro. So an apply engine is not an
+extension of an existing asset; it is a new contract, and adoption of
+an already-migrated database — today handled entirely outside the tool
+— comes with it.
+
+**And the row's requirements are not settled by anything here.** The
+existing row satisfies a ledger's easy half: the database assigns the
+order, the history is append-only, and — newly measured — the row's
+snapshot hash is **byte-identical to the `-- snapshot:` line in the
+migration that wrote it**, so the join between ledger and files already
+exists and needs no new plumbing. What it cannot do is represent a
+failure: the insert is the file's last statement, so a migration that
+dies midway leaves no row, and a partial application is
+indistinguishable from one that never started. There is no column for
+a state, and baseline writes no row at all, which leaves an adopted
+database's first entry unaccounted for.
+
+Two further measurements make the same point, and both belong to that
+change rather than this one.
+
+**The row's form already matches the identity ruling, for a reason that
+also limits it.** The row is written by an INSERT inside the migration
+file, from values computed before anything ran: nothing reads a
+catalog, nothing is inferred from the database's state. That is
+self-recording, not introspection. But the recorder is the migration
+itself, so the record lives inside the thing that can fail — a failure
+is therefore unrecordable in principle, and "no row" means *not yet
+applied*, *failed midway*, and *applied from a migration generated
+without a manifest* all at once. Keeping that property or moving the
+write into the apply engine, which could record a start and a failure,
+is that change's first fork.
+
+**And one transaction per migration cannot be an unconditional rule.**
+Adding a value to an enum type is constrained inside a transaction
+block: the new value cannot be used until the transaction commits. The
+kind ordering puts enum statements before table statements in the same
+diff and the same stage, and the declaration surface can put a new
+value into a default or a check constraint, so a single migration that
+adds a value and uses it is expressible. Partial-failure semantics is
+therefore not an optional refinement of the apply engine — it is
+forced.
+
+Those are the apply engine's questions, not this change's. Deciding
+them here would put a ledger's contract inside a change about how a
+consumer obtains types — which is the error this revision exists to
+correct.
+
+**One correction belongs to me.** I ruled during the previous round
+that the manifest must never be read with a full-table fetch, because
+an append-only history has no row-count ceiling. Against a ledger that
+ruling is only half right: reading *many rows* is exactly what gap
+detection needs, and the ceiling is the number of migrations the
+repository has on disk, not the history's length. What stays right is
+the reason underneath it — the expensive part is the payload column at
+roughly 18 kB a row, not the row count, and the existing queries name
+their columns explicitly, so a narrow projection is a one-line change.
+The sentence as I wrote it reads as the broader prohibition and is
+corrected here rather than quietly relaxed later.
+
+## The fork everything else hangs on
+
+Research reduced the question *what survives* to a single choice, and
+it is a choice the owner has to make because it decides how much of the
+built work exists at all.
+
+**Does the consumer's query layer eat the emitted flat types and a
+metadata constant, or does it keep eating table values?**
+
+Today's query layer is built on table values: dozens of sites in the
+query package match on a table's column type parameter, and the write
+optionality a consumer sees — a defaulted column optional on insert, a
+computed one absent, an identity column that yields to a supplied value
+optional rather than absent — is derived from those values' metadata by
+existing logic, with nothing extra to write.
+
+If the mirror emits flat `Row`/`Insert`/`Update` interfaces, that
+optionality is decided when the file is written, as a `?` on a field.
+The consumer then holds no column builders at all, and everything that
+exists to re-tag them loses its reader: the three write-fact helpers,
+the usage-table constructor, the usage side of the authority brand, and
+the origin carrier that rides on it. That is most of two completed
+groups.
+
+If instead the mirror keeps table values beside the flat types, those
+assets stay exactly as they are, and the flat types are a second view
+onto the same thing.
+
+**This is settled: the consumer gets a metadata-based contract.** One
+file holds a `Database` interface in the shape users already know —
+tables, views, functions, enums — a metadata constant beside it, and a
+`createDb(conn)` factory. Table values do not cross.
+
+The reasoning, since the alternative was defensible. Keeping table
+values would have preserved the built assets and let the flat types
+ride along as a second view. But then a column's type is stated twice,
+and something has to keep the two statements equal for as long as the
+project lives — a permanent tax, paid at the centre of the contract,
+of exactly the kind this change has removed three times already. The
+metadata client costs a new layer once. A one-time construction beats a
+standing obligation, and it is also the only option that gives the
+owner's three requirements literally: one factory, one type file, no
+generics in the user's hands.
+
+What follows from it is written plainly below rather than softened.
+
+**The built work that loses its reader.** With no column builders in a
+consumer, nothing exists to re-tag them: the three write-fact helpers,
+the usage-table constructor, the usage side of the authority brand, and
+the origin carrier that rides on it. They are removed before merge,
+where removal costs a diff. The *declared* side of the authority brand
+is re-examined rather than removed with them — narrowing what
+`generateMigration` accepts is a schema-repository property that does
+not depend on what a consumer holds, and it either stands on that
+ground or it does not.
+
+**The work that appears.** The query package gains a client keyed by
+names rather than by table values. How much of the existing chain and
+compiler it reuses is a `[design]`, and it is the largest unknown in
+this change.
+
+Write optionality, which the removed helpers carried, is decided when
+the file is written: a defaulted column is optional in `Insert`, a
+computed one is absent, an identity column that yields to a supplied
+value is optional. The facts are the same; the place they are expressed
+moves from a type-level tag to a field's `?`.
+
+## Three facts the export must carry that nobody has needed yet
+
+The sidecar's list grows from six to nine, and the three new ones are
+not oversights — they are created by the new promise that the mirror is
+the whole database contract.
+
+- **A view's column types.** The snapshot stores a view's column
+  *names* and the select AST that produced them, not their types. A
+  Supabase-shaped `Views` entry needs the types, which means resolving
+  that AST against the table types. The one view in the examples is the
+  easy shape; an arbitrary projection or join is not, and today a
+  consumer cannot query a view at all.
+- **A function's signature, structurally.** The snapshot keeps the
+  rendered SQL text. The declaration keeps a discriminated form that
+  says *returns a set of this table*, which is exactly what turns into
+  a typed call returning that table's rows. Recovering it from the text
+  would mean parsing SQL type syntax.
+- **A function argument's TypeScript key.** This one is not merely
+  unserialized — the declaration itself does not keep it. Argument keys
+  are converted to snake case on the way in and the original is
+  dropped, and the conversion is one-way. A typed RPC call would
+  therefore ask for `user_id` rather than `userId` unless the
+  declaration side starts keeping the key.
+
+The last one reaches back into the declaration DSL rather than the
+export format, which is why it is listed here rather than buried in a
+task. It is also the natural boundary for how far function emission
+goes in this version: a fact the declaration itself does not keep
+cannot be carried by any format, so emitting typed calls with their
+declared argument names is a decision about the DSL, taken separately
+or deferred.
+
+The follow-up already filed against the old model — carrying function
+export names without emitting function declarations — is superseded in
+its reasoning by this section and needs a disposition: redefined
+against the export, absorbed here, or left standing. **[to be stated in
+the final draft]**
+
+## Owner gates, in the order they must be answered
+
+D12 is answered (revised in full). The rest, in dependency order:
+
+1. **The replacement wording for the generated-artifact prohibition**,
+   and the amendment to the decision it rests on. Removal plus a new
+   requirement, not a modification.
+2. **The manifest row's fate** — now a sub-question of the apply
+   engine's ledger rather than an independent one, since verification
+   is not being built.
+3. **The assets already built.** `DeclaredTable`, `syncedTable`, the
+   write-fact helpers: on this branch, not published — the shipped core
+   carries none of them. Removing one costs a diff through merge; the
+   point of no return is the release, because npm keeps a version
+   number for good. So this gate sits below the others rather than
+   above them.
+4. **Vocabulary, and one name that means the opposite elsewhere.** Our
+   `manifest` is a database row; the settled design has a
+   `manifest.json` in the export directory. Two artifacts, one word —
+   separated now, or conflated in specs and code later.
+
+   The consumer command is **`vendor`**, settled. `pull` was the
+   obvious name and is the wrong one: in the two tools whose users and
+   training data we inherit, `pull` means *introspect the database and
+   write declarations from it* — precisely what the identity ruling
+   excludes. A name that teaches the opposite of what it does would
+   have cost exactly what the Supabase-shaped contract was chosen to
+   buy. `vendor` says what happens, and has its own precedent in the
+   module ecosystem this channel is modelled on. `link`, `--ref` and
+   the lock keep their meanings.
+5. **The DSL becomes a statically parseable subset — decided now,
+   built later.** Today's DSL is executed: callbacks and thunks mean a
+   reader must run TypeScript to learn a schema. The constraint cannot
+   be applied retroactively, so the decision is recorded now and the
+   detection gate and documentation follow in their own change. Two
+   things fall out of it: a reader in another language could one day
+   read declarations without a JavaScript runtime, and the schema
+   repository's own tooling stops depending on execution to know what
+   was declared.
+
+6. **`generate`'s speed is a stated requirement.** Declining watch mode
+   rested on generation being fast enough that running it by hand is
+   not felt; that promise is written down as a requirement rather than
+   left as an intention, with sub-second generation as the target and
+   the reason — no daemon — recorded beside it.
+
+**Already decided, recorded so it is not re-proposed:** a one-time
+`import` deriving declarations from an existing database is **allowed
+as an on-ramp only**. An existing project has to get into this model
+somehow, and reading its database once is the only way in. After that
+run the declarations are the truth and the identity ruling governs the
+normal loop; re-running it habitually is not a supported path. That
+discouragement is carried by the design and the documentation, not by a
+prevention mechanism — the tool detects that declarations already exist,
+refuses to overwrite them, and names the flag that would, which is the
+same shape as the overwrite guard this change already built. It lives
+in its own change, sharing no file or contract with this one.
+
+Beyond that on-ramp, no feature in this change or its successors takes
+a live catalog reading as the basis for a judgement.
+
+The one gate still recorded without a recommendation: whether
+`generate`'s speed becomes a stated requirement, since declining watch
+mode rested on it.
+
+The already-shipped surfaces that do read a live catalog stay exactly as
+they are — this change neither extends them nor removes them.
+
+## Decision log entries this change would add or amend
+
+The settled directions live in a design conversation, which is not a
+decision record. They land as owner-gated entries before any delta
+cites them; otherwise a reviewer working from the repository alone
+meets a contract with no stated basis.
+
+Draft list, to be confirmed with the owner, the first one standing above
+the others and cited by them:
+
+1. **hejbro works from declarations, not from live infrastructure.**
+   The schema and its access are managed from what is declared; what a
+   database currently contains is not a source of truth the tool reads
+   to decide. Applying, and keeping a ledger of one's own applications,
+   are writes in the declared direction and are not exceptions to this.
+2. The git channel as the consumption mechanism.
+3. The emitted mirror as the consumer's type source, amending the
+   inference-only decision.
+4. D12's revision: applying is first-class, production included.
+5. A database's shape is not verified against the declarations.
+6. The vocabulary split between the database row and the export file.
+
+## Open decisions (`[design]`)
+
+1. **The fate of the sync command** — removed, or retained as an
+   internal step of `pull`.
+2. **How CI is told apart from a local run**, since replace and `--ref`
+   warn locally and fail in CI. Inferring from the environment is
+   invisible; a flag is visible but forgettable exactly where it
+   matters. **[awaits R1-01 axis ⑦ — precedent in this repository and
+   in the tools it already uses]**
+3. **The emitted module's file layout**, and what `createDb` binds to,
+   which decides what a consuming repository depends on.
+4. **The failure enumeration, recounted.** The seven states were
+   counted for a database reader. Research maps them: two are purely
+   runtime, one is purely deployment, and four span both because they
+   share the structure *reading a versioned document*. With runtime
+   verification not being built, the two runtime-only states have no
+   reader left in this change — they either move to the apply engine's
+   ledger, where the question becomes what this tool has applied, or
+   they end. The four spanning states reappear on the git side against
+   different artifacts, and new git-side failures join them: no export
+   directory at the resolved commit, a ref that does not resolve, a lock
+   naming a commit the remote does not have. The count is redone across
+   delta, verification table and task text together — this change has
+   already paid four times for a counting sentence left behind.
+5. **The vendored set** — emitted mirror, `snapshot.sql`, the IR, the
+   lock: which a consumer commits, and which is derivable.
+6. **Whether the banner's manifest line is repurposed or retired.**
+
+## What happens to the groups already done or planned
+
+Nothing here is closed yet; this is the map the sweep follows once the
+revision is approved. Completed groups keep their ticks and their
+ledger rows — the work happened, and the record of how long it took
+stays true regardless of what its output becomes.
+
+| Was | What becomes of it |
+|---|---|
+| **G1 — manifest emission in core** | The SQL rendering and its quoting guard end with the row. The payload assembly survives as the export's body. The banner line is a `[design]`: repurposed as an export marker, or retired. |
+| **G2 — migration authority as a type** | The usage side loses its reader with the fork and is withdrawn before merge. The declared side is re-examined on its own ground: narrowing what generation accepts is a schema-repository property and does not depend on what a consumer holds. Nothing is published, so either outcome costs a diff. |
+| **G3 — sidecar collection and configuration** | The sidecar *moves*: it is the part of the IR the snapshot does not carry. The optional-config work survives untouched and is needed more, since a consumer repository has no migrations directory. |
+| **G4 — emission wiring and monotonicity** | The monotonicity gate's failure mode cannot occur once the truth is a committed file. A different gate replaces it: the schema repository's own check that its export matches its declarations. |
+| **G5 — the sync command** | The overwrite guard and the snapshot-to-source type mapping survive. The origin carrier goes with the usage constructor it rides on. The connection path, the state classifier and most of the emitter end with the database channel. |
+| **G6 — freshness at startup** | Purpose dissolved by the judgement that a database's shape is not verified. Closes. |
+| **G7 — documentation and release** | Redefined against the new surface; reissued. |
+| **G8 — two-repository witness** | Redefined, and sequenced after the apply engine, since the consumer's loop cannot close without it. |
+
+The groups this change holds, with estimates frozen now that the shape
+is settled. The numbers are agent execution minutes, set against the
+measured actuals of the completed groups rather than against intuition.
+
+| # | Group | `est_frozen` |
+|---|---|---|
+| 1 | **Withdrawing what lost its reader** — the write-fact helpers, the usage-table constructor, the usage side of the brand, the origin carrier; and the re-examination of whether the declared side still stands on its own ground | 20m |
+| 2 | **The export directory** — the IR assembled from declarations including the three facts nobody has needed yet, the squashed schema SQL generation already computes and discards, and the export's own manifest. Determinism is this group's property | 55m |
+| 3 | **The schema repository's own check** — that the committed export matches the declarations, which turns "the default branch's export is valid" into a contract. Replaces the monotonicity gate, whose failure mode no longer exists | 30m |
+| 4 | **`link` and `vendor`** — symbolic-HEAD resolution, fetching one commit's export, the lock, and the overwrite guard carried over intact | 60m |
+| 5 | **The emitted contract** — the `Database` interface, the metadata constant, the factory | 70m |
+| 6 | **The name-keyed client in the query package** — the layer the metadata contract needs | 90m |
+| 7 | **The consumer's check** — a lock naming a commit the remote lacks, a ref resolved from somewhere other than the default branch, an active local replacement, and the local-versus-CI boundary | 40m |
+| 8 | **Documentation, skill and changeset** | 26m |
+| 9 | **The two-repository witness**, after the apply engine | 25m |
+
+Group 6 carries the most uncertainty and is the one to watch: it is the
+only group with no comparable predecessor, and its reuse of the
+existing chain and compiler is an open design question rather than a
+known quantity. If a re-freeze happens, it happens there, and the
+reason will be recorded rather than absorbed.
+
+## Deferred, with reasons
+
+- **Per-query codegen (the sqlc model).** Named in the conversation as
+  the principled endpoint for query result types. The name-keyed client
+  types entity-level operations from the `Database` contract, which is
+  what a consumer needs to read and write its tables. Emitting a
+  committed result type for each arbitrary projection or join is a
+  further step, weighing as much as the client itself, and it is its
+  own change.
+- **Other languages.** The IR carries a version field from day one; only
+  the TypeScript mirror is produced here.
+- **A hosted registry.** The owner chose the git-native channel only.
+- **Unifying the schema repository's own surface.** The consumer now
+  reads a contract file; whether the repository that owns the schema
+  eventually queries through one too, rather than through its
+  declarations, is a real question and a later one.
+- **The onboarding `import`.** Allowed, but its own change: it shares
+  no file and no contract with anything here, and it is the one place
+  where the truth flows the other way for a single run.
+
+## Measurement protocol, pre-registered
+
+The property this change stands or falls on moves from the migration's
+bytes to the export's and the mirror's.
+
+- **Claim**: the same declarations produce a byte-identical export
+  directory and a byte-identical mirror, on any machine, at any time,
+  under any file name.
+- **Instrument**: two runs over identical declarations with the clock
+  advanced between them, compared byte for byte; and a mirror emitted
+  twice from the same export.
+- **Judgment, fixed in advance**: any byte difference fails the claim.
+  No allowance for ordering, whitespace, or a timestamp in a header.
+- **A second, independent check** asserts the absence of the causes
+  rather than the symptom — no value derived from a clock, a machine,
+  or a path reaches either artifact — because two runs a second apart
+  can agree by luck.
+- **Determinism is now load-bearing in a way it was not.** Both
+  artifacts are committed and reviewed as diffs; an emitter that
+  reorders its output on a different machine turns every unrelated pull
+  into a review of noise.
+
+If the mirror carries both flat types and table values, one further
+property is pre-registered: **the two expressions of a column's type
+agree**, checked by a type-level assertion that fails when they
+diverge, since nothing else would observe it.
 
 ## Impact
 
-- **Affected code**: `packages/core/src/engine` and `packages/core/src/sql`
-  (render only — text, no I/O, no hashing), `packages/cli` (new command,
-  payload assembly, loader export names, config, `assertSchema`),
-  `skills/hejbro`, `docs/guide`, `scripts/pack-install-smoke.sh`.
-  **No file under `packages/query`, `packages/pg`, `packages/supabase`,
-  `packages/neon` or `packages/nile` is edited.**
-- **Breaking, one type-level consequence**: the migration input now
-  requires a table that carries declaration authority, so a user who
-  collects declarations through the bare `Table` type — `const list:
-  Table[] = [posts]` — no longer type-checks at the call. The remedy is
-  the exported `DeclaredTable`, and it is a one-word change. Nothing
-  else moves: the emission is opt-in, and with it off, core's 50
-  golden `.sql` files and every committed example chain are
-  byte-identical — the same shape the `-- hejbro: <version>` banner line
-  already demonstrates (present in examples, absent from all 50
-  goldens).
-- **Core purity**: rendering a statement is string construction, which
-  core already does for every statement it emits. The hash and the
-  connection stay in the CLI, as `chain.ts:118-119` requires.
-- **`examples/`**: unchanged. The two-repository witness lives beside
-  the CLI's existing live suites rather than in a new example package,
-  so no workspace package, no vitest configuration and no derived gate
-  (package counts, source roots, the pack-install smoke) moves.
-- **CI**: the witness needs a real Postgres, and CI runs none
-  (`.github/workflows/ci.yml:81-164` has no `services:` block and no
-  `test:integration` step). It is therefore excluded by pattern, the way
-  the existing live suites are (`packages/cli/vitest.config.ts:13-17`),
-  and every specification scenario keeps a database-free failing test in
-  the default run.
-
-## Open decisions (`[design]`, settled before the code that depends on them)
-
-1. The opt-in flag: its name, and whether it lives in `hejbro.config.ts`
-   or on the command.
-2. The bootstrap and table shape: column set, the identity column, and
-   whether the payload column is `jsonb` (queryable by plain SQL —
-   the owner's stated diagnostic requirement) or `text` (byte-preserving,
-   required only if the design re-hashes the payload itself). The two
-   are mutually exclusive; settled as `text`, for the reason recorded
-   under Known limits.
-3. How the payload is quoted inside the emitted SQL. Core's only helper
-   doubles single quotes (`packages/core/src/sql/literal.ts:2-3`), which
-   leaves a backslash in the payload at the mercy of a server with
-   `standard_conforming_strings` off — a risk we have not measured and
-   will not carry. The leading candidate is a fixed dollar-quote tag
-   with a fail-closed guard: if the payload contains the tag as a
-   substring, generation refuses with a coded error rather than emitting
-   something that might parse differently than it reads.
-4. The monotonicity marker: what it is, where it is read, and whether an
-   unknown banner line is ignored or refused by today's parser.
-5. The refusal code for a synced module reaching `generate`, and which
-   of the two candidate points owns it (single chokepoint).
-6. The five freshness codes and their remedies, including whether the
-   "no row yet" remedy prints the insert statement the baseline file
-   already contains, and how the two format-skew directions are named.
-7. How a foreign key whose target is outside the manifest is emitted —
-   a schema that references a table it declares as pre-existing has an
-   edge whose other end the manifest does not contain. The leading
-   candidate keeps the column and omits only the derived relation.
-8. Which row a stamp matches when more than one row carries the same
-   snapshot hash — a schema reverted and then restored produces exactly
-   that. The leading candidate is the newest such row, which makes the
-   counted distance the smallest true one.
-7. The upper bound on what a drift failure's text may assert. What is
-   detected is a hash mismatch and a row distance; the text may say
-   that and nothing more — never a cause it did not observe.
-8. The synced module: file name, header, and the exact names of the
-   exported stamp and role list.
-9. How far the config relaxation goes, and what a consumer repository is
-   asked to provide — including where the module's path comes from,
-   given that a consuming repository's declaration entry is the module
-   `sync` has not written yet on the first run.
-10. The loader change that preserves export names.
-11. `seq` presentation in diagnostics (the owner's "0042" form).
-12. The two-repository witness's shape.
-13. The usage constructor `sync` emits: its name, and whether it extends
-    the shape of the existing authority-free `Table` builder or stands
-    on its own. It must carry columns, `mode`, `notNullElements`, the
-    TypeScript keys, the export name and references, and it must be
-    unable to yield a branded declaration.
-
-## Decision log entries (draft — this change's approval gate)
-
-**D97, amended.** Inside the schema-owning repository, query types come
-from type-level inference over the declarations and nothing is
-generated — unchanged and absolute. At a polyrepo boundary, where a
-repository queries a schema it does not own and must not migrate,
-`hejbro sync` writes a **declaration** module of runtime values, from
-which query types are still inferred. What D97 rejected was an artifact
-"periodically overwritten and hoped fresh"; an artifact whose staleness
-is a loud, quantified failure in CI and at startup is not that. The
-carve-out is the boundary and nothing wider.
-
-**D108 (new).** **Schema distribution across repositories is a
-database-mediated manifest, not a package.** Each migration carries an
-append-only manifest row inside its own SQL — hejbro writes those
-statements and never executes them, so applying stays out of scope
-(D12). Emission is opt-in and, once enabled on a chain, monotone: a
-chain that carried a manifest and stops is refused, because the stale
-newest row would make every downstream freshness check pass. Ordering is
-the database's (an identity column), never a file name, because two of
-three prefix strategies are clock-derived and the emitted SQL must stay
-byte-deterministic. History exists to make drift quantitative ("behind
-by N"); there is no version-pin flag. The boundary artifact is a runtime
-value module carrying the four facts the snapshot does not hold plus
-role names; `$type` brands do not cross, and a branded column reads as
-`unknown` in the consumer. Connection entry is `--db-url` then
-`DATABASE_URL` only — the presets hold no connection knowledge to
-shorten (zero of the three read a connection string, and Supabase's
-endpoint is declared, never detected), so a preset shortcut would be an
-alias invented to look helpful.
-*Rejected*: distributing types as an npm package (staleness with no
-verification, and a release coupling between repositories that ship on
-different cadences); generating from introspection alone (four of the
-five needed facts are not in the database); a type-only artifact (the
-query API is value-driven, so the consumer needs values); a
-consumer-side override patch layer; a version-pin flag (it would make a
-consumer's staleness a supported configuration). Migration authority is
-a type brand acquired by calling the declaration constructor and by
-nothing else, so a synced module — which calls a usage constructor
-instead — is refused by the generator structurally rather than by
-inspection.
-
-## Measurement protocol (Rule 50, pre-registered)
-
-This change makes no performance claim, so no dispersion estimator
-applies. It does make a determinism claim, and the way that claim is
-tested is fixed here, before implementation:
-
-- **Instrument**: two `generate` runs over identical declarations and an
-  identical parent snapshot, separated by an injected clock difference
-  large enough to move every prefix strategy, compared byte for byte.
-- **Judgment rule, fixed in advance**: any byte difference fails the
-  claim. A difference is never explained away as "only the timestamp" —
-  that is precisely the failure mode.
-- **A second, independent check** asserts the absence of the cause
-  rather than of the symptom: the emitted manifest statements contain no
-  value derived from a clock or from a file name. Two checks because a
-  passing byte comparison could be an accident of a fast test run.
-- **The live witness is corroboration, never the gate.** Every scenario
-  keeps a database-free failing test; the Docker-gated two-repository
-  run proves what a server actually received and is excluded from
-  `pnpm test` and from CI by pattern.
-- **Direction of the caveat**: measurements of today's repository are a
-  floor. Where a claim rests on reading source rather than running it,
-  the specification states what is asserted and the task names the test
-  that makes it true.
-
-## The two-repository witness, and what it is not
-
-A stub proves what `sync` wrote. Only a server proves that a migration's
-own SQL put the row there and that a second repository read it back. The
-witness is therefore end to end: apply a schema repository's chain to a
-container, run `sync` in a consumer fixture, type-check the consumer's
-queries against the generated module, and let `assertSchema` pass and
-then — after one more migration is applied — fail with a counted
-distance. One more end-to-end assertion belongs here and nowhere else:
-running `generate` against the synced module is refused with its coded
-error, which is the only place the whole authority boundary is exercised
-by real files rather than by types.
-
-Four constraints keep it honest and cheap: it reuses the existing
-recipes rather than inventing one (`examples/cli-smoke/test/e2e.test.ts`
-for the built-CLI spawn and its stale-build guard,
-`scripts/roundtrip.sh:57-83` for a temporary project with relinked
-`node_modules`); it needs no new workspace package and no new vitest
-configuration, joining the CLI package's existing Docker-gated suites,
-which are already excluded from the default run by pattern; it never
-reports success when Docker is absent; and it lives in its own task
-group so a Docker dependency never contaminates a group that has none.
-
-Both "repositories" are temporary directories the test builds, so the
-witness pins the boundary rather than a checked-in example, and the
-scenarios that need a server — a chain applied from a later migration,
-a distance counted across rows applied within the same second — are
-paired here with the shape assertions that stand in the default run.
-
-## Known limits
-
-Two are accepted rather than defended against, because the defense would
-cost more than the failure.
-
-- **A snapshot format bump couples the two repositories.** The manifest
-  format's own skew rule is asymmetric on purpose, but the payload
-  embeds a snapshot, and the snapshot reader refuses in both directions
-  — so when the snapshot format moves, a consumer cannot read a payload
-  generated by an older hejbro until the owning repository regenerates.
-  Undoing that would mean reading superseded snapshot formats, which is
-  the cross-version upgrade path #413 exists to build; when it lands,
-  this coupling is worth revisiting.
-
-- **A naive apply tool that splits on semicolons can mis-split the
-  dollar-quoted payload.** Tools that parse SQL — psql included — do not,
-  and psql is what the witness exercises. Working around the naive case
-  would mean giving up dollar quoting, which is the thing that makes the
-  payload safe to embed in the first place.
-
-The payload column is `text`, not `jsonb`, for one reason: `jsonb` does
-not preserve key order, so the stored row would stop being the snapshot
-bytes while `snapshot_hash` went on being the snapshot's hash — a row
-carrying the hash of something it does not contain. Diagnosing a stored
-manifest in plain SQL costs one `::jsonb` cast and is otherwise
-unaffected.
-
-The manifest table is invisible to `check`: that command compares
-declared schemas only, so an undeclared schema and everything in it is
-never reported as drift. That invisibility is a consequence of a choice,
-not a property of the name — **the manifest table is deliberately not
-declared through the DSL.** Declaring it would put its schema into the
-declared set, and everything else that ever appears in that schema would
-begin reporting as unmanaged. Anyone converting the bootstrap from
-rendered SQL into declarations is changing this outcome too.
-
-## Out of scope
-
-- **Carrying `$type` brands across the boundary** (#576) — the
-  classification question is the owner's, and the manifest's version
-  field keeps the door open.
-- **Preset connection shortcuts.** Measured: no preset reads a
-  connection string or an environment variable, and Supabase's endpoint
-  is "declared, never detected". A `--supabase` flag would shorten
-  nothing it is entitled to know.
-- **Implementing `--schema`.** It is parsed and refused as reserved, so
-  the flag's meaning is fixed now and its behavior can arrive without a
-  surface change.
-- **Emitting function declarations into a synced module** (#587). The
-  approved consumer surface is the type layer of tables; a typed function
-  surface is a new scope, not a detail of this one. The manifest carries
-  function export names anyway, so that version needs no format change —
-  which is exactly why the fact is carried now rather than later.
-- **A supported path for writing usage declarations by hand.** The usage
-  constructor exists for the module `hejbro sync` writes, and its name
-  says where such a module comes from. This change builds no workflow,
-  no documentation and no guarantees around authoring one directly; a
-  repository that owns its schema declares it, and one that does not
-  syncs it. Hand-written usage declarations are neither built nor
-  refused nor special-cased here: a table without the declared brand
-  behaves the same whatever wrote it, and what that behaviour is, is a
-  requirement rather than a sentence in this paragraph.
-- **Applying migrations** (D12), including any command that would write
-  the manifest row itself.
-- **A version-pin flag** (`--at`). Owner-settled: pinning would make a
-  consumer's staleness supported instead of visible.
-- **Regenerating the existing example chains.** The option is off for
-  them, and turning it on would rewrite committed migrations for a
-  demonstration the witness already provides.
+- **Affected**: the CLI gains git remote functions in the file that
+  already owns every git subprocess, an export writer, an emitter, and
+  two commands. The core keeps its purity: parsing a snapshot node's
+  object keys stays outside it, by the owner's condition on this
+  change's earlier round.
+- **Ends**: the manifest's SQL rendering and quoting guard, the
+  chain-monotonicity gate, the consumer's database connection path.
+- **Not touched**: the shipped `check` and its live catalog comparison
+  — neither extended nor removed.
+- **Depends on**: the apply engine, for the consumer loop and the
+  witness only.
+- **Dependencies added**: none. Remote git is reached through the same
+  subprocess seam as local git, measured against a real remote.
