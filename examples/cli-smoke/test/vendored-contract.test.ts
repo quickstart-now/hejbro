@@ -155,4 +155,85 @@ describe("a vendored contract type-checks against the real, installed hejbro pac
 		expect(check.stdout).toBe("");
 		expect(check.exitCode).toBe(0);
 	});
+
+	/**
+	 * D106 m8: `query-type-inference`'s own "a vendored contract types a
+	 * query … matches what the same query yields against the owning
+	 * repository's declarations" had never been checked at the type
+	 * level — only per-member (`contract-types.test.ts`) and by SQL
+	 * parity (`parity.test.ts`). This is the missing observer: the same
+	 * declarations, read two ways (a local `db()` handle and a vendored
+	 * `createDb()` handle), compiled together by one real `tsc`, with a
+	 * type-level equality check that only compiles if the two `select()`
+	 * result types are structurally identical.
+	 */
+	it("a local db() handle and a vendored createDb() handle agree on a query's result type (D106 m8)", async () => {
+		const init = await runCli(schemaRepo, ["init"]);
+		expect(init.exitCode).toBe(0);
+		await mkdir(join(schemaRepo, "src"), { recursive: true });
+		await writeFile(join(schemaRepo, "src", "app.schema.ts"), SCHEMA_SOURCE);
+		const generate = await runCli(schemaRepo, ["generate", "--export"]);
+		expect(generate.exitCode).toBe(0);
+		await run("git", ["init", "-q"], schemaRepo);
+		await run("git", ["config", "user.email", "smoke@example.com"], schemaRepo);
+		await run("git", ["config", "user.name", "smoke"], schemaRepo);
+		await run("git", ["add", "-A"], schemaRepo);
+		await run("git", ["commit", "-q", "-m", "export"], schemaRepo);
+
+		const link = await runCli(consumerRepo, ["link", schemaRepo]);
+		expect(link.exitCode).toBe(0);
+		const vendor = await runCli(consumerRepo, ["vendor"]);
+		expect(vendor.exitCode).toBe(0);
+
+		// The same declarations the schema repository committed, copied
+		// verbatim -- not imported across repositories (there is no
+		// package boundary here to cross), just present so one `tsc`
+		// invocation can type-check both paths against the identical
+		// schema source.
+		await writeFile(join(consumerRepo, "local-schema.ts"), SCHEMA_SOURCE);
+		const parityCheckPath = join(consumerRepo, "type-parity-check.ts");
+		await writeFile(
+			parityCheckPath,
+			`import type { Driver } from "hejbro";
+import { db } from "hejbro";
+import * as localSchema from "./local-schema";
+import { createDb } from "./.hejbro/vendor/contract";
+
+declare const driver: Driver;
+
+const localHandle = db(localSchema, driver);
+const vendoredHandle = createDb(driver);
+
+const localChain = localHandle.select(localSchema.posts);
+const vendoredChain = vendoredHandle.posts.select();
+
+type LocalRow = Awaited<typeof localChain>[number];
+type VendoredRow = Awaited<typeof vendoredChain>[number];
+
+type AssertEqual<A, B> = A extends B ? (B extends A ? true : false) : false;
+// Fails to compile (never is not assignable to true) if the two
+// result types are not structurally identical.
+const _typesAgree: AssertEqual<LocalRow, VendoredRow> = true;
+void _typesAgree;
+`,
+		);
+
+		const check = await run(
+			TSC_PATH,
+			[
+				"--noEmit",
+				"--strict",
+				"--moduleResolution",
+				"bundler",
+				"--module",
+				"esnext",
+				"--target",
+				"es2022",
+				parityCheckPath,
+			],
+			consumerRepo,
+		);
+		expect(check.stdout).toBe("");
+		expect(check.exitCode).toBe(0);
+	});
 });

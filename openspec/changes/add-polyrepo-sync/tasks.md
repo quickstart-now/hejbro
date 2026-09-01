@@ -391,7 +391,15 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       while keeping the column. Start from `cli/test/sync-emit.test.ts >
       derives no relation for a reference to an unmanaged table`. ~6m
 
-## 6. Freshness at startup — `est_frozen: 30m` — issue #584
+## 6. Freshness at startup — **superseded by the git-channel pivot, not built** — `est_frozen: 30m` — issue #584
+
+**D106 m7**: this group belonged to the withdrawn database channel — a
+manifest row to read at startup no longer exists once the channel is
+git, not a database (proposal.md, "What happens to the groups", G6:
+"Purpose dissolved by the judgement that a database's shape is not
+verified"). Left unchecked below is correct, not pending: nothing here
+is planned for this change, ever. Kept for the historical record rather
+than deleted, the same reasoning R2-G9's own header uses for its move.
 
 Files: `packages/cli/src/assert-schema.ts`,
 `packages/cli/src/manifest-read.ts` (new).
@@ -426,7 +434,16 @@ Files: `packages/cli/src/assert-schema.ts`,
       `cli/test/assert-schema-manifest.test.ts > distinguishes the seven
       situations`. ~12m
 
-## 7. Documentation and release plumbing — `est_frozen: 26m` — issue #585
+## 7. Documentation and release plumbing — **superseded by R2-G8, not built as written here** — `est_frozen: 26m` — issue #585
+
+**D106 m7**: redefined against the shipped git-channel surface rather
+than run as its own group (proposal.md, "What happens to the groups",
+G7: "Redefined against the new surface; reissued") — the actual
+documentation/skill/changeset work is R2-G8's, whose own files
+(`docs/guide/polyrepo.md`, `skills/hejbro/references/polyrepo.md`,
+`SKILL.md`, `.changeset/*.md`, `scripts/pack-install-smoke.sh`) are the
+same list below with one rename (`polyrepo-sync.md` → `polyrepo.md`).
+Kept for the historical record, same reasoning as group 6 above.
 
 Files: `docs/guide/polyrepo.md` (new),
 `skills/hejbro/references/polyrepo-sync.md` (new),
@@ -457,7 +474,15 @@ it; that gate is the task's red signal.
       smoke. Gate: `changeset status`, then
       `scripts/pack-install-smoke.sh` assertion 3. ~6m
 
-## 8. The two-repository witness — `est_frozen: 25m` — issue #586
+## 8. The two-repository witness — **superseded by R2-G9, which itself moved to #603 — not built here** — `est_frozen: 25m` — issue #586
+
+**D106 m7**: redefined and sequenced after the apply engine
+(proposal.md, "What happens to the groups", G8: "Redefined, and
+sequenced after the apply engine, since the consumer's loop cannot
+close without it") — became R2-G9, which itself later moved in full to
+the apply-engine change (#603, see R2-G9's own header for that second
+hop). Two supersessions deep; kept for the historical record, same
+reasoning as groups 6 and 7 above.
 
 Files: `packages/cli/test/integration/polyrepo.integration.test.ts`
 (new) and its fixture helpers in the same directory. **No new package
@@ -1054,6 +1079,15 @@ rather than importing it", confirmed to mean exactly this.
       execution proof. Renamed the two red tests accordingly
       (`the exported roles are exactly what the schema declares` /
       `omitting every grant leaves the role list empty, not omitted`).
+      **D106 finding B2**: this narrowing renamed the tests but never
+      propagated to the delta's own requirement text, which kept
+      describing a "consumer passes the roles explicitly" interaction
+      the shipped factory (one-parameter `createDb`) makes impossible.
+      Fixed by revising the requirement to the model that actually
+      shipped — opt-in moved from construction time to call time
+      (`client.as({role})`) — with a third, previously-missing observer
+      added (`roles.test.ts`: no role is active without calling
+      `as()`). See `blackbox/` for why the gap survived.
 - [x] 5.9 No relation for an unmanaged target. Start from
       `cli/test/contract-emit.test.ts > no relation is derived for an
       unmanaged target`. ~6m
@@ -1548,7 +1582,13 @@ count was cited.
       "reads an older format with absent facts absent" fixture against
       — `validateExport`'s own comment records this rather than
       claiming the scenario is proven. Closes for real the day format
-      `2` ships.
+      `2` ships. **D106 M4/m7**: the delta's own requirement text now
+      states this same boundary explicitly (`schema-vendoring/spec.md`,
+      "A description format newer than the reader is refused"), so the
+      spec and this note agree rather than the spec silently promising
+      more than this task ever closed. Still left unchecked — the
+      downward scenario remains genuinely unobservable, not merely
+      undocumented.
 - [x] 7.5 The enumeration test runs the reader against each situation
       and compares the codes themselves, not their labels. Start from
       `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
@@ -1595,6 +1635,12 @@ for the same finding)**: the guide's failure table and the skill's own
 wording both moved from ten to eleven once `vendor-not-yet-vendored`
 was recognized as a genuine member — this implementer's own gap, not a
 planner-approval reversal, so it's counted as pace here too.
+**Correction (D106 M7): that claim was itself wrong for one row.**
+`references/polyrepo.md`'s own body text moved to "eleven", but
+`SKILL.md`'s References table row — a separate copy of the same count,
+one line — was missed and still said "ten" at merge. Fixed by D106's
+own pass; the eighth counting failure of this change, and the first
+found outside the team that built it.
 
 - [x] 8.1 The guide's body: what crosses and what does not, the command
       surface, and the boundary between local freedom and committed
@@ -1607,12 +1653,17 @@ planner-approval reversal, so it's counted as pace here too.
       with `vendor`" (owner ruling, planner-directed, added after the
       body's own first draft — monorepo/polyrepo/neighbor-checkout, with
       the trap named explicitly: `link ../schema` *inside* a monorepo is
-      a working but unnecessary detour); the five real commands
-      (`link`/`vendor`/`vendor --check`/`outdated`, `vendor` covering
-      both the first vendor and every later pin move — there is no
-      separate `--update` flag), with the sixth (`pull --db-url`)
-      explicitly named as **not existing yet** (#604) rather than left
-      unmentioned or promised; the four-file pair
+      a working but unnecessary detour); the four consumer-side
+      commands (`link`/`vendor`/`vendor --check`/`outdated`, `vendor`
+      covering both the first vendor and every later pin move — there
+      is no separate `--update` flag) plus the schema repository's own
+      `generate --export`, covered separately (**D106 FIX-03
+      correction**: the guide itself later split this into "four
+      commands … plus `generate --export`" (finding m3) — this row said
+      "five" and named only the four in parentheses; fixed to match),
+      with the sixth (`pull --db-url`) explicitly named as **not
+      existing yet** (#604) rather than left unmentioned or promised;
+      the four-file pair
       (`hejbro.json`/`hejbro.lock`/the two IR files/`contract.ts`) via
       the `package.json`/`package-lock.json` analogy the owner's own
       education frame already uses; `--strict`'s TTY default and that it
@@ -1748,3 +1799,65 @@ only genuinely new scope this absorption added was the row-conversion
 assertion (`numeric`/`bigint`/`timestamptz` off a real driver) that
 6.11's own text named. That 27m, and the row-conversion scope it
 covers, is what now travels to #603.
+
+## Archive procedure — verified, one step you can now skip
+
+**D106 finding, PS-D106-FIX-02**: a reviewer ran `openspec archive
+add-polyrepo-sync -y` in an isolated worktree (reverted after) and
+observed `+ 24, ~ 1, - 0` — zero removals, so both REMOVED requirements
+(`cli-commands`'s "The database driver is an optional dependency" and
+`query-type-inference`'s "No generated type artifacts") would have
+survived archive alongside their own replacements, the corpus asserting
+both a prohibition and its opposite at once.
+
+**Root cause, confirmed by observation, not assumed**: this change's
+own delta files headed their REMOVED entries `### Removed: <title>`.
+`openspec archive` matches a REMOVED entry against the shipped spec by
+the exact header shape ADDED/MODIFIED entries use — `### Requirement:
+<title>` — and a `### Removed:` header simply never matches, with no
+error surfaced. Two minimal probes confirmed this, both in a detached
+`/tmp` worktree, never this one:
+1. Every *other* archived change in this repository's own history
+   heads its REMOVED entries `### Requirement: <title>`, and their
+   removals took (e.g. `align-spec-corpus`'s "The baseline banner
+   marker is machine-readable" — gone from the shipped `cli-commands`
+   spec today).
+2. Changing only this change's own two header lines from `### Removed:`
+   to `### Requirement:` (title text byte-identical either way) and
+   re-running the same archive produced `- 2 removed`, and the shipped
+   specs then carried the new requirement alone.
+
+`schema-export`/`schema-vendoring` are unaffected either way: both are
+first-time `create` capabilities (`openspec/specs/` carries neither
+today), so their own eleven `### Removed:` entries have no shipped
+baseline to remove from regardless of header shape — the archive tool's
+own dry-run output never lists a removal for either, before or after
+this fix.
+
+**Fix applied at the source, not a manual archive-time step**: the root
+cause is a delta-format mismatch (the tool's own REMOVED-matching
+respects `### Requirement: <title>`, not `### Removed: <title>`), and
+where the tool has a format it respects, the delta is corrected to that
+format rather than a person doing by hand what the CLI already does —
+both headers corrected in this change's own delta files
+(`cli-commands/spec.md`/`query-type-inference/spec.md`, title text
+unchanged), each carrying a one-line note explaining why. Confirmed by
+a real dry run, not assumed: `openspec archive add-polyrepo-sync -y`
+in an isolated worktree, reverted after, reported `- 2 removed`, and a
+grep of the resulting rollup specs confirmed zero remaining hits for
+`cli-commands`'s own "The database driver is an optional dependency"
+and `query-type-inference`'s own "No generated type artifacts".
+
+**Before the real archive, re-run this exact check** — this is a
+confirmation of a fix already made, not a manual removal to perform:
+1. `openspec validate add-polyrepo-sync --strict` passes.
+2. `openspec archive add-polyrepo-sync -y` reports `- 2` in its totals
+   line, not `- 0`.
+3. `grep -rn "The database driver is an optional dependency"
+   openspec/specs/cli-commands/spec.md` and `grep -rn "No generated
+   type artifacts" openspec/specs/query-type-inference/spec.md` both
+   return nothing.
+
+If any of the three fails, stop before committing the archive —
+something about this tool's own matching changed since this note was
+written, and that is worth a new finding, not a silent workaround.

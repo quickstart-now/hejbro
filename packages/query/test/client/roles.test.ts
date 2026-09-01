@@ -64,4 +64,23 @@ describe("the role whitelist reaches the client from the contract's exported lis
 			expect((error as { readonly code: string }).code).toBe("undeclared-role");
 		}
 	});
+
+	/**
+	 * D106 B2, condition ①'s own third observer: holding the contract
+	 * carries the whitelist, but adopts nothing from it on its own.
+	 * `contextRequired: true` makes any uncontexted statement fail loudly
+	 * (the same mechanism `context-required.test.ts` uses) -- if this
+	 * call silently picked a role for the caller, the statement would
+	 * carry a context and this driver would accept it; it doesn't, so it
+	 * fails the same way an ordinary `db()` handle's own unscoped call
+	 * would against this driver.
+	 */
+	it("no role is active without calling as() -- an unscoped call runs uncontexted", async () => {
+		const { driver } = recordingTransactionalDriver({ contextRequired: true });
+		const client = createNameKeyedDb<TestDatabase>(driver, METADATA);
+
+		await expect(client.posts.select()).rejects.toMatchObject({
+			code: "context-required",
+		});
+	});
 });

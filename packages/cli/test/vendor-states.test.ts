@@ -135,6 +135,25 @@ describe("hejbro vendor — the eleven named failure situations (R2-G7)", () => 
 		expect(result.stderr).toContain("vendor-export-invalid");
 	});
 
+	it("refuses a format.json that does not answer its own format, under member 5's own code (D106 M3)", async () => {
+		await writeExportFiles(
+			remote,
+			VALID_SCHEMA,
+			// A plausible hand-edit -- renamed "descriptionFormat" to
+			// "format" -- not member 6's territory (a value newer than
+			// this toolchain knows): the shape itself doesn't parse, so
+			// there is no version to compare yet.
+			'{"format":1,"snapshotFormat":8}',
+		);
+		remote.commit("export v1", "2026-01-01T10:00:00Z");
+		await runCli(cwd, ["link", `file://${remote.cwd}`]);
+
+		const result = await runCli(cwd, ["vendor"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("vendor-export-invalid");
+		expect(result.stderr).not.toContain("vendor-export-format-unsupported");
+	});
+
 	it("refuses a newer description format and names the upgrade (member 6)", async () => {
 		await writeExportFiles(
 			remote,

@@ -349,11 +349,18 @@ computed one is absent, an identity column that yields to a supplied
 value is optional. The facts are the same; the place they are expressed
 moves from a type-level tag to a field's `?`.
 
-## Three facts the export must carry that nobody has needed yet
+## Three facts nobody has needed yet, and the owner's call on them
 
-The sidecar's list grows from six to nine, and the three new ones are
-not oversights — they are created by the new promise that the mirror is
-the whole database contract.
+**Amended: the owner settled on none of the three, this version** (task
+2.8's own decision) — this section is kept as the reasoning for why they
+exist as a question at all, not as a claim about what shipped. The
+three are not oversights; they are created by the new promise that the
+mirror is the whole database contract, and the sidecar's carried list
+stays at the same six facts it already had. A view yields no export
+fact at all; a function's fact carries only its names, never a
+signature — a consumer sees no view entry and no function
+argument/return information, documented as absent on `ExportDescription`
+itself rather than guessed at.
 
 - **A view's column types.** The snapshot stores a view's column
   *names* and the select AST that produced them, not their types. A
@@ -383,9 +390,14 @@ or deferred.
 
 The follow-up already filed against the old model — carrying function
 export names without emitting function declarations — is superseded in
-its reasoning by this section and needs a disposition: redefined
-against the export, absorbed here, or left standing. **[to be stated in
-the final draft]**
+its reasoning by this section, and its disposition is **absorbed here**:
+the export's own `functions` fact list already carries each function's
+`exportName` alongside its schema-qualified name (`schema-export`'s own
+description shape). Emitting a typed call from that fact remains a DSL
+decision this change does not make, the same as every other item this
+section lists — the follow-up's own request is already satisfied at the
+fact-carrying layer; only the emission is still open, and it stays open
+here rather than being redefined into a new obligation.
 
 - **An object this repository does not own.** An application that joins
   a platform-owned table has nothing to join against: the export
@@ -420,29 +432,32 @@ D12 is answered (revised in full). The rest, in dependency order:
 
    ```
    hejbro link github.com/org/schema   # register the source once
-   hejbro vendor                       # write the IR and contract, pin the lock
-   hejbro vendor --update              # move to the newest commit (the one networked command)
+   hejbro vendor                       # write the IR and contract, pin the lock -- first run and every later pin move alike
    hejbro vendor --check               # verify against the lock (offline, CI)
    hejbro outdated                     # is there a newer commit (advisory)
    hejbro pull --db-url <url>          # the database fallback, with its warning
    ```
 
-   The verb stays `vendor` and the satellites follow package-manager
-   habit. `vendor` names what happens — the IR is copied into the
-   repository and pinned — and this revision is what earns the name:
-   with the IR itself committed, the word describes the artifact
-   rather than the intent. The precedent it borrows from is the module
-   ecosystem this channel is modelled on. `pull` is free to mean the
-   database fallback, which is what the tools that trained everyone's
+   **Correction (D106 M8): the shipped surface folds "move to the
+   newest commit" into plain `vendor` rather than a separate
+   `--update` flag** — `vendor` is first-run and update alike, so there
+   is nothing left for a satellite flag to name. The verb stays
+   `vendor` and the remaining satellites follow package-manager habit:
+   it names what happens — the IR is copied into the repository and
+   pinned — and this revision is what earns the name: with the IR
+   itself committed, the word describes the artifact rather than the
+   intent. The precedent it borrows from is the module ecosystem this
+   channel is modelled on. `pull` is free to mean the database
+   fallback, which is what the tools that trained everyone's
    expectations already use it for, so the one name that would have
-   fought prior knowledge now agrees with it. `outdated`, `--check` and
-   `--update` say to a package manager's user exactly what they say
-   here.
+   fought prior knowledge now agrees with it. `outdated` and `--check`
+   say to a package manager's user exactly what they say here.
 
    One property of the surface is worth stating because it is the
-   point of the vendored IR: **`--update` is the only command that
-   needs the network.** Everything else — checking, regenerating,
-   type-checking — runs from committed files.
+   point of the vendored IR: **only `vendor` — and the advisory
+   `outdated`, which also reaches the remote to answer "is there a
+   newer commit" — need the network.** Checking, regenerating and
+   type-checking all run from committed files alone.
 5. **The DSL becomes a statically parseable subset — decided now,
    built later.** Today's DSL is executed: callbacks and thunks mean a
    reader must run TypeScript to learn a schema. The constraint cannot
@@ -618,8 +633,13 @@ measured actuals of the completed groups rather than against intuition.
    commit's export, the lock, and the overwrite guard carried over
    intact. The consumer commits the contract file, the IR and the
    lock, so that checking, regenerating and type-checking all run from
-   committed files and only `--update` needs the network. The lock
-   records the IR format version alongside the commit. `est_frozen: 70m`
+   committed files, and only `vendor` (moving the pin) and the advisory
+   `outdated` reach the network. **Corrected (D106 N1): no separate
+   `--update` flag exists** — `vendor` itself is the command that
+   moves the pin, first run and every later one alike; this sentence
+   named a flag the command-surface section's own D106 M8 correction
+   had already folded away. The lock records the IR format version
+   alongside the commit. `est_frozen: 70m`
 5. **The emitted contract** — the `Database` interface, the metadata
    constant, the factory. The contract file also carries the point it
    was generated from — the migration head it corresponds to, or the

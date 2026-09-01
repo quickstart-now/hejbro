@@ -7,7 +7,7 @@
 [![tasks · 490 done](https://img.shields.io/badge/tasks-490%20done-blue)](openspec/task-times.csv)
 [![avg task · 11m](https://img.shields.io/badge/avg%20task-11m-blue)](openspec/task-times.csv)
 [![estimate · 1.19x](https://img.shields.io/badge/estimate-1.19x-blue)](openspec/task-times.csv)
-[![overhead · 28%](https://img.shields.io/badge/overhead-28%25-blue)](openspec/task-times.csv)
+[![overhead · 29%](https://img.shields.io/badge/overhead-29%25-blue)](openspec/task-times.csv)
 <!-- tasktime-badges:end -->
 
 > hej (Swedish: "hello") + bro (Swedish: "bridge") — hello, bridge.
@@ -193,7 +193,8 @@ pnpm build && pnpm --filter example-postgres roundtrip
 
 Guides: [getting started](docs/guide/getting-started.md) ·
 [indexes](docs/guide/indexes.md) · [renames](docs/guide/renames.md) ·
-[CI](docs/guide/ci.md)
+[CI](docs/guide/ci.md) ·
+[schema across repositories](docs/guide/polyrepo.md)
 
 ## For agents
 

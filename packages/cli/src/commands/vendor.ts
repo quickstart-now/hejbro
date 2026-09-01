@@ -23,6 +23,7 @@ import {
 } from "../vendor/lock";
 import { readSourceFile } from "../vendor/source-file";
 import { assertBoundaryAtCheck, warnIfNonDefaultRef } from "../vendor/state";
+import { assertContractDestinationWritable } from "../vendor/write";
 
 const VENDOR_DESCRIPTION =
 	"Fetch the linked source's schema export and pin it (writes the description, the squashed SQL, the contract and the lock).";
@@ -175,6 +176,11 @@ const runVendorUpdate = (
 	// `vendor --check` (`assertBoundaryAtCheck`) is the boundary that can
 	// actually fail on it.
 	const resolvedBy = resolvedByFor(ref);
+	// D106 M6: guards the one vendored destination the overwrite guard
+	// originally missed, before any network work -- the same "guard
+	// runs first" order the lock's own guard already follows in
+	// `runVendor` below.
+	assertContractDestinationWritable(vendorContractPath(cwd), force);
 	const warnings: string[] = [];
 	warnIfNonDefaultRef(resolvedBy, (message: string) => warnings.push(message));
 	// Runs *after* `resolveExport` below succeeds, deliberately: that

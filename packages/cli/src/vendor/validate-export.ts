@@ -82,10 +82,17 @@ export const validateExport = (
 	formatText: string,
 	schemaText: string,
 ): ValidatedExport => {
+	// D106 M3: a format.json that fails its own shape parse is "the
+	// export does not answer its own format" (member 5) -- distinct from
+	// member 6's "the format this toolchain knows is older than the one
+	// declared", which only applies once the shape parses and its
+	// version number can actually be read. Coding this branch as member
+	// 6 sent readers to upgrade their own hejbro for a problem that
+	// lives in the schema repository -- the delta's own stated harm.
 	const formatParsed = formatSchema.safeParse(JSON.parse(formatText));
 	if (!formatParsed.success) {
 		return throwHejbroError(
-			"vendor-export-format-unsupported",
+			"vendor-export-invalid",
 			"the vendored export's format.json does not answer its own format (schema-export spec) -- hand-edited, truncated, or written by something else. Next: ask the owner of the schema repository to regenerate it with `hejbro generate --export`.",
 		);
 	}

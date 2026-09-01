@@ -109,6 +109,37 @@ describe("hejbro generate --export", () => {
 		}
 	});
 
+	it("writes a first export even when declarations already match the snapshot (D106 M2)", async () => {
+		await writeSchema(cwd, SCHEMA_SOURCE);
+		// Establishes a snapshot with no export enabled -- the shape an
+		// already-adopted repository is in the day it decides to start
+		// exporting: its declarations already match its snapshot, so a
+		// plain `generate --export` run finds no difference at all.
+		await runCli(cwd, ["generate"]);
+
+		const result = await runCli(cwd, ["generate", "--export"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("no changes");
+		expect(await readExportFile(cwd, "schema.json")).toBeTruthy();
+		expect(await readExportFile(cwd, "snapshot.sql")).toBeTruthy();
+		expect(await readExportFile(cwd, "format.json")).toBeTruthy();
+	});
+
+	it("refreshes an existing export on a no-difference run, not just a first one", async () => {
+		await writeSchema(cwd, SCHEMA_SOURCE);
+		await runCli(cwd, ["generate", "--export"]);
+		const before = await readExportFile(cwd, "schema.json");
+
+		// Hand-edit the export to something stale, then confirm the very
+		// next no-difference run restores it -- "refresh", not merely
+		// "create the first one and never touch it again".
+		await writeFixtureFile(cwd, ".hejbro/export/schema.json", "{}");
+		const result = await runCli(cwd, ["generate", "--export"]);
+		expect(result.exitCode).toBe(0);
+
+		expect(await readExportFile(cwd, "schema.json")).toBe(before);
+	});
+
 	it("description and snapshot formats are distinct values", async () => {
 		await writeSchema(cwd, SCHEMA_SOURCE);
 		await runCli(cwd, ["generate", "--export"]);

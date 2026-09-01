@@ -5,7 +5,7 @@ migrations, and commits an **export** — a portable intermediate
 representation (IR) of what it declared, never the declarations
 themselves. A consuming repository (one that does not own the schema)
 **vendors** that export over git: `link` records where it comes from,
-`vendor` fetches one commit's worth of it and writes three committed
+`vendor` fetches one commit's worth of it and writes four committed
 files, including a generated `contract.ts` the consumer imports to get
 typed reads and writes against the same schema — with no database
 connection and no second copy of the query language.
@@ -52,7 +52,8 @@ repository**.
 
 ## The command surface
 
-Five commands, all in the consuming repository except where noted:
+Four commands, all in the consuming repository — plus the schema
+repository's own `generate --export`, covered separately below:
 
 - **`hejbro link <repository>`** — records the source (a git URL or a
   local path) in `hejbro.json`. Repository only: no branch, no ref, no
@@ -79,16 +80,18 @@ Not built here: a database-fallback path (`pull --db-url`, reading an
 existing database's shape when the owning repository doesn't use
 hejbro) is tracked separately (#604) and does not exist yet.
 
-## Day-to-day, only `vendor` needs the network
+## Day-to-day, only `vendor` moves the pin — and needs the network to do it
 
 Every other command — building, type-checking, `vendor --check` — reads
 committed files only. That's the entire reason the IR exists as a
 committed artifact rather than something fetched at build time: an
 agent sandbox with no network and no database can still type-check a
 consumer's code, because everything it needs is already in the tree.
-Only moving the pin forward (`vendor`) reaches out.
+Only moving the pin forward (`vendor`) reaches out — `outdated` also
+reaches out (see above), but it's an advisory check, not part of the
+build path this section is about.
 
-## The four files, and the pair they form
+## The five files, and the pair they form
 
 |  | Committed | Written by | Carries |
 |---|---|---|---|

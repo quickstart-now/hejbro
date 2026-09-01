@@ -14,10 +14,12 @@ a `Database` interface, `contractMetadata`, and `createDb(conn)` —
 `db()` handle to it, so a vendored contract queries exactly like a
 locally declared schema (`select`/`insert`/`update`/`deleteFrom`,
 `.where(eq(...))`, relations), with no `Table`-typed value anywhere in
-its public surface. Ten named failures are each their own coded
-diagnostic with its own remedy repository; `--strict`/`--no-strict`
-(default: fail outside a TTY) governs the one situation still open to
-judgement — a lock resolved from a non-default ref. A monorepo
-consumer in the same workspace as the schema keeps using a plain
-alias import instead — `link`/`vendor` are for an actual repository
-boundary, including a locally cloned neighbor repository.
+its public surface. Role names travel with the contract and opt-in is
+a call (`client.as({role})`), not a construction-time argument — the
+generated client adopts nothing on its own. Eleven named failures are
+each their own coded diagnostic with its own remedy repository;
+`--strict`/`--no-strict` (default: fail outside a TTY) governs the one
+situation still open to judgement — a lock resolved from a non-default
+ref. A monorepo consumer in the same workspace as the schema keeps
+using a plain alias import instead — `link`/`vendor` are for an actual
+repository boundary, including a locally cloned neighbor repository.

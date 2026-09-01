@@ -586,9 +586,33 @@ export const runGenerate = async (
 					cwd,
 				);
 			}
+			// D106 M2: a repository whose snapshot already matches its
+			// declarations must still be able to produce its *first* export --
+			// otherwise `generate --export` is a no-op there forever (`baseline
+			// --export` is refused once migrations exist), and the schema
+			// repository's export directory never comes to exist at all. Reused
+			// by both branches below: the no-difference return (this export is
+			// the only artifact that run writes) and the ordinary
+			// difference-found path further down.
+			const writeExportArtifact = (
+				snapshot: (typeof firstPass)["snapshot"],
+			): void => {
+				const description = buildExportDescription(
+					declarations,
+					declarations.exportNames,
+				);
+				writeExport(
+					cwd,
+					{ ...description, snapshot },
+					buildSquashedSql(declarations, registry, validators),
+				);
+			};
 			if (!firstPass.hasChanges) {
 				if (mode === "baseline") {
 					throwBaselineNothingToAdopt(config.entry);
+				}
+				if (exportEnabled) {
+					writeExportArtifact(firstPass.snapshot);
 				}
 				return {
 					exitCode: 0,
@@ -627,15 +651,7 @@ export const runGenerate = async (
 				renderSnapshot(finalPass.snapshot),
 			);
 			if (exportEnabled) {
-				const description = buildExportDescription(
-					declarations,
-					declarations.exportNames,
-				);
-				writeExport(
-					cwd,
-					{ ...description, snapshot: finalPass.snapshot },
-					buildSquashedSql(declarations, registry, validators),
-				);
+				writeExportArtifact(finalPass.snapshot);
 			}
 
 			const migrationRelativePath = join(config.migrationsDir, fileName);
