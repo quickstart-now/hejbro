@@ -1653,12 +1653,17 @@ found outside the team that built it.
       with `vendor`" (owner ruling, planner-directed, added after the
       body's own first draft — monorepo/polyrepo/neighbor-checkout, with
       the trap named explicitly: `link ../schema` *inside* a monorepo is
-      a working but unnecessary detour); the five real commands
-      (`link`/`vendor`/`vendor --check`/`outdated`, `vendor` covering
-      both the first vendor and every later pin move — there is no
-      separate `--update` flag), with the sixth (`pull --db-url`)
-      explicitly named as **not existing yet** (#604) rather than left
-      unmentioned or promised; the four-file pair
+      a working but unnecessary detour); the four consumer-side
+      commands (`link`/`vendor`/`vendor --check`/`outdated`, `vendor`
+      covering both the first vendor and every later pin move — there
+      is no separate `--update` flag) plus the schema repository's own
+      `generate --export`, covered separately (**D106 FIX-03
+      correction**: the guide itself later split this into "four
+      commands … plus `generate --export`" (finding m3) — this row said
+      "five" and named only the four in parentheses; fixed to match),
+      with the sixth (`pull --db-url`) explicitly named as **not
+      existing yet** (#604) rather than left unmentioned or promised;
+      the four-file pair
       (`hejbro.json`/`hejbro.lock`/the two IR files/`contract.ts`) via
       the `package.json`/`package-lock.json` analogy the owner's own
       education frame already uses; `--strict`'s TTY default and that it
