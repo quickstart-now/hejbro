@@ -8,9 +8,17 @@ Command *surface* is now one group that owns every registration, and
 each command's *logic* stays in its own file under `src/apply/`. Ten
 groups; what moved is which group writes the calling line.
 
-**46 tasks, 398 minutes.** Group 9's three tasks and their 27 minutes
-are the sibling change's own, inherited with the work; every other
-group's figures are this change's.
+**58 tasks, 492 minutes, across thirteen groups** — file-derived at
+close-out. The original freeze read "46 tasks, 398 minutes" over ten
+groups and went stale twice without this sentence moving: 7.5 was
+re-frozen 8→10 by the group-4 commit when it took ownership of the
+run-level property, and groups 11–13 were added mid-flight, each with
+its reason on its own header. (4.3r's ~9m entered in the same commit
+as the completed rework — an estimate-shaped number that was never a
+prediction, which is why the ledger keeps that row's est empty.)
+Group 9's three tasks and their 27 minutes are the sibling change's
+own, inherited with the work; every other group's figures are this
+change's.
 
 Estimates are pure work minutes (D88), frozen. Durations are recorded
 clock-stamped (`HH:MM:SSZ-HH:MM:SSZ` in the notes column), because the
