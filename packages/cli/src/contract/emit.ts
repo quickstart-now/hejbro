@@ -1,7 +1,34 @@
+import type { TableSnapshot } from "@hejbro/core";
+import type { ExportTableFact } from "../export/description";
 import type { ExportPayload } from "../export/write";
 import { enumsInSnapshot, tablesInSnapshot } from "./read-snapshot";
-import { buildEnumLookup, buildTableEntry } from "./tables";
+import { buildEnumLookup, buildTableEntry, buildTableNameMap } from "./tables";
 import { enumUnion } from "./ts-type";
+
+type MatchedTable = {
+	readonly table: TableSnapshot;
+	readonly fact: ExportTableFact;
+};
+
+/** Every exported table fact paired with its own snapshot node — shared
+ * by the `Database` interface and the metadata's name map so the two
+ * can never disagree about which tables exist. */
+const matchedTables = (payload: ExportPayload): ReadonlyArray<MatchedTable> => {
+	const tables = tablesInSnapshot(payload.snapshot);
+	return payload.tables
+		.map((fact) => {
+			const table = tables.find(
+				(candidate) =>
+					candidate.schema === fact.schemaName &&
+					candidate.name === fact.tableName,
+			);
+			if (table === undefined) {
+				return null;
+			}
+			return { table, fact };
+		})
+		.filter((entry): entry is MatchedTable => entry !== null);
+};
 
 /**
  * The point a contract was generated from (schema-vendoring spec, "The
@@ -39,24 +66,17 @@ const EMPTY_SECTION =
 	'\t// R2-G2 2.8: view column types and function signatures are not carried\n\t// by the export yet — this is "not supported", not "none declared".\n\t[key: string]: never;';
 
 /** Renders the `Database` interface's full source (5.1's own settled shape: `Tables`/`Views`/`Functions`/`Enums`, mirroring Supabase's own generated type). */
-const renderDatabaseInterface = (payload: ExportPayload): string => {
+const renderDatabaseInterface = (
+	payload: ExportPayload,
+	matched: ReadonlyArray<MatchedTable>,
+): string => {
 	const snapshot = payload.snapshot;
-	const tables = tablesInSnapshot(snapshot);
 	const enums = enumsInSnapshot(snapshot);
 	const enumLookup = buildEnumLookup(enums);
-	const tableEntries = payload.tables
-		.map((fact) => {
-			const table = tables.find(
-				(candidate) =>
-					candidate.schema === fact.schemaName &&
-					candidate.name === fact.tableName,
-			);
-			if (table === undefined) {
-				return null;
-			}
-			return buildTableEntry(table, fact, snapshot, enumLookup);
-		})
-		.filter((entry): entry is string => entry !== null)
+	const tableEntries = matched
+		.map(({ table, fact }) =>
+			buildTableEntry(table, fact, snapshot, enumLookup),
+		)
 		.join("\n");
 	const enumEntries = enums.map(renderEnumEntry).join("\n");
 	return `export interface Database {
@@ -75,22 +95,51 @@ ${enumEntries}
 }`;
 };
 
+const renderTableNameMapEntry = (matched: MatchedTable): string => {
+	const nameMap = buildTableNameMap(matched.table, matched.fact);
+	const columns = Object.entries(nameMap.columns)
+		.map(
+			([tsKey, sqlName]) =>
+				`\t\t\t${JSON.stringify(tsKey)}: ${JSON.stringify(sqlName)},`,
+		)
+		.join("\n");
+	return `\t\t${JSON.stringify(nameMap.name)}: {
+\t\t\tschema: ${JSON.stringify(nameMap.schema)},
+\t\t\tname: ${JSON.stringify(nameMap.name)},
+\t\t\tcolumns: {
+${columns}
+\t\t\t},
+\t\t},`;
+};
+
 /**
  * The metadata constant (5.6/5.7/5.8) — the origin stamp
- * ({@link ContractOrigin}) and the role list the schema declares
- * (Requirement: "Role names travel with the contract"). A consumer
- * passes `contractMetadata.roles` explicitly to opt into them; holding
- * a contract never adopts a role silently.
+ * ({@link ContractOrigin}), the role list the schema declares
+ * (Requirement: "Role names travel with the contract"), and a runtime
+ * name map per table (planner-confirmed, 5.1 follow-up): a client needs
+ * the SQL identity behind every TS key to build a query at all, and
+ * without it here it would have to read `schema.json` at runtime,
+ * breaking the "import one file" surface the contract exists to give.
+ * Carries no value-conversion policy (numeric mode, …) — additive once
+ * R2-G6 reveals what it actually needs. A consumer passes
+ * `contractMetadata.roles` explicitly to opt into them; holding a
+ * contract never adopts a role silently.
  */
 const renderMetadata = (
 	origin: ContractOrigin,
 	roles: ReadonlyArray<string>,
-): string =>
-	`export const contractMetadata = {
+	matched: ReadonlyArray<MatchedTable>,
+): string => {
+	const tables = matched.map(renderTableNameMapEntry).join("\n");
+	return `export const contractMetadata = {
 \tcommit: ${JSON.stringify(origin.commit)},
 \texportHash: ${JSON.stringify(origin.exportHash)},
 \troles: [${roles.map((role) => JSON.stringify(role)).join(", ")}] as const,
+\ttables: {
+${tables}
+\t},
 } as const;`;
+};
 
 /**
  * The factory (5.6) — binds `Database` inside the generated module, so
@@ -121,11 +170,13 @@ const CREATE_DB_FACTORY = `export const createDb = (conn: unknown): never => {
 export const emitContract = (
 	payload: ExportPayload,
 	origin: ContractOrigin,
-): string =>
-	`${GENERATED_HEADER}
-${renderDatabaseInterface(payload)}
+): string => {
+	const matched = matchedTables(payload);
+	return `${GENERATED_HEADER}
+${renderDatabaseInterface(payload, matched)}
 
-${renderMetadata(origin, payload.roles)}
+${renderMetadata(origin, payload.roles, matched)}
 
 ${CREATE_DB_FACTORY}
 `;
+};

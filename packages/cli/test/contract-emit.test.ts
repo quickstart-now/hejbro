@@ -14,6 +14,24 @@ const buildDeclarations = (): ReadonlyArray<HejbroInput> => {
 	return [app, posts];
 };
 
+describe("the metadata's runtime name map (5.1 follow-up, planner-confirmed)", () => {
+	it("carries every table's schema, SQL name, and TS-key-to-SQL-name column map", () => {
+		const postId = uuid().primaryKey().defaultRandom();
+		const posts = table(app, "posts", { postId });
+		const payload = buildFixturePayload([app, posts]);
+		const source = emitContract(payload, {
+			commit: "abc123",
+			exportHash: "sha256:deadbeef",
+		});
+
+		const metadataBlock =
+			source.split("export const contractMetadata")[1] ?? "";
+		expect(metadataBlock).toContain('schema: "app"');
+		expect(metadataBlock).toContain('name: "posts"');
+		expect(metadataBlock).toContain('"postId": "post_id"');
+	});
+});
+
 const ORIGIN = { commit: "abc123", exportHash: "sha256:deadbeef" };
 
 describe("emitContract", () => {

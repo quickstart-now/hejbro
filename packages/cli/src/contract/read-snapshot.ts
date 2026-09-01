@@ -1,4 +1,4 @@
-import type { Snapshot, TableSnapshot } from "@hejbro/core";
+import type { SequenceSnapshot, Snapshot, TableSnapshot } from "@hejbro/core";
 
 /**
  * An enum object node's own shape (`core/src/kinds/enum-kind.ts`'s
@@ -17,6 +17,7 @@ export type ContractEnumFact = {
 const KIND_PREFIX = {
 	table: "table:",
 	enum: "enum:",
+	sequence: "sequence:",
 } as const;
 
 /**
@@ -46,3 +47,33 @@ export const snapshotHasTable = (
 	snapshot: Snapshot,
 	identity: string,
 ): boolean => `${KIND_PREFIX.table}${identity}` in snapshot.objects;
+
+/**
+ * Every `"sequence:…"` entry in `snapshot.objects` — a `serial`/
+ * `smallserial`/`bigserial` column's own synthesized, owner-recording
+ * sequence (`SequenceSnapshot.table`/`.column`, `sequence-kind.ts`). Used
+ * to re-derive "Postgres fills this in" for such a column (5.3): its
+ * `nextval(...)` default lives on this object, never on the column's own
+ * `ColumnSnapshot`, since `materializeTypeNode` already decomposed the
+ * column to its base integer type before it ever reached a snapshot.
+ */
+export const sequencesInSnapshot = (
+	snapshot: Snapshot,
+): ReadonlyArray<SequenceSnapshot> =>
+	Object.entries(snapshot.objects)
+		.filter(([key]) => key.startsWith(KIND_PREFIX.sequence))
+		.map(([, node]) => node as SequenceSnapshot);
+
+/** Whether a synthesized sequence in `snapshot` owns `tableName.columnName` within `schemaName` — the derivation that closes the `serial` write-optionality gap without a new sidecar fact (5.3, planner-confirmed). */
+export const columnOwnedBySequence = (
+	snapshot: Snapshot,
+	schemaName: string,
+	tableName: string,
+	columnName: string,
+): boolean =>
+	sequencesInSnapshot(snapshot).some(
+		(sequence) =>
+			sequence.schema === schemaName &&
+			sequence.table === tableName &&
+			sequence.column === columnName,
+	);

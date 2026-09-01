@@ -944,8 +944,7 @@ rather than importing it", confirmed to mean exactly this.
       the interface — one file or several, and what the metadata
       constant holds. Start from `cli/test/contract-emit.test.ts > two
       runs write byte-identical files`. ~9m
-      **Settled, self-determined, flagged for confirmation (not yet
-      confirmed as of this commit):** one file, `.hejbro/vendor/
+      **Settled, planner-confirmed:** one file, `.hejbro/vendor/
       contract.ts` — proposal.md's own text already says "one type
       file", so this was barely open. The `Database` interface mirrors
       Supabase's own generated shape (`Tables`/`Views`/`Functions`/
@@ -956,12 +955,22 @@ rather than importing it", confirmed to mean exactly this.
       note asking for exactly that. `Tables` is keyed by the bare SQL
       table name, not schema-qualified — the mirror is flat
       (proposal.md, "the emitted mirror is flat"). Metadata:
-      `{commit, exportHash, roles}` — `exportHash` is a sha256 of the
-      exact `schema.json` bytes (same value as `hejbro.lock`'s own
-      `schemaHash`), read as "the identity of the export" half of "The
-      contract names the point it was generated from"; `ref` was
+      `{commit, exportHash, roles, tables}` — `exportHash` is a sha256
+      of the exact `schema.json` bytes (same value as `hejbro.lock`'s
+      own `schemaHash`), read as "the identity of the export" half of
+      "The contract names the point it was generated from"; `ref` was
       considered and dropped, since the requirement is a function of
-      the *commit*, not of which ref resolved to it.
+      the *commit*, not of which ref resolved to it. `tables` (planner
+      follow-up, see 5.6's own note below) is a runtime name map, added
+      after the first draft's `{commit, exportHash, roles}` was found to
+      be short one thing R2-G6 cannot do without.
+      **Recorded, not built (planner's own follow-up, out of this
+      group's scope):** the contract living inside a dot-directory
+      (`.hejbro/vendor/`) is invisible to a human browsing the tree and
+      some bundlers/toolchains skip dot-directories outright. Making the
+      output path consumer-configurable may be needed later; reopening
+      the config surface for it now would cost more than it returns
+      today, so this is a filed note, not a task.
 - [x] 5.2 Emit the row, insert and update shapes per table from the
       description. Start from `cli/test/types/contract-types.test.ts >
       row keys are the declared TypeScript keys`. ~9m
@@ -969,22 +978,23 @@ rather than importing it", confirmed to mean exactly this.
       computed absent, identity-by-default optional. Start from
       `cli/test/types/contract-types.test.ts > defaulted optional,
       computed absent, identity optional`. ~8m
-      **Known gap, documented in `contract/tables.ts` and flagged
-      here rather than silently wrong:** `hasDefault` is re-derived from
-      the vendored snapshot alone (an explicit `default`, or any
-      `identity`) since `@hejbro/core`'s own `hasDefault` flag
-      (`insert-input.ts`) is declaration-time-only and never reaches a
-      snapshot. A `serial`/`smallserial`/`bigserial` column decomposes to
-      its base integer type before it ever reaches a snapshot
-      (`table-kind.ts`'s `materializeTypeNode`) and its `nextval(...)`
-      default lives on a separately synthesized `sequence` object, never
-      on the column — so such a column reads as **required** in
-      `Insert` here, where the live declaration path reads it as
-      optional. No example in this repository declares a `serial`-family
-      column, so no golden test catches this. Closing it needs a fourth
-      sidecar fact (e.g. `hasImpliedDefault`) — an R2-G2 delta-surface
-      change, out of this group's own scope; filed for a follow-up
-      rather than guessed at silently.
+      **`serial` gap closed, not accepted (planner asked to check
+      before accepting it — the check paid off):** `hasDefault` is
+      re-derived from the vendored snapshot alone (an explicit
+      `default`, an `identity`, or ownership by a synthesized sequence)
+      since `@hejbro/core`'s own `hasDefault` flag (`insert-input.ts`)
+      is declaration-time-only and never reaches a snapshot. A `serial`/
+      `smallserial`/`bigserial` column decomposes to its base integer
+      type before it ever reaches a snapshot (`table-kind.ts`'s
+      `materializeTypeNode`) and its `nextval(...)` default lives on a
+      separately synthesized `sequence` object rather than the column —
+      but that object records its own owner (`SequenceSnapshot.table`/
+      `.column`, `sequence-kind.ts`, exported specifically for this kind
+      of cross-reference — its own doc comment says so), so
+      `columnOwnedBySequence` (`contract/read-snapshot.ts`) derives
+      "the database fills this in" without a new sidecar fact. Covered
+      by `types/contract-types.test.ts > a serial column is optional on
+      insert`. No R2-G2 delta change, no follow-up issue needed.
 - [x] 5.4 Element nullability, numeric mode and enum values, each from
       its carried fact. Start from `cli/test/types/contract-types.test.ts
       > non-null elements are not nullable`. ~8m
@@ -1008,14 +1018,25 @@ rather than importing it", confirmed to mean exactly this.
       inside the generated module so no type parameter reaches the
       caller. Start from `cli/test/contract-emit.test.ts > the factory
       takes only a connection`. ~9m
-      **Self-determined, flagged for confirmation:** `createDb`'s body
-      is a placeholder that throws a clear, coded-free `Error` naming
-      why (`@hejbro/query`'s name-keyed client doesn't exist until
-      R2-G6) — every schema-vendoring scenario about the contract this
-      group owns is a static-type or metadata property, never a runtime
-      query, so nothing in this group's own delta needs `createDb` to
-      work yet. Wiring a real body is R2-G6's own task, not a rewrite of
-      this file's shape (mirrors 5.10's own G6 deferral).
+      **`createDb`'s body: planner-confirmed placeholder** — it throws a
+      clear, coded-free `Error` naming why (`@hejbro/query`'s name-keyed
+      client doesn't exist until R2-G6) — every schema-vendoring
+      scenario about the contract this group owns is a static-type or
+      metadata property, never a runtime query, so nothing in this
+      group's own delta needs `createDb` to work yet. Wiring a real body
+      is R2-G6's own task, not a rewrite of this file's shape (mirrors
+      5.10's own G6 deferral).
+      **Metadata gained a fourth field, `tables` (planner correction to
+      5.1's own first draft):** `{commit, exportHash, roles}` alone
+      cannot build SQL — a client needs the SQL identity behind every TS
+      key (a table's `{schema, name}`, a column's TS-key→SQL-name map),
+      or it would have to read `schema.json` at runtime, breaking the
+      "import one file" surface the contract exists to give. Carries no
+      value-conversion policy (numeric mode, etc.) — additive once R2-G6
+      reveals what it actually needs, per the planner's own "additive
+      when needed" principle applied to this one field only. Covered by
+      `contract-emit.test.ts > carries every table's schema, SQL name,
+      and TS-key-to-SQL-name column map`.
 - [x] 5.7 The origin stamp as an exported value. Start from
       `cli/test/contract-emit.test.ts > exports the commit and export
       identity`. ~6m

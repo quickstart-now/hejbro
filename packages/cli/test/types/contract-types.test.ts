@@ -4,6 +4,7 @@ import {
 	numeric,
 	pgEnum,
 	schema,
+	serial,
 	sql,
 	table,
 	text,
@@ -41,7 +42,11 @@ describe("row keys match the declaring repository (5.2)", () => {
 		const source = emitSource([app, posts]);
 
 		expect(source).toContain("readonly postId: string;");
-		expect(source).not.toContain("post_id");
+		// The `Database` interface itself never spells the SQL name -- only
+		// the metadata's own runtime name map does (5.1 follow-up), so the
+		// SQL name is absent from everything before that map starts.
+		const beforeMetadata = source.split("export const contractMetadata")[0];
+		expect(beforeMetadata).not.toContain("post_id");
 	});
 });
 
@@ -147,6 +152,17 @@ describe("write inputs follow what the database does (5.3)", () => {
 
 		expect(source).toMatch(/Update: \{[\s\S]*?readonly id\?: string;/);
 		expect(source).toMatch(/Update: \{[\s\S]*?readonly title\?: string;/);
+	});
+
+	it("a serial column is optional on insert, derived from its owning sequence (planner-confirmed, no new sidecar fact)", () => {
+		const posts = table(app, "posts", {
+			id: serial().primaryKey(),
+			title: text().notNull(),
+		});
+		const source = emitSource([app, posts]);
+
+		const insertBlock = source.match(/Insert: \{([\s\S]*?)\};/)?.[1] ?? "";
+		expect(insertBlock).toContain("readonly id?: number;");
 	});
 });
 

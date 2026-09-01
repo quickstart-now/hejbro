@@ -7,7 +7,7 @@ import type {
 import { columnDefault, columnGenerated, columnIdentity } from "@hejbro/core";
 import type { ExportTableFact } from "../export/description";
 import type { ContractEnumFact } from "./read-snapshot";
-import { snapshotHasTable } from "./read-snapshot";
+import { columnOwnedBySequence, snapshotHasTable } from "./read-snapshot";
 import { columnTsType } from "./ts-type";
 
 type EnumLookup = (schema: string, name: string) => ContractEnumFact | null;
@@ -33,24 +33,30 @@ const isAlwaysGenerated = (column: ColumnSnapshot): boolean =>
 /**
  * Whether Postgres fills this column in when a write omits it —
  * re-derived from what the vendored snapshot alone carries (an explicit
- * default, or a by-default identity), **not** an exact mirror of
- * `@hejbro/core`'s declaration-time `hasDefault` flag.
+ * default, a by-default identity, or ownership by a synthesized
+ * sequence), **not** an exact mirror of `@hejbro/core`'s declaration-time
+ * `hasDefault` flag.
  *
- * **Known gap, documented rather than silently wrong**: a `serial`/
- * `smallserial`/`bigserial` column decomposes to its base integer type
- * before it ever reaches a snapshot (`table-kind.ts`'s own
- * `materializeTypeNode`), and its `nextval(...)` default lives on a
- * separately synthesized `sequence` object, never on the column itself
- * — so a vendored contract cannot tell such a column apart from a
- * plain `integer().notNull()` column with no default, and reads it as
- * **required** in `Insert` where the live declaration path reads it as
- * optional. No example in this repository exercises `serial` today
- * (owner-confirmed, R2-G5 5.3). Closing this gap needs a fourth sidecar
- * fact recording implied-default-ness, which is R2-G2 delta surface —
- * out of this group's scope.
+ * **The `serial`/`smallserial`/`bigserial` case, closed without a new
+ * sidecar fact (planner-confirmed, R2-G5 5.3):** such a column decomposes
+ * to its base integer type before it ever reaches a snapshot
+ * (`table-kind.ts`'s `materializeTypeNode`), and its `nextval(...)`
+ * default lives on a separately synthesized `sequence` object rather
+ * than on the column itself — but that object records its own owner
+ * (`SequenceSnapshot.table`/`.column`, `sequence-kind.ts`, exported
+ * specifically so a cross-reference like this one never needs its own
+ * fact), so `columnOwnedBySequence` derives "the database fills this
+ * in" from the snapshot exactly as the live declaration path would.
  */
-const hasDefault = (column: ColumnSnapshot): boolean =>
-	columnDefault(column) !== null || columnIdentity(column) !== null;
+const hasDefault = (
+	schemaName: string,
+	tableName: string,
+	column: ColumnSnapshot,
+	snapshot: Snapshot,
+): boolean =>
+	columnDefault(column) !== null ||
+	columnIdentity(column) !== null ||
+	columnOwnedBySequence(snapshot, schemaName, tableName, column.name);
 
 const isColumnNotNull = (column: ColumnSnapshot): boolean =>
 	column.notNull === true;
@@ -67,6 +73,7 @@ type ColumnEntry = {
 const buildColumnEntries = (
 	table: TableSnapshot,
 	fact: ExportTableFact,
+	snapshot: Snapshot,
 	enumLookup: EnumLookup,
 ): ReadonlyArray<ColumnEntry> =>
 	table.columns.map((column) => {
@@ -82,7 +89,8 @@ const buildColumnEntries = (
 			tsType: columnTsType(column.typeNode, mode, notNullElements, enumLookup),
 			notNull,
 			alwaysGenerated,
-			optional: !notNull || hasDefault(column),
+			optional:
+				!notNull || hasDefault(table.schema, table.name, column, snapshot),
 		};
 	});
 
@@ -174,6 +182,35 @@ export type TableIdentity = {
 	readonly tableName: string;
 };
 
+/**
+ * A table's schema-qualified SQL identity plus its own TS-key→SQL-name
+ * column map — the runtime name mapping `contractMetadata.tables` carries
+ * (planner-confirmed): without it, a consumer's client would have to
+ * read `schema.json` at runtime to build SQL at all, breaking the
+ * "import one file" surface the contract exists to provide. Carries no
+ * value-conversion policy (numeric mode, etc.) — additive once R2-G6
+ * reveals what it actually needs.
+ */
+export type TableNameMap = {
+	readonly schema: string;
+	readonly name: string;
+	readonly columns: { readonly [tsKey: string]: string };
+};
+
+export const buildTableNameMap = (
+	table: TableSnapshot,
+	fact: ExportTableFact,
+): TableNameMap => ({
+	schema: table.schema,
+	name: table.name,
+	columns: Object.fromEntries(
+		table.columns.map((column) => [
+			fact.columns[column.name]?.key ?? column.name,
+			column.name,
+		]),
+	),
+});
+
 /** One `Database["Tables"][tableName]` entry's own source text, keyed by the table's bare SQL name (the mirror is flat — no per-schema nesting, proposal.md's own "the emitted mirror is flat"). */
 export const buildTableEntry = (
 	table: TableSnapshot,
@@ -181,7 +218,7 @@ export const buildTableEntry = (
 	snapshot: Snapshot,
 	enumLookup: EnumLookup,
 ): string => {
-	const entries = buildColumnEntries(table, fact, enumLookup);
+	const entries = buildColumnEntries(table, fact, snapshot, enumLookup);
 	return `\t${JSON.stringify(table.name)}: {
 \t\treadonly Row: {
 ${buildRowInterface(entries)}
