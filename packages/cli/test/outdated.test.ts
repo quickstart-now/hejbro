@@ -12,7 +12,8 @@ import { createGitFixture } from "./support/git-fixture";
 
 beforeAll(assertBuiltCli);
 
-const EXPORT_SCHEMA_V1 = '{"tables":[],"functions":[],"roles":[]}';
+const EXPORT_SCHEMA_V1 =
+	'{"tables":[],"functions":[],"roles":[],"snapshot":{"formatVersion":8,"dialect":"postgres","objects":{}}}';
 const EXPORT_SQL_V1 = 'create schema "app";\n';
 const EXPORT_FORMAT_V1 = '{"descriptionFormat":1,"snapshotFormat":8}';
 

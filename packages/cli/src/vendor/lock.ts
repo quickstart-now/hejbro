@@ -13,6 +13,7 @@ import { assertVendorDestinationWritable, isVendorLockText } from "./write";
 export const VENDOR_DIR_NAME = ".hejbro/vendor";
 export const VENDOR_SCHEMA_FILE = "schema.json";
 export const VENDOR_SQL_FILE = "snapshot.sql";
+export const VENDOR_CONTRACT_FILE = "contract.ts";
 
 /** `vendor`'s own file, at the repository root — `link` never touches
  * it (owner decision, 4.13): the source lives in the sibling
@@ -27,14 +28,19 @@ export const vendorSchemaPath = (cwd: string): string =>
 	join(vendorDirPath(cwd), VENDOR_SCHEMA_FILE);
 export const vendorSqlPath = (cwd: string): string =>
 	join(vendorDirPath(cwd), VENDOR_SQL_FILE);
+export const vendorContractPath = (cwd: string): string =>
+	join(vendorDirPath(cwd), VENDOR_CONTRACT_FILE);
 export const lockPath = (cwd: string): string => join(cwd, LOCK_FILE_NAME);
 
 /**
  * `vendor`'s own resolution record, rewritten every run: the commit,
  * the ref it was resolved from, the description's format version, and
- * both vendored files' content hashes (what lets `vendor --check`
- * compare against the lock with no network at all). Carries no source
- * — that is the sibling `hejbro.json`'s own, single fact.
+ * all three vendored files' content hashes (what lets `vendor --check`
+ * compare against the lock with no network at all — R2-G5 5.11 adds
+ * `contractHash` alongside `schemaHash`/`sqlHash` so a hand-edited
+ * contract is caught the same way: it is the easiest of the three to
+ * touch, being the one file a consumer's own code imports). Carries no
+ * source — that is the sibling `hejbro.json`'s own, single fact.
  */
 export type VendorLock = {
 	readonly generatedBy: "hejbro vendor";
@@ -43,6 +49,7 @@ export type VendorLock = {
 	readonly descriptionFormat?: number;
 	readonly schemaHash?: string;
 	readonly sqlHash?: string;
+	readonly contractHash?: string;
 };
 
 /** `vendor`'s own guard: refuses to claim `hejbro.lock` when it already

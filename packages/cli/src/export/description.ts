@@ -17,7 +17,7 @@ import { getTableMeta, isTable, stableJson } from "@hejbro/core";
 const isDeclaredTable = (value: HejbroInput): value is DeclaredTable =>
 	isTable(value);
 
-type ExportColumnFact = {
+export type ExportColumnFact = {
 	readonly key: string;
 	readonly mode: NumericMode | null;
 	readonly notNullElements: boolean;
@@ -36,7 +36,7 @@ type ExportColumnFact = {
  */
 type ExportColumns = { readonly [sqlName: string]: ExportColumnFact };
 
-type ExportTableFact = {
+export type ExportTableFact = {
 	readonly schemaName: string;
 	readonly tableName: string;
 	readonly exportName: string | null;

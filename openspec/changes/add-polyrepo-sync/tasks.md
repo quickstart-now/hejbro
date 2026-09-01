@@ -891,9 +891,37 @@ strip `source` back out of `hejbro.lock` — again a delivery-timing gap
 between two owner-driven rulings reaching the implementer in sequence,
 not a task running long.
 
-## R2-G5 — The emitted contract — `est_frozen: 75m` — #598
+## R2-G5 — The emitted contract — `est_frozen: 88m` — #598
 
-Files: `packages/cli/src/contract/*` (new).
+Files: `packages/cli/src/contract/*` (new),
+`packages/cli/src/commands/vendor.ts` (shared with R2-G4 — 5.11 only
+adds the contract-emission call and the lock's third hash, never
+touches R2-G4's own read/write paths), `packages/cli/src/loader.ts`
+(shared with the already-shipped group 3 — 5.12 only adds a refusal
+branch, additive, never touches that group's own export-name collection).
+
+**Scope, settled before this group started:** 5.10 keeps only
+determinism and the absence of a clock — the "prove it by loading and
+running the emitted module" property moves to R2-G6's own 6.11, since
+the client that would load and run a contract does not exist until that
+group exists. 5.11 adds the wiring itself: `vendor` calls into
+`contract/*` and writes the contract file alongside the description and
+the squashed SQL, closing the contract half of "Vendoring pins what it
+read" (R2-G4's own note on 4.4 names this the same scenario).
+
+**Architecture, confirmed by reading rather than assumed:** `schema.json`
+already embeds the full structured `Snapshot` alongside the sidecar
+facts (`export/write.ts`'s `ExportPayload = ExportDescription &
+{snapshot: Snapshot}`, `serializeExportDescription` serializes the whole
+payload at runtime) — every column fact type synthesis needs
+(`typeNode`, `notNull`, `default`, `generated`, `identity`) is already
+vendored, with no export-format change needed for this group. `core`'s
+`TableSnapshot`/`ColumnSnapshot`/`TypeNode`/`renderTypeNode`/
+`columnDefault`/`columnGenerated`/`columnIdentity`/`columnNotNull` are
+public and reused directly; `EnumSnapshot` (`enum-kind.ts`) is not, so
+`contract/read-snapshot.ts` restates its `{schema, name, values}` shape
+locally — proposal.md's own "the reader restates an internal shape
+rather than importing it", confirmed to mean exactly this.
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
@@ -908,44 +936,156 @@ Files: `packages/cli/src/contract/*` (new).
 | " | Enum columns keep their values | `cli/test/types/contract-types.test.ts > an enum types as its values` |
 | " | Write inputs follow what the database does | `cli/test/types/contract-types.test.ts > defaulted optional, computed absent, identity optional` |
 | " | A branded column reads as its unbranded type | `cli/test/types/contract-types.test.ts > a brand does not cross` |
-| Role names travel with the contract | Supplied roles are accepted | `cli/test/contract-roles.test.ts > the exported roles are accepted` |
-| " | Omitting the roles leaves the rejection in force | `cli/test/contract-roles.test.ts > an unlisted role is still rejected` |
+| Role names travel with the contract | Supplied roles are accepted (metadata half; the runtime half is R2-G6's, see 5.8's own note) | `cli/test/contract-roles.test.ts > the exported roles are exactly what the schema declares` |
+| " | Omitting the roles leaves the rejection in force (metadata half; ditto) | `cli/test/contract-roles.test.ts > omitting every grant leaves the role list empty, not omitted` |
 | A reference to a table the schema does not own has no relation | A relation to an unmanaged target is absent | `cli/test/contract-emit.test.ts > no relation is derived for an unmanaged target` |
 
-- [ ] 5.1 `[design]` Settle the contract's file layout and the shape of
+- [x] 5.1 `[design]` Settle the contract's file layout and the shape of
       the interface — one file or several, and what the metadata
       constant holds. Start from `cli/test/contract-emit.test.ts > two
       runs write byte-identical files`. ~9m
-- [ ] 5.2 Emit the row, insert and update shapes per table from the
+      **Settled, self-determined, flagged for confirmation (not yet
+      confirmed as of this commit):** one file, `.hejbro/vendor/
+      contract.ts` — proposal.md's own text already says "one type
+      file", so this was barely open. The `Database` interface mirrors
+      Supabase's own generated shape (`Tables`/`Views`/`Functions`/
+      `Enums`); `Views`/`Functions` are always present and always
+      `{[key: string]: never}` with a comment naming R2-G2's 2.8 as the
+      reason (not "none declared") — distinguishing "not supported yet"
+      from "this schema genuinely has none", per an earlier planner
+      note asking for exactly that. `Tables` is keyed by the bare SQL
+      table name, not schema-qualified — the mirror is flat
+      (proposal.md, "the emitted mirror is flat"). Metadata:
+      `{commit, exportHash, roles}` — `exportHash` is a sha256 of the
+      exact `schema.json` bytes (same value as `hejbro.lock`'s own
+      `schemaHash`), read as "the identity of the export" half of "The
+      contract names the point it was generated from"; `ref` was
+      considered and dropped, since the requirement is a function of
+      the *commit*, not of which ref resolved to it.
+- [x] 5.2 Emit the row, insert and update shapes per table from the
       description. Start from `cli/test/types/contract-types.test.ts >
       row keys are the declared TypeScript keys`. ~9m
-- [ ] 5.3 Write optionality decided at emission: defaulted optional,
+- [x] 5.3 Write optionality decided at emission: defaulted optional,
       computed absent, identity-by-default optional. Start from
       `cli/test/types/contract-types.test.ts > defaulted optional,
       computed absent, identity optional`. ~8m
-- [ ] 5.4 Element nullability, numeric mode and enum values, each from
+      **Known gap, documented in `contract/tables.ts` and flagged
+      here rather than silently wrong:** `hasDefault` is re-derived from
+      the vendored snapshot alone (an explicit `default`, or any
+      `identity`) since `@hejbro/core`'s own `hasDefault` flag
+      (`insert-input.ts`) is declaration-time-only and never reaches a
+      snapshot. A `serial`/`smallserial`/`bigserial` column decomposes to
+      its base integer type before it ever reaches a snapshot
+      (`table-kind.ts`'s `materializeTypeNode`) and its `nextval(...)`
+      default lives on a separately synthesized `sequence` object, never
+      on the column — so such a column reads as **required** in
+      `Insert` here, where the live declaration path reads it as
+      optional. No example in this repository declares a `serial`-family
+      column, so no golden test catches this. Closing it needs a fourth
+      sidecar fact (e.g. `hasImpliedDefault`) — an R2-G2 delta-surface
+      change, out of this group's own scope; filed for a follow-up
+      rather than guessed at silently.
+- [x] 5.4 Element nullability, numeric mode and enum values, each from
       its carried fact. Start from `cli/test/types/contract-types.test.ts
       > non-null elements are not nullable`. ~8m
-- [ ] 5.5 Brands do not cross. Start from
+      A `bigint`/`numeric` column with no recorded mode does **not**
+      share one fallback type: `bigint` defaults to `bigint` and
+      `numeric` defaults to `string` (`@hejbro/core`'s own
+      `DefaultBigintMode`/`DefaultNumericMode`, `numeric-mode-defaults.ts`
+      — neither exported publicly, so `contract/ts-type.ts` restates the
+      two literals). A first draft that shared one "no mode → number"
+      fallback was caught by its own red test going the wrong shade of
+      green before this was fixed — worth naming since it is exactly the
+      kind of drift `ts-type.ts`'s own doc comment now warns against.
+- [x] 5.5 Brands do not cross. Start from
       `cli/test/types/contract-types.test.ts > a brand does not cross`.
       ~5m
-- [ ] 5.6 The metadata constant and the factory, with the binding done
+      Needed no code: a `TypeNode` never carries a `$type` brand at all
+      (it is a `ColumnBuilder`-only, type-level-only fact), so nothing
+      here could leak one even by accident. The task's own work was the
+      test proving it, not a guard.
+- [x] 5.6 The metadata constant and the factory, with the binding done
       inside the generated module so no type parameter reaches the
       caller. Start from `cli/test/contract-emit.test.ts > the factory
       takes only a connection`. ~9m
-- [ ] 5.7 The origin stamp as an exported value. Start from
+      **Self-determined, flagged for confirmation:** `createDb`'s body
+      is a placeholder that throws a clear, coded-free `Error` naming
+      why (`@hejbro/query`'s name-keyed client doesn't exist until
+      R2-G6) — every schema-vendoring scenario about the contract this
+      group owns is a static-type or metadata property, never a runtime
+      query, so nothing in this group's own delta needs `createDb` to
+      work yet. Wiring a real body is R2-G6's own task, not a rewrite of
+      this file's shape (mirrors 5.10's own G6 deferral).
+- [x] 5.7 The origin stamp as an exported value. Start from
       `cli/test/contract-emit.test.ts > exports the commit and export
       identity`. ~6m
-- [ ] 5.8 The exported role list. Start from
+- [x] 5.8 The exported role list. Start from
       `cli/test/contract-roles.test.ts > the exported roles are
       accepted`. ~6m
-- [ ] 5.9 No relation for an unmanaged target. Start from
+      **Narrowed, mirroring 5.10's own precedent (self-determined,
+      flagged for confirmation):** this group proves the *metadata*
+      half only — `contractMetadata.roles` carries exactly what the
+      schema declares. "Supplied roles are accepted"/"an unlisted role
+      is still rejected" name *runtime* acceptance/rejection through a
+      real client, which does not exist until R2-G6 — the same client
+      dependency 5.10's own note already made explicit for the
+      execution proof. Renamed the two red tests accordingly
+      (`the exported roles are exactly what the schema declares` /
+      `omitting every grant leaves the role list empty, not omitted`).
+- [x] 5.9 No relation for an unmanaged target. Start from
       `cli/test/contract-emit.test.ts > no relation is derived for an
       unmanaged target`. ~6m
-- [ ] 5.10 Determinism and the absence of a clock; the emitted module
-      is proved by loading and running it, not by matching strings.
-      Start from `cli/test/contract-emit.test.ts > two runs write
-      byte-identical files`. ~9m
+      `Relationships` mirrors Supabase's own generated shape
+      (`{foreignKeyName, columns, referencedRelation,
+      referencedColumns}`, SQL names throughout) — populated only when
+      the foreign key's target table exists in the vendored snapshot;
+      the referencing column itself is unaffected either way (still a
+      plain scalar in `Row`/`Insert`/`Update`).
+- [x] 5.10 Determinism and the absence of a clock, asserted on the
+      emitted files themselves (byte-identity across two runs, no
+      timestamp/host substring) — not by loading and executing the
+      module, since no client to run it against exists until R2-G6
+      (that proof is 6.11). Start from
+      `cli/test/contract-emit.test.ts > two runs write byte-identical
+      files`. ~9m
+- [x] 5.11 `[design]` Wire `vendor` to the contract: call `contract/*`
+      and write the contract file alongside the description and the
+      squashed SQL, on every update run. Decide whether the lock's hash
+      list grows to cover the contract too, so `vendor --check` catches
+      a hand-edited contract the same way it already catches a
+      hand-edited description or SQL file. Start from
+      `cli/test/vendor.test.ts > vendor also writes the contract file`.
+      ~6m
+      **Decided: yes, the lock's hash list grows** — `contractHash`
+      alongside `schemaHash`/`sqlHash` (planner-confirmed): the contract
+      is the easiest of the three vendored files to touch by hand (the
+      one a consumer's own code imports), so excluding it from `--check`
+      would leave the most likely tamper outside the gate the scenario
+      exists to close.
+- [ ] 5.12 A vendored contract cannot author migrations, refused by
+      name. **Discovered gap, not in the original task list**: the
+      SHALL/scenario table above already names this group's own
+      "A consumer holds a contract, not declarations" requirement
+      (`contract-authority.test.ts`, both its scenarios), but no task
+      5.1–5.11 implements it — an oversight found while implementing,
+      not a design ambiguity. "The contract yields no declaration" needs
+      no new code (a `contractMetadata`/`createDb` export carries no
+      `declarationKind`, so `loader.ts`'s existing `isHejbroInput` guard
+      already excludes every contract export — only a test is needed).
+      "Generating from a vendored contract is refused... naming the
+      owning repository" does need new code: today that same file
+      degrades to the generic `entry-not-found`/"exports nothing"
+      diagnostic, not one naming the owning repository specifically.
+      Touches `loader.ts`, owned by the already-shipped group 3 — held
+      pending planner confirmation before writing the refusal branch,
+      since it crosses a completed group's file. ~7m
+
+**Re-freeze: 75m → 81m → 88m.** First move (75→81, before this group
+started): 5.11 added for the vendor↔contract wiring the original list
+never carried a task for. Second move (81→88): 5.12 added mid-
+implementation for a real gap in the delta's own scenario table that no
+task closed — an oversight in the task list itself, not a task running
+long.
 
 ## R2-G6 — The name-keyed client — `est_frozen: 90m` — #599
 

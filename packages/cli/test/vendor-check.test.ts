@@ -12,7 +12,8 @@ import { createGitFixture } from "./support/git-fixture";
 
 beforeAll(assertBuiltCli);
 
-const EXPORT_SCHEMA_V1 = '{"tables":[],"functions":[],"roles":[]}';
+const EXPORT_SCHEMA_V1 =
+	'{"tables":[],"functions":[],"roles":[],"snapshot":{"formatVersion":8,"dialect":"postgres","objects":{}}}';
 const EXPORT_SQL_V1 = 'create schema "app";\n';
 const EXPORT_FORMAT_V1 = '{"descriptionFormat":1,"snapshotFormat":8}';
 
@@ -62,6 +63,17 @@ describe("hejbro vendor --check", () => {
 		expect(
 			await readFile(join(cwd, ".hejbro", "vendor", "schema.json"), "utf8"),
 		).toBe('{"tables":["hand-edited"],"functions":[],"roles":[]}');
+	});
+
+	it("exits non-zero when the contract file was hand-edited (5.11)", async () => {
+		await writeFile(
+			join(cwd, ".hejbro", "vendor", "contract.ts"),
+			"// hand-edited\nexport const oops = true;\n",
+		);
+
+		const result = await runCli(cwd, ["vendor", "--check"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("vendor-check-mismatch");
 	});
 
 	it("checks with the remote unreachable", async () => {

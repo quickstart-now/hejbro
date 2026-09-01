@@ -1,8 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
+import type { ContractOrigin } from "../contract/emit";
+import { emitContract } from "../contract/emit";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import type { ExportPayload } from "../export/write";
 import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
 import { resolveExport } from "../vendor/fetch";
@@ -11,6 +14,7 @@ import type { VendorLock } from "../vendor/lock";
 import {
 	assertLockWritable,
 	readLock,
+	vendorContractPath,
 	vendorDirPath,
 	vendorSchemaPath,
 	vendorSqlPath,
@@ -19,7 +23,7 @@ import {
 import { readSourceFile } from "../vendor/source-file";
 
 const VENDOR_DESCRIPTION =
-	"Fetch the linked source's schema export and pin it (writes the description, the squashed SQL and the lock).";
+	"Fetch the linked source's schema export and pin it (writes the description, the squashed SQL, the contract and the lock).";
 
 export type VendorResult = {
 	readonly exitCode: 0 | 1;
@@ -64,9 +68,11 @@ const runVendorCheck = (cwd: string): VendorResult => {
 	const lock = requireVendoredLock(cwd);
 	const schemaText = readFileSync(vendorSchemaPath(cwd), "utf8");
 	const sqlText = readFileSync(vendorSqlPath(cwd), "utf8");
+	const contractText = readFileSync(vendorContractPath(cwd), "utf8");
 	const matches =
 		sha256Hex(schemaText) === lock.schemaHash &&
-		sha256Hex(sqlText) === lock.sqlHash;
+		sha256Hex(sqlText) === lock.sqlHash &&
+		sha256Hex(contractText) === lock.contractHash;
 	if (matches) {
 		return {
 			exitCode: 0,
@@ -76,9 +82,21 @@ const runVendorCheck = (cwd: string): VendorResult => {
 	}
 	return throwHejbroError(
 		"vendor-check-mismatch",
-		'the vendored files no longer match the lock — at least one of ".hejbro/vendor/schema.json"/".hejbro/vendor/snapshot.sql" was edited after the last `hejbro vendor`. Next: run `hejbro vendor` to restore them, or revert the hand edit.',
+		'the vendored files no longer match the lock — at least one of ".hejbro/vendor/schema.json"/".hejbro/vendor/snapshot.sql"/".hejbro/vendor/contract.ts" was edited after the last `hejbro vendor`. Next: run `hejbro vendor` to restore them, or revert the hand edit.',
 	);
 };
+
+/** The contract is the easiest of the three vendored files for a
+ * consumer to touch by hand (it's the one their own code imports), so
+ * `--check`'s hash list covers it the same way it already covers the
+ * description and the squashed SQL (5.11's own design note, `lock.ts`). */
+const buildContractOrigin = (
+	fetched: { readonly commit: string },
+	schemaText: string,
+): ContractOrigin => ({
+	commit: fetched.commit,
+	exportHash: sha256Hex(schemaText),
+});
 
 const runVendorUpdate = (
 	cwd: string,
@@ -88,15 +106,22 @@ const runVendorUpdate = (
 	const fetched = withGitDiagnostic("vendor", source, () =>
 		resolveExport(cwd, source, ref),
 	);
+	const payload = JSON.parse(fetched.schemaText) as ExportPayload;
+	const contractText = emitContract(
+		payload,
+		buildContractOrigin(fetched, fetched.schemaText),
+	);
 	mkdirSync(vendorDirPath(cwd), { recursive: true });
 	writeFileSync(vendorSchemaPath(cwd), fetched.schemaText);
 	writeFileSync(vendorSqlPath(cwd), fetched.sqlText);
+	writeFileSync(vendorContractPath(cwd), contractText);
 	writeLock(cwd, {
 		resolvedFrom: fetched.ref,
 		commit: fetched.commit,
 		descriptionFormat: fetched.format.descriptionFormat,
 		schemaHash: sha256Hex(fetched.schemaText),
 		sqlHash: sha256Hex(fetched.sqlText),
+		contractHash: sha256Hex(contractText),
 	});
 	return {
 		exitCode: 0,

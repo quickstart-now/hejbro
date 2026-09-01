@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { sha256Hex } from "../src/hash";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -13,7 +14,8 @@ import { createGitFixture } from "./support/git-fixture";
 
 beforeAll(assertBuiltCli);
 
-const EXPORT_SCHEMA_V1 = '{"tables":[],"functions":[],"roles":[]}';
+const EXPORT_SCHEMA_V1 =
+	'{"tables":[],"functions":[],"roles":[],"snapshot":{"formatVersion":8,"dialect":"postgres","objects":{}}}';
 const EXPORT_SQL_V1 = 'create schema "app";\n';
 const EXPORT_FORMAT_V1 = '{"descriptionFormat":1,"snapshotFormat":8}';
 
@@ -74,6 +76,23 @@ describe("hejbro vendor", () => {
 		expect(await readSourceFile()).toEqual({ source: remote.cwd });
 	});
 
+	it("vendor also writes the contract file", async () => {
+		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
+		remote.commit("export v1", "2026-01-01T10:00:00Z");
+		await runCli(cwd, ["link", remote.cwd]);
+
+		const result = await runCli(cwd, ["vendor"]);
+		expect(result.exitCode).toBe(0);
+
+		const contract = await readVendored("contract.ts");
+		expect(contract).toContain("export interface Database");
+		expect(contract).toContain("export const contractMetadata");
+		expect(contract).toContain("export const createDb");
+
+		const lock = await readLock();
+		expect(lock.contractHash).toBe(sha256Hex(contract));
+	});
+
 	it("the lock records the description format version", async () => {
 		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");
@@ -91,7 +110,7 @@ describe("hejbro vendor", () => {
 		execFileSync("git", ["tag", "v1"], { cwd: remote.cwd });
 		await writeExport(
 			remote,
-			'{"tables":["later"],"functions":[],"roles":[]}',
+			'{"tables":["later"],"functions":[],"roles":[],"snapshot":{"formatVersion":8,"dialect":"postgres","objects":{}}}',
 			EXPORT_SQL_V1,
 		);
 		const headCommit = remote.commit("export v2", "2026-01-02T10:00:00Z");
