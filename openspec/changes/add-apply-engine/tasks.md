@@ -20,10 +20,17 @@ calibration this change was estimated against — `add-check-schema`, a
 
 ## 0. Before the first group
 
-- Rebase onto `dev` and confirm the sibling change `add-polyrepo-sync`
-  has landed there before group 9 starts. It is expected weeks earlier;
-  if the merge order inverts, group 9 cannot start and that is a
-  tripwire, not a scheduling detail.
+- Group 9 cannot start until the sibling change `add-polyrepo-sync` is
+  on `dev`. It landed there while this change was in group 7, so the
+  precondition is met — and the way to pick it up is **`git merge
+  upstream/dev`, never a rebase**: this branch is pushed, and rebasing
+  rewrites history other people have already fetched. The merge commit
+  shows up in the PR's commit list and is squashed away at merge, so it
+  costs a line in the PR body and nothing else. Do it **after group 8
+  lands and before group 9 starts** — not while a live witness is
+  running, which would move the tree under a suite that takes minutes —
+  and run every gate once afterwards, so a cross-change regression
+  surfaces before group 9 builds on top of it.
 - `pnpm build --force` before any subprocess measurement: this worktree
   carries a `dist` built from `94998be1`, which goes stale the moment
   the branch moves, and a stale `dist` reports on code nobody is
@@ -403,23 +410,23 @@ Runs on the declared floor and on 17. The floor is not decoration: the
 example chain was measured failing on 14 at its first file, which is how
 the floor was found.
 
-- [ ] 8.1 (~10m) The two-image harness. The comparable change estimated
+- [x] 8.1 (~10m) The two-image harness. The comparable change estimated
       its Docker suite at 9 minutes and spent 35, on container-readiness
       rather than on tests — `pg_isready` false-positives during the
       image's bootstrap-then-restart window. Two images doubles that
       exposure. Red: `apply-live.integration.test.ts` — "applies a
       migration against a real server on each supported major".
-- [ ] 8.2 (~10m) The whole committed chain applies, on both majors, and
+- [x] 8.2 (~10m) The whole committed chain applies, on both majors, and
       the test asserts **how many** migrations it applied. A witness
       that only checks for the absence of complaints cannot notice that
       it applied nothing. Red: same file — "applies every migration in
       the example chain", "the ledger holds one row per migration".
-- [ ] 8.3 (~10m) Partial failure, produced on purpose: a migration whose
+- [x] 8.3 (~10m) Partial failure, produced on purpose: a migration whose
       second statement fails against a real server, asserting the schema
       is unchanged, the ledger is unchanged, and the report names the
       next command. Every claim in the failure contract is unobservable
       otherwise. Red: same file — "a failed migration changes nothing".
-- [ ] 8.4 (~10m) Two runners raced, and the enum migration applied for
+- [x] 8.4 (~10m) Two runners raced, and the enum migration applied for
       the first time against a real server — `alter type … add value` is
       the only statement this project emits that a transaction block
       could refuse, and it appears in no example and no committed
@@ -440,7 +447,9 @@ travels with it: 25m → 27m, when 9.2 absorbed a row-conversion
 assertion from elsewhere in that change.
 
 - [ ] 9.1 (~9m) The fixture consumer repository and the vendored SQL it
-      receives. Starts only after the sibling change is on `dev`. Red:
+      receives. Starts only after `upstream/dev` has been merged in —
+      this branch forked before the sibling change landed, so the
+      vendoring machinery it needs is not here until then. Red:
       `two-repo.integration.test.ts` — "a consumer repository vendors
       the schema it was given".
 - [ ] 9.2 (~10m) The consumer raises its database from that SQL and runs
