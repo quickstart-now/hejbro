@@ -122,12 +122,21 @@ Files: `packages/cli/src/apply/execute.ts`,
       Red: same file — "takes a transaction-scoped lock", "a second
       runner waits rather than applying concurrently".
 - [ ] 3.5 (~9m) The precondition the engine states: an applied file
-      carries no transaction-control statement. Measured, a `commit;`
+      carries no transaction-control statement **of its own** — the
+      detection judges where the word sits, not whether it occurs. A
+      `commit` inside a dollar-quoted `plpgsql` body or a string literal
+      is not a statement, and refusing such a file would refuse a
+      migration this project routinely emits; the same "where does it
+      sit" distinction that keeps function bodies out of the split
+      trigger applies here. A naive text match is the failure mode to
+      guard against, so the red case includes a function body containing
+      the word. Why the precondition exists at all: measured, a `commit;`
       mid-file ends the atomicity with no error at all, and a failed
       file containing `begin` poisons the pooled connection so the two
       calls after it fail with `25P02`. Red: same file — "refuses a
       migration containing its own transaction control, naming the
-      statement".
+      statement", "accepts a migration whose function body contains the
+      word `commit`".
 
 ## 4. The generator's split
 
