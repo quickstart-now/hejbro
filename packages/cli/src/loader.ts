@@ -220,7 +220,7 @@ export type LoadedDeclarations = ReadonlyArray<HejbroInput> & {
  * narrowing) — non-declaration exports are silently ignored. The returned
  * array also carries `exportNames`, the module export name each
  * declaration was found under (3.1) — needed downstream by the schema
- * manifest, which carries a table or function's export name because a
+ * export, which carries a table or function's export name because a
  * consuming repository's relation keys and typed function calls are keyed
  * by it.
  */

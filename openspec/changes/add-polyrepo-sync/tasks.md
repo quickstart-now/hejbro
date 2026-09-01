@@ -549,13 +549,18 @@ implementer's observation that its own generated-code emitter still
 named the four withdrawn symbols by string, with no gate in this repo
 able to catch it), not a task running long.
 
-## R2-G2 — The export directory — `est_frozen: 66m` — #595
+## R2-G2 — The export directory — `est_frozen: 76m` — #595
 
 Files: `packages/cli/src/export/*` (new),
 `packages/cli/src/manifest-payload.ts` → renamed to
 `packages/cli/src/export/description.ts`, `packages/cli/src/commands/
 generate.ts` (shared), `packages/cli/src/commands/verify.ts` (2.9 only),
-`packages/cli/src/manifest-chain.ts` (deleted, 2.9).
+`packages/cli/src/manifest-chain.ts` (deleted, 2.9),
+`packages/core/src/sql/manifest.ts` (deleted, 2.10),
+`packages/core/src/sql/migration-file.ts` (2.10, banner line + parser
+only), `packages/core/src/engine/generate.ts` (2.10, emission wiring
+only), `packages/core/src/index.ts` (2.10, `MANIFEST_FORMAT`
+re-export only).
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
@@ -627,10 +632,29 @@ generate.ts` (shared), `packages/cli/src/commands/verify.ts` (2.9 only),
       disposed of this requirement as **Ends** ("against a committed
       file that state cannot arise"); left in place by G1 only because it
       crossed that group's own file boundary. ~6m
+- [x] 2.10 Withdraw core's manifest emission machinery: delete
+      `sql/manifest.ts` (bootstrap/insert renderer, dollar-quote guard,
+      `MANIFEST_PAYLOAD_TERMINATOR`, `MANIFEST_FORMAT`) and its test;
+      remove the manifest banner line and `parseBannerManifestFormat`
+      from `migration-file.ts` (every other banner line and its parser
+      stays); remove the `MANIFEST_FORMAT` re-export from `index.ts`;
+      remove the emission-option wiring from `engine/generate.ts`; remove
+      the CLI's `--manifest` flag, `resolveManifestOptions`,
+      `manifestOptions` and the baseline exception note from
+      `commands/generate.ts`, and delete `generate-manifest.test.ts`
+      (the whole file exercised only this). `manifest-payload.ts` itself
+      is untouched — already renamed to the export's own description
+      builder in 2.2, a fact-collector rather than an emission machine.
+      ~10m
 
-**Re-freeze: 60m → 66m.** Reason: no task covered retiring the
-monotonicity gate itself — a planning-gap correction, not a task running
-long (2.9 added). The live-database proof for "the squashed SQL is
+**Re-freeze: 60m → 66m → 76m.** First move (60→66): no task covered
+retiring the monotonicity gate itself — a planning-gap correction, not a
+task running long (2.9 added). Second move (66→76): the delta already
+disposed of the manifest-emission requirements as moved to the
+apply-engine change or ended outright, but no task covered actually
+removing the code — living code with no describing contract, caught by
+the owner's END/REMOVED cross-check rather than by this group's own
+planning (2.10 added). The live-database proof for "the squashed SQL is
 complete on its own" moved to a new `export-sql.integration.test.ts`
 (docker-gated, mirrors `assert-schema-live.integration.test.ts`) rather
 than `export-sql.test.ts` as the delta packet named it — proving SQL

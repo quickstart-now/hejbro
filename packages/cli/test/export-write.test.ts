@@ -11,7 +11,7 @@ import {
 
 beforeAll(assertBuiltCli);
 
-// Same built-CLI, child_process approach as generate-manifest.test.ts and
+// Same built-CLI, child_process approach as generate-command.test.ts and
 // for the same reason: loadDeclarations jiti-imports the schema fixture
 // through Node's own resolution, which would otherwise resolve a
 // different @hejbro/core instance than an in-process vitest call.

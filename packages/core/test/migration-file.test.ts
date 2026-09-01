@@ -13,7 +13,6 @@ import {
 	migrationVersionOf,
 	parseBannerBaseline,
 	parseBannerHashes,
-	parseBannerManifestFormat,
 	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,
@@ -196,62 +195,6 @@ describe("renderBanner", () => {
 
 	it("omits the version line when no version is given", () => {
 		expect(renderBanner([createChange])).not.toContain("-- hejbro:");
-	});
-});
-
-describe("parseBannerManifestFormat", () => {
-	it("parses the manifest format line by its prefix", () => {
-		const sql = renderBanner(
-			[createChange],
-			undefined,
-			undefined,
-			undefined,
-			1,
-		);
-		expect(parseBannerManifestFormat(sql)).toBe(1);
-		expect(sql).toContain("-- + table app.posts [new]");
-	});
-
-	it("an unknown banner line is ignored", () => {
-		const sql =
-			"-- hejbro migration\n-- some-future-line: unknown\n-- + table app.posts [new]";
-		expect(parseBannerManifestFormat(sql)).toBeNull();
-	});
-
-	it("returns null for a banner rendered with no manifest format", () => {
-		expect(parseBannerManifestFormat(renderBanner([createChange]))).toBeNull();
-	});
-
-	it("a non-integer banner manifest format is rejected, not coerced", () => {
-		expect(
-			parseBannerManifestFormat("-- hejbro migration\n-- hejbro-manifest: x"),
-		).toBeNull();
-		expect(
-			parseBannerManifestFormat("-- hejbro migration\n-- hejbro-manifest: "),
-		).toBeNull();
-		// trailing garbage after a leading digit: an unanchored digit test
-		// would accept this and then `Number("1x")` would silently produce
-		// `NaN`, reviving the coercion bug the two cases above already guard.
-		expect(
-			parseBannerManifestFormat("-- hejbro migration\n-- hejbro-manifest: 1x"),
-		).toBeNull();
-	});
-
-	it("a reader that knows only the pre-existing banner lines reads its own value, unaffected by the manifest line (delta: 'A reader that does not know the line is unaffected')", () => {
-		const sql = renderBanner(
-			[createChange],
-			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
-			"0.2.0",
-			true,
-			1,
-		);
-		expect(parseBannerVersion(sql)).toBe("0.2.0");
-		expect(parseBannerHashes(sql)).toEqual({
-			parent: "sha256:aaaa",
-			current: "sha256:bbbb",
-		});
-		expect(parseBannerBaseline(sql)).toBe(true);
-		expect(parseBannerManifestFormat(sql)).toBe(1);
 	});
 });
 

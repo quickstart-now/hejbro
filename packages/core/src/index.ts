@@ -384,7 +384,6 @@ export type { JsonValue } from "./snapshot/stable-json";
 export { stableJson } from "./snapshot/stable-json";
 export { qualifyName, quoteIdentifier } from "./sql/identifier";
 export { quoteStringLiteral } from "./sql/literal";
-export { MANIFEST_FORMAT } from "./sql/manifest";
 export type {
 	BannerHashes,
 	DuplicateVersionGroup,
@@ -398,7 +397,6 @@ export {
 	migrationVersionOf,
 	parseBannerBaseline,
 	parseBannerHashes,
-	parseBannerManifestFormat,
 	parseBannerVersion,
 	renderBanner,
 	renderMigrationPrefix,

@@ -182,8 +182,6 @@ const BASELINE_LINE = `${BASELINE_PREFIX} these objects already exist — regist
 const PARENT_SNAPSHOT_PREFIX = "-- parent-snapshot: ";
 const SNAPSHOT_PREFIX = "-- snapshot: ";
 const VERSION_PREFIX = "-- hejbro: ";
-/** The schema-manifest capability's own banner line prefix — a tool can learn what a migration carries without parsing its SQL. Unknown to every parser but {@link parseBannerManifestFormat}, exactly like every other banner line here. */
-const MANIFEST_PREFIX = "-- hejbro-manifest: ";
 
 /**
  * Renders a one-line-per-change summary banner: `+` for creates, `~` for
@@ -211,28 +209,16 @@ const baselineLines = (
 	return [BASELINE_LINE];
 };
 
-/** The `-- hejbro-manifest: <format>` line, when `manifestFormat` is given — `[]` when it is `undefined`, so a migration rendered without it carries not one character of this line. */
-const manifestLines = (
-	manifestFormat: number | undefined,
-): ReadonlyArray<string> => {
-	if (manifestFormat === undefined) {
-		return [];
-	}
-	return [`${MANIFEST_PREFIX}${manifestFormat}`];
-};
-
 export const renderBanner = (
 	changes: ReadonlyArray<KindChange>,
 	hashes?: BannerHashes,
 	version?: string,
 	baseline?: boolean,
-	manifestFormat?: number,
 ): string => {
 	const lines = [
 		"-- hejbro migration",
 		...versionLines(version),
 		...baselineLines(baseline),
-		...manifestLines(manifestFormat),
 		...changes.map((change) => renderBannerLine(change)),
 	];
 	if (hashes === undefined) {
@@ -283,33 +269,6 @@ export const parseBannerVersion = (fileContent: string): string | null => {
 		return null;
 	}
 	return versionLine.slice(VERSION_PREFIX.length);
-};
-
-const MANIFEST_FORMAT_VALUE = /^\d+$/;
-
-/**
- * Reads a migration file's `-- hejbro-manifest: <format>` line, or `null`
- * when the line is absent — every migration rendered without the
- * schema-manifest capability opted in — or when its value isn't a plain
- * non-negative integer, so a hand-edited or truncated line reports as
- * absent rather than as `NaN` or `0`. Reads by {@link MANIFEST_PREFIX}
- * only, so an older hejbro reading a newer file's other unknown lines
- * stays unaffected, matching every other parser here.
- */
-export const parseBannerManifestFormat = (
-	fileContent: string,
-): number | null => {
-	const manifestLine = fileContent
-		.split("\n")
-		.find((line) => line.startsWith(MANIFEST_PREFIX));
-	if (manifestLine === undefined) {
-		return null;
-	}
-	const value = manifestLine.slice(MANIFEST_PREFIX.length);
-	if (!MANIFEST_FORMAT_VALUE.test(value)) {
-		return null;
-	}
-	return Number(value);
 };
 
 /**
