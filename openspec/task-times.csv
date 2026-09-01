@@ -565,3 +565,4 @@ date,change-id,task-id,group,est_min,actual_min,waited_user_min,notes
 2026-09-01,add-polyrepo-sync,1.6,1,5,2,0,determinism held by construction; test only
 2026-09-01,add-polyrepo-sync,1.7,1,3,3,0,added mid-group; parser rejects a non-integer format
 2026-09-01,add-polyrepo-sync,g1-review,1,0,5,0,process: review round 2 (five findings) plus instruction crossings
+2026-09-01,add-polyrepo-sync,1.1-1.6,R2-G1,38,17,0,"combined row -- no per-subtask date -u stamps taken this round, only a coarse start (09:41:25Z) and completion (09:55:04Z); stop-and-ask over cross-boundary sync-command usages expanded scope from usage-table withdrawal alone to retiring hejbro sync entirely (1.4-1.6 added)"

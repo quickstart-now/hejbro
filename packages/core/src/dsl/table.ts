@@ -107,9 +107,10 @@ export type ForeignKeyDeclaration = {
 
 /**
  * Which constructor built a {@link Table} value — `"declared"` for
- * {@link table}/{@link existingTable} (both authored in this repository),
- * `"usage"` for `syncedTable` (`dsl/usage-table.ts`, values read back
- * from a database this repository does not own).
+ * {@link table}/{@link existingTable} (both authored in this repository).
+ * `"usage"` marks a value this package did not build itself; no
+ * constructor here produces it, and `engine/generate.ts` refuses it
+ * wherever it is seen.
  */
 export type TableAuthority = "declared" | "usage";
 
@@ -138,17 +139,6 @@ export type TableDeclaration = {
 	 * `"usage"`, never an absent value.
 	 */
 	readonly authority?: TableAuthority;
-	/**
-	 * The manifest row a `syncedTable()` output was made from, if the
-	 * caller supplied one — the same string a synced module exports as
-	 * its freshness stamp (schema-manifest delta's own `snapshot_hash`),
-	 * never a new format computed here. A different axis from
-	 * {@link authority}: `authority` says which constructor built this
-	 * value (always present, what a refusal judges); `origin` says which
-	 * manifest row it came from (present only when known, what a refusal
-	 * may go on to name). `table()`/`existingTable()` never set it.
-	 */
-	readonly origin?: string;
 	readonly declaredAt: string | null;
 };
 
@@ -205,8 +195,8 @@ export type Table<
 /**
  * A {@link Table} authored in this repository (via {@link table} or
  * {@link existingTable}) — narrows `TAuthority` to `"declared"`, excluding
- * `syncedTable`'s output. `engine/generate.ts`'s `HejbroInput` narrows to
- * this. Measured: `table()`'s own return type must spell out
+ * a `"usage"`-authority value. `engine/generate.ts`'s `HejbroInput` narrows
+ * to this. Measured: `table()`'s own return type must spell out
  * `Table<TColumns, "declared">` rather than naming this alias directly —
  * substituting the alias there (a function called from thousands of
  * call sites across this package's own test suite) reintroduced the same
@@ -1270,7 +1260,7 @@ const assertNoDoublyDeclaredReference = (
 	);
 };
 
-/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. Exported so `dsl/usage-table.ts`'s `syncedTable` reuses the identical fold, rather than re-deriving foreign keys a second way. */
+/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. Exported so `existing-table.ts` and `rls.ts` reuse the identical fold, rather than re-deriving foreign keys a second way. */
 export const foldColumnReferences = (
 	tableName: string,
 	columnEntries: ReadonlyArray<ColumnEntry>,

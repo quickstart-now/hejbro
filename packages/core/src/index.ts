@@ -74,12 +74,6 @@ export {
 	tableMeta,
 	toSnakeCase,
 } from "./dsl/table";
-export {
-	syncedGenerated,
-	syncedHasDefault,
-	syncedIdentity,
-	syncedTable,
-} from "./dsl/usage-table";
 export type { ChainEntry, ChainReport } from "./engine/chain";
 export { checkChain } from "./engine/chain";
 export { diffSnapshots } from "./engine/diff-engine";

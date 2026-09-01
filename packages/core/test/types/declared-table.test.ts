@@ -7,7 +7,6 @@ import type {
 	TableDeclaration,
 } from "../../src/dsl/table";
 import { table, tableMeta } from "../../src/dsl/table";
-import { syncedTable } from "../../src/dsl/usage-table";
 import type { HejbroInput } from "../../src/engine/generate";
 import type {
 	DeclaredTable as DeclaredTablePublic,
@@ -16,10 +15,10 @@ import type {
 import {
 	emptySnapshot,
 	generateMigration,
-	syncedTable as syncedTablePublic,
 	table as tablePublic,
 } from "../../src/index";
 import { uuid } from "../../src/types/column-builder-factories";
+import { buildUsageTable } from "../support/usage-table";
 
 const app = schema("app");
 const columns = { id: uuid().primaryKey() };
@@ -54,7 +53,7 @@ describe("Table is structurally unchanged (2.2)", () => {
 
 describe("a usage table is not assignable to the migration input (2.3 — type layer)", () => {
 	it("is a type error, pinned; the runtime chokepoint (engine/authority-refusal.test.ts) is what a caller the type layer never saw — a JS project, or a config file jiti loads without a compile step — still reaches", () => {
-		const usage = syncedTable("app", "posts", columns);
+		const usage = buildUsageTable("app", "posts", columns);
 		// @ts-expect-error a usage table carries no migration authority
 		const input: HejbroInput = usage;
 		expect(input).toBe(usage);
@@ -72,7 +71,7 @@ describe("existingTable is branded too (regression, EXISTING-2.1-FINAL)", () => 
 describe("the published input type takes a declared table and refuses a bare one", () => {
 	it("accepts a declared table, refuses a bare Table annotation and a usage table, through @hejbro/core's own public surface", () => {
 		const declared = tablePublic(app, "posts", columns);
-		const usage = syncedTablePublic("app", "posts", columns);
+		const usage = buildUsageTable("app", "posts", columns);
 
 		const result = generateMigration({
 			declarations: [declared],

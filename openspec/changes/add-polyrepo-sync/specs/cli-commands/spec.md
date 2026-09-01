@@ -61,9 +61,9 @@ nowhere in the package's own dependency list, and SHALL report its
 absence as a coded failure naming what to install.
 
 Two such tools exist. Vendoring runs `git`, and a machine without it
-SHALL be told so rather than shown a subprocess error. The database
-fallback and `check` load a driver dynamically, and a missing driver
-SHALL be reported as it already is.
+SHALL be told so rather than shown a subprocess error. `check` loads a
+driver dynamically, and a missing driver SHALL be reported as it
+already is.
 
 #### Scenario: A missing driver is explained
 - **WHEN** `hejbro check` runs in a project without the driver package

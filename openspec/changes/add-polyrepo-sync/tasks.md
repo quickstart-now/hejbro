@@ -502,28 +502,52 @@ subprocess in the package goes through it) ·
 `packages/cli/src/config.ts` (R2-G4, R2-G7).
 Every other file belongs to exactly one group.
 
-## R2-G1 — Withdrawing what lost its reader — `est_frozen: 20m` — #594
+## R2-G1 — Withdrawing what lost its reader — `est_frozen: 38m` — #594
 
 Files: `packages/core/src/dsl/usage-table.ts` (deleted),
 `packages/core/src/dsl/table.ts`, `packages/core/src/index.ts`,
-`packages/query/test/types/usage-table.test.ts` (deleted).
+`packages/query/test/types/usage-table.test.ts` (deleted),
+`packages/cli/src/main.ts`, `packages/cli/src/commands/sync.ts`
+(deleted), `packages/cli/src/sync/{connection,emit,manifest-state}.ts`
+(deleted; `sync/write.ts` preserved for R2-G4), `packages/cli/src/manifest-read.ts`
+(deleted), `packages/cli/src/flags.ts`, and the deleted modules' own
+tests.
 
-- [ ] 1.1 Delete the usage-table constructor and the three write-fact
+- [x] 1.1 Delete the usage-table constructor and the three write-fact
       helpers, and remove their exports. Start from the type test that
       asserts they exist: it is deleted in the same step, and the
       failing signal is `check-types` over the packages that imported
       them. ~6m
-- [ ] 1.2 `[design]` Decide whether the authority brand's **declared**
+- [x] 1.2 `[design]` Decide whether the authority brand's **declared**
       side survives on its own ground. It narrows what generation
       accepts, which is a property of the repository that authors
       migrations and does not depend on what a consumer holds. Settle
       *keep* or *withdraw* with the reason recorded in one line, then
       execute it. Start from
       `core/test/types/declared-table.test.ts`. ~8m
-- [ ] 1.3 Remove the origin carrier and the origin clause of the
+      **Decision: keep.** `TableAuthority` stays `"declared" | "usage"`
+      — the runtime chokepoint in `engine/generate.ts` still refuses
+      any hand-assembled `"usage"`-tagged value regardless of whether a
+      public constructor exists, so the brand keeps guarding a property
+      of the repository that authors migrations.
+- [x] 1.3 Remove the origin carrier and the origin clause of the
       refusal, keeping the refusal itself. Start from
       `core/test/engine/authority-refusal.test.ts > the refusal names
       what it observed`. ~6m
+- [x] 1.4 Command registration + `commands/sync.ts` deletion. Start
+      from `cli/test/help.test.ts`'s command-listing assertion losing
+      `sync`. ~6m
+- [x] 1.5 Delete `src/sync/{connection,emit,manifest-state}.ts` and
+      `manifest-read.ts` plus their tests. `write.ts` preserved. Red
+      signal: `check-types` and the remaining suite. ~7m
+- [x] 1.6 Flag-surface cleanup — only what no other command uses
+      (`--out`, `--schema`; `--url` stays, shared with `check`). ~5m
+
+**Re-freeze: 20m → 38m.** Reason: no task covered retiring the `sync`
+command itself — a planning-gap correction (owner caught it from an
+implementer's observation that its own generated-code emitter still
+named the four withdrawn symbols by string, with no gate in this repo
+able to catch it), not a task running long.
 
 ## R2-G2 — The export directory — `est_frozen: 60m` — #595
 
