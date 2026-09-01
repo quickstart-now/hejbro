@@ -2,18 +2,46 @@ import type { KindChange } from "../kind/object-kind";
 import type { Snapshot } from "../snapshot/snapshot";
 import type { JsonValue } from "../snapshot/stable-json";
 
+/**
+ * [task 13.1, #625] `value` narrowed to a plain JSON object, or `null` for
+ * anything else (a JSON scalar, an array, or `null` itself) -- the one
+ * "is this a plain object" test this file needed three times
+ * (`enumValuesOf`, `isMatchingLiteral`, `referencesAnyLiteral`), each
+ * previously writing out the same three-way check
+ * (`null`/`typeof !== "object"`/`Array.isArray`) inline and then casting
+ * the result by hand. Extracted once, as a narrowing helper rather than a
+ * bare boolean predicate: a boolean answer would still leave every caller
+ * casting the value itself, which is the reason the guards were written
+ * inline in the first place (the cast site and the check site stayed
+ * next to each other on purpose) -- a narrowing return removes the cast
+ * along with the check, at every call site at once.
+ */
+const asJsonRecord = (
+	value: JsonValue | null | undefined,
+): Record<string, JsonValue> | null => {
+	if (
+		value === null ||
+		value === undefined ||
+		typeof value !== "object" ||
+		Array.isArray(value)
+	) {
+		return null;
+	}
+	return value as Record<string, JsonValue>;
+};
+
 /** `EnumSnapshot`'s own shape (`kinds/enum-kind.ts`, not exported there) -- read structurally here rather than imported, the same "don't own a second copy of a private shape" reasoning `enum-kind.ts` itself states for its own `asEnumSnapshot`. */
 const enumValuesOf = (
 	value: JsonValue | null,
 ): ReadonlyArray<string> | null => {
-	if (value === null || typeof value !== "object" || Array.isArray(value)) {
+	const record = asJsonRecord(value);
+	if (record === null) {
 		return null;
 	}
-	const values = (value as Record<string, JsonValue>).values;
-	if (!Array.isArray(values)) {
+	if (!Array.isArray(record.values)) {
 		return null;
 	}
-	return values as ReadonlyArray<string>;
+	return record.values as ReadonlyArray<string>;
 };
 
 /** `true` when `next` is `previous` with zero or more values appended -- mirrors `enum-kind.ts`'s own `isAppendOnly`, which is not exported (kept private to that file's own diff/emit pairing); duplicated here rather than exported across a kind-module boundary for one predicate. */
@@ -23,6 +51,31 @@ const isAppendOnly = (
 ): boolean =>
 	nextValues.length >= previousValues.length &&
 	previousValues.every((value, index) => value === nextValues[index]);
+
+/** `true` when `change` is an `alter` on an `enum` -- the one kind/operation pair {@link addedEnumValues} has anything to say about; named so that check reads as one fact at its call site instead of two comparisons. */
+const isEnumAlterChange = (change: KindChange): boolean =>
+	change.kind === "enum" && change.operation === "alter";
+
+/**
+ * [task 13.4, #625] The values `nextValues` appends onto `previousValues`,
+ * or `[]` when it is not append-only (shorter, reordered, or otherwise
+ * not `previousValues` with zero or more values on the end) -- the
+ * "does `next` extend `previous`, and if so what's new" half of
+ * {@link addedEnumValues}, split out on its own so that function's
+ * remaining job is finding the two value lists and handing them here.
+ */
+const appendedValues = (
+	previousValues: ReadonlyArray<string>,
+	nextValues: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	if (nextValues.length <= previousValues.length) {
+		return [];
+	}
+	if (!isAppendOnly(previousValues, nextValues)) {
+		return [];
+	}
+	return nextValues.slice(previousValues.length);
+};
 
 /**
  * The values `change` adds to an *existing* enum type -- `[]` for
@@ -35,7 +88,7 @@ const isAppendOnly = (
  * could trigger a split either).
  */
 const addedEnumValues = (change: KindChange): ReadonlyArray<string> => {
-	if (change.kind !== "enum" || change.operation !== "alter") {
+	if (!isEnumAlterChange(change)) {
 		return [];
 	}
 	const previousValues = enumValuesOf(change.previous);
@@ -43,13 +96,26 @@ const addedEnumValues = (change: KindChange): ReadonlyArray<string> => {
 	if (previousValues === null || nextValues === null) {
 		return [];
 	}
-	if (nextValues.length <= previousValues.length) {
-		return [];
+	return appendedValues(previousValues, nextValues);
+};
+
+/**
+ * [task 13.2, #625] `literalRecord`'s own string value, when it encodes a
+ * string literal (`literalKind === "string"`, `value` actually a
+ * `string`) -- `null` otherwise. Split out of `isMatchingLiteral` so that
+ * function's own remaining job is one comparison against `targets`, not
+ * also reading the literal's shape apart from its value.
+ */
+const stringLiteralValue = (
+	literalRecord: Record<string, JsonValue>,
+): string | null => {
+	if (literalRecord.literalKind !== "string") {
+		return null;
 	}
-	if (!isAppendOnly(previousValues, nextValues)) {
-		return [];
+	if (typeof literalRecord.value !== "string") {
+		return null;
 	}
-	return nextValues.slice(previousValues.length);
+	return literalRecord.value;
 };
 
 /**
@@ -65,20 +131,12 @@ const isMatchingLiteral = (
 	if (value.nodeKind !== "literal") {
 		return false;
 	}
-	const literal = value.literal;
-	if (
-		literal === null ||
-		typeof literal !== "object" ||
-		Array.isArray(literal)
-	) {
+	const literalRecord = asJsonRecord(value.literal);
+	if (literalRecord === null) {
 		return false;
 	}
-	const literalRecord = literal as Record<string, JsonValue>;
-	return (
-		literalRecord.literalKind === "string" &&
-		typeof literalRecord.value === "string" &&
-		targets.has(literalRecord.value)
-	);
+	const literalValue = stringLiteralValue(literalRecord);
+	return literalValue !== null && targets.has(literalValue);
 };
 
 /**
@@ -125,10 +183,10 @@ const referencesAnyLiteral = (
 	if (Array.isArray(value)) {
 		return value.some((entry) => referencesAnyLiteral(entry, targets));
 	}
-	if (value === null || typeof value !== "object") {
+	const record = asJsonRecord(value);
+	if (record === null) {
 		return false;
 	}
-	const record = value as Record<string, JsonValue>;
 	if (isMatchingLiteral(record, targets)) {
 		return true;
 	}

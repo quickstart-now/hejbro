@@ -10,6 +10,7 @@ import {
 	generateMigrations,
 } from "../src/engine/generate";
 import { applySplitChangesOnly, planSplit } from "../src/engine/split";
+import type { KindChange } from "../src/kind/object-kind";
 import { createDefaultRegistry } from "../src/kind/registry";
 import { select } from "../src/query/select";
 import { buildSnapshot, emptySnapshot } from "../src/snapshot/snapshot";
@@ -163,6 +164,57 @@ describe("planSplit / 4.1", () => {
 
 		const changes = diffSnapshots(previous, next, registry);
 		const decision = planSplit(changes);
+
+		expect(decision.split).toBe(false);
+	});
+});
+
+/**
+ * [task 13.3, #625] `enumValuesOf`'s own two rejections, reached the only
+ * way a caller can reach a private function: through `planSplit`, with a
+ * hand-built `KindChange` rather than a real declaration -- these shapes
+ * exist because a snapshot could hold them (a hand-edited snapshot file,
+ * or a format this build reads but does not itself write), not because
+ * any of this repository's own emitters produce one. Asserts what a
+ * caller of `planSplit` actually observes (no split triggers from a
+ * malformed enum change) rather than which line inside `enumValuesOf`
+ * ran -- a test that only moved the coverage number without saying why a
+ * shape is rejected is exactly the defect this change spent its life
+ * finding, including inside its own task 1.4.
+ */
+describe("planSplit / 13.3 -- enumValuesOf's own rejections (#625)", () => {
+	const malformedEnumChange = (
+		previous: KindChange["previous"],
+		next: KindChange["next"],
+	): KindChange => ({
+		kind: "enum",
+		operation: "alter",
+		identity: "app.mood",
+		previous,
+		next,
+		notes: [],
+	});
+
+	it("an enum snapshot that is not a plain object adds no values, so it cannot trigger a split on its own", () => {
+		// A snapshot node is always a plain object in every shape this
+		// build's own emitters write -- this is the shape a hand-edited or
+		// foreign-written snapshot file could still hold instead.
+		const change = malformedEnumChange("not-an-object", {
+			values: ["ok", "great"],
+		});
+
+		const decision = planSplit([change]);
+
+		expect(decision.split).toBe(false);
+	});
+
+	it("an enum snapshot whose values field is not an array adds no values either", () => {
+		const change = malformedEnumChange(
+			{ values: "ok" },
+			{ values: ["ok", "great"] },
+		);
+
+		const decision = planSplit([change]);
 
 		expect(decision.split).toBe(false);
 	});

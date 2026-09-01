@@ -602,6 +602,107 @@ Files: `packages/cli/src/commands/verify.ts` (the chain reader),
       `apply-live.integration.test.ts` — "registers a baseline against a
       database that already has its objects".
 
+## 13. Bringing the split module under the CRAP gate
+
+Found in group 10, by running `pnpm check:crap` to confirm it would not
+dirty the README. It did — and then exited 1. The gate runs in two stages
+in one command: it rewrites the README block from the live measurement,
+then compares that measurement to the threshold. Three functions in
+`packages/core/src/engine/split.ts` are over it: `addedEnumValues`
+(7.23), `isMatchingLiteral` (7.10), `enumValuesOf` (5.58).
+
+`split.ts` does not exist on `upstream/dev` (measured, both by the
+implementer and the lead). This is not inherited debt — **group 4
+introduced it and no task owned bringing it under the gate**, though this
+change's own `tasks.md` lists `check:crap` as a close-out gate. That is
+group 12's shape again: the plan wrote down a requirement and gave nobody
+the job of meeting it.
+
+`CRAP = complexity² × (1 − coverage)³ + complexity`, threshold `> 5`
+(strict). So at perfect coverage a function's CRAP **is** its complexity,
+and the gate's own `Next:` line — "reduce complexity or add tests" —
+offers an option that is false for two of these three: no amount of
+testing brings a complexity-7 function under 5. Only `enumValuesOf`
+(complexity 5) can pass on tests alone, and only at *full* coverage,
+where it lands on exactly 5 and the strict `>` lets it through.
+
+**The zero-margin trap follows from the same arithmetic**: a function
+sitting exactly at the threshold is green only while its coverage is
+perfect. The next uncovered branch anywhere in it turns the gate red
+again. Aim below the line, not at it.
+
+Scope pin (lead, #625): the smallest change that makes the gate green,
+with **no observable behaviour change**. Group 4R's seal holds — the
+`index.ts` diff stays exactly one new export, and every helper this
+group extracts stays inside the module. The split machine's output is
+pinned by the existing suite and the goldens, so this refactor rides on
+a green suite: if it goes red, the refactor changed behaviour and is
+wrong, not the test.
+
+There is no failing *test* to start from here; the failing gate is the
+red. Each task names which function drops off the gate's list, and the
+measurement is `pnpm check:crap`'s own output. It rewrites `README.md`
+every run — revert it each time (`git checkout -- README.md`); the README
+block is refreshed once, by the lead, at close-out.
+
+Files: `packages/core/src/engine/split.ts`,
+`packages/core/test/split.test.ts`.
+
+- [x] 13.1 (~8m) [design] The same "is this a plain JSON object" test is
+      written out three times in this file — in `enumValuesOf`, in
+      `isMatchingLiteral`, and in `referencesAnyLiteral` — as
+      `null` / `typeof !== "object"` / `Array.isArray`. Extracting it
+      once (a `JsonValue` → `Record<string, JsonValue> | null` narrowing
+      helper) removes three decision points from each caller. This task
+      first said "which is why one extraction moves all three flagged
+      functions at once" — **that was false, and it is what left 13.4
+      unwritten**: `addedEnumValues` does not carry that guard, it calls
+      `enumValuesOf` instead, so nothing done here reaches it. The
+      design part is whether that helper narrows the type or only
+      answers a boolean: only the narrowing form lets the callers drop
+      their casts, and the casts are the reason the guards were inlined.
+      Red: `check-crap` lists `enumValuesOf`; green: it does not.
+- [x] 13.2 (~7m) `isMatchingLiteral` after 13.1 — **measure before
+      writing anything.** Complexity counts each `&&`/`||` operand, so
+      its final three-term `return` chain carries points that guard
+      extraction does not touch; whether it is under the line after 13.1
+      is a fact to read off the gate, not to predict. If it is already
+      green, do not extract anything and record that the task was
+      unnecessary. If not, the remaining shape is reading the literal's
+      own value out of the record (`literalKind === "string"` plus the
+      string check) as a `string | null`, leaving the caller with one
+      comparison against `targets`. Red/green: `check-crap`'s listing of
+      `isMatchingLiteral`.
+- [x] 13.3 (~8m) `enumValuesOf`'s uncovered paths (71.4% — the gate names
+      the file and line; `vitest --coverage` names the branches). Assert
+      **behaviour, not lines**: each malformed shape this function
+      rejects exists because a snapshot could hold it, and what matters
+      to a caller is that such a shape yields no added values and
+      therefore no split. A test written to move a coverage number,
+      whose name claims more than its body checks, is precisely the
+      defect this change spent its life finding — including in its own
+      task 1.4. Red: `check-crap` lists `enumValuesOf` at 5.58; green: it
+      is off the list, and the assertions say why each rejected shape is
+      rejected.
+- [x] 13.4 (~9m) [design] `addedEnumValues` — the one this group named in
+      its own opening line and then gave to nobody. Its complexity is its
+      own control flow: an enum-alter guard (2 operands), a
+      null-pair guard (2), a length check, an append-only check. **Two
+      extractions, not one**, and the arithmetic is why: taking only the
+      trailing "does `next` append onto `previous`, and what did it add"
+      pair leaves complexity 5, which at this file's measured coverage
+      (91.7%) computes to 5.01 — over a threshold of 5. Also lifting the
+      enum-alter guard into a named predicate leaves 4, which is green
+      with room. That is the zero-margin trap in the one place it
+      actually bites: the smaller refactor *looks* sufficient and fails
+      by a hundredth.
+      **Measure each extracted helper too** — the walker names every
+      function, so complexity relocated into a helper is complexity that
+      merely moved, and a helper no test reaches arrives with coverage 0.
+      Red: `check-crap` lists `addedEnumValues` at 7.03; green: the gate
+      exits 0 with an empty list, which is this group's actual finish
+      line.
+
 ## Verification
 
 - **At archive time, read the rolled-up main specs and confirm they say
