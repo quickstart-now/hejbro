@@ -24,6 +24,19 @@ const writeExport = async (remote: GitFixture): Promise<void> => {
 	await writeFile(join(dir, "format.json"), EXPORT_FORMAT_V1);
 };
 
+const writeConsumerConfig = (cwd: string, source: string): Promise<void> =>
+	writeFile(
+		join(cwd, "hejbro.config.ts"),
+		`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	schemaSource: "${source}",
+	presets: [],
+});
+`,
+	);
+
 let remote: GitFixture;
 let cwd: string;
 
@@ -32,7 +45,7 @@ beforeEach(async () => {
 	cwd = await createCliFixtureDir();
 	await writeExport(remote);
 	remote.commit("export v1", "2026-01-01T10:00:00Z");
-	await runCli(cwd, ["link", remote.cwd]);
+	await writeConsumerConfig(cwd, remote.cwd);
 	await runCli(cwd, ["vendor"]);
 });
 

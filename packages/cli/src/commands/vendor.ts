@@ -1,18 +1,20 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
+import { loadConfig } from "../loader";
 import { resolveExport } from "../vendor/fetch";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
-import type { VendorLock } from "../vendor/lock";
 import {
-	readVendorLock,
+	assertLockWritable,
+	readLock,
+	vendorDirPath,
 	vendorSchemaPath,
 	vendorSqlPath,
-	writeVendorLock,
+	writeLock,
 } from "../vendor/lock";
 
 const VENDOR_DESCRIPTION =
@@ -35,22 +37,28 @@ const flagValue = (
 	return argv[index + 1];
 };
 
-const requireLinkedSource = (cwd: string): VendorLock => {
-	const lock = readVendorLock(cwd);
-	if (lock === null) {
+/** `hejbro.config.ts`'s own field (schema-vendoring spec) — intent,
+ * committed, distinct from `hejbro.lock`'s resolved commit. */
+const requireSchemaSource = async (
+	cwd: string,
+	configFlag: string | undefined,
+): Promise<string> => {
+	const { config } = await loadConfig(cwd, configFlag);
+	if (config.schemaSource === undefined) {
 		return throwHejbroError(
 			"vendor-source-not-linked",
-			"hejbro vendor needs a linked source. Next: run `hejbro link <repository>` first.",
+			'hejbro vendor needs a source. Next: run `hejbro link <repository>` (or add "schemaSource" to hejbro.config.ts yourself).',
 		);
 	}
-	return lock;
+	return config.schemaSource;
 };
 
-const runVendorCheck = (cwd: string, lock: VendorLock): VendorResult => {
-	if (lock.commit === undefined) {
+const runVendorCheck = (cwd: string): VendorResult => {
+	const lock = readLock(cwd);
+	if (lock === null) {
 		return throwHejbroError(
 			"vendor-not-yet-vendored",
-			"hejbro vendor --check has nothing to compare against: this repository is linked but has never been vendored. Next: run `hejbro vendor` first.",
+			"hejbro vendor --check has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
 		);
 	}
 	const schemaText = readFileSync(vendorSchemaPath(cwd), "utf8");
@@ -73,21 +81,17 @@ const runVendorCheck = (cwd: string, lock: VendorLock): VendorResult => {
 
 const runVendorUpdate = (
 	cwd: string,
-	lock: VendorLock,
+	source: string,
 	ref: string | undefined,
 ): VendorResult => {
-	const fetched = withGitDiagnostic("vendor", lock.source, () =>
-		resolveExport(cwd, lock.source, ref),
+	const fetched = withGitDiagnostic("vendor", source, () =>
+		resolveExport(cwd, source, ref),
 	);
-	// No overwrite guard here: `requireLinkedSource` already read (and so
-	// already validated) any pre-existing lock via `readVendorLock` --
-	// once the directory's ownership is established, this run's own
-	// schema.json/snapshot.sql/lock.json are always safe to overwrite.
+	mkdirSync(vendorDirPath(cwd), { recursive: true });
 	writeFileSync(vendorSchemaPath(cwd), fetched.schemaText);
 	writeFileSync(vendorSqlPath(cwd), fetched.sqlText);
-	writeVendorLock(cwd, {
-		source: lock.source,
-		ref: fetched.ref,
+	writeLock(cwd, {
+		resolvedFrom: fetched.ref,
 		commit: fetched.commit,
 		descriptionFormat: fetched.format.descriptionFormat,
 		schemaHash: sha256Hex(fetched.schemaText),
@@ -100,17 +104,21 @@ const runVendorUpdate = (
 	};
 };
 
-export const runVendor = (
+export const runVendor = async (
 	cwd: string,
 	argv: ReadonlyArray<string>,
-): VendorResult => {
+): Promise<VendorResult> => {
 	const fallbackIdentity = "vendor";
 	try {
-		const lock = requireLinkedSource(cwd);
 		if (argv.includes("--check")) {
-			return runVendorCheck(cwd, lock);
+			return runVendorCheck(cwd);
 		}
-		return runVendorUpdate(cwd, lock, flagValue(argv, "--ref"));
+		// The lock guard runs before config even loads: a foreign lock
+		// file blocks everything, regardless of whether a source is
+		// configured yet.
+		assertLockWritable(cwd, argv.includes("--force"));
+		const source = await requireSchemaSource(cwd, flagValue(argv, "--config"));
+		return runVendorUpdate(cwd, source, flagValue(argv, "--ref"));
 	} catch (error) {
 		const hejbroError = asHejbroError(error);
 		const diagnostic = fromHejbroError(
@@ -141,9 +149,13 @@ export const vendorCommand = defineCommand({
 			description:
 				"compare the vendored files against the lock and write nothing",
 		},
+		force: {
+			type: "boolean",
+			description: "overwrite a lock this tool did not write",
+		},
 	},
 	run: async (ctx) => {
-		const result = runVendor(process.cwd(), ctx.rawArgs);
+		const result = await runVendor(process.cwd(), ctx.rawArgs);
 		result.stdout.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);

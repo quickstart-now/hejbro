@@ -7,11 +7,11 @@ import { throwHejbroError } from "@hejbro/core";
  * "The check SHALL be textual"). Adopted from the schema-sync capability's
  * own `SYNCED_MODULE_MARKER` (D87 polyrepo-sync, R2-G4, 4.7): same
  * mechanism, renamed for the vendor world, where the guarded file is
- * `lock.json` rather than a generated TS module — `lock.json` is always
- * a hejbro-only format, unlike `schema.json`/`snapshot.sql`, which are
- * kept as byte-identical copies of what the schema repository published
- * (so a consumer can diff them directly against the upstream export) and
- * therefore carry no mark of their own. */
+ * `hejbro.lock` rather than a generated TS module — `hejbro.lock` is
+ * always a hejbro-only format, unlike `schema.json`/`snapshot.sql`,
+ * which are kept as byte-identical copies of what the schema repository
+ * published (so a consumer can diff them directly against the upstream
+ * export) and therefore carry no mark of their own. */
 export const VENDOR_LOCK_MARKER = '"generatedBy": "hejbro vendor"';
 
 /** Whether `text` carries a vendor lock's own mark. */

@@ -499,8 +499,7 @@ through the built CLI.
 `packages/cli/src/commands/generate.ts` (R2-G2, R2-G3) ·
 `packages/cli/src/git.ts` (R2-G4 only, listed because every git
 subprocess in the package goes through it) ·
-`packages/cli/src/config.ts` (R2-G7 — R2-G4 turned out not to need it,
-see that group's own note) ·
+`packages/cli/src/config.ts` (R2-G4 adds `schemaSource`, R2-G7 too) ·
 `packages/cli/src/commands/vendor.ts` (R2-G4 writes it, R2-G5 only adds
 the contract file on top, 5.11).
 Every other file belongs to exactly one group.
@@ -707,9 +706,8 @@ Files: `packages/cli/src/git.ts` (remote functions added),
 the withdrawn `sync/write.ts` via `git mv`, see 4.7),
 `packages/cli/src/commands/{link,vendor,outdated}.ts` (new —
 `commands/vendor.ts` is shared with R2-G5, which only adds),
-`packages/core/test/migration-file.test.ts` (4.11 only). `config.ts`
-turned out not to need a change (4.10's own note) — dropped from this
-list rather than left stale.
+`packages/cli/src/config.ts` (new `schemaSource` field, see 4.4/4.10),
+`packages/core/test/migration-file.test.ts` (4.11 only).
 
 **This group writes the description, the squashed SQL and the lock —
 never the contract file.** The delta's "Vendoring pins what it read"
@@ -750,12 +748,24 @@ half of that scenario is closed by R2-G5 (5.11).
       (R2-G5's 5.11 adds the contract file on top, once it exists).
       Start from `cli/test/vendor.test.ts > writes the description and
       the squashed SQL and records the commit`. ~9m
-      **Self-determined layout** (asked, no objection raised): consumer
-      side is `.hejbro/vendor/{schema.json,snapshot.sql,lock.json}`,
-      symmetric to the schema repository's own `.hejbro/export/`.
-      `schema.json`/`snapshot.sql` are kept byte-identical to what was
-      fetched — never wrapped or marked — so a consumer can diff them
-      directly against the upstream export.
+      **Layout, owner-corrected after an initial self-determination**:
+      the two raw copies are `.hejbro/vendor/{schema.json,snapshot.sql}`
+      — symmetric to the schema repository's own `.hejbro/export/`, kept
+      byte-identical to what was fetched, never wrapped or marked, so a
+      consumer can diff them directly against the upstream export (this
+      part of the self-determined layout stood). The lock does **not**
+      live beside them: it is **`hejbro.lock` at the repository root** —
+      the same place `package-lock.json`/`go.sum` sit, owner-decided, so
+      a schema move is visible in a pull request's own file list rather
+      than hidden inside `.hejbro/`. `link` no longer writes anything at
+      all: the source is `hejbro.config.ts`'s own new `schemaSource`
+      field (intent, committed) rather than a file `link` produces —
+      committed config and resolved lock are two different files on
+      purpose, so deleting the lock never loses where the schema came
+      from. `link`'s own output is provisional (prints the field to add,
+      does not edit the TS file) pending a ruling on whether it should
+      write `hejbro.config.ts` automatically — flagged, not decided
+      here.
 - [x] 4.5 The lock also records the description's format version. Start
       from `cli/test/vendor.test.ts > the lock records the description
       format version`. ~6m
@@ -771,12 +781,20 @@ half of that scenario is closed by R2-G5 (5.11).
       `SYNCED_MODULE_MARKER` → `VENDOR_LOCK_MARKER` and the error code
       `sync-destination-not-synced` → `vendor-destination-not-vendored`.
       JSON can't carry a comment marker the way a generated TS module
-      could, so the guard now protects `lock.json` alone (a top-level
+      could, so the guard protects `hejbro.lock` alone (a top-level
       `"generatedBy": "hejbro vendor"` field, checked as a substring) —
-      `lock.json` is always a hejbro-only format, unlike
+      `hejbro.lock` is always a hejbro-only format, unlike
       `schema.json`/`snapshot.sql`, which stay unmarked raw copies (4.4).
-      `readVendorLock` enforces the same check before ever trusting an
-      existing lock's `source`, not only `link`'s own write path.
+      `readLock` enforces the same check before ever trusting an
+      existing lock, not only the write path; the guard runs before
+      `hejbro.config.ts` even loads, so a foreign lock blocks a run
+      regardless of whether a source is configured yet. The negative
+      fixture is a believable hand-written `hejbro.lock` (real key
+      shapes, missing only the mark), not a comment-bearing TS file —
+      confirmed to have real discriminating power by hand: weakening
+      `VENDOR_LOCK_MARKER` to `'"commit"'` flipped
+      `vendor-write.test.ts`'s guard test red (sha256 of `write.ts`
+      before/after the revert: `cfbf640a…6f4ac`, byte-identical).
 - [x] 4.8 `vendor --check`: compare against the lock, offline, writing
       nothing. Start from `cli/test/vendor-check.test.ts > exits
       non-zero and writes nothing`. ~8m
@@ -794,9 +812,9 @@ half of that scenario is closed by R2-G5 (5.11).
       commands that ever reach a remote) rather than one copy per
       command; the diagnostic text is asserted directly in a subprocess
       test with `PATH` stripped, not inferred from a type passing.
-      `packages/cli/src/config.ts` needed no change: `link`/`vendor`/
-      `outdated` read no `hejbro.config.ts` field at all (the three
-      migration-authoring fields were already optional, and these
+      `packages/cli/src/config.ts` **did** need a change after all
+      (4.4's own correction) — a new optional `schemaSource` field,
+      alongside the three already-optional migration-authoring fields.
       commands have no reason to ask for any of them).
 - [x] 4.11 Restore the forward-compatibility regression guard 2.10
       removed along with `parseBannerManifestFormat`: a banner line no

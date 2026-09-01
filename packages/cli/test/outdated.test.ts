@@ -27,6 +27,19 @@ const writeExport = async (
 	await writeFile(join(dir, "format.json"), EXPORT_FORMAT_V1);
 };
 
+const writeConsumerConfig = (cwd: string, source: string): Promise<void> =>
+	writeFile(
+		join(cwd, "hejbro.config.ts"),
+		`import { defineConfig } from "hejbro";
+
+export default defineConfig({
+	entry: ["src/**/*.schema.ts"],
+	schemaSource: "${source}",
+	presets: [],
+});
+`,
+	);
+
 let remote: GitFixture;
 let cwd: string;
 
@@ -35,7 +48,7 @@ beforeEach(async () => {
 	cwd = await createCliFixtureDir();
 	await writeExport(remote, EXPORT_SCHEMA_V1);
 	remote.commit("export v1", "2026-01-01T10:00:00Z");
-	await runCli(cwd, ["link", remote.cwd]);
+	await writeConsumerConfig(cwd, remote.cwd);
 	await runCli(cwd, ["vendor"]);
 });
 
@@ -64,7 +77,7 @@ describe("hejbro outdated", () => {
 	it("refuses when nothing has been vendored yet", async () => {
 		const freshCwd = await createCliFixtureDir();
 		try {
-			await runCli(freshCwd, ["link", remote.cwd]);
+			await writeConsumerConfig(freshCwd, remote.cwd);
 			const result = await runCli(freshCwd, ["outdated"]);
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain("vendor-not-yet-vendored");

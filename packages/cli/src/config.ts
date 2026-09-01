@@ -19,6 +19,13 @@ export type HejbroConfig = {
 	readonly migrationsDir?: string;
 	readonly snapshotPath?: string;
 	readonly prefixStrategy?: MigrationPrefixStrategy;
+	/** `hejbro link`'s own field (schema-vendoring spec, R2-G4): the
+	 * repository this project vendors its schema from — intent, committed
+	 * in this file, distinct from `hejbro.lock`'s resolved commit (truth).
+	 * A consuming repository sets this and none of the three
+	 * migration-authoring fields above; a repository that owns its schema
+	 * sets none of it. */
+	readonly schemaSource?: string;
 	/** Provider presets to register — their kinds and validators (D55). Defaults to `[]`. */
 	readonly presets: ReadonlyArray<Preset>;
 };
@@ -74,11 +81,12 @@ const configSchema = z.object({
 	migrationsDir: z.string().optional(),
 	snapshotPath: z.string().optional(),
 	prefixStrategy: z.enum(migrationPrefixStrategies).optional(),
+	schemaSource: z.string().optional(),
 	presets: z.array(z.unknown()).default([]),
 });
 
 const HEJBRO_CONFIG_SHAPE_HINT =
-	'{ entry: string[], migrationsDir?: string, snapshotPath?: string, prefixStrategy?: "timestamp" | "index" | "unix", presets?: Preset[] }';
+	'{ entry: string[], migrationsDir?: string, snapshotPath?: string, prefixStrategy?: "timestamp" | "index" | "unix", schemaSource?: string, presets?: Preset[] }';
 
 const issueFieldName = (issue: ZodIssue): string => {
 	if (issue.path.length === 0) {
@@ -157,6 +165,9 @@ export const parseConfig = (
 		}),
 		...(result.data.prefixStrategy !== undefined && {
 			prefixStrategy: result.data.prefixStrategy,
+		}),
+		...(result.data.schemaSource !== undefined && {
+			schemaSource: result.data.schemaSource,
 		}),
 		presets: result.data.presets.filter(isPreset),
 	};

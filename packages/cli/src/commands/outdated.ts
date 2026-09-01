@@ -4,8 +4,9 @@ import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { resolveRemoteHead } from "../git";
 import { identityFromMessage } from "../identity";
+import { loadConfig } from "../loader";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
-import { readVendorLock } from "../vendor/lock";
+import { readLock } from "../vendor/lock";
 
 const OUTDATED_DESCRIPTION =
 	"Report whether the linked source has a newer commit than the vendored lock — advisory, never fails.";
@@ -22,24 +23,26 @@ export type OutdatedResult = {
  * are about not having anything to compare (no source linked, never
  * vendored), not about the comparison's own result.
  */
-export const runOutdated = (cwd: string): OutdatedResult => {
+export const runOutdated = async (cwd: string): Promise<OutdatedResult> => {
 	const fallbackIdentity = "outdated";
 	try {
-		const lock = readVendorLock(cwd);
-		if (lock === null) {
+		const { config } = await loadConfig(cwd, undefined);
+		if (config.schemaSource === undefined) {
 			throwHejbroError(
 				"vendor-source-not-linked",
-				"hejbro outdated needs a linked source. Next: run `hejbro link <repository>` first.",
+				'hejbro outdated needs a source. Next: run `hejbro link <repository>` (or add "schemaSource" to hejbro.config.ts yourself).',
 			);
 		}
-		if (lock.commit === undefined) {
+		const source = config.schemaSource as string;
+		const lock = readLock(cwd);
+		if (lock === null) {
 			throwHejbroError(
 				"vendor-not-yet-vendored",
-				"hejbro outdated has nothing to compare against: this repository is linked but has never been vendored. Next: run `hejbro vendor` first.",
+				"hejbro outdated has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
 			);
 		}
-		const head = withGitDiagnostic("outdated", lock.source, () =>
-			resolveRemoteHead(cwd, lock.source),
+		const head = withGitDiagnostic("outdated", source, () =>
+			resolveRemoteHead(cwd, source),
 		);
 		if (head.commit === lock.commit) {
 			return { exitCode: 0, stdout: ["up to date"], stderr: null };
@@ -71,7 +74,7 @@ export const outdatedCommand = defineCommand({
 		description: OUTDATED_DESCRIPTION,
 	},
 	run: async () => {
-		const result = runOutdated(process.cwd());
+		const result = await runOutdated(process.cwd());
 		result.stdout.map((line) => console.log(line));
 		if (result.stderr !== null) {
 			console.error(result.stderr);
