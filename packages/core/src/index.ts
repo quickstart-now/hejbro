@@ -88,7 +88,7 @@ export {
 	planDuplicateVersionFix,
 } from "./engine/duplicate-version-fix";
 export type { HejbroInput } from "./engine/generate";
-export { generateMigration } from "./engine/generate";
+export { generateMigration, generateMigrations } from "./engine/generate";
 export type { Preset } from "./engine/preset";
 export { presetValidators, registerPresets } from "./engine/preset";
 export type {

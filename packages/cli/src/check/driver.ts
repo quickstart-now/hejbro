@@ -6,6 +6,46 @@ import { describeDriverError } from "./error-message";
 export type ConnectionEnv = Readonly<Record<string, string | undefined>>;
 
 /**
+ * [design, task 7.2, #613] `commandName`/`codes` for every function in
+ * this module below -- required everywhere, never defaulted, for the same
+ * reason `execute.ts`'s own `nextCommand` is required: this module has
+ * more than one production caller (`hejbro check`, and now every apply-
+ * engine command that needs a connection -- `migrate`/`reset`/`raise`), so
+ * a default would be a silent channel for the wrong command's name to
+ * ship the moment a second caller appeared -- which is exactly what
+ * reusing `check-*` as-is would have done here (task 7.2's own
+ * originating question: `hejbro migrate` answering under a code that
+ * names `check`).
+ *
+ * `codes` are three literal strings the CALLER supplies, never assembled
+ * here from a prefix (owner/lead review, #613, correcting this module's
+ * own first draft): a code built as `` `${prefix}-connection-missing` ``
+ * exists nowhere in the source as the string it actually throws, which
+ * `check-diagnostic-xref`'s definition scan (literal-argument-only, by
+ * design) cannot see, `grep` cannot find, and a future citation of it
+ * would be wrongly flagged as undefined -- exactly the "reference a tool
+ * can't see" failure mode this whole change has already paid for three
+ * times (string pins, the public surface, a hardcoded command name).
+ * Each of `check`/`migrate`/`status`/`reset`/`raise` writes its own three
+ * codes out as literals at its own call site instead; `ledger.ts`'s own
+ * rule (a prefix names the OPERATION, never the one command that minted
+ * it first) still decides what those literals spell -- `check-*` for
+ * `hejbro check` (command and operation coincide there), `apply-*` for
+ * the four apply-engine commands (they share one operation through this
+ * same path) -- it just no longer decides it by string concatenation.
+ */
+export type ConnectionCodes = {
+	readonly connectionMissing: string;
+	readonly driverMissing: string;
+	readonly connectionFailed: string;
+};
+
+export type ConnectionContext = {
+	readonly commandName: string;
+	readonly codes: ConnectionCodes;
+};
+
+/**
  * `--url`, else `DATABASE_URL`, else a coded refusal (spec: "cli-commands"
  * delta, "Declarations can be checked against a live database"). Never
  * reads `hejbro.config.ts`: that file is committed and a connection
@@ -14,6 +54,7 @@ export type ConnectionEnv = Readonly<Record<string, string | undefined>>;
 export const resolveConnectionString = (
 	url: string | undefined,
 	env: ConnectionEnv,
+	context: ConnectionContext,
 ): string => {
 	if (url !== undefined && url !== "") {
 		return url;
@@ -22,8 +63,8 @@ export const resolveConnectionString = (
 		return env.DATABASE_URL;
 	}
 	return throwHejbroError(
-		"check-connection-missing",
-		"hejbro check needs a database connection, but neither --url nor the DATABASE_URL environment variable is set. Next: pass --url <connection-string>, or set DATABASE_URL, then rerun `hejbro check`.",
+		context.codes.connectionMissing,
+		`${context.commandName} needs a database connection, but neither --url nor the DATABASE_URL environment variable is set. Next: pass --url <connection-string>, or set DATABASE_URL, then rerun \`${context.commandName}\`.`,
 	);
 };
 
@@ -68,6 +109,7 @@ const isModuleNotFoundError = (error: unknown): boolean =>
  * silently invalidate).
  */
 export const loadCheckDriver = async (
+	context: ConnectionContext,
 	importer: CheckDriverImporter = importCheckDriver,
 ): Promise<PgDriverFactory> => {
 	try {
@@ -78,8 +120,8 @@ export const loadCheckDriver = async (
 			throw error;
 		}
 		return throwHejbroError(
-			"check-driver-missing",
-			`hejbro check needs the "${CHECK_DRIVER_PACKAGE}" package to connect to Postgres, and it is not installed. Next: run \`pnpm add -D ${CHECK_DRIVER_PACKAGE}\` (or your package manager's equivalent), then rerun \`hejbro check\`.`,
+			context.codes.driverMissing,
+			`${context.commandName} needs the "${CHECK_DRIVER_PACKAGE}" package to connect to Postgres, and it is not installed. Next: run \`pnpm add -D ${CHECK_DRIVER_PACKAGE}\` (or your package manager's equivalent), then rerun \`${context.commandName}\`.`,
 		);
 	}
 };
@@ -88,10 +130,11 @@ export const loadCheckDriver = async (
 export const connectForCheck = async (
 	url: string | undefined,
 	env: ConnectionEnv,
+	context: ConnectionContext,
 	importer?: CheckDriverImporter,
 ): Promise<CheckDriverConnection> => {
-	const connectionString = resolveConnectionString(url, env);
-	const pgDriver = await loadCheckDriver(importer);
+	const connectionString = resolveConnectionString(url, env, context);
+	const pgDriver = await loadCheckDriver(context, importer);
 	return pgDriver(connectionString);
 };
 
@@ -115,13 +158,14 @@ const CONNECTIVITY_PROBE = {
  */
 export const assertConnected = async (
 	session: DriverSession,
+	context: ConnectionContext,
 ): Promise<void> => {
 	try {
 		await session.execute(CONNECTIVITY_PROBE);
 	} catch (error) {
 		throwHejbroError(
-			"check-connection-failed",
-			`hejbro check could not connect to the database: ${describeDriverError(error)}. Next: confirm --url/DATABASE_URL is correct and the database is reachable, then rerun \`hejbro check\`.`,
+			context.codes.connectionFailed,
+			`${context.commandName} could not connect to the database: ${describeDriverError(error)}. Next: confirm --url/DATABASE_URL is correct and the database is reachable, then rerun \`${context.commandName}\`.`,
 		);
 	}
 };
@@ -132,17 +176,19 @@ export const assertConnected = async (
  * success path and on a rejection alike, since a caller that only closes
  * on success leaves the pool open exactly when there was something to
  * report. This is the only place `check` opens a connection, so it is
- * the only place that needs to close one.
+ * the only place that needs to close one -- and, since G7, the only place
+ * every apply-engine command that needs one does too.
  */
 export const withCheckConnection = async <T>(
 	url: string | undefined,
 	env: ConnectionEnv,
+	context: ConnectionContext,
 	body: (driver: CheckDriverConnection) => Promise<T>,
 	importer?: CheckDriverImporter,
 ): Promise<T> => {
-	const driver = await connectForCheck(url, env, importer);
+	const driver = await connectForCheck(url, env, context, importer);
 	try {
-		await assertConnected(driver);
+		await assertConnected(driver, context);
 		return await body(driver);
 	} finally {
 		await driver.client.end();

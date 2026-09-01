@@ -57,6 +57,33 @@ guidance after the colon, which may reword), so an unrelated banner
 line — or a future line an older hejbro doesn't recognize — is never
 mistaken for one it does.
 
+## A run can write two migrations, not one
+
+`hejbro generate` normally writes one migration. It writes **two** where
+Postgres's own transaction semantics require a boundary between
+statements the run produced: a run that adds a value to an existing enum
+type AND emits that value into an expression the database resolves while
+executing the statement that carries it (a column default, a generated
+column, a check constraint, an index expression/predicate, a policy's
+`using`/`with check`, or a view body) — Postgres refuses to use an
+enum value in the same transaction that added it. The enum change lands
+first, the rest of the run second; both carry their own banner and chain
+onto each other, and `--name` never collapses them into one file. A
+value used only inside a `plpgsql` function body does not trigger this
+(its SQL is not resolved when the function is created), and neither does
+a value added by the same run that also *creates* the enum type (the
+restriction is about values added to a type that already existed).
+
+`@hejbro/core` exposes this as `generateMigrations` (plural) — the CLI's
+own entry point for `hejbro generate`. It returns `{ migrations, hasChanges,
+errors, ambiguities, warnings }`, where `migrations` is `[]` when nothing
+changed, one entry for an ordinary run, and two when the run above
+applies — each `GeneratedMigration` carries its own `sql`/`changes`/
+`snapshot`. `generateMigration` (singular) is unchanged for existing
+callers that only need one file's worth of a run that can't split; it
+refuses (`migration-requires-split`) a run that would need two, naming
+`generateMigrations` as the entry point that returns the split.
+
 ## Ambiguous renames
 
 `hejbro generate` never guesses whether a same-table column (or schema
@@ -95,16 +122,28 @@ dumps — the deeper, pre-merge check `verify` can't do without a database.
 
 ## When an apply step fails partway through
 
-Applying a migration to a database is out of hejbro's scope (D12) — an
-external pipeline (`supabase db push`, a raw `psql -f migration.sql`, a
-CI job, …) reads a migration file and runs it. That pipeline can fail
-partway through a file. hejbro's own generated SQL carries no
+`hejbro migrate` (D12, amended — applying is now hejbro's own command
+surface) sends each migration inside its own
+transaction, so a failure partway through one file's statements always
+rolls back that whole file — never a partial apply — and its report
+names the file, the database's own code and message, and the next
+command to run. Earlier migrations in the same `migrate` run keep
+whatever they already committed (each file is its own transaction, not
+one transaction over the whole run); `hejbro status` then shows exactly
+which files are still pending.
+
+An external pipeline (`supabase db push`, a raw `psql -f migration.sql`,
+a CI job, …) reading a migration file and running it directly is still
+a valid alternative to `hejbro migrate`, and for that path the original
+uncertainty still holds: hejbro's own generated SQL carries no
 `begin`/`commit` wrapper of its own — every migration file (the banner
 example above included) is a plain sequential list of DDL statements —
-so whether a mid-file failure leaves only the earlier statements applied,
-or gets rolled back entirely, depends on whether *the apply tool itself*
-wraps the run in a transaction. hejbro has no way to know which happened,
-and no way to inspect the live database to find out.
+so whether a mid-file failure under that other tool leaves only the
+earlier statements applied, or gets rolled back entirely, depends on
+whether *that apply tool itself* wraps the run in a transaction. hejbro
+has no way to know which happened there, and no way to inspect the live
+database to find out — only `hejbro migrate`'s own path carries that
+guarantee.
 
 ### What `verify` tells you here, and what it doesn't
 
@@ -119,15 +158,20 @@ database, by design.
 
 ### A straight retry is not automatically safe
 
-hejbro's generated DDL has no `if not exists`/`or replace` guard on
-`create table` (`create table ...`, rendered verbatim — see
+Re-running `hejbro migrate` itself after a failure IS safe: its own
+transaction already rolled the failed file back completely (above), so
+nothing of it landed for a retry to collide with.
+
+For any OTHER apply tool, this is not automatic. hejbro's generated DDL
+has no `if not exists`/`or replace` guard on `create table` (`create
+table ...`, rendered verbatim — see
 `packages/core/src/kinds/table-kind-emit-sql.ts`) — re-running the exact
 same migration file against a database that already has some of its
 objects fails on whichever object landed before the original failure
-(e.g. `relation "..." already exists`), unless the apply tool wrapped the
-whole file in a transaction that already rolled everything in it back.
-Whether that's the case is entirely the apply tool's own behavior, not
-something hejbro controls or reports. This isn't uniform across every
+(e.g. `relation "..." already exists`), unless that apply tool wrapped
+the whole file in a transaction that already rolled everything in it
+back. Whether that's the case is entirely the apply tool's own behavior,
+not something hejbro controls or reports. This isn't uniform across every
 statement in a migration file, though: a function or a view is always
 rendered `create or replace` (`packages/core/src/plpgsql/render-body.ts`,
 `packages/core/src/kinds/view-kind.ts`), so re-running one of those

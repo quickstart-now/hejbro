@@ -29,17 +29,19 @@ import type {
 	RenameSpec,
 } from "./rename-plan";
 import { planRenames } from "./rename-plan";
+import type { SplitDecision } from "./split";
+import { applySplitChangesOnly, planSplit } from "./split";
 import type { Diagnostic, Validator } from "./validate";
 import { runValidators } from "./validate";
 
 /**
- * Anything `generateMigration` accepts as a declaration: a plain
- * declaration, or a `table()`/`existingTable()`-built `Table` object
- * (unwrapped via `getTableMeta` at the entry point) — narrowed to
- * {@link DeclaredTable} so a `"usage"`-authority value (no migration
- * authority) is rejected here at the type level, not just at the runtime
- * chokepoint in {@link resolveTableDeclarations}. Only this PUBLIC type
- * narrows; every internal helper below takes {@link AnyInput} (bare
+ * Anything `generateMigration`/`generateMigrations` accepts as a
+ * declaration: a plain declaration, or a `table()`/`existingTable()`-built
+ * `Table` object (unwrapped via `getTableMeta` at the entry point) —
+ * narrowed to {@link DeclaredTable} so a `"usage"`-authority value (no
+ * migration authority) is rejected here at the type level, not just at the
+ * runtime chokepoint in {@link resolveTableDeclarations}. Only this PUBLIC
+ * type narrows; every internal helper below takes {@link AnyInput} (bare
  * `Table`, either authority) — narrowing this type's own internal uses
  * would break `isTable`'s false-branch narrowing back to
  * `HejbroDeclaration` (measured: every internal guard failed to compile
@@ -186,6 +188,35 @@ type GenerateMigrationResult = {
 };
 
 /**
+ * [G4 rework, #610] `generateMigrations`'s own options — identical to
+ * `generateMigration`'s except `bannerHashes`, which this entry point
+ * takes one *per migration* (index-aligned with the result's own
+ * `migrations`), because a split run has more than one banner to seat.
+ */
+export type GenerateMigrationsOptions = Omit<
+	GenerateMigrationOptions,
+	"bannerHashes"
+> & {
+	readonly bannerHashes?: ReadonlyArray<BannerHashes>;
+};
+
+/** One file `generateMigrations` writes: its own SQL (banner included), the changes it carries (slug derivation is the caller's job), and the snapshot state this file's own chain hash names as its `snapshot:` line. */
+export type GeneratedMigration = {
+	readonly sql: string;
+	readonly changes: ReadonlyArray<KindChange>;
+	readonly snapshot: Snapshot;
+};
+
+export type GenerateMigrationsResult = {
+	/** `[]` when nothing changed, one entry for an ordinary run, two for a run `generateMigration` itself would have refused (spec: "more than one only where Postgres's own transaction semantics require a boundary"). */
+	readonly migrations: ReadonlyArray<GeneratedMigration>;
+	readonly hasChanges: boolean;
+	readonly errors: ReadonlyArray<HejbroError>;
+	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
+	readonly warnings: ReadonlyArray<Diagnostic>;
+};
+
+/**
  * Builds the `declaredAt`-by-table-identity map `planRenames` attaches to
  * its diagnostics, from the *pre-normalization* `declarations` — after
  * `resolveDeclarations` a table's `declaredAt` would already be buried
@@ -227,41 +258,15 @@ type ResolvedGenerateMigrationOptions = {
 	readonly confirmedDrops: ReadonlyArray<ConfirmDropSpec>;
 };
 
-/** {@link generateMigration}'s own optional-field defaults, resolved once up front. */
+/** {@link generateMigration}'s/{@link generateMigrations}'s own optional-field defaults, resolved once up front. */
 const resolveGenerateMigrationOptions = (
-	options: GenerateMigrationOptions,
+	options: GenerateMigrationsOptions,
 ): ResolvedGenerateMigrationOptions => ({
 	registry: options.registry ?? createDefaultRegistry(),
 	validators: options.validators ?? [],
 	renames: options.renames ?? [],
 	confirmedDrops: options.confirmedDrops ?? [],
 });
-
-/**
- * {@link generateMigration}'s blocked-run result — `plan`'s own rename/
- * confirm-drop errors, or an error-severity validator diagnostic, either
- * of which short-circuits with `sql: ""` and `hasChanges: false`. `null`
- * means neither happened: the run isn't blocked, proceed to diff/emit.
- */
-const blockedResult = (
-	snapshot: Snapshot,
-	plan: RenamePlan,
-	validatorErrors: ReadonlyArray<HejbroError>,
-	warnings: ReadonlyArray<Diagnostic>,
-): GenerateMigrationResult | null => {
-	if (plan.errors.length === 0 && validatorErrors.length === 0) {
-		return null;
-	}
-	return {
-		snapshot,
-		changes: [],
-		sql: "",
-		hasChanges: false,
-		errors: [...plan.errors, ...validatorErrors],
-		ambiguities: plan.ambiguities,
-		warnings,
-	};
-};
 
 type EmittedStatement = {
 	readonly change: KindChange;
@@ -300,17 +305,134 @@ const sortPredropStatements = (
 };
 
 /**
- * Runs the full pipeline: build the next snapshot from `declarations`,
- * resolve `renames`/`confirmedDrops` against `previousSnapshot` (rule A;
- * `errors` non-empty short-circuits with `sql: ""`), diff the rewritten
- * previous snapshot against the next, and emit SQL (banner + rename
- * statements + predrop statements + main statements + deferred statements,
- * `"\n\n"`-joined). `sql` is `""` and `hasChanges` is `false` when nothing
- * changed.
+ * Emits `changesToEmit`'s own SQL -- predrop, then main, then deferred,
+ * `"\n\n"`-joined, `""` when `changesToEmit` is empty (never a lone blank
+ * line: this function contributes nothing to an outer join in that case).
+ * `siblingChanges`/`snapshot` are read-only context (D74/D78) -- a caller
+ * emitting one *subset* of a run's changes (`generateMigrations`' split
+ * path) still passes the run's *whole* `changes`/final `snapshot` here,
+ * so every kind's `emit` sees exactly what it would have seen unsplit,
+ * and splitting itself changes no kind's own decision.
  */
-export const generateMigration = (
-	options: GenerateMigrationOptions,
-): GenerateMigrationResult => {
+export const emitStatementsSql = (
+	changesToEmit: ReadonlyArray<KindChange>,
+	siblingChanges: ReadonlyArray<KindChange>,
+	snapshot: Snapshot,
+	registry: KindRegistry,
+): string => {
+	const emittedStatements: ReadonlyArray<EmittedStatement> =
+		changesToEmit.flatMap((change) =>
+			registry
+				.get(change.kind)
+				.emit(change, siblingChanges, snapshot)
+				.map((statement) => ({ change, statement })),
+		);
+	const predropStatements = sortPredropStatements(emittedStatements, registry);
+	const mainStatements = emittedStatements.filter(
+		(entry) => entry.statement.stage === "main",
+	);
+	const deferredStatements = emittedStatements.filter(
+		(entry) => entry.statement.stage === "deferred",
+	);
+	return [
+		...predropStatements.map((entry) => entry.statement.sql),
+		...mainStatements.map((entry) => entry.statement.sql),
+		...deferredStatements.map((entry) => entry.statement.sql),
+	].join("\n\n");
+};
+
+/** `[text]` unless `text` is `""`, in which case `[]` -- lets a caller splice {@link emitStatementsSql}'s result into an outer `"\n\n"`-joined array without contributing a spurious empty segment when there was nothing to emit. */
+const nonEmptyPart = (text: string): ReadonlyArray<string> => {
+	if (text === "") {
+		return [];
+	}
+	return [text];
+};
+
+/**
+ * One file's worth of banner + rename statements (only on the *last*
+ * file -- renames are a data-level correction with nothing to do with
+ * where the transaction boundary falls, so they attach to whichever
+ * migration is the sequence's own tail) + this changeSet's own emitted
+ * SQL. Shared by both entry points below so a single-file run and each
+ * half of a split run build their SQL through the identical path.
+ */
+const bannerChangesFor = (
+	isLastMigration: boolean,
+	changeSet: ReadonlyArray<KindChange>,
+	plan: RenamePlan,
+): ReadonlyArray<KindChange> => {
+	if (isLastMigration) {
+		return [...plan.renameChanges, ...changeSet];
+	}
+	return changeSet;
+};
+
+const renameStatementsFor = (
+	isLastMigration: boolean,
+	plan: RenamePlan,
+): ReadonlyArray<string> => {
+	if (isLastMigration) {
+		return plan.renameStatements;
+	}
+	return [];
+};
+
+const buildGeneratedMigrationSql = (
+	changeSet: ReadonlyArray<KindChange>,
+	isLastMigration: boolean,
+	siblingChanges: ReadonlyArray<KindChange>,
+	contextSnapshot: Snapshot,
+	registry: KindRegistry,
+	plan: RenamePlan,
+	bannerHashes: BannerHashes | undefined,
+	hejbroVersion: string | undefined,
+	baseline: boolean | undefined,
+): string => {
+	const statementsSql = emitStatementsSql(
+		changeSet,
+		siblingChanges,
+		contextSnapshot,
+		registry,
+	);
+	return [
+		renderBanner(
+			bannerChangesFor(isLastMigration, changeSet, plan),
+			bannerHashes,
+			hejbroVersion,
+			baseline,
+		),
+		...renameStatementsFor(isLastMigration, plan),
+		...nonEmptyPart(statementsSql),
+	].join("\n\n");
+};
+
+/**
+ * The pipeline both entry points below share: build the next snapshot
+ * from `declarations`, resolve `renames`/`confirmedDrops` (rule A), and
+ * diff. Stops short of emitting any SQL -- that's where the two entry
+ * points' contracts actually differ (one file vs. one-or-two), so it is
+ * not shared past this point.
+ */
+type Pipeline =
+	| {
+			readonly blocked: true;
+			readonly snapshot: Snapshot;
+			readonly errors: ReadonlyArray<HejbroError>;
+			readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
+			readonly warnings: ReadonlyArray<Diagnostic>;
+	  }
+	| {
+			readonly blocked: false;
+			readonly snapshot: Snapshot;
+			readonly changes: ReadonlyArray<KindChange>;
+			readonly hasChanges: boolean;
+			readonly warnings: ReadonlyArray<Diagnostic>;
+			readonly plan: RenamePlan;
+			readonly registry: KindRegistry;
+	  };
+
+const runPipeline = (options: GenerateMigrationsOptions): Pipeline => {
 	const resolved = resolveGenerateMigrationOptions(options);
 	const normalized = options.declarations.flatMap(resolveDeclarations);
 	const snapshot = buildSnapshot(
@@ -341,9 +463,14 @@ export const generateMigration = (
 		declaredAtByIdentity: buildDeclaredAtByIdentity(options.declarations),
 	});
 
-	const blocked = blockedResult(snapshot, plan, validatorErrors, warnings);
-	if (blocked !== null) {
-		return blocked;
+	if (plan.errors.length > 0 || validatorErrors.length > 0) {
+		return {
+			blocked: true,
+			snapshot,
+			errors: [...plan.errors, ...validatorErrors],
+			ambiguities: plan.ambiguities,
+			warnings,
+		};
 	}
 
 	const changes = diffSnapshots(
@@ -354,64 +481,194 @@ export const generateMigration = (
 	const hasChanges = changes.length > 0 || plan.renameStatements.length > 0;
 	const allWarnings = [...warnings, ...notNullWithoutDefaultWarnings(changes)];
 
-	if (!hasChanges) {
+	return {
+		blocked: false,
+		snapshot,
+		changes,
+		hasChanges,
+		warnings: allWarnings,
+		plan,
+		registry: resolved.registry,
+	};
+};
+
+/**
+ * Runs the full pipeline and writes one migration per transaction
+ * boundary the run needs (spec: "one migration, and more than one only
+ * where Postgres's own transaction semantics require a boundary between
+ * statements the run produced"). `migrations` is `[]` when nothing
+ * changed, one entry for an ordinary run, two when the run adds a value
+ * to an existing enum type that an expression it also emits resolves in
+ * the same transaction (`engine/split.ts`'s own condition).
+ *
+ * D74/D78: every kind's `emit` sees the whole diff's `changes`
+ * (siblingChanges) and the whole run's final `snapshot`, read-only and
+ * optional, for both halves of a split run alike -- so splitting itself
+ * changes no kind's own emit decision.
+ */
+const changeSetsFor = (
+	splitDecision: SplitDecision,
+	changes: ReadonlyArray<KindChange>,
+): ReadonlyArray<ReadonlyArray<KindChange>> => {
+	if (splitDecision.split) {
+		return [splitDecision.enumChanges, splitDecision.restChanges];
+	}
+	return [changes];
+};
+
+const migrationSnapshotsFor = (
+	splitDecision: SplitDecision,
+	rewrittenPrevious: Snapshot,
+	finalSnapshot: Snapshot,
+): ReadonlyArray<Snapshot> => {
+	if (splitDecision.split) {
+		return [
+			applySplitChangesOnly(rewrittenPrevious, splitDecision.enumChanges),
+			finalSnapshot,
+		];
+	}
+	return [finalSnapshot];
+};
+
+export const generateMigrations = (
+	options: GenerateMigrationsOptions,
+): GenerateMigrationsResult => {
+	const pipeline = runPipeline(options);
+	if (pipeline.blocked) {
 		return {
-			snapshot,
-			changes,
+			migrations: [],
+			hasChanges: false,
+			errors: pipeline.errors,
+			ambiguities: pipeline.ambiguities,
+			warnings: pipeline.warnings,
+		};
+	}
+	if (!pipeline.hasChanges) {
+		return {
+			migrations: [],
+			hasChanges: false,
+			errors: [],
+			ambiguities: [],
+			warnings: pipeline.warnings,
+		};
+	}
+
+	const splitDecision = planSplit(pipeline.changes);
+	const changeSets = changeSetsFor(splitDecision, pipeline.changes);
+	const migrationSnapshots = migrationSnapshotsFor(
+		splitDecision,
+		pipeline.plan.rewrittenPrevious,
+		pipeline.snapshot,
+	);
+
+	const migrations: ReadonlyArray<GeneratedMigration> = changeSets.map(
+		(changeSet, index) => ({
+			sql: buildGeneratedMigrationSql(
+				changeSet,
+				index === changeSets.length - 1,
+				pipeline.changes,
+				pipeline.snapshot,
+				pipeline.registry,
+				pipeline.plan,
+				options.bannerHashes?.[index],
+				options.hejbroVersion,
+				options.baseline,
+			),
+			changes: changeSet,
+			snapshot: migrationSnapshots[index] as Snapshot,
+		}),
+	);
+
+	return {
+		migrations,
+		hasChanges: true,
+		errors: [],
+		ambiguities: [],
+		warnings: pipeline.warnings,
+	};
+};
+
+/** `generateMigration`'s own `bannerHashes` (singular) wrapped into `generateMigrations`' array form -- omitted entirely rather than set to `undefined` (`exactOptionalPropertyTypes`), matching the same "absent means absent, never a present `undefined`" convention this codebase already follows elsewhere. */
+const pipelineOptionsFor = (
+	rest: Omit<GenerateMigrationOptions, "bannerHashes">,
+	bannerHashes: BannerHashes | undefined,
+): GenerateMigrationsOptions => {
+	if (bannerHashes === undefined) {
+		return rest;
+	}
+	return { ...rest, bannerHashes: [bannerHashes] };
+};
+
+/**
+ * Runs the full pipeline for a run this function can actually represent
+ * as ONE file (banner + rename statements + predrop statements + main
+ * statements + deferred statements, `"\n\n"`-joined). `sql` is `""` and
+ * `hasChanges` is `false` when nothing changed.
+ *
+ * [G4 rework, #610] A run that needs *two* files (the transaction-
+ * boundary split, `generateMigrations`' own job) is refused here with a
+ * coded error rather than silently returning half the run: this
+ * function's contract is one migration, and a single `sql` string
+ * cannot honestly carry two. Every caller of this 40-call-site, pre-
+ * existing entry point keeps its exact contract for every run it could
+ * already express; only the newly-representable split case is new, and
+ * it fails loudly instead of arriving as a partial, misleading result.
+ */
+export const generateMigration = (
+	options: GenerateMigrationOptions,
+): GenerateMigrationResult => {
+	const { bannerHashes, ...rest } = options;
+	const pipeline = runPipeline(pipelineOptionsFor(rest, bannerHashes));
+	if (pipeline.blocked) {
+		return {
+			snapshot: pipeline.snapshot,
+			changes: [],
+			sql: "",
+			hasChanges: false,
+			errors: pipeline.errors,
+			ambiguities: pipeline.ambiguities,
+			warnings: pipeline.warnings,
+		};
+	}
+	if (!pipeline.hasChanges) {
+		return {
+			snapshot: pipeline.snapshot,
+			changes: pipeline.changes,
 			sql: "",
 			hasChanges: false,
 			errors: [],
 			ambiguities: [],
-			warnings: allWarnings,
+			warnings: pipeline.warnings,
 		};
 	}
 
-	// D74: every kind's emit sees the whole diff's changes (siblingChanges),
-	// read-only and optional -- most kinds ignore it; sequenceKind/tableKind
-	// use it to coordinate a serial column's single-statement add (#23).
-	// D78: emit also sees the full next snapshot, read-only and optional --
-	// tableKind uses it to re-grant a newly created table under a standing
-	// schema-wide grant (#121), which siblingChanges can't cover (the grant
-	// itself has no change in this diff).
-	const emittedStatements: ReadonlyArray<EmittedStatement> = changes.flatMap(
-		(change) =>
-			resolved.registry
-				.get(change.kind)
-				.emit(change, changes, snapshot)
-				.map((statement) => ({ change, statement })),
-	);
+	const splitDecision = planSplit(pipeline.changes);
+	if (splitDecision.split) {
+		return throwHejbroError(
+			"migration-requires-split",
+			"this run adds a value to an existing enum type that an expression it also emits resolves inside the same transaction — Postgres refuses that combination, so it cannot be expressed as one migration file. Next: call generateMigrations() instead of generateMigration() — it returns one migration per transaction boundary this run needs.",
+		);
+	}
 
-	const predropStatements = sortPredropStatements(
-		emittedStatements,
-		resolved.registry,
+	const sql = buildGeneratedMigrationSql(
+		pipeline.changes,
+		true,
+		pipeline.changes,
+		pipeline.snapshot,
+		pipeline.registry,
+		pipeline.plan,
+		bannerHashes,
+		options.hejbroVersion,
+		options.baseline,
 	);
-	const mainStatements = emittedStatements.filter(
-		(entry) => entry.statement.stage === "main",
-	);
-	const deferredStatements = emittedStatements.filter(
-		(entry) => entry.statement.stage === "deferred",
-	);
-
-	const sql = [
-		renderBanner(
-			[...plan.renameChanges, ...changes],
-			options.bannerHashes,
-			options.hejbroVersion,
-			options.baseline,
-		),
-		...plan.renameStatements,
-		...predropStatements.map((entry) => entry.statement.sql),
-		...mainStatements.map((entry) => entry.statement.sql),
-		...deferredStatements.map((entry) => entry.statement.sql),
-	].join("\n\n");
 
 	return {
-		snapshot,
-		changes,
+		snapshot: pipeline.snapshot,
+		changes: pipeline.changes,
 		sql,
 		hasChanges: true,
 		errors: [],
 		ambiguities: [],
-		warnings: allWarnings,
+		warnings: pipeline.warnings,
 	};
 };

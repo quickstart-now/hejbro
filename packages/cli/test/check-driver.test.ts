@@ -1,6 +1,9 @@
 import type { DriverCapabilities, DriverSession } from "@hejbro/query";
 import { describe, expect, it, vi } from "vitest";
-import type { CheckDriverConnection } from "../src/check/driver";
+import type {
+	CheckDriverConnection,
+	ConnectionContext,
+} from "../src/check/driver";
 import {
 	assertConnected,
 	CHECK_DRIVER_PACKAGE,
@@ -9,27 +12,52 @@ import {
 	withCheckConnection,
 } from "../src/check/driver";
 
+// `commandName`/`codes` are required everywhere in this module (no
+// default -- see its own doc comment on `ConnectionContext`); this file's
+// own fixture is `hejbro check`'s real context (its three codes as
+// literals, not assembled from a prefix -- #613), since this suite tests
+// this module's own behavior for its one existing caller. Group 7's own
+// apply-side context (`APPLY_CONNECTION_CODES`, `apply/capability.ts`)
+// is exercised through the command tests that use it, not duplicated
+// here.
+const CHECK_CONTEXT: ConnectionContext = {
+	commandName: "hejbro check",
+	codes: {
+		connectionMissing: "check-connection-missing",
+		driverMissing: "check-driver-missing",
+		connectionFailed: "check-connection-failed",
+	},
+};
+
 describe("resolveConnectionString", () => {
 	it("prefers --url over DATABASE_URL", () => {
-		const result = resolveConnectionString("postgres://from-flag", {
-			// biome-ignore lint/style/useNamingConvention: DATABASE_URL is the environment variable name itself
-			DATABASE_URL: "postgres://from-env",
-		});
+		const result = resolveConnectionString(
+			"postgres://from-flag",
+			{
+				// biome-ignore lint/style/useNamingConvention: DATABASE_URL is the environment variable name itself
+				DATABASE_URL: "postgres://from-env",
+			},
+			CHECK_CONTEXT,
+		);
 
 		expect(result).toBe("postgres://from-flag");
 	});
 
 	it("falls back to DATABASE_URL when --url is not given", () => {
-		const result = resolveConnectionString(undefined, {
-			// biome-ignore lint/style/useNamingConvention: DATABASE_URL is the environment variable name itself
-			DATABASE_URL: "postgres://from-env",
-		});
+		const result = resolveConnectionString(
+			undefined,
+			{
+				// biome-ignore lint/style/useNamingConvention: DATABASE_URL is the environment variable name itself
+				DATABASE_URL: "postgres://from-env",
+			},
+			CHECK_CONTEXT,
+		);
 
 		expect(result).toBe("postgres://from-env");
 	});
 
 	it("refuses with a coded error when neither is given", () => {
-		expect(() => resolveConnectionString(undefined, {})).toThrow(
+		expect(() => resolveConnectionString(undefined, {}, CHECK_CONTEXT)).toThrow(
 			expect.objectContaining({ code: "check-connection-missing" }),
 		);
 	});
@@ -50,7 +78,9 @@ describe("loadCheckDriver", () => {
 			);
 		};
 
-		await expect(loadCheckDriver(rejectingImporter)).rejects.toEqual(
+		await expect(
+			loadCheckDriver(CHECK_CONTEXT, rejectingImporter),
+		).rejects.toEqual(
 			expect.objectContaining({
 				code: "check-driver-missing",
 				message: expect.stringContaining(CHECK_DRIVER_PACKAGE),
@@ -65,9 +95,9 @@ describe("loadCheckDriver", () => {
 			throw new SyntaxError("Unexpected token in @hejbro/pg's own module");
 		};
 
-		await expect(loadCheckDriver(brokenImporter)).rejects.toThrow(
-			"Unexpected token",
-		);
+		await expect(
+			loadCheckDriver(CHECK_CONTEXT, brokenImporter),
+		).rejects.toThrow("Unexpected token");
 	});
 });
 
@@ -108,6 +138,7 @@ describe("withCheckConnection / N2 pool teardown", () => {
 		const result = await withCheckConnection(
 			"postgres://from-flag",
 			{},
+			CHECK_CONTEXT,
 			async () => "report",
 			buildFakeImporter(ends),
 		);
@@ -123,6 +154,7 @@ describe("withCheckConnection / N2 pool teardown", () => {
 			withCheckConnection(
 				"postgres://from-flag",
 				{},
+				CHECK_CONTEXT,
 				async () => {
 					throw new Error("catalog read failed");
 				},
@@ -160,7 +192,7 @@ describe("assertConnected / 1.5 connection failures", () => {
 			},
 		};
 
-		await expect(assertConnected(session)).rejects.toEqual(
+		await expect(assertConnected(session, CHECK_CONTEXT)).rejects.toEqual(
 			expect.objectContaining({
 				code: "check-connection-failed",
 				message: expect.stringContaining("ECONNREFUSED 127.0.0.1:55499"),
@@ -182,7 +214,7 @@ describe("assertConnected / 1.5 connection failures", () => {
 		const catalogRead = vi.fn(async () => "catalog rows");
 
 		await expect(
-			assertConnected(unreachableSession).then(catalogRead),
+			assertConnected(unreachableSession, CHECK_CONTEXT).then(catalogRead),
 		).rejects.toEqual(
 			expect.objectContaining({ code: "check-connection-failed" }),
 		);
@@ -200,9 +232,13 @@ describe("assertConnected / 1.5 connection failures", () => {
 			});
 		});
 
-		await expect(assertConnected(reachableSession)).resolves.toBeUndefined();
 		await expect(
-			assertConnected(reachableSession).then(laterCatalogFailure),
+			assertConnected(reachableSession, CHECK_CONTEXT),
+		).resolves.toBeUndefined();
+		await expect(
+			assertConnected(reachableSession, CHECK_CONTEXT).then(
+				laterCatalogFailure,
+			),
 		).rejects.toEqual(
 			expect.objectContaining({ code: "check-catalog-unreadable" }),
 		);

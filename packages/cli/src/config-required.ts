@@ -9,14 +9,22 @@ type OptionalConfigField = "migrationsDir" | "snapshotPath" | "prefixStrategy";
 /** Every CLI command that can reach this guard — `baseline` is its own
  * citty subcommand (`runGenerate` in `"baseline"` mode), so it gets its
  * own label rather than reading as `generate` in a refusal it didn't
- * cause. */
+ * cause. `migrate`/`status`/`reset` (add-apply-engine, merged in) added
+ * here mechanically -- each command's own file, not this union, decides
+ * which fields it actually needs. `raise` is deliberately absent: it
+ * never calls `loadConfig` (it reads only its own `--file`/`--url`
+ * flags), so it can never reach this guard or `readSnapshotFileText` --
+ * an unreachable union member would name a call that does not exist. */
 export type ConfigCommand =
 	| "generate"
 	| "baseline"
 	| "verify"
 	| "history"
 	| "restore"
-	| "check";
+	| "check"
+	| "migrate"
+	| "status"
+	| "reset";
 
 /**
  * Refuses with a coded error naming the first missing field a command

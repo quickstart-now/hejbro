@@ -198,7 +198,26 @@ const pluralNoun = (count: number): string => {
 	return "migrations";
 };
 
-/** A lost-migration group note: every migration sharing `commit` (co-added), the last one's own state (still `ok` — the survivor), suggesting a restore of that survivor. `null` when nothing in the group is actually lost (a co-add group where everything still resolves `ok` needs no note), or when the group has no surviving `ok` migration to point at (defensive — every real co-add group's last member is the one whose snapshot the commit actually recorded). */
+/**
+ * A lost-migration group note: every migration sharing `commit` (co-added),
+ * the last one's own state (still `ok` — the survivor), suggesting a
+ * restore of that survivor. `null` when nothing in the group is actually
+ * lost (a co-add group where everything still resolves `ok` needs no
+ * note), or when the group has no surviving `ok` migration to point at
+ * (defensive — every real co-add group's last member is the one whose
+ * snapshot the commit actually recorded).
+ *
+ * [task 4.7] States only what git can observe — that only the survivor's
+ * declaration state exists in git — and names no cause. An earlier
+ * version of this text asserted one ("squash merge lost …'s"), which was
+ * true of every case this tool had seen until the generator started
+ * splitting a run at a transaction boundary (`add-apply-engine`): a
+ * split pair's first file names an intermediate snapshot that is never
+ * written to disk at all, so it reads exactly like a squash-flattened
+ * migration despite no history rewrite ever happening. Rather than tell
+ * the two causes apart (git cannot: both leave the identical trace, an
+ * unmatched hash), this note asserts only what is true either way.
+ */
 const lostGroupNote = (
 	commit: GitCommitInfo,
 	group: ReadonlyArray<HistoryRow>,
@@ -220,8 +239,7 @@ const lostGroupNote = (
 		return null;
 	}
 	const migrationNoun = pluralNoun(allNumbers.length);
-	const lostNoun = pluralNoun(lostNumbers.length);
-	return `note: ${migrationNoun} ${joinWithAnd(allNumbers)} were added together in commit ${commit.sha.slice(0, 7)} — only migration ${survivor.number}'s declaration state exists in git (squash merge lost ${lostNoun} ${joinWithAnd(lostNumbers)}'s). Closest available: \`hejbro restore ${survivor.number}\`.`;
+	return `note: ${migrationNoun} ${joinWithAnd(allNumbers)} were added together in commit ${commit.sha.slice(0, 7)} — only migration ${survivor.number}'s declaration state exists in git. Closest available: \`hejbro restore ${survivor.number}\`.`;
 };
 
 const rewrittenNote = (row: HistoryRow): string =>

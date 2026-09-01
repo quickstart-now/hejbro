@@ -392,6 +392,14 @@ export const runCheck = async (
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
+			{
+				commandName: "hejbro check",
+				codes: {
+					connectionMissing: "check-connection-missing",
+					driverMissing: "check-driver-missing",
+					connectionFailed: "check-connection-failed",
+				},
+			},
 			async (driver) => {
 				const catalog = await readCatalog(driver);
 				const findings = await compareCheckAgainstCatalog(
