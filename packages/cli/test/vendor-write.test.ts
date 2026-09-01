@@ -41,20 +41,34 @@ describe("vendor never overwrites a file it did not write", () => {
 		expect(result.stderr).toContain("vendor-destination-not-vendored");
 	});
 
-	it("link --force overwrites a hand-written lock, and vendor proceeds normally after", async () => {
+	it("refuses even when a source is already linked", async () => {
 		await writeFile(join(cwd, "hejbro.lock"), HAND_WRITTEN_LOCK);
-
-		const forced = await runCli(cwd, [
+		const linked = await runCli(cwd, [
 			"link",
-			"--force",
 			"https://example.com/org/schema.git",
 		]);
-		expect(forced.exitCode).toBe(0);
+		expect(linked.exitCode).toBe(0);
 
-		// vendor now reads a lock this tool actually wrote -- it fails for
-		// an unrelated reason (the source isn't a real reachable
-		// repository), never the overwrite guard.
+		// The guard on `hejbro.lock` runs before the linked source is even
+		// read (4.13: `link` never touches `hejbro.lock`, so linking
+		// successfully must not by itself excuse a foreign lock).
 		const result = await runCli(cwd, ["vendor"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("vendor-destination-not-vendored");
+	});
+
+	it("vendor --force overwrites a hand-written lock, and proceeds normally after", async () => {
+		await writeFile(join(cwd, "hejbro.lock"), HAND_WRITTEN_LOCK);
+		const linked = await runCli(cwd, [
+			"link",
+			"https://example.com/org/schema.git",
+		]);
+		expect(linked.exitCode).toBe(0);
+
+		// vendor's own --force claims the lock -- it then fails for an
+		// unrelated reason (the source isn't a real reachable repository),
+		// never the overwrite guard.
+		const result = await runCli(cwd, ["vendor", "--force"]);
 		expect(result.stderr).not.toContain("vendor-destination-not-vendored");
 	});
 });

@@ -6,6 +6,7 @@ import { resolveRemoteHead } from "../git";
 import { identityFromMessage } from "../identity";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
 import { readLock } from "../vendor/lock";
+import { readSourceFile } from "../vendor/source-file";
 
 const OUTDATED_DESCRIPTION =
 	"Report whether the linked source has a newer commit than the vendored lock — advisory, never fails.";
@@ -25,21 +26,23 @@ export type OutdatedResult = {
 export const runOutdated = (cwd: string): OutdatedResult => {
 	const fallbackIdentity = "outdated";
 	try {
-		const lock = readLock(cwd);
-		if (lock === null) {
+		const sourceFile = readSourceFile(cwd);
+		if (sourceFile === null) {
 			throwHejbroError(
 				"vendor-source-not-linked",
 				"hejbro outdated needs a linked source. Next: run `hejbro link <repository>` first.",
 			);
 		}
-		if (lock.commit === undefined) {
+		const lock = readLock(cwd);
+		if (lock === null || lock.commit === undefined) {
 			throwHejbroError(
 				"vendor-not-yet-vendored",
-				"hejbro outdated has nothing to compare against: this repository is linked but has never been vendored. Next: run `hejbro vendor` first.",
+				"hejbro outdated has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
 			);
 		}
-		const head = withGitDiagnostic("outdated", lock.source, () =>
-			resolveRemoteHead(cwd, lock.source),
+		const source = sourceFile.source;
+		const head = withGitDiagnostic("outdated", source, () =>
+			resolveRemoteHead(cwd, source),
 		);
 		if (head.commit === lock.commit) {
 			return { exitCode: 0, stdout: ["up to date"], stderr: null };

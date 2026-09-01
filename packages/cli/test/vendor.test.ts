@@ -50,6 +50,9 @@ afterEach(async () => {
 const readLock = async (): Promise<Record<string, unknown>> =>
 	JSON.parse(await readFile(join(cwd, "hejbro.lock"), "utf8"));
 
+const readSourceFile = async (): Promise<Record<string, unknown>> =>
+	JSON.parse(await readFile(join(cwd, "hejbro.json"), "utf8"));
+
 const readVendored = (name: string): Promise<string> =>
 	readFile(join(cwd, ".hejbro", "vendor", name), "utf8");
 
@@ -67,7 +70,8 @@ describe("hejbro vendor", () => {
 		const lock = await readLock();
 		expect(lock.commit).toBe(commit);
 		expect(lock.resolvedFrom).toBe("main");
-		expect(lock.source).toBe(remote.cwd);
+		expect(lock.source).toBeUndefined();
+		expect(await readSourceFile()).toEqual({ source: remote.cwd });
 	});
 
 	it("the lock records the description format version", async () => {

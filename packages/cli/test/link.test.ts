@@ -20,18 +20,17 @@ afterEach(async () => {
 	await removeCliFixtureDir(cwd);
 });
 
-const readLock = async (): Promise<Record<string, unknown>> =>
-	JSON.parse(await readFile(join(cwd, "hejbro.lock"), "utf8"));
+const readSourceFile = async (): Promise<Record<string, unknown>> =>
+	JSON.parse(await readFile(join(cwd, "hejbro.json"), "utf8"));
 
-/** A believable hand-written `hejbro.lock` -- the shape a person
- * guessing at the format might type by hand, missing only the
- * `generatedBy` mark. Real discriminating power: it needs the *exact*
- * mark, not just "the file has lock-shaped keys" (confirmed by hand --
- * weakening `VENDOR_LOCK_MARKER` to a common substring flips this
- * fixture's own test green; see the report for the sha256 before/after
- * the revert). */
-const HAND_WRITTEN_LOCK =
-	'{\n\t"commit": "0000000000000000000000000000000000000000",\n\t"resolvedFrom": "main"\n}\n';
+/** A believable hand-written `hejbro.json` — the shape a person guessing
+ * at the format might type, adding a field that seems natural (a
+ * branch) but that the strict schema rejects. Real discriminating
+ * power: it needs *exactly* `{ source: string }`, not just "the file
+ * has a source key" — a schema that degraded to "accepts any object
+ * with a source key" would silently accept this. */
+const HAND_WRITTEN_SOURCE_FILE =
+	'{\n\t"source": "https://old.example.com/org/schema.git",\n\t"branch": "main"\n}\n';
 
 describe("hejbro link", () => {
 	it("records the repository and no branch", async () => {
@@ -41,10 +40,10 @@ describe("hejbro link", () => {
 		]);
 		expect(result.exitCode).toBe(0);
 
-		const lock = await readLock();
-		expect(lock.source).toBe("https://example.com/org/schema.git");
-		expect(lock).not.toHaveProperty("resolvedFrom");
-		expect(lock).not.toHaveProperty("commit");
+		const sourceFile = await readSourceFile();
+		expect(sourceFile).toEqual({
+			source: "https://example.com/org/schema.git",
+		});
 	});
 
 	it("refuses with no source given", async () => {
@@ -53,8 +52,8 @@ describe("hejbro link", () => {
 		expect(result.stderr).toContain("link-source-required");
 	});
 
-	it("refuses to overwrite a hand-written lock without --force", async () => {
-		await writeFile(join(cwd, "hejbro.lock"), HAND_WRITTEN_LOCK);
+	it("refuses to overwrite a hand-written hejbro.json without --force", async () => {
+		await writeFile(join(cwd, "hejbro.json"), HAND_WRITTEN_SOURCE_FILE);
 
 		const result = await runCli(cwd, [
 			"link",
@@ -64,8 +63,8 @@ describe("hejbro link", () => {
 		expect(result.stderr).toContain("vendor-destination-not-vendored");
 	});
 
-	it("--force overwrites a hand-written lock", async () => {
-		await writeFile(join(cwd, "hejbro.lock"), HAND_WRITTEN_LOCK);
+	it("--force overwrites a hand-written hejbro.json", async () => {
+		await writeFile(join(cwd, "hejbro.json"), HAND_WRITTEN_SOURCE_FILE);
 
 		const result = await runCli(cwd, [
 			"link",
@@ -73,8 +72,8 @@ describe("hejbro link", () => {
 			"https://example.com/org/schema.git",
 		]);
 		expect(result.exitCode).toBe(0);
-		expect((await readLock()).source).toBe(
-			"https://example.com/org/schema.git",
-		);
+		expect(await readSourceFile()).toEqual({
+			source: "https://example.com/org/schema.git",
+		});
 	});
 });

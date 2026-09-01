@@ -3,7 +3,10 @@ import { defineCommand } from "citty";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { identityFromMessage } from "../identity";
-import { assertLockWritable, writeLock } from "../vendor/lock";
+import {
+	assertSourceFileWritable,
+	writeSourceFile,
+} from "../vendor/source-file";
 
 const LINK_DESCRIPTION =
 	"Record the git repository this project vendors its schema from.";
@@ -17,12 +20,10 @@ export type LinkResult = {
 /**
  * `link` records the source repository alone — no branch, no ref, no
  * commit (schema-vendoring spec, "Linking records the repository
- * alone") — into `hejbro.lock` at the repository root (owner decision):
- * `source` is `link`'s own field there and `vendor` never touches it;
- * `vendor` rewrites every other field (`commit`/`resolvedFrom`/
- * `descriptionFormat`/the two hashes) on every run. Intent and truth
- * stay separated by *who writes what*, in the same file, rather than by
- * splitting them across two files.
+ * alone") — into `hejbro.json` at the repository root (owner decision,
+ * 4.13): a single committed fact, paired with `hejbro.lock` the way
+ * `package.json`/`package-lock.json` are always a pair. `vendor` never
+ * touches this file; `link` never touches `hejbro.lock`.
  */
 export const runLink = (
 	cwd: string,
@@ -38,8 +39,8 @@ export const runLink = (
 				"hejbro link needs the source repository (a git URL or local path). Next: run `hejbro link <repository>`.",
 			);
 		}
-		assertLockWritable(cwd, force);
-		writeLock(cwd, { source });
+		assertSourceFileWritable(cwd, force);
+		writeSourceFile(cwd, source);
 		return {
 			exitCode: 0,
 			stdout: [`linked "${source}"`],
@@ -73,7 +74,7 @@ export const linkCommand = defineCommand({
 		},
 		force: {
 			type: "boolean",
-			description: "overwrite a lock this tool did not write",
+			description: "overwrite a hejbro.json this tool did not write",
 		},
 	},
 	run: async (ctx) => {

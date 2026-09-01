@@ -9,12 +9,14 @@ import { resolveExport } from "../vendor/fetch";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
 import type { VendorLock } from "../vendor/lock";
 import {
+	assertLockWritable,
 	readLock,
 	vendorDirPath,
 	vendorSchemaPath,
 	vendorSqlPath,
 	writeLock,
 } from "../vendor/lock";
+import { readSourceFile } from "../vendor/source-file";
 
 const VENDOR_DESCRIPTION =
 	"Fetch the linked source's schema export and pin it (writes the description, the squashed SQL and the lock).";
@@ -36,24 +38,30 @@ const flagValue = (
 	return argv[index + 1];
 };
 
-const requireLinkedSource = (cwd: string): VendorLock => {
-	const lock = readLock(cwd);
-	if (lock === null) {
+const requireLinkedSource = (cwd: string): string => {
+	const sourceFile = readSourceFile(cwd);
+	if (sourceFile === null) {
 		return throwHejbroError(
 			"vendor-source-not-linked",
 			"hejbro vendor needs a linked source. Next: run `hejbro link <repository>` first.",
 		);
 	}
+	return sourceFile.source;
+};
+
+const requireVendoredLock = (cwd: string): VendorLock => {
+	const lock = readLock(cwd);
+	if (lock === null) {
+		return throwHejbroError(
+			"vendor-not-yet-vendored",
+			"hejbro vendor --check has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
+		);
+	}
 	return lock;
 };
 
-const runVendorCheck = (cwd: string, lock: VendorLock): VendorResult => {
-	if (lock.commit === undefined) {
-		return throwHejbroError(
-			"vendor-not-yet-vendored",
-			"hejbro vendor --check has nothing to compare against: this repository is linked but has never been vendored. Next: run `hejbro vendor` first.",
-		);
-	}
+const runVendorCheck = (cwd: string): VendorResult => {
+	const lock = requireVendoredLock(cwd);
 	const schemaText = readFileSync(vendorSchemaPath(cwd), "utf8");
 	const sqlText = readFileSync(vendorSqlPath(cwd), "utf8");
 	const matches =
@@ -74,21 +82,16 @@ const runVendorCheck = (cwd: string, lock: VendorLock): VendorResult => {
 
 const runVendorUpdate = (
 	cwd: string,
-	lock: VendorLock,
+	source: string,
 	ref: string | undefined,
 ): VendorResult => {
-	const fetched = withGitDiagnostic("vendor", lock.source, () =>
-		resolveExport(cwd, lock.source, ref),
+	const fetched = withGitDiagnostic("vendor", source, () =>
+		resolveExport(cwd, source, ref),
 	);
-	// No overwrite guard here: `requireLinkedSource` already read (and so
-	// already validated) any pre-existing lock via `readLock` -- once
-	// `hejbro.lock`'s ownership is established, this run's own
-	// schema.json/snapshot.sql/lock rewrite are always safe.
 	mkdirSync(vendorDirPath(cwd), { recursive: true });
 	writeFileSync(vendorSchemaPath(cwd), fetched.schemaText);
 	writeFileSync(vendorSqlPath(cwd), fetched.sqlText);
 	writeLock(cwd, {
-		source: lock.source,
 		resolvedFrom: fetched.ref,
 		commit: fetched.commit,
 		descriptionFormat: fetched.format.descriptionFormat,
@@ -108,11 +111,16 @@ export const runVendor = (
 ): VendorResult => {
 	const fallbackIdentity = "vendor";
 	try {
-		const lock = requireLinkedSource(cwd);
 		if (argv.includes("--check")) {
-			return runVendorCheck(cwd, lock);
+			return runVendorCheck(cwd);
 		}
-		return runVendorUpdate(cwd, lock, flagValue(argv, "--ref"));
+		// `hejbro.lock` is entirely vendor's own file (4.13: `link` never
+		// touches it) -- its guard runs first, before any dependent work
+		// (reading the linked source, reaching the network), the same
+		// order every destination file's own guard runs in this codebase.
+		assertLockWritable(cwd, argv.includes("--force"));
+		const source = requireLinkedSource(cwd);
+		return runVendorUpdate(cwd, source, flagValue(argv, "--ref"));
 	} catch (error) {
 		const hejbroError = asHejbroError(error);
 		const diagnostic = fromHejbroError(
@@ -142,6 +150,10 @@ export const vendorCommand = defineCommand({
 			type: "boolean",
 			description:
 				"compare the vendored files against the lock and write nothing",
+		},
+		force: {
+			type: "boolean",
+			description: "overwrite a hejbro.lock this tool did not write",
 		},
 	},
 	run: async (ctx) => {

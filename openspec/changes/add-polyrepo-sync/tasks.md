@@ -700,16 +700,17 @@ squashed-SQL builder rather than two).
       to before this group, pinned by the new "existing chain
       diagnostics are unchanged" test.
 
-## R2-G4 — `link` and `vendor` — `est_frozen: 82m` — #597
+## R2-G4 — `link` and `vendor` — `est_frozen: 88m` — #597
 
 Files: `packages/cli/src/git.ts` (remote functions added),
 `packages/cli/src/vendor/*` (new — includes `write.ts`, adopted from
-the withdrawn `sync/write.ts` via `git mv`, see 4.7),
+the withdrawn `sync/write.ts` via `git mv`, see 4.7; `source-file.ts`
+new as of 4.13),
 `packages/cli/src/commands/{link,vendor,outdated}.ts` (new —
 `commands/vendor.ts` is shared with R2-G5, which only adds),
 `packages/core/test/migration-file.test.ts` (4.11 only). `config.ts`
 stays untouched — this group's own commands read no
-`hejbro.config.ts` field at all (see 4.4/4.12's own history: a
+`hejbro.config.ts` field at all (see 4.4/4.12/4.13's own history: a
 `schemaSource` field was added and then reverted).
 
 **This group writes the description, the squashed SQL and the lock —
@@ -751,29 +752,23 @@ half of that scenario is closed by R2-G5 (5.11).
       (R2-G5's 5.11 adds the contract file on top, once it exists).
       Start from `cli/test/vendor.test.ts > writes the description and
       the squashed SQL and records the commit`. ~9m
-      **Layout, settled after two owner corrections (4.12's own
-      history)**: the two raw copies are
+      **Layout, settled after three owner corrections (4.12's and
+      4.13's own history)**: the two raw copies are
       `.hejbro/vendor/{schema.json,snapshot.sql}` — symmetric to the
       schema repository's own `.hejbro/export/`, kept byte-identical to
       what was fetched, never wrapped or marked, so a consumer can diff
       them directly against the upstream export (this part of the
-      initial self-determined layout stood throughout). The lock does
-      **not** live beside them: it is **`hejbro.lock` at the repository
-      root** — the same place `package-lock.json`/`go.sum` sit,
-      owner-decided, so a schema move is visible in a pull request's own
-      file list rather than hidden inside `.hejbro/`. `link` writes
-      `source` into `hejbro.lock` (and nothing else); `vendor` rewrites
-      every other field on every run, never touching `source`. Intent
-      (`source`) and truth (everything else) are separated by *who
-      writes what*, in the one committed file, not by splitting them
-      across `hejbro.config.ts` and the lock — an intermediate ruling
-      that would have added `schemaSource` to `hejbro.config.ts` was
-      itself reverted once the owner weighed the cost of the CLI writing
-      back into a hand-authored TypeScript config file (no precedent in
-      this package, and either an AST tool with no precedent here or a
-      user-facing-instructions-only `link` that would have quietly
-      changed the delta's own "Linking records the repository" into "the
-      user records the repository").
+      initial self-determined layout stood throughout, unchanged by
+      either correction). The lock does **not** carry `source` (see
+      4.13): it is **`hejbro.lock` at the repository root** — the same
+      place `package-lock.json`/`go.sum` sit, owner-decided, so a schema
+      move is visible in a pull request's own file list rather than
+      hidden inside `.hejbro/` — and it is **`vendor`'s file alone**.
+      `source` lives in a sibling root file, **`hejbro.json`**, written
+      only by `link`, so the pair mirrors `package.json`/
+      `package-lock.json`: an intent file and a truth file, always
+      together, never one without the other. Neither file's writer ever
+      touches the other's field.
 - [x] 4.5 The lock also records the description's format version. Start
       from `cli/test/vendor.test.ts > the lock records the description
       format version`. ~6m
@@ -820,8 +815,8 @@ half of that scenario is closed by R2-G5 (5.11).
       commands that ever reach a remote) rather than one copy per
       command; the diagnostic text is asserted directly in a subprocess
       test with `PATH` stripped, not inferred from a type passing.
-      `packages/cli/src/config.ts` needed no change, in the end (4.12's
-      own final ruling): `link`/`vendor`/`outdated` read no
+      `packages/cli/src/config.ts` needed no change, in the end (settled
+      across 4.12 and 4.13): `link`/`vendor`/`outdated` read no
       `hejbro.config.ts` field at all.
 - [x] 4.11 Restore the forward-compatibility regression guard 2.10
       removed along with `parseBannerManifestFormat`: a banner line no
@@ -849,20 +844,52 @@ half of that scenario is closed by R2-G5 (5.11).
       goes red, revert, confirm `write.ts`'s sha256 is byte-identical to
       before. `config.ts` untouched throughout this task's own scope.
       ~5m
+- [x] 4.13 Layout correction, superseding 4.12's own choice of where
+      `source` lives: split it out of `hejbro.lock` into a new root file,
+      **`hejbro.json`**, containing exactly `{source}` — its own schema
+      rejects any other key, so no door is left open for configuration to
+      drift into it (owner's sealed decision, "(C)": an intent file and a
+      lock file are always a pair in every ecosystem this borrows its
+      pedagogy from — `package.json`/`package-lock.json`,
+      `go.mod`/`go.sum` — no ecosystem ships a lock file alone).
+      `hejbro.lock` becomes pure truth: `source` removed from
+      `VendorLock` entirely. `link` writes only `hejbro.json`; `vendor`
+      writes only `hejbro.lock`, and regains its own `--force` (removed
+      in 4.12, needed again now that no other command ever claims
+      `hejbro.lock` on its behalf). The already-landed 4.12 state (source
+      inside `hejbro.lock`) was carried forward rather than reverted
+      first, per the owner's own instruction, since `config.ts` needed no
+      touching either way. `hejbro.json`'s own overwrite guard reuses the
+      `vendor-destination-not-vendored` code but checks strict-schema
+      validity rather than a textual marker — `{source}` alone leaves no
+      room for an extra marker field without breaking "reject any other
+      key" — flagged to the planner as a self-determined interpretation,
+      not literally specified. `vendor`'s own guard on `hejbro.lock` now
+      runs before it reads the linked source at all (the same
+      guard-before-dependent-work order every destination file's guard in
+      this codebase follows), confirmed by a fixture where a source is
+      already linked yet a hand-written lock still refuses. Start from
+      `cli/test/link.test.ts > refuses to overwrite a hand-written
+      hejbro.json without --force`. ~13m
 
-**Re-freeze: 70m → 72m → 77m → 82m.** First move (70→72): decomposing
-this group surfaced the missing-`git` diagnostic, which the delta
-requires and no task covered. Second move (72→77): 2.10's own removal of
-`parseBannerManifestFormat` took its sibling test's forward-compatibility
-fixture with it, without a replacement — found and confirmed during
-R2-G3's review exchange, not a task running long (4.11 added). Third
-move (77→82): the owner's own lock-location and intent/truth-separation
-rulings reached the implementer after 4.1–4.10 had already landed on a
-self-determined layout, requiring a follow-up correction (4.12) — a
-delivery-timing gap, not a task running long; a parallel ruling that
-would have added a `schemaSource` field to `hejbro.config.ts` was raised
-and then withdrawn within the same exchange, before any estimate moved
-for it.
+**Re-freeze: 70m → 72m → 77m → 82m → 88m.** First move (70→72):
+decomposing this group surfaced the missing-`git` diagnostic, which the
+delta requires and no task covered. Second move (72→77): 2.10's own
+removal of `parseBannerManifestFormat` took its sibling test's
+forward-compatibility fixture with it, without a replacement — found and
+confirmed during R2-G3's review exchange, not a task running long (4.11
+added). Third move (77→82): the owner's own lock-location and
+intent/truth-separation rulings reached the implementer after 4.1–4.10
+had already landed on a self-determined layout, requiring a follow-up
+correction (4.12) — a delivery-timing gap, not a task running long; a
+parallel ruling that would have added a `schemaSource` field to
+`hejbro.config.ts` was raised and then withdrawn within the same
+exchange, before any estimate moved for it. Fourth move (82→88): the
+owner's sealed decision landed after 4.12 had already shipped, requiring
+a second follow-up correction (4.13) to introduce `hejbro.json` and
+strip `source` back out of `hejbro.lock` — again a delivery-timing gap
+between two owner-driven rulings reaching the implementer in sequence,
+not a task running long.
 
 ## R2-G5 — The emitted contract — `est_frozen: 75m` — #598
 
