@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { throwHejbroError } from "@hejbro/core";
+import { CONTRACT_MARKER } from "../contract/emit";
 
 /** The textual mark every lock this tool writes carries — checked as a
  * substring, never by parsing the existing file as JSON first (schema-
@@ -42,5 +43,34 @@ export const assertVendorDestinationWritable = (
 	throwHejbroError(
 		"vendor-destination-not-vendored",
 		`"${lockPath}" already exists and doesn't look like a file \`hejbro vendor\` wrote. Next: remove it, or pass --force if overwriting it is what you want.`,
+	);
+};
+
+/**
+ * D106 M6: `contract.ts` is the one vendored destination the overwrite
+ * guard originally left unprotected — unlike `schema.json`/
+ * `snapshot.sql` (byte-identical upstream copies whose integrity the
+ * lock's own hashes already cover, `--check`'s job, not this guard's),
+ * `contract.ts` is generated *by this tool*, carries its own header
+ * marker, and is the one file a consumer's own code imports — the
+ * destination the delta's "never loading the existing file as code"
+ * reasoning was actually written for. Same shape as
+ * {@link assertVendorDestinationWritable}, checked against
+ * `CONTRACT_MARKER` instead of the lock's own mark.
+ */
+export const assertContractDestinationWritable = (
+	contractPath: string,
+	force: boolean,
+): void => {
+	if (!existsSync(contractPath) || force) {
+		return;
+	}
+	const existingText = readFileSync(contractPath, "utf8");
+	if (existingText.includes(CONTRACT_MARKER)) {
+		return;
+	}
+	throwHejbroError(
+		"vendor-destination-not-vendored",
+		`"${contractPath}" already exists and doesn't look like a file \`hejbro vendor\` wrote. Next: remove it, or pass --force if overwriting it is what you want.`,
 	);
 };

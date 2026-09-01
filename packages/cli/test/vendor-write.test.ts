@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -67,6 +67,49 @@ describe("vendor never overwrites a file it did not write", () => {
 
 		// vendor's own --force claims the lock -- it then fails for an
 		// unrelated reason (the source isn't a real reachable repository),
+		// never the overwrite guard.
+		const result = await runCli(cwd, ["vendor", "--force"]);
+		expect(result.stderr).not.toContain("vendor-destination-not-vendored");
+	});
+
+	/** D106 M6: on a *first* vendor -- no lock present yet, so the lock's
+	 * own guard has nothing to refuse -- a pre-existing hand-written
+	 * `contract.ts` at the vendored path must still be protected: it's
+	 * the one destination a consumer's own code imports. */
+	it("refuses a hand-written contract.ts even with no lock present yet", async () => {
+		await mkdir(join(cwd, ".hejbro", "vendor"), { recursive: true });
+		await writeFile(
+			join(cwd, ".hejbro", "vendor", "contract.ts"),
+			"export const createDb = () => { throw new Error('hand-written'); };\n",
+		);
+		const linked = await runCli(cwd, [
+			"link",
+			"https://example.com/org/schema.git",
+		]);
+		expect(linked.exitCode).toBe(0);
+
+		// Refused before any network call -- the guard runs ahead of
+		// `resolveExport`, the same order the lock's own guard runs in.
+		const result = await runCli(cwd, ["vendor"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("vendor-destination-not-vendored");
+		expect(result.stderr).toContain("contract.ts");
+	});
+
+	it("vendor --force overwrites a hand-written contract.ts too", async () => {
+		await mkdir(join(cwd, ".hejbro", "vendor"), { recursive: true });
+		await writeFile(
+			join(cwd, ".hejbro", "vendor", "contract.ts"),
+			"export const createDb = () => { throw new Error('hand-written'); };\n",
+		);
+		const linked = await runCli(cwd, [
+			"link",
+			"https://example.com/org/schema.git",
+		]);
+		expect(linked.exitCode).toBe(0);
+
+		// --force claims the contract file too; the run still fails, but
+		// for an unrelated reason (the source isn't a real repository),
 		// never the overwrite guard.
 		const result = await runCli(cwd, ["vendor", "--force"]);
 		expect(result.stderr).not.toContain("vendor-destination-not-vendored");

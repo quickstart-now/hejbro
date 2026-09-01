@@ -78,6 +78,37 @@ describe("hejbro vendor", () => {
 		});
 	});
 
+	it("two vendor runs against the same commit write byte-identical files, including the lock (D106 m10)", async () => {
+		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
+		remote.commit("export v1", "2026-01-01T10:00:00Z");
+		await runCli(cwd, ["link", remote.cwd]);
+
+		const first = await runCli(cwd, ["vendor"]);
+		expect(first.exitCode).toBe(0);
+		const firstFiles = {
+			schema: await readVendored("schema.json"),
+			sql: await readVendored("snapshot.sql"),
+			contract: await readVendored("contract.ts"),
+			lock: await readFile(join(cwd, "hejbro.lock"), "utf8"),
+		};
+
+		// Same commit, no change on the remote in between -- this is the
+		// scenario's own subject ("`vendor` runs twice against the same
+		// commit"), checked at the command itself rather than only at
+		// `emitContract`'s own unit-level byte-identity proof
+		// (`contract-emit.test.ts`), and covering the lock too, which that
+		// unit-level proof cannot reach at all (`resolvedFrom`/`resolvedBy`
+		// are vendor's own facts, not the emitter's).
+		const second = await runCli(cwd, ["vendor"]);
+		expect(second.exitCode).toBe(0);
+		expect(await readVendored("schema.json")).toBe(firstFiles.schema);
+		expect(await readVendored("snapshot.sql")).toBe(firstFiles.sql);
+		expect(await readVendored("contract.ts")).toBe(firstFiles.contract);
+		expect(await readFile(join(cwd, "hejbro.lock"), "utf8")).toBe(
+			firstFiles.lock,
+		);
+	});
+
 	it("vendor also writes the contract file", async () => {
 		await writeExport(remote, EXPORT_SCHEMA_V1, EXPORT_SQL_V1);
 		remote.commit("export v1", "2026-01-01T10:00:00Z");

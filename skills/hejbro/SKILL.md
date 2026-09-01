@@ -37,4 +37,4 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 | `references/nile-preset.md` | Using `@hejbro/nile` — `nileDriver`, `asTenant`, the declarations this preset refuses and their evidence grades |
 | `references/query-layer.md` | Building a `db()` handle, chaining queries, calling `db.fn`, running under an RLS execution context, transactions, asserting the connected database matches its declarations (`assertSchema`), or query-layer errors |
 | `references/brownfield-adoption.md` | Adopting hejbro into an existing (already-populated) database |
-| `references/polyrepo.md` | A repository needs types for a schema it doesn't declare — monorepo alias vs. `link`/`vendor`, the vendoring command surface, a generated `contract.ts`, or one of the ten coded vendoring failures |
+| `references/polyrepo.md` | A repository needs types for a schema it doesn't declare — monorepo alias vs. `link`/`vendor`, the vendoring command surface, a generated `contract.ts`, or one of the eleven coded vendoring failures |

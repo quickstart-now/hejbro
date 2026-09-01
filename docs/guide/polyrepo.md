@@ -5,7 +5,7 @@ migrations, and commits an **export** — a portable intermediate
 representation (IR) of what it declared, never the declarations
 themselves. A consuming repository (one that does not own the schema)
 **vendors** that export over git: `link` records where it comes from,
-`vendor` fetches one commit's worth of it and writes three committed
+`vendor` fetches one commit's worth of it and writes four committed
 files, including a generated `contract.ts` the consumer imports to get
 typed reads and writes against the same schema — with no database
 connection and no second copy of the query language.
@@ -52,7 +52,8 @@ repository**.
 
 ## The command surface
 
-Five commands, all in the consuming repository except where noted:
+Four commands, all in the consuming repository — plus the schema
+repository's own `generate --export`, covered separately below:
 
 - **`hejbro link <repository>`** — records the source (a git URL or a
   local path) in `hejbro.json`. Repository only: no branch, no ref, no
@@ -88,7 +89,7 @@ agent sandbox with no network and no database can still type-check a
 consumer's code, because everything it needs is already in the tree.
 Only moving the pin forward (`vendor`) reaches out.
 
-## The four files, and the pair they form
+## The five files, and the pair they form
 
 |  | Committed | Written by | Carries |
 |---|---|---|---|

@@ -391,7 +391,15 @@ Files: `packages/cli/src/commands/sync.ts` (new),
       while keeping the column. Start from `cli/test/sync-emit.test.ts >
       derives no relation for a reference to an unmanaged table`. ~6m
 
-## 6. Freshness at startup — `est_frozen: 30m` — issue #584
+## 6. Freshness at startup — **superseded by the git-channel pivot, not built** — `est_frozen: 30m` — issue #584
+
+**D106 m7**: this group belonged to the withdrawn database channel — a
+manifest row to read at startup no longer exists once the channel is
+git, not a database (proposal.md, "What happens to the groups", G6:
+"Purpose dissolved by the judgement that a database's shape is not
+verified"). Left unchecked below is correct, not pending: nothing here
+is planned for this change, ever. Kept for the historical record rather
+than deleted, the same reasoning R2-G9's own header uses for its move.
 
 Files: `packages/cli/src/assert-schema.ts`,
 `packages/cli/src/manifest-read.ts` (new).
@@ -426,7 +434,16 @@ Files: `packages/cli/src/assert-schema.ts`,
       `cli/test/assert-schema-manifest.test.ts > distinguishes the seven
       situations`. ~12m
 
-## 7. Documentation and release plumbing — `est_frozen: 26m` — issue #585
+## 7. Documentation and release plumbing — **superseded by R2-G8, not built as written here** — `est_frozen: 26m` — issue #585
+
+**D106 m7**: redefined against the shipped git-channel surface rather
+than run as its own group (proposal.md, "What happens to the groups",
+G7: "Redefined against the new surface; reissued") — the actual
+documentation/skill/changeset work is R2-G8's, whose own files
+(`docs/guide/polyrepo.md`, `skills/hejbro/references/polyrepo.md`,
+`SKILL.md`, `.changeset/*.md`, `scripts/pack-install-smoke.sh`) are the
+same list below with one rename (`polyrepo-sync.md` → `polyrepo.md`).
+Kept for the historical record, same reasoning as group 6 above.
 
 Files: `docs/guide/polyrepo.md` (new),
 `skills/hejbro/references/polyrepo-sync.md` (new),
@@ -457,7 +474,15 @@ it; that gate is the task's red signal.
       smoke. Gate: `changeset status`, then
       `scripts/pack-install-smoke.sh` assertion 3. ~6m
 
-## 8. The two-repository witness — `est_frozen: 25m` — issue #586
+## 8. The two-repository witness — **superseded by R2-G9, which itself moved to #603 — not built here** — `est_frozen: 25m` — issue #586
+
+**D106 m7**: redefined and sequenced after the apply engine
+(proposal.md, "What happens to the groups", G8: "Redefined, and
+sequenced after the apply engine, since the consumer's loop cannot
+close without it") — became R2-G9, which itself later moved in full to
+the apply-engine change (#603, see R2-G9's own header for that second
+hop). Two supersessions deep; kept for the historical record, same
+reasoning as groups 6 and 7 above.
 
 Files: `packages/cli/test/integration/polyrepo.integration.test.ts`
 (new) and its fixture helpers in the same directory. **No new package
@@ -1054,6 +1079,15 @@ rather than importing it", confirmed to mean exactly this.
       execution proof. Renamed the two red tests accordingly
       (`the exported roles are exactly what the schema declares` /
       `omitting every grant leaves the role list empty, not omitted`).
+      **D106 finding B2**: this narrowing renamed the tests but never
+      propagated to the delta's own requirement text, which kept
+      describing a "consumer passes the roles explicitly" interaction
+      the shipped factory (one-parameter `createDb`) makes impossible.
+      Fixed by revising the requirement to the model that actually
+      shipped — opt-in moved from construction time to call time
+      (`client.as({role})`) — with a third, previously-missing observer
+      added (`roles.test.ts`: no role is active without calling
+      `as()`). See `blackbox/` for why the gap survived.
 - [x] 5.9 No relation for an unmanaged target. Start from
       `cli/test/contract-emit.test.ts > no relation is derived for an
       unmanaged target`. ~6m
@@ -1548,7 +1582,13 @@ count was cited.
       "reads an older format with absent facts absent" fixture against
       — `validateExport`'s own comment records this rather than
       claiming the scenario is proven. Closes for real the day format
-      `2` ships.
+      `2` ships. **D106 M4/m7**: the delta's own requirement text now
+      states this same boundary explicitly (`schema-vendoring/spec.md`,
+      "A description format newer than the reader is refused"), so the
+      spec and this note agree rather than the spec silently promising
+      more than this task ever closed. Still left unchecked — the
+      downward scenario remains genuinely unobservable, not merely
+      undocumented.
 - [x] 7.5 The enumeration test runs the reader against each situation
       and compares the codes themselves, not their labels. Start from
       `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
@@ -1595,6 +1635,12 @@ for the same finding)**: the guide's failure table and the skill's own
 wording both moved from ten to eleven once `vendor-not-yet-vendored`
 was recognized as a genuine member — this implementer's own gap, not a
 planner-approval reversal, so it's counted as pace here too.
+**Correction (D106 M7): that claim was itself wrong for one row.**
+`references/polyrepo.md`'s own body text moved to "eleven", but
+`SKILL.md`'s References table row — a separate copy of the same count,
+one line — was missed and still said "ten" at merge. Fixed by D106's
+own pass; the eighth counting failure of this change, and the first
+found outside the team that built it.
 
 - [x] 8.1 The guide's body: what crosses and what does not, the command
       surface, and the boundary between local freedom and committed

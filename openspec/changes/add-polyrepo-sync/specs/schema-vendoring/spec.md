@@ -7,19 +7,21 @@ A consuming repository SHALL name its source once, and thereafter
 obtain the schema from that repository's committed export. `link`
 records the source **repository** and nothing else. `vendor` resolves
 the remote's default branch, reads the export at the resolved commit,
-writes the contract and the intermediate description into the consuming
-repository, and records the commit in a lock. `--ref` overrides the
-resolution for one run and does not persist; the lock records which ref
-a commit was resolved from.
+writes the contract, the intermediate description, and the squashed SQL
+into the consuming repository, and records the commit in a lock.
+`--ref` overrides the resolution for one run and does not persist; the
+lock records which ref a commit was resolved from.
 
 Branch is intent and commit is truth: everything except a deliberate
 update reads the lock, so a colleague's clone and a continuous
 integration run build from the same commit whatever the branch has done
 since.
 
-Only the update reaches the network. Checking, regenerating and
-type-checking SHALL work from committed files alone, which is what lets
-an agent with no credentials do all of them.
+**Only `vendor` — and the advisory `outdated`, which also reaches the
+remote to answer whether a newer commit exists — reach the network.**
+Checking, regenerating and type-checking SHALL work from committed
+files alone, which is what lets an agent with no credentials do all of
+them.
 
 #### Scenario: Linking records the repository alone
 - **WHEN** a consumer links a source
@@ -27,8 +29,9 @@ an agent with no credentials do all of them.
 
 #### Scenario: Vendoring pins what it read
 - **WHEN** `vendor` runs against a linked source
-- **THEN** the contract and the description are written into the
-  repository and the lock records the commit they came from
+- **THEN** the contract, the description and the squashed SQL are
+  written into the repository and the lock records the commit they
+  came from
 
 #### Scenario: A one-off ref does not stick
 - **WHEN** `vendor --ref` runs and then `vendor` runs again
@@ -39,6 +42,11 @@ an agent with no credentials do all of them.
 - **WHEN** the vendored files are checked against the lock with the
   remote unreachable
 - **THEN** the check completes and reports its result
+
+#### Scenario: Outdated is advisory, and it does reach the network
+- **WHEN** `outdated` runs against a linked source
+- **THEN** it resolves the remote's current default branch to answer
+  whether a newer commit exists, unlike checking or type-checking
 
 ### Requirement: The vendored contract is a function of the commit
 Two vendoring runs against the same commit SHALL write byte-identical
@@ -139,18 +147,35 @@ side for the name to refer to.
   vendored contract
 - **THEN** its type is the underlying type, unbranded
 
-### Requirement: Role names travel with the contract and the consumer opts in
-The contract SHALL export the role names the schema declares, and a
-consumer SHALL pass them explicitly to obtain the whitelist. Roles are
-not adopted silently by holding a contract.
+### Requirement: Role names travel with the contract, and opting in is a call, not a configuration
+**Revised (D106 B2): opt-in moved from construction time to call time.**
+The contract SHALL export the role names the schema declares, and the
+generated client SHALL carry that list as its own whitelist — a
+consumer never passes it separately, and holding the client adopts no
+role by itself. A role is only ever active for the one call that names
+it: `client.as({role})` accepts a role in the contract's list and
+rejects one that is not, and a call that never names a role SHALL run
+with none active, the same as an unscoped `db()` call.
 
-#### Scenario: Supplied roles are accepted
-- **WHEN** a consumer passes the contract's role list
-- **THEN** those roles are accepted where a declared role would be
+The metadata carries only the **candidate set** a client is willing to
+accept — never permission. What a role can actually do once accepted is
+decided entirely by the database's own RLS policies and grants; vendoring
+a schema grants nothing on its own.
 
-#### Scenario: Omitting the roles leaves the rejection in force
-- **WHEN** a consumer does not pass them
-- **THEN** a role name is rejected exactly as before
+#### Scenario: An in-list role is accepted at the call that names it
+- **WHEN** a consumer calls `client.as({role})` with a role the contract
+  exports
+- **THEN** the call succeeds and that role is active for it
+
+#### Scenario: An out-of-list role is rejected exactly as before
+- **WHEN** a consumer calls `client.as({role})` with a role the contract
+  does not export
+- **THEN** it is rejected the same way an undeclared role always is
+
+#### Scenario: No role is active without calling `as()`
+- **WHEN** a consumer calls a table method directly, without `as()`
+- **THEN** the call runs with no role active, never one silently chosen
+  from the contract's list
 
 ### Requirement: A reference to a table the schema does not own has no relation
 Where a foreign key points at a table the export does not describe, the
@@ -181,12 +206,14 @@ this tool did not write; the lock was resolved from somewhere other
 than the default branch; and a check is asked for before anything has
 ever been vendored.
 
-A situation earns its own code when its remedy sends the reader
-somewhere another remedy does not — to the consuming repository, to the
-repository that owns the schema, or to the consumer's own toolchain.
-Some of these send the reader out of their own repository entirely, and
-reporting one under another's code sends someone to fix what they do
-not own.
+A situation earns its own code when its remedy is **distinct** — a
+different action, not necessarily a different destination: most of
+these send the reader back to their own repository, but the action they
+take there (re-vendor, edit `--ref`, decide with `--force`, remove a
+hand-written file, …) still differs from one code to the next. A few do
+send the reader elsewhere entirely — to the repository that owns the
+schema, or to upgrade the consumer's own toolchain — and reporting one
+under another's code there sends someone to fix what they do not own.
 
 Being behind the newest commit is not among them: a lock that names an
 older commit is doing its job, and staleness is reported as advice. Nor
@@ -219,6 +246,31 @@ it yet. It returns to this enumeration when `replace` lands.
 - **WHEN** the lock names an older commit than the default branch's tip
 - **THEN** the staleness is reported without failing the check
 
+### Requirement: An explicit flag decides warn-vs-fail; without one, the terminal does
+The lock resolved from a non-default ref is advisory at `vendor` itself
+and refused at `vendor --check` — the boundary between local freedom
+and committed state. `--strict`/`--no-strict` SHALL decide which side of
+that boundary a run treats a non-default-ref lock as; an explicit flag
+SHALL always win. Without either, `vendor --check` SHALL fail when its
+output is not an interactive terminal (including piped output, not only
+a recognized CI environment variable — this repository reads no such
+variable), and SHALL only warn when it is.
+
+#### Scenario: An explicit flag always wins
+- **WHEN** `--strict` or `--no-strict` is passed to `vendor --check`
+- **THEN** that flag's own behavior applies regardless of whether output
+  is a terminal
+
+#### Scenario: A non-interactive check fails by default
+- **WHEN** `vendor --check` runs against a non-default-ref lock with
+  neither flag and output is not an interactive terminal
+- **THEN** it fails, naming the non-default ref
+
+#### Scenario: An interactive check warns by default
+- **WHEN** `vendor --check` runs against a non-default-ref lock with
+  neither flag and output is an interactive terminal
+- **THEN** it warns and exits zero, rather than failing
+
 ### Requirement: A description format newer than the reader is refused
 Format skew is asymmetric because the description format only ever
 gains fields. A toolchain meeting a **newer** format SHALL refuse,
@@ -226,23 +278,48 @@ naming the version it found, the version it knows, and the command that
 installs a newer hejbro. A toolchain meeting an **older** format SHALL
 read it and treat the facts that format does not carry as absent.
 
+**Not yet observable, and recorded as such rather than promised**: the
+description format has held one shape (format 1) since it first
+existed, so there is no earlier shape yet for an "older format" branch
+to read — the asymmetry above is structural, built ahead of the day
+format 2 ships, the same way the local-replacement absence elsewhere in
+this document names a destination rather than a proof that doesn't
+exist yet. This closes for real, with a real fixture, the day a second
+description format exists.
+
 #### Scenario: A newer format is refused with the command that fixes it
 - **WHEN** the vendored description declares a newer format
 - **THEN** the failure names both versions and the command that
   installs a newer toolchain, and no contract is written
 
-#### Scenario: An older format is read
+#### Scenario: An older format is read (unobservable until a second format exists)
 - **WHEN** the vendored description declares an older format
 - **THEN** it is read, and facts that format does not carry are absent
 
 ### Requirement: Vendoring never overwrites a file it did not write
-Where the destination already holds a file that is not a vendored
-artifact, vendoring SHALL refuse rather than overwrite it. The check
-SHALL be textual, so that deciding never requires loading the existing
-file as code.
+Where the destination holds `hejbro.lock` or the vendored `contract.ts`
+and either is not a file this tool wrote, vendoring SHALL refuse rather
+than overwrite it. The check SHALL be textual, so that deciding never
+requires loading the existing file as code — a clause that matters for
+`contract.ts` specifically, the one vendored destination a consumer's
+own code imports and therefore the one whose accidental execution as
+code would actually matter.
 
-#### Scenario: A hand-written file is not overwritten
-- **WHEN** the destination holds a file this tool did not write
+`.hejbro/vendor/schema.json` and `.hejbro/vendor/snapshot.sql` are
+exempt from this same textual guard, for a different reason: both are
+byte-identical copies of what the schema repository published, never
+loaded as code by anything, and their integrity is already covered by
+`hejbro.lock`'s own per-file hashes (`vendor --check`'s job). A guard
+against overwriting them would be a second, redundant check on a
+property the lock already proves.
+
+#### Scenario: A hand-written lock is not overwritten
+- **WHEN** `hejbro.lock` exists and is not a file this tool wrote
+- **THEN** vendoring fails with a coded error and the file is unchanged
+
+#### Scenario: A hand-written contract is not overwritten, even before a first vendor
+- **WHEN** `.hejbro/vendor/contract.ts` exists and is not a file this
+  tool wrote, whether or not `hejbro.lock` exists yet
 - **THEN** vendoring fails with a coded error and the file is unchanged
 
 ### Requirement: The check compares without writing
