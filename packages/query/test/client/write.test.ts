@@ -1,3 +1,4 @@
+import { eq } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { ContractMetadata } from "../../src/client/contract-types";
 import { createNameKeyedDb } from "../../src/client/name-keyed-db";
@@ -81,6 +82,34 @@ describe("insert and update honour the contract's write optionality (R2-G6 6.4)"
 
 		expect(rows).toEqual([{ id: "p1", title: "renamed", slug: "hello" }]);
 		expect(topLevelSent[0]?.sql).toContain("update");
+	});
+
+	it("update .where(eq(...)) narrows which rows are touched (owner seal (가))", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "p1", title: "renamed", slug: "hello" }],
+		});
+		const client = createNameKeyedDb<TestDatabase>(driver, METADATA);
+
+		const rows = await client.posts
+			.update({ title: "renamed" })
+			.where(eq(client.posts.columns.id, "p1"));
+
+		expect(rows).toEqual([{ id: "p1", title: "renamed", slug: "hello" }]);
+		expect(topLevelSent[0]?.sql).toContain("where");
+	});
+
+	it("delete .where(eq(...)) narrows which rows are removed (owner seal (가))", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "p1", title: "hello", slug: "hello" }],
+		});
+		const client = createNameKeyedDb<TestDatabase>(driver, METADATA);
+
+		const rows = await client.posts
+			.delete()
+			.where(eq(client.posts.columns.id, "p1"));
+
+		expect(rows).toEqual([{ id: "p1", title: "hello", slug: "hello" }]);
+		expect(topLevelSent[0]?.sql).toContain("where");
 	});
 
 	it("rejects a computed column in an insert -- it has no key in Insert at all", () => {

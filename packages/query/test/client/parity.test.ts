@@ -1,29 +1,26 @@
-import { schema, select, table, text, uuid } from "@hejbro/core";
+import { eq, schema, select, table, text, uuid } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
-import type { ContractTableMeta } from "../../src/client/contract-types";
-import { synthesizeTable } from "../../src/client/synthesize";
+import type { ContractMetadata } from "../../src/client/contract-types";
+import { createNameKeyedDb } from "../../src/client/name-keyed-db";
 import { compile } from "../../src/compile/compile";
+import { recordingTransactionalDriver } from "../db/recording-driver";
 
-/**
- * The compiled SQL equals what the declaration-based path compiles for
- * the same query (R2-G6 6.5) — this group's own real proof, per the
- * planner's own emphasis: without it, a client could be "typed right but
- * wired to different SQL". Proven at the `synthesizeTable` seam directly
- * (not through the name-keyed wrapper, which awaits immediately rather
- * than exposing `.compile()`) — this IS the exact value
- * `createNameKeyedDb` feeds `db()` internally, so a match here is a
- * match for the real client too.
- */
-describe("the compiled SQL equals the declaration-based path (R2-G6 6.5)", () => {
-	it("select compiles to the same SQL and params", () => {
-		const app = schema("app");
-		const declaredPosts = table(app, "posts", {
-			id: uuid().primaryKey(),
-			title: text().notNull(),
-		});
-		const declaredCompiled = compile(select(declaredPosts));
+type TestDatabase = {
+	readonly Tables: {
+		readonly posts: {
+			readonly Row: { readonly id: string; readonly title: string };
+			readonly Insert: { readonly id?: string; readonly title: string };
+			readonly Update: { readonly id?: string; readonly title?: string };
+		};
+	};
+};
 
-		const meta: ContractTableMeta = {
+const METADATA: ContractMetadata = {
+	commit: "abc123",
+	exportHash: "sha256:x",
+	roles: [],
+	tables: {
+		posts: {
 			schema: "app",
 			name: "posts",
 			columns: {
@@ -41,11 +38,57 @@ describe("the compiled SQL equals the declaration-based path (R2-G6 6.5)", () =>
 				},
 			},
 			foreignKeys: [],
-		};
-		const synthesizedPosts = synthesizeTable(meta);
-		const synthesizedCompiled = compile(select(synthesizedPosts));
+		},
+	},
+};
 
-		expect(synthesizedCompiled.sql).toBe(declaredCompiled.sql);
-		expect(synthesizedCompiled.params).toEqual(declaredCompiled.params);
+/**
+ * The compiled SQL equals what the declaration-based path compiles for
+ * the same query (R2-G6 6.5) — this group's own real proof, per the
+ * planner's own emphasis: without it, a client could be "typed right but
+ * wired to different SQL". Two scenarios, both through
+ * `createNameKeyedDb` itself (the real wrapper, not a lower internal
+ * seam): a plain whole-table select, and — since owner seal (가) opened
+ * `.where(eq(...))` on the public surface — a filtered one, which is
+ * where this design's real reuse claim lives (the planner's own note:
+ * comparing only the unfiltered case would leave the biggest reused
+ * surface unverified).
+ */
+describe("the compiled SQL equals the declaration-based path (R2-G6 6.5)", () => {
+	it("a plain select compiles to the same SQL and params", () => {
+		const app = schema("app");
+		const declaredPosts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+		});
+		const declaredCompiled = compile(select(declaredPosts));
+
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<TestDatabase>(driver, METADATA);
+		const clientCompiled = client.posts.select().compile();
+
+		expect(clientCompiled.sql).toBe(declaredCompiled.sql);
+		expect(clientCompiled.params).toEqual(declaredCompiled.params);
+	});
+
+	it("a filtered select (owner seal (가), .where(eq(...))) compiles to the same SQL and params", () => {
+		const app = schema("app");
+		const declaredPosts = table(app, "posts", {
+			id: uuid().primaryKey(),
+			title: text().notNull(),
+		});
+		const declaredCompiled = compile(
+			select(declaredPosts).where(eq(declaredPosts.id, "p1")),
+		);
+
+		const { driver } = recordingTransactionalDriver();
+		const client = createNameKeyedDb<TestDatabase>(driver, METADATA);
+		const clientCompiled = client.posts
+			.select()
+			.where(eq(client.posts.columns.id, "p1"))
+			.compile();
+
+		expect(clientCompiled.sql).toBe(declaredCompiled.sql);
+		expect(clientCompiled.params).toEqual(declaredCompiled.params);
 	});
 });

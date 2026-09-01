@@ -1163,20 +1163,31 @@ happens here.
       and how a table is reached on it, in the shape the contract
       already teaches. Start from the same test as 6.1 — the two
       decisions are settled together and first observed there. ~9m
-      **Settled:** `createNameKeyedDb<TDatabase>(conn, metadata)` returns
-      one client object keyed by table name (`NameKeyedDb`), each table
-      exposing `select`/`insert`/`update`/`delete` over the *whole*
-      table — no `.where()`/predicate parameter yet, since the filter
-      surface (how a caller references a column without a `Table` value
-      crossing) is an owner-gated decision still open at this commit
-      (planner: "이건 소비자가 실제로 타이핑하는 표면... 오너가 정해온
-      축"). Also exposes `.as(context)` (role-scoping, R2-G5 5.8's own
-      functional half, closed here) — in scope now because `DbContext`
-      is a plain `{role, settings?}` value, never a column reference, so
-      it doesn't wait on the same ruling. Planner condition ①, "no
-      `Table` in the client's public types", is a type-level assertion
-      (`no-table-leak.test.ts`) plus a runtime own-symbol-property check,
-      not a comment.
+      **Settled, owner-sealed ("봉인 (가)"):** `createNameKeyedDb
+      <TDatabase>(conn, metadata)` returns one client object keyed by
+      table name (`NameKeyedDb`). Each table exposes `select`/`insert`/
+      `update`/`delete`, plus **`columns`** — a plain-`Expr` bag (the
+      owner's own accessor name, from the sealed example `db.post.
+      columns.status`) a caller combines with the already-public `eq`/
+      `and`/`or` to build a `.where()` predicate:
+      `client.posts.select().where(eq(client.posts.columns.id, value))`.
+      `select()` returns a real filterable/orderable/limitable chain
+      (`NameKeyedSelectChain`, `.where`/`.orderBy`/`.limit`/`.offset`,
+      thenable, `.compile()`); `update`/`delete` return a filterable
+      terminal (`NameKeyedMutationChain`, `.where`). The owner's own
+      reasoning (recorded, not re-derived): a second filter dialect would
+      be the same "permanent tax" that ruled out table values crossing
+      in the first place — reuse, not a second grammar, or the choice
+      contradicts itself. `columns` never carries declaration authority
+      (no `.notNull()`, no `[tableMeta]`) — a leaf `Expr`, outside what
+      the "no `Table`" seal restricts. Also exposes `.as(context)`
+      (role-scoping, R2-G5 5.8's own functional half, closed here) —
+      never needed the filter ruling since `DbContext` is a plain
+      `{role, settings?}` value. Planner condition ①, "no `Table` in the
+      client's public types", is a type-level exact-key assertion plus a
+      runtime own-symbol-property check (`no-table-leak.test.ts`), not a
+      comment — the one observation that tells "`ColumnRef` is exposed,
+      `Table` is not" apart.
 - [x] 6.3 Select against a named table, typed from the contract. Start
       from `query/test/client/select.test.ts > selects and types rows
       from the contract`. ~10m
@@ -1187,22 +1198,29 @@ happens here.
       own exclusion) — proven as a compile-time `@ts-expect-error`, not a
       runtime check, since the client's own types come from the
       contract's static `Insert`/`Update`, never re-derived from the
-      loosely-typed synthesized table.
+      loosely-typed synthesized table. `update`/`delete` also gained
+      `.where(eq(...))` once the filter seal landed (6.2) — narrowing
+      which rows are touched, the same `columns` bag `select()` uses.
 - [x] 6.5 The compiled SQL equals what the declaration-based path
       compiles for the same query. Start from
       `query/test/client/parity.test.ts > compiles to the same SQL as
       the declaration path`. ~10m
-      True by construction (6.1) — passed on the first run, which is
-      itself the evidence the construction-not-comparison design holds.
+      True by construction (6.1) — passed on the first run, both times.
+      Two scenarios, both through the real `createNameKeyedDb` wrapper
+      (not a lower internal seam): a plain whole-table select, and — once
+      the filter seal landed — a `.where(eq(...))`-filtered one, per the
+      planner's own note that the unfiltered case alone would leave this
+      design's largest reused surface (the compiler's own `where`
+      rendering) unverified.
 - [x] 6.6 Relations, where the contract carries them. Start from
       `query/test/client/relations.test.ts > follows a carried
       relation`. ~9m
       Proven at the same internal seam as 6.5 (`synthesizeTable`'s own
       reconstructed `foreignKeys` feed `db/related.ts` unchanged) —
-      exposing `.related()` on the public per-table client is part of
-      the richer surface awaiting the same filter-syntax ruling 6.2
-      names, so this proves the mechanism the eventual public surface
-      will delegate to, not the public surface itself.
+      exposing `.related()` on the public per-table client is a further
+      surface decision (its own projection shape) not covered by the
+      filter seal, so this still proves the mechanism, not the public
+      surface.
 - [x] 6.7 The role whitelist reaches the client from the contract's
       exported list. Start from `query/test/client/roles.test.ts >
       accepts a role the contract exports`. ~8m

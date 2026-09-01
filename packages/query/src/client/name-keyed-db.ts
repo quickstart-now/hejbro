@@ -1,5 +1,11 @@
-import type { DeclaredTable } from "@hejbro/core";
+import type {
+	Condition,
+	DeclaredTable,
+	Expr,
+	OrderTermInput,
+} from "@hejbro/core";
 import { roleName } from "@hejbro/core";
+import type { CompileResult } from "../compile/compile";
 import type { ChainApi } from "../db/chain";
 import type { DbContext } from "../db/context";
 import { db } from "../db/db";
@@ -20,16 +26,46 @@ export type DatabaseShape = {
 };
 
 /**
- * One table's public surface — every member resolves to a plain row
- * array, never the `Table` value this package builds internally
- * (planner condition ①: "no `Table` in the client's public types" is
- * enforced by construction here, not by convention — nothing below ever
- * names {@link DeclaredTable} or imports `tableMeta`). No `.where()`/
- * predicate parameter yet: the filter surface is an owner-gated decision
- * still pending (R2-G6 6.2's own open question) — `select`/`insert`/
- * `update`/`delete` cover the whole table until it lands, the same way
- * `@hejbro/query`'s own `deleteFrom(target)` covers the whole table
- * until `.where()` is chained.
+ * A thenable select chain over a name-keyed table's own row type (owner
+ * seal (가), R2-G6 6.2): `.where()`/`.orderBy()`/`.limit()`/`.offset()`
+ * inherit `@hejbro/query`'s existing chain and compiler unchanged — the
+ * same reasoning that rejected a second table-value expression (planner
+ * condition B's own rationale) applies to a second query dialect: one
+ * production and consumption repository speak the same query language,
+ * or the difference is a permanent tax. Narrower than `db()`'s own
+ * `SelectChainDistinctable` (no `.distinct()`/joins/`.groupBy()` yet,
+ * and no `.related()` — those await the same design attention this
+ * surface itself just received); `.where()`/`.orderBy()`/`.limit()`/
+ * `.offset()` cover the scenario this seal was made for.
+ */
+export type NameKeyedSelectChain<TRow> = PromiseLike<ReadonlyArray<TRow>> & {
+	compile(): CompileResult;
+	where(condition: Condition): NameKeyedSelectChain<TRow>;
+	orderBy(...terms: ReadonlyArray<OrderTermInput>): NameKeyedSelectChain<TRow>;
+	limit(count: number): NameKeyedSelectChain<TRow>;
+	offset(count: number): NameKeyedSelectChain<TRow>;
+};
+
+/** An `update`/`delete` chain's own filterable terminal — `.where()` narrows which rows are touched, mirroring `@hejbro/query`'s own `UpdateChainReturnable`/`DeleteChainReturnable` shape without `.returning()` (not yet exposed on this surface). */
+export type NameKeyedMutationChain<TRow> = PromiseLike<ReadonlyArray<TRow>> & {
+	compile(): CompileResult;
+	where(condition: Condition): PromiseLike<ReadonlyArray<TRow>> & {
+		compile(): CompileResult;
+	};
+};
+
+/**
+ * One table's public surface: `select`/`insert`/`update`/`delete`, plus
+ * `columns` — a plain-`Expr` bag (owner seal (가)) a caller combines with
+ * `eq`/`and`/`or` (already-public `@hejbro/query` exports) to build a
+ * `.where()` predicate, e.g. `client.posts.select().where(eq(client.
+ * posts.columns.id, value))`. `columns` carries no declaration
+ * authority — no `.notNull()`/`.primaryKey()`/any other declaration-time
+ * builder method, and no hidden `[tableMeta]` symbol (planner condition
+ * ①, "no `Table` in the client's public types" — proven in
+ * `no-table-leak.test.ts`, both the type-level exact-key check and a
+ * runtime own-symbol-properties probe). Owner's own accessor name from
+ * the sealed example (`db.post.columns.status`).
  */
 export type NameKeyedTableClient<
 	TTable extends {
@@ -38,12 +74,13 @@ export type NameKeyedTableClient<
 		readonly Update: unknown;
 	},
 > = {
-	select(): Promise<ReadonlyArray<TTable["Row"]>>;
+	readonly columns: { readonly [K in keyof TTable["Row"]]: Expr };
+	select(): NameKeyedSelectChain<TTable["Row"]>;
 	insert(
 		rows: TTable["Insert"] | ReadonlyArray<TTable["Insert"]>,
 	): Promise<ReadonlyArray<TTable["Row"]>>;
-	update(values: TTable["Update"]): Promise<ReadonlyArray<TTable["Row"]>>;
-	delete(): Promise<ReadonlyArray<TTable["Row"]>>;
+	update(values: TTable["Update"]): NameKeyedMutationChain<TTable["Row"]>;
+	delete(): NameKeyedMutationChain<TTable["Row"]>;
 };
 
 /** Every table client, keyed exactly as `Database["Tables"]` is — the shape both the unscoped and `.as(context)`-scoped surfaces share (mirrors `@hejbro/query`'s own unscoped `db()` vs `db.as(context)` pair: a scoped handle never re-nests its own `.as`, task 4.6's "no nesting" rule). */
@@ -59,8 +96,7 @@ export type NameKeyedTables<TDatabase extends DatabaseShape> = {
  * the consumer opts in" — R2-G5 5.8's own metadata-only half is closed
  * here, the runtime accept/reject half). `.as` never needs a `Table`/
  * column-ref parameter (`DbContext` is a plain `{role, settings?}`
- * value), so it is in scope now even though the filter surface (`.where`)
- * is not.
+ * value), so it was in scope from 6.2's own first draft.
  */
 export type NameKeyedDb<TDatabase extends DatabaseShape> =
 	NameKeyedTables<TDatabase> & {
@@ -68,12 +104,22 @@ export type NameKeyedDb<TDatabase extends DatabaseShape> =
 	};
 
 /**
+ * `table`'s own enumerable column-ref properties, copied without its
+ * hidden `[tableMeta]` symbol (`Object.entries` never sees a symbol key)
+ * — the runtime half of planner condition ①: even though this function
+ * reads the same object `getTableMeta`/`isTable` recognize, the value it
+ * returns carries none of that recognition.
+ */
+const buildColumnsBag = (table: DeclaredTable): Record<string, unknown> =>
+	Object.fromEntries(Object.entries(table));
+
+/**
  * Builds one table's client over any `select`/`insert`/`update`/
  * `deleteFrom` source — `db()`'s own unscoped handle or its
  * `.as(context)`-scoped one, which share this same shape
  * (`ChainApi<TSchema>`) — using the internally-held synthesized `table`
- * (never returned, never assigned to an enumerable property of the
- * client object this function returns — the structural half of planner
+ * (never returned as itself, only as its column-ref bag with the
+ * `[tableMeta]` symbol stripped — the structural half of planner
  * condition ①). Casts at this one boundary, not scattered: the chain
  * source's own generic inference over a loosely-typed synthesized table
  * can never equal the contract's own precise `Row`/`Insert`/`Update`
@@ -94,20 +140,21 @@ const buildTableClient = <
 	chainSource: Pick<ChainApi, "select" | "insert" | "update" | "deleteFrom">,
 	table: DeclaredTable,
 ): NameKeyedTableClient<TTable> => ({
-	select: async () =>
-		(await chainSource.select(table)) as unknown as ReadonlyArray<
-			TTable["Row"]
-		>,
+	columns: buildColumnsBag(
+		table,
+	) as unknown as NameKeyedTableClient<TTable>["columns"],
+	select: () =>
+		chainSource.select(table) as unknown as NameKeyedSelectChain<TTable["Row"]>,
 	insert: async (rows) =>
 		(await chainSource
 			.insert(table)
 			.values(rows as never)) as unknown as ReadonlyArray<TTable["Row"]>,
-	update: async (values) =>
-		(await chainSource
+	update: (values) =>
+		chainSource
 			.update(table)
-			.set(values as never)) as unknown as ReadonlyArray<TTable["Row"]>,
-	delete: async () =>
-		(await chainSource.deleteFrom(table)) as unknown as ReadonlyArray<
+			.set(values as never) as unknown as NameKeyedMutationChain<TTable["Row"]>,
+	delete: () =>
+		chainSource.deleteFrom(table) as unknown as NameKeyedMutationChain<
 			TTable["Row"]
 		>,
 });
@@ -164,17 +211,19 @@ const buildTables = <TDatabase extends DatabaseShape>(
 };
 
 /**
- * The name-keyed client (R2-G6): `createDb`'s own real body, once R2-G5's
- * 6.12 replaces its placeholder. Reconstructs a real `Table` per
- * vendored table (`synthesizeTable`), feeds them all into one `db()`
- * handle so relation-following (`db/related.ts`) sees every table at
- * once, and wraps each table in a thin, name-keyed façade — no `Table`
- * value ever reaches this function's own return value (planner condition
- * ①). `TDatabase` is the one type parameter this whole package needs;
- * the generated contract itself supplies it at the one call site that
- * matters (`createDb(conn) => createNameKeyedDb<Database>(conn,
- * contractMetadata)`), so no caller of the *generated* factory ever
- * writes it out (proposal.md, "no type parameter reaches the user").
+ * The name-keyed client (R2-G6): `createDb`'s own real body (R2-G5
+ * 6.12). Reconstructs a real `Table` per vendored table
+ * (`synthesizeTable`), feeds them all into one `db()` handle so
+ * relation-following (`db/related.ts`) sees every table at once, and
+ * wraps each table in a thin, name-keyed façade — the `Table` value
+ * itself never reaches this function's own return value, only its
+ * column-ref bag with the declaration-authority symbol stripped
+ * (planner condition ①). `TDatabase` is the one type parameter this
+ * whole package needs; the generated contract itself supplies it at the
+ * one call site that matters (`createDb(conn) => createNameKeyedDb
+ * <Database>(conn, contractMetadata)`), so no caller of the *generated*
+ * factory ever writes it out (proposal.md, "no type parameter reaches
+ * the user").
  */
 export const createNameKeyedDb = <TDatabase extends DatabaseShape>(
 	conn: Driver,

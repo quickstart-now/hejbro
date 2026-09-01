@@ -1,3 +1,4 @@
+import { eq } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { ContractMetadata } from "../../src/client/contract-types";
 import { createNameKeyedDb } from "../../src/client/name-keyed-db";
@@ -52,5 +53,20 @@ describe("selects and types rows from the contract (R2-G6 6.3)", () => {
 		expect(rows).toEqual([{ id: "p1", title: "hello" }]);
 		expect(topLevelSent).toHaveLength(1);
 		expect(topLevelSent[0]?.sql).toContain('"app"."posts"');
+	});
+
+	it("filters with .where(eq(...)) over the exposed columns bag (owner seal (가))", async () => {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "p1", title: "hello" }],
+		});
+
+		const client = createNameKeyedDb<TestDatabase>(driver, METADATA);
+		const rows = await client.posts
+			.select()
+			.where(eq(client.posts.columns.id, "p1"));
+
+		expect(rows).toEqual([{ id: "p1", title: "hello" }]);
+		expect(topLevelSent[0]?.sql).toContain("where");
+		expect(topLevelSent[0]?.params).toEqual(["p1"]);
 	});
 });

@@ -1,3 +1,4 @@
+import type { DeclaredTable } from "@hejbro/core";
 import { tableMeta } from "@hejbro/core";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ContractMetadata } from "../../src/client/contract-types";
@@ -31,10 +32,16 @@ type TestDatabase = {
  * value).
  */
 describe("no Table value crosses into the client's public types (R2-G6 6.1 condition ①)", () => {
-	it("a table client's own keys are exactly select/insert/update/delete — nothing else", () => {
+	it("a table client's own keys are exactly select/insert/update/delete/columns — nothing else", () => {
 		expectTypeOf<
 			keyof NameKeyedTableClient<TestDatabase["Tables"]["posts"]>
-		>().toEqualTypeOf<"select" | "insert" | "update" | "delete">();
+		>().toEqualTypeOf<"select" | "insert" | "update" | "delete" | "columns">();
+	});
+
+	it("columns carries plain Expr values, never a Table (owner seal (가))", () => {
+		expectTypeOf<
+			NameKeyedTableClient<TestDatabase["Tables"]["posts"]>["columns"]["id"]
+		>().not.toExtend<DeclaredTable>();
 	});
 
 	it("NameKeyedDb<TDatabase> is keyed exactly by the contract's own table names plus .as", () => {
