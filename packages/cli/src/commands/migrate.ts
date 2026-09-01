@@ -13,6 +13,7 @@ import type { PlanResult } from "../apply/plan";
 import { planApply } from "../apply/plan";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
+import { requireConfigFields } from "../config-required";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { normalizeEqualsFlags } from "../flags";
@@ -188,6 +189,7 @@ export const runMigrate = async (
 	const urlFlag = lastFlagValue(normalizeEqualsFlags(argv), "--url");
 	try {
 		const { config } = await loadConfig(cwd, undefined);
+		requireConfigFields(config, "migrate", ["migrationsDir"]);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
 		const fileNames = listMigrationFiles(migrationsDirPath);
 		const chain = readChainEntries(migrationsDirPath, fileNames);

@@ -18,7 +18,7 @@ export const existingTable = <TColumns extends Record<string, ColumnBuilder>>(
 	schemaName: string,
 	tableName: string,
 	columns: TColumns,
-): Table<TColumns> => {
+): Table<TColumns, "declared"> => {
 	const declaredAt = captureDeclarationSite();
 	assertSqlName(schemaName, "schema", declaredAt);
 	assertSqlName(tableName, "table", declaredAt);
@@ -40,8 +40,12 @@ export const existingTable = <TColumns extends Record<string, ColumnBuilder>>(
 		checks: [],
 		rls: null,
 		existing: true,
+		authority: "declared",
 		declaredAt,
 	};
 
-	return Object.assign(refsObject, { [tableMeta]: declaration });
+	return Object.assign(refsObject, { [tableMeta]: declaration }) as Table<
+		TColumns,
+		"declared"
+	>;
 };

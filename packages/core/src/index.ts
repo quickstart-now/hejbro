@@ -50,6 +50,7 @@ export { roleName } from "./dsl/role";
 export type { SchemaDeclaration } from "./dsl/schema";
 export { schema } from "./dsl/schema";
 export type {
+	DeclaredTable,
 	ForeignKeyAction,
 	ForeignKeyDeclaration,
 	ForeignKeyInput,
@@ -276,6 +277,19 @@ export type {
 } from "./kinds/sequence-kind";
 export { sequenceKind } from "./kinds/sequence-kind";
 export { tableKind } from "./kinds/table-kind";
+export type {
+	ColumnSnapshot,
+	ForeignKeySnapshot,
+	IdentitySnapshot,
+	TableSnapshot,
+} from "./kinds/table-snapshot";
+export {
+	columnDefault,
+	columnGenerated,
+	columnIdentity,
+	columnNotNull,
+	tableIdentity,
+} from "./kinds/table-snapshot";
 export type {
 	TriggerEventSnapshot,
 	TriggerSnapshot,

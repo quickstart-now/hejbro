@@ -20,6 +20,7 @@ import {
 	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
+import { requireConfigFields } from "../config-required";
 import type { Diagnostic } from "../diagnostics";
 import {
 	fromHejbroError,
@@ -27,6 +28,9 @@ import {
 	renderDiagnostics,
 } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { buildExportDescription } from "../export/description";
+import { buildSquashedSql } from "../export/squash";
+import { writeExport } from "../export/write";
 import {
 	normalizeEqualsFlags,
 	parseConfirmDropFlag,
@@ -74,6 +78,11 @@ const GENERATE_ARGS = {
 		type: "string",
 		description:
 			"confirm a genuine drop (not a rename): <schema>.<table>.<column>, or <schema>.<table> for a whole table (repeatable)",
+	},
+	export: {
+		type: "boolean",
+		description:
+			"write a schema export (description, squashed SQL, format record) into .hejbro/export/ alongside the migration (opt-in)",
 	},
 } as const;
 
@@ -618,6 +627,7 @@ export const runGenerate = async (
 	// normalization point means a flag added later doesn't need its own.
 	const rawArgs = normalizeEqualsFlags(argv);
 	const parsedArgv = parseGenerateArgv(rawArgs);
+	const exportEnabled = rawArgs.includes("--export");
 	const fallbackIdentity = parsedArgv.configFlag ?? "hejbro.config.ts";
 	try {
 		assertBaselineFlagsApplicable(mode, rawArgs);
@@ -627,6 +637,11 @@ export const runGenerate = async (
 			parsedArgv.confirmDropValues.map(parseConfirmDropFlag);
 
 		const { config, configPath } = await loadConfig(cwd, parsedArgv.configFlag);
+		requireConfigFields(config, mode, [
+			"migrationsDir",
+			"snapshotPath",
+			"prefixStrategy",
+		]);
 		const declarations = await loadDeclarations(configPath, config);
 
 		// Nested, not the outer catch: a `malformed-snapshot-node` error
@@ -638,7 +653,7 @@ export const runGenerate = async (
 		try {
 			const registry = buildRegistry(config);
 			const previousSnapshot = parseSnapshot(
-				readSnapshotFileText(cwd, config),
+				readSnapshotFileText(cwd, config, mode),
 				requiredKeysByKind(registry),
 			);
 			const validators = configValidators(config);
@@ -671,9 +686,35 @@ export const runGenerate = async (
 					cwd,
 				);
 			}
+			// D106 M2: a repository whose snapshot already matches its
+			// declarations must still be able to produce its *first* export --
+			// otherwise `generate --export` is a no-op there forever (`baseline
+			// --export` is refused once migrations exist), and the schema
+			// repository's export directory never comes to exist at all. Reused
+			// by both branches below: the no-difference return (this export is
+			// the only artifact that run writes) and the ordinary
+			// difference-found path further down.
+			const writeExportArtifact = (snapshot: Snapshot): void => {
+				const description = buildExportDescription(
+					declarations,
+					declarations.exportNames,
+				);
+				writeExport(
+					cwd,
+					{ ...description, snapshot },
+					buildSquashedSql(declarations, registry, validators),
+				);
+			};
 			if (!firstPass.hasChanges) {
 				if (mode === "baseline") {
 					throwBaselineNothingToAdopt(config.entry);
+				}
+				if (exportEnabled) {
+					// No changes means the declared state already matches
+					// `previousSnapshot` (`generateMigrations` returns no
+					// migrations, and so no snapshot, exactly when there is
+					// nothing to diff) -- this is that state's own export.
+					writeExportArtifact(previousSnapshot);
 				}
 				return {
 					exitCode: 0,
@@ -727,6 +768,13 @@ export const runGenerate = async (
 				join(cwd, config.snapshotPath),
 				renderSnapshot(finalSnapshot),
 			);
+			if (exportEnabled) {
+				// Reuses the same last-migration snapshot the write above
+				// already derived (`finalPass.migrations` is never `[]`
+				// here -- see that constant's own comment) rather than
+				// re-deriving it a second way.
+				writeExportArtifact(finalSnapshot);
+			}
 
 			return {
 				exitCode: 0,

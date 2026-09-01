@@ -372,4 +372,25 @@ if (typeof asTenant !== 'function') {
 ") || fail "@hejbro/nile's own nileDriver/asTenant exports did not resolve through the installed package"
 echo "   ok"
 
+echo "== assertion 6: link/vendor/vendor --check/outdated (add-polyrepo-sync, #314) are reachable through the installed hejbro binary, entirely without a database or network -- none of these four commands needs either to report a coded failure, so this is the database-free reachability check #601 asks for rather than a full vendoring round trip (that needs a real git remote, covered by R2-G9's own integration suite instead)"
+(cd "$SCRATCH_DIR" && "$BIN" link /no/such/schema-repo >/dev/null) || fail "hejbro link exited non-zero"
+[ -f "$SCRATCH_DIR/hejbro.json" ] || fail "hejbro link did not create hejbro.json"
+
+# `set -e` would otherwise abort the script the moment one of these two
+# commands exits non-zero, which is exactly the outcome being asserted --
+# capture the exit code explicitly instead of letting a `||`-guarded
+# command substitution's own subshell swallow it.
+set +e
+CHECK_OUTPUT="$(cd "$SCRATCH_DIR" && "$BIN" vendor --check 2>&1)"
+CHECK_EXIT=$?
+OUTDATED_OUTPUT="$(cd "$SCRATCH_DIR" && "$BIN" outdated 2>&1)"
+OUTDATED_EXIT=$?
+set -e
+
+[ "$CHECK_EXIT" -ne 0 ] || fail "hejbro vendor --check unexpectedly exited 0 with nothing vendored yet"
+grep -q "vendor-not-yet-vendored" <<< "$CHECK_OUTPUT" || fail "hejbro vendor --check's own coded failure (vendor-not-yet-vendored) did not reach stderr through the installed binary: $CHECK_OUTPUT"
+[ "$OUTDATED_EXIT" -ne 0 ] || fail "hejbro outdated unexpectedly exited 0 with nothing vendored yet"
+grep -q "vendor-not-yet-vendored" <<< "$OUTDATED_OUTPUT" || fail "hejbro outdated's own coded failure (vendor-not-yet-vendored) did not reach stderr through the installed binary: $OUTDATED_OUTPUT"
+echo "   ok"
+
 echo "pack-install smoke OK: @hejbro/core, hejbro, @hejbro/supabase, @hejbro/query, @hejbro/pg, @hejbro/neon, @hejbro/nile install cleanly with npm and run init/generate/verify"

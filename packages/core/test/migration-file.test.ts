@@ -298,6 +298,42 @@ describe("parseBannerBaseline (#445/R5)", () => {
 	});
 });
 
+/**
+ * Forward compatibility (R2-G4, 4.11): a banner line no current parser
+ * recognizes at all -- distinct from the coverage `parseBannerHashes`'s
+ * own "#229 unknown-line tolerance" test carries, which only proves that
+ * *other known* prefixes (the version line) don't confuse a parser
+ * reading its own. This restores the guard 2.10 removed along with
+ * `parseBannerManifestFormat` (the manifest banner line was this test's
+ * only "genuinely unknown to everyone" fixture) -- the property itself
+ * survives the manifest capability's own withdrawal and is required by
+ * the shipped `migration-format` spec ("an unrecognized banner line is
+ * ignored").
+ */
+describe("an unrecognized banner line does not break the parsers that read the others", () => {
+	it("every current parser still reads its own line with a fabricated, nobody-recognizes-it line mixed in", () => {
+		const rendered = renderBanner(
+			[createChange],
+			{ parent: "sha256:aaaa", current: "sha256:bbbb" },
+			"0.1.0",
+			true,
+		);
+		const [marker, ...rest] = rendered.split("\n");
+		const withUnknownLine = [
+			marker,
+			"-- some-future-line: unknown",
+			...rest,
+		].join("\n");
+
+		expect(parseBannerVersion(withUnknownLine)).toBe("0.1.0");
+		expect(parseBannerBaseline(withUnknownLine)).toBe(true);
+		expect(parseBannerHashes(withUnknownLine)).toEqual({
+			parent: "sha256:aaaa",
+			current: "sha256:bbbb",
+		});
+	});
+});
+
 describe("renderMigrationPrefix", () => {
 	it("renders just the prefix half, matching migrationFileName's own prefix (#220)", () => {
 		expect(

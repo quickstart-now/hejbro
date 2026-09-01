@@ -3,12 +3,22 @@ import { migrationPrefixStrategies, throwHejbroError } from "@hejbro/core";
 import type { ZodIssue } from "zod";
 import { z } from "zod";
 
-/** The shape of `hejbro.config.ts` (decision D30). */
+/**
+ * The shape of `hejbro.config.ts` (decision D30). `migrationsDir`,
+ * `snapshotPath` and `prefixStrategy` serve only a repository that holds
+ * migration authority and are optional (cli-commands delta,
+ * "Configuration asks each command only for what it needs") — `entry` is
+ * not relaxed alongside them: every repository still reads declarations,
+ * migration-authoring or not. A command that needs one of the three and
+ * finds it absent refuses by name (`config-required.ts`) before doing
+ * any work, rather than failing however this field's absence happens to
+ * surface deeper in that command's own logic.
+ */
 export type HejbroConfig = {
 	readonly entry: ReadonlyArray<string>;
-	readonly migrationsDir: string;
-	readonly snapshotPath: string;
-	readonly prefixStrategy: MigrationPrefixStrategy;
+	readonly migrationsDir?: string;
+	readonly snapshotPath?: string;
+	readonly prefixStrategy?: MigrationPrefixStrategy;
 	/** Provider presets to register — their kinds and validators (D55). Defaults to `[]`. */
 	readonly presets: ReadonlyArray<Preset>;
 };
@@ -61,14 +71,14 @@ export const isPreset = (value: unknown): value is Preset => {
 
 const configSchema = z.object({
 	entry: z.array(z.string()),
-	migrationsDir: z.string(),
-	snapshotPath: z.string(),
-	prefixStrategy: z.enum(migrationPrefixStrategies),
+	migrationsDir: z.string().optional(),
+	snapshotPath: z.string().optional(),
+	prefixStrategy: z.enum(migrationPrefixStrategies).optional(),
 	presets: z.array(z.unknown()).default([]),
 });
 
 const HEJBRO_CONFIG_SHAPE_HINT =
-	'{ entry: string[], migrationsDir: string, snapshotPath: string, prefixStrategy: "timestamp" | "index" | "unix", presets?: Preset[] }';
+	'{ entry: string[], migrationsDir?: string, snapshotPath?: string, prefixStrategy?: "timestamp" | "index" | "unix", presets?: Preset[] }';
 
 const issueFieldName = (issue: ZodIssue): string => {
 	if (issue.path.length === 0) {
@@ -132,9 +142,22 @@ export const parseConfig = (
 	}
 	// findInvalidPresetIndex already confirmed every entry passes isPreset;
 	// filter (rather than an `as` cast) lets the type predicate narrow the
-	// array for us.
+	// array for us. The three optional fields are spread only when zod
+	// actually parsed a value for them — under `exactOptionalPropertyTypes`,
+	// an omitted key and a key explicitly set to `undefined` are different
+	// types, and only the former matches `HejbroConfig`'s own optional
+	// fields.
 	return {
-		...result.data,
+		entry: result.data.entry,
+		...(result.data.migrationsDir !== undefined && {
+			migrationsDir: result.data.migrationsDir,
+		}),
+		...(result.data.snapshotPath !== undefined && {
+			snapshotPath: result.data.snapshotPath,
+		}),
+		...(result.data.prefixStrategy !== undefined && {
+			prefixStrategy: result.data.prefixStrategy,
+		}),
 		presets: result.data.presets.filter(isPreset),
 	};
 };

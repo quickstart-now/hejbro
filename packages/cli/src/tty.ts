@@ -1,11 +1,13 @@
 /**
- * `history`/`restore`'s shared terminal-capability checks (#130 spec §9,
- * §7). Both are re-evaluated per call (not cached at module load) so a
- * test can flip `process.stdout.isTTY`/`process.env.NO_COLOR` between
- * assertions without needing to re-import the module.
+ * Shared terminal-capability checks (#130 spec §9, §7; R2-G7 7.2 reuses
+ * the same explicit-flag-first, TTY-inferred-fallback pattern for
+ * `vendor`'s own local/CI boundary). Every check here is re-evaluated
+ * per call (not cached at module load) so a test can flip
+ * `process.stdout.isTTY`/`process.env.NO_COLOR` between assertions
+ * without needing to re-import the module.
  */
 
-const isInteractive = (): boolean => process.stdout.isTTY === true;
+export const isInteractive = (): boolean => process.stdout.isTTY === true;
 
 const noColorSet = (): boolean =>
 	process.env.NO_COLOR !== undefined && process.env.NO_COLOR !== "";
@@ -40,6 +42,27 @@ export const shouldUseLinks = (flag: boolean | undefined): LinkMode => {
 		return "osc8";
 	}
 	return "none";
+};
+
+/**
+ * `vendor`'s own local/CI boundary (R2-G7 7.2, members 10 and 11): an
+ * explicit `--strict` always fails on the boundary; an explicit
+ * `--no-strict` always only warns; with neither flag, a non-interactive
+ * terminal (CI, or output piped to a file) fails by default — nobody is
+ * watching to notice a warning scroll by — while an interactive terminal
+ * only warns, since a developer sees it live and can act on it. Mirrors
+ * {@link shouldUseLinks}'s explicit-flag-first, TTY-inferred-fallback
+ * shape; this repo has never read a `CI` environment variable and its
+ * own habit is explicit flags over env-var inference.
+ */
+export const resolveStrictMode = (flag: boolean | undefined): boolean => {
+	if (flag === true) {
+		return true;
+	}
+	if (flag === false) {
+		return false;
+	}
+	return !isInteractive();
 };
 
 export type DiffLineColor = "green" | "yellow" | "red";

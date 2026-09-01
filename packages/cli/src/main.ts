@@ -3,11 +3,14 @@ import { checkCommand } from "./commands/check";
 import { baselineCommand, generateCommand } from "./commands/generate";
 import { historyCommand } from "./commands/history";
 import { initCommand } from "./commands/init";
+import { linkCommand } from "./commands/link";
 import { migrateCommand } from "./commands/migrate";
+import { outdatedCommand } from "./commands/outdated";
 import { raiseCommand } from "./commands/raise";
 import { resetCommand } from "./commands/reset";
 import { restoreCommand } from "./commands/restore";
 import { statusCommand } from "./commands/status";
+import { vendorCommand } from "./commands/vendor";
 import { verifyCommand } from "./commands/verify";
 import { CLI_VERSION } from "./version";
 
@@ -41,5 +44,8 @@ export const main = defineCommand({
 		status: statusCommand,
 		reset: resetCommand,
 		raise: raiseCommand,
+		link: linkCommand,
+		vendor: vendorCommand,
+		outdated: outdatedCommand,
 	},
 });

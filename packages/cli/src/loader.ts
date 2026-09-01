@@ -156,12 +156,51 @@ const isHejbroInput = (value: unknown): value is HejbroInput => {
 	);
 };
 
+/**
+ * Whether a loaded module is a vendored contract (schema-vendoring
+ * spec, "Generating from a vendored contract is refused") — judged by
+ * the one export every contract this tool ever writes always carries
+ * (`contract/emit.ts`'s `contractMetadata`), never by the file's own
+ * name or path (planner-confirmed): a signal a project could rename or
+ * relocate would make the refusal easy to defeat by accident, where the
+ * export's own presence cannot be. `contractMetadata` itself carries no
+ * `declarationKind`, so it was already silently excluded from
+ * `collectDeclarations` before this check existed — this check runs
+ * first specifically so the refusal names *why* nothing was found,
+ * instead of falling through to the generic `entry-not-found`/"exports
+ * nothing" diagnostics, neither of which mentions a contract at all.
+ */
+const hasContractMetadataExport = (moduleNamespace: unknown): boolean =>
+	typeof moduleNamespace === "object" &&
+	moduleNamespace !== null &&
+	"contractMetadata" in moduleNamespace;
+
+/** Refuses `filePath` as a declaration entry point, naming the repository that owns the schema — mirrors the wording the migration-authority refusal already used for the same idea (`engine/generate.ts`'s `synced-table-declared`), applied here to the file level rather than one table's own value. */
+const refuseVendoredContractAsEntry = (filePath: string | undefined): never =>
+	throwHejbroError(
+		"vendored-contract-declared",
+		`"${filePath ?? "(unknown file)"}" is a vendored contract (hejbro vendor wrote it) — it carries no declarations, only types and metadata for reading and writing through what's already there. Next: declare the schema with table() in the repository that owns it, or remove this file from hejbro.config.ts's entry patterns if it was matched by accident.`,
+	);
+
+/** A module's declarations, paired with the export name each was found
+ * under — the map's key is the declaration's own identity, so a
+ * declaration exported under no name (there is none for a plain module
+ * export, but a caller may synthesize one, e.g. a trigger's function)
+ * simply has no entry. */
 const collectDeclarations = (
 	moduleNamespace: object,
-): ReadonlyArray<HejbroInput> =>
-	Object.values(moduleNamespace).filter((value): value is HejbroInput =>
-		isHejbroInput(value),
+): {
+	readonly declarations: ReadonlyArray<HejbroInput>;
+	readonly exportNames: ReadonlyMap<HejbroInput, string>;
+} => {
+	const named = Object.entries(moduleNamespace).filter(
+		(entry): entry is [string, HejbroInput] => isHejbroInput(entry[1]),
 	);
+	return {
+		declarations: named.map(([, value]) => value),
+		exportNames: new Map(named.map(([name, value]) => [value, name])),
+	};
+};
 
 /**
  * The onboarding example a terminal renderer attaches as a separate block
@@ -191,17 +230,30 @@ const entryPatternPhrase = (entry: ReadonlyArray<string>): string => {
 	return `entry patterns ${quoted}`;
 };
 
+/** The array `loadDeclarations` has always returned, carrying an
+ * additional `exportNames` map keyed by declaration identity (3.1) — a
+ * plain array in every other respect, so every caller that only ever
+ * iterated or indexed it is untouched by this addition. */
+export type LoadedDeclarations = ReadonlyArray<HejbroInput> & {
+	readonly exportNames: ReadonlyMap<HejbroInput, string>;
+};
+
 /**
  * Glob-expands `config.entry` relative to the config file's directory
  * (deterministic — matches sorted by path, independent of directory
  * listing order), jiti-imports every matched file, and collects every
  * exported value that is a hejbro declaration (`isTable`/`declarationKind`
- * narrowing) — non-declaration exports are silently ignored.
+ * narrowing) — non-declaration exports are silently ignored. The returned
+ * array also carries `exportNames`, the module export name each
+ * declaration was found under (3.1) — needed downstream by the schema
+ * export, which carries a table or function's export name because a
+ * consuming repository's relation keys and typed function calls are keyed
+ * by it.
  */
 export const loadDeclarations = async (
 	configPath: string,
 	config: HejbroConfig,
-): Promise<ReadonlyArray<HejbroInput>> => {
+): Promise<LoadedDeclarations> => {
 	const entryDir = dirname(configPath);
 	const matches = await glob([...config.entry], {
 		cwd: entryDir,
@@ -237,7 +289,16 @@ export const loadDeclarations = async (
 			),
 		),
 	);
-	return modules.flatMap((moduleNamespace) =>
+	const vendoredContractIndex = modules.findIndex(hasContractMetadataExport);
+	if (vendoredContractIndex !== -1) {
+		refuseVendoredContractAsEntry(sortedMatches[vendoredContractIndex]);
+	}
+	const collected = modules.map((moduleNamespace) =>
 		collectDeclarations(moduleNamespace as object),
 	);
+	const declarations = collected.flatMap((entry) => entry.declarations);
+	const exportNames = new Map(
+		collected.flatMap((entry) => Array.from(entry.exportNames.entries())),
+	);
+	return Object.assign([...declarations], { exportNames });
 };

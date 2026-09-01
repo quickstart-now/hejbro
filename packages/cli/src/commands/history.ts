@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseBannerHashes, throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
+import { requireConfigFields } from "../config-required";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import {
@@ -108,6 +109,7 @@ export const runHistory = async (
 	try {
 		const configFlag = lastFlagValue(rawArgs, "--config");
 		const { config } = await loadConfig(cwd, configFlag);
+		requireConfigFields(config, "history", ["migrationsDir", "snapshotPath"]);
 		if (!isGitRepository(cwd)) {
 			throwHejbroError(
 				"not-a-git-repository",

@@ -13,6 +13,7 @@ import {
 } from "@hejbro/core";
 import { defineCommand } from "citty";
 import { globSync } from "tinyglobby";
+import { requireConfigFields } from "../config-required";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import type { GitCommitInfo } from "../git";
@@ -265,6 +266,7 @@ export const runRestore = async (
 	const fallbackIdentity = "hejbro.config.ts";
 	try {
 		const { configPath, config } = await loadConfig(cwd, undefined);
+		requireConfigFields(config, "restore", ["migrationsDir", "snapshotPath"]);
 		if (!isGitRepository(cwd)) {
 			throwHejbroError(
 				"not-a-git-repository",

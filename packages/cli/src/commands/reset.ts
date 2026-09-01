@@ -13,6 +13,7 @@ import {
 import { applyReset } from "../apply/reset";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
+import { requireConfigFields } from "../config-required";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { normalizeEqualsFlags } from "../flags";
@@ -113,10 +114,11 @@ export const runReset = async (
 	const confirmFlag = lastFlagValue(rawArgs, "--confirm-drop");
 	try {
 		const { config, configPath } = await loadConfig(cwd, undefined);
+		requireConfigFields(config, "reset", ["snapshotPath"]);
 		const declarations = await loadDeclarations(configPath, config);
 		const registry = buildRegistry(config);
 		const diskSnapshot = parseSnapshot(
-			readSnapshotFileText(cwd, config),
+			readSnapshotFileText(cwd, config, "reset"),
 			requiredKeysByKind(registry),
 		);
 		const currentSnapshot = generateMigration({
