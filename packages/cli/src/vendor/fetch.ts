@@ -1,5 +1,6 @@
 import { throwHejbroError } from "@hejbro/core";
 import type { ExportFormatRecord } from "../export/format";
+import type { ExportPayload } from "../export/write";
 import {
 	EXPORT_DESCRIPTION_FILE,
 	EXPORT_DIR_NAME,
@@ -11,6 +12,7 @@ import {
 	resolveRemoteHead,
 	resolveRemoteRef,
 } from "../git";
+import { validateExport } from "./validate-export";
 
 export type FetchedExport = {
 	readonly ref: string;
@@ -18,6 +20,7 @@ export type FetchedExport = {
 	readonly schemaText: string;
 	readonly sqlText: string;
 	readonly format: ExportFormatRecord;
+	readonly payload: ExportPayload;
 };
 
 const exportPath = (name: string): string => `${EXPORT_DIR_NAME}/${name}`;
@@ -54,12 +57,16 @@ const readExportAt = (
 			`commit ${commit} of "${source}" carries no schema export at "${EXPORT_DIR_NAME}/". Next: ask the owner of that repository to run \`hejbro generate --export\` and commit the result, or link a different source.`,
 		);
 	}
+	const schemaText = schemaBytes.toString("utf8");
+	const formatText = formatBytes.toString("utf8");
+	const validated = validateExport(formatText, schemaText);
 	return {
 		ref,
 		commit,
-		schemaText: schemaBytes.toString("utf8"),
+		schemaText,
 		sqlText: sqlBytes.toString("utf8"),
-		format: JSON.parse(formatBytes.toString("utf8")) as ExportFormatRecord,
+		format: validated.format,
+		payload: validated.payload,
 	};
 };
 

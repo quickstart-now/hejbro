@@ -5,7 +5,6 @@ import type { ContractOrigin } from "../contract/emit";
 import { emitContract } from "../contract/emit";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
-import type { ExportPayload } from "../export/write";
 import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
 import { resolveExport } from "../vendor/fetch";
@@ -106,9 +105,8 @@ const runVendorUpdate = (
 	const fetched = withGitDiagnostic("vendor", source, () =>
 		resolveExport(cwd, source, ref),
 	);
-	const payload = JSON.parse(fetched.schemaText) as ExportPayload;
 	const contractText = emitContract(
-		payload,
+		fetched.payload,
 		buildContractOrigin(fetched, fetched.schemaText),
 	);
 	mkdirSync(vendorDirPath(cwd), { recursive: true });
@@ -130,12 +128,29 @@ const runVendorUpdate = (
 	};
 };
 
+/** Refuses `--schema` outright rather than accepting and silently
+ * ignoring it (schema-vendoring spec, "The schema filter is reserved,
+ * not silently ignored") — a caller who believes it applied would ship
+ * a contract describing more than they asked for. Reserved for a future
+ * filtering feature; no such feature exists yet, so any value at all is
+ * refused the same way. */
+const assertNoSchemaFilter = (argv: ReadonlyArray<string>): void => {
+	if (!argv.includes("--schema")) {
+		return;
+	}
+	throwHejbroError(
+		"vendor-schema-filter-reserved",
+		"--schema is reserved for a future filtering feature and is refused rather than silently ignored. Next: remove --schema; every schema in the export is vendored.",
+	);
+};
+
 export const runVendor = (
 	cwd: string,
 	argv: ReadonlyArray<string>,
 ): VendorResult => {
 	const fallbackIdentity = "vendor";
 	try {
+		assertNoSchemaFilter(argv);
 		if (argv.includes("--check")) {
 			return runVendorCheck(cwd);
 		}

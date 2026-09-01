@@ -1334,13 +1334,39 @@ Files: `packages/cli/src/vendor/state.ts` (new),
       an inferred fallback. Record the basis in one line. Start from
       `cli/test/vendor-states.test.ts > a replacement warns locally and
       fails at the boundary`. ~9m
-- [ ] 7.3 Validate the vendored description against its format rather
+- [x] 7.3 Validate the vendored description against its format rather
       than casting it, and raise the situations reading owns. Start from
       `cli/test/vendor-states.test.ts > refuses a description that does
       not answer its format`. ~9m
+      `vendor/validate-export.ts` (new) — a zod schema for
+      `format.json`/`schema.json`'s own top-level shape (member 5), never
+      the blind `as ExportFormatRecord`/`as ExportPayload` cast
+      `fetch.ts` used before. The embedded `snapshot` field is
+      re-serialized and handed to `@hejbro/core`'s own `parseSnapshot`
+      rather than restated as a second schema — one validator for that
+      shape, not two that could drift. `fetch.ts`'s `FetchedExport` now
+      carries the validated `payload` directly; `commands/vendor.ts` no
+      longer re-parses `schemaText` itself.
+      **Also closed, found while reading the spec's own requirement list
+      alongside this task**: "The schema filter is reserved, not
+      silently ignored" — `vendor --schema <anything>` now refuses
+      outright (`vendor-schema-filter-reserved`) rather than accepting
+      and ignoring it; no filtering feature exists yet, so any value is
+      refused the same way.
 - [ ] 7.4 Format skew, refused upward with the upgrade command named
       and read downward. Start from `cli/test/vendor-states.test.ts >
       refuses a newer format and names the upgrade`. ~9m
+      **Upward half done** (`vendor-export-format-unsupported`, naming
+      both versions and the upgrade command) — covered by
+      `vendor-states.test.ts`, and left checked off nowhere else since
+      this task's own two scenarios aren't both closed yet. **Downward
+      half structural, not yet exercisable, left unchecked on
+      purpose**: `EXPORT_DESCRIPTION_FORMAT` has been `1` since the
+      format existed, so there is no earlier shape to construct a real
+      "reads an older format with absent facts absent" fixture against
+      — `validateExport`'s own comment records this rather than
+      claiming the scenario is proven. Closes for real the day format
+      `2` ships.
 - [ ] 7.5 The enumeration test runs the reader against each situation
       and compares the codes themselves, not their labels. Start from
       `cli/test/vendor-states.test.ts > reports eleven distinct codes`.

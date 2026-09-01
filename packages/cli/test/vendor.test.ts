@@ -110,7 +110,7 @@ describe("hejbro vendor", () => {
 		execFileSync("git", ["tag", "v1"], { cwd: remote.cwd });
 		await writeExport(
 			remote,
-			'{"tables":["later"],"functions":[],"roles":[],"snapshot":{"formatVersion":8,"dialect":"postgres","objects":{}}}',
+			'{"tables":[{"schemaName":"app","tableName":"later","exportName":null,"columns":{}}],"functions":[],"roles":[],"snapshot":{"formatVersion":8,"dialect":"postgres","objects":{}}}',
 			EXPORT_SQL_V1,
 		);
 		const headCommit = remote.commit("export v2", "2026-01-02T10:00:00Z");
