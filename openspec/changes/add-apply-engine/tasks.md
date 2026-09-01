@@ -97,7 +97,7 @@ database.
 Files: `packages/cli/src/apply/execute.ts`,
 `packages/cli/test/apply-execute.test.ts`.
 
-- [ ] 3.1 (~9m) [design] One migration is applied as one whole-file
+- [x] 3.1 (~9m) [design] One migration is applied as one whole-file
       statement inside `transaction()`, with the ledger row written in
       the same transaction. The [design] part is the shape of the unit:
       the file's text goes out with **no parameters** — measured, a
@@ -108,27 +108,27 @@ Files: `packages/cli/src/apply/execute.ts`,
       `apply-execute.test.ts` — "sends the migration as one
       parameterless statement", "writes the ledger row inside the same
       transaction".
-- [ ] 3.2 (~9m) A failed migration leaves nothing: no schema change, no
+- [x] 3.2 (~9m) A failed migration leaves nothing: no schema change, no
       ledger row. The test has to be able to fail — assert the table the
       first statement created is *absent* afterwards, not merely that an
       error was thrown. Red: same file — "a mid-file failure rolls back
       the statements before it", "a failed migration writes no ledger
       row".
-- [ ] 3.3 (~9m) [design] The failure report: which file, the server's
+- [x] 3.3 (~9m) [design] The failure report: which file, the server's
       own code and message, and a `Next:` line. `55P04` gets its own
       translation — a migration that adds an enum value and uses it was
       written before this change's generator existed, and the remedy is
       to regenerate so the enum change lands in its own migration. Red:
       same file — "names the file and repeats the server's code",
       "translates 55P04 into the regenerate remedy".
-- [ ] 3.4 (~8m) The advisory lock: `pg_advisory_xact_lock` inside the
+- [x] 3.4 (~8m) The advisory lock: `pg_advisory_xact_lock` inside the
       applying transaction, released when it ends. A session-scoped lock
       is the trap here — measured, sequential calls reuse one backend so
       it looks held, and concurrent ones scatter across four, leaving
       the lock owned by a connection the next statement does not get.
       Red: same file — "takes a transaction-scoped lock", "a second
       runner waits rather than applying concurrently".
-- [ ] 3.5 (~9m) The precondition the engine states: an applied file
+- [x] 3.5 (~9m) The precondition the engine states: an applied file
       carries no transaction-control statement **of its own** — the
       detection judges where the word sits, not whether it occurs. A
       `commit` inside a dollar-quoted `plpgsql` body or a string literal
