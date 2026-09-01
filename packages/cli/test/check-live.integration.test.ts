@@ -22,6 +22,7 @@ import {
 	compareCheckAgainstCatalog,
 	declaredCheckConstraints,
 } from "../src/commands/check";
+import { requireConfigFields } from "../src/config-required";
 import { loadConfig, loadDeclarations } from "../src/loader";
 import { buildRegistry } from "../src/presets";
 import { readSnapshotFileText } from "../src/snapshot-file";
@@ -232,10 +233,11 @@ const chainUrl = (): string => hostUrl("postgres", "chain");
 /** Rebuilds the declared snapshot the same way `runCheck` does (its own construction isn't separately exported) -- needed here only for the in-process witnesses below, which inspect facts (`declaredCheckConstraints`'s count, `compareCatalog`'s own findings) a spawned process's report text never exposes. */
 const buildExampleSnapshot = async (): Promise<Snapshot> => {
 	const { config, configPath } = await loadConfig(EXAMPLE_DIR, undefined);
+	requireConfigFields(config, "check", ["snapshotPath"]);
 	const declarations = await loadDeclarations(configPath, config);
 	const registry = buildRegistry(config);
 	const diskSnapshot = parseSnapshot(
-		readSnapshotFileText(EXAMPLE_DIR, config),
+		readSnapshotFileText(EXAMPLE_DIR, config, "check"),
 		requiredKeysByKind(registry),
 	);
 	return generateMigration({

@@ -105,6 +105,15 @@ export type ForeignKeyDeclaration = {
 	readonly onUpdate: ForeignKeyAction | null;
 };
 
+/**
+ * Which constructor built a {@link Table} value — `"declared"` for
+ * {@link table}/{@link existingTable} (both authored in this repository).
+ * `"usage"` marks a value this package did not build itself; no
+ * constructor here produces it, and `engine/generate.ts` refuses it
+ * wherever it is seen.
+ */
+export type TableAuthority = "declared" | "usage";
+
 /** A declared table: its columns (in declaration order), indexes, and foreign keys. */
 export type TableDeclaration = {
 	readonly declarationKind: "table";
@@ -122,6 +131,14 @@ export type TableDeclaration = {
 	readonly rls: RlsDeclaration | null;
 	/** `true` for an {@link existingTable} reference (D41) — reference-only, never passed to `generateMigration`, never diffed, never emitted. `table()` always sets `false`. */
 	readonly existing: boolean;
+	/**
+	 * See {@link TableAuthority}. Optional: a hand-assembled
+	 * `TableDeclaration` that bypasses every constructor (a test fixture
+	 * predating this field) carries none, and is treated as authored here
+	 * — the runtime chokepoint in `engine/generate.ts` refuses only
+	 * `"usage"`, never an absent value.
+	 */
+	readonly authority?: TableAuthority;
 	readonly declaredAt: string | null;
 };
 
@@ -152,13 +169,48 @@ export type TableColumns<TColumns extends Record<string, ColumnBuilder>> = {
 		OriginBrand<TColumns, K>;
 };
 
-/** A drizzle-style table object (D15): columns as top-level typed refs, declaration metadata hidden behind {@link tableMeta}. */
+/**
+ * A drizzle-style table object (D15): columns as top-level typed refs,
+ * declaration metadata hidden behind {@link tableMeta}. `TAuthority`
+ * defaults to the full {@link TableAuthority} union — `Table` keeps a
+ * single type parameter's worth of shape for every existing bare
+ * reference (`packages/query`'s 64 `extends Table<infer TColumns>`
+ * sites, this package's own `Table[]`/`function f(t: Table)` — measured:
+ * a second type parameter, even with a union default, broke every one of
+ * those inference sites when it was intersected onto `Table` as a
+ * required brand; a type parameter avoids that because it adds no new
+ * key to `keyof Table`). Narrowing lives entirely inside the
+ * `[tableMeta]` member's own type — see {@link DeclaredTable}.
+ */
 export type Table<
 	TColumns extends Record<string, ColumnBuilder> = Record<
 		string,
 		ColumnBuilder
 	>,
-> = TableColumns<TColumns> & { readonly [tableMeta]: TableDeclaration };
+	TAuthority extends TableAuthority = TableAuthority,
+> = TableColumns<TColumns> & {
+	readonly [tableMeta]: TableDeclaration & { readonly authority?: TAuthority };
+};
+
+/**
+ * A {@link Table} authored in this repository (via {@link table} or
+ * {@link existingTable}) — narrows `TAuthority` to `"declared"`, excluding
+ * a `"usage"`-authority value. `engine/generate.ts`'s `HejbroInput` narrows
+ * to this. Measured: `table()`'s own return type must spell out
+ * `Table<TColumns, "declared">` rather than naming this alias directly —
+ * substituting the alias there (a function called from thousands of
+ * call sites across this package's own test suite) reintroduced the same
+ * inference breakage the type-parameter design exists to avoid, even
+ * though the two forms are structurally identical. `existingTable`'s
+ * return type carries the same constraint for the same reason. This
+ * alias itself is safe where it is only read, as `HejbroInput` does.
+ */
+export type DeclaredTable<
+	TColumns extends Record<string, ColumnBuilder> = Record<
+		string,
+		ColumnBuilder
+	>,
+> = Table<TColumns, "declared">;
 
 /** Reads a {@link Table}'s hidden declaration metadata. */
 export const getTableMeta = (tableObject: Table): TableDeclaration =>
@@ -1208,8 +1260,8 @@ const assertNoDoublyDeclaredReference = (
 	);
 };
 
-/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. */
-const foldColumnReferences = (
+/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. Exported so `existing-table.ts` and `rls.ts` reuse the identical fold, rather than re-deriving foreign keys a second way. */
+export const foldColumnReferences = (
 	tableName: string,
 	columnEntries: ReadonlyArray<ColumnEntry>,
 ): ReadonlyArray<ForeignKeyDeclaration> =>
@@ -1257,7 +1309,7 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	tableName: string,
 	columns: TColumns,
 	extras?: (t: TableColumns<TColumns>) => TableExtras,
-): Table<TColumns> => {
+): Table<TColumns, "declared"> => {
 	const declaredAt = captureDeclarationSite();
 	assertSqlName(tableName, "table", null);
 	const columnEntries = buildColumnEntries(tableName, columns);
@@ -1316,8 +1368,12 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		checks,
 		rls,
 		existing: false,
+		authority: "declared",
 		declaredAt,
 	};
 
-	return Object.assign(refsObject, { [tableMeta]: declaration });
+	return Object.assign(refsObject, { [tableMeta]: declaration }) as Table<
+		TColumns,
+		"declared"
+	>;
 };

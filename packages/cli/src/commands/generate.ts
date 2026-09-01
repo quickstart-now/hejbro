@@ -18,6 +18,7 @@ import {
 	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
+import { requireConfigFields } from "../config-required";
 import type { Diagnostic } from "../diagnostics";
 import {
 	fromHejbroError,
@@ -25,6 +26,9 @@ import {
 	renderDiagnostics,
 } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { buildExportDescription } from "../export/description";
+import { buildSquashedSql } from "../export/squash";
+import { writeExport } from "../export/write";
 import {
 	normalizeEqualsFlags,
 	parseConfirmDropFlag,
@@ -72,6 +76,11 @@ const GENERATE_ARGS = {
 		type: "string",
 		description:
 			"confirm a genuine drop (not a rename): <schema>.<table>.<column>, or <schema>.<table> for a whole table (repeatable)",
+	},
+	export: {
+		type: "boolean",
+		description:
+			"write a schema export (description, squashed SQL, format record) into .hejbro/export/ alongside the migration (opt-in)",
 	},
 } as const;
 
@@ -522,6 +531,7 @@ export const runGenerate = async (
 	// normalization point means a flag added later doesn't need its own.
 	const rawArgs = normalizeEqualsFlags(argv);
 	const parsedArgv = parseGenerateArgv(rawArgs);
+	const exportEnabled = rawArgs.includes("--export");
 	const fallbackIdentity = parsedArgv.configFlag ?? "hejbro.config.ts";
 	try {
 		assertBaselineFlagsApplicable(mode, rawArgs);
@@ -531,6 +541,11 @@ export const runGenerate = async (
 			parsedArgv.confirmDropValues.map(parseConfirmDropFlag);
 
 		const { config, configPath } = await loadConfig(cwd, parsedArgv.configFlag);
+		requireConfigFields(config, mode, [
+			"migrationsDir",
+			"snapshotPath",
+			"prefixStrategy",
+		]);
 		const declarations = await loadDeclarations(configPath, config);
 
 		// Nested, not the outer catch: a `malformed-snapshot-node` error
@@ -542,7 +557,7 @@ export const runGenerate = async (
 		try {
 			const registry = buildRegistry(config);
 			const previousSnapshot = parseSnapshot(
-				readSnapshotFileText(cwd, config),
+				readSnapshotFileText(cwd, config, mode),
 				requiredKeysByKind(registry),
 			);
 			const validators = configValidators(config);
@@ -611,6 +626,17 @@ export const runGenerate = async (
 				join(cwd, config.snapshotPath),
 				renderSnapshot(finalPass.snapshot),
 			);
+			if (exportEnabled) {
+				const description = buildExportDescription(
+					declarations,
+					declarations.exportNames,
+				);
+				writeExport(
+					cwd,
+					{ ...description, snapshot: finalPass.snapshot },
+					buildSquashedSql(declarations, registry, validators),
+				);
+			}
 
 			const migrationRelativePath = join(config.migrationsDir, fileName);
 			const [banner] = finalPass.sql.split("\n\n");

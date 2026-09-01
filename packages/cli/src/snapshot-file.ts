@@ -2,6 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { throwHejbroError } from "@hejbro/core";
 import type { HejbroConfig } from "./config";
+import type { ConfigCommand } from "./config-required";
+import { requireConfigFields } from "./config-required";
 
 /** Every `.sql` filename in `migrationsDirPath`, sorted — `[]` if the directory doesn't exist. */
 export const listMigrationFiles = (
@@ -22,18 +24,26 @@ export const listMigrationFiles = (
  * depending on whether the migrations directory already has `.sql` files
  * (owner-approved texts, decision ⑥). Paths in the message stay exactly as
  * given in `hejbro.config.ts` (not resolved to absolute paths). Shared by
- * `generate` (Task 13) and `verify` (Task 17, reviewer M2) so both
- * commands report the identical branch and text for a missing snapshot —
- * duplicating this logic risks the two commands drifting apart.
+ * `generate` (Task 13), `verify` (Task 17, reviewer M2) and `check` (group
+ * 3) so all three commands report the identical branch and text for a
+ * missing snapshot — duplicating this logic risks them drifting apart.
+ * `config.snapshotPath` is required by every caller (the type parameter
+ * says so); `config.migrationsDir` is needed only on the path where no
+ * snapshot file exists yet, which is exactly the field `check` alone
+ * doesn't otherwise require (cli-commands delta) — so that one field is
+ * guarded here, at the point it's actually read, rather than upfront for
+ * every caller.
  */
 export const readSnapshotFileText = (
 	cwd: string,
-	config: HejbroConfig,
+	config: HejbroConfig & { readonly snapshotPath: string },
+	command: ConfigCommand,
 ): string => {
 	const snapshotFsPath = join(cwd, config.snapshotPath);
 	if (existsSync(snapshotFsPath)) {
 		return readFileSync(snapshotFsPath, "utf8");
 	}
+	requireConfigFields(config, command, ["migrationsDir"]);
 	const migrationsDirPath = join(cwd, config.migrationsDir);
 	const priorMigrationCount = listMigrationFiles(migrationsDirPath).length;
 	if (priorMigrationCount === 0) {

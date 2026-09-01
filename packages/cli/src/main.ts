@@ -3,7 +3,10 @@ import { checkCommand } from "./commands/check";
 import { baselineCommand, generateCommand } from "./commands/generate";
 import { historyCommand } from "./commands/history";
 import { initCommand } from "./commands/init";
+import { linkCommand } from "./commands/link";
+import { outdatedCommand } from "./commands/outdated";
 import { restoreCommand } from "./commands/restore";
+import { vendorCommand } from "./commands/vendor";
 import { verifyCommand } from "./commands/verify";
 import { CLI_VERSION } from "./version";
 
@@ -33,5 +36,8 @@ export const main = defineCommand({
 		check: checkCommand,
 		history: historyCommand,
 		restore: restoreCommand,
+		link: linkCommand,
+		vendor: vendorCommand,
+		outdated: outdatedCommand,
 	},
 });

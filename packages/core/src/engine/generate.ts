@@ -1,6 +1,6 @@
 import type { TriggerDeclaration } from "../dsl/define-trigger";
 import type { GrantSetDeclaration } from "../dsl/grant";
-import type { Table, TableDeclaration } from "../dsl/table";
+import type { DeclaredTable, Table, TableDeclaration } from "../dsl/table";
 import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroError } from "../error";
 import { hejbroError, throwHejbroError } from "../error";
@@ -32,8 +32,24 @@ import { planRenames } from "./rename-plan";
 import type { Diagnostic, Validator } from "./validate";
 import { runValidators } from "./validate";
 
-/** Anything `generateMigration` accepts as a declaration: a plain declaration, or a `table()`-built `Table` object (unwrapped via `getTableMeta` at the entry point). */
-export type HejbroInput = HejbroDeclaration | Table;
+/**
+ * Anything `generateMigration` accepts as a declaration: a plain
+ * declaration, or a `table()`/`existingTable()`-built `Table` object
+ * (unwrapped via `getTableMeta` at the entry point) — narrowed to
+ * {@link DeclaredTable} so a `"usage"`-authority value (no migration
+ * authority) is rejected here at the type level, not just at the runtime
+ * chokepoint in {@link resolveTableDeclarations}. Only this PUBLIC type
+ * narrows; every internal helper below takes {@link AnyInput} (bare
+ * `Table`, either authority) — narrowing this type's own internal uses
+ * would break `isTable`'s false-branch narrowing back to
+ * `HejbroDeclaration` (measured: every internal guard failed to compile
+ * against the narrowed type, cascading into build errors that broke
+ * unrelated tests reading this package's own compiled output).
+ */
+export type HejbroInput = HejbroDeclaration | DeclaredTable;
+
+/** @see HejbroInput */
+type AnyInput = HejbroDeclaration | Table;
 
 const isTriggerDeclaration = (
 	declaration: HejbroDeclaration,
@@ -74,7 +90,7 @@ const synthesizeSequenceDeclarations = (
 
 /** {@link resolveDeclarations}'s table case — the table itself, its synthesized sequences, and (if declared) its RLS block and policies. Takes the DECLARATION, not the `Table`, so both supported input forms route through the same expansion (#408: a raw `TableDeclaration` used to skip it, silently dropping rls/policies/sequences and the existing-table guard). */
 /** A raw table declaration (never a built `Table` — the `!isTable` leg keeps this predicate sound on its own, independent of `resolveDeclarations`'s branch order). */
-const isTableDeclaration = (input: HejbroInput): input is TableDeclaration =>
+const isTableDeclaration = (input: AnyInput): input is TableDeclaration =>
 	!isTable(input) && input.declarationKind === "table";
 
 const resolveTableDeclarations = (
@@ -84,6 +100,22 @@ const resolveTableDeclarations = (
 		return throwHejbroError(
 			"existing-table-declared",
 			`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration. Next: remove it from the declarations list (managed tables are declared with table()).`,
+			meta.declaredAt,
+		);
+	}
+	// The single chokepoint for the absent-authority refusal (D87
+	// polyrepo-sync): keyed on `meta.authority === "usage"` only, never on
+	// `!== "declared"` — a hand-assembled `TableDeclaration` that bypasses
+	// every constructor carries no `authority` at all, and is
+	// authored-here by definition, not a `"usage"`-tagged escapee.
+	// Type-level exclusion (`HejbroInput`) already stops a `"usage"` value
+	// from a type-checked caller, so this guard exists for the caller the
+	// type layer never saw — a JS project, or a config file `jiti` loads
+	// without a compile step (our own CLI loader does exactly that).
+	if (meta.authority === "usage") {
+		return throwHejbroError(
+			"synced-table-declared",
+			`table "${meta.schema.schemaName}"."${meta.tableName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with table() in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
 			meta.declaredAt,
 		);
 	}
@@ -105,7 +137,7 @@ const resolveTableDeclarations = (
  * per such column (#23/D66) — see {@link resolveTableDeclarations}.
  */
 const resolveDeclarations = (
-	input: HejbroInput,
+	input: AnyInput,
 ): ReadonlyArray<HejbroDeclaration> => {
 	if (isTable(input)) {
 		return resolveTableDeclarations(getTableMeta(input));
@@ -162,7 +194,7 @@ type GenerateMigrationResult = {
  * `TableDeclaration` as-is).
  */
 const buildDeclaredAtByIdentity = (
-	declarations: ReadonlyArray<HejbroInput>,
+	declarations: ReadonlyArray<AnyInput>,
 ): ReadonlyMap<string, string | null> => {
 	const entries = declarations.flatMap((input) => {
 		if (isTable(input)) {
