@@ -378,11 +378,24 @@ export const resolveRemoteRef = (
  * carries no file at `path` (the caller tells that apart from "commit
  * doesn't exist" itself, checked separately).
  */
-export const readFileAtRemoteCommit = (
+/**
+ * Fetches exactly `commit` from `remote` into a throwaway bare
+ * repository (`--filter=blob:none --depth=1`, a blobless partial
+ * clone), hands its path to `useScratchDir`, and always cleans up —
+ * shared by every function in this file that needs to read one commit
+ * of a remote without ever creating a working tree for it. Lets the
+ * fetch's own failure (the remote no longer has `commit` at all —
+ * force-pushed, garbage-collected, rewritten history) propagate to the
+ * caller unchanged, rather than swallowing it the way `readFileAtRemoteCommit`'s
+ * own inner `git show` failure is swallowed (that one path-not-found
+ * case is expected and recoverable; a fetch failure is a different,
+ * structural situation callers tell apart on purpose).
+ */
+const withFetchedCommit = <T>(
 	remote: string,
 	commit: string,
-	path: string,
-): Buffer | null => {
+	useScratchDir: (scratchDir: string) => T,
+): T => {
 	const scratchDir = mkdtempSync(join(tmpdir(), "hejbro-vendor-"));
 	try {
 		execFileSync("git", ["init", "--bare", "--quiet", scratchDir], {
@@ -403,6 +416,28 @@ export const readFileAtRemoteCommit = (
 			],
 			{ env: GIT_ENV, stdio: ["ignore", "ignore", "ignore"] },
 		);
+		return useScratchDir(scratchDir);
+	} finally {
+		rmSync(scratchDir, { recursive: true, force: true });
+	}
+};
+
+/**
+ * Reads one path's raw bytes at one commit of `remote`, without ever
+ * creating a working tree for it. `commit` can be any commit the remote
+ * still has reachable — not only the branch tip — which is what lets a
+ * pinned lock stay readable after the branch has moved on (`git archive
+ * --remote` cannot do this at all; GitHub refuses it outright). `null`
+ * when `commit` carries no file at `path` (the caller tells that apart
+ * from "commit doesn't exist" itself, checked separately — see
+ * {@link remoteHasCommit}).
+ */
+export const readFileAtRemoteCommit = (
+	remote: string,
+	commit: string,
+	path: string,
+): Buffer | null =>
+	withFetchedCommit(remote, commit, (scratchDir) => {
 		try {
 			return execFileSync(
 				"git",
@@ -412,8 +447,22 @@ export const readFileAtRemoteCommit = (
 		} catch {
 			return null;
 		}
-	} finally {
-		rmSync(scratchDir, { recursive: true, force: true });
+	});
+
+/**
+ * Whether `remote` still has `commit` reachable at all (schema-vendoring
+ * spec, member 7 of the eleven: "The lock names a commit the remote no
+ * longer has") — attempts the same fetch {@link readFileAtRemoteCommit}
+ * does, and turns *that* failure (as opposed to the file-not-found one)
+ * into a plain `false` instead of letting it throw, so a caller can ask
+ * this question on its own, before ever touching a path.
+ */
+export const remoteHasCommit = (remote: string, commit: string): boolean => {
+	try {
+		withFetchedCommit(remote, commit, () => undefined);
+		return true;
+	} catch {
+		return false;
 	}
 };
 

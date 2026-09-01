@@ -5,6 +5,7 @@ import type { ContractOrigin } from "../contract/emit";
 import { emitContract } from "../contract/emit";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { remoteHasCommit } from "../git";
 import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
 import { resolveExport } from "../vendor/fetch";
@@ -97,14 +98,54 @@ const buildContractOrigin = (
 	exportHash: sha256Hex(schemaText),
 });
 
+/**
+ * Refuses to move an existing lock's commit forward when the remote no
+ * longer has the commit it currently names (schema-vendoring spec,
+ * member 7 of the eleven: "The lock names a commit the remote no longer
+ * has" — force-pushed, garbage-collected, or rewritten history). The
+ * remedy is a decision, not a repair: `--force` is the same deliberate
+ * override the destination-file guard already uses, reused here rather
+ * than inventing a second one. Only reachable at `vendor` time (the
+ * network is available); `--check` stays offline and never asks this
+ * question, per the enumeration's own note.
+ */
+const assertLockCommitNotLost = (
+	cwd: string,
+	source: string,
+	force: boolean,
+): void => {
+	if (force) {
+		return;
+	}
+	const existingLock = readLock(cwd);
+	if (existingLock === null || existingLock.commit === undefined) {
+		return;
+	}
+	if (remoteHasCommit(source, existingLock.commit)) {
+		return;
+	}
+	throwHejbroError(
+		"vendor-lock-commit-lost",
+		`hejbro.lock names commit ${existingLock.commit}, which "${source}" no longer has (force-pushed, garbage-collected, or rewritten history). Next: run \`hejbro vendor --force\` to deliberately move to the current commit, or find out why the schema repository's history changed before doing so.`,
+	);
+};
+
 const runVendorUpdate = (
 	cwd: string,
 	source: string,
 	ref: string | undefined,
+	force: boolean,
 ): VendorResult => {
+	// Runs *after* `resolveExport` below succeeds, deliberately: that
+	// call already proves the remote itself is reachable
+	// (`vendor-remote-unreachable` would already have fired otherwise),
+	// so a `false` from `remoteHasCommit` here can only mean the old
+	// lock's own commit specifically is gone -- never a misdiagnosis of
+	// "lost" for what is actually "the whole remote is down".
 	const fetched = withGitDiagnostic("vendor", source, () =>
 		resolveExport(cwd, source, ref),
 	);
+	assertLockCommitNotLost(cwd, source, force);
 	const contractText = emitContract(
 		fetched.payload,
 		buildContractOrigin(fetched, fetched.schemaText),
@@ -158,9 +199,10 @@ export const runVendor = (
 		// touches it) -- its guard runs first, before any dependent work
 		// (reading the linked source, reaching the network), the same
 		// order every destination file's own guard runs in this codebase.
-		assertLockWritable(cwd, argv.includes("--force"));
+		const force = argv.includes("--force");
+		assertLockWritable(cwd, force);
 		const source = requireLinkedSource(cwd);
-		return runVendorUpdate(cwd, source, flagValue(argv, "--ref"));
+		return runVendorUpdate(cwd, source, flagValue(argv, "--ref"), force);
 	} catch (error) {
 		const hejbroError = asHejbroError(error);
 		const diagnostic = fromHejbroError(
