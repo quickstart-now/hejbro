@@ -9,7 +9,6 @@ import type {
 } from "@hejbro/core";
 import {
 	deriveSlug,
-	emptySnapshot,
 	generateMigration,
 	hejbroError,
 	migrationFileName,
@@ -28,6 +27,7 @@ import {
 } from "../diagnostics";
 import { asHejbroError } from "../errors";
 import { buildExportDescription } from "../export/description";
+import { buildSquashedSql } from "../export/squash";
 import { writeExport } from "../export/write";
 import {
 	normalizeEqualsFlags,
@@ -36,7 +36,6 @@ import {
 } from "../flags";
 import { sha256Hex } from "../hash";
 import { identityFromMessage } from "../identity";
-import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations, ONBOARDING_EXAMPLE } from "../loader";
 import { buildRegistry, configValidators } from "../presets";
 import { buildAmbiguityDiagnostic } from "../rename-diagnostics";
@@ -517,26 +516,6 @@ const reportHead = (
 	];
 };
 
-/**
- * The squashed SQL for the export's `snapshot.sql` (schema-export spec,
- * "The export includes the SQL that raises the schema"): a full create
- * script is exactly what `generateMigration` already emits when it diffs
- * against nothing, so this reuses that same call rather than a second
- * SQL-rendering path — no banner (this isn't a migration file), no
- * renames or confirmed drops possible against an empty snapshot.
- */
-const squashedSql = (
-	declarations: LoadedDeclarations,
-	registry: ReturnType<typeof buildRegistry>,
-	validators: ReturnType<typeof configValidators>,
-): string =>
-	generateMigration({
-		declarations,
-		previousSnapshot: emptySnapshot,
-		registry,
-		validators,
-	}).sql;
-
 export const runGenerate = async (
 	cwd: string,
 	argv: ReadonlyArray<string>,
@@ -655,7 +634,7 @@ export const runGenerate = async (
 				writeExport(
 					cwd,
 					{ ...description, snapshot: finalPass.snapshot },
-					squashedSql(declarations, registry, validators),
+					buildSquashedSql(declarations, registry, validators),
 				);
 			}
 

@@ -665,29 +665,37 @@ only the migrations-directory scenario, which needs no database.
 ## R2-G3 — The schema repository's own check — `est_frozen: 30m` — #596
 
 Files: `packages/cli/src/commands/verify.ts`,
-`packages/cli/src/export-compare.ts` (new).
+`packages/cli/src/export-compare.ts` (new),
+`packages/cli/src/export/squash.ts` (new — `buildSquashedSql`, moved out
+of `commands/generate.ts` so `generate` and `verify` share one
+squashed-SQL builder rather than two).
 
 | SHALL (delta) | Scenario | Red test |
 |---|---|---|
 | A committed export matches the declarations beside it | A stale export is reported | `cli/test/verify-export.test.ts > reports an export written before the last declaration change` |
 | " | A current export passes | `cli/test/verify-export.test.ts > a regenerated export passes` |
 
-- [ ] 3.1 Compare by regenerating the description in memory and
+- [x] 3.1 Compare by regenerating the description in memory and
       comparing bytes, so the check and the writer cannot disagree about
       what "matching" means. Start from `cli/test/verify-export.test.ts
       > reports an export written before the last declaration change`.
       ~9m
-- [ ] 3.2 The failure names the command that regenerates, and asserts
+- [x] 3.2 The failure names the command that regenerates, and asserts
       nothing about why the export is stale. Start from
       `cli/test/verify-export.test.ts > the failure names the command,
       not a cause`. ~6m
-- [ ] 3.3 A repository with no export at all is not reported as stale —
+- [x] 3.3 A repository with no export at all is not reported as stale —
       the check applies where an export exists. Start from
       `cli/test/verify-export.test.ts > a repository without an export
       is not reported`. ~7m
-- [ ] 3.4 Wire into `verify` beside the existing chain checks, without
+- [x] 3.4 Wire into `verify` beside the existing chain checks, without
       changing their output. Start from `cli/test/verify.test.ts >
       existing chain diagnostics are unchanged`. ~8m
+      `TOTAL_CHECKS` (now `totalChecks(exportApplied)`) only counts the
+      export check when it actually ran — an export-less repository's
+      "5 checks passed"/"of 5 checks failed" wording is byte-identical
+      to before this group, pinned by the new "existing chain
+      diagnostics are unchanged" test.
 
 ## R2-G4 — `link` and `vendor` — `est_frozen: 72m` — #597
 

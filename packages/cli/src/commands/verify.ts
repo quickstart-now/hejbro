@@ -10,6 +10,7 @@ import type {
 	HejbroInput,
 	KindRegistry,
 	MigrationPrefixStrategy,
+	Validator,
 } from "@hejbro/core";
 import {
 	checkChain,
@@ -29,9 +30,11 @@ import { requireConfigFields } from "../config-required";
 import type { Diagnostic } from "../diagnostics";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
 import { asHejbroError } from "../errors";
+import { compareExport } from "../export-compare";
 import { sha256Hex } from "../hash";
+import type { LoadedDeclarations } from "../loader";
 import { loadConfig, loadDeclarations } from "../loader";
-import { buildRegistry } from "../presets";
+import { buildRegistry, configValidators } from "../presets";
 import { listMigrationFiles, readSnapshotFileText } from "../snapshot-file";
 
 const VERIFY_DESCRIPTION =
@@ -48,6 +51,14 @@ const snapshotStaleMessage = (snapshotPath: string): string =>
 
 const CHAIN_TIP_MISMATCH_MESSAGE =
 	"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.";
+
+/** States only the observation, never a cause (schema-export spec, R2-G3
+ * 3.2): the export could be stale for any number of reasons (an edited
+ * declaration, a hand-edited export file, a regeneration that was never
+ * committed), and naming one would assert something this check never
+ * verified. */
+const EXPORT_STALE_MESSAGE =
+	'the export in ".hejbro/export/" does not match your declarations. Next: run `hejbro generate --export` and commit the result.';
 
 /** `<migrationsDir>/<fileName>`, always POSIX-joined (`config.migrationsDir` is a shell-command path fragment here, not a filesystem path Node needs to resolve — `path.join` would use `\` on Windows and break the very command this renders). */
 const migrationPath = (migrationsDir: string, fileName: string): string =>
@@ -201,16 +212,30 @@ const SKIPPED_CHECK_3_LINE =
 const SKIPPED_CHECK_4_LINE =
 	"skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)";
 
-const TOTAL_CHECKS = 5;
+const BASE_CHECKS = 5;
+
+/**
+ * The export freshness check (R2-G3) only counts toward the total when it
+ * applied — a repository that has never opted into the export sees the
+ * exact same "5 checks" wording it always has, never a phantom 6th check
+ * it can't act on.
+ */
+const totalChecks = (exportApplied: boolean): number => {
+	if (exportApplied) {
+		return BASE_CHECKS + 1;
+	}
+	return BASE_CHECKS;
+};
 
 const failureSummaryLine = (
 	failedCount: number,
 	skippedCount: number,
+	checks: number,
 ): string => {
 	if (skippedCount === 0) {
-		return `verify: ${failedCount} of ${TOTAL_CHECKS} checks failed — fix the errors above and rerun \`hejbro verify\`.`;
+		return `verify: ${failedCount} of ${checks} checks failed — fix the errors above and rerun \`hejbro verify\`.`;
 	}
-	return `verify: ${failedCount} of ${TOTAL_CHECKS} checks failed, ${skippedCount} skipped — fix the errors above and rerun \`hejbro verify\`.`;
+	return `verify: ${failedCount} of ${checks} checks failed, ${skippedCount} skipped — fix the errors above and rerun \`hejbro verify\`.`;
 };
 
 export type VerifyResult = {
@@ -520,6 +545,63 @@ const runCheck4IfEligible = (
 	return runCheck4(check1DiskText, check3.report.tip);
 };
 
+/**
+ * The export freshness check (R2-G3, new requirement — not a
+ * monotonicity-gate successor): `"not-applicable"` when check 1 failed
+ * (no parseable snapshot to regenerate against) or the repository has
+ * never opted into the export (`compareExport`'s own `"absent"`) — a
+ * repository with no export at all is not reported as stale (3.3).
+ * Otherwise regenerates the export in memory from the same declarations
+ * `generate --export` would use, and compares bytes (3.1).
+ */
+const runExportCheck = (
+	cwd: string,
+	check1DiskText: string | null,
+	declarations: LoadedDeclarations,
+	registry: KindRegistry,
+	validators: ReadonlyArray<Validator>,
+): CheckOutcome | "not-applicable" => {
+	if (check1DiskText === null) {
+		return "not-applicable";
+	}
+	const currentSnapshot = generateMigration({
+		declarations,
+		previousSnapshot: parseSnapshot(
+			check1DiskText,
+			requiredKeysByKind(registry),
+		),
+		registry,
+	}).snapshot;
+	const comparison = compareExport(
+		cwd,
+		declarations,
+		declarations.exportNames,
+		currentSnapshot,
+		registry,
+		validators,
+	);
+	if (comparison === "absent") {
+		return "not-applicable";
+	}
+	if (comparison === "current") {
+		return { ok: true };
+	}
+	return {
+		ok: false,
+		error: hejbroError("export-stale", EXPORT_STALE_MESSAGE),
+	};
+};
+
+/** `[]` when the export check did not apply, so it contributes nothing to `outcomes`, `TOTAL_CHECKS`, or the failure summary — indistinguishable from the check not existing, which is what lets every export-less repository's report stay byte-identical to before this check was added. */
+const exportOutcomes = (
+	exportCheck: CheckOutcome | "not-applicable",
+): ReadonlyArray<CheckOutcome> => {
+	if (exportCheck === "not-applicable") {
+		return [];
+	}
+	return [exportCheck];
+};
+
 const check2SkipLine = (check2: CheckOutcome | null): string | null => {
 	if (check2 === null) {
 		return SKIPPED_CHECK_2_LINE;
@@ -587,6 +669,7 @@ export const runVerify = async (
 		]);
 		const declarations = await loadDeclarations(configPath, config);
 		const registry = buildRegistry(config);
+		const validators = configValidators(config);
 
 		const check1 = runCheck1(cwd, config, registry);
 		const migrationsDirPath = join(cwd, config.migrationsDir);
@@ -619,6 +702,14 @@ export const runVerify = async (
 			registry,
 		);
 		const check4 = runCheck4IfEligible(check1.diskText, check3);
+		const exportCheck = runExportCheck(
+			cwd,
+			check1.diskText,
+			declarations,
+			registry,
+			validators,
+		);
+		const exportApplied = exportCheck !== "not-applicable";
 
 		const outcomes = [
 			checkDuplicateVersion,
@@ -626,6 +717,7 @@ export const runVerify = async (
 			check2,
 			check3Outcome(check3),
 			check4,
+			...exportOutcomes(exportCheck),
 		];
 		const failures = outcomes.filter(
 			(outcome): outcome is Extract<CheckOutcome, { ok: false }> =>
@@ -641,7 +733,7 @@ export const runVerify = async (
 				exitCode: 0,
 				stdout: [
 					...fixOutcome.lines,
-					`verify: ${TOTAL_CHECKS} checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
+					`verify: ${totalChecks(exportApplied)} checks passed (${fileNames.length} migrations, snapshot ${snapshotHash.slice(0, 19)}…)`,
 				],
 				stderr: null,
 			};
@@ -658,7 +750,11 @@ export const runVerify = async (
 		const skippedCount = skippedLines.length;
 		const summary = [
 			...skippedLines,
-			failureSummaryLine(failures.length, skippedCount),
+			failureSummaryLine(
+				failures.length,
+				skippedCount,
+				totalChecks(exportApplied),
+			),
 		].join("\n");
 
 		return {

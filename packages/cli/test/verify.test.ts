@@ -427,6 +427,32 @@ export const projects = table(app, "projects", {
 		);
 	});
 
+	it("existing chain diagnostics are unchanged (R2-G3's export check contributes nothing to a repository with no export)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const corrupted = replaceLinePrefixedWith(
+			original,
+			SNAPSHOT_PREFIX,
+			`sha256:${"a".repeat(64)}`,
+		);
+		await writeFile(filePath, corrupted);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		// Still "of 5", not 6 -- no export directory exists, so the export
+		// check contributed nothing: no outcome, no skip line, no shift in
+		// the total a repository that has never opted in has always seen.
+		expect(result.stderr).toContain(
+			"verify: 1 of 5 checks failed — fix the errors above and rerun `hejbro verify`.",
+		);
+		expect(result.stderr).not.toContain("export-stale");
+	});
+
 	// #220: two migrations claiming the same version prefix -- Supabase (and
 	// any tool that tracks *applied* migrations by that prefix, not the full
 	// filename) can only ever apply one of them. This drives the built CLI
