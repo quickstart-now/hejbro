@@ -1,6 +1,6 @@
 ---
 name: hejbro
-description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — when generating/verifying migrations, when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()), when writing typed queries against a declared schema (db(), the select/insert/update/deleteFrom chain, db.fn), when running a query under an RLS execution context (db.as, asUser/asAnon) or registering a context provider so every execution applies one automatically, when asserting at startup that the connected database actually matches its declarations (assertSchema), or when adopting hejbro into an existing (brownfield) database.
+description: Use when declaring or changing a Postgres schema with hejbro — tables, RLS, functions/triggers, grants, views — when generating/verifying migrations, when a function body needs control flow (real JS if/for is forbidden inside bodies; use ctx.if()/ctx.forEach()), when writing typed queries against a declared schema (db(), the select/insert/update/deleteFrom chain, db.fn), when running a query under an RLS execution context (db.as, asUser/asAnon) or registering a context provider so every execution applies one automatically, when asserting at startup that the connected database actually matches its declarations (assertSchema), when adopting hejbro into an existing (brownfield) database, or when a repository needs types for a schema it does not declare — deciding monorepo alias vs. link/vendor, running link/vendor/vendor --check/outdated, or writing code against a generated contract.ts.
 version: 0.2.0
 license: Apache-2.0
 ---
@@ -22,6 +22,8 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 8. `db(schema, driver)` builds a typed handle straight from the same declarations — `select`/`insert`/`update`/`deleteFrom` chains stay inert until awaited, and `.compile()` never touches a driver.
 9. `db.as(context)` runs statements under an explicit role/session context (RLS); a role outside the declared whitelist fails immediately, before anything reaches the database.
 10. `db(schema, driver, { context })` registers a resolver instead: every execution surface applies the resolved context automatically. An explicit `db.as(context)` still always wins and never calls the resolver; a throwing resolver propagates unchanged rather than running uncontexted.
+11. A repository that doesn't declare the schema it queries gets types from a committed, generated `contract.ts` (`link`/`vendor`), never from declarations directly — except inside the *same* workspace, where importing the declaring package (an alias) is correct and `link`/`vendor` would be an unnecessary detour. See `references/polyrepo.md`.
+12. `table()` returns `DeclaredTable`, not the general `Table` type — an existing declaration explicitly annotated `: Table` that no longer satisfies something requiring a real declaration (e.g. `generateMigration`) just needs that annotation removed or narrowed to `DeclaredTable`.
 
 ## References
 
@@ -35,3 +37,4 @@ SQL) and **declare → typed queries** (the same declarations drive a typed
 | `references/nile-preset.md` | Using `@hejbro/nile` — `nileDriver`, `asTenant`, the declarations this preset refuses and their evidence grades |
 | `references/query-layer.md` | Building a `db()` handle, chaining queries, calling `db.fn`, running under an RLS execution context, transactions, asserting the connected database matches its declarations (`assertSchema`), or query-layer errors |
 | `references/brownfield-adoption.md` | Adopting hejbro into an existing (already-populated) database |
+| `references/polyrepo.md` | A repository needs types for a schema it doesn't declare — monorepo alias vs. `link`/`vendor`, the vendoring command surface, a generated `contract.ts`, or one of the ten coded vendoring failures |

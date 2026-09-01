@@ -1490,27 +1490,95 @@ count was cited.
       end-to-end cross-check independent of every other file's own
       coverage.
 
-## R2-G8 — Documentation, skill and changeset — `est_frozen: 26m` — #601
+## R2-G8 — Documentation, skill and changeset — `est_frozen: 26m → 38m` — #601
 
 Files: `docs/guide/polyrepo.md` (new),
 `skills/hejbro/references/polyrepo.md` (new), `skills/hejbro/SKILL.md`,
-`.changeset/*.md` (new), `scripts/pack-install-smoke.sh`.
+`packages/skills/test/fixtures/preludes/polyrepo-contract.ts` (new, not
+in the original file list — needed once the skill's own snippet-compile
+gate, #373, caught the first draft's doc example), `.changeset/*.md`
+(new), `scripts/pack-install-smoke.sh`.
 
-- [ ] 8.1 The guide's body: what crosses and what does not, the command
+**Re-freeze: 26m → 38m** (actual: 38m across 8.1/8.1b/8.2/8.3). The
+owner's mid-task addendum (the three-way boundary section, planner
+relay PS-PIVOT) landed inside 8.1 rather than as separate scope, and
+8.2's own gate (`@hejbro/skills`'s real TS type-check of every doc
+snippet) caught a genuine drift on the first run — the fix (a proper
+prelude fixture) cost real time neither task's own estimate carried,
+since neither anticipated the guide's own code examples needing to
+compile for real.
+
+- [x] 8.1 The guide's body: what crosses and what does not, the command
       surface, and the boundary between local freedom and committed
       state. Gate: `pnpm check:diagnostic-xref`. ~6m
-- [ ] 8.1b The guide's failure table: **all ten, each with the
+      `docs/guide/polyrepo.md` (new) — what crosses (the IR, the
+      generated contract) and what never does (declarations, a live
+      database connection, lockstep toolchain versions); the **three-way
+      boundary** as its own section, first sentence "if you're in the
+      same workspace, use an alias; only cross a repository boundary
+      with `vendor`" (owner ruling, planner-directed, added after the
+      body's own first draft — monorepo/polyrepo/neighbor-checkout, with
+      the trap named explicitly: `link ../schema` *inside* a monorepo is
+      a working but unnecessary detour); the five real commands
+      (`link`/`vendor`/`vendor --check`/`outdated`, `vendor` covering
+      both the first vendor and every later pin move — there is no
+      separate `--update` flag), with the sixth (`pull --db-url`)
+      explicitly named as **not existing yet** (#604) rather than left
+      unmentioned or promised; the four-file pair
+      (`hejbro.json`/`hejbro.lock`/the two IR files/`contract.ts`) via
+      the `package.json`/`package-lock.json` analogy the owner's own
+      education frame already uses; `--strict`'s TTY default and that it
+      fires under piped output, not only a recognized CI variable; that
+      `vendor` is the only command needing network for the normal
+      build/type-check path; and the schema repository's own half
+      (`generate --export`, `verify`'s opt-in export-match check).
+- [x] 8.1b The guide's failure table: **all ten, each with the
       repository its remedy sends the reader to**. The cross-reference
       gate runs one way only — it checks that cited codes exist, never
       that every code is cited — so the enumeration is deliberate and
       its completeness is checked by counting the table's rows against
       the delta's list. ~6m
-- [ ] 8.2 The skill reference and its row in the References table,
+      Ten rows, counted against `schema-vendoring/spec.md`'s own
+      requirement list — 7 send the reader back to the consumer's own
+      repository, 2 (`vendor-export-missing`/`vendor-export-invalid`)
+      to the schema repository, and 1
+      (`vendor-export-format-unsupported`) to the consumer's own
+      toolchain specifically (upgrade hejbro) rather than its
+      repository's files. Also notes, in the same table's footer, that a
+      local replacement is deliberately absent (belongs to `replace`,
+      which this change does not build) and that staleness is
+      `outdated`'s advisory, not a failure.
+- [x] 8.2 The skill reference and its row in the References table,
       including the one-line migration for a reader who annotated
       declarations with the general table type. ~8m
-- [ ] 8.3 One `minor` changeset naming any member of the fixed group,
+      `skills/hejbro/references/polyrepo.md` (new) — the same
+      alias-vs-vendor decision as the guide's own, agent-directive and
+      terse rather than narrative; explicitly does not restate the
+      ten-code table (points at the guide instead, "two copies of the
+      same list is exactly the kind of drift this project avoids
+      elsewhere"). `SKILL.md` gained: a `description` clause naming this
+      trigger, two new numbered gotchas (11: alias-vs-vendor by
+      repository boundary; 12: the `Table`→`DeclaredTable` one-line
+      migration, R1's own public-surface change, #580, never previously
+      documented in the skill — found while writing this task, closed
+      opportunistically since a stale skill is a broken user contract
+      per this repo's own "before claiming done" checklist), and a new
+      References table row.
+- [x] 8.3 One `minor` changeset naming any member of the fixed group,
       plus a database-free reachability assertion for the new commands
       in the pack-install smoke. Gate: `changeset status`. ~6m
+      `.changeset/add-polyrepo-sync.md` (new, `hejbro: minor`) —
+      `changeset status` confirms all seven fixed-group packages bump
+      together. `scripts/pack-install-smoke.sh` gained assertion 6:
+      through the real npm-installed tarball's own `hejbro` binary
+      (no workspace alias), `link` writes `hejbro.json` with no network
+      reachability check of its own, then `vendor --check` and
+      `outdated` both report `vendor-not-yet-vendored` — proving the
+      four new commands are wired into the installed CLI without a
+      database or a network call, the M6-gap shape assertions 3–5
+      already established for other packages' exports. A full vendoring
+      round trip needs a real git remote and stays R2-G9's own job.
+      Passed on the first run.
 
 ## R2-G9 — The two-repository witness — `est_frozen: 27m` — #602
 
