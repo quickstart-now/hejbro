@@ -71,11 +71,11 @@ disk and the ledger's rows in, an ordered set of pending migrations and
 a list of disagreements out. No I/O, so it runs in CI, which has no
 database.
 
-- [ ] 2.1 (~9m) Pending set in chain order — the migrations on disk that
+- [x] 2.1 (~9m) Pending set in chain order — the migrations on disk that
       the ledger does not record, ordered by the chain rather than by
       filename. Red: `apply-plan.test.ts` — "orders pending migrations
       by the chain, not by directory listing".
-- [ ] 2.2 (~9m) [design] Disagreements, as an enumeration whose members
+- [x] 2.2 (~9m) [design] Disagreements, as an enumeration whose members
       each earn their place by having a remedy no other member has: a
       ledger row naming a migration the repository does not have, and a
       migration recorded out of order. Each carries a code and a
@@ -86,7 +86,7 @@ database.
       the two are the members. Red: same file — "reports a ledger row
       with no file on disk", "reports a recorded migration that the
       chain orders after an unrecorded one".
-- [ ] 2.3 (~8m) The chain is verified before anything is applied.
+- [x] 2.3 (~8m) The chain is verified before anything is applied.
       Applying a chain that does not verify is applying bytes nothing
       vouches for, and the check is offline and already written. Red:
       same file — "refuses to plan against a chain whose hashes do not
