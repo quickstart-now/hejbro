@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { colorize, shouldUseColor, shouldUseLinks } from "../src/tty";
+import {
+	colorize,
+	resolveStrictMode,
+	shouldUseColor,
+	shouldUseLinks,
+} from "../src/tty";
 
 describe("tty.ts", () => {
 	const originalIsTTY = process.stdout.isTTY;
@@ -64,6 +69,33 @@ describe("tty.ts", () => {
 		it("no flag, NO_COLOR set: none", () => {
 			process.env.NO_COLOR = "1";
 			expect(shouldUseLinks(undefined)).toBe("none");
+		});
+	});
+
+	describe("resolveStrictMode", () => {
+		beforeEach(() => {
+			process.stdout.isTTY = true;
+			delete process.env.NO_COLOR;
+		});
+
+		it("--strict always true, even in an interactive terminal", () => {
+			expect(resolveStrictMode(true)).toBe(true);
+			process.stdout.isTTY = false;
+			expect(resolveStrictMode(true)).toBe(true);
+		});
+
+		it("--no-strict always false, even when not a TTY", () => {
+			process.stdout.isTTY = false;
+			expect(resolveStrictMode(false)).toBe(false);
+		});
+
+		it("no flag, not a TTY (piped/CI): true — nobody is there to notice a warning", () => {
+			process.stdout.isTTY = false;
+			expect(resolveStrictMode(undefined)).toBe(true);
+		});
+
+		it("no flag, interactive terminal: false — a developer sees the warning live", () => {
+			expect(resolveStrictMode(undefined)).toBe(false);
 		});
 	});
 

@@ -1328,12 +1328,64 @@ Files: `packages/cli/src/vendor/state.ts` (new),
       and every sentence citing it move in the same edit. Start from
       `cli/test/vendor-states.test.ts > reports eleven distinct codes`.
       ~10m
+      **Partially settled, planner-approved:** 10 and 11 stay separate
+      codes (`vendor-local-source-active`/`vendor-lock-non-default-ref`,
+      names not yet final) — the shapes they inspect are structurally
+      different (10 reads the connection source's own shape, 11 reads
+      the lock's `resolvedBy`), matching the enumeration's own remedy
+      split. `resolvedBy: "default-branch" | "explicit-ref"` is the new
+      lock field for 11, asymmetric-tolerant: an old lock missing it
+      reads as `"default-branch"` and never breaks (same discipline as
+      the format-skew rule, member 6).
+      **Two members closed as genuinely new code, found while wiring
+      the rest of this group** (neither had its own task row — both
+      fell under this task's "settle the codes" umbrella): member 2's
+      other half, and member 7. `vendor/git-diagnostic.ts`'s
+      `withGitDiagnostic` only ever caught a missing `git` binary
+      (ENOENT) — every other git failure (bad URL, unreachable host,
+      auth failure) re-threw the raw subprocess error uncaught, crashing
+      the process with a stack trace instead of a diagnostic. Fixed:
+      catches `HejbroError` first and re-throws it unchanged (a
+      more-specific diagnostic from inside the wrapped call, e.g.
+      `vendor-export-missing`, must never be re-coded), then
+      `isGitBinaryMissing` as before, then everything else as a new
+      `vendor-remote-unreachable`, naming the source and the first line
+      of git's own stderr (or the error's own message as fallback).
+      Member 7 (`vendor-lock-commit-lost`): `git.ts` gained
+      `remoteHasCommit(remote, commit): boolean`, sharing a new
+      `withFetchedCommit` helper factored out of the existing
+      blobless-fetch machinery `readFileAtRemoteCommit` already used.
+      `commands/vendor.ts`'s `assertLockCommitNotLost` calls it *after*
+      `resolveExport` succeeds — deliberately, since that success
+      already proves the remote is reachable, so a `false` here can only
+      mean the lock's own commit specifically is gone, never a
+      misdiagnosis of total unreachability. `--force` (already the
+      destination-file guard's override) is reused rather than inventing
+      a second one, matching the enumeration's own remedy text ("a
+      decision, not a repair"). Proven with a genuine git-history
+      rewrite in `vendor-states.test.ts` (`checkout --orphan` + re-commit
+      + `branch -D`/`-m` + `reflog expire` + `gc --prune=now`), not a
+      mocked failure — the old commit object is actually gone from the
+      fixture repo.
 - [ ] 7.2 `[design]` Settle how a run that must fail is told from one
       that may warn. This repository has no precedent for reading a CI
       environment variable, and its habit is an explicit flag first with
       an inferred fallback. Record the basis in one line. Start from
       `cli/test/vendor-states.test.ts > a replacement warns locally and
       fails at the boundary`. ~9m
+      **Mechanism added, not yet wired**: `tty.ts` gained
+      `resolveStrictMode(flag)`, mirroring `shouldUseLinks`'s own
+      explicit-flag-first shape — `--strict`/`--no-strict` always win;
+      with neither, a non-interactive terminal (CI, or piped output)
+      defaults to failing (nobody is watching to notice a warning
+      scroll by) and an interactive one defaults to warning. `isInteractive`
+      exported from `tty.ts` for this. Tested in both directions in
+      `tty.test.ts`. **Not yet wired into `vendor`** — see the design
+      question raised to the planner about member 10's own trigger
+      condition risking a false positive against every existing
+      local-git-fixture test in this suite (`link <local temp dir>` is
+      how `vendor.test.ts`/`vendor-states.test.ts`/etc. all vendor
+      today); flagged rather than guessed past.
 - [x] 7.3 Validate the vendored description against its format rather
       than casting it, and raise the situations reading owns. Start from
       `cli/test/vendor-states.test.ts > refuses a description that does
