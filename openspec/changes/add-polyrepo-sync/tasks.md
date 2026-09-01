@@ -1118,53 +1118,164 @@ implementation for a real gap in the delta's own scenario table that no
 task closed — an oversight in the task list itself, not a task running
 long.
 
-## R2-G6 — The name-keyed client — `est_frozen: 90m` — #599
+## R2-G6 — The name-keyed client — `est_frozen: 102m` — #599
 
 Files: `packages/query/src/client/*` (new),
-`packages/query/test/client/*` (new).
+`packages/query/test/client/*` (new),
+`packages/cli/src/contract/emit.ts` (shared with R2-G5, additive only —
+6.12 replaces the placeholder `createDb` body, never touches
+`renderDatabaseInterface`/`renderMetadata`'s own output shape),
+`examples/cli-smoke/test/vendored-contract.test.ts` (new, 6.12's own
+round-trip proof), `biome.json` (new override for
+`packages/query/src/client/**`/`test/client/**`/`test/exports.test.ts` —
+`Row`/`Insert`/`Update`/`Tables` deliberately mirror the contract's own
+PascalCase field names, the same exception `packages/core/src/kinds/**`
+already carries for snapshot field names).
 
 **The one group with no comparable predecessor.** Its estimate is the
 least trustworthy in this change, and a re-freeze, if one happens,
 happens here.
 
-- [ ] 6.1 `[design]` Settle what the client takes and how much of the
+- [x] 6.1 `[design]` Settle what the client takes and how much of the
       existing chain and compiler it reuses: whether the metadata
       constant feeds the same statement compiler with names where table
       values used to be, or a parallel path. This decides the size of
       everything below it. Start from `query/test/client/select.test.ts
       > selects and types rows from the contract`, which is where the
       choice first becomes observable. ~10m
-- [ ] 6.2 `[design]` Settle the surface: what `createDb(conn)` returns
+      **Settled, planner-confirmed: construction, not comparison.**
+      `contractMetadata` carries enough per-column facts
+      (`typeNode`/`mode`/`notNullElements`) to reconstruct a real,
+      queryable `Table` value at runtime (`synthesizeTable`,
+      `@hejbro/query`'s own new `client/synthesize.ts`) — the same public
+      mechanism `@hejbro/core`'s `existingTable()` uses for "a table this
+      repository does not own" (`tableMeta` is a `Symbol.for`
+      global-registry symbol, confirmed against `@hejbro/supabase`'s
+      `authUsers` as a real cross-package precedent). The reconstructed
+      table feeds the already-shipped, unmodified `db()` handle, so
+      select/insert/update/deleteFrom/relations/roles all come from the
+      existing compiler and executor — 6.5/6.9 hold **by construction**,
+      not by a separate comparison. Metadata carries only the three
+      facts `db/convert.ts` actually reads at runtime (planner condition
+      ④) — `primaryKey`/`unique`/`defaultValue` are hardcoded `false`/
+      `null` in the synthesized `ColumnState`, documented as never read.
+- [x] 6.2 `[design]` Settle the surface: what `createDb(conn)` returns
       and how a table is reached on it, in the shape the contract
       already teaches. Start from the same test as 6.1 — the two
       decisions are settled together and first observed there. ~9m
-- [ ] 6.3 Select against a named table, typed from the contract. Start
+      **Settled:** `createNameKeyedDb<TDatabase>(conn, metadata)` returns
+      one client object keyed by table name (`NameKeyedDb`), each table
+      exposing `select`/`insert`/`update`/`delete` over the *whole*
+      table — no `.where()`/predicate parameter yet, since the filter
+      surface (how a caller references a column without a `Table` value
+      crossing) is an owner-gated decision still open at this commit
+      (planner: "이건 소비자가 실제로 타이핑하는 표면... 오너가 정해온
+      축"). Also exposes `.as(context)` (role-scoping, R2-G5 5.8's own
+      functional half, closed here) — in scope now because `DbContext`
+      is a plain `{role, settings?}` value, never a column reference, so
+      it doesn't wait on the same ruling. Planner condition ①, "no
+      `Table` in the client's public types", is a type-level assertion
+      (`no-table-leak.test.ts`) plus a runtime own-symbol-property check,
+      not a comment.
+- [x] 6.3 Select against a named table, typed from the contract. Start
       from `query/test/client/select.test.ts > selects and types rows
       from the contract`. ~10m
-- [ ] 6.4 Insert and update, honouring the write optionality the
+- [x] 6.4 Insert and update, honouring the write optionality the
       contract emitted. Start from `query/test/client/write.test.ts >
       rejects a computed column in an insert`. ~10m
-- [ ] 6.5 The compiled SQL equals what the declaration-based path
+      A computed column has no key in `Insert`/`Update` at all (5.3's
+      own exclusion) — proven as a compile-time `@ts-expect-error`, not a
+      runtime check, since the client's own types come from the
+      contract's static `Insert`/`Update`, never re-derived from the
+      loosely-typed synthesized table.
+- [x] 6.5 The compiled SQL equals what the declaration-based path
       compiles for the same query. Start from
       `query/test/client/parity.test.ts > compiles to the same SQL as
       the declaration path`. ~10m
-- [ ] 6.6 Relations, where the contract carries them. Start from
+      True by construction (6.1) — passed on the first run, which is
+      itself the evidence the construction-not-comparison design holds.
+- [x] 6.6 Relations, where the contract carries them. Start from
       `query/test/client/relations.test.ts > follows a carried
       relation`. ~9m
-- [ ] 6.7 The role whitelist reaches the client from the contract's
+      Proven at the same internal seam as 6.5 (`synthesizeTable`'s own
+      reconstructed `foreignKeys` feed `db/related.ts` unchanged) —
+      exposing `.related()` on the public per-table client is part of
+      the richer surface awaiting the same filter-syntax ruling 6.2
+      names, so this proves the mechanism the eventual public surface
+      will delegate to, not the public surface itself.
+- [x] 6.7 The role whitelist reaches the client from the contract's
       exported list. Start from `query/test/client/roles.test.ts >
       accepts a role the contract exports`. ~8m
-- [ ] 6.8 Errors name the contract, not internals: a table that is not
+      Closes the runtime half R2-G5 5.8 deferred here — `client.as({role:
+      ...})` accepts a role the contract exports and rejects one it
+      doesn't (`undeclared-role`), through `db()`'s own already-shipped
+      whitelist, fed `contractMetadata.roles`.
+- [x] 6.8 Errors name the contract, not internals: a table that is not
       in the contract fails saying so. Start from
       `query/test/client/errors.test.ts > names a table absent from the
       contract`. ~8m
-- [ ] 6.9 The existing declaration-based surface is untouched. Start
+      A `Proxy` over the client object (`wrapWithTableGuard`) refuses an
+      unknown table name with a coded, contract-naming error before a
+      raw "Cannot read properties of undefined" ever surfaces — reachable
+      when a caller's own `TDatabase` type disagrees with
+      `contractMetadata` at runtime (hand-edited, or generated against a
+      different commit), which the type system alone cannot catch.
+- [x] 6.9 The existing declaration-based surface is untouched. Start
       from the query package's existing suites, run unchanged. ~8m
-- [ ] 6.10 The type-level claims in this group are evidenced by
+      True by construction (6.1: zero changes to `db.ts`/`chain.ts`/
+      `compile.ts`) — the full existing suite (57 files, 802 tests before
+      this group's own additions) still passes unchanged.
+- [x] 6.10 The type-level claims in this group are evidenced by
       `check-types`, not by the test runner, and the cross-package pins
       read built output — so the build precedes the check. Start from
       `query/test/client/select.test.ts`'s type assertions, verified
       under `check-types` after a build. ~8m
+- [ ] 6.11 The execution proof 5.10 deferred here: load a real emitted
+      contract and run a real query through it end to end (this is the
+      first point in the change where a client exists to run one
+      against). Start from
+      `query/test/client/execution.integration.test.ts > runs a real
+      query against a live database through a vendored contract`. ~6m
+      **Partially satisfied, flagged rather than claimed done.** The full
+      async execution path (table synthesis → `db()` → compile → a real
+      driver's `execute` → row conversion → resolve) is exercised for
+      real in `select.test.ts`/`write.test.ts`/`roles.test.ts`, and
+      `examples/cli-smoke`'s new round-trip test (6.12) proves a real
+      `hejbro vendor` output against the real installed package — but
+      neither runs a query against a **live Postgres** the way
+      `check-live.integration.test.ts`'s own Docker-gated pattern does.
+      Building that (its own container lifecycle, ~150 lines of
+      precedent to mirror) is a bigger scope item than this task's own
+      6m estimate affords — held pending planner direction rather than
+      either skipped silently or built without confirmation.
+- [x] 6.12 Replace R2-G5's placeholder `createDb` body
+      (`packages/cli/src/contract/emit.ts`'s `CREATE_DB_FACTORY`) with a
+      real call into this group's own client — the third "group A built
+      it, group B calls it" seam this change has had, discovered by the
+      planner rather than left implicit. Start from
+      `cli/test/contract-emit.test.ts > the emitted factory returns a
+      working client`. ~6m
+      `createDb = (conn: Driver) => createNameKeyedDb<Database>(conn,
+      contractMetadata)` — `Driver`/`createNameKeyedDb` imported from
+      `"hejbro"` (not `"@hejbro/query"` directly), since a consumer
+      already depends on `hejbro` and its barrel re-exports query's full
+      surface (`packages/cli/src/index.ts`, `export * from
+      "@hejbro/query"`) — no second dependency for the one thing a
+      vendored contract needs from it. Proven by a genuine round trip,
+      not a unit test alone: `examples/cli-smoke`'s new
+      `vendored-contract.test.ts` runs the **built** CLI end to end
+      (`init` → `generate --export` → git commit → `link` → `vendor` in
+      a second temp repo) and then a real `tsc --strict` against the
+      resulting `contract.ts`, resolving `hejbro` through a real
+      `node_modules` symlink to the built package — the one proof
+      packages/cli's own aliased-source unit tests structurally cannot
+      give.
+
+**Re-freeze: 90m → 96m → 102m, both before this group started.** First
+move (90→96): 6.11 added for the execution proof 5.10 deferred here.
+Second move (96→102): 6.12 added for the placeholder-replacement seam
+R2-G5 knowingly left open and reported, but that no task closed — the
+sixth planning gap this change has surfaced.
 
 ## R2-G7 — The consumer's check — `est_frozen: 45m` — #600
 

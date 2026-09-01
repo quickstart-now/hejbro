@@ -14,6 +14,11 @@ import type {
 	CompileResult,
 	ContextProvider,
 	ContextRendering,
+	ContractColumnMeta,
+	ContractForeignKeyMeta,
+	ContractMetadata,
+	ContractTableMeta,
+	DatabaseShape,
 	Db,
 	DbContext,
 	DbOptions,
@@ -30,6 +35,9 @@ import type {
 	InsertChainConflictable,
 	InsertChainFinal,
 	InsertChainReturnable,
+	NameKeyedDb,
+	NameKeyedTableClient,
+	NameKeyedTables,
 	ReturningRow,
 	Schema,
 	ScopedDb,
@@ -48,6 +56,16 @@ import type {
 import * as barrel from "../src/index";
 
 /** Referenced so the type-only import block above isn't flagged unused -- every listed name is a real presence assertion, not decoration. */
+type _TestDatabaseShape = {
+	readonly Tables: {
+		readonly posts: {
+			readonly Row: unknown;
+			readonly Insert: unknown;
+			readonly Update: unknown;
+		};
+	};
+};
+
 type _AgreedTypesPresent = [
 	ChainApi,
 	CompileInput,
@@ -55,6 +73,11 @@ type _AgreedTypesPresent = [
 	CompileResult,
 	ContextProvider,
 	ContextRendering,
+	ContractColumnMeta,
+	ContractForeignKeyMeta,
+	ContractMetadata,
+	ContractTableMeta,
+	DatabaseShape,
 	Db,
 	DbContext,
 	DbOptions,
@@ -71,6 +94,9 @@ type _AgreedTypesPresent = [
 	InsertChainConflictable,
 	InsertChainFinal,
 	InsertChainReturnable,
+	NameKeyedDb<_TestDatabaseShape>,
+	NameKeyedTableClient<_TestDatabaseShape["Tables"]["posts"]>,
+	NameKeyedTables<_TestDatabaseShape>,
 	ReturningRow<never>,
 	Schema,
 	ScopedDb,
@@ -107,13 +133,14 @@ type _ColumnPlanEntryNeverReExported = ColumnPlanEntry;
  * -- both are the header's own words, restated as assertions.
  */
 describe("@hejbro/query public barrel (task 7.8)", () => {
-	it("exposes exactly the agreed runtime value exports -- db, compile, sql, throwMissingCapability, defaultContextRendering", () => {
+	it("exposes exactly the agreed runtime value exports -- db, compile, sql, throwMissingCapability, defaultContextRendering, createNameKeyedDb", () => {
 		// Exact-set equality (not just "contains") -- the task's own
 		// contract is "matches the agreed list": this fails just as hard
 		// on an accidental future *addition* (e.g. a stray `convertRows`
 		// leak) as it does on one of the agreed names going missing.
 		expect(Object.keys(barrel).sort()).toEqual([
 			"compile",
+			"createNameKeyedDb",
 			"db",
 			"defaultContextRendering",
 			"sql",

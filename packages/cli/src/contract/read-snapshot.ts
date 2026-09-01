@@ -42,11 +42,27 @@ export const enumsInSnapshot = (
 		.filter(([key]) => key.startsWith(KIND_PREFIX.enum))
 		.map(([, node]) => node as ContractEnumFact);
 
-/** Whether `snapshot.objects` carries a table whose identity is `identity` (schema-qualified, `tableIdentity`'s own shape) — used to tell a managed foreign-key target from an unmanaged one (5.9). */
+/**
+ * The table in `snapshot` whose identity is `identity` (schema-qualified,
+ * `tableIdentity`'s own shape), or `null` — used to tell a managed
+ * foreign-key target from an unmanaged one (5.9) and, once found, to read
+ * its own `schema`/`name` directly rather than re-splitting the identity
+ * string it was looked up by (6.1: a foreign key's reconstructed
+ * reference needs the target's schema and name as separate fields).
+ */
+export const findTableInSnapshot = (
+	snapshot: Snapshot,
+	identity: string,
+): TableSnapshot | null =>
+	(snapshot.objects[`${KIND_PREFIX.table}${identity}`] as
+		| TableSnapshot
+		| undefined) ?? null;
+
+/** Whether `snapshot.objects` carries a table whose identity is `identity` — see {@link findTableInSnapshot}. */
 export const snapshotHasTable = (
 	snapshot: Snapshot,
 	identity: string,
-): boolean => `${KIND_PREFIX.table}${identity}` in snapshot.objects;
+): boolean => findTableInSnapshot(snapshot, identity) !== null;
 
 /**
  * Every `"sequence:…"` entry in `snapshot.objects` — a `serial`/

@@ -82,6 +82,35 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": [
+				"packages/query/src/client/**",
+				"packages/query/test/client/**",
+				"packages/query/test/exports.test.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"useNamingConvention": {
+							"level": "error",
+							"options": {
+								"strictCase": false,
+								"conventions": [
+									{
+										"selector": { "kind": "objectLiteralProperty" },
+										"match": ".*"
+									},
+									{
+										"selector": { "kind": "typeProperty" },
+										"match": ".*"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
 		}
 	]
 }

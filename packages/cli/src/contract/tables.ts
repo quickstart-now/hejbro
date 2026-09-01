@@ -3,11 +3,12 @@ import type {
 	NumericMode,
 	Snapshot,
 	TableSnapshot,
+	TypeNode,
 } from "@hejbro/core";
 import { columnDefault, columnGenerated, columnIdentity } from "@hejbro/core";
 import type { ExportTableFact } from "../export/description";
 import type { ContractEnumFact } from "./read-snapshot";
-import { columnOwnedBySequence, snapshotHasTable } from "./read-snapshot";
+import { columnOwnedBySequence, findTableInSnapshot } from "./read-snapshot";
 import { columnTsType } from "./ts-type";
 
 type EnumLookup = (schema: string, name: string) => ContractEnumFact | null;
@@ -40,7 +41,7 @@ const isAlwaysGenerated = (column: ColumnSnapshot): boolean =>
  * **The `serial`/`smallserial`/`bigserial` case, closed without a new
  * sidecar fact (planner-confirmed, R2-G5 5.3):** such a column decomposes
  * to its base integer type before it ever reaches a snapshot
- * (`table-kind.ts`'s `materializeTypeNode`), and its `nextval(...)`
+ * (`table-kind.ts`'s `materializeTypeNode`) and its `nextval(...)`
  * default lives on a separately synthesized `sequence` object rather
  * than on the column itself — but that object records its own owner
  * (`SequenceSnapshot.table`/`.column`, `sequence-kind.ts`, exported
@@ -61,10 +62,27 @@ const hasDefault = (
 const isColumnNotNull = (column: ColumnSnapshot): boolean =>
 	column.notNull === true;
 
+/**
+ * One column's full computed facts — the single source both the
+ * `Database` interface's TS text and `contractMetadata`'s runtime name
+ * map render from (R2-G6 6.1's own condition ②: the two must come from
+ * one pass, never two independent ones that could drift). `typeNode`/
+ * `mode`/`notNullElements` are carried (not just `tsType`, the rendered
+ * string) because R2-G6's client needs the *structured* facts to
+ * reconstruct a real column for query compilation — the exact three
+ * fields `@hejbro/query`'s own `db/convert.ts` reads at runtime for row
+ * conversion (array/enum/interval branches, numeric-mode decoding, the
+ * array-element fail-fast guard) and nothing more (`primaryKey`/
+ * `unique`/`defaultValue` never affect query compilation or row
+ * conversion, so R2-G6 does not carry them — planner condition ④).
+ */
 type ColumnEntry = {
 	readonly sqlName: string;
 	readonly tsKey: string;
 	readonly tsType: string;
+	readonly typeNode: TypeNode;
+	readonly mode: NumericMode | null;
+	readonly notNullElements: boolean;
 	readonly notNull: boolean;
 	readonly alwaysGenerated: boolean;
 	readonly optional: boolean;
@@ -87,6 +105,9 @@ const buildColumnEntries = (
 			sqlName: column.name,
 			tsKey,
 			tsType: columnTsType(column.typeNode, mode, notNullElements, enumLookup),
+			typeNode: column.typeNode,
+			mode,
+			notNullElements,
 			notNull,
 			alwaysGenerated,
 			optional:
@@ -131,10 +152,19 @@ const buildUpdateInterface = (entries: ReadonlyArray<ColumnEntry>): string =>
 			.map((entry) => `readonly ${entry.tsKey}?: ${rowFieldType(entry)};`),
 	);
 
+/**
+ * One foreign key's full computed facts, target schema/name split out
+ * (not re-parsed from a combined identity string later) — the single
+ * source both `Relationships`' TS text and `contractMetadata`'s
+ * reconstructed `foreignKeys` render from (6.1's condition ②). Absent
+ * entirely for a foreign key pointing at a table the snapshot does not
+ * carry (5.9), the same rule for both renderers.
+ */
 type RelationshipEntry = {
 	readonly foreignKeyName: string;
 	readonly columns: ReadonlyArray<string>;
-	readonly referencedRelation: string;
+	readonly referencesSchema: string;
+	readonly referencesTable: string;
 	readonly referencedColumns: ReadonlyArray<string>;
 };
 
@@ -150,13 +180,20 @@ const buildRelationships = (
 	snapshot: Snapshot,
 ): ReadonlyArray<RelationshipEntry> =>
 	table.foreignKeys
-		.filter((fk) => snapshotHasTable(snapshot, fk.referencesTable))
-		.map((fk) => ({
-			foreignKeyName: fk.name,
-			columns: fk.columns,
-			referencedRelation: fk.referencesTable,
-			referencedColumns: fk.referencesColumns,
-		}));
+		.map((fk) => {
+			const target = findTableInSnapshot(snapshot, fk.referencesTable);
+			if (target === null) {
+				return null;
+			}
+			return {
+				foreignKeyName: fk.name,
+				columns: fk.columns,
+				referencesSchema: target.schema,
+				referencesTable: target.name,
+				referencedColumns: fk.referencesColumns,
+			};
+		})
+		.filter((entry): entry is RelationshipEntry => entry !== null);
 
 const renderRelationships = (
 	relationships: ReadonlyArray<RelationshipEntry>,
@@ -169,7 +206,7 @@ const renderRelationships = (
 			(relationship) => `\t\t\t{
 \t\t\t\treadonly foreignKeyName: ${JSON.stringify(relationship.foreignKeyName)};
 \t\t\t\treadonly columns: readonly [${relationship.columns.map((name) => JSON.stringify(name)).join(", ")}];
-\t\t\t\treadonly referencedRelation: ${JSON.stringify(relationship.referencedRelation)};
+\t\t\t\treadonly referencedRelation: ${JSON.stringify(`${relationship.referencesSchema}.${relationship.referencesTable}`)};
 \t\t\t\treadonly referencedColumns: readonly [${relationship.referencedColumns.map((name) => JSON.stringify(name)).join(", ")}];
 \t\t\t}`,
 		)
@@ -177,58 +214,108 @@ const renderRelationships = (
 	return `\t\treadonly Relationships: readonly [\n${entries},\n\t\t];`;
 };
 
-export type TableIdentity = {
-	readonly schemaName: string;
-	readonly tableName: string;
-};
-
 /**
- * A table's schema-qualified SQL identity plus its own TS-key→SQL-name
- * column map — the runtime name mapping `contractMetadata.tables` carries
- * (planner-confirmed): without it, a consumer's client would have to
- * read `schema.json` at runtime to build SQL at all, breaking the
- * "import one file" surface the contract exists to provide. Carries no
- * value-conversion policy (numeric mode, etc.) — additive once R2-G6
- * reveals what it actually needs.
+ * One table's full computation — {@link buildColumnEntries}'s and
+ * {@link buildRelationships}' own outputs, computed exactly once per
+ * table and handed to both the `Database` interface renderer and the
+ * `contractMetadata` renderer (6.1's condition ②, structural rather than
+ * conventional: there is no second call site either renderer could drift
+ * against).
  */
-export type TableNameMap = {
-	readonly schema: string;
-	readonly name: string;
-	readonly columns: { readonly [tsKey: string]: string };
+export type TableComputation = {
+	readonly table: TableSnapshot;
+	readonly entries: ReadonlyArray<ColumnEntry>;
+	readonly relationships: ReadonlyArray<RelationshipEntry>;
 };
 
-export const buildTableNameMap = (
-	table: TableSnapshot,
-	fact: ExportTableFact,
-): TableNameMap => ({
-	schema: table.schema,
-	name: table.name,
-	columns: Object.fromEntries(
-		table.columns.map((column) => [
-			fact.columns[column.name]?.key ?? column.name,
-			column.name,
-		]),
-	),
-});
-
-/** One `Database["Tables"][tableName]` entry's own source text, keyed by the table's bare SQL name (the mirror is flat — no per-schema nesting, proposal.md's own "the emitted mirror is flat"). */
-export const buildTableEntry = (
+export const computeTable = (
 	table: TableSnapshot,
 	fact: ExportTableFact,
 	snapshot: Snapshot,
 	enumLookup: EnumLookup,
-): string => {
-	const entries = buildColumnEntries(table, fact, snapshot, enumLookup);
-	return `\t${JSON.stringify(table.name)}: {
+): TableComputation => ({
+	table,
+	entries: buildColumnEntries(table, fact, snapshot, enumLookup),
+	relationships: buildRelationships(table, snapshot),
+});
+
+/** One `Database["Tables"][tableName]` entry's own source text, keyed by the table's bare SQL name (the mirror is flat — no per-schema nesting, proposal.md's own "the emitted mirror is flat"). */
+export const renderTableEntry = (
+	computation: TableComputation,
+): string => `\t${JSON.stringify(computation.table.name)}: {
 \t\treadonly Row: {
-${buildRowInterface(entries)}
+${buildRowInterface(computation.entries)}
 \t\t};
 \t\treadonly Insert: {
-${buildInsertInterface(entries)}
+${buildInsertInterface(computation.entries)}
 \t\t};
 \t\treadonly Update: {
-${buildUpdateInterface(entries)}
+${buildUpdateInterface(computation.entries)}
 \t\t};
-${renderRelationships(buildRelationships(table, snapshot))}
+${renderRelationships(computation.relationships)}
 \t};`;
+
+/**
+ * The runtime column fact `contractMetadata.tables[name].columns[tsKey]`
+ * carries — exactly the three facts `@hejbro/query`'s `db/convert.ts`
+ * reads at runtime (see {@link ColumnEntry}'s own doc comment), plus the
+ * SQL name every clause needs to render at all.
+ */
+export type ContractColumnMeta = {
+	readonly sqlName: string;
+	readonly typeNode: TypeNode;
+	readonly mode: NumericMode | null;
+	readonly notNullElements: boolean;
 };
+
+/** The runtime fact `contractMetadata.tables[name].foreignKeys` carries — enough to reconstruct a real `ForeignKeyDeclaration` for relation-following (`@hejbro/query`'s `db/related.ts`), and nothing DDL-only (`onDelete`/`onUpdate` never affect a read). */
+export type ContractForeignKeyMeta = {
+	readonly name: string;
+	readonly columns: ReadonlyArray<string>;
+	readonly referencesSchema: string;
+	readonly referencesTable: string;
+	readonly referencedColumns: ReadonlyArray<string>;
+};
+
+/**
+ * A table's schema-qualified SQL identity, its own TS-key→column-fact
+ * map, and its foreign keys — the runtime name mapping
+ * `contractMetadata.tables` carries (planner-confirmed, extended for
+ * R2-G6): without it, a client would have to read `schema.json` at
+ * runtime to build SQL at all, breaking the "import one file" surface
+ * the contract exists to provide. Carries no value-conversion policy
+ * beyond what query compilation and row conversion actually read
+ * (planner condition ④) — `primaryKey`/`unique`/`defaultValue` are
+ * deliberately absent.
+ */
+export type TableClientMeta = {
+	readonly schema: string;
+	readonly name: string;
+	readonly columns: { readonly [tsKey: string]: ContractColumnMeta };
+	readonly foreignKeys: ReadonlyArray<ContractForeignKeyMeta>;
+};
+
+export const buildTableClientMeta = (
+	computation: TableComputation,
+): TableClientMeta => ({
+	schema: computation.table.schema,
+	name: computation.table.name,
+	columns: Object.fromEntries(
+		computation.entries.map((entry) => [
+			entry.tsKey,
+			{
+				sqlName: entry.sqlName,
+				typeNode: entry.typeNode,
+				mode: entry.mode,
+				notNullElements: entry.notNullElements,
+			} satisfies ContractColumnMeta,
+		]),
+	),
+	foreignKeys: computation.relationships.map((relationship) => ({
+		name: relationship.foreignKeyName,
+		columns: relationship.columns,
+		referencesSchema: relationship.referencesSchema,
+		referencesTable: relationship.referencesTable,
+		referencedColumns: relationship.referencedColumns,
+	})),
+});
