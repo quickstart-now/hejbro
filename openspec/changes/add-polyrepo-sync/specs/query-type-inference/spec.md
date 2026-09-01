@@ -2,7 +2,11 @@
 
 ## REMOVED Requirements
 
-### Removed: No generated type artifacts
+### Requirement: No generated type artifacts
+**D106 correction**: header changed from `### Removed:` to
+`### Requirement:` — see `cli-commands/spec.md`'s own matching note;
+same tool behavior, same fix.
+
 **Ends, and is replaced by the requirement below.** It said query
 typing works purely at the type level from declaration values, and that
 the toolchain writes no on-disk type artifact for queries. The settled

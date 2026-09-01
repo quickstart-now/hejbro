@@ -2,10 +2,17 @@
 
 ## REMOVED Requirements
 
-### Removed: The database driver is an optional dependency
+### Requirement: The database driver is an optional dependency
 **Renamed.** The git channel depends on an external binary as well, and
 the requirement now covers both. Its content is re-stated below rather
 than changed in place, because a requirement is matched by its title.
+**D106 correction**: this REMOVED entry's own header must read
+`### Requirement: <title>`, exactly the tag ADDED/MODIFIED entries use
+— `openspec archive` matches a REMOVED entry against the shipped spec
+by that exact header shape, not by a `### Removed:` variant, and a
+mismatch here is not an error the tool surfaces: it silently drops zero
+requirements. Verified by observation, not assumed (see tasks.md's own
+closing note).
 
 ## MODIFIED Requirements
 

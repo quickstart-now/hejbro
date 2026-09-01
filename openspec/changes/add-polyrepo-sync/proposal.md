@@ -633,8 +633,13 @@ measured actuals of the completed groups rather than against intuition.
    commit's export, the lock, and the overwrite guard carried over
    intact. The consumer commits the contract file, the IR and the
    lock, so that checking, regenerating and type-checking all run from
-   committed files and only `--update` needs the network. The lock
-   records the IR format version alongside the commit. `est_frozen: 70m`
+   committed files, and only `vendor` (moving the pin) and the advisory
+   `outdated` reach the network. **Corrected (D106 N1): no separate
+   `--update` flag exists** — `vendor` itself is the command that
+   moves the pin, first run and every later one alike; this sentence
+   named a flag the command-surface section's own D106 M8 correction
+   had already folded away. The lock records the IR format version
+   alongside the commit. `est_frozen: 70m`
 5. **The emitted contract** — the `Database` interface, the metadata
    constant, the factory. The contract file also carries the point it
    was generated from — the migration head it corresponds to, or the

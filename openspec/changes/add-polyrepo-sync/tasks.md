@@ -1794,3 +1794,51 @@ only genuinely new scope this absorption added was the row-conversion
 assertion (`numeric`/`bigint`/`timestamptz` off a real driver) that
 6.11's own text named. That 27m, and the row-conversion scope it
 covers, is what now travels to #603.
+
+## Archive procedure — verified, one step you can now skip
+
+**D106 finding, PS-D106-FIX-02**: a reviewer ran `openspec archive
+add-polyrepo-sync -y` in an isolated worktree (reverted after) and
+observed `+ 24, ~ 1, - 0` — zero removals, so both REMOVED requirements
+(`cli-commands`'s "The database driver is an optional dependency" and
+`query-type-inference`'s "No generated type artifacts") would have
+survived archive alongside their own replacements, the corpus asserting
+both a prohibition and its opposite at once.
+
+**Root cause, confirmed by observation, not assumed**: this change's
+own delta files headed their REMOVED entries `### Removed: <title>`.
+`openspec archive` matches a REMOVED entry against the shipped spec by
+the exact header shape ADDED/MODIFIED entries use — `### Requirement:
+<title>` — and a `### Removed:` header simply never matches, with no
+error surfaced. Two minimal probes confirmed this, both in a detached
+`/tmp` worktree, never this one:
+1. Every *other* archived change in this repository's own history
+   heads its REMOVED entries `### Requirement: <title>`, and their
+   removals took (e.g. `align-spec-corpus`'s "The baseline banner
+   marker is machine-readable" — gone from the shipped `cli-commands`
+   spec today).
+2. Changing only this change's own two header lines from `### Removed:`
+   to `### Requirement:` (title text byte-identical either way) and
+   re-running the same archive produced `- 2 removed`, and the shipped
+   specs then carried the new requirement alone.
+
+`schema-export`/`schema-vendoring` are unaffected either way: both are
+first-time `create` capabilities (`openspec/specs/` carries neither
+today), so their own eleven `### Removed:` entries have no shipped
+baseline to remove from regardless of header shape — the archive tool's
+own dry-run output never lists a removal for either, before or after
+this fix.
+
+**Fix applied here, not deferred to the archive step**: both headers
+corrected in this change's own delta files
+(`cli-commands/spec.md`/`query-type-inference/spec.md`), each carrying
+a one-line note explaining why. This makes the manual-removal
+contingency unnecessary — `openspec archive add-polyrepo-sync -y` now
+removes both on its own — but the archiver should still **read the
+totals line before confirming**: expect `- 2` (not `- 0`), and expect
+`cli-commands`'s own "The database driver is an optional dependency"
+and `query-type-inference`'s own "No generated type artifacts" to be
+absent from `openspec/specs/` afterward. If either check fails, stop
+before committing the archive — something about this tool's own
+matching changed since this note was written, and that is worth a new
+finding, not a silent workaround.
