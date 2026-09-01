@@ -38,7 +38,15 @@ calibration this change was estimated against — `add-check-schema`, a
   lands and before group 9 starts** — not while a live witness is
   running, which would move the tree under a suite that takes minutes —
   and run every gate once afterwards, so a cross-change regression
-  surfaces before group 9 builds on top of it.
+  surfaces before group 9 builds on top of it. "Every gate" MUST
+  include `openspec validate --strict` by name — it is not in
+  `ci.yml`, and this change ran the merge-in gates without it: the
+  sibling's new scenarios had landed inside a requirement this
+  change's delta MODIFIES, and a MODIFIED block replaces the whole
+  requirement, so archiving would have dropped them silently
+  (repaired at close-out, `3b7af63d`). Archive-stage gates live
+  outside `ci.yml`; a gate list derived from `ci.yml` alone is
+  complete only for CI.
 - `pnpm build --force` before any subprocess measurement: this worktree
   carries a `dist` built from `94998be1`, which goes stale the moment
   the branch moves, and a stale `dist` reports on code nobody is
