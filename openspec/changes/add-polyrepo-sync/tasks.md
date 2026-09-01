@@ -1484,6 +1484,17 @@ count was cited.
       satisfy this repo's own convention would defeat the fixture's
       entire point; the rationale is recorded as a comment in the
       fixture itself, not just here.
+      **A known gap left open on purpose, reviewer-flagged**:
+      `vendor-code-ownership.test.ts` binds code ↔ ownership-map ↔ total
+      count together, but not to the delta requirement's own prose
+      count ("eleven") — the spec's own sentence can still drift alone
+      and this guard stays silent. Judgement: leave it. Parsing spec
+      prose to cross-check a number is brittle (it breaks on a wording
+      change, not just a real drift), and that particular failure mode
+      is already caught by human eyes — D106's spec-only review and its
+      own counting procedure. Code-side drift is stopped by the guard;
+      spec-side drift is stopped by review; neither path is
+      undefended.
 - [x] 7.2 `[design]` Settle how a run that must fail is told from one
       that may warn. This repository has no precedent for reading a CI
       environment variable, and its habit is an explicit flag first with
