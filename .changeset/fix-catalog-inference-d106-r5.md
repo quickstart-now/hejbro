@@ -20,6 +20,9 @@ still declared as a column), and the rest of the database is still
 read. A `UNIQUE` constraint on an omitted table is no longer announced
 as an approximation for an object the same report says was never
 inferred, and a database whose named schemas are all omitted for their
-own names now succeeds with the omission named, instead of refusing
-with "found no table, enum, or sequence to infer" -- a schema that in
-fact held one hejbro just couldn't name.
+own names now refuses with its own diagnostic -- naming the reason in
+the loss report first -- instead of the misleading "found no table,
+enum, or sequence to infer": that message is now reserved for schemas
+that genuinely hold nothing, never for one hejbro just couldn't name.
+Either way, nothing is written and the `--out` directory is never
+created.
