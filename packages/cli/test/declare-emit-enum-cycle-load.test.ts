@@ -357,3 +357,138 @@ describe("emitDeclarationFiles / D106 R2-B1 (CI-R2-02): a chorded three-schema c
 		await expect(importAsEntry(path)).resolves.toBeDefined();
 	});
 });
+
+describe("emitDeclarationFiles / D106 R2-B2 (CI-R2-02): a same-named table chained across three schemas loads without a duplicate declaration", () => {
+	/**
+	 * The reviewer's own repro (`evaluation.md`): three schemas each hold a
+	 * table named `users`, chained by foreign keys `a.users -> b.users ->
+	 * c.users` -- no cycle anywhere. The two-phase resolution this fix
+	 * replaces reserved an imported symbol's *first-pass* name but
+	 * rendered the owner's *second-pass* one: `b` reserved phase-1
+	 * `users` from `c` and became `users2`, then `a` reserved phase-1
+	 * `users` from `b` and *also* became `users2`, while its import line
+	 * rendered `b`'s phase-2 name (`users2`) -- `export const users2` and
+	 * `import { users2 }` in the same file, a `Duplicate declaration`
+	 * that never parses.
+	 */
+	const cUsers: TableSnapshot = {
+		schema: "c",
+		name: "users",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+		],
+		indexes: [],
+		foreignKeys: [],
+		primaryKeyName: "users_pkey",
+	};
+	const bUsers: TableSnapshot = {
+		schema: "b",
+		name: "users",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+			{ name: "c_id", typeNode: { typeName: "uuid" }, notNull: true },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: "users_c_id_fkey",
+				columns: ["c_id"],
+				referencesTable: "c.users",
+				referencesColumns: ["id"],
+			},
+		],
+		primaryKeyName: "users_pkey",
+	};
+	const aUsers: TableSnapshot = {
+		schema: "a",
+		name: "users",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+			{ name: "b_id", typeNode: { typeName: "uuid" }, notNull: true },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: "users_b_id_fkey",
+				columns: ["b_id"],
+				referencesTable: "b.users",
+				referencesColumns: ["id"],
+			},
+		],
+		primaryKeyName: "users_pkey",
+	};
+
+	it("loads cleanly starting from a.schema.ts", async () => {
+		const paths = writeFiles(resultFor([aUsers, bUsers, cUsers], []));
+		const path = paths.get("a");
+		if (path === undefined) {
+			throw new Error("expected an a.schema.ts to have been written");
+		}
+		await expect(importAsEntry(path)).resolves.toBeDefined();
+	});
+
+	it("loads cleanly starting from b.schema.ts", async () => {
+		const paths = writeFiles(resultFor([aUsers, bUsers, cUsers], []));
+		const path = paths.get("b");
+		if (path === undefined) {
+			throw new Error("expected a b.schema.ts to have been written");
+		}
+		await expect(importAsEntry(path)).resolves.toBeDefined();
+	});
+
+	it("loads cleanly starting from c.schema.ts", async () => {
+		const paths = writeFiles(resultFor([aUsers, bUsers, cUsers], []));
+		const path = paths.get("c");
+		if (path === undefined) {
+			throw new Error("expected a c.schema.ts to have been written");
+		}
+		await expect(importAsEntry(path)).resolves.toBeDefined();
+	});
+
+	it("aliases each import to the owning schema plus Pascal-cased symbol (a imports b's users as bUsers, b imports c's users as cUsers)", () => {
+		const files = emitDeclarationFiles(resultFor([aUsers, bUsers, cUsers], []));
+		const aFile = files.find((file) => file.schema === "a");
+		const bFile = files.find((file) => file.schema === "b");
+		if (aFile === undefined || bFile === undefined) {
+			throw new Error("expected a.schema.ts and b.schema.ts to be emitted");
+		}
+		expect(aFile.source).toContain(
+			'import { users as bUsers } from "./b.schema";',
+		);
+		expect(aFile.source).toContain("bUsers.id");
+		expect(bFile.source).toContain(
+			'import { users as cUsers } from "./c.schema";',
+		);
+		expect(bFile.source).toContain("cUsers.id");
+		// each file still declares its own table under its own bare name.
+		expect(aFile.source).toContain("export const users = table(");
+		expect(bFile.source).toContain("export const users = table(");
+	});
+
+	it("emits the same aliasing regardless of the tables' own input order (determinism pin)", () => {
+		const forward = emitDeclarationFiles(
+			resultFor([aUsers, bUsers, cUsers], []),
+		);
+		const reversed = emitDeclarationFiles(
+			resultFor([cUsers, bUsers, aUsers], []),
+		);
+		const bySchema = (files: ReturnType<typeof emitDeclarationFiles>) =>
+			new Map(files.map((file) => [file.schema, file.source] as const));
+		expect(bySchema(forward)).toEqual(bySchema(reversed));
+	});
+});

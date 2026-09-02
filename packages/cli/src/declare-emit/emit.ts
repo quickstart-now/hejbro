@@ -21,7 +21,11 @@ import {
 	sequencesInSnapshot,
 	tablesInSnapshot,
 } from "../contract/read-snapshot";
-import { resolveIdentifierKeys } from "../infer/column-keys";
+import {
+	capitalize,
+	nextFreeSuffix,
+	resolveIdentifierKeys,
+} from "../infer/column-keys";
 import type { InferCatalogResult } from "../infer/compose";
 import type { CatalogDescription } from "../infer/description";
 import { sqlRawCall } from "./expr-render";
@@ -1502,82 +1506,22 @@ export const emitDeclarationFiles = (
 		};
 	};
 
-	// Phase 1: each file's own names only, no cross-file knowledge yet --
-	// other files' imports are read from this result.
-	const phase1Plans = schemaNames.map((schemaName) =>
+	/**
+	 * D106 R2-B2: each file's own identifiers are resolved once, with no
+	 * cross-file knowledge at all -- a file's own name never depends on
+	 * what any other file decided, so there is nothing here that can go
+	 * stale. The two-phase scheme this replaces reserved an imported
+	 * symbol's *first-pass* name (`phase1ImportedNameFor`, since removed)
+	 * but rendered the owner's *second-pass* one; a file whose own name
+	 * shifted between passes -- because it, in turn, had reserved
+	 * something -- ended up importing the very name it gave its own
+	 * table (measured: a same-named table chained `a -> b -> c` across
+	 * three schemas made `a.schema.ts` declare `users2` while importing
+	 * `users2`, a `Duplicate declaration` that never parses).
+	 */
+	const filePlans = schemaNames.map((schemaName) =>
 		buildFilePlan(schemaName, (vocabulary) => vocabulary),
 	);
-	const phase1FileOfTable = new Map(
-		phase1Plans.flatMap((plan) =>
-			plan.schemaTables.map(
-				(table) => [tableIdentity(table.schema, table.name), plan] as const,
-			),
-		),
-	);
-	const phase1FileOfEnum = new Map(
-		phase1Plans.flatMap((plan) =>
-			plan.schemaEnums.map(
-				(row) => [enumIdentity(row.schema, row.name), plan] as const,
-			),
-		),
-	);
-
-	/** The phase-1 identifier a table/enum identity's own owning file assigned it, `null` when that owner is this same file (no import, so no name to reserve) or unknown. */
-	const phase1ImportedNameFor = (
-		identity: string,
-		ownerLookup: ReadonlyMap<string, FilePlan>,
-		namesLookup: (plan: FilePlan) => ReadonlyMap<string, string>,
-		thisFileBaseName: string,
-	): string | null => {
-		const owner = ownerLookup.get(identity);
-		if (owner === undefined || owner.fileBaseName === thisFileBaseName) {
-			return null;
-		}
-		return namesLookup(owner).get(identity) ?? null;
-	};
-
-	// Phase 2: reserve every name this file imports from another file's
-	// phase-1 result, alongside its own vocabulary, then re-resolve
-	// (CI-G2-R1-09: two schemas both naming a table `users`, one importing
-	// the other's, must not collide silently).
-	const filePlans = schemaNames.map((schemaName) => {
-		const phase1 = phase1Plans.find((plan) => plan.schemaName === schemaName);
-		const thisFileBaseName =
-			phase1?.fileBaseName ?? safeFileBaseName(schemaName);
-		const importedNames = (phase1?.schemaTables ?? []).flatMap((table) => [
-			...neededCrossFileTableReferences(
-				table,
-				classificationFor(table),
-			).flatMap((identity) =>
-				optionalEntry(
-					phase1ImportedNameFor(
-						identity,
-						phase1FileOfTable,
-						(plan) => plan.tableIdentifiers,
-						thisFileBaseName,
-					),
-					(name) => name,
-				),
-			),
-			...table.columns.flatMap((column) =>
-				enumIdentitiesIn(column.typeNode).flatMap((identity) =>
-					optionalEntry(
-						phase1ImportedNameFor(
-							identity,
-							phase1FileOfEnum,
-							(plan) => plan.enumIdentifiers,
-							thisFileBaseName,
-						),
-						(name) => name,
-					),
-				),
-			),
-		]);
-		return buildFilePlan(
-			schemaName,
-			(vocabulary) => new Set([...vocabulary, ...importedNames]),
-		);
-	});
 
 	const fileOfTable = new Map(
 		filePlans.flatMap((plan) =>
@@ -1615,17 +1559,175 @@ export const emitDeclarationFiles = (
 		);
 	};
 
-	const identifierForTable = (identity: string): string =>
-		fileOfTable.get(identity)?.tableIdentifiers.get(identity) ?? identity;
-	const identifierForEnum = (
-		schemaName: string,
-		enumNameValue: string,
+	/** A cross-file reference this file's own tables need, named by the owner's own (final, single-pass) identifier -- never a name this file has any say over. */
+	type CrossFileRef = {
+		readonly identity: string;
+		readonly ownerFileBaseName: string;
+		readonly ownerSchemaIdentifier: string;
+		readonly ownerName: string;
+	};
+
+	const crossFileRefOrNone = (
+		identity: string,
+		plan: FilePlan,
+		owner: FilePlan | undefined,
+		ownerName: string | undefined,
+	): ReadonlyArray<CrossFileRef> => {
+		if (
+			owner === undefined ||
+			ownerName === undefined ||
+			owner.fileBaseName === plan.fileBaseName
+		) {
+			return [];
+		}
+		return [
+			{
+				identity,
+				ownerFileBaseName: owner.fileBaseName,
+				ownerSchemaIdentifier: owner.schemaIdentifier,
+				ownerName,
+			},
+		];
+	};
+
+	/**
+	 * Every table/enum this file's own tables reach for outside this file
+	 * -- the same identity sources {@link renderTable} itself traverses
+	 * (`neededCrossFileTableReferences`, a column's own enum types minus
+	 * whichever are deferred to a local clone), deduped by identity since
+	 * more than one column or foreign key can name the same target.
+	 */
+	const crossFileRefsFor = (plan: FilePlan): ReadonlyArray<CrossFileRef> => {
+		const tableRefs = plan.schemaTables
+			.flatMap((table) =>
+				neededCrossFileTableReferences(table, classificationFor(table)),
+			)
+			.flatMap((identity) =>
+				crossFileRefOrNone(
+					identity,
+					plan,
+					fileOfTable.get(identity),
+					fileOfTable.get(identity)?.tableIdentifiers.get(identity),
+				),
+			);
+		const enumRefs = plan.schemaTables
+			.flatMap((table) =>
+				table.columns.flatMap((column) =>
+					enumIdentitiesIn(column.typeNode).filter(
+						(identity) =>
+							!mustDeferEnumReference(
+								table,
+								enumsByIdentity.get(identity)?.schema ?? table.schema,
+								identity,
+								mustDeferContext,
+							),
+					),
+				),
+			)
+			.flatMap((identity) =>
+				crossFileRefOrNone(
+					identity,
+					plan,
+					fileOfEnum.get(identity),
+					fileOfEnum.get(identity)?.enumIdentifiers.get(identity),
+				),
+			);
+		return [
+			...new Map(
+				[...tableRefs, ...enumRefs].map((ref) => [ref.identity, ref] as const),
+			).values(),
+		];
+	};
+
+	const compareRefOrderStrings = (a: string, b: string): number => {
+		if (a < b) {
+			return -1;
+		}
+		if (a > b) {
+			return 1;
+		}
+		return 0;
+	};
+
+	/** Deterministic alias-assignment order (owner file name, then the owner's own symbol name) -- never traversal order, so a different column/FK discovery order can't flip which import gets a plain name and which gets suffixed. */
+	const compareRefOrder = (a: CrossFileRef, b: CrossFileRef): number => {
+		if (a.ownerFileBaseName !== b.ownerFileBaseName) {
+			return compareRefOrderStrings(a.ownerFileBaseName, b.ownerFileBaseName);
+		}
+		return compareRefOrderStrings(a.ownerName, b.ownerName);
+	};
+
+	/**
+	 * D106 R2-B2's own alias rule: an imported symbol keeps the owner's
+	 * name unless this file already uses it (its own local namespace, or
+	 * an alias already chosen earlier in {@link compareRefOrder}'s
+	 * order); the first fallback is the owning schema's own identifier
+	 * joined with the symbol in Pascal case (`users` from schema `b`
+	 * becomes `bUsers`), and a further collision takes
+	 * {@link nextFreeSuffix} -- the same smallest-free-integer rule the
+	 * keys already use, not a second one.
+	 */
+	const aliasNameFor = (
+		ref: CrossFileRef,
+		usedNames: ReadonlySet<string>,
 	): string => {
-		const identity = enumIdentity(schemaName, enumNameValue);
-		return fileOfEnum.get(identity)?.enumIdentifiers.get(identity) ?? identity;
+		if (!usedNames.has(ref.ownerName)) {
+			return ref.ownerName;
+		}
+		const aliasBase = `${ref.ownerSchemaIdentifier}${capitalize(ref.ownerName)}`;
+		if (!usedNames.has(aliasBase)) {
+			return aliasBase;
+		}
+		return nextFreeSuffix(aliasBase, usedNames);
+	};
+
+	/** Every name this file's own declarations already occupy -- its schema/enum/table/handle/enum-clone identifiers plus the hejbro-barrel vocabulary it uses -- the starting `usedNames` an import alias must avoid. */
+	const localNamespaceOf = (plan: FilePlan): ReadonlySet<string> =>
+		new Set([
+			plan.schemaIdentifier,
+			...plan.enumIdentifiers.values(),
+			...plan.tableIdentifiers.values(),
+			...plan.handleIdentifiers.values(),
+			...plan.enumCloneIdentifiers.values(),
+			...plan.vocabulary,
+		]);
+
+	/** This file's own `identity -> name used in this file's own source` map -- the owner's bare name when nothing collides, an alias otherwise. */
+	const resolveAliasesFor = (plan: FilePlan): ReadonlyMap<string, string> => {
+		const orderedRefs = [...crossFileRefsFor(plan)].sort(compareRefOrder);
+		const resolved = orderedRefs.reduce<{
+			readonly usedNames: ReadonlySet<string>;
+			readonly aliasFor: ReadonlyMap<string, string>;
+		}>(
+			(state, ref) => {
+				const chosen = aliasNameFor(ref, state.usedNames);
+				return {
+					usedNames: new Set([...state.usedNames, chosen]),
+					aliasFor: new Map([...state.aliasFor, [ref.identity, chosen]]),
+				};
+			},
+			{ usedNames: localNamespaceOf(plan), aliasFor: new Map() },
+		);
+		return resolved.aliasFor;
 	};
 
 	return filePlans.map((plan) => {
+		const aliasFor = resolveAliasesFor(plan);
+		const identifierForTable = (identity: string): string =>
+			aliasFor.get(identity) ??
+			fileOfTable.get(identity)?.tableIdentifiers.get(identity) ??
+			identity;
+		const identifierForEnum = (
+			schemaNameArg: string,
+			enumNameValue: string,
+		): string => {
+			const identity = enumIdentity(schemaNameArg, enumNameValue);
+			return (
+				aliasFor.get(identity) ??
+				fileOfEnum.get(identity)?.enumIdentifiers.get(identity) ??
+				identity
+			);
+		};
 		const renderContext: TableRenderContext = {
 			schemaIdentifier: plan.schemaIdentifier,
 			identifierFor: identifierForTable,
@@ -1650,49 +1752,27 @@ export const emitDeclarationFiles = (
 			),
 		);
 
-		const referencedTableIdentities = plan.schemaTables.flatMap((table) =>
-			neededCrossFileTableReferences(table, classificationFor(table)),
+		/**
+		 * D106 R2-B2: each imported symbol renders as `ownerName` alone
+		 * when this file has no name clashing with it, or `ownerName as
+		 * <alias>` when {@link resolveAliasesFor} had to pick one --
+		 * `aliasFor` already carries every needed identity's chosen
+		 * display name (the same one {@link identifierForTable}/
+		 * {@link identifierForEnum} used to render this file's own
+		 * declarations above), so the two can never drift apart.
+		 */
+		const importedSymbolText = (ref: CrossFileRef): string => {
+			const chosen = aliasFor.get(ref.identity) ?? ref.ownerName;
+			if (chosen === ref.ownerName) {
+				return ref.ownerName;
+			}
+			return `${ref.ownerName} as ${chosen}`;
+		};
+		const importsByFile = crossFileRefsFor(plan).reduce(
+			(map, ref) =>
+				addToMultiMap(map, ref.ownerFileBaseName, importedSymbolText(ref)),
+			new Map<string, Set<string>>(),
 		);
-		/** D106 B1: a deferred enum reference (this table's own crossing is the back edge) never imports its target -- it declares a local clone instead, exactly like a handled FK never imports its target table. */
-		const referencedEnumIdentities = plan.schemaTables.flatMap((table) =>
-			table.columns.flatMap((column) =>
-				enumIdentitiesIn(column.typeNode).filter(
-					(identity) =>
-						!mustDeferEnumReference(
-							table,
-							enumsByIdentity.get(identity)?.schema ?? table.schema,
-							identity,
-							mustDeferContext,
-						),
-				),
-			),
-		);
-
-		const importsByFile = [
-			...referencedTableIdentities.map((identity) => ({
-				fileBaseName: fileOfTable.get(identity)?.fileBaseName,
-				identifier: fileOfTable.get(identity)?.tableIdentifiers.get(identity),
-			})),
-			...referencedEnumIdentities.map((identity) => ({
-				fileBaseName: fileOfEnum.get(identity)?.fileBaseName,
-				identifier: fileOfEnum.get(identity)?.enumIdentifiers.get(identity),
-			})),
-		]
-			.filter(
-				(
-					ref,
-				): ref is {
-					readonly fileBaseName: string;
-					readonly identifier: string;
-				} =>
-					ref.fileBaseName !== undefined &&
-					ref.identifier !== undefined &&
-					ref.fileBaseName !== plan.fileBaseName,
-			)
-			.reduce(
-				(map, ref) => addToMultiMap(map, ref.fileBaseName, ref.identifier),
-				new Map<string, Set<string>>(),
-			);
 
 		const crossFileImportLines = [...importsByFile.keys()]
 			.sort()

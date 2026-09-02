@@ -12,7 +12,8 @@ const LEADING_UNDERSCORES = /^_+/;
 const NON_ALPHANUMERIC_RUN = /[^a-z0-9]+/g;
 const STARTS_WITH_DIGIT = /^[0-9]/;
 
-const capitalize = (run: string): string => {
+/** Exported so `declare-emit/emit.ts` can build a cross-file import alias's own Pascal-cased half the same way a camelCase run is capitalized here (D106 R2-B2) -- one capitalization rule, not two. */
+export const capitalize = (run: string): string => {
 	if (run.length === 0) {
 		return run;
 	}
@@ -46,9 +47,11 @@ const baseTsKey = (sqlName: string): string => {
  * already in `assigned` (catalog-inference delta's collision rule).
  * Recursive rather than looping (no `for`/`while` in this codebase); it
  * terminates because a SQL name is unique within its table, so some
- * suffix is always free.
+ * suffix is always free. Exported so `declare-emit/emit.ts` can apply the
+ * same rule to a cross-file import alias that still collides after its
+ * first choice (D106 R2-B2) -- one suffix rule, not two.
  */
-const nextFreeSuffix = (
+export const nextFreeSuffix = (
 	baseKey: string,
 	assigned: ReadonlySet<string>,
 ): string => {
