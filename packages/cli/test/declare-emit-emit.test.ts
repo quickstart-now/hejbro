@@ -315,7 +315,7 @@ describe("emitDeclarationFiles / 2.1", () => {
 		expect(file.source).not.toContain(".references(() =>");
 	});
 
-	it("suffixes a local table when a same-named table is imported from another schema (CI-G2-R1-09: app.users / audit.users is an ordinary case)", () => {
+	it("aliases the import when a same-named table is imported from another schema, never renaming the local one (D106 R2-B2, CI-G2-R1-09: app.users / audit.users is an ordinary case)", () => {
 		const appUsers: TableSnapshot = {
 			schema: "app",
 			name: "users",
@@ -362,15 +362,18 @@ describe("emitDeclarationFiles / 2.1", () => {
 			throw new Error("expected one file per schema");
 		}
 
-		// app.users is not itself imported from anywhere, so it keeps the
-		// bare name; audit.users collides with the name audit's own file
-		// imports, so it -- the local one -- is the one suffixed.
+		// D106 R2-B2: each file's own local identifiers are resolved with
+		// no cross-file knowledge, so neither table is ever renamed --
+		// both keep the bare name "users" in their own file. The import
+		// that would otherwise collide is what gets aliased instead
+		// (owning schema's identifier + Pascal-cased symbol: "appUsers").
 		expect(appFile.source).toContain("export const users = table(");
-		expect(auditFile.source).toContain('import { users } from "./app.schema";');
-		expect(auditFile.source).toContain("export const users2 = table(");
-		expect(auditFile.source).not.toContain("export const users = table(");
+		expect(auditFile.source).toContain("export const users = table(");
 		expect(auditFile.source).toContain(
-			"references: { table: users, columns: [users.id] }",
+			'import { users as appUsers } from "./app.schema";',
+		);
+		expect(auditFile.source).toContain(
+			"references: { table: appUsers, columns: [appUsers.id] }",
 		);
 	});
 

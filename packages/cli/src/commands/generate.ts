@@ -10,6 +10,7 @@ import type {
 	Snapshot,
 } from "@hejbro/core";
 import {
+	deriveExistingTransitionSlug,
 	deriveSlug,
 	generateMigrations,
 	hejbroError,
@@ -17,7 +18,6 @@ import {
 	parseSnapshot,
 	renderSnapshot,
 	requiredKeysByKind,
-	sameJson,
 	throwHejbroError,
 } from "@hejbro/core";
 import { defineCommand } from "citty";
@@ -556,6 +556,33 @@ type WrittenMigration = {
 };
 
 /**
+ * D106 R3, J13: gated on the *run's* own `hasChanges`, not
+ * `migration.changes.length` -- measured, not assumed: a pure rename
+ * (`RenamePlan.renameStatements` only, no `KindChange` at all) already
+ * has `hasChanges: true` with an empty `changes` array
+ * (`engine/generate.ts`'s `runPipeline`, `changes.length > 0 ||
+ * plan.renameStatements.length > 0`), and `deriveSlug([])`'s own
+ * `"migration"` fallback already covered that case correctly before this
+ * round -- routing it into `deriveExistingTransitionSlug` instead threw
+ * (caught by running the existing rename suite, not by inspection: it
+ * looks for an existing-marker transition that isn't there). Only a run
+ * with `hasChanges: false` reaches `deriveExistingTransitionSlug` --
+ * exactly the one shape `deriveSlug` was never able to name, since an
+ * existing-table marker transition produces no `KindChange` at all by
+ * this change's own closed design.
+ */
+const slugFor = (
+	migration: GeneratedMigration,
+	previousSnapshot: Snapshot,
+	hasChanges: boolean,
+): string => {
+	if (hasChanges) {
+		return deriveSlug(migration.changes);
+	}
+	return deriveExistingTransitionSlug(previousSnapshot, migration.snapshot);
+};
+
+/**
  * [task 4.3/4.4/4.5, generalized for #610] One relative path + its own
  * SQL (banner included -- `generateMigrations` already assembled it) per
  * migration the run needs -- writing nothing itself (the caller still owns
@@ -566,9 +593,12 @@ const buildWrittenMigrations = (
 	migrationsDir: string,
 	firstFileNameOptions: MigrationFileNameOptions,
 	nameOverride: string | undefined,
+	previousSnapshot: Snapshot,
+	hasChanges: boolean,
 ): ReadonlyArray<WrittenMigration> =>
 	migrations.map((migration, index) => {
-		const slug = nameOverride ?? deriveSlug(migration.changes);
+		const slug =
+			nameOverride ?? slugFor(migration, previousSnapshot, hasChanges);
 		const fileName = migrationFileName({
 			...fileNameOptionsForIndex(firstFileNameOptions, index),
 			slug,
@@ -590,10 +620,42 @@ const buildWrittenMigrations = (
  * `create`, and "already exists" is a confusing way to learn that the file
  * was never meant to be run.
  */
+/**
+ * D106 R3, J13: the one written migration this run's own no-DDL branch
+ * produces carries no statements -- the report SHALL name both the file
+ * and that fact (the live "The migration chain on disk is verifiable"
+ * requirement, whose own delta addition this satisfies), or a reader
+ * would have no way to tell it apart from an ordinary migration without
+ * opening the file. `statementCount === 0` is this run's own signal
+ * (mirrors `finalPass.hasChanges` at the call site) -- an ordinary run's
+ * migrations always carry at least one statement.
+ */
+const noStatementsLine = (
+	writtenMigrations: ReadonlyArray<WrittenMigration>,
+): ReadonlyArray<string> => {
+	const [only] = writtenMigrations;
+	if (writtenMigrations.length !== 1 || only === undefined) {
+		return [];
+	}
+	return [`${only.relativePath} carries no statements.`];
+};
+
+/** `[]` when the run had real statements to write -- the guard clause `noStatementsLine`'s own call site would otherwise need as a ternary. */
+const noStatementsLineIfEmpty = (
+	writtenMigrations: ReadonlyArray<WrittenMigration>,
+	hasStatements: boolean,
+): ReadonlyArray<string> => {
+	if (hasStatements) {
+		return [];
+	}
+	return noStatementsLine(writtenMigrations);
+};
+
 const reportHead = (
 	mode: GenerateMode,
 	declarationCount: number,
 	writtenMigrations: ReadonlyArray<WrittenMigration>,
+	hasStatements: boolean,
 ): ReadonlyArray<string> => {
 	if (mode === "baseline") {
 		const migrationRelativePath = writtenMigrations[0]?.relativePath ?? "";
@@ -610,6 +672,7 @@ const reportHead = (
 		"hejbro generate",
 		`loaded ${declarationCount} declarations`,
 		...writtenMigrations.map((written) => `wrote ${written.relativePath}`),
+		...noStatementsLineIfEmpty(writtenMigrations, hasStatements),
 	];
 };
 
@@ -723,44 +786,68 @@ export const runGenerate = async (
 			};
 			if (!firstPass.hasChanges) {
 				if (mode === "baseline") {
-					throwBaselineNothingToAdopt(config.entry);
-				}
-				// D106 R2, R2-B2: `hasChanges` only tracks whether there is DDL
-				// to emit -- an existing-table marker change (handover,
-				// adoption, rename) can differ `firstPass.snapshot` from
-				// `previousSnapshot` with no statement at all. The old
-				// `hasChanges`-only gate treated that as "nothing to persist",
-				// so the marker never reached disk and a later run diffed
-				// against the stale, pre-handover snapshot (evaluation.md
-				// R2-B2 consequence 2 -- the drops it had already silenced
-				// coming back one run later). This snapshot-identity check is
-				// this fix's own mutant target.
-				const snapshotUnchanged = sameJson(
-					firstPass.snapshot.objects,
-					previousSnapshot.objects,
-				);
-				if (!snapshotUnchanged) {
+					if (declarations.length === 0) {
+						throwBaselineNothingToAdopt(config.entry);
+					}
+					// D106 R3, NB6: `throwBaselineNothingToAdopt`'s own premise
+					// (every non-empty declaration set fans out to at least one
+					// `create` against baseline's always-empty `previousSnapshot`)
+					// was true before #605 and false after it -- an
+					// `existingTable()`-only project loads real declarations
+					// (`declarations.length > 0`) that still diff to nothing,
+					// since an existing declaration is never DDL. There is
+					// nothing to *register*: no `create` statement was ever
+					// going to exist for `hejbro migrate` to mark as applied.
+					// `assertBaselineIsFirst` already guarantees `previousSnapshot`
+					// is empty here, so `firstPass.snapshot` (which carries at
+					// least one `table:` entry, marked existing, for every
+					// declared `existingTable()`) is guaranteed to differ from
+					// it -- this branch always has a snapshot worth writing,
+					// unlike the shared `snapshotUnchanged` check below.
 					writeFileSync(
 						join(cwd, config.snapshotPath),
 						renderSnapshot(firstPass.snapshot),
 					);
+					if (exportEnabled) {
+						writeExportArtifact(firstPass.snapshot);
+					}
+					return {
+						exitCode: 0,
+						stdout: [
+							"hejbro baseline",
+							`loaded ${declarations.length} declarations`,
+							"",
+							"No managed objects were declared -- only existingTable() declarations, which hejbro never migrates or registers.",
+							"The snapshot records them as existing. Next: run `hejbro check` to confirm your declarations match the live schema.",
+						],
+						stderr: null,
+					};
 				}
-				if (exportEnabled) {
-					// `firstPass.snapshot`, not `previousSnapshot`: the export
-					// must describe the same state generate just settled on, or
-					// the export's `Tables` entry and any FK relation onto a
-					// table whose only change was its existing marker silently
-					// disagree with what generate itself just wrote
-					// (evaluation.md R2-B2 consequence 3). Identical content to
-					// `previousSnapshot` when nothing actually differed, so this
-					// is a no-op for that case.
-					writeExportArtifact(firstPass.snapshot);
+				// D106 R2, R2-B2 / R3, R3-B1+J14: `hasChanges` only tracks
+				// whether there is DDL to emit -- an existing-table marker
+				// change (handover, adoption, rename) can differ
+				// `firstPass.snapshot` from `previousSnapshot` with no
+				// statement at all. A truly unchanged snapshot
+				// (`!firstPass.snapshotChanged`, the one fact the core result
+				// itself states rather than this command re-deriving it) is
+				// the one case this run has nothing at all to write; anything
+				// else falls through to the ordinary write-files path below,
+				// which now handles a no-DDL, snapshot-changed run identically
+				// to one with real changes -- `generateMigrations`' own R3-B1
+				// branch already gives `firstPass.migrations` exactly one
+				// zero-statement entry for it, so there is no separate write
+				// here to keep in sync with that path. This snapshot-identity
+				// check is this fix's own mutant target.
+				if (!firstPass.snapshotChanged) {
+					if (exportEnabled) {
+						writeExportArtifact(firstPass.snapshot);
+					}
+					return {
+						exitCode: 0,
+						stdout: [noMigrationReportLine(true)],
+						stderr: null,
+					};
 				}
-				return {
-					exitCode: 0,
-					stdout: [noMigrationReportLine(snapshotUnchanged)],
-					stderr: null,
-				};
 			}
 
 			const migrationsDirPath = join(cwd, config.migrationsDir);
@@ -791,13 +878,17 @@ export const runGenerate = async (
 					slug: "",
 				},
 				parsedArgv.name,
+				previousSnapshot,
+				finalPass.hasChanges,
 			);
-			// `finalPass.migrations` is never `[]` here: `firstPass.hasChanges`
-			// is already `true`, and `finalPass` runs the identical pipeline
-			// (same `declarations`/`previousSnapshot`/`renames`/
+			// `finalPass.migrations` is never `[]` here: either
+			// `firstPass.hasChanges` is already `true`, or the snapshot
+			// genuinely differs (the branch above only falls through, never
+			// returning, in that case) -- and `finalPass` runs the identical
+			// pipeline (same `declarations`/`previousSnapshot`/`renames`/
 			// `confirmedDrops`) with only banner metadata added -- metadata
 			// `runPipeline`/`planSplit` never read -- so it diffs to the same
-			// non-empty `migrations` `firstPass` already proved.
+			// non-empty `migrations` `firstPass` already proved, DDL or not.
 			const finalSnapshot = finalPass.migrations.at(-1)?.snapshot as Snapshot;
 
 			mkdirSync(migrationsDirPath, { recursive: true });
@@ -819,7 +910,12 @@ export const runGenerate = async (
 			return {
 				exitCode: 0,
 				stdout: [
-					...reportHead(mode, declarations.length, writtenMigrations),
+					...reportHead(
+						mode,
+						declarations.length,
+						writtenMigrations,
+						finalPass.hasChanges,
+					),
 					...warningSummaryLines(finalPass.warnings),
 					...writtenMigrations.map(
 						(written) => written.sql.split("\n\n")[0] ?? "",

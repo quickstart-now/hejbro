@@ -390,6 +390,7 @@ export type {
 	MigrationPrefixStrategy,
 } from "./sql/migration-file";
 export {
+	deriveExistingTransitionSlug,
 	deriveSlug,
 	findDuplicateVersionGroups,
 	migrationFileName,
