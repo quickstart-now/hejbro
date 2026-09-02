@@ -10,14 +10,24 @@ numeric mode**, **whether an array column's elements are constrained
 non-null**, **a column's TypeScript key**, **the name each declaration
 was exported under** — for tables, because a reverse relation key is
 that name, and for functions, because a typed call is keyed by it —
-**a function's argument keys and return shape** — the TypeScript key
-each argument was declared under, in declaration order against the
-argument's SQL name, and whether the return is a scalar type or a table
-— and **the role names the schema declares in its grants and
-policies**. A function's argument keys are carried because a typed call
-names its arguments by them and the snapshot records only the SQL
-names; the return shape is carried because the consumer's call must
-know whether to expect a value or rows.
+**a function's arguments and return shape** — per argument, in
+declaration order, the TypeScript key it was declared under, its SQL
+name, its declared type, its numeric mode and whether its array
+elements are constrained non-null; and for the return, whether it is a
+scalar, with its declared type and numeric mode, or a table, named by
+that table's schema and name — and **the role names the schema declares
+in its grants and policies**. An argument carries the same four facts a
+column does, plus its key, because for the purpose of typing a call an
+argument *is* a column: the caller's value is checked against exactly
+the type a column of that declaration would read back as. The keys are
+carried because a typed call names its arguments by them and the
+snapshot records only the SQL names; the types are carried because the
+snapshot renders an argument's type as SQL text, and recovering a
+declared type from that text would mean parsing SQL to rebuild
+something the declaration already had; and the numeric mode and element
+nullability are carried because they are declaration-time choices that
+no SQL text holds at all. The return shape is carried because the
+consumer's call must know whether to expect a value or rows.
 
 Every fact that belongs to a column SHALL be carried against that
 column's SQL name, never against its position. The snapshot records
@@ -68,6 +78,15 @@ exist in a consuming repository at all.
 - **THEN** each argument's key is recovered against that argument's SQL
   name, in declaration order, and the return is marked scalar or table
   as declared
+
+#### Scenario: An argument's declared type survives with its choices
+- **WHEN** a function declaring an argument with a non-default numeric
+  mode, and an array argument whose elements are constrained non-null,
+  is exported and read back
+- **THEN** each argument's declared type, numeric mode and element
+  nullability are recovered as declared, and a scalar return's declared
+  type and numeric mode with them — so a consumer types a call exactly
+  as the declaring repository does, without reading SQL text
 
 #### Scenario: A brand is not among the carried facts
 - **WHEN** a schema declaring a `$type` brand is exported

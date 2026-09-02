@@ -27,10 +27,13 @@ export-validation test, this change's own `specs/schema-export/spec.md`
       sqlName: string }>` in declaration order and `returns: { kind:
       "scalar" } | { kind: "table"; schemaName: string; tableName: string
       } | null`. A table return carries the SQL identity, never the
-      returned table's export name — that fact already rides in
-      `tables[]`, and the contract emitter joins on schema and name,
-      dropping an entry whose table the export does not carry (the rule
-      `computeTables` already applies to a fact with no snapshot node).
+      returned table's export name — and the SQL identity is what the
+      emitter actually needs: `Database["Tables"]` is keyed by the bare
+      SQL table name (`renderTableEntry`), so a return type names that
+      key directly and no join to an export name happens at all. A
+      function whose returned table the contract does not emit is
+      dropped rather than guessed at, the rule `computeTables` already
+      applies to a fact with no snapshot node.
       `null` is what a trigger-synthesized function's return reads as: it
       is neither scalar nor table, and the delta's prose says so in the
       same task. Additive; `manifest`/description format version
@@ -65,6 +68,31 @@ export-validation test, this change's own `specs/schema-export/spec.md`
       (scalar, table, `null`) are fixtures, not one. Failing test: the
       vendor export-validation test — "keeps a function's carried
       facts".
+
+- [x] 1.4 (~12m) The carried facts are enough to type a call. Found
+      while designing group 2, from both sides at once: the snapshot
+      renders a function argument's type as **SQL text**
+      (`function-kind.ts`, `renders type: renderTypeNode(...)`), while a
+      table column keeps a structured `typeNode` — so nothing in the
+      contract's reach can map an argument to a TypeScript type, and no
+      reverse parser exists anywhere in `packages/` (searched by name,
+      zero hits). Worse, core's own `resolveArgs` **drops** the
+      builder's `mode` and `notNullElements`, so the choice is not even
+      in the live declaration to be carried. The measure of what must be
+      carried is the owning repository's own type: `db.fn`'s arguments
+      are `FnArgsInput = { [K]: ColumnTsType<TArgs[K]> }`, a column's
+      read type, which honours numeric mode and element nullability — a
+      consumer types the same call only with the same facts. A scalar
+      return needs `typeNode` and `mode` only, since core rejects
+      `.notNullElements()` on a return, so an array return is typed with
+      nullable elements. Path: core keeps them on the resolved argument
+      → `description.ts` carries them → `validate-export.ts` admits them
+      → tests. Failing tests, one per layer: `define-function.test.ts` —
+      "keeps an argument's declared mode and element nullability";
+      `export-facts.test.ts` — "carries an argument's declared type and
+      choices"; the vendor export-validation test — the union's new
+      members, including which omissions read as *dropped* and which as
+      *refused* (1.3's own two directions).
 
 ## 2. The contract's Functions section (#587)
 Files: `packages/cli/src/contract/functions.ts` (new), `packages/cli/src/
@@ -106,7 +134,9 @@ polyrepo}.md` (measure the file name), `.changeset/*.md`
       two-repository witness gains the two calls (red before G2/G3 land:
       no `fn`).
 - [ ] 3.3 (~5m) Skill sentences (the contract now carries functions; call
-      them through `fn`), `minor` changeset, ledger rows.
+      them through `fn` — and say that `Functions` is keyed by export
+      name while `Tables` is keyed by SQL name, since a reader who meets
+      one rule will assume the other), `minor` changeset, ledger rows.
 
 ## Verification (definition of done, not a task)
 `openspec validate emit-typed-functions --strict`; `openspec show

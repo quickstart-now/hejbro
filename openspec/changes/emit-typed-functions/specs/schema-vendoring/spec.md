@@ -5,7 +5,10 @@
 ### Requirement: The contract carries a typed function surface
 A vendored contract SHALL emit, under its `Functions` section, one entry
 per function the export carries an export name for — keyed by that
-export name — with the argument object type (the declared TypeScript
+export name, while `Tables` stays keyed by SQL name as it already
+ships, because a function is called the way the declaring repository
+calls it and a function's SQL name is frequently not the name anyone
+wrote — with the argument object type (the declared TypeScript
 keys, each typed as the declared argument type would be read) and the
 result type (the mapped scalar type, or the rows of the returned table,
 with the same numeric-mode and element-nullability rules the table
