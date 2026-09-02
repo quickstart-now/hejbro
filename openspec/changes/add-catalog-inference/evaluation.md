@@ -765,3 +765,61 @@ observer is weaker than it looks.
 - Loaded an emitted file set's exports and ran `generateMigration` against an empty snapshot in-process: one `create type` for a cloned enum (the clone is unexported, so `collectDeclarations` never sees it), every table and both foreign keys — and the `_fk`/`_fkey` divergence R3-B3 names.
 - `node scripts/check-diagnostic-xref.mjs` and `node scripts/check-bans.mjs` both pass.
 - Docker-gated `*.integration.test.ts` were not run (`live-witness`, `declare-emit.integration`, `declare-emit-roundtrip.integration`, `infer-catalog-read.integration`), so the live "generate against empty matches the database" claim is read, not executed — R3-B3 is what that reading found. `pnpm build`/`pnpm install`/full-workspace gates were not run.
+
+## Round 3 disposition
+
+All seven accepted; none rebutted. Three were code defects reachable by
+exotic-but-legal names, one was a design gap the DSL had left open since
+before this change, and three were documentation, a stale comment and a
+test that could not see what it claimed to.
+
+- **R3-B1 — a report line could end the header comment.** The escape
+  lives at the header seam, where the reviewer said it belonged: a
+  comment-ending pair inside any report line is written with a backslash
+  between the two characters, and the header says so in a line that
+  appears only when something was escaped. The first attempt inserted a
+  zero-width space instead; that was rejected here — a file the
+  repository now owns should not carry invisible characters.
+- **R3-B2 — a suffix could take a base key still to come.** The
+  collision resolver now knows every base key the run will claim before
+  it hands out a suffix, so an exotic sibling can no longer cost an
+  ordinary column its own key. Both physical orders the reviewer drove
+  are pinned, and so is the report line that used to call that column
+  undeclarable when it was nothing of the sort.
+- **R3-B3 — a foreign key's catalog name was dropped.** The DSL now has
+  the name slot an index and a check already had (`table-declaration`
+  delta), the reading carries the real `conname` — it was being matched
+  on and then discarded in `infer/adapter.ts`, one layer earlier than
+  the report placed it — and the emitter writes the name only where it
+  differs from the derived one, so a database hejbro created still emits
+  byte-identical starters. A name the DSL cannot express falls back to
+  the derived one and is reported as an approximation. `isSqlName` was
+  *not* added to core's public surface for that check: the CLI catches
+  `assertSqlName` instead, keeping the rule in one place without
+  widening the surface. `deriveForeignKeyName` is exported, because the
+  alternative was for the CLI to restate the `<table>_<columns>_fk`
+  format as a string — public surface, but tooling's, not the user's
+  vocabulary, which is why the skill's cheatsheet gains only `name?`.
+- **A real regression, caught by the sweep rather than by a gate.**
+  Adding `name` to `ForeignKeyDeclaration` broke `@hejbro/query`'s own
+  `synthesizeForeignKey`, which builds that declaration itself — a
+  compile error in a published package. It survived every check this
+  round ran because those runs were filtered (`--filter=hejbro`,
+  `--filter=@hejbro/core`) and `pnpm test` cannot see a type error at
+  all. The earlier reading of the failed gate as "expectation debt, not
+  a regression" was therefore only half right, and the whole-workspace
+  `check-types` that found it is now the rule. A second reader was found
+  the same way and is worth naming separately, because the sweep's own
+  pattern could not have found it: `exports.test.ts` (#471) walks every
+  runtime value `@hejbro/core` exports and fails unless each is
+  classified as vocabulary or engine, so the two new exports failed on
+  their *names*, not on their shape. Both are engine — a schema author
+  never types them — which is the same answer the skill question got.
+- **R3-N1, R3-N2, R3-N3, R3-N4 — closed.** The skill quotes `pull`'s
+  actual last line; the destination refusal no longer offers `pull` a
+  `--force` it does not have (the guard is unchanged, only its remedy
+  text); the two comments describing the removed two-phase scheme are
+  gone along with the vestigial `reserved` wrapper the second one
+  explained; and the import-cycle assertion is keyed by file base name,
+  so a schema whose name folds (`a.b` → `a_b`) no longer makes the graph
+  read as empty. That last one had been passing vacuously.
