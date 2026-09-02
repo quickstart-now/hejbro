@@ -4,6 +4,11 @@ import { throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
+import {
+	enumsInSnapshot,
+	sequencesInSnapshot,
+	tablesInSnapshot,
+} from "../contract/read-snapshot";
 import type { DeclareEmitFile } from "../declare-emit/emit";
 import { emitDeclarationFiles } from "../declare-emit/emit";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
@@ -83,13 +88,22 @@ const throwMissingOut = (): never =>
 		'hejbro import needs "--out" to name the directory it writes starter declaration files into, and it was not given. Next: pass --out <directory>, then rerun `hejbro import`.',
 	);
 
-const INFERRED_OBJECT_PREFIXES = ["table:", "enum:", "sequence:"];
-
-/** Whether `result` infers anything at all besides the schemas themselves -- a run over schemas that hold no table, enum, or sequence would otherwise write files declaring only an empty `schema()`. */
-const hasInferredObjects = (result: InferCatalogResult): boolean =>
-	Object.keys(result.snapshot.objects).some((key) =>
-		INFERRED_OBJECT_PREFIXES.some((prefix) => key.startsWith(prefix)),
-	);
+/**
+ * The set of schema names carrying at least one inferred table, enum or
+ * sequence -- read from each object's own `.schema` field (`tablesInSnapshot`/
+ * `enumsInSnapshot`/`sequencesInSnapshot`, `contract/read-snapshot.ts`),
+ * never by splitting a snapshot key string: a schema name can itself
+ * contain a `.` (D106 N6's own fixture, `"a.b"`), so `"table:a.b.widgets"`
+ * cannot be split back into schema/table reliably by punctuation alone.
+ */
+const schemasWithInferredObjects = (
+	result: InferCatalogResult,
+): ReadonlySet<string> =>
+	new Set([
+		...tablesInSnapshot(result.snapshot).map((t) => t.schema),
+		...enumsInSnapshot(result.snapshot).map((e) => e.schema),
+		...sequencesInSnapshot(result.snapshot).map((s) => s.schema),
+	]);
 
 const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
 	throwHejbroError(
@@ -97,8 +111,82 @@ const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
 		`hejbro import found no table, enum, or sequence to infer in schema(s) ${schemas.join(", ")}. Next: confirm the schema name(s) are correct and that the database holds objects in them, then rerun \`hejbro import\`.`,
 	);
 
+/**
+ * D106 N7: when *some* (not all) named schemas hold nothing, `import`
+ * used to write files for the ones that do and say nothing at all about
+ * the ones that don't -- neither a file nor a diagnostic named the
+ * gap. One line per empty schema, printed alongside the real loss
+ * report; the all-empty case is unchanged (`throwNothingToInfer` above
+ * still refuses outright, before any file is written).
+ */
+const emptySchemaLines = (
+	result: InferCatalogResult,
+	schemas: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	const withObjects = schemasWithInferredObjects(result);
+	return schemas
+		.filter((schemaName) => !withObjects.has(schemaName))
+		.map(
+			(schemaName) =>
+				`Not inferred: nothing to infer in schema "${schemaName}".`,
+		);
+};
+
 const targetPath = (out: string, file: DeclareEmitFile): string =>
 	join(out, `${file.fileBaseName}.schema.ts`);
+
+/**
+ * Groups planned files by the on-disk path they would write to, compared
+ * case-insensitively (D106 N6: `safeFileBaseName` folds every character
+ * outside `[A-Za-z0-9_-]` to `_`, so schemas like `"a.b"` and `"a b"`
+ * both become `a_b`, and a case-insensitive filesystem -- macOS's own
+ * default -- also folds `"Users"`/`"users"`). Same `.reduce()`-into-`Map`
+ * shape `declare-emit/emit.ts`'s own `groupBySchema` uses.
+ */
+const groupByPlannedPath = (
+	out: string,
+	files: ReadonlyArray<DeclareEmitFile>,
+): ReadonlyMap<string, ReadonlyArray<DeclareEmitFile>> =>
+	files.reduce((map, file) => {
+		const key = targetPath(out, file).toLowerCase();
+		const existing = map.get(key) ?? [];
+		map.set(key, [...existing, file]);
+		return map;
+	}, new Map<string, ReadonlyArray<DeclareEmitFile>>());
+
+const describeCollisionGroup = (
+	out: string,
+	group: ReadonlyArray<DeclareEmitFile>,
+): string =>
+	group
+		.map((file) => `"${file.schema}" -> "${targetPath(out, file)}"`)
+		.join(", ");
+
+/**
+ * Refuses before any file is written if two or more schemas plan to
+ * write the same on-disk path (D106 N6) -- without this,
+ * `throwIfAnyFileExists` only ever checks a prospective path against
+ * disk, never against the *other* prospective paths in the same run, so
+ * the second schema's write would silently overwrite the first's.
+ */
+const throwIfPlannedFilesCollide = (
+	out: string,
+	files: ReadonlyArray<DeclareEmitFile>,
+): void => {
+	const collisions = [...groupByPlannedPath(out, files).values()].filter(
+		(group) => group.length > 1,
+	);
+	if (collisions.length === 0) {
+		return;
+	}
+	const described = collisions
+		.map((group) => describeCollisionGroup(out, group))
+		.join("; ");
+	throwHejbroError(
+		"import-destination-collision",
+		`hejbro import would write more than one schema's starter file to the same path: ${described}. Next: these schema names differ only in characters a file name (or a case-insensitive filesystem) can't tell apart -- rename one of the database schemas, then rerun \`hejbro import\`.`,
+	);
+};
 
 /** Refuse-before-write (spec: "import never overwrites"): every prospective file is checked against the real, resolved `outDir` before any of them is written; `out` (the raw `--out` value) is only ever used for the report's own display text. */
 const throwIfAnyFileExists = (
@@ -193,15 +281,20 @@ export const runImport = async (
 					schemas,
 					command: "import",
 				});
-				if (!hasInferredObjects(result)) {
+				if (schemasWithInferredObjects(result).size === 0) {
 					throwNothingToInfer(schemas);
 				}
 				const files = emitDeclarationFiles(result);
+				throwIfPlannedFilesCollide(out, files);
 				throwIfAnyFileExists(out, outDir, files);
 				const created = writeFiles(outDir, out, files);
 				return {
 					exitCode: 0,
-					stdout: [...created, ...result.lossReport],
+					stdout: [
+						...created,
+						...result.lossReport,
+						...emptySchemaLines(result, schemas),
+					],
 					stderr: null,
 				};
 			},
