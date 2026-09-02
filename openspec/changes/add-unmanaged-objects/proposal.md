@@ -70,9 +70,10 @@ tables' metadata goes.
   `contract/tables.ts`/`emit.ts`, `check/compare.ts`/`inventory.ts`,
   `commands/{reset,raise}` (skip), tests, the two-repository witness.
 - `packages/query`: `client/synthesize.ts` (marker), relations.
-- `packages/supabase`: `authUsers` becomes exportable as a declaration
-  (no change to the preset's reserved-schema validator — it exempts
-  existing tables already).
+- `packages/supabase`/`packages/nile`: `authUsers` becomes exportable as
+  a declaration; the presets' validators exempt unmanaged declarations
+  explicitly — the exemption used to rest on the retired refusal making
+  them unreachable.
 - Snapshot format: an optional field; older readers ignore it (D33
   compact rule). Export/description format: additive fields, same
   version.

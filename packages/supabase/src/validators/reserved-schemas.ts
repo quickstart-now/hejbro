@@ -1,6 +1,11 @@
 import type { Diagnostic, Validator } from "@hejbro/core";
 import { diagnostic } from "@hejbro/core";
-import { declaredAtOf, schemaOf } from "./schema-of";
+import {
+	declaredAtOf,
+	isManagedTableDeclaration,
+	isTableDeclaration,
+	schemaOf,
+} from "./schema-of";
 
 /** The Postgres schemas Supabase owns and manages — hejbro must never create or alter objects in them (D38). */
 export const reservedSchemas: ReadonlyArray<string> = [
@@ -15,12 +20,21 @@ const reservedSchemaMessage = (schemaName: string): string =>
 /**
  * Hard-errors on any managed declaration (schema, table, view, function,
  * trigger, grant, RLS/policy) targeting a reserved schema (D38).
- * `existingTable()` references are exempt by construction — they never
- * enter `generateMigration`'s normalized declaration list (D41's
- * `existing-table-declared` hard error rejects them earlier).
+ * `existingTable()` references are exempt (D38/D41): this judges DDL
+ * hejbro would create or alter, and an unmanaged table's is never run
+ * (add-unmanaged-objects, J6-2 — before that change the exemption held
+ * structurally, because `existingTable()` never reached this validator's
+ * `declarations` at all; the guard that made that true is retired, so the
+ * exemption moves here, explicitly).
  */
 export const reservedSchemaValidator: Validator = (_snapshot, declarations) =>
 	declarations.flatMap((declaration): ReadonlyArray<Diagnostic> => {
+		if (
+			isTableDeclaration(declaration) &&
+			!isManagedTableDeclaration(declaration)
+		) {
+			return [];
+		}
 		const schemaName = schemaOf(declaration);
 		if (schemaName === null || !reservedSchemas.includes(schemaName)) {
 			return [];

@@ -19,6 +19,9 @@ A managed declaration replaced by an unmanaged one, or the reverse,
 SHALL emit nothing — the table stands as it is; the reverse is
 adoption, and only later changes alter it.
 
+A validator that judges managed DDL SHALL skip an unmanaged table; one
+that checks a reference SHALL see it.
+
 #### Scenario: An unmanaged declaration produces no migration
 - **WHEN** a schema file exports an `existingTable()` and `hejbro
   generate` runs
@@ -38,6 +41,12 @@ adoption, and only later changes alter it.
   is replaced by a managed one — and `hejbro generate` runs
 - **THEN** no statement is written for that table, neither a drop nor a
   create, and the snapshot records it under its new management
+
+#### Scenario: A reserved-schema validator exempts an unmanaged table
+- **WHEN** a schema declares a table unmanaged in a schema the provider
+  preset reserves, and the preset's validator runs
+- **THEN** the unmanaged declaration raises no diagnostic, and a managed
+  table declared in that same schema is still refused
 
 #### Scenario: An older snapshot has no unmanaged tables
 - **WHEN** a snapshot written before the unmanaged marker existed is

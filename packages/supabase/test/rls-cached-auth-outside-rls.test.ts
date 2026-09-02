@@ -4,9 +4,11 @@ import {
 	check,
 	emptySnapshot,
 	eq,
+	existingTable,
 	exists,
 	expr,
 	generateMigration,
+	getTableMeta,
 	index,
 	isNotNull,
 	over,
@@ -325,5 +327,15 @@ describe("rlsCachedAuthOutsideRlsValidator", () => {
 			validators: [rlsCachedAuthOutsideRlsValidator],
 		});
 		expect(result.errors).toEqual([]);
+	});
+
+	it("does not error on an existingTable's column default calling authUidCached() (add-unmanaged-objects, J6-2 — never emitted as real DDL)", () => {
+		const authUsers = existingTable("auth", "users", {
+			id: uuid().default(authUidCached()),
+		});
+		const diagnostics = rlsCachedAuthOutsideRlsValidator(emptySnapshot, [
+			getTableMeta(authUsers),
+		]);
+		expect(diagnostics).toEqual([]);
 	});
 });

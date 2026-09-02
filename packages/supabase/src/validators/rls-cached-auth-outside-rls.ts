@@ -7,7 +7,7 @@ import type {
 	Validator,
 } from "@hejbro/core";
 import { diagnostic, renderExpr, someDeepExprNode } from "@hejbro/core";
-import { declaredAtOf, isTableDeclaration } from "./schema-of";
+import { declaredAtOf, isManagedTableDeclaration } from "./schema-of";
 
 /** The two `auth` schema functions with an initPlan-cached form (#97) — same set {@link ../validators/rls-uncached-auth-call} covers, opposite direction. */
 type CachableAuthFunctionName = "uid" | "jwt";
@@ -166,13 +166,20 @@ const indexPredicateDiagnostics = (
  * a cached call inside a partial index predicate's or CHECK's own
  * ownership-style subquery is caught the same way it would be missed by
  * core's shallower `someExprNode`.
+ *
+ * Skips an `existingTable()` declaration (add-unmanaged-objects, J6-2):
+ * this judges DDL hejbro would emit (a default/check/index-predicate
+ * clause becoming real SQL), and an unmanaged table's is never emitted —
+ * `indexes`/`checks` are always `[]` for one by construction, so only a
+ * deliberately unusual `.default(authUidCached())` on its own column
+ * could ever reach here, and even that value is inert.
  */
 export const rlsCachedAuthOutsideRlsValidator: Validator = (
 	_snapshot,
 	declarations,
 ) =>
 	declarations
-		.filter(isTableDeclaration)
+		.filter(isManagedTableDeclaration)
 		.flatMap((table) => [
 			...columnDefaultDiagnostics(table),
 			...checkDiagnostics(table),

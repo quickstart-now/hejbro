@@ -10,7 +10,14 @@ Files: `packages/core/src/kinds/{table-snapshot,table-kind}.ts`,
 existing-table.ts` (doc only), `packages/core/test/**`,
 `packages/query/src/client/{synthesize,name-keyed-db}.ts`,
 `packages/query/test/client/synthesize.test.ts`,
-`packages/supabase/src/validators/reserved-schemas.ts` (comment only).
+`packages/supabase/src/validators/{schema-of,reserved-schemas,
+exposed-tables,rls-cached-auth-outside-rls}.ts` and their tests (upgraded
+from comment-only, R1-06/R1-08: a real, reachable exemption, not a
+premise cleanup — see 1.2's own body), `packages/nile/src/validators.ts`
+and its test. `packages/core/src/engine/core-validators.ts` is measured
+(1.2's own body) but **not opened for a fix** — R1-08 closed that
+condition: both its validators are structurally unreachable from an
+unmanaged table, so it is not in this group's file list.
 `synthesize.ts` is shared with group 3 (marker); the groups run
 sequentially, so the two never edit it at once.
 
@@ -28,7 +35,7 @@ sequentially, so the two never edit it at once.
       would be a divergence to maintain. Failing test:
       `existing-table.test.ts` — "records an existing table as unmanaged
       with its declared columns".
-- [ ] 1.2 (~9m) `generate` accepts an exported `existingTable()`, emits
+- [x] 1.2 (~9m) `generate` accepts an exported `existingTable()`, emits
       nothing for it, and diffs nothing: adding, changing, removing →
       zero statements. The refusal retires at a single chokepoint — the
       guard sits at the top of `tableKind.diff`, before
@@ -57,6 +64,99 @@ sequentially, so the two never edit it at once.
       (a JS/jiti caller with no compile step, engine/generate.ts's own
       `authority === "usage"` guard)", the latter now `synced-table-
       declared`.
+
+      **Exemption restoration (lead J6-1/J6-2), same task, its own second
+      commit** (items 1-3 above already landed as `9855c9b8` before this
+      slice was ordered — see that commit for the retirement/DDL-guard/
+      authority-migration half): before this task, no
+      preset validator ever saw an `existingTable()` declaration —
+      `resolveTableDeclarations`'s retired `existing-table-declared`
+      guard refused it before `normalized` was ever built, so every
+      validator's own "existingTable is exempt" was a structural fact,
+      never a check. Retiring that guard makes every validator that
+      filters on `declarationKind === "table"` see one for the first
+      time. J6-2's rule: a validator that judges *managed DDL* SHALL
+      skip an unmanaged table; one that judges a *reference* SHALL see
+      it unchanged. Full audit (measured, not assumed — see each
+      validator's own file for the reachability proof):
+      - `packages/core/src/engine/core-validators.ts`'s
+        `notNullWithoutDefaultWarnings` — reads diff `changes`, never
+        declarations; the DDL-blocking guard already empties `changes`
+        for an unmanaged table, so this never reaches one. No fix.
+      - `packages/core/src/engine/core-validators.ts`'s
+        `rlsUnreachableSchemaWarnings` — filters `PolicyDeclaration`;
+        `existingTable()` hardcodes `rls: null` (no builder option to
+        set it), so it can never produce one. No fix.
+      - **Supabase: one shared predicate.** Measured every caller of
+        `schema-of.ts`'s `isTableDeclaration` first (lead's own
+        instruction, R1-08): its only *other* uses are internal to
+        `schemaOf`/`declaredAtOf` (generic field-extraction dispatchers,
+        not DDL judgment — `schemaOf`'s only caller is
+        `reservedSchemaValidator` itself; `declaredAtOf`'s two other
+        callers pass a `ViewDeclaration`/`PolicyDeclaration`, never a
+        table). So a *second*, narrower predicate was added —
+        `isManagedTableDeclaration` (`isTableDeclaration(d) &&
+        !d.existing`) — rather than redefining `isTableDeclaration`
+        itself (which would have silently changed `schemaOf`/
+        `declaredAtOf`'s own generic meaning for every future caller).
+        All three DDL-judging validators below import the one new
+        predicate:
+        - `reserved-schemas.ts`'s `reservedSchemaValidator` (D38).
+          Failing tests: `reserved-schemas.test.ts` — "an existingTable
+          in a reserved schema is exempt (add-unmanaged-objects, J6-2)"
+          and its control "a managed table in auth is still refused (the
+          exemption does not swallow the protection)".
+        - `exposed-tables.ts`'s `exposedTableValidator` (D40, "declare
+          rls(...)" is unactionable for a builder with no rls option).
+          Failing test: `exposed-tables.test.ts` — "does not warn on an
+          existingTable in a schema granted to anon/authenticated
+          (add-unmanaged-objects, J6-2 — its builder has no rls(...)
+          option to declare)".
+        - `rls-cached-auth-outside-rls.ts`'s
+          `rlsCachedAuthOutsideRlsValidator` (a default/check/
+          index-predicate becoming real SQL — included per lead
+          judgement even though `indexes`/`checks` are always `[]` for
+          an `existingTable()` by construction and only a
+          deliberately-written `.default(authUidCached())` can ever
+          reach it: the six sites are one pattern, and leaving one
+          unfixed reads as "rare in practice", not a contract). Failing
+          test: `rls-cached-auth-outside-rls.test.ts` — "does not error
+          on an existingTable's column default calling authUidCached()
+          (add-unmanaged-objects, J6-2 — never emitted as real DDL)".
+        Mutant (one, on the shared predicate): drop `&&
+        !d.existing` → all three failing tests above go red at once
+        (measured: 3 red/141), every other test in the 17-file suite
+        stays green, including `reserved-schemas.test.ts`'s own control.
+      - `packages/supabase/src/validators/view-security-invoker.ts`'s
+        `viewSecurityInvokerValidator` — filters `ViewDeclaration`, and
+        its `protectedTables` set is built from `RlsDeclaration` the
+        same way `rlsUnreachableSchemaWarnings` is — structurally never
+        includes an unmanaged table. No fix.
+      - `packages/supabase/src/validators/rls-uncached-auth-call.ts`'s
+        `rlsUncachedAuthCallValidator` — filters `PolicyDeclaration`,
+        same reasoning as `rlsUnreachableSchemaWarnings`. No fix.
+      - `packages/nile/src/validators.ts`'s `nileSerialValidator`/
+        `nileTenantPrimaryKeyValidator`/`nileIdentityValidator` (all
+        three: managed DDL, tenant-aware table constraints Nile would
+        have to run) — all three call sites of the file's own
+        `isTableDeclaration` are managed-DDL-judging (measured: `grep
+        isTableDeclaration` finds exactly these three, nothing else), so
+        the exclusion moved into the predicate itself, renamed
+        `isManagedTableDeclaration` (a name that quietly excluded
+        existing tables while still called `isTableDeclaration` would
+        lie about itself). Failing test: `validators.test.ts` — "an
+        existingTable is not validated as a managed table" (one test,
+        one declaration set exercising all three rules at once).
+      - `packages/nile/src/validators.ts`'s `nileRlsValidator`/
+        `nileFunctionTriggerValidator`/`nileGrantValidator` — filter
+        Rls/Policy/Function/Trigger/Grant declarations; `existingTable()`
+        cannot produce any of them. No fix.
+      - `packages/neon`: zero validators registered. N/A.
+      Nile mutant (on `isManagedTableDeclaration`, the renamed and
+      excluding `isTableDeclaration`): drop the exclusion → the one
+      combined failing test above goes red (measured: 1 red/59), every
+      other test — including task 4.5's own "what the platform accepts
+      is untouched" control — stays green.
 - [ ] 1.3 (~5m) Older snapshots read as all-managed (parse test with a
       pre-marker fixture); the D33 compact rule stated in the node's doc.
 
@@ -109,7 +209,13 @@ names), `docs/specs/2026-08-19-hejbro-design.md` (D41 amendment note),
       text is never deleted, only annotated: "amended by
       add-unmanaged-objects (#605) — an exported existingTable is a
       declaration that emits nothing; pending owner ratification"),
-      `minor` changeset, ledger rows.
+      `minor` changeset, ledger rows. The changeset body MUST carry, near
+      verbatim, the user-facing half of 1.2's exemption restoration:
+      "preset validators (Supabase, Nile) skip unmanaged declarations —
+      they judge managed DDL" — a real behavior change (a warning/error
+      that used to fire on a declared `existingTable()` no longer does),
+      not an internal refactor, so it belongs in the `minor` changeset's
+      own body, not just this file.
 
 ## Verification (definition of done, not a task)
 `openspec validate add-unmanaged-objects --strict`; `openspec show
