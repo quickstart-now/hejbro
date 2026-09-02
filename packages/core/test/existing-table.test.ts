@@ -16,7 +16,7 @@ import {
 	uuid,
 } from "../src/index";
 import type { TableSnapshot } from "../src/kinds/table-snapshot";
-import { tableUnmanaged } from "../src/kinds/table-snapshot";
+import { tableExisting } from "../src/kinds/table-snapshot";
 
 describe("existingTable", () => {
 	const authUsers = existingTable("auth", "users", { id: uuid() });
@@ -55,11 +55,11 @@ describe("existingTable", () => {
 		expect(result.hasChanges).toBe(false);
 		expect(result.sql).toBe("");
 		expect(result.snapshot.objects["table:auth.users"]).toMatchObject({
-			unmanaged: true,
+			existing: true,
 		});
 	});
 
-	it("records an existing table as unmanaged with its declared columns", () => {
+	it("records an existing table as such, with its declared columns", () => {
 		const registry = createDefaultRegistry();
 		const snapshot = buildSnapshot(
 			[app, getTableMeta(authUsers)],
@@ -71,7 +71,7 @@ describe("existingTable", () => {
 			schema: "auth",
 			name: "users",
 			columns: [expect.objectContaining({ name: "id" })],
-			unmanaged: true,
+			existing: true,
 		});
 
 		const profiles = table(app, "profiles", { id: uuid().primaryKey() });
@@ -81,8 +81,8 @@ describe("existingTable", () => {
 			emptySnapshot,
 		);
 		const managedNode = managedSnapshot.objects["table:app.profiles"];
-		expect(managedNode).not.toHaveProperty("unmanaged");
-		expect(tableUnmanaged(node as TableSnapshot)).toBe(true);
+		expect(managedNode).not.toHaveProperty("existing");
+		expect(tableExisting(node as TableSnapshot)).toBe(true);
 	});
 });
 

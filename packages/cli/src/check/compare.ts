@@ -86,7 +86,7 @@ type LocalTableSnapshot = {
 	readonly foreignKeys?: ReadonlyArray<LocalForeignKeySnapshot>;
 	readonly checks?: ReadonlyArray<LocalCheckSnapshot>;
 	readonly primaryKeyName?: string;
-	readonly unmanaged?: true;
+	readonly existing?: true;
 };
 
 type LocalSchemaSnapshot = { readonly name: string };
@@ -417,13 +417,13 @@ const compareTable = (
 	catalog: Catalog,
 ): ReadonlyArray<Finding> => {
 	const table = node as LocalTableSnapshot;
-	// add-unmanaged-objects: an unmanaged declaration claims a shape this
+	// add-unmanaged-objects: an existing declaration claims a shape this
 	// repository does not own -- comparing that claim against the catalog
 	// is a separate, out-of-scope feature (proposal.md), and its
 	// presence or absence in the database SHALL NOT affect the exit code
 	// (table-declaration delta). Zero comparisons, not just a shape-diff
 	// skip: this table is never even looked up in the catalog.
-	if (table.unmanaged === true) {
+	if (table.existing === true) {
 		return [];
 	}
 	const row = catalog.tables.find(

@@ -45,7 +45,7 @@ const isGrantDeclaration = (
  * A table this repository manages — excludes an `existingTable()`
  * declaration (add-unmanaged-objects, J6-2): every one of this predicate's
  * three call sites (tenant-aware serial/identity/primary-key refusals)
- * judges DDL Nile would have to run, and an unmanaged table's is never
+ * judges DDL Nile would have to run, and an existing table's is never
  * run. Named for what it excludes, not just what it matches — a plain
  * `isTableDeclaration` that quietly excluded existing tables would lie
  * about its own name.

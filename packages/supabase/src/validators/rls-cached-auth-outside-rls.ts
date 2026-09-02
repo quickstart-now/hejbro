@@ -169,7 +169,7 @@ const indexPredicateDiagnostics = (
  *
  * Skips an `existingTable()` declaration (add-unmanaged-objects, J6-2):
  * this judges DDL hejbro would emit (a default/check/index-predicate
- * clause becoming real SQL), and an unmanaged table's is never emitted —
+ * clause becoming real SQL), and an existing table's is never emitted —
  * `indexes`/`checks` are always `[]` for one by construction, so only a
  * deliberately unusual `.default(authUidCached())` on its own column
  * could ever reach here, and even that value is inert.

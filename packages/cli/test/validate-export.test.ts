@@ -3,8 +3,8 @@ import { validateExport } from "../src/vendor/validate-export";
 
 const VALID_FORMAT = '{"descriptionFormat":1,"snapshotFormat":8}';
 
-describe("validateExport — unmanaged (add-unmanaged-objects, 2.1)", () => {
-	it("a current export's unmanaged table reads back as unmanaged", () => {
+describe("validateExport — existing (add-unmanaged-objects, 2.1)", () => {
+	it("a current export's existing table reads back as existing", () => {
 		const schema = JSON.stringify({
 			tables: [
 				{
@@ -12,7 +12,7 @@ describe("validateExport — unmanaged (add-unmanaged-objects, 2.1)", () => {
 					tableName: "users",
 					exportName: null,
 					columns: {},
-					unmanaged: true,
+					existing: true,
 				},
 			],
 			functions: [],
@@ -20,7 +20,7 @@ describe("validateExport — unmanaged (add-unmanaged-objects, 2.1)", () => {
 			snapshot: { formatVersion: 8, dialect: "postgres", objects: {} },
 		});
 		const { payload } = validateExport(VALID_FORMAT, schema);
-		expect(payload.tables[0]?.unmanaged).toBe(true);
+		expect(payload.tables[0]?.existing).toBe(true);
 	});
 
 	// Hand-written, not built by our own writer -- a schema.json this
@@ -36,7 +36,7 @@ describe("validateExport — unmanaged (add-unmanaged-objects, 2.1)", () => {
 					tableName: "posts",
 					exportName: null,
 					columns: {},
-					// No `unmanaged` key at all -- a real pre-add-unmanaged-
+					// No `existing` key at all -- a real pre-add-unmanaged-
 					// objects export.
 				},
 			],
@@ -45,6 +45,6 @@ describe("validateExport — unmanaged (add-unmanaged-objects, 2.1)", () => {
 			snapshot: { formatVersion: 8, dialect: "postgres", objects: {} },
 		});
 		const { payload } = validateExport(VALID_FORMAT, olderSchema);
-		expect(payload.tables[0]?.unmanaged).toBe(false);
+		expect(payload.tables[0]?.existing).toBe(false);
 	});
 });

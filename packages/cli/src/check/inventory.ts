@@ -1,6 +1,7 @@
 import type { Snapshot } from "@hejbro/core";
 import type { Catalog } from "./catalog";
 
+/** This module's own "unmanaged" (spec Req5): a catalog table no declaration covers at all -- not the same axis as `existingTable()` (add-unmanaged-objects), which *is* a declaration and so never appears here. */
 export type UnmanagedTable = {
 	readonly schema: string;
 	readonly table: string;

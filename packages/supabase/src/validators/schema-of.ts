@@ -26,7 +26,7 @@ export const isTableDeclaration = (
  * an `existingTable()` declaration (add-unmanaged-objects, J6-2): shared by
  * every validator here that judges managed DDL (reserved schemas, exposed
  * tables, cached-auth-outside-RLS), none of which has anything to judge
- * on an unmanaged table, since it is never emitted. `isTableDeclaration`
+ * on an existing table, since it is never emitted. `isTableDeclaration`
  * itself stays general (used by `schemaOf`/`declaredAtOf`'s own field
  * extraction, which reports a real fact about any table regardless of
  * management) — this is a second, narrower predicate, not a redefinition.

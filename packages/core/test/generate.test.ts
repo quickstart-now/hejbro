@@ -808,7 +808,7 @@ describe("raw table declarations expand like whole tables (#408)", () => {
 	it("an existingTable meta produces no migration through the raw path too (add-unmanaged-objects)", () => {
 		const app = schema("gen408b");
 		// The schema itself already exists (a prior run) -- isolates this
-		// assertion to the unmanaged table's own contribution.
+		// assertion to the existing table's own contribution.
 		const baseline = generateMigration({
 			declarations: [app],
 			previousSnapshot: emptySnapshot,
@@ -821,16 +821,16 @@ describe("raw table declarations expand like whole tables (#408)", () => {
 		expect(result.hasChanges).toBe(false);
 		expect(result.sql).toBe("");
 		expect(result.snapshot.objects["table:gen408b.elsewhere"]).toMatchObject({
-			unmanaged: true,
+			existing: true,
 		});
 	});
 });
 
-describe("an unmanaged declaration emits nothing (add-unmanaged-objects, #605)", () => {
-	it("an unmanaged table produces no migration", () => {
+describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", () => {
+	it("an existing table produces no migration", () => {
 		const app = schema("uo1");
 		// The schema itself already exists (a prior run) -- isolates this
-		// assertion to the unmanaged table's own contribution, which must
+		// assertion to the existing table's own contribution, which must
 		// be zero.
 		const baseline = generateMigration({
 			declarations: [app],
@@ -844,12 +844,12 @@ describe("an unmanaged declaration emits nothing (add-unmanaged-objects, #605)",
 		expect(result.hasChanges).toBe(false);
 		expect(result.sql).toBe("");
 		expect(result.snapshot.objects["table:uo1.users"]).toMatchObject({
-			unmanaged: true,
+			existing: true,
 			columns: [expect.objectContaining({ name: "id" })],
 		});
 	});
 
-	it("changing an unmanaged declaration produces no migration", () => {
+	it("changing an existing declaration produces no migration", () => {
 		const app = schema("uo2");
 		const first = existingTable("uo2", "users", { id: uuid() });
 		const firstResult = generateMigration({
@@ -867,7 +867,7 @@ describe("an unmanaged declaration emits nothing (add-unmanaged-objects, #605)",
 		expect(secondResult.hasChanges).toBe(false);
 		expect(secondResult.sql).toBe("");
 		expect(secondResult.snapshot.objects["table:uo2.users"]).toMatchObject({
-			unmanaged: true,
+			existing: true,
 			columns: [
 				expect.objectContaining({ name: "id" }),
 				expect.objectContaining({ name: "email" }),
@@ -875,7 +875,7 @@ describe("an unmanaged declaration emits nothing (add-unmanaged-objects, #605)",
 		});
 	});
 
-	it("removing an unmanaged declaration produces no migration", () => {
+	it("removing an existing declaration produces no migration", () => {
 		const app = schema("uo3");
 		const authUsers = existingTable("uo3", "users", { id: uuid() });
 		const firstResult = generateMigration({
@@ -891,7 +891,7 @@ describe("an unmanaged declaration emits nothing (add-unmanaged-objects, #605)",
 		expect(secondResult.sql).not.toContain("drop table");
 	});
 
-	it("a managed foreign key onto an unmanaged table is emitted and the target untouched", () => {
+	it("a managed foreign key onto an existing table is emitted and the target untouched", () => {
 		const app = schema("uo4");
 		const authUsers = existingTable("uo4", "users", { id: uuid() });
 		const profiles = table(
@@ -914,38 +914,38 @@ describe("an unmanaged declaration emits nothing (add-unmanaged-objects, #605)",
 		expect(result.sql).toContain('references "uo4"."users"');
 		expect(result.sql).not.toContain('create table "uo4"."users"');
 		expect(result.snapshot.objects["table:uo4.users"]).toMatchObject({
-			unmanaged: true,
+			existing: true,
 		});
 	});
 
-	it("a table changing hands emits nothing: managed to unmanaged", () => {
+	it("a table changing hands emits nothing: managed to existing", () => {
 		const app = schema("uo5");
 		const managed = table(app, "widgets", { id: uuid().primaryKey() });
 		const firstResult = generateMigration({
 			declarations: [app, managed],
 			previousSnapshot: emptySnapshot,
 		});
-		const unmanaged = existingTable("uo5", "widgets", {
+		const existing = existingTable("uo5", "widgets", {
 			id: uuid().primaryKey(),
 		});
 		const secondResult = generateMigration({
-			declarations: [app, getTableMeta(unmanaged)],
+			declarations: [app, getTableMeta(existing)],
 			previousSnapshot: firstResult.snapshot,
 		});
 		expect(secondResult.hasChanges).toBe(false);
 		expect(secondResult.sql).toBe("");
 		expect(secondResult.snapshot.objects["table:uo5.widgets"]).toMatchObject({
-			unmanaged: true,
+			existing: true,
 		});
 	});
 
-	it("a table changing hands emits nothing: unmanaged to managed", () => {
+	it("a table changing hands emits nothing: existing to managed", () => {
 		const app = schema("uo6");
-		const unmanaged = existingTable("uo6", "widgets", {
+		const existing = existingTable("uo6", "widgets", {
 			id: uuid().primaryKey(),
 		});
 		const firstResult = generateMigration({
-			declarations: [app, getTableMeta(unmanaged)],
+			declarations: [app, getTableMeta(existing)],
 			previousSnapshot: emptySnapshot,
 		});
 		const managed = table(app, "widgets", { id: uuid().primaryKey() });
@@ -957,6 +957,6 @@ describe("an unmanaged declaration emits nothing (add-unmanaged-objects, #605)",
 		expect(secondResult.sql).toBe("");
 		expect(
 			secondResult.snapshot.objects["table:uo6.widgets"],
-		).not.toHaveProperty("unmanaged");
+		).not.toHaveProperty("existing");
 	});
 });

@@ -6,10 +6,10 @@ import type { Table, TableDeclaration } from "./table";
 import { buildColumnEntries, buildColumnRefs, tableMeta } from "./table";
 
 /**
- * An unmanaged table (D41, add-unmanaged-objects): usable as an FK target,
+ * An existing table (D41, add-unmanaged-objects): usable as an FK target,
  * in `exists()`, in view from/joins, and — since add-unmanaged-objects —
- * as a top-level declaration itself: the snapshot records it unmanaged
- * (`unmanaged: true`, `kinds/table-snapshot.ts`) and `generateMigration`
+ * as a top-level declaration itself: the snapshot records it existing
+ * (`existing: true`, `kinds/table-snapshot.ts`) and `generateMigration`
  * emits and diffs nothing for it (`tableKind.diff`'s DDL-blocking guard).
  * Column names go through the same snake_case + D36 rules as `table()`.
  * Builds an inline `SchemaDeclaration` that is never exported and never

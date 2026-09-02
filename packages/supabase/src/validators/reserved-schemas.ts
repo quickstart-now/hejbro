@@ -21,7 +21,7 @@ const reservedSchemaMessage = (schemaName: string): string =>
  * Hard-errors on any managed declaration (schema, table, view, function,
  * trigger, grant, RLS/policy) targeting a reserved schema (D38).
  * `existingTable()` references are exempt (D38/D41): this judges DDL
- * hejbro would create or alter, and an unmanaged table's is never run
+ * hejbro would create or alter, and an existing table's is never run
  * (add-unmanaged-objects, J6-2 — before that change the exemption held
  * structurally, because `existingTable()` never reached this validator's
  * `declarations` at all; the guard that made that true is retired, so the

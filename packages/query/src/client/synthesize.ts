@@ -73,7 +73,7 @@ const synthesizeForeignKey = (
  * `authUsers` as a real precedent). Tagged `authority: "usage"` (add-
  * unmanaged-objects, J3) — a query-time reconstruction is never migration
  * authority, whether or not the table it mirrors is itself declared
- * unmanaged in the schema repository; `HejbroInput`'s own type-level
+ * existing in the schema repository; `HejbroInput`'s own type-level
  * narrowing rejects it, and `resolveTableDeclarations`'s `"usage"` guard
  * (`engine/generate.ts`) refuses it at runtime for the caller the type
  * layer never saw (a JS/jiti caller with no compile step).

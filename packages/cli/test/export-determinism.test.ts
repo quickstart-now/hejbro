@@ -77,12 +77,12 @@ describe("export determinism", () => {
 		}
 	});
 
-	// add-unmanaged-objects, 2.1: `unmanaged` is a new key on every table
+	// add-unmanaged-objects, 2.1: `existing` is a new key on every table
 	// fact (`stableJson`'s recursive key sort, `@hejbro/core`), so its own
 	// position is deterministic by construction -- this pins that the new
 	// field actually goes through that sort rather than landing wherever
 	// object literal insertion order happened to put it.
-	it("a table fact's keys are alphabetically sorted, `unmanaged` included", async () => {
+	it("a table fact's keys are alphabetically sorted, `existing` included", async () => {
 		const cwd = await buildExport();
 		cwds.push(cwd);
 
@@ -107,7 +107,7 @@ describe("export determinism", () => {
 		description.tables.forEach((table: Record<string, unknown>) => {
 			const keys = Object.keys(table);
 			expect(keys).toEqual([...keys].sort(byteOrder));
-			expect(keys).toContain("unmanaged");
+			expect(keys).toContain("existing");
 		});
 	});
 });

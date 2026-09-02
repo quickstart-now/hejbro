@@ -47,7 +47,7 @@ const rlsProtectedTables = (
  * (D40) — every row in that table is then readable/writable through the
  * Supabase API. Order is declaration order. Skips an `existingTable()`
  * declaration (add-unmanaged-objects, J6-2): this judges whether hejbro
- * should have declared `rls(...)` on a table it manages, and an unmanaged
+ * should have declared `rls(...)` on a table it manages, and an existing
  * table's builder has no `rls(...)` option to declare in the first place —
  * the warning's own "declare rls(...) on the table" advice would be
  * unactionable for it.

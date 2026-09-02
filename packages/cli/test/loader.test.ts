@@ -143,7 +143,7 @@ describe("loadDeclarations", () => {
 	// Characterization pin, green on arrival (add-unmanaged-objects, 2.2):
 	// group 1 already landed the loader-relevant half of this change --
 	// `loadDeclarations` collects every `isTable()` export regardless of
-	// managed/unmanaged, so this scenario required no loader code change
+	// managed/existing, so this scenario required no loader code change
 	// at all. Load-bearing anyway (proven by mutant, not by red): see this
 	// file's own `.filter` in `loadDeclarations` (`src/loader.ts`).
 	it("an exported existing table is loaded as a declaration", async () => {

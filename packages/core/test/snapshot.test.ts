@@ -13,7 +13,7 @@ import {
 import { schemaKind } from "../src/kinds/schema-kind";
 import { tableKind } from "../src/kinds/table-kind";
 import type { TableSnapshot } from "../src/kinds/table-snapshot";
-import { tableUnmanaged } from "../src/kinds/table-snapshot";
+import { tableExisting } from "../src/kinds/table-snapshot";
 import type { Snapshot } from "../src/snapshot/snapshot";
 import {
 	buildSnapshot,
@@ -481,7 +481,7 @@ describe("an older snapshot's tables are still managed (add-unmanaged-objects, D
 		// way or the other, so it can never stand in for a file written
 		// before the marker existed (it would prove nothing about that
 		// case). This is a real pre-add-unmanaged-objects v8 file: no
-		// `unmanaged` key on the table node at all.
+		// `existing` key on the table node at all.
 		const olderSnapshot: Snapshot = {
 			formatVersion: 8,
 			dialect: "postgres",
@@ -497,12 +497,12 @@ describe("an older snapshot's tables are still managed (add-unmanaged-objects, D
 			},
 		};
 		expect(
-			tableUnmanaged(olderSnapshot.objects["table:app.posts"] as TableSnapshot),
+			tableExisting(olderSnapshot.objects["table:app.posts"] as TableSnapshot),
 		).toBe(false);
 
 		// The behavioral proof: reading it as managed means a run that
-		// declares nothing sees a real table to drop -- if tableUnmanaged
-		// misread the absent field as unmanaged, the DDL-blocking guard
+		// declares nothing sees a real table to drop -- if tableExisting
+		// misread the absent field as existing, the DDL-blocking guard
 		// would swallow this drop silently, and every table in every
 		// user's pre-existing snapshot would fall out of management on
 		// upgrade.

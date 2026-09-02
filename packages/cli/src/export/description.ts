@@ -44,13 +44,13 @@ export type ExportTableFact = {
 	/**
 	 * `true` for an `existingTable()` declaration, `false` for a `table()`
 	 * one (add-unmanaged-objects) — always present, unlike the snapshot's
-	 * own compact `unmanaged?: true` (`@hejbro/core`'s `TableSnapshot`):
+	 * own compact `existing?: true` (`@hejbro/core`'s `TableSnapshot`):
 	 * this file's own convention is that every field is a plain,
 	 * always-present JSON value (see {@link ExportDescription}'s doc
 	 * comment), so a reader never has to supply its own default for an
-	 * absent key here the way `tableUnmanaged` does for the snapshot.
+	 * absent key here the way `tableExisting` does for the snapshot.
 	 */
-	readonly unmanaged: boolean;
+	readonly existing: boolean;
 };
 
 type ExportFunctionFact = {
@@ -119,7 +119,7 @@ const tableFact = (
 		tableName: meta.tableName,
 		exportName: exportNames.get(table) ?? null,
 		columns: columnsBySqlName(meta.columns),
-		unmanaged: meta.existing,
+		existing: meta.existing,
 	};
 };
 

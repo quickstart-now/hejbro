@@ -100,7 +100,7 @@ const resolveTableDeclarations = (
 ): ReadonlyArray<HejbroDeclaration> => {
 	// add-unmanaged-objects: `meta.existing` no longer refuses here — an
 	// `existingTable()` declaration is accepted and flows through to the
-	// snapshot (`unmanagedField`, kinds/table-kind.ts), producing no
+	// snapshot (`existingField`, kinds/table-kind.ts), producing no
 	// statement (the guard moves to `tableKind.diff`). "existing-table-
 	// declared" stays a registered code (`error.ts`'s codes are a plain
 	// string, not a static union) with no live raise site.

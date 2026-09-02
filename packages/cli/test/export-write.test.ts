@@ -140,8 +140,8 @@ describe("hejbro generate --export", () => {
 		expect(await readExportFile(cwd, "schema.json")).toBe(before);
 	});
 
-	it("carries an unmanaged table marked as such (add-unmanaged-objects, 2.1)", async () => {
-		const schemaWithUnmanaged = `import { existingTable, schema, table, text, uuid } from "hejbro";
+	it("carries an existing table marked as such (add-unmanaged-objects, 2.1)", async () => {
+		const schemaWithExisting = `import { existingTable, schema, table, text, uuid } from "hejbro";
 
 export const app = schema("app");
 
@@ -152,7 +152,7 @@ export const posts = table(app, "posts", {
 	title: text().notNull(),
 });
 `;
-		await writeSchema(cwd, schemaWithUnmanaged);
+		await writeSchema(cwd, schemaWithExisting);
 		const result = await runCli(cwd, ["generate", "--export"]);
 		expect(result.exitCode).toBe(0);
 
@@ -161,7 +161,7 @@ export const posts = table(app, "posts", {
 			(t: { tableName: string }) => t.tableName === "users",
 		);
 		expect(authUsersFact).toBeDefined();
-		expect(authUsersFact.unmanaged).toBe(true);
+		expect(authUsersFact.existing).toBe(true);
 
 		// The field is always present (export/description.ts's own "no
 		// omitted key" convention, unlike the snapshot's compact rule) --
@@ -171,7 +171,7 @@ export const posts = table(app, "posts", {
 			(t: { tableName: string }) => t.tableName === "posts",
 		);
 		expect(postsFact).toBeDefined();
-		expect(postsFact.unmanaged).toBe(false);
+		expect(postsFact.existing).toBe(false);
 	});
 
 	it("description and snapshot formats are distinct values", async () => {

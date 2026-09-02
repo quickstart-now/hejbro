@@ -4,7 +4,7 @@ Piece team (planner + implementer). Base: dev at branch creation.
 Groups are file-disjoint and sequential (G2 needs G1's marker, G3 needs
 G2's export field).
 
-## 1. The snapshot knows an unmanaged table (#605)
+## 1. The snapshot knows an existing table (#605)
 Files: `packages/core/src/kinds/{table-snapshot,table-kind}.ts`,
 `packages/core/src/engine/generate.ts`, `packages/core/src/dsl/
 existing-table.ts` (doc only), `packages/core/test/**`,
@@ -17,15 +17,15 @@ premise cleanup — see 1.2's own body), `packages/nile/src/validators.ts`
 and its test. `packages/core/src/engine/core-validators.ts` is measured
 (1.2's own body) but **not opened for a fix** — R1-08 closed that
 condition: both its validators are structurally unreachable from an
-unmanaged table, so it is not in this group's file list.
+existing table, so it is not in this group's file list.
 `synthesize.ts` is shared with group 3 (marker); the groups run
 sequentially, so the two never edit it at once.
 
 - [x] 1.1 (~8m) [design — settled, lead judgement J1/J2] The marker is
-      `unmanaged?: true` on the table snapshot node (D33 compact rule:
-      absent = managed), read through a `tableUnmanaged()` helper beside
-      `tableChecks`/`tablePrimaryKeyName`, written by a
-      `unmanagedField(declaration)` spread beside `checksField`/
+      `existing?: true` on the table snapshot node (D33 compact rule:
+      absent = managed), read through a `tableExisting()` helper beside
+      `tableChecks`/`tablePrimaryKeyName`, written by an
+      `existingField(declaration)` spread beside `checksField`/
       `primaryKeyNameField` and set from `TableDeclaration.existing`.
       Indexes/checks/rls need no rule: `existingTable()` fixes them
       empty by construction, so the existing serializer already produces
@@ -33,14 +33,14 @@ sequentially, so the two never edit it at once.
       facts are kept as serialized today — the export and the contract
       read them for typing and relations, and a second serializer path
       would be a divergence to maintain. Failing test:
-      `existing-table.test.ts` — "records an existing table as unmanaged
-      with its declared columns".
+      `existing-table.test.ts` — "records an existing table as such,
+      with its declared columns" (renamed 2.1b, R1-05 — see that task).
 - [x] 1.2 (~9m) `generate` accepts an exported `existingTable()`, emits
       nothing for it, and diffs nothing: adding, changing, removing →
       zero statements. The refusal retires at a single chokepoint — the
       guard sits at the top of `tableKind.diff`, before
       `createOrDropDiff`, and returns `[]` when *either* side is
-      unmanaged, so a managed↔unmanaged flip emits nothing either (J2).
+      existing, so a managed↔existing flip emits nothing either (J2).
       The `existing-table-declared` code stays registered with a note.
       Same task, same commit (a task that removes a guard installs its
       replacement): `synthesize.ts` moves its discriminator from
@@ -49,14 +49,14 @@ sequentially, so the two never edit it at once.
       that code instead; `name-keyed-db.ts`'s four `DeclaredTable`
       annotations widen with it. `reserved-schemas.ts`'s comment cites
       the retired refusal and is corrected here.
-      Failing tests: `generate.test.ts` — "an unmanaged table produces
-      no migration", "changing an unmanaged declaration produces no
-      migration", "removing an unmanaged declaration produces no
-      migration", "a managed foreign key onto an unmanaged table is
+      Failing tests: `generate.test.ts` — "an existing table produces
+      no migration", "changing an existing declaration produces no
+      migration", "removing an existing declaration produces no
+      migration", "a managed foreign key onto an existing table is
       emitted and the target untouched", "a table changing hands emits
-      nothing: managed to unmanaged", "a table changing hands emits
-      nothing: unmanaged to managed" (both directions, same subject as
-      the delta scenario). `synthesize.test.ts`'s own refusal case splits
+      nothing: managed to existing", "a table changing hands emits
+      nothing: existing to managed" (both directions, same subject as
+      the delta scenario; renamed 2.1b, R1-05). `synthesize.test.ts`'s own refusal case splits
       in two: "is rejected by HejbroInput's own type, not just at runtime
       (type pin — evidence is check-types, not vitest; mirrors
       core/test/types/declared-table.test.ts's own usage-table pin)" and
@@ -76,13 +76,13 @@ sequentially, so the two never edit it at once.
       never a check. Retiring that guard makes every validator that
       filters on `declarationKind === "table"` see one for the first
       time. J6-2's rule: a validator that judges *managed DDL* SHALL
-      skip an unmanaged table; one that judges a *reference* SHALL see
+      skip an existing table; one that judges a *reference* SHALL see
       it unchanged. Full audit (measured, not assumed — see each
       validator's own file for the reachability proof):
       - `packages/core/src/engine/core-validators.ts`'s
         `notNullWithoutDefaultWarnings` — reads diff `changes`, never
         declarations; the DDL-blocking guard already empties `changes`
-        for an unmanaged table, so this never reaches one. No fix.
+        for an existing table, so this never reaches one. No fix.
       - `packages/core/src/engine/core-validators.ts`'s
         `rlsUnreachableSchemaWarnings` — filters `PolicyDeclaration`;
         `existingTable()` hardcodes `rls: null` (no builder option to
@@ -131,7 +131,7 @@ sequentially, so the two never edit it at once.
         `viewSecurityInvokerValidator` — filters `ViewDeclaration`, and
         its `protectedTables` set is built from `RlsDeclaration` the
         same way `rlsUnreachableSchemaWarnings` is — structurally never
-        includes an unmanaged table. No fix.
+        includes an existing table. No fix.
       - `packages/supabase/src/validators/rls-uncached-auth-call.ts`'s
         `rlsUncachedAuthCallValidator` — filters `PolicyDeclaration`,
         same reasoning as `rlsUnreachableSchemaWarnings`. No fix.
@@ -161,21 +161,21 @@ sequentially, so the two never edit it at once.
       not a marker-presence check: a hand-written, pre-marker `Snapshot`
       literal (never built by `buildSnapshot`, which always writes the
       marker one way or the other and so can never stand in for a file
-      written before it existed) carrying one table with no `unmanaged`
+      written before it existed) carrying one table with no `existing`
       key, run through `generateMigration` with an empty declaration
-      list — the real risk this pins is silent: if `tableUnmanaged`
-      misread the absent field as unmanaged, the DDL-blocking guard
+      list — the real risk this pins is silent: if `tableExisting`
+      misread the absent field as existing, the DDL-blocking guard
       would swallow every drop for every user's pre-existing table on
       upgrade. Failing test: `snapshot.test.ts` — "an older snapshot's
-      tables are still managed" (asserts both `tableUnmanaged(node) ===
+      tables are still managed" (asserts both `tableExisting(node) ===
       false` and that the run's SQL actually contains `drop table
       "app"."posts"`). The D33 compact-rule doc line was already written
-      in 1.1's own commit (`TableSnapshot.unmanaged`'s doc comment: "A
-      snapshot written before this field existed has no unmanaged
-      tables") — nothing to add there. Mutant: `tableUnmanaged` to
-      `snapshot.unmanaged ?? true` — explosive by design (every managed
+      in 1.1's own commit (`TableSnapshot.existing`'s doc comment: "A
+      snapshot written before this field existed has every table
+      reading as managed") — nothing to add there. Mutant: `tableExisting`
+      to `snapshot.existing ?? true` — explosive by design (every managed
       table in the whole suite lacks the field, so the DDL guard now
-      misreads all of them as unmanaged): 131 red across 18 files/1462,
+      misreads all of them as existing): 131 red across 18 files/1462,
       confirmed the new test is among them (its own file: 1 red/82).
       Reverted, full suite green (97 files/1461+1 todo).
 
@@ -188,7 +188,8 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
 `packages/cli/test/**`
 
 - [x] 2.1 (~8m) [design — settled, lead judgement] `ExportTableFact` gains
-      `unmanaged: boolean`, **always present** (`false` for a managed
+      `existing: boolean` (named `unmanaged` at first landing, renamed by
+      2.1b — see that task), **always present** (`false` for a managed
       table) — the opposite of the snapshot's compact convention,
       because `export/description.ts`'s own doc comment already commits
       this file's format to "every field is a plain, always-present JSON
@@ -202,7 +203,7 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
       objects export for a fact it never claimed to carry.
       Pre-measured (lead's own instruction, before writing code): ①
       `buildExportDescription`'s `isDeclaredTable` is `isTable`, so an
-      unmanaged table **already** reaches `tables` post-group-1 (measured
+      existing table **already** reaches `tables` post-group-1 (measured
       directly: schemaName/tableName/exportName/columns all present,
       only the marker missing) — the writer red is "marked as such," not
       "appears at all," which was already true. ② the reader file is
@@ -210,57 +211,106 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
       `EXPORT_DESCRIPTION_FORMAT = 1` (`export/format.ts`), checked by
       `assertDescriptionFormatSupported` in the same reader file; an
       older format is read as-is (no shim exists yet, none needed).
-      Failing tests: `export-write.test.ts` — "carries an unmanaged table
-      marked as such" (asserts the unmanaged table's `unmanaged: true`
-      **and** the managed table's `unmanaged: false` in the same test);
+      Failing tests: `export-write.test.ts` — "carries an existing table
+      marked as such" (asserts the existing table's `existing: true`
+      **and** the managed table's `existing: false` in the same test);
       `export-determinism.test.ts` — "a table fact's keys are
-      alphabetically sorted, `unmanaged` included" (extends the
-      determinism fixture with an unmanaged table); new file
+      alphabetically sorted, `existing` included" (extends the
+      determinism fixture with an existing table); new file
       `validate-export.test.ts` (direct unit test of `validateExport`,
       no CLI subprocess needed — it does no I/O of its own) — "a current
-      export's unmanaged table reads back as unmanaged" and "an export
+      export's existing table reads back as existing" and "an export
       written before the marker reads as managed" (hand-written
       pre-marker JSON, never built by our own writer — same reasoning as
       1.3's snapshot fixture: a writer-built fixture already carries the
       field one way or the other and proves nothing about a file written
-      before it existed).
+      before it existed). Wording renamed 2.1b (R1-05) — see that task.
       Mutant (a), writer (`tableFact` in `description.ts`): hardcode
-      `unmanaged: false` regardless of `meta.existing` → exactly 1 red
+      `existing: false` regardless of `meta.existing` → exactly 1 red
       (the writer test), the two reader tests and the determinism test
       stay green (12/13 in the three files together).
       Mutant (b), reader (`validate-export.ts`): drop `.default(false)`,
-      making `unmanaged` a required field → exactly 1 red (the
+      making `existing` a required field → exactly 1 red (the
       pre-marker reader test, which now throws `vendor-export-invalid`
       instead of returning), the writer test and the current-export
       reader test stay green (12/13).
-- [x] 2.2 (~9m) `check` compares nothing about an unmanaged table and
+- [x] 2.1b (~15m) [design — settled, lead judgement, R1-05/R1-06]
+      **Rename the marker `existing`, not `unmanaged`, everywhere it is
+      our own concept.** Decision axis: not "are the two senses
+      confusable" but "does this concept already have a name" — the DSL
+      (`existingTable()`), core's `TableDeclaration.existing`, and the
+      vendored client's `authority`/`existing: true` all already say
+      `existing`; `unmanaged` would have been a fourth name for the same
+      thing, and the one that collides with `hejbro check`'s own shipped
+      "unmanaged" (a catalog table no declaration covers at all —
+      `check/inventory.ts`'s `UnmanagedTable`, unaffected). `check`'s own
+      inventory type/text and this feature's DSL/id (`add-unmanaged-objects`,
+      directory, branch, issue title) are untouched by design.
+      Scope: core's snapshot marker (`existing?: true`), reader
+      (`tableExisting`), serializer helper (`existingField`), diff-guard
+      predicate (`isExistingSide`); the export field
+      (`ExportTableFact.existing`) and its zod key
+      (`existing: z.boolean().default(false)`); every test name/comment
+      describing *our* concept across core/cli/query/supabase/nile
+      (validator doc comments already said "existing table" generically
+      enough not to need touching, except three that said "an unmanaged
+      table's"). `isManagedTableDeclaration` (nile, supabase) is
+      unaffected — "managed" is already the right word, not a fourth
+      name for "existing". `check/inventory.ts` gains one disambiguating
+      doc-comment line (R1-06 item 1, constraint-only) on
+      `UnmanagedTable`.
+      Machine-checked residue (grep `unmanaged` across
+      `packages/*/src`, `packages/*/test`,
+      `openspec/changes/add-unmanaged-objects/**`, this file included):
+      every remaining hit is one of exactly three kinds — ① `check`'s
+      own inventory (type/field names, `commands/check.ts`'s rendered
+      text, and the tests pinned to both, including `check-inventory.test.ts`,
+      `check-compare.test.ts`, and `check-command.test.ts`'s
+      pre-existing 5.1-section tests); ② the change id/path string
+      `add-unmanaged-objects` itself (directory, branch, issue title,
+      doc-comment attributions); ③ this file's own historical/comparison
+      prose (this section, and the `cli-commands` delta's contrast
+      sentence). A fourth, pre-existing sense also survives untouched
+      and was confirmed unrelated by reading each site: `apply/ledger.ts`,
+      `contract/read-snapshot.ts`, `contract/ts-type.ts`,
+      `apply-raise.test.ts`, `apply-reset.test.ts`, `contract-emit.test.ts`
+      all cite an *earlier* change's own "an object no declaration
+      covers"/"a target the export does not describe" vocabulary (task
+      references "5.9"/"6.2", predating add-unmanaged-objects), which is
+      the same axis as `check`'s inventory concept, not this one — left
+      alone as out of this change's scope.
+      Same commit as the five spec documents the lead already staged in
+      the worktree (`proposal.md` + all four capability deltas) — spec
+      sentences first, code proving them second, never split across two
+      commits. `7db42527` (2.1's own commit) is NOT amended (lead
+      ruling, R1-06): once a report quotes a SHA for specific content,
+      amending it — pushed or not — makes the quoted evidence false.
+
+- [x] 2.2 (~9m) `check` compares nothing about an existing table and
       omits it from the inventory.
 
-      **Name-collision measurement (lead-flagged, R1-03/R1-04), held**:
-      `check/inventory.ts` already had `UnmanagedTable`/
-      `unmanagedTables` — "a catalog table no declaration covers at
-      all," the opposite axis from this task's "declared but not
-      managed." Measured: the word reaches user-facing stdout
-      (`commands/check.ts:138`, `` `unmanaged table (not covered by any
-      declaration): ${schema}.${table}` ``), so this is an observable-
-      contract question, not an internal-naming one. **On hold for lead
-      judgement** — no text or type name touched this task (`check.ts`'s
-      line, `UnmanagedTable`/`unmanagedTables`, and this feature's own
-      `unmanaged` name all left exactly as they were); the lead's
-      provisional reading is that the two are not actually opposite (the
-      undeclared-vs-declared axis the existing text already names is the
-      real distinction), so (c) no-rename is likely, but the rename
-      itself (if any) and its own doc comment are a later, separate
-      commit once confirmed.
+      **Name-collision measurement (lead-flagged, R1-03/R1-04),
+      resolved by 2.1b (R1-05/R1-06)**: `check/inventory.ts` already had
+      `UnmanagedTable`/`unmanagedTables` — "a catalog table no
+      declaration covers at all," a different axis from this task's
+      "declared but not managed." Measured: the word reaches
+      user-facing stdout (`commands/check.ts:138`, `` `unmanaged table
+      (not covered by any declaration): ${schema}.${table}` ``), so this
+      was an observable-contract question, not an internal-naming one —
+      correctly held rather than decided unilaterally. Lead ruling:
+      rename *our* concept to `existing` (2.1b); `check`'s own
+      "unmanaged" stays exactly as it was. `UnmanagedTable` gains one
+      disambiguating doc-comment line (R1-06 item 1).
 
       **`compare.ts`**: `compareTable` returns `[]` immediately for an
-      `unmanaged: true` node, before the catalog lookup even runs (zero
+      `existing: true` node, before the catalog lookup even runs (zero
       comparisons, not a shape-diff skip) — `LocalTableSnapshot` gains
-      the same optional `unmanaged?: true` mirror the rest of this
+      the same optional `existing?: true` mirror the rest of this
       file's compact-format locals already use.
-      **`inventory.ts`**: needs no code change — measured, not assumed.
+      **`inventory.ts`**: needs no code change beyond the R1-06
+      disambiguating comment — measured, not assumed.
       `declaredTableIdentities` already reads every `"table:"` snapshot
-      key regardless of managed/unmanaged, so an unmanaged declared
+      key regardless of managed/existing, so an existing declared
       table's identity is already "declared" for this file's own
       purposes and was never going to appear in `unmanagedTables` (that
       inventory concept is catalog-vs-undeclared, and this table *is*
@@ -276,15 +326,18 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
       red.
 
       Failing test (1, `compare.ts`'s own fix): `check-command.test.ts`
-      — three independent `it`s under "an unmanaged declaration is
+      — four independent `it`s under "an existing declaration is
       neither compared nor inventoried" — "no difference is reported for
       it" (①), "is absent from the inventory section" (②), "the exit
-      code is unaffected" (③), sharing one scenario (a declared unmanaged
-      table whose catalog counterpart has a genuinely different column
-      type — proves the skip runs before any shape comparison, not that
-      the shapes happened to agree). Split into three `it`s specifically
-      so a mutant that breaks only one side doesn't hide behind the
-      others.
+      code is unaffected" (③), and "the word `unmanaged` never appears
+      in the report, even though an existing table is declared" (④,
+      R1-06 item 2 — reuses this file's own line-179 stdout-absence
+      idiom, phrase-independent of ①-③), sharing one scenario (a
+      declared existing table whose catalog counterpart has a genuinely
+      different column type — proves the skip runs before any shape
+      comparison, not that the shapes happened to agree). Split into
+      independent `it`s specifically so a mutant that breaks only one
+      side doesn't hide behind the others.
       Characterization pin (0 red, already true): `loader.test.ts` — "an
       exported existing table is loaded as a declaration" (new fixture
       `test/fixtures/existing-table/`, since `fixtures/basic`'s own table
@@ -294,7 +347,7 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
       ③ go red (measured: 2/20), inventory ② stays green — proving ②
       never depended on compare.ts at all.
       Mutant (b), `inventory.ts`'s `declaredTableIdentities` narrowed to
-      exclude unmanaged tables (a probe mutant proving ②'s own test is
+      exclude existing tables (a probe mutant proving ②'s own test is
       load-bearing despite no real code existing to remove): only ②
       goes red (measured: 1/20), ① and ③ stay green — the reverse
       independence, and the reason "no fix needed" above is a measured
@@ -304,9 +357,9 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
       (the new loader test), the other 8 in that file stay green —
       proves the characterization pin is load-bearing even though it
       arrived green.
-- [ ] 2.3 (~5m) `reset` drops nothing of an unmanaged table and `raise`
+- [ ] 2.3 (~5m) `reset` drops nothing of an existing table and `raise`
       ignores it. Failing test: `reset-command.test.ts` — "reset drops no
-      unmanaged table".
+      existing table".
 
 ## 3. The contract, the client, and the witness (#605)
 Files: `packages/cli/src/contract/{tables,emit}.ts`, `packages/query/src/
@@ -316,26 +369,30 @@ supabase/src/auth-tables.ts` (doc), `examples/*/test/*vendor*.test.ts`,
 names), `docs/specs/2026-08-19-hejbro-design.md` (D41 amendment note),
 `.changeset/*.md`. `synthesize.ts` is shared with group 1 (see there).
 
-- [ ] 3.1 (~9m) [design] The contract emits the unmanaged table's
+- [ ] 3.1 (~9m) [design] The contract emits the existing table's
       `Row`/`Insert`/`Update` and marks its client metadata; relations
       onto it resolve (the "no relation" rule narrows to undeclared
-      tables). Failing tests: contract emit test — "emits an unmanaged
+      tables). Failing tests: contract emit test — "emits an existing
       table under Tables, marked"; relation test — "a foreign key onto a
-      declared unmanaged table resolves to a relation".
+      declared existing table resolves to a relation".
 - [ ] 3.2 (~9m) The two-repository witness: the examples' supabase
-      schema exports `authUsers` as unmanaged; the consumer reads a
+      schema exports `authUsers` as existing; the consumer reads a
       managed table joined to it against a real server (PG15/PG17).
       Failing test: the existing witness gains the join.
 - [ ] 3.3 (~7m) Skill sentences (brownfield: an exported `existingTable`
       is now a declaration that emits nothing — the sentence naming the
-      hard error goes; polyrepo: unmanaged tables cross the boundary),
-      the D41 amendment note beside the decision's own row (the original
+      hard error goes; polyrepo: existing tables cross the boundary),
+      quoting the two-senses distinction verbatim (R1-06 item 3): "hejbro
+      does not manage a table for one of two reasons — no declaration
+      covers it at all (`check`'s own inventory), or a declaration
+      covers it with `existingTable()` (never in the inventory)." The
+      D41 amendment note beside the decision's own row (the original
       text is never deleted, only annotated: "amended by
       add-unmanaged-objects (#605) — an exported existingTable is a
       declaration that emits nothing; pending owner ratification"),
       `minor` changeset, ledger rows. The changeset body MUST carry, near
       verbatim, the user-facing half of 1.2's exemption restoration:
-      "preset validators (Supabase, Nile) skip unmanaged declarations —
+      "preset validators (Supabase, Nile) skip existing declarations —
       they judge managed DDL" — a real behavior change (a warning/error
       that used to fire on a declared `existingTable()` no longer does),
       not an internal refactor, so it belongs in the `minor` changeset's
