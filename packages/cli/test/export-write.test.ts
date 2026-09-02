@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { validateExport } from "../src/vendor/validate-export";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -236,6 +237,52 @@ export const posts = table(app, "posts", {
 		);
 		expect(postsFact).toBeDefined();
 		expect(postsFact.existing).toBe(false);
+	});
+
+	// D106 R2, R2-N7: the write half above only ever asserts `existing`
+	// itself; the read half (`validate-export.test.ts`) only ever reads
+	// a hand-written payload. Neither exercises the existing table's own
+	// `columns`/`exportName`/`mode`/`notNullElements` surviving a real
+	// write-then-read round trip -- this connects both halves in one
+	// fixture, `validateExport` imported in-process (pure JSON
+	// validation, no jiti/module-instance risk the CLI-subprocess
+	// convention exists to avoid) reading the same `format.json`/
+	// `schema.json` this same run's real CLI write just produced.
+	it("an existing table's own columns, mode and notNullElements survive a real write-then-read round trip (D106 R2, R2-N7)", async () => {
+		const schemaWithRichExisting = `import { bigint, existingTable, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", {
+	id: uuid(),
+	balance: bigint(),
+	tags: text().array().notNullElements(),
+});
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+`;
+		await writeSchema(cwd, schemaWithRichExisting);
+		const result = await runCli(cwd, ["generate", "--export"]);
+		expect(result.exitCode).toBe(0);
+
+		const formatText = await readExportFile(cwd, "format.json");
+		const schemaText = await readExportFile(cwd, "schema.json");
+		const { payload } = validateExport(formatText, schemaText);
+
+		const authUsersFact = payload.tables.find(
+			(fact) => fact.tableName === "users",
+		);
+		expect(authUsersFact).toBeDefined();
+		expect(authUsersFact?.existing).toBe(true);
+		expect(authUsersFact?.exportName).toBe("authUsers");
+		expect(authUsersFact?.columns).toEqual({
+			id: { key: "id", mode: null, notNullElements: false },
+			balance: { key: "balance", mode: "bigint", notNullElements: false },
+			tags: { key: "tags", mode: null, notNullElements: true },
+		});
 	});
 
 	it("description and snapshot formats are distinct values", async () => {
