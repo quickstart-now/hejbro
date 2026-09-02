@@ -239,5 +239,25 @@ describe("runPull / 4.1", () => {
 		expect(readFileSync(vendorContractPath(cwd), "utf8")).toBe(
 			"// hand-written, not ours\n",
 		);
+		// D106 R3-N2: pull has no --force flag at all -- the remedy text
+		// must not send a consumer looking for one.
+		expect(outcome.stderr).not.toContain("--force");
+		expect(outcome.stderr).toContain("hejbro pull");
+	});
+
+	it("still refuses when a foreign (non-hejbro) file already occupies hejbro.lock -- no --force exists to override it either (D106 R3-N2)", async () => {
+		mkdirSync(vendorDirPath(cwd), { recursive: true });
+		writeFileSync(lockPath(cwd), '{"generatedBy": "some-other-tool"}');
+
+		const outcome = await runPull(
+			cwd,
+			["--db-url", "postgres://fixture", "--schema", "app"],
+			depsFor(widgetsResult),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("vendor-destination-not-vendored");
+		expect(outcome.stderr).not.toContain("--force");
+		expect(outcome.stderr).toContain("hejbro pull");
 	});
 });

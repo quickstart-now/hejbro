@@ -3,6 +3,7 @@ import type { Catalog } from "../src/check/catalog";
 import type { LossReportFacts } from "../src/infer/loss-report";
 import {
 	buildLossReport,
+	detectForeignKeyNameApproximations,
 	detectNextvalDefaultApproximations,
 	detectUniqueIndexApproximations,
 } from "../src/infer/loss-report";
@@ -22,6 +23,7 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	typeLosses: [],
 	uniqueIndexApproximations: [],
 	nextvalDefaults: [],
+	foreignKeyNameApproximations: [],
 	undeclarableNameColumns: [],
 });
 
@@ -109,6 +111,29 @@ describe("buildLossReport / 1.7", () => {
 		expect(
 			report.some(
 				(line) => line.includes("nextval") && line.includes("legacy_id_seq"),
+			),
+		).toBe(true);
+	});
+
+	it("names the foreign-key-derived-name approximation (D106 R3-B3)", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			foreignKeyNameApproximations: [
+				{
+					schema: "app",
+					table: "comments",
+					catalogName: "Comments_PostId_FK",
+					derivedName: "comments_post_id_fk",
+				},
+			],
+		});
+
+		expect(
+			report.some(
+				(line) =>
+					line.includes("Comments_PostId_FK") &&
+					line.includes("comments_post_id_fk") &&
+					line.startsWith("Approximated:"),
 			),
 		).toBe(true);
 	});
@@ -317,6 +342,49 @@ describe("detectNextvalDefaultApproximations / 1.7", () => {
 				table: "legacy",
 				column: "external_id",
 				sequence: "app.orphan_seq",
+			},
+		]);
+	});
+});
+
+describe("detectForeignKeyNameApproximations / D106 R3-B3", () => {
+	it("names only the foreign key whose catalog name isn't a valid hejbro SQL identifier, not the one that already is", () => {
+		const tables: ReadonlyArray<InferredTableFacts> = [
+			{
+				schema: { declarationKind: "schema", schemaName: "app" },
+				tableName: "comments",
+				columns: [],
+				foreignKeys: [
+					{
+						name: "Comments_PostId_FK",
+						sourceColumns: ["post_id"],
+						targetSchema: "app",
+						targetTable: "posts",
+						targetColumns: [],
+						onDelete: "a",
+						onUpdate: "a",
+					},
+					{
+						name: "comments_author_id_fk",
+						sourceColumns: ["author_id"],
+						targetSchema: "app",
+						targetTable: "users",
+						targetColumns: [],
+						onDelete: "a",
+						onUpdate: "a",
+					},
+				],
+				checks: [],
+				indexes: [],
+			},
+		];
+
+		expect(detectForeignKeyNameApproximations(tables)).toEqual([
+			{
+				schema: "app",
+				table: "comments",
+				catalogName: "Comments_PostId_FK",
+				derivedName: "comments_post_id_fk",
 			},
 		]);
 	});

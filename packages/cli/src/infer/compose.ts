@@ -16,6 +16,7 @@ import { describeCatalog } from "./description";
 import type { UndeclarableNameColumn } from "./loss-report";
 import {
 	buildLossReport,
+	detectForeignKeyNameApproximations,
 	detectNextvalDefaultApproximations,
 	detectUniqueIndexApproximations,
 } from "./loss-report";
@@ -209,6 +210,8 @@ export const inferFromCatalog = async (
 		typeLosses,
 		uniqueIndexApproximations: detectUniqueIndexApproximations(catalog),
 		nextvalDefaults: detectNextvalDefaultApproximations(mergedTables),
+		foreignKeyNameApproximations:
+			detectForeignKeyNameApproximations(mergedTables),
 		undeclarableNameColumns: undeclarableNameColumnsFor(mergedTables),
 	});
 

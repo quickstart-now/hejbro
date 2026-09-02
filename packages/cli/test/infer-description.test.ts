@@ -1,3 +1,4 @@
+import { toSnakeCase } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import type { InferenceCatalog } from "../src/infer/catalog";
@@ -159,6 +160,105 @@ describe("describeCatalog / 1.6", () => {
 			{ sqlName: "user_id", tsKey: "userId" },
 			{ sqlName: "USER_ID", tsKey: "userId2" },
 		]);
+	});
+
+	/**
+	 * D106 R3-B2: a third, ordinary column `user_id2` has its own distinct
+	 * base key `userId2` -- exactly the suffix the `user_id`/`USER_ID`
+	 * collision would otherwise hand out next. `user_id2` must keep its
+	 * own bare key regardless: `compose.ts`'s own exclusion rule
+	 * (`isNameRoundTrippable`, private to that module and reachable
+	 * end-to-end only through a live catalog read) is exactly
+	 * `toSnakeCase(tsKey) === sqlName`, so asserting that round trip here
+	 * is this suite's own way of pinning "never mis-reported as
+	 * undeclarable" without a database.
+	 */
+	it("keeps an ordinary column's own bare key even when an unrelated collision's suffix would otherwise land on it", () => {
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [{ schema: "app", table: "widgets", rls: false }],
+			columns: [
+				{
+					schema: "app",
+					table: "widgets",
+					name: "user_id",
+					notNull: true,
+					catalogType: "uuid",
+					baseTypeKind: "b",
+					baseTypeSchema: "pg_catalog",
+					baseTypeName: "uuid",
+					catalogDefault: null,
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "USER_ID",
+					notNull: true,
+					catalogType: "uuid",
+					baseTypeKind: "b",
+					baseTypeSchema: "pg_catalog",
+					baseTypeName: "uuid",
+					catalogDefault: null,
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "user_id2",
+					notNull: true,
+					catalogType: "uuid",
+					baseTypeKind: "b",
+					baseTypeSchema: "pg_catalog",
+					baseTypeName: "uuid",
+					catalogDefault: null,
+				},
+			],
+		};
+		const inferenceCatalog: InferenceCatalog = {
+			...emptyInferenceCatalog(),
+			columnDetails: [
+				{
+					schema: "app",
+					table: "widgets",
+					name: "user_id",
+					position: 1,
+					identityKind: "",
+					generatedKind: "",
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "USER_ID",
+					position: 2,
+					identityKind: "",
+					generatedKind: "",
+				},
+				{
+					schema: "app",
+					table: "widgets",
+					name: "user_id2",
+					position: 3,
+					identityKind: "",
+					generatedKind: "",
+				},
+			],
+		};
+
+		const description = describeCatalog(catalog, inferenceCatalog);
+
+		const widgets = description.tables.find((t) => t.table === "widgets");
+		if (widgets === undefined) {
+			throw new Error("expected widgets table description");
+		}
+		expect(widgets.columns).toEqual([
+			{ sqlName: "user_id", tsKey: "userId" },
+			{ sqlName: "USER_ID", tsKey: "userId3" },
+			{ sqlName: "user_id2", tsKey: "userId2" },
+		]);
+		const userId2 = widgets.columns.find((c) => c.sqlName === "user_id2");
+		if (userId2 === undefined) {
+			throw new Error("expected user_id2's own description entry");
+		}
+		expect(toSnakeCase(userId2.tsKey)).toBe(userId2.sqlName);
 	});
 
 	it("carries distinct role names from the grants present", () => {

@@ -13,6 +13,7 @@ import {
 	columnIdentity,
 	columnNotNull,
 	decodeExprNode,
+	deriveForeignKeyName,
 	renderExpr,
 	tableIdentity,
 } from "@hejbro/core";
@@ -476,6 +477,29 @@ export type ForeignKeyRenderContext = {
 	readonly targetIdentifier: string | null;
 	readonly tsKeyFor: (sqlName: string) => string;
 	readonly targetTsKeyFor: (sqlName: string) => string;
+	/** The owning table's own SQL name (D106 R3-B3) -- `renderForeignKeyNameField`'s own input for deciding whether the catalog's name needs stating explicitly at all. */
+	readonly tableName: string;
+};
+
+/**
+ * D106 R3-B3: an explicit `name:` only when the catalog's own foreign key
+ * name differs from what `deriveForeignKeyName` would produce for this
+ * table and these columns -- so importing a database hejbro itself
+ * created (whose foreign keys are already named this way) writes exactly
+ * the same bytes it always has, and only a foreign key hejbro did not
+ * create carries the extra field. `fk.name` is already guaranteed
+ * expressible by this point: `infer/table.ts`'s own `expressibleForeignKeyName`
+ * (D36) falls back to the derived name before this snapshot is ever
+ * built, so no validation is needed here, only the equality check.
+ */
+const renderForeignKeyNameField = (
+	tableName: string,
+	fk: ForeignKeySnapshot,
+): string => {
+	if (fk.name === deriveForeignKeyName(tableName, fk.columns)) {
+		return "";
+	}
+	return `, name: ${JSON.stringify(fk.name)}`;
 };
 
 const renderReferencesObject = (
@@ -509,7 +533,8 @@ const renderForeignKey = (
 		context.targetIdentifier,
 		targetColumns,
 	);
-	return `{ columns: [${columns}], references: ${references}${renderForeignKeyActions(fk)} }`;
+	const nameField = renderForeignKeyNameField(context.tableName, fk);
+	return `{ columns: [${columns}], references: ${references}${nameField}${renderForeignKeyActions(fk)} }`;
 };
 
 /**
@@ -949,6 +974,7 @@ export const renderTable = (
 					context.identifierFor,
 				),
 				tsKeyFor: tsKeyForOwn,
+				tableName: table.name,
 				targetTsKeyFor: (sqlName: string) =>
 					context.tsKeyFor(fk.referencesTable, sqlName),
 			});
@@ -1036,12 +1062,41 @@ const HEADER_INTRO = [
 	"rewrites it.",
 ];
 
+/**
+ * D106 R3-B1 (revised, CI-R3-03): explains a visible escape before the
+ * report lines below can show one -- an ASCII backslash reads as part
+ * of a catalog name unless a line right above it says otherwise.
+ */
+const ESCAPE_NOTE =
+	"A comment-ending pair inside a name below is escaped with a backslash.";
+
+// D106 R3-B1: a loss-report line carries raw catalog text -- a quoted
+// identifier can itself contain a star immediately followed by a
+// slash, and a report line naming one verbatim would otherwise close
+// the header's own block comment right there, truncating the file
+// (the loader then fails to parse whatever text follows, outside any
+// comment). A block comment ends at that exact two-character sequence
+// and nothing else, so inserting a backslash between the two
+// characters is enough to defang it -- plain ASCII, greppable, visible
+// (hence ESCAPE_NOTE above explaining it), and never mistaken for a
+// comment ending itself. (This comment avoids spelling the pair out
+// literally, for the obvious reason.)
+const COMMENT_TERMINATOR = /\*\//g;
+const containsCommentTerminator = (line: string): boolean => /\*\//.test(line);
+const escapeCommentTerminator = (line: string): string =>
+	line.replace(COMMENT_TERMINATOR, "*\\/");
+
 export const renderHeader = (lossReport: ReadonlyArray<string>): string => {
-	const introLines = HEADER_INTRO.map((line) => ` * ${line}`);
+	const introLines = [
+		...HEADER_INTRO,
+		...entryWhen(lossReport.some(containsCommentTerminator), ESCAPE_NOTE),
+	].map((line) => ` * ${line}`);
 	if (lossReport.length === 0) {
 		return ["/**", ...introLines, " */"].join("\n");
 	}
-	const reportLines = lossReport.map((line) => ` * ${line}`);
+	const reportLines = lossReport.map(
+		(line) => ` * ${escapeCommentTerminator(line)}`,
+	);
 	return ["/**", ...introLines, " *", ...reportLines, " */"].join("\n");
 };
 
@@ -1148,14 +1203,15 @@ const neededCrossFileTableReferences = (
 
 /**
  * One file's own identifier namespace (schema + its enums + its tables +
- * its (c) handles, in that order), resolved against `reserved` -- called
- * twice (CI-G2-R1-07/09): once with only this file's own hejbro-vocabulary
- * usage (phase 1, whose result other files' imports are read from), once
- * more with vocabulary *and* every name this file imports from another
- * file added to `reserved` (phase 2, the actual final identifiers) -- so a
- * table imported from another schema can never be shadowed by a same-named
- * local one (CI-G2-R1-09: two schemas both naming a table `users`, one
- * referencing the other, is an ordinary case, not an edge case).
+ * its (c) handles, in that order), resolved against `reserved` -- this
+ * file's own hejbro-vocabulary usage (the barrel symbols it imports,
+ * `table`/`uuid`/…), so a local table or enum identifier can never
+ * collide with one of them. Cross-file collisions (CI-G2-R1-09: two
+ * schemas both naming a table `users`, one referencing the other) are no
+ * longer this function's concern: since D106 R2-B2 a file's own
+ * identifiers are settled with no knowledge of any other file at all,
+ * and a colliding cross-file *import* is aliased afterward
+ * (`resolveAliasesFor`, below) rather than reserved here.
  */
 const resolveFileIdentifiers = (
 	schemaName: string,
@@ -1405,11 +1461,13 @@ export const emitDeclarationFiles = (
 
 	const dryRunHandleIdentifierFor = (): string => "handle";
 
-	/** Phase 1 (vocabulary-only) or phase 2 (vocabulary + imports) -- same shape, different `reserved`. */
-	const buildFilePlan = (
-		schemaName: string,
-		reserved: (vocabulary: ReadonlySet<string>) => ReadonlySet<string>,
-	): FilePlan => {
+	/**
+	 * One file's own plan: its tables, enums, (c) handles and enum
+	 * clones, and the identifiers `resolveFileIdentifiers` settles for
+	 * all of them against this file's own hejbro-vocabulary usage alone
+	 * (D106 R2-B2 -- no cross-file knowledge here at all).
+	 */
+	const buildFilePlan = (schemaName: string): FilePlan => {
 		const schemaTables = tablesBySchema.get(schemaName) ?? [];
 		const schemaEnums = enumsBySchema.get(schemaName) ?? [];
 		const schemaHandles: ReadonlyArray<HandleNeed> = schemaTables.flatMap(
@@ -1486,7 +1544,7 @@ export const emitDeclarationFiles = (
 			schemaTables,
 			schemaHandles,
 			schemaEnumClones,
-			reserved(vocabulary),
+			vocabulary,
 		);
 
 		return {
@@ -1514,9 +1572,7 @@ export const emitDeclarationFiles = (
 	 * three schemas made `a.schema.ts` declare `users2` while importing
 	 * `users2`, a `Duplicate declaration` that never parses).
 	 */
-	const filePlans = schemaNames.map((schemaName) =>
-		buildFilePlan(schemaName, (vocabulary) => vocabulary),
-	);
+	const filePlans = schemaNames.map((schemaName) => buildFilePlan(schemaName));
 
 	const fileOfTable = new Map(
 		filePlans.flatMap((plan) =>

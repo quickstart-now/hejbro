@@ -42,6 +42,7 @@ const snapshotWith = (
 const resultFor = (
 	tables: ReadonlyArray<TableSnapshot>,
 	enumFacts: ReadonlyArray<EnumFactLike>,
+	lossReport: ReadonlyArray<string> = [],
 ): InferCatalogResult => ({
 	snapshot: snapshotWith(tables, enumFacts),
 	description: {
@@ -55,7 +56,7 @@ const resultFor = (
 		})),
 		roleNames: [],
 	},
-	lossReport: [],
+	lossReport,
 	sql: "",
 });
 
@@ -490,5 +491,42 @@ describe("emitDeclarationFiles / D106 R2-B2 (CI-R2-02): a same-named table chain
 		const bySchema = (files: ReturnType<typeof emitDeclarationFiles>) =>
 			new Map(files.map((file) => [file.schema, file.source] as const));
 		expect(bySchema(forward)).toEqual(bySchema(reversed));
+	});
+});
+
+describe('emitDeclarationFiles / D106 R3-B1 (CI-R3-01): a loss-report line carrying "*/" never closes the header comment early', () => {
+	// The reviewer's own repro (evaluation.md): an exotic catalog identifier
+	// carries a star followed immediately by a slash, so buildLossReport's
+	// own (unescaped) report line, once prefixed with " * " in the header,
+	// closes that block comment early. dangerousLine below stands in for
+	// buildLossReport's own output with that exact line, so this test
+	// proves renderHeader's own seam rather than re-deriving the line from
+	// a real catalog read. (Deliberately not spelling the star-slash pair
+	// out in this very comment, for the obvious reason.)
+	const widgets: TableSnapshot = {
+		schema: "app",
+		name: "widgets",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+		],
+		indexes: [],
+		foreignKeys: [],
+		primaryKeyName: "widgets_pkey",
+	};
+	const dangerousLine =
+		'Omitted: column "app.widgets.a*/b" -- its SQL name has no declaration key.';
+
+	it("loads cleanly even though the loss report names a column containing */", async () => {
+		const paths = writeFiles(resultFor([widgets], [], [dangerousLine]));
+		const path = paths.get("app");
+		if (path === undefined) {
+			throw new Error("expected an app.schema.ts to have been written");
+		}
+		await expect(importAsEntry(path)).resolves.toBeDefined();
 	});
 });

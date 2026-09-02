@@ -99,6 +99,37 @@ describe("tableKind.emit — create", () => {
 		]);
 	});
 
+	it("emits an explicit foreign key name in the constraint statement, and omits it (derives) when unset (D106 R3-B3)", () => {
+		const posts = table(app, "posts_fk_name_emit", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const comments = table(
+			app,
+			"comments_fk_name_emit",
+			{ id: uuid().primaryKey().defaultRandom(), postId: uuid().notNull() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { table: posts, columns: [posts.id] },
+						name: "comments_fk_name_emit_legacy_fkey",
+					},
+				],
+			}),
+		);
+
+		const next = tableKind.serialize(getTableMeta(comments));
+		const change = expectSingleChange(
+			tableKind.diff(null, next, "app.comments_fk_name_emit"),
+		);
+		const foreignKeyStatement = tableKind
+			.emit(change)
+			.find((statement) => statement.sql.includes("add constraint"));
+		expect(foreignKeyStatement?.sql).toBe(
+			'alter table "app"."comments_fk_name_emit" add constraint "comments_fk_name_emit_legacy_fkey" foreign key ("post_id") references "app"."posts_fk_name_emit" ("id");',
+		);
+	});
+
 	it("emits a create table statement with a unique index and no on-delete clause when unset", () => {
 		const users = table(
 			app,

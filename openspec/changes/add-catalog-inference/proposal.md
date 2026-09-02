@@ -25,13 +25,14 @@ else.
 - **Catalog-to-IR inference**, built once: the read-only catalog queries
   `check` already runs (`CHECK_CATALOG_QUERIES`) are read into a snapshot
   — schemas, tables with columns, defaults, identity/generated markers,
-  primary keys, foreign keys, checks, indexes, enum types, sequences — and
+  primary keys, foreign keys, checks, indexes, enum types, and the
+  sequences an identity or serial column owns — and
   an export description whose declaration-time facts are **guessed and
   marked as guessed**: TypeScript keys by a stated rule (snake_case →
   camelCase, collisions resolved by a stated rule), numeric mode the
   default, element nullability unknown → nullable, no function export
   names or argument keys (functions are not inferred in v1), roles from
-  the grants and policies present. What v1 does not infer is listed as
+  the grants present. What v1 does not infer is listed as
   such: functions, triggers, policies' expressions, views' bodies,
   grants beyond role names.
 - **`hejbro import`** (`--url`/`DATABASE_URL`, the `check` rule): writes
@@ -39,9 +40,9 @@ else.
   schema, `table()` per table with the declared-looking column builders
   hejbro can map, `pgEnum` per enum — into a directory the command names
   and never overwrites, and prints the loss report. A starter, not a
-  round trip: the next `hejbro generate` against an empty snapshot
-  produces the migration that would create what the database already
-  has, which is what `baseline` then registers.
+  round trip: `hejbro baseline` then produces the migration that would
+  create what the database already has, marked in its banner so that
+  `migrate` registers it rather than runs it.
 - **`hejbro pull --db-url`**: the inferred payload fed to the same
   contract emitter the git channel uses; the contract carries an origin
   that names the database (no commit, no export hash) and a header line
@@ -67,6 +68,8 @@ else.
   overwrite).
 - `schema-vendoring` — ADDED "A database-sourced contract is marked and
   refused by the checks that need a commit".
+- `table-declaration` — ADDED "A foreign key can carry the name the
+  database already gave it" (D106 round 3).
 
 ## Impact
 
@@ -85,8 +88,9 @@ else.
   database, generate against empty, diff against the examples' own
   migration), `skills/hejbro/references/brownfield-adoption.md` and the
   polyrepo reference, `.changeset/*.md`, `openspec/task-times.csv`.
-- `@hejbro/core`: no change (inference and emission live in the CLI;
-  the snapshot codec is reused as-is).
+- `@hejbro/core`: a foreign key's optional `name` (D106 round 3) — the
+  slot an index and a check already had; inference and emission
+  otherwise live in the CLI, and the snapshot codec is reused as-is.
 
 ## Out of scope
 

@@ -148,6 +148,7 @@ const foreignKeysFor = (
 			}
 			return [
 				{
+					name: constraint.name,
 					sourceColumns: constraint.columns,
 					targetSchema: detail.targetSchema,
 					targetTable: detail.targetTable,
