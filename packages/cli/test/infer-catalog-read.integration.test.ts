@@ -156,98 +156,154 @@ afterAll(() => {
 const fixtureUrl = (): string =>
 	`postgres://postgres@127.0.0.1:${hostPort}/postgres`;
 
+/**
+ * Read once, asserted by many independent `it`s below -- split
+ * deliberately (CI-G1-R1-05) so a mutant's failure is isolated to the
+ * one `it` whose fact it broke, instead of one giant assertion list
+ * where a single early failure hides whether everything after it would
+ * have stayed green. `let` at module scope is fine here -- `check:bans`
+ * only walks each package's own `src`, never `test` -- mirrors
+ * `check-live.integration.test.ts`'s own `let snapshot`.
+ */
+let catalog: Awaited<ReturnType<typeof readInferenceCatalog>>;
+let driver: ReturnType<typeof pgDriver>;
+
+beforeAll(async () => {
+	driver = pgDriver(fixtureUrl());
+	catalog = await readInferenceCatalog(driver);
+});
+
+afterAll(async () => {
+	await driver.client.end();
+});
+
 describe("readInferenceCatalog / 1.2b live witness", () => {
-	it("reads back exactly what the fixture DDL declared", async () => {
-		const driver = pgDriver(fixtureUrl());
-		try {
-			const catalog = await readInferenceCatalog(driver);
+	it("reads a by-default identity column's kind and non-default options", () => {
+		const idColumn = catalog.columnDetails.find(
+			(row) =>
+				row.schema === "infer_probe" &&
+				row.table === "parents" &&
+				row.name === "id",
+		);
+		expect(idColumn?.identityKind).toBe("d");
 
-			const idColumn = catalog.columnDetails.find(
-				(row) =>
-					row.schema === "infer_probe" &&
-					row.table === "parents" &&
-					row.name === "id",
-			);
-			expect(idColumn?.identityKind).toBe("d");
+		const identityOptions = catalog.identitySequenceOptions.find(
+			(row) => row.schema === "infer_probe" && row.table === "parents",
+		);
+		expect(identityOptions?.startValue).toBe("5");
+		expect(identityOptions?.increment).toBe("2");
+	});
 
-			const fullNameColumn = catalog.columnDetails.find(
-				(row) =>
-					row.schema === "infer_probe" &&
-					row.table === "parents" &&
-					row.name === "full_name",
-			);
-			expect(fullNameColumn?.generatedKind).toBe("s");
+	it("reads a stored generated column's kind", () => {
+		const fullNameColumn = catalog.columnDetails.find(
+			(row) =>
+				row.schema === "infer_probe" &&
+				row.table === "parents" &&
+				row.name === "full_name",
+		);
+		expect(fullNameColumn?.generatedKind).toBe("s");
+	});
 
-			const identityOptions = catalog.identitySequenceOptions.find(
-				(row) => row.schema === "infer_probe" && row.table === "parents",
-			);
-			expect(identityOptions?.startValue).toBe("5");
-			expect(identityOptions?.increment).toBe("2");
+	// children.id is `generated always as identity` with no options at all
+	// -- the only fixture column proving "the catalog reports every
+	// sequence option regardless" (Postgres always fills seqstart/seqmin/
+	// seqmax/etc in from its own defaults once the sequence exists,
+	// whether or not the DDL named them). 1.3's "declare only what
+	// differs" rule depends on this row actually equalling Postgres's own
+	// defaults, which is exactly what this pins.
+	it("reads Postgres's own defaults for an identity column with no options named", () => {
+		const childIdentityOptions = catalog.identitySequenceOptions.find(
+			(row) => row.schema === "infer_probe" && row.table === "children",
+		);
+		expect(childIdentityOptions).toEqual({
+			schema: "infer_probe",
+			table: "children",
+			column: "id",
+			startValue: "1",
+			increment: "1",
+			minValue: "1",
+			maxValue: "9223372036854775807",
+			cache: "1",
+			cycle: false,
+		});
+	});
 
-			const selfRefFk = catalog.foreignKeyDetails.find(
-				(row) =>
-					row.schema === "infer_probe" &&
-					row.table === "parents" &&
-					row.name.includes("parent_id"),
-			);
-			expect(selfRefFk?.targetTable).toBe("parents");
-			expect(selfRefFk?.targetColumns).toEqual(["id"]);
-			expect(selfRefFk?.onDelete).toBe("a");
+	it("reads a self-referencing foreign key's target and default (unspecified) action", () => {
+		const selfRefFk = catalog.foreignKeyDetails.find(
+			(row) =>
+				row.schema === "infer_probe" &&
+				row.table === "parents" &&
+				row.name.includes("parent_id"),
+		);
+		expect(selfRefFk?.targetTable).toBe("parents");
+		expect(selfRefFk?.targetColumns).toEqual(["id"]);
+		expect(selfRefFk?.onDelete).toBe("a");
+	});
 
-			const cascadeFk = catalog.foreignKeyDetails.find(
-				(row) => row.schema === "infer_probe" && row.table === "children",
-			);
-			expect(cascadeFk?.targetTable).toBe("parents");
-			expect(cascadeFk?.onDelete).toBe("c");
+	it("reads a foreign key's on-delete-cascade action", () => {
+		const cascadeFk = catalog.foreignKeyDetails.find(
+			(row) => row.schema === "infer_probe" && row.table === "children",
+		);
+		expect(cascadeFk?.targetTable).toBe("parents");
+		expect(cascadeFk?.onDelete).toBe("c");
+	});
 
-			const checkExpr = catalog.checkExpressions.find(
-				(row) => row.name === "parents_name_check",
-			);
-			expect(checkExpr?.expression).toBe("(length(name) > 0)");
+	it("reads a check constraint's expression text", () => {
+		const checkExpr = catalog.checkExpressions.find(
+			(row) => row.name === "parents_name_check",
+		);
+		expect(checkExpr?.expression).toBe("(length(name) > 0)");
+	});
 
-			const exprIndex = catalog.indexDetails.find(
-				(row) => row.name === "parents_email_lower_idx",
-			);
-			expect(exprIndex?.columns).toHaveLength(1);
-			expect(exprIndex?.columns[0]?.column).toBeNull();
-			// Real Postgres output (verified directly, docker postgres:17-alpine):
-			// no cast, since `email` is already `text` and `lower(text)` is a
-			// real overload -- confirms pg_get_indexdef needs no `::text` guess.
-			expect(exprIndex?.columns[0]?.text).toBe("lower(email)");
+	it("reads an expression index's column as text with no attribute name", () => {
+		const exprIndex = catalog.indexDetails.find(
+			(row) => row.name === "parents_email_lower_idx",
+		);
+		expect(exprIndex?.columns).toHaveLength(1);
+		expect(exprIndex?.columns[0]?.column).toBeNull();
+		// Real Postgres output (verified directly, docker postgres:17-alpine):
+		// no cast, since `email` is already `text` and `lower(text)` is a
+		// real overload -- confirms pg_get_indexdef needs no `::text` guess.
+		expect(exprIndex?.columns[0]?.text).toBe("lower(email)");
+	});
 
-			const partialIndex = catalog.indexDetails.find(
-				(row) => row.name === "parents_active_name_idx",
-			);
-			expect(partialIndex?.isUnique).toBe(true);
-			expect(partialIndex?.predicate).toBe("(parent_id IS NULL)");
+	it("reads a partial unique index's predicate", () => {
+		const partialIndex = catalog.indexDetails.find(
+			(row) => row.name === "parents_active_name_idx",
+		);
+		expect(partialIndex?.isUnique).toBe(true);
+		expect(partialIndex?.predicate).toBe("(parent_id IS NULL)");
+	});
 
-			const ginIndex = catalog.indexDetails.find(
-				(row) => row.name === "parents_metadata_gin_idx",
-			);
-			expect(ginIndex?.method).toBe("gin");
-			expect(ginIndex?.columns[0]?.opclass).toBe("jsonb_path_ops");
-			expect(ginIndex?.columns[0]?.opclassIsDefault).toBe(false);
-			// pg_get_indexdef's per-column form carries no opclass suffix of its
-			// own (verified directly: only the whole-index form does) -- this
-			// pins that `text` and `opclass` never duplicate the same fact, so
-			// 1.4 can safely combine them without re-parsing `text`.
-			expect(ginIndex?.columns[0]?.text).toBe("metadata");
+	it("reads a GIN index's non-default operator class, without duplicating it in the column text", () => {
+		const ginIndex = catalog.indexDetails.find(
+			(row) => row.name === "parents_metadata_gin_idx",
+		);
+		expect(ginIndex?.method).toBe("gin");
+		expect(ginIndex?.columns[0]?.opclass).toBe("jsonb_path_ops");
+		expect(ginIndex?.columns[0]?.opclassIsDefault).toBe(false);
+		// pg_get_indexdef's per-column form carries no opclass suffix of its
+		// own (verified directly: only the whole-index form does) -- this
+		// pins that `text` and `opclass` never duplicate the same fact, so
+		// 1.4 can safely combine them without re-parsing `text`.
+		expect(ginIndex?.columns[0]?.text).toBe("metadata");
+	});
 
-			const descIndex = catalog.indexDetails.find(
-				(row) => row.name === "parents_id_desc_idx",
-			);
-			expect(descIndex?.columns[0]?.descending).toBe(true);
-			expect(descIndex?.columns[0]?.nullsFirst).toBe(true);
-			// Same non-duplication pin as above, for indoption's DESC/NULLS
-			// FIRST bits: pg_get_indexdef's per-column form never appends them.
-			expect(descIndex?.columns[0]?.text).toBe("id");
+	it("reads a descending/nulls-first index column, without duplicating it in the column text", () => {
+		const descIndex = catalog.indexDetails.find(
+			(row) => row.name === "parents_id_desc_idx",
+		);
+		expect(descIndex?.columns[0]?.descending).toBe(true);
+		expect(descIndex?.columns[0]?.nullsFirst).toBe(true);
+		// Same non-duplication pin as above, for indoption's DESC/NULLS
+		// FIRST bits: pg_get_indexdef's per-column form never appends them.
+		expect(descIndex?.columns[0]?.text).toBe("id");
+	});
 
-			const enumRow = catalog.enumLabels.find(
-				(row) => row.schema === "infer_probe" && row.name === "mood",
-			);
-			expect(enumRow).toBeDefined();
-		} finally {
-			await driver.client.end();
-		}
+	it("reads an enum type's presence", () => {
+		const enumRow = catalog.enumLabels.find(
+			(row) => row.schema === "infer_probe" && row.name === "mood",
+		);
+		expect(enumRow).toBeDefined();
 	});
 });
