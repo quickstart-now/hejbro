@@ -723,7 +723,42 @@ export const runGenerate = async (
 			};
 			if (!firstPass.hasChanges) {
 				if (mode === "baseline") {
-					throwBaselineNothingToAdopt(config.entry);
+					if (declarations.length === 0) {
+						throwBaselineNothingToAdopt(config.entry);
+					}
+					// D106 R3, NB6: `throwBaselineNothingToAdopt`'s own premise
+					// (every non-empty declaration set fans out to at least one
+					// `create` against baseline's always-empty `previousSnapshot`)
+					// was true before #605 and false after it -- an
+					// `existingTable()`-only project loads real declarations
+					// (`declarations.length > 0`) that still diff to nothing,
+					// since an existing declaration is never DDL. There is
+					// nothing to *register*: no `create` statement was ever
+					// going to exist for `hejbro migrate` to mark as applied.
+					// `assertBaselineIsFirst` already guarantees `previousSnapshot`
+					// is empty here, so `firstPass.snapshot` (which carries at
+					// least one `table:` entry, marked existing, for every
+					// declared `existingTable()`) is guaranteed to differ from
+					// it -- this branch always has a snapshot worth writing,
+					// unlike the shared `snapshotUnchanged` check below.
+					writeFileSync(
+						join(cwd, config.snapshotPath),
+						renderSnapshot(firstPass.snapshot),
+					);
+					if (exportEnabled) {
+						writeExportArtifact(firstPass.snapshot);
+					}
+					return {
+						exitCode: 0,
+						stdout: [
+							"hejbro baseline",
+							`loaded ${declarations.length} declarations`,
+							"",
+							"No managed objects were declared -- only existingTable() declarations, which hejbro never migrates or registers.",
+							"The snapshot records them as existing. Next: run `hejbro check` to confirm your declarations match the live schema.",
+						],
+						stderr: null,
+					};
 				}
 				// D106 R2, R2-B2: `hasChanges` only tracks whether there is DDL
 				// to emit -- an existing-table marker change (handover,
