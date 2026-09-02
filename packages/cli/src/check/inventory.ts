@@ -25,12 +25,34 @@ export type Inventory = {
 // Mirrors compare.ts's own internal-invariant idiom (table shapes aren't
 // part of core's public surface).
 type LocalObjectWithSchema = { readonly schema: string };
+type LocalTableWithExisting = {
+	readonly schema: string;
+	readonly existing?: true;
+};
 
-/** Every schema any declared object touches -- "the declared schemas" (spec), read from every kind's own `schema` field, not only `schema:` entries (a project's declarations may never explicitly declare the `schema()` object itself). */
+/**
+ * Every schema any declared object touches -- "the declared schemas"
+ * (spec), read from every kind's own `schema` field, not only `schema:`
+ * entries (a project's declarations may never explicitly declare the
+ * `schema()` object itself). D106 R3, #665: an `existingTable()` node
+ * does not count -- it declares one table's own shape, not that this
+ * project has anything to say about the rest of its schema, so a single
+ * existing declaration must not pull every other catalog table in that
+ * schema into the inventory. Only a *managed* `table:` node (or any
+ * non-table kind -- `schema:`, `grant:`, a function, a view -- which
+ * carry no existing/managed distinction at all) still marks its schema
+ * declared.
+ */
 const declaredSchemaNames = (snapshot: Snapshot): ReadonlySet<string> =>
 	new Set(
-		Object.values(snapshot.objects)
-			.map((node) => (node as LocalObjectWithSchema).schema)
+		Object.entries(snapshot.objects)
+			.filter(([key, node]) => {
+				if (!key.startsWith("table:")) {
+					return true;
+				}
+				return (node as LocalTableWithExisting).existing !== true;
+			})
+			.map(([, node]) => (node as LocalObjectWithSchema).schema)
 			.filter(
 				(schemaName): schemaName is string => typeof schemaName === "string",
 			),

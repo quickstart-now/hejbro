@@ -1,5 +1,9 @@
 import { assertNever } from "../error";
 import type { ChangeOperation, KindChange } from "../kind/object-kind";
+import type { TableSnapshot } from "../kinds/table-snapshot";
+import { asTableSnapshot, tableExisting } from "../kinds/table-snapshot";
+import type { Snapshot } from "../snapshot/snapshot";
+import type { JsonValue } from "../snapshot/stable-json";
 import { compareKeys } from "../sort";
 
 /** The supported migration filename prefix strategies (D14). */
@@ -318,4 +322,142 @@ export const deriveSlug = (changes: ReadonlyArray<KindChange>): string => {
 		return "migration";
 	}
 	return `${changeVerb(firstChange.operation)}_${lastIdentitySegment(firstChange.identity)}`;
+};
+
+const TABLE_KEY_PREFIX = "table:";
+
+/**
+ * D106 R3, J13: the four ways one table's own existing marker can move
+ * between `previous` and `next` (identity unchanged — a rename produces
+ * two separate identities, each its own appear/disappear, not a fifth
+ * case). `null` when this identity's existing status didn't move (both
+ * absent, both managed, both existing, or one side absent and the other
+ * managed — an ordinary create/drop `deriveSlug` already names).
+ */
+const existingTransitionVerbs: Record<
+	"appeared" | "disappeared" | "released" | "adopted",
+	string
+> = {
+	appeared: "record",
+	disappeared: "forget",
+	// A managed table handed to the platform "releases" it; the reverse
+	// "adopts" one -- both words this same change's own delta/skill prose
+	// already uses for these two directions ("hands the table to the
+	// platform", "adopts it"), so the slug names the same transition a
+	// reader already has words for, not a new pair invented for this.
+	released: "release",
+	adopted: "adopt",
+};
+
+/** `asTableSnapshot`, guarding the one input it doesn't accept (a key absent from this snapshot) -- the guard clause `sideOf`'s own call site would otherwise need as a ternary. */
+const asTableSnapshotOrUndefined = (
+	node: JsonValue | undefined,
+): TableSnapshot | undefined => {
+	if (node === undefined) {
+		return undefined;
+	}
+	return asTableSnapshot(node);
+};
+
+type ExistingSide = "absent" | "existing" | "managed";
+
+/** Which of the three states one side of a `table:` key is in -- absent from that snapshot entirely, present and marked existing, or present and managed. */
+const sideOf = (node: TableSnapshot | undefined): ExistingSide => {
+	if (node === undefined) {
+		return "absent";
+	}
+	if (tableExisting(node)) {
+		return "existing";
+	}
+	return "managed";
+};
+
+/**
+ * Table-driven, not a branch per transition (#154's own CRAP ratchet: a
+ * sequential if-chain over four independently-computed booleans measured
+ * complexity 13, nowhere near the CRAP <= 5 budget even at full coverage
+ * -- `sideOf` narrows each side to one of three states first, so this is
+ * a single lookup over the 9 possible `previous:next` pairings, only 4
+ * of which name a real transition). The other 5 (both absent, both
+ * managed, both existing, or one absent and the other managed) are an
+ * ordinary create/drop `deriveSlug` already names, or no movement at
+ * all -- `undefined` from the lookup, narrowed to `null` by the `??`.
+ */
+const existingTransitionsBySideChange: Readonly<
+	Record<string, keyof typeof existingTransitionVerbs>
+> = {
+	"absent:existing": "appeared",
+	"existing:absent": "disappeared",
+	"managed:existing": "released",
+	"existing:managed": "adopted",
+};
+
+const classifyExistingTransition = (
+	previousNode: TableSnapshot | undefined,
+	nextNode: TableSnapshot | undefined,
+): keyof typeof existingTransitionVerbs | null =>
+	existingTransitionsBySideChange[
+		`${sideOf(previousNode)}:${sideOf(nextNode)}`
+	] ?? null;
+
+/**
+ * Derives a migration slug for a run whose only movement is one or more
+ * tables' own existing marker (D106 R3, J13) -- `deriveSlug` cannot see
+ * this run at all, by construction: an existing-table transition never
+ * produces a `KindChange`, so `changes` is always `[]` here, and
+ * `deriveSlug([])` falls back to the generic `"migration"` the lead
+ * ruled out for this case. Mirrors `deriveSlug`'s own shape exactly
+ * (verb + `_` + the identity's last dot-segment, first difference only,
+ * no third part) rather than inventing a new one: the verb names the
+ * direction the existing marker moved instead of a create/alter/drop
+ * operation. "First difference" is made deterministic the same way
+ * `stableJson` is: both snapshots' `table:`-prefixed keys, unioned and
+ * sorted with `compareKeys` (plain string order, matching every other
+ * deterministic-output guarantee in this codebase), and the first key
+ * in that order whose existing status actually moved wins -- exactly
+ * `deriveSlug`'s own "first change in the array" rule, applied to a
+ * deterministically-ordered set instead of an array a caller already
+ * built in one order. Never falls through to a generic default: a
+ * caller only reaches this function when the two snapshots are already
+ * known to differ (`R3-B1`'s own `snapshotChanged` gate) with no
+ * `KindChange` at all, and every such difference is, by this change's
+ * own closed enumeration (D106 add-unmanaged-objects), an existing
+ * marker moving on some `table:` key -- so a run that reaches here and
+ * finds no transition is a genuine bug, not a state to default through.
+ */
+export const deriveExistingTransitionSlug = (
+	previous: Snapshot,
+	next: Snapshot,
+): string => {
+	const keys = Array.from(
+		new Set([
+			...Object.keys(previous.objects).filter((key) =>
+				key.startsWith(TABLE_KEY_PREFIX),
+			),
+			...Object.keys(next.objects).filter((key) =>
+				key.startsWith(TABLE_KEY_PREFIX),
+			),
+		]),
+	).sort(compareKeys);
+	const transition = keys
+		.map((key) => ({
+			key,
+			kind: classifyExistingTransition(
+				asTableSnapshotOrUndefined(previous.objects[key]),
+				asTableSnapshotOrUndefined(next.objects[key]),
+			),
+		}))
+		.find(
+			(
+				entry,
+			): entry is { key: string; kind: NonNullable<(typeof entry)["kind"]> } =>
+				entry.kind !== null,
+		);
+	if (transition === undefined) {
+		throw new Error(
+			`deriveExistingTransitionSlug found no existing-marker transition between two snapshots the caller already knows differ -- internal invariant violated (D106 R3, J13). This is a hejbro bug: file an issue with the declarations that produced it.`,
+		);
+	}
+	const identity = transition.key.slice(TABLE_KEY_PREFIX.length);
+	return `${existingTransitionVerbs[transition.kind]}_${lastIdentitySegment(identity)}`;
 };

@@ -149,17 +149,20 @@ table to the platform and emits nothing at all, for the table or for
 anything hejbro managed on it (its sequences, its row-level security,
 its policies). The reverse — replacing an `existingTable()` with a
 managed `table()` of the same identity — **adopts** it: no `create
-table` is emitted for the table itself (it already exists), but
-everything the new declaration manages on it (a serial column's
-sequence, row-level security, its policies) is created exactly as it
-would be for any other managed table. Declaring a schema's tables with
-`table()`/`existingTable()` no longer has to stay a bare, unexported
-reference to work this way, the difference from before #605.
+table` is emitted for the table itself (it already exists), and only
+the three things a handover also spares are created for it — a serial
+column's sequence, row-level security, its policies. **Not** created:
+the declaration's own indexes, check constraints, foreign keys, or
+primary key, even though the snapshot afterwards records them as if
+they were (#671) — an adopted table's declared shape beyond that
+three-item list needs its own follow-up run once that gap closes.
+Declaring a schema's tables with `table()`/`existingTable()` no longer
+has to stay a bare, unexported reference to work this way, the
+difference from before #605.
 
 ```ts
 import { existingTable, text, uuid } from "hejbro";
 
-// Permanently unmanaged — declared for its shape, never diffed or emitted.
 export const legacyCustomers = existingTable("public", "legacy_customers", {
 	id: uuid().primaryKey(),
 	email: text().notNull(),

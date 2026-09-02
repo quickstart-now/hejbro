@@ -5,7 +5,7 @@ import { pgEnum } from "../src/dsl/pg-enum";
 import { rls } from "../src/dsl/rls";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
-import { generateMigration } from "../src/engine/generate";
+import { generateMigration, generateMigrations } from "../src/engine/generate";
 import { eq, literal, now } from "../src/expr/operators";
 import { sql } from "../src/expr/sql-template";
 import { createDefaultRegistry } from "../src/kind/registry";
@@ -849,6 +849,39 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		});
 	});
 
+	// D106 R3, J14: `hasChanges` ("is there DDL") and `snapshotChanged`
+	// ("does the snapshot differ from previousSnapshot at all") are two
+	// facts, not one -- a run that only moves an existing-table marker
+	// has to report `hasChanges: false` (nothing to diff into a
+	// statement) while still reporting `snapshotChanged: true` (R3-B1's
+	// own zero-statement migration exists to anchor exactly this case in
+	// the chain). A caller that could only read `hasChanges` before this
+	// field existed had no way to tell the two apart.
+	it("generateMigrations states hasChanges and snapshotChanged separately (D106 R3, J14)", () => {
+		const app = schema("uo1d");
+		const baseline = generateMigrations({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const repeat = generateMigrations({
+			declarations: [app],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(repeat.hasChanges).toBe(false);
+		expect(repeat.snapshotChanged).toBe(false);
+		expect(repeat.migrations).toEqual([]);
+
+		const authUsers = existingTable("uo1d", "users", { id: uuid() });
+		const withMarker = generateMigrations({
+			declarations: [app, getTableMeta(authUsers)],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(withMarker.hasChanges).toBe(false);
+		expect(withMarker.snapshotChanged).toBe(true);
+		expect(withMarker.migrations).toHaveLength(1);
+		expect(withMarker.migrations[0]?.changes).toEqual([]);
+	});
+
 	// D106 R1, B1: `existingTable()` accepts any column builder, including
 	// serial-family ones -- `resolveTableDeclarations` used to synthesize
 	// that column's backing sequence (and, had `.rls` been set, its
@@ -1301,5 +1334,54 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		// naming `gadgets`, the existing declaration.
 		expect(secondResult.sql).toContain('drop table "e3"."widgets"');
 		expect(secondResult.sql.toLowerCase()).not.toContain("gadgets");
+	});
+
+	// D106 R3, R3-B2: repros A-D above all keep a table existing (or
+	// managed) on *both* sides of the run they measure -- `excludeExisting`
+	// filtered `previousTables`/`nextTables` independently, so those never
+	// reached the one case a filter run per-map cannot see: a table
+	// managed on one side and existing on the other (a handover or an
+	// adoption), in a run that *also* adds or drops a different table in
+	// that same schema. Two reproductions replay the evaluator's own α/β
+	// verbatim.
+
+	it("a handover in a run that also adds an unrelated managed table in the same schema is not an ambiguous rename (D106 R3, R3-B2 repro α)", () => {
+		const s2 = schema("s2");
+		const widgets = table(s2, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [s2, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const handedOver = existingTable("s2", "widgets", { id: uuid() });
+		const gizmos = table(s2, "gizmos", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [s2, getTableMeta(handedOver), gizmos],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain('create table "s2"."gizmos"');
+		expect(secondResult.sql.toLowerCase()).not.toContain("widgets");
+	});
+
+	it("an adoption in a run that also drops an unrelated managed table in the same schema is not an ambiguous rename (D106 R3, R3-B2 repro β)", () => {
+		const s4 = schema("s4");
+		const legacy = existingTable("s4", "legacy", { id: uuid() });
+		const old = table(s4, "old", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [s4, getTableMeta(legacy), old],
+			previousSnapshot: emptySnapshot,
+		});
+		const adopted = table(s4, "legacy", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [s4, adopted],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain('drop table "s4"."old"');
+		// The adoption itself never renames a managed declaration onto
+		// `legacy`'s identity -- no statement issues `alter table ...
+		// rename to "legacy"`, the collision R2-B1's own repro D named,
+		// reached through the adoption door instead of the handover one.
+		expect(secondResult.sql).not.toContain('rename to "legacy"');
 	});
 });

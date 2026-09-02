@@ -3,10 +3,13 @@ import type { Diagnostic, DiagnosticSeverity, Validator } from "../src/index";
 import {
 	diagnostic,
 	emptySnapshot,
+	existingTable,
 	generateMigration,
+	getTableMeta,
 	hejbroError,
 	runValidators,
 	schema,
+	uuid,
 } from "../src/index";
 
 describe("generateMigration validators", () => {
@@ -59,6 +62,44 @@ describe("generateMigration validators", () => {
 			],
 		});
 		expect(seen).toEqual([["schema"]]);
+	});
+
+	// D106 R3, #666: `table-declaration`'s "a validator that checks a
+	// reference SHALL see it" had no observer for three rounds -- this is
+	// that observer. A future refactor that quietly dropped existing
+	// declarations before `runValidators` (the risk the requirement
+	// itself guards against) would fail this test, not just leave the
+	// requirement's own text unobserved.
+	it("an existing declaration reaches the validators exactly as a managed one does (D106 R3, #666)", () => {
+		const authUsers = existingTable("auth", "users", { id: uuid() });
+		const seen: Array<
+			ReadonlyArray<{
+				readonly declarationKind: string;
+				readonly existing?: boolean;
+			}>
+		> = [];
+		generateMigration({
+			declarations: [getTableMeta(authUsers)],
+			previousSnapshot: emptySnapshot,
+			validators: [
+				(_snapshot, declarations) => {
+					seen.push(
+						declarations as ReadonlyArray<{
+							readonly declarationKind: string;
+							readonly existing?: boolean;
+						}>,
+					);
+					return [];
+				},
+			],
+		});
+		expect(seen).toHaveLength(1);
+		expect(seen[0]).toContainEqual(
+			expect.objectContaining({
+				declarationKind: "table",
+				existing: true,
+			}),
+		);
 	});
 
 	it("omitting validators yields empty warnings (back-compat)", () => {

@@ -217,6 +217,7 @@ export const ENGINE = [
 	// Type families and SQL text helpers
 	"canonicalizeInterval",
 	"comparisonOperators",
+	"deriveExistingTransitionSlug",
 	"deriveSlug",
 	"familyOfTypeNode",
 	"qualifyName",
