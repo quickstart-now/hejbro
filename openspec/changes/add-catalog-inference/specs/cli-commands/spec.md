@@ -22,7 +22,11 @@ produce — the DSL derives a column's SQL name from its key by
 snake_case — SHALL be omitted from the starter files and named in the
 loss report together with its consequence: the table is only partly
 declared, and `check` reports that column until it is declared by hand
-or renamed in the database. The starter files' imports SHALL never form
+or renamed in the database. A foreign key's own catalog name SHALL survive into the starter
+declaration — written out where it differs from the name the DSL would
+derive, left implicit where it does not — because `check` compares
+foreign keys by name, and a database hejbro did not create names them
+its own way. The starter files' imports SHALL never form
 a cycle — and a reference to another file's enum counts as an import,
 exactly as a foreign key to another file's table does: where a cycle
 would form, the crossings in one direction are declared against
