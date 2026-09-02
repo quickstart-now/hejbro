@@ -873,6 +873,12 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		await writeSchema(RENAME_GUARD_EXISTING_SOURCE);
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(1);
+		// A real ambiguous-table-rename error routes through the CLI's own
+		// rich terminal renderer (rename-diagnostics.ts), never core's flat
+		// ambiguousTableRenameMessage directly -- both now share the exact
+		// phrase "two runs" on purpose (#703), but asserting against the
+		// wrong one here would silently pass even if the rich renderer's
+		// own wording drifted away from it again.
 		expect(result.stderr).toContain("ambiguous-table-rename");
 		expect(result.stderr).toContain("two runs");
 		expect(result.stdout).not.toContain("wrote migrations/");
@@ -901,7 +907,17 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 			"app.widgets=gadgets",
 		]);
 		expect(renameResult.exitCode).toBe(0);
-		expect(renameResult.stdout).toContain(
+		// stdout only ever prints each written migration's own banner (the
+		// first "\n\n"-split segment), never its full SQL body -- read the
+		// migration file itself to see the actual statement (measured
+		// directly, the same lesson R3-B1's own measurement ② already
+		// caught once).
+		const renamedFiles = await sqlFileNames();
+		const renamedContent = await readFile(
+			join(cwd, "migrations", renamedFiles.at(-1) as string),
+			"utf8",
+		);
+		expect(renamedContent).toContain(
 			'alter table "app"."widgets" rename to "gadgets"',
 		);
 		const firstVerify = await runCli(cwd, ["verify"]);
