@@ -11,8 +11,10 @@ against those literals.)
 ## 1. The reading (#604)
 Files: `packages/cli/src/infer/*.ts` (new — including inference's own
 read-only catalog queries for the facts `check` never needed),
-`packages/cli/test/infer-*.test.ts`. `check/catalog.ts` is **read, not
-edited**: `readCatalog` supplies the shared inventory unchanged.
+`packages/cli/test/infer-*.test.ts`,
+`packages/cli/test/infer-catalog-read.integration.test.ts`.
+`check/catalog.ts` is **read, not edited**: `readCatalog` supplies the
+shared inventory unchanged.
 
 The reading builds declarations with core's public DSL (`schema`,
 `table`, `pgEnum`, `sql.raw`) and takes the snapshot and the export
@@ -29,9 +31,20 @@ public surface.
 - [ ] 1.2 (~10m) Inference's own read-only catalog reads: column
       position/`attidentity`/`attgenerated`, foreign-key targets and
       actions, check expressions, index columns/uniqueness/method/
-      predicate, enum labels, identity sequence options. Failing test:
+      predicate/operator class/sort options and expression bodies, enum
+      labels, identity sequence options. Failing test:
       `infer-catalog-read.test.ts` (parameterless read-only text pinned,
       rows parsed).
+- [ ] 1.2b (~10m) The same reads proved against a real database, not a
+      string-matching fake: one fixture carrying an enum, an identity
+      column with non-default options, a stored generated column, a
+      self-referencing foreign key and one with `on delete cascade`, a
+      check, an expression index, a partial unique index, a GIN index
+      with `jsonb_path_ops`, and a descending/nulls-first index column.
+      Failing test: `infer-catalog-read.integration.test.ts` (group 1
+      owns this file; group 5's witness is a separate one), on the
+      ephemeral-container harness `check-live.integration.test.ts`
+      already uses.
 - [ ] 1.3 (~9m) Columns → declarations: type → builder, defaults,
       identity (options only where they differ from Postgres's own),
       generated, not-null; a type no builder expresses is omitted and

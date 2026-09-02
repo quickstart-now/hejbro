@@ -6,10 +6,16 @@ import { z } from "zod";
  * against the current `check/catalog.ts`, #604 CI-G1-R1-01 B1): column
  * physical position, `attidentity`/`attgenerated`, a foreign key's
  * target and actions, a CHECK constraint's expression text, an index's
- * columns/uniqueness/access method/partial predicate, enum labels, and
- * an identity column's owned-sequence options. Inference needs all of
- * these on top of the shared `readCatalog` inventory (catalog-inference
- * delta) -- read here, never by editing `check/catalog.ts`.
+ * key columns (expression elements included)/uniqueness/access
+ * method/partial predicate/operator class/sort options, enum labels,
+ * and an identity column's owned-sequence options. Inference needs all
+ * of these on top of the shared `readCatalog` inventory
+ * (catalog-inference delta) -- read here, never by editing
+ * `check/catalog.ts`. The index widening (B6) is load-bearing:
+ * `examples/postgres` declares an expression index, a partial unique
+ * index, a GIN index with a non-default operator class, and a
+ * descending/nulls-first index column, and group 5's witness reads
+ * exactly that database.
  */
 const columnDetailRow = z.object({
 	schema: z.string(),
@@ -41,15 +47,31 @@ const checkExpressionRow = z.object({
 });
 export type CheckExpressionRow = z.infer<typeof checkExpressionRow>;
 
-/** `columns` carries `null` for an expression-index element (no matching `pg_attribute` row). */
+/**
+ * One key column of an index, via `pg_get_indexdef(indexrelid, n, true)`
+ * (`text`) so a plain column and an expression element (B6: `lower(email)`)
+ * come back the same way -- never a raw `pg_attribute` join, which has no
+ * row for an expression element's `attnum = 0`. `opclass` is `null` only
+ * when the type has no operator class family for this access method (rare
+ * in practice; every B6 candidate -- btree/gin -- has one). `descending`/
+ * `nullsFirst` decode `pg_index.indoption`'s two low bits.
+ */
+const indexColumnRow = z.object({
+	text: z.string(),
+	opclass: z.string().nullable(),
+	descending: z.boolean(),
+	nullsFirst: z.boolean(),
+});
+export type IndexColumnRow = z.infer<typeof indexColumnRow>;
+
 const indexDetailRow = z.object({
 	schema: z.string(),
 	table: z.string(),
 	name: z.string(),
 	isUnique: z.boolean(),
 	method: z.string(),
-	columns: z.array(z.string().nullable()),
 	predicate: z.string().nullable(),
+	columns: z.array(indexColumnRow),
 });
 export type IndexDetailRow = z.infer<typeof indexDetailRow>;
 
@@ -126,13 +148,19 @@ export const INFER_CATALOG_QUERIES = {
 		select n.nspname as schema, c.relname as "table", ic.relname as name,
 			ix.indisunique as "isUnique",
 			am.amname as method,
+			pg_get_expr(ix.indpred, ix.indrelid) as predicate,
 			coalesce((
-				select json_agg(att.attname order by ord.n)
-				from unnest(ix.indkey) with ordinality as ord(attnum, n)
-				left join pg_attribute att
-					on att.attrelid = ix.indrelid and att.attnum = ord.attnum
-			), '[]'::json) as columns,
-			pg_get_expr(ix.indpred, ix.indrelid) as predicate
+				select json_agg(
+					json_build_object(
+						'text', pg_get_indexdef(ix.indexrelid, ord.n::int, true),
+						'opclass', opc.opcname,
+						'descending', (ix.indoption[ord.n - 1] & 1) = 1,
+						'nullsFirst', (ix.indoption[ord.n - 1] & 2) = 2
+					) order by ord.n
+				)
+				from generate_series(1, ix.indnkeyatts) as ord(n)
+				left join pg_opclass opc on opc.oid = ix.indclass[ord.n - 1]
+			), '[]'::json) as columns
 		from pg_index ix
 		join pg_class c on c.oid = ix.indrelid
 		join pg_class ic on ic.oid = ix.indexrelid
