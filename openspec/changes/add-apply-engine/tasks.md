@@ -8,9 +8,12 @@ Command *surface* is now one group that owns every registration, and
 each command's *logic* stays in its own file under `src/apply/`. Ten
 groups; what moved is which group writes the calling line.
 
-**58 tasks, 492 minutes, across thirteen groups** — file-derived at
-close-out. The original freeze read "46 tasks, 398 minutes" over ten
-groups and went stale twice without this sentence moving: 7.5 was
+**Groups 1–13, as merged: 58 tasks, 492 minutes** — file-derived at
+close-out. (The D106 correction round is groups 14–20 and counts
+separately: 22 tasks, 167 minutes. **The scope is stated so this
+sentence can stop going stale** — it has twice, and both times the
+number moved while the sentence did not.) The original freeze read
+"46 tasks, 398 minutes" over ten groups: 7.5 was
 re-frozen 8→10 by the group-4 commit when it took ownership of the
 run-level property, and groups 11–13 were added mid-flight, each with
 its reason on its own header. (4.3r's ~9m entered in the same commit
@@ -753,6 +756,222 @@ Files: `packages/core/src/engine/split.ts`,
       is unchanged (97 files, 1449 tests); green (branch two): the
       maximum is still 5.00 and this task says why that was the right
       answer.
+
+## The D106 correction round (groups 14–20)
+
+The adversarial spec-only review of the merged change returned FAIL —
+2 blocking, 7 major, 6 minor. **All fifteen are accepted as repairs; none
+is rebutted and none is out of scope.** The reason for zero rebuttals is
+worth writing down: every finding carries a file, a line, and a command's
+output, and a rebuttal needs better evidence than that. There is none.
+
+Three shapes account for almost all of it:
+
+1. **Merge-in staleness in delta prose** (B1, B2). The sibling change was
+   merged in; the code and some scenarios were adapted, the delta's own
+   sentences were not. One instance was already repaired before the PR
+   (`3b7af63d`, scenarios). B1 is the same defect wearing a requirement
+   *title*, B2 wearing a `SHALL` sentence and a dropped paragraph.
+   **`validate --strict` says "valid" for all three** — the tool that
+   catches them is `openspec show <change> --diff`.
+2. **Sentences with no observable surface** (M1, M2, M5). A `SHALL` that
+   lists a report member the command never prints; a scenario whose
+   "reported" means a private function's return shape; six user-facing
+   behaviours with no owning sentence. M2 is the one to sit with: this
+   change spent thirteen groups finding tests whose names claim what
+   their bodies cannot show, and then shipped the same defect as a
+   *specification*.
+3. **Sentences that assert more than the code does** (M3, M4, m1, m4).
+   The chain does not authenticate a migration's SQL body — a fact this
+   change recorded in its own flight-recorder entry and then wrote into
+   new delta text anyway. The split walk under-approximates in exactly
+   the direction the requirement calls unacceptable.
+
+Groups are sequential here, not parallel: they share `plan.ts`,
+`raise.ts` and the delta files. Where two findings touch one file they
+are in one group, which is why the grouping does not follow the
+report's own numbering.
+
+## 14. The two blocking delta repairs (B1, B2)
+
+Files: `openspec/changes/add-apply-engine/specs/cli-commands/spec.md`,
+and `openspec/specs/cli-commands/spec.md` as the **source to copy from**.
+
+**Copy the shipped block, do not retype it.** A `MODIFIED` block replaces
+what it names, so a sentence lost in transcription is a sentence the
+archive deletes silently. Verify with `show --diff`, not with `validate`.
+
+- [x] 14.1 (~9m) B1: the block names `The database driver is an optional
+      dependency`; the shipped corpus calls it **`An external tool is an
+      optional dependency`** (the sibling renamed it, and another
+      capability cross-references the new name). Retitle and carry the
+      full shipped text — the `git` sentences, the `history`/`restore`
+      parenthetical, and **all three scenarios**; the block currently
+      keeps one. Then add the apply-trade sentence. Green:
+      `show --diff` prints no "No matching main requirement" warning.
+- [x] 14.2 (~8m) B2: `A run that finds no difference SHALL write nothing`
+      contradicts two scenarios inside its own block, the shipped
+      `schema-export` capability, and the implementation. Restore the
+      shipped `SHALL write no migration and no snapshot` and the dropped
+      export paragraph (`This SHALL hold even when there is no difference
+      to write a migration for`). The split additions stay as they are.
+
+## 15. The delta sentences that overstate (M3, M5, M6, M7, m1, m3–m6)
+
+Files: the `migration-apply` and `migration-format` delta specs.
+Prose only — the code these sentences describe moves in groups 16–19,
+and the sentences must be written to match what those groups land.
+
+- [ ] 15.1 (~8m) M3's prose: state that the chain vouches for the
+      **snapshot hashes**, not for a file's SQL bytes, and that this is
+      *why* the transaction-control refusal exists. Rewrite the scenario
+      to the true contract (a banner line edited, a file removed or
+      reordered). The current WHEN describes a class of edits most of
+      which pass.
+- [ ] 15.2 (~9m) M5, part one: `migrate`'s three-way exit code, and the
+      shared `--url` / `DATABASE_URL` rule for the connecting commands —
+      including the shipped security sentence's extension (**not** read
+      from `hejbro.config.ts`). The corpus pins exactly this for `check`;
+      four new commands inherited the behaviour and none of the words.
+- [ ] 15.3 (~8m) M5, part two: `raise --file`, `reset --confirm-drop` and
+      its `<database>:<count>` token, and `migrate`'s report buckets.
+      Apply the admission test — a sentence earns its place by pinning
+      something a reader cannot get from another sentence.
+- [ ] 15.4 (~7m) [design] M5, part three + M7's prose, **written
+      together**: the ledger's identity (schema, table, columns) and the
+      origin discriminator group 16 adds. These are one decision about
+      one durable object; writing them in two passes would settle its
+      shape twice. Record that no compatibility path is owed because
+      nothing is published yet.
+- [ ] 15.5 (~5m) M6's prose: either the zero-change carve-out is stated
+      or the implementation refuses first. Group 18 chooses; this task
+      writes whichever it chose.
+- [ ] 15.6 (~8m) The minors: m1 (`before any *migration* statement is
+      sent`), m3 (`the format-version line` misnames the hejbro-version
+      line — the MODIFIED block inherited the misnomer and can fix it),
+      m4 (raise refuses net-of-rollback, and says so), m5 (reset's two
+      SHALLs under declaration drift), m6 (drop `and a configuration
+      default` — there is none).
+- [ ] 15.7 (~6m) m2: the **shipped** `cli-commands` Purpose already
+      promises the four commands, whose requirements live in the
+      unarchived `migration-apply`. Point it at that capability. First
+      measure who wrote that Purpose line and when (`git log -p`) — a
+      Purpose edited ahead of its requirements is worth understanding
+      before it is patched.
+
+## 16. The ledger's origin, and the surfaces that read it (M7, M1, M2)
+
+Files: `packages/cli/src/apply/ledger.ts`, `apply/plan.ts`,
+`apply/raise.ts`, `commands/raise.ts`, `commands/status.ts` and their
+tests.
+
+M7 is the round's only real design fork and the lead settled its
+direction: **a ledger column, not a filename convention** (a filename
+marker collides with "a row identifies its migration by the full
+filename" and is stringly). The window matters — the ledger is a
+permanent object in a user's database and **nothing is published yet**,
+so its shape is free to change today and not tomorrow.
+
+- [ ] 16.1 (~9m) [design] The discriminator: its column name and its
+      value set (chain-applied / baseline-registered / raised). Settle it
+      with 15.4 in the same breath. Red: `apply-ledger.test.ts` — "records
+      how a row entered the ledger".
+- [ ] 16.2 (~8m) `planApply` stops classifying a non-chain row as
+      `apply-ledger-orphan-row`. Today a raised database makes `status`
+      exit 1 and `migrate` refuse with "resolve the mismatch by hand" —
+      one requirement mandates creating exactly the state another
+      mandates reporting as blocking. Red: `apply-plan.test.ts` — "a
+      raised row is not an orphan".
+- [ ] 16.3 (~9m) M1 + M2 together, because they are one command's output:
+      `status` gains an applied section, and says **which** of the two
+      empty states it found (no ledger table at all vs. a ledger with no
+      rows). The distinction exists today only as a private union that
+      `planApply` flattens before anything can print it — the scenario's
+      "reported" has no observer. Red: `status-command.test.ts` — "names
+      the migrations the ledger records", "tells an absent ledger from an
+      empty one".
+- [ ] 16.4 (~7m) `raise` writes its row with the raised origin, and
+      `status` says the database was raised from that file rather than
+      listing it as a migration nobody has.
+- [ ] 16.5 (~6m) m4's half of the ordering family: `bootstrapLedger` runs
+      *after* the emptiness check, so a database `raise` refuses does not
+      keep `hejbro.migration_ledger` as a souvenir.
+
+## 17. migrate verifies before it connects (M3, code)
+
+Files: `packages/cli/src/commands/migrate.ts` and its test.
+
+- [ ] 17.1 (~8m) The chain check is **offline** (`checkChain` reads banner
+      lines), so it can run before the connection is opened. Today the
+      order is connect → probe → capability → **bootstrap (two DDL
+      writes)** → read → plan → chain check, so a run refused for an
+      unverifiable chain has already created a schema and a table in a
+      database it then refuses to touch — and our own sentence says "no
+      statement is sent". Red: `migrate-command.test.ts` — "refuses an
+      unverifiable chain without opening a connection".
+
+## 18. reset's unconfirmed destructive path (M6)
+
+Files: `packages/cli/src/apply/reset.ts`, `commands/reset.ts`, tests.
+
+- [ ] 18.1 (~9m) [design] A `reset` whose declarations export nothing
+      computes an empty drop list, asks for no confirmation, exits 0 —
+      and still runs `clearLedger`, emptying the ledger of a database
+      whose objects are all still standing. The next `migrate` then
+      re-applies the chain onto objects that exist. Two repairs are
+      available and the corpus prefers the first: refuse an empty
+      declaration set the way `check` and `baseline` already do, **and**
+      move the ledger clear under the confirmation. Red:
+      `reset-command.test.ts` — "refuses a declaration set that exports
+      nothing", "clears no ledger row without confirmation".
+
+## 19. The split walk sees text, not only literal nodes (M4)
+
+Files: `packages/core/src/engine/split.ts`,
+`packages/core/test/split.test.ts`,
+`packages/cli/test/apply-live.integration.test.ts`.
+
+The requirement says the decision is made from the statements the run is
+about to emit and that it **over-approximates**. The walk matches encoded
+literal nodes only, so a value spelled inside a `sql` template's text
+chunks or a `sql.raw` node is invisible — and both encodings appear in
+committed examples, inside slots this same requirement enumerates
+(a check constraint, a policy's `using`). That is under-approximation in
+the direction the requirement's own rationale exists to forbid.
+
+**This reopens the file the CRAP gate broke on.** Group 13's rules apply:
+aim below the line, and measure every helper the work extracts.
+
+- [ ] 19.1 (~8m) [design] The match rule for raw text. Substring on the
+      value's spelling is licensed by the stated over-approximation, but
+      *how far* it over-approximates was never settled — a value spelled
+      inside an unrelated word or a comment would split a run that did
+      not need it. Decide and write it down; D106 will read it again.
+- [ ] 19.2 (~9m) The walk reaches `chunkKind: "text"` chunks and
+      `nodeKind: "raw-sql"` nodes. Red: `split.test.ts` — "splits when the
+      added value is spelled inside a sql template", "…inside sql.raw".
+      The over-approximation direction already has a test; this is the
+      direction that had none.
+- [ ] 19.3 (~6m) Re-measure the gate. `pnpm check:crap` must exit 0 with
+      room, not at the line, and every helper this group adds is measured
+      by name.
+- [ ] 19.4 (~9m) The live witness the report marked UNVERIFIED: a run
+      that adds an enum value and a check constraint spelling it, applied
+      against a real server. Without 19.2 it takes `55P04`; with it, two
+      migrations apply. Red: `apply-live.integration.test.ts`.
+
+## 20. The gate sentences, and the round's own close-out
+
+Files: this file, `.changeset/`.
+
+- [ ] 20.1 (~6m) Add `openspec show <change> --diff` by name to the
+      merge-in gate sentence (beside the `validate --strict` line added
+      in `e8e0aee9`) and to the archive-time list below, with the reason:
+      **whether a `MODIFIED` block names a requirement that exists is a
+      question `validate` does not answer** — it called this change valid
+      while a block named nothing.
+- [ ] 20.2 (~5m) One changeset for the round: `@hejbro/core` and `hejbro`
+      both move, and the seven published packages version together.
 
 ## Verification
 
