@@ -4,7 +4,7 @@
 [![CRAP ≤ 5 · 0 / 1602](https://img.shields.io/badge/CRAP%20%E2%89%A4%205-0%20%2F%201602-brightgreen)](#status)
 <!-- crap-badge:end -->
 <!-- tasktime-badges:start -->
-[![tasks · 554 done](https://img.shields.io/badge/tasks-554%20done-blue)](openspec/task-times.csv)
+[![tasks · 559 done](https://img.shields.io/badge/tasks-559%20done-blue)](openspec/task-times.csv)
 [![avg task · 12m](https://img.shields.io/badge/avg%20task-12m-blue)](openspec/task-times.csv)
 [![estimate · 1.19x](https://img.shields.io/badge/estimate-1.19x-blue)](openspec/task-times.csv)
 [![overhead · 28%](https://img.shields.io/badge/overhead-28%25-blue)](openspec/task-times.csv)

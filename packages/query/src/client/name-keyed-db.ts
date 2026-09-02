@@ -60,10 +60,20 @@ export type NameKeyedSelectChain<TRow> = PromiseLike<ReadonlyArray<TRow>> & {
 	offset(count: number): NameKeyedSelectChain<TRow>;
 };
 
-/** An `update`/`delete` chain's own filterable terminal — `.where()` narrows which rows are touched, mirroring `@hejbro/query`'s own `UpdateChainReturnable`/`DeleteChainReturnable` shape without `.returning()` (not yet exposed on this surface). */
-export type NameKeyedMutationChain<TRow> = PromiseLike<ReadonlyArray<TRow>> & {
+/**
+ * An `update`/`delete` chain's own filterable terminal — `.where()`
+ * narrows which rows are touched, mirroring `@hejbro/query`'s own
+ * `UpdateChainReturnable`/`DeleteChainReturnable` shape without
+ * `.returning()` (not yet exposed on this surface). Never generic over a
+ * row type (#654): no statement this surface sends carries a `RETURNING`
+ * clause, so every stage — bare or after `.where()` — resolves
+ * `ReadonlyArray<never>`, the same honest shape `@hejbro/query`'s own
+ * pre-`.returning()` chain stage already types (#622) — one promise, not
+ * two, about what a statement with no `RETURNING` clause hands back.
+ */
+export type NameKeyedMutationChain = PromiseLike<ReadonlyArray<never>> & {
 	compile(): CompileResult;
-	where(condition: Condition): PromiseLike<ReadonlyArray<TRow>> & {
+	where(condition: Condition): PromiseLike<ReadonlyArray<never>> & {
 		compile(): CompileResult;
 	};
 };
@@ -90,11 +100,18 @@ export type NameKeyedTableClient<
 > = {
 	readonly columns: { readonly [K in keyof TTable["Row"]]: Expr };
 	select(): NameKeyedSelectChain<TTable["Row"]>;
+	/**
+	 * Resolves to `ReadonlyArray<never>` (#654): the statement this sends
+	 * carries no `RETURNING` clause, so it always resolves to an empty
+	 * array — never the table's row type, which it does not deliver. A
+	 * consumer that needs the written rows back reads them in a second
+	 * statement.
+	 */
 	insert(
 		rows: TTable["Insert"] | ReadonlyArray<TTable["Insert"]>,
-	): Promise<ReadonlyArray<TTable["Row"]>>;
-	update(values: TTable["Update"]): NameKeyedMutationChain<TTable["Row"]>;
-	delete(): NameKeyedMutationChain<TTable["Row"]>;
+	): Promise<ReadonlyArray<never>>;
+	update(values: TTable["Update"]): NameKeyedMutationChain;
+	delete(): NameKeyedMutationChain;
 };
 
 /** Every table client, keyed exactly as `Database["Tables"]` is — the shape both the unscoped and `.as(context)`-scoped surfaces share (mirrors `@hejbro/query`'s own unscoped `db()` vs `db.as(context)` pair: a scoped handle never re-nests its own `.as`, task 4.6's "no nesting" rule). */
@@ -152,15 +169,24 @@ const buildColumnsBag = (table: SynthesizedTable): Record<string, unknown> =>
  * (`ChainApi<TSchema>`) — using the internally-held synthesized `table`
  * (never returned as itself, only as its column-ref bag with the
  * `[tableMeta]` symbol stripped — the structural half of planner
- * condition ①). Casts at this one boundary, not scattered: the chain
- * source's own generic inference over a loosely-typed synthesized table
- * can never equal the contract's own precise `Row`/`Insert`/`Update`
- * types (they are two different sources of the same fact by design,
+ * condition ①). `columns`/`select` cast at this one boundary, not
+ * scattered: the chain source's own generic inference over a
+ * loosely-typed synthesized table can never equal the contract's own
+ * precise `Row` type (two different sources of the same fact by design,
  * R2-G5's own type synthesis versus this reconstruction) — the cast is
  * the seam where the contract's static claim takes over, exactly like
  * `db.ts`'s own `execute`'s cast comment: the runtime value is correct
  * because both sides are built from the same vendored metadata, not
- * because the two inferred types happen to match structurally.
+ * because the two inferred types happen to match structurally. `insert`/
+ * `update`/`delete` need no such return-side cast (#654): every stage
+ * that never calls `.returning()` already resolves `ReadonlyArray<never>`
+ * on the chain source's own real type, regardless of which table it was
+ * built against, so `NameKeyedMutationChain`'s row-agnostic shape is
+ * satisfied structurally. Each still casts its own *argument* (`rows`/
+ * `values`) — a different, narrower seam: the contract's `Insert`/
+ * `Update` shape can never equal `InsertInput`/`UpdateInput`'s own
+ * inference over the synthesized table, the same reason `columns`/
+ * `select` cast on the way out.
  */
 const buildTableClient = <
 	TTable extends {
@@ -177,18 +203,9 @@ const buildTableClient = <
 	) as unknown as NameKeyedTableClient<TTable>["columns"],
 	select: () =>
 		chainSource.select(table) as unknown as NameKeyedSelectChain<TTable["Row"]>,
-	insert: async (rows) =>
-		(await chainSource
-			.insert(table)
-			.values(rows as never)) as unknown as ReadonlyArray<TTable["Row"]>,
-	update: (values) =>
-		chainSource
-			.update(table)
-			.set(values as never) as unknown as NameKeyedMutationChain<TTable["Row"]>,
-	delete: () =>
-		chainSource.deleteFrom(table) as unknown as NameKeyedMutationChain<
-			TTable["Row"]
-		>,
+	insert: async (rows) => await chainSource.insert(table).values(rows as never),
+	update: (values) => chainSource.update(table).set(values as never),
+	delete: () => chainSource.deleteFrom(table),
 });
 
 /**
@@ -409,7 +426,7 @@ export const createNameKeyedDb = <TDatabase extends DatabaseShape>(
 	);
 	const functions: Readonly<Record<string, FunctionDeclaration>> =
 		Object.fromEntries(
-			Object.entries(metadata.functions).map(([name, fnMeta]) => [
+			Object.entries(metadata.functions ?? {}).map(([name, fnMeta]) => [
 				name,
 				synthesizeFunction(fnMeta),
 			]),

@@ -126,9 +126,29 @@ const rowFieldType = (entry: ColumnEntry): string => {
 const renderInterfaceBody = (lines: ReadonlyArray<string>): string =>
 	lines.map((line) => `\t\t${line}`).join("\n");
 
+const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * A type member key, quoted only when it is not a valid TS identifier
+ * (#662) -- never a reserved-word list, since a reserved word (`class`,
+ * `new`) is already legal unquoted as a type member/object literal key.
+ * Shared by `contract/tables.ts` (`Row`/`Insert`/`Update`) and
+ * `contract/functions.ts` (an argument's own key) -- the one place either
+ * renderer decides whether a key needs quoting, so an identifier key's
+ * own output never churns.
+ */
+export const renderKey = (key: string): string => {
+	if (IDENTIFIER_PATTERN.test(key)) {
+		return key;
+	}
+	return JSON.stringify(key);
+};
+
 const buildRowInterface = (entries: ReadonlyArray<ColumnEntry>): string =>
 	renderInterfaceBody(
-		entries.map((entry) => `readonly ${entry.tsKey}: ${rowFieldType(entry)};`),
+		entries.map(
+			(entry) => `readonly ${renderKey(entry.tsKey)}: ${rowFieldType(entry)};`,
+		),
 	);
 
 /** `Insert`'s own per-column key: absent for an ALWAYS-family column, required when `notNull` and no default, optional otherwise (mirrors `@hejbro/query`'s `insert-input.ts`). */
@@ -138,9 +158,9 @@ const buildInsertInterface = (entries: ReadonlyArray<ColumnEntry>): string =>
 			.filter((entry) => !entry.alwaysGenerated)
 			.map((entry) => {
 				if (entry.optional) {
-					return `readonly ${entry.tsKey}?: ${rowFieldType(entry)};`;
+					return `readonly ${renderKey(entry.tsKey)}?: ${rowFieldType(entry)};`;
 				}
-				return `readonly ${entry.tsKey}: ${rowFieldType(entry)};`;
+				return `readonly ${renderKey(entry.tsKey)}: ${rowFieldType(entry)};`;
 			}),
 	);
 
@@ -149,7 +169,10 @@ const buildUpdateInterface = (entries: ReadonlyArray<ColumnEntry>): string =>
 	renderInterfaceBody(
 		entries
 			.filter((entry) => !entry.alwaysGenerated)
-			.map((entry) => `readonly ${entry.tsKey}?: ${rowFieldType(entry)};`),
+			.map(
+				(entry) =>
+					`readonly ${renderKey(entry.tsKey)}?: ${rowFieldType(entry)};`,
+			),
 	);
 
 /**

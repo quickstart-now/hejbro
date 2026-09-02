@@ -1,6 +1,5 @@
 import { throwHejbroError } from "@hejbro/core";
 import type { ExportFormatRecord } from "../export/format";
-import type { ExportPayload } from "../export/write";
 import {
 	EXPORT_DESCRIPTION_FILE,
 	EXPORT_DIR_NAME,
@@ -12,6 +11,7 @@ import {
 	resolveRemoteHead,
 	resolveRemoteRef,
 } from "../git";
+import type { ValidatedExportPayload } from "./validate-export";
 import { validateExport } from "./validate-export";
 
 export type FetchedExport = {
@@ -20,7 +20,7 @@ export type FetchedExport = {
 	readonly schemaText: string;
 	readonly sqlText: string;
 	readonly format: ExportFormatRecord;
-	readonly payload: ExportPayload;
+	readonly payload: ValidatedExportPayload;
 };
 
 const exportPath = (name: string): string => `${EXPORT_DIR_NAME}/${name}`;
