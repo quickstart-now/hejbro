@@ -129,7 +129,7 @@ export type TableDeclaration = {
 	readonly foreignKeys: ReadonlyArray<ForeignKeyDeclaration>;
 	readonly checks: ReadonlyArray<CheckDeclaration>;
 	readonly rls: RlsDeclaration | null;
-	/** `true` for an {@link existingTable} reference (D41) — reference-only, never passed to `generateMigration`, never diffed, never emitted. `table()` always sets `false`. */
+	/** `true` for an {@link existingTable} reference (D41, amended by add-unmanaged-objects #605) — declared for its shape, never for its DDL: passing it to `generateMigration` is accepted, but it is never diffed and never emitted. `table()` always sets `false`. */
 	readonly existing: boolean;
 	/**
 	 * See {@link TableAuthority}. Optional: a hand-assembled

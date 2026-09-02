@@ -849,6 +849,62 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		});
 	});
 
+	// D106 R1, B1: `existingTable()` accepts any column builder, including
+	// serial-family ones -- `resolveTableDeclarations` used to synthesize
+	// that column's backing sequence (and, had `.rls` been set, its
+	// policies too) for *any* table declaration, with no `meta.existing`
+	// guard of its own. The fixture is the evaluator's own reproduction
+	// (evaluation.md), replayed here as a pin.
+	it("an existing table with a serial-family column produces no migration (D106 R1, B1)", () => {
+		const app = schema("uo1b");
+		const baseline = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const legacy = existingTable("uo1b", "legacy", {
+			id: serial(),
+			name: text(),
+		});
+		const result = generateMigration({
+			declarations: [app, getTableMeta(legacy)],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(result.hasChanges).toBe(false);
+		expect(result.sql).toBe("");
+		expect(
+			result.snapshot.objects["sequence:uo1b.legacy_id_seq"],
+		).toBeUndefined();
+	});
+
+	// D106 R1, B1 removal: the scenario's own removal clause ("a later run
+	// with the declaration changed or removed writes no migration
+	// either") fails the identical way in evaluation.md's reproduction --
+	// a synthesized sequence that should never have existed still had to
+	// be dropped. Pinned so a fix that stops synthesizing the sequence
+	// going forward, but forgets that one might already be sitting in an
+	// older snapshot, can't pass silently.
+	it("removing an existing table with a serial-family column produces no migration (D106 R1, B1 removal)", () => {
+		const app = schema("uo1c");
+		const baseline = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const legacy = existingTable("uo1c", "legacy", {
+			id: serial(),
+			name: text(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(legacy)],
+			previousSnapshot: baseline.snapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
 	it("changing an existing declaration produces no migration", () => {
 		const app = schema("uo2");
 		const first = existingTable("uo2", "users", { id: uuid() });

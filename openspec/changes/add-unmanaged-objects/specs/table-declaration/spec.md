@@ -17,9 +17,10 @@ one; everything that writes DDL SHALL not see it at all. A snapshot
 written before this marker existed SHALL read as having every table
 managed.
 
-A managed declaration replaced by an existing one, or the reverse,
-SHALL emit nothing — the table stands as it is; the reverse is
-adoption, and only later changes alter it.
+A table changing hands SHALL emit nothing for the table itself; on
+adoption the objects hejbro manages on that table — its sequences, its
+row-level security, its policies — are created as for any managed
+table, and on handover nothing of theirs is dropped.
 
 A validator that judges managed DDL SHALL skip an existing table; one
 that checks a reference SHALL see it.
@@ -37,12 +38,22 @@ that checks a reference SHALL see it.
 - **THEN** the managed table's migration carries the foreign key and no
   statement touches the existing table
 
-#### Scenario: A table changing hands emits nothing
-- **WHEN** a table declared with `table()` is replaced by an
-  `existingTable()` of the same identity — or an existing declaration
-  is replaced by a managed one — and `hejbro generate` runs
-- **THEN** no statement is written for that table, neither a drop nor a
-  create, and the snapshot records it under its new management
+#### Scenario: A table handed to the platform loses nothing
+- **WHEN** a managed table that declares row-level security, a policy
+  and a `serial` column is replaced by an `existingTable()` of the same
+  identity and `hejbro generate` runs
+- **THEN** no statement is written at all — the table is not dropped,
+  its sequence is not dropped, its policy is not dropped and its
+  row-level security is not disabled — and the snapshot records the
+  table as existing
+
+#### Scenario: An adopted table gains what the declaration manages
+- **WHEN** a table declared with `existingTable()` is replaced by a
+  managed `table()` declaring row-level security, a policy and a
+  `serial` column, and `hejbro generate` runs
+- **THEN** no `create table` is written, and the sequence, the
+  row-level-security enablement and the policy are created as they are
+  for any managed table
 
 #### Scenario: A reserved-schema validator exempts an existing table
 - **WHEN** a schema declares a table with `existingTable()` in a schema

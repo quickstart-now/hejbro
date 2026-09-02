@@ -145,9 +145,24 @@ const resolveTableDeclarations = (
 	if (meta.authority === "usage") {
 		return throwHejbroError(
 			"synced-table-declared",
-			`table "${meta.schema.schemaName}"."${meta.tableName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with table() in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
+			`table "${meta.schema.schemaName}"."${meta.tableName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with table() (if this repository owns its DDL) or existingTable() (if it only owns the table's shape) in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
 			meta.declaredAt,
 		);
+	}
+	// D106 R1, B1/B1-removal: an existing declaration fans out into
+	// nothing — no synthesized sequence, no rls/policy attachment — so a
+	// table hejbro does not own never gains a hejbro-declared sequence or
+	// policy in the first place. The guard sits here, at declaration
+	// expansion, not in `tableKind.diff`: that guard only ever saw the
+	// table node itself, never the objects a table fans out into, which
+	// is exactly the gap D106 found (evaluation.md, B1). A managed↔
+	// existing handover for a table that already has these objects is a
+	// separate question (B2, held pending a diff-engine design ruling —
+	// this guard does not touch that path, since the objects being
+	// suppressed here never existed in a previous snapshot to diff
+	// against).
+	if (meta.existing) {
+		return [meta];
 	}
 	const sequences = synthesizeSequenceDeclarations(meta);
 	if (meta.rls === null) {

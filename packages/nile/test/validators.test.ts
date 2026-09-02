@@ -478,6 +478,15 @@ describe("an existingTable is not validated as a managed table (add-unmanaged-ob
 			id: integer().generatedByDefaultAsIdentity(),
 			tenantId: uuid(),
 		});
+		// D106 R1, N3: a base run creates the schema alone first (the same
+		// two-phase shape evaluation.md's own B1 reproduction uses) so the
+		// existing declarations' own run below has nothing to emit but
+		// what they themselves would contribute -- `sql === ""` only means
+		// what it should when schema creation isn't noise inside it.
+		const base = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
 		const result = generateMigration({
 			declarations: [
 				app,
@@ -485,9 +494,16 @@ describe("an existingTable is not validated as a managed table (add-unmanaged-ob
 				getTableMeta(primaryKeyRef),
 				getTableMeta(identityRef),
 			],
-			previousSnapshot: emptySnapshot,
+			previousSnapshot: base.snapshot,
 			validators: allValidators,
 		});
 		expect(result.errors).toEqual([]);
+		// No diagnostic is only half the claim — "not validated as a
+		// managed table" means no DDL either, and this fixture's own
+		// `serial()` column was exactly what B1 (evaluation.md) found
+		// emitting `create sequence`/`alter table` against a table none of
+		// these declarations own. `result.errors` alone couldn't have
+		// caught that; this line is the one that would have.
+		expect(result.sql).toBe("");
 	});
 });

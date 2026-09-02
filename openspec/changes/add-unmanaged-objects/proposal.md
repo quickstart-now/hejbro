@@ -61,8 +61,9 @@ tables' metadata goes.
 - `schema-vendoring` — ADDED "An existing table crosses the boundary":
   the contract's `Tables` entry, the client's read/join surface, and
   relations onto it.
-- `cli-commands` — ADDED "check leaves existing declarations alone":
-  no comparison, no inventory line.
+- `cli-commands` — ADDED "The apply commands leave existing
+  declarations alone": no comparison, no inventory line, nothing for
+  `reset`/`baseline`/`raise` to touch.
 
 ## Impact
 
