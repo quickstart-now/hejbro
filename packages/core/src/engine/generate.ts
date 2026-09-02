@@ -5,6 +5,7 @@ import type { DeclaredTable, Table, TableDeclaration } from "../dsl/table";
 import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroError } from "../error";
 import { hejbroError, throwHejbroError } from "../error";
+import { sameJson } from "../kind/diff-helpers";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { createDefaultRegistry } from "../kind/registry";
@@ -283,10 +284,25 @@ export type GenerateMigrationsResult = {
 	 * `hasChanges` before this field existed had no way to notice.
 	 */
 	readonly snapshot: Snapshot;
+	/**
+	 * [D106 R3, J14] Whether `snapshot` differs from `options.previousSnapshot`
+	 * at all — a fact distinct from `hasChanges` ("is there DDL"), stated on
+	 * its own rather than left for a caller to infer from `snapshot` and
+	 * `previousSnapshot` itself or to reconcile against `hasChanges` reporting
+	 * "no change" while `migrations` still carries one (R3-B1's own
+	 * zero-statement migration: `hasChanges: false`, `snapshotChanged: true`).
+	 */
+	readonly snapshotChanged: boolean;
 	readonly errors: ReadonlyArray<HejbroError>;
 	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
 	readonly warnings: ReadonlyArray<Diagnostic>;
 };
+
+/** Structural equality of two snapshots' declared objects — the one fact {@link GenerateMigrationsResult.snapshotChanged} states, computed identically at every return site rather than three separately-reasoned comparisons. */
+const snapshotChangedFrom = (
+	snapshot: Snapshot,
+	previousSnapshot: Snapshot,
+): boolean => !sameJson(snapshot.objects, previousSnapshot.objects);
 
 /**
  * Builds the `declaredAt`-by-table-identity map `planRenames` attaches to
@@ -611,16 +627,65 @@ export const generateMigrations = (
 			migrations: [],
 			hasChanges: false,
 			snapshot: pipeline.snapshot,
+			snapshotChanged: snapshotChangedFrom(
+				pipeline.snapshot,
+				options.previousSnapshot,
+			),
 			errors: pipeline.errors,
 			ambiguities: pipeline.ambiguities,
 			warnings: pipeline.warnings,
 		};
 	}
 	if (!pipeline.hasChanges) {
+		// D106 R3, J13 ("The migration chain on disk is verifiable" already
+		// SHALLs the banner's two hashes are the declaration snapshot
+		// before/after, never the SQL text -- so a run with no statement to
+		// write is not a special case for that requirement, it is the
+		// requirement working as specified). `hasChanges` tracks DDL only;
+		// an existing-table marker moving (handover, adoption, a plain
+		// add/change/remove) can differ `pipeline.snapshot` from
+		// `options.previousSnapshot` with no `KindChange` at all. Writing
+		// nothing here left that new state with no banner to anchor it in
+		// the chain -- `verify` then finds the tip and the snapshot
+		// disagreeing on a repository nobody edited (R3-B1). The fix is one
+		// migration carrying no statements, whose banner records the same
+		// before/after hashes any other migration's would.
+		const snapshotChanged = snapshotChangedFrom(
+			pipeline.snapshot,
+			options.previousSnapshot,
+		);
+		if (!snapshotChanged) {
+			return {
+				migrations: [],
+				hasChanges: false,
+				snapshot: pipeline.snapshot,
+				snapshotChanged: false,
+				errors: [],
+				ambiguities: [],
+				warnings: pipeline.warnings,
+			};
+		}
 		return {
-			migrations: [],
+			migrations: [
+				{
+					sql: buildGeneratedMigrationSql(
+						[],
+						true,
+						[],
+						pipeline.snapshot,
+						pipeline.registry,
+						pipeline.plan,
+						options.bannerHashes?.[0],
+						options.hejbroVersion,
+						options.baseline,
+					),
+					changes: [],
+					snapshot: pipeline.snapshot,
+				},
+			],
 			hasChanges: false,
 			snapshot: pipeline.snapshot,
+			snapshotChanged: true,
 			errors: [],
 			ambiguities: [],
 			warnings: pipeline.warnings,
@@ -657,6 +722,10 @@ export const generateMigrations = (
 		migrations,
 		hasChanges: true,
 		snapshot: pipeline.snapshot,
+		snapshotChanged: snapshotChangedFrom(
+			pipeline.snapshot,
+			options.previousSnapshot,
+		),
 		errors: [],
 		ambiguities: [],
 		warnings: pipeline.warnings,

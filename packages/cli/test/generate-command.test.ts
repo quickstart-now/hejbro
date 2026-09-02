@@ -118,6 +118,37 @@ const HANDOVER_REMOVED_SCHEMA_SOURCE = `import { schema } from "hejbro";
 export const k1 = schema("k1");
 `;
 
+// D106 R3, R3-B1: the evaluator's own reproduction, verbatim -- an
+// in-sync project (no handover, no adoption) that adds a plain
+// `existingTable()` declaration for the first time.
+const SCHEMA_WITH_NEW_EXISTING_SOURCE = `import { existingTable, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+`;
+
+// A real DDL change layered on top of the fixture above -- measurement ②
+// needs a run that genuinely emits statements *after* a zero-statement
+// migration already anchored the chain.
+const SCHEMA_WITH_NEW_EXISTING_AND_EXTRA_COLUMN_SOURCE = `import { existingTable, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	subtitle: text(),
+});
+
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -176,7 +207,7 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(await sqlFileNames()).toHaveLength(1);
 	});
 
-	it("an existing marker survives a real handover run on the on-disk snapshot (D106 R2, R2-B2 measurement ①)", async () => {
+	it("an existing marker survives a real handover run on the on-disk snapshot and anchors the chain (D106 R2/R3, R2-B2/R3-B1 measurement ①)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(HANDOVER_MANAGED_SCHEMA_SOURCE);
 		await runCli(cwd, ["generate"]);
@@ -184,14 +215,16 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		await writeSchema(HANDOVER_EXISTING_SCHEMA_SOURCE);
 		const result = await runCli(cwd, ["generate"]);
 		expect(result.exitCode).toBe(0);
-		// cli-commands (this change's own MODIFIED delta, "A recorded
-		// declaration that emits nothing still writes the snapshot"): a run
-		// that moves the snapshot with no migration reports that, never the
-		// unqualified "already matches" line -- that line would now be
-		// false the moment this run's own write lands.
-		expect(result.stdout).toContain(
-			"no migration — snapshot updated to record the declared change.",
-		);
+		// cli-commands (this change's own MODIFIED delta, D106 R3, J13): a
+		// run that moves the snapshot with no statement to write still
+		// writes a migration -- one carrying no statements, whose banner
+		// anchors the new snapshot in the chain -- and reports both the
+		// file and that it carries no statements, never the unqualified
+		// "already matches" line (that line would now be false) and never
+		// silently updating the snapshot with nothing on disk to show it
+		// (R3-B1's own failure mode).
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("carries no statements.");
 
 		const snapshotText = await readFile(
 			join(cwd, "hejbro.snapshot.json"),
@@ -201,6 +234,13 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(snapshot.objects["table:k1.widgets"]).toMatchObject({
 			existing: true,
 		});
+
+		// R3-B1's own core observer: a repository nobody hand-edited still
+		// passes verify after this run -- the chain-tip/snapshot mismatch
+		// the evaluator's own reproduction found is exactly what a
+		// zero-statement migration's banner prevents.
+		const verify = await runCli(cwd, ["verify"]);
+		expect(verify.exitCode).toBe(0);
 	});
 
 	it("a run that later removes a handed-over table's declaration entirely never brings its drops back (D106 R2, R2-B2 measurement ②)", async () => {
@@ -216,34 +256,32 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		const removedResult = await runCli(cwd, ["generate"]);
 		expect(removedResult.exitCode).toBe(0);
 
-		// Neither the handover run nor the declaration-removal run after it
-		// emits any DDL for k1.widgets -- if either had, a second migration
-		// file would exist alongside the original `create table` one. The
-		// file count alone already proves it; the destructive-drop greps
-		// below (evaluation.md's own consequence 2 text, exact statements)
-		// rule out the one false positive a bare "drop" substring search
-		// would catch -- `create policy`'s own idempotent
-		// `drop policy if exists` guard, present in the original file too.
+		// D106 R3, J13: neither the handover run nor the declaration-removal
+		// run after it emits any DDL for k1.widgets -- each still gets its
+		// own migration file now (one to anchor the handover, one to anchor
+		// the removal), but every file's own SQL body stays free of the
+		// destructive statements evaluation.md's own consequence 2 named.
+		// The original `create table` migration plus these two zero-
+		// statement ones make three files total.
 		const fileNames = await sqlFileNames();
-		expect(fileNames).toHaveLength(1);
-		const [onlyFileName] = fileNames;
-		const onlyFileText = await readFile(
-			join(cwd, "migrations", onlyFileName as string),
-			"utf8",
+		expect(fileNames).toHaveLength(3);
+		const fileTexts = await Promise.all(
+			fileNames.map((name) => readFile(join(cwd, "migrations", name), "utf8")),
 		);
-		expect(onlyFileText).not.toContain('drop policy "read_low"');
-		expect(onlyFileText).not.toContain("drop sequence");
-		expect(onlyFileText).not.toContain("disable row level security");
-		expect(onlyFileText).not.toContain("drop table");
+		const wholeText = fileTexts.join("\n");
+		expect(wholeText).not.toContain('drop policy "read_low"');
+		expect(wholeText).not.toContain("drop sequence");
+		expect(wholeText).not.toContain("disable row level security");
+		expect(wholeText).not.toContain("drop table");
 
 		// Removing the declaration entirely still moves the snapshot (the
 		// entry itself drops out, since nothing declares the table any
-		// longer) even though it emits no statement -- the same "snapshot
-		// differs, no migration" case as the handover run before it, so it
-		// gets the same report line, not "already matches".
-		expect(removedResult.stdout).toContain(
-			"no migration — snapshot updated to record the declared change.",
-		);
+		// longer) even though it emits no statement -- the same
+		// "snapshot differs, no statement" case as the handover run before
+		// it, so it gets the same report shape: a migration written, and
+		// that it carries no statements.
+		expect(removedResult.stdout).toContain("wrote migrations/");
+		expect(removedResult.stdout).toContain("carries no statements.");
 		const finalSnapshotText = await readFile(
 			join(cwd, "hejbro.snapshot.json"),
 			"utf8",
@@ -251,6 +289,13 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(
 			JSON.parse(finalSnapshotText).objects["table:k1.widgets"],
 		).toBeUndefined();
+
+		// R3-B1's own second failure mode (evaluation.md: "the chain breaks
+		// permanently at the next real migration"): both zero-statement
+		// migrations anchored the chain correctly, so a repository nobody
+		// edited still verifies clean after both of them.
+		const verify = await runCli(cwd, ["verify"]);
+		expect(verify.exitCode).toBe(0);
 	});
 
 	// #26/#136 (identity fix, item 21 of phase8-snapshot-v5) originally
@@ -394,6 +439,103 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 		expect(result.stderr).toBe(
 			'warning[not-null-without-default]: app.posts\n  column "app"."posts"."status" is added as not null without a default — this migration will fail if the table already has rows. Next: add .default(...), or add the column nullable now and set it not null in a later migration.\n',
 		);
+	});
+
+	// D106 R3, R3-B1 measurement ①: the evaluator's own flagship
+	// reproduction (evaluation.md's exact repro shape) -- an already
+	// in-sync project (already generated and verified once) that adds a
+	// plain `existingTable()` declaration, with no handover or adoption
+	// involved. Before this round's fix, this exact sequence left
+	// `hejbro verify` failing permanently with a false
+	// `chain-tip-mismatch` on a repository nobody edited.
+	it("an in-sync project that adds a new existing declaration still verifies afterward (D106 R3, R3-B1 measurement ①)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+		const firstVerify = await runCli(cwd, ["verify"]);
+		expect(firstVerify.exitCode).toBe(0);
+
+		await writeSchema(SCHEMA_WITH_NEW_EXISTING_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("carries no statements.");
+
+		const verify = await runCli(cwd, ["verify"]);
+		expect(verify.exitCode).toBe(0);
+	});
+
+	// D106 R3, R3-B1 measurement ②: the evaluator's own "second failure
+	// mode" -- once a zero-statement migration is in the chain, the NEXT
+	// migration that genuinely does emit statements writes a
+	// `parent-snapshot:` naming the state the zero-statement migration
+	// settled on. Before this round's fix, nothing ever recorded that
+	// state in a migration's own `snapshot:` line at all, so this next
+	// real migration's `parent-snapshot:` matched no earlier migration,
+	// breaking the chain permanently (`broken-chain`).
+	it("a later run that does emit statements still verifies after a zero-statement migration anchored the chain (D106 R3, R3-B1 measurement ②)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(SCHEMA_WITH_NEW_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(SCHEMA_WITH_NEW_EXISTING_AND_EXTRA_COLUMN_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).not.toContain("carries no statements.");
+		// Names the real change in the report's own banner line (stdout
+		// only ever prints each written migration's banner, never its full
+		// SQL body -- `written.sql.split("\n\n")[0]`).
+		expect(result.stdout).toContain('column "subtitle" added');
+
+		const verify = await runCli(cwd, ["verify"]);
+		expect(verify.exitCode).toBe(0);
+	});
+
+	// D106 R3, R3-B1 measurement ④: `deriveExistingTransitionSlug`'s own
+	// determinism -- the same declared change, from the same starting
+	// state, in two entirely independent projects, SHALL name its
+	// zero-statement migration the same slug (never a generic fallback,
+	// never a random or time-derived name). Only the numeric prefix
+	// (`migrationFileName`'s own version/timestamp) is allowed to differ
+	// between the two -- stripped here (`migrationVersionOf`'s own
+	// "before the first `_`" rule) before comparing.
+	it("the zero-statement migration's own slug is deterministic across two independent runs (D106 R3, R3-B1 measurement ④)", async () => {
+		const stripPrefix = (fileName: string): string =>
+			fileName.replace(/^\d+_/, "");
+
+		const cwdA = await createCliFixtureDir();
+		const cwdB = await createCliFixtureDir();
+		try {
+			for (const target of [cwdA, cwdB]) {
+				await runCli(target, ["init"]);
+				await writeFixtureFile(target, "src/app.schema.ts", SCHEMA_SOURCE);
+				await runCli(target, ["generate"]);
+				await writeFixtureFile(
+					target,
+					"src/app.schema.ts",
+					SCHEMA_WITH_NEW_EXISTING_SOURCE,
+				);
+				await runCli(target, ["generate"]);
+			}
+			const namesA = (await readdir(join(cwdA, "migrations")))
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+			const namesB = (await readdir(join(cwdB, "migrations")))
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+			expect(namesA.map(stripPrefix)).toEqual(namesB.map(stripPrefix));
+			// Names the actual slug too, not just that the two runs agree --
+			// a bug that made both runs agree on the SAME wrong slug (a
+			// generic fallback, for instance) would still pass the line
+			// above alone.
+			expect(stripPrefix(namesA[1] as string)).toBe("record_users.sql");
+		} finally {
+			await removeCliFixtureDir(cwdA);
+			await removeCliFixtureDir(cwdB);
+		}
 	});
 });
 

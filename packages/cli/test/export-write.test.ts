@@ -324,13 +324,14 @@ export const posts = table(app, "posts", {
 		await writeSchema(cwd, alsoExported);
 		const secondResult = await runCli(cwd, ["generate", "--export"]);
 		expect(secondResult.exitCode).toBe(0);
-		// Newly exporting `authUsers` moves the snapshot itself (it gains
-		// its own `table:` entry, marked existing) even though it emits no
-		// statement -- the "snapshot updated, no migration" report, not
-		// "already matches" (D106 R2, cli-commands MODIFIED delta).
-		expect(secondResult.stdout).toContain(
-			"no migration — snapshot updated to record the declared change.",
-		);
+		// D106 R3, J13: newly exporting `authUsers` moves the snapshot itself
+		// (it gains its own `table:` entry, marked existing) even though it
+		// emits no statement -- a migration carrying no statements is
+		// written to anchor that move in the chain, reported alongside the
+		// fact that it carries no statements, never the unqualified
+		// "already matches" line.
+		expect(secondResult.stdout).toContain("wrote migrations/");
+		expect(secondResult.stdout).toContain("carries no statements.");
 
 		const formatText = await readExportFile(cwd, "format.json");
 		const schemaText = await readExportFile(cwd, "schema.json");

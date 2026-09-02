@@ -22,8 +22,10 @@ adoption the objects hejbro manages on that table — its sequences, its
 row-level security, its policies — are created as for any managed
 table, and on handover nothing of theirs is dropped.
 
-A validator that judges managed DDL SHALL skip an existing table; one
-that checks a reference SHALL see it.
+A validator that judges managed DDL SHALL skip an existing table. An
+existing declaration SHALL still reach the validator pipeline exactly as
+a managed one does, so a validator that judges a reference rather than
+DDL has it to look at.
 
 #### Scenario: An existing declaration produces no migration
 - **WHEN** a schema file exports an `existingTable()` and `hejbro
@@ -61,7 +63,30 @@ that checks a reference SHALL see it.
 - **THEN** the existing declaration raises no diagnostic, and a managed
   table declared in that same schema is still refused
 
+#### Scenario: An existing declaration reaches the validators
+- **WHEN** a schema declaring a table with `existingTable()` is
+  generated with a validator installed
+- **THEN** that validator is handed the existing declaration among the
+  normalized declarations, exactly as it is handed a managed one
+
 #### Scenario: An older snapshot's tables are all managed
 - **WHEN** a snapshot written before the existing marker was added is
   read
 - **THEN** every table in it is managed
+
+### Requirement: A table this repository does not author is refused as a declaration
+A table value that carries no migration authority — one reconstructed
+from a vendored contract rather than written here — SHALL be refused
+when it reaches migration generation, under the code
+`synced-table-declared`. The refusal SHALL name the repository that owns
+the schema and both ways a table authored here is declared: `table()`
+for one this repository manages, `existingTable()` for one it declares
+but does not manage. Being reference-only is no longer what disqualifies
+a table value; carrying no authority is.
+
+#### Scenario: A vendored contract's table cannot author a migration
+- **WHEN** a table value reconstructed from a vendored contract is
+  passed to migration generation
+- **THEN** the run is refused with `synced-table-declared`, and the
+  message names both `table()` and `existingTable()` as the ways to
+  declare a table this repository authors
