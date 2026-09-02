@@ -160,6 +160,16 @@ either, before or after #671 closes (a recorded object never appears
 "new" to a future diff). Closing that gap for an already-adopted table
 needs out-of-band DDL run directly against the database, or a
 hand-corrected snapshot — not a follow-up `hejbro generate`.
+
+Handing a table over and then adopting it back is not yet safe to
+apply, though: the handover deliberately leaves a `serial` column's
+sequence behind (nothing hejbro managed on the table is dropped), and
+adoption's own `create sequence` collides with it — `hejbro migrate`
+fails with `relation "..." already exists` (#694). Until that's fixed,
+either drop the leftover sequence out of band before re-adopting the
+table, or treat the re-adopted state as a fresh `hejbro baseline`
+instead of a `hejbro generate` continuation of the handed-over chain.
+
 Declaring a schema's tables with `table()`/`existingTable()` no longer
 has to stay a bare, unexported reference to work this way, the
 difference from before #605.
