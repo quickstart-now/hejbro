@@ -227,12 +227,20 @@ describe("readInferenceCatalog / 1.2b live witness", () => {
 			expect(ginIndex?.method).toBe("gin");
 			expect(ginIndex?.columns[0]?.opclass).toBe("jsonb_path_ops");
 			expect(ginIndex?.columns[0]?.opclassIsDefault).toBe(false);
+			// pg_get_indexdef's per-column form carries no opclass suffix of its
+			// own (verified directly: only the whole-index form does) -- this
+			// pins that `text` and `opclass` never duplicate the same fact, so
+			// 1.4 can safely combine them without re-parsing `text`.
+			expect(ginIndex?.columns[0]?.text).toBe("metadata");
 
 			const descIndex = catalog.indexDetails.find(
 				(row) => row.name === "parents_id_desc_idx",
 			);
 			expect(descIndex?.columns[0]?.descending).toBe(true);
 			expect(descIndex?.columns[0]?.nullsFirst).toBe(true);
+			// Same non-duplication pin as above, for indoption's DESC/NULLS
+			// FIRST bits: pg_get_indexdef's per-column form never appends them.
+			expect(descIndex?.columns[0]?.text).toBe("id");
 
 			const enumRow = catalog.enumLabels.find(
 				(row) => row.schema === "infer_probe" && row.name === "mood",
