@@ -1,6 +1,6 @@
 import type { Snapshot, TableSnapshot } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
-import { emitDeclarationFiles } from "../src/declare-emit/emit";
+import { emitDeclarationFiles, renderHeader } from "../src/declare-emit/emit";
 import type { InferCatalogResult } from "../src/infer/compose";
 
 const widgetsTable: TableSnapshot = {
@@ -821,5 +821,38 @@ describe("emitDeclarationFiles / 2.1", () => {
 			.findIndex((line) => line.includes("Closes a declaration-file cycle"));
 		const nextLine = withClone.source.split("\n")[commentLine + 1] ?? "";
 		expect(nextLine).toContain("pgEnum(schema(");
+	});
+});
+
+describe("renderHeader / D106 R3-B1 (CI-R3-01): a star-slash pair inside a loss-report line never closes the header comment early", () => {
+	// A star immediately followed by a slash is never spelled out
+	// literally in this file's own comments, for the obvious reason --
+	// built from parts at each call site instead.
+	const starSlash = `${"*"}${"/"}`;
+
+	it("splits every star-slash pair in a report line so the block comment only ever closes at its own final line", () => {
+		const header = renderHeader([
+			`Omitted: column "app.widgets.a${starSlash}b" -- danger.`,
+		]);
+		const lines = header.split("\n");
+		const closingLine = lines.at(-1);
+		const body = lines.slice(0, -1).join("\n");
+		expect(closingLine).toBe(" */");
+		expect(body).not.toContain(starSlash);
+		// the pair still reads as itself -- a zero-width character sits
+		// between the star and the slash, invisible to a reader.
+		expect(body).toContain(`app.widgets.a*`);
+		expect(body).toContain(`/b`);
+	});
+
+	it("splits more than one star-slash pair on the same line", () => {
+		const header = renderHeader([`a${starSlash}b${starSlash}c`]);
+		const body = header.split("\n").slice(0, -1).join("\n");
+		expect(body).not.toContain(starSlash);
+	});
+
+	it("leaves an ordinary report line (no star-slash pair) unchanged", () => {
+		const header = renderHeader(["Guessed: TypeScript keys from SQL names."]);
+		expect(header).toContain(" * Guessed: TypeScript keys from SQL names.");
 	});
 });

@@ -1036,12 +1036,30 @@ const HEADER_INTRO = [
 	"rewrites it.",
 ];
 
+// D106 R3-B1: a loss-report line carries raw catalog text -- a quoted
+// identifier can itself contain a star immediately followed by a
+// slash, and a report line naming one verbatim would otherwise close
+// the header's own block comment right there, truncating the file
+// (the loader then fails to parse whatever text follows, outside any
+// comment). Splitting that exact two-character pair with a zero-width
+// space defangs it without changing what a reader sees -- the
+// character renders invisibly in every terminal and editor this
+// repository's headers are read in, so the line still reads as the
+// exact catalog text it names. (This comment avoids spelling the pair
+// out literally, for the obvious reason.)
+const COMMENT_TERMINATOR = /\*\//g;
+const ZERO_WIDTH_SPACE = "​";
+const escapeCommentTerminator = (line: string): string =>
+	line.replace(COMMENT_TERMINATOR, `*${ZERO_WIDTH_SPACE}/`);
+
 export const renderHeader = (lossReport: ReadonlyArray<string>): string => {
 	const introLines = HEADER_INTRO.map((line) => ` * ${line}`);
 	if (lossReport.length === 0) {
 		return ["/**", ...introLines, " */"].join("\n");
 	}
-	const reportLines = lossReport.map((line) => ` * ${line}`);
+	const reportLines = lossReport.map(
+		(line) => ` * ${escapeCommentTerminator(line)}`,
+	);
 	return ["/**", ...introLines, " *", ...reportLines, " */"].join("\n");
 };
 
