@@ -40,6 +40,76 @@ const IMAGE =
 	"ghcr.io/niledatabase/testingcontainer@sha256:188a7230d9f39e615bc584d90e8ec6f4754d0ef298701a1d6811d394f3d35696";
 const CONTAINER = `hejbro-nile-integration-${process.pid}`;
 
+const mountedVolumeNames = (container: string): ReadonlyArray<string> =>
+	execFileSync(
+		"docker",
+		["inspect", "--format", "{{range .Mounts}}{{.Name}} {{end}}", container],
+		{ encoding: "utf-8" },
+	)
+		.trim()
+		.split(/\s+/)
+		.filter((name) => name.length > 0);
+
+/** `null` when `docker inspect` itself fails -- never let that abort the removal `removeContainer` runs right after (#709 R2). */
+const mountedVolumeNamesOrNull = (
+	container: string,
+): ReadonlyArray<string> | null => {
+	try {
+		return mountedVolumeNames(container);
+	} catch {
+		return null;
+	}
+};
+
+const existingVolumeNames = (): ReadonlyArray<string> =>
+	execFileSync("docker", ["volume", "ls", "-q"], { encoding: "utf-8" })
+		.split("\n")
+		.filter((name) => name.length > 0);
+
+/**
+ * #709: `docker rm -f <container>` (no `-v`) freed the container but
+ * left the image's own declared data volume behind as an orphaned
+ * anonymous volume -- every integration witness's own `afterAll` did
+ * this, and the accumulation (1,418 volumes, 84 GB) ate the shared
+ * Docker data disk (round 4, D106). `-v` frees the volume too; this
+ * checks that it actually happened, since the flag's own success is
+ * silent -- the volume names this container's own mounts carried,
+ * read before removal, must all be gone from `docker volume ls` right
+ * after. Naming both the leftover volumes and the container on
+ * failure is half this check's value. Not shared with the sibling
+ * copies in `packages/cli/test/docker-volumes.ts`/`packages/pg/test/
+ * docker-volumes.ts` -- a single call site here has no reason to add a
+ * cross-package dependency for it.
+ *
+ * `docker inspect` runs *before* `rm`, so its own failure must never
+ * skip the removal it precedes -- `mountedVolumeNamesOrNull` swallows
+ * that one failure into `null`, but this function does not swallow it
+ * a second time: `rm -f -v` still runs either way, and a `null` read
+ * is reported afterward as its own failure, since the volume
+ * attribution this function exists to prove was never actually
+ * checked.
+ */
+const removeContainer = (container: string): void => {
+	const mounted = mountedVolumeNamesOrNull(container);
+	execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
+	if (mounted === null) {
+		throw new Error(
+			`docker inspect failed for container "${container}" before it was removed -- it was still removed (rm -f -v), but its volumes were never confirmed freed. Next: check \`docker volume ls -qf dangling=true\` by hand.`,
+		);
+	}
+	if (mounted.length === 0) {
+		return;
+	}
+	const remaining = new Set(existingVolumeNames());
+	const stillPresent = mounted.filter((name) => remaining.has(name));
+	if (stillPresent.length === 0) {
+		return;
+	}
+	throw new Error(
+		`docker rm -f -v "${container}" did not remove its own volume(s): ${stillPresent.join(", ")}. Next: check \`docker volume rm ${stillPresent.join(" ")}\` by hand.`,
+	);
+};
+
 /**
  * The container's own fixed credentials for its one pre-provisioned
  * database (measured 2026-08-31 via `docker logs` on first boot -- the
@@ -216,7 +286,7 @@ describe("nileDriver + a real db() handle against Nile's official testing contai
 	afterAll(async () => {
 		await base.current?.client.end();
 		if (containerStarted.current) {
-			execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
+			removeContainer(CONTAINER);
 		}
 	});
 

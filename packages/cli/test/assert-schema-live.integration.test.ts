@@ -11,6 +11,7 @@ import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AssertSchemaHandle } from "../src/assert-schema";
 import { assertSchema } from "../src/assert-schema";
+import { removeContainer } from "./docker-volumes";
 
 /**
  * The other half of group 2's own fixture pin (owner decision ⑤, mirrors
@@ -195,7 +196,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => {
-	execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
+	removeContainer(CONTAINER);
 });
 
 describe("assertSchema / live witness (group 3, task 3.1)", () => {
