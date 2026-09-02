@@ -40,6 +40,7 @@ const METADATA: ContractMetadata = {
 			foreignKeys: [],
 		},
 	},
+	functions: {},
 };
 
 /**

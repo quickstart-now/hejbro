@@ -39,6 +39,7 @@ const METADATA: ContractMetadata = {
 			foreignKeys: [],
 		},
 	},
+	functions: {},
 };
 
 describe("selects and types rows from the contract (R2-G6 6.3)", () => {

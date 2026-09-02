@@ -71,6 +71,7 @@ describe("no Table value crosses into the client's public types (R2-G6 6.1 condi
 					foreignKeys: [],
 				},
 			},
+			functions: {},
 		};
 
 		const client = createNameKeyedDb<TestDatabase>(driver, metadata);

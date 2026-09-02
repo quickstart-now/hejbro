@@ -56,6 +56,7 @@ const METADATA: ContractMetadata = {
 			foreignKeys: [],
 		},
 	},
+	functions: {},
 };
 
 describe("insert and update honour the contract's write optionality (R2-G6 6.4)", () => {
