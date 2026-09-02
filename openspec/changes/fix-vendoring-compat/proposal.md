@@ -56,7 +56,9 @@ All six sit on published surfaces (`hejbro vendor`'s reader and emitter,
 ## Impact
 
 - `packages/cli/src/vendor/validate-export.ts` (optional function facts on
-  read), `packages/cli/src/contract/{functions,tables,ts-type,emit}.ts`
+  read) and `packages/cli/src/vendor/fetch.ts` (it hands on the read-side
+  payload type that change introduces),
+  `packages/cli/src/contract/{functions,tables,ts-type,emit}.ts`
   (quoting, interval import, uncarried legacy functions).
 - `packages/query/src/client/{contract-types,name-keyed-db}.ts` (`functions`
   optional at runtime, mutation result types).
