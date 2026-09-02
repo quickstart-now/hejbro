@@ -799,13 +799,17 @@ const renderExistingTableHandle = (
  * (a plain string) into the column's own type node, never the schema
  * object's identity, so this throwaway owner produces identical DDL.
  */
+/** (enum)'s own constraint (D106 B1, CI-D106-R2-02, lead-approved wording: state the constraint only, mirroring {@link HANDLE_CONSTRAINT_COMMENT}'s own FK-side text). */
+const ENUM_CLONE_CONSTRAINT_COMMENT =
+	"// Closes a declaration-file cycle -- importing the other file's own enum would close it the other way, so this column types against a local, unexported clone instead.";
+
 const renderEnumClone = (
 	enumSchema: string,
 	enumNameValue: string,
 	values: ReadonlyArray<string>,
 	cloneIdentifier: string,
 ): TypeRender => ({
-	call: `const ${cloneIdentifier} = pgEnum(schema(${JSON.stringify(enumSchema)}), ${JSON.stringify(enumNameValue)}, ${JSON.stringify([...values])});`,
+	call: `${ENUM_CLONE_CONSTRAINT_COMMENT}\nconst ${cloneIdentifier} = pgEnum(schema(${JSON.stringify(enumSchema)}), ${JSON.stringify(enumNameValue)}, ${JSON.stringify([...values])});`,
 	symbols: new Set(["pgEnum", "schema"]),
 });
 

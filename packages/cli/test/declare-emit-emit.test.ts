@@ -748,4 +748,75 @@ describe("emitDeclarationFiles / 2.1", () => {
 		);
 		expect(forward).toEqual(reversed);
 	});
+
+	it("carries a one-line constraint comment at the enum clone's own cut site, mirroring the FK handle's own comment (D106 B1)", () => {
+		const appA: TableSnapshot = {
+			schema: "app",
+			name: "a",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{
+					name: "kind",
+					typeNode: {
+						typeName: "enum",
+						enumSchema: "audit",
+						enumName: "status",
+					},
+					notNull: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "a_pkey",
+		};
+		const auditB: TableSnapshot = {
+			schema: "audit",
+			name: "b",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{
+					name: "other_kind",
+					typeNode: {
+						typeName: "enum",
+						enumSchema: "app",
+						enumName: "category",
+					},
+					notNull: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "b_pkey",
+		};
+		const enumFacts = [
+			{ schema: "audit", name: "status", values: ["created", "updated"] },
+			{ schema: "app", name: "category", values: ["x", "y"] },
+		];
+
+		const files = emitDeclarationFiles(resultFor([appA, auditB], enumFacts));
+		const withClone = files.find((file) =>
+			file.source.includes("pgEnum(schema("),
+		);
+		if (withClone === undefined) {
+			throw new Error("expected exactly one file to carry an enum clone");
+		}
+		expect(withClone.source).toContain(
+			"// Closes a declaration-file cycle -- importing the other file's own enum would close it the other way, so this column types against a local, unexported clone instead.",
+		);
+		const commentLine = withClone.source
+			.split("\n")
+			.findIndex((line) => line.includes("Closes a declaration-file cycle"));
+		const nextLine = withClone.source.split("\n")[commentLine + 1] ?? "";
+		expect(nextLine).toContain("pgEnum(schema(");
+	});
 });
