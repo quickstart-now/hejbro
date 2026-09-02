@@ -19,11 +19,17 @@ minutes; every task starts from its named red test. Verification (gates,
 - [ ] 1.2 (~6m) `synced-function-declared` is specified and documented
       (#658, function half). Red: `packages/core/test/engine/function-authority-refusal.test.ts`
       already exists — add the assertion that the message names the
-      function and the way forward (delta scenario), and the
-      `check:diagnostic-xref` entry where the repo lists refusals
-      (measure where `synced-table-declared` should live too and leave a
-      note for `add-unmanaged-objects` round 4, which owns that half).
-      Files: core error text if it changes, diagnostics doc, test.
+      function and the way forward (delta scenario). Premise corrected
+      by measurement (#677 implementer, HV-G1-R1-01): `check:diagnostic-xref`
+      reads no documentation at all — it only cross-references `error[<code>]`
+      string literals inside `src` against each code's own `src`
+      definition, and the repository carries no diagnostics-list doc for
+      it to check against. `synced-table-declared`'s own half (the table
+      cousin of this refusal) is not documented anywhere in `skills/` or
+      `docs/` either, and stays `add-unmanaged-objects` round 4's to add —
+      no note to leave inside a nonexistent list.
+      Files: core error text (unchanged — already names the function),
+      `skills/hejbro/references/polyrepo.md`, test.
 
 ## 2. DSL: cross-file references and projected returning (#677)
 

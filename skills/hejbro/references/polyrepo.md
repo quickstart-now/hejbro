@@ -53,6 +53,14 @@ schema repository exports, callable through `db.fn` — `createDb(driver)
 carries over unchanged: a scoped handle's `fn` calls the same vendored
 functions, inside that context's transaction.
 
+The runtime pair of the type-level exclusion above: a vendored/
+synthesized function declaration (`@hejbro/query`'s `synthesizeFunction`
+output, carrying `"usage"` authority, not `defineFunction()`'s own) that
+reaches `generateMigration` is refused with `synced-function-declared`.
+Next: declare it with `defineFunction()` in the repository that owns its
+schema, or remove it from the declarations list if this repository
+doesn't own that schema.
+
 **Two different keying rules, not one.** `Tables` is keyed by the
 table's own SQL name (matching `db()`'s own table-name keying);
 `Functions` is keyed by the function's own **export name** from the
