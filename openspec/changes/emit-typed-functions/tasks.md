@@ -99,21 +99,51 @@ Files: `packages/cli/src/contract/functions.ts` (new), `packages/cli/src/
 contract/emit.ts`, `packages/cli/src/contract/ts-type.ts` (reuse),
 `packages/cli/test/contract-*.test.ts`
 
-- [ ] 2.1 (~9m) [design] `Functions` entries: `<exportName>: { Args: {
-      key: TsType }; Returns: TsType | Database["Tables"][t]["Row"][] }`
-      and the runtime metadata entry (schema, SQL name, ordered args with
-      sqlName/typeNode/mode, return kind + table identity). Failing test:
+- [x] 2.1 (~9m) [design — settled by the lead, 2026-09-02] `Functions`
+      entries: `<exportName>: { Args: { <declared key>: TsType };
+      Returns: TsType | ReadonlyArray<Database["Tables"][<sql name>]
+      ["Row"]> }`, and a runtime metadata entry that is a **direct
+      transcription of the carried facts** — `{ schema, name, args: [{
+      key, sqlName, typeNode, mode, notNullElements }], returns }` — so
+      the emitter computes only the TypeScript type text and nothing
+      else can drift. The argument entries keep `key` because the client
+      maps a named-argument object to positional order, and re-deriving
+      that mapping by re-casing the key is the one-way conversion this
+      whole change exists to escape. Four settled details: an argument
+      list of no arguments is `Record<string, never>` (a bare `{}`
+      accepts extra properties, so the "an extra argument fails to
+      compile" scenario would be quietly false for exactly the functions
+      that take none); an empty section is `{}` while `Views` keeps its
+      "not carried by this version" marker, because the two now mean
+      different things; neither an argument nor a scalar return takes
+      `| null`, since the declaring repository's own `db.fn` types do
+      not and parity is the point; an array return's elements are
+      nullable. Failing test:
       `contract-emit.test.ts` (or the existing contract test file) —
       "emits a Functions entry per exported function", "a trigger-
-      synthesized function is absent". **Carried in from group 1**:
+      synthesized function is absent", "a function returning a table the
+      contract does not carry is absent". **Carried in from group 1**:
       `emit.ts`'s `EMPTY_SECTION` comment says the export carries no
       function signatures, which group 1 made false — this group's own
       edit is what corrects it, and it is a false statement in the tree
       until then, not a docs nit.
-- [ ] 2.2 (~7m) Determinism and the golden: the generated contract for
-      the examples' schema gains its function entries; `contract-
-      authority.test.ts` / determinism tests stay green. Failing test: the
-      golden diff itself (regenerate deliberately, review the diff).
+- [x] 2.2 (~9m) Determinism, the golden, and a real `tsc` over the new
+      section. `examples/cli-smoke/test/vendored-contract.test.ts` is the
+      only place a contract is type-checked by a real `tsc` against the
+      installed package rather than asserted as strings — and its schema
+      declares no function at all, so everything group 2 emits is
+      currently unproven there: a `Functions` section that does not
+      compile would pass every test this change has. Its fixture gains a
+      scalar and a table-returning function (one argument keyed
+      differently from its SQL name, one non-default numeric mode, so the
+      emitted types are not all `string`). **This file is shared with
+      group 3 by halves** — group 2 owns the type-check half, group 3
+      owns the live-call half; the same split the emitter and its
+      proof-of-execution already needed. Determinism: two vendor runs
+      byte-identical with a function declared; `contract-authority.test.ts`
+      and the existing determinism tests stay green. Failing test: the
+      real-`tsc` run over an emitted `Functions` section, and the golden
+      diff itself (regenerate deliberately, review the diff).
 
 ## 3. The client's fn and the witness (#587)
 Files: `packages/query/src/client/name-keyed-db.ts`, `packages/query/src/

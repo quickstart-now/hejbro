@@ -13,7 +13,11 @@ keys, each typed as the declared argument type would be read) and the
 result type (the mapped scalar type, or the rows of the returned table,
 with the same numeric-mode and element-nullability rules the table
 entries follow). A function synthesized as part of a trigger definition
-carries no export name and SHALL NOT appear. The name-keyed client
+carries no export name and SHALL NOT appear. Neither SHALL a function
+whose returned table the contract does not itself carry: there is no
+row type to resolve to, and typing it against a table that is not there
+would be a guess — the rule a foreign key pointing outside the schema
+already follows. The name-keyed client
 built from that contract SHALL expose those functions under `fn`,
 keyed the same way, as callables whose rendered SQL is the same
 parameterized invocation the declaring repository's own `db.fn` renders
@@ -39,6 +43,12 @@ declarations gave them and no declaration in hand.
 - **WHEN** the consumer calls a vendored function with a missing, extra,
   or wrongly typed argument
 - **THEN** the call fails to compile
+
+#### Scenario: A function returning an uncarried table is absent
+- **WHEN** a vendored schema declares an exported function returning a
+  table the contract does not carry
+- **THEN** that function has no `Functions` entry and no `fn` callable,
+  rather than an entry typed against rows the contract cannot describe
 
 #### Scenario: A synthesized trigger function is absent
 - **WHEN** the vendored schema's only functions come from trigger
