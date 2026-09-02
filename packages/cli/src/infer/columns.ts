@@ -1,4 +1,4 @@
-import type { ColumnBuilder } from "@hejbro/core";
+import type { ColumnBuilder, EnumDeclaration } from "@hejbro/core";
 import {
 	bigint,
 	boolean,
@@ -69,6 +69,16 @@ export type InferredColumnFacts = {
 		readonly cache: string;
 		readonly cycle: boolean;
 	} | null;
+	/**
+	 * Set (by the caller assembling a table's columns, 1.4) when
+	 * `baseTypeKind === "e"` -- the *same* `EnumDeclaration` instance every
+	 * other column using this enum type gets, never a fresh `pgEnum(...)`
+	 * per column (that would declare the type twice). `check/catalog.ts`'s
+	 * own rule applies here too: an enum's own type is identified by
+	 * schema/name, never by `catalogType`'s spelling, which is
+	 * `search_path`-sensitive.
+	 */
+	readonly enumDeclaration: EnumDeclaration | null;
 };
 
 export type ColumnLoss = {
@@ -292,6 +302,16 @@ export const inferColumnDeclaration = (
 		column: facts.name,
 		sqlType: facts.sqlType,
 	};
+	if (facts.enumDeclaration !== null) {
+		const declaredEnum = withNotNull(
+			withGeneratedIdentityOrDefault(
+				applyArray(facts.enumDeclaration.column(), facts.isArray),
+				facts,
+			),
+			facts.notNull,
+		);
+		return { kind: "declared", builder: declaredEnum };
+	}
 	if (facts.baseTypeName === null) {
 		return { kind: "loss", loss };
 	}

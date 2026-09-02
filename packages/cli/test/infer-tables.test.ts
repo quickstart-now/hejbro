@@ -1,5 +1,11 @@
-import type { ColumnBuilder, HejbroInput } from "@hejbro/core";
-import { emptySnapshot, generateMigration, schema, table } from "@hejbro/core";
+import type { ColumnBuilder, EnumDeclaration, HejbroInput } from "@hejbro/core";
+import {
+	emptySnapshot,
+	generateMigration,
+	pgEnum,
+	schema,
+	table,
+} from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { InferredColumnFacts } from "../src/infer/columns";
 import { inferColumnDeclaration } from "../src/infer/columns";
@@ -18,12 +24,20 @@ const baseFacts: InferredColumnFacts = {
 	identityKind: "",
 	generatedKind: "",
 	identityOptions: null,
+	enumDeclaration: null,
 };
 
 /** Rebuilds a one-column table from a declaration result and returns the create-table SQL -- the black-box proof (team rule "generated code is proved by running it") that the builder `inferColumnDeclaration` returns is actually well-formed, not just shaped right internally. */
-const createSqlFor = (builder: ColumnBuilder): string => {
+const createSqlFor = (
+	builder: ColumnBuilder,
+	extraDeclarations: ReadonlyArray<HejbroInput> = [],
+): string => {
 	const widgets = table(app, "widgets", { col: builder });
-	const declarations: ReadonlyArray<HejbroInput> = [app, widgets];
+	const declarations: ReadonlyArray<HejbroInput> = [
+		app,
+		...extraDeclarations,
+		widgets,
+	];
 	const migration = generateMigration({
 		declarations,
 		previousSnapshot: emptySnapshot,
@@ -91,6 +105,62 @@ describe("inferColumnDeclaration / 1.3 type -> builder", () => {
 				sqlType: "point",
 			},
 		});
+	});
+
+	it("records a loss for a domain type (its own typname, never its base type's)", () => {
+		// A domain over text (e.g. `create domain email_address as text`) has
+		// its own pg_type row and its own typname ("email_address") -- it is
+		// never confused with plain `text` because check/catalog.ts's
+		// baseTypeName is *this* type's typname, not the domain's base type
+		// (CI-G1-R1-05 pt.2c: typtype 'd'/'c' etc, no special-casing needed --
+		// the lookup already fails closed for any name it doesn't recognize).
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "email_address",
+			baseTypeName: "email_address",
+		});
+
+		expect(result.kind).toBe("loss");
+	});
+
+	it("maps an array column to the element builder plus .array(), never asserting not-null elements", () => {
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "text[]",
+			baseTypeName: "text",
+			isArray: true,
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		const sql = createSqlFor(result.builder);
+		// The catalog never says whether an array's elements are themselves
+		// non-null (CI-G1-R1-05 pt.2b) -- the delta's own rule is to read
+		// unknown element nullability as nullable and mark it guessed, which
+		// means never emitting the `<column>_no_null_elements` CHECK
+		// `.notNullElements()` would derive.
+		expect(sql).toContain('"col" text[]');
+		expect(sql).not.toContain("no_null_elements");
+	});
+
+	it("maps an enum column via the shared EnumDeclaration's own .column(), not a plain builder", () => {
+		const mood = pgEnum(app, "mood", ["happy", "sad"] as const);
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "mood",
+			baseTypeName: "mood",
+			enumDeclaration: mood as EnumDeclaration,
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		const sql = createSqlFor(result.builder, [mood]);
+		expect(sql).toContain('create type "app"."mood" as enum');
+		expect(sql).toContain('"col" "app"."mood"');
 	});
 });
 
