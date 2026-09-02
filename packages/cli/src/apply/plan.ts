@@ -178,30 +178,19 @@ const outOfOrderDisagreements = (
 	});
 
 /**
- * The chain on disk and the ledger's own rows in, a plan out: which
- * migrations are pending (in chain order, never re-sorted by filename)
- * when the two agree, or every way they disagree when they don't. No
- * filesystem, no driver -- `chain` and `ledger` are already read by the
- * caller (group 7's job); this function only compares what it is given.
- * `baselineFileNames` (task 12.1, #624) is the same kind of caller-read
- * input as `chain`/`ledger` -- read by `commands/verify.ts`'s own
- * `readBaselineFileNames` -- and defaults to empty so every existing
- * caller/fixture that never mentions a baseline keeps meaning exactly
- * what it did before this parameter existed.
+ * [task 17.1, D106 M3] `planApply`'s own chain check, extracted (not
+ * duplicated) so a caller can run it before opening a connection at all
+ * -- `migrate`'s own bootstrap step sends DDL (creating the ledger
+ * schema/table), so refusing only inside `planApply`, after that
+ * bootstrap already ran, is too late for the delta's "no statement is
+ * sent" promise on an unverifiable chain. `null` means the chain
+ * verifies. This is `planApply`'s own former head (the `checkChain` call
+ * that used to open its body) moved out whole, not a second copy of it
+ * -- `planApply` below calls this once and returns its result directly
+ * when it fails, so `chainInvalidMessage` (the diagnostic text) still
+ * has exactly one place that constructs it.
  */
-/**
- * [task 17.1, D106 M3] `planApply`'s own chain half, split out so a caller
- * can verify the chain before opening a connection at all -- `migrate`'s
- * own bootstrap step sends DDL (creating the ledger schema/table), so
- * refusing only inside `planApply`, after that bootstrap already ran, is
- * too late for the delta's "no statement is sent" promise on an
- * unverifiable chain. `null` means the chain verifies; `checkChain` is
- * offline and idempotent, so `planApply` below runs it again rather than
- * threading this result through -- cheap, and keeps `planApply`'s own
- * signature (chain/ledger/baselineFileNames in, one `PlanResult` out)
- * unchanged for its other caller, `status`.
- */
-export const planChainOnly = (
+export const checkChainOffline = (
 	chain: ReadonlyArray<ChainEntry>,
 ): Extract<
 	PlanResult,
@@ -218,12 +207,24 @@ export const planChainOnly = (
 	};
 };
 
+/**
+ * The chain on disk and the ledger's own rows in, a plan out: which
+ * migrations are pending (in chain order, never re-sorted by filename)
+ * when the two agree, or every way they disagree when they don't. No
+ * filesystem, no driver -- `chain` and `ledger` are already read by the
+ * caller (group 7's job); this function only compares what it is given.
+ * `baselineFileNames` (task 12.1, #624) is the same kind of caller-read
+ * input as `chain`/`ledger` -- read by `commands/verify.ts`'s own
+ * `readBaselineFileNames` -- and defaults to empty so every existing
+ * caller/fixture that never mentions a baseline keeps meaning exactly
+ * what it did before this parameter existed.
+ */
 export const planApply = (
 	chain: ReadonlyArray<ChainEntry>,
 	ledger: LedgerState,
 	baselineFileNames: ReadonlySet<string> = new Set(),
 ): PlanResult => {
-	const chainFailure = planChainOnly(chain);
+	const chainFailure = checkChainOffline(chain);
 	if (chainFailure !== null) {
 		return chainFailure;
 	}

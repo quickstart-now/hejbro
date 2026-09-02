@@ -990,7 +990,7 @@ so its shape is free to change today and not tomorrow.
 
 Files: `packages/cli/src/commands/migrate.ts` and its test. Also opens
 `packages/cli/src/apply/plan.ts` (export-only change): `planApply`'s own
-chain check is pulled out as `planChainOnly` so `chainInvalidMessage`
+chain check is extracted as `checkChainOffline` so `chainInvalidMessage`
 (the diagnostic text) keeps a single owner rather than gaining a second
 copy in `migrate.ts`.
 
