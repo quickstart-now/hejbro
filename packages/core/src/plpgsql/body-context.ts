@@ -5,7 +5,12 @@ import type { ColumnRef, Condition, Expr, QueryNode } from "../expr/ast";
 import { expr, isExpr } from "../expr/ast";
 import { liftOperand } from "../expr/literal";
 import type { SqlTypeFamily } from "../expr/type-family";
-import type { DeleteFinal, InsertFinal, UpdateFinal } from "../query/mutate";
+import type {
+	DeleteFinal,
+	InsertFinal,
+	ReturningProjection,
+	UpdateFinal,
+} from "../query/mutate";
 import type { SelectLimited } from "../query/select";
 import { stableJson } from "../snapshot/stable-json";
 import type { BuilderFamily } from "../types/column-builder";
@@ -81,12 +86,19 @@ export type TriggerRow<TTable extends Table> = {
 		: never;
 } & { readonly [triggerRowMeta]: "new" | "old" };
 
-/** What `ctx.return()` accepts besides a trigger row: any query ending in `.returning()`/a bare select. */
+/**
+ * What `ctx.return()` accepts besides a trigger row: any query ending in
+ * `.returning()`/a bare select. The three mutation members carry
+ * `ReturningProjection | undefined`, not the bare (`undefined`-only)
+ * default (#634) -- a projected `.returning({...})` is the canonical
+ * form the body requirement names, exactly as accepted as the bare
+ * `.returning()` form.
+ */
 export type ReturnableQuery =
 	| SelectLimited
-	| InsertFinal
-	| UpdateFinal
-	| DeleteFinal;
+	| InsertFinal<Table, ReturningProjection | undefined>
+	| UpdateFinal<Table, ReturningProjection | undefined>
+	| DeleteFinal<Table, ReturningProjection | undefined>;
 
 /** The recording API a `defineFunction`/`defineTrigger` body callback receives. */
 export type BodyContext = {

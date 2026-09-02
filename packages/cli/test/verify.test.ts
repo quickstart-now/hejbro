@@ -405,7 +405,7 @@ export const projects = table(app, "projects", {
 		);
 	});
 
-	it("check 4 (tip == current): exits 1 with chain-tip-mismatch when a migration's own snapshot hash is corrupted", async () => {
+	it("check 4 (tip == current): exits 1 with chain-tip-mismatch naming both the migration and the snapshot when a migration's own snapshot hash is corrupted (#632)", async () => {
 		await runCli(cwd, ["init"]);
 		await writeSchema(BASE_SCHEMA);
 		await runCli(cwd, ["generate"]);
@@ -422,9 +422,53 @@ export const projects = table(app, "projects", {
 
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(1);
+		// The header line's identity must name the actual migration file, not
+		// the "snapshot:" substring the message happens to quote (#632: the
+		// regex-based identity heuristic used to pick that up instead).
 		expect(result.stderr).toContain(
-			"the migration chain's tip hash doesn't match the current snapshot — the last migration's \"snapshot:\" hash and the on-disk snapshot's own hash disagree, which means the snapshot or the last migration file was edited after the last `hejbro generate`. Next: restore the snapshot (and the last migration file, if it was edited) from version control — the snapshot is a derived file and should only ever change through `hejbro generate`.",
+			`error[chain-tip-mismatch]: migrations/${fileName}`,
 		);
+		expect(result.stderr).toContain(
+			`the migration chain's tip hash doesn't match the current snapshot — "migrations/${fileName}"'s "snapshot:" hash and the snapshot at "hejbro.snapshot.json" disagree. Next: restore the snapshot (and "migrations/${fileName}", if it was edited) from version control — the snapshot is a derived file and should only ever change through \`hejbro generate\`.`,
+		);
+		// The prior text asserted a cause ("which means ... was edited after
+		// the last `hejbro generate`") the check never actually verified —
+		// dropped, states the observation only.
+		expect(result.stderr).not.toContain("which means");
+	});
+
+	it("check 4 (tip == current): names the last hash-bearing migration, not the last file in the directory listing (#632)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+
+		const [fileName] = await migrationFileNames();
+		const filePath = join(cwd, "migrations", fileName as string);
+		const original = await readFile(filePath, "utf8");
+		const corrupted = replaceLinePrefixedWith(
+			original,
+			SNAPSHOT_PREFIX,
+			`sha256:${"a".repeat(64)}`,
+		);
+		await writeFile(filePath, corrupted);
+
+		// A legacy, pre-Phase-5 file with no hash-chain banner at all, sorted
+		// after the real (hashed) migration by filename — readChainEntries
+		// filters it out entirely, so the reported tip must still be the real
+		// migration, never this one, even though it's the last file
+		// `listMigrationFiles` returns.
+		await writeFixtureFile(
+			cwd,
+			"migrations/99999999999999_legacy_no_hashes.sql",
+			"-- hand-written, no hejbro banner\ncreate table legacy (id int);\n",
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			`error[chain-tip-mismatch]: migrations/${fileName}`,
+		);
+		expect(result.stderr).not.toContain("99999999999999_legacy_no_hashes.sql");
 	});
 
 	// #616: the banner hashes are snapshot hashes, so a body edit is outside

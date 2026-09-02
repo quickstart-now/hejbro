@@ -510,26 +510,21 @@ const renderForeignKey = (
 
 /**
  * Every cycle-closing FK is declared against an unexported `existingTable`
- * handle (CI-G2-R1-16, lead-approved, measured): `.references()`'s own
- * thunk is not a deferral mechanism at all -- `dsl/table.ts`'s
- * `foldColumnReferences` calls it synchronously, once, as part of
- * `table()`'s own construction (core's own doc call this "the thunk's
- * single evaluation point"; #669 tracks the gap between that doc's
- * "import-order safety" language and this actual eagerness, not this
- * piece's to fix). Measured directly, twice: a same-schema (same-file)
- * closing edge thunked crashes with `Cannot access 'x' before
- * initialization` (TDZ -- the target `const` genuinely isn't
- * initialized yet at that textual point), and a cross-schema pair
- * crashes with `Cannot read properties of undefined (reading 'id')`
- * (a live ESM import cycle) in *both* load orders alike, regardless of
- * which side is thunked and which is immediate. A self-reference is
- * unaffected -- it uses the extras callback's own `t`, never a
- * module-level identifier, confirmed loading cleanly. The handle itself
- * generalizes to same-file and cross-file alike: `existingTable` takes
- * its target's schema and table as string literals, never an import.
- * This base name (before this file's own casing+collision pass) is
- * deterministic in the target identity and this FK's own name, so two
- * handles in one file never collide by accident.
+ * handle (CI-G2-R1-16, lead-approved): the cycle-closing side never emits
+ * a real import into the other schema's module, regardless of load
+ * order. Since #669, `.references()`'s own thunk is lazy (resolved on
+ * the declaration's first `foreignKeys` read, never during `table()`
+ * itself) rather than the deferral mechanism this cut still assumed
+ * eager — this strategy stays correct anyway, because severing the
+ * import edge removes the cycle itself, which is what actually matters,
+ * independent of thunk timing. A self-reference is unaffected -- it uses
+ * the extras callback's own `t`, never a module-level identifier. The
+ * handle itself generalizes to same-file and cross-file alike:
+ * `existingTable` takes its target's schema and table as string
+ * literals, never an import. This base name (before this file's own
+ * casing+collision pass) is deterministic in the target identity and
+ * this FK's own name, so two handles in one file never collide by
+ * accident.
  */
 export const handleBaseNameFor = (fk: ForeignKeySnapshot): string =>
 	`${fk.referencesTable.replace(".", "_")}_${fk.name}_ref`;
