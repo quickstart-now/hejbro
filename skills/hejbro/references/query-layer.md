@@ -131,7 +131,10 @@ A `returning()` (and a function's own returned-row projection) is under
 the same rule as `select` — always an explicit column list, never
 `returning *`. A mutation without `.returning()` resolves to an empty
 array and still runs — `await handle.update(posts).set({ status:
-"archived" })` executes the update, it just has no rows to hand back.
+"archived" })` executes the update, it just has no rows to hand back —
+and its type says so: the awaited value is `ReadonlyArray<never>`, so
+reading a column off it is a compile-time error. Call `.returning()`
+(every column) or `.returning({ … })` (named columns) to get rows back.
 
 ## Relational reads (nested rows)
 
