@@ -458,9 +458,49 @@ is unaffected (the lines are stdout-only and follow the flag order).
 - `schema-vendoring` › **A database-sourced contract says so and carries no commit** — OK. `renderOriginFields` (`contract/emit.ts:252-262`) emits `source: "database"`, `database`, sorted `schemas`, no `commit`, no connection string; `contract-origin.test.ts:111`, `:126`, `:142`. The git golden still proves the origin key is the *only* difference (it rebuilds `expected` from the pre-union capture by one insertion and asserts the insertion matched, then compares full text — `contract-origin.test.ts:91`). All three metadata shapes were type-checked against the reader for real (throwaway file under `packages/query/test`, `tsc -p packages/query/tsconfig.json`, deleted): legacy `{commit, exportHash}` with no `source`, `{source:"git",…}`, and `{source:"database",…}` all satisfy `ContractMetadata` and `createNameKeyedDb`, which touches only `roles`/`tables`/`functions` (`client/name-keyed-db.ts:403-423`).
 - `schema-vendoring` › **outdated refuses a database-sourced contract** — OK (N4 closed). `commands/outdated.ts:42` before `:49`; `outdated-database-origin.test.ts:29`, `:74`.
 
-### Method
+## Round 2 disposition
 
-- Read `openspec show add-catalog-inference --diff` for the three capabilities' deltas (the command prints `proposal.md` first; that prose was not used as evidence). `openspec validate add-catalog-inference --strict` passes.
+All five accepted; none rebutted. Both blocking defects were in code,
+and one of them was in code this change's own round-1 correction added.
+
+- **R2-B1 — the FK-preference step cut an edge off the cycle.**
+  `preferForeignKeyBackEdges` is deleted. The graph now cuts the back
+  edges the traversal itself found, whatever kind they are — an enum
+  crossing by the unexported local copy, a table crossing by the
+  unexported handle. **Round 1's "foreign-key edges are preferred" is
+  withdrawn**: it bought one real import per cycle and cost this
+  scenario twice, and a chord is enough to make the swap cut an edge no
+  cycle contains. Cutting every back edge the traversal reports is
+  acyclic by construction, so there is nothing left to prefer. Observed
+  by the reviewer's own chorded graph in all three entry orders, by an
+  enum-only cycle, by the two-schema pairs that already existed, and —
+  the one that generalises — by a property test that rebuilds the
+  residual graph for several shapes (chorded three-cycle, four-schema
+  mixed, two overlapping two-cycles) and walks it for cycles with a
+  second, independent traversal.
+- **R2-B2 — the identifier reservation was one phase stale.** The two
+  phases are gone. A file's own identifiers are settled with no
+  knowledge of any other file; only then are its imports named, and an
+  imported symbol that collides with something already in this file is
+  aliased (`users` from schema `b` as `bUsers`, a further collision
+  taking the suffix rule the keys use). Nothing a file reserves can
+  therefore go stale, because nothing it reserves depends on another
+  file's later decisions. Observed by the reviewer's three-schema
+  same-name chain, loaded for real, plus a determinism pin.
+- **R2-N1, R2-N2 — the skill over-claimed.** The policy clause is gone
+  and the cycle paragraph now carries both severing mechanisms. The
+  absolute load guarantee is restated as what the delta says and what
+  the property test holds: the files' imports form no cycle, so loading
+  does not depend on which file the loader reaches first. **Neither
+  sentence has an automated observer** — nothing in the suite asserts
+  the skill's prose — and that is worth saying plainly rather than
+  implying a red exists.
+- **R2-N3 — the header lost the empty-schema lines.** Those lines are
+  now merged into the loss report *before* emission, so the header and
+  the printed report are the same array rather than two lists that have
+  to be kept equal.
+
+### Method
 - Read the named surface: `packages/cli/src/{commands/{import,pull,outdated,vendor}.ts,infer/*,declare-emit/*,contract/emit.ts,contract/from-catalog.ts,vendor/{lock,write}.ts,check/catalog.ts}`, `packages/query/src/client/{contract-types,name-keyed-db}.ts`, plus `skills/hejbro/`.
 - Ran the change's own unit suites green: 17 files / 115 tests (`import-command`, `pull-command`, `contract-origin`, `contract-from-catalog`, `outdated-database-origin`, `declare-emit-{emit,file-cycle,topo-order,enum-cycle-load}`, `infer-{keys,description,loss-report,tables,rest,adapter,constraints,catalog-read}`).
 - Constructed R2-B1 in a throwaway `packages/cli/test/*.test.ts`: first against `buildSchemaFileGraph` alone (back-edge report above), then through `emitDeclarationFiles`, writing the emitted files into a real directory inside the package and loading each as an entry point with the same `jiti` the production loader uses. Three entry orders, three crashes.
