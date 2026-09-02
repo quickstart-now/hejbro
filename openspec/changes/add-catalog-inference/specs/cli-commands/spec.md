@@ -14,8 +14,15 @@ common answer; a database's schemas include its platform's own
 (`auth`, `storage` and their neighbours on a hosted Postgres), and
 adopting those as declarations is not a default anyone can want. The
 destination SHALL be named explicitly too (`--out`, no default), and a
-run whose named schemas hold nothing to infer SHALL say so with its own
-code rather than writing empty files. The files SHALL declare what
+run whose named schemas hold nothing to infer — or nothing it can
+declare, every one of them omitted for its own name — SHALL say so with
+its own code, a different code for each of those two reasons, rather
+than writing empty files, and SHALL leave the destination untouched,
+creating not even the directory. Where the reason is omission, the
+report's `Omitted:` lines SHALL be printed with the refusal: that a
+schema was found and could not be carried is the one useful thing such
+a run has to say, and it is not the same statement as "nothing is
+there". The files SHALL declare what
 the reading inferred with the DSL's own builders, and the command SHALL
 print the loss report. A column whose SQL name no declaration key can
 produce — the DSL derives a column's SQL name from its key by
@@ -28,7 +35,11 @@ or renamed in the database. A foreign key's own catalog name SHALL survive into 
 declaration — written out where it differs from the name the DSL would
 derive, left implicit where it does not — because `check` compares
 foreign keys by name, and a database hejbro did not create names them
-its own way. The starter files' imports SHALL never form
+its own way. A catalog name D36 cannot carry at all is the one
+exception: that key is declared under the derived name and the report
+announces the approximation, since a foreign key's name is a label on a
+constraint the declaration still expresses, not the constraint's own
+identity. The starter files' imports SHALL never form
 a cycle — and a reference to another file's enum counts as an import,
 exactly as a foreign key to another file's table does: where a cycle
 would form, the crossings in one direction are declared against
@@ -100,6 +111,14 @@ meant to run.
   sequence the reading can infer
 - **THEN** it fails with its own coded diagnostic naming those schemas,
   and writes no files at all
+
+#### Scenario: Every named schema was omitted for its name
+- **WHEN** every schema named by `--schema` holds objects, but each
+  schema's own catalog name is one no declaration can carry
+- **THEN** it fails with a code of its own — not the one for schemas
+  that are empty, since the two say different things — its output
+  carries the `Omitted: schema …` line for each of them with what to do
+  about it, and the destination directory is not created
 
 #### Scenario: import never overwrites
 - **WHEN** the output directory already holds a file `import` would

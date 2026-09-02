@@ -119,7 +119,9 @@ name, so re-creating it emits `create unique index` rather than
 `add constraint … unique`; a `nextval` default on a sequence the column
 does not own is kept as a raw default, naming that sequence;
 expressions are carried as raw SQL text rather than as the typed
-builders a hand-written declaration would use — and the command that
+builders a hand-written declaration would use; a foreign key whose own
+catalog name D36 cannot carry is declared under the derived name,
+naming both — and the command that
 removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
 declarations for `import`.
