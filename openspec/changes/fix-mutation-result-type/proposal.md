@@ -46,19 +46,22 @@ not "add RETURNING silently".
 
 ## Impact
 
-- `packages/core/src/query/mutate.ts` (the mutation stages' `TReturning`
-  default becomes a distinct never-requested marker; `returning()`'s own
-  no-argument form keeps `undefined`), `packages/query/src/types/
-  returning.ts`, `packages/query/src/db/db.ts` (`ExecuteResult`),
-  `packages/query/src/db/chain.ts` (`*ChainFinal` defaults), their type
-  tests, `skills/hejbro/references/query.md` (or wherever the mutation
-  result is documented — measured in task 1.1), `.changeset/*.md`,
+- `packages/core/src/query/mutate.ts` (the pre-`returning()` stages —
+  `*Returnable`, and `*Conflictable`/`*Filterable` through them — carry
+  `TReturning = never`; the bare `*Final` defaults stay `undefined`),
+  `packages/query/src/db/chain.ts` (the `*ChainReturnable` stages
+  likewise), doc comments in `packages/query/src/types/returning.ts` and
+  `packages/query/src/db/db.ts`, their type tests,
+  `skills/hejbro/references/query-layer.md`, `.changeset/*.md`,
   `openspec/task-times.csv`.
-- Public types touched: `InsertFinal`/`UpdateFinal`/`DeleteFinal` (and
-  their earlier stages) gain a wider `TReturning` constraint;
-  `ReturningRow`'s second parameter accepts the marker. Exact-set export
-  pins in `exports.test.ts` decide whether the marker is exported (task
-  1.1, `[design]`).
+- No new type, no export change, no widening of any constraint: `never`
+  already satisfies `ReturningProjection | undefined`, and `ReturningRow`'s
+  conditional distributes over it to `never` unaided. The D106 review's
+  first round caught the earlier shape of this change (marker as the
+  bare names' default) breaking `ctx.return`/`ctx.execute` for a
+  variable-bound `.returning()` stage; the marker moved to the stages
+  that actually lack a `returning()` call, and the bare names are
+  untouched.
 
 ## Out of scope
 
@@ -66,3 +69,5 @@ not "add RETURNING silently".
   (a new runtime surface; the driver contract would have to carry it).
 - Re-writing the G9 witness's raw-statement workaround (it stays correct;
   a follow-up may swap it for `.returning()`).
+- `ctx.return` refusing a mutation whose `returning()` carries a
+  projection — pre-existing, found by the same review, filed as #634.

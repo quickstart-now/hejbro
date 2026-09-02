@@ -202,8 +202,8 @@ const rolesOf = (
  *   4.11-mutation) resolves {@link ReturningRow}<TTable, TReturning> —
  *   `TReturning` `undefined` (`.returning()` with no projection) means
  *   the whole declared table's shape, matching `ReturningRow`'s own
- *   default; `TReturning` `never` (no `.returning()` call at all —
- *   core's default for a bare mutation stage, #622) resolves to
+ *   default; `TReturning` `never` (no `.returning()` call at all — the
+ *   instantiation core's pre-returning stages carry, #622) resolves to
  *   `ReadonlyArray<never>`, the honest type of the empty array such a
  *   statement always produces, since it carries no SQL `RETURNING`
  *   clause and hejbro never adds one implicitly. The two are different

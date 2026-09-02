@@ -1,5 +1,6 @@
 import type {
 	DeleteFinal,
+	InsertConflictable,
 	InsertFinal,
 	IntervalValue,
 	SelectLimited,
@@ -14,13 +15,16 @@ import type {
 	ChainApi,
 	DeleteChainFilterable,
 	DeleteChainFinal,
+	DeleteChainReturnable,
 	InsertChainFinal,
+	InsertChainReturnable,
 	SelectChainDistinctable,
 	SelectChainJoinable,
 	SelectChainLimited,
 	SelectChainRelated,
 	UpdateChainFilterable,
 	UpdateChainFinal,
+	UpdateChainReturnable,
 } from "../../src/db/chain";
 import type { db, ExecuteResult } from "../../src/db/db";
 import type { Tx } from "../../src/db/transaction";
@@ -199,17 +203,23 @@ describe("chain await types equal execute types for select and returning mutatio
 	});
 
 	it("a returning-less mutation chain (no .returning() call at all) awaits to ReadonlyArray<never>, exactly what db.execute(insert(...).values(...)) resolves (#622)", () => {
+		// The stage a chain sits at before .returning(): what db.insert(t)
+		// .values(r) / db.update(t).set(v) / db.deleteFrom(t) hand back.
+		expectTypeOf<Awaited<InsertChainReturnable<Posts>>>().toEqualTypeOf<
+			ExecuteResult<InsertConflictable<Posts>>
+		>();
+		expectTypeOf<Awaited<InsertChainReturnable<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
+		>();
+		expectTypeOf<Awaited<UpdateChainReturnable<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
+		>();
+		expectTypeOf<Awaited<DeleteChainReturnable<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
+		>();
+		// The bare terminal name keeps its old meaning: every declared column.
 		expectTypeOf<Awaited<InsertChainFinal<Posts>>>().toEqualTypeOf<
 			ExecuteResult<InsertFinal<Posts>>
-		>();
-		expectTypeOf<Awaited<InsertChainFinal<Posts>>>().toEqualTypeOf<
-			ReadonlyArray<never>
-		>();
-		expectTypeOf<Awaited<UpdateChainFinal<Posts>>>().toEqualTypeOf<
-			ReadonlyArray<never>
-		>();
-		expectTypeOf<Awaited<DeleteChainFinal<Posts>>>().toEqualTypeOf<
-			ReadonlyArray<never>
 		>();
 	});
 

@@ -1,10 +1,13 @@
 import type {
 	DeleteFinal,
+	DeleteReturnable,
+	InsertConflictable,
 	InsertFinal,
 	IntervalValue,
 	QueryNode,
 	SelectLimited,
 	UpdateFinal,
+	UpdateReturnable,
 } from "@hejbro/core";
 // biome-ignore lint/style/useImportType: jsonArrayFrom is used only in a type position below via `typeof jsonArrayFrom<T>` (a real instantiation expression), which requires an actual value import -- `import type` has no runtime binding to reference.
 import {
@@ -147,18 +150,20 @@ describe("the untracked boundary holds at a nested read's own subselect (narrow-
 
 describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", () => {
 	it("insert().returning() (no projection) resolves the whole declared table's shape", () => {
-		type Stage = InsertFinal<Posts, undefined>;
+		type Stage = InsertFinal<Posts>;
 
 		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
 		>();
 	});
 
-	// #622: a bare mutation stage (returning() never called) is the `never`
-	// instantiation -- the statement carries no RETURNING clause, so the
-	// resolved type is the empty array's own, not the table's rows.
+	// #622: the stage a chain sits at before returning() is called (what
+	// insert().values() actually returns) is the `never` instantiation --
+	// the statement carries no RETURNING clause, so the resolved type is
+	// the empty array's own, not the table's rows. The bare InsertFinal<T>
+	// above keeps meaning every column, exactly as before.
 	it("an insert that never called returning() resolves ReadonlyArray<never>", () => {
-		type Stage = InsertFinal<Posts>;
+		type Stage = InsertConflictable<Posts>;
 		type Row = ExecuteRows<Stage>[number];
 
 		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<ReadonlyArray<never>>();
@@ -186,17 +191,17 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 	});
 
 	it("update()/deleteFrom() resolve through the exact same ReturningRow mechanism -- one shared path, not three independently-typed copies", () => {
-		type UpdateStage = UpdateFinal<Posts, undefined>;
+		type UpdateStage = UpdateFinal<Posts>;
 		type DeleteStage = DeleteFinal<Posts, { readonly id: Posts["id"] }>;
 
 		expectTypeOf<ExecuteRows<UpdateStage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
 		>();
 		// #622: the never-requested case rides the same path for all three.
-		expectTypeOf<ExecuteRows<UpdateFinal<Posts>>>().toEqualTypeOf<
+		expectTypeOf<ExecuteRows<UpdateReturnable<Posts>>>().toEqualTypeOf<
 			ReadonlyArray<never>
 		>();
-		expectTypeOf<ExecuteRows<DeleteFinal<Posts>>>().toEqualTypeOf<
+		expectTypeOf<ExecuteRows<DeleteReturnable<Posts>>>().toEqualTypeOf<
 			ReadonlyArray<never>
 		>();
 		// A mutation's own left-joined set is always `never` (narrow-join-

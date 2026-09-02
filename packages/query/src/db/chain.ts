@@ -501,21 +501,22 @@ const makeDistinctableChain = <
 
 /**
  * A mutation chain's terminal shape: awaiting it resolves the `returning()`
- * row shape ({@link ReturningRow}, task 3.13/4.11-mutation reused). A
- * chain that never called `.returning()` carries `TReturning = never`
- * (core's own default for a bare mutation stage, #622) and so awaits to
- * `ReadonlyArray<never>` — the empty array it always resolves to, typed
- * as such, since no SQL `RETURNING` clause is ever issued for it.
- * `.returning()` with no projection is the `undefined` instantiation and
- * still resolves every declared column.
+ * row shape ({@link ReturningRow}, task 3.13/4.11-mutation reused). The
+ * stage a chain sits at before `.returning()` is called (the
+ * `*ChainReturnable` types below) carries `TReturning = never` (#622) and
+ * so awaits to `ReadonlyArray<never>` — the empty array it always
+ * resolves to, typed as such, since no SQL `RETURNING` clause is ever
+ * issued for it. The bare `*ChainFinal<T>` default stays `undefined`
+ * (every declared column), matching core's own stage defaults, so a
+ * consumer that names the bare type keeps accepting what it accepted.
  */
 export type InsertChainFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = never,
+	TReturning extends ReturningProjection | undefined = undefined,
 > = ChainTerminal<ReturningRow<TTable, TReturning>>;
 
 export type InsertChainReturnable<TTable extends Table = Table> =
-	InsertChainFinal<TTable> & {
+	InsertChainFinal<TTable, never> & {
 		returning<TProjection extends ReturningProjection | undefined = undefined>(
 			projection?: TProjection,
 		): InsertChainFinal<TTable, TProjection>;
@@ -534,11 +535,11 @@ export type InsertChainConflictable<TTable extends Table = Table> =
 
 export type UpdateChainFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = never,
+	TReturning extends ReturningProjection | undefined = undefined,
 > = ChainTerminal<ReturningRow<TTable, TReturning>>;
 
 export type UpdateChainReturnable<TTable extends Table = Table> =
-	UpdateChainFinal<TTable> & {
+	UpdateChainFinal<TTable, never> & {
 		returning<TProjection extends ReturningProjection | undefined = undefined>(
 			projection?: TProjection,
 		): UpdateChainFinal<TTable, TProjection>;
@@ -551,11 +552,11 @@ export type UpdateChainFilterable<TTable extends Table = Table> =
 
 export type DeleteChainFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = never,
+	TReturning extends ReturningProjection | undefined = undefined,
 > = ChainTerminal<ReturningRow<TTable, TReturning>>;
 
 export type DeleteChainReturnable<TTable extends Table = Table> =
-	DeleteChainFinal<TTable> & {
+	DeleteChainFinal<TTable, never> & {
 		returning<TProjection extends ReturningProjection | undefined = undefined>(
 			projection?: TProjection,
 		): DeleteChainFinal<TTable, TProjection>;

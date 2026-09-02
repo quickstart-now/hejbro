@@ -13,8 +13,9 @@ import type { SelectResult } from "./select-result";
  * `DeleteReturnable.returning(projection?)`, spec §5.2) — that's
  * `SelectResult<TTable>`, the whole-table branch, with full per-column
  * richness (nullability/mode/element/`$type` brand), not a widened or
- * `unknown` fallback. A `TProjection` of `never` — core's default for a
- * mutation stage whose `returning()` was never called (#622) — resolves
+ * `unknown` fallback. A `TProjection` of `never` — what core's
+ * pre-returning stages carry when `returning()` was never called (#622)
+ * — resolves
  * to `never` by distribution over the naked type parameter below, so a
  * mutation that requested nothing types its (always empty) result as
  * `ReadonlyArray<never>` rather than as the table's rows. That is not a

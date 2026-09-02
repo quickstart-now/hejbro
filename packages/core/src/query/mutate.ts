@@ -153,36 +153,41 @@ type MutationStageMeta<
 
 /**
  * The terminal insert stage: nothing left to chain but the compiled
- * query. `TTable` defaults to the widest `Table`. `TReturning` defaults
- * to `never` — "returning was never requested" (#622): the statement
- * carries no `returning` clause, so the row type a reader derives from
- * it must be `never`, not the table's shape. `returning()` with no
- * argument sets `undefined` instead (spec §5.2's "no projection = every
- * column"); the two are different instantiations on purpose, and
- * `never` is the one a bare `InsertFinal<T>` means. `UpdateFinal` and
- * `DeleteFinal` follow the same rule.
+ * query. `TTable` defaults to the widest `Table` and `TReturning` to
+ * `undefined` (spec §5.2's "no projection = every column"), so every
+ * existing consumer that names the bare `InsertFinal` -- including
+ * plpgsql's `ReturnableQuery` -- keeps accepting what it accepted. The
+ * stage a chain sits at *before* `returning()` is called
+ * (`InsertReturnable`, and `InsertConflictable` through it) is the
+ * `never` instantiation instead (#622): that statement carries no
+ * `returning` clause, so the row type a reader derives from it is
+ * `never`, not the table's shape, and `never` is assignable to the bare
+ * default so no consumer narrows. `UpdateFinal`/`DeleteFinal` and their
+ * `*Returnable` stages follow the same rule.
  */
 export type InsertFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = never,
+	TReturning extends ReturningProjection | undefined = undefined,
 > = {
 	readonly insertQuery: InsertNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
 	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
 };
-export type InsertReturnable<TTable extends Table = Table> =
-	InsertFinal<TTable> & {
-		/**
-		 * No-arg = every column, snake_cased and explicit (spec §5.2); an
-		 * object projection = exactly those aliased expressions. `TProjection`
-		 * is inferred from the call site — omitted vs. supplied resolve to two
-		 * different `InsertFinal` instantiations (task 4.11-mutation), not the
-		 * same erased shape either way.
-		 */
-		returning<TProjection extends ReturningProjection | undefined = undefined>(
-			projection?: TProjection,
-		): InsertFinal<TTable, TProjection>;
-	};
+export type InsertReturnable<TTable extends Table = Table> = InsertFinal<
+	TTable,
+	never
+> & {
+	/**
+	 * No-arg = every column, snake_cased and explicit (spec §5.2); an
+	 * object projection = exactly those aliased expressions. `TProjection`
+	 * is inferred from the call site — omitted vs. supplied resolve to two
+	 * different `InsertFinal` instantiations (task 4.11-mutation), not the
+	 * same erased shape either way.
+	 */
+	returning<TProjection extends ReturningProjection | undefined = undefined>(
+		projection?: TProjection,
+	): InsertFinal<TTable, TProjection>;
+};
 export type InsertConflictable<TTable extends Table> =
 	InsertReturnable<TTable> & {
 		onConflictDoNothing(
@@ -196,18 +201,20 @@ export type InsertConflictable<TTable extends Table> =
 
 export type UpdateFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = never,
+	TReturning extends ReturningProjection | undefined = undefined,
 > = {
 	readonly updateQuery: UpdateNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
 	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
 };
-export type UpdateReturnable<TTable extends Table = Table> =
-	UpdateFinal<TTable> & {
-		returning<TProjection extends ReturningProjection | undefined = undefined>(
-			projection?: TProjection,
-		): UpdateFinal<TTable, TProjection>;
-	};
+export type UpdateReturnable<TTable extends Table = Table> = UpdateFinal<
+	TTable,
+	never
+> & {
+	returning<TProjection extends ReturningProjection | undefined = undefined>(
+		projection?: TProjection,
+	): UpdateFinal<TTable, TProjection>;
+};
 export type UpdateFilterable<TTable extends Table = Table> =
 	UpdateReturnable<TTable> & {
 		where(condition: Condition): UpdateReturnable<TTable>;
@@ -215,18 +222,20 @@ export type UpdateFilterable<TTable extends Table = Table> =
 
 export type DeleteFinal<
 	TTable extends Table = Table,
-	TReturning extends ReturningProjection | undefined = never,
+	TReturning extends ReturningProjection | undefined = undefined,
 > = {
 	readonly deleteQuery: DeleteNode;
 	/** Type-only marker, never assigned — see {@link mutationStageBrand}. */
 	readonly [mutationStageBrand]?: MutationStageMeta<TTable, TReturning>;
 };
-export type DeleteReturnable<TTable extends Table = Table> =
-	DeleteFinal<TTable> & {
-		returning<TProjection extends ReturningProjection | undefined = undefined>(
-			projection?: TProjection,
-		): DeleteFinal<TTable, TProjection>;
-	};
+export type DeleteReturnable<TTable extends Table = Table> = DeleteFinal<
+	TTable,
+	never
+> & {
+	returning<TProjection extends ReturningProjection | undefined = undefined>(
+		projection?: TProjection,
+	): DeleteFinal<TTable, TProjection>;
+};
 export type DeleteFilterable<TTable extends Table = Table> =
 	DeleteReturnable<TTable> & {
 		where(condition: Condition): DeleteReturnable<TTable>;

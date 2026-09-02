@@ -261,6 +261,7 @@ describe("InsertFinal/UpdateFinal/DeleteFinal<TTable, TReturning> generics (task
 	});
 
 	it("returning() (no projection) and returning({...}) (object projection) resolve to two different TReturning instantiations, not the same erased shape either way", () => {
+		const unrequested = insert(posts).values({ slug: "x" });
 		const wholeRow = insert(posts).values({ slug: "x" }).returning();
 		const projected = insert(posts)
 			.values({ slug: "x" })
@@ -270,11 +271,13 @@ describe("InsertFinal/UpdateFinal/DeleteFinal<TTable, TReturning> generics (task
 		type ProjectedReturning = ExtractInsertReturning<typeof projected>;
 
 		expectTypeOf<WholeReturning>().toEqualTypeOf<undefined>();
-		// #622: a stage whose returning() was never called is the `never`
-		// instantiation -- distinct from the no-projection `undefined` one.
+		// #622: the stage values() hands back -- returning() never called --
+		// is the `never` instantiation, distinct from the no-projection
+		// `undefined` one; the bare InsertFinal<T> still defaults to undefined.
+		expectTypeOf<ExtractInsertReturning<typeof unrequested>>().toBeNever();
 		expectTypeOf<
 			ExtractInsertReturning<InsertFinal<typeof posts>>
-		>().toBeNever();
+		>().toEqualTypeOf<undefined>();
 		expectTypeOf<keyof ProjectedReturning>().toEqualTypeOf<"id">();
 		expectTypeOf<ProjectedReturning["id"]>().toEqualTypeOf<typeof posts.id>();
 		// @ts-expect-error "id" was the only key projected -- "slug" wasn't.
