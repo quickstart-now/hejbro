@@ -44,10 +44,19 @@ sequentially, so the two never edit it at once.
       the retired refusal and is corrected here.
       Failing tests: `generate.test.ts` — "an unmanaged table produces
       no migration", "changing an unmanaged declaration produces no
+      migration", "removing an unmanaged declaration produces no
       migration", "a managed foreign key onto an unmanaged table is
-      emitted and the target untouched", "a managed table replaced by an
-      unmanaged one is not dropped"; `synthesize.test.ts` — the refusal
-      case, now `synced-table-declared`.
+      emitted and the target untouched", "a table changing hands emits
+      nothing: managed to unmanaged", "a table changing hands emits
+      nothing: unmanaged to managed" (both directions, same subject as
+      the delta scenario). `synthesize.test.ts`'s own refusal case splits
+      in two: "is rejected by HejbroInput's own type, not just at runtime
+      (type pin — evidence is check-types, not vitest; mirrors
+      core/test/types/declared-table.test.ts's own usage-table pin)" and
+      "is refused at runtime too, for the caller the type layer never saw
+      (a JS/jiti caller with no compile step, engine/generate.ts's own
+      `authority === "usage"` guard)", the latter now `synced-table-
+      declared`.
 - [ ] 1.3 (~5m) Older snapshots read as all-managed (parse test with a
       pre-marker fixture); the D33 compact rule stated in the node's doc.
 

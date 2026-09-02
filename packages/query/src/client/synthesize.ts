@@ -1,7 +1,8 @@
 import type {
+	ColumnBuilder,
 	ColumnState,
-	DeclaredTable,
 	ForeignKeyDeclaration,
+	Table,
 	TableDeclaration,
 } from "@hejbro/core";
 import { columnRef, tableMeta } from "@hejbro/core";
@@ -69,10 +70,13 @@ const synthesizeForeignKey = (
  * (`tableMeta` is a `Symbol.for` global-registry symbol precisely so a
  * value built outside `@hejbro/core`'s own package is still recognized
  * by `getTableMeta`/`isTable`, confirmed against `@hejbro/supabase`'s
- * `authUsers` as a real precedent). Tagged `existing: true` — a second,
- * independent refusal if this value were ever handed to
- * `generateMigration` (`hejbro`'s own `loader.ts` check, R2-G5 5.12, is
- * the first layer; this is the query-execution layer's own).
+ * `authUsers` as a real precedent). Tagged `authority: "usage"` (add-
+ * unmanaged-objects, J3) — a query-time reconstruction is never migration
+ * authority, whether or not the table it mirrors is itself declared
+ * unmanaged in the schema repository; `HejbroInput`'s own type-level
+ * narrowing rejects it, and `resolveTableDeclarations`'s `"usage"` guard
+ * (`engine/generate.ts`) refuses it at runtime for the caller the type
+ * layer never saw (a JS/jiti caller with no compile step).
  *
  * Unlike `existingTable()`, this carries real `foreignKeys` (built from
  * the contract's own vendored relations) — `existingTable()` hardcodes
@@ -85,7 +89,9 @@ const synthesizeForeignKey = (
  * shape) since `existingTable()`'s own column/ref-building internals
  * are not part of `@hejbro/core`'s public surface.
  */
-export const synthesizeTable = (meta: ContractTableMeta): DeclaredTable => {
+export const synthesizeTable = (
+	meta: ContractTableMeta,
+): Table<Record<string, ColumnBuilder>, "usage"> => {
 	const declaration: TableDeclaration = {
 		declarationKind: "table",
 		schema: { declarationKind: "schema", schemaName: meta.schema },
@@ -100,7 +106,7 @@ export const synthesizeTable = (meta: ContractTableMeta): DeclaredTable => {
 		checks: [],
 		rls: null,
 		existing: true,
-		authority: "declared",
+		authority: "usage",
 		declaredAt: null,
 	};
 	const refsObject = Object.fromEntries(
@@ -111,5 +117,5 @@ export const synthesizeTable = (meta: ContractTableMeta): DeclaredTable => {
 	);
 	return Object.assign(refsObject, {
 		[tableMeta]: declaration,
-	}) as DeclaredTable;
+	}) as Table<Record<string, ColumnBuilder>, "usage">;
 };

@@ -6,13 +6,14 @@ import type { Table, TableDeclaration } from "./table";
 import { buildColumnEntries, buildColumnRefs, tableMeta } from "./table";
 
 /**
- * A reference-only table (D41): usable as an FK target, in `exists()`, and
- * in view from/joins — never passed to `generateMigration`, never diffed,
- * never emitted (passing one as a declaration is the hard error
- * `existing-table-declared`). Column names go through the same
- * snake_case + D36 rules as `table()`. Builds an inline `SchemaDeclaration`
- * that is never exported and never declared, so referencing an existing
- * table never emits `create schema`.
+ * An unmanaged table (D41, add-unmanaged-objects): usable as an FK target,
+ * in `exists()`, in view from/joins, and — since add-unmanaged-objects —
+ * as a top-level declaration itself: the snapshot records it unmanaged
+ * (`unmanaged: true`, `kinds/table-snapshot.ts`) and `generateMigration`
+ * emits and diffs nothing for it (`tableKind.diff`'s DDL-blocking guard).
+ * Column names go through the same snake_case + D36 rules as `table()`.
+ * Builds an inline `SchemaDeclaration` that is never exported and never
+ * declared, so referencing an existing table never emits `create schema`.
  */
 export const existingTable = <TColumns extends Record<string, ColumnBuilder>>(
 	schemaName: string,

@@ -47,15 +47,16 @@ describe("existingTable", () => {
 		);
 	});
 
-	it("hard-errors when passed as a declaration", () => {
-		expect(() =>
-			generateMigration({
-				declarations: [authUsers],
-				previousSnapshot: emptySnapshot,
-			}),
-		).toThrowError(
-			expect.objectContaining({ code: "existing-table-declared" }),
-		);
+	it("produces no migration when passed as a declaration (add-unmanaged-objects)", () => {
+		const result = generateMigration({
+			declarations: [authUsers],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(result.hasChanges).toBe(false);
+		expect(result.sql).toBe("");
+		expect(result.snapshot.objects["table:auth.users"]).toMatchObject({
+			unmanaged: true,
+		});
 	});
 
 	it("records an existing table as unmanaged with its declared columns", () => {

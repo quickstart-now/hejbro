@@ -1,8 +1,9 @@
 import type {
+	ColumnBuilder,
 	Condition,
-	DeclaredTable,
 	Expr,
 	OrderTermInput,
+	Table,
 } from "@hejbro/core";
 import { roleName } from "@hejbro/core";
 import type { CompileResult } from "../compile/compile";
@@ -12,6 +13,9 @@ import { db } from "../db/db";
 import type { Driver } from "../driver/contract";
 import type { ContractMetadata, ContractTableMeta } from "./contract-types";
 import { synthesizeTable } from "./synthesize";
+
+/** {@link synthesizeTable}'s own return type (add-unmanaged-objects, J3): `authority: "usage"`, never migration authority — see that function's doc comment. */
+type SynthesizedTable = Table<Record<string, ColumnBuilder>, "usage">;
 
 /** The shape a vendored `Database` interface always has — just enough to key {@link NameKeyedDb} off it, never imported from `hejbro`/`@hejbro/cli` (this package has no dependency on either, `AGENTS.md`'s own repo map). */
 export type DatabaseShape = {
@@ -110,7 +114,7 @@ export type NameKeyedDb<TDatabase extends DatabaseShape> =
  * reads the same object `getTableMeta`/`isTable` recognize, the value it
  * returns carries none of that recognition.
  */
-const buildColumnsBag = (table: DeclaredTable): Record<string, unknown> =>
+const buildColumnsBag = (table: SynthesizedTable): Record<string, unknown> =>
 	Object.fromEntries(Object.entries(table));
 
 /**
@@ -138,7 +142,7 @@ const buildTableClient = <
 	},
 >(
 	chainSource: Pick<ChainApi, "select" | "insert" | "update" | "deleteFrom">,
-	table: DeclaredTable,
+	table: SynthesizedTable,
 ): NameKeyedTableClient<TTable> => ({
 	columns: buildColumnsBag(
 		table,
@@ -199,7 +203,7 @@ const wrapWithTableGuard = <T extends object>(target: T): T =>
 
 const buildTables = <TDatabase extends DatabaseShape>(
 	chainSource: Pick<ChainApi, "select" | "insert" | "update" | "deleteFrom">,
-	tables: Readonly<Record<string, DeclaredTable>>,
+	tables: Readonly<Record<string, SynthesizedTable>>,
 ): NameKeyedTables<TDatabase> => {
 	const plain = Object.fromEntries(
 		Object.entries(tables).map(([name, table]) => [
@@ -229,7 +233,7 @@ export const createNameKeyedDb = <TDatabase extends DatabaseShape>(
 	conn: Driver,
 	metadata: ContractMetadata,
 ): NameKeyedDb<TDatabase> => {
-	const tables: Readonly<Record<string, DeclaredTable>> = Object.fromEntries(
+	const tables: Readonly<Record<string, SynthesizedTable>> = Object.fromEntries(
 		Object.entries(metadata.tables).map(
 			([name, tableMeta]: [string, ContractTableMeta]) => [
 				name,

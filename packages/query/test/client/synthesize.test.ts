@@ -1,3 +1,4 @@
+import type { DeclaredTable, HejbroInput } from "@hejbro/core";
 import {
 	emptySnapshot,
 	generateMigration,
@@ -54,10 +55,20 @@ describe("synthesizeTable (R2-G6 6.1)", () => {
 	// a second way to author a migration -- distinct from R2-G5 5.12's own
 	// loader-level refusal (a different layer: that one refuses a file as
 	// a *declaration entry point*; this one refuses the *value itself* at
-	// the migration engine, the same chokepoint `existingTable()`'s own
-	// values already go through).
-	it("is refused by generateMigration, the same way existingTable() is", () => {
+	// the migration engine). Pinned at two layers (add-unmanaged-objects,
+	// J3): `authority: "usage"` (not `existing`) is the discriminator, so
+	// this is now the SAME chokepoint `HejbroInput`'s own type narrowing
+	// and `resolveTableDeclarations`'s `"usage"` guard already apply to any
+	// synced/vendored table value, not a second one of its own.
+	it("is rejected by HejbroInput's own type, not just at runtime (type pin — evidence is check-types, not vitest; mirrors core/test/types/declared-table.test.ts's own usage-table pin)", () => {
 		const posts = synthesizeTable(POSTS_META);
+		// @ts-expect-error a "usage"-authority Table is not a HejbroInput
+		const input: HejbroInput = posts;
+		expect(input).toBe(posts);
+	});
+
+	it('is refused at runtime too, for the caller the type layer never saw (a JS/jiti caller with no compile step, engine/generate.ts\'s own `authority === "usage"` guard)', () => {
+		const posts = synthesizeTable(POSTS_META) as unknown as DeclaredTable;
 
 		expect.assertions(2);
 		try {
@@ -68,7 +79,7 @@ describe("synthesizeTable (R2-G6 6.1)", () => {
 		} catch (error) {
 			expect(error).toBeInstanceOf(HejbroError);
 			expect((error as InstanceType<typeof HejbroError>).code).toBe(
-				"existing-table-declared",
+				"synced-table-declared",
 			);
 		}
 	});

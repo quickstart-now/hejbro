@@ -29,7 +29,12 @@ import type {
 	IndexSnapshot,
 	TableSnapshot,
 } from "./table-snapshot";
-import { asTableSnapshot, tableChecks, tableIdentity } from "./table-snapshot";
+import {
+	asTableSnapshot,
+	tableChecks,
+	tableIdentity,
+	tableUnmanaged,
+} from "./table-snapshot";
 
 /** Derives an index's default name from its owning table and columns — shared with `engine/rename-plan.ts`'s drift guard (Phase 5). */
 export const deriveIndexName = (
@@ -559,6 +564,10 @@ const isEmptyTableFieldDiffs = (diffs: TableFieldDiffs): boolean =>
 	isEmptyKeyedDiff(diffs.foreignKeyDiff) &&
 	isEmptyKeyedDiff(diffs.checkDiff);
 
+/** `true` when `node` is a table snapshot node marked unmanaged — `null` (the table absent on that side) is never unmanaged (add-unmanaged-objects). The DDL-blocking guard `tableKind.diff` opens with: an unmanaged table on *either* side of a diff emits nothing, before create/drop/alter is even considered. */
+const isUnmanagedSide = (node: JsonValue | null): boolean =>
+	node !== null && tableUnmanaged(asTableSnapshot(node));
+
 /** One banner note per added/dropped/changed entry across all four of `diffs`' fields (#154 ratchet-5, see tableFieldDiffs). */
 const tableFieldDiffNotes = (diffs: TableFieldDiffs): ReadonlyArray<string> => [
 	...buildNotes("column", diffs.columnDiff),
@@ -615,6 +624,9 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		return tableIdentity(tableSnapshot.schema, tableSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
+		if (isUnmanagedSide(previous) || isUnmanagedSide(next)) {
+			return [];
+		}
 		const guard = createOrDropDiff("table", previous, next, identity);
 		if (guard.done) {
 			return guard.changes;

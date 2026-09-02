@@ -98,13 +98,12 @@ const isTableDeclaration = (input: AnyInput): input is TableDeclaration =>
 const resolveTableDeclarations = (
 	meta: TableDeclaration,
 ): ReadonlyArray<HejbroDeclaration> => {
-	if (meta.existing) {
-		return throwHejbroError(
-			"existing-table-declared",
-			`existingTable("${meta.schema.schemaName}", "${meta.tableName}") is reference-only — it describes an existing table and must not be passed to generateMigration. Next: remove it from the declarations list (managed tables are declared with table()).`,
-			meta.declaredAt,
-		);
-	}
+	// add-unmanaged-objects: `meta.existing` no longer refuses here — an
+	// `existingTable()` declaration is accepted and flows through to the
+	// snapshot (`unmanagedField`, kinds/table-kind.ts), producing no
+	// statement (the guard moves to `tableKind.diff`). "existing-table-
+	// declared" stays a registered code (`error.ts`'s codes are a plain
+	// string, not a static union) with no live raise site.
 	// The single chokepoint for the absent-authority refusal (D87
 	// polyrepo-sync): keyed on `meta.authority === "usage"` only, never on
 	// `!== "declared"` — a hand-assembled `TableDeclaration` that bypasses
