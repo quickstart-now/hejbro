@@ -1901,6 +1901,47 @@ requirement gained one clarifying sentence mid-round making the same
 point ("whether a run has something to write and whether it emitted any
 statement are two facts, not one").
 
+### hasChanges/snapshotChanged — R3-11 → J14 (reversed, with the
+consumer table as the reason)
+
+The lead's first ruling on the open question above (R3-11) went the
+other way: redefine `hasChanges` itself to mean "is there something to
+write" rather than "is there DDL", so a zero-statement run would report
+`hasChanges: true`. Implementing that against the exhaustive,
+search-derived caller table above (not memory, not a fresh guess) showed
+the ruling's own premise — "the public result's two fields contradict
+each other" — was a naming gap, not an observed fault: every one of the
+three `generateMigrations` call sites, and every direct reader of
+`hasChanges`/`.migrations`, already reads `hasChanges` consistently as
+"is there DDL" and depends on exactly that meaning at one of them
+(`slugFor`'s own gate — the same branch the pure-rename bug lived in
+earlier this round). Reported the table with an alternative rather than
+silently implementing the redefinition or silently keeping the old
+behavior: add a field instead of changing one. **J14 adopted the
+alternative** — `hasChanges` keeps its existing meaning; a new,
+additive `snapshotChanged: boolean` states the second fact
+(`snapshot` differs from `previousSnapshot` at all) on the public result
+type itself, filled honestly at all four `generateMigrations` return
+sites via one shared `snapshotChangedFrom` helper, with the CLI reading
+the field instead of re-deriving it locally. Pin: a new
+`generateMigrations`-level test in `core/test/generate.test.ts`
+asserting a truly-unchanged rerun reports both flags `false` and an
+existing-marker-only rerun reports `hasChanges: false` /
+`snapshotChanged: true`. Mutant (bind `snapshotChanged` to the same
+literal as `hasChanges` at the zero-statement return site): exactly 1
+red / 42, clean restore confirmed against a backup diff. This round's
+own baseline-rewiring risk that R3-11 would have introduced (`baseline`'s
+early return currently keyed on `hasChanges`, which would have always
+been `true` under the withdrawn definition, silently routing an
+existing-only project into the shared write-files path and breaking
+NB6) never had to be built — the reversal happened before that change
+was made, not after. `deltaCount`/`cli-commands` MODIFIED-count
+unaffected (J14's own delta sentence replaced J13's without adding a
+second MODIFIED entry). This is the third time this piece's own
+measurement has reversed a ruling already in flight rather than the
+ruling standing on inspection alone (after J3's type pin and the
+agree-count cut) — recorded here as the same pattern, not a new one.
+
 ### NB1, NB5 — fixed
 
 `.changeset/declare-existing-tables.md` and `skills/hejbro/references/
@@ -2048,3 +2089,41 @@ running at the same time), not to anything this round changed. Both
 cleared on retry, confirmed clean twice each afterward.
 
 10 commits this round (`6fc944b8` through `c41a79c2`), still unpushed.
+
+**Gates, final state (after the R3-11 → J14 sub-round above)**. One
+more commit (`c8c97ceb`, `snapshotChanged`) landed after the numbers
+above; re-run under a coordinated, single-team gate slot (system load
+1-min avg 2.04 at the start, confirmed clean before running) so these
+are uncontended: `TURBO_FORCE=1 build --force` 7/7
+(2026-09-02T16:00:58Z–16:01:07Z); full `test` 17/17 tasks — core
+98f/1487t (+1 test over the number above, same 98 files: the new J14
+pin landed inside an existing file), query 61f/844t unchanged, cli
+64f/561t unchanged (2026-09-02T16:01:10Z–16:02:45Z); `check:crap`
+0/**1607** (+1 function over 1606: the new `snapshotChangedFrom` helper,
+comfortably under the threshold, not among the 38 sitting at exactly 5)
+(2026-09-02T16:03:02Z–16:04:35Z); `test:integration` run twice — default
+(postgres:17-alpine; `apply-live.integration.test.ts`'s own
+`describe.each(["postgres:15-alpine","postgres:17-alpine"])` already
+covers both majors for every block in that file, including the R3-B1/
+J13 zero-statement live-server test) 5f/38t, then
+`HEJBRO_PG_IMAGE=postgres:15-alpine` for the other integration files
+5f/38t — zero flakes across both runs, no leftover containers
+(2026-09-02T16:05:04Z–16:07:33Z). Light gates re-run after releasing the
+slot (none fan out): `check:bans` 219 clean, `changeset status` (all 7
+fixed-group packages, minor), `check:first-release-version` (skip,
+expected), `check:next-marker` ok, `check:fixed-group` ok (7 packages),
+`check:diagnostic-xref` 4/217 ok, `check:tasktime` ok (no README badge
+change needed), `smoke:pack-install` all 6 assertions ok. `openspec
+validate --strict` valid; `show --diff` reconfirmed once more:
+`deltaCount: 6` and `cli-commands` MODIFIED still exactly one entry,
+unchanged by this sub-round's code-only commit. Full-workspace `pnpm
+check` (biome) and `pnpm check-types` (turbo, every package) were not
+re-run in this sub-round without a fresh slot grant — scoped coverage
+exists instead (`biome check` on the 4 changed files, clean; `turbo run
+check-types --filter=@hejbro/core`/`--filter=hejbro`, clean, covering
+every package this sub-round actually touched) and the two
+full-workspace runs are deferred to the next slot rather than run
+outside one on a personal reading of scope.
+
+**13 commits total this round now** (`6fc944b8` through `c8c97ceb`),
+still unpushed.
