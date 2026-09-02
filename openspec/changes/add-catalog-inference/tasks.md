@@ -143,10 +143,12 @@ Files: `packages/cli/src/declare-emit/*.ts` (new), tests
       is now the repository's own. Three details are settled, and they
       exist because the output has to be reproducible: table order is
       topological with ties broken by `schema.table` name, so a
-      different catalog row order cannot change the file; a cycle is
-      the edge that points at a vertex already on the traversal stack,
-      and only that one edge is written as a column-level thunk (a
-      self-reference is not a cycle); and the header carries no clock-
+      different catalog row order cannot change the file; a cycle's back
+      edge is the one that points at a vertex already on the traversal
+      stack, and the foreign keys crossing in that direction are the
+      ones written against handles (a self-reference is not a cycle, and
+      goes through the `extras` callback's own `t`); and the header
+      carries no clock-
       or machine-derived value — no timestamp, connection string, user,
       host or version — so a second import writes the same bytes.
       Failing test: `declare-emit.test.ts`
@@ -188,8 +190,12 @@ refusal's, are literals at their own raise sites),
 payload the emitter already takes — the delta says the same emitter,
 so the adapter is the only way in), `main.ts` (registers
 `pull`, after group 3's edit to the same map), `contract/emit.ts`
-(origin variant), `vendor/state.ts`, `commands/{outdated,vendor}.ts`
-(refusal), tests
+(origin variant), `vendor/{lock,write}.ts` (the second mark, and the
+refusal that reads it), `commands/{outdated,vendor}.ts` (refusal),
+`infer/compose.ts` (the entry point returns the SQL it already builds,
+since `pull` writes the same four artefacts `vendor` does),
+`test/vendor-code-ownership.test.ts` (the new code names its owning
+requirement, outside the eleven), tests
 
 - [ ] 4.1 (~10m) [design, settled] `ContractOrigin` becomes a
       discriminated union — `{source: "git", commit, exportHash}` and
