@@ -20,6 +20,7 @@ type TestDatabase = {
 			readonly Update: { readonly id?: string };
 		};
 	};
+	readonly Functions: Record<string, never>;
 };
 
 const METADATA: ContractMetadata = {
