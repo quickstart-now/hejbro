@@ -225,7 +225,8 @@ const renderTypeNode = (
 // ---------------------------------------------------------------------------
 // Column builder rendering (fixed chaining order, CI-G2-R1-05/1.3-1.4's own
 // proven order: type -> notNull -> unique -> [generated|identity|default] ->
-// primaryKey -> references thunk).
+// primaryKey; no `.references()` thunk -- CI-G2-R1-16, it is never a real
+// deferral, see `mustDeferForeignKey`'s own doc comment).
 // ---------------------------------------------------------------------------
 
 const renderIdentityOptions = (identity: IdentitySnapshot): string => {
@@ -278,18 +279,11 @@ const renderGeneratedIdentityOrDefault = (
 	return { call: "", symbols: new Set() };
 };
 
-export type ReferenceThunkTarget = {
-	readonly targetIdentifier: string;
-	readonly targetColumnTsKey: string;
-};
-
 export type ColumnRenderContext = {
 	readonly schema: string;
 	readonly table: string;
 	readonly sequences: ReturnType<typeof sequencesInSnapshot>;
 	readonly enumRef: (enumSchema: string, enumName: string) => string;
-	/** Present only for the one column whose FK is this graph's cycle-closing edge (2.1, CI-G2-R1-06 Q3) -- composite/action-bearing FKs never reach here (they stay on the `extras` path, matching `.references()`'s own restriction, add-relational-reads). */
-	readonly referenceThunk: ReferenceThunkTarget | null;
 };
 
 const serialSymbolFor = (
@@ -310,13 +304,6 @@ const serialSymbolFor = (
 		return undefined;
 	}
 	return SERIAL_SYMBOL_FOR_BASE[column.typeNode.typeName];
-};
-
-const renderReferencesThunk = (thunk: ReferenceThunkTarget | null): string => {
-	if (thunk === null) {
-		return "";
-	}
-	return `.references(() => ${thunk.targetIdentifier}.${thunk.targetColumnTsKey})`;
 };
 
 const renderTypeOrSerial = (
@@ -352,10 +339,9 @@ export const renderColumnBuilder = (
 	const uniquePart = suffixIf(column.unique === true, ".unique()");
 	const valuePart = renderValuePart(column, serialSymbol);
 	const primaryKeyPart = suffixIf(column.primaryKey === true, ".primaryKey()");
-	const referencesPart = renderReferencesThunk(context.referenceThunk);
 
 	return {
-		call: `${typeRender.call}${notNullPart}${uniquePart}${valuePart.call}${primaryKeyPart}${referencesPart}`,
+		call: `${typeRender.call}${notNullPart}${uniquePart}${valuePart.call}${primaryKeyPart}`,
 		symbols: new Set([...typeRender.symbols, ...valuePart.symbols]),
 	};
 };
@@ -457,9 +443,10 @@ const renderCheck = (check: CheckSnapshotLike): TypeRender => ({
 });
 
 // ---------------------------------------------------------------------------
-// Foreign key (extras path) rendering -- every FK except the one cycle-
-// closing edge per table (that one is a column-level thunk instead, see
-// `renderColumnBuilder`'s `referenceThunk`).
+// Foreign key (extras path) rendering -- every FK, whether its own target
+// is a real cross-file import, a same-file const, or (c)'s own unexported
+// handle (CI-G2-R1-16: `.references()`'s thunk is never used by this
+// emitter -- see `mustDeferForeignKey`'s own doc comment).
 // ---------------------------------------------------------------------------
 
 const FOREIGN_KEY_ACTION_KEYS: ReadonlyArray<
@@ -519,12 +506,103 @@ const renderForeignKey = (
 	return `{ columns: [${columns}], references: ${references}${renderForeignKeyActions(fk)} }`;
 };
 
-/** Whether `fk` is eligible for the column-level `.references()` thunk (add-relational-reads' own restriction, not a 2.1 choice): single column, no actions. Composite or action-bearing FKs stay on the `extras` path even when they close a cycle. */
-const isThunkEligible = (fk: ForeignKeySnapshot): boolean =>
-	fk.columns.length === 1 &&
-	fk.referencesColumns.length === 1 &&
-	fk.onDelete === undefined &&
-	fk.onUpdate === undefined;
+/**
+ * Every cycle-closing FK is declared against an unexported `existingTable`
+ * handle (CI-G2-R1-16, lead-approved, measured): `.references()`'s own
+ * thunk is not a deferral mechanism at all -- `dsl/table.ts`'s
+ * `foldColumnReferences` calls it synchronously, once, as part of
+ * `table()`'s own construction (core's own doc call this "the thunk's
+ * single evaluation point"; #669 tracks the gap between that doc's
+ * "import-order safety" language and this actual eagerness, not this
+ * piece's to fix). Measured directly, twice: a same-schema (same-file)
+ * closing edge thunked crashes with `Cannot access 'x' before
+ * initialization` (TDZ -- the target `const` genuinely isn't
+ * initialized yet at that textual point), and a cross-schema pair
+ * crashes with `Cannot read properties of undefined (reading 'id')`
+ * (a live ESM import cycle) in *both* load orders alike, regardless of
+ * which side is thunked and which is immediate. A self-reference is
+ * unaffected -- it uses the extras callback's own `t`, never a
+ * module-level identifier, confirmed loading cleanly. The handle itself
+ * generalizes to same-file and cross-file alike: `existingTable` takes
+ * its target's schema and table as string literals, never an import.
+ * This base name (before this file's own casing+collision pass) is
+ * deterministic in the target identity and this FK's own name, so two
+ * handles in one file never collide by accident.
+ */
+export const handleBaseNameFor = (fk: ForeignKeySnapshot): string =>
+	`${fk.referencesTable.replace(".", "_")}_${fk.name}_ref`;
+
+/**
+ * Whether `fk` must never be an immediate reference (must instead go
+ * through a handle, {@link handleBaseNameFor}) -- two different rules,
+ * by whether `fk` stays inside one file:
+ *
+ * - same schema (same file): the table-level topological order's own
+ *   closing-edge rule (CI-G2-R1-05) -- a same-module declaration order
+ *   problem; a self-reference is never on it.
+ * - different schema (different file): `fk`'s own crossing direction is
+ *   a *back edge* of the schema-level graph (CI-G2-R1-18, lead-adopted
+ *   refinement over R1-16's own first cut: only the back edge a
+ *   deterministic DFS over schema names finds needs a handle, not every
+ *   crossing on the cycle -- severing that one edge already makes the
+ *   remaining import graph acyclic, so the other direction keeps a real,
+ *   type-carrying cross-file import).
+ */
+export const mustDeferForeignKey = (
+	table: TableSnapshot,
+	fk: ForeignKeySnapshot,
+	context: {
+		readonly cycleClosingEdges: ReadonlySet<string>;
+		readonly targetSchemaOf: (tableIdentity: string) => string | undefined;
+		readonly isSchemaCrossingOnBackEdge: (
+			table: TableSnapshot,
+			fk: ForeignKeySnapshot,
+			targetSchema: string,
+		) => boolean;
+	},
+): boolean => {
+	const ownIdentity = tableIdentity(table.schema, table.name);
+	if (fk.referencesTable === ownIdentity) {
+		return false;
+	}
+	const targetSchema = context.targetSchemaOf(fk.referencesTable);
+	if (targetSchema === table.schema) {
+		return context.cycleClosingEdges.has(
+			foreignKeyEdgeKey({
+				from: ownIdentity,
+				to: fk.referencesTable,
+				foreignKeyName: fk.name,
+			}),
+		);
+	}
+	if (targetSchema === undefined) {
+		return false;
+	}
+	return context.isSchemaCrossingOnBackEdge(table, fk, targetSchema);
+};
+
+/** One table's own FKs split into the two settled branches (CI-G2-R1-16): handled (every cycle-closing edge, paired with its own handle's base name) and everything else -- self-references, same-schema non-closing references, and a cross-schema reference whose file pair is acyclic -- left on the ordinary `extras` path. */
+export type ForeignKeyClassification = {
+	readonly isHandled: (fk: ForeignKeySnapshot) => boolean;
+	readonly handled: ReadonlyArray<{
+		readonly fk: ForeignKeySnapshot;
+		readonly handleBaseName: string;
+	}>;
+};
+
+export const classifyForeignKeys = (
+	table: TableSnapshot,
+	mustDeferContext: Parameters<typeof mustDeferForeignKey>[2],
+): ForeignKeyClassification => {
+	const handled = table.foreignKeys
+		.filter((fk) => mustDeferForeignKey(table, fk, mustDeferContext))
+		.map((fk) => ({ fk, handleBaseName: handleBaseNameFor(fk) }));
+	const handledSet = new Set(handled.map((entry) => entry.fk));
+	return {
+		isHandled: (fk) => handledSet.has(fk),
+		handled,
+	};
+};
 
 // ---------------------------------------------------------------------------
 // Table rendering.
@@ -536,36 +614,18 @@ export type TableRenderContext = {
 	readonly tsKeyFor: (tableIdentity: string, sqlColumnName: string) => string;
 	readonly enumRef: (enumSchema: string, enumName: string) => string;
 	readonly sequences: SequenceFacts;
-	readonly cycleClosingEdges: ReadonlySet<string>;
+	/** {@link mustDeferForeignKey}'s own context (CI-G2-R1-11): table-level cycle-closing edges for a same-schema pair, plus file-level (schema-to-schema) reachability for a cross-schema pair. */
+	readonly mustDeferContext: Parameters<typeof mustDeferForeignKey>[2];
+	/** Every table this run covers, by identity -- (c)'s own handle needs its target's real column types, which a cross-schema reference otherwise never looks up (its target's own file renders those, not this one). */
+	readonly tablesByIdentity: ReadonlyMap<string, TableSnapshot>;
+	/** Resolved per (owning table identity, FK name) -- (c)'s own unexported `existingTable` handle identifier, seeded into this file's own identifier namespace alongside its schema/enum/table names. */
+	readonly handleIdentifierFor: (
+		ownIdentity: string,
+		foreignKeyName: string,
+	) => string;
 };
-
-const isThunkedForeignKey = (
-	fk: ForeignKeySnapshot,
-	ownIdentity: string,
-	cycleClosingEdges: ReadonlySet<string>,
-): boolean =>
-	fk.referencesTable !== ownIdentity &&
-	isThunkEligible(fk) &&
-	cycleClosingEdges.has(
-		foreignKeyEdgeKey({
-			from: ownIdentity,
-			to: fk.referencesTable,
-			foreignKeyName: fk.name,
-		}),
-	);
 
 const INDENT = "\t";
-
-const targetIdentifierFor = (
-	isSelf: boolean,
-	identifierFor: (identity: string) => string,
-	referencesTable: string,
-): string | null => {
-	if (isSelf) {
-		return null;
-	}
-	return identifierFor(referencesTable);
-};
 
 const extrasBlockEntry = (
 	label: string,
@@ -584,39 +644,126 @@ const renderExtrasBlock = (extrasEntries: ReadonlyArray<string>): string => {
 	return `,\n${INDENT}(t) => ({\n${extrasEntries.join("\n")}\n${INDENT}})`;
 };
 
+/** One `foreignKeys` array entry, with the constraint comment (c) carries directly above it -- `null` for every (a)/(b) entry. */
+type ForeignKeyEntryRender = {
+	readonly text: string;
+	readonly comment: string | null;
+};
+
+/** (c)'s own constraint (CI-G2-R1-16, lead-approved wording: state the constraint only, never the round's own process history). */
+const HANDLE_CONSTRAINT_COMMENT =
+	"// Closes a declaration-file cycle -- any live reference to the other table, thunked or immediate, evaluates before that file finishes initializing, so this FK stays on a reference-only handle instead.";
+
+const commentForForeignKeyEntry = (isHandled: boolean): string | null => {
+	if (isHandled) {
+		return HANDLE_CONSTRAINT_COMMENT;
+	}
+	return null;
+};
+
+/**
+ * `foreignKeys: [...]` -- a single line when no entry carries a comment
+ * (every existing (a)/(b)-only table), one entry per line with its own
+ * comment line above it once any entry does (c) -- never mixed at the
+ * granularity of one array literal, since biome doesn't accept a comment
+ * inside a single-line array element list either.
+ */
+const renderForeignKeysBlock = (
+	entries: ReadonlyArray<ForeignKeyEntryRender>,
+): ReadonlyArray<string> => {
+	if (entries.length === 0) {
+		return [];
+	}
+	if (!entries.some((entry) => entry.comment !== null)) {
+		return [
+			`${INDENT.repeat(2)}foreignKeys: [${entries.map((entry) => entry.text).join(", ")}],`,
+		];
+	}
+	const lines = entries.flatMap((entry) => [
+		...optionalEntry(
+			entry.comment,
+			(comment) => `${INDENT.repeat(3)}${comment}`,
+		),
+		`${INDENT.repeat(3)}${entry.text},`,
+	]);
+	return [
+		`${INDENT.repeat(2)}foreignKeys: [`,
+		...lines,
+		`${INDENT.repeat(2)}],`,
+	];
+};
+
+/** (c)'s own unexported `existingTable` handle (D41) -- carries only the FK's own target columns, matching `infer/table.ts`'s own `referencesFor` (1.4b): a reference-only handle never needs its target's full column set. */
+const renderExistingTableHandle = (
+	fk: ForeignKeySnapshot,
+	handleIdentifier: string,
+	targetTable: TableSnapshot | undefined,
+	targetTsKeyFor: (sqlName: string) => string,
+	enumRef: (enumSchema: string, enumName: string) => string,
+): TypeRender => {
+	const [fallbackSchema, fallbackTable] = fk.referencesTable.split(".");
+	const targetSchema = targetTable?.schema ?? fallbackSchema ?? "";
+	const targetTableName = targetTable?.name ?? fallbackTable ?? "";
+	const columnRenders = fk.referencesColumns.map((columnName) => {
+		const columnSnapshot = targetTable?.columns.find(
+			(column) => column.name === columnName,
+		);
+		if (columnSnapshot === undefined) {
+			return {
+				key: targetTsKeyFor(columnName),
+				render: { call: "text()", symbols: new Set(["text"]) },
+			};
+		}
+		return {
+			key: targetTsKeyFor(columnName),
+			render: renderTypeNode(columnSnapshot.typeNode, enumRef),
+		};
+	});
+	const columnsObject = columnRenders
+		.map(({ key, render }) => `${key}: ${render.call}`)
+		.join(", ");
+	return {
+		call: `const ${handleIdentifier} = existingTable(${JSON.stringify(targetSchema)}, ${JSON.stringify(targetTableName)}, { ${columnsObject} });`,
+		symbols: new Set([
+			"existingTable",
+			...columnRenders.flatMap(({ render }) => [...render.symbols]),
+		]),
+	};
+};
+
+/** Resolves one FK entry's own `references.table` (Q: self -> `null` (the extras path's own self-reference shape); (c) -> its handle's identifier; (a) -> the target's real identifier, same-file or cross-file alike). */
+const resolveForeignKeyTargetIdentifier = (
+	fk: ForeignKeySnapshot,
+	ownIdentity: string,
+	isHandled: boolean,
+	handleIdentifierForFk: ReadonlyMap<ForeignKeySnapshot, string>,
+	identifierFor: (identity: string) => string,
+): string | null => {
+	if (fk.referencesTable === ownIdentity) {
+		return null;
+	}
+	if (isHandled) {
+		return handleIdentifierForFk.get(fk) ?? "";
+	}
+	return identifierFor(fk.referencesTable);
+};
+
+export type TableRender = {
+	/** (c)'s own unexported `existingTable` handle declarations -- placed directly before this table's own `export const` block, never exported (loader.ts:196's `Object.entries(moduleNamespace)` only ever sees a module's own exports, so an unexported handle is never read as a second table declaration). */
+	readonly preamble: ReadonlyArray<string>;
+	readonly call: string;
+	readonly symbols: ReadonlySet<string>;
+};
+
 export const renderTable = (
 	table: TableSnapshot,
 	context: TableRenderContext,
-): TypeRender => {
+): TableRender => {
 	const ownIdentity = tableIdentity(table.schema, table.name);
 	const tsKeyForOwn = (sqlName: string) =>
 		context.tsKeyFor(ownIdentity, sqlName);
 
-	const thunkedForeignKeys = table.foreignKeys.filter((fk) =>
-		isThunkedForeignKey(fk, ownIdentity, context.cycleClosingEdges),
-	);
-	const extraForeignKeys = table.foreignKeys.filter(
-		(fk) => !isThunkedForeignKey(fk, ownIdentity, context.cycleClosingEdges),
-	);
-
-	const referenceThunkForColumn = (
-		sqlColumnName: string,
-	): ReferenceThunkTarget | null => {
-		const fk = thunkedForeignKeys.find(
-			(candidate) => candidate.columns[0] === sqlColumnName,
-		);
-		if (fk === undefined) {
-			return null;
-		}
-		const targetColumn = fk.referencesColumns[0];
-		if (targetColumn === undefined) {
-			return null;
-		}
-		return {
-			targetIdentifier: context.identifierFor(fk.referencesTable),
-			targetColumnTsKey: context.tsKeyFor(fk.referencesTable, targetColumn),
-		};
-	};
+	const classification = classifyForeignKeys(table, context.mustDeferContext);
 
 	const columnRenders = table.columns.map((column) => ({
 		tsKey: tsKeyForOwn(column.name),
@@ -625,24 +772,49 @@ export const renderTable = (
 			table: table.name,
 			sequences: context.sequences,
 			enumRef: context.enumRef,
-			referenceThunk: referenceThunkForColumn(column.name),
 		}),
 	}));
 
-	const foreignKeyEntries = extraForeignKeys.map((fk) => {
-		const isSelf = fk.referencesTable === ownIdentity;
-		return renderForeignKey(fk, {
-			isSelf,
-			targetIdentifier: targetIdentifierFor(
-				isSelf,
-				context.identifierFor,
-				fk.referencesTable,
+	const handleRenders = classification.handled.map(({ fk }) => {
+		const handleIdentifier = context.handleIdentifierFor(ownIdentity, fk.name);
+		const targetTable = context.tablesByIdentity.get(fk.referencesTable);
+		return {
+			fk,
+			handleIdentifier,
+			render: renderExistingTableHandle(
+				fk,
+				handleIdentifier,
+				targetTable,
+				(sqlName) => context.tsKeyFor(fk.referencesTable, sqlName),
+				context.enumRef,
 			),
-			tsKeyFor: tsKeyForOwn,
-			targetTsKeyFor: (sqlName: string) =>
-				context.tsKeyFor(fk.referencesTable, sqlName),
-		});
+		};
 	});
+	const handleIdentifierForFk = new Map(
+		handleRenders.map(
+			({ fk, handleIdentifier }) => [fk, handleIdentifier] as const,
+		),
+	);
+
+	const foreignKeyEntryRenders: ReadonlyArray<ForeignKeyEntryRender> =
+		table.foreignKeys.map((fk) => {
+			const isSelf = fk.referencesTable === ownIdentity;
+			const isHandled = classification.isHandled(fk);
+			const text = renderForeignKey(fk, {
+				isSelf,
+				targetIdentifier: resolveForeignKeyTargetIdentifier(
+					fk,
+					ownIdentity,
+					isHandled,
+					handleIdentifierForFk,
+					context.identifierFor,
+				),
+				tsKeyFor: tsKeyForOwn,
+				targetTsKeyFor: (sqlName: string) =>
+					context.tsKeyFor(fk.referencesTable, sqlName),
+			});
+			return { text, comment: commentForForeignKeyEntry(isHandled) };
+		});
 
 	const indexRenders = table.indexes.map((index) =>
 		renderIndex(index, tsKeyForOwn),
@@ -654,7 +826,7 @@ export const renderTable = (
 		.join("\n");
 
 	const extrasEntries: ReadonlyArray<string> = [
-		...extrasBlockEntry("foreignKeys", foreignKeyEntries),
+		...renderForeignKeysBlock(foreignKeyEntryRenders),
 		...extrasBlockEntry(
 			"indexes",
 			indexRenders.map((render) => render.call),
@@ -683,9 +855,11 @@ export const renderTable = (
 		...columnRenders.flatMap(({ render }) => [...render.symbols]),
 		...indexRenders.flatMap((render) => [...render.symbols]),
 		...checkRenders.flatMap((render) => [...render.symbols]),
+		...handleRenders.flatMap(({ render }) => [...render.symbols]),
 	]);
+	const preamble = handleRenders.map(({ render }) => render.call);
 
-	return { call, symbols };
+	return { preamble, call, symbols };
 };
 
 // ---------------------------------------------------------------------------
@@ -763,14 +937,23 @@ const enumIdentitiesIn = (
 	return [];
 };
 
+type HandleNeed = {
+	readonly ownIdentity: string;
+	readonly fk: ForeignKeySnapshot;
+	readonly handleBaseName: string;
+};
+
 type FilePlan = {
 	readonly schemaName: string;
 	readonly fileBaseName: string;
 	readonly schemaTables: ReadonlyArray<TableSnapshot>;
 	readonly schemaEnums: ReturnType<typeof enumsInSnapshot>;
+	readonly schemaHandles: ReadonlyArray<HandleNeed>;
 	readonly schemaIdentifier: string;
 	readonly enumIdentifiers: ReadonlyMap<string, string>;
 	readonly tableIdentifiers: ReadonlyMap<string, string>;
+	/** Keyed `${ownIdentity} ${foreignKeyName}` -- one per (c) handle this file's own tables need. */
+	readonly handleIdentifiers: ReadonlyMap<string, string>;
 	readonly vocabulary: ReadonlySet<string>;
 };
 
@@ -785,18 +968,98 @@ const addToMultiMap = (
 	return map;
 };
 
+const handleNeedKey = (ownIdentity: string, foreignKeyName: string): string =>
+	`${ownIdentity} ${foreignKeyName}`;
+
+/** Every table a cross-schema FK reaches for, except (c)'s own -- a handled FK never imports its target, it declares an unexported local handle instead (CI-G2-R1-08). Both (a) (a plain cross-file reference) and (b) (a thunked one) still need the import: (b)'s thunk text names the target's real identifier directly. */
+const neededCrossFileTableReferences = (
+	table: TableSnapshot,
+	classification: ForeignKeyClassification,
+): ReadonlyArray<string> => {
+	const ownIdentity = tableIdentity(table.schema, table.name);
+	return table.foreignKeys
+		.filter(
+			(fk) =>
+				fk.referencesTable !== ownIdentity && !classification.isHandled(fk),
+		)
+		.map((fk) => fk.referencesTable);
+};
+
+/**
+ * One file's own identifier namespace (schema + its enums + its tables +
+ * its (c) handles, in that order), resolved against `reserved` -- called
+ * twice (CI-G2-R1-07/09): once with only this file's own hejbro-vocabulary
+ * usage (phase 1, whose result other files' imports are read from), once
+ * more with vocabulary *and* every name this file imports from another
+ * file added to `reserved` (phase 2, the actual final identifiers) -- so a
+ * table imported from another schema can never be shadowed by a same-named
+ * local one (CI-G2-R1-09: two schemas both naming a table `users`, one
+ * referencing the other, is an ordinary case, not an edge case).
+ */
+const resolveFileIdentifiers = (
+	schemaName: string,
+	schemaEnums: ReturnType<typeof enumsInSnapshot>,
+	schemaTables: ReadonlyArray<TableSnapshot>,
+	schemaHandles: ReadonlyArray<HandleNeed>,
+	reserved: ReadonlySet<string>,
+): {
+	readonly schemaIdentifier: string;
+	readonly enumIdentifiers: ReadonlyMap<string, string>;
+	readonly tableIdentifiers: ReadonlyMap<string, string>;
+	readonly handleIdentifiers: ReadonlyMap<string, string>;
+} => {
+	const names = [
+		schemaName,
+		...schemaEnums.map((row) => row.name),
+		...schemaTables.map((table) => table.name),
+		...schemaHandles.map((need) => need.handleBaseName),
+	];
+	const identifiers = resolveIdentifierKeys(names, reserved);
+	const schemaIdentifier = identifiers[0] ?? schemaName;
+	const enumIdentifiers = new Map(
+		schemaEnums.map(
+			(row, index) =>
+				[
+					enumIdentity(row.schema, row.name),
+					identifiers[1 + index] ?? row.name,
+				] as const,
+		),
+	);
+	const tableOffset = 1 + schemaEnums.length;
+	const tableIdentifiers = new Map(
+		schemaTables.map(
+			(table, index) =>
+				[
+					tableIdentity(table.schema, table.name),
+					identifiers[tableOffset + index] ?? table.name,
+				] as const,
+		),
+	);
+	const handleOffset = tableOffset + schemaTables.length;
+	const handleIdentifiers = new Map(
+		schemaHandles.map(
+			(need, index) =>
+				[
+					handleNeedKey(need.ownIdentity, need.fk.name),
+					identifiers[handleOffset + index] ?? need.handleBaseName,
+				] as const,
+		),
+	);
+	return {
+		schemaIdentifier,
+		enumIdentifiers,
+		tableIdentifiers,
+		handleIdentifiers,
+	};
+};
+
 /**
  * The whole pipeline (2.1): group by schema, order tables by FK topology
  * (global, CI-G2-R1-06 -- ties broken by identity so a different catalog
  * row order can never change a file), resolve one identifier namespace per
- * file (schema + its own enums + its own tables, seeded with that file's
- * own hejbro-vocabulary usage so a table literally named `check` still
- * cannot shadow the imported `check` function), then render.
- *
- * Cross-schema identifier collisions (an imported table/enum name landing
- * on a name this file already resolved locally) are out of this pass's
- * scope -- the settled red case is the vocabulary collision above, not a
- * second collision layer between two schemas' own names.
+ * file in two passes (CI-G2-R1-09: a cross-file import must not collide
+ * with a name this file already resolved locally, nor the reverse), then
+ * render.
  */
 export const emitDeclarationFiles = (
 	result: InferCatalogResult,
@@ -805,6 +1068,11 @@ export const emitDeclarationFiles = (
 	const enums = enumsInSnapshot(result.snapshot);
 	const sequences = sequencesInSnapshot(result.snapshot);
 	const tsKeyFor = buildTsKeyLookup(result.description);
+	const tablesByIdentity = new Map(
+		tables.map(
+			(table) => [tableIdentity(table.schema, table.name), table] as const,
+		),
+	);
 
 	const edges: ReadonlyArray<TopoEdge> = tables.flatMap((table) => {
 		const ownIdentity = tableIdentity(table.schema, table.name);
@@ -829,15 +1097,107 @@ export const emitDeclarationFiles = (
 			(orderIndex.get(tableIdentity(b.schema, b.name)) ?? 0),
 	);
 
+	const targetSchemaOf = (identity: string): string | undefined =>
+		tablesByIdentity.get(identity)?.schema;
+
+	/**
+	 * CI-G2-R1-18 (lead-adopted refinement over R1-16's own first cut):
+	 * only a schema-level *back edge* -- the direction a deterministic DFS
+	 * over the schema graph names, same tie-break rule as the table graph
+	 * -- goes through a handle; the other direction keeps a real
+	 * cross-file import, since severing the back edge alone already makes
+	 * the remaining import graph acyclic (safety is identical either way;
+	 * this one just leaves more real, type-carrying imports in the files
+	 * the repository now owns). `topologicalTableOrder` is reused
+	 * unchanged, schema names standing in for table identities and one
+	 * edge per crossing FK (keyed by that FK's own owner + name, so two
+	 * different FKs crossing the same schema pair are each judged on
+	 * their own merits, matching the table-level graph's own behavior).
+	 */
+	const schemaCrossingEdges: ReadonlyArray<TopoEdge> = tables.flatMap(
+		(table) => {
+			const ownIdentity = tableIdentity(table.schema, table.name);
+			return table.foreignKeys
+				.filter((fk) => fk.referencesTable !== ownIdentity)
+				.flatMap((fk) => {
+					const targetSchema = targetSchemaOf(fk.referencesTable);
+					if (targetSchema === undefined || targetSchema === table.schema) {
+						return [];
+					}
+					return [
+						{
+							from: table.schema,
+							to: targetSchema,
+							foreignKeyName: `${ownIdentity} ${fk.name}`,
+						},
+					];
+				});
+		},
+	);
+	const schemaNamesForTopo = [...new Set(tables.map((table) => table.schema))];
+	const schemaTopo = topologicalTableOrder(
+		schemaNamesForTopo,
+		schemaCrossingEdges,
+	);
+	const isSchemaCrossingOnBackEdge = (
+		table: TableSnapshot,
+		fk: ForeignKeySnapshot,
+		targetSchema: string,
+	): boolean =>
+		schemaTopo.cycleClosingEdges.has(
+			foreignKeyEdgeKey({
+				from: table.schema,
+				to: targetSchema,
+				foreignKeyName: `${tableIdentity(table.schema, table.name)} ${fk.name}`,
+			}),
+		);
+
+	const mustDeferContext: Parameters<typeof mustDeferForeignKey>[2] = {
+		cycleClosingEdges: topo.cycleClosingEdges,
+		targetSchemaOf,
+		isSchemaCrossingOnBackEdge,
+	};
+
+	const classificationByTable = new Map(
+		tables.map(
+			(table) =>
+				[
+					tableIdentity(table.schema, table.name),
+					classifyForeignKeys(table, mustDeferContext),
+				] as const,
+		),
+	);
+	const classificationFor = (table: TableSnapshot): ForeignKeyClassification =>
+		classificationByTable.get(tableIdentity(table.schema, table.name)) ?? {
+			isHandled: () => false,
+			handled: [],
+		};
+
 	const tablesBySchema = groupBySchema(tablesInGlobalOrder);
 	const enumsBySchema = groupBySchema(enums);
 	const schemaNames = [
 		...new Set([...tablesBySchema.keys(), ...enumsBySchema.keys()]),
 	].sort();
 
-	const filePlans: ReadonlyArray<FilePlan> = schemaNames.map((schemaName) => {
+	const dryRunHandleIdentifierFor = (): string => "handle";
+
+	/** Phase 1 (vocabulary-only) or phase 2 (vocabulary + imports) -- same shape, different `reserved`. */
+	const buildFilePlan = (
+		schemaName: string,
+		reserved: (vocabulary: ReadonlySet<string>) => ReadonlySet<string>,
+	): FilePlan => {
 		const schemaTables = tablesBySchema.get(schemaName) ?? [];
 		const schemaEnums = enumsBySchema.get(schemaName) ?? [];
+		const schemaHandles: ReadonlyArray<HandleNeed> = schemaTables.flatMap(
+			(table) => {
+				const ownIdentity = tableIdentity(table.schema, table.name);
+				return classificationFor(table).handled.map((entry) => ({
+					ownIdentity,
+					fk: entry.fk,
+					handleBaseName: entry.handleBaseName,
+				}));
+			},
+		);
 
 		const dryRunContext: TableRenderContext = {
 			schemaIdentifier: "schema",
@@ -845,7 +1205,9 @@ export const emitDeclarationFiles = (
 			tsKeyFor: (_id, sql) => sql,
 			enumRef: () => "enum",
 			sequences,
-			cycleClosingEdges: topo.cycleClosingEdges,
+			mustDeferContext,
+			tablesByIdentity,
+			handleIdentifierFor: dryRunHandleIdentifierFor,
 		};
 		const vocabulary = new Set<string>([
 			"schema",
@@ -855,30 +1217,12 @@ export const emitDeclarationFiles = (
 			]),
 		]);
 
-		const names = [
+		const resolved = resolveFileIdentifiers(
 			schemaName,
-			...schemaEnums.map((row) => row.name),
-			...schemaTables.map((table) => table.name),
-		];
-		const identifiers = resolveIdentifierKeys(names, vocabulary);
-		const schemaIdentifier = identifiers[0] ?? schemaName;
-		const enumIdentifiers = new Map(
-			schemaEnums.map(
-				(row, index) =>
-					[
-						enumIdentity(row.schema, row.name),
-						identifiers[1 + index] ?? row.name,
-					] as const,
-			),
-		);
-		const tableIdentifiers = new Map(
-			schemaTables.map(
-				(table, index) =>
-					[
-						tableIdentity(table.schema, table.name),
-						identifiers[1 + schemaEnums.length + index] ?? table.name,
-					] as const,
-			),
+			schemaEnums,
+			schemaTables,
+			schemaHandles,
+			reserved(vocabulary),
 		);
 
 		return {
@@ -886,11 +1230,87 @@ export const emitDeclarationFiles = (
 			fileBaseName: safeFileBaseName(schemaName),
 			schemaTables,
 			schemaEnums,
-			schemaIdentifier,
-			enumIdentifiers,
-			tableIdentifiers,
+			schemaHandles,
 			vocabulary,
+			...resolved,
 		};
+	};
+
+	// Phase 1: each file's own names only, no cross-file knowledge yet --
+	// other files' imports are read from this result.
+	const phase1Plans = schemaNames.map((schemaName) =>
+		buildFilePlan(schemaName, (vocabulary) => vocabulary),
+	);
+	const phase1FileOfTable = new Map(
+		phase1Plans.flatMap((plan) =>
+			plan.schemaTables.map(
+				(table) => [tableIdentity(table.schema, table.name), plan] as const,
+			),
+		),
+	);
+	const phase1FileOfEnum = new Map(
+		phase1Plans.flatMap((plan) =>
+			plan.schemaEnums.map(
+				(row) => [enumIdentity(row.schema, row.name), plan] as const,
+			),
+		),
+	);
+
+	/** The phase-1 identifier a table/enum identity's own owning file assigned it, `null` when that owner is this same file (no import, so no name to reserve) or unknown. */
+	const phase1ImportedNameFor = (
+		identity: string,
+		ownerLookup: ReadonlyMap<string, FilePlan>,
+		namesLookup: (plan: FilePlan) => ReadonlyMap<string, string>,
+		thisFileBaseName: string,
+	): string | null => {
+		const owner = ownerLookup.get(identity);
+		if (owner === undefined || owner.fileBaseName === thisFileBaseName) {
+			return null;
+		}
+		return namesLookup(owner).get(identity) ?? null;
+	};
+
+	// Phase 2: reserve every name this file imports from another file's
+	// phase-1 result, alongside its own vocabulary, then re-resolve
+	// (CI-G2-R1-09: two schemas both naming a table `users`, one importing
+	// the other's, must not collide silently).
+	const filePlans = schemaNames.map((schemaName) => {
+		const phase1 = phase1Plans.find((plan) => plan.schemaName === schemaName);
+		const thisFileBaseName =
+			phase1?.fileBaseName ?? safeFileBaseName(schemaName);
+		const importedNames = (phase1?.schemaTables ?? []).flatMap((table) => [
+			...neededCrossFileTableReferences(
+				table,
+				classificationFor(table),
+			).flatMap((identity) =>
+				optionalEntry(
+					phase1ImportedNameFor(
+						identity,
+						phase1FileOfTable,
+						(plan) => plan.tableIdentifiers,
+						thisFileBaseName,
+					),
+					(name) => name,
+				),
+			),
+			...table.columns.flatMap((column) =>
+				enumIdentitiesIn(column.typeNode).flatMap((identity) =>
+					optionalEntry(
+						phase1ImportedNameFor(
+							identity,
+							phase1FileOfEnum,
+							(plan) => plan.enumIdentifiers,
+							thisFileBaseName,
+						),
+						(name) => name,
+					),
+				),
+			),
+		]);
+		return buildFilePlan(
+			schemaName,
+			(vocabulary) => new Set([...vocabulary, ...importedNames]),
+		);
 	});
 
 	const fileOfTable = new Map(
@@ -907,6 +1327,16 @@ export const emitDeclarationFiles = (
 			),
 		),
 	);
+	const handleIdentifierFor = (
+		ownIdentity: string,
+		foreignKeyName: string,
+	): string => {
+		const plan = fileOfTable.get(ownIdentity);
+		return (
+			plan?.handleIdentifiers.get(handleNeedKey(ownIdentity, foreignKeyName)) ??
+			foreignKeyName
+		);
+	};
 
 	const identifierForTable = (identity: string): string =>
 		fileOfTable.get(identity)?.tableIdentifiers.get(identity) ?? identity;
@@ -925,9 +1355,11 @@ export const emitDeclarationFiles = (
 			tsKeyFor,
 			enumRef: identifierForEnum,
 			sequences,
-			cycleClosingEdges: topo.cycleClosingEdges,
+			mustDeferContext,
+			tablesByIdentity,
+			handleIdentifierFor,
 		};
-		const tableTexts = plan.schemaTables.map((table) =>
+		const tableRenders = plan.schemaTables.map((table) =>
 			renderTable(table, renderContext),
 		);
 		const enumTexts = plan.schemaEnums.map((row) =>
@@ -939,12 +1371,9 @@ export const emitDeclarationFiles = (
 			),
 		);
 
-		const referencedTableIdentities = plan.schemaTables.flatMap((table) => {
-			const ownIdentity = tableIdentity(table.schema, table.name);
-			return table.foreignKeys
-				.filter((fk) => fk.referencesTable !== ownIdentity)
-				.map((fk) => fk.referencesTable);
-		});
+		const referencedTableIdentities = plan.schemaTables.flatMap((table) =>
+			neededCrossFileTableReferences(table, classificationFor(table)),
+		);
 		const referencedEnumIdentities = plan.schemaTables.flatMap((table) =>
 			table.columns.flatMap((column) => enumIdentitiesIn(column.typeNode)),
 		);
@@ -985,6 +1414,11 @@ export const emitDeclarationFiles = (
 		const hejbroImportLine = `import { ${[...plan.vocabulary].sort().join(", ")} } from "hejbro";`;
 		const schemaDeclLine = `export const ${plan.schemaIdentifier} = schema(${JSON.stringify(plan.schemaName)});`;
 
+		const tableSections = tableRenders.flatMap((render) => [
+			...render.preamble.map((line) => `\n${line}`),
+			`\n${render.call}`,
+		]);
+
 		const sections: ReadonlyArray<string> = [
 			renderHeader(result.lossReport),
 			"",
@@ -993,7 +1427,7 @@ export const emitDeclarationFiles = (
 			"",
 			schemaDeclLine,
 			...enumTexts.map((render) => `\n${render.call}`),
-			...tableTexts.map((render) => `\n${render.call}`),
+			...tableSections,
 		];
 
 		return {

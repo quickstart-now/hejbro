@@ -153,7 +153,7 @@ describe("emitDeclarationFiles / 2.1", () => {
 		expect(first).toEqual(second);
 	});
 
-	it("wires a foreign key that crosses schemas as a real cross-file named import, and closes the cross-schema cycle on exactly one edge (CI-G2-R1-06 Q3)", () => {
+	it("handles only the schema-graph's own back edge on a cross-schema cycle, keeping a real import on the other direction (CI-G2-R1-18)", () => {
 		const appA: TableSnapshot = {
 			schema: "app",
 			name: "a",
@@ -209,18 +209,380 @@ describe("emitDeclarationFiles / 2.1", () => {
 			throw new Error("expected one file per schema");
 		}
 
-		// visiting starts at "app.a" (identity order): app.a -> billing.b is
-		// followed first, so billing.b -> app.a is the edge that closes the
-		// cycle -- table `b`'s own FK becomes the column-level thunk, and
-		// table `a`'s FK to `b` stays a normal cross-file extras reference.
+		// app and billing would otherwise import each other (a -> b and
+		// b -> a both cross the same file pair) -- CI-G2-R1-18: the schema
+		// graph's own deterministic DFS (identity order: "app" before
+		// "billing") visits app -> billing first, so billing -> app is the
+		// back edge; only billing's own edge to app goes through a handle,
+		// while app's own edge to billing keeps a real import (severing
+		// one direction already makes the import graph acyclic).
 		expect(appFile.source).toContain('import { b } from "./billing.schema";');
 		expect(appFile.source).toContain(
 			"references: { table: b, columns: [b.id] }",
 		);
-		expect(appFile.source).not.toContain(".references(() =>");
+		expect(appFile.source).not.toContain("existingTable");
 
-		expect(billingFile.source).toContain('import { a } from "./app.schema";');
-		expect(billingFile.source).toContain(".references(() => a.id)");
-		expect(billingFile.source).not.toContain("foreignKeys:");
+		expect(billingFile.source).not.toContain('from "./app.schema"');
+		expect(billingFile.source).toContain('existingTable("app", "a"');
+		expect(billingFile.source).toContain(
+			"references: { table: appABAIdFkeyRef, columns: [appABAIdFkeyRef.id] }",
+		);
+		expect(billingFile.source).not.toContain(".references(() =>");
+	});
+
+	it("handles the table-level closing edge for a same-schema (same-file) cycle too (CI-G2-R1-16: measured -- thunking it crashes with a TDZ error, `Cannot access 'x' before initialization`, since the target isn't declared yet at that textual point)", () => {
+		const tableX: TableSnapshot = {
+			schema: "app",
+			name: "x",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "y_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "x_y_id_fkey",
+					columns: ["y_id"],
+					referencesTable: "app.y",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "x_pkey",
+		};
+		const tableY: TableSnapshot = {
+			schema: "app",
+			name: "y",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "x_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "y_x_id_fkey",
+					columns: ["x_id"],
+					referencesTable: "app.x",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "y_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([tableX, tableY]));
+		expect(files).toHaveLength(1);
+		const [file] = files;
+		if (file === undefined) {
+			throw new Error("expected one file");
+		}
+
+		// same file, no ESM import at all -- but the topological order still
+		// declares y before x, so y's own back-reference to x would read
+		// `x` before its own `const x = table(...)` line ever runs. A
+		// thunk doesn't help (CI-G2-R1-16): y's own edge goes through a
+		// handle just like a cross-file one would, while x's forward
+		// reference to the already-declared `y` stays a normal extras
+		// entry.
+		expect(file.source).toContain("references: { table: y, columns: [y.id] }");
+		expect(file.source).toContain('existingTable("app", "x"');
+		expect(file.source).toContain(
+			"references: { table: appXYXIdFkeyRef, columns: [appXYXIdFkeyRef.id] }",
+		);
+		expect(file.source).not.toContain(".references(() =>");
+	});
+
+	it("suffixes a local table when a same-named table is imported from another schema (CI-G2-R1-09: app.users / audit.users is an ordinary case)", () => {
+		const appUsers: TableSnapshot = {
+			schema: "app",
+			name: "users",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+			],
+			indexes: [],
+			foreignKeys: [],
+			primaryKeyName: "users_pkey",
+		};
+		const auditUsers: TableSnapshot = {
+			schema: "audit",
+			name: "users",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "app_user_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "audit_users_app_user_id_fkey",
+					columns: ["app_user_id"],
+					referencesTable: "app.users",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "users_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([appUsers, auditUsers]));
+		const appFile = files.find((file) => file.schema === "app");
+		const auditFile = files.find((file) => file.schema === "audit");
+		if (appFile === undefined || auditFile === undefined) {
+			throw new Error("expected one file per schema");
+		}
+
+		// app.users is not itself imported from anywhere, so it keeps the
+		// bare name; audit.users collides with the name audit's own file
+		// imports, so it -- the local one -- is the one suffixed.
+		expect(appFile.source).toContain("export const users = table(");
+		expect(auditFile.source).toContain('import { users } from "./app.schema";');
+		expect(auditFile.source).toContain("export const users2 = table(");
+		expect(auditFile.source).not.toContain("export const users = table(");
+		expect(auditFile.source).toContain(
+			"references: { table: users, columns: [users.id] }",
+		);
+	});
+
+	it("declares a composite cross-schema cycle-closing FK against an unexported existingTable handle, with every one of its target columns (CI-G2-R1-16)", () => {
+		const appA: TableSnapshot = {
+			schema: "app",
+			name: "a",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "b_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "a_b_id_fkey",
+					columns: ["b_id"],
+					referencesTable: "billing.b",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "a_pkey",
+		};
+		const billingB: TableSnapshot = {
+			schema: "billing",
+			name: "b",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "a_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					// composite (spans two columns) -- CI-G2-R1-16: a handle is
+					// used here regardless of column count, same as the
+					// single-column edge on the other side of this cycle.
+					name: "b_a_id_fkey",
+					columns: ["a_id", "id"],
+					referencesTable: "app.a",
+					referencesColumns: ["id", "b_id"],
+				},
+			],
+			primaryKeyName: "b_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([appA, billingB]));
+		const appFile = files.find((file) => file.schema === "app");
+		const billingFile = files.find((file) => file.schema === "billing");
+		if (appFile === undefined || billingFile === undefined) {
+			throw new Error("expected one file per schema");
+		}
+
+		// no import of `a` from app.schema -- the handle carries the schema
+		// and table as string literals instead, so the cross-schema cycle
+		// import never actually happens (app -> billing is now the only
+		// direction, so there is no file cycle left to worry about at all).
+		expect(billingFile.source).not.toContain('from "./app.schema"');
+		expect(billingFile.source).toContain("existingTable");
+		expect(billingFile.source).toContain('existingTable("app", "a"');
+		expect(billingFile.source).not.toContain(".references(() =>");
+		expect(billingFile.source).toContain("// Closes a declaration-file cycle");
+		expect(billingFile.source).toContain(
+			"references: { table: appABAIdFkeyRef, columns: [appABAIdFkeyRef.id, appABAIdFkeyRef.b_id] }",
+		);
+
+		// app.a's own edge to billing.b is the schema graph's forward
+		// direction (not the back edge -- "app" sorts before "billing", so
+		// app -> billing is visited first), so it stays a real cross-file
+		// import regardless of its own shape being single-column/no-action
+		// (CI-G2-R1-18: only the back edge needs a handle).
+		expect(appFile.source).toContain('import { b } from "./billing.schema";');
+		expect(appFile.source).toContain(
+			"references: { table: b, columns: [b.id] }",
+		);
+		expect(appFile.source).not.toContain("existingTable");
+	});
+
+	it("picks the same back edge regardless of catalog row order (CI-G2-R1-18 condition 1: the same database import run twice must not flip which direction gets the handle)", () => {
+		const appA: TableSnapshot = {
+			schema: "app",
+			name: "a",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "b_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "a_b_id_fkey",
+					columns: ["b_id"],
+					referencesTable: "billing.b",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "a_pkey",
+		};
+		const billingB: TableSnapshot = {
+			schema: "billing",
+			name: "b",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "a_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "b_a_id_fkey",
+					columns: ["a_id"],
+					referencesTable: "app.a",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "b_pkey",
+		};
+
+		const forward = emitDeclarationFiles(resultFor([appA, billingB]));
+		const reversed = emitDeclarationFiles(resultFor([billingB, appA]));
+		expect(forward).toEqual(reversed);
+	});
+
+	/** Every `import { ... } from "./<schema>.schema";` line's own target schema, parsed straight out of the generated source -- a direct assertion on the declared invariant itself (cli-commands: "Declaration files never import each other in a cycle"), independent of whether any particular fixture happens to execute successfully. */
+	const importedSchemasFrom = (source: string): ReadonlyArray<string> =>
+		[...source.matchAll(/from "\.\/([^"]+)\.schema";/g)].map(
+			(match) => match[1] ?? "",
+		);
+
+	const hasImportCycle = (
+		files: ReadonlyArray<{ readonly schema: string; readonly source: string }>,
+	): boolean => {
+		const adjacency = new Map(
+			files.map(
+				(file) => [file.schema, importedSchemasFrom(file.source)] as const,
+			),
+		);
+		const visit = (
+			visited: ReadonlySet<string>,
+			node: string,
+		): ReadonlySet<string> => {
+			if (visited.has(node)) {
+				return visited;
+			}
+			const nextVisited = new Set([...visited, node]);
+			return (adjacency.get(node) ?? []).reduce(visit, nextVisited);
+		};
+		/** Reachable from `start` through at least one real edge -- never trivially "reachable from itself" in zero steps, or every acyclic graph would falsely report a cycle at every node. */
+		const reachesItself = (start: string): boolean =>
+			(adjacency.get(start) ?? []).reduce(visit, new Set<string>()).has(start);
+		return files.some((file) => reachesItself(file.schema));
+	};
+
+	it('never emits a set of files whose imports form a cycle (cli-commands: "Declaration files never import each other in a cycle")', () => {
+		const appA: TableSnapshot = {
+			schema: "app",
+			name: "a",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "b_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "a_b_id_fkey",
+					columns: ["b_id"],
+					referencesTable: "billing.b",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "a_pkey",
+		};
+		const billingB: TableSnapshot = {
+			schema: "billing",
+			name: "b",
+			columns: [
+				{
+					name: "id",
+					typeNode: { typeName: "uuid" },
+					notNull: true,
+					primaryKey: true,
+				},
+				{ name: "a_id", typeNode: { typeName: "uuid" }, notNull: true },
+			],
+			indexes: [],
+			foreignKeys: [
+				{
+					name: "b_a_id_fkey",
+					columns: ["a_id"],
+					referencesTable: "app.a",
+					referencesColumns: ["id"],
+				},
+			],
+			primaryKeyName: "b_pkey",
+		};
+
+		const files = emitDeclarationFiles(resultFor([appA, billingB]));
+		expect(hasImportCycle(files)).toBe(false);
+		// the assertion itself must be able to see a cycle when there is
+		// one, or it proves nothing -- a hand-built pair of mutually
+		// importing files is exactly that case.
+		expect(
+			hasImportCycle([
+				{ schema: "x", source: 'import { y } from "./y.schema";' },
+				{ schema: "y", source: 'import { x } from "./x.schema";' },
+			]),
+		).toBe(true);
 	});
 });

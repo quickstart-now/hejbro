@@ -110,13 +110,33 @@ Files: `packages/cli/src/declare-emit/*.ts` (new), tests
       engine symbol appearing there is itself a failure; declaration
       order `schema()` → `pgEnum()` (labels in catalog order) →
       `table()` in foreign-key topological order over every table the
-      run covers, a reference across schemas written as a cross-file
-      import (never a reference-only handle — that is for a cycle the
-      import cannot serve), a cycle written with the column-level
-      `.references(() => …)` thunk, and a cycle-closing key the thunk
-      cannot express (composite, or carrying an action) written against
-      an unexported `existingTable` handle with the constraint stated in
-      a comment above it; a fixed builder
+      run covers; cycles judged on the **file** graph (a schema-to-schema
+      edge exists where a foreign key crosses in that direction), never
+      on the table graph alone, because two schemas can import each
+      other with no table cycle at all; a depth-first walk of the schema
+      graph, ties by name, names the back edges, and **the foreign keys
+      crossing in a back edge's direction are declared against an
+      unexported `existingTable` handle**, whatever their columns and
+      actions, with the constraint stated in a comment above them — so
+      that file never imports the other one, the remaining import graph
+      is acyclic, and every other edge keeps a real cross-file import
+      with an immediate `extras` reference. Handles are confined to the
+      back edges rather than applied to every edge on a cycle because a
+      real import is what carries the reference into the type layer of
+      the file the repository now owns; a handle buys safety and costs
+      that. The
+      column-level `.references(() => …)` thunk is not an option here:
+      `dsl/table.ts`'s fold calls it once, synchronously, while `table()`
+      is being built, so on a module cycle it reads the same `undefined`
+      an immediate reference would, and inside one file it reads a
+      binding before its initialisation (measured three ways: a minimal
+      reproduction, a live cross-file load in both entry orders, and a
+      live in-file cycle that fails with `Cannot access 'x' before
+      initialization`). The emitter therefore writes no thunk at all; a
+      self-reference goes through the `extras` callback's own `t`, which
+      never touches module initialisation (measured green). The gap
+      between that doc comment and that behaviour is filed as #669 and
+      is not this change's to fix; a fixed builder
       chaining order, so the output is deterministic; `index(...)` and
       `check(...)` carrying their catalog names; and a header comment
       holding the loss report in full plus the sentence that this file

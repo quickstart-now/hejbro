@@ -14,7 +14,10 @@ produce — the DSL derives a column's SQL name from its key by
 snake_case — SHALL be omitted from the starter files and named in the
 loss report together with its consequence: the table is only partly
 declared, and `check` reports that column until it is declared by hand
-or renamed in the database. Each file SHALL open with a header carrying
+or renamed in the database. The starter files' imports SHALL never form
+a cycle: where they would, the foreign keys in one direction are
+declared against unexported reference-only handles. Each file SHALL
+open with a header carrying
 the loss report in full and the statement that the file is the
 repository's own from now on, and SHALL carry no clock- or
 machine-derived value, so importing the same database twice writes
@@ -22,13 +25,14 @@ byte-identical files. A `generate` against an empty snapshot after an
 `import` SHALL emit the DDL that creates what the database already has,
 which `baseline` then registers.
 
-#### Scenario: A cycle-closing foreign key the thunk cannot express
-- **WHEN** a foreign key closes a cycle between two schemas and carries
-  an action or spans several columns, which the column-level reference
-  thunk does not express
-- **THEN** the starter file declares it against a reference-only handle
-  that is not exported, so the file declares the foreign key without
-  declaring that table twice
+#### Scenario: Declaration files never import each other in a cycle
+- **WHEN** two schemas' files would reference each other, so their
+  imports would form a cycle
+- **THEN** the foreign keys in one of the two directions are declared
+  against reference-only handles that are not exported, whatever their
+  columns and actions, so the files' imports form no cycle, no table is
+  declared twice, and loading does not depend on which file the loader
+  reaches first
 
 #### Scenario: A second import writes the same bytes
 - **WHEN** the same database is imported twice, into two empty

@@ -104,13 +104,25 @@ let hostPort = "";
  * enum column, a by-default identity column, a stored generated column, a
  * serial-owned column, a self-referencing FK, a separate FK with `on
  * delete cascade`, a check constraint, a plain index, a partial unique
- * index, and a descending/nulls-first index column. Deliberately a single
- * schema (cross-schema/cycle wiring is already pinned at the pure-unit
- * level in `declare-emit-emit.test.ts`, which can assert the exact import
- * text a live catalog reading order never guarantees).
+ * index, and a descending/nulls-first index column -- plus two
+ * independent, differently-named cross-schema cycles (both single-column,
+ * no-action FKs on both sides -- exactly the shape that used to crash via
+ * `.references()`'s own eager fold, #669, regardless of which side the
+ * loader reached first, measured directly with a minimal jiti
+ * reproduction). CI-G2-R1-16's rule -- every crossing on a schema-file
+ * cycle is a handle, never an import -- makes load order irrelevant to
+ * either pair; before that rule, this fixture's own first pair
+ * (`declare_probe` <-> `declare_probe_other`) is exactly what crashed
+ * with `Cannot read properties of undefined (reading 'id')` (quoted in
+ * full in this piece's own history). The second pair (`rev_a`/`rev_z`)
+ * guards the same mechanism against a second, independently-named
+ * schema pair.
  */
 const FIXTURE_DDL = `
 	create schema declare_probe;
+	create schema declare_probe_other;
+	create schema rev_a;
+	create schema rev_z;
 
 	create type declare_probe.mood as enum ('happy', 'sad');
 
@@ -131,6 +143,32 @@ const FIXTURE_DDL = `
 	create index parents_name_idx on declare_probe.parents (name);
 	create unique index parents_active_name_idx on declare_probe.parents (name) where parent_id is null;
 	create index parents_id_desc_idx on declare_probe.parents (id desc nulls first);
+
+	-- pair 1: this exact shape (declare_probe.cycle_a <-> declare_probe_other.cycle_b)
+	-- is what crashed before CI-G2-R1-16's rule.
+	create table declare_probe_other.cycle_b (
+		id bigint generated always as identity primary key,
+		a_id bigint
+	);
+	create table declare_probe.cycle_a (
+		id bigint generated always as identity primary key,
+		b_id bigint not null references declare_probe_other.cycle_b (id)
+	);
+	alter table declare_probe_other.cycle_b
+		add constraint cycle_b_a_id_fkey foreign key (a_id) references declare_probe.cycle_a (id);
+
+	-- pair 2: a second, independently-named cycle (rev_a.item <-> rev_z.item),
+	-- guarding the same mechanism against a different schema-name pair.
+	create table rev_z.item (
+		id bigint generated always as identity primary key,
+		a_id bigint
+	);
+	create table rev_a.item (
+		id bigint generated always as identity primary key,
+		z_id bigint not null references rev_z.item (id)
+	);
+	alter table rev_z.item
+		add constraint item_a_id_fkey foreign key (a_id) references rev_a.item (id);
 `;
 
 beforeAll(async () => {
@@ -184,7 +222,7 @@ describe("declare-emit / 2.1 live witness", () => {
 		const driver = pgDriver(fixtureUrl());
 		const result = await inferFromCatalog({
 			session: driver,
-			schemas: ["declare_probe"],
+			schemas: ["declare_probe", "declare_probe_other", "rev_a", "rev_z"],
 			command: "import",
 		});
 		await driver.client.end();
@@ -227,7 +265,7 @@ describe("declare-emit / 2.1 live witness", () => {
 		const driverA = pgDriver(fixtureUrl());
 		const first = await inferFromCatalog({
 			session: driverA,
-			schemas: ["declare_probe"],
+			schemas: ["declare_probe", "declare_probe_other", "rev_a", "rev_z"],
 			command: "import",
 		});
 		await driverA.client.end();
@@ -235,7 +273,7 @@ describe("declare-emit / 2.1 live witness", () => {
 		const driverB = pgDriver(fixtureUrl());
 		const second = await inferFromCatalog({
 			session: driverB,
-			schemas: ["declare_probe"],
+			schemas: ["declare_probe", "declare_probe_other", "rev_a", "rev_z"],
 			command: "import",
 		});
 		await driverB.client.end();
