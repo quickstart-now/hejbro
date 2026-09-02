@@ -324,7 +324,7 @@ describe("two-repository witness (#602)", () => {
 	}, 120_000);
 
 	afterAll(() => {
-		execFileSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+		execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
 	});
 
 	let schemaRepo: string;

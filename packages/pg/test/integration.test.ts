@@ -449,7 +449,9 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 	afterAll(async () => {
 		await pool.current?.end();
 		if (containerStarted.current) {
-			execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
+			execFileSync("docker", ["rm", "-f", "-v", CONTAINER], {
+				stdio: "ignore",
+			});
 		}
 	});
 

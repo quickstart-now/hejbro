@@ -172,7 +172,9 @@ describe("the reporting query executed for real against postgres:17 (#474 3.3)",
 	afterAll(async () => {
 		await pool.current?.end();
 		if (containerStarted.current) {
-			execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
+			execFileSync("docker", ["rm", "-f", "-v", CONTAINER], {
+				stdio: "ignore",
+			});
 		}
 	});
 

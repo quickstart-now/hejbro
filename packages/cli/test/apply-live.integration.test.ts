@@ -299,7 +299,7 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 	}, 120_000);
 
 	afterAll(() => {
-		execFileSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+		execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
 	});
 
 	describe("8.1/8.2 the whole example chain", () => {

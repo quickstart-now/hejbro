@@ -216,7 +216,9 @@ describe("nileDriver + a real db() handle against Nile's official testing contai
 	afterAll(async () => {
 		await base.current?.client.end();
 		if (containerStarted.current) {
-			execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
+			execFileSync("docker", ["rm", "-f", "-v", CONTAINER], {
+				stdio: "ignore",
+			});
 		}
 	});
 

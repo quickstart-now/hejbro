@@ -225,7 +225,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => {
-	execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
+	execFileSync("docker", ["rm", "-f", "-v", CONTAINER], { stdio: "ignore" });
 });
 
 const chainUrl = (): string => hostUrl("postgres", "chain");

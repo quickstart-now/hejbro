@@ -333,7 +333,9 @@ describe("prepared-statement bench / 4.0 instrument sensitivity", () => {
 	afterAll(async () => {
 		await pool?.end();
 		if (containerStarted) {
-			execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
+			execFileSync("docker", ["rm", "-f", "-v", CONTAINER], {
+				stdio: "ignore",
+			});
 		}
 	});
 
@@ -452,7 +454,9 @@ describe("prepared-statement bench / measurement worker (spawned by 4.1, one ind
 	afterAll(async () => {
 		await pool?.end();
 		if (containerStarted) {
-			execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
+			execFileSync("docker", ["rm", "-f", "-v", CONTAINER], {
+				stdio: "ignore",
+			});
 		}
 	});
 
