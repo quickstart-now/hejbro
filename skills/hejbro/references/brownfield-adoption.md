@@ -233,11 +233,13 @@ file's table does. `import` breaks such a cycle itself, on one
 deterministic direction, using an unexported reference-only
 declaration for whichever kind of crossing runs that way: a handle
 (`existingTable`, above) for a foreign key, a local copy of the enum
-for an enum reference. "Checking a declaration against the real
-schema" above is still how you confirm the result (hand-edited or not)
-matches the database, and a `hejbro generate` against an empty
-snapshot right after `import` reproduces the database's own DDL, which
-`hejbro baseline` then registers exactly as step 2 describes.
+for an enum reference — so the starter files' imports form no cycle,
+and loading does not depend on which file the loader reaches first.
+"Checking a declaration against the real schema" above is still how
+you confirm the result (hand-edited or not) matches the database, and
+a `hejbro generate` against an empty snapshot right after `import`
+reproduces the database's own DDL, which `hejbro baseline` then
+registers exactly as step 2 describes.
 
 A database is also a valid *fallback* source for a vendored contract
 (`skills/hejbro/references/polyrepo.md`'s own subject) when the schema
