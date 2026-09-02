@@ -127,7 +127,11 @@ export const rankKinds = (
  * `previousNode`/`nextNode` is always non-null here — the cast below
  * narrows that guarantee rather than adding a runtime branch nothing
  * can ever take (a fan-out object's own key only ever exists because
- * some run once serialized it from a real table declaration).
+ * some run once serialized it from a real table declaration). This
+ * breaks the moment a second caller passes a `previousNode`/`nextNode`
+ * pair for a key it invented rather than one drawn from that same
+ * union — the compiler cannot catch that; only this comment can warn
+ * the next caller.
  */
 const authoritativeOwnerNode = (
 	kind: RegisteredObjectKind,
