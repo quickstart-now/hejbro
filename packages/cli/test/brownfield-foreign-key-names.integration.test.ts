@@ -11,8 +11,11 @@ import {
 
 /**
  * D106 R3-B3 (#693): the brownfield-adoption flow the skill documents
- * (`import` -> `generate` -> `baseline` -> `check`) against a database
- * hejbro did not itself create -- the one case the round-trip witness
+ * (`import`, then `baseline` -- never `generate` first, since `baseline`
+ * is by definition the *first* migration of an adopted database and
+ * refuses `baseline-not-first` if one already exists -- then `migrate`,
+ * then `check`) against a database hejbro did not itself create -- the
+ * one case the round-trip witness
  * (`declare-emit-roundtrip.integration.test.ts`) can never see, since
  * that witness's own database is created by hejbro in the first place,
  * so its foreign keys are already named the way hejbro's own
@@ -21,11 +24,8 @@ import {
  * (Postgres's own default naming, `<table>_<column>_fkey`), the exact
  * shape the reviewer's own repro measured.
  *
- * Not run under `pnpm test`/`pnpm --filter hejbro test:integration`'s
- * own default pass without Docker -- gated the same way every other
- * `*.integration.test.ts` in this package is; the ci team's own
- * operating rule for this round holds this file to "written, not run"
- * until a heavy-execution slot is open.
+ * Not run under `pnpm test`'s own default pass without Docker -- gated
+ * the same way every other `*.integration.test.ts` in this package is.
  */
 const IMAGE = process.env.HEJBRO_PG_IMAGE ?? "postgres:17-alpine";
 const CONTAINER = `hejbro-cli-brownfield-fk-${process.pid}`;
@@ -169,7 +169,7 @@ afterAll(() => {
 const fixtureUrl = (): string =>
 	`postgres://postgres@127.0.0.1:${hostPort}/${DATABASE}`;
 
-describe("brownfield adoption / D106 R3-B3: a foreign key's own catalog name survives import -> generate -> baseline -> check", () => {
+describe("brownfield adoption / D106 R3-B3: a foreign key's own catalog name survives import -> baseline -> migrate -> check", () => {
 	it("check reports the foreign key present, not missing, after the documented adoption flow", async () => {
 		const cwd = await createCliFixtureDir();
 		try {
@@ -199,9 +199,11 @@ describe("brownfield adoption / D106 R3-B3: a foreign key's own catalog name sur
 			);
 			expect(schemaSource).toContain('name: "comments_post_id_fkey"');
 
-			const generateResult = await runCli(cwd, ["generate"]);
-			expect(generateResult.exitCode).toBe(0);
-
+			// The documented adoption flow (brownfield-adoption.md) runs
+			// `baseline` alone here, never `generate` first -- `baseline` is
+			// by definition the *first* migration of an adopted database
+			// (it refuses a second run, `baseline-not-first`), and a `generate`
+			// run beforehand would already have written one.
 			const baselineResult = await runCli(cwd, ["baseline"]);
 			expect(baselineResult.exitCode).toBe(0);
 
