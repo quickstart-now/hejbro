@@ -72,10 +72,7 @@ export const excludeExisting = (
 	readonly previousTables: ReadonlyMap<string, TableSnapshot>;
 	readonly nextTables: ReadonlyMap<string, TableSnapshot>;
 } => {
-	const identities = new Set([
-		...previousTables.keys(),
-		...nextTables.keys(),
-	]);
+	const identities = new Set([...previousTables.keys(), ...nextTables.keys()]);
 	const existingIdentities = new Set(
 		Array.from(identities).filter((identity) =>
 			isExistingOnEitherSide(previousTables, nextTables, identity),
