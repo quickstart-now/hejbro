@@ -1302,4 +1302,53 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		expect(secondResult.sql).toContain('drop table "e3"."widgets"');
 		expect(secondResult.sql.toLowerCase()).not.toContain("gadgets");
 	});
+
+	// D106 R3, R3-B2: repros A-D above all keep a table existing (or
+	// managed) on *both* sides of the run they measure -- `excludeExisting`
+	// filtered `previousTables`/`nextTables` independently, so those never
+	// reached the one case a filter run per-map cannot see: a table
+	// managed on one side and existing on the other (a handover or an
+	// adoption), in a run that *also* adds or drops a different table in
+	// that same schema. Two reproductions replay the evaluator's own α/β
+	// verbatim.
+
+	it("a handover in a run that also adds an unrelated managed table in the same schema is not an ambiguous rename (D106 R3, R3-B2 repro α)", () => {
+		const s2 = schema("s2");
+		const widgets = table(s2, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [s2, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const handedOver = existingTable("s2", "widgets", { id: uuid() });
+		const gizmos = table(s2, "gizmos", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [s2, getTableMeta(handedOver), gizmos],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain('create table "s2"."gizmos"');
+		expect(secondResult.sql.toLowerCase()).not.toContain("widgets");
+	});
+
+	it("an adoption in a run that also drops an unrelated managed table in the same schema is not an ambiguous rename (D106 R3, R3-B2 repro β)", () => {
+		const s4 = schema("s4");
+		const legacy = existingTable("s4", "legacy", { id: uuid() });
+		const old = table(s4, "old", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [s4, getTableMeta(legacy), old],
+			previousSnapshot: emptySnapshot,
+		});
+		const adopted = table(s4, "legacy", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [s4, adopted],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain('drop table "s4"."old"');
+		// The adoption itself never renames a managed declaration onto
+		// `legacy`'s identity -- no statement issues `alter table ...
+		// rename to "legacy"`, the collision R2-B1's own repro D named,
+		// reached through the adoption door instead of the handover one.
+		expect(secondResult.sql).not.toContain('rename to "legacy"');
+	});
 });
