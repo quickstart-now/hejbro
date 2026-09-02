@@ -172,6 +172,14 @@ line SHALL NOT collapse them into one file.
   names both, the exit code is zero — and `hejbro verify` run afterwards
   passes, as does a later run that does emit statements
 
+#### Scenario: A changed existing declaration is named and anchored like any other
+- **WHEN** an `existingTable()` declaration's own columns change — a
+  column added, renamed or retyped — and `hejbro generate` runs
+- **THEN** the run does not fail, a migration carrying no statements is
+  written whose name says what changed about the declaration, the
+  snapshot records the new columns, and `hejbro verify` passes
+  afterwards
+
 #### Scenario: The export is written by the same run
 - **WHEN** generation runs with the export enabled and finds a
   difference
