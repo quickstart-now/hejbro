@@ -25,6 +25,10 @@ const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	nextvalDefaults: [],
 	foreignKeyNameApproximations: [],
 	undeclarableNameColumns: [],
+	omittedSchemas: [],
+	omittedTables: [],
+	omittedIndexes: [],
+	omittedChecks: [],
 });
 
 describe("buildLossReport / 1.7", () => {
@@ -238,6 +242,155 @@ describe("buildLossReport / 1.7", () => {
 		);
 		expect(approximationLines[0]).toContain("a_key");
 		expect(approximationLines[1]).toContain("z_key");
+	});
+
+	// D106 R4-B1: a table, schema, index or check whose catalog name is not
+	// a valid hejbro SQL identifier is omitted, never aborts the reading --
+	// named here with its identity and the consequence, mirroring the
+	// undeclarable-name-column pair above.
+	it("import: names an omitted schema and says check will not list its tables either, since nothing in it is declared", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedSchemas: [{ sqlName: "App" }],
+		});
+
+		const line = report.find((entry) => entry.includes('schema "App"'));
+		expect(line).toBeDefined();
+		expect(line).toContain("not a valid hejbro SQL identifier");
+		expect(line).toContain("are not inferred either");
+		expect(line).toContain("will not list them");
+	});
+
+	it("pull: names an omitted schema with its own contract-facing consequence", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedSchemas: [{ sqlName: "App" }],
+		});
+
+		const line = report.find((entry) => entry.includes('schema "App"'));
+		expect(line).toBeDefined();
+		expect(line).toContain("can be carried in the contract");
+		expect(line).not.toContain("left undeclared");
+	});
+
+	it("import: names an omitted table whose schema still has another declared table, and says check keeps listing it as unmanaged", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedTables: [
+				{ schema: "app", sqlName: "Widgets", stillReportedInInventory: true },
+			],
+		});
+
+		const line = report.find((entry) => entry.includes('table "app.Widgets"'));
+		expect(line).toBeDefined();
+		expect(line).toContain("not a valid hejbro SQL identifier");
+		expect(line).toContain("left undeclared");
+		expect(line).toContain("unmanaged-table inventory");
+	});
+
+	// D106 R4-B3/#707: the report's own wording must not claim an
+	// ongoing signal that doesn't exist -- when the omitted table was
+	// the only thing its schema would have declared, `check`'s own
+	// inventory never scans that schema at all (`declaredSchemaNames`
+	// needs another declared object to anchor on), so the line must say
+	// so instead of repeating the "check keeps listing it" claim above.
+	it("import: names an omitted table whose schema has no other declaration, and does NOT claim check keeps listing it", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedTables: [
+				{ schema: "app", sqlName: "Widgets", stillReportedInInventory: false },
+			],
+		});
+
+		const line = report.find((entry) => entry.includes('table "app.Widgets"'));
+		expect(line).toBeDefined();
+		expect(line).not.toContain("unmanaged-table inventory");
+		expect(line).toContain("only thing that schema would have declared");
+	});
+
+	it("pull: names an omitted table with its own contract-facing consequence", () => {
+		const report = buildLossReport({
+			...emptyFacts("pull"),
+			omittedTables: [
+				{ schema: "app", sqlName: "Widgets", stillReportedInInventory: true },
+			],
+		});
+
+		const line = report.find((entry) => entry.includes('table "app.Widgets"'));
+		expect(line).toBeDefined();
+		expect(line).toContain("cannot be carried in the contract");
+		expect(line).not.toContain("left undeclared");
+	});
+
+	it("names an omitted index, its table, and says hejbro will not mention it again -- the same line for both commands, since a contract never carries indexes", () => {
+		const facts = {
+			omittedIndexes: [
+				{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
+			],
+		};
+		const importLine = buildLossReport({
+			...emptyFacts("import"),
+			...facts,
+		}).find((entry) => entry.includes("IX_Widgets"));
+		const pullLine = buildLossReport({ ...emptyFacts("pull"), ...facts }).find(
+			(entry) => entry.includes("IX_Widgets"),
+		);
+		expect(importLine).toBeDefined();
+		expect(importLine).toBe(pullLine);
+		expect(importLine).toContain('index "app.widgets.IX_Widgets"');
+		expect(importLine).toContain("hejbro will not mention it again");
+	});
+
+	it("names an omitted check constraint, its table, and says hejbro will not mention it again", () => {
+		const report = buildLossReport({
+			...emptyFacts("import"),
+			omittedChecks: [
+				{ schema: "app", table: "widgets", sqlName: "CK_Widgets" },
+			],
+		});
+
+		const line = report.find((entry) => entry.includes("CK_Widgets"));
+		expect(line).toBeDefined();
+		expect(line).toContain('check constraint "app.widgets.CK_Widgets"');
+		expect(line).toContain("hejbro will not mention it again");
+	});
+
+	// D106 R4-B3: the three "no ongoing check signal" wordings must be
+	// distinct sentences, one per fact this round actually measured
+	// (`check()` has no derived-name path; a whole omitted schema has
+	// nothing left to anchor an inventory scan on; an omitted index or
+	// check is never scanned for at all) -- never a single generic
+	// "check will not report this" line reused three times.
+	it("uses three distinct consequence sentences for a schema, an unanchored table, and an index/check omission -- never one generic line", () => {
+		const schemaLine = buildLossReport({
+			...emptyFacts("import"),
+			omittedSchemas: [{ sqlName: "App" }],
+		}).find((entry) => entry.includes('schema "App"'));
+		const unanchoredTableLine = buildLossReport({
+			...emptyFacts("import"),
+			omittedTables: [
+				{ schema: "app", sqlName: "Widgets", stillReportedInInventory: false },
+			],
+		}).find((entry) => entry.includes('table "app.Widgets"'));
+		const indexLine = buildLossReport({
+			...emptyFacts("import"),
+			omittedIndexes: [
+				{ schema: "app", table: "widgets", sqlName: "IX_Widgets" },
+			],
+		}).find((entry) => entry.includes("IX_Widgets"));
+
+		expect(schemaLine).toContain("will not list them");
+		expect(unanchoredTableLine).toContain(
+			"only thing that schema would have declared",
+		);
+		expect(indexLine).toContain("hejbro will not mention it again");
+
+		const consequenceSentences = new Set([
+			schemaLine,
+			unanchoredTableLine,
+			indexLine,
+		]);
+		expect(consequenceSentences.size).toBe(3);
 	});
 });
 

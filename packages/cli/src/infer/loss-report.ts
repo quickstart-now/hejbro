@@ -108,6 +108,47 @@ export type UndeclarableNameColumn = {
 	readonly sqlName: string;
 };
 
+/**
+ * A schema whose catalog name is not a valid hejbro SQL identifier
+ * (D106 R4-B1) -- omitted along with every table, enum and sequence it
+ * holds, since a declaration's schema identity is that name itself,
+ * with no separate key to declare it under the way a column has.
+ */
+export type OmittedSchema = {
+	readonly sqlName: string;
+};
+
+/**
+ * A table whose catalog name is not a valid hejbro SQL identifier
+ * (D106 R4-B1) -- omitted along with everything it holds (columns,
+ * checks, indexes, foreign keys), for the same reason a schema is.
+ * `stillReportedInInventory` is `true` when its own schema still holds
+ * another declared table or enum -- `check`'s own inventory (#707)
+ * keeps naming this table as unmanaged on every run in that case;
+ * `false` when the omitted table was the only thing that schema would
+ * have declared, the same "nothing declared here" gap the schema-level
+ * omission line already states directly.
+ */
+export type OmittedTable = {
+	readonly schema: string;
+	readonly sqlName: string;
+	readonly stillReportedInInventory: boolean;
+};
+
+/** An index whose catalog name is not a valid hejbro SQL identifier (D106 R4-B1) -- costs that index alone; the table and its other objects are still declared. */
+export type OmittedIndex = {
+	readonly schema: string;
+	readonly table: string;
+	readonly sqlName: string;
+};
+
+/** A check constraint whose catalog name is not a valid hejbro SQL identifier (D106 R4-B1) -- costs that check alone; the table and its other objects are still declared. */
+export type OmittedCheck = {
+	readonly schema: string;
+	readonly table: string;
+	readonly sqlName: string;
+};
+
 export type LossReportFacts = {
 	readonly command: "import" | "pull";
 	readonly roleNames: ReadonlyArray<string>;
@@ -121,6 +162,10 @@ export type LossReportFacts = {
 	readonly nextvalDefaults: ReadonlyArray<NextvalDefaultApproximation>;
 	readonly foreignKeyNameApproximations: ReadonlyArray<ForeignKeyNameApproximation>;
 	readonly undeclarableNameColumns: ReadonlyArray<UndeclarableNameColumn>;
+	readonly omittedSchemas: ReadonlyArray<OmittedSchema>;
+	readonly omittedTables: ReadonlyArray<OmittedTable>;
+	readonly omittedIndexes: ReadonlyArray<OmittedIndex>;
+	readonly omittedChecks: ReadonlyArray<OmittedCheck>;
 };
 
 const guessedLine = (
@@ -251,6 +296,109 @@ const undeclarableNameLines = (
 	return ordered.map(undeclarableNameLineForImport);
 };
 
+/**
+ * import's own consequence: no declaration file can name a schema
+ * whose own identifier hejbro cannot express, so every table, enum and
+ * sequence it holds goes with it -- and unlike an omitted table under
+ * an otherwise-declared schema (`check`'s own inventory still lists
+ * that one, see {@link omittedTableLineForImport}), a whole omitted
+ * schema has no declared sibling left to anchor an inventory scan on
+ * (#707): nothing in it is declared, so `check` never lists it either.
+ */
+const omittedSchemaLineForImport = (schema: OmittedSchema): string =>
+	`Omitted: schema "${schema.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Its tables, enums and sequences are not inferred either, and \`check\` will not list them, since nothing in that schema is declared. Next: rename the schema in the database, then re-run \`hejbro import\`.`;
+
+/** pull's own consequence: a table under an unexpressible schema can reach neither the snapshot nor the contract. */
+const omittedSchemaLineForPull = (schema: OmittedSchema): string =>
+	`Omitted: schema "${schema.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so nothing it holds (tables, enums, sequences) can be carried in the contract. Rename the schema in the database, then link the schema repository.`;
+
+const omittedSchemaLines = (
+	schemas: ReadonlyArray<OmittedSchema>,
+	command: LossReportFacts["command"],
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(schemas, (schema) => schema.sqlName);
+	if (command === "pull") {
+		return ordered.map(omittedSchemaLineForPull);
+	}
+	return ordered.map(omittedSchemaLineForImport);
+};
+
+/**
+ * import's own consequence: the table's own identifier is what a
+ * declaration would need to name it by, so everything it holds
+ * (columns, checks, indexes, foreign keys) goes with it. Unlike an
+ * omitted index or check (which `check` never mentions again, see
+ * {@link omittedIndexLine}), the table itself keeps surfacing: its own
+ * schema is still declared (by its other, expressible tables), so
+ * `check`'s own inventory (existence-only, informational, never a
+ * failing check) keeps listing it as unmanaged on every run (#707).
+ */
+const omittedTableConsequenceForImport = (
+	stillReportedInInventory: boolean,
+): string => {
+	if (stillReportedInInventory) {
+		return "`check` keeps listing the table itself in its unmanaged-table inventory (informational, never a failing check) until it is renamed in the database.";
+	}
+	return "the omitted table was the only thing that schema would have declared, so nothing keeps naming it after this run's own report -- rename it in the database, or declare its schema's other objects so `check`'s inventory has something to anchor on.";
+};
+
+const omittedTableLineForImport = (table: OmittedTable): string =>
+	`Omitted: table "${table.schema}.${table.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it. Everything it holds (columns, checks, indexes and foreign keys) is left undeclared, and ${omittedTableConsequenceForImport(table.stillReportedInInventory)}`;
+
+/** pull's own consequence, mirroring `undeclarableNameLineForPull`'s own reasoning one level up: the whole table, not one column, cannot reach the contract. */
+const omittedTableLineForPull = (table: OmittedTable): string =>
+	`Omitted: table "${table.schema}.${table.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so it cannot be carried in the contract, with everything it holds. Rename the table in the database, then link the schema repository.`;
+
+const omittedTableLines = (
+	tables: ReadonlyArray<OmittedTable>,
+	command: LossReportFacts["command"],
+): ReadonlyArray<string> => {
+	const ordered = sortedBy(
+		tables,
+		(table) => `${table.schema}.${table.sqlName}`,
+	);
+	if (command === "pull") {
+		return ordered.map(omittedTableLineForPull);
+	}
+	return ordered.map(omittedTableLineForImport);
+};
+
+/**
+ * An index's own name is compared by `check`, so declaring it under any
+ * other name than the catalog's would leave `check` reporting the
+ * declared (wrong) name as missing and the catalog's own name as
+ * unmanaged, forever -- the same drift the round-3 foreign-key fix
+ * exists to prevent, not reproduce. Omission costs only this index; a
+ * vendored contract never carries indexes at all (`contract/emit.ts`),
+ * so the two commands share one line. Unlike an omitted table (which
+ * `check`'s own inventory keeps naming, see
+ * {@link omittedTableConsequenceForImport}), nothing in `check` scans
+ * for an index or check no declaration names (#707) -- this run's own
+ * report is the only place this omission is ever said out loud.
+ */
+const omittedIndexLine = (index: OmittedIndex): string =>
+	`Omitted: index "${index.schema}.${index.table}.${index.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. hejbro will not mention it again -- \`check\` compares only what is declared, so declare it by hand or rename it in the database.`;
+
+const omittedIndexLines = (
+	indexes: ReadonlyArray<OmittedIndex>,
+): ReadonlyArray<string> =>
+	sortedBy(
+		indexes,
+		(index) => `${index.schema}.${index.table}.${index.sqlName}`,
+	).map(omittedIndexLine);
+
+/** A check constraint's own name is compared by `check` the same way an index's is (see {@link omittedIndexLine}) -- omission costs only this check, and a vendored contract never carries checks either; nothing in `check` scans for one no declaration names, so this run's own report is the only place this omission is ever said out loud (#707). */
+const omittedCheckLine = (check: OmittedCheck): string =>
+	`Omitted: check constraint "${check.schema}.${check.table}.${check.sqlName}" -- its catalog name is not a valid hejbro SQL identifier, so no declaration can carry it under the same name \`check\` would compare it by. hejbro will not mention it again -- \`check\` compares only what is declared, so declare it by hand or rename it in the database.`;
+
+const omittedCheckLines = (
+	checks: ReadonlyArray<OmittedCheck>,
+): ReadonlyArray<string> =>
+	sortedBy(
+		checks,
+		(check) => `${check.schema}.${check.table}.${check.sqlName}`,
+	).map(omittedCheckLine);
+
 const wayOutLine = (command: LossReportFacts["command"]): string => {
 	if (command === "pull") {
 		return "The loss ends when you link the schema repository.";
@@ -278,6 +426,10 @@ export const buildLossReport = (
 		facts.nextvalDefaults,
 		facts.foreignKeyNameApproximations,
 	),
+	...omittedSchemaLines(facts.omittedSchemas, facts.command),
+	...omittedTableLines(facts.omittedTables, facts.command),
+	...omittedIndexLines(facts.omittedIndexes),
+	...omittedCheckLines(facts.omittedChecks),
 	...undeclarableNameLines(facts.undeclarableNameColumns, facts.command),
 	wayOutLine(facts.command),
 ];

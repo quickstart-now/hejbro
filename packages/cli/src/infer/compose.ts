@@ -13,7 +13,11 @@ import type { InferenceCatalog } from "./catalog";
 import { readInferenceCatalog } from "./catalog";
 import type { CatalogDescription } from "./description";
 import { describeCatalog } from "./description";
-import type { UndeclarableNameColumn } from "./loss-report";
+import type {
+	OmittedSchema,
+	OmittedTable,
+	UndeclarableNameColumn,
+} from "./loss-report";
 import {
 	buildLossReport,
 	detectForeignKeyNameApproximations,
@@ -27,7 +31,7 @@ import {
 	standaloneSequences,
 } from "./rest";
 import type { InferredTableFacts } from "./table";
-import { inferTable } from "./table";
+import { inferTable, isExpressibleName } from "./table";
 
 export type InferSourceCommand = "import" | "pull";
 
@@ -141,6 +145,80 @@ const undeclarableNameColumnsFor = (
 			})),
 	);
 
+export type SchemaPartition = {
+	/** Every schema row whose own name round-trips through the DSL's D36 rule -- safe to pass to `declareSchema`. */
+	readonly expressibleNames: ReadonlyArray<string>;
+	readonly omittedSchemas: ReadonlyArray<OmittedSchema>;
+};
+
+/**
+ * D106 R4-B1: splits the requested schemas into the ones `declareSchema`
+ * can carry and the ones it would throw `invalid-sql-name` on -- read
+ * before any `declareSchema` call, not caught around one, so a
+ * misnamed schema never reaches it and the reading never aborts.
+ * Everything the omitted schema holds (tables, enums, sequences) is
+ * excluded downstream by narrowing the catalog to `expressibleNames`
+ * a second time, the same `filterCatalogToSchemas`/
+ * `filterInferenceCatalogToSchemas` helpers already use for the
+ * `--schema` flag itself.
+ */
+export const partitionSchemas = (catalog: Catalog): SchemaPartition => ({
+	expressibleNames: catalog.schemas
+		.filter((row) => isExpressibleName(row.schema))
+		.map((row) => row.schema),
+	omittedSchemas: catalog.schemas
+		.filter((row) => !isExpressibleName(row.schema))
+		.map((row) => ({ sqlName: row.schema })),
+});
+
+/** A table's identity alone, before `withInventorySignal` below can say whether `check` will keep naming it (that needs the final declared schema/enum set, not yet known at partition time). */
+export type TableNameOmission = {
+	readonly schema: string;
+	readonly sqlName: string;
+};
+
+export type TablePartition = {
+	readonly tables: ReadonlyArray<InferredTableFacts>;
+	readonly omittedTables: ReadonlyArray<TableNameOmission>;
+};
+
+/**
+ * D106 R4-B1: a table whose own catalog name `table()` cannot express
+ * takes everything it holds with it (columns, checks, indexes, foreign
+ * keys) -- filtered here, before `inferTable` ever calls `table()`, for
+ * the same reason {@link partitionSchemas} filters ahead of
+ * `declareSchema`.
+ */
+export const partitionTables = (
+	tables: ReadonlyArray<InferredTableFacts>,
+): TablePartition => ({
+	tables: tables.filter((table) => isExpressibleName(table.tableName)),
+	omittedTables: tables
+		.filter((table) => !isExpressibleName(table.tableName))
+		.map((table) => ({
+			schema: table.schema.schemaName,
+			sqlName: table.tableName,
+		})),
+});
+
+/**
+ * D106 R4-B1/#707: whether `check`'s own inventory will keep naming an
+ * omitted table as unmanaged depends on whether its own schema still
+ * holds another declared table or enum (`check/inventory.ts`'s own
+ * `declaredSchemaNames` rule, mirrored here rather than imported -- that
+ * module reads a built `Snapshot`, not the pre-snapshot facts this
+ * reading has at this point). `false` when the omitted table was the
+ * only thing its schema would have declared.
+ */
+export const withInventorySignal = (
+	omittedTables: ReadonlyArray<TableNameOmission>,
+	schemasWithOtherDeclarations: ReadonlySet<string>,
+): ReadonlyArray<OmittedTable> =>
+	omittedTables.map((table) => ({
+		...table,
+		stillReportedInInventory: schemasWithOtherDeclarations.has(table.schema),
+	}));
+
 /**
  * The single entry point over every `infer/` part (CI-G1-R1-14): one
  * session and a required schema list in, `{ snapshot, description,
@@ -156,15 +234,30 @@ export const inferFromCatalog = async (
 		readCatalog(options.session),
 		readInferenceCatalog(options.session),
 	]);
-	const catalog = filterCatalogToSchemas(rawCatalog, options.schemas);
-	const inferenceCatalog = filterInferenceCatalogToSchemas(
+	const requestedCatalog = filterCatalogToSchemas(rawCatalog, options.schemas);
+	const requestedInferenceCatalog = filterInferenceCatalogToSchemas(
 		rawInferenceCatalog,
 		options.schemas,
 	);
 
+	// D106 R4-B1: a schema whose own name `declareSchema` cannot express
+	// (and everything it holds) is excluded before any declaration is
+	// built, by narrowing the requested catalog a second time -- the same
+	// helpers the `--schema` flag itself already uses.
+	const schemaPartition = partitionSchemas(requestedCatalog);
+	const catalog = filterCatalogToSchemas(
+		requestedCatalog,
+		schemaPartition.expressibleNames,
+	);
+	const inferenceCatalog = filterInferenceCatalogToSchemas(
+		requestedInferenceCatalog,
+		schemaPartition.expressibleNames,
+	);
+
 	// One SchemaDeclaration instance per name, shared by every reference to
 	// it (a table's own `.schema`, an enum's own `.schema`) and declared
-	// exactly once in the array generateMigration reads.
+	// exactly once in the array generateMigration reads. Every name here
+	// already passed `partitionSchemas`, so `declareSchema` never throws.
 	const schemasByName = new Map<string, SchemaDeclaration>(
 		catalog.schemas.map((row) => [row.schema, declareSchema(row.schema)]),
 	);
@@ -181,11 +274,26 @@ export const inferFromCatalog = async (
 		inferenceCatalog.enumLabels,
 		schemaFor,
 	);
-	const mergedTables = mergeTableFacts(
+	const allMergedTables = mergeTableFacts(
 		catalog,
 		inferenceCatalog,
 		enums.byIdentity,
 		schemaFor,
+	);
+	const tablePartition = partitionTables(allMergedTables);
+	const mergedTables = tablePartition.tables;
+	// #707: a schema an omitted table's own report line names as still
+	// scanned by `check`'s inventory needs another surviving declared
+	// table or enum in that same schema -- computed from the survivors,
+	// not from `allMergedTables`, since the omitted table itself must
+	// never count as its own "other" declaration.
+	const schemasWithOtherDeclarations = new Set([
+		...mergedTables.map((table) => table.schema.schemaName),
+		...enums.declarations.map((decl) => decl.schema.schemaName),
+	]);
+	const omittedTables = withInventorySignal(
+		tablePartition.omittedTables,
+		schemasWithOtherDeclarations,
 	);
 
 	const snapshotTables = tablesExcludingUndeclarableNames(mergedTables);
@@ -213,6 +321,10 @@ export const inferFromCatalog = async (
 		foreignKeyNameApproximations:
 			detectForeignKeyNameApproximations(mergedTables),
 		undeclarableNameColumns: undeclarableNameColumnsFor(mergedTables),
+		omittedSchemas: schemaPartition.omittedSchemas,
+		omittedTables,
+		omittedIndexes: built.flatMap((result) => result.omittedIndexes),
+		omittedChecks: built.flatMap((result) => result.omittedChecks),
 	});
 
 	return {
