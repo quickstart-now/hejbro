@@ -4,6 +4,11 @@ import { throwHejbroError } from "@hejbro/core";
 import { defineCommand } from "citty";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
+import {
+	enumsInSnapshot,
+	sequencesInSnapshot,
+	tablesInSnapshot,
+} from "../contract/read-snapshot";
 import type { DeclareEmitFile } from "../declare-emit/emit";
 import { emitDeclarationFiles } from "../declare-emit/emit";
 import { fromHejbroError, renderDiagnostics } from "../diagnostics";
@@ -83,19 +88,49 @@ const throwMissingOut = (): never =>
 		'hejbro import needs "--out" to name the directory it writes starter declaration files into, and it was not given. Next: pass --out <directory>, then rerun `hejbro import`.',
 	);
 
-const INFERRED_OBJECT_PREFIXES = ["table:", "enum:", "sequence:"];
-
-/** Whether `result` infers anything at all besides the schemas themselves -- a run over schemas that hold no table, enum, or sequence would otherwise write files declaring only an empty `schema()`. */
-const hasInferredObjects = (result: InferCatalogResult): boolean =>
-	Object.keys(result.snapshot.objects).some((key) =>
-		INFERRED_OBJECT_PREFIXES.some((prefix) => key.startsWith(prefix)),
-	);
+/**
+ * The set of schema names carrying at least one inferred table, enum or
+ * sequence -- read from each object's own `.schema` field (`tablesInSnapshot`/
+ * `enumsInSnapshot`/`sequencesInSnapshot`, `contract/read-snapshot.ts`),
+ * never by splitting a snapshot key string: a schema name can itself
+ * contain a `.` (D106 N6's own fixture, `"a.b"`), so `"table:a.b.widgets"`
+ * cannot be split back into schema/table reliably by punctuation alone.
+ */
+const schemasWithInferredObjects = (
+	result: InferCatalogResult,
+): ReadonlySet<string> =>
+	new Set([
+		...tablesInSnapshot(result.snapshot).map((t) => t.schema),
+		...enumsInSnapshot(result.snapshot).map((e) => e.schema),
+		...sequencesInSnapshot(result.snapshot).map((s) => s.schema),
+	]);
 
 const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
 	throwHejbroError(
 		"import-nothing-to-infer",
 		`hejbro import found no table, enum, or sequence to infer in schema(s) ${schemas.join(", ")}. Next: confirm the schema name(s) are correct and that the database holds objects in them, then rerun \`hejbro import\`.`,
 	);
+
+/**
+ * D106 N7: when *some* (not all) named schemas hold nothing, `import`
+ * used to write files for the ones that do and say nothing at all about
+ * the ones that don't -- neither a file nor a diagnostic named the
+ * gap. One line per empty schema, printed alongside the real loss
+ * report; the all-empty case is unchanged (`throwNothingToInfer` above
+ * still refuses outright, before any file is written).
+ */
+const emptySchemaLines = (
+	result: InferCatalogResult,
+	schemas: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+	const withObjects = schemasWithInferredObjects(result);
+	return schemas
+		.filter((schemaName) => !withObjects.has(schemaName))
+		.map(
+			(schemaName) =>
+				`Not inferred: nothing to infer in schema "${schemaName}".`,
+		);
+};
 
 const targetPath = (out: string, file: DeclareEmitFile): string =>
 	join(out, `${file.fileBaseName}.schema.ts`);
@@ -246,7 +281,7 @@ export const runImport = async (
 					schemas,
 					command: "import",
 				});
-				if (!hasInferredObjects(result)) {
+				if (schemasWithInferredObjects(result).size === 0) {
 					throwNothingToInfer(schemas);
 				}
 				const files = emitDeclarationFiles(result);
@@ -255,7 +290,11 @@ export const runImport = async (
 				const created = writeFiles(outDir, out, files);
 				return {
 					exitCode: 0,
-					stdout: [...created, ...result.lossReport],
+					stdout: [
+						...created,
+						...result.lossReport,
+						...emptySchemaLines(result, schemas),
+					],
 					stderr: null,
 				};
 			},

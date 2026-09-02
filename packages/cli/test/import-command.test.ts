@@ -322,4 +322,34 @@ describe("runImport / 3.1", () => {
 		expect(outcome.stderr).toContain("empty_schema");
 		expect(existsSync(join(cwd, "src/schema"))).toBe(false);
 	});
+
+	/**
+	 * D106 N7: when only *some* named schemas hold nothing, `import` wrote
+	 * a file for the ones that did and said nothing at all about the ones
+	 * that didn't -- no file, no diagnostic, no loss-report line. Only the
+	 * all-empty case (above) was ever announced.
+	 */
+	it("writes a file for the schema that has something and names the one that doesn't, rather than staying silent about it", async () => {
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"app",
+				"--schema",
+				"billing",
+				"--out",
+				"src/schema",
+			],
+			depsFor(resultFor([table("app", "widgets", [idColumn])])),
+		);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(existsSync(join(cwd, "src/schema/app.schema.ts"))).toBe(true);
+		expect(existsSync(join(cwd, "src/schema/billing.schema.ts"))).toBe(false);
+		expect(outcome.stdout).toContain(
+			'Not inferred: nothing to infer in schema "billing".',
+		);
+	});
 });
