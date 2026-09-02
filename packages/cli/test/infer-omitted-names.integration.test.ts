@@ -220,12 +220,22 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 				resolve(cwd, "src/schema/app.schema.ts"),
 				"utf8",
 			);
-			expect(schemaSource).toContain("widgets");
-			expect(schemaSource).toContain("widgets_name_not_blank");
-			expect(schemaSource).toContain("widgets_name_idx");
-			expect(schemaSource).not.toContain('Widgets"');
-			expect(schemaSource).not.toContain("CK_Widgets");
-			expect(schemaSource).not.toContain("IX_Widgets");
+			// The header's own loss-report prose legitimately names every
+			// omitted object (asserted on `first.stdout` above, and the file
+			// carries the same report in its header, R2-N3) -- what must be
+			// absent is a *declared* object of that name, so this checks only
+			// the declaration code itself, not the whole file (a whole-file
+			// substring check would false-fail on the header's own prose).
+			const declarationCode = schemaSource.slice(
+				schemaSource.indexOf("import {"),
+			);
+			expect(schemaSource).toContain('Omitted: table "app.Widgets"');
+			expect(declarationCode).toContain("widgets");
+			expect(declarationCode).toContain("widgets_name_not_blank");
+			expect(declarationCode).toContain("widgets_name_idx");
+			expect(declarationCode).not.toContain('"Widgets"');
+			expect(declarationCode).not.toContain("CK_Widgets");
+			expect(declarationCode).not.toContain("IX_Widgets");
 
 			expect(
 				execFileSync("ls", [resolve(cwd, "src/schema")], {
