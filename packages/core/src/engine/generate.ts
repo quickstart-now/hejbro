@@ -273,6 +273,16 @@ export type GenerateMigrationsResult = {
 	/** `[]` when nothing changed, one entry for an ordinary run, two for a run `generateMigration` itself would have refused (spec: "more than one only where Postgres's own transaction semantics require a boundary"). */
 	readonly migrations: ReadonlyArray<GeneratedMigration>;
 	readonly hasChanges: boolean;
+	/**
+	 * [D106 R2, R2-B2] The state this run reached, present unconditionally
+	 * (blocked, no-DDL, or ordinary) — matching {@link GenerateMigrationResult}'s
+	 * own unconditional `snapshot`. `hasChanges` only tracks whether there is
+	 * DDL to emit; an existing-table marker change (handover/adoption/rename)
+	 * can differ this from `previousSnapshot` with `hasChanges` still `false`
+	 * (nothing to diff into a statement), and a caller that only checked
+	 * `hasChanges` before this field existed had no way to notice.
+	 */
+	readonly snapshot: Snapshot;
 	readonly errors: ReadonlyArray<HejbroError>;
 	readonly ambiguities: ReadonlyArray<RenameAmbiguity>;
 	readonly warnings: ReadonlyArray<Diagnostic>;
@@ -600,6 +610,7 @@ export const generateMigrations = (
 		return {
 			migrations: [],
 			hasChanges: false,
+			snapshot: pipeline.snapshot,
 			errors: pipeline.errors,
 			ambiguities: pipeline.ambiguities,
 			warnings: pipeline.warnings,
@@ -609,6 +620,7 @@ export const generateMigrations = (
 		return {
 			migrations: [],
 			hasChanges: false,
+			snapshot: pipeline.snapshot,
 			errors: [],
 			ambiguities: [],
 			warnings: pipeline.warnings,
@@ -644,6 +656,7 @@ export const generateMigrations = (
 	return {
 		migrations,
 		hasChanges: true,
+		snapshot: pipeline.snapshot,
 		errors: [],
 		ambiguities: [],
 		warnings: pipeline.warnings,
