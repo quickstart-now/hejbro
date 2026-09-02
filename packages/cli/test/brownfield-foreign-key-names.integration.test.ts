@@ -2,12 +2,28 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { CliRun } from "./support/cli-runner";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
 	removeCliFixtureDir,
 	runCli,
 } from "./support/cli-runner";
+
+/**
+ * D106 R3-B3: a failure this far into a Docker-gated live witness is
+ * expensive to re-diagnose (a stray `stderr`-less exit code once cost a
+ * whole gate slot, CI-R3-08 through CI-R3-11) -- every step below
+ * asserts through this, so a future failure's own diagnostic block
+ * (its coded error and "Next:" remedy) lands directly in the assertion
+ * message rather than needing a second run to surface.
+ */
+const expectExitCode = (label: string, run: CliRun, exitCode: number): void => {
+	expect(
+		run.exitCode,
+		`${label} exited ${run.exitCode} -- stderr:\n${run.stderr}`,
+	).toBe(exitCode);
+};
 
 /**
  * D106 R3-B3 (#693): the brownfield-adoption flow the skill documents
@@ -174,7 +190,7 @@ describe("brownfield adoption / D106 R3-B3: a foreign key's own catalog name sur
 		const cwd = await createCliFixtureDir();
 		try {
 			const init = await runCli(cwd, ["init"]);
-			expect(init.exitCode).toBe(0);
+			expectExitCode("init", init, 0);
 
 			const importResult = await runCli(cwd, [
 				"import",
@@ -185,7 +201,7 @@ describe("brownfield adoption / D106 R3-B3: a foreign key's own catalog name sur
 				"--out",
 				"src/schema",
 			]);
-			expect(importResult.exitCode).toBe(0);
+			expectExitCode("import", importResult, 0);
 			// The loss report never names the foreign key as an
 			// approximation -- its catalog name (`_fkey`) is a valid
 			// hejbro SQL identifier on its own, so it is carried
@@ -205,17 +221,17 @@ describe("brownfield adoption / D106 R3-B3: a foreign key's own catalog name sur
 			// (it refuses a second run, `baseline-not-first`), and a `generate`
 			// run beforehand would already have written one.
 			const baselineResult = await runCli(cwd, ["baseline"]);
-			expect(baselineResult.exitCode).toBe(0);
+			expectExitCode("baseline", baselineResult, 0);
 
 			const migrateResult = await runCli(cwd, [
 				"migrate",
 				"--url",
 				fixtureUrl(),
 			]);
-			expect(migrateResult.exitCode).toBe(0);
+			expectExitCode("migrate", migrateResult, 0);
 
 			const checkResult = await runCli(cwd, ["check", "--url", fixtureUrl()]);
-			expect(checkResult.exitCode).toBe(0);
+			expectExitCode("check", checkResult, 0);
 			expect(checkResult.stdout).not.toContain("foreign key");
 		} finally {
 			await removeCliFixtureDir(cwd);
