@@ -220,7 +220,7 @@ describe("applyReset / 5.3", () => {
 		// Seed the ledger as if migrations had already run.
 		await driver.transaction(async (session) => {
 			await bootstrapLedger(session);
-			await recordAppliedMigration(session, "0001_add_managed.sql");
+			await recordAppliedMigration(session, "0001_add_managed.sql", "applied");
 		});
 
 		await applyReset(driver, managedSnapshot, registry, "testdb:2");

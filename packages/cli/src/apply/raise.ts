@@ -118,34 +118,45 @@ const rethrowIfAlreadyExists = (
 
 /**
  * [task 6.1/6.3] Stands an empty database up from a snapshot SQL file.
- * Bootstraps the ledger first (idempotent, run once here since this
- * module is raise's own single entry point -- `ledger.ts`'s own "once per
- * apply run, not once per migration"), refuses if the ledger already has
- * history (6.2, layer 1), then reuses `execute.ts`'s own `applyMigration`
- * for everything else the spec asks: one transaction, the advisory lock,
- * the parameterless send, the transaction-control precondition, and the
- * ledger row (6.3) -- the same mechanism `migrate` uses, not a second
- * one, so "applies nothing" on refusal is the transaction's own guarantee
- * rather than something this module re-implements. A failure from that
- * call is re-classified by {@link rethrowIfAlreadyExists} (6.2, layer 2)
- * before it escapes this function.
+ * Reads the ledger first (task 16.5, D106 m4) -- `readLedger` already
+ * tolerates a table that does not exist yet (`{exists: false}`, the same
+ * leniency `bootstrapLedger` itself does not need to run for) -- and
+ * refuses if it already has history (6.2, layer 1) *before* this call
+ * creates anything: a database refused by the ledger precheck no longer
+ * gains `hejbro.migration_ledger` as a souvenir of the refusal. This does
+ * NOT hold for a layer-2 refusal (D106 m4) -- bootstrap below still runs,
+ * idempotently, before the catalog collision that layer discovers is
+ * ever reached, so that refusal's own database keeps the (empty) ledger
+ * table and schema this call created. Only once past the ledger-history
+ * check does it bootstrap (idempotent, run once here since this module
+ * is raise's own single entry point -- `ledger.ts`'s own "once per apply
+ * run, not once per migration") and reuse `execute.ts`'s own
+ * `applyMigration` for everything else the spec asks: one transaction,
+ * the advisory lock, the parameterless send, the transaction-control
+ * precondition, and the ledger row (6.3) -- the same mechanism `migrate`
+ * uses, not a second one, so "applies nothing" on refusal is the
+ * transaction's own guarantee rather than something this module
+ * re-implements. A failure from that call is re-classified by
+ * {@link rethrowIfAlreadyExists} (6.2, layer 2) before it escapes this
+ * function.
  *
  * The ledger row `applyMigration` writes uses `snapshotFile.fileName`
  * verbatim -- raise derives no chain-shaped name for it the way
  * `generate`/`baseline` do (`migrationFileName`'s prefix strategies never
- * run here). That a raised database's own ledger row never looks like a
- * real chain file's name is exactly how it is told apart from a
- * migrate-arrived one, reading the ledger alone (spec: "records how the
- * database was raised") -- no second column or marker.
+ * run here) -- and its `origin` column (task 16.1, D106 M7) is
+ * `"raised"`, which is now the mechanism that tells a raised row apart
+ * from a migrate-arrived one; a raised filename's own shape was never a
+ * reliable signal (`--file` accepts any path) and is not read as one
+ * anywhere in this module.
  */
 export const applyRaise = async (
 	driver: Driver,
 	snapshotFile: SnapshotFile,
 	commandName: string,
 ): Promise<void> => {
-	await bootstrapLedger(driver);
 	const ledgerState = await readLedger(driver);
 	assertDatabaseEmptyByLedger(ledgerState, commandName);
+	await bootstrapLedger(driver);
 	try {
 		await applyMigration(driver, snapshotFile, commandName);
 	} catch (error) {

@@ -59,10 +59,12 @@ const makeFakeDriver = (options?: {
 const migrationA: Migration = {
 	fileName: "0001_a.sql",
 	sql: 'create table "app"."a" (id integer);',
+	origin: "applied",
 };
 const migrationB: Migration = {
 	fileName: "0002_b.sql",
 	sql: 'create table "app"."b" (id integer);',
+	origin: "applied",
 };
 
 describe("applyFrom / 7.5", () => {
@@ -161,6 +163,7 @@ describe("applyFrom / 11.2 (#620)", () => {
 		const migrationC: Migration = {
 			fileName: "0003_c.sql",
 			sql: 'create table "app"."c" (id integer);',
+			origin: "applied",
 		};
 		const recheckFindsA = (
 			call: CompileResult,
@@ -197,7 +200,7 @@ describe("applyFrom / 12.2 (#624)", () => {
 	const baselineMigration: Migration = {
 		fileName: "0001_baseline.sql",
 		sql: 'create table "app"."adopted" (id integer);',
-		baseline: true,
+		origin: "registered",
 	};
 
 	it("registers a baseline without sending its statements, and reports it as registered, not applied", async () => {
@@ -221,7 +224,10 @@ describe("applyFrom / 12.2 (#624)", () => {
 		const ledgerInsertCall = calls.find((call) =>
 			call.sql.toLowerCase().includes("insert into"),
 		);
-		expect(ledgerInsertCall?.params).toEqual([baselineMigration.fileName]);
+		expect(ledgerInsertCall?.params).toEqual([
+			baselineMigration.fileName,
+			baselineMigration.origin,
+		]);
 	});
 
 	it("keeps a baseline's own bucket separate from an ordinary migration applied in the same run", async () => {
@@ -357,6 +363,102 @@ export default defineConfig({
 	prefixStrategy: "timestamp",
 });
 `;
+
+/**
+ * [task 17.1, D106 M3] Two files whose banner hashes either chain (root's
+ * own `current`, `sha256:bbbb`, matches the second file's `parent`) or
+ * don't (`secondParent` is anything else) -- `checkChain` only needs
+ * consistent parent/current links, never real sha256 output, matching
+ * this suite's siblings (`status-command.test.ts`'s own fixture).
+ */
+const writeTwoFileChain = async (
+	cwd: string,
+	secondParent: string,
+): Promise<void> => {
+	await writeFixtureFile(
+		cwd,
+		"migrations/0001_a.sql",
+		[
+			"-- hejbro migration",
+			"-- parent-snapshot: sha256:aaaa",
+			"-- snapshot: sha256:bbbb",
+			'create table "app"."a" (id integer);',
+		].join("\n"),
+	);
+	await writeFixtureFile(
+		cwd,
+		"migrations/0002_b.sql",
+		[
+			"-- hejbro migration",
+			`-- parent-snapshot: ${secondParent}`,
+			"-- snapshot: sha256:cccc",
+			'create table "app"."b" (id integer);',
+		].join("\n"),
+	);
+};
+
+describe("runMigrate / 17.1 (D106 M3) verifies the chain before connecting", () => {
+	let cwd: string;
+
+	beforeEach(async () => {
+		cwd = await createCliFixtureDir();
+		await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+	});
+
+	afterEach(async () => {
+		await removeCliFixtureDir(cwd);
+	});
+
+	it("refuses an unverifiable chain without opening a connection", async () => {
+		// 0002_b.sql's own parent is not 0001_a.sql's own current
+		// (sha256:bbbb) -- a broken link, not a fork (nothing earlier
+		// claims this parent), so checkChain reports "broken-chain".
+		await writeTwoFileChain(cwd, "sha256:zzzz");
+		const calls: string[] = [];
+		// Coded ERR_MODULE_NOT_FOUND (mirrors the 7.2 suite's own
+		// rejectingImporter below) rather than a plain Error -- a plain
+		// one is not a HejbroError, and asHejbroError rethrows anything
+		// that isn't, turning a should-never-run spy into an unhandled
+		// rejection instead of a clean, coded failure if it is ever hit.
+		const spyImporter = async () => {
+			calls.push("import");
+			throw Object.assign(new Error("Cannot find package '@hejbro/pg'"), {
+				code: "ERR_MODULE_NOT_FOUND",
+			});
+		};
+
+		const result = await runMigrate(
+			cwd,
+			["--url", "postgres://fake"],
+			spyImporter,
+		);
+
+		expect(calls).toHaveLength(0);
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("error[broken-chain]");
+		expect(result.stderr).not.toContain("apply-driver-missing");
+		expect(result.stderr).not.toContain("apply-connection-failed");
+	});
+
+	it("opens a connection when the chain verifies (control, same spy importer)", async () => {
+		// 0002_b.sql's own parent matches 0001_a.sql's own current --
+		// a healthy chain. Without this pair, the refusal above would be
+		// indistinguishable from a fixture that never reaches the
+		// connection path at all.
+		await writeTwoFileChain(cwd, "sha256:bbbb");
+		const calls: string[] = [];
+		const spyImporter = async () => {
+			calls.push("import");
+			throw Object.assign(new Error("Cannot find package '@hejbro/pg'"), {
+				code: "ERR_MODULE_NOT_FOUND",
+			});
+		};
+
+		await runMigrate(cwd, ["--url", "postgres://fake"], spyImporter);
+
+		expect(calls).toHaveLength(1);
+	});
+});
 
 describe("runMigrate / 7.2 connection acquisition, apply-owned codes", () => {
 	let cwd: string;

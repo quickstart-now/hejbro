@@ -1,6 +1,6 @@
 import type { ChainEntry, ChainReport, HejbroError } from "@hejbro/core";
 import { checkChain, hejbroError } from "@hejbro/core";
-import type { LedgerState } from "./ledger";
+import type { LedgerRow, LedgerState } from "./ledger";
 
 /**
  * `chain`'s array order IS chain order (root first), the same contract
@@ -95,12 +95,26 @@ const orphanRowFinding = (filename: string): Disagreement => ({
 });
 
 /** `ledger.exists` narrows which arm carries `applied` -- no ternary (banned house style): an absent ledger has recorded nothing. */
-const appliedFileNames = (ledger: LedgerState): ReadonlyArray<string> => {
+const ledgerRows = (ledger: LedgerState): ReadonlyArray<LedgerRow> => {
 	if (ledger.exists) {
 		return ledger.applied;
 	}
 	return [];
 };
+
+/**
+ * [task 16.2, D106 M7] The filenames of every ledger row that is *not*
+ * `raise`'s own -- a raised row's `--file` value has no relationship to
+ * the migration chain at all (typically a vendored snapshot, never a
+ * chain file), so it can never appear in `chain` by construction. A
+ * `baseline` row needs no such exclusion: the baseline migration it
+ * names is the chain's own first file, already present in `chain`, so
+ * it was never at risk of being misclassified as an orphan.
+ */
+const chainLinkedFileNames = (
+	rows: ReadonlyArray<LedgerRow>,
+): ReadonlyArray<string> =>
+	rows.filter((row) => row.origin !== "raised").map((row) => row.filename);
 
 const outOfOrderFinding = (
 	filename: string,
@@ -164,6 +178,36 @@ const outOfOrderDisagreements = (
 	});
 
 /**
+ * [task 17.1, D106 M3] `planApply`'s own chain check, extracted (not
+ * duplicated) so a caller can run it before opening a connection at all
+ * -- `migrate`'s own bootstrap step sends DDL (creating the ledger
+ * schema/table), so refusing only inside `planApply`, after that
+ * bootstrap already ran, is too late for the delta's "no statement is
+ * sent" promise on an unverifiable chain. `null` means the chain
+ * verifies. This is `planApply`'s own former head (the `checkChain` call
+ * that used to open its body) moved out whole, not a second copy of it
+ * -- `planApply` below calls this once and returns its result directly
+ * when it fails, so `chainInvalidMessage` (the diagnostic text) still
+ * has exactly one place that constructs it.
+ */
+export const checkChainOffline = (
+	chain: ReadonlyArray<ChainEntry>,
+): Extract<
+	PlanResult,
+	{ readonly ok: false; readonly reason: "chain-invalid" }
+> | null => {
+	const chainReport = checkChain(chain);
+	if (chainReport.ok) {
+		return null;
+	}
+	return {
+		ok: false,
+		reason: "chain-invalid",
+		error: hejbroError(chainReport.code, chainInvalidMessage(chainReport)),
+	};
+};
+
+/**
  * The chain on disk and the ledger's own rows in, a plan out: which
  * migrations are pending (in chain order, never re-sorted by filename)
  * when the two agree, or every way they disagree when they don't. No
@@ -180,13 +224,9 @@ export const planApply = (
 	ledger: LedgerState,
 	baselineFileNames: ReadonlySet<string> = new Set(),
 ): PlanResult => {
-	const chainReport = checkChain(chain);
-	if (!chainReport.ok) {
-		return {
-			ok: false,
-			reason: "chain-invalid",
-			error: hejbroError(chainReport.code, chainInvalidMessage(chainReport)),
-		};
+	const chainFailure = checkChainOffline(chain);
+	if (chainFailure !== null) {
+		return chainFailure;
 	}
 
 	// Past this point, `chain`'s array order is not merely assumed to be
@@ -196,7 +236,7 @@ export const planApply = (
 	// and a failure already returned. So nothing below may re-sort `chain`
 	// (e.g. by filename) without silently substituting a different order
 	// for the one just verified -- filter/map only, never `.sort()`.
-	const applied = new Set(appliedFileNames(ledger));
+	const applied = new Set(chainLinkedFileNames(ledgerRows(ledger)));
 	const chainFileNames = new Set(chain.map((entry) => entry.fileName));
 
 	const orphanRows = Array.from(applied)

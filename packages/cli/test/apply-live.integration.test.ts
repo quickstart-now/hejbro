@@ -190,6 +190,47 @@ export const races = table(app, "races", {
 });
 `;
 
+/** [task 19.4, D106 M4] A table whose check constraint will, in the next version below, spell the enum value added alongside it -- via `sql.raw`, not a typed default, so it is the split rule's raw-text reach (task 19.2) that has to see it, not `isMatchingLiteral` (already proven live by 8.4 above). */
+const SPLIT_RAW_TEXT_V1_SOURCE = `import { pgEnum, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+export const mood = pgEnum(app, "mood", ["ok"]);
+export const widgets = table(app, "widgets", {
+	id: uuid().primaryKey().defaultRandom(),
+	status: text(),
+});
+`;
+
+/**
+ * [task 19.4, D106 M4] Adds "great" to the enum AND, in the same
+ * declaration change, a check constraint spelling it via `sql.raw` --
+ * `expr/codec.ts`'s own `{ nodeKind: "raw-sql", sql }`, a shape
+ * `isMatchingLiteral` never reaches. The report this task closes marked
+ * this UNVERIFIED by execution: without task 19.2, `planSplit`'s walk
+ * cannot see this reference, so `generate` writes one file carrying both
+ * the new enum value and its own use, and the server refuses it exactly
+ * the way the hand-written fixture above (`measurement protocol: the
+ * 55P04 translation`) demonstrates. With 19.2, the walk reaches the
+ * check constraint's raw text, `planSplit` reports a trigger, and
+ * `generate` writes two files instead.
+ */
+const SPLIT_RAW_TEXT_V2_SOURCE = `import { check, pgEnum, schema, sql, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+export const mood = pgEnum(app, "mood", ["ok", "great"]);
+export const widgets = table(
+	app,
+	"widgets",
+	{
+		id: uuid().primaryKey().defaultRandom(),
+		status: text(),
+	},
+	() => ({
+		checks: [check("widgets_status_check", sql.raw("status = 'great'"))],
+	}),
+);
+`;
+
 describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 	const container = `hejbro-cli-apply-${process.pid}-${image.replace(/[^a-z0-9]/gi, "")}`;
 	let hostPort = "";
@@ -723,6 +764,90 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 				expect(result.exitCode).toBe(1);
 				expect(result.stderr).toContain("error[apply-unsafe-new-enum-value]");
 				expect(result.stderr).toMatch(/regenerate/i);
+			} finally {
+				await removeCliFixtureDir(cwd);
+			}
+		});
+	});
+
+	/**
+	 * [task 19.4, D106 M4] The live witness the D106 report marked
+	 * UNVERIFIED by execution -- a *generated* run (never hand-written)
+	 * that adds an enum value and, in the same change, a check constraint
+	 * spelling it via `sql.raw`. Proves task 19.2's raw-text reach against
+	 * a real server: `generate` itself must decide to split, not merely
+	 * refuse a pre-split file the way `apply-unsafe-new-enum-value` above
+	 * does.
+	 */
+	describe("19.4 (D106 M4) a generated run splits an enum value spelled in a raw-SQL check", () => {
+		const database = "splitrawtext";
+
+		beforeAll(() => {
+			psqlCommand(container, "postgres", `create database ${database};`);
+		});
+
+		it("writes two migrations instead of one, and both apply", async () => {
+			const cwd = await createCliFixtureDir();
+			try {
+				await runCli(cwd, ["init"]);
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					SPLIT_RAW_TEXT_V1_SOURCE,
+				);
+				const first = await runCli(cwd, ["generate"]);
+				expect(first.exitCode).toBe(0);
+				const firstMigrate = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+				expect(firstMigrate.exitCode).toBe(0);
+
+				const migrationsDir = resolve(cwd, "migrations");
+				const countSqlFiles = (): number =>
+					readdirSync(migrationsDir).filter((name) => name.endsWith(".sql"))
+						.length;
+				const beforeCount = countSqlFiles();
+
+				await writeFixtureFile(
+					cwd,
+					"src/app.schema.ts",
+					SPLIT_RAW_TEXT_V2_SOURCE,
+				);
+				const generated = await runCli(cwd, ["generate"]);
+				expect(generated.exitCode).toBe(0);
+
+				// task 19.2's own proof, live: without the raw-text reach,
+				// `planSplit` never sees the check constraint's own text, so
+				// this run writes ONE file carrying both the new enum value
+				// and its own use -- exactly the shape the server refuses
+				// with 55P04 (the sibling test above shows this same
+				// refusal on a hand-written file). With it, TWO files.
+				expect(countSqlFiles() - beforeCount).toBe(2);
+
+				const result = await runCli(cwd, [
+					"migrate",
+					"--url",
+					hostUrl(database),
+				]);
+
+				// Both migrations apply cleanly -- the enum-adding one commits
+				// (and its own transaction ends) before the check-constraint
+				// one, in its own later transaction, ever uses the value.
+				expect(result.exitCode).toBe(0);
+
+				const driver = pgDriver(hostUrl(database));
+				try {
+					const rows = await driver.execute({
+						sql: "select unnest(enum_range(null::app.mood))::text as value",
+						params: [],
+						kind: "sql",
+					});
+					expect(rows.map((row) => row.value)).toEqual(["ok", "great"]);
+				} finally {
+					await driver.client.end();
+				}
 			} finally {
 				await removeCliFixtureDir(cwd);
 			}

@@ -1,13 +1,19 @@
 import type { ChainEntry } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
-import type { LedgerState } from "../src/apply/ledger";
+import type { LedgerRow, LedgerState } from "../src/apply/ledger";
 import { planApply } from "../src/apply/plan";
 
 const NOT_APPLIED: LedgerState = { exists: true, applied: [] };
 
 const applied = (filenames: ReadonlyArray<string>): LedgerState => ({
 	exists: true,
-	applied: filenames,
+	applied: filenames.map((filename) => ({ filename, origin: "applied" })),
+});
+
+/** [task 16.2, D106 M7] A ledger holding exactly the rows given, each with its own stated origin -- for building a mixed applied/baseline/raised fixture without every row defaulting to `"applied"`. */
+const ledgerOf = (rows: ReadonlyArray<LedgerRow>): LedgerState => ({
+	exists: true,
+	applied: rows,
 });
 
 describe("planApply / 2.1", () => {
@@ -91,6 +97,47 @@ describe("planApply / 12.1 (#624)", () => {
 		}
 		expect(result.pending).toEqual([]);
 		expect(result.baselineFileNames).toEqual(new Set());
+	});
+});
+
+describe("planApply / 16.2 (D106 M7)", () => {
+	it("a raised row is not an orphan", () => {
+		const chain: ReadonlyArray<ChainEntry> = [
+			{ fileName: "0001_init.sql", parent: "root", current: "h1" },
+		];
+		// "snapshot.sql" is `raise`'s own row -- its `--file` value has no
+		// relationship to the chain at all, unlike a baseline row (whose
+		// filename is the chain's own first file, already present in
+		// `chain`, and so never at risk of this misclassification).
+		const ledger = ledgerOf([
+			{ filename: "0001_init.sql", origin: "applied" },
+			{ filename: "snapshot.sql", origin: "raised" },
+		]);
+
+		const result = planApply(chain, ledger);
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error("expected a successful plan");
+		}
+		expect(result.pending).toEqual([]);
+	});
+
+	it("a baseline row was never at risk of the same misclassification, but is confirmed anyway", () => {
+		const chain: ReadonlyArray<ChainEntry> = [
+			{ fileName: "0001_baseline.sql", parent: "root", current: "h1" },
+		];
+		const ledger = ledgerOf([
+			{ filename: "0001_baseline.sql", origin: "registered" },
+		]);
+
+		const result = planApply(chain, ledger);
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error("expected a successful plan");
+		}
+		expect(result.pending).toEqual([]);
 	});
 });
 

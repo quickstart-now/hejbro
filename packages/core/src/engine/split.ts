@@ -147,20 +147,119 @@ const isMatchingLiteral = (
 	return literalValue !== null && targets.has(literalValue);
 };
 
+/** Regex-special characters escaped so `spelling` is matched literally, never interpreted as a pattern -- an enum value is arbitrary user text, not a pattern the author wrote. */
+const escapeForRegExp = (spelling: string): string =>
+	spelling.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
- * [design, task 4.1] Structural, not by field name: recurses through
- * `value` (any JSON shape a snapshot node can hold) and reports `true`
- * the moment it meets an encoded literal naming one of `targets` --
- * `nodeKind`/`literalKind` are the *only* vocabulary this function knows,
- * so it reaches a column default, a generated column, a check
- * constraint, an index predicate, a policy's `using`/`with check`, or a
- * view body identically, without being told any of their field names
- * (`expr/codec.ts` encodes all of them the same way). A kind added later
- * that stores an expression the same way is covered automatically; one
- * this file's author never thought of is exactly the gap a hand-written
- * list of "expression-bearing slots" would have left (this delta's own
- * proposal: the specs' own such list is missing view bodies, measured
- * failing).
+ * [task 19.1, D106 M4, lead ruling] `true` where `text` spells `spelling`
+ * at an **identifier boundary** -- the characters immediately before and
+ * after the match (if any) are not a letter, digit, or underscore. Plain
+ * substring was rejected by measurement of its own arithmetic (a
+ * two-character enum value like `a`/`on` appears in almost any SQL text,
+ * so every run would split); quote-only was rejected for encoding an
+ * assumption about how SQL spells the value. No false negative against a
+ * literal's own spelling: every string-literal form (`'v'`, `E'v'`,
+ * `$$v$$`) puts a quote or `$` beside the value, and `'redraft'` failing
+ * to match `draft` is correct -- the database does not read it as that
+ * value either. A regex lookaround, not a loop (house style bans
+ * for/while): `RegExp#test` walks `text` internally.
+ */
+const spellsAtBoundary = (text: string, spelling: string): boolean => {
+	if (spelling === "") {
+		return false;
+	}
+	const pattern = new RegExp(
+		`(?<![A-Za-z0-9_])${escapeForRegExp(spelling)}(?![A-Za-z0-9_])`,
+	);
+	return pattern.test(text);
+};
+
+/** `'` doubled (`it's` -> `it''s`) -- the spelling SQL text carries when a value holding a quote is written as a string literal (Postgres's own escaping, not this project's choice). */
+const doubleSingleQuotes = (value: string): string =>
+	value.split("'").join("''");
+
+/**
+ * [task 19.1, D106 M4, lead ruling] Two needles, not one: `value` as
+ * spelled, and its single-quote-doubled spelling, because SQL text
+ * carrying a value with a quote in it is written the second way and a
+ * single-needle rule misses it. When `value` holds no quote the two
+ * needles are identical strings, so this costs nothing -- no branch to
+ * skip the second check. Backslash/E-string escapes are deliberately not
+ * chased (task 15.8 states that limit).
+ */
+const spellsValueAtBoundary = (text: string, value: string): boolean =>
+	spellsAtBoundary(text, value) ||
+	spellsAtBoundary(text, doubleSingleQuotes(value));
+
+/** `record`'s raw SQL text, when it is an encoded `sql.raw(...)` node (`expr/codec.ts`'s `encodeRawSql`: `{ nodeKind: "raw-sql", sql }`) -- `null` otherwise. */
+const rawSqlText = (record: Record<string, JsonValue>): string | null => {
+	if (record.nodeKind !== "raw-sql") {
+		return null;
+	}
+	if (typeof record.sql !== "string") {
+		return null;
+	}
+	return record.sql;
+};
+
+/** `record`'s literal text, when it is an encoded `` sql`...` `` template's own text chunk (`expr/codec.ts`'s `encodeSqlTemplateChunk`: `{ chunkKind: "text", text }`) -- `null` otherwise. A `chunkKind: "expr"` chunk is not this shape; the existing recursion already reaches its own `expr` field structurally. */
+const textChunkText = (record: Record<string, JsonValue>): string | null => {
+	if (record.chunkKind !== "text") {
+		return null;
+	}
+	if (typeof record.text !== "string") {
+		return null;
+	}
+	return record.text;
+};
+
+/**
+ * [task 19.2, D106 M4] `true` when `record` is one of the two raw-text
+ * shapes above and its text spells any of `targets` at a boundary --
+ * structural, matching only these two field/discriminator pairs, never
+ * an arbitrary string value anywhere in the snapshot. That precision
+ * matters: `kinds/function-kind.ts`'s `FunctionSnapshot` stores its whole
+ * body as `bodySql: string`, a plain string field with neither
+ * `nodeKind: "raw-sql"` nor `chunkKind: "text"` beside it -- matching any
+ * string would reach into it and undo task 4.1's own function-body
+ * exclusion (pinned by `split.test.ts`'s "does not split when the value
+ * is referenced only inside a function body").
+ */
+const isMatchingRawText = (
+	record: Record<string, JsonValue>,
+	targets: ReadonlySet<string>,
+): boolean => {
+	const rawSql = rawSqlText(record);
+	if (rawSql !== null) {
+		return Array.from(targets).some((value) =>
+			spellsValueAtBoundary(rawSql, value),
+		);
+	}
+	const text = textChunkText(record);
+	if (text !== null) {
+		return Array.from(targets).some((value) =>
+			spellsValueAtBoundary(text, value),
+		);
+	}
+	return false;
+};
+
+/**
+ * [design, task 4.1; raw-text reach task 19.2, D106 M4] Structural, not by
+ * field name: recurses through `value` (any JSON shape a snapshot node can
+ * hold) and reports `true` the moment it meets an encoded literal naming
+ * one of `targets`, *or* a `sql`/`sql.raw` text carrying one of them at an
+ * identifier boundary (task 19.1's rule) -- `nodeKind`/`literalKind`/
+ * `chunkKind` are the *only* vocabulary this function knows, so it reaches
+ * a column default, a generated column, a check constraint, an index
+ * predicate, a policy's `using`/`with check`, or a view body identically,
+ * without being told any of their field names (`expr/codec.ts` encodes all
+ * of them the same way). A kind added later that stores an expression the
+ * same way is covered automatically; one this file's author never thought
+ * of is exactly the gap a hand-written list of "expression-bearing slots"
+ * would have left (this delta's own proposal: the specs' own such list is
+ * missing view bodies, measured failing).
  *
  * A function body costs no separate exception here. `kinds/function-kind.ts`'s
  * `FunctionSnapshot` stores its body as `bodySql: string` -- already-
@@ -196,6 +295,9 @@ const referencesAnyLiteral = (
 		return false;
 	}
 	if (isMatchingLiteral(record, targets)) {
+		return true;
+	}
+	if (isMatchingRawText(record, targets)) {
 		return true;
 	}
 	return Object.values(record).some((child) =>

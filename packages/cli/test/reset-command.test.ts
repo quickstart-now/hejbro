@@ -99,3 +99,43 @@ describe("applyResetReport / 7.7", () => {
 		expect(calls).toHaveLength(0);
 	});
 });
+
+describe("applyResetReport / 18.1 (D106 M6)", () => {
+	it("refuses a declaration set that exports nothing", async () => {
+		const { driver, calls } = makeFakeDriver();
+
+		await expect(
+			applyResetReport(driver, emptySnapshot, registry, undefined),
+		).rejects.toMatchObject({ code: "reset-declarations-empty" });
+		// Not even current_database() went out -- a misconfigured entry
+		// pattern refuses before the confirmation check that would need it.
+		expect(calls).toHaveLength(0);
+	});
+
+	// Arrives green: `assertResetConfirmed` already throws before
+	// `driver.transaction` ever runs whenever `changes.length > 0`, so
+	// this is a pin (D106 M6 wants it named as a scenario), not a red.
+	// Measured, not assumed: the branch-move mutant (moving `clearLedger`
+	// back outside the `changes.length > 0` branch) does NOT turn this
+	// test red -- `assertResetConfirmed`'s refusal for a non-empty
+	// `changes` set happens before the transaction runs regardless of
+	// where `clearLedger` sits inside it, so this scenario alone cannot
+	// discriminate the branch move. See the completion report for what
+	// does: `changes.length === 0` is unreachable from a non-empty
+	// declaration set (every registered kind reports "drop" when an
+	// object disappears), so the branch move is unreachable structural
+	// invariant, not something an integration test through
+	// `applyResetReport` can pin.
+	it("clears no ledger row without confirmation", async () => {
+		const { driver, calls } = makeFakeDriver("testdb");
+
+		await expect(
+			applyResetReport(driver, managedSnapshot, registry, undefined),
+		).rejects.toMatchObject({ code: "reset-not-confirmed" });
+		expect(
+			calls.some((call) =>
+				call.sql.toLowerCase().includes('delete from "hejbro"'),
+			),
+		).toBe(false);
+	});
+});

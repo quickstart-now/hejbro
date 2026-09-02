@@ -8,9 +8,10 @@ import {
 } from "../apply/capability";
 import type { Migration } from "../apply/execute";
 import { applyMigration } from "../apply/execute";
+import type { LedgerOrigin } from "../apply/ledger";
 import { bootstrapLedger, readLedger } from "../apply/ledger";
 import type { PlanResult } from "../apply/plan";
-import { planApply } from "../apply/plan";
+import { checkChainOffline, planApply } from "../apply/plan";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
 import { requireConfigFields } from "../config-required";
@@ -32,6 +33,17 @@ const MIGRATE_ARGS = {
 } as const;
 
 const MIGRATE_COMMAND = "hejbro migrate";
+
+/** [task 16.1, D106 M7] The ledger origin `fileName` records under, given `plan.baselineFileNames` -- no ternary (house style): a chain-applied file is `"applied"`, a baseline file is `"registered"` (the same word this file's own report line already uses for it, below); `migrate` never writes `"raised"` (that origin is `raise`'s own). */
+const originFor = (
+	fileName: string,
+	baselineFileNames: ReadonlySet<string>,
+): LedgerOrigin => {
+	if (baselineFileNames.has(fileName)) {
+		return "registered";
+	}
+	return "applied";
+};
 
 const lastFlagValue = (
 	rawArgs: ReadonlyArray<string>,
@@ -185,9 +197,9 @@ const failureResult = (
  *
  * Four accumulators, not one: `applyMigration`'s own per-file outcome
  * (task 11.1) says whether this call did the work or found it already
- * done, and `next.baseline` (read from the same `Migration` the caller
- * already built from `plan.baselineFileNames`, task 12.1) says whether
- * that work was sending DDL or registering without it. The cross product
+ * done, and `next.origin` (read from the same `Migration` the caller
+ * already built via `originFor`, task 12.1/16.1) says whether that work
+ * was sending DDL or registering without it. The cross product
  * of those two facts is exactly four buckets, and all four are reported
  * (tasks 11.2/12.2) when the run finishes, whether it finishes by
  * exhausting `remaining` or by failing partway through.
@@ -215,7 +227,7 @@ export const applyFrom = async (
 	}
 	try {
 		const outcome = await applyMigration(driver, next, MIGRATE_COMMAND);
-		if (outcome === "already-applied" && next.baseline === true) {
+		if (outcome === "already-applied" && next.origin === "registered") {
 			return applyFrom(
 				driver,
 				rest,
@@ -235,7 +247,7 @@ export const applyFrom = async (
 				alreadyRegisteredSoFar,
 			);
 		}
-		if (next.baseline === true) {
+		if (next.origin === "registered") {
 			return applyFrom(
 				driver,
 				rest,
@@ -324,6 +336,15 @@ export const runMigrate = async (
 			fileNames,
 		);
 
+		// [task 17.1, D106 M3] Verified before any connection opens --
+		// `bootstrapLedger` below sends DDL, so refusing after that ran
+		// would already have broken the delta's "no statement is sent"
+		// promise on an unverifiable chain.
+		const chainFailure = checkChainOffline(chain);
+		if (chainFailure !== null) {
+			return planFailureResult(chainFailure);
+		}
+
 		return await withCheckConnection(
 			urlFlag,
 			process.env,
@@ -343,7 +364,7 @@ export const runMigrate = async (
 					(fileName) => ({
 						fileName,
 						sql: readFileSync(join(migrationsDirPath, fileName), "utf8"),
-						baseline: plan.baselineFileNames.has(fileName),
+						origin: originFor(fileName, plan.baselineFileNames),
 					}),
 				);
 				return await applyFrom(driver, migrations, []);

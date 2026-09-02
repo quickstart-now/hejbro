@@ -98,32 +98,39 @@ they match the live schema stays a separate step.
   declarations against the live database, rather than a step to arrange
   or a comparison to run by hand
 
-### Requirement: The database driver is an optional dependency
-A command that connects to a database SHALL acquire its driver
-dynamically and SHALL NOT make any database driver a hard runtime
-dependency of the CLI: the commands that never connect work without one,
-and installing hejbro must not pull in a driver for them.
+### Requirement: An external tool is an optional dependency
+The vendoring commands and `check` reach outside the process — `git`
+and a database driver, respectively — and SHALL declare neither
+dependency in the package's own dependency list, reporting its absence
+as a coded failure naming what to install instead. (`history`/`restore`
+also shell out to `git`, but for reading this repository's own
+existing history, never a repository this process doesn't already sit
+inside — a missing `git` there is a different, pre-existing situation
+this requirement does not cover.)
 
-When the driver is absent, such a command SHALL fail with a
-hejbro-coded diagnostic naming the package to install — never a raw
-module-resolution error.
+Two such tools exist in the scope above. Vendoring runs `git`, and a
+machine without it SHALL be told so rather than shown a subprocess
+error. `check` loads a driver dynamically, and a missing driver SHALL
+be reported as it already is.
 
-Failing to reach the database SHALL be its own failure, distinct from
-failing to read its catalog, and SHALL carry the reason the driver gave.
-A wrong port or a typo in a URL is the first failure most users will
-meet, and answering it with "confirm the connected role can read
-pg_catalog" sends them to inspect privileges on a database they never
-reached. The reason SHALL survive the driver's own error shape: a driver
-may report a connection failure as an aggregate whose own message is
-empty, and an empty reason is not a reason.
+Once a driver is loaded, `check` SHALL still meet two more failure
+shapes distinct from either tool being absent. Failing to reach the
+database SHALL be its own failure, distinct from failing to read its
+catalog, and SHALL carry the reason the driver gave. A wrong port or a
+typo in a URL is the first failure most users will meet, and answering
+it with "confirm the connected role can read pg_catalog" sends them to
+inspect privileges on a database they never reached. The reason SHALL
+survive the driver's own error shape: a driver may report a connection
+failure as an aggregate whose own message is empty, and an empty reason
+is not a reason.
 
 `check` SHALL NOT require any driver capability. Every statement it
-issues is a plain read that a driver must already support to be a driver
-at all, so no capability negotiation stands between this command and a
-database. This is a constraint on the design, not an observation about
-today's drivers: a future comparison that needs session state or a
-transaction would be trading this property away, and that trade is the
-decision to surface. Commands that apply migrations make that trade
+issues is a plain read that a driver must already support to be a
+driver at all, so no capability negotiation stands between this command
+and a database. This is a constraint on the design, not an observation
+about today's drivers: a future comparison that needs session state or
+a transaction would be trading this property away, and that trade is
+the decision to surface. Commands that apply migrations make that trade
 openly and state the capability they require; the property being
 protected here is `check`'s, not the CLI's as a whole.
 
@@ -131,6 +138,18 @@ protected here is `check`'s, not the CLI's as a whole.
 - **WHEN** `hejbro check` runs in a project without the driver package
 - **THEN** it fails with a hejbro-coded error naming the package to
   install, not a module-resolution stack trace
+
+#### Scenario: A missing git is explained
+- **WHEN** a vendoring command runs on a machine with no `git`
+- **THEN** it fails with a coded error naming what is missing, not with
+  a raw subprocess failure
+
+#### Scenario: A connection failure is distinct from a catalog failure
+- **WHEN** `hejbro check` cannot connect to the database at all (a wrong
+  port, a wrong password, a nonexistent database)
+- **THEN** it fails with its own connection-failure code, carrying the
+  driver's own reason, never the catalog-unreadable code a later read
+  would fail with
 
 ### Requirement: Migrations are generated deterministically from declarations
 The CLI SHALL provide a `generate` command that diffs the declarations
@@ -141,12 +160,22 @@ between statements the run produced. Generation SHALL be deterministic:
 the same declarations against the same snapshot SHALL produce
 byte-identical migration SQL, byte-identical snapshot bytes, and the same
 number of migration files, run anywhere, with no database connection. A
-run that finds no difference SHALL write nothing, report "no changes —
-snapshot already matches your declarations", and exit zero. `generate`'s
-flag surface carries the rename flags (identifying a rename that would
-otherwise diff as drop-plus-add) and the drop-confirmation flags
-(confirming a destructive change by the dropped object's name); those
-flags are `generate`'s own, which is why a baseline refuses them.
+run that finds no difference SHALL write no migration and no snapshot,
+report "no changes — snapshot already matches your declarations", and
+exit zero. `generate`'s flag surface carries the rename flags
+(identifying a rename that would otherwise diff as drop-plus-add) and
+the drop-confirmation flags (confirming a destructive change by the
+dropped object's name); those flags are `generate`'s own, which is why
+a baseline refuses them.
+
+Where the export is enabled, generation SHALL also write the export
+described by `schema-export`, from the same pass over the declarations,
+so that a repository cannot hold a migration and an export that
+disagree about what was declared. **This SHALL hold even when there is
+no difference to write a migration for**: a repository whose snapshot
+already matches its declarations has no other run that could ever
+produce its first export, so a no-difference run with the export
+enabled SHALL still write it (or refresh it, if one already exists).
 
 A run SHALL be split where it adds a value to an existing enum type and
 also emits that value into an expression the database resolves while
@@ -165,15 +194,27 @@ hejbro emits no other kind of function body. Creating an enum type and
 using its values in the same run does not satisfy it either — the
 restriction applies to values added to a type that already existed.
 
-The test is by the value's spelling, and it over-approximates: a string
-literal elsewhere in the same run that happens to read the same as the
-added value causes a split it did not need. That is deliberate. A
+The decision is made over the run's own **encoded expression nodes** —
+an encoded string-literal node, a `sql` template's own text chunks, and
+a `sql.raw` node's text — never over the statements as rendered for the
+database, so this SHALL is a claim about what the surface reads, not
+about text the database would see. Within that surface, the test is by
+the value's spelling: the value as written, and its spelling with every
+`'` doubled (the form a string literal carries it in when the value
+itself holds a quote), matched wherever the characters immediately
+before and after are not a letter, digit or underscore — an identifier
+boundary, not a bare substring search. It over-approximates in the
+direction that boundary licenses: the same word inside a comment or an
+unrelated string SHALL still cause a split, and that is deliberate. A
 literal carries no type of its own, so distinguishing "this enum's
 value" from "a string that looks like it" would mean inferring the type
 of every expression — and the two failures are not symmetric: an
 unnecessary split costs one extra migration that applies cleanly, while
 a missed one costs a migration that passes every check hejbro has and
-fails against the database.
+fails against the database. A value assembled by concatenation or
+produced by a function call is not a spelling and is not seen. A `sql`
+template's text chunks are each tested on their own: a value split
+across a chunk boundary by an interpolated parameter is not that value.
 
 Where a run is split, the migrations it writes SHALL carry distinct
 versions under every prefix strategy, and SHALL each carry their own

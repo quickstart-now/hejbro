@@ -1,5 +1,6 @@
 import { hejbroError } from "@hejbro/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { LedgerState } from "../src/apply/ledger";
 import type { PlanResult } from "../src/apply/plan";
 import { planFailureResult } from "../src/commands/migrate";
 import {
@@ -13,6 +14,9 @@ import {
 	writeFixtureFile,
 } from "./support/cli-runner";
 
+const EMPTY_LEDGER: LedgerState = { exists: true, applied: [] };
+const NO_LEDGER: LedgerState = { exists: false };
+
 describe("renderStatusReport / 7.6", () => {
 	it("reports pending migrations, in chain order", () => {
 		const plan: Extract<PlanResult, { readonly ok: true }> = {
@@ -21,10 +25,11 @@ describe("renderStatusReport / 7.6", () => {
 			baselineFileNames: new Set(),
 		};
 
-		const result = renderStatusReport(plan);
+		const result = renderStatusReport(plan, EMPTY_LEDGER);
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toEqual([
+			"status: the ledger table exists and records no migrations yet.",
 			"status: 2 migration(s) pending:",
 			" - 0001_a.sql",
 			" - 0002_b.sql",
@@ -38,10 +43,71 @@ describe("renderStatusReport / 7.6", () => {
 			baselineFileNames: new Set(),
 		};
 
-		const result = renderStatusReport(plan);
+		const result = renderStatusReport(plan, EMPTY_LEDGER);
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toEqual([
+			"status: the ledger table exists and records no migrations yet.",
+			"status: nothing pending -- the ledger is caught up with the chain.",
+		]);
+	});
+});
+
+describe("renderStatusReport / 16.3 (D106 M1)", () => {
+	const caughtUp: Extract<PlanResult, { readonly ok: true }> = {
+		ok: true,
+		pending: [],
+		baselineFileNames: new Set(),
+	};
+
+	it("tells an absent ledger from an empty one", () => {
+		const absent = renderStatusReport(caughtUp, NO_LEDGER);
+		const empty = renderStatusReport(caughtUp, EMPTY_LEDGER);
+
+		expect(absent.stdout[0]).toBe(
+			"status: no ledger table exists yet -- this database has never been touched by hejbro.",
+		);
+		expect(empty.stdout[0]).toBe(
+			"status: the ledger table exists and records no migrations yet.",
+		);
+	});
+
+	it("names the migrations the ledger records as applied", () => {
+		const ledger: LedgerState = {
+			exists: true,
+			applied: [
+				{ filename: "0001_a.sql", origin: "applied" },
+				{ filename: "0002_b.sql", origin: "applied" },
+			],
+		};
+
+		const result = renderStatusReport(caughtUp, ledger);
+
+		expect(result.stdout).toEqual([
+			"status: 2 migration(s) recorded as applied:",
+			" - 0001_a.sql",
+			" - 0002_b.sql",
+			"status: nothing pending -- the ledger is caught up with the chain.",
+		]);
+	});
+});
+
+describe("renderStatusReport / 16.4 (D106 M7)", () => {
+	it("says the database was raised from that file", () => {
+		const plan: Extract<PlanResult, { readonly ok: true }> = {
+			ok: true,
+			pending: [],
+			baselineFileNames: new Set(),
+		};
+		const ledger: LedgerState = {
+			exists: true,
+			applied: [{ filename: "vendor/schema.sql", origin: "raised" }],
+		};
+
+		const result = renderStatusReport(plan, ledger);
+
+		expect(result.stdout).toEqual([
+			'status: this database was raised from "vendor/schema.sql".',
 			"status: nothing pending -- the ledger is caught up with the chain.",
 		]);
 	});
@@ -184,6 +250,7 @@ describe("runStatus / 7.6, database unchanged", () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toEqual([
+			"status: the ledger table exists and records no migrations yet.",
 			"status: 1 migration(s) pending:",
 			" - 0001_a.sql",
 		]);
