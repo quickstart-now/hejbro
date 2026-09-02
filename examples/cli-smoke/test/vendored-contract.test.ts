@@ -166,6 +166,28 @@ export const posts = table(app, "posts", {
 });
 `;
 
+/**
+ * D106 round 1, N2: the column half of "A non-identifier key is quoted"
+ * has no real-`tsc` observer. D36's `assertSqlName` makes `table()`
+ * structurally incapable of declaring a non-identifier column key
+ * (tasks.md 1.4's own measurement), so every column here uses an
+ * ordinary identifier -- the adversarial keys are patched into the
+ * committed `schema.json` afterward, standing in for a person hand-
+ * editing that file (the reader never checks a column key's shape).
+ */
+const COLUMN_KEY_SCHEMA_SOURCE = `import { schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	userId: uuid().notNull(),
+	firstPlace: text().notNull(),
+	klass: text().notNull(),
+	aQuoteB: text().notNull(),
+});
+`;
+
 let schemaRepo: string;
 let consumerRepo: string;
 
@@ -233,6 +255,135 @@ describe("a vendored contract type-checks against the real, installed hejbro pac
 				"--target",
 				"es2022",
 				contractPath,
+			],
+			consumerRepo,
+		);
+		expect(check.stdout).toBe("");
+		expect(check.exitCode).toBe(0);
+	});
+
+	/**
+	 * D106 round 1, N2: real-`tsc` observer for the column half of "A
+	 * non-identifier key is quoted" -- `user-id`, `1st`, `class`
+	 * (reserved word, legal unquoted as a type member key), and `a"b`
+	 * (escapes to `"a\"b"`), the same adversarial keys the round 1
+	 * reviewer independently verified compile.
+	 */
+	it("a hand-edited export's non-identifier column keys compile under a real tsc (D106 N2)", async () => {
+		const init = await runCli(schemaRepo, ["init"]);
+		expect(init.exitCode).toBe(0);
+		await mkdir(join(schemaRepo, "src"), { recursive: true });
+		await writeFile(
+			join(schemaRepo, "src", "app.schema.ts"),
+			COLUMN_KEY_SCHEMA_SOURCE,
+		);
+		const generate = await runCli(schemaRepo, ["generate", "--export"]);
+		expect(generate.exitCode).toBe(0);
+
+		// Hand-edit the export's table fact before it is ever committed --
+		// standing in for a person editing `schema.json` by hand (1.4's own
+		// reasoning: the reader never checks a column key's shape). Every
+		// other field is left as the real writer produced it; only `key`
+		// changes, and only via reconstruction, never mutation.
+		const schemaJsonPath = join(schemaRepo, ".hejbro", "export", "schema.json");
+		// A hand-edited export's own JSON, read back before this
+		// repository's own writer types apply to it -- the point of this
+		// fixture is that the reader never checks its shape.
+		// biome-ignore lint/suspicious/noExplicitAny: see the comment above.
+		const original: any = JSON.parse(await readFile(schemaJsonPath, "utf8"));
+		const postsFact = original.tables.find(
+			// biome-ignore lint/suspicious/noExplicitAny: see above.
+			(table: any) => table.tableName === "posts",
+		);
+		if (postsFact === undefined) {
+			throw new Error('fixture: no "posts" table fact in the export');
+		}
+		const userIdSqlName = "user_id";
+		const firstPlaceSqlName = "first_place";
+		const klassSqlName = "klass";
+		const aQuoteBSqlName = "a_quote_b";
+		const patchedColumns = {
+			...postsFact.columns,
+			[userIdSqlName]: {
+				...postsFact.columns[userIdSqlName],
+				key: "user-id",
+			},
+			[firstPlaceSqlName]: {
+				...postsFact.columns[firstPlaceSqlName],
+				key: "1st",
+			},
+			[klassSqlName]: { ...postsFact.columns[klassSqlName], key: "class" },
+			[aQuoteBSqlName]: {
+				...postsFact.columns[aQuoteBSqlName],
+				key: 'a"b',
+			},
+		};
+		const patched = {
+			...original,
+			// biome-ignore lint/suspicious/noExplicitAny: see above.
+			tables: original.tables.map((table: any) => {
+				if (table.tableName !== "posts") {
+					return table;
+				}
+				return { ...table, columns: patchedColumns };
+			}),
+		};
+		await writeFile(schemaJsonPath, JSON.stringify(patched));
+
+		await run("git", ["init", "-q"], schemaRepo);
+		await run("git", ["config", "user.email", "smoke@example.com"], schemaRepo);
+		await run("git", ["config", "user.name", "smoke"], schemaRepo);
+		await run("git", ["add", "-A"], schemaRepo);
+		const commit = await run(
+			"git",
+			["commit", "-q", "-m", "export"],
+			schemaRepo,
+		);
+		expect(commit.exitCode).toBe(0);
+
+		const link = await runCli(consumerRepo, ["link", schemaRepo]);
+		expect(link.exitCode).toBe(0);
+		const vendor = await runCli(consumerRepo, ["vendor"]);
+		expect(vendor.exitCode).toBe(0);
+
+		const contractPath = join(consumerRepo, ".hejbro", "vendor", "contract.ts");
+		const contractSource = await readFile(contractPath, "utf8");
+		expect(contractSource).toContain('"user-id"');
+		expect(contractSource).toContain('"1st"');
+		expect(contractSource).toContain("readonly class:");
+		expect(contractSource).toContain('"a\\"b"');
+
+		// The consumer half: the adversarial keys are actually reachable off
+		// `client.posts.columns`, not just present in the rendered text --
+		// compiled together with the contract by one real tsc.
+		const columnKeyCheckPath = join(consumerRepo, "column-key-check.ts");
+		await writeFile(
+			columnKeyCheckPath,
+			`import type { Driver } from "hejbro";
+import { createDb } from "./.hejbro/vendor/contract";
+
+declare const driver: Driver;
+const client = createDb(driver);
+client.posts.columns["user-id"];
+client.posts.columns["1st"];
+client.posts.columns.class;
+client.posts.columns["a\\"b"];
+`,
+		);
+
+		const check = await run(
+			TSC_PATH,
+			[
+				"--noEmit",
+				"--strict",
+				"--moduleResolution",
+				"bundler",
+				"--module",
+				"esnext",
+				"--target",
+				"es2022",
+				contractPath,
+				columnKeyCheckPath,
 			],
 			consumerRepo,
 		);
