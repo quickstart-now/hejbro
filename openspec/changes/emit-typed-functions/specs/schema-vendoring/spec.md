@@ -21,9 +21,11 @@ already follows. The name-keyed client
 built from that contract SHALL expose those functions under `fn`,
 keyed the same way, as callables whose rendered SQL is the same
 parameterized invocation the declaring repository's own `db.fn` renders
-— an explicit column list for a table return, never `select *` — so a
-consumer calls the owning repository's functions with the types the
-declarations gave them and no declaration in hand.
+— an explicit column list for a table return, never `select *` — and
+the same surface under `.as(context)`, since a function called for a
+role is the case a scoped handle exists for. So a consumer calls the
+owning repository's functions with the types the declarations gave them
+and no declaration in hand.
 
 #### Scenario: A scalar function crosses the boundary
 - **WHEN** a schema declaring a scalar-returning function is vendored
@@ -31,7 +33,8 @@ declarations gave them and no declaration in hand.
   arguments
 - **THEN** the call type-checks against the declared argument keys and
   types, executes a parameterized invocation, and resolves to the
-  mapped scalar type
+  mapped scalar type — through the scoped handle as well, where the
+  same invocation runs inside the context the scope applies
 
 #### Scenario: A table-returning function crosses the boundary
 - **WHEN** a schema declaring a function that returns a table is

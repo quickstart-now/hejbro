@@ -147,26 +147,108 @@ contract/emit.ts`, `packages/cli/src/contract/ts-type.ts` (reuse),
 
 ## 3. The client's fn and the witness (#587)
 Files: `packages/query/src/client/name-keyed-db.ts`, `packages/query/src/
-db/fn.ts` (reuse of the call plan; export what `fn` needs),
-`packages/query/test/client/*.test.ts`, `examples/*/test/*vendor*.test.ts`
-(the two-repository witness), `skills/hejbro/references/{query-layer,
-polyrepo}.md` (measure the file name), `.changeset/*.md`
+client/synthesize-function.ts` (new — **not** `synthesize.ts`, which a
+parallel change is editing), `packages/query/src/client/contract-types.ts`
+(it carries no `functions` field at all yet), `packages/query/src/db/fn.ts`
+(reuse of the call plan; export what `fn` needs), `packages/query/test/
+client/*.test.ts`, `examples/*/test/*vendor*.test.ts` (the two-repository
+witness — its type-check half belongs to group 2), `skills/hejbro/
+references/{query-layer,polyrepo}.md` (measure the file name),
+`.changeset/*.md`
 
-- [ ] 3.1 (~9m) [design] `createNameKeyedDb` gains `fn`, keyed by export
+- [x] 3.1 (~9m) [design] `createNameKeyedDb` gains `fn`, keyed by export
       name, typed from `Database["Functions"]`, rendering through the
       same scalar-call / returns-table plan `db.fn` uses (no second
-      renderer). Failing tests: `name-keyed-db.test.ts` — "fn renders the
-      same SQL as db.fn for a scalar call", "…for a table return, with an
-      explicit column list", type test "a mismatched argument fails".
-- [ ] 3.2 (~9m) The live witness: vendor the examples' schema into the
+      renderer). **Two parities, and they are separate claims** (lead,
+      2026-09-02): the *result types* agree, and the *rendered SQL and
+      params* agree. A type equality says nothing about what reached the
+      driver, and identical SQL says nothing about what the caller was
+      allowed to write; either alone leaves the client "typed right and
+      wired to different SQL", or the reverse. Failing tests:
+      `client/parity.test.ts` — the existing recording-driver comparison
+      of the declaration path against the vendored client, extended to a
+      scalar call and a table-returning call (same SQL, same params, and
+      the table return's explicit column list); `name-keyed-db.test.ts`
+      — a type test "a mismatched argument fails", including 2.1's
+      zero-argument `Record<string, never>` probe; and the type-equality
+      half under one real `tsc`, the function-shaped sibling of the
+      D106 m8 select check.
+      The key-avoidance search needed a fixture built to make it work:
+      the property it exists for also held for an unrelated reason
+      (tables spread first, and table clients resolving by value rather
+      than by name), so the search was unobserved code until two tables
+      and two `setof`-returning functions were arranged such that
+      skipping the search evicts one table and stopping it after a
+      single attempt evicts the other. Both mutants now kill exactly one
+      test, and they are different tests. The spread order keeps its own
+      observer and a one-line constraint comment.
+      The synthesized declaration fills the fields `createFnApi` never
+      reads with honest minimums — the way the table synthesis already
+      fills unread column fields — rather than earning a coded refusal
+      of its own. That was measured, not assumed, and the measurement
+      carries its date: on `dev` at `28e7010a`, the table precedent kept
+      DDL away by reusing `existing: true`, and no refusal existed for a
+      synthesized value; a parallel change is moving that table to
+      `"usage"` authority so the `synced-table-declared` guard catches
+      it. The conclusion outlives that move, because the protection here
+      is not refusal but unreachability — the declaration escapes to no
+      public surface at all, which is the stronger property. **That
+      makes the leak test the one pillar under this decision**: if a
+      later change ever exposes the synthesized declaration, the refusal
+      question reopens with it.
+- [x] 3.1b (~10m) A synthesized function is refused by the migration
+      engine. **A measurement changed this decision** (lead, 2026-09-02):
+      3.1 had settled for unreachability plus a leak test, on the
+      reasoning that a value which escapes nowhere needs no refusal. Then
+      the declaration was actually handed to `generateMigration` in a
+      probe, and it was not rejected — it produced a migration creating
+      the function with an empty body. A silent wrong DDL under the one
+      pillar is a different risk from an error under it, so the pillar
+      gets a second layer, the two-layer shape the vendored *table*
+      already has. The synthesized declaration carries an authority
+      marker and `generate.ts` refuses it at its single function
+      chokepoint with `synced-function-declared`, keyed on the marker
+      being `"usage"` and never on its absence — every `defineFunction`
+      carries no marker at all and must stay unaffected. The leak test
+      stays: one layer says it cannot get there, the other says what
+      happens if it does. This opens a core file during group 3, which
+      the groups' sequence permits; the reason it is not in group 1 is
+      that the fact justifying it was not known then. Failing test: core
+      — "a synthesized function handed to generateMigration is refused"
+      (the probe, kept as a test).
+- [x] 3.2 (~9m) The live witness: vendor the examples' schema into the
       consumer fixture and call one scalar and one table-returning
-      function against PG15 and PG17. Failing test: the existing
-      two-repository witness gains the two calls (red before G2/G3 land:
-      no `fn`).
-- [ ] 3.3 (~5m) Skill sentences (the contract now carries functions; call
+      function against PG15 and PG17. The live half does **not** go in
+      the existing smoke file after all: that file runs in the default
+      `pnpm test`, and putting a server call in it would make a package
+      that needs no Docker suddenly need it, against the convention every
+      other integration suite here follows. It lands as its own
+      Docker-gated `*.integration.test.ts` with its own config and
+      script — the same feature's live half, a different file.
+      The witness seeds its rows through the driver rather than through
+      the vendored client's own `insert`, following the workaround the
+      two-repository witness already documents: that `insert` never
+      calls `.returning()`, so it resolves empty while its type promises
+      rows. Found live here, pre-existing — #622 fixed the chain types
+      and did not reach the name-keyed wrapper's casts — and filed as
+      #654. Out of scope for this change; the citation is here so the
+      seeding is not read as an arbitrary choice.
+- [x] 3.3 (~5m) Skill sentences (the contract now carries functions; call
       them through `fn` — and say that `Functions` is keyed by export
       name while `Tables` is keyed by SQL name, since a reader who meets
-      one rule will assume the other), `minor` changeset, ledger rows.
+      one rule will assume the other), and a `minor` changeset — which
+      CI cannot ask for: `changeset status` passes while any unconsumed
+      changeset covers the fixed group, and fifty of them sit in
+      `.changeset/` between releases, so its absence would never be
+      reported (#652). The ledger rows and the README blocks are **not**
+      this task: they are the lead's close-out commit at PR time, one
+      writer for those files.
+      **Carried in from 3.1**: `skills/hejbro/references/polyrepo.md:47`
+      says what `createDb`'s value has is `columns`/`select`/`insert`/
+      `update`/`delete` — 3.1 made that false by adding `fn`. It is a
+      false statement sitting in the tree until this task, not a docs
+      nit, and the rule it trips is "public surface changed → the skill
+      moves in the same PR".
 
 ## Verification (definition of done, not a task)
 `openspec validate emit-typed-functions --strict`; `openspec show
