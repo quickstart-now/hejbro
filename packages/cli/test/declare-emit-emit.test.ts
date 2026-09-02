@@ -519,12 +519,26 @@ describe("emitDeclarationFiles / 2.1", () => {
 			(match) => match[1] ?? "",
 		);
 
+	/**
+	 * D106 R3-N4: keyed and probed by `fileBaseName` throughout, never
+	 * `schema` -- `importedSchemasFrom` parses an import line's own
+	 * target, which is always the *file* base name a `from "./<...>
+	 * .schema"` path names, not the schema itself. A schema whose name
+	 * isn't already a safe file base name (`safeFileBaseName` folds
+	 * `a.b`/`a b` to `a_b`) used to make every lookup miss when this map
+	 * was keyed by `schema` instead, so the whole graph read as empty and
+	 * this assertion passed vacuously even over a real cycle.
+	 */
 	const hasImportCycle = (
-		files: ReadonlyArray<{ readonly schema: string; readonly source: string }>,
+		files: ReadonlyArray<{
+			readonly fileBaseName: string;
+			readonly source: string;
+		}>,
 	): boolean => {
 		const adjacency = new Map(
 			files.map(
-				(file) => [file.schema, importedSchemasFrom(file.source)] as const,
+				(file) =>
+					[file.fileBaseName, importedSchemasFrom(file.source)] as const,
 			),
 		);
 		const visit = (
@@ -540,7 +554,7 @@ describe("emitDeclarationFiles / 2.1", () => {
 		/** Reachable from `start` through at least one real edge -- never trivially "reachable from itself" in zero steps, or every acyclic graph would falsely report a cycle at every node. */
 		const reachesItself = (start: string): boolean =>
 			(adjacency.get(start) ?? []).reduce(visit, new Set<string>()).has(start);
-		return files.some((file) => reachesItself(file.schema));
+		return files.some((file) => reachesItself(file.fileBaseName));
 	};
 
 	it('never emits a set of files whose imports form a cycle (cli-commands: "Declaration files never import each other in a cycle")', () => {
@@ -598,8 +612,24 @@ describe("emitDeclarationFiles / 2.1", () => {
 		// importing files is exactly that case.
 		expect(
 			hasImportCycle([
-				{ schema: "x", source: 'import { y } from "./y.schema";' },
-				{ schema: "y", source: 'import { x } from "./x.schema";' },
+				{ fileBaseName: "x", source: 'import { y } from "./y.schema";' },
+				{ fileBaseName: "y", source: 'import { x } from "./x.schema";' },
+			]),
+		).toBe(true);
+	});
+
+	/**
+	 * D106 R3-N4: a schema name that isn't already a safe file base name
+	 * (`safeFileBaseName` folds `a.b` to `a_b`, N6's own fixture shape) --
+	 * the cycle here is real (`a_b` imports `c`, `c` imports `a_b`), and
+	 * the assertion must still catch it even though the schema's own
+	 * name (`a.b`) and its file base name (`a_b`) differ.
+	 */
+	it("hasImportCycle still catches a cycle when a schema's own name folds into a different file base name", () => {
+		expect(
+			hasImportCycle([
+				{ fileBaseName: "a_b", source: 'import { c1 } from "./c.schema";' },
+				{ fileBaseName: "c", source: 'import { a1 } from "./a_b.schema";' },
 			]),
 		).toBe(true);
 	});
