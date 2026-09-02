@@ -71,7 +71,13 @@ wrote and that it carries no statements, and exit zero. That migration's
 name SHALL be derived from the difference between the two snapshots, by
 the same naming rules every other migration follows and as
 deterministically: the same pair of snapshots SHALL always produce the
-same name, never a generic fallback.
+same name, never a generic fallback. A snapshot can move without any
+table changing hands — a declaration restating a table hejbro already
+records the same way — and such a run SHALL be named from the table
+whose record changed, exactly as deterministically. Only a run whose
+snapshot moved with no table's record changing at all is a fault in
+hejbro, and it SHALL be reported as a coded diagnostic naming itself as
+one, never as a crash.
 
 Whether a run has something to write is decided by comparing the
 snapshot it arrived at against the previous one, never by whether the
@@ -171,6 +177,14 @@ line SHALL NOT collapse them into one file.
   a migration carrying no statements is written alongside it, the report
   names both, the exit code is zero — and `hejbro verify` run afterwards
   passes, as does a later run that does emit statements
+
+#### Scenario: A changed existing declaration is named and anchored like any other
+- **WHEN** an `existingTable()` declaration's own columns change — a
+  column added, renamed or retyped — and `hejbro generate` runs
+- **THEN** the run does not fail, a migration carrying no statements is
+  written whose name says what changed about the declaration, the
+  snapshot records the new columns, and `hejbro verify` passes
+  afterwards
 
 #### Scenario: The export is written by the same run
 - **WHEN** generation runs with the export enabled and finds a

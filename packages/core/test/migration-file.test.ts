@@ -540,10 +540,135 @@ describe("deriveExistingTransitionSlug (D106 R3, J13)", () => {
 		);
 	});
 
-	it("throws an internal-invariant error when the two snapshots carry no existing-marker transition at all", () => {
+	// D106 R4, R4-B1: both sides marked existing, but the declared columns
+	// differ -- the fifth transition, reached only when the two sides'
+	// content actually differs (not by side-category alone, unlike the
+	// other four).
+	it("names 'reshape_<table>' when both sides are existing but the declared shape differs", () => {
+		const previous = snapshotWith("table:auth.users", existingNode);
+		const next = snapshotWith("table:auth.users", {
+			...existingNode,
+			columns: [{ name: "email" }],
+		});
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("reshape_users");
+	});
+
+	it("keeps scanning past an unchanged existing:existing table to find the real mover, even when it sorts first", () => {
+		const previous: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				"table:app.same_shape": existingNode,
+				"table:app.zzz_reshaped": existingNode,
+			},
+		};
+		const next: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				// Sorts before "app.zzz_reshaped" but carries no content
+				// difference -- must be skipped, not mistaken for the mover.
+				"table:app.same_shape": existingNode,
+				"table:app.zzz_reshaped": { ...existingNode, columns: [{ name: "x" }] },
+			},
+		};
+		expect(deriveExistingTransitionSlug(previous, next)).toBe(
+			"reshape_zzz_reshaped",
+		);
+	});
+
+	it("throws a coded HejbroError, not a raw Error, when the two snapshots carry no explaining transition at all (D106 R4, R4-B1)", () => {
 		const same = snapshotWith("table:app.widgets", managedNode);
 		expect(() => deriveExistingTransitionSlug(same, same)).toThrow(
-			/no existing-marker transition/,
+			expect.objectContaining({
+				name: "HejbroError",
+				code: "existing-transition-not-found",
+			}),
 		);
+	});
+
+	// D106 R5, R5-B1/J17: a managed:managed table whose own record moved
+	// (e.g. an index/check declaration reorder, R5-B1's own repro) has no
+	// side-category transition -- tier 2's raw content comparison names it
+	// `restate_<table>` instead, deliberately not claiming *why* it moved.
+	describe("restate fallback (D106 R5, R5-B1, J17)", () => {
+		it("names 'restate_<table>' when a managed table's own content differs with no classifiable transition", () => {
+			const previous = snapshotWith("table:app.widgets", {
+				schema: "app",
+				name: "widgets",
+				indexes: [{ name: "widgets_a_idx" }, { name: "widgets_b_idx" }],
+			});
+			const next = snapshotWith("table:app.widgets", {
+				schema: "app",
+				name: "widgets",
+				indexes: [{ name: "widgets_b_idx" }, { name: "widgets_a_idx" }],
+			});
+			expect(deriveExistingTransitionSlug(previous, next)).toBe(
+				"restate_widgets",
+			);
+		});
+
+		it("keeps scanning past an unchanged managed:managed table to find the real mover, even when it sorts first", () => {
+			const unchangedNode: JsonValue = { schema: "app", name: "aaa" };
+			const previous: Snapshot = {
+				...emptySnapshot,
+				objects: {
+					"table:app.aaa": unchangedNode,
+					"table:app.zzz": {
+						schema: "app",
+						name: "zzz",
+						indexes: [{ name: "a" }],
+					},
+				},
+			};
+			const next: Snapshot = {
+				...emptySnapshot,
+				objects: {
+					// Sorts before "app.zzz" but carries no content difference.
+					"table:app.aaa": unchangedNode,
+					"table:app.zzz": {
+						schema: "app",
+						name: "zzz",
+						indexes: [{ name: "b" }],
+					},
+				},
+			};
+			expect(deriveExistingTransitionSlug(previous, next)).toBe("restate_zzz");
+		});
+
+		it("prefers a real existing-marker transition over an unrelated restate candidate in the same run, regardless of key order", () => {
+			// "app.aaa" (restate candidate) sorts before "app.zzz" (a real
+			// transition) -- tier 1 must still find "zzz" first, since it
+			// scans every key for a classifiable transition before tier 2
+			// ever runs, not "whichever tier finds a match first per key".
+			const previous: Snapshot = {
+				...emptySnapshot,
+				objects: {
+					"table:app.aaa": {
+						schema: "app",
+						name: "aaa",
+						indexes: [{ name: "a" }],
+					},
+					"table:app.zzz": managedNode,
+				},
+			};
+			const next: Snapshot = {
+				...emptySnapshot,
+				objects: {
+					"table:app.aaa": {
+						schema: "app",
+						name: "aaa",
+						indexes: [{ name: "b" }],
+					},
+					"table:app.zzz": { ...existingNode, name: "zzz" },
+				},
+			};
+			expect(deriveExistingTransitionSlug(previous, next)).toBe("release_zzz");
+		});
+
+		it("throwing still requires no table's raw content to differ at all, unaffected by the restate tier", () => {
+			const same = snapshotWith("table:app.widgets", managedNode);
+			expect(() => deriveExistingTransitionSlug(same, same)).toThrow(
+				expect.objectContaining({ code: "existing-transition-not-found" }),
+			);
+		});
 	});
 });

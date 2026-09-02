@@ -287,14 +287,20 @@ naming the version it found, the version it knows, and the command that
 installs a newer hejbro. A toolchain meeting an **older** format SHALL
 read it and treat the facts that format does not carry as absent.
 
-**Not yet observable, and recorded as such rather than promised**: the
-description format has held one shape (format 1) since it first
-existed, so there is no earlier shape yet for an "older format" branch
-to read — the asymmetry above is structural, built ahead of the day
-format 2 ships, the same way the local-replacement absence elsewhere in
-this document names a destination rather than a proof that doesn't
-exist yet. This closes for real, with a real fixture, the day a second
-description format exists.
+The two skew axes are observed differently, and the scenario titles below
+say which is which. The format-**number** axis stays structural: the
+description format has only ever been 1, so no export declaring a lower
+number was ever written, and the suite pins only the refusal side. A
+fixture declaring format 0 would be a fabricated artifact, not an older
+export, so the older-number branch is recorded as unobservable rather
+than promised as checked — exactly what its scenario title says.
+
+The **shape** axis is observed. Format 1 now has two shapes: the one
+written before functions carried their argument and return facts, and the
+one written since. A reader meeting the earlier shape SHALL read the
+function as present and its typed-call facts as absent, and SHALL NOT
+carry that function into the contract's `Functions` section — a call it
+cannot type is not offered.
 
 #### Scenario: A newer format is refused with the command that fixes it
 - **WHEN** the vendored description declares a newer format
@@ -304,6 +310,12 @@ description format exists.
 #### Scenario: An older format is read (unobservable until a second format exists)
 - **WHEN** the vendored description declares an older format
 - **THEN** it is read, and facts that format does not carry are absent
+
+#### Scenario: A pre-functions export reads with its functions absent
+- **WHEN** `hejbro vendor` reads a format-1 export whose function facts
+  carry no `args` or `returns`
+- **THEN** the export is read, the tables are carried as before, and the
+  contract's `Functions` section carries none of those functions
 
 ### Requirement: Vendoring never overwrites a file it did not write
 Where the destination holds `hejbro.lock` or the vendored `contract.ts`
@@ -378,6 +390,13 @@ role is the case a scoped handle exists for. So a consumer calls the
 owning repository's functions with the types the declarations gave them
 and no declaration in hand.
 
+A mismatch is caught where TypeScript can see it: a missing or wrongly
+typed argument fails to compile anywhere; an extra property fails to
+compile on a fresh object literal, and a pre-built value whose key count
+does not match the declared arguments is refused at runtime by the
+argument-count check, never sent (the runtime check counts keys; it does
+not inspect their names).
+
 #### Scenario: A scalar function crosses the boundary
 - **WHEN** a schema declaring a scalar-returning function is vendored
   and the consumer calls it through the client's `fn` with matching
@@ -394,9 +413,12 @@ and no declaration in hand.
   lists the returned columns explicitly
 
 #### Scenario: A mismatched call fails the type check
-- **WHEN** the consumer calls a vendored function with a missing, extra,
-  or wrongly typed argument
-- **THEN** the call fails to compile
+- **WHEN** the consumer calls a vendored function with a missing or
+  wrongly typed argument, or with an extra property on a fresh object
+  literal
+- **THEN** the call fails to compile; a pre-built value whose key count
+  does not match the declared arguments is refused at runtime before
+  any SQL is sent
 
 #### Scenario: A function returning an uncarried table is absent
 - **WHEN** a vendored schema declares an exported function returning a
@@ -409,3 +431,84 @@ and no declaration in hand.
   definitions
 - **THEN** the contract's `Functions` section is empty and the client
   exposes no `fn` entry
+
+### Requirement: A vendored mutation's type matches what it returns
+The name-keyed client's bare `insert()`, `update()` and `delete()` SHALL
+type as resolving to no rows, because the statement they send carries no
+`RETURNING` clause. A consumer who needs the written rows back reads them
+in a second statement; the client SHALL NOT promise rows in a type it
+never delivers.
+
+#### Scenario: A bare insert resolves to no rows, and says so in its type
+- **WHEN** a consumer awaits `client.<table>.insert(row)` through a
+  vendored contract
+- **THEN** the promise resolves to an empty array and its awaited type is
+  exactly `ReadonlyArray<never>` — the table's row type is not what it
+  resolves to
+
+### Requirement: A contract vendored before functions were carried still runs
+`createNameKeyedDb` SHALL accept contract metadata that carries no
+`functions` member — the shape every contract vendored before the typed
+function surface existed has — and expose an empty `fn`.
+
+#### Scenario: A pre-functions contract still builds a client
+- **WHEN** a consumer builds a client from a vendored `contract.ts` whose
+  metadata has no `functions` member
+- **THEN** the client's tables work as before and `fn` carries no callables
+
+### Requirement: Every emitted key compiles
+The contract emitter SHALL quote a table column key or function argument
+key that is not a valid TypeScript identifier, and SHALL import every
+value type its own output names, so that a contract compiles whatever the
+schema declared.
+
+This requirement is about the emitted contract only. Whether the *DDL*
+side quotes a non-identifier function argument name is a separate axis
+this change does not touch and does not promise: it renders such a name
+unquoted, so a declaration carrying one still produces invalid migration
+SQL. That gap is tracked on its own.
+
+#### Scenario: A non-identifier key is quoted
+- **WHEN** a schema declaring a function argument under a key such as
+  `my-arg` is vendored, and an export whose table fact carries such a
+  column key is read
+- **THEN** the contract compiles and the key is preserved as written
+
+#### Scenario: An interval column compiles
+- **WHEN** a schema declaring an `interval` column and an `interval`
+  function argument is vendored
+- **THEN** the contract compiles with the interval value type resolved
+
+### Requirement: An existing table crosses the boundary
+A vendored contract SHALL emit an existing table — one the schema
+declares with `existingTable()` — under `Tables` with the same `Row`,
+`Insert`, and `Update` derivation a managed table gets, and its client
+metadata SHALL mark it existing. The name-keyed client SHALL expose it
+for reading like any other table, and a managed table's foreign key
+onto it SHALL resolve to a relation in the contract exactly as one onto
+a managed table does; a foreign key onto a table the schema does not
+declare at all keeps having none.
+
+Following that relation from the client is a separate surface: the
+name-keyed client exposes no `.related()` for any table, managed or
+existing. What this requirement guarantees is that the relation is
+carried in the contract.
+
+No code reads that mark today — the client already treats every
+vendored table as existing, and whether a relation resolves is decided
+when the contract is emitted, not when it is read. The mark is carried
+for the reader of the generated file and for tooling built on it.
+
+#### Scenario: A consumer reads a platform-owned table
+- **WHEN** a schema declaring `auth.users` with `existingTable()` and a
+  managed table referencing it are vendored, and the consumer reads
+  both tables through the vendored client
+- **THEN** the contract carries the relation to `auth.users`, and rows
+  of the existing table read through the client type as its declared
+  columns
+
+#### Scenario: An undeclared table still has no relation
+- **WHEN** a managed table references a table the schema neither
+  manages nor declares with `existingTable()`
+- **THEN** the contract carries no relation for that reference, as
+  before

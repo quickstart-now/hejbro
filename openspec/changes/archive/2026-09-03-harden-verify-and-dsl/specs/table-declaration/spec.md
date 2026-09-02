@@ -23,7 +23,7 @@ the other, changes neither the generated DDL nor the snapshot.
 
 The thunk SHALL never be resolved while `table()` runs — this is what
 lets a reference into another declaration file (or another table in
-the same file) resolve whichever one the loader reaches first. The
+the same file) resolve regardless of which one the loader reaches first. The
 declaration's first `foreignKeys` read that completes SHALL be cached,
 so every `.references()` thunk on that declaration runs at most once
 across every later read; a read that throws SHALL cache nothing, so
@@ -61,7 +61,7 @@ the next read folds again.
   for the same-file case, regardless of which table is declared first),
   and the emitted foreign keys are the ones each declaration named
 
-#### Scenario: The thunk resolves once per successful read, not once per read
+#### Scenario: The thunk resolves once across repeated reads, not once per read
 - **WHEN** a declaration's foreign keys are read more than once and every
   read completes without throwing
 - **THEN** each `.references()` thunk runs exactly once, cached after the

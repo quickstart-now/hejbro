@@ -817,7 +817,7 @@ export const runGenerate = async (
 							"hejbro baseline",
 							`loaded ${declarations.length} declarations`,
 							"",
-							"No managed objects were declared -- only existingTable() declarations, which hejbro never migrates or registers.",
+							"No managed objects were declared — only existingTable() declarations, which hejbro never migrates or registers.",
 							"The snapshot records them as existing. Next: run `hejbro check` to confirm your declarations match the live schema.",
 						],
 						stderr: null,

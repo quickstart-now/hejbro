@@ -30,6 +30,12 @@ key that is not a valid TypeScript identifier, and SHALL import every
 value type its own output names, so that a contract compiles whatever the
 schema declared.
 
+This requirement is about the emitted contract only. Whether the *DDL*
+side quotes a non-identifier function argument name is a separate axis
+this change does not touch and does not promise: it renders such a name
+unquoted, so a declaration carrying one still produces invalid migration
+SQL. That gap is tracked on its own.
+
 #### Scenario: A non-identifier key is quoted
 - **WHEN** a schema declaring a function argument under a key such as
   `my-arg` is vendored, and an export whose table fact carries such a
@@ -50,11 +56,20 @@ naming the version it found, the version it knows, and the command that
 installs a newer hejbro. A toolchain meeting an **older** format SHALL
 read it and treat the facts that format does not carry as absent.
 
-Format 1 now has two shapes: the one written before functions carried
-their argument and return facts, and the one written since. A reader
-meeting the earlier shape SHALL read the function as present and its
-typed-call facts as absent, and SHALL NOT carry that function into the
-contract's `Functions` section — a call it cannot type is not offered.
+The two skew axes are observed differently, and the scenario titles below
+say which is which. The format-**number** axis stays structural: the
+description format has only ever been 1, so no export declaring a lower
+number was ever written, and the suite pins only the refusal side. A
+fixture declaring format 0 would be a fabricated artifact, not an older
+export, so the older-number branch is recorded as unobservable rather
+than promised as checked — exactly what its scenario title says.
+
+The **shape** axis is observed. Format 1 now has two shapes: the one
+written before functions carried their argument and return facts, and the
+one written since. A reader meeting the earlier shape SHALL read the
+function as present and its typed-call facts as absent, and SHALL NOT
+carry that function into the contract's `Functions` section — a call it
+cannot type is not offered.
 
 #### Scenario: A newer format is refused with the command that fixes it
 - **WHEN** the vendored description declares a newer format
@@ -98,8 +113,10 @@ and no declaration in hand.
 
 A mismatch is caught where TypeScript can see it: a missing or wrongly
 typed argument fails to compile anywhere; an extra property fails to
-compile on a fresh object literal, and a pre-built value carrying one is
-refused at runtime by the argument-count check, never sent.
+compile on a fresh object literal, and a pre-built value whose key count
+does not match the declared arguments is refused at runtime by the
+argument-count check, never sent (the runtime check counts keys; it does
+not inspect their names).
 
 #### Scenario: A scalar function crosses the boundary
 - **WHEN** a schema declaring a scalar-returning function is vendored
@@ -120,8 +137,9 @@ refused at runtime by the argument-count check, never sent.
 - **WHEN** the consumer calls a vendored function with a missing or
   wrongly typed argument, or with an extra property on a fresh object
   literal
-- **THEN** the call fails to compile; a pre-built value carrying an
-  extra property is refused at runtime before any SQL is sent
+- **THEN** the call fails to compile; a pre-built value whose key count
+  does not match the declared arguments is refused at runtime before
+  any SQL is sent
 
 #### Scenario: A function returning an uncarried table is absent
 - **WHEN** a vendored schema declares an exported function returning a
