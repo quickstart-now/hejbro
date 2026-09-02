@@ -346,48 +346,84 @@ red across the full core suite (98 files/1469), the other 1466 stayed
 green, including every managed-table serial test — the fix does not
 touch managed-table sequence synthesis at all.
 
-**B2 — fixed (J10 ruling: `next` only).** `ObjectKind` gained an
-optional `ownerTableIdentity?(node): string` accessor (no kind-name
-hardcoding) — implemented by `sequenceKind`/`rlsKind`/`policyKind`
-(each `tableIdentity(schema, table)` off their own snapshot node) and
-by `tableKind` itself (`tableIdentity(schema, name)`, self); **not**
+**B2 — fixed (J10 ruling: two different contracts, not one).**
+`ObjectKind` gained an optional `ownerTableIdentity?(node): string`
+accessor (no kind-name hardcoding) — implemented by **only the three
+fan-out kinds**, `sequenceKind`/`rlsKind`/`policyKind` (each
+`tableIdentity(schema, table)` off their own snapshot node); **not**
 implemented by `grant` (a user's own standalone declaration, never a
 table fan-out — implementing it there would silently drop an
-explicitly-written grant under the same rule). `diffSnapshots`
-(`engine/diff-engine.ts`) gained `ownerIsExisting`: a key is skipped
-before its kind's own `diff` ever runs when its owning table's
-*authoritative* record — `next`'s own entry for that identity, falling
-back to `previous`'s only when the table's declaration was removed
-outright and `next` carries no entry for it at all — is marked
-existing. This is deliberately not `previous || next`: on adoption,
-`next`'s own record says the table is managed again, so a fanned-out
-object's create must proceed rather than being suppressed merely
-because the table once was existing (the exact recommendation — "both
-directions silence" — J10 rejected: a user who declares RLS, a policy,
-and a `serial` column on an adopted table and gets silent non-creation
-pays the cost in live data, forever, on every later run too).
-`tableKind.diff`'s own `isExistingSide` guard was **measured and
-removed**: no test calls `tableKind.diff` directly with an
-`existing`-marked node (`table-kind-diff.test.ts` and every other
-direct-call site — `generated-columns-{diff,emit}.test.ts`,
-`identity-columns-{diff,emit}.test.ts` — exercise unrelated concerns;
-every existing-table assertion in the repo goes through
-`generateMigration`/`diffSnapshots`), and the full core suite (98
-files) stays green with the guard gone — the single-chokepoint claim
-is now literally true. Two new tests in `packages/core/test/
-generate.test.ts` replay the evaluator's own reproduction fixture (RLS
-+ one policy + a `serial()` primary key) on both handover directions:
-"managed … to existing" (`hasChanges: false`, `sql === ""`) and
-"existing to managed" (no `create table`, but `create sequence`/
-`enable row level security`/`create policy` all present — asserting
-presence, not just absence, since that is the half of the ruling a
-"nothing happened" assertion can't tell apart from a bug). Mutant ①
-(`next` → `previous || next`): exactly 1 red (the adoption test only)
-across the file's 33, the handover test and the other 31 stayed green
-— the one word is the substance of the ruling. Mutant ② (the rule
-removed): exactly 1 red (the handover test only) across the full core
-suite (98 files/1471), the adoption test unaffected (its own path
-never needed the rule to be green). Both reverted; 98/98 clean.
+explicitly-written grant under the same rule), and, after a same-round
+correction (below), **not** implemented by `tableKind` either.
+`diffSnapshots` (`engine/diff-engine.ts`) gained `ownerIsExisting`: a
+fan-out key is skipped before its kind's own `diff` ever runs when its
+owning table's *authoritative* record — `next`'s own entry for that
+identity, falling back to `previous`'s only when the table's
+declaration was removed outright and `next` carries no entry for it at
+all — is marked existing. This is deliberately not `previous ||
+next`: on adoption, `next`'s own record says the table is managed
+again, so a fanned-out object's create must proceed rather than being
+suppressed merely because the table once was existing (the exact
+recommendation — "both directions silence" — J10 rejected: a user who
+declares RLS, a policy, and a `serial` column on an adopted table and
+gets silent non-creation pays the cost in live data, forever, on every
+later run too).
+
+**Correction within this round**: `tableKind.diff`'s own
+`isExistingSide` guard was first measured and removed (no test calls
+`tableKind.diff` directly with an `existing`-marked node, and the full
+core suite stayed green without it) — reasoning that the fan-out rule
+now covering the table's own key too made the guard redundant. **That
+reasoning was wrong.** The table's own contract is *bidirectional*
+silence (existing on either side suppresses both a drop on handover
+*and* a create on adoption), while the fan-out rule is deliberately
+`next`-only so adoption's own objects get created — folding the table
+into the `next`-only rule would leak a `create table` on adoption (or,
+symmetrically, folding the fan-out rule into bidirectional silence
+would break J10 by suppressing adoption's own creates). Two contracts,
+not one duplicated: **the guard was restored**, with a comment stating
+the distinction (constraint only), and `tableKind` does not implement
+`ownerTableIdentity`.
+
+Two new tests in `packages/core/test/generate.test.ts` replay the
+evaluator's own reproduction fixture (RLS + one policy + a `serial()`
+primary key) on both handover directions: "managed … to existing"
+(`hasChanges: false`, `sql === ""`) and "existing to managed" (no
+`create table`, **and** no spurious `alter column … type …` — see
+mutant ③ below for why the second assertion exists — but `create
+sequence`/`enable row level security`/`create policy` all present,
+asserting presence, not just absence, since that is the half of the
+ruling a "nothing happened" assertion can't tell apart from a bug).
+
+**Three mutants**, each isolating a different edge of the design:
+① (`next` → `previous || next` on the fan-out rule): exactly 1 red
+(the adoption test only) across `generate.test.ts`'s 33, the handover
+test and the other 31 stayed green — the one word is the substance of
+the J10 ruling.
+② (the fan-out rule removed entirely): exactly 1 red (the handover
+test only) across the full core suite (98 files/1471), the adoption
+test unaffected.
+③ (`tableKind.diff`'s own guard weakened from `isExistingSide(previous)
+|| isExistingSide(next)` to `isExistingSide(next)` alone, matching the
+fan-out rule's own shape) — measured, not the outcome first guessed:
+**3 red**, not 1. Two are the *removal* direction (`next` carries no
+entry at all when a declaration is removed outright, so
+`isExistingSide(next)` reads `false` and the phantom drop this guard
+exists to suppress reappears) — B1's own "removing … with a
+serial-family column" pin and the plain "removing an existing
+declaration" pin both broke, a failure mode nobody had named yet.
+The third is the *adoption* test — but not by leaking a literal
+`create table`: probed directly (`generateMigration`'s own `result.sql`
+under the mutant), the actual leak is `alter table "…" alter column
+"id" type integer;` — the existing declaration's own column shape
+(`uuid`) gets diffed against the managed declaration's (`serial`,
+i.e. `integer`) as if one were a real edit of the other, which they
+never are. Worse than a duplicate create precisely because it looks
+like a plausible statement rather than an obvious mistake — the
+`not.toContain('alter column "id" type')` assertion was added to the
+adoption test specifically because this probe found it, closing a gap
+the original assertion (`not.toContain("create table")`) alone left
+open. All three reverted; 98/98 clean.
 
 **N1, N2, N5 — no instruction received this round.** Not addressed;
 left exactly as the evaluation found them, pending direction.
@@ -442,3 +478,9 @@ cached), `test` (17/17 tasks — core 98f/1469t incl. 1 todo, query
 (7/7), `check` (656 files clean), `check-types` (16/16, 0 cached),
 `test` (17/17 tasks — core 98f/1471t incl. 1 todo (+2), query 61f/843t,
 nile 5f/59t, supabase 17f/141t, cli 64f/545t (+1)).
+
+**Gates (round 2 correction, `tableKind.diff`'s guard restored + mutant
+③)**: `TURBO_FORCE=1 pnpm build --force` (7/7), `check` (656 files
+clean), `check-types` (16/16, 0 cached), `test` (17/17 tasks — core
+98f/1471t unchanged in count, one assertion strengthened; cli
+64f/545t). `openspec validate --strict` valid.

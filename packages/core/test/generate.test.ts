@@ -1083,8 +1083,22 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			previousSnapshot: firstResult.snapshot,
 		});
 		expect(secondResult.errors).toEqual([]);
-		// No `create table` -- the table itself already exists.
+		// No `create table` -- the table itself already exists. D106 R2's
+		// own mutant (table-kind.ts's guard weakened to `next`-only,
+		// matching the fan-out rule) measured that removing this half
+		// doesn't leak a `create table` at all -- both sides being
+		// present routes to the ALTER path instead -- so this line alone
+		// is not what proves the table needs its own bidirectional guard;
+		// the next line is.
 		expect(secondResult.sql).not.toContain("create table");
+		// The measured failure mode of that same mutant: an existing
+		// declaration's own (unrelated) column shape gets diffed against
+		// the managed declaration's, producing a spurious `alter column
+		// … type …` -- arguably worse than a duplicate create, since nothing
+		// about it looks wrong at a glance. The table's own bidirectional
+		// guard exists specifically so the two declarations' shapes are
+		// never compared to each other at all.
+		expect(secondResult.sql).not.toContain('alter column "id" type');
 		// ...but everything hejbro now manages ON that table is created as
 		// it would be for any managed table -- this is the half of the
 		// judgement that isn't "nothing": adoption is not silent about
