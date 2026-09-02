@@ -36,19 +36,20 @@ const synthesizeReturns = (
  * with the table half): a parallel piece is editing that file's own
  * `synthesizeTable`, and this function has no dependency on it.
  *
- * **Deliberately no new rejection marker, and this is a narrower
- * guarantee than `synthesizeTable`'s `existing: true`, not the same one
- * relabeled** — `FunctionDeclaration` has no `existing`/`authority` field
- * at all (core has no "existing function" concept the way it has an
- * "existing table" one for `@hejbro/supabase`'s `authUsers`), so there is
- * no marker to reuse and nothing here refuses a synthesized function
- * handed to `generateMigration` — measured directly: it accepts one
- * silently and would emit a migration creating a function with an empty
- * plpgsql body. The actual boundary is structural, not an active guard:
- * `@hejbro/query` never imports `generateMigration` at all, so no code
- * path *this package* owns can reach that outcome — `no-fn-leak.test.ts`
- * proves the narrower, real claim (the client's public `fn` surface
- * carries no `FunctionDeclaration` shape), not migration-refusal.
+ * **Tagged `authority: "usage"` (#587/G3, core-side follow-up) — the
+ * function sibling of `synthesizeTable`'s `existing: true`, not the same
+ * mechanism relabeled.** A synthesized function used to have no rejection
+ * marker at all (measured directly: handed to `generateMigration`, it was
+ * silently ACCEPTED, emitting a migration creating a function with an
+ * empty plpgsql body) — `FunctionDeclaration` gained its own `authority`
+ * field for exactly this, reusing `TableAuthority`'s name/values so both
+ * families read as one convention; `engine/generate.ts`'s runtime
+ * chokepoint now refuses any function whose `authority === "usage"`, the
+ * same rule the table guard already used (absence — every real
+ * `defineFunction()` call — is never touched). `no-fn-leak.test.ts` still
+ * proves the narrower, structural claim on top of this (the client's
+ * public `fn` surface carries no `FunctionDeclaration` shape at all) —
+ * two layers, not one relabeled as the other.
  */
 export const synthesizeFunction = (
 	meta: ContractFunctionMeta,
@@ -67,4 +68,5 @@ export const synthesizeFunction = (
 	security: "invoker",
 	body: { declarations: [], statements: [] },
 	declaredAt: null,
+	authority: "usage",
 });
