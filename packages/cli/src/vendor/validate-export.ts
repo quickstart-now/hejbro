@@ -18,10 +18,29 @@ const tableFactSchema = z.object({
 	columns: z.record(z.string(), columnFactSchema),
 });
 
+const functionArgFactSchema = z.object({
+	key: z.string(),
+	sqlName: z.string(),
+});
+
+/** `null` for a trigger-synthesized function's return — neither a scalar value nor a row (schema-export delta). */
+const functionReturnsFactSchema = z
+	.union([
+		z.object({ kind: z.literal("scalar") }),
+		z.object({
+			kind: z.literal("table"),
+			schemaName: z.string(),
+			tableName: z.string(),
+		}),
+	])
+	.nullable();
+
 const functionFactSchema = z.object({
 	schemaName: z.string(),
 	functionName: z.string(),
 	exportName: z.string().nullable(),
+	args: z.array(functionArgFactSchema),
+	returns: functionReturnsFactSchema,
 });
 
 /**
@@ -47,10 +66,11 @@ const formatSchema = z.object({
  * Refuses a `format.json` newer than this toolchain knows, naming both
  * versions and the upgrade command (schema-vendoring spec, member 6 of
  * the eleven — "A description format newer than the reader is refused").
- * An older format is read as-is (the description schema below has grown
- * by exactly one field so far, `EXPORT_DESCRIPTION_FORMAT`'s own history
- * — there is no earlier shape yet to tolerate; this branch exists so the
- * asymmetry is structural now, not added the day format 2 ships).
+ * An older format is read as-is (the description schema below has only
+ * ever grown by additive fields since format 1 shipped, `EXPORT_
+ * DESCRIPTION_FORMAT`'s own history — there is no earlier shape yet to
+ * tolerate; this branch exists so the asymmetry is structural now, not
+ * added the day format 2 ships).
  */
 const assertDescriptionFormatSupported = (format: ExportFormatRecord): void => {
 	if (format.descriptionFormat <= EXPORT_DESCRIPTION_FORMAT) {
