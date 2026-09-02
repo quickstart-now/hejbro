@@ -44,7 +44,10 @@ public surface — a vendored contract cannot be passed anywhere a
 declaration-authority-carrying table is expected (`generateMigration`,
 `existingTable`, …). Tables carry `columns` (plain expressions, usable
 with `eq`/`and`/`or` the same as any other query), `select`/`insert`/
-`update`/`delete`.
+`update`/`delete`. A bare `insert`/`update`/`delete` (no `.returning()`
+— not yet exposed on this surface) sends no `RETURNING` clause and
+types as resolving to `ReadonlyArray<never>`, never the table's row
+type; read written rows back with a second `select`.
 
 A vendored contract also carries every `defineFunction` declaration the
 schema repository exports, callable through `db.fn` — `createDb(driver)

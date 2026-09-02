@@ -176,3 +176,61 @@ describe("validateExport — existing (add-unmanaged-objects, 2.1)", () => {
 		expect(payload.tables[0]?.existing).toBe(false);
 	});
 });
+
+/**
+ * #657: a format-1 export written before the typed function surface
+ * existed (pre-#587) has a `functions` entry carrying only `schemaName`/
+ * `functionName`/`exportName` -- no `args`, no `returns` key at all
+ * (confirmed against the real pre-#587 shape at git 518dcdde, not
+ * assumed). Hand-written, not built by our own writer, the same
+ * reasoning `existing`'s own pre-add-unmanaged-objects fixture above
+ * already follows: a schema.json this writer produces always carries
+ * both keys, one way or the other.
+ */
+describe("validateExport — a pre-functions export (#657)", () => {
+	it("reads a pre-functions export and carries its tables", () => {
+		const olderSchema = JSON.stringify({
+			tables: [
+				{
+					schemaName: "app",
+					tableName: "posts",
+					exportName: "posts",
+					columns: {
+						id: { key: "id", mode: null, notNullElements: false },
+					},
+				},
+			],
+			functions: [
+				{
+					schemaName: "app",
+					functionName: "total_posts",
+					exportName: "totalPosts",
+					// No `args`/`returns` key at all -- the pre-#587 shape.
+				},
+			],
+			roles: [],
+			snapshot: { formatVersion: 8, dialect: "postgres", objects: {} },
+		});
+
+		const { payload } = validateExport(FORMAT_TEXT, olderSchema);
+
+		expect(payload.tables).toEqual([
+			{
+				schemaName: "app",
+				tableName: "posts",
+				exportName: "posts",
+				columns: { id: { key: "id", mode: null, notNullElements: false } },
+				existing: false,
+			},
+		]);
+		expect(payload.functions).toEqual([
+			{
+				schemaName: "app",
+				functionName: "total_posts",
+				exportName: "totalPosts",
+			},
+		]);
+		expect(payload.functions[0]).not.toHaveProperty("args");
+		expect(payload.functions[0]).not.toHaveProperty("returns");
+	});
+});

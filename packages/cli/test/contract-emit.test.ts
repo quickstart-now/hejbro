@@ -3,6 +3,7 @@ import {
 	bigint,
 	defineFunction,
 	defineTrigger,
+	interval,
 	schema,
 	select,
 	sql,
@@ -12,6 +13,12 @@ import {
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { emitContract } from "../src/contract/emit";
+import type {
+	ExportColumnFact,
+	ExportTableFact,
+} from "../src/export/description";
+import type { ExportPayload } from "../src/export/write";
+import type { ValidatedFunctionFact } from "../src/vendor/validate-export";
 import { buildFixturePayload } from "./support/contract-fixture";
 
 const app = schema("app");
@@ -343,5 +350,355 @@ describe("the Functions section (#587)", () => {
 		const second = emitContract(payload, ORIGIN);
 
 		expect(first).toBe(second);
+	});
+});
+
+/**
+ * The text between two markers, exclusive of both -- used to scope an
+ * assertion to one rendered interface section (`Row`/`Insert`/`Update`)
+ * so a mutant that only breaks one of the three sharing the same
+ * literal text (e.g. a not-null, no-default column's `Row` and required
+ * `Insert` entries render identically) is still caught by the section
+ * it actually broke.
+ */
+const sectionBetween = (
+	source: string,
+	startMarker: string,
+	endMarker: string,
+): string => {
+	const afterStart = source.split(startMarker)[1] ?? "";
+	return afterStart.split(endMarker)[0] ?? "";
+};
+
+const requireTableFact = (
+	payload: ExportPayload,
+	tableName: string,
+): ExportTableFact => {
+	const fact = payload.tables.find((entry) => entry.tableName === tableName);
+	if (fact === undefined) {
+		throw new Error(`fixture: no table fact for "${tableName}"`);
+	}
+	return fact;
+};
+
+const requireColumnFact = (
+	columns: ExportTableFact["columns"],
+	sqlName: string,
+): ExportColumnFact => {
+	const fact = columns[sqlName];
+	if (fact === undefined) {
+		throw new Error(`fixture: no column fact for "${sqlName}"`);
+	}
+	return fact;
+};
+
+/**
+ * #662: the column half enters through the emitter's *other* input
+ * contract, a hand-editable `schema.json` whose reader never checks a
+ * key's shape (`columnFactSchema.key` is `z.string()`) -- not through
+ * `table()`, which D36's `assertSqlName` makes structurally incapable of
+ * declaring a non-identifier column key (every key that survives it is
+ * already a valid TS identifier; tasks.md 1.4's own measurement). So the
+ * snapshot/description come from a real declaration, and only the export
+ * table fact's TS keys are hand-edited afterward, standing in for a
+ * committed `schema.json` a person touched. The function argument half
+ * has no such D36 check (`defineFunction` validates reserved words only)
+ * and rides the real DSL directly.
+ */
+describe("non-identifier keys are quoted in the emitted contract (#662)", () => {
+	it("quotes a column key and an argument key that are not identifiers", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			myArg: text(),
+			twoFa: text().notNull(),
+		});
+		const echoArg = defineFunction(
+			app,
+			"echo_arg",
+			{ args: { "my-arg": uuid() }, returns: uuid() },
+			(ctx, args) => {
+				ctx.return(sql`${args["my-arg"]}`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, echoArg];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[echoArg, "echoArg"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const myArgSqlName = "my_arg";
+		const twoFaSqlName = "two_fa";
+		const postsFact = requireTableFact(payload, "posts");
+		const myArgFact = requireColumnFact(postsFact.columns, myArgSqlName);
+		const twoFaFact = requireColumnFact(postsFact.columns, twoFaSqlName);
+		const patchedTable: ExportTableFact = {
+			...postsFact,
+			columns: {
+				...postsFact.columns,
+				[myArgSqlName]: { ...myArgFact, key: "my-arg" },
+				[twoFaSqlName]: { ...twoFaFact, key: "2fa" },
+			},
+		};
+		// `posts` is the only declared table, so the patched array replaces
+		// `payload.tables` outright rather than searching it back out.
+		const patchedPayload: ExportPayload = {
+			...payload,
+			tables: [patchedTable],
+		};
+
+		const source = emitContract(patchedPayload, ORIGIN);
+
+		const rowSection = sectionBetween(
+			source,
+			"readonly Row: {",
+			"readonly Insert: {",
+		);
+		const insertSection = sectionBetween(
+			source,
+			"readonly Insert: {",
+			"readonly Update: {",
+		);
+		const updateSection = sectionBetween(
+			source,
+			"readonly Update: {",
+			"readonly Relationships:",
+		);
+
+		// Row (tables.ts:131) -- the nullable column carries `| null`, the
+		// not-null column does not.
+		expect(rowSection).toContain('readonly "my-arg": string | null;');
+		expect(rowSection).toContain('readonly "2fa": string;');
+		// Insert -- the nullable/no-default column is optional (:141), the
+		// not-null/no-default column is required (:143): two different code
+		// paths, so each gets its own key.
+		expect(insertSection).toContain('readonly "my-arg"?: string | null;');
+		expect(insertSection).toContain('readonly "2fa": string;');
+		// Update (:152) -- always optional, value type unchanged from Row.
+		expect(updateSection).toContain('readonly "my-arg"?: string | null;');
+		expect(updateSection).toContain('readonly "2fa"?: string;');
+		// Args (functions.ts:158).
+		expect(source).toContain('readonly Args: { readonly "my-arg": string; };');
+	});
+});
+
+const requireFunctionFact = (
+	payload: ExportPayload,
+	exportName: string,
+): ExportPayload["functions"][number] => {
+	const fact = payload.functions.find(
+		(entry) => entry.exportName === exportName,
+	);
+	if (fact === undefined) {
+		throw new Error(`fixture: no function fact for "${exportName}"`);
+	}
+	return fact;
+};
+
+/**
+ * #657: a format-1 export written before the typed function surface
+ * existed carries a function fact with no `args`/`returns` key at all
+ * (see `validate-export.test.ts`'s own reading observer for the
+ * git-measured pre-#587 shape) — this is the other half of the delta,
+ * the drop at contract-emission time. `posts`/`totalPosts`'s own
+ * snapshot and table fact come from a real declaration (`buildFixturePayload`,
+ * 1.4's own idiom) — only the function fact is hand-edited afterward to
+ * the untyped shape, never this writer's own always-typed output.
+ */
+describe("a pre-functions fact drops out of the contract (#657)", () => {
+	it("drops a pre-functions fact from the contract's Functions section and its metadata", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const totalPosts = defineFunction(
+			app,
+			"total_posts",
+			{ returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, totalPosts];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[totalPosts, "totalPosts"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const totalPostsFact = requireFunctionFact(payload, "totalPosts");
+		const untypedFact: ValidatedFunctionFact = {
+			schemaName: totalPostsFact.schemaName,
+			functionName: totalPostsFact.functionName,
+			exportName: totalPostsFact.exportName,
+			// No `args`/`returns` key at all -- the pre-#587 shape.
+		};
+		const patchedPayload = {
+			...payload,
+			functions: [untypedFact],
+		};
+
+		const source = emitContract(patchedPayload, ORIGIN);
+
+		expect(source).toContain("readonly Functions: {};");
+		expect(source).not.toContain("totalPosts");
+		const metadataBlock =
+			source.split("export const contractMetadata")[1] ?? "";
+		expect(metadataBlock).toMatch(/functions: \{\s*\},/);
+		expect(metadataBlock).not.toContain("totalPosts");
+	});
+
+	it("drops a hand-edited fact carrying args but no returns, or returns but no args", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const totalPosts = defineFunction(
+			app,
+			"total_posts",
+			{ args: { weight: bigint({ mode: "number" }) }, returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, totalPosts];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[totalPosts, "totalPosts"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const totalPostsFact = requireFunctionFact(payload, "totalPosts");
+		// A hand-edited hybrid neither writer ever produces on its own --
+		// exists only to prove the drop guard checks `args`/`returns`
+		// independently, not "either implies both" (tasks.md 1.1's own m4).
+		const argsOnlyFact: ValidatedFunctionFact = {
+			schemaName: totalPostsFact.schemaName,
+			functionName: totalPostsFact.functionName,
+			exportName: totalPostsFact.exportName,
+			args: totalPostsFact.args,
+			// No `returns` key.
+		};
+		const returnsOnlyFact: ValidatedFunctionFact = {
+			schemaName: totalPostsFact.schemaName,
+			functionName: totalPostsFact.functionName,
+			exportName: totalPostsFact.exportName,
+			returns: totalPostsFact.returns,
+			// No `args` key.
+		};
+
+		const argsOnlySource = emitContract(
+			{ ...payload, functions: [argsOnlyFact] },
+			ORIGIN,
+		);
+		const returnsOnlySource = emitContract(
+			{ ...payload, functions: [returnsOnlyFact] },
+			ORIGIN,
+		);
+
+		expect(argsOnlySource).toContain("readonly Functions: {};");
+		expect(argsOnlySource).not.toContain("totalPosts");
+		expect(returnsOnlySource).toContain("readonly Functions: {};");
+		expect(returnsOnlySource).not.toContain("totalPosts");
+	});
+});
+
+const INTERVAL_IMPORT = 'import type { IntervalValue } from "hejbro";';
+
+/**
+ * #661: `IntervalValue` is imported only when the emitted body actually
+ * names it — decided structurally, over each fact's own `TypeNode`
+ * (`typeNodeNamesInterval`), never a scan of the rendered body text (a
+ * column keyed literally `IntervalValue` would false-positive that).
+ * Three independent sources feed the decision (a column, a function
+ * argument, a scalar function return), so each gets its own case; a
+ * fourth pins the no-interval golden, and a fifth proves the database
+ * (`pull`) header gets the same treatment as the git one.
+ */
+describe("the IntervalValue import is conditional on the contract actually naming it (#661)", () => {
+	it("a column naming interval adds the import", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			checkIn: interval(),
+		});
+		const payload = buildFixturePayload([app, posts]);
+
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain(INTERVAL_IMPORT);
+	});
+
+	it("a function argument naming interval adds the import", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const waitFor = defineFunction(
+			app,
+			"wait_for",
+			{ args: { delay: interval() }, returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, waitFor];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[waitFor, "waitFor"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain(INTERVAL_IMPORT);
+	});
+
+	it("a scalar function return naming interval adds the import", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const totalDuration = defineFunction(
+			app,
+			"total_duration",
+			{ returns: interval() },
+			(ctx) => {
+				ctx.return(sql`interval '1 hour'`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [
+			app,
+			posts,
+			totalDuration,
+		];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[totalDuration, "totalDuration"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain(INTERVAL_IMPORT);
+	});
+
+	it("a contract with no interval fact anywhere carries no such import (golden)", () => {
+		const payload = buildFixturePayload(buildDeclarations());
+
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).not.toContain(INTERVAL_IMPORT);
+	});
+
+	it("a database (pull) origin's header gets the same conditional import", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			checkIn: interval(),
+		});
+		const payload = buildFixturePayload([app, posts]);
+
+		const source = emitContract(payload, {
+			source: "database",
+			database: "widgets_db",
+			schemas: ["app"],
+		});
+
+		expect(source).toContain(INTERVAL_IMPORT);
 	});
 });
