@@ -299,7 +299,13 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				expect(migrateResult.exitCode).toBe(0);
 				const checkResult = await runCli(cwd, ["check", "--url", url()]);
 				// (d): observed, not asserted -- 2nd-token work (#711 also
-				// changes what the loss report and `check` say).
+				// changes what the loss report and `check` say). Also
+				// observed on dev 36520086, unattributed to #711 -- reported
+				// to the lead: every `serial()` column's own owned-sequence
+				// default (`nextval(...)`) is missing from the declaration
+				// `check` compares against, so a clean serial column reports
+				// as differing even though nothing about it was omitted or
+				// approximated in the loss report.
 				const findingCount = (checkResult.stderr.match(/^error\[/gm) ?? [])
 					.length;
 				console.log(
@@ -309,5 +315,98 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				await removeCliFixtureDir(cwd);
 			}
 		}, 60_000);
+	});
+
+	/**
+	 * 2b (#714 bc-1): each R5-blocked schema run alone, so its own
+	 * distinct failure mode is captured on its own -- the full-corpus run
+	 * above only ever shows the first one it reaches (R5-B2, `people`).
+	 * `inventory` alone does not abort today (unlike `shop`/`people`) --
+	 * its own failure is a silent content swap, not an exit code, and is
+	 * fixed to green by a follow-up commit's content assertion instead
+	 * (2c) rather than here.
+	 */
+	describe("the three R5-blocked schemas, each in isolation", () => {
+		it('shop: red on #711 -- "Widgets" (and the UNIQUE on it) should be omitted, taking the FK that targets it with it', async () => {
+			const cwd = await createCliFixtureDir();
+			try {
+				await runCli(cwd, ["init"]);
+				const importResult = await runCli(
+					cwd,
+					importArgs(url(), ["shop"], "src/schema"),
+				);
+				// red on dev until #711: R5-B1 + R5-N2 (#711) -- the UNIQUE
+				// constraint on the omitted "Widgets" table is detected
+				// against the schema-filtered catalog before R4's own
+				// table-level omission has excluded it, so this aborts
+				// before R5-B1's own FK-into-an-omitted-table path is ever
+				// separately reached. Captured verbatim against
+				// postgres:17-alpine, 2026-09-03, tip 36520086 (dev):
+				//
+				//   error[invalid-sql-name]: Widgets
+				//     table name "Widgets" is not a valid hejbro SQL
+				//     identifier -- names must match ^[a-z][a-z0-9_]*$
+				//     (lower-case snake_case, no dots or symbols) so they
+				//     can be referenced from --rename/--confirm-drop
+				//     flags. Next: rename the table to snake_case.
+				//
+				// Once #711 lands: "Widgets" and its UNIQUE constraint are
+				// omitted, the loss report names both, and shop.orders
+				// survives without the foreign key that used to target it.
+				expect(importResult.exitCode).toBe(0);
+				const source = readFileSync(
+					resolve(cwd, "src/schema/shop.schema.ts"),
+					"utf8",
+				);
+				expect(source).not.toContain("Widgets");
+			} finally {
+				await removeCliFixtureDir(cwd);
+			}
+		});
+
+		it("people: red on #711 -- the leading-underscore column `_id` should be omitted, not abort the reading", async () => {
+			const cwd = await createCliFixtureDir();
+			try {
+				await runCli(cwd, ["init"]);
+				const importResult = await runCli(
+					cwd,
+					importArgs(url(), ["people"], "src/schema"),
+				);
+				// red on dev until #711: R5-B2 (#711) -- captured verbatim
+				// against postgres:17-alpine, 2026-09-03, tip 36520086 (dev):
+				//
+				//   error[invalid-sql-name]: _id
+				//     column name "_id" is not a valid hejbro SQL
+				//     identifier -- names must match ^[a-z][a-z0-9_]*$
+				//     (lower-case snake_case, no dots or symbols) so they
+				//     can be referenced from --rename/--confirm-drop
+				//     flags. Next: rename the column to snake_case.
+				//
+				// Once #711 lands: people.accounts survives with `_id`
+				// omitted and named in the loss report, `id`/`email` intact.
+				expect(importResult.exitCode).toBe(0);
+				const source = readFileSync(
+					resolve(cwd, "src/schema/people.schema.ts"),
+					"utf8",
+				);
+				expect(source).not.toContain('"_id"');
+			} finally {
+				await removeCliFixtureDir(cwd);
+			}
+		});
+
+		it("inventory: already green today at the exit-code level -- the real defect (R5-B3) is a silent content swap, asserted in a follow-up commit (2c)", async () => {
+			const cwd = await createCliFixtureDir();
+			try {
+				await runCli(cwd, ["init"]);
+				const importResult = await runCli(
+					cwd,
+					importArgs(url(), ["inventory"], "src/schema"),
+				);
+				expect(importResult.exitCode).toBe(0);
+			} finally {
+				await removeCliFixtureDir(cwd);
+			}
+		});
 	});
 });
