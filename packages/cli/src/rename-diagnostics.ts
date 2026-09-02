@@ -224,8 +224,14 @@ const existingTargetTableSuggestions = (
 	newName: string,
 ): Diagnostic["suggestions"] => [
 	{
+		// #703: shares the exact phrase "two runs" with core's own flat
+		// message (ambiguousTableRenameMessage) on purpose -- this piece
+		// paid for "the same fact stated in different words in two
+		// places" five rounds running, and a reader who sees the flat
+		// message in a log after seeing this one in a terminal should
+		// recognize it as the same guidance, not a second, different fact.
 		label:
-			"if the table really is the same one, run this NOW, then hand it over to existingTable() in a LATER run:",
+			"if the table really is the same one, do it in two runs -- run this NOW, then hand it over to existingTable() in a LATER run:",
 		lines: rerunLines(argv, `--rename ${schemaName}.${oldName}=${newName}`),
 	},
 	{

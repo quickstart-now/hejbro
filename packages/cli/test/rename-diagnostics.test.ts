@@ -157,6 +157,10 @@ describe("buildAmbiguityDiagnostic — table, 1:1, created side is existingTable
 		const diagnostic = buildAmbiguityDiagnostic(ambiguity, [], null);
 		const rendered = renderDiagnostics([diagnostic], null);
 		expect(rendered).not.toContain("if this is a rename, rerun:");
+		// #703: "two runs" is the exact phrase core's own flat message
+		// (ambiguousTableRenameMessage) uses too -- asserted on purpose so
+		// this pin would catch the two messages drifting apart again.
+		expect(rendered).toContain("two runs");
 		expect(rendered).toContain("run this NOW, then hand it over");
 		expect(rendered).toContain("hejbro generate --rename e3.widgets=gadgets");
 		expect(rendered).toContain("if these are unrelated tables, rerun:");
