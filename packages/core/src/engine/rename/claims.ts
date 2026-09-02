@@ -1,6 +1,7 @@
 import type { HejbroError } from "../../error";
 import { hejbroError } from "../../error";
-import { tableIdentity } from "../../kinds/table-snapshot";
+import type { TableSnapshot } from "../../kinds/table-snapshot";
+import { tableExisting, tableIdentity } from "../../kinds/table-snapshot";
 import { compareKeys } from "../../sort";
 import type {
 	NameSets,
@@ -173,24 +174,51 @@ export const isDropAddPair = (
 ): boolean =>
 	(sets?.dropped.has(oldName) ?? false) && (sets?.added.has(newName) ?? false);
 
-/** {@link validateRenameSpecTarget}'s `"table"` case: `spec`'s old/new names must match a table this run actually drops/adds in that schema. */
+/**
+ * `unknown-rename-target`, worded for the one case that isn't actually
+ * "unknown" (#703): `newName` matches a real drop+add pair, but the
+ * added side is declared with `existingTable()` -- hejbro never DDLs an
+ * existing declaration (`table-kind.ts`'s own bidirectional guard), so
+ * a rename that ends there has no statement it could honestly emit.
+ * Names the two-step remedy explicitly (rename while both sides are
+ * still `table()`, hand over to `existingTable()` in a later run)
+ * rather than leaving the user to rediscover it, the same way
+ * `synced-table-declared`'s own message names both ways to declare a
+ * table this repository authors instead of just refusing.
+ */
+const existingRenameTargetError = (
+	spec: TableRenameSpec,
+	newIdentity: string,
+	declaredAt: string | null,
+): HejbroError =>
+	hejbroError(
+		"unknown-rename-target",
+		`--rename "${spec.schemaName}.${spec.oldName}=${spec.newName}" can't apply: "${newIdentity}" is declared, but with existingTable() -- hejbro doesn't own its DDL and never renames onto it. Next: if the table really is the same one changing hands, do it in two runs -- first --rename "${spec.schemaName}.${spec.oldName}=${spec.newName}" while both sides are still table() declarations, then hand the renamed table over to existingTable() in a later run.`,
+		declaredAt,
+	);
+
+/** {@link validateRenameSpecTarget}'s `"table"` case: `spec`'s old/new names must match a table this run actually drops/adds in that schema, and the added side must be a table hejbro can actually DDL onto (#703: never an `existingTable()`). */
 export const validateTableRenameTarget = (
 	spec: TableRenameSpec,
 	schemaTableSets: SchemaTableSets,
+	nextTables: ReadonlyMap<string, TableSnapshot>,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
 ): HejbroError | null => {
 	const sets = schemaTableSets.get(spec.schemaName);
-	if (isDropAddPair(sets, spec.oldName, spec.newName)) {
-		return null;
+	const newIdentity = tableIdentity(spec.schemaName, spec.newName);
+	const declaredAt = declaredAtByIdentity.get(newIdentity) ?? null;
+	if (!isDropAddPair(sets, spec.oldName, spec.newName)) {
+		return hejbroError(
+			"unknown-rename-target",
+			`--rename "${spec.schemaName}.${spec.oldName}=${spec.newName}" doesn't match this run: schema "${spec.schemaName}" has no dropped table named "${spec.oldName}" (or no added table named "${spec.newName}"). Next: check both names for typos — --rename's left side must be a table this run drops, the right side a table this run adds.`,
+			declaredAt,
+		);
 	}
-	const declaredAt =
-		declaredAtByIdentity.get(tableIdentity(spec.schemaName, spec.newName)) ??
-		null;
-	return hejbroError(
-		"unknown-rename-target",
-		`--rename "${spec.schemaName}.${spec.oldName}=${spec.newName}" doesn't match this run: schema "${spec.schemaName}" has no dropped table named "${spec.oldName}" (or no added table named "${spec.newName}"). Next: check both names for typos — --rename's left side must be a table this run drops, the right side a table this run adds.`,
-		declaredAt,
-	);
+	const targetTable = nextTables.get(newIdentity);
+	if (targetTable !== undefined && tableExisting(targetTable)) {
+		return existingRenameTargetError(spec, newIdentity, declaredAt);
+	}
+	return null;
 };
 
 /** {@link validateRenameSpecTarget}'s `"column"` case: `spec`'s old/new names must match a column this run actually drops/adds on that table. */
@@ -216,12 +244,14 @@ export const validateRenameSpecTarget = (
 	spec: RenameSpec,
 	schemaTableSets: SchemaTableSets,
 	tableColumnSets: TableColumnSets,
+	nextTables: ReadonlyMap<string, TableSnapshot>,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
 ): HejbroError | null => {
 	if (spec.target === "table") {
 		return validateTableRenameTarget(
 			spec,
 			schemaTableSets,
+			nextTables,
 			declaredAtByIdentity,
 		);
 	}
@@ -236,6 +266,7 @@ export const partitionRenameSpecs = (
 	renames: ReadonlyArray<RenameSpec>,
 	schemaTableSets: SchemaTableSets,
 	tableColumnSets: TableColumnSets,
+	nextTables: ReadonlyMap<string, TableSnapshot>,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
 ): {
 	readonly validSpecs: ReadonlyArray<RenameSpec>;
@@ -248,6 +279,7 @@ export const partitionRenameSpecs = (
 			spec,
 			schemaTableSets,
 			tableColumnSets,
+			nextTables,
 			declaredAtByIdentity,
 		);
 	const targetErrorUnlessDuplicated = (

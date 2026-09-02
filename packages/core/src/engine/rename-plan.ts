@@ -44,11 +44,21 @@ export const planRenames = (options: {
 	readonly declaredAtByIdentity: ReadonlyMap<string, string | null>;
 }): RenamePlan =>
 	guardSnapshotRead("planning renames from the on-disk snapshot", () => {
+		const rawNextTables = tableEntries(options.next.objects);
 		const { previousTables, nextTables } = excludeExisting(
 			tableEntries(options.previous.objects),
-			tableEntries(options.next.objects),
+			rawNextTables,
 		);
-		const schemaTableSets = computeSchemaTableSets(previousTables, nextTables);
+		// #703: table-NAME sets need the raw (un-excludeExisting'd) maps --
+		// computeSchemaTableSets does its own, drop-side-only existing
+		// filtering, deliberately narrower than excludeExisting's symmetric
+		// one (see that function's own doc comment). Column sets below keep
+		// the symmetric excludeExisting output unchanged (R2-B1's own
+		// protection).
+		const schemaTableSets = computeSchemaTableSets(
+			tableEntries(options.previous.objects),
+			rawNextTables,
+		);
 		const renamedPairings = tableRenamePairings(
 			options.renames,
 			schemaTableSets,
@@ -59,10 +69,14 @@ export const planRenames = (options: {
 			renamedPairings,
 		);
 
+		// #703: --rename must never validate a target hejbro can't actually
+		// DDL onto -- rawNextTables (not excludeExisting's output) so an
+		// existingTable() target is visible to check, not already erased.
 		const renameResult = partitionRenameSpecs(
 			options.renames,
 			schemaTableSets,
 			tableColumnSets,
+			rawNextTables,
 			options.declaredAtByIdentity,
 		);
 		const dropResult = partitionConfirmDrops(
