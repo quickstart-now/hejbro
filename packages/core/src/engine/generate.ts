@@ -1,3 +1,4 @@
+import type { FunctionDeclaration } from "../dsl/define-function";
 import type { TriggerDeclaration } from "../dsl/define-trigger";
 import type { GrantSetDeclaration } from "../dsl/grant";
 import type { DeclaredTable, Table, TableDeclaration } from "../dsl/table";
@@ -62,6 +63,34 @@ const isGrantSetDeclaration = (
 	declaration: HejbroDeclaration,
 ): declaration is GrantSetDeclaration =>
 	declaration.declarationKind === "grant-set";
+
+const isFunctionDeclaration = (
+	declaration: HejbroDeclaration,
+): declaration is FunctionDeclaration =>
+	declaration.declarationKind === "function";
+
+/**
+ * The function sibling of {@link resolveTableDeclarations}'s single
+ * chokepoint (#587/G3): a synthesized `FunctionDeclaration` handed to
+ * `generateMigration` used to be silently ACCEPTED, producing an
+ * empty-body function migration — no refusal existed at all before this.
+ * Keyed on `meta.authority === "usage"` only, mirroring the table guard's
+ * own rule exactly: absence (every real `defineFunction()`/
+ * `defineTrigger()` call, which never sets this field) must never trip
+ * this, only a hand-built or synthesized `"usage"`-tagged value does.
+ */
+const resolveFunctionDeclaration = (
+	meta: FunctionDeclaration,
+): ReadonlyArray<HejbroDeclaration> => {
+	if (meta.authority === "usage") {
+		return throwHejbroError(
+			"synced-function-declared",
+			`function "${meta.schemaName}"."${meta.functionName}" carries no migration authority — for example, a module obtained from a database this repository does not own. Next: declare it with defineFunction() in the repository that owns its schema, or remove it from the declarations list if this repository doesn't own that schema.`,
+			meta.declaredAt,
+		);
+	}
+	return [meta];
+};
 
 /**
  * Synthesizes one `SequenceDeclaration` per `serial`/`smallserial`/
@@ -152,6 +181,9 @@ const resolveDeclarations = (
 	}
 	if (isGrantSetDeclaration(input)) {
 		return input.grants;
+	}
+	if (isFunctionDeclaration(input)) {
+		return resolveFunctionDeclaration(input);
 	}
 	return [input];
 };
