@@ -5,7 +5,7 @@ import { asHejbroError } from "../errors";
 import { resolveRemoteHead } from "../git";
 import { identityFromMessage } from "../identity";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
-import { readLock } from "../vendor/lock";
+import { assertLockNamesACommit, readLock } from "../vendor/lock";
 import { readSourceFile } from "../vendor/source-file";
 
 const OUTDATED_DESCRIPTION =
@@ -34,7 +34,14 @@ export const runOutdated = (cwd: string): OutdatedResult => {
 			);
 		}
 		const lock = readLock(cwd);
-		if (lock === null || lock.commit === undefined) {
+		if (lock === null) {
+			throwHejbroError(
+				"vendor-not-yet-vendored",
+				"hejbro outdated has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
+			);
+		}
+		assertLockNamesACommit(lock, "hejbro outdated");
+		if (lock.commit === undefined) {
 			throwHejbroError(
 				"vendor-not-yet-vendored",
 				"hejbro outdated has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
