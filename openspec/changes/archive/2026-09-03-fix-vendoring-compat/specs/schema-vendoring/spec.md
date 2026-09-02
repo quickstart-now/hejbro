@@ -113,8 +113,10 @@ and no declaration in hand.
 
 A mismatch is caught where TypeScript can see it: a missing or wrongly
 typed argument fails to compile anywhere; an extra property fails to
-compile on a fresh object literal, and a pre-built value carrying one is
-refused at runtime by the argument-count check, never sent.
+compile on a fresh object literal, and a pre-built value whose key count
+does not match the declared arguments is refused at runtime by the
+argument-count check, never sent (the runtime check counts keys; it does
+not inspect their names).
 
 #### Scenario: A scalar function crosses the boundary
 - **WHEN** a schema declaring a scalar-returning function is vendored
@@ -135,8 +137,9 @@ refused at runtime by the argument-count check, never sent.
 - **WHEN** the consumer calls a vendored function with a missing or
   wrongly typed argument, or with an extra property on a fresh object
   literal
-- **THEN** the call fails to compile; a pre-built value carrying an
-  extra property is refused at runtime before any SQL is sent
+- **THEN** the call fails to compile; a pre-built value whose key count
+  does not match the declared arguments is refused at runtime before
+  any SQL is sent
 
 #### Scenario: A function returning an uncarried table is absent
 - **WHEN** a vendored schema declares an exported function returning a
