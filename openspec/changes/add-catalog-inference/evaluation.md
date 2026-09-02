@@ -815,6 +815,16 @@ test that could not see what it claimed to.
   classified as vocabulary or engine, so the two new exports failed on
   their *names*, not on their shape. Both are engine — a schema author
   never types them — which is the same answer the skill question got.
+- **Where the gates ran.** The seven-step gate set ran green at
+  `d13c35df` — build, the whole test run (84 files, 724 tests), CRAP,
+  both Postgres majors of the integration suite with nothing skipped,
+  an unfiltered `check-types`, the two `dist`-dependent vendor suites,
+  and a container check. One documentation-only commit follows it,
+  correcting stale claims in `proposal.md` (core is no longer
+  unchanged; roles come from grants; sequences are the ones a column
+  owns; the capability list gains `table-declaration`). No source or
+  test file moves in that commit, which is why the gate result above
+  still describes the pushed tree.
 - **R3-N1, R3-N2, R3-N3, R3-N4 — closed.** The skill quotes `pull`'s
   actual last line; the destination refusal no longer offers `pull` a
   `--force` it does not have (the guard is unchanged, only its remedy
