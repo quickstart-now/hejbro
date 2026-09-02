@@ -395,7 +395,13 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 			}
 		});
 
-		it("inventory: already green today at the exit-code level -- the real defect (R5-B3) is a silent content swap, asserted in a follow-up commit (2c)", async () => {
+		it("inventory: red on #711 -- terminals' own check should not be registers' expression (silent content swap, R5-B3)", async () => {
+			// scope: adds a content assertion beyond BC-1's (a)(b)(c);
+			// droppable. A crash-free defect (R5-B3) can never be caught
+			// by an exit-code assertion alone -- import succeeds
+			// (exitCode 0) either way, which is exactly why the corpus
+			// needs to pin the *content* it silently gets wrong, not just
+			// whether the command ran.
 			const cwd = await createCliFixtureDir();
 			try {
 				await runCli(cwd, ["init"]);
@@ -404,6 +410,33 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 					importArgs(url(), ["inventory"], "src/schema"),
 				);
 				expect(importResult.exitCode).toBe(0);
+				const source = readFileSync(
+					resolve(cwd, "src/schema/inventory.schema.ts"),
+					"utf8",
+				);
+				const blockFor = (exportName: string): string => {
+					const rest = source.slice(
+						source.indexOf(`export const ${exportName}`),
+					);
+					const nextExportIndex = rest.indexOf("\nexport const ", 1);
+					if (nextExportIndex === -1) {
+						return rest;
+					}
+					return rest.slice(0, nextExportIndex);
+				};
+				const terminalsBlock = blockFor("terminals");
+				const registersBlock = blockFor("registers");
+				// red on dev until #711: R5-B3 -- verbatim, 2026-09-03,
+				// postgres:17-alpine, tip 36520086 (dev): checksFor matches
+				// a check expression on schema + constraint name only, so
+				// `terminals` (columns: id, status -- no "balance" column
+				// at all) silently inherits `registers`' own
+				// check("pos", "balance >= 0") expression instead of its
+				// own "status in (...)". Once #711 lands, each table keeps
+				// its own expression under the shared name "pos".
+				expect(terminalsBlock).not.toContain("balance");
+				expect(terminalsBlock).toMatch(/status/);
+				expect(registersBlock).toContain("balance");
 			} finally {
 				await removeCliFixtureDir(cwd);
 			}
