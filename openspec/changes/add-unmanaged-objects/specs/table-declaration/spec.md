@@ -10,7 +10,10 @@ declaration covers. The snapshot SHALL record it as an existing table —
 its schema, name, and the columns it was declared with, under an
 explicit existing marker — and the generator SHALL emit no statement for
 it and SHALL diff nothing against it. Adding, changing, or removing an
-existing declaration SHALL produce no migration. Everything that reads a
+existing declaration SHALL produce **no statement**: the run records the
+new state in the snapshot and writes a migration carrying no statements
+to anchor it in the chain (`cli-commands`), never DDL naming that table.
+Everything that reads a
 declaration's shape for typing, joins, foreign-key targets, and
 expressions SHALL see an existing table exactly as it sees a managed
 one; everything that writes DDL SHALL not see it at all. A snapshot
@@ -27,12 +30,13 @@ existing declaration SHALL still reach the validator pipeline exactly as
 a managed one does, so a validator that judges a reference rather than
 DDL has it to look at.
 
-#### Scenario: An existing declaration produces no migration
+#### Scenario: An existing declaration produces no statement
 - **WHEN** a schema file exports an `existingTable()` and `hejbro
   generate` runs
-- **THEN** no migration is written for it, the snapshot records it as
-  existing with its declared columns, and a later run with the
-  declaration changed or removed writes no migration either
+- **THEN** no statement is written for it — the migration the run writes
+  carries none — the snapshot records it as existing with its declared
+  columns, and a later run with the declaration changed or removed
+  writes no statement for it either
 
 #### Scenario: A managed table may reference an existing one
 - **WHEN** a managed table declares a foreign key to an existing
