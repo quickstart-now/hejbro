@@ -21,10 +21,12 @@ two forms in one table, or converting a foreign key from one form to
 the other, changes neither the generated DDL nor the snapshot.
 
 
-The thunk SHALL never be resolved while `table()` runs; it is resolved
-exactly once, on the declaration's first consumption, after every
-declaration module has evaluated — so a reference into another
-declaration file resolves whichever file the loader reaches first.
+The thunk SHALL never be resolved while `table()` runs. The
+declaration's first `foreignKeys` read that completes SHALL be cached,
+so every `.references()` thunk on that declaration runs at most once
+across every later read; a read that throws SHALL cache nothing, so
+the next read folds again — this is what lets a reference into another
+declaration file resolve whichever file the loader reaches first.
 
 #### Scenario: A column-level reference emits the same DDL as extras
 - **WHEN** a table declares `ownerId: uuid().notNull().references(()
@@ -58,9 +60,17 @@ declaration file resolves whichever file the loader reaches first.
   for the same-file case, regardless of which table is declared first),
   and the emitted foreign keys are the ones each declaration named
 
-#### Scenario: The thunk is resolved exactly once, however many times a declaration's foreign keys are read
-- **WHEN** a declaration's foreign keys are read more than once
-- **THEN** each `.references()` thunk runs exactly once, not once per read
+#### Scenario: The thunk resolves once per successful read, not once per read
+- **WHEN** a declaration's foreign keys are read more than once and every
+  read completes without throwing
+- **THEN** each `.references()` thunk runs exactly once, cached after the
+  first successful read
+
+#### Scenario: A read whose thunk throws caches nothing
+- **WHEN** a declaration's first `foreignKeys` read throws, and it is
+  read again
+- **THEN** the second read re-runs every `.references()` thunk on that
+  declaration, since the failed read cached nothing
 
 #### Scenario: table() itself never resolves a reference thunk
 - **WHEN** `table()` returns
