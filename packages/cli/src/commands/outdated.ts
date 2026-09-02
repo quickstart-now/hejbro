@@ -5,7 +5,7 @@ import { asHejbroError } from "../errors";
 import { resolveRemoteHead } from "../git";
 import { identityFromMessage } from "../identity";
 import { withGitDiagnostic } from "../vendor/git-diagnostic";
-import { readLock } from "../vendor/lock";
+import { assertLockNamesACommit, readLock } from "../vendor/lock";
 import { readSourceFile } from "../vendor/source-file";
 
 const OUTDATED_DESCRIPTION =
@@ -26,18 +26,31 @@ export type OutdatedResult = {
 export const runOutdated = (cwd: string): OutdatedResult => {
 	const fallbackIdentity = "outdated";
 	try {
+		// D106 N4: the origin is checked before the linked-source guard --
+		// a consumer running `hejbro pull` specifically because it cannot
+		// use the git channel has no `hejbro.json` at all, and naming that
+		// absence first would point at `link`, which is not this
+		// consumer's own way out (`assertLockNamesACommit` already names
+		// the real one). Both guards below still fire with no network.
+		const lock = readLock(cwd);
+		if (lock === null) {
+			throwHejbroError(
+				"vendor-not-yet-vendored",
+				"hejbro outdated has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
+			);
+		}
+		assertLockNamesACommit(lock, "hejbro outdated");
+		if (lock.commit === undefined) {
+			throwHejbroError(
+				"vendor-not-yet-vendored",
+				"hejbro outdated has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
+			);
+		}
 		const sourceFile = readSourceFile(cwd);
 		if (sourceFile === null) {
 			throwHejbroError(
 				"vendor-source-not-linked",
 				"hejbro outdated needs a linked source. Next: run `hejbro link <repository>` first.",
-			);
-		}
-		const lock = readLock(cwd);
-		if (lock === null || lock.commit === undefined) {
-			throwHejbroError(
-				"vendor-not-yet-vendored",
-				"hejbro outdated has nothing to compare against: this repository has never been vendored. Next: run `hejbro vendor` first.",
 			);
 		}
 		const source = sourceFile.source;

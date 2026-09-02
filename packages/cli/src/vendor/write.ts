@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { throwHejbroError } from "@hejbro/core";
-import { CONTRACT_MARKER } from "../contract/emit";
+import { CONTRACT_MARKER, PULL_CONTRACT_MARKER } from "../contract/emit";
 
 /** The textual mark every lock this tool writes carries — checked as a
  * substring, never by parsing the existing file as JSON first (schema-
@@ -15,9 +15,16 @@ import { CONTRACT_MARKER } from "../contract/emit";
  * export) and therefore carry no mark of their own. */
 export const VENDOR_LOCK_MARKER = '"generatedBy": "hejbro vendor"';
 
-/** Whether `text` carries a vendor lock's own mark. */
+/** `pull`'s own counterpart mark (CI-G4-R1-01) -- `readLock`/
+ * `assertVendorDestinationWritable` must recognize either, so a pull
+ * lock is neither refused as "foreign" nor silently reclaimable by a
+ * later `vendor` run without `--force`. */
+export const PULL_LOCK_MARKER = '"generatedBy": "hejbro pull"';
+
+/** Whether `text` carries either lock mark this tool writes -- still
+ * rejects anything else (CI-G4-R1-01 condition (b)). */
 export const isVendorLockText = (text: string): boolean =>
-	text.includes(VENDOR_LOCK_MARKER);
+	text.includes(VENDOR_LOCK_MARKER) || text.includes(PULL_LOCK_MARKER);
 
 /**
  * Refuses to write over `lockPath` when it already exists and doesn't
@@ -55,8 +62,10 @@ export const assertVendorDestinationWritable = (
  * marker, and is the one file a consumer's own code imports — the
  * destination the delta's "never loading the existing file as code"
  * reasoning was actually written for. Same shape as
- * {@link assertVendorDestinationWritable}, checked against
- * `CONTRACT_MARKER` instead of the lock's own mark.
+ * {@link assertVendorDestinationWritable}, checked against either
+ * `CONTRACT_MARKER` or `pull`'s own `PULL_CONTRACT_MARKER` (CI-G4-R1-01)
+ * -- `pull` writes to this same destination, so a second `pull` run
+ * must not refuse its own prior output.
  */
 export const assertContractDestinationWritable = (
 	contractPath: string,
@@ -66,7 +75,10 @@ export const assertContractDestinationWritable = (
 		return;
 	}
 	const existingText = readFileSync(contractPath, "utf8");
-	if (existingText.includes(CONTRACT_MARKER)) {
+	if (
+		existingText.includes(CONTRACT_MARKER) ||
+		existingText.includes(PULL_CONTRACT_MARKER)
+	) {
 		return;
 	}
 	throwHejbroError(
