@@ -227,3 +227,133 @@ describe("emitDeclarationFiles / D106 B1 (CI-D106-R2-02): an enum-only cycle (no
 		await expect(importAsEntry(auditPath)).resolves.toBeDefined();
 	});
 });
+
+describe("emitDeclarationFiles / D106 R2-B1 (CI-R2-02): a chorded three-schema cycle loads in every entry order, now that no back-edge kind is preferred", () => {
+	/**
+	 * The reviewer's own repro (`evaluation.md`): `a.ta` -> `b.tb` (FK),
+	 * `a.ta2` -> `c.tc` (FK, a chord across the a-b-c cycle), `b.tb` ->
+	 * `c.tc` (FK), `c.tc.kind` types against `a.category` (enum, closing
+	 * the cycle). Round-1's FK-preference step cut the chord (`a.ta2`'s
+	 * own FK) instead of the raw back edge (the enum crossing), leaving
+	 * `a -> b -> c -> a` intact -- every entry order crashed.
+	 */
+	const ta: TableSnapshot = {
+		schema: "a",
+		name: "ta",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+			{ name: "b_id", typeNode: { typeName: "uuid" }, notNull: true },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: "ta_b_id_fkey",
+				columns: ["b_id"],
+				referencesTable: "b.tb",
+				referencesColumns: ["id"],
+			},
+		],
+		primaryKeyName: "ta_pkey",
+	};
+	const ta2: TableSnapshot = {
+		schema: "a",
+		name: "ta2",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+			{ name: "c_id", typeNode: { typeName: "uuid" }, notNull: true },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: "ta2_c_id_fkey",
+				columns: ["c_id"],
+				referencesTable: "c.tc",
+				referencesColumns: ["id"],
+			},
+		],
+		primaryKeyName: "ta2_pkey",
+	};
+	const tb: TableSnapshot = {
+		schema: "b",
+		name: "tb",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+			{ name: "c_id", typeNode: { typeName: "uuid" }, notNull: true },
+		],
+		indexes: [],
+		foreignKeys: [
+			{
+				name: "tb_c_id_fkey",
+				columns: ["c_id"],
+				referencesTable: "c.tc",
+				referencesColumns: ["id"],
+			},
+		],
+		primaryKeyName: "tb_pkey",
+	};
+	const tc: TableSnapshot = {
+		schema: "c",
+		name: "tc",
+		columns: [
+			{
+				name: "id",
+				typeNode: { typeName: "uuid" },
+				notNull: true,
+				primaryKey: true,
+			},
+			{
+				name: "kind",
+				typeNode: { typeName: "enum", enumSchema: "a", enumName: "category" },
+				notNull: true,
+			},
+		],
+		indexes: [],
+		foreignKeys: [],
+		primaryKeyName: "tc_pkey",
+	};
+	const enumFacts: ReadonlyArray<EnumFactLike> = [
+		{ schema: "a", name: "category", values: ["x", "y"] },
+	];
+
+	it("loads cleanly starting from a.schema.ts", async () => {
+		const paths = writeFiles(resultFor([ta, ta2, tb, tc], enumFacts));
+		const path = paths.get("a");
+		if (path === undefined) {
+			throw new Error("expected an a.schema.ts to have been written");
+		}
+		await expect(importAsEntry(path)).resolves.toBeDefined();
+	});
+
+	it("loads cleanly starting from b.schema.ts", async () => {
+		const paths = writeFiles(resultFor([ta, ta2, tb, tc], enumFacts));
+		const path = paths.get("b");
+		if (path === undefined) {
+			throw new Error("expected a b.schema.ts to have been written");
+		}
+		await expect(importAsEntry(path)).resolves.toBeDefined();
+	});
+
+	it("loads cleanly starting from c.schema.ts", async () => {
+		const paths = writeFiles(resultFor([ta, ta2, tb, tc], enumFacts));
+		const path = paths.get("c");
+		if (path === undefined) {
+			throw new Error("expected a c.schema.ts to have been written");
+		}
+		await expect(importAsEntry(path)).resolves.toBeDefined();
+	});
+});
