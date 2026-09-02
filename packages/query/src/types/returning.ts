@@ -13,7 +13,14 @@ import type { SelectResult } from "./select-result";
  * `DeleteReturnable.returning(projection?)`, spec §5.2) — that's
  * `SelectResult<TTable>`, the whole-table branch, with full per-column
  * richness (nullability/mode/element/`$type` brand), not a widened or
- * `unknown` fallback.
+ * `unknown` fallback. A `TProjection` of `never` — what core's
+ * pre-returning stages carry when `returning()` was never called (#622)
+ * — resolves
+ * to `never` by distribution over the naked type parameter below, so a
+ * mutation that requested nothing types its (always empty) result as
+ * `ReadonlyArray<never>` rather than as the table's rows. That is not a
+ * special case written here; it is what the conditional already does
+ * with `never`, pinned by `execute-result-type.test.ts`.
  *
  * This is a structural reuse, not just a type that happens to compute
  * the same answer: `ReturningRow` never repeats `SelectResult`'s own
