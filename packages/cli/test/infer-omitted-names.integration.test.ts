@@ -110,7 +110,11 @@ const psqlFile = (database: string, sql: string): void => {
  * it even when the table's own name would otherwise be fine. `app`
  * holds the ordinary sibling of each kind (`widgets`, its check and its
  * index) beside the one bad name of that kind (`"Widgets"`,
- * `"CK_Widgets"`, `"IX_Widgets"`).
+ * `"CK_Widgets"`, `"IX_Widgets"`). `legacy` (D106 R5-B2) holds a
+ * leading-underscore column (`_id`) beside an ordinary one (`label`) --
+ * round-trippable (`toSnakeCase("_id") === "_id"`) but not a valid
+ * hejbro SQL identifier, the exact gap between the two rules that used
+ * to abort the whole reading.
  */
 const SCHEMA_SQL = `
 create schema "App";
@@ -130,6 +134,11 @@ create index "IX_Widgets" on app.widgets (name);
 
 create table app."Widgets" (
 	id uuid primary key default gen_random_uuid()
+);
+
+create table app.legacy (
+	_id uuid primary key default gen_random_uuid(),
+	label text not null
 );
 `;
 
@@ -249,6 +258,11 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			);
 			expect(first.stdout).toContain("unmanaged-table inventory");
 			expect(first.stdout).toContain("hejbro will not mention it again");
+			// D106 R5-B2: a leading-underscore column round-trips through its
+			// own TypeScript key but is not a valid hejbro SQL identifier --
+			// omitted and named like any other undeclarable column, never an
+			// abort of the whole reading.
+			expect(first.stdout).toContain('Omitted: column "app.legacy._id"');
 
 			const schemaSource = readFileSync(
 				resolve(cwd, "src/schema/app.schema.ts"),
@@ -268,6 +282,12 @@ describe("catalog-inference / D106 R4-B1: a bad name costs the object, not the r
 			expect(declarationCode).toContain("widgets_name_not_blank");
 			expect(declarationCode).toContain("widgets_name_idx");
 			expect(declarationCode).not.toContain('"Widgets"');
+			// D106 R5-B2: `legacy` itself is still declared (the table is only
+			// *partly* declared, per the loss line above) -- its ordinary
+			// column survives, only `_id` does not.
+			expect(declarationCode).toContain("legacy");
+			expect(declarationCode).toContain("label");
+			expect(declarationCode).not.toContain("_id");
 			expect(declarationCode).not.toContain("CK_Widgets");
 			expect(declarationCode).not.toContain("IX_Widgets");
 

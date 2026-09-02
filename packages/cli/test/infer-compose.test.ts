@@ -2,6 +2,7 @@ import { schema } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import {
+	isNameDeclarable,
 	partitionSchemas,
 	partitionTables,
 	withInventorySignal,
@@ -127,5 +128,25 @@ describe("withInventorySignal / D106 R4-B3", () => {
 		expect(result).toEqual([
 			{ schema: "app", sqlName: "Widgets", stillReportedInInventory: false },
 		]);
+	});
+});
+
+// D106 R5-B2: round-trippable alone is not enough -- a name can round-
+// trip and still fail D36 (`table()`'s own `assertSqlName`), and only
+// one predicate should ever answer "can this be declared".
+describe("isNameDeclarable / D106 R5-B2", () => {
+	it("accepts an ordinary column whose key round-trips to a D36 name", () => {
+		expect(isNameDeclarable("id", "id")).toBe(true);
+	});
+
+	it("rejects a leading-underscore name even though it is its own round-trip fixed point", () => {
+		// toSnakeCase("_id") === "_id" (the round trip holds), but
+		// assertSqlName's own pattern (^[a-z][a-z0-9_]*$) starts with
+		// a-z, not _ -- the exact gap D106 R5-B2 measured live.
+		expect(isNameDeclarable("_id", "_id")).toBe(false);
+	});
+
+	it("rejects a name whose key does not round-trip at all (the pre-existing case)", () => {
+		expect(isNameDeclarable("createdAt", "createdAt")).toBe(false);
 	});
 });
