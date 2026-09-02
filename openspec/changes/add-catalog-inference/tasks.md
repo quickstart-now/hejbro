@@ -91,6 +91,13 @@ public surface.
       then creates `"createdat"` — neither the original nor
       `created_at`. The report's wording follows that observation.
       Failing test: `infer-loss-report.test.ts`.
+- [ ] 1.8 (~8m) One entry point over the parts — a session in; the
+      snapshot, the description and the loss report out — so groups 3
+      and 4 share one composition instead of writing two that drift.
+      Failing test: `infer-catalog-read.integration.test.ts`, end to end
+      over the live fixture, pinning the three outputs against each
+      other: a column whose SQL name no key can produce is absent from
+      the snapshot, present in the description, and named in the report.
 
 ## 2. Declarations from a snapshot (#604)
 Files: `packages/cli/src/declare-emit/*.ts` (new), tests

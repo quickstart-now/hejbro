@@ -128,7 +128,7 @@ const notInferredLines = (
 	),
 	...standaloneSequences.map(
 		(sequence) =>
-			`Not inferred: sequence "${sequence.schema}.${sequence.name}" -- no column owns it, and the DSL has no defineSequence().`,
+			`Not inferred: sequence "${sequence.schema}.${sequence.name}" -- no column owns it, and the DSL has no defineSequence() (D66).`,
 	),
 ];
 
