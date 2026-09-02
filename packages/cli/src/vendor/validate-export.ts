@@ -1,9 +1,13 @@
-import type { TypeNode } from "@hejbro/core";
+import type { Snapshot, TypeNode } from "@hejbro/core";
 import { parseSnapshot, simpleTypeNames, throwHejbroError } from "@hejbro/core";
 import { z } from "zod";
+import type {
+	ExportFunctionArgFact,
+	ExportFunctionReturnsFact,
+	ExportTableFact,
+} from "../export/description";
 import type { ExportFormatRecord } from "../export/format";
 import { EXPORT_DESCRIPTION_FORMAT } from "../export/format";
-import type { ExportPayload } from "../export/write";
 
 /** Mirrors `@hejbro/core`'s own `TypeNode` union (`types/type-node.ts`) — restated here rather than imported as a schema, since core exports the type but not a runtime validator for it (the same constraint `read-snapshot.ts`'s own doc comment already names for the table snapshot). `z.lazy` handles the one recursive member (`array`'s `element`). */
 const typeNodeSchema: z.ZodType<TypeNode> = z.lazy(() =>
@@ -72,12 +76,19 @@ const functionReturnsFactSchema = z
 	])
 	.nullable();
 
+/**
+ * `args`/`returns` are optional here, unlike `export/description.ts`'s
+ * own always-present write side (#657, format-1's earlier shape): a
+ * `schema.json` a pre-#587 `hejbro generate --export` wrote carries
+ * neither key at all -- the writer never regresses, only a reader must
+ * still parse what an older one produced.
+ */
 const functionFactSchema = z.object({
 	schemaName: z.string(),
 	functionName: z.string(),
 	exportName: z.string().nullable(),
-	args: z.array(functionArgFactSchema),
-	returns: functionReturnsFactSchema,
+	args: z.array(functionArgFactSchema).optional(),
+	returns: functionReturnsFactSchema.optional(),
 });
 
 /**
@@ -119,9 +130,41 @@ const assertDescriptionFormatSupported = (format: ExportFormatRecord): void => {
 	);
 };
 
+/**
+ * A function fact exactly as it may be read (#657) — `args`/`returns`
+ * optional, unlike `export/description.ts`'s own always-present write
+ * side: a format-1 export written before the typed function surface
+ * existed carries neither key, and reads as "present, untyped" rather
+ * than refusing or guessing a value neither key ever had.
+ */
+export type ValidatedFunctionFact = {
+	readonly schemaName: string;
+	readonly functionName: string;
+	readonly exportName: string | null;
+	readonly args?: ReadonlyArray<ExportFunctionArgFact>;
+	readonly returns?: ExportFunctionReturnsFact;
+};
+
+/**
+ * `ExportPayload`'s own read-side counterpart (`export/write.ts`): every
+ * field but `functions` is unchanged (a table fact's own shape has not
+ * moved since format 1), and `functions` carries {@link
+ * ValidatedFunctionFact} instead of the write side's always-typed one. A
+ * value typed `ExportPayload` (every writer's own output, `pull`'s
+ * included) already satisfies this — required fields satisfy an optional
+ * one — so nothing downstream that only ever sees a current writer's
+ * output has to change.
+ */
+export type ValidatedExportPayload = {
+	readonly tables: ReadonlyArray<ExportTableFact>;
+	readonly functions: ReadonlyArray<ValidatedFunctionFact>;
+	readonly roles: ReadonlyArray<string>;
+	readonly snapshot: Snapshot;
+};
+
 export type ValidatedExport = {
 	readonly format: ExportFormatRecord;
-	readonly payload: ExportPayload;
+	readonly payload: ValidatedExportPayload;
 };
 
 /**
@@ -170,6 +213,6 @@ export const validateExport = (
 
 	return {
 		format: formatParsed.data,
-		payload: descriptionParsed.data as unknown as ExportPayload,
+		payload: descriptionParsed.data as unknown as ValidatedExportPayload,
 	};
 };

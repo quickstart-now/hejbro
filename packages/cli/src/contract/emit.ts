@@ -1,4 +1,4 @@
-import type { ExportPayload } from "../export/write";
+import type { ValidatedExportPayload } from "../vendor/validate-export";
 import type { FunctionClientMeta, FunctionComputation } from "./functions";
 import {
 	buildFunctionClientMeta,
@@ -29,7 +29,7 @@ type EnumLookup = (schema: string, name: string) => ContractEnumFact | null;
  * "exactly once" reason.
  */
 const computeTables = (
-	payload: ExportPayload,
+	payload: ValidatedExportPayload,
 	enumLookup: EnumLookup,
 ): ReadonlyArray<TableComputation> => {
 	const snapshot = payload.snapshot;
@@ -143,7 +143,7 @@ ${entries}
 
 /** Renders the `Database` interface's full source (5.1's own settled shape: `Tables`/`Views`/`Functions`/`Enums`, mirroring Supabase's own generated type). */
 const renderDatabaseInterface = (
-	payload: ExportPayload,
+	payload: ValidatedExportPayload,
 	tables: ReadonlyArray<TableComputation>,
 	functions: ReadonlyArray<FunctionComputation>,
 ): string => {
@@ -308,7 +308,7 @@ const CREATE_DB_FACTORY = `export const createDb = (conn: Driver) =>
  * path reaches it.
  */
 export const emitContract = (
-	payload: ExportPayload,
+	payload: ValidatedExportPayload,
 	origin: ContractOrigin,
 ): string => {
 	const enumLookup = buildEnumLookup(enumsInSnapshot(payload.snapshot));

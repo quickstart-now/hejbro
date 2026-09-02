@@ -17,6 +17,7 @@ import type {
 	ExportTableFact,
 } from "../src/export/description";
 import type { ExportPayload } from "../src/export/write";
+import type { ValidatedFunctionFact } from "../src/vendor/validate-export";
 import { buildFixturePayload } from "./support/contract-fixture";
 
 const app = schema("app");
@@ -477,5 +478,124 @@ describe("non-identifier keys are quoted in the emitted contract (#662)", () => 
 		expect(updateSection).toContain('readonly "2fa"?: string;');
 		// Args (functions.ts:158).
 		expect(source).toContain('readonly Args: { readonly "my-arg": string; };');
+	});
+});
+
+const requireFunctionFact = (
+	payload: ExportPayload,
+	exportName: string,
+): ExportPayload["functions"][number] => {
+	const fact = payload.functions.find(
+		(entry) => entry.exportName === exportName,
+	);
+	if (fact === undefined) {
+		throw new Error(`fixture: no function fact for "${exportName}"`);
+	}
+	return fact;
+};
+
+/**
+ * #657: a format-1 export written before the typed function surface
+ * existed carries a function fact with no `args`/`returns` key at all
+ * (see `validate-export.test.ts`'s own reading observer for the
+ * git-measured pre-#587 shape) — this is the other half of the delta,
+ * the drop at contract-emission time. `posts`/`totalPosts`'s own
+ * snapshot and table fact come from a real declaration (`buildFixturePayload`,
+ * 1.4's own idiom) — only the function fact is hand-edited afterward to
+ * the untyped shape, never this writer's own always-typed output.
+ */
+describe("a pre-functions fact drops out of the contract (#657)", () => {
+	it("drops a pre-functions fact from the contract's Functions section and its metadata", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const totalPosts = defineFunction(
+			app,
+			"total_posts",
+			{ returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, totalPosts];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[totalPosts, "totalPosts"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const totalPostsFact = requireFunctionFact(payload, "totalPosts");
+		const untypedFact: ValidatedFunctionFact = {
+			schemaName: totalPostsFact.schemaName,
+			functionName: totalPostsFact.functionName,
+			exportName: totalPostsFact.exportName,
+			// No `args`/`returns` key at all -- the pre-#587 shape.
+		};
+		const patchedPayload = {
+			...payload,
+			functions: [untypedFact],
+		};
+
+		const source = emitContract(patchedPayload, ORIGIN);
+
+		expect(source).toContain("readonly Functions: {};");
+		expect(source).not.toContain("totalPosts");
+		const metadataBlock =
+			source.split("export const contractMetadata")[1] ?? "";
+		expect(metadataBlock).toMatch(/functions: \{\s*\},/);
+		expect(metadataBlock).not.toContain("totalPosts");
+	});
+
+	it("drops a hand-edited fact carrying args but no returns, or returns but no args", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const totalPosts = defineFunction(
+			app,
+			"total_posts",
+			{ args: { weight: bigint({ mode: "number" }) }, returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, totalPosts];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[totalPosts, "totalPosts"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const totalPostsFact = requireFunctionFact(payload, "totalPosts");
+		// A hand-edited hybrid neither writer ever produces on its own --
+		// exists only to prove the drop guard checks `args`/`returns`
+		// independently, not "either implies both" (tasks.md 1.1's own m4).
+		const argsOnlyFact: ValidatedFunctionFact = {
+			schemaName: totalPostsFact.schemaName,
+			functionName: totalPostsFact.functionName,
+			exportName: totalPostsFact.exportName,
+			args: totalPostsFact.args,
+			// No `returns` key.
+		};
+		const returnsOnlyFact: ValidatedFunctionFact = {
+			schemaName: totalPostsFact.schemaName,
+			functionName: totalPostsFact.functionName,
+			exportName: totalPostsFact.exportName,
+			returns: totalPostsFact.returns,
+			// No `args` key.
+		};
+
+		const argsOnlySource = emitContract(
+			{ ...payload, functions: [argsOnlyFact] },
+			ORIGIN,
+		);
+		const returnsOnlySource = emitContract(
+			{ ...payload, functions: [returnsOnlyFact] },
+			ORIGIN,
+		);
+
+		expect(argsOnlySource).toContain("readonly Functions: {};");
+		expect(argsOnlySource).not.toContain("totalPosts");
+		expect(returnsOnlySource).toContain("readonly Functions: {};");
+		expect(returnsOnlySource).not.toContain("totalPosts");
 	});
 });

@@ -6,7 +6,7 @@ starts from its named red test. Verification (gates, `openspec validate
 
 ## 1. Vendoring compatibility (#676)
 
-- [ ] 1.1 (~9m) `[design]` The export reader accepts a format-1
+- [x] 1.1 (~9m) `[design]` The export reader accepts a format-1
       description whose function facts carry no `args`/`returns`
       (#657). Red: `packages/cli/test/validate-export.test.ts` —
       "reads a pre-functions export and carries its tables" with a
@@ -15,9 +15,14 @@ starts from its named red test. Verification (gates, `openspec validate
       `returns` optional on read; a fact missing either reads as
       "present, untyped". `packages/cli/src/contract/functions.ts`
       skips such a function (no `Functions` entry, no client metadata).
-      Design detail settled here: the read shape of an untyped function
-      fact (`args: null`/`returns: null` vs. absent) — pick one, state it
-      in the delta scenario's THEN if it becomes observable.
+      Design detail settled (lead ruling): an untyped fact reads as
+      **absent**, never normalized to `null` — `returns: null` already
+      means "trigger-synthesized", and normalizing would leave the
+      reader unable to tell the two apart. `validate-export.ts` exports
+      a read-side payload type whose function facts carry `args?`/
+      `returns?`; `contract/functions.ts` takes that type and drops a
+      fact missing either. Nothing in an emitted artifact observes the
+      choice (such a function is dropped), so the delta's THEN stands.
       Files: `packages/cli/src/vendor/validate-export.ts`,
       `packages/cli/src/contract/functions.ts`, tests.
 - [x] 1.2 (~6m) `createNameKeyedDb` accepts metadata with no
