@@ -5,53 +5,62 @@ const FORMAT_TEXT = '{"descriptionFormat":1,"snapshotFormat":8}';
 
 const SNAPSHOT = '{"formatVersion":8,"dialect":"postgres","objects":{}}';
 
+// One function per schemaText, deliberately: `z.array` fails the whole
+// array on any one element's mismatch, so a shared fixture would turn
+// every return kind red together under a mutant that drops only one
+// union member -- these stay isolated so each kind's own fixture is the
+// only one that can go red for that kind's own reason.
+const buildSchemaText = (functionFact: unknown): string =>
+	JSON.stringify({
+		tables: [],
+		functions: [functionFact],
+		roles: [],
+		snapshot: JSON.parse(SNAPSHOT),
+	});
+
 describe("validateExport", () => {
-	it("keeps a function's carried facts", () => {
-		const schemaText = JSON.stringify({
-			tables: [],
-			functions: [
-				{
-					schemaName: "app",
-					functionName: "total_posts",
-					exportName: "totalPosts",
-					args: [
-						{ key: "postId", sqlName: "post_id" },
-						{ key: "createdAt", sqlName: "created_at" },
-					],
-					returns: { kind: "scalar" },
-				},
-				{
-					schemaName: "app",
-					functionName: "posts_touch",
-					exportName: null,
-					args: [],
-					returns: null,
-				},
+	it("keeps a scalar-returning function's carried facts", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "total_posts",
+			exportName: "totalPosts",
+			args: [
+				{ key: "postId", sqlName: "post_id" },
+				{ key: "createdAt", sqlName: "created_at" },
 			],
-			roles: [],
-			snapshot: JSON.parse(SNAPSHOT),
-		});
+			returns: { kind: "scalar" },
+		};
 
-		const validated = validateExport(FORMAT_TEXT, schemaText);
+		const validated = validateExport(FORMAT_TEXT, buildSchemaText(fact));
 
-		expect(validated.payload.functions).toEqual([
-			{
-				schemaName: "app",
-				functionName: "total_posts",
-				exportName: "totalPosts",
-				args: [
-					{ key: "postId", sqlName: "post_id" },
-					{ key: "createdAt", sqlName: "created_at" },
-				],
-				returns: { kind: "scalar" },
-			},
-			{
-				schemaName: "app",
-				functionName: "posts_touch",
-				exportName: null,
-				args: [],
-				returns: null,
-			},
-		]);
+		expect(validated.payload.functions).toEqual([fact]);
+	});
+
+	it("keeps a table-returning function's carried facts", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "posts_by_status",
+			exportName: "postsByStatus",
+			args: [{ key: "status", sqlName: "status" }],
+			returns: { kind: "table", schemaName: "app", tableName: "posts" },
+		};
+
+		const validated = validateExport(FORMAT_TEXT, buildSchemaText(fact));
+
+		expect(validated.payload.functions).toEqual([fact]);
+	});
+
+	it("keeps a trigger-synthesized function's null return", () => {
+		const fact = {
+			schemaName: "app",
+			functionName: "posts_touch",
+			exportName: null,
+			args: [],
+			returns: null,
+		};
+
+		const validated = validateExport(FORMAT_TEXT, buildSchemaText(fact));
+
+		expect(validated.payload.functions).toEqual([fact]);
 	});
 });
