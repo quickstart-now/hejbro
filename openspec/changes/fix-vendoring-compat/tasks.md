@@ -20,7 +20,7 @@ starts from its named red test. Verification (gates, `openspec validate
       in the delta scenario's THEN if it becomes observable.
       Files: `packages/cli/src/vendor/validate-export.ts`,
       `packages/cli/src/contract/functions.ts`, tests.
-- [ ] 1.2 (~6m) `createNameKeyedDb` accepts metadata with no
+- [x] 1.2 (~6m) `createNameKeyedDb` accepts metadata with no
       `functions` member (#659). Red:
       `packages/query/test/client/legacy-metadata.test.ts` — "a
       contract vendored before functions builds a client with an empty

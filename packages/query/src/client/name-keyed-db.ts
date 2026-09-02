@@ -409,7 +409,7 @@ export const createNameKeyedDb = <TDatabase extends DatabaseShape>(
 	);
 	const functions: Readonly<Record<string, FunctionDeclaration>> =
 		Object.fromEntries(
-			Object.entries(metadata.functions).map(([name, fnMeta]) => [
+			Object.entries(metadata.functions ?? {}).map(([name, fnMeta]) => [
 				name,
 				synthesizeFunction(fnMeta),
 			]),
