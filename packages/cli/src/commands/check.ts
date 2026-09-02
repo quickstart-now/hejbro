@@ -126,7 +126,10 @@ const existingTableBoundaryLines = (
 		.filter((table) => table.existing === true)
 		.map(
 			(table) =>
-				`existing table (declared, not compared): ${table.schema}.${table.name}`,
+				// Matches `boundaryLineFor`'s own "check does not compare X:
+				// reason" shape (never `inventoryLines`' "unmanaged" wording --
+				// that word is reserved for a table no declaration covers).
+				`check does not compare ${table.schema}.${table.name}: declared existing and not compared.`,
 		);
 
 /**

@@ -634,18 +634,24 @@ describe("an existing declaration is neither compared nor inventoried (add-unman
 		expect(wholeReport).not.toContain("unmanaged");
 	});
 
-	// ⑤ D106 R2-06/07: "The check states the boundary of its own coverage"
-	// (cli-commands) requires naming what it did not compare regardless of
-	// the reason -- ① found no `check-object-*` finding for this table
-	// (nothing to name as a difference), and ④ already established the
-	// report never calls it "unmanaged" (the wrong axis: this table IS
-	// declared). Neither means the report says *nothing* about it; this
-	// is the coverage-boundary line that fills that silence, distinct from
-	// both `boundaryLineFor`'s kind-level lines and `inventoryLines`'
-	// undeclared-table line. Passes the real `snapshot` (the 4th,
-	// previously-unexercised parameter) rather than relying on the
-	// `emptySnapshot` default every other test in this file uses.
-	it("names it in the coverage-boundary section as declared and not compared", async () => {
+	// D106 R2-08/R2-09: "The check states the boundary of its own coverage"
+	// (cli-commands, live requirement) requires naming what it did not
+	// compare regardless of the reason -- an existing table's skip is
+	// neither of that requirement's two named categories (not a kind-level
+	// incapacity: `table` compares fine for every other declaration; not
+	// an operational failure: nothing failed, this was never attempted by
+	// design), but the requirement's own opening sentence is not scoped to
+	// only those two, and the report said nothing about it before this
+	// fix. Four independent axes (round 1's own convention for this exact
+	// describe block, ①-④ above), each its own assertion so a mutant
+	// removing only one leaves the other three green. Passes the real
+	// `snapshot` (the 4th, previously-unexercised parameter) rather than
+	// relying on the `emptySnapshot` default every other test in this file
+	// uses.
+	const buildCoverageBoundaryReport = async (): Promise<{
+		readonly report: ReturnType<typeof renderCheckReport>;
+		readonly findings: ReadonlyArray<Finding>;
+	}> => {
 		const { snapshot, catalog } = buildScenario();
 		const findings = await compareCheckAgainstCatalog(
 			snapshot,
@@ -654,9 +660,48 @@ describe("an existing declaration is neither compared nor inventoried (add-unman
 		);
 		const inventory = buildInventory(snapshot, catalog);
 		const report = renderCheckReport(findings, inventory, undefined, snapshot);
+		return { report, findings };
+	};
+
+	// ⑤ Names the table, in the coverage-boundary section's own
+	// established style ("check does not compare X: reason") -- never
+	// `inventoryLines`' "unmanaged" wording (④ above already established
+	// the report never calls a declared table that; this line only
+	// confirms the *positive* claim, that it names it some other way).
+	it("names the table in the coverage-boundary section", async () => {
+		const { report } = await buildCoverageBoundaryReport();
 		const stdoutText = report.stdout.join("\n");
 		expect(stdoutText).toContain(
-			"existing table (declared, not compared): auth.users",
+			"check does not compare auth.users: declared existing and not compared.",
 		);
+	});
+
+	// ⑥ Not a finding: the boundary line is additive to the report's
+	// stdout, never derived from `findings` -- the table contributes zero
+	// findings of any kind (not a difference, not a `check-not-compared`).
+	// Restates ① above (same fact) so this describe block proves all four
+	// axes on its own.
+	it("is not a finding", async () => {
+		const { findings } = await buildCoverageBoundaryReport();
+		expect(findings).toEqual([]);
+	});
+
+	// ⑦ Not counted as agreeing: measured, not assumed -- read
+	// `renderCheckReport`'s own exit-0 branch, `summaryLine`, and
+	// `nonEmptyFindingsExitCode` before writing this test, and none of
+	// them count agreement anywhere; only disagreements and not-compared
+	// objects get a number. There is no count for this table to inflate,
+	// so what this axis can assert is that the no-differences line stays
+	// exactly what it always was.
+	it("has no agree-count for it to be counted under (this report has none at all)", async () => {
+		const { report } = await buildCoverageBoundaryReport();
+		expect(report.stdout.at(-1)).toBe("check: no differences.");
+	});
+
+	// ⑧ Restates ③ above (same fact) so this describe block proves all
+	// four axes on its own, without a reader having to cross-reference it.
+	it("does not affect the exit code", async () => {
+		const { report } = await buildCoverageBoundaryReport();
+		expect(report.exitCode).toBe(0);
 	});
 });

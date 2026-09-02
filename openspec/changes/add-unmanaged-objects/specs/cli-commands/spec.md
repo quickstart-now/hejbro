@@ -16,10 +16,11 @@ could not be carried out, and its kind is comparable for every other
 table. `check` SHALL therefore name it in the report's
 coverage-boundary section as declared existing and not compared —
 "what it did not compare" covers a table it declined to compare as much
-as one it was unable to. That line SHALL NOT be a finding, SHALL NOT
-affect the exit code, and SHALL NOT be counted as agreeing: a report
-that counted it as agreeing would claim the shape matched, which is the
-one thing `check` never looked at.
+as one it was unable to. That line SHALL NOT be a finding and SHALL NOT
+affect the exit code. Naming it is what keeps a passing report from
+being read as a guarantee about a shape `check` never looked at — so
+wherever the report summarises the objects that agreed, an existing
+declaration SHALL NOT be among them.
 
 `hejbro reset` SHALL drop nothing of an existing table, `hejbro
 baseline` SHALL write no statement for one, and `hejbro raise` SHALL be
@@ -33,13 +34,12 @@ ledger, never a declaration.
 - **THEN** no difference is reported for it, it is absent from the
   inventory section, and the exit code is unaffected
 
-#### Scenario: An existing declaration is named in the coverage boundary, never counted as agreeing
+#### Scenario: An existing declaration is named in the coverage boundary, never as a finding
 - **WHEN** a schema declares a table with `existingTable()` and `hejbro
   check` runs
 - **THEN** the report's coverage-boundary section names that table as
-  declared existing and not compared, it is neither a finding nor
-  counted among the objects that agreed, it is absent from the unmanaged
-  inventory, and the exit code is unaffected
+  declared existing and not compared, it is not a finding, it is absent
+  from the unmanaged inventory, and the exit code is unaffected
 
 #### Scenario: baseline and reset pass an existing declaration by
 - **WHEN** a schema declaring a table with `existingTable()` is
