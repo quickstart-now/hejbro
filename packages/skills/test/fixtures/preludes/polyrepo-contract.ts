@@ -32,6 +32,7 @@ export interface Database {
 }
 
 export const contractMetadata = {
+	source: "git",
 	commit: "0".repeat(40),
 	exportHash: `sha256:${"0".repeat(64)}`,
 	roles: [] as const,

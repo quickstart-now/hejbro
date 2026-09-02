@@ -218,7 +218,11 @@ requirement, outside the eleven), tests
       `source` key and nothing else.
 
 ## 5. The live witness and the docs (#604)
-Files: `packages/cli/test/*.integration.test.ts`, `skills/hejbro/
+Files: `packages/cli/test/*.integration.test.ts`,
+`packages/query/src/client/contract-types.ts` and its own test fixtures
+(the consuming side of the contract restates the metadata type on
+purpose, so the origin union has to be widened there too — found by
+compiling a pulled contract, not by reading), `skills/hejbro/
 references/brownfield-adoption.md`, the polyrepo reference,
 `.changeset/*.md`
 

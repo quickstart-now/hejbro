@@ -53,6 +53,7 @@ describe("no Table value crosses into the client's public types (R2-G6 6.1 condi
 	it("the runtime client object carries no own tableMeta symbol property", () => {
 		const { driver } = recordingTransactionalDriver();
 		const metadata: ContractMetadata = {
+			source: "git",
 			commit: "abc123",
 			exportHash: "sha256:x",
 			roles: [],

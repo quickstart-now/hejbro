@@ -12,7 +12,10 @@ connection string, which carries a secret. A contract written by
 in its header that it was inferred from a database rather than vendored
 from a schema repository. `vendor --check` and `outdated` SHALL refuse
 to run against it with a coded diagnostic naming `link` as the way to a
-commit-anchored contract.
+commit-anchored contract. A contract vendored before the origin was
+named — carrying a commit and no source — SHALL still type-check
+against the client that reads it, so upgrading the client never breaks
+a contract already committed.
 
 #### Scenario: pull writes where vendor writes
 - **WHEN** `hejbro pull --db-url <db> --schema public` runs in a
