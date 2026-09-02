@@ -1076,3 +1076,51 @@ compile. Fix the sentence, not the surface.
 - `node scripts/check-diagnostic-xref.mjs` (227 codes, ok) and `node scripts/check-bans.mjs` (235 files, ok).
 - Round-4 probes, in throwaway files created, run and deleted in the same tool call (`packages/cli/test/_r4probe*.test.ts`, `packages/query/test/_r4probe-types*.ts`; `git status --porcelain` shows only `evaluation.md`): eleven column-collision shapes through `inferColumnKeys`; `renderHeader` plus a full emit-and-`jiti`-load for a `*/`-bearing report line; the `_fkey`/`_fk` starter pair emitted, loaded and run through `generateMigration`; the explicit-name and derived-name declarations through `generateMigration` and `planRenames`; six cycle/alias graphs emitted to real directories and loaded from every entry point (13 loads); a determinism comparison with the table order reversed; `schema()`/`inferTable` driven with non-D36 schema, table, check and index names (R4-B1); the three `ContractMetadata` origin shapes through the package's own `tsc`, with a negative control.
 - Not run: `pnpm build`, `pnpm install`, full-workspace `pnpm test`/`check-types` (another team holds the gate slot). Docker-gated `*.integration.test.ts` were not run — `docker info` fails on this machine, so `brownfield-foreign-key-names.integration.test.ts`, `declare-emit-roundtrip.integration.test.ts`, `infer-catalog-read.integration.test.ts` and `live-witness.integration.test.ts` are read, not executed; every measurement above is in-process from `src`, and `packages/cli/dist` was neither read nor rebuilt (the repo's own `Read` deny rules cover it).
+
+## Round 4 disposition
+
+All three accepted; none rebutted. The blocking one was the last
+unprobed corner of the exotic-name class rounds 1–3 kept finding: the
+identifiers of objects other than columns and foreign keys.
+
+- **R4-B1 — an unexpressible schema, table, index or check name stopped
+  the whole reading.** Every such object is now left out and named in
+  the loss report, and the reading continues: a schema takes what it
+  holds with it, a table takes its own constraints, an index or a check
+  costs only itself. **Approximation was never an option here**, which
+  the measurement settled rather than taste: `check()` takes its name as
+  a required argument with no derive path at all, and a table's or
+  schema's name *is* its identity — only a foreign key's and an index's
+  name is a label over an identity the columns already carry. Naming an
+  index or check something else would also split the declaration from
+  the database and leave `check` reporting one object as missing and
+  another as unmanaged, forever — the shape R3-B3 existed to remove.
+  The three consequence sentences differ because the facts differ: an
+  omitted table keeps appearing in `check`'s unmanaged inventory, unless
+  it was the only thing its schema would have declared; an omitted index
+  or check never appears again, because nothing inventories those (#707).
+  The report says which is which.
+- **R4-N1, R4-N2 — closed.** The skill's Approximated band gained the
+  fourth kind round 3 introduced, and the round-3 changeset stopped
+  claiming an export (`isSqlName`) that its own disposition said was
+  private.
+- **Where the gates ran.** The seven-step set ran green at `e68647e3`,
+  with the tip unmoved from before step 0 until after step 7. What
+  follows it is this disposition and a changeset — no source or test
+  file moves in either, which is why the numbers above still describe
+  the pushed tree.
+- **What the round cost, and why.** Three gate slots were spent: one to
+  a full Docker data disk (1,418 anonymous volumes, 84 GB, left by this
+  package's integration suites since round 1 — #709), and two to
+  assertions in the new witness whose subject was wrong rather than to
+  the code under test. Both assertion faults were the same shape as the
+  findings this piece keeps making: the check was wider than what it
+  meant to observe — a name matched inside the header's own prose, and
+  then a whole-stdout comparison across two runs whose output paths
+  differ by design. The rule that came out of it — a new Docker-gated
+  witness is run alone, outside the slot, before it may enter one —
+  closed it. A fourth fault was caught before it could cost anything:
+  the report-line allowlist the fixed determinism check compares was
+  missing `Guessed role names:`, so that comparison had been quietly
+  half-blind; a line-by-line sweep of every literal `loss-report.ts`
+  renders found it.
