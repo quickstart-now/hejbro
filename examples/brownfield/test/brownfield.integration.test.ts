@@ -449,4 +449,62 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 			}
 		});
 	});
+
+	/**
+	 * 3 (#714 bc-1): the clean subset -- every schema R1-R4 (already on
+	 * dev) already cover cleanly, selected on its own via `--schema`.
+	 * Green today; proves the corpus's own non-R5 shapes (the
+	 * opposite-direction enum/FK cycle, the three-schema `users` chain,
+	 * default `_fkey` names, CamelCase schema/index/check omission, the
+	 * star-slash-in-a-name header escape, the approximation shapes) all
+	 * still work, without waiting on #711.
+	 *
+	 * #711 merged, re-check: once the full-corpus run in "the documented
+	 * import flow" above is green on its own, this axis is redundant with
+	 * it (this only exists because that one isn't green yet).
+	 */
+	describe("the clean subset (app, audit, billing, catalog, Marketing)", () => {
+		it("imports cleanly, twice identically, and every emitted file loads from every entry point", async () => {
+			const cwd = await createCliFixtureDir();
+			try {
+				const initResult = await runCli(cwd, ["init"]);
+				expect(initResult.exitCode).toBe(0);
+
+				const firstImport = await runCli(
+					cwd,
+					importArgs(url(), CLEAN_SCHEMAS, "src/schema"),
+				);
+				expect(firstImport.exitCode).toBe(0);
+
+				// Written outside "src/" -- see the full-corpus case above
+				// for why (the default entry glob would otherwise match
+				// both copies once baseline runs).
+				const secondImport = await runCli(
+					cwd,
+					importArgs(url(), CLEAN_SCHEMAS, "verify-schema"),
+				);
+				expect(secondImport.exitCode).toBe(0);
+				execFileSync("diff", [
+					"-rq",
+					resolve(cwd, "src/schema"),
+					resolve(cwd, "verify-schema"),
+				]);
+
+				const filesToProbe = CLEAN_SCHEMAS.filter(
+					(schema) => schema !== "Marketing",
+				).map((schema) => resolve(cwd, "src", "schema", `${schema}.schema.ts`));
+				await assertEveryEntryPointLoads(
+					resolve(cwd, "hejbro.config.ts"),
+					filesToProbe,
+				);
+
+				const baselineResult = await runCli(cwd, ["baseline"]);
+				expect(baselineResult.exitCode).toBe(0);
+				const migrateResult = await runCli(cwd, ["migrate", "--url", url()]);
+				expect(migrateResult.exitCode).toBe(0);
+			} finally {
+				await removeCliFixtureDir(cwd);
+			}
+		}, 60_000);
+	});
 });
