@@ -1218,4 +1218,88 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			secondResult.snapshot.objects["table:uo10.widgets"],
 		).not.toHaveProperty("existing");
 	});
+
+	// D106 R2, R2-B1: `planRenames` runs before `diffSnapshots`, entirely
+	// outside the table guard (`table-kind.ts:636`) and the fan-out rule
+	// (`diff-engine.ts`'s `ownerIsExisting`) alike -- it built its own
+	// working sets from every `table:` entry, with no existence filter
+	// of its own, so it both refused otherwise-valid runs and prescribed
+	// `alter table … rename …` against tables hejbro does not own. Four
+	// tests replay the evaluator's own reproductions (A-D) verbatim.
+
+	it("changing an existing declaration's own column name produces no migration and no rename ambiguity (D106 R2, R2-B1 repro A)", () => {
+		const app = schema("c1");
+		const first = existingTable("c1", "users", { id: uuid(), name: text() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(first)],
+			previousSnapshot: emptySnapshot,
+		});
+		const changed = existingTable("c1", "users", {
+			id: uuid(),
+			title: text(),
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(changed)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("renaming an existing declaration itself produces no migration and no rename ambiguity (D106 R2, R2-B1 repro B)", () => {
+		const app = schema("e2");
+		const first = existingTable("e2", "old_name", { id: uuid() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(first)],
+			previousSnapshot: emptySnapshot,
+		});
+		const renamed = existingTable("e2", "new_name", { id: uuid() });
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(renamed)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
+	it("removing an existing declaration never poisons an unrelated managed table added in the same run (D106 R2, R2-B1 repro C)", () => {
+		const app = schema("e4");
+		const legacy = existingTable("e4", "legacy", { id: uuid() });
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(legacy)],
+			previousSnapshot: emptySnapshot,
+		});
+		const fresh = table(app, "fresh", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [app, fresh],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		expect(secondResult.sql).toContain('create table "e4"."fresh"');
+		expect(secondResult.sql.toLowerCase()).not.toContain("legacy");
+	});
+
+	it("a managed table replaced by an existing declaration under a different name drops only the managed identity, untouched by rename detection (D106 R2, R2-B1 repro D)", () => {
+		const app = schema("e3");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const gadgets = existingTable("e3", "gadgets", { id: uuid() });
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(gadgets)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		// A genuine, ordinary drop of the managed declaration that
+		// disappeared -- unrelated to existing-table semantics, since
+		// `widgets`/`gadgets` are two different identities, not one
+		// table changing hands. What must never appear is any statement
+		// naming `gadgets`, the existing declaration.
+		expect(secondResult.sql).toContain('drop table "e3"."widgets"');
+		expect(secondResult.sql.toLowerCase()).not.toContain("gadgets");
+	});
 });

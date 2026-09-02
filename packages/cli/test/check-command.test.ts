@@ -633,4 +633,78 @@ describe("an existing declaration is neither compared nor inventoried (add-unman
 		const wholeReport = [...report.stdout, report.stderr ?? ""].join("\n");
 		expect(wholeReport).not.toContain("unmanaged");
 	});
+
+	// D106 R2-08/R2-09/R2-11: "The check states the boundary of its own
+	// coverage" (cli-commands, live requirement) requires naming what it
+	// did not compare regardless of the reason -- an existing table's skip
+	// is neither of that requirement's two named categories (not a
+	// kind-level incapacity: `table` compares fine for every other
+	// declaration; not an operational failure: nothing failed, this was
+	// never attempted by design), but the requirement's own opening
+	// sentence is not scoped to only those two, and the report said
+	// nothing about it before this fix. The delta's own scenario names
+	// four THEN clauses (naming, not a finding, absent from the unmanaged
+	// inventory, exit code unaffected) -- a fourth, "not counted as
+	// agreeing", was cut mid-round (R2-11) once measuring
+	// `renderCheckReport` showed this report has no agree-count anywhere
+	// to be counted under, which would have made that clause an
+	// unobserved claim (evaluation.md's own N2 shape, the one this piece
+	// has avoided throughout). Each of the four remaining clauses gets its
+	// own assertion (round 1's own convention), so a mutant removing only
+	// one leaves the other three green. Passes the real `snapshot` (the
+	// 4th, previously-unexercised parameter) rather than relying on the
+	// `emptySnapshot` default every other test in this file uses.
+	const buildCoverageBoundaryReport = async (): Promise<{
+		readonly report: ReturnType<typeof renderCheckReport>;
+		readonly findings: ReadonlyArray<Finding>;
+		readonly inventory: Inventory;
+	}> => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		const inventory = buildInventory(snapshot, catalog);
+		const report = renderCheckReport(findings, inventory, undefined, snapshot);
+		return { report, findings, inventory };
+	};
+
+	// ⑤ Names the table, in the coverage-boundary section's own
+	// established style ("check does not compare X: reason") -- never
+	// `inventoryLines`' "unmanaged" wording (④ above already established
+	// the report never calls a declared table that; this line only
+	// confirms the *positive* claim, that it names it some other way).
+	it("names the table in the coverage-boundary section", async () => {
+		const { report } = await buildCoverageBoundaryReport();
+		const stdoutText = report.stdout.join("\n");
+		expect(stdoutText).toContain(
+			"check does not compare auth.users: declared existing and not compared.",
+		);
+	});
+
+	// ⑥ Not a finding: the boundary line is additive to the report's
+	// stdout, never derived from `findings` -- the table contributes zero
+	// findings of any kind (not a difference, not a `check-not-compared`).
+	// Restates ① above (same fact) so this describe block proves the
+	// scenario's own clauses on its own.
+	it("is not a finding", async () => {
+		const { findings } = await buildCoverageBoundaryReport();
+		expect(findings).toEqual([]);
+	});
+
+	// ⑦ Restates ② above (same fact, absent from the unmanaged inventory)
+	// alongside the other three clauses so this describe block proves the
+	// whole scenario on its own, without a reader having to
+	// cross-reference the block above it.
+	it("is absent from the unmanaged inventory", async () => {
+		const { inventory } = await buildCoverageBoundaryReport();
+		expect(inventory.unmanagedTables).toEqual([]);
+	});
+
+	// ⑧ Restates ③ above (same fact) for the same reason as ⑦.
+	it("does not affect the exit code", async () => {
+		const { report } = await buildCoverageBoundaryReport();
+		expect(report.exitCode).toBe(0);
+	});
 });

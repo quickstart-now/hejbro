@@ -1,5 +1,9 @@
 import type { TableSnapshot } from "../../kinds/table-snapshot";
-import { asTableSnapshot, tableIdentity } from "../../kinds/table-snapshot";
+import {
+	asTableSnapshot,
+	tableExisting,
+	tableIdentity,
+} from "../../kinds/table-snapshot";
 import type { Snapshot } from "../../snapshot/snapshot";
 import type { JsonValue } from "../../snapshot/stable-json";
 import type { RenameSpec, TableRenameSpec } from "./types";
@@ -28,6 +32,22 @@ export const tableEntries = (
 			asTableSnapshot(node),
 		]),
 	);
+
+/**
+ * `tables`, excluding any table marked existing (D106 R2, R2-B1).
+ * Rename planning is a managed-table concern only — hejbro neither
+ * drops nor creates an existing table (`table-kind.ts`'s own
+ * bidirectional guard), so one is never a rename candidate and never
+ * a rename ambiguity source, on either side of a run. Applied where
+ * `previousTables`/`nextTables` are built (`rename-plan.ts`), so both
+ * `computeSchemaTableSets` and `computeTableColumnSets` — and,
+ * through them, every ambiguity/pairing computation downstream —
+ * never see one.
+ */
+export const excludeExisting = (
+	tables: ReadonlyMap<string, TableSnapshot>,
+): ReadonlyMap<string, TableSnapshot> =>
+	new Map(Array.from(tables).filter(([, table]) => !tableExisting(table)));
 
 export type NameSets = {
 	readonly dropped: ReadonlySet<string>;
