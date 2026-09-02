@@ -20,6 +20,8 @@ Handing a managed table to `existingTable()` emits nothing at all —
 neither the table nor anything on it (its sequence, its row-level
 security, its policies) is dropped. Adopting an `existingTable()` into
 a managed `table()` the other way emits no `create table` for the
-table itself, but everything the new declaration manages on it — a
-serial column's sequence, row-level security, its policies — is
-created exactly as it would be for any other managed table.
+table itself, and creates exactly three things a handover also spares
+— a serial column's sequence, row-level security, its policies. It does
+not yet create the declaration's own indexes, check constraints,
+foreign keys, or primary key, even though the snapshot afterwards
+records them as if it had (#671).

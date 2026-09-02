@@ -62,13 +62,27 @@ number of migration files, run anywhere, with no database connection.
 A run whose declarations produce a snapshot identical to the previous
 one SHALL write neither a migration nor a snapshot, report "no changes
 — snapshot already matches your declarations", and exit zero. A run
-that produces a **different** snapshot but no migration SHALL write the
-snapshot, write no migration, report that the snapshot was updated with
-no migration to write, and exit zero. That second case is what a
-declaration hejbro records but never emits produces: whether a run has
-something to write is decided by comparing the snapshot it arrived at
-against the previous one, never by whether the migration SQL came out
-empty.
+that produces a **different** snapshot but no statement to write SHALL
+write the snapshot together with a migration carrying no statements,
+whose banner records the state before and after exactly as any other
+migration's does — so the chain stays anchored and a repository nobody
+edited still passes `hejbro verify` — and SHALL report the migration it
+wrote and that it carries no statements, and exit zero. That migration's
+name SHALL be derived from the difference between the two snapshots, by
+the same naming rules every other migration follows and as
+deterministically: the same pair of snapshots SHALL always produce the
+same name, never a generic fallback.
+
+Whether a run has something to write is decided by comparing the
+snapshot it arrived at against the previous one, never by whether the
+migration SQL came out empty. An empty statement list decides what a
+migration *contains*, not whether one exists: a state hejbro recorded is
+a state the chain has to carry, or `verify` is left calling an untouched
+repository edited. Whether a run has something to write and whether it
+emitted any statement are two facts, not one: a run can have a snapshot
+to write and no statement to emit. Generation SHALL state each of them
+on its own, so that no caller has to infer one from the other or
+reconcile a result that reports no change while carrying a migration.
 
 `generate`'s flag surface carries the rename flags
 (identifying a rename that would otherwise diff as drop-plus-add) and
@@ -149,13 +163,14 @@ line SHALL NOT collapse them into one file.
 - **THEN** no migration and no snapshot are written, the no-change line
   is reported, and the exit code is zero
 
-#### Scenario: A recorded declaration that emits nothing still writes the snapshot
+#### Scenario: A recorded declaration that emits nothing still anchors the chain
 - **WHEN** an `existingTable()` declaration is added to a repository
   whose snapshot already matches its declarations, and `hejbro generate`
   runs
-- **THEN** no migration is written, the snapshot is written with the
-  table recorded as existing, the report says so, and the exit code is
-  zero
+- **THEN** the snapshot is written with the table recorded as existing,
+  a migration carrying no statements is written alongside it, the report
+  names both, the exit code is zero — and `hejbro verify` run afterwards
+  passes, as does a later run that does emit statements
 
 #### Scenario: The export is written by the same run
 - **WHEN** generation runs with the export enabled and finds a

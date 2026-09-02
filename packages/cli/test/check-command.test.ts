@@ -180,6 +180,53 @@ describe("renderCheckReport / 5.1 inventory section", () => {
 	});
 });
 
+describe("check's inventory does not widen to a whole reserved schema (D106 R3, #665)", () => {
+	// Declaring one existing table in `auth` used to pull `auth`'s own
+	// name into `declaredSchemaNames`, and once a schema counts as
+	// "declared" every catalog table inside it that no declaration
+	// covers is reported unmanaged -- three tables nobody ever declared
+	// a shape or an existing marker for, purely because one sibling
+	// table happened to be existing.
+	it("does not report the rest of a schema as unmanaged just because one table in it is declared existing", () => {
+		const authUsers = existingTable("auth", "users", { id: uuid() });
+		const snapshot = buildTestSnapshot([getTableMeta(authUsers)]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [
+				{ schema: "auth", table: "users", rls: false },
+				{ schema: "auth", table: "sessions", rls: false },
+				{ schema: "auth", table: "refresh_tokens", rls: false },
+				{ schema: "auth", table: "mfa_factors", rls: false },
+			],
+		};
+
+		const inventory = buildInventory(snapshot, catalog);
+		expect(inventory.unmanagedTables).toEqual([]);
+	});
+
+	// Control (round 1's own form): a schema a *managed* table actually
+	// declares still gets its other catalog tables reported unmanaged --
+	// the fix above must narrow the existing-only case, not the
+	// declared-schema rule generally.
+	it("still reports an undeclared table unmanaged when the schema has a managed table", () => {
+		const app = schema("app");
+		const posts = table(app, "posts", { id: uuid().primaryKey() });
+		const snapshot = buildTestSnapshot([app, posts]);
+		const catalog: Catalog = {
+			...emptyCatalog(),
+			tables: [
+				{ schema: "app", table: "posts", rls: false },
+				{ schema: "app", table: "legacy_table", rls: false },
+			],
+		};
+
+		const inventory = buildInventory(snapshot, catalog);
+		expect(inventory.unmanagedTables).toEqual([
+			{ schema: "app", table: "legacy_table" },
+		]);
+	});
+});
+
 const app = schema("app");
 
 const buildTestSnapshot = (

@@ -1296,3 +1296,848 @@ answer. The lead's own closing gate re-runs it regardless. `check`,
 `check-types`, and the full `test` suite were all re-run once already
 (R2-11's own close-out, 17/17 tasks green) after this sub-round's test
 restructure.
+
+---
+
+## Round 3
+
+### Verdict
+
+**BLOCKING 2 / NON-BLOCKING 7 / OK 13**
+
+Round 2's own two fixes are each half-right, and each leaves a hole one
+layer out from where it was patched:
+
+- **R2-B2's fix works and breaks something else.** The no-DDL branch now
+  writes the snapshot (all three of R2-B2's consequences are genuinely
+  closed, re-measured through a real CLI). But a snapshot written with no
+  migration has no migration banner carrying its hash — so the chain tip
+  and the on-disk snapshot now disagree, and `hejbro verify` fails on a
+  repository nobody hand-edited. That is a live, unmodified `cli-commands`
+  requirement (**R3-B1**).
+- **R2-B1's fix is applied per-side, not per-run.** `excludeExisting`
+  filters `previousTables` and `nextTables` independently, so a table
+  that is *managed on one side and existing on the other* — i.e. exactly
+  a handover or an adoption — still counts as a dropped/added table name.
+  Every one of R2-B1's four repros is closed; the transition the change
+  exists to support is not (**R3-B2**).
+
+Both were reached the same way R1 and R2 reached theirs: by running the
+real CLI over a real project, on the paths whose fixtures the shipped
+pins do not have (a run with *another* table changing in the same
+schema; a run followed by `verify`).
+
+---
+
+### Round-2 findings re-checked
+
+| # | Round-2 finding | Round-3 verdict | Evidence |
+|---|---|---|---|
+| R2-B1 | rename planner sees existing tables (repros A–D) | **closed for A–D, re-opened for the managed↔existing transition (R3-B2)** | `rename/snapshot-sets.ts:47-50` + `rename-plan.ts:47-50`. Real-CLI replay: A (`existingTable("c1","users")` column `name`→`title`) → `no migration — snapshot updated…`, zero migration files; B (declaration renamed `users`→`people`) → same; C (remove existing `e4.legacy` + add managed `e4.fresh`) → one migration, `+ table e4.fresh` only; D (managed `e3.widgets` → `existingTable("e3","gadgets")`) → plain `- table e3.widgets [dropped]`, nothing named `gadgets`. **But** the filter runs on each map separately, so a table managed in `previous` and existing in `next` is still in `previousTables` — see R3-B2 |
+| R2-B2 | existing marker never reaches the on-disk snapshot | **closed (all three consequences), but see R3-B1** | `commands/generate.ts:738-751` (`sameJson(firstPass.snapshot.objects, previousSnapshot.objects)` gate) + `engine/generate.ts:272-279` (top-level `snapshot` on all three branches). Real CLI: ① handover run writes `"table:k1.widgets": {…,"existing":true}` to disk and prints `no migration — snapshot updated to record the declared change.`; ② removing the declaration afterwards still writes **one** migration file total — no `drop policy`/`drop sequence`/`disable row level security`/`drop table` anywhere; ③ an in-sync project that only adds `existingTable("auth","users")` writes an export whose `tables[]` fact **and** `snapshot.objects["table:auth.users"]` both carry it, and feeding that real `schema.json`/`format.json` through `validateExport`→`emitContract` yields `Tables["users"]` with `Row`/`Insert`/`Update` and `existing: true` in `contractMetadata` |
+| R2-N1 | adoption creates the fan-out objects but not the adopted table's own indexes/checks/FKs/PK | **still open, and wider than R2 measured** | Real CLI, `existingTable("a1","widgets",{id})` → `table(a1,"widgets",{id:serial().primaryKey(), email:text().notNull()},…indexes:[index().on(t.email)])`: emits `create sequence` + `enable row level security` + `create policy` + `set default nextval` and **no** `create index`, **no** `add column "email"`, **no** primary key. Snapshot afterwards claims `"indexes":[{"name":"widgets_email_idx"…}]`, `"primaryKeyName":"widgets_pkey"`, and an `email` column. Second measurement (partial→wider column list, `s1.w`): three declared columns `a`,`b`,`c` never emitted, all three recorded. No clause, no pin, no issue. See NB1 |
+| R2-N2 | `check`'s inventory widens to the whole reserved schema (R1-N1, #665) | **still open** | `check/inventory.ts:29-36` unchanged. Probe (`buildInventory` over a snapshot declaring `app.posts` managed + `auth.users` existing, catalog holding `auth.{users,sessions,refresh_tokens,mfa_factors}`) returns `[{auth,sessions},{auth,refresh_tokens},{auth,mfa_factors}]` — declaring one platform table pulls the rest of its schema into the report |
+| R2-N3 | "a validator that checks a reference SHALL see it" has no observer (R1-N2, #666) | **still open** | `grep -rn foreignKeys packages/core/src/engine/core-validators.ts packages/supabase/src/validators packages/nile/src/validators.ts` → zero hits |
+| R2-N4 | vendoring client-read half Docker-gated only (R1-N5, #667) | **still open** | `packages/cli/vitest.config.ts:14-16` still excludes `test/**/*integration.test.ts`; `two-repo.integration.test.ts` remains the only client-read witness |
+| R2-N5 | changeset/skill over-claim "ever" | **fixed, except one new clause that is itself false** | `.changeset/declare-existing-tables.md` and `skills/hejbro/references/brownfield-adoption.md` are both rescoped to the table's own identity. But both now assert "none of them can block or refuse an unrelated managed change in the same schema either" — falsified by R3-B2. See NB5 |
+| R2-N6 | skill contradicted the adoption scenario | **closed** | `brownfield-adoption.md` "Deciding what to manage" now describes the handover/adoption transition and what adoption creates; the "binary and made once … not a staging step" sentence is gone |
+| R2-N7 | export round trip pinned in two halves that never meet | **closed** | Independently replayed through a real CLI `generate --export` writing `existingTable("billing","ledger",{id:uuid(), balance:bigint(), tags:text().array().notNullElements()})`, then `validateExport` over that run's own `format.json`/`schema.json`: `exportName:"ledger"`, `existing:true`, `balance.mode:"bigint"`, `tags.notNullElements:true`, `id.mode:null` all recovered |
+
+---
+
+### Blocking
+
+#### R3-B1 — a snapshot written with no migration leaves the chain tip and the snapshot disagreeing, so `hejbro verify` fails on a repository nobody edited, permanently and with no remedy
+
+Live requirement (`openspec/specs/cli-commands/spec.md:521-532`,
+**not** modified by this change), "The migration chain on disk is
+verifiable":
+
+> the snapshot's recorded hash matches the parsed-and-re-rendered
+> snapshot — so a hand-edited snapshot, an edited `parent-snapshot:` or
+> `snapshot:` hash line … is reported as a mismatch, and an untouched
+> chain passes.
+
+Its scenario, "An untouched chain passes":
+
+> - **WHEN** `hejbro verify` runs over migrations and a snapshot that
+>   hejbro wrote and nothing edited
+> - **THEN** it passes with exit code zero
+
+**Code path.** `commands/generate.ts:742-746` now writes
+`hejbro.snapshot.json` on the no-DDL branch whenever
+`firstPass.snapshot.objects` differs from `previousSnapshot.objects`.
+No migration file is written on that branch, so no banner carries the
+new snapshot's hash. `verify`'s check 4 (`commands/verify.ts:535-547`)
+compares the last migration's `snapshot:` hash against
+`normalizedSnapshotHash(diskText)` and now finds them different.
+
+**Reproduction (measured, real CLI over a real project — the exact
+flagship path the proposal names).**
+
+```
+hejbro init
+# src/app.schema.ts: schema("app") + table(app,"posts",{id,title})
+hejbro generate                       → wrote migrations/…_add_app.sql
+hejbro verify                         → verify: 5 checks passed
+# add src/b.schema.ts: existingTable("auth","users",{id})
+hejbro generate                       → no migration — snapshot updated to record the declared change.
+hejbro verify                         → exit 1
+```
+
+```
+error[chain-tip-mismatch]: snapshot:
+  the migration chain's tip hash doesn't match the current snapshot — the last
+  migration's "snapshot:" hash and the on-disk snapshot's own hash disagree,
+  which means the snapshot or the last migration file was edited after the last
+  `hejbro generate`. Next: restore the snapshot (and the last migration file, if
+  it was edited) from version control — the snapshot is a derived file and
+  should only ever change through `hejbro generate`.
+
+verify: 1 of 5 checks failed — fix the errors above and rerun `hejbro verify`.
+```
+
+Two things make this worse than a wrong exit code:
+
+1. **The message is false and its remedy is destructive.** Nothing was
+   edited; the snapshot changed *through* `hejbro generate`, exactly as
+   the message says it should. A user following "restore the snapshot
+   from version control" would throw away the existing marker this
+   change exists to record.
+2. **There is no way out.** Re-running `hejbro generate` reports
+   `no changes — snapshot already matches your declarations.` and writes
+   nothing (measured). `verify` stays red for the life of the
+   repository, or until some unrelated migration happens to be
+   generated.
+
+**Second failure mode — the chain breaks permanently at the next real
+migration.** The next `generate` that *does* emit DDL writes
+`parent-snapshot:` = the snapshot the no-migration run settled on, which
+matches no earlier migration's `snapshot:` line. Measured, same project
+plus a foreign key onto the existing table:
+
+```
+error[broken-chain]: 20260902124738_alter_posts.sql
+  the migration chain is broken at "…_alter_posts.sql" — its parent-snapshot
+  hash doesn't match any earlier migration's snapshot hash. …
+skipped: chain tip ↔ snapshot (needs a parseable snapshot and a linear chain)
+verify: 1 of 6 checks failed, 1 skipped
+```
+
+Reproduced independently three times: the in-sync-project-gains-an-
+existing-declaration path (above), the managed→existing handover path
+(`k1.widgets`, `chain-tip-mismatch`), and the handover→adoption path
+(`s1.w`, `broken-chain`). `verify` is documented as the offline CI gate
+("`verify` (offline migration-chain integrity)",
+`openspec/specs/cli-commands/spec.md:9-10`), so this is a CI break for
+every repository that adopts the feature.
+
+**Why the shipped pins miss it.** `generate-command.test.ts`'s two new
+R2-B2 tests assert the snapshot file's *content* and the migration file
+*count*; neither runs `verify` afterwards, and `verify.test.ts` has no
+fixture in which `generate` itself moved the snapshot without writing a
+migration. The repository's own `examples/` declare no `existingTable()`
+(`grep -rn existingTable examples/` → no matches), so the example
+round-trips never reach this state either.
+
+**Scope of the decision (informational).** The delta's own MODIFIED
+requirement settles that such a run writes the snapshot; it says nothing
+about what then anchors the chain. Either the chain-tip rule has to
+learn about a snapshot state no migration carries, or such a run must
+also record its own hash somewhere `verify` reads. That is a
+requirement-level decision this change owns — it created the state — and
+it is currently unmade, with the live requirement quietly falsified.
+
+---
+
+#### R3-B2 — `excludeExisting` filters each side of the run separately, so a handover or an adoption still registers as a dropped/added table name: any *other* table added or dropped in that schema in the same run is refused, and the prescribed `--rename` remedy emits DDL against the existing table and never creates the intended one
+
+Requirement (`table-declaration`, this change's own ADDED):
+
+> the generator SHALL emit no statement for it and SHALL diff nothing
+> against it … everything that writes DDL SHALL not see it at all.
+
+Scenario, "A table handed to the platform loses nothing":
+
+> - **THEN** no statement is written at all — the table is not dropped …
+
+**Code path.** `rename/snapshot-sets.ts:47-50`:
+
+```ts
+export const excludeExisting = (tables) =>
+	new Map(Array.from(tables).filter(([, table]) => !tableExisting(table)));
+```
+
+applied at `rename-plan.ts:47-50` to `previousTables` and `nextTables`
+**independently**. Its own doc comment (`snapshot-sets.ts:37-45`) claims
+the opposite — "so one is never a rename candidate and never a rename
+ambiguity source, **on either side of a run**" — and the Round 2
+disposition restates it as "a table marked existing on either side is
+dropped from **both** maps". Neither is what the code does. A table
+managed in `previous` and existing in `next` (a **handover**) survives
+in `previousTables`; existing in `previous` and managed in `next` (an
+**adoption**) survives in `nextTables`. `computeSchemaTableSets`
+therefore still counts it as a dropped, respectively added, table name,
+and `residualTableAmbiguities` still raises on it.
+
+**Reproduction α — handover in a run that also adds a managed table.**
+`s2.widgets` managed, then in one run: hand it over *and* add `s2.gizmos`.
+
+```ts
+export const widgets = existingTable("s2", "widgets", { id: uuid() });
+export const gizmos  = table(s, "gizmos", { id: uuid().primaryKey() });
+```
+
+```
+error[ambiguous-table-rename]: s2
+  table "widgets" was dropped, table "gizmos" was created.
+  → if this is a rename, rerun:
+      hejbro generate --rename s2.widgets=gizmos
+```
+
+`hejbro generate` refuses outright. Following the remedy it prescribes:
+
+```sql
+-- hejbro migration
+-- ~ table s2.widgets [renamed to "gizmos"]
+
+alter table "s2"."widgets" rename to "gizmos";
+alter table "s2"."gizmos" rename constraint "widgets_pkey" to "gizmos_pkey";
+```
+
+Two statements against `s2.widgets` — the table the declaration on that
+same run says hejbro does not own — and **no `create table "s2"."gizmos"`
+at all**, so the table the user actually asked for is never created. The
+snapshot the same run writes records `table:s2.widgets` with
+`"existing": true` *and* `table:s2.gizmos` as a managed table, while the
+migration renamed one into the other: snapshot, migration, and database
+now disagree three ways.
+
+**Reproduction β — adoption in a run that also drops a managed table.**
+`s4.legacy` existing + `s4.old` managed, then in one run: adopt `legacy`
+into a managed `table()` and delete `old`.
+
+```
+error[ambiguous-table-rename]: s4
+  table "old" was dropped, table "legacy" was created.
+  → hejbro generate --rename s4.old=legacy
+  → hejbro generate --confirm-drop s4.old
+```
+
+With the prescribed `--rename`:
+
+```sql
+alter table "s4"."old" rename to "legacy";
+alter table "s4"."legacy" rename constraint "old_pkey" to "legacy_pkey";
+```
+
+A rename onto the identity of a table that, being declared
+`existingTable()`, already exists in the database — the apply-time
+collision R2-B1's own repro D named, reached through the adoption door.
+
+**The other remedy is not free either.** `--confirm-drop s2.widgets`
+does produce correct SQL (measured: `create table "s2"."gizmos"` only,
+nothing touching `widgets`) — but it makes the user *confirm the drop of
+a table hejbro never drops and does not own*, which is verbatim the
+harm R2-B1's repro C described.
+
+**Bounds of the hole (measured, so the fix can be scoped).** A handover
+alone is fine (`no migration — snapshot updated…`). A handover in a run
+that only *drops* another managed table in that schema is fine (a lone
+drop is not an ambiguity: measured, `- table s3.gizmos [dropped]`, one
+migration). A different schema is fine (the sets are per-schema). The
+break is exactly: a managed↔existing transition **plus** at least one
+table added (handover) or dropped (adoption) in the same schema in the
+same run.
+
+**Fix shape (informational):** the exclusion has to be computed over the
+run, not over one map — a table marked existing in `previous` **or** in
+`next` must be dropped from both `previousTables` and `nextTables`,
+which is what `excludeExisting`'s own doc comment already claims and
+what `tableKind.diff`'s bidirectional guard (`table-kind.ts:636`)
+already does one layer down.
+
+**Test gap.** The four R2-B1 pins replay repros A–D, all of which keep
+the table existing (or managed) on *both* sides; none crosses the
+managed↔existing boundary in a run that also touches another table in
+that schema. `generate.test.ts`'s handover/adoption pins
+(`:1051`, `:1179`) change exactly one table per run. The fixture shape
+that reaches this is "transition **and** something else in the same
+schema" — the same one-table-per-fixture gap R1 named for the handover
+pins and R2 named for the rename pins, now at its third site.
+
+---
+
+### Non-blocking
+
+**NB1 — R2-N1 is still open and is wider than R2 measured: adoption
+creates the fan-out objects but none of the adopted table's own declared
+columns, primary key, indexes, checks or foreign keys — while the
+snapshot records all of them as existing.** Measured twice through the
+real CLI (`a1.widgets` gaining `email` + an index; `s1.w` gaining
+columns `a`,`b`,`c` after a partial-column handover): the run emits only
+`create sequence` / `owned by` / `set default nextval` / `enable row
+level security` / `create policy`, and the snapshot afterwards claims
+`"indexes":[{"name":"widgets_email_idx"…}]`, `"primaryKeyName":
+"widgets_pkey"` and every unemitted column. No later run will ever
+create them — the snapshot says they are already there. The delta's own
+enumeration is closed ("its sequences, its row-level security, its
+policies"), so the scenario is not contradicted; but both user-facing
+texts rewritten in round 2 now say **"everything the new declaration
+manages on it … is created exactly as it would be for any other managed
+table"** (`.changeset/declare-existing-tables.md`,
+`skills/hejbro/references/brownfield-adoption.md`), which a reader will
+not read as "the three things in the parenthesis and nothing else".
+Still no clause, no pin, no issue.
+
+**NB2 — R2-N2 (`check`'s inventory widening, R1-N1, #665) is still
+open**, now with a concrete measurement: with `app.posts` managed and
+`auth.users` declared existing, `buildInventory` returns
+`auth.sessions`, `auth.refresh_tokens`, `auth.mfa_factors` as unmanaged.
+For the flagship Supabase case the report simultaneously prints
+`check does not compare auth.users: declared existing and not compared.`
+and lists the rest of `auth` as unmanaged — the boundary line makes the
+inconsistency louder than it was in round 1.
+
+**NB3 — R2-N3 (R1-N2: "A validator that … checks a reference SHALL see
+it" has no shipped observer, #666) is still open.** `grep -rn
+foreignKeys` over `core/src/engine/core-validators.ts`,
+`supabase/src/validators/`, `nile/src/validators.ts` returns nothing.
+The clause remains structurally satisfiable and unexercised.
+
+**NB4 — R2-N4 (the vendored client's read half is Docker-gated only,
+#667) is still open.** `packages/cli/vitest.config.ts:14-16` excludes
+`test/**/*integration.test.ts` from the default run; the contract half
+of "A consumer reads a platform-owned table" is well pinned
+(`contract-existing.test.ts`, re-verified end to end here through a real
+CLI export), the client-read half is not observable without Docker.
+
+**NB5 — the changeset and the skill now carry a new claim that R3-B2
+falsifies.** Both say adding/changing/renaming/removing an existing
+declaration means "none of them can block or refuse an unrelated managed
+change in the same schema either"
+(`.changeset/declare-existing-tables.md`;
+`skills/hejbro/references/brownfield-adoption.md`, "Deciding what to
+manage"). Reproduction α is exactly that: adding an existing declaration
+(as a handover) refuses an unrelated managed table addition in the same
+schema. Round 2 rescoped these two texts to close R2-N5; the rescoped
+version overshot in the other direction. Whatever the resolution of
+R3-B2, this sentence must not outrun it. (Minor, same files: the code
+sample under that section still labels its example
+`// Permanently unmanaged`, three paragraphs after the prose explains
+the choice is no longer permanent.)
+
+**NB6 — `hejbro baseline` on a project whose only declarations are
+existing tables fails with a message that is factually false.** Measured:
+a project declaring only `existingTable("auth","users",…)` gets
+
+```
+error[baseline-nothing-to-adopt]: src/**/*.schema.ts
+  baseline found nothing to adopt: your declaration files loaded, but exported
+  no hejbro declarations (schema/table/... calls). …
+```
+
+exit 1. The file *did* export a hejbro declaration; before this change
+that path was unreachable (an `existingTable()` was refused as a
+declaration outright), so the message never had to be true of it.
+`commands/generate.ts:724-727` runs `throwBaselineNothingToAdopt` off
+`!firstPass.hasChanges`, which this change decoupled from "there are no
+declarations". No scenario covers it (the delta's baseline scenario is
+about a *mixed* project, which works — verified: the baseline SQL
+carries `create schema "app"` + `create table "app"."posts"` and nothing
+naming `auth.users`, and the snapshot records `table:auth.users`).
+
+**NB7 — `excludeExisting`'s own doc comment states the contract the code
+does not implement.** `snapshot-sets.ts:37-45`: "never a rename
+ambiguity source, **on either side of a run** … so both
+`computeSchemaTableSets` and `computeTableColumnSets` — and, through
+them, every ambiguity/pairing computation downstream — never see one."
+The function filters one map at a time and cannot see the other side.
+Recorded separately from R3-B2 because this comment (and the identical
+claim in `## Round 2 disposition`) is what makes the gap invisible to
+the next reader: a maintainer checking "is the rename planner
+existing-aware?" reads the comment and stops.
+
+---
+
+### Verified scenarios
+
+| # | Capability | Scenario | Verdict | Evidence |
+|---|---|---|---|---|
+| 1 | table-declaration | An existing declaration produces no migration | **OK** | Real-CLI repros A/B/C: column rename inside an existing declaration, rename of the declaration itself, and removal beside a managed addition in the same schema all report `no migration — snapshot updated…` (or emit only the managed table) with zero migration files naming the existing table; `rename-plan.ts:47-50`; `generate.test.ts` R2-B1 repro block |
+| 2 | table-declaration | A managed table may reference an existing one | **OK** | Real CLI: `alter table "app"."posts" add constraint "posts_author_id_fk" foreign key ("author_id") references "auth"."users" ("id")`; `grep auth` over every migration file in that project returns only that constraint line — no `create schema "auth"`, no statement naming `auth.users` as a subject |
+| 3 | table-declaration | A table handed to the platform loses nothing | **BLOCKING (R3-B2)**; the isolated case OK, and its snapshot clause now genuinely closed | Isolated handover (`k1.widgets`, `serial` PK + rls + policy, and the partial-column pair `s1.w`): no migration, on-disk snapshot carries `"existing": true`, `sequence:`/`rls:`/`policy:` nodes leave the snapshot with no DDL, and the follow-up removal run still writes no drop. In a run that also adds a table in that schema: refused, and the prescribed remedy emits `alter table "s2"."widgets" rename to "gizmos"` |
+| 4 | table-declaration | An adopted table gains what the declaration manages | **BLOCKING (R3-B2)**; the isolated case OK but see NB1 | Isolated adoption: no `create table`, `create sequence` + `owned by` + `set default nextval` + `enable row level security` + `create policy` all emitted. In a run that also drops a table in that schema: refused, remedy renames a managed table onto the existing table's identity. Declared indexes/columns/PK never created (NB1) |
+| 5 | table-declaration | A reserved-schema validator exempts an existing table | **OK** | Real CLI with `presets:[supabasePreset]`: `existingTable("auth","users")` → exit 0, no diagnostic; adding `table(auth,"sessions",…)` in the same schema → `error[reserved-schema]: auth`. `supabase/src/validators/reserved-schemas.ts:30-49`; `supabase` suite 17f/141t green |
+| 6 | table-declaration | An older snapshot's tables are all managed | **OK** | `kinds/table-snapshot.ts:274-275` (`snapshot.existing === true`); `core/test/snapshot.test.ts` `formatVersion: 8` node; core suite 98f/1476t + 1 todo green |
+| 7 | schema-export | An existing table survives the round trip | **OK** | Real CLI `generate --export` → `validateExport` over that run's own files: `existing:true`, `exportName:"ledger"`, `balance.mode:"bigint"`, `tags.notNullElements:true` all recovered; embedded snapshot node carries the array `typeNode` |
+| 8 | schema-export | A description written before the mark reads as managed | **OK** | `vendor/validate-export.ts:37-49` (`existing: z.boolean().default(false)`, no `descriptionFormat` bump); `validate-export.test.ts` green in-process |
+| 9 | schema-vendoring | A consumer reads a platform-owned table | **OK** (contract half measured end to end; client-read half NB4) | Real CLI export → `validateExport` → `emitContract`: `Tables["users"]` with full `Row`/`Insert`/`Update`, `contractMetadata.tables.users.existing: true`, and with the FK declared, `referencedRelation: "auth.users"` in `posts`' `Relationships`. `query/src/client/synthesize.ts:92-119` synthesizes every vendored table with no existing filter |
+| 10 | schema-vendoring | An undeclared table still has no relation | **OK** | `contract/tables.ts:178-196` (`findTableInSnapshot` → drop); `contract-emit.test.ts` "no relation is derived for an unmanaged target" green |
+| 11 | cli-commands | An existing declaration is neither compared nor inventoried | **OK** (NB2 still open on the surrounding schema) | `check/compare.ts:414-427` returns `[]` before any catalog lookup; `check/inventory.ts:38-44`; `check-command.test.ts:545-635` — fixture has the catalog holding the table with a *different* type, all four clauses green in-process |
+| 12 | cli-commands | An existing declaration is named in the coverage boundary, never as a finding | **OK** | `commands/check.ts:120-133` + `:257`; the one production call site (`:458`) passes the declaration-derived snapshot, so the line appears even before the marker reaches disk. `summaryLine` (`:214-223`) and the exit-0 branch (`:260-265`) carry no agreed-object count, so the conditional "SHALL NOT be among them" clause has nothing to condition on — vacuously true, as round 2 measured. Four assertions green |
+| 13 | cli-commands | baseline and reset pass an existing declaration by | **OK** (see NB6 for the existing-only edge) | Real CLI baseline over a mixed project: SQL carries `create schema "app"` + `create table "app"."posts"`, nothing naming `auth.users`; snapshot records `table:auth.users`. `apply-reset.test.ts:147-183` (`planReset` → `["table:app.managed","schema:app"]`, no DDL call mentioning `auth`) green; `apply-raise.test.ts` green |
+| 14 | cli-commands (MODIFIED) | A recorded declaration that emits nothing still writes the snapshot | **OK as written — but see R3-B1 for what it leaves behind** | Real CLI: adding `existingTable("auth","users")` to an in-sync project → no migration file, snapshot gains `"table:auth.users": {…,"existing":true}`, `no migration — snapshot updated to record the declared change.`, exit 0. Every clause of the scenario holds; the chain-integrity consequence is not one of its clauses |
+| 15 | cli-commands (MODIFIED) | No difference writes nothing | **OK** | Real CLI, second run with no edit: `no changes — snapshot already matches your declarations.`, exit 0, no new file; `noMigrationReportLine` (`commands/generate.ts:624-628`) keeps the two lines distinct |
+
+---
+
+### Method
+
+- `pnpm exec openspec show add-unmanaged-objects --diff` from the repo
+  root — four ADDED requirements and one MODIFIED, fifteen scenarios
+  read against the main spec. (That command prints `proposal.md`'s
+  narrative ahead of the diff; it was skipped, and the review is written
+  against the requirement/scenario text only.) Read from
+  `evaluation.md`: the round-1 and round-2 findings lists,
+  `## Round 1 disposition`, `## Round 2 disposition` and
+  `### Snapshot consumers`. `design.md`, `tasks.md`, PR bodies,
+  `git log` messages and `blackbox/` were not read.
+- **The built CLI is stale** (`packages/cli/dist` newest file
+  2026-08-28, `packages/cli/src` 2026-09-02), and the brief forbids
+  `pnpm build`, so the 23 `packages/cli` subprocess suites cannot run.
+  Rather than read them only, this round drove the CLI **from source**:
+  a throwaway `node --import` hook (`module.registerHooks`) mapping
+  `hejbro`/`@hejbro/*` and any `packages/*/dist/{index,cli}.js` to the
+  corresponding `src/*.ts`, with Node 26's native TS type-stripping and
+  an extensionless-import fallback, running
+  `packages/cli/src/cli.ts` in a real tmp project (config, `src/*.
+  schema.ts`, `node_modules/hejbro` symlink — the same layout
+  `test/support/cli-runner.ts` builds). Confirmed live end to end
+  (`init`, `generate`, `generate --export`, `baseline`, `verify` all
+  behave, with jiti loading the fixtures through the same hook), so
+  every CLI measurement above is the shipped code path, not a
+  hand-assembled payload.
+- Eighteen throwaway projects under `/tmp/d106r3/` (deleted afterwards;
+  no repository file created or modified except this report). They
+  exercised: an `existingTable()` added to an in-sync project, and
+  removed again; the managed→existing handover with `serial` + rls +
+  policy, and the removal after it; the reverse adoption, with an index,
+  a `notNull` column and a wider column list than the existing
+  declaration carried; the partial-column pair in both directions; R2-B1
+  repros A–D through the real CLI; a handover and an adoption each
+  combined with another table added or dropped in the same schema
+  (R3-B2), with both prescribed remedies applied and their SQL read; a
+  managed FK onto an existing table, with the export and the emitted
+  contract read back; the rich-column export round trip; `--rename` and
+  `--confirm-drop` naming an existing table; the Supabase preset with a
+  reserved-schema existing declaration and a managed one; `baseline`
+  over a mixed and over an existing-only project; and `hejbro verify`
+  after each of the no-migration snapshot writes (R3-B1).
+- Three in-process probes through the same hook:
+  `buildInventory` over a fake `auth` catalog (NB2), the Nile
+  serial/tenant-PK/identity validators against an existing tenant-aware
+  table and its managed twin, and `validateExport` → `emitContract` over
+  the real files a CLI run wrote.
+- Read: `packages/core/src/{engine/generate.ts, engine/rename-plan.ts,
+  engine/rename/snapshot-sets.ts, kinds/table-snapshot.ts,
+  dsl/{table,existing-table}.ts}`; `packages/cli/src/{commands/
+  {generate,check,verify,vendor}.ts, check/{compare,inventory}.ts,
+  export/{description,write}.ts, vendor/validate-export.ts,
+  contract/{emit,tables}.ts}`; `packages/query/src/client/
+  {synthesize,name-keyed-db}.ts`; `packages/supabase/src/validators/
+  reserved-schemas.ts`; `packages/nile/src/validators.ts`;
+  `skills/hejbro/references/brownfield-adoption.md`;
+  `.changeset/declare-existing-tables.md`;
+  `openspec/specs/cli-commands/spec.md`.
+- Tests run: `packages/core` 98 files / 1476 passed + 1 todo (green).
+  `packages/supabase` 17 files / 141 passed (green). `packages/cli`
+  in-process subset (`check-command`, `check-compare`,
+  `contract-existing`, `contract-emit`, `validate-export`,
+  `apply-reset`, `apply-raise`) — 86 passed, the only two reds being
+  `check-command.test.ts`'s two subprocess `--help` cases, which fail on
+  the dist-freshness guard alone.
+- Not run / environment notes: the full `packages/cli` suite is 23 files
+  red on `assertFreshBuild` (`test/support/cli-runner.ts:61`) plus the
+  same pre-existing `assert-schema.test.ts` failure round 2 recorded (an
+  artifact of invoking vitest outside turbo — `vitest.shared.ts` aliases
+  `@hejbro/core`/`@hejbro/query` to source but not `@hejbro/supabase`).
+  `packages/nile` has no installed `node_modules`; its validators were
+  replayed against source instead. `packages/skills` is 4/5 files green
+  with one unrelated red (`neon-preset.md`'s snippet cannot resolve
+  `@neondatabase/serverless` — a missing optional dependency in this
+  checkout, not a text change from this piece). Docker-gated
+  `*integration.test.ts` files were not run.
+
+## Round 3 disposition
+
+Both blocking findings are closed, all seven non-blocking findings are
+either closed or newly opened as tracked issues, and three lead-added
+items landed for the 0.2.0 release tray (#665, #666, #658's table
+half). Example coverage (evaluation.md's own "the repository's own
+`examples/` declare no `existingTable()`" note) is explicitly out of
+scope this round — handed off as #674.
+
+### R3-B2 — fixed
+
+`excludeExisting` (`packages/core/src/engine/rename/snapshot-sets.ts`)
+took only one map and filtered it on its own, so a table managed on one
+side and existing on the other — exactly a handover or an adoption —
+stayed present on the side it hadn't left, reading as a genuine
+drop/create the moment another table in the same schema also changed.
+Rewritten to take both `previousTables`/`nextTables`, compute the union
+of identities existing on *either* side first (`isExistingOnEitherSide`),
+then remove that union from *both* maps before `computeSchemaTableSets`/
+`computeTableColumnSets` ever see them (`packages/core/src/engine/
+rename-plan.ts`'s one call site, now destructuring `{ previousTables,
+nextTables }`). Red: the evaluator's own repros α (handover + an
+unrelated managed table added in the same schema) and β (adoption + an
+unrelated managed table dropped in the same schema), replayed verbatim
+in `packages/core/test/generate.test.ts`, reproducing the exact
+`ambiguous-table-rename` error text evaluation.md quoted before the fix,
+green after. Mutant (revert to independent per-map filtering): exactly
+2 red / 41 in that file, R2-B1's own A-D repros stay green (a different
+code path — same-map transitions, not cross-map ones).
+
+### R3-B1 (J13) — fixed
+
+The live `cli-commands` requirement "The migration chain on disk is
+verifiable" already says the banner's two hashes are the declaration
+snapshot before/after, never the SQL text — so a run with no statement
+to write was never an exception to that requirement, it was the
+requirement working as specified once the implementation caught up.
+`generateMigrations`' own no-DDL branch (`packages/core/src/engine/
+generate.ts`) now returns one migration carrying no statements, banner
+included with the same before/after hashes any other migration's would,
+whenever the settled snapshot differs from `previousSnapshot` with no
+`KindChange` to explain it — never a generic `migrations: []` write-nothing
+in that case. `commands/generate.ts` was restructured so this case falls
+through to the *existing* write-files path (second pass for banner
+hashes, `buildWrittenMigrations`, file writes, report) instead of a
+second, CLI-side assembly of banner/hash/file-format rules — matching
+the lead's own ruling that those rules stay in core alone.
+
+**Slug.** `deriveSlug` cannot name this run at all: an existing-marker
+transition produces no `KindChange`, so `changes` is always `[]`, and
+`deriveSlug([])`'s own `"migration"` fallback was explicitly ruled out
+for this case. `deriveExistingTransitionSlug` (new, `packages/core/src/
+sql/migration-file.ts`, exported from `@hejbro/core`) mirrors
+`deriveSlug`'s exact shape — verb + `_` + the identity's last
+dot-segment, first difference only, no third part, no schema prefix —
+reading the snapshot difference directly instead of a `KindChange`
+array. Four verbs, all taken from this same change's own delta/skill
+prose rather than invented: `record` (a marker appeared), `forget` (one
+disappeared), `release` (managed → existing, the same word the delta
+uses for "hands the table to the platform"), `adopt` (existing →
+managed, the delta's own word for the reverse). "First difference" is
+deterministic the same way `stableJson` is: both snapshots' `table:`
+keys, unioned and sorted with `compareKeys` (plain string order), first
+key in that order whose existing status moved wins. Never falls through
+to a generic default — reaching this function with no transition found
+is an internal-invariant throw, not a silent default, since a caller
+only reaches it once the two snapshots are already known to differ.
+
+**A real bug, caught by running the suite, not by inspection.** Gating
+the slug choice on `migration.changes.length` broke the existing
+`--rename` test: a pure rename (`RenamePlan.renameStatements` only, no
+`KindChange` at all) already has `hasChanges: true` with an empty
+`changes` array, a real, pre-existing shape `deriveSlug([])`'s own
+`"migration"` fallback already handled correctly before this round.
+Routing it into `deriveExistingTransitionSlug` instead threw, looking
+for a transition that wasn't there. Fixed by gating on the *run's* own
+`hasChanges`, threaded down from the CLI's own `finalPass.hasChanges`,
+not on the per-migration `changes` array.
+
+**A CRAP violation, caught and fixed by redesign, not by tests.**
+`classifyExistingTransition`'s first draft (four independently-computed
+booleans feeding a four-way if-chain) measured complexity 13 — CRAP
+148.31, nowhere near the ≤5 budget even at full coverage (CRAP equals
+complexity exactly at 100%, per this repo's own gate). Redesigned as a
+three-state classifier (`sideOf`: `absent`/`existing`/`managed` for
+each side) feeding a plain object lookup keyed by `previous:next` —
+branching collapsed to near zero. The same redesign also surfaced a
+coverage gap: `deriveExistingTransitionSlug`/`classifyExistingTransition`
+were exercised only through CLI subprocess tests, invisible to
+`packages/core`'s own coverage instrumentation (a different process
+entirely) — closed with 7 new direct unit tests in `packages/core/test/
+migration-file.test.ts` (all four transitions, the last-dot-segment
+rule, first-in-sorted-order determinism, and the internal-invariant
+throw). Re-measured: 0/1606 functions over the CRAP threshold.
+
+**Four CLI reds** (evaluator's own reproductions, real CLI and real
+disk): ① an in-sync project that adds a new `existingTable()` →
+`generate` → `verify` passes ② a later run that *does* emit real DDL
+after that → `verify` still passes (the evaluator's own "second failure
+mode", `broken-chain`) ③ the same two, through the handover path
+(`k1.widgets`) ④ the zero-statement migration's own slug is
+deterministic across two entirely independent fixture directories given
+the same declared change. Plus one new real-server integration test
+(`packages/cli/test/apply-live.integration.test.ts`, both PG majors): a
+*real* `hejbro generate` run's own zero-statement migration — never
+hand-written, the way the round 3 evaluator's own repro method had to
+be given the brief's stale-dist constraint — applies via `hejbro
+migrate` against a live server, the ledger records both rows, and
+`verify` passes afterward. Mutant (revert `generateMigrations`' new
+branch to unconditional `migrations: []`): exactly 6 red / 561 (the four
+new tests plus the two R2-B2 pins and the export pin this round's report
+line touches), "No difference writes nothing" and every round 2
+snapshot-recording pin stay green.
+
+**Cross-consumer verification (R3-07/R3-08/R3-10).** Widening a shared
+core function's own no-DDL branch is exactly the shape this piece has
+been caught by three times running (R1: the fan-out kinds; R2: the
+rename planner and the CLI's own snapshot-write rule). Grep-derived,
+not assumed: `generateMigrations` has exactly three call sites in the
+entire source tree (`apply/reset.ts` ×1, `commands/generate.ts` ×2, both
+this round's own), and every reader of `hasChanges` or the `.migrations`
+array (`.length`, `[0]`, `.at()`) lives in one of those same two files
+plus `engine/generate.ts` itself, where the field is defined. `reset`
+cannot reach the new branch at all — `resetMigrationSql` is only called
+once `planReset`'s own, independent `diffSnapshots` call has already
+confirmed `changes.length > 0`, so the internal `generateMigrations`
+call it makes is structurally guaranteed `hasChanges: true` too (same
+snapshot pair, same diff). `baseline` reaches the core call but never
+its new branch's output — the CLI's own `if (mode === "baseline")`
+block (this round's NB6 fix) always returns before falling through to
+the shared write-files path. `verify`'s export check uses only the
+singular `generateMigration`, untouched this round (confirmed again,
+having been closed the same way in round 2). Confirmed by control-flow
+reading *and* re-running `apply-reset.test.ts` (13/13) and
+`baseline-command.test.ts` (14/14) unchanged. No fourth consumer found.
+Whether `hasChanges`'s own meaning should change (it still means "DDL
+exists," and nothing reads it as "something to write") was reported as
+a table and left to the lead/planner, not decided here; the live
+requirement gained one clarifying sentence mid-round making the same
+point ("whether a run has something to write and whether it emitted any
+statement are two facts, not one").
+
+### hasChanges/snapshotChanged — R3-11 → J14 (reversed, with the
+consumer table as the reason)
+
+The lead's first ruling on the open question above (R3-11) went the
+other way: redefine `hasChanges` itself to mean "is there something to
+write" rather than "is there DDL", so a zero-statement run would report
+`hasChanges: true`. Implementing that against the exhaustive,
+search-derived caller table above (not memory, not a fresh guess) showed
+the ruling's own premise — "the public result's two fields contradict
+each other" — was a naming gap, not an observed fault: every one of the
+three `generateMigrations` call sites, and every direct reader of
+`hasChanges`/`.migrations`, already reads `hasChanges` consistently as
+"is there DDL" and depends on exactly that meaning at one of them
+(`slugFor`'s own gate — the same branch the pure-rename bug lived in
+earlier this round). Reported the table with an alternative rather than
+silently implementing the redefinition or silently keeping the old
+behavior: add a field instead of changing one. **J14 adopted the
+alternative** — `hasChanges` keeps its existing meaning; a new,
+additive `snapshotChanged: boolean` states the second fact
+(`snapshot` differs from `previousSnapshot` at all) on the public result
+type itself, filled honestly at all four `generateMigrations` return
+sites via one shared `snapshotChangedFrom` helper, with the CLI reading
+the field instead of re-deriving it locally. Pin: a new
+`generateMigrations`-level test in `core/test/generate.test.ts`
+asserting a truly-unchanged rerun reports both flags `false` and an
+existing-marker-only rerun reports `hasChanges: false` /
+`snapshotChanged: true`. Mutant (bind `snapshotChanged` to the same
+literal as `hasChanges` at the zero-statement return site): exactly 1
+red / 42, clean restore confirmed against a backup diff. This round's
+own baseline-rewiring risk that R3-11 would have introduced (`baseline`'s
+early return currently keyed on `hasChanges`, which would have always
+been `true` under the withdrawn definition, silently routing an
+existing-only project into the shared write-files path and breaking
+NB6) never had to be built — the reversal happened before that change
+was made, not after. `deltaCount`/`cli-commands` MODIFIED-count
+unaffected (J14's own delta sentence replaced J13's without adding a
+second MODIFIED entry). This is the third time this piece's own
+measurement has reversed a ruling already in flight rather than the
+ruling standing on inspection alone (after J3's type pin and the
+agree-count cut) — recorded here as the same pattern, not a new one.
+
+### NB1, NB5 — fixed
+
+`.changeset/declare-existing-tables.md` and `skills/hejbro/references/
+brownfield-adoption.md` both narrowed "everything the new declaration
+manages on it ... is created exactly as it would be for any other
+managed table" to the closed, three-item enumeration (sequence,
+row-level security, policies), citing #671 for what adoption still does
+not create (indexes, check constraints, foreign keys, primary key) even
+though the snapshot records them as if it had. "None of them can block
+or refuse an unrelated managed change in the same schema either" is
+true again once R3-B2 landed — left as-is, now backed by R3-B2's own
+repro α/β tests rather than reworded. The stale `// Permanently
+unmanaged` code-sample comment in the skill (three paragraphs after the
+prose explains the choice is no longer permanent) was removed.
+
+### NB6 — fixed
+
+`hejbro baseline` on a project declaring only `existingTable()`s used to
+fail with `baseline-nothing-to-adopt` — literally false, since real
+declarations *did* load and export. `commands/generate.ts` now checks
+`declarations.length === 0` first (the genuinely-empty case keeps the
+old refusal) before falling into a new branch for the existing-only
+case: writes the snapshot (baseline's `previousSnapshot` is always
+empty, so it's guaranteed to differ), writes no migration file (there
+was never a `create` statement for `hejbro migrate` to register), and
+reports accurately, exit 0. Three new tests in `baseline-command.test.ts`
+(succeeds with an accurate report; a second baseline still refuses even
+with zero migration files on disk; `verify` accepts the state this
+leaves behind); mutant (revert to the unconditional refusal) exactly 3
+red / 14, zero collateral.
+
+### NB7 — closed
+
+`excludeExisting`'s own doc comment claimed the "both sides" behavior
+the pre-R3-B2 code didn't implement, making the R3-B2 gap invisible to
+a reader who checked the comment and stopped. Closed by R3-B2's own fix
+itself: the new doc comment describes the actual union-based, both-maps
+behavior accurately, since that's what the code now does.
+
+### #665 — fixed
+
+`check/inventory.ts`'s `declaredSchemaNames` read every snapshot node's
+`.schema` unconditionally, so declaring one existing table in a reserved
+schema (`auth.users`) pulled every *other* catalog table in that schema
+into the unmanaged inventory — three tables nobody declared a shape or
+an existing marker for. Rewritten to `Object.entries`-based filtering:
+a `table:`-prefixed node contributes its schema only when it is *not*
+marked existing; every other kind (`schema:`, `grant:`, functions,
+views, and managed `table:` nodes) contributes exactly as before. Red:
+the evaluator's own repro (`auth.users` existing-only → `auth.sessions`/
+`refresh_tokens`/`mfa_factors` no longer reported unmanaged), plus a
+control in the same shape round 1 used (a schema with a real managed
+table still reports its own undeclared tables) proving the exemption
+didn't widen past existing tables specifically. Mutant (revert to
+unconditional schema reads): exactly 1 red / 27, the control stays
+green.
+
+### #666 — closed (delta narrowed by the lead/planner, pin added here)
+
+`table-declaration`'s "one that checks a reference SHALL see it" had no
+observer for three rounds running. Rather than remove the sentence, the
+lead/planner narrowed it to an observable claim: "An existing
+declaration SHALL still reach the validator pipeline exactly as a
+managed one does" plus a new scenario, "An existing declaration reaches
+the validators." The pin: a recording validator installed in
+`core/test/validators.test.ts`, asserting a `generateMigration` run's
+`declarations` array (as handed to every installed validator) contains
+the `existingTable()` declaration with `{declarationKind: "table",
+existing: true}` — green on the first run, meaning the protection was
+real all along and simply unobserved. Mutant (quietly filter existing
+declarations out immediately before `runValidators`, simulating exactly
+the future refactor the requirement guards against): exactly 1 red /
+1480.
+
+### #658 (table half) — closed (requirement added by the lead/planner,
+pins extended/measured here)
+
+The `synced-table-declared` refusal became the *only* defense against a
+vendored/synced table value reaching migration generation once this
+piece moved the discriminator from `existing` to `authority` (J3) —
+and no requirement anywhere named it. The lead/planner added
+`table-declaration`'s "A table this repository does not author is
+refused as a declaration" (new requirement, `synced-table-declared`
+code, both `table()` and `existingTable()` named in the message) plus
+its own scenario. Two items to close it:
+
+(a) A pin already existed (`packages/query/test/client/
+synthesize.test.ts`, asserting `error.code === "synced-table-declared"`)
+but never checked the message text named both remedies — a new test
+asserts the exact substring naming `table()` and `existingTable()`
+together.
+
+(b) `check:diagnostic-xref`'s own doc-catalog ask, measured rather than
+assumed: the gate's `scripts/source-roots.mjs` scans `packages/*/src`
+only — never `docs/` or `skills/`, and `@hejbro/skills` has no `src` at
+all — so there is no doc catalog of error codes for this gate to check
+against in the first place. Confirmed, not guessed: grepped for
+already-shipped codes with the same shape (`synced-function-declared`,
+`baseline-nothing-to-adopt`) across `docs/`/`skills/` and found neither
+one documented anywhere either. Nothing added — there was nowhere to
+add it, and the instruction's own condition ("문서 목록이 있으면")
+never held.
+
+### #674 — handed off
+
+Example coverage (a supabase example with `auth.users` existing +
+`profiles` FK, roundtrip + image verification + the coverage-boundary
+line) is the fixture shape the round 3 evaluator's own "`grep -rn
+existingTable examples/` → no matches" finding named — out of scope for
+this round by the lead's own prior 3.2 ruling ("don't touch the
+examples"). Filed as #674 (Task, #623 tray) per the lead's instruction;
+not attempted here.
+
+### Gates
+
+`TURBO_FORCE=1 build --force` 7/7 (rerun across every mutant swap).
+`check` 656 files clean (2 formatting nits auto-fixed by `pnpm format`;
+3 ternaries the house style bans replaced with small named helpers or a
+table lookup). `check-types` 16/16 (0 cached, forced, rerun multiple
+times). `test` 17/17 tasks — core 98f/1487t (+7 over round 2's 1480t),
+query 61f/844t (+1), cli 64f/561t (+9 net over round 2's 552t across
+the whole round). `check:bans` 219 files clean. `check:crap` 0/1606 (the
+two new core functions/helper measured directly and confirmed clean
+after the redesign, twice). `openspec validate --strict` valid; `show
+--diff` reconfirmed multiple times across this round's three separate
+spec edits: `deltaCount: 6`, `cli-commands` MODIFIED still exactly one
+entry (no second MODIFIED created), `table-declaration` ADDED ×2 is
+correct (two distinct `### Requirement:` blocks in the same delta file
+— #666's edit lives in the pre-existing requirement, #658's is a
+brand-new one). `ci.yml`-derived full list (tasktime, changeset status,
+first-release-version skip, next-marker, diagnostic-xref 4/217,
+fixed-group 7 packages, smoke:pack-install 6 assertions) all green.
+`test:integration` 5f/38t (+2 over round 2's 36t, the new zero-statement
+real-server test), both PG majors (`postgres:15-alpine`/
+`postgres:17-alpine`) confirmed independently, `two-repo`'s own
+vendoring round trip staying green throughout.
+
+One environmental note, recorded honestly rather than hidden: a
+mid-round `pnpm test` pass showed transient `cli-smoke` timeouts, and
+one `check:crap` run hit an `ENOENT` reading `packages/core/dist/
+index.js` mid-coverage-run — both traced to concurrent, unrelated
+processes on a shared machine (system load observed at 113-122 during
+the episode; a different worktree's own build process was independently
+running at the same time), not to anything this round changed. Both
+cleared on retry, confirmed clean twice each afterward.
+
+10 commits this round (`6fc944b8` through `c41a79c2`), still unpushed.
+
+**Gates, final state (after the R3-11 → J14 sub-round above)**. One
+more commit (`c8c97ceb`, `snapshotChanged`) landed after the numbers
+above; re-run under a coordinated, single-team gate slot (system load
+1-min avg 2.04 at the start, confirmed clean before running) so these
+are uncontended: `TURBO_FORCE=1 build --force` 7/7
+(2026-09-02T16:00:58Z–16:01:07Z); full `test` 17/17 tasks — core
+98f/1487t (+1 test over the number above, same 98 files: the new J14
+pin landed inside an existing file), query 61f/844t unchanged, cli
+64f/561t unchanged (2026-09-02T16:01:10Z–16:02:45Z); `check:crap`
+0/**1607** (+1 function over 1606: the new `snapshotChangedFrom` helper,
+comfortably under the threshold, not among the 38 sitting at exactly 5)
+(2026-09-02T16:03:02Z–16:04:35Z); `test:integration` run twice — default
+(postgres:17-alpine; `apply-live.integration.test.ts`'s own
+`describe.each(["postgres:15-alpine","postgres:17-alpine"])` already
+covers both majors for every block in that file, including the R3-B1/
+J13 zero-statement live-server test) 5f/38t, then
+`HEJBRO_PG_IMAGE=postgres:15-alpine` for the other integration files
+5f/38t — zero flakes across both runs, no leftover containers
+(2026-09-02T16:05:04Z–16:07:33Z). Light gates re-run after releasing the
+slot (none fan out): `check:bans` 219 clean, `changeset status` (all 7
+fixed-group packages, minor), `check:first-release-version` (skip,
+expected), `check:next-marker` ok, `check:fixed-group` ok (7 packages),
+`check:diagnostic-xref` 4/217 ok, `check:tasktime` ok (no README badge
+change needed), `smoke:pack-install` all 6 assertions ok. `openspec
+validate --strict` valid; `show --diff` reconfirmed once more:
+`deltaCount: 6` and `cli-commands` MODIFIED still exactly one entry,
+unchanged by this sub-round's code-only commit.
+
+**Full-workspace `check`/`check-types`, run to completion (two further
+slot grants, not deferred)**. `pnpm check` (root `biome check .`) is a
+single process, not a turbo fan-out — the ban list that had it flagged
+as heavy was the planner's own misclassification, corrected mid-round;
+it ran outside a slot once it was: 656 files clean, no fixes
+(2026-09-02T16:14:15Z–16:14:17Z). `pnpm check-types` (turbo, every
+package) genuinely does fan out and stayed gated behind a dedicated,
+single-command slot: `snapshotChanged` is a *required* field on a public
+result type, so any site building that type's object literal wholesale
+(a test's own fake result, most plausibly) would type-error at exactly
+that site and nowhere `pnpm test` — which does not type-check — could
+show it. Scoped coverage (`--filter=@hejbro/core`/`--filter=hejbro`,
+clean, run earlier without a slot) covered core and the CLI but not
+`@hejbro/query`/`@hejbro/supabase`/`@hejbro/neon`/`@hejbro/pg`/
+`@hejbro/nile`/`examples/*` — sites that consume `GenerateMigrationsResult`
+indirectly and were exactly the gap a full run closes. `TURBO_FORCE=1
+pnpm check-types` — **16/16 tasks successful, 0 cached (forced)** —
+every one of those packages included, zero type errors from the new
+field (2026-09-02T16:15:46Z–16:16:04Z, slot held, exactly one run, slot
+released immediately after). Neither run left the tree dirty.
+
+**14 commits total this round now** (`6fc944b8` through this section's
+own commit), still unpushed.

@@ -33,21 +33,64 @@ export const tableEntries = (
 		]),
 	);
 
+/** Whether `identity` is marked existing on either side of the run — present and `existing: true` in `previousTables`, or present and `existing: true` in `nextTables`. A table whose identity appears on only one side reads as not-existing on the side it's absent from, which is exactly right: a genuinely dropped or created *managed* table's own identity is absent from one side too, and this check must not treat that absence as an existing marker. */
+const isExistingOnEitherSide = (
+	previousTables: ReadonlyMap<string, TableSnapshot>,
+	nextTables: ReadonlyMap<string, TableSnapshot>,
+	identity: string,
+): boolean => {
+	const previousTable = previousTables.get(identity);
+	const nextTable = nextTables.get(identity);
+	return (
+		(previousTable !== undefined && tableExisting(previousTable)) ||
+		(nextTable !== undefined && tableExisting(nextTable))
+	);
+};
+
 /**
- * `tables`, excluding any table marked existing (D106 R2, R2-B1).
- * Rename planning is a managed-table concern only — hejbro neither
- * drops nor creates an existing table (`table-kind.ts`'s own
- * bidirectional guard), so one is never a rename candidate and never
- * a rename ambiguity source, on either side of a run. Applied where
+ * `previousTables`/`nextTables`, each with every identity marked
+ * existing on *either* side removed from *both* (D106 R3, R3-B2 — the
+ * fix R2-B1 claimed but did not implement: excluding each map on its
+ * own left a table managed in `previous` and existing in `next` — a
+ * handover — still present in `previousTables` alone, which reads as a
+ * genuine drop, and the mirror case (an adoption) as a genuine create).
+ * Computed over the *union* of identities first, not two independent
+ * per-map filters, precisely so a handover's or an adoption's identity
+ * disappears from the side it would otherwise still occupy. Rename
+ * planning is a managed-table concern only — hejbro neither drops nor
+ * creates an existing table (`table-kind.ts`'s own bidirectional
+ * guard), so one is never a rename candidate and never a rename
+ * ambiguity source, on either side of a run. Applied where
  * `previousTables`/`nextTables` are built (`rename-plan.ts`), so both
- * `computeSchemaTableSets` and `computeTableColumnSets` — and,
- * through them, every ambiguity/pairing computation downstream —
- * never see one.
+ * `computeSchemaTableSets` and `computeTableColumnSets` — and, through
+ * them, every ambiguity/pairing computation downstream — never see one.
  */
 export const excludeExisting = (
-	tables: ReadonlyMap<string, TableSnapshot>,
-): ReadonlyMap<string, TableSnapshot> =>
-	new Map(Array.from(tables).filter(([, table]) => !tableExisting(table)));
+	previousTables: ReadonlyMap<string, TableSnapshot>,
+	nextTables: ReadonlyMap<string, TableSnapshot>,
+): {
+	readonly previousTables: ReadonlyMap<string, TableSnapshot>;
+	readonly nextTables: ReadonlyMap<string, TableSnapshot>;
+} => {
+	const identities = new Set([...previousTables.keys(), ...nextTables.keys()]);
+	const existingIdentities = new Set(
+		Array.from(identities).filter((identity) =>
+			isExistingOnEitherSide(previousTables, nextTables, identity),
+		),
+	);
+	const withoutExisting = (
+		tables: ReadonlyMap<string, TableSnapshot>,
+	): ReadonlyMap<string, TableSnapshot> =>
+		new Map(
+			Array.from(tables).filter(
+				([identity]) => !existingIdentities.has(identity),
+			),
+		);
+	return {
+		previousTables: withoutExisting(previousTables),
+		nextTables: withoutExisting(nextTables),
+	};
+};
 
 export type NameSets = {
 	readonly dropped: ReadonlySet<string>;

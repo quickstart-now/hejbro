@@ -44,10 +44,10 @@ export const planRenames = (options: {
 	readonly declaredAtByIdentity: ReadonlyMap<string, string | null>;
 }): RenamePlan =>
 	guardSnapshotRead("planning renames from the on-disk snapshot", () => {
-		const previousTables = excludeExisting(
+		const { previousTables, nextTables } = excludeExisting(
 			tableEntries(options.previous.objects),
+			tableEntries(options.next.objects),
 		);
-		const nextTables = excludeExisting(tableEntries(options.next.objects));
 		const schemaTableSets = computeSchemaTableSets(previousTables, nextTables);
 		const renamedPairings = tableRenamePairings(
 			options.renames,

@@ -83,4 +83,25 @@ describe("synthesizeTable (R2-G6 6.1)", () => {
 			);
 		}
 	});
+
+	// D106 R3, #658 (table half): `synced-table-declared`'s own message
+	// names both ways to declare a table this repository authors, not
+	// just that the value is refused -- a reader who only owns the
+	// table's shape needs to see `existingTable()` named as the fix, not
+	// just `table()`.
+	it("names both table() and existingTable() as the way to author a migration", () => {
+		const posts = synthesizeTable(POSTS_META) as unknown as DeclaredTable;
+
+		expect.assertions(1);
+		try {
+			generateMigration({
+				declarations: [posts],
+				previousSnapshot: emptySnapshot,
+			});
+		} catch (error) {
+			expect((error as InstanceType<typeof HejbroError>).message).toContain(
+				"declare it with table() (if this repository owns its DDL) or existingTable() (if it only owns the table's shape)",
+			);
+		}
+	});
 });

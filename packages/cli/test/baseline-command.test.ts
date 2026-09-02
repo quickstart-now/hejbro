@@ -53,6 +53,21 @@ export const posts = table(app, "posts", {
 });
 `;
 
+// D106 R3, NB6: a project declaring *only* `existingTable()` -- no
+// managed objects at all -- still loads real declarations, but diffs to
+// nothing against baseline's always-empty `previousSnapshot`. No
+// separate `schema()` export: `existingTable()` builds its own internal,
+// never-declared `SchemaDeclaration` (`dsl/existing-table.ts`) so
+// referencing one never emits `create schema` either -- exporting
+// `schema("app")` alongside it would make this fixture produce real DDL
+// (the schema itself) and miss the case entirely.
+const SCHEMA_ONLY_EXISTING_SOURCE = `import { existingTable, uuid } from "hejbro";
+
+export const legacyCustomers = existingTable("app", "legacy_customers", {
+	id: uuid(),
+});
+`;
+
 const soleMigration = async (cwd: string): Promise<string> => {
 	const names = (await readdir(join(cwd, "migrations"))).filter((name) =>
 		name.endsWith(".sql"),
@@ -118,6 +133,86 @@ describe("hejbro baseline", () => {
 			// banner note naming it -- baseline shares generate's diff path,
 			// and generate emits nothing for an existing table (group 1).
 			expect(sql.toLowerCase()).not.toContain("legacy_customers");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("succeeds with an accurate report when every declaration is existingTable() (D106 R3, NB6)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				SCHEMA_ONLY_EXISTING_SOURCE,
+			);
+			await runCli(cwd, ["init"]);
+
+			const result = await runCli(cwd, ["baseline"]);
+			expect(result.exitCode).toBe(0);
+			// The old message ("baseline found nothing to adopt: your
+			// declaration files loaded, but exported no hejbro declarations")
+			// is false here -- a real `existingTable()` declaration was
+			// exported and loaded. Never printed.
+			expect(result.stdout).not.toContain("nothing to adopt");
+			expect(result.stdout).toContain("loaded 1 declarations");
+
+			// No migration file: there was never a `create` statement for
+			// `hejbro migrate` to register as already applied.
+			const migrationFiles = (await readdir(join(cwd, "migrations"))).filter(
+				(name) => name.endsWith(".sql"),
+			);
+			expect(migrationFiles).toHaveLength(0);
+
+			// The snapshot records the existing declaration despite no
+			// migration ever naming it.
+			const snapshotText = await readFile(
+				join(cwd, "hejbro.snapshot.json"),
+				"utf8",
+			);
+			expect(JSON.parse(snapshotText).objects).toHaveProperty(
+				"table:app.legacy_customers",
+			);
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("a second baseline still refuses, even with zero migration files (D106 R3, NB6)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				SCHEMA_ONLY_EXISTING_SOURCE,
+			);
+			await runCli(cwd, ["init"]);
+			await runCli(cwd, ["baseline"]);
+
+			const result = await runCli(cwd, ["baseline"]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("error[baseline-not-first]");
+		} finally {
+			await removeCliFixtureDir(cwd);
+		}
+	});
+
+	it("verify accepts the state an existing-only baseline leaves behind (D106 R3, NB6)", async () => {
+		const cwd = await createCliFixtureDir();
+		try {
+			await writeFixtureFile(cwd, "hejbro.config.ts", CONFIG_SOURCE);
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				SCHEMA_ONLY_EXISTING_SOURCE,
+			);
+			await runCli(cwd, ["init"]);
+			await runCli(cwd, ["baseline"]);
+
+			const verify = await runCli(cwd, ["verify"]);
+			expect(verify.exitCode).toBe(0);
 		} finally {
 			await removeCliFixtureDir(cwd);
 		}

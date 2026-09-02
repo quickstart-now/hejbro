@@ -150,6 +150,19 @@ export const seed = table(app, "seed", {
 });
 `;
 
+// D106 R3, R3-B1/J13: the same `app.seed` table, plus a declared existing
+// table added in a second run -- the real-CLI fixture for a zero-statement
+// migration (never hand-written; `hejbro generate` produces this file the
+// same way it produces any other).
+const SEED_SCHEMA_WITH_EXISTING_SOURCE = `import { existingTable, schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+export const seed = table(app, "seed", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+`;
+
 /** [task 8.3] Two brand-new tables in one generate run -- a real,
  * two-statement migration file the fixture measures the statement order
  * of, rather than assumes. */
@@ -609,6 +622,74 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 			} finally {
 				await driver.client.end();
 			}
+		});
+	});
+
+	describe("R3-B1/J13: a zero-statement migration applies against a real server", () => {
+		const database = "zerostatement";
+		let cwd = "";
+
+		beforeAll(async () => {
+			cwd = await createCliFixtureDir();
+			await runCli(cwd, ["init"]);
+			await writeFixtureFile(cwd, "src/app.schema.ts", SEED_SCHEMA_SOURCE);
+			const generated = await runCli(cwd, ["generate"]);
+			if (generated.exitCode !== 0) {
+				throw new Error(
+					`fixture setup's own first \`hejbro generate\` failed: ${generated.stderr}`,
+				);
+			}
+
+			psqlCommand(container, "postgres", `create database ${database};`);
+		}, 60_000);
+
+		afterAll(async () => {
+			await removeCliFixtureDir(cwd);
+		});
+
+		it("a real generate run's own zero-statement migration applies cleanly and the ledger records it", async () => {
+			// Applies the real first migration (the managed `app.seed` table).
+			const firstApply = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(firstApply.exitCode).toBe(0);
+
+			// A real `hejbro generate` run, not a hand-written file, produces
+			// the zero-statement migration -- the same command a user runs.
+			await writeFixtureFile(
+				cwd,
+				"src/app.schema.ts",
+				SEED_SCHEMA_WITH_EXISTING_SOURCE,
+			);
+			const secondGenerate = await runCli(cwd, ["generate"]);
+			expect(secondGenerate.exitCode).toBe(0);
+			expect(secondGenerate.stdout).toContain("carries no statements.");
+
+			const secondApply = await runCli(cwd, [
+				"migrate",
+				"--url",
+				hostUrl(database),
+			]);
+			expect(secondApply.exitCode).toBe(0);
+
+			const driver = pgDriver(hostUrl(database));
+			try {
+				const rows = await driver.execute({
+					sql: 'select "filename" from "hejbro"."migration_ledger" order by "id"',
+					params: [],
+					kind: "sql",
+				});
+				expect(rows).toHaveLength(2);
+			} finally {
+				await driver.client.end();
+			}
+
+			// R3-B1's own core observer: the chain the zero-statement
+			// migration's banner anchored still verifies clean.
+			const verify = await runCli(cwd, ["verify"]);
+			expect(verify.exitCode).toBe(0);
 		});
 	});
 

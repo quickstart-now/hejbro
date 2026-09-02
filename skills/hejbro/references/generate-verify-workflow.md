@@ -76,17 +76,26 @@ restriction is about values added to a type that already existed).
 
 `@hejbro/core` exposes this as `generateMigrations` (plural) — the CLI's
 own entry point for `hejbro generate`. It returns `{ migrations,
-hasChanges, snapshot, errors, ambiguities, warnings }`, where `migrations`
-is `[]` when nothing changed, one entry for an ordinary run, and two when
-the run above applies — each `GeneratedMigration` carries its own
-`sql`/`changes`/`snapshot`, and the top-level `snapshot` (D106 R2) is the
-state this run reached regardless, present even when `migrations` is `[]`
-(`hasChanges` tracks DDL only — a declaration whose own identity never
-diffs into a statement, like an `existingTable()` marker change, can still
-move this). `generateMigration` (singular) is unchanged for existing
-callers that only need one file's worth of a run that can't split; it
-refuses (`migration-requires-split`) a run that would need two, naming
-`generateMigrations` as the entry point that returns the split.
+hasChanges, snapshot, snapshotChanged, errors, ambiguities, warnings }`,
+where `migrations` is `[]` when nothing at all needs writing, one entry
+for an ordinary run (including a zero-statement entry when only an
+existing-table marker moved — D106 R3, R3-B1 — its banner still anchors
+the chain), and two when the run above applies — each `GeneratedMigration`
+carries its own `sql`/`changes`/`snapshot`, and the top-level `snapshot`
+(D106 R2) is the state this run reached regardless, present even when
+`migrations` is `[]`. `hasChanges` and `snapshotChanged` (D106 R3, J14)
+state two different facts, not one: `hasChanges` is whether there is DDL
+to emit, `snapshotChanged` is whether `snapshot` differs from
+`previousSnapshot` at all. A declaration whose own identity never diffs
+into a statement (an `existingTable()` marker change) can leave
+`hasChanges: false` while `snapshotChanged: true` — a caller that needs
+"is there DDL" reads `hasChanges`; a caller that needs "is there anything
+to write at all" reads `snapshotChanged` (or, equivalently, checks
+whether `migrations` is non-empty). `generateMigration` (singular) is
+unchanged for existing callers that only need one file's worth of a run
+that can't split; it refuses (`migration-requires-split`) a run that
+would need two, naming `generateMigrations` as the entry point that
+returns the split.
 
 ## Ambiguous renames
 
