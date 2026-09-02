@@ -1314,7 +1314,15 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		expect(secondResult.sql.toLowerCase()).not.toContain("legacy");
 	});
 
-	it("a managed table replaced by an existing declaration under a different name drops only the managed identity, untouched by rename detection (D106 R2, R2-B1 repro D)", () => {
+	// D106 R2's own repro D read this as "a genuine, ordinary drop,
+	// untouched by rename detection" -- correct DDL-wise (an existing
+	// declaration never gets a `create table`), but silent about a real
+	// hazard #703 restores: a managed table's own removal, paired with a
+	// same-shaped existing declaration appearing under a different name
+	// in the same schema and run, is exactly the shape a genuine
+	// `--rename` would also produce. Recorded here as the closed
+	// version of R2-B1's own repro D (#703, R5's own rename-guard piece).
+	it("a managed table replaced by a same-shaped existing declaration is an ambiguous rename, not a silent drop (D106 R2/#703, R2-B1 repro D closed)", () => {
 		const app = schema("e3");
 		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
 		const firstResult = generateMigration({
@@ -1326,14 +1334,112 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 			declarations: [app, getTableMeta(gadgets)],
 			previousSnapshot: firstResult.snapshot,
 		});
+		expect(secondResult.errors).toHaveLength(1);
+		expect(secondResult.errors[0]).toMatchObject({
+			code: "ambiguous-table-rename",
+		});
+		// #703: the prescribed remedy must never suggest rerunning THIS
+		// generate with --rename e3.widgets=gadgets as if it would apply
+		// as-is -- that flag targets an existingTable() and the guard
+		// above refuses it too, the exact "the remedy is the command that
+		// just failed" shape D106 R5-B1 was filed against. The flag text
+		// may still appear as step 1 of the two-run path (a legitimate,
+		// different procedure), just never as a standalone "rerun with"
+		// suggestion for the current declarations.
+		expect(secondResult.errors[0]?.message).not.toContain(
+			"rerun with `--rename e3.widgets=gadgets`",
+		);
+		expect(secondResult.errors[0]?.message).toContain("two runs");
+		expect(secondResult.errors[0]?.message).toContain(
+			"--confirm-drop e3.widgets",
+		);
+		// No DDL at all fires without confirmation -- not the managed
+		// table's drop, and never anything naming the existing declaration.
+		expect(secondResult.sql).toBe("");
+	});
+
+	// #703: a --rename that targets an identity the ambiguity above just
+	// refused isn't "unknown" the way a genuine typo is -- it's declared,
+	// just not DDL-owned. `unknown-rename-target` is reused (no new code),
+	// with a message that says so and names the two-step remedy.
+	it("--rename refuses a target that's declared with existingTable(), naming the two-step remedy (#703)", () => {
+		const app = schema("e3");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+		const gadgets = existingTable("e3", "gadgets", { id: uuid() });
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(gadgets)],
+			previousSnapshot: firstResult.snapshot,
+			renames: [
+				{
+					target: "table",
+					schemaName: "e3",
+					oldName: "widgets",
+					newName: "gadgets",
+				},
+			],
+		});
+		// Two errors, not one: the flag itself is refused (below) AND the
+		// underlying drop+add pair stays unresolved -- an invalid --rename
+		// spec never consumes the pairing it failed to validate, so the
+		// same ambiguity R2-B1 repro D's own test pins fires too.
+		expect(secondResult.errors).toHaveLength(2);
+		const targetError = secondResult.errors.find(
+			(error) => error.code === "unknown-rename-target",
+		);
+		expect(targetError).toBeDefined();
+		expect(targetError?.message).toContain("existingTable()");
+		expect(targetError?.message).toContain("two runs");
+		expect(
+			secondResult.errors.some(
+				(error) => error.code === "ambiguous-table-rename",
+			),
+		).toBe(true);
+		expect(secondResult.sql).toBe("");
+	});
+
+	// #703: the safe way to do what the two tests above both refuse --
+	// rename while both sides are still managed, THEN hand the renamed
+	// table over to existingTable() in a later run. Both steps green.
+	it("the two-step path -- rename while both managed, then hand over -- applies cleanly (#703)", () => {
+		const app = schema("e3");
+		const widgets = table(app, "widgets", { id: uuid().primaryKey() });
+		const firstResult = generateMigration({
+			declarations: [app, widgets],
+			previousSnapshot: emptySnapshot,
+		});
+
+		const gadgetsManaged = table(app, "gadgets", { id: uuid().primaryKey() });
+		const secondResult = generateMigration({
+			declarations: [app, gadgetsManaged],
+			previousSnapshot: firstResult.snapshot,
+			renames: [
+				{
+					target: "table",
+					schemaName: "e3",
+					oldName: "widgets",
+					newName: "gadgets",
+				},
+			],
+		});
 		expect(secondResult.errors).toEqual([]);
-		// A genuine, ordinary drop of the managed declaration that
-		// disappeared -- unrelated to existing-table semantics, since
-		// `widgets`/`gadgets` are two different identities, not one
-		// table changing hands. What must never appear is any statement
-		// naming `gadgets`, the existing declaration.
-		expect(secondResult.sql).toContain('drop table "e3"."widgets"');
-		expect(secondResult.sql.toLowerCase()).not.toContain("gadgets");
+		expect(secondResult.sql).toContain(
+			'alter table "e3"."widgets" rename to "gadgets"',
+		);
+
+		const gadgetsExisting = existingTable("e3", "gadgets", { id: uuid() });
+		const thirdResult = generateMigration({
+			declarations: [app, getTableMeta(gadgetsExisting)],
+			previousSnapshot: secondResult.snapshot,
+		});
+		expect(thirdResult.errors).toEqual([]);
+		expect(thirdResult.sql).toBe("");
+		expect(thirdResult.snapshot.objects["table:e3.gadgets"]).toMatchObject({
+			existing: true,
+		});
 	});
 
 	// D106 R3, R3-B2: repros A-D above all keep a table existing (or

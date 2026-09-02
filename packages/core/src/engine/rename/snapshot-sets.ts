@@ -110,6 +110,54 @@ export const setDifference = (
 ): ReadonlySet<string> =>
 	new Set(Array.from(source).filter((value) => !remove.has(value)));
 
+/**
+ * `dropped`, with every name whose *previous*-side node is marked
+ * existing removed (#703): an `existingTable()` disappearing is never
+ * real drop DDL (`table-kind.ts`'s own bidirectional guard), so it
+ * never belongs in a "was this dropped" set at all — only a managed
+ * table's own disappearance is destructive enough to need this
+ * function's own ambiguity guard. `added` gets no matching filter:
+ * a *newly* existing declaration (added fresh, or replacing a managed
+ * table under a different name) must stay visible as a genuine `added`
+ * name, or the exact ambiguity #703 exists to restore -- a managed
+ * table silently dropped, mistaken for handing off to a same-shaped
+ * existing declaration under a new name -- goes undetected again.
+ * Takes `previousTables` un-excluded (this file's own `excludeExisting`
+ * output has already erased every existing-marked identity before this
+ * point, drop and add side alike): this function needs the raw
+ * existing marker to filter *only* the drop side, so it reads straight
+ * from `tableEntries`'s own output instead (see `rename-plan.ts`'s own
+ * call site).
+ */
+const nonExistingDroppedNames = (
+	previousTables: ReadonlyMap<string, TableSnapshot>,
+	schemaName: string,
+	dropped: ReadonlySet<string>,
+): ReadonlySet<string> =>
+	new Set(
+		Array.from(dropped).filter((name) => {
+			const table = Array.from(previousTables.values()).find(
+				(t) => t.schema === schemaName && t.name === name,
+			);
+			return table === undefined || !tableExisting(table);
+		}),
+	);
+
+/**
+ * Per-schema dropped/added table-NAME sets — deliberately a narrower
+ * existing-exclusion than {@link computeTableColumnSets}'s own (#703):
+ * a same-identity handover/adopt (R3-B2's own α/β) already cancels out
+ * of `dropped`/`added` alike through ordinary set difference before any
+ * existing-aware filtering runs at all (its name is present on both
+ * sides), so it needs no special case here. What's left after that is
+ * genuinely asymmetric movement -- an identity present on exactly one
+ * side -- and only the *drop* side of that needs filtering (see
+ * {@link nonExistingDroppedNames}). Callers pass the RAW,
+ * un-`excludeExisting`d maps here (unlike {@link computeTableColumnSets},
+ * which still gets the symmetric `excludeExisting` output -- R2-B1's own
+ * protection, unchanged): this function does its own, asymmetric
+ * filtering instead.
+ */
 export const computeSchemaTableSets = (
 	previousTables: ReadonlyMap<string, TableSnapshot>,
 	nextTables: ReadonlyMap<string, TableSnapshot>,
@@ -130,10 +178,15 @@ export const computeSchemaTableSets = (
 					.filter((t) => t.schema === schemaName)
 					.map((t) => t.name),
 			);
+			const rawDropped = setDifference(previousNames, nextNames);
 			return [
 				schemaName,
 				{
-					dropped: setDifference(previousNames, nextNames),
+					dropped: nonExistingDroppedNames(
+						previousTables,
+						schemaName,
+						rawDropped,
+					),
 					added: setDifference(nextNames, previousNames),
 				},
 			] as const;

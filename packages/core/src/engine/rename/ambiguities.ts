@@ -1,6 +1,7 @@
 import type { HejbroError } from "../../error";
 import { hejbroError } from "../../error";
-import { tableIdentity } from "../../kinds/table-snapshot";
+import type { TableSnapshot } from "../../kinds/table-snapshot";
+import { tableExisting, tableIdentity } from "../../kinds/table-snapshot";
 import { compareKeys } from "../../sort";
 import type {
 	NameSets,
@@ -137,16 +138,43 @@ export const ambiguousColumnRenameMessage = (
 	return `table "${identity}" has an ambiguous column change: ${droppedClause} and ${addedClause} in the same generate run, and hejbro cannot infer which pairs (if any) are renames. Next: resolve each dropped column with --rename or --confirm-drop and rerun — see the flags to add below.`;
 };
 
-/** @see ambiguousColumnRenameMessage — the table/schema-level counterpart. */
+/**
+ * The exact-1:1 case's own `Next:` clause (#703): `--rename` onto a
+ * `newName` declared with `existingTable()` would itself be refused by
+ * `unknown-rename-target` the moment this rerun tried it -- suggesting
+ * it here would be the same "the prescribed remedy is the command that
+ * just failed" shape D106 R5-B1 was filed against, one door over. Names
+ * the two-run path instead of the doomed flag.
+ */
+const tableRenameNextClause = (
+	schemaName: string,
+	oldName: string,
+	newName: string,
+	newNameIsExisting: boolean,
+): string => {
+	if (newNameIsExisting) {
+		return `Next: "${schemaName}.${newName}" is declared with existingTable(), so hejbro can't rename onto it -- if the table really is the same one changing hands, do it in two runs: first \`--rename ${schemaName}.${oldName}=${newName}\` while both sides are still table() declarations, then hand it over to existingTable() in a later run. If these are unrelated tables, rerun with \`--confirm-drop ${schemaName}.${oldName}\`.`;
+	}
+	return `Next: rerun with \`--rename ${schemaName}.${oldName}=${newName}\` (if this is a rename) or \`--confirm-drop ${schemaName}.${oldName}\` (if these are unrelated tables).`;
+};
+
+/** @see ambiguousColumnRenameMessage — the table/schema-level counterpart. `existingCreatedTables` (#703) is the sorted subset of `added` declared with `existingTable()`, used only by the exact-1:1 case's own concrete suggestion (see {@link tableRenameNextClause}) -- the multi-name case never names a specific flag inline, so it needs no such check. */
 export const ambiguousTableRenameMessage = (
 	schemaName: string,
 	dropped: ReadonlyArray<string>,
 	added: ReadonlyArray<string>,
+	existingCreatedTables: ReadonlyArray<string>,
 ): string => {
 	if (dropped.length === 1 && added.length === 1) {
 		const oldName = dropped[0] ?? "";
 		const newName = added[0] ?? "";
-		return `schema "${schemaName}" has an ambiguous table change: table "${oldName}" was dropped and table "${newName}" was created in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. Next: rerun with \`--rename ${schemaName}.${oldName}=${newName}\` (if this is a rename) or \`--confirm-drop ${schemaName}.${oldName}\` (if these are unrelated tables).`;
+		const nextClause = tableRenameNextClause(
+			schemaName,
+			oldName,
+			newName,
+			existingCreatedTables.includes(newName),
+		);
+		return `schema "${schemaName}" has an ambiguous table change: table "${oldName}" was dropped and table "${newName}" was created in the same generate run — a table rename recreates every column, index, foreign key, RLS policy, and trigger attached to it, so hejbro refuses to guess. ${nextClause}`;
 	}
 	const droppedClause = countedClause("table", "dropped", dropped);
 	const createdClause = countedClause("table", "created", added);
@@ -240,16 +268,31 @@ export const declaredAtForFirstAdded = (
 	declaredAtByIdentity.get(tableIdentity(schemaName, addedNames[0] ?? "")) ??
 	null;
 
+/** The sorted subset of `addedNames` that `nextTables` marks existing (#703) — see {@link TableRenameAmbiguity.existingCreatedTables}. */
+const existingNamesOf = (
+	nextTables: ReadonlyMap<string, TableSnapshot>,
+	schemaName: string,
+	addedNames: ReadonlyArray<string>,
+): ReadonlyArray<string> =>
+	addedNames.filter((name) => {
+		const table = nextTables.get(tableIdentity(schemaName, name));
+		return table !== undefined && tableExisting(table);
+	});
+
 /**
  * {@link residualTableAmbiguities}'s own diagnostics for one schema —
  * extracted to module scope (not a nested closure) the same way
  * {@link checksPatch} above was, so this shape's own branches don't fold
- * into the calling function's complexity.
+ * into the calling function's complexity. `nextTables` is the RAW
+ * (un-`excludeExisting`d) map, the same one `computeSchemaTableSets`
+ * itself reads (#703) -- the existing marker this needs was already
+ * erased from `excludeExisting`'s own output before this point.
  */
 export const residualTableAmbiguityFor = (
 	schemaName: string,
 	sets: NameSets,
 	consumed: ReadonlyMap<string, ConsumedNameSets>,
+	nextTables: ReadonlyMap<string, TableSnapshot>,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
 ): ReadonlyArray<AmbiguityResult> => {
 	const consumedSets = consumedSetsFor(consumed, schemaName);
@@ -260,6 +303,11 @@ export const residualTableAmbiguityFor = (
 	}
 	const droppedNames = Array.from(residualDropped).sort(compareKeys);
 	const addedNames = Array.from(residualAdded).sort(compareKeys);
+	const existingCreatedTables = existingNamesOf(
+		nextTables,
+		schemaName,
+		addedNames,
+	);
 	const declaredAt = declaredAtForFirstAdded(
 		declaredAtByIdentity,
 		schemaName,
@@ -269,7 +317,12 @@ export const residualTableAmbiguityFor = (
 		{
 			error: hejbroError(
 				"ambiguous-table-rename",
-				ambiguousTableRenameMessage(schemaName, droppedNames, addedNames),
+				ambiguousTableRenameMessage(
+					schemaName,
+					droppedNames,
+					addedNames,
+					existingCreatedTables,
+				),
 				declaredAt,
 			),
 			ambiguity: {
@@ -277,6 +330,7 @@ export const residualTableAmbiguityFor = (
 				schemaName,
 				droppedTables: droppedNames,
 				createdTables: addedNames,
+				existingCreatedTables,
 				declaredAt,
 			},
 		},
@@ -286,6 +340,7 @@ export const residualTableAmbiguityFor = (
 export const residualTableAmbiguities = (
 	schemaTableSets: SchemaTableSets,
 	consumed: ReadonlyMap<string, ConsumedNameSets>,
+	nextTables: ReadonlyMap<string, TableSnapshot>,
 	declaredAtByIdentity: ReadonlyMap<string, string | null>,
 ): ReadonlyArray<AmbiguityResult> =>
 	Array.from(schemaTableSets.entries())
@@ -295,6 +350,7 @@ export const residualTableAmbiguities = (
 				schemaName,
 				sets,
 				consumed,
+				nextTables,
 				declaredAtByIdentity,
 			),
 		);

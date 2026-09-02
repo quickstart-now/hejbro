@@ -171,6 +171,18 @@ either drop the leftover sequence out of band before re-adopting the
 table, or treat the re-adopted state as a fresh `hejbro baseline`
 instead of a `hejbro generate` continuation of the handed-over chain.
 
+A handover only stays unambiguous when the identity doesn't move: if
+the same edit also renames the table (a managed declaration removed,
+a same-shaped `existingTable()` appearing under a *different* name in
+the same schema and run), `hejbro generate` refuses it with
+`ambiguous-table-rename` and emits no DDL at all — the shape genuinely
+is indistinguishable from a `--rename`, and a silent drop of the
+managed table's own DDL (its table, sequence, policies, RLS) is
+exactly the harm the refusal exists to prevent (#703). The safe path
+is two runs, not one: first `--rename` the table while both sides are
+still `table()` declarations, confirm `hejbro verify` passes, then
+hand the renamed table over to `existingTable()` in a later run.
+
 Declaring a schema's tables with `table()`/`existingTable()` no longer
 has to stay a bare, unexported reference to work this way, the
 difference from before #605.

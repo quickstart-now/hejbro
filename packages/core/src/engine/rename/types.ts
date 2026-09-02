@@ -57,12 +57,21 @@ export type ColumnRenameAmbiguity = {
 	readonly declaredAt: string | null;
 };
 
-/** @see ColumnRenameAmbiguity — the schema-level table-drop+create counterpart. */
+/**
+ * @see ColumnRenameAmbiguity — the schema-level table-drop+create
+ * counterpart. `existingCreatedTables` (#703) is the sorted subset of
+ * `createdTables` declared with `existingTable()` -- hejbro never DDLs
+ * one, so a `--rename` onto it is refused separately (`unknown-rename-
+ * target`); a caller building a rerun suggestion checks this set before
+ * offering `--rename` for a given created name, so the suggestion never
+ * points at a flag the very next run would also refuse.
+ */
 export type TableRenameAmbiguity = {
 	readonly kind: "table";
 	readonly schemaName: string;
 	readonly droppedTables: ReadonlyArray<string>;
 	readonly createdTables: ReadonlyArray<string>;
+	readonly existingCreatedTables: ReadonlyArray<string>;
 	readonly declaredAt: string | null;
 };
 
