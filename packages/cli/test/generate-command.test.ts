@@ -165,6 +165,89 @@ export const posts = table(app, "posts", {
 export const authUsers = existingTable("auth", "users", { id: uuid(), email: text() });
 `;
 
+// D106 R5, R5-B1: the evaluator's own flagship reproduction, repro ① --
+// a plain managed table, no existingTable() anywhere in the project.
+// serializeIndexes doesn't sort, so swapping the two index() calls below
+// moves the snapshot with no KindChange to emit (managed:managed,
+// diffByKey is name-keyed).
+const SCHEMA_WITH_TWO_INDEXES_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	body: text().notNull(),
+}, (t) => ({ indexes: [index().on(t.title), index().on(t.body)] }));
+`;
+
+const SCHEMA_WITH_TWO_INDEXES_REORDERED_SOURCE = `import { index, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	body: text().notNull(),
+}, (t) => ({ indexes: [index().on(t.body), index().on(t.title)] }));
+`;
+
+// D106 R5, R5-B1: repro ② -- the same shape, on `checks` instead of
+// `indexes` (serializeChecks doesn't sort either).
+const SCHEMA_WITH_TWO_CHECKS_SOURCE = `import { check, gt, schema, table, integer, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	a: integer().notNull(),
+	b: integer().notNull(),
+}, (t) => ({ checks: [check("a_pos", gt(t.a, 0)), check("b_pos", gt(t.b, 0))] }));
+`;
+
+const SCHEMA_WITH_TWO_CHECKS_REORDERED_SOURCE = `import { check, gt, schema, table, integer, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	a: integer().notNull(),
+	b: integer().notNull(),
+}, (t) => ({ checks: [check("b_pos", gt(t.b, 0)), check("a_pos", gt(t.a, 0))] }));
+`;
+
+// D106 R5, R5-B1: repro ③ -- inside this change's own feature surface,
+// the same index reorder alongside a real existingTable() and a managed
+// FK onto it, so the scan crosses an existing:existing (unchanged,
+// reshapedOrNull -> null) table before reaching the managed one.
+const SCHEMA_WITH_EXISTING_AND_REORDERED_INDEXES_SOURCE = `import { existingTable, index, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	body: text().notNull(),
+	authorId: uuid().references(() => authUsers.id),
+}, (t) => ({ indexes: [index().on(t.title), index().on(t.body)] }));
+`;
+
+const SCHEMA_WITH_EXISTING_AND_REORDERED_INDEXES_SWAPPED_SOURCE = `import { existingTable, index, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const authUsers = existingTable("auth", "users", { id: uuid() });
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+	body: text().notNull(),
+	authorId: uuid().references(() => authUsers.id),
+}, (t) => ({ indexes: [index().on(t.body), index().on(t.title)] }));
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -622,6 +705,124 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 				.sort();
 			expect(namesA.map(stripPrefix)).toEqual(namesB.map(stripPrefix));
 			expect(stripPrefix(namesA[2] as string)).toBe("reshape_users.sql");
+		} finally {
+			await removeCliFixtureDir(cwdA);
+			await removeCliFixtureDir(cwdB);
+		}
+	});
+
+	// D106 R5, R5-B1 repro ①: the evaluator's own flagship reproduction --
+	// reordering two index() declarations on a plain managed table (no
+	// existingTable() anywhere in the project) used to crash generate with
+	// `existing-transition-not-found`. Fixed by the restate fallback
+	// (D106 R5, J17).
+	it("reordering two index() declarations on a managed table writes a restate migration instead of crashing (D106 R5, R5-B1 repro ①)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_WITH_TWO_INDEXES_SOURCE);
+		await runCli(cwd, ["generate"]);
+		const firstVerify = await runCli(cwd, ["verify"]);
+		expect(firstVerify.exitCode).toBe(0);
+
+		await writeSchema(SCHEMA_WITH_TWO_INDEXES_REORDERED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("carries no statements.");
+
+		const names = await sqlFileNames();
+		expect(names.some((name) => name.endsWith("_restate_posts.sql"))).toBe(
+			true,
+		);
+
+		const verify = await runCli(cwd, ["verify"]);
+		expect(verify.exitCode).toBe(0);
+	});
+
+	// D106 R5, R5-B1 repro ②: the same shape on `checks` instead of
+	// `indexes`.
+	it("reordering two check() declarations on a managed table writes a restate migration instead of crashing (D106 R5, R5-B1 repro ②)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_WITH_TWO_CHECKS_SOURCE);
+		await runCli(cwd, ["generate"]);
+		const firstVerify = await runCli(cwd, ["verify"]);
+		expect(firstVerify.exitCode).toBe(0);
+
+		await writeSchema(SCHEMA_WITH_TWO_CHECKS_REORDERED_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("carries no statements.");
+
+		const names = await sqlFileNames();
+		expect(names.some((name) => name.endsWith("_restate_posts.sql"))).toBe(
+			true,
+		);
+
+		const verify = await runCli(cwd, ["verify"]);
+		expect(verify.exitCode).toBe(0);
+	});
+
+	// D106 R5, R5-B1 repro ③: inside this change's own feature surface --
+	// the same index reorder alongside a real existingTable() and a
+	// managed FK onto it, so the scan crosses an unchanged existing:existing
+	// table before reaching the managed one that actually moved.
+	it("an index reorder in a project that also declares an existingTable() still restates the managed table, not the existing one (D106 R5, R5-B1 repro ③)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_WITH_EXISTING_AND_REORDERED_INDEXES_SOURCE);
+		await runCli(cwd, ["generate"]);
+		const firstVerify = await runCli(cwd, ["verify"]);
+		expect(firstVerify.exitCode).toBe(0);
+
+		await writeSchema(
+			SCHEMA_WITH_EXISTING_AND_REORDERED_INDEXES_SWAPPED_SOURCE,
+		);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("carries no statements.");
+
+		const names = await sqlFileNames();
+		expect(names.some((name) => name.endsWith("_restate_posts.sql"))).toBe(
+			true,
+		);
+
+		const verify = await runCli(cwd, ["verify"]);
+		expect(verify.exitCode).toBe(0);
+	});
+
+	// D106 R5, R5-B1: the restate slug is deterministic across two
+	// entirely independent projects, the same way R3-B1/R4-B1 measurement
+	// already proved for the other verbs.
+	it("the restate migration's own slug is deterministic across two independent runs (D106 R5, R5-B1)", async () => {
+		const stripPrefix = (fileName: string): string =>
+			fileName.replace(/^\d+_/, "");
+
+		const cwdA = await createCliFixtureDir();
+		const cwdB = await createCliFixtureDir();
+		try {
+			for (const target of [cwdA, cwdB]) {
+				await runCli(target, ["init"]);
+				await writeFixtureFile(
+					target,
+					"src/app.schema.ts",
+					SCHEMA_WITH_TWO_INDEXES_SOURCE,
+				);
+				await runCli(target, ["generate"]);
+				await writeFixtureFile(
+					target,
+					"src/app.schema.ts",
+					SCHEMA_WITH_TWO_INDEXES_REORDERED_SOURCE,
+				);
+				await runCli(target, ["generate"]);
+			}
+			const namesA = (await readdir(join(cwdA, "migrations")))
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+			const namesB = (await readdir(join(cwdB, "migrations")))
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+			expect(namesA.map(stripPrefix)).toEqual(namesB.map(stripPrefix));
+			expect(stripPrefix(namesA[1] as string)).toBe("restate_posts.sql");
 		} finally {
 			await removeCliFixtureDir(cwdA);
 			await removeCliFixtureDir(cwdB);

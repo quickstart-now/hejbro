@@ -454,35 +454,63 @@ const classifyExistingTransition = (
 
 /**
  * Derives a migration slug for a run whose only movement is one or more
- * tables' own existing marker OR declared shape (D106 R3/R4, J13/R4-B1)
- * -- `deriveSlug` cannot see this run at all, by construction: neither
- * kind of movement ever produces a `KindChange`, so `changes` is always
- * `[]` here, and `deriveSlug([])` falls back to the generic `"migration"`
- * the lead ruled out for this case. Mirrors `deriveSlug`'s own shape
- * exactly (verb + `_` + the identity's last dot-segment, first
- * difference only, no third part) rather than inventing a new one: the
- * verb names the direction the existing marker moved, or `reshape` when
- * it didn't move at all and only the declared shape did. "First
- * difference" is made deterministic the same way `stableJson` is: both
- * snapshots' `table:`-prefixed keys, unioned and sorted with
- * `compareKeys` (plain string order, matching every other
- * deterministic-output guarantee in this codebase), and the first key in
- * that order `classifyExistingTransition` names wins -- exactly
+ * tables' own existing marker, declared shape, or (D106 R3/R4/R5,
+ * J13/R4-B1/R5-B1) plain declared *record* -- `deriveSlug` cannot see
+ * this run at all, by construction: none of those ever produce a
+ * `KindChange`, so `changes` is always `[]` here, and `deriveSlug([])`
+ * falls back to the generic `"migration"` the lead ruled out for this
+ * case. Mirrors `deriveSlug`'s own shape exactly (verb + `_` + the
+ * identity's last dot-segment, first difference only, no third part)
+ * rather than inventing a new one, in two tiers:
+ *
+ * 1. `classifyExistingTransition` names the five existing-marker/shape
+ *    transitions (`record`/`forget`/`release`/`adopt`/`reshape`).
+ * 2. **`restate` (D106 R5, R5-B1, J17)**: when tier 1 finds nothing, the
+ *    same scan runs again comparing each `table:` key's raw content
+ *    (`rawContentDiffers`, no side-category lookup) -- any table whose
+ *    own record changed at all, for a reason tier 1 doesn't name (an
+ *    ordinary managed table's `indexes`/`checks` reordering, R5-B1's
+ *    own repro; or any other cause), is `restate_<table>`, deliberately
+ *    naming the fact a table's record moved without claiming *why* --
+ *    `reorder` was considered and rejected precisely because it would
+ *    be wrong the moment tier 2 is reached for a reason that isn't
+ *    reordering, repeating this same requirement's own R4 mistake (a
+ *    verb whose truth was narrower than its coverage) one layer up.
+ *
+ * "First difference" is made deterministic the same way `stableJson`
+ * is in both tiers: both snapshots' `table:`-prefixed keys, unioned and
+ * sorted with `compareKeys` (plain string order, matching every other
+ * deterministic-output guarantee in this codebase) -- exactly
  * `deriveSlug`'s own "first change in the array" rule, applied to a
  * deterministically-ordered set instead of an array a caller already
  * built in one order. Never falls through to a generic default: a
  * caller only reaches this function when the two snapshots are already
  * known to differ (`R3-B1`'s own `snapshotChanged` gate) with no
- * `KindChange` at all, and every such difference is, by this change's
- * own closed enumeration (D106 add-unmanaged-objects, R4-corrected),
- * one of the five `classifyExistingTransition`/`reshapedOrNull` name --
- * every other side pairing would have produced a real `KindChange`
- * instead (see the comment on `existingTransitionVerbs`), so a run that
- * reaches here and finds no transition is a genuine bug, not a state to
- * default through -- reported as a coded `HejbroError`, not a raw
- * `Error`, so it reaches the user as a diagnostic (D106 R4, R4-B1) with
- * a `Next:` step rather than an unhandled stack trace.
+ * `KindChange` at all, and tier 2 is total over every remaining
+ * `table:`-domain movement (the exhaustive sweep the R5-B1 finding
+ * demanded: of the nine `previous:next` side pairings a `table:` key
+ * can be in, four are unreachable here by construction -- they'd have
+ * produced a real `KindChange` instead -- and the fifth,
+ * `existing:existing`, is `reshape` or unmoved; tier 2 catches every
+ * remaining shape a table's own JSON node can differ in). So a run that
+ * reaches the final throw has NO `table:` key whose raw content differs
+ * at all -- the movement is outside the table domain entirely, a
+ * genuine bug, not a state to default through -- reported as a coded
+ * `HejbroError`, not a raw `Error` (D106 R4, R4-B1), so it reaches the
+ * user as a diagnostic with a `Next:` step rather than an unhandled
+ * stack trace.
  */
+/** D106 R5, R5-B1: tier 2's own per-key test -- any raw content difference at all, independent of `sideOf`/side-category (an appear/disappear would already be `true` here too, but tier 1 always names those first, so tier 2 only ever supplies the naming for a case tier 1's five verbs don't cover). */
+const rawContentDiffers = (
+	previousRaw: JsonValue | undefined,
+	nextRaw: JsonValue | undefined,
+): boolean => {
+	if (previousRaw === undefined || nextRaw === undefined) {
+		return true;
+	}
+	return !sameJson(previousRaw, nextRaw);
+};
+
 export const deriveExistingTransitionSlug = (
 	previous: Snapshot,
 	next: Snapshot,
@@ -511,12 +539,19 @@ export const deriveExistingTransitionSlug = (
 			): entry is { key: string; kind: NonNullable<(typeof entry)["kind"]> } =>
 				entry.kind !== null,
 		);
-	if (transition === undefined) {
-		return throwHejbroError(
-			"existing-transition-not-found",
-			`hejbro found a snapshot that changed with nothing to write, but no existing-table transition explains why -- internal invariant violated. Next: this is a hejbro bug -- file an issue with the declarations that produced it; \`hejbro verify\` can confirm whether your existing snapshot and migration chain still agree in the meantime.`,
-		);
+	if (transition !== undefined) {
+		const identity = transition.key.slice(TABLE_KEY_PREFIX.length);
+		return `${existingTransitionVerbs[transition.kind]}_${lastIdentitySegment(identity)}`;
 	}
-	const identity = transition.key.slice(TABLE_KEY_PREFIX.length);
-	return `${existingTransitionVerbs[transition.kind]}_${lastIdentitySegment(identity)}`;
+	const restated = keys.find((key) =>
+		rawContentDiffers(previous.objects[key], next.objects[key]),
+	);
+	if (restated !== undefined) {
+		const identity = restated.slice(TABLE_KEY_PREFIX.length);
+		return `restate_${lastIdentitySegment(identity)}`;
+	}
+	return throwHejbroError(
+		"existing-transition-not-found",
+		`hejbro found a snapshot that changed with nothing to write, but no table's own record explains why -- internal invariant violated. Next: this is a hejbro bug -- file an issue with the declarations that produced it; \`hejbro verify\` can confirm whether your existing snapshot and migration chain still agree in the meantime.`,
+	);
 };
