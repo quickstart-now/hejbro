@@ -33,7 +33,7 @@ minutes; every task starts from its named red test. Verification (gates,
 
 ## 2. DSL: cross-file references and projected returning (#677)
 
-- [ ] 2.1 (~10m) `[design]` `.references()` thunks resolve at collection
+- [x] 2.1 (~10m) `[design]` `.references()` thunks resolve at collection
       time (#669). Red: `packages/cli/test/loader-cycle.test.ts` — two
       schema files referencing each other, loaded under both name orders
       through the real loader (`collectDeclarations`), currently
@@ -49,7 +49,7 @@ minutes; every task starts from its named red test. Verification (gates,
       Files: `packages/core/src/dsl/table.ts`, `packages/cli/src/loader.ts`
       (or core collection), tests, `skills/hejbro` sentence on cross-file
       references.
-- [ ] 2.2 (~7m) `ctx.return` accepts a projected returning (#634). Red:
+- [x] 2.2 (~7m) `ctx.return` accepts a projected returning (#634). Red:
       `packages/core/test/plpgsql/render-body.test.ts` — "returns a
       projected returning" (currently a type error / refusal). Green:
       widen `ReturnableQuery`'s three mutation members to the
