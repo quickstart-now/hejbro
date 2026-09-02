@@ -132,6 +132,14 @@ order (sorted by local columns, then target identity) — so mixing the
 two forms in one table, or converting a foreign key from one form to
 the other, changes neither the generated DDL nor the snapshot.
 
+The thunk SHALL never be resolved while `table()` runs — this is what
+lets a reference into another declaration file (or another table in
+the same file) resolve regardless of which one the loader reaches first. The
+declaration's first `foreignKeys` read that completes SHALL be cached,
+so every `.references()` thunk on that declaration runs at most once
+across every later read; a read that throws SHALL cache nothing, so
+the next read folds again.
+
 #### Scenario: A column-level reference emits the same DDL as extras
 - **WHEN** a table declares `ownerId: uuid().notNull().references(()
   => users.id)` and an otherwise-identical table declares the same
@@ -155,6 +163,30 @@ the other, changes neither the generated DDL nor the snapshot.
   also named in an `extras` foreign key
 - **THEN** `table()` fails at declaration time with an explicit error
   naming the column
+
+#### Scenario: Declaration files, or two tables in one file, that reference each other
+- **WHEN** schema file A declares a column with `.references()` into a
+  table of schema file B, and B declares one into a table of A — or two
+  tables in the same file reference each other the same way
+- **THEN** the declarations load and generate under either file order (or,
+  for the same-file case, regardless of which table is declared first),
+  and the emitted foreign keys are the ones each declaration named
+
+#### Scenario: The thunk resolves once across repeated reads, not once per read
+- **WHEN** a declaration's foreign keys are read more than once and every
+  read completes without throwing
+- **THEN** each `.references()` thunk runs exactly once, cached after the
+  first successful read
+
+#### Scenario: A read whose thunk throws caches nothing
+- **WHEN** a declaration's first `foreignKeys` read throws, and it is
+  read again
+- **THEN** the second read re-runs every `.references()` thunk on that
+  declaration, since the failed read cached nothing
+
+#### Scenario: table() itself never resolves a reference thunk
+- **WHEN** `table()` returns
+- **THEN** no `.references()` thunk on that table has run yet
 
 ### Requirement: Declaration-site expressions refuse window functions
 A window function SHALL be refused where a declaration stores an
