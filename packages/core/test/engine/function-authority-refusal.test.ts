@@ -46,7 +46,7 @@ describe("refuses a function that carries no migration authority (#587/G3)", () 
 
 	it("the refusal states the absent authority and a Next: step", () => {
 		const usage = buildUsageFunction("app", "total_posts");
-		expect.assertions(2);
+		expect.assertions(3);
 		try {
 			generateMigration({
 				declarations: [usage],
@@ -57,6 +57,7 @@ describe("refuses a function that carries no migration authority (#587/G3)", () 
 			const message = (error as HejbroError).message;
 			expect(message).toContain("carries no migration authority");
 			expect(message).toMatch(/\bNext:/);
+			expect(message).toContain('function "app"."total_posts"');
 		}
 	});
 

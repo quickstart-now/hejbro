@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ColumnRef } from "../../src/index";
 import {
+	getTableMeta,
 	index,
 	isNull,
 	schema,
@@ -77,11 +78,13 @@ describe("declaration sites refuse a CTE column reference (task 1.2c)", () => {
 	});
 
 	it("the per-column .references() sugar refuses a CTE reference target, naming the CTE", () => {
-		expect(() =>
-			table(app, "comments", {
-				postId: uuid().references(() => cteColumnRef("ranked", "id")),
-			}),
-		).toThrow(
+		// #669: the thunk no longer runs during table() itself -- it's
+		// folded lazily on the declaration's first `foreignKeys` read, so
+		// that's where this refusal now fires.
+		const comments = table(app, "comments", {
+			postId: uuid().references(() => cteColumnRef("ranked", "id")),
+		});
+		expect(() => getTableMeta(comments).foreignKeys).toThrow(
 			expect.objectContaining({
 				code: "foreign-column-ref",
 				message: expect.stringContaining("ranked"),
