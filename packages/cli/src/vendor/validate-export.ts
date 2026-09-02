@@ -116,9 +116,9 @@ const formatSchema = z.object({
  * the eleven — "A description format newer than the reader is refused").
  * An older format is read as-is (the description schema below has only
  * ever grown by additive fields since format 1 shipped, `EXPORT_
- * DESCRIPTION_FORMAT`'s own history — there is no earlier shape yet to
- * tolerate; this branch exists so the asymmetry is structural now, not
- * added the day format 2 ships).
+ * DESCRIPTION_FORMAT`'s own history) — this branch guards the format-
+ * number axis only; format 1's own shape axis (its two function-fact
+ * shapes, #657) is `functionFactSchema`'s own concern, above.
  */
 const assertDescriptionFormatSupported = (format: ExportFormatRecord): void => {
 	if (format.descriptionFormat <= EXPORT_DESCRIPTION_FORMAT) {
