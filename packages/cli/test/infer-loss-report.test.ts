@@ -80,6 +80,19 @@ describe("buildLossReport / 1.7", () => {
 		).toBe(true);
 	});
 
+	it("names the expression-as-raw-SQL approximation, unconditionally (info msg after CI-G2-R1-06: third approximation, Q4 follow-up)", () => {
+		const report = buildLossReport(emptyFacts("import"));
+
+		expect(
+			report.some(
+				(line) =>
+					line.startsWith("Approximated:") &&
+					line.includes("raw SQL text") &&
+					line.includes("typed builders"),
+			),
+		).toBe(true);
+	});
+
 	it("names the nextval-default approximation", () => {
 		const report = buildLossReport({
 			...emptyFacts("pull"),
