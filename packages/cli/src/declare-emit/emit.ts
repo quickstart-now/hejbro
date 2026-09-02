@@ -1166,14 +1166,15 @@ const neededCrossFileTableReferences = (
 
 /**
  * One file's own identifier namespace (schema + its enums + its tables +
- * its (c) handles, in that order), resolved against `reserved` -- called
- * twice (CI-G2-R1-07/09): once with only this file's own hejbro-vocabulary
- * usage (phase 1, whose result other files' imports are read from), once
- * more with vocabulary *and* every name this file imports from another
- * file added to `reserved` (phase 2, the actual final identifiers) -- so a
- * table imported from another schema can never be shadowed by a same-named
- * local one (CI-G2-R1-09: two schemas both naming a table `users`, one
- * referencing the other, is an ordinary case, not an edge case).
+ * its (c) handles, in that order), resolved against `reserved` -- this
+ * file's own hejbro-vocabulary usage (the barrel symbols it imports,
+ * `table`/`uuid`/…), so a local table or enum identifier can never
+ * collide with one of them. Cross-file collisions (CI-G2-R1-09: two
+ * schemas both naming a table `users`, one referencing the other) are no
+ * longer this function's concern: since D106 R2-B2 a file's own
+ * identifiers are settled with no knowledge of any other file at all,
+ * and a colliding cross-file *import* is aliased afterward
+ * (`resolveAliasesFor`, below) rather than reserved here.
  */
 const resolveFileIdentifiers = (
 	schemaName: string,
@@ -1423,11 +1424,13 @@ export const emitDeclarationFiles = (
 
 	const dryRunHandleIdentifierFor = (): string => "handle";
 
-	/** Phase 1 (vocabulary-only) or phase 2 (vocabulary + imports) -- same shape, different `reserved`. */
-	const buildFilePlan = (
-		schemaName: string,
-		reserved: (vocabulary: ReadonlySet<string>) => ReadonlySet<string>,
-	): FilePlan => {
+	/**
+	 * One file's own plan: its tables, enums, (c) handles and enum
+	 * clones, and the identifiers `resolveFileIdentifiers` settles for
+	 * all of them against this file's own hejbro-vocabulary usage alone
+	 * (D106 R2-B2 -- no cross-file knowledge here at all).
+	 */
+	const buildFilePlan = (schemaName: string): FilePlan => {
 		const schemaTables = tablesBySchema.get(schemaName) ?? [];
 		const schemaEnums = enumsBySchema.get(schemaName) ?? [];
 		const schemaHandles: ReadonlyArray<HandleNeed> = schemaTables.flatMap(
@@ -1504,7 +1507,7 @@ export const emitDeclarationFiles = (
 			schemaTables,
 			schemaHandles,
 			schemaEnumClones,
-			reserved(vocabulary),
+			vocabulary,
 		);
 
 		return {
@@ -1532,9 +1535,7 @@ export const emitDeclarationFiles = (
 	 * three schemas made `a.schema.ts` declare `users2` while importing
 	 * `users2`, a `Duplicate declaration` that never parses).
 	 */
-	const filePlans = schemaNames.map((schemaName) =>
-		buildFilePlan(schemaName, (vocabulary) => vocabulary),
-	);
+	const filePlans = schemaNames.map((schemaName) => buildFilePlan(schemaName));
 
 	const fileOfTable = new Map(
 		filePlans.flatMap((plan) =>
