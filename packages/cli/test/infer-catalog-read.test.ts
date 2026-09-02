@@ -141,11 +141,14 @@ const FIXTURE_ROWS: {
 		},
 	],
 	enumLabels: [{ schema: "app", name: "status", label: "draft", sortOrder: 1 }],
-	identitySequenceOptions: [
+	sequenceOwnership: [
 		{
+			sequenceSchema: "app",
+			sequenceName: "posts_id_seq",
 			schema: "app",
 			table: "posts",
 			column: "id",
+			ownership: "i",
 			startValue: "1",
 			increment: "1",
 			minValue: "1",

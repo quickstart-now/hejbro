@@ -1,13 +1,22 @@
 import { schema } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
-import type { EnumLabelRow } from "../src/infer/catalog";
+import type { EnumLabelRow, InferenceCatalog } from "../src/infer/catalog";
 import {
 	inferEnums,
 	inferRoleNames,
 	notInferredSummary,
 	standaloneSequences,
 } from "../src/infer/rest";
+
+const emptyInferenceCatalog = (): InferenceCatalog => ({
+	columnDetails: [],
+	foreignKeyDetails: [],
+	checkExpressions: [],
+	indexDetails: [],
+	enumLabels: [],
+	sequenceOwnership: [],
+});
 
 const emptyCatalog = (): Catalog => ({
 	schemas: [],
@@ -104,21 +113,56 @@ describe("notInferredSummary / 1.5", () => {
 	});
 });
 
-describe("standaloneSequences / 1.5", () => {
-	it("names every sequence read, since none has a declaration path (D66: no defineSequence() in the public DSL)", () => {
-		// Every sequence hejbro ever *emits* is synthesized from a serial or
-		// identity column (D66, engine/generate.ts's own synthesizeSequence
-		// Declarations comment) -- there is no way to declare a standalone
-		// one, identity-owned or not. This module does not attempt to tell
-		// the two apart (open question, reported to ci-planner): it names
-		// every sequence the shared inventory read, full stop.
+describe("standaloneSequences / 1.5b (CI-G1-R1-10 (D))", () => {
+	it("names only the sequence no column owns -- identity- and serial-owned ones are excluded", () => {
+		// Three sequences: one an identity column owns (already expressed by
+		// that column's own declaration), one a serial column owns (D66:
+		// the DSL synthesizes it from serial()/bigserial()/smallserial()),
+		// and one no column owns at all -- only the third is a real loss.
 		const catalog: Catalog = {
 			...emptyCatalog(),
-			sequences: [{ schema: "app", name: "posts_id_seq" }],
+			sequences: [
+				{ schema: "app", name: "posts_id_seq" },
+				{ schema: "app", name: "legacy_id_seq" },
+				{ schema: "app", name: "orphan_seq" },
+			],
+		};
+		const inferenceCatalog: InferenceCatalog = {
+			...emptyInferenceCatalog(),
+			sequenceOwnership: [
+				{
+					sequenceSchema: "app",
+					sequenceName: "posts_id_seq",
+					schema: "app",
+					table: "posts",
+					column: "id",
+					ownership: "i",
+					startValue: "1",
+					increment: "1",
+					minValue: "1",
+					maxValue: "9223372036854775807",
+					cache: "1",
+					cycle: false,
+				},
+				{
+					sequenceSchema: "app",
+					sequenceName: "legacy_id_seq",
+					schema: "app",
+					table: "legacy",
+					column: "id",
+					ownership: "a",
+					startValue: "1",
+					increment: "1",
+					minValue: "1",
+					maxValue: "2147483647",
+					cache: "1",
+					cycle: false,
+				},
+			],
 		};
 
-		expect(standaloneSequences(catalog)).toEqual([
-			{ schema: "app", name: "posts_id_seq" },
+		expect(standaloneSequences(catalog, inferenceCatalog)).toEqual([
+			{ schema: "app", name: "orphan_seq" },
 		]);
 	});
 });

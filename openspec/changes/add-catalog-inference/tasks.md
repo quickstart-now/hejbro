@@ -95,13 +95,27 @@ public surface.
 ## 2. Declarations from a snapshot (#604)
 Files: `packages/cli/src/declare-emit/*.ts` (new), tests
 
-- [ ] 2.1 (~9m) [design] The source shape: one file per schema, imports,
-      `schema()`/`table()`/`pgEnum()`, column builders per type family,
-      foreign keys via `references`, the header comment carrying the
-      loss report. Failing test: `declare-emit.test.ts` golden.
-- [ ] 2.2 (~8m) Round trip: emitted source, loaded and generated against
-      an empty snapshot, yields DDL equal to the fixture's objects.
-      Failing test: `declare-emit-roundtrip.test.ts`.
+- [ ] 2.1 (~10m) [design, settled] The source shape: one file per
+      schema, named `<schema>.schema.ts` (only the file name is made
+      safe, and the original schema name goes in the loss report);
+      named imports from `hejbro`, alphabetical, only the symbols the
+      file uses — the barrel carries vocabulary only (#471), so an
+      engine symbol appearing there is itself a failure; declaration
+      order `schema()` → `pgEnum()` (labels in catalog order) →
+      `table()` in foreign-key topological order, a cycle written with
+      the column-level `.references(() => …)` thunk; a fixed builder
+      chaining order, so the output is deterministic; `index(...)` and
+      `check(...)` carrying their catalog names; and a header comment
+      holding the loss report in full plus the sentence that this file
+      is now the repository's own. Failing test: `declare-emit.test.ts`
+      — a golden, **and** the emitted source loaded and run through
+      `generateMigration`, its DDL compared object by object against the
+      fixture database's own (a golden proves the strings; only running
+      it proves the module).
+- [ ] 2.2 (~8m) Round trip over the examples' own database rather than
+      the fixture: emitted source, loaded and generated against an empty
+      snapshot, yields DDL equal to that database's objects. Failing
+      test: `declare-emit-roundtrip.test.ts`.
 
 ## 3. The import command (#604)
 Files: `packages/cli/src/commands/import.ts` (new — its codes are string

@@ -24,6 +24,7 @@ const baseFacts: InferredColumnFacts = {
 	identityKind: "",
 	generatedKind: "",
 	identityOptions: null,
+	isSerialOwned: false,
 	enumDeclaration: null,
 };
 
@@ -249,5 +250,61 @@ describe("inferColumnDeclaration / 1.3 default, identity, generated", () => {
 		expect(sql).toContain("generated always as identity");
 		expect(sql).not.toContain("start with");
 		expect(sql).not.toContain("increment by");
+	});
+});
+
+describe("inferColumnDeclaration / 1.5c serial ownership (CI-G1-R1-10 (D))", () => {
+	it("maps a serial-owned integer column to the matching serial builder, never a raw nextval default", () => {
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "integer",
+			baseTypeName: "int4",
+			notNull: true,
+			catalogDefault: "nextval('app.widgets_id_seq'::regclass)",
+			isSerialOwned: true,
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		const sql = createSqlFor(result.builder);
+		// Real generateMigration output (not guessed): core's own serial()
+		// synthesizes a real sequence declaration plus an owned-by clause
+		// and an explicit `set default nextval(...)`, rather than the
+		// inline `col serial` shorthand -- the plain integer type is what
+		// actually appears on the column itself.
+		expect(sql).toContain('"col" integer not null');
+		expect(sql).toContain('create sequence "app"."widgets_col_seq"');
+		expect(sql).toContain(
+			'alter sequence "app"."widgets_col_seq" owned by "app"."widgets"."col"',
+		);
+		expect(sql).toContain("set default nextval('app.widgets_col_seq')");
+	});
+
+	it("keeps a nextval default on a sequence this column does not own as a plain raw default, never serial (1.5c's own trap)", () => {
+		// Same shape as the serial case above -- integer, not-null, a
+		// nextval(...) default -- except isSerialOwned is false, the way
+		// the adapter reports it for a column whose default merely
+		// *references* a sequence with no `ALTER SEQUENCE ... OWNED BY`
+		// relationship to this column at all. Converting this to serial()
+		// would silently declare an ownership Postgres itself never made.
+		const result = inferColumnDeclaration({
+			...baseFacts,
+			sqlType: "integer",
+			baseTypeName: "int4",
+			notNull: true,
+			catalogDefault: "nextval('app.orphan_seq'::regclass)",
+			isSerialOwned: false,
+		});
+
+		expect(result.kind).toBe("declared");
+		if (result.kind !== "declared") {
+			throw new Error("expected a declared column");
+		}
+		const sql = createSqlFor(result.builder);
+		expect(sql).toContain('"col" integer not null');
+		expect(sql).toContain("default nextval('app.orphan_seq'::regclass)");
+		expect(sql).not.toContain("serial");
 	});
 });

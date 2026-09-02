@@ -142,6 +142,16 @@ const FIXTURE_DDL = `
 	create table infer_probe.naming_probe (
 		"createdAt" timestamptz
 	);
+
+	-- CI-G1-R1-10 (D): the three-way sequence split -- identity-owned
+	-- (parents.id/children.id above), serial-owned (legacy.id, deptype
+	-- 'a'), and standalone (orphan_seq, no OWNED BY at all, only an
+	-- incidental nextval() default with no ownership dependency).
+	create sequence infer_probe.orphan_seq;
+	create table infer_probe.legacy (
+		id serial primary key,
+		external_id integer default nextval('infer_probe.orphan_seq')
+	);
 `;
 
 beforeAll(async () => {
@@ -210,8 +220,11 @@ describe("readInferenceCatalog / 1.2b live witness", () => {
 		);
 		expect(idColumn?.identityKind).toBe("d");
 
-		const identityOptions = catalog.identitySequenceOptions.find(
-			(row) => row.schema === "infer_probe" && row.table === "parents",
+		const identityOptions = catalog.sequenceOwnership.find(
+			(row) =>
+				row.schema === "infer_probe" &&
+				row.table === "parents" &&
+				row.ownership === "i",
 		);
 		expect(identityOptions?.startValue).toBe("5");
 		expect(identityOptions?.increment).toBe("2");
@@ -235,13 +248,19 @@ describe("readInferenceCatalog / 1.2b live witness", () => {
 	// differs" rule depends on this row actually equalling Postgres's own
 	// defaults, which is exactly what this pins.
 	it("reads Postgres's own defaults for an identity column with no options named", () => {
-		const childIdentityOptions = catalog.identitySequenceOptions.find(
-			(row) => row.schema === "infer_probe" && row.table === "children",
+		const childIdentityOptions = catalog.sequenceOwnership.find(
+			(row) =>
+				row.schema === "infer_probe" &&
+				row.table === "children" &&
+				row.ownership === "i",
 		);
 		expect(childIdentityOptions).toEqual({
+			sequenceSchema: "infer_probe",
+			sequenceName: "children_id_seq",
 			schema: "infer_probe",
 			table: "children",
 			column: "id",
+			ownership: "i",
 			startValue: "1",
 			increment: "1",
 			minValue: "1",
@@ -328,6 +347,32 @@ describe("readInferenceCatalog / 1.2b live witness", () => {
 			(row) => row.schema === "infer_probe" && row.name === "mood",
 		);
 		expect(enumRow).toBeDefined();
+	});
+
+	// CI-G1-R1-10 (D): the three-way split, live -- identity ('i') is
+	// already pinned above (parents.id/children.id); this is the other
+	// two branches, and the one negative (orphan_seq owns nothing).
+	it("reads a serial column's own sequence ownership as 'a', distinct from identity's 'i'", () => {
+		const serialOwnership = catalog.sequenceOwnership.find(
+			(row) =>
+				row.schema === "infer_probe" &&
+				row.table === "legacy" &&
+				row.column === "id",
+		);
+		expect(serialOwnership?.ownership).toBe("a");
+		expect(serialOwnership?.sequenceName).toBe("legacy_id_seq");
+	});
+
+	it("never reports a standalone sequence's incidental nextval() default as ownership", () => {
+		// orphan_seq backs external_id's default via a plain nextval() call,
+		// never `ALTER SEQUENCE ... OWNED BY` -- no row should name it at
+		// all, for any column, at any ownership kind.
+		const anyOwnership = catalog.sequenceOwnership.find(
+			(row) =>
+				row.sequenceSchema === "infer_probe" &&
+				row.sequenceName === "orphan_seq",
+		);
+		expect(anyOwnership).toBeUndefined();
 	});
 
 	// CI-G1-R1-06 (B): "a named UNIQUE table constraint's backing index

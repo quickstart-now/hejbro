@@ -27,7 +27,7 @@ const emptyInferenceCatalog = (): InferenceCatalog => ({
 	checkExpressions: [],
 	indexDetails: [],
 	enumLabels: [],
-	identitySequenceOptions: [],
+	sequenceOwnership: [],
 });
 
 describe("describeCatalog / 1.6", () => {

@@ -29,7 +29,7 @@ const emptyInferenceCatalog = (): InferenceCatalog => ({
 	checkExpressions: [],
 	indexDetails: [],
 	enumLabels: [],
-	identitySequenceOptions: [],
+	sequenceOwnership: [],
 });
 
 describe("mergeTableFacts / 1.4b adapter", () => {

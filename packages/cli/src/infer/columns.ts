@@ -1,6 +1,7 @@
 import type { ColumnBuilder, EnumDeclaration } from "@hejbro/core";
 import {
 	bigint,
+	bigserial,
 	boolean,
 	bytea,
 	char,
@@ -15,7 +16,9 @@ import {
 	macaddr,
 	numeric,
 	real,
+	serial,
 	smallint,
+	smallserial,
 	sql,
 	text,
 	time,
@@ -70,6 +73,18 @@ export type InferredColumnFacts = {
 		readonly cycle: boolean;
 	} | null;
 	/**
+	 * `pg_depend`'s own `deptype = 'a'` on this column's owned sequence
+	 * (CI-G1-R1-10 (D)) -- a `serial`/`smallserial`/`bigserial` column's
+	 * own dependency, distinct from identity's `'i'`. When true (and
+	 * `baseTypeName` is an integer type), the serial builder expresses
+	 * both the type and the default; `catalogDefault`'s `nextval(...)`
+	 * text is not carried, since the DSL synthesizes it. A `nextval(...)`
+	 * default whose column this is `false` for is *not* owned by this
+	 * column -- kept as a plain raw default and reported as an
+	 * approximation (1.7), never miscategorized as serial.
+	 */
+	readonly isSerialOwned: boolean;
+	/**
 	 * Set (by the caller assembling a table's columns, 1.4) when
 	 * `baseTypeKind === "e"` -- the *same* `EnumDeclaration` instance every
 	 * other column using this enum type gets, never a fresh `pgEnum(...)`
@@ -121,6 +136,29 @@ const SIMPLE_TYPE_BUILDERS: Readonly<Record<string, () => ColumnBuilder>> = {
 	inet: () => inet(),
 	cidr: () => cidr(),
 	macaddr: () => macaddr(),
+};
+
+/**
+ * `pg_type.typname` (an integer family) to the serial-family builder
+ * that expresses it -- used only when the column's own `pg_depend`
+ * (`deptype = 'a'`) shows it owns the sequence its default calls
+ * (CI-G1-R1-10 (D)): the DSL synthesizes both the sequence and the
+ * `nextval(...)` default from this one builder, so neither is carried
+ * separately.
+ */
+const SERIAL_BUILDERS: Readonly<Record<string, () => ColumnBuilder>> = {
+	int2: () => smallserial(),
+	int4: () => serial(),
+	int8: () => bigserial(),
+};
+
+const serialBuilderFor = (
+	facts: InferredColumnFacts,
+): (() => ColumnBuilder) | undefined => {
+	if (!facts.isSerialOwned || facts.baseTypeName === null) {
+		return undefined;
+	}
+	return SERIAL_BUILDERS[facts.baseTypeName];
 };
 
 const NUMERIC_PRECISION_SCALE = /numeric\((\d+),(\d+)\)/;
@@ -314,6 +352,14 @@ export const inferColumnDeclaration = (
 	}
 	if (facts.baseTypeName === null) {
 		return { kind: "loss", loss };
+	}
+	const serialFactory = serialBuilderFor(facts);
+	if (serialFactory !== undefined) {
+		const declaredSerial = withNotNull(
+			applyArray(serialFactory(), facts.isArray),
+			facts.notNull,
+		);
+		return { kind: "declared", builder: declaredSerial };
 	}
 	const factory = baseBuilder(facts.baseTypeName, facts.sqlType);
 	if (factory === null) {

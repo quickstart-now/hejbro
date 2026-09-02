@@ -20,6 +20,7 @@ const columnFacts = (
 	identityKind: "",
 	generatedKind: "",
 	identityOptions: null,
+	isSerialOwned: false,
 	enumDeclaration: null,
 	...overrides,
 });

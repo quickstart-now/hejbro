@@ -31,16 +31,24 @@ const findColumnDetail = (
 			detail.name === row.name,
 	);
 
+const findSequenceOwnership = (
+	inferenceCatalog: InferenceCatalog,
+	row: ColumnRow,
+	ownership: "i" | "a",
+) =>
+	inferenceCatalog.sequenceOwnership.find(
+		(option) =>
+			option.schema === row.schema &&
+			option.table === row.table &&
+			option.column === row.name &&
+			option.ownership === ownership,
+	);
+
 const findIdentityOptions = (
 	inferenceCatalog: InferenceCatalog,
 	row: ColumnRow,
 ): InferredColumnFacts["identityOptions"] => {
-	const found = inferenceCatalog.identitySequenceOptions.find(
-		(option) =>
-			option.schema === row.schema &&
-			option.table === row.table &&
-			option.column === row.name,
-	);
+	const found = findSequenceOwnership(inferenceCatalog, row, "i");
 	if (found === undefined) {
 		return null;
 	}
@@ -53,6 +61,12 @@ const findIdentityOptions = (
 		cycle: found.cycle,
 	};
 };
+
+/** CI-G1-R1-10 (D): a serial-family column's own `pg_depend` auto dependency (`deptype = 'a'`) on the sequence its default calls -- distinct from identity's `'i'`. */
+const isSerialOwned = (
+	inferenceCatalog: InferenceCatalog,
+	row: ColumnRow,
+): boolean => findSequenceOwnership(inferenceCatalog, row, "a") !== undefined;
 
 const enumDeclarationFor = (
 	row: ColumnRow,
@@ -90,6 +104,7 @@ const columnFacts = (
 		identityKind: detail?.identityKind ?? "",
 		generatedKind: detail?.generatedKind ?? "",
 		identityOptions: findIdentityOptions(inferenceCatalog, row),
+		isSerialOwned: isSerialOwned(inferenceCatalog, row),
 		enumDeclaration: enumDeclarationFor(row, enumsByIdentity),
 	};
 };
@@ -142,6 +157,7 @@ const foreignKeysFor = (
 							identityKind: "",
 							generatedKind: "",
 							identityOptions: null,
+							isSerialOwned: false,
 							enumDeclaration: null,
 						},
 					})),

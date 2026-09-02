@@ -9,7 +9,7 @@ import type {
 	TriggerRow,
 	ViewRow,
 } from "../check/catalog";
-import type { EnumLabelRow } from "./catalog";
+import type { EnumLabelRow, InferenceCatalog } from "./catalog";
 
 export type InferredEnums = {
 	readonly declarations: ReadonlyArray<EnumDeclaration>;
@@ -105,18 +105,26 @@ export const notInferredSummary = (catalog: Catalog): NotInferredSummary => ({
 });
 
 /**
- * Every sequence the shared inventory reads, unfiltered -- there is no
- * `defineSequence()` in `@hejbro/core`'s public DSL (D66,
- * `engine/generate.ts`'s own `synthesizeSequenceDeclarations` comment):
- * every sequence hejbro ever emits is synthesized from a `serial`-family
- * or identity column, never declared standalone. This module does not
- * attempt to tell an identity-owned sequence apart from a genuinely
- * standalone one (open question reported alongside this group,
- * CI-G1-R1-06 (D)): `identitySequenceOptions` names the owning column,
- * never the sequence's own schema/name, so nothing here can join the
- * two. Every sequence is therefore named as not inferred, including
- * ones a column's own identity declaration already accounts for.
+ * Sequences no column owns (CI-G1-R1-10 (D), the lead's three-way
+ * split): an identity-owned sequence (`sequenceOwnership`'s own
+ * `ownership: "i"`) is already expressed by that column's identity
+ * declaration, and a serial-owned one (`"a"`) by its `serial`-family
+ * builder (D66: the DSL synthesizes both from that one builder) --
+ * neither is a loss. A sequence in the shared inventory's own
+ * `sequences` list with no matching ownership row owns no column at
+ * all and has no declaration path (no `defineSequence()` in the
+ * public DSL): that is the real not-inferred set.
  */
 export const standaloneSequences = (
 	catalog: Catalog,
-): ReadonlyArray<SequenceRow> => catalog.sequences;
+	inferenceCatalog: InferenceCatalog,
+): ReadonlyArray<SequenceRow> => {
+	const owned = new Set(
+		inferenceCatalog.sequenceOwnership.map(
+			(row) => `${row.sequenceSchema}.${row.sequenceName}`,
+		),
+	);
+	return catalog.sequences.filter(
+		(sequence) => !owned.has(`${sequence.schema}.${sequence.name}`),
+	);
+};

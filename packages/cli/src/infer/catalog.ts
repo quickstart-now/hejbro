@@ -89,11 +89,26 @@ const enumLabelRow = z.object({
 });
 export type EnumLabelRow = z.infer<typeof enumLabelRow>;
 
-/** `pg_sequence`'s own bigint columns arrive as text (node-postgres's int8 default), never a JS `number`. */
-const identitySequenceOptionRow = z.object({
+/**
+ * A sequence's own facts, plus who owns it and how (CI-G1-R1-10 (D) --
+ * the lead's three-way split): `ownership` is `pg_depend.deptype`,
+ * `"i"` (identity, `.generatedAlwaysAsIdentity()`/
+ * `.generatedByDefaultAsIdentity()` already express it) or `"a"`
+ * (a `serial`-family column's own auto dependency -- the DSL
+ * synthesizes this sequence from `serial()`/`bigserial()`/
+ * `smallserial()`, D66). A sequence absent from this array (present in
+ * `check/catalog.ts`'s shared `sequences` inventory but not here) owns
+ * no column and is standalone -- not inferred (no `defineSequence()`
+ * in the public DSL). `pg_sequence`'s own bigint columns arrive as
+ * text (node-postgres's int8 default), never a JS `number`.
+ */
+const sequenceOwnershipRow = z.object({
+	sequenceSchema: z.string(),
+	sequenceName: z.string(),
 	schema: z.string(),
 	table: z.string(),
 	column: z.string(),
+	ownership: z.enum(["i", "a"]),
 	startValue: z.string(),
 	increment: z.string(),
 	minValue: z.string(),
@@ -101,9 +116,7 @@ const identitySequenceOptionRow = z.object({
 	cache: z.string(),
 	cycle: z.boolean(),
 });
-export type IdentitySequenceOptionRow = z.infer<
-	typeof identitySequenceOptionRow
->;
+export type SequenceOwnershipRow = z.infer<typeof sequenceOwnershipRow>;
 
 /**
  * One query per detail concern, parameterless and read-only like
@@ -186,22 +199,26 @@ export const INFER_CATALOG_QUERIES = {
 		join pg_type t on t.oid = e.enumtypid
 		join pg_namespace n on n.oid = t.typnamespace
 	`,
-	identitySequenceOptions: `
-		select n.nspname as schema, c.relname as "table", a.attname as "column",
+	sequenceOwnership: `
+		select sn.nspname as "sequenceSchema", seqc.relname as "sequenceName",
+			n.nspname as schema, c.relname as "table", a.attname as "column",
+			dep.deptype as ownership,
 			seq.seqstart as "startValue",
 			seq.seqincrement as increment,
 			seq.seqmin as "minValue",
 			seq.seqmax as "maxValue",
 			seq.seqcache as cache,
 			seq.seqcycle as cycle
-		from pg_attribute a
-		join pg_class c on c.oid = a.attrelid
-		join pg_namespace n on n.oid = c.relnamespace
+		from pg_class seqc
+		join pg_namespace sn on sn.oid = seqc.relnamespace
 		join pg_depend dep
-			on dep.refobjid = c.oid and dep.refobjsubid = a.attnum and dep.deptype = 'i'
-		join pg_class seqc on seqc.oid = dep.objid and seqc.relkind = 'S'
+			on dep.objid = seqc.oid and dep.deptype in ('i','a')
+		join pg_class c on c.oid = dep.refobjid
+		join pg_namespace n on n.oid = c.relnamespace
+		join pg_attribute a
+			on a.attrelid = dep.refobjid and a.attnum = dep.refobjsubid
 		join pg_sequence seq on seq.seqrelid = seqc.oid
-		where a.attidentity <> ''
+		where seqc.relkind = 'S' and dep.refobjsubid > 0
 	`,
 } as const satisfies Readonly<Record<string, string>>;
 
@@ -211,7 +228,7 @@ export type InferenceCatalog = {
 	readonly checkExpressions: ReadonlyArray<CheckExpressionRow>;
 	readonly indexDetails: ReadonlyArray<IndexDetailRow>;
 	readonly enumLabels: ReadonlyArray<EnumLabelRow>;
-	readonly identitySequenceOptions: ReadonlyArray<IdentitySequenceOptionRow>;
+	readonly sequenceOwnership: ReadonlyArray<SequenceOwnershipRow>;
 };
 
 /** Runs one inference-catalog query and validates every row against `rowSchema` -- the system-boundary check for data arriving from a live database (mirrors `check/catalog.ts`'s `runCatalogQuery`). */
@@ -245,7 +262,7 @@ export const readInferenceCatalog = async (
 		checkExpressions,
 		indexDetails,
 		enumLabels,
-		identitySequenceOptions,
+		sequenceOwnership,
 	] = await Promise.all([
 		runInferQuery(
 			session,
@@ -266,8 +283,8 @@ export const readInferenceCatalog = async (
 		runInferQuery(session, INFER_CATALOG_QUERIES.enumLabels, enumLabelRow),
 		runInferQuery(
 			session,
-			INFER_CATALOG_QUERIES.identitySequenceOptions,
-			identitySequenceOptionRow,
+			INFER_CATALOG_QUERIES.sequenceOwnership,
+			sequenceOwnershipRow,
 		),
 	]);
 	return {
@@ -276,6 +293,6 @@ export const readInferenceCatalog = async (
 		checkExpressions,
 		indexDetails,
 		enumLabels,
-		identitySequenceOptions,
+		sequenceOwnership,
 	};
 };
