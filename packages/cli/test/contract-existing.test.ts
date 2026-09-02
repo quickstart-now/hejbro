@@ -6,7 +6,10 @@ import { loadEmittedContract } from "./support/load-emitted-contract";
 
 const app = schema("app");
 const ORIGIN = {
-	source: "git" as const, commit: "abc123", exportHash: "sha256:deadbeef" };
+	source: "git" as const,
+	commit: "abc123",
+	exportHash: "sha256:deadbeef",
+};
 
 const buildFixture = () => {
 	const authUsers = existingTable("auth", "users", {
