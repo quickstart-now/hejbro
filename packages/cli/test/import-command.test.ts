@@ -1,6 +1,7 @@
 import {
 	existsSync,
 	mkdirSync,
+	mkdtempSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -101,11 +102,7 @@ const depsFor = (result: InferCatalogResult): ImportDeps => ({
 let cwd = "";
 
 beforeEach(() => {
-	cwd = join(
-		tmpdir(),
-		`hejbro-import-command-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-	);
-	mkdirSync(cwd, { recursive: true });
+	cwd = mkdtempSync(join(tmpdir(), "hejbro-import-command-test-"));
 });
 
 afterEach(() => {
@@ -173,14 +170,30 @@ describe("runImport / 3.1", () => {
 		expect(outcome.stdout).toContain(lossLine);
 	});
 
-	it("never overwrites an existing file", async () => {
+	it("never overwrites an existing file -- proved over two schemas, only one of which already exists", async () => {
+		// A single-file fixture can't tell "refused before writing" apart
+		// from "wrote one file, then failed on the next" -- with two
+		// schemas and only `app`'s file pre-existing, the untouched
+		// `billing` file must never appear at all.
 		mkdirSync(join(cwd, "src/schema"), { recursive: true });
 		writeFileSync(join(cwd, "src/schema/app.schema.ts"), "// hand-written\n");
-		const result = resultFor([table("app", "widgets", [idColumn])]);
+		const result = resultFor([
+			table("app", "widgets", [idColumn]),
+			table("billing", "invoices", [idColumn]),
+		]);
 
 		const outcome = await runImport(
 			cwd,
-			["--url", "postgres://fixture", "--schema", "app", "--out", "src/schema"],
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"app",
+				"--schema",
+				"billing",
+				"--out",
+				"src/schema",
+			],
 			depsFor(result),
 		);
 
@@ -190,9 +203,40 @@ describe("runImport / 3.1", () => {
 		expect(readFileSync(join(cwd, "src/schema/app.schema.ts"), "utf8")).toBe(
 			"// hand-written\n",
 		);
+		expect(existsSync(join(cwd, "src/schema/billing.schema.ts"))).toBe(false);
 	});
 
-	it("refuses to guess which schemas to read when --schema is not given", async () => {
+	it("fails when the destination cannot be written, and writes nothing", async () => {
+		// `--out` names a path segment that is already a plain file, not a
+		// directory, so `mkdir` itself fails (ENOTDIR) before any file is
+		// written -- proves the same "wrote nothing" property as the
+		// overwrite case, for the other refusal path.
+		writeFileSync(join(cwd, "blocked"), "not a directory\n");
+		const result = resultFor([table("app", "widgets", [idColumn])]);
+
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"app",
+				"--out",
+				"blocked/schema",
+			],
+			depsFor(result),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("import-destination-unwritable");
+		expect(outcome.stderr).toContain("blocked/schema");
+		expect(readFileSync(join(cwd, "blocked"), "utf8")).toBe(
+			"not a directory\n",
+		);
+		expect(existsSync(join(cwd, "blocked/schema/app.schema.ts"))).toBe(false);
+	});
+
+	it("refuses to guess which schemas to read when --schema is not given, and shows the common answer", async () => {
 		const outcome = await runImport(
 			cwd,
 			["--url", "postgres://fixture", "--out", "src/schema"],
@@ -202,6 +246,7 @@ describe("runImport / 3.1", () => {
 		expect(outcome.exitCode).toBe(1);
 		expect(outcome.stderr).toContain("import-schema-missing");
 		expect(outcome.stderr).toContain("--schema");
+		expect(outcome.stderr).toContain("--schema public");
 		expect(existsSync(join(cwd, "src/schema"))).toBe(false);
 	});
 

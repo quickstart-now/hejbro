@@ -197,7 +197,10 @@ Files: `packages/cli/test/*.integration.test.ts`, `skills/hejbro/
 references/brownfield-adoption.md`, the polyrepo reference,
 `.changeset/*.md`
 
-- [ ] 5.1 (~9m) Import the examples' postgres database (applied with the
+- [ ] 5.1 (~9m) Runs the real command, with no test seam standing in for
+      the reading — group 3's own suite injects one, so this is the only
+      place the command's wiring to the inference is exercised. Import
+      the examples' postgres database (applied with the
       examples' own chain), generate against empty, compare objects with
       the examples' snapshot; pull a contract and read one table through
       it. Both majors.
