@@ -22,7 +22,7 @@ import type {
 	ExecuteResult,
 	FunctionDeclaration,
 	InsertFinal,
-	LeftJoinedBrand,
+	LeftJoinedBrand<never>,
 	ReturningProjection,
 	ScopedDb,
 	SelectLimited,
@@ -166,7 +166,7 @@ type _QueryTypesPresent = [
 // reaching users, so the construction is checked, not assumed.
 type _CoreTypesPresent = [
 	DeclaredCteMarker,
-	LeftJoinedBrand,
+	LeftJoinedBrand<never>,
 	UntrackedJoins,
 	FunctionDeclaration,
 	Table,
