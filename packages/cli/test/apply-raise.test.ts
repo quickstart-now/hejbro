@@ -1,3 +1,12 @@
+import {
+	emptySnapshot,
+	existingTable,
+	generateMigration,
+	getTableMeta,
+	schema,
+	table,
+	uuid,
+} from "@hejbro/core";
 import type { CompileResult, Driver, DriverSession } from "@hejbro/query";
 import { describe, expect, it } from "vitest";
 import { readLedger } from "../src/apply/ledger";
@@ -248,5 +257,51 @@ describe("applyRaise / 6.3", () => {
 			exists: true,
 			applied: [{ filename: vendoredFile.fileName, origin: "raised" }],
 		});
+	});
+});
+
+// D106 R1, N6: the `cli-commands` requirement now names `raise` ("hejbro
+// raise SHALL be unaffected by such a declaration"), so a claim with no
+// observer at all would be exactly the N2-shaped gap evaluation.md
+// already flagged elsewhere. `applyRaise` structurally cannot see a
+// declaration (only opaque SQL text and the ledger, `SnapshotFile`'s own
+// shape) -- this pin exercises that structural fact end-to-end instead
+// of only citing it: the SQL raised here is a REAL `generateMigration`
+// output for a schema that includes an `existingTable()`, not a
+// hand-written string, so a future change that somehow made an existing
+// declaration leak into generated SQL would surface here too.
+describe("applyRaise / 6.1 (D106 R1, N6)", () => {
+	it("raises a real migration from a schema with an existing declaration cleanly, recording the ledger and naming nothing about the existing table", async () => {
+		const app = schema("uo_raise");
+		const authUsers = existingTable("uo_raise", "users", { id: uuid() });
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			authorId: uuid()
+				.notNull()
+				.references(() => authUsers.id),
+		});
+		const generated = generateMigration({
+			declarations: [app, getTableMeta(authUsers), posts],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(generated.errors).toEqual([]);
+		const generatedFile: SnapshotFile = {
+			fileName: "0001_raise_with_existing.sql",
+			sql: generated.sql,
+			origin: "raised",
+		};
+
+		const { driver } = makeFakeDriver();
+
+		await applyRaise(driver, generatedFile, COMMAND);
+
+		const state = await readLedger(driver);
+		expect(state).toEqual({
+			exists: true,
+			applied: [{ filename: generatedFile.fileName, origin: "raised" }],
+		});
+		expect(generatedFile.sql.toLowerCase()).not.toContain(
+			'create table "uo_raise"."users"',
+		);
 	});
 });

@@ -17,6 +17,7 @@ import {
 } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
 import { predropStatement, statement } from "../sql/statement";
+import { tableIdentity } from "./table-snapshot";
 
 /**
  * A policy's serialized snapshot node. **Compact** (Task 3 audit / D33):
@@ -279,4 +280,8 @@ export const policyKind: ObjectKind<PolicyDeclaration> = {
 			},
 			change,
 		),
+	ownerTableIdentity: (node) => {
+		const snapshot = asPolicySnapshot(node);
+		return tableIdentity(snapshot.schema, snapshot.table);
+	},
 };

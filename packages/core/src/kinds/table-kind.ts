@@ -624,6 +624,15 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		return tableIdentity(tableSnapshot.schema, tableSnapshot.name);
 	},
 	diff: (previous, next, identity) => {
+		// D106 R2: the table's own contract is bidirectional silence —
+		// existing on *either* side suppresses a drop (handover) or a
+		// create (adoption) alike, unlike the objects it fans out into
+		// (`sequenceKind`/`rlsKind`/`policyKind`'s own `ownerTableIdentity`,
+		// `engine/diff-engine.ts`'s `ownerIsExisting`), which the J10
+		// ruling deliberately keyed on `next` alone so adoption still
+		// creates what the declaration now manages. Two different
+		// contracts, not one duplicated — this guard stays, and
+		// `tableKind` does not implement `ownerTableIdentity`.
 		if (isExistingSide(previous) || isExistingSide(next)) {
 			return [];
 		}

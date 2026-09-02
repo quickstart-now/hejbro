@@ -10,6 +10,7 @@ import type { JsonValue } from "../snapshot/stable-json";
 import { qualifyName } from "../sql/identifier";
 import type { SqlStatement } from "../sql/statement";
 import { statement } from "../sql/statement";
+import { tableIdentity } from "./table-snapshot";
 
 /**
  * A table's row-level-security enable/force state — policies are separate
@@ -149,4 +150,8 @@ export const rlsKind: ObjectKind<RlsDeclaration> = {
 		];
 	},
 	emit: (change) => emitHandlers[change.operation](change),
+	ownerTableIdentity: (node) => {
+		const snapshot = asRlsSnapshot(node);
+		return tableIdentity(snapshot.schema, snapshot.table);
+	},
 };

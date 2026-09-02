@@ -849,6 +849,62 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		});
 	});
 
+	// D106 R1, B1: `existingTable()` accepts any column builder, including
+	// serial-family ones -- `resolveTableDeclarations` used to synthesize
+	// that column's backing sequence (and, had `.rls` been set, its
+	// policies too) for *any* table declaration, with no `meta.existing`
+	// guard of its own. The fixture is the evaluator's own reproduction
+	// (evaluation.md), replayed here as a pin.
+	it("an existing table with a serial-family column produces no migration (D106 R1, B1)", () => {
+		const app = schema("uo1b");
+		const baseline = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const legacy = existingTable("uo1b", "legacy", {
+			id: serial(),
+			name: text(),
+		});
+		const result = generateMigration({
+			declarations: [app, getTableMeta(legacy)],
+			previousSnapshot: baseline.snapshot,
+		});
+		expect(result.hasChanges).toBe(false);
+		expect(result.sql).toBe("");
+		expect(
+			result.snapshot.objects["sequence:uo1b.legacy_id_seq"],
+		).toBeUndefined();
+	});
+
+	// D106 R1, B1 removal: the scenario's own removal clause ("a later run
+	// with the declaration changed or removed writes no migration
+	// either") fails the identical way in evaluation.md's reproduction --
+	// a synthesized sequence that should never have existed still had to
+	// be dropped. Pinned so a fix that stops synthesizing the sequence
+	// going forward, but forgets that one might already be sitting in an
+	// older snapshot, can't pass silently.
+	it("removing an existing table with a serial-family column produces no migration (D106 R1, B1 removal)", () => {
+		const app = schema("uo1c");
+		const baseline = generateMigration({
+			declarations: [app],
+			previousSnapshot: emptySnapshot,
+		});
+		const legacy = existingTable("uo1c", "legacy", {
+			id: serial(),
+			name: text(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(legacy)],
+			previousSnapshot: baseline.snapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+	});
+
 	it("changing an existing declaration produces no migration", () => {
 		const app = schema("uo2");
 		const first = existingTable("uo2", "users", { id: uuid() });
@@ -957,6 +1013,209 @@ describe("an existing declaration emits nothing (add-unmanaged-objects, #605)", 
 		expect(secondResult.sql).toBe("");
 		expect(
 			secondResult.snapshot.objects["table:uo6.widgets"],
+		).not.toHaveProperty("existing");
+	});
+
+	// D106 R1, B2: the two tests above use a bare table (no RLS, no
+	// policy, no serial column) — exactly the shape the evaluator found
+	// "cannot reach the fan-out" (evaluation.md's own test-gap note).
+	// These replay the evaluator's own reproduction fixture (RLS + one
+	// policy + a `serial()` primary key) on both handover directions.
+	it("a table changing hands emits nothing, including what it fans out into: managed (with RLS, a policy, and a serial column) to existing", () => {
+		const app = schema("uo7");
+		const managed = table(
+			app,
+			"widgets",
+			{ id: serial().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readLow: rls
+						.policy("read_low")
+						.for("select")
+						.to("anon")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		const firstResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: emptySnapshot,
+		});
+		const existing = existingTable("uo7", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(secondResult.snapshot.objects["table:uo7.widgets"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("an adopted table gains what the declaration manages: existing to managed (with RLS, a policy, and a serial column)", () => {
+		const app = schema("uo8");
+		const existing = existingTable("uo8", "widgets", {
+			id: uuid().primaryKey(),
+		});
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existing)],
+			previousSnapshot: emptySnapshot,
+		});
+		const managed = table(
+			app,
+			"widgets",
+			{ id: serial().primaryKey() },
+			() => ({
+				rls: rls.enabled({
+					readLow: rls
+						.policy("read_low")
+						.for("select")
+						.to("anon")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		const secondResult = generateMigration({
+			declarations: [app, managed],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		// No `create table` -- the table itself already exists. D106 R2's
+		// own mutant (table-kind.ts's guard weakened to `next`-only,
+		// matching the fan-out rule) measured that removing this half
+		// doesn't leak a `create table` at all -- both sides being
+		// present routes to the ALTER path instead -- so this line alone
+		// is not what proves the table needs its own bidirectional guard;
+		// the next line is.
+		expect(secondResult.sql).not.toContain("create table");
+		// The measured failure mode of that same mutant: an existing
+		// declaration's own (unrelated) column shape gets diffed against
+		// the managed declaration's, producing a spurious `alter column
+		// … type …` -- arguably worse than a duplicate create, since nothing
+		// about it looks wrong at a glance. The table's own bidirectional
+		// guard exists specifically so the two declarations' shapes are
+		// never compared to each other at all.
+		expect(secondResult.sql).not.toContain('alter column "id" type');
+		// ...but everything hejbro now manages ON that table is created as
+		// it would be for any managed table -- this is the half of the
+		// judgement that isn't "nothing": adoption is not silent about
+		// what the declaration asks for.
+		expect(secondResult.sql).toContain("create sequence");
+		expect(secondResult.sql).toContain("enable row level security");
+		expect(secondResult.sql).toContain("create policy");
+		expect(
+			secondResult.snapshot.objects["table:uo8.widgets"],
+		).not.toHaveProperty("existing");
+	});
+
+	// D106 R1-04/R1-05: `existingTable()`'s own column list is a partial
+	// claim, not a complete description -- `authUsers` declares only
+	// `{id, email}`, not the platform's real full row shape. uo7/uo8
+	// above use identical columns on both sides of the handover, which
+	// is exactly the shape evaluation.md flagged for the pre-existing
+	// `generate.test.ts:920-955` pins: it "cannot reach" a diff between
+	// two genuinely different column lists for the same table identity.
+	// These two replay uo7/uo8 with the lead's own fixture (existing
+	// declares only `id`; managed declares `id`, `email`, `createdAt`,
+	// plus RLS/a policy/a serial column) so the table's own column diff
+	// has something real to (wrongly) find if the guard doesn't hold —
+	// an `alter table` of any shape (`add column` on adoption, `drop
+	// column` on handover) would mean the two declarations' shapes got
+	// compared to each other, which must never happen for a table on
+	// either side of an existing marker.
+	const buildPartialWidgets = (
+		schemaName: string,
+	): {
+		readonly app: ReturnType<typeof schema>;
+		readonly existingPartial: ReturnType<typeof existingTable>;
+		readonly managedFull: ReturnType<typeof table>;
+	} => {
+		const app = schema(schemaName);
+		const existingPartial = existingTable(schemaName, "widgets", {
+			id: uuid(),
+		});
+		const managedFull = table(
+			app,
+			"widgets",
+			{
+				id: serial().primaryKey(),
+				email: text(),
+				createdAt: timestamptz(),
+			},
+			() => ({
+				rls: rls.enabled({
+					readLow: rls
+						.policy("read_low")
+						.for("select")
+						.to("anon")
+						.using(literal(true)),
+				}),
+			}),
+		);
+		return { app, existingPartial, managedFull };
+	};
+
+	it("a table changing hands emits nothing, even when the existing declaration's own column list is a partial claim: managed (full columns, RLS, a policy, a serial column) to existing (id only)", () => {
+		const { app, existingPartial, managedFull } = buildPartialWidgets("uo9");
+		const firstResult = generateMigration({
+			declarations: [app, managedFull],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, getTableMeta(existingPartial)],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		// Handover is silence in full, the same as uo7's bare-column
+		// case: the table's own guard suppresses its own diff, and
+		// `ownerIsExisting` (`diff-engine.ts`) suppresses the fan-out
+		// objects' drops -- nothing for either declaration's column list
+		// to be compared against, in either direction, so there is
+		// nothing at all to emit.
+		expect(secondResult.hasChanges).toBe(false);
+		expect(secondResult.sql).toBe("");
+		expect(secondResult.snapshot.objects["table:uo9.widgets"]).toMatchObject({
+			existing: true,
+		});
+	});
+
+	it("an adopted table gains what the declaration manages, even when the existing declaration's own column list is a partial claim: existing (id only) to managed (full columns, RLS, a policy, a serial column)", () => {
+		const { app, existingPartial, managedFull } = buildPartialWidgets("uo10");
+		const firstResult = generateMigration({
+			declarations: [app, getTableMeta(existingPartial)],
+			previousSnapshot: emptySnapshot,
+		});
+		const secondResult = generateMigration({
+			declarations: [app, managedFull],
+			previousSnapshot: firstResult.snapshot,
+		});
+		expect(secondResult.errors).toEqual([]);
+		// Deliberately asymmetric with uo9's own `sql === ""`: adoption
+		// legitimately DOES emit `alter table "uo10"."widgets"`
+		// lines -- enabling RLS and wiring the new sequence's own
+		// default are both real `alter table` statements, the fan-out
+		// objects' own creation DDL, not a diff of the table's structure.
+		// The guarantee under test is narrower and precise: no statement
+		// that could only come from comparing the two declarations'
+		// column lists to each other -- no `add column` (what a naive
+		// diff would infer for `email`/`createdAt`, present in `managed`
+		// but absent from the existing declaration's own partial list),
+		// no `drop column`, no `alter column ... type` (uo8's own
+		// probed-and-found leak, D106 R1-03).
+		expect(secondResult.sql).not.toContain("add column");
+		expect(secondResult.sql).not.toContain("drop column");
+		expect(secondResult.sql).not.toContain('alter column "id" type');
+		// ...but the objects hejbro now manages ON that table are still
+		// created normally -- the two contracts (table: bidirectional
+		// silence; fan-out: `next`-only) both hold in the same run.
+		expect(secondResult.sql).toContain("create sequence");
+		expect(secondResult.sql).toContain("enable row level security");
+		expect(secondResult.sql).toContain("create policy");
+		expect(
+			secondResult.snapshot.objects["table:uo10.widgets"],
 		).not.toHaveProperty("existing");
 	});
 });

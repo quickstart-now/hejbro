@@ -138,4 +138,19 @@ export interface ObjectKind<TDeclaration extends HejbroDeclaration> {
 	 * #508, decided when one does.
 	 */
 	readonly noCatalogObjectReason?: string;
+	/**
+	 * `ownerTableIdentity` (D106 R1, B2) — answers "which table declaration
+	 * gave rise to this node", for a kind whose objects are always the
+	 * fan-out of a table declaration (`sequenceKind`/`rlsKind`/
+	 * `policyKind`; `tableKind` answers with its own identity). Optional
+	 * and additive, the same way every other member here widened this
+	 * interface: a kind that doesn't set it (a `grant`, for instance — a
+	 * grant is the user's own standalone declaration, never a table
+	 * fan-out, and MUST NOT answer this) is never asked. `diffSnapshots`
+	 * is the only reader: a key whose owning table identity resolves to
+	 * an `existing` table in `next` is skipped before this kind's own
+	 * `diff` ever runs — a table hejbro does not own gets no drop *or*
+	 * create for what it fans out into, on either side of a handover.
+	 */
+	ownerTableIdentity?(node: JsonValue): string;
 }
