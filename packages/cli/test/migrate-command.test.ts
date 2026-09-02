@@ -513,6 +513,42 @@ describe("runMigrate / 17.1 (D106 M3) verifies the chain before connecting", () 
 		expect(await connectionAttempted()).toBe(1);
 	});
 
+	const writeThreeFileChain = async (): Promise<void> => {
+		const files: ReadonlyArray<readonly [string, string, string]> = [
+			["0001_a.sql", "sha256:aaaa", "sha256:bbbb"],
+			["0002_b.sql", "sha256:bbbb", "sha256:cccc"],
+			["0003_c.sql", "sha256:cccc", "sha256:dddd"],
+		];
+		await Promise.all(
+			files.map(([name, parent, current]) =>
+				writeFixtureFile(
+					cwd,
+					`migrations/${name}`,
+					[
+						"-- hejbro migration",
+						`-- parent-snapshot: ${parent}`,
+						`-- snapshot: ${current}`,
+						`create table "app"."${name.slice(5, 6)}" (id integer);`,
+					].join("\n"),
+				),
+			),
+		);
+	};
+
+	it("opens a connection when a leading run of migrations was removed (stated limitation)", async () => {
+		await writeThreeFileChain();
+		await rm(join(cwd, "migrations", "0001_a.sql"));
+		await rm(join(cwd, "migrations", "0002_b.sql"));
+		expect(await connectionAttempted()).toBe(1);
+	});
+
+	it("opens a connection when a trailing run of migrations was removed (stated limitation)", async () => {
+		await writeThreeFileChain();
+		await rm(join(cwd, "migrations", "0002_b.sql"));
+		await rm(join(cwd, "migrations", "0003_c.sql"));
+		expect(await connectionAttempted()).toBe(1);
+	});
+
 	it("opens a connection when the first migration was removed (stated limitation: the root is taken as given)", async () => {
 		await writeTwoFileChain(cwd, "sha256:bbbb");
 		await rm(join(cwd, "migrations", "0001_a.sql"));

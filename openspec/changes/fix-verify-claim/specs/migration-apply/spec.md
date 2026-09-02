@@ -10,15 +10,18 @@ the same fact `migration-format`'s own requirement states about these
 lines — so applying a chain whose hashes do not agree is applying
 migrations no snapshot vouches for, and the check needs no database to
 make. This is why the chain catches a hash-chain line edited, a file
-removed, or the order rearranged, but not a hand-edit to a migration's
-own SQL body: the chain was never a witness to that body, so a body edit
-is instead what the transaction-control refusal above exists to bound.
+removed, or the order rearranged — between the ends of the chain, as
+the next paragraph bounds it — but not a hand-edit to a migration's own
+SQL body: the chain was never a witness to that body, so a body edit is
+instead what the transaction-control refusal above exists to bound.
 The pre-flight is the chain walk alone — each file's `parent-snapshot:`
 against the previous file's `snapshot:` — and nothing else: the apply
 path reads no snapshot file, so `verify`'s tip check (the last
 migration's `snapshot:` against the on-disk snapshot) is not part of it.
-That leaves both ends of the chain outside its reach, and the following
-SHALL NOT be refused: at the head, an edit to the first migration's
+That leaves both ends of the chain outside its reach — and, at any
+position, a file with no hash lines, which the walk skips as `verify`
+does; the list below names the measured cases, not every possible one —
+and the following SHALL NOT be refused: at the head, an edit to the first migration's
 `parent-snapshot:` line (the root is taken as given, the same rule
 cli-commands' `verify` states) and the removal of the first migration or
 of any leading run of migrations; at the tail, an edit to the last
