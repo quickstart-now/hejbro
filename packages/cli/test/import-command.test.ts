@@ -352,4 +352,49 @@ describe("runImport / 3.1", () => {
 			'Not inferred: nothing to infer in schema "billing".',
 		);
 	});
+
+	/**
+	 * D106 R2-N3: `emptySchemaLines` reached stdout only -- the requirement
+	 * is that a file's header carries the loss report "in full", so a
+	 * reader of the committed file (not the run's own terminal) must see
+	 * the same line. Byte-determinism (the delta's "a second import
+	 * writes the same bytes") has to survive the header growing this
+	 * line, so a second run into a fresh directory is checked too.
+	 */
+	it("carries the empty-schema report line in the written file's own header, byte-identically across two runs", async () => {
+		const argv = [
+			"--url",
+			"postgres://fixture",
+			"--schema",
+			"app",
+			"--schema",
+			"billing",
+			"--out",
+			"src/schema",
+		];
+		const result = resultFor([table("app", "widgets", [idColumn])]);
+
+		const first = await runImport(cwd, argv, depsFor(result));
+		expect(first.exitCode).toBe(0);
+		const firstSource = readFileSync(
+			join(cwd, "src/schema/app.schema.ts"),
+			"utf8",
+		);
+		expect(firstSource).toContain(
+			'Not inferred: nothing to infer in schema "billing".',
+		);
+
+		const cwd2 = mkdtempSync(join(tmpdir(), "hejbro-import-command-test-"));
+		try {
+			const second = await runImport(cwd2, argv, depsFor(result));
+			expect(second.exitCode).toBe(0);
+			const secondSource = readFileSync(
+				join(cwd2, "src/schema/app.schema.ts"),
+				"utf8",
+			);
+			expect(secondSource).toBe(firstSource);
+		} finally {
+			rmSync(cwd2, { recursive: true, force: true });
+		}
+	});
 });
