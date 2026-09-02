@@ -19,12 +19,15 @@ called, not on the bare exported names: `InsertFinal<T>`,
 `UpdateFinal<T>`, `DeleteFinal<T>`, their `*ChainFinal` counterparts and
 `ReturningRow<T>` written with one type argument SHALL keep meaning
 "every declared column", exactly as before, so code that names a stage
-by its bare type keeps compiling and keeps accepting stages that
-requested a projection or no projection. Only the pre-`returning()`
-stage types (`InsertReturnable`/`InsertConflictable`, `UpdateReturnable`/
-`UpdateFilterable`, `DeleteReturnable`/`DeleteFilterable`, and their chain
-counterparts) carry the never-requested instantiation, and that
-instantiation is assignable wherever the bare name is accepted.
+by its bare type keeps compiling and keeps accepting a stage that called
+`returning()` with no projection, and a pre-`returning()` stage. (A
+stage whose `returning()` carries a projection was never assignable to
+the bare name and still is not — that is #634, untouched here.) Only
+the pre-`returning()` stage types (`InsertReturnable`/
+`InsertConflictable`, `UpdateReturnable`/`UpdateFilterable`,
+`DeleteReturnable`/`DeleteFilterable`, and their chain counterparts)
+carry the never-requested instantiation, and that instantiation is
+assignable wherever the bare name is accepted.
 
 #### Scenario: An insert without returning promises no rows
 - **WHEN** a mutation chain is awaited without `returning()` having been
@@ -40,9 +43,9 @@ instantiation is assignable wherever the bare name is accepted.
   declared, exactly as before this requirement
 
 #### Scenario: A bare stage name keeps its meaning
-- **WHEN** a stage that called `returning()` — with or without a
-  projection — is passed where a bare `InsertFinal<T>` (or the update or
-  delete equivalent) is expected, or a pre-`returning()` stage is
+- **WHEN** a stage that called `returning()` with no projection, or a
+  pre-`returning()` stage, is passed where a bare `InsertFinal<T>` (or
+  the update or delete equivalent) is expected
 - **THEN** it compiles as it did before this requirement; the bare name
   accepts every instantiation it accepted
 
