@@ -31,7 +31,9 @@ nullable; and role names from the grants and policies present. The
 description SHALL be built from the catalog reading directly, so every
 column the reading found is carried with a guessed key; a declaration
 round trip is not its source, and a column that no declaration can
-express is therefore still described. The reading SHALL infer no
+express is therefore still described — described, but never contracted:
+a contract carries the columns the snapshot holds, and a column the DSL
+cannot name never reaches the snapshot. The reading SHALL infer no
 function, trigger, policy expression, view body, grant beyond its role
 name, column whose type no column builder expresses, or standalone
 sequence that no column owns — the DSL has no `defineSequence()` (D66)
@@ -43,6 +45,14 @@ sequence that no column owns — the DSL has no `defineSequence()` (D66)
 - **THEN** the snapshot records each of them with its columns, keys and
   constraints, and the enum with its values, and the description marks
   every TypeScript key as guessed
+
+#### Scenario: Two SQL names that collide on one key are both described
+- **WHEN** a table holds `user_id` and a quoted `USER_ID`, whose
+  TypeScript keys collide
+- **THEN** the description carries both columns, the first in physical
+  order under the plain key and the second under the key with the
+  collision suffix, and the loss report names the column that cannot be
+  declared, since only one of the two can be named by a declaration
 
 #### Scenario: What is not inferred is named
 - **WHEN** the database also holds a function, a trigger, a view, a

@@ -100,30 +100,29 @@ const filterInferenceCatalogToSchemas = (
 const isNameRoundTrippable = (sqlName: string, tsKey: string): boolean =>
 	toSnakeCase(tsKey) === sqlName;
 
-/** `pull` carries every column regardless (its own contract, CI-G1-R1-08 (C)) -- only `import`'s starter files omit one whose name cannot round-trip. */
-const tablesForCommand = (
+/**
+ * Neither command's snapshot can carry a column under a name the
+ * database does not have (CI-G1-R1-16): `contract/emit.ts`'s own rule
+ * ("a table fact with no matching snapshot node is dropped, not
+ * guessed at") means `pull`'s contract would silently declare a
+ * column under the wrong name if the snapshot carried it -- excluded
+ * here for both commands, `command` no longer branches this half.
+ */
+const tablesExcludingUndeclarableNames = (
 	tables: ReadonlyArray<InferredTableFacts>,
-	command: InferSourceCommand,
-): ReadonlyArray<InferredTableFacts> => {
-	if (command === "pull") {
-		return tables;
-	}
-	return tables.map((table) => ({
+): ReadonlyArray<InferredTableFacts> =>
+	tables.map((table) => ({
 		...table,
 		columns: table.columns.filter((column) =>
 			isNameRoundTrippable(column.sqlName, column.tsKey),
 		),
 	}));
-};
 
+/** Named in the loss report for both commands (CI-G1-R1-16) -- only the consequence sentence `buildLossReport` renders differs by command. */
 const undeclarableNameColumnsFor = (
 	tables: ReadonlyArray<InferredTableFacts>,
-	command: InferSourceCommand,
-): ReadonlyArray<UndeclarableNameColumn> => {
-	if (command === "pull") {
-		return [];
-	}
-	return tables.flatMap((table) =>
+): ReadonlyArray<UndeclarableNameColumn> =>
+	tables.flatMap((table) =>
 		table.columns
 			.filter((column) => !isNameRoundTrippable(column.sqlName, column.tsKey))
 			.map((column) => ({
@@ -132,7 +131,6 @@ const undeclarableNameColumnsFor = (
 				sqlName: column.sqlName,
 			})),
 	);
-};
 
 /**
  * The single entry point over every `infer/` part (CI-G1-R1-14): one
@@ -181,7 +179,7 @@ export const inferFromCatalog = async (
 		schemaFor,
 	);
 
-	const snapshotTables = tablesForCommand(mergedTables, options.command);
+	const snapshotTables = tablesExcludingUndeclarableNames(mergedTables);
 	const built = snapshotTables.map((table) => inferTable(table));
 	const typeLosses = built.flatMap((result) => result.losses);
 	const declarations: ReadonlyArray<HejbroInput> = [
@@ -203,10 +201,7 @@ export const inferFromCatalog = async (
 		typeLosses,
 		uniqueIndexApproximations: detectUniqueIndexApproximations(catalog),
 		nextvalDefaults: detectNextvalDefaultApproximations(mergedTables),
-		undeclarableNameColumns: undeclarableNameColumnsFor(
-			mergedTables,
-			options.command,
-		),
+		undeclarableNameColumns: undeclarableNameColumnsFor(mergedTables),
 	});
 
 	return { snapshot: migration.snapshot, description, lossReport };

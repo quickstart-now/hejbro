@@ -146,18 +146,25 @@ const approximationLines = (
 	),
 ];
 
-/** import only (CI-G1-R1-08 (C)) -- pull's contract carries every column regardless of whether a declaration key can reproduce its SQL name. */
+/** import's own consequence: the table is left only partly declared, and `check` keeps reporting the column until it is declared by hand or renamed in the database. */
+const undeclarableNameLineForImport = (
+	column: UndeclarableNameColumn,
+): string =>
+	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- its SQL name has no declaration key. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is declared by hand or renamed in the database.`;
+
+/** pull's own consequence (CI-G1-R1-16): `contract/emit.ts` drops any table fact with no matching snapshot node, so a column excluded from the snapshot cannot reach the contract at all, regardless of what the description carries -- `link` is the only way out. */
+const undeclarableNameLineForPull = (column: UndeclarableNameColumn): string =>
+	`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- its SQL name has no declaration key, so it cannot be carried in the contract. Link the schema repository to declare it by hand.`;
+
+/** Excluded from both commands' snapshots (CI-G1-R1-16) -- neither can carry a column under a name the database does not have. Only the consequence sentence differs. */
 const undeclarableNameLines = (
 	columns: ReadonlyArray<UndeclarableNameColumn>,
 	command: LossReportFacts["command"],
 ): ReadonlyArray<string> => {
-	if (command !== "import") {
-		return [];
+	if (command === "pull") {
+		return columns.map(undeclarableNameLineForPull);
 	}
-	return columns.map(
-		(column) =>
-			`Omitted: column "${column.schema}.${column.table}.${column.sqlName}" -- its SQL name has no declaration key. The table "${column.schema}.${column.table}" is only partly declared, and \`check\` reports this column until it is declared by hand or renamed in the database.`,
-	);
+	return columns.map(undeclarableNameLineForImport);
 };
 
 const wayOutLine = (command: LossReportFacts["command"]): string => {

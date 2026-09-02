@@ -465,9 +465,12 @@ describe("inferFromCatalog / 1.8 single entry point", () => {
 		);
 	});
 
-	// pull's own contract carries every column regardless (CI-G1-R1-08 (C))
-	// -- the same fact, the opposite outcome for the snapshot half.
-	it("pull: carries an undeclarable-name column in the snapshot too, and never omits it", async () => {
+	// CI-G1-R1-16: contract/emit.ts's own rule ("a table fact with no
+	// matching snapshot node is dropped, not guessed at") means pull's
+	// snapshot half must exclude an undeclarable-name column too, or the
+	// contract would declare a column under a name the database does not
+	// have. Only the loss report's wording differs from import's.
+	it("pull: also omits an undeclarable-name column from the snapshot, and names it with its own consequence", async () => {
 		const result = await inferFromCatalog({
 			session: driver,
 			schemas: ["infer_probe"],
@@ -479,9 +482,11 @@ describe("inferFromCatalog / 1.8 single entry point", () => {
 		] as { readonly columns: ReadonlyArray<{ readonly name: string }> };
 		expect(
 			namingTable.columns.some((column) => column.name === "createdat"),
-		).toBe(true);
-		expect(result.lossReport.some((line) => line.includes("createdAt"))).toBe(
-			false,
-		);
+		).toBe(false);
+
+		const line = result.lossReport.find((entry) => entry.includes("createdAt"));
+		expect(line).toBeDefined();
+		expect(line).toContain("cannot be carried in the contract");
+		expect(line).not.toContain("only partly declared");
 	});
 });

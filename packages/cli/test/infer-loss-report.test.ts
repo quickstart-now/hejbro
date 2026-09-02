@@ -116,7 +116,7 @@ describe("buildLossReport / 1.7", () => {
 		expect(line).toContain("declared by hand or renamed in the database");
 	});
 
-	it("pull: never omits an undeclarable-name column, and says the way out is linking the schema repository", () => {
+	it("pull: names an undeclarable-name column too (CI-G1-R1-16: contract/emit.ts drops any table fact with no matching snapshot node), with its own consequence", () => {
 		const report = buildLossReport({
 			...emptyFacts("pull"),
 			undeclarableNameColumns: [
@@ -124,11 +124,16 @@ describe("buildLossReport / 1.7", () => {
 			],
 		});
 
-		// pull's own contract carries every column (CI-G1-R1-08 (C)) -- an
-		// undeclarable-name column is never a reason to omit anything, so
-		// this input is not even meaningful for pull; the way-out line is
-		// what actually matters here.
-		expect(report.some((line) => line.includes("link"))).toBe(true);
+		const line = report.find((entry) => entry.includes("createdAt"));
+		expect(line).toBeDefined();
+		expect(line).toContain("app.widgets");
+		// pull's own wording differs from import's: the column cannot reach
+		// the contract at all (never "declared by hand or renamed").
+		expect(line).toContain("cannot be carried in the contract");
+		expect(line).not.toContain("only partly declared");
+		expect(
+			report.some((entry) => entry.includes("link the schema repository")),
+		).toBe(true);
 	});
 
 	it("import: says the way out is hand-editing the starter declarations", () => {

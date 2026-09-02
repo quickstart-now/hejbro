@@ -50,7 +50,5 @@ schema than the catalog.
 #### Scenario: A contract is pulled from a database
 - **WHEN** `hejbro pull --db-url <db>` runs
 - **THEN** a contract is written whose header says it was inferred from
-  a database, whose `Tables` are the inferred tables with guessed keys —
-  two columns whose SQL names collide on one key carried as that key and
-  that key with the collision suffix, both of them present — and the
-  loss report is printed
+  a database, whose `Tables` are the inferred tables with guessed keys,
+  and the loss report is printed
