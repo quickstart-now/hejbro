@@ -418,7 +418,9 @@ check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
 ## 3. The contract, the client, and the witness (#605)
 Files: `packages/cli/src/contract/{tables,emit}.ts`, `packages/query/src/
 client/{synthesize,name-keyed-db,contract-types}.ts`, `packages/
-supabase/src/auth-tables.ts` (doc), `examples/*/test/*vendor*.test.ts`,
+supabase/src/auth-tables.ts` (doc), `packages/cli/test/two-repo.
+integration.test.ts` (runtime witness), `examples/cli-smoke/test/
+vendored-contract.test.ts` (type witness),
 `skills/hejbro/references/{brownfield-adoption,polyrepo}.md` (measure
 names), `docs/specs/2026-08-19-hejbro-design.md` (D41 amendment note),
 `.changeset/*.md`. `synthesize.ts` is shared with group 1 (see there).
@@ -520,10 +522,101 @@ names), `docs/specs/2026-08-19-hejbro-design.md` (D41 amendment note),
       Gates: `TURBO_FORCE=1 build --force` (7/7), `check` (645 files
       clean), `check-types` (16/16, 0 cached), `test` (64 files/512
       tests, 0 cached — +1 file/+3 tests over G2's close).
-- [ ] 3.2 (~9m) The two-repository witness: the examples' supabase
-      schema exports `authUsers` as existing; the consumer reads a
-      managed table joined to it against a real server (PG15/PG17).
-      Failing test: the existing witness gains the join.
+- [x] 3.2 (~9m) The two-repository witness — the consumer reads a
+      managed table alongside an existing one against a real server.
+
+      **Plan corrected against measurement (R1-06/R1-07)**: this line
+      originally said "the examples' supabase schema exports
+      `authUsers`" — written before the harness was measured, not
+      matching it. `examples/supabase` is **untouched**: measured (②)
+      that `createCliFixtureDir()` (`packages/cli/test/support/
+      cli-runner.ts`) already symlinks `node_modules/@hejbro/supabase`
+      into every throwaway fixture specifically so a fixture schema can
+      `import { authUsers } from "@hejbro/supabase"` — the real example's
+      own 4-step chain (golden migrations, `seed/`, `verify:supabase-
+      image`) has a far larger blast radius than this task needs and the
+      harness was already built to avoid it.
+
+      **A blocker found mid-task, escalated, and settled (owner-approval
+      queue, delta narrowing option ②)**: the vendored `createDb()`'s
+      public `NameKeyedSelectChain` (`packages/query/src/client/
+      name-keyed-db.ts`) has no `.related()` — deliberately absent for
+      **every** table, managed or existing, awaiting a separate
+      filter-syntax ruling (D102/owner-seal "가"), confirmed by
+      `relations.test.ts`'s own doc comment ("this test proves the
+      *mechanism* the eventual public surface will delegate to already
+      works"). The original delta scenario asked for "the consumer
+      reads the managed table with its relation to `auth.users`" —
+      not constructible through the documented one-file consumer
+      surface as it stands, for any table. Rejected: (a) reaching a
+      low-level `db()`/`synthesizeTable()` via a cast to make a witness
+      exist anyway — would overstate what a real consumer's one
+      generated file can do today, the exact failure shape this repo
+      has paid for before; (b) opening `.related()` on the vendored
+      client here — out of scope, and `packages/query/src/client/
+      name-keyed-db.ts` is mid-edit by another piece (tf) at the same
+      time. **Lead narrowed the requirement instead** (spec.md, staged
+      by the lead, bundled unedited): the contract carries the relation
+      (build-time, 3.1's own job); the name-keyed client reads an
+      existing table plainly, like any other; *following* the relation
+      from the client is named out of scope in `proposal.md`, with a
+      follow-up filed as **#653** (Feature, #623 tray) for opening
+      `.related()` on the vendored client later.
+
+      **The witness has three, not two, layers, each its own file
+      (R1-09)**: **① relation resolution** — the contract-emission
+      layer, already 3.1's own observer (the sibling requirement's "an
+      undeclared target still has no relation" and this one's own
+      relation pin) — cited, no new test. **② real server** —
+      `packages/cli/test/two-repo.integration.test.ts`'s own throwaway
+      fixture pair (`AUTH_JOIN_SCHEMA`, real `@hejbro/supabase`
+      `authUsers`), hydrated via the file's existing `psqlCommand` hook
+      (the same one 9.2 already uses for `create database`, extended
+      with `create schema "auth"; create table "auth"."users" (...)`
+      immediately before `raise` — no new seed mechanism, R1-05).
+      Proves the vendored file alone reads the existing table's real
+      rows, and that a managed table's FK onto the hydrated row inserts
+      successfully (the question only a live server answers — a mock
+      can't prove a constraint holds against real data). **③ type** —
+      `examples/cli-smoke/test/vendored-contract.test.ts`'s own D106 m8
+      real-`tsc` idiom (not `vitest`/`expectTypeOf` — lead: "vitest
+      통과 자체는 타입 주장의 증거가 아니다"), not docker-gated, runs
+      under plain `pnpm test`.
+
+      **Single PG image, not `describe.each` (lead ruling)**: neither
+      guarantee this task proves (relation resolution — build-time,
+      3.1; row conversion) varies by major version — the same reasoning
+      `two-repo.integration.test.ts`'s own doc comment already gives
+      for its 3 pre-existing tests. The group's "both majors" line is
+      satisfied by `apply-live.integration.test.ts`'s own
+      `describe.each(["postgres:15-alpine","postgres:17-alpine"])`
+      inside the same `pnpm --filter hejbro test:integration` run —
+      measured: 10 tests under each image (20 total, `--reporter=verbose`
+      grep count), one invocation.
+
+      Real-server tests (②): "the vendored client reads a declared
+      existing table's real rows, and a managed FK onto it inserts
+      successfully" (green) and its mutant counterpart, "an undeclared
+      `authUsers` still lets the FK insert succeed" — **measured, not
+      forced (R1-09 explicit instruction)**: the FK constraint lives on
+      the *managed* table's own declaration regardless of whether
+      `authUsers` is separately exported, and Postgres enforces a
+      constraint against what physically exists, not against what
+      hejbro declared — the insert stayed green on this axis, pinned
+      as its own honest characterization rather than bent into a false
+      red. `packages/cli/test/two-repo.integration.test.ts`: 5/5 green
+      (3 pre-existing + these 2).
+
+      Type tests (③, both pinned permanently, not reverted-after
+      mutants — the declared/undeclared axis toggle IS the mutant, D57
+      pattern already used by `contract-emit.test.ts`'s own control):
+      "a declared existing table's row type is identical on a vendored
+      client and a local `db()` handle" (green — real `tsc`, exit 0,
+      empty stdout) and "an undeclared existing table has no entry to
+      type-check against, so the same consumer code fails tsc" (the
+      identical consumer code, `authUsers` built but never exported —
+      `tsc` exit non-zero, stdout names the missing property).
+      `examples/cli-smoke`: 4/4 tests green (2 pre-existing + these 2).
 - [ ] 3.3 (~7m) Skill sentences (brownfield: an exported `existingTable`
       is now a declaration that emits nothing — the sentence naming the
       hard error goes; polyrepo: existing tables cross the boundary),

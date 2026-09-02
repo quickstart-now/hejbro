@@ -48,6 +48,28 @@ type ContractModule = {
 	readonly createDb: (conn: Driver) => { readonly metrics: MetricsClient };
 };
 
+/** [add-unmanaged-objects, 3.2] The same loosely-typed jiti shape as {@link ContractModule}, for the existing-table + managed-FK fixture. */
+type UsersRow = {
+	readonly id: string;
+	readonly email: string | null;
+};
+type PostsRow = {
+	readonly id: string;
+	readonly authorId: string;
+};
+type AuthJoinClient = {
+	select(): Promise<ReadonlyArray<UsersRow>>;
+};
+type PostsClient = {
+	select(): Promise<ReadonlyArray<PostsRow>>;
+};
+type AuthJoinContractModule = {
+	readonly createDb: (conn: Driver) => {
+		readonly users: AuthJoinClient;
+		readonly posts: PostsClient;
+	};
+};
+
 /**
  * The two-repository witness (group 9, #602) -- not this change's own
  * requirement. It was planned in the sibling change (`add-polyrepo-sync`,
@@ -209,6 +231,37 @@ export const metrics = table(app, "metrics", {
 	amount: numeric(),
 	observedAt: timestamptz(),
 	label: text(),
+});
+`;
+
+/**
+ * [add-unmanaged-objects, 3.2] `authUsers` is `@hejbro/supabase`'s own
+ * `existingTable()` (`packages/supabase/src/auth-tables.ts`) -- real
+ * usage, not a stand-in -- exported here (a real declaration, group 1),
+ * with a managed table's foreign key onto it. `createCliFixtureDir()`
+ * already symlinks `node_modules/@hejbro/supabase` into every fixture
+ * for exactly this import (`support/cli-runner.ts`'s own doc comment).
+ */
+const AUTH_JOIN_SCHEMA = `import { authUsers } from "@hejbro/supabase";
+import { schema, table, uuid } from "hejbro";
+
+export { authUsers };
+
+export const app = schema("app");
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	authorId: uuid().notNull().references(() => authUsers.id),
+});
+`;
+
+/** [mutant, add-unmanaged-objects 3.2] The identical schema, `authUsers` built and referenced but never re-exported -- the undeclared axis, matching what a schema repository looks like today (before this task). */
+const AUTH_JOIN_SCHEMA_UNDECLARED = `import { authUsers } from "@hejbro/supabase";
+import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	authorId: uuid().notNull().references(() => authUsers.id),
 });
 `;
 
@@ -425,5 +478,156 @@ describe("two-repository witness (#602)", () => {
 		// commit's own squashed SQL names the column the old one never had.
 		expect(secondSql).toContain("label");
 		expect(secondSql).not.toBe(firstSql);
+	});
+
+	/**
+	 * [add-unmanaged-objects, 3.2] Hydrates `auth.users` **before**
+	 * `raise` runs -- existing by definition, hejbro never creates it
+	 * (`isExistingSide`'s DDL-blocking guard, group 1), so the platform
+	 * that owns it has to exist first, the same "seed before migrations"
+	 * slot `examples/postgres`'s own integration harness uses for
+	 * `seed/roles.sql` (R1-04) -- here inlined via the same `psqlCommand`
+	 * this file already uses for `create database` (9.2), rather than a
+	 * new seed-file mechanism (R1-05: no new harness).
+	 */
+	const hydrateAuthUsers = (database: string): void => {
+		psqlCommand(
+			container,
+			database,
+			'create schema "auth"; create table "auth"."users" ("id" uuid primary key, "email" text);',
+		);
+	};
+
+	/**
+	 * [add-unmanaged-objects, 3.2] The delta's own narrowed requirement
+	 * (D106/owner judgement, R1-09 — "expose it for reading like any
+	 * other table"; following the relation from the client is out of
+	 * scope, #653): the vendored file alone reads a declared existing
+	 * table's real rows, and a managed table's FK onto it inserts
+	 * successfully against the hydrated row -- the real-server question
+	 * this witness uniquely answers (a mock driver can't prove a
+	 * constraint actually holds against live data).
+	 */
+	it("3.2: the vendored client reads a declared existing table's real rows, and a managed FK onto it inserts successfully", async () => {
+		const database = "two_repo_3_2";
+		const init = await runCli(schemaRepo, ["init"]);
+		expect(init.exitCode).toBe(0);
+		await commitSchemaExport(schemaRepo, AUTH_JOIN_SCHEMA, "initial export");
+		const link = await runCli(consumerRepo, ["link", schemaRepo]);
+		expect(link.exitCode).toBe(0);
+		const vendor = await runCli(consumerRepo, ["vendor"]);
+		expect(vendor.exitCode).toBe(0);
+
+		psqlCommand(container, "postgres", `create database ${database};`);
+		hydrateAuthUsers(database);
+		const raise = await runCli(consumerRepo, [
+			"raise",
+			"--file",
+			".hejbro/vendor/snapshot.sql",
+			"--url",
+			hostUrl(database),
+		]);
+		expect(raise.exitCode).toBe(0);
+
+		const userId = "11111111-1111-1111-1111-111111111111";
+		const userEmail = "user@example.com";
+
+		const driver = pgDriver(hostUrl(database));
+		try {
+			await driver.execute({
+				sql: 'insert into "auth"."users" ("id", "email") values ($1, $2)',
+				params: [userId, userEmail],
+				kind: "sql",
+			});
+
+			const jiti = createJiti(consumerRepo);
+			const contractModule = (await jiti.import(
+				vendorContractPath(consumerRepo),
+			)) as AuthJoinContractModule;
+			const client = contractModule.createDb(driver);
+
+			// Read alone, plainly -- "the name-keyed client SHALL expose
+			// it for reading like any other table."
+			const users = await client.users.select();
+			expect(users).toHaveLength(1);
+			expect(users[0]?.id).toBe(userId);
+			expect(users[0]?.email).toBe(userEmail);
+
+			// A managed table's FK onto the existing one inserts
+			// successfully against the real, hydrated row.
+			await driver.execute({
+				sql: 'insert into "app"."posts" ("author_id") values ($1)',
+				params: [userId],
+				kind: "sql",
+			});
+			const posts = await client.posts.select();
+			expect(posts).toHaveLength(1);
+			expect(posts[0]?.authorId).toBe(userId);
+		} finally {
+			await driver.client.end();
+		}
+	});
+
+	/**
+	 * [mutant, add-unmanaged-objects 3.2] The undeclared axis's own
+	 * real-server half -- measured, not assumed, per R1-09's explicit
+	 * instruction not to force a red that isn't there. The FK constraint
+	 * lives on `posts`'s own managed declaration (`.references(() =>
+	 * authUsers.id)`), independent of whether `authUsers` itself is
+	 * separately exported, and Postgres enforces a constraint against
+	 * whatever physically exists, not against what hejbro declared -- so
+	 * the insert is measured to still succeed here. What genuinely
+	 * differs on this axis is the *contract* (no relation, 3.1's own
+	 * pin) and the *type* (`vendoredHandle.users` doesn't exist,
+	 * `vendored-contract.test.ts`'s own pin) -- this test pins the
+	 * real-server side's own, different answer: unchanged.
+	 */
+	it("3.2 mutant, real-server half: an undeclared authUsers still lets the FK insert succeed (measured, not the axis that changes here)", async () => {
+		const database = "two_repo_3_2_undeclared";
+		const init = await runCli(schemaRepo, ["init"]);
+		expect(init.exitCode).toBe(0);
+		await commitSchemaExport(
+			schemaRepo,
+			AUTH_JOIN_SCHEMA_UNDECLARED,
+			"initial export",
+		);
+		const link = await runCli(consumerRepo, ["link", schemaRepo]);
+		expect(link.exitCode).toBe(0);
+		const vendor = await runCli(consumerRepo, ["vendor"]);
+		expect(vendor.exitCode).toBe(0);
+
+		psqlCommand(container, "postgres", `create database ${database};`);
+		hydrateAuthUsers(database);
+		const raise = await runCli(consumerRepo, [
+			"raise",
+			"--file",
+			".hejbro/vendor/snapshot.sql",
+			"--url",
+			hostUrl(database),
+		]);
+		expect(raise.exitCode).toBe(0);
+
+		const userId = "22222222-2222-2222-2222-222222222222";
+		const driver = pgDriver(hostUrl(database));
+		try {
+			await driver.execute({
+				sql: 'insert into "auth"."users" ("id", "email") values ($1, $2)',
+				params: [userId, "still-a-real-row@example.com"],
+				kind: "sql",
+			});
+			await driver.execute({
+				sql: 'insert into "app"."posts" ("author_id") values ($1)',
+				params: [userId],
+				kind: "sql",
+			});
+			const rows = await driver.execute({
+				sql: 'select "author_id" from "app"."posts"',
+				params: [],
+				kind: "sql",
+			});
+			expect(rows).toHaveLength(1);
+		} finally {
+			await driver.client.end();
+		}
 	});
 });

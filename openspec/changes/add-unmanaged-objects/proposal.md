@@ -86,6 +86,10 @@ tables' metadata goes.
 
 - Comparing an existing declaration's claimed shape against the live
   catalog (`check`), and refusing a declaration whose shape disagrees.
+- Following a relation from the vendored client. The contract carries
+  the relation; the name-keyed client exposes no `.related()` for any
+  table, managed or existing, and opening that surface is separate work
+  (#653).
 - Existing objects other than tables (views, functions, enums the
   repository does not own).
 - Any migration for an existing table — by definition.
