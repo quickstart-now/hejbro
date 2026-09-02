@@ -61,8 +61,9 @@ active change that owns them:
 
 ## Impact
 
-- Group 1: `packages/cli/src/commands/verify.ts`, `packages/core/src/engine/generate.ts`
-  (message/doc only), diagnostic docs, tests.
+- Group 1: `packages/cli/src/commands/verify.ts` and its test, one sentence in
+  `skills/hejbro/references/polyrepo.md`; core untouched (the tip comes from the
+  CLI's own chain entries), and no diagnostic catalog exists to update.
 - Group 2: `packages/core/src/dsl/table.ts`, `packages/core/src/plpgsql/body-context.ts`,
   `packages/cli/src/declare-emit/emit.ts` (comment only); new tests
   `packages/cli/test/loader-cycle.test.ts` and
