@@ -6,6 +6,7 @@ import { pgDriver } from "@hejbro/pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { AssertSchemaHandle } from "../src/assert-schema";
 import { assertSchema } from "../src/assert-schema";
+import { removeContainer } from "./docker-volumes";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -144,7 +145,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => {
-	execFileSync("docker", ["rm", "-f", "-v", CONTAINER], { stdio: "ignore" });
+	removeContainer(CONTAINER);
 });
 
 const cwds: Array<string> = [];

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { removeContainer } from "./docker-volumes";
 import type { CliRun } from "./support/cli-runner";
 import {
 	assertBuiltCli,
@@ -173,7 +174,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => {
-	execFileSync("docker", ["rm", "-f", "-v", CONTAINER], { stdio: "ignore" });
+	removeContainer(CONTAINER);
 });
 
 const fixtureUrl = (): string =>

@@ -5,6 +5,7 @@ import { compile } from "@hejbro/query";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pgDriver } from "../src/driver";
+import { removeContainer } from "./docker-volumes";
 
 /**
  * Group 4's own measurement harness (no product code in this group,
@@ -333,9 +334,7 @@ describe("prepared-statement bench / 4.0 instrument sensitivity", () => {
 	afterAll(async () => {
 		await pool?.end();
 		if (containerStarted) {
-			execFileSync("docker", ["rm", "-f", "-v", CONTAINER], {
-				stdio: "ignore",
-			});
+			removeContainer(CONTAINER);
 		}
 	});
 
@@ -454,9 +453,7 @@ describe("prepared-statement bench / measurement worker (spawned by 4.1, one ind
 	afterAll(async () => {
 		await pool?.end();
 		if (containerStarted) {
-			execFileSync("docker", ["rm", "-f", "-v", CONTAINER], {
-				stdio: "ignore",
-			});
+			removeContainer(CONTAINER);
 		}
 	});
 

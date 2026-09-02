@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readInferenceCatalog } from "../src/infer/catalog";
 import { inferColumnKeys } from "../src/infer/column-keys";
 import { inferFromCatalog } from "../src/infer/compose";
+import { removeContainer } from "./docker-volumes";
 
 /**
  * Group 1's own live proof (CI-G1-R1-04): the unit test
@@ -196,7 +197,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => {
-	execFileSync("docker", ["rm", "-f", "-v", CONTAINER], { stdio: "ignore" });
+	removeContainer(CONTAINER);
 });
 
 const fixtureUrl = (): string =>

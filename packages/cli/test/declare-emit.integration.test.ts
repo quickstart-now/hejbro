@@ -5,6 +5,7 @@ import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { emitDeclarationFiles } from "../src/declare-emit/emit";
 import { inferFromCatalog } from "../src/infer/compose";
+import { removeContainer } from "./docker-volumes";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -201,7 +202,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => {
-	execFileSync("docker", ["rm", "-f", "-v", CONTAINER], { stdio: "ignore" });
+	removeContainer(CONTAINER);
 });
 
 const fixtureUrl = (): string =>

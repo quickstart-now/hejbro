@@ -26,6 +26,7 @@ import { requireConfigFields } from "../src/config-required";
 import { loadConfig, loadDeclarations } from "../src/loader";
 import { buildRegistry } from "../src/presets";
 import { readSnapshotFileText } from "../src/snapshot-file";
+import { removeContainer } from "./docker-volumes";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -225,7 +226,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => {
-	execFileSync("docker", ["rm", "-f", "-v", CONTAINER], { stdio: "ignore" });
+	removeContainer(CONTAINER);
 });
 
 const chainUrl = (): string => hostUrl("postgres", "chain");

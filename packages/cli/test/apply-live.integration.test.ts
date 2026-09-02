@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { removeContainer } from "./docker-volumes";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -299,7 +300,7 @@ describe.each(PG_IMAGES)("apply engine live witness / %s", (image) => {
 	}, 120_000);
 
 	afterAll(() => {
-		execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
+		removeContainer(container);
 	});
 
 	describe("8.1/8.2 the whole example chain", () => {

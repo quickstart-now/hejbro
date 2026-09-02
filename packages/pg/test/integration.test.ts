@@ -55,6 +55,7 @@ import {
 	vi,
 } from "vitest";
 import { pgDriver } from "../src/driver";
+import { removeContainer } from "./docker-volumes";
 
 /**
  * Docker-gated integration harness (owner decision ⑤, task 5.6, extended
@@ -449,9 +450,7 @@ describe("pgDriver + a real db() handle against postgres:17 (owner decision ⑤,
 	afterAll(async () => {
 		await pool.current?.end();
 		if (containerStarted.current) {
-			execFileSync("docker", ["rm", "-f", "-v", CONTAINER], {
-				stdio: "ignore",
-			});
+			removeContainer(CONTAINER);
 		}
 	});
 

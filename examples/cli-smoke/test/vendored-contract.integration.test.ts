@@ -251,6 +251,48 @@ const containerPort = (container: string): string => {
 	return port;
 };
 
+/**
+ * #709: `docker rm -f <container>` (no `-v`) freed the container but
+ * left the official `postgres` image's own declared data volume
+ * behind as an orphaned anonymous volume -- every integration
+ * witness's own `afterAll` did this, and the accumulation (1,418
+ * volumes, 84 GB) ate the shared Docker data disk (round 4, D106).
+ * `-v` frees the volume too; this checks that it actually happened,
+ * since the flag's own success is silent -- the volume names this
+ * container's own mounts carried, read before removal, must all be
+ * gone from `docker volume ls` right after. Naming both the leftover
+ * volumes and the container on failure is half this check's value.
+ * Not shared with the sibling copies in `packages/cli/test/
+ * docker-volumes.ts`/`packages/pg/test/docker-volumes.ts` -- a single
+ * call site here has no reason to add a cross-package dependency.
+ */
+const removeContainer = (container: string): void => {
+	const mounted = execFileSync(
+		"docker",
+		["inspect", "--format", "{{range .Mounts}}{{.Name}} {{end}}", container],
+		{ encoding: "utf-8" },
+	)
+		.trim()
+		.split(/\s+/)
+		.filter((name) => name.length > 0);
+	execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
+	if (mounted.length === 0) {
+		return;
+	}
+	const remaining = new Set(
+		execFileSync("docker", ["volume", "ls", "-q"], { encoding: "utf-8" })
+			.split("\n")
+			.filter((name) => name.length > 0),
+	);
+	const stillPresent = mounted.filter((name) => remaining.has(name));
+	if (stillPresent.length === 0) {
+		return;
+	}
+	throw new Error(
+		`docker rm -f -v "${container}" did not remove its own volume(s): ${stillPresent.join(", ")}. Next: check \`docker volume rm ${stillPresent.join(" ")}\` by hand.`,
+	);
+};
+
 describe.each(PG_IMAGES)("vendored fn live witness / %s", (image) => {
 	const container = `cli-smoke-fn-live-${process.pid}-${image.replace(/[^a-z0-9]/gi, "")}`;
 	let hostPort = "";
@@ -286,7 +328,7 @@ describe.each(PG_IMAGES)("vendored fn live witness / %s", (image) => {
 	}, 120_000);
 
 	afterAll(() => {
-		execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
+		removeContainer(container);
 	});
 
 	let schemaRepo = "";

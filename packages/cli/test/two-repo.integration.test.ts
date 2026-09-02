@@ -17,6 +17,7 @@ import {
 	vendorContractPath,
 	vendorSqlPath,
 } from "../src/vendor/lock";
+import { removeContainer } from "./docker-volumes";
 import {
 	assertBuiltCli,
 	createCliFixtureDir,
@@ -324,7 +325,7 @@ describe("two-repository witness (#602)", () => {
 	}, 120_000);
 
 	afterAll(() => {
-		execFileSync("docker", ["rm", "-f", "-v", container], { stdio: "ignore" });
+		removeContainer(container);
 	});
 
 	let schemaRepo: string;
