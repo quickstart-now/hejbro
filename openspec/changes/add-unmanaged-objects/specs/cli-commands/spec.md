@@ -10,6 +10,17 @@ declaration covers, and an existing declaration covers one: it claims a
 shape hejbro does not own. Its presence or absence in the database SHALL
 NOT affect the exit code.
 
+Not comparing it is a choice, not a failure, so it belongs in neither
+category the coverage-boundary rules already name: nothing about it
+could not be carried out, and its kind is comparable for every other
+table. `check` SHALL therefore name it in the report's
+coverage-boundary section as declared existing and not compared —
+"what it did not compare" covers a table it declined to compare as much
+as one it was unable to. That line SHALL NOT be a finding, SHALL NOT
+affect the exit code, and SHALL NOT be counted as agreeing: a report
+that counted it as agreeing would claim the shape matched, which is the
+one thing `check` never looked at.
+
 `hejbro reset` SHALL drop nothing of an existing table, `hejbro
 baseline` SHALL write no statement for one, and `hejbro raise` SHALL be
 unaffected by such a declaration — it reads migration text and the
@@ -21,6 +32,14 @@ ledger, never a declaration.
   different shape
 - **THEN** no difference is reported for it, it is absent from the
   inventory section, and the exit code is unaffected
+
+#### Scenario: An existing declaration is named in the coverage boundary, never counted as agreeing
+- **WHEN** a schema declares a table with `existingTable()` and `hejbro
+  check` runs
+- **THEN** the report's coverage-boundary section names that table as
+  declared existing and not compared, it is neither a finding nor
+  counted among the objects that agreed, it is absent from the unmanaged
+  inventory, and the exit code is unaffected
 
 #### Scenario: baseline and reset pass an existing declaration by
 - **WHEN** a schema declaring a table with `existingTable()` is

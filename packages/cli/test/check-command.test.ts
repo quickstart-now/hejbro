@@ -633,4 +633,30 @@ describe("an existing declaration is neither compared nor inventoried (add-unman
 		const wholeReport = [...report.stdout, report.stderr ?? ""].join("\n");
 		expect(wholeReport).not.toContain("unmanaged");
 	});
+
+	// ⑤ D106 R2-06/07: "The check states the boundary of its own coverage"
+	// (cli-commands) requires naming what it did not compare regardless of
+	// the reason -- ① found no `check-object-*` finding for this table
+	// (nothing to name as a difference), and ④ already established the
+	// report never calls it "unmanaged" (the wrong axis: this table IS
+	// declared). Neither means the report says *nothing* about it; this
+	// is the coverage-boundary line that fills that silence, distinct from
+	// both `boundaryLineFor`'s kind-level lines and `inventoryLines`'
+	// undeclared-table line. Passes the real `snapshot` (the 4th,
+	// previously-unexercised parameter) rather than relying on the
+	// `emptySnapshot` default every other test in this file uses.
+	it("names it in the coverage-boundary section as declared and not compared", async () => {
+		const { snapshot, catalog } = buildScenario();
+		const findings = await compareCheckAgainstCatalog(
+			snapshot,
+			catalog,
+			noOpSession,
+		);
+		const inventory = buildInventory(snapshot, catalog);
+		const report = renderCheckReport(findings, inventory, undefined, snapshot);
+		const stdoutText = report.stdout.join("\n");
+		expect(stdoutText).toContain(
+			"existing table (declared, not compared): auth.users",
+		);
+	});
 });
