@@ -90,11 +90,11 @@ export type NotInferredSummary = {
 
 /**
  * The catalog-inference delta's own not-inferred enumeration, as data
- * (1.6, on hold, turns this into report text): function, trigger, view
- * body, policy expression, and grant beyond its role name. A column
- * whose type no builder expresses is the sixth element and is not
- * repeated here -- it is 1.3/1.4's `ColumnLoss`, already produced where
- * the column itself is inferred.
+ * that `buildLossReport` turns into report text: function, trigger,
+ * view body, policy expression, and grant beyond its role name. A
+ * column whose type no builder expresses is not repeated here -- it is
+ * 1.3/1.4's own `ColumnLoss`, already produced where the column itself
+ * is inferred.
  */
 export const notInferredSummary = (catalog: Catalog): NotInferredSummary => ({
 	functions: catalog.functions,

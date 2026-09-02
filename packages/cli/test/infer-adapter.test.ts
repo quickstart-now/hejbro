@@ -1,4 +1,4 @@
-import { emptySnapshot, generateMigration } from "@hejbro/core";
+import { emptySnapshot, generateMigration, schema } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../src/check/catalog";
 import { mergeTableFacts } from "../src/infer/adapter";
@@ -238,7 +238,12 @@ describe("mergeTableFacts / 1.4b adapter", () => {
 			],
 		};
 
-		const tables = mergeTableFacts(catalog, inferenceCatalog, new Map());
+		const tables = mergeTableFacts(
+			catalog,
+			inferenceCatalog,
+			new Map(),
+			(name) => schema(name),
+		);
 		expect(tables).toHaveLength(2);
 
 		const childrenFacts = tables.find((t) => t.tableName === "children");

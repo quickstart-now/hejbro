@@ -10,6 +10,7 @@ import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readInferenceCatalog } from "../src/infer/catalog";
 import { inferColumnKeys } from "../src/infer/column-keys";
+import { inferFromCatalog } from "../src/infer/compose";
 
 /**
  * Group 1's own live proof (CI-G1-R1-04): the unit test
@@ -429,5 +430,58 @@ describe("readInferenceCatalog / 1.2b live witness", () => {
 		expect(migration.sql).toContain('"createdat"');
 		expect(migration.sql).not.toContain("created_at");
 		expect(migration.sql).not.toContain('"createdAt"');
+	});
+});
+
+describe("inferFromCatalog / 1.8 single entry point", () => {
+	// One case pins all three outputs against each other for the same fact
+	// (CI-G1-R1-14): a column whose SQL name no declaration key can
+	// reproduce ("createdAt") is absent from the snapshot, present in the
+	// description, and named in the loss report -- import's own contract.
+	it("import: omits an undeclarable-name column from the snapshot, keeps it in the description, and names it in the loss report", async () => {
+		const result = await inferFromCatalog({
+			session: driver,
+			schemas: ["infer_probe"],
+			command: "import",
+		});
+
+		const namingTable = result.snapshot.objects[
+			"table:infer_probe.naming_probe"
+		] as { readonly columns: ReadonlyArray<{ readonly name: string }> };
+		expect(
+			namingTable.columns.some((column) => column.name === "createdat"),
+		).toBe(false);
+
+		const describedTable = result.description.tables.find(
+			(entry) =>
+				entry.schema === "infer_probe" && entry.table === "naming_probe",
+		);
+		expect(
+			describedTable?.columns.some((column) => column.sqlName === "createdAt"),
+		).toBe(true);
+
+		expect(result.lossReport.some((line) => line.includes("createdAt"))).toBe(
+			true,
+		);
+	});
+
+	// pull's own contract carries every column regardless (CI-G1-R1-08 (C))
+	// -- the same fact, the opposite outcome for the snapshot half.
+	it("pull: carries an undeclarable-name column in the snapshot too, and never omits it", async () => {
+		const result = await inferFromCatalog({
+			session: driver,
+			schemas: ["infer_probe"],
+			command: "pull",
+		});
+
+		const namingTable = result.snapshot.objects[
+			"table:infer_probe.naming_probe"
+		] as { readonly columns: ReadonlyArray<{ readonly name: string }> };
+		expect(
+			namingTable.columns.some((column) => column.name === "createdat"),
+		).toBe(true);
+		expect(result.lossReport.some((line) => line.includes("createdAt"))).toBe(
+			false,
+		);
 	});
 });

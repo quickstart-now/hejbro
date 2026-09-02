@@ -1,5 +1,4 @@
 import type { EnumDeclaration, SchemaDeclaration } from "@hejbro/core";
-import { schema as declareSchema } from "@hejbro/core";
 import type { Catalog, ColumnRow, ConstraintRow } from "../check/catalog";
 import type { ColumnDetailRow, InferenceCatalog } from "./catalog";
 import { inferColumnKeys } from "./column-keys";
@@ -240,16 +239,18 @@ export const orderedColumnsWithKeys = (
  * the raw-row adapter tasks.md's group 1 header names, deferred until
  * 1.4b (CI-G1-R1-07). `enumsByIdentity` (1.5's `inferEnums` output) is
  * threaded through so every column of a given enum type shares the
- * *same* `EnumDeclaration` instance.
+ * *same* `EnumDeclaration` instance. `schemaFor` (1.8's entry point
+ * builds one map, shared with `inferEnums`) is why -- the same reason,
+ * one level up: `generateMigration`'s own declarations array declares
+ * each schema name once, so every reference to it (a table's own
+ * `.schema`, an enum's own `.schema`) has to be the *same* object.
  */
 export const mergeTableFacts = (
 	catalog: Catalog,
 	inferenceCatalog: InferenceCatalog,
 	enumsByIdentity: ReadonlyMap<string, EnumDeclaration>,
+	schemaFor: (schemaName: string) => SchemaDeclaration,
 ): ReadonlyArray<InferredTableFacts> => {
-	const schemasByName = new Map<string, SchemaDeclaration>(
-		catalog.schemas.map((row) => [row.schema, declareSchema(row.schema)]),
-	);
 	return catalog.tables.map((tableRow) => {
 		const { columns: orderedColumns, tsKeys } = orderedColumnsWithKeys(
 			catalog,
@@ -278,8 +279,7 @@ export const mergeTableFacts = (
 			(row) => row.type === "p",
 		);
 		return {
-			schema:
-				schemasByName.get(tableRow.schema) ?? declareSchema(tableRow.schema),
+			schema: schemaFor(tableRow.schema),
 			tableName: tableRow.table,
 			columns: orderedColumns.map((row, index) => ({
 				sqlName: row.name,
