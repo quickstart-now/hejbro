@@ -149,6 +149,22 @@ export const posts = table(app, "posts", {
 export const authUsers = existingTable("auth", "users", { id: uuid() });
 `;
 
+// D106 R4, R4-B1: the evaluator's own flagship reproduction -- the one
+// edit this feature exists to enable (widening an existing declaration's
+// own shape, e.g. for a join), layered on top of SCHEMA_WITH_NEW_EXISTING
+// once that first record_users.sql migration is already on disk.
+const SCHEMA_WITH_RESHAPED_EXISTING_SOURCE = `import { existingTable, schema, table, text, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const posts = table(app, "posts", {
+	id: uuid().primaryKey().defaultRandom(),
+	title: text().notNull(),
+});
+
+export const authUsers = existingTable("auth", "users", { id: uuid(), email: text() });
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -532,6 +548,80 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 			// generic fallback, for instance) would still pass the line
 			// above alone.
 			expect(stripPrefix(namesA[1] as string)).toBe("record_users.sql");
+		} finally {
+			await removeCliFixtureDir(cwdA);
+			await removeCliFixtureDir(cwdB);
+		}
+	});
+
+	// D106 R4, R4-B1 repro ①②: widening an existing declaration's own
+	// shape (adding a column, here) used to crash `generate` with a raw
+	// internal-invariant stack trace, write nothing, and leave `verify`
+	// permanently red -- the "existing:existing, content differs" side
+	// pair had no transition verb of its own. Fixed by the fifth verb,
+	// `reshape`.
+	it("an existing declaration's own shape change writes a reshape migration instead of crashing, and verify passes after (D106 R4, R4-B1 repro ①②)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(SCHEMA_SOURCE);
+		await runCli(cwd, ["generate"]);
+		const firstVerify = await runCli(cwd, ["verify"]);
+		expect(firstVerify.exitCode).toBe(0);
+
+		await writeSchema(SCHEMA_WITH_NEW_EXISTING_SOURCE);
+		await runCli(cwd, ["generate"]);
+		const secondVerify = await runCli(cwd, ["verify"]);
+		expect(secondVerify.exitCode).toBe(0);
+
+		await writeSchema(SCHEMA_WITH_RESHAPED_EXISTING_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("wrote migrations/");
+		expect(result.stdout).toContain("carries no statements.");
+
+		const names = await sqlFileNames();
+		expect(names.some((name) => name.endsWith("_reshape_users.sql"))).toBe(
+			true,
+		);
+
+		const verify = await runCli(cwd, ["verify"]);
+		expect(verify.exitCode).toBe(0);
+	});
+
+	// D106 R4, R4-B1 repro ③: the reshape slug is deterministic across two
+	// entirely independent projects, the same way R3-B1 measurement ④
+	// already proved for the marker-transition verbs.
+	it("the reshape migration's own slug is deterministic across two independent runs (D106 R4, R4-B1 repro ③)", async () => {
+		const stripPrefix = (fileName: string): string =>
+			fileName.replace(/^\d+_/, "");
+
+		const cwdA = await createCliFixtureDir();
+		const cwdB = await createCliFixtureDir();
+		try {
+			for (const target of [cwdA, cwdB]) {
+				await runCli(target, ["init"]);
+				await writeFixtureFile(target, "src/app.schema.ts", SCHEMA_SOURCE);
+				await runCli(target, ["generate"]);
+				await writeFixtureFile(
+					target,
+					"src/app.schema.ts",
+					SCHEMA_WITH_NEW_EXISTING_SOURCE,
+				);
+				await runCli(target, ["generate"]);
+				await writeFixtureFile(
+					target,
+					"src/app.schema.ts",
+					SCHEMA_WITH_RESHAPED_EXISTING_SOURCE,
+				);
+				await runCli(target, ["generate"]);
+			}
+			const namesA = (await readdir(join(cwdA, "migrations")))
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+			const namesB = (await readdir(join(cwdB, "migrations")))
+				.filter((name) => name.endsWith(".sql"))
+				.sort();
+			expect(namesA.map(stripPrefix)).toEqual(namesB.map(stripPrefix));
+			expect(stripPrefix(namesA[2] as string)).toBe("reshape_users.sql");
 		} finally {
 			await removeCliFixtureDir(cwdA);
 			await removeCliFixtureDir(cwdB);
