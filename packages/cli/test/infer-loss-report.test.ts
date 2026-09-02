@@ -154,6 +154,21 @@ describe("buildLossReport / 1.7", () => {
 
 		expect(report.some((line) => line.includes("hand-edit"))).toBe(true);
 	});
+
+	/**
+	 * catalog-inference delta, "The report names the way out" (its own
+	 * scenario names `pull --db-url` specifically) -- the unit-level half
+	 * of the pair with `live-witness.integration.test.ts`'s own real
+	 * `hejbro pull` run: this pins the exact wording so a change to it
+	 * goes red here first, the live run second.
+	 */
+	it("pull: says the loss ends when the consumer links the schema repository", () => {
+		const report = buildLossReport(emptyFacts("pull"));
+
+		expect(report.at(-1)).toBe(
+			"The loss ends when you link the schema repository.",
+		);
+	});
 });
 
 describe("detectUniqueIndexApproximations / 1.7", () => {

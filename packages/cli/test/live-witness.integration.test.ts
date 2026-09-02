@@ -281,6 +281,17 @@ describe("pull / 5.1 live witness (no seam: the real command, end to end)", () =
 			]);
 			expect(pull.exitCode).toBe(0);
 			expect(pull.stderr).toBe("");
+			// catalog-inference delta, "The report names the way out": the
+			// *command's own output*, not just the header text a string
+			// assertion on the written file could satisfy -- this is the one
+			// scenario whose subject is "pull --db-url completes -> its
+			// output", so only a real run's stdout proves it.
+			expect(pull.stdout).toContain(
+				"Guessed: TypeScript keys from SQL names, the default numeric mode, and unknown array-element nullability (read as nullable).",
+			);
+			expect(pull.stdout).toContain(
+				"The loss ends when you link the schema repository.",
+			);
 
 			const contractPath = join(cwd, ".hejbro", "vendor", "contract.ts");
 			const contractSource = await readFile(contractPath, "utf8");
