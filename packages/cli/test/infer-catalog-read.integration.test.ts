@@ -533,4 +533,20 @@ describe("inferFromCatalog / 1.8 single entry point", () => {
 		expect(collisionLine).toContain("USER_ID");
 		expect(collisionLine).not.toContain('infer_probe.collision_probe.user_id"');
 	});
+
+	// CI-G4-R1-04: `pull` needs the squashed create-from-empty DDL the
+	// composition already computes internally (via `generateMigration`)
+	// and used to discard -- exposed as its own field rather than a
+	// second caller recomputing it (the exact "computed twice, drifts
+	// quietly" shape this change has already paid for once, D97/CI-G1-
+	// R1-13's own overrun).
+	it("carries the squashed create-from-empty DDL as its own sql field", async () => {
+		const result = await inferFromCatalog({
+			session: driver,
+			schemas: ["infer_probe"],
+			command: "pull",
+		});
+
+		expect(result.sql).toContain('create table "infer_probe"."parents"');
+	});
 });

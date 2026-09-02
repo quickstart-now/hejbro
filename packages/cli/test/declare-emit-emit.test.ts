@@ -44,6 +44,8 @@ const resultFor = (
 		roleNames: [],
 	},
 	lossReport: [],
+	// unused by this suite -- emitDeclarationFiles never reads it.
+	sql: "",
 });
 
 describe("emitDeclarationFiles / 2.1", () => {

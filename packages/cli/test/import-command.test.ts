@@ -80,12 +80,15 @@ const resultFor = (
 		roleNames: [],
 	},
 	lossReport,
+	// unused by this suite -- runImport never reads it.
+	sql: "",
 });
 
 const emptyResult: InferCatalogResult = {
 	snapshot: { formatVersion: 8, dialect: "postgres", objects: {} },
 	description: { tables: [], roleNames: [] },
 	lossReport: [],
+	sql: "",
 };
 
 const idColumn: TableSnapshot["columns"][number] = {

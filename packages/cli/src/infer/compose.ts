@@ -48,6 +48,14 @@ export type InferCatalogResult = {
 	readonly snapshot: Snapshot;
 	readonly description: CatalogDescription;
 	readonly lossReport: ReadonlyArray<string>;
+	/**
+	 * The DDL that creates this reading's own snapshot from an empty
+	 * database (CI-G4-R1-04) -- `generateMigration` already computes this
+	 * internally; exposed rather than left for `pull` to recompute a
+	 * second time from the same declarations (the exact "computed twice,
+	 * drifts quietly" shape this change has already paid for once).
+	 */
+	readonly sql: string;
 };
 
 const bySchema = <T extends { readonly schema: string }>(
@@ -204,5 +212,10 @@ export const inferFromCatalog = async (
 		undeclarableNameColumns: undeclarableNameColumnsFor(mergedTables),
 	});
 
-	return { snapshot: migration.snapshot, description, lossReport };
+	return {
+		snapshot: migration.snapshot,
+		description,
+		lossReport,
+		sql: migration.sql,
+	};
 };
