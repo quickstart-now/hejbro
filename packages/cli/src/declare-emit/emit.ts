@@ -25,6 +25,8 @@ import { resolveIdentifierKeys } from "../infer/column-keys";
 import type { InferCatalogResult } from "../infer/compose";
 import type { CatalogDescription } from "../infer/description";
 import { sqlRawCall } from "./expr-render";
+import type { SchemaCrossing } from "./file-cycle";
+import { buildSchemaFileGraph } from "./file-cycle";
 import type { TopoEdge } from "./topo-order";
 import { foreignKeyEdgeKey, topologicalTableOrder } from "./topo-order";
 
@@ -1101,20 +1103,15 @@ export const emitDeclarationFiles = (
 		tablesByIdentity.get(identity)?.schema;
 
 	/**
-	 * CI-G2-R1-18 (lead-adopted refinement over R1-16's own first cut):
-	 * only a schema-level *back edge* -- the direction a deterministic DFS
-	 * over the schema graph names, same tie-break rule as the table graph
+	 * CI-G2-R1-18/19: only a schema-level *back edge* -- the direction
+	 * `file-cycle.ts`'s own deterministic DFS over the schema graph names
 	 * -- goes through a handle; the other direction keeps a real
 	 * cross-file import, since severing the back edge alone already makes
 	 * the remaining import graph acyclic (safety is identical either way;
 	 * this one just leaves more real, type-carrying imports in the files
-	 * the repository now owns). `topologicalTableOrder` is reused
-	 * unchanged, schema names standing in for table identities and one
-	 * edge per crossing FK (keyed by that FK's own owner + name, so two
-	 * different FKs crossing the same schema pair are each judged on
-	 * their own merits, matching the table-level graph's own behavior).
+	 * the repository now owns).
 	 */
-	const schemaCrossingEdges: ReadonlyArray<TopoEdge> = tables.flatMap(
+	const schemaCrossings: ReadonlyArray<SchemaCrossing> = tables.flatMap(
 		(table) => {
 			const ownIdentity = tableIdentity(table.schema, table.name);
 			return table.foreignKeys
@@ -1126,30 +1123,28 @@ export const emitDeclarationFiles = (
 					}
 					return [
 						{
-							from: table.schema,
-							to: targetSchema,
-							foreignKeyName: `${ownIdentity} ${fk.name}`,
+							fromSchema: table.schema,
+							toSchema: targetSchema,
+							edgeId: `${ownIdentity} ${fk.name}`,
 						},
 					];
 				});
 		},
 	);
 	const schemaNamesForTopo = [...new Set(tables.map((table) => table.schema))];
-	const schemaTopo = topologicalTableOrder(
+	const schemaFileGraph = buildSchemaFileGraph(
 		schemaNamesForTopo,
-		schemaCrossingEdges,
+		schemaCrossings,
 	);
 	const isSchemaCrossingOnBackEdge = (
 		table: TableSnapshot,
 		fk: ForeignKeySnapshot,
 		targetSchema: string,
 	): boolean =>
-		schemaTopo.cycleClosingEdges.has(
-			foreignKeyEdgeKey({
-				from: table.schema,
-				to: targetSchema,
-				foreignKeyName: `${tableIdentity(table.schema, table.name)} ${fk.name}`,
-			}),
+		schemaFileGraph.isBackEdge(
+			table.schema,
+			targetSchema,
+			`${tableIdentity(table.schema, table.name)} ${fk.name}`,
 		);
 
 	const mustDeferContext: Parameters<typeof mustDeferForeignKey>[2] = {

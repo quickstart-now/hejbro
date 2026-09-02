@@ -226,4 +226,70 @@ describe("declare-emit / 2.2 round trip over examples/postgres's own database", 
 			await removeCliFixtureDir(cwd);
 		}
 	}, 60_000);
+
+	/**
+	 * The comparison scope, stated as its own assertion (not left implicit
+	 * in what `toEqual` above happens to compare): `examples/postgres`'s
+	 * own `app.schema.ts` declares functions, triggers, a view, RLS
+	 * policies, and grants -- v1 infers none of them, so the object-by-
+	 * object comparison above never touches those kinds at all (both
+	 * sides simply lack them). This is not a claim that nothing was lost;
+	 * it is the claim that the excluded set is *exactly* what the loss
+	 * report itself names as not inferred, checked against the real
+	 * counts this database is known to have (2 functions --
+	 * `comments_enforce_single_depth`, `audit_task_status_change`; 2
+	 * triggers of the same names; 1 view -- `open_tasks`; policies and
+	 * grants beyond role names, present on every RLS-enabled table).
+	 */
+	it("declares only the object kinds inference actually infers, and names everything else in the loss report (schema, tables, indexes, checks, foreign keys, enums, identity/serial sequences vs. functions/triggers/views/policies/grants)", async () => {
+		const driver = pgDriver(fixtureUrl());
+		const result = await inferFromCatalog({
+			session: driver,
+			schemas: ["app"],
+			command: "import",
+		});
+		await driver.client.end();
+
+		const inferredKinds = new Set(
+			Object.keys(result.snapshot.objects).map(
+				(key) => key.split(":")[0] ?? "",
+			),
+		);
+		// only ever schema/table/enum/sequence -- never a view, trigger,
+		// function, policy, rls, or grant kind, all of which this database
+		// does declare (that's exactly the loss report's own job to name).
+		const AllowedKinds = new Set(["schema", "table", "enum", "sequence"]);
+		expect([...inferredKinds].every((kind) => AllowedKinds.has(kind))).toBe(
+			true,
+		);
+		// this database's own real shape: no enum types, no serial/identity
+		// columns -- tables are the only object kind besides the schema
+		// itself. If a future example database gains one of the other
+		// allowed kinds, this line (not the loop above) is what should grow.
+		expect(inferredKinds).toEqual(new Set(["schema", "table"]));
+
+		expect(
+			result.lossReport.some((line) =>
+				line.includes("2 function(s) not inferred"),
+			),
+		).toBe(true);
+		expect(
+			result.lossReport.some((line) =>
+				line.includes("2 trigger(s) not inferred"),
+			),
+		).toBe(true);
+		expect(
+			result.lossReport.some((line) => line.includes("1 view(s) not inferred")),
+		).toBe(true);
+		expect(
+			result.lossReport.some((line) =>
+				line.includes("policy expression(s) not inferred"),
+			),
+		).toBe(true);
+		expect(
+			result.lossReport.some((line) =>
+				line.includes("grants beyond their role name"),
+			),
+		).toBe(true);
+	});
 });

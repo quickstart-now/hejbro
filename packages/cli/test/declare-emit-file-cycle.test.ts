@@ -2,57 +2,88 @@ import { describe, expect, it } from "vitest";
 import type { SchemaCrossing } from "../src/declare-emit/file-cycle";
 import { buildSchemaFileGraph } from "../src/declare-emit/file-cycle";
 
-describe("buildSchemaFileGraph / CI-G2-R1-14", () => {
-	it("reports no crossing on a cycle when the file graph is acyclic", () => {
-		const crossings: ReadonlyArray<SchemaCrossing> = [
-			{ fromSchema: "audit", toSchema: "app" },
-		];
-		const graph = buildSchemaFileGraph(crossings);
-		expect(graph.isOnCycle("audit", "app")).toBe(false);
+describe("buildSchemaFileGraph / CI-G2-R1-19: the schema graph's own deterministic back-edge selection", () => {
+	it("names no back edge when the file graph is acyclic", () => {
+		const graph = buildSchemaFileGraph(
+			["app", "audit"],
+			[
+				{
+					fromSchema: "audit",
+					toSchema: "app",
+					edgeId: "audit.x audit_x_app_fkey",
+				},
+			],
+		);
+		expect(graph.isBackEdge("audit", "app", "audit.x audit_x_app_fkey")).toBe(
+			false,
+		);
 	});
 
-	it("reports both directions on a cycle for two schemas that import each other", () => {
+	it("names the back edge on a two-schema cycle by identity order (app < billing, so billing -> app is visited second and closes it)", () => {
 		const crossings: ReadonlyArray<SchemaCrossing> = [
-			{ fromSchema: "app", toSchema: "billing" },
-			{ fromSchema: "billing", toSchema: "app" },
+			{ fromSchema: "app", toSchema: "billing", edgeId: "app.a a_b_id_fkey" },
+			{
+				fromSchema: "billing",
+				toSchema: "app",
+				edgeId: "billing.b b_a_id_fkey",
+			},
 		];
-		const graph = buildSchemaFileGraph(crossings);
-		expect(graph.isOnCycle("app", "billing")).toBe(true);
-		expect(graph.isOnCycle("billing", "app")).toBe(true);
+		const graph = buildSchemaFileGraph(["app", "billing"], crossings);
+		expect(graph.isBackEdge("billing", "app", "billing.b b_a_id_fkey")).toBe(
+			true,
+		);
+		expect(graph.isBackEdge("app", "billing", "app.a a_b_id_fkey")).toBe(false);
 	});
 
-	it("judges the cycle on the file graph, not the table graph: two schemas with no direct mutual table pair still import each other", () => {
-		// app.a -> audit.x and audit.y -> app.b: no single table pair forms
-		// a cycle, but app and audit's own *files* still import each other.
+	it("judges the cycle on the file graph, not the table graph: two schemas with no table-level cycle still import each other (app.a -> audit.x and audit.y -> app.b)", () => {
 		const crossings: ReadonlyArray<SchemaCrossing> = [
-			{ fromSchema: "app", toSchema: "audit" },
-			{ fromSchema: "audit", toSchema: "app" },
+			{ fromSchema: "app", toSchema: "audit", edgeId: "app.a app_a_x_id_fkey" },
+			{
+				fromSchema: "audit",
+				toSchema: "app",
+				edgeId: "audit.y audit_y_b_id_fkey",
+			},
 		];
-		const graph = buildSchemaFileGraph(crossings);
-		expect(graph.isOnCycle("app", "audit")).toBe(true);
-		expect(graph.isOnCycle("audit", "app")).toBe(true);
+		const graph = buildSchemaFileGraph(["app", "audit"], crossings);
+		// exactly one direction is the back edge (app < audit, so app -> audit
+		// is visited first and audit -> app is what closes it) even though no
+		// single *table* pair forms a cycle of its own.
+		expect(graph.isBackEdge("audit", "app", "audit.y audit_y_b_id_fkey")).toBe(
+			true,
+		);
+		expect(graph.isBackEdge("app", "audit", "app.a app_a_x_id_fkey")).toBe(
+			false,
+		);
 	});
 
-	it("reports every crossing on a longer (three-schema) cycle, not only the one edge a DFS would call closing", () => {
+	it("names every back edge on a longer (three-schema) cycle", () => {
 		const crossings: ReadonlyArray<SchemaCrossing> = [
-			{ fromSchema: "a", toSchema: "b" },
-			{ fromSchema: "b", toSchema: "c" },
-			{ fromSchema: "c", toSchema: "a" },
+			{ fromSchema: "a", toSchema: "b", edgeId: "a.t1 e1" },
+			{ fromSchema: "b", toSchema: "c", edgeId: "b.t1 e2" },
+			{ fromSchema: "c", toSchema: "a", edgeId: "c.t1 e3" },
 		];
-		const graph = buildSchemaFileGraph(crossings);
-		expect(graph.isOnCycle("a", "b")).toBe(true);
-		expect(graph.isOnCycle("b", "c")).toBe(true);
-		expect(graph.isOnCycle("c", "a")).toBe(true);
+		const graph = buildSchemaFileGraph(["a", "b", "c"], crossings);
+		expect(graph.isBackEdge("c", "a", "c.t1 e3")).toBe(true);
+		expect(graph.isBackEdge("a", "b", "a.t1 e1")).toBe(false);
+		expect(graph.isBackEdge("b", "c", "b.t1 e2")).toBe(false);
 	});
 
-	it("is independent of the order crossings are given in (no tie-break rule needed -- mutual reachability alone decides it)", () => {
-		const forward: ReadonlyArray<SchemaCrossing> = [
-			{ fromSchema: "app", toSchema: "billing" },
-			{ fromSchema: "billing", toSchema: "app" },
+	it("is independent of the order crossings are given in (the same tie-break rule as the table graph: identity order, not catalog row order)", () => {
+		const crossings: ReadonlyArray<SchemaCrossing> = [
+			{ fromSchema: "app", toSchema: "billing", edgeId: "app.a a_b_id_fkey" },
+			{
+				fromSchema: "billing",
+				toSchema: "app",
+				edgeId: "billing.b b_a_id_fkey",
+			},
 		];
-		const reversed = [...forward].reverse();
-		expect(buildSchemaFileGraph(forward).isOnCycle("app", "billing")).toBe(
-			buildSchemaFileGraph(reversed).isOnCycle("app", "billing"),
+		const forward = buildSchemaFileGraph(["app", "billing"], crossings);
+		const reversed = buildSchemaFileGraph(
+			["billing", "app"],
+			[...crossings].reverse(),
+		);
+		expect(forward.isBackEdge("billing", "app", "billing.b b_a_id_fkey")).toBe(
+			reversed.isBackEdge("billing", "app", "billing.b b_a_id_fkey"),
 		);
 	});
 });

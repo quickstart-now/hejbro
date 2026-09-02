@@ -158,8 +158,12 @@ Files: `packages/cli/src/declare-emit/*.ts` (new), tests
       import run twice emits the same bytes.
 - [ ] 2.2 (~8m) Round trip over the examples' own database rather than
       the fixture: emitted source, loaded and generated against an empty
-      snapshot, yields DDL equal to that database's objects. Failing
-      test: `declare-emit-roundtrip.test.ts`.
+      snapshot, yields DDL equal to that database's objects — compared
+      over exactly what the reading claims, with the objects left out of
+      the comparison asserted to be the same set the loss report names
+      as not inferred. Failing test:
+      `declare-emit-roundtrip.integration.test.ts` (the suffix is what
+      `vitest.integration.config.ts` collects).
 
 ## 3. The import command (#604)
 Files: `packages/cli/src/commands/import.ts` (new — its codes are string
