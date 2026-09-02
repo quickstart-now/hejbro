@@ -1,16 +1,16 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { supabasePreset } from "@hejbro/supabase";
-import type { ChainEntry, ConfirmDropSpec } from "hejbro";
 import {
 	checkChain,
 	createDefaultRegistry,
 	emptySnapshot,
 	generateMigration,
-	parseBannerHashes,
 	registerPresets,
 	renderSnapshot,
-} from "hejbro";
+} from "@hejbro/core";
+import { supabasePreset } from "@hejbro/supabase";
+import type { ChainEntry, ConfirmDropSpec } from "hejbro";
+import { parseBannerHashes } from "hejbro";
 import { describe, expect, it } from "vitest";
 import { declarations as step1 } from "../src/steps/step-1.schema";
 import { declarations as step2 } from "../src/steps/step-2.schema";
