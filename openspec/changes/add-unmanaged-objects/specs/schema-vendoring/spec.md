@@ -12,6 +12,11 @@ key onto an existing table the schema declares SHALL resolve to a
 relation; a foreign key onto a table the schema does not declare at all
 keeps having none.
 
+No code reads that mark today — the client already treats every
+vendored table as existing, and whether a relation resolves is decided
+when the contract is emitted, not when it is read. The mark is carried
+for the reader of the generated file and for tooling built on it.
+
 #### Scenario: A consumer joins a platform-owned table
 - **WHEN** a schema declaring `auth.users` with `existingTable()` and a
   managed table referencing it are vendored, and the consumer reads the

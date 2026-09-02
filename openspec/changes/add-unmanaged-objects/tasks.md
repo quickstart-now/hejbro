@@ -423,12 +423,103 @@ supabase/src/auth-tables.ts` (doc), `examples/*/test/*vendor*.test.ts`,
 names), `docs/specs/2026-08-19-hejbro-design.md` (D41 amendment note),
 `.changeset/*.md`. `synthesize.ts` is shared with group 1 (see there).
 
-- [ ] 3.1 (~9m) [design] The contract emits the existing table's
-      `Row`/`Insert`/`Update` and marks its client metadata; relations
-      onto it resolve (the "no relation" rule narrows to undeclared
-      tables). Failing tests: contract emit test — "emits an existing
-      table under Tables, marked"; relation test — "a foreign key onto a
-      declared existing table resolves to a relation".
+- [x] 3.1 (~20m) [design — settled, lead judgement] The contract marks
+      an existing table's client metadata; `Row`/`Insert`/`Update` and
+      relation resolution were already true (measured, not assumed).
+
+      **Design (lead ruling, not reopened)**: the marker is **compact**
+      `existing?: true` on `contractMetadata`'s own per-table meta —
+      present only for an existing table, absent for a managed one
+      (opposite of the export description's always-present convention,
+      D57: generated code is read and diffed by a person, so the common
+      case carries no noise). The marker is **client-metadata only** —
+      the `Database`/`Tables` TypeScript interface is untouched
+      (Supabase-style consumer compatibility; the delta only requires
+      metadata). No code reads the mark today — carried for the reader
+      of the generated file and for tooling built on it (the sentence
+      the lead staged into `specs/schema-vendoring/spec.md`, bundled
+      here unedited).
+
+      **Pre-measurement confirmed both green-on-arrival claims by
+      actually running `emitContract`** (throwaway probe, not
+      committed): a managed table referencing an `existingTable()`
+      already emitted the existing table fully under `Tables`
+      (`Row`/`Insert`/`Update`) and the relation already resolved
+      (`referencedRelation: "auth.users"`) — the only thing missing was
+      the marker itself.
+
+      **Edit points** (all three found by measurement, no others
+      needed): `contract/tables.ts`'s `TableComputation` gains
+      `existing: boolean`, sourced once from the snapshot node
+      (`table.existing === true`) so both renderers that read this
+      shared array can never disagree about it, even though only the
+      metadata renderer uses it; `TableClientMeta` gains `existing?:
+      true` plus a `clientMetaExistingField` helper (mirrors core's own
+      `existingField` — `{}` or `{ existing: true }`, spread into
+      `buildTableClientMeta`'s return); `query/src/client/
+      contract-types.ts`'s `ContractTableMeta` mirrors the same field
+      (this package restates the shape rather than importing it, `hejbro`
+      never being a dependency of `@hejbro/query`); `contract/emit.ts`'s
+      `renderTableClientMetaEntry` is a **hand-written per-field
+      renderer** (`JSON.stringify` per line), so the type addition alone
+      does not print — a conditional `existingMetaLine` helper
+      (`""` or `"\t\t\texisting: true,\n"`, if/return, no ternary) had
+      to be added and spliced into the rendered entry.
+
+      **`name-keyed-db.ts` boundary (tf coexistence)**: confirmed by
+      reading — `createNameKeyedDb` forwards `ContractTableMeta` to
+      `synthesizeTable` untouched, no field-level branching. **Not
+      opened** for 3.1 — the marker needed no runtime consumer there.
+
+      **Red — proved by executing the generated module, not by
+      pattern-matching its text** (planner instruction, after this repo
+      has previously shipped a module that passed every text assertion
+      and still threw on load): new test support
+      `test/support/load-emitted-contract.ts` transpiles `emitContract`'s
+      real output with `typescript`'s own `transpileModule` and
+      dynamically `import()`s it from inside `packages/cli/` (never
+      `node_modules/` or `/tmp` — Node's package self-reference needs an
+      unbroken walk-up to `package.json`'s own `exports` field to
+      resolve the emitted file's `import ... from "hejbro"`; measured
+      that a `node_modules`-nested temp dir breaks that walk),
+      auto-cleaned after every call. Test (`contract-existing.test.ts`)
+      — "emits an existing table under Tables, marked": loads the real
+      module, asserts `contractMetadata.tables.users.existing === true`
+      and (compact's other side) `"existing" in
+      contractMetadata.tables.posts === false`. Confirmed genuinely red
+      before this task's code (`existingMetaLine` temporarily forced to
+      always return `""`) — exactly 1 red, the other 2 new tests stayed
+      green; reverted, green again.
+
+      **Two green-on-arrival pins, each proved load-bearing by its own
+      probe** (not left untested just because pre-existing): "green on
+      arrival: an existing table already appears under Tables with its
+      own Row/Insert/Update" (text-based — a TS interface has no runtime
+      value to load) and "a foreign key onto a declared existing table
+      resolves to a relation" (text-based, mirrors the sibling "carries
+      a relation to a managed target" test). The existing "no relation
+      is derived for an unmanaged target" (`contract-emit.test.ts`
+      123-143, the undeclared-target axis) is cited as the control, not
+      duplicated.
+      Probe (entry presence): `computeTables` (emit.ts) temporarily
+      filtered `!entry.existing` — exactly 2 red (the marker test and
+      the entry-presence pin, both of which depend on the table's whole
+      computation surviving), the relation pin and all of
+      `contract-emit.test.ts`'s own 9 tests stayed green (relation
+      resolution reads the raw snapshot independently of this filtered
+      array). Reverted.
+      Probe (relation, surgical): `buildRelationships` (`tables.ts`)
+      temporarily excluded an existing target
+      (`target.existing === true`) from resolving. Exactly 1 red (only
+      the relation pin) across the 12 tests in `contract-existing.test.ts`
+      + `contract-emit.test.ts` together — the marker pin, the
+      entry-presence pin, and the existing undeclared-target control all
+      stayed green, showing the two axes (existing vs. undeclared) are
+      independently guarded. Reverted.
+
+      Gates: `TURBO_FORCE=1 build --force` (7/7), `check` (645 files
+      clean), `check-types` (16/16, 0 cached), `test` (64 files/512
+      tests, 0 cached — +1 file/+3 tests over G2's close).
 - [ ] 3.2 (~9m) The two-repository witness: the examples' supabase
       schema exports `authUsers` as existing; the consumer reads a
       managed table joined to it against a real server (PG15/PG17).

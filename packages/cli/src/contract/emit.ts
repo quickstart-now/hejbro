@@ -1,6 +1,6 @@
 import type { ExportPayload } from "../export/write";
 import { enumsInSnapshot, tablesInSnapshot } from "./read-snapshot";
-import type { TableComputation } from "./tables";
+import type { TableClientMeta, TableComputation } from "./tables";
 import {
 	buildEnumLookup,
 	buildTableClientMeta,
@@ -101,6 +101,14 @@ ${enumEntries}
 }`;
 };
 
+/** `\t\t\texisting: true,\n` for an existing table's meta entry, else `""` (compact, no ternary — mirrors core's own `existingField`-style helpers) — add-unmanaged-objects, 3.1. */
+const existingMetaLine = (meta: TableClientMeta): string => {
+	if (meta.existing !== true) {
+		return "";
+	}
+	return "\t\t\texisting: true,\n";
+};
+
 const renderTableClientMetaEntry = (computation: TableComputation): string => {
 	const meta = buildTableClientMeta(computation);
 	const columns = Object.entries(meta.columns)
@@ -124,7 +132,7 @@ ${columns}
 \t\t\tforeignKeys: [
 ${foreignKeys}
 \t\t\t],
-\t\t},`;
+${existingMetaLine(meta)}\t\t},`;
 };
 
 /**

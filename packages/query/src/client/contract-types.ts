@@ -28,12 +28,20 @@ export type ContractForeignKeyMeta = {
 	readonly referencedColumns: ReadonlyArray<string>;
 };
 
-/** One table's vendored facts — see `contract/tables.ts`'s own `TableClientMeta`. */
+/**
+ * One table's vendored facts — see `contract/tables.ts`'s own
+ * `TableClientMeta`. `existing` (add-unmanaged-objects, 3.1) is
+ * **compact** — present (`true`) only for an existing table, absent for
+ * a managed one, matching the emitting side's own convention — no code
+ * in this package reads it today; it is carried for the reader of the
+ * generated file and for tooling built on it.
+ */
 export type ContractTableMeta = {
 	readonly schema: string;
 	readonly name: string;
 	readonly columns: { readonly [tsKey: string]: ContractColumnMeta };
 	readonly foreignKeys: ReadonlyArray<ContractForeignKeyMeta>;
+	readonly existing?: true;
 };
 
 /** `contractMetadata`'s own full shape — see `contract/emit.ts`'s `renderMetadata`. */
