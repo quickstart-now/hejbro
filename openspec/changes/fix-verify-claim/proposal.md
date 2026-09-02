@@ -54,12 +54,21 @@ here: it adds a column to a durable object and a refusal path to
 
 - `cli-commands` — the requirement "The migration chain on disk is
   verifiable": the SHALL names what the chain vouches for, the
-  hand-edit scenario narrows to banner and snapshot, and a scenario
-  states that a body-only edit passes.
+  hand-edit scenario narrows to the two hash lines and the snapshot, and
+  scenarios pin each measured limit (body edit, first-file removal,
+  position-keeping rename, an added hash-less file).
+- `migration-apply` — the requirement "Applying refuses a chain that
+  does not verify, and reports what disagrees": `migrate` walks the same
+  chain, so its sentence and scenario take the same two root qualifiers
+  (the first migration's `parent-snapshot:` is taken as given; removing
+  the first migration passes the pre-flight), and a scenario states it.
+  Round 2 of the D106 review measured `migrate` opening its connection in
+  exactly those two cases.
 
 ## Impact
 
-- `openspec/specs/cli-commands/spec.md` (via this delta),
+- `openspec/specs/cli-commands/spec.md` and
+  `openspec/specs/migration-apply/spec.md` (via this delta),
   `packages/cli/test/verify.test.ts` (one test), `docs/guide/renames.md`
   (one sentence), `.changeset/*.md`, `openspec/task-times.csv`.
 - No source file changes. `verify`'s output, exit codes and diagnostics

@@ -19,14 +19,18 @@ The two hash lines are hashes of the normalized declaration snapshot
 before and after the migration, never of the file's own SQL text
 (migration-format), and the chain is checked link by link from its
 first hashed file onward. `verify` therefore vouches for the recorded
-sequence of declared states, and for nothing else about a file: an edit
-to a migration's SQL body that leaves its hash lines intact SHALL pass
-`verify` unreported, as SHALL an edit to any other banner line (the
-summary lines, the `hejbro:` version line), a rename that keeps a file's
-sort position (no hash covers the filename), and the removal of the
-first migration (the next file's own `parent-snapshot:` becomes the root
-and is taken as given). The limit is stated so that nobody reads a
-passing `verify` as proof that applied SQL matches generated SQL. The
+sequence of declared states, and not for the files around it. Mutations
+outside its reach include — this list names the measured ones, not
+every possible one — an edit to a migration's SQL body that leaves its
+hash lines intact, an edit to any other banner line (the summary lines,
+the `hejbro:` version line), a rename that keeps a file's sort position
+(no hash covers the filename), the removal of the first migration (the
+next file's own `parent-snapshot:` becomes the root and is taken as
+given), and a file added with no hash lines at all (the walk skips it,
+though `verify`'s summary line still counts it among the migrations).
+Each of these SHALL pass `verify` unreported. The limit is stated so
+that nobody reads a passing `verify` as proof that applied SQL matches
+generated SQL. The
 one body edit hejbro does catch — a transaction-control statement — is
 refused at apply time (migration-apply); detecting other body edits
 needs a record of what was applied, which is a separate capability.
@@ -51,5 +55,15 @@ needs a record of what was applied, which is a separate capability.
 #### Scenario: Removing the first migration passes
 - **WHEN** the first migration of a chain is deleted and `hejbro verify`
   runs
-- **THEN** it passes with exit code zero, because the next file's
-  `parent-snapshot:` is now the chain root and the root is taken as given
+- **THEN** it passes with exit code zero
+
+#### Scenario: A rename that keeps a file's position passes
+- **WHEN** a migration file is renamed without changing its sort position
+  and `hejbro verify` runs
+- **THEN** it passes with exit code zero
+
+#### Scenario: A file with no hash lines is skipped but counted
+- **WHEN** a file with no banner hash lines is added to the migrations
+  directory and `hejbro verify` runs
+- **THEN** it passes with exit code zero, and the summary line counts the
+  added file among the migrations

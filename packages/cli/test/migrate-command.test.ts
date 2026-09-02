@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { hejbroError } from "@hejbro/core";
 import type {
 	CompileResult,
@@ -446,6 +448,25 @@ describe("runMigrate / 17.1 (D106 M3) verifies the chain before connecting", () 
 		// indistinguishable from a fixture that never reaches the
 		// connection path at all.
 		await writeTwoFileChain(cwd, "sha256:bbbb");
+		const calls: string[] = [];
+		const spyImporter = async () => {
+			calls.push("import");
+			throw Object.assign(new Error("Cannot find package '@hejbro/pg'"), {
+				code: "ERR_MODULE_NOT_FOUND",
+			});
+		};
+
+		await runMigrate(cwd, ["--url", "postgres://fake"], spyImporter);
+
+		expect(calls).toHaveLength(1);
+	});
+
+	// #616: the chain root's own parent is taken as given, so removing the
+	// first migration leaves a chain that verifies -- the pre-flight passes
+	// and the run goes on to open its connection. A stated limit, pinned.
+	it("opens a connection when the first migration was removed (stated limitation: the root is taken as given)", async () => {
+		await writeTwoFileChain(cwd, "sha256:bbbb");
+		await rm(join(cwd, "migrations", "0001_a.sql"));
 		const calls: string[] = [];
 		const spyImporter = async () => {
 			calls.push("import");

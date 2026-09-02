@@ -1,4 +1,4 @@
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -496,6 +496,39 @@ export const projects = table(app, "projects", {
 
 		const result = await runCli(cwd, ["verify"]);
 		expect(result.exitCode).toBe(0);
+	});
+
+	it("a rename that keeps a file's sort position passes (stated limitation: no hash covers the filename)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeSchema(CHANGED_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		const [, second] = await migrationFileNames();
+		const version = (second as string).split("_", 1)[0] as string;
+		const renamed = `${version}_renamed_by_hand.sql`;
+		expect(renamed).not.toBe(second);
+		await rename(
+			join(cwd, "migrations", second as string),
+			join(cwd, "migrations", renamed),
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+	});
+
+	it("a file with no hash lines passes and is counted (stated limitation: the walk skips it, the summary counts it)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(BASE_SCHEMA);
+		await runCli(cwd, ["generate"]);
+		await writeFile(
+			join(cwd, "migrations", "99999999999999_added_by_hand.sql"),
+			"drop table app.posts;\n",
+		);
+
+		const result = await runCli(cwd, ["verify"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("checks passed (2 migrations");
 	});
 
 	it("existing chain diagnostics are unchanged (R2-G3's export check contributes nothing to a repository with no export)", async () => {

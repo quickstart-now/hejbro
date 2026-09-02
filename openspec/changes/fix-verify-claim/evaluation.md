@@ -273,3 +273,287 @@ snapshot" and "breaks the chain (`hejbro verify`'s check 3 or check 4)".
   outside this delta; it is noted here only because a repair to M2 that does not
   also touch it will leave the two capabilities disagreeing about what a removed
   file costs.
+
+---
+
+# Round 2
+
+**FAIL** — 0 blocking / 2 major / 3 minor.
+
+Method: the delta as rendered by `openspec show fix-verify-claim --diff`, read
+fresh against the shipped surface (`packages/cli/src/commands/verify.ts`,
+`packages/core/src/engine/chain.ts`, `packages/cli/test/verify.test.ts`,
+`docs/guide/renames.md`, `openspec/specs/migration-format/spec.md`,
+`openspec/specs/migration-apply/spec.md`). Every executable claim was exercised
+against the built CLI (`packages/cli/dist/cli.js`) on throwaway fixtures: a
+three-migration chain and a one-migration chain, each mutated one way per run
+(18 + 3 mutations; hash-line edits at first/middle/last, snapshot edit, body
+edit, three non-hash banner edits, renames at two positions, deletions at three
+positions plus the degenerate cases, reorder at head and tail, a forged
+`-- baseline:` marker, an added hash-less file), plus four `migrate` runs against
+an unreachable URL to observe the apply path's pre-flight. Findings are verified
+by execution unless marked UNVERIFIED.
+
+Every scenario in the delta reproduces exactly as written; no delta scenario
+contradicts shipped behaviour, so nothing here is blocking. The two majors are
+sentences elsewhere in the corpus that the delta's own carve-outs now falsify,
+one of them in a file this change edits.
+
+---
+
+## M3 (MAJOR) — `migration-apply` still asserts the two properties this delta carves out
+
+**Delta sentences** (`specs/cli-commands/spec.md:10-14, 26-28`): an edited hash
+line is reported "other than the first migration's own `parent-snapshot:`, which
+is the chain root and is taken as given"; "a migration missing from anywhere but
+the start of the chain … is reported"; "the removal of the first migration"
+SHALL pass.
+
+**Shipped sentence it contradicts** (`openspec/specs/migration-apply/spec.md:199-200`):
+"This is why the chain catches a hash-chain line edited, **a file removed**, or
+the order rearranged" — with its own scenario (lines 211-215): "**WHEN** a
+migration's hash-chain banner line has been edited, or a migration has been
+removed or reordered, and `migrate` runs — **THEN** it fails naming the artifact
+whose hash no longer matches, no connection is opened, and no statement is sent
+to the database".
+
+**Observed.** `migrate` reads the same chain as `verify`
+(`packages/cli/src/commands/migrate.ts:22-23, 332-333` import `readChainEntries`
+from `verify.ts` and hand it to the same `checkChain`), so the carve-outs are
+`migrate`'s too. Against an unreachable database (`--url=postgres://…:59999/none`),
+so that a pre-flight refusal is distinguishable from a connection attempt:
+
+| chain state | `migrate` |
+|---|---|
+| intact (control) | `error[apply-connection-failed]` — connection attempted |
+| middle migration's `parent-snapshot:` edited (control) | `error[broken-chain]`, no connection |
+| **first migration removed** | `error[apply-connection-failed]` — connection attempted |
+| **first migration's `parent-snapshot:` edited** | `error[apply-connection-failed]` — connection attempted |
+
+So `migration-apply`'s scenario is false in exactly the two positions
+`cli-commands` now declares as passing, and its "no connection is opened" is
+false with it: the apply path opens the connection and would go on to apply.
+
+**Why it is a defect.** After this delta the corpus holds both "the removal of
+the first migration SHALL pass `verify`" and "a migration has been removed →
+`migrate` fails, no connection is opened", about one chain walk shared by both
+commands. That is the same defect class the change exists to delete — one
+sentence claiming an integrity property the product does not have, next to one
+saying it does not — moved one capability sideways rather than removed. Round 1
+saw this coming and recorded it under "Considered and rejected as a finding"
+("a repair to M2 that does not also touch it will leave the two capabilities
+disagreeing"); the repair landed and the sibling sentence was not touched, so
+the risk is now realised text.
+
+**Repair.** Either extend the delta to `migration-apply` (its sentence and
+scenario need the same two qualifiers — "a file removed from anywhere but the
+start of the chain", and the root's own `parent-snapshot:` excluded), or, if the
+change is deliberately kept to one capability, say so in the proposal's "Out of
+scope" and file the sibling correction — an out-of-scope item that is not stated
+is indistinguishable from one that was missed.
+
+Reproduction:
+
+```
+rm migrations/<first>.sql
+node packages/cli/dist/cli.js migrate --url=postgres://nobody:nobody@127.0.0.1:59999/none
+# -> error[apply-connection-failed]  (chain pre-flight passed)
+```
+
+---
+
+## M4 (MAJOR) — the corrected guide sentence still overclaims for the chain root
+
+**Surface** (`docs/guide/renames.md:109`, the sentence this change rewrote):
+
+> …so reverting a file, **editing one of those two hash lines**, or editing the
+> snapshot breaks the chain (`hejbro verify`'s check 3, or check 4 for the last
+> migration's `snapshot:` line).
+
+**Observed.** Editing the first migration's `parent-snapshot:` line to
+`sha256:000…0` in a three-migration chain: `verify: 5 checks passed (3
+migrations, …)`, exit 0. Same in a one-migration chain: `5 checks passed (1
+migrations, …)`, exit 0. `checkChain` accepts the root's `parent`
+unconditionally (`packages/core/src/engine/chain.ts:104-110, 128-132`), which is
+precisely what `specs/cli-commands/spec.md:10-12` now carves out. "Reverting a
+file" is false in the same position: reverting the first migration's addition
+(i.e. deleting it) passes, exit 0.
+
+**Why it is a defect.** m4's other half was repaired well — the guide now names
+the two hash lines and attributes check 3 *and* check 4 correctly — but the
+remaining half of the same sentence is the guide's operative instruction
+("never …, because it breaks the chain") and it is now the one place in the
+corpus that still asserts what the requirement was rewritten to deny. The file
+is in this change's own Impact list, so it is not out-of-scope drift.
+
+**Repair.** "…so reverting a file, editing one of those two hash lines (except
+the first migration's own `parent-snapshot:`, which is the chain root and is
+taken as given), or editing the snapshot breaks the chain…" — or drop the
+exception into the paragraph's existing "not hashes of the file's SQL body"
+sentence, next to the body-edit limit it already states.
+
+Reproduction:
+
+```
+sed -i '' 's|^-- parent-snapshot: .*|-- parent-snapshot: sha256:000…0|' migrations/<first>.sql
+node packages/cli/dist/cli.js verify   # -> "verify: 5 checks passed", exit 0
+```
+
+---
+
+## m5 (MINOR) — the new scenario's THEN carries a rationale, and the rationale is false for a one-file chain
+
+**Delta sentence** (`specs/cli-commands/spec.md:51-55`):
+
+> #### Scenario: Removing the first migration passes
+> - **WHEN** the first migration of a chain is deleted and `hejbro verify` runs
+> - **THEN** it passes with exit code zero, **because the next file's
+>   `parent-snapshot:` is now the chain root and the root is taken as given**
+
+**Observed.** The observable half is correct at every arity tested (3-file chain
+→ `5 checks passed (2 migrations…)`; 3-file chain with the first two deleted →
+`(1 migrations…)`; one-file chain → `5 checks passed (0 migrations…)`), all exit
+0. The rationale is not: when the deleted first migration was the only one there
+is no "next file", and the pass comes from a different branch —
+`runCheck4`'s `tip === null` early return (`verify.ts:536-540`), an empty chain
+having nothing to compare. The scenario's WHEN admits that case; its THEN
+explains a mechanism that does not run there.
+
+Two further notes on the same clause: it is rationale inside a THEN, the exact
+shape round 1's m3 asked to be removed from the body-edit scenario — removed
+there, reintroduced here — and the same reasoning already appears verbatim in
+the requirement paragraph above (lines 26-28), where it belongs.
+
+**Repair.** End the THEN at "it passes with exit code zero".
+
+---
+
+## m6 (MINOR) — two of the four stated limits have no scenario, and the rename limit has no pin at all
+
+**Delta sentences** (`specs/cli-commands/spec.md:22-28`) state four limits with
+SHALL force: body edit, any other banner line, a rename that keeps sort
+position, removal of the first migration. Two carry scenarios (body edit, first
+removal); the other-banner-line limit has a subprocess pin but no scenario
+(`packages/cli/test/verify.test.ts:483-499`); the **rename** limit has neither —
+no scenario, and no test in `verify.test.ts` renames a migration file.
+
+**Observed.** The limit itself is real: renaming the middle migration to
+`20260902031631_totally_other.sql` and renaming the first to
+`20260902031619_zzz_other.sql` (same version prefixes, same sort positions) both
+give `verify: 5 checks passed`, exit 0. So the sentence is true — it is simply
+the one stated limit nothing holds, in a change whose own argument is that these
+pins "are the day a body hash ships turning red on purpose"
+(proposal, "What Changes"). A limit with no pin decays silently.
+
+**Repair.** Add the one-line rename case to the subprocess tests, or drop the
+rename clause to a non-normative aside; do not leave a SHALL unheld.
+
+---
+
+## m7 (MINOR) — the enumerated limits omit an added hash-less file, which `verify` counts as a migration
+
+**Delta sentence** (`specs/cli-commands/spec.md:21-22`): "`verify` therefore
+vouches for the recorded sequence of declared states, and for nothing else about
+a file:" followed by a closed list.
+
+**Observed.** Dropping a new file into the migrations directory with arbitrary
+SQL and no banner (`printf 'drop table app.posts;\n' > migrations/20260902031640_evil.sql`)
+gives `verify: 5 checks passed (4 migrations, …)`, exit 0 — the file is skipped
+by `readChainEntries` (`verify.ts:276-287`, hash-less files filtered) but counted
+in the success line, which reads the raw directory listing. So a passing
+`verify` reports "4 migrations" for a chain of which it checked three. The apply
+path is unaffected (`migrate` iterates the same filtered chain), so the exposure
+is the report, not execution.
+
+**Why it is a defect.** The requirement's list is written as the full account of
+what `verify` does not see ("and for nothing else about a file"), and it stops
+at edits, renames and removals. An added file is the fourth mutation of that
+class, and it is the one that makes `verify`'s own success line overstate its
+coverage. Pre-existing behaviour; the defect is the delta enumerating limits
+exhaustively and leaving this one out.
+
+**Repair.** Add the case to the limit list ("a migration file added with no hash
+lines at all is skipped by the walk, though `verify`'s summary still counts
+it"), or replace "and for nothing else about a file" with a non-exhaustive
+phrasing so the list is not read as complete.
+
+---
+
+## Checked and clean
+
+- **`#### Scenario: An untouched chain passes`** — freshly generated
+  three-migration and one-migration chains both give `5 checks passed`, exit 0.
+- **`#### Scenario: A hand-edited artifact is reported`** — every hash line the
+  WHEN admits was edited to `sha256:000…0` and every one is reported with exit
+  1: first migration's `snapshot:` (`broken-chain`), middle `parent-snapshot:`
+  and `snapshot:`, last `parent-snapshot:` (all `broken-chain`), last
+  `snapshot:` (`chain-tip-mismatch`), one-file chain's `snapshot:`
+  (`chain-tip-mismatch`). A hand-edited `hejbro.snapshot.json` gives
+  `error[snapshot-stale]` naming the file, exit 1. The excluded case (first
+  migration's `parent-snapshot:`) passes, exactly as the WHEN's exception says.
+- **The narrowed THEN ("naming the artifact when the failing check knows one")** —
+  round 1's m1 is repaired and the THEN is now satisfiable: `broken-chain` and
+  `snapshot-stale` name a file, `chain-tip-mismatch` renders `error[…]: snapshot:`
+  with no path (`identityFromMessage`, `verify.ts:250-257`), which the hedge
+  admits.
+- **`#### Scenario: A body edit that keeps the hash lines passes`** — a
+  `/* hand-edited */` insertion into the middle migration's `alter table`
+  statement leaves `verify` at `5 checks passed`, exit 0; the check-4 pin is its
+  control. Round 1's m3 rationale clause is gone from this THEN.
+- **"an edit to any other banner line (the summary lines, the `hejbro:` version
+  line)"** — three edits tried, all exit 0: a `-- + table app.posts [new]` →
+  `[TAMPERED]` summary line, `-- hejbro: 0.1.1` → `9.9.9`, and deleting the
+  `-- hejbro migration` line outright. Also true of the `-- baseline:` marker: a
+  forged `-- baseline: adopted 2026-09-02` line inserted into the first migration
+  passes `verify` (the marker is read by the apply path, never by any of
+  `verify`'s five checks — `readBaselineFileNames` is exported from `verify.ts`
+  but not called by them). Accurate as written; noted, not a finding, since the
+  sentence is about `verify` alone.
+- **"a migration missing from anywhere but the start of the chain … is
+  reported"** — middle deleted → `broken-chain` naming the following file, exit
+  1; last deleted → `chain-tip-mismatch`, exit 1; first deleted → passes; first
+  two deleted → passes. The boundary is exactly where the sentence puts it.
+- **"a migration whose order changed is reported"** — reordering at the tail
+  (middle file's prefix moved past the last) and at the head (first file's
+  prefix moved past the second) both give `error[broken-chain]`, exit 1. No
+  position where a reorder slips through was found.
+- **"the chain is checked link by link from its first hashed file onward"** —
+  matches `checkChain`'s contract (`chain.ts:104-132`) and `readChainEntries`'
+  filtering of hash-less files; the legacy-prefix integration test
+  (`verify.test.ts:816`) exercises the same path.
+- **"The two hash lines are hashes of the normalized declaration snapshot before
+  and after the migration, never of the file's own SQL text
+  (migration-format)"** — agrees with `migration-format` lines 13-17 and
+  `migration-apply` line 195. The parenthetical credits `migration-format`, which
+  states the positive definition; the outright "never" is `migration-apply`'s
+  sentence. Attribution nit only, same call as round 1.
+- **"The one body edit hejbro does catch — a transaction-control statement — is
+  refused at apply time (migration-apply)"** (UNVERIFIED — exercising the refusal
+  needs a reachable database) — round 1's m2 is repaired: the command name is
+  gone, and the claim now matches `migration-apply`'s command-agnostic
+  requirement (lines 123-137) and the shared `assertNoTransactionControl` on the
+  `migrate`/`raise` path.
+- **The three subprocess pins** (`verify.test.ts:435-467`, `468-482`, `483-499`)
+  pin exactly the delta's body-edit, first-removal and non-hash-banner-line
+  limits, on chains of the right arity (the removal test uses a two-migration
+  chain and asserts `checks passed (1 migrations`), and each names the control
+  that turns red.
+- **No "No matching main requirement" warning** from `openspec show
+  fix-verify-claim --diff`; the MODIFIED header still matches the shipped one.
+- **`verify` SHALL accept the chain a `baseline` starts** — carried over
+  unchanged by this delta; not re-reviewed (no `baseline` run is possible without
+  a database).
+
+---
+
+## Round 1 findings — status
+
+| # | Finding | Status |
+|---|---|---|
+| B1 | hand-edit scenario's WHEN broader than `verify` | repaired — WHEN now names the two hash lines and excludes the root's `parent-snapshot:`; all seven admitted positions verified reported, the excluded one verified passing |
+| M1 | "renamed … is reported" is false | repaired — `renamed` is gone from the SHALL and the rename case is restated as a limit (though unpinned, see m6) |
+| M2 | "a missing … file is reported" false for the first file | repaired in `cli-commands` — "missing from anywhere but the start of the chain", plus a scenario; **not repaired corpus-wide**, see M3 (`migration-apply` still carries the unqualified claim) |
+| m1 | "naming the artifact" has no observer in the tip-mismatch case | repaired — THEN now hedges "when the failing check knows one" |
+| m2 | transaction-control refusal is not `migrate`'s alone | repaired — reads "refused at apply time (migration-apply)" |
+| m3 | scenario THEN carries rationale instead of an observation | partially repaired — removed from the body-edit scenario, reintroduced in the new first-removal scenario, where it is also false for a one-file chain (m5) |
+| m4 | guide keeps the over-broad claim in its other half | partially repaired — the hash-line/body-hash half and the check-3/check-4 attribution are now correct; "editing one of those two hash lines … breaks the chain" is still false for the chain root (M4) |
