@@ -1033,9 +1033,9 @@ avoid — reads the same `format.json`/`schema.json` that same run just
 produced, asserting the existing table's `exportName`, and each
 column's `key`/`mode`/`notNullElements` round-trip exactly.
 
-### R2-B2 — held (measured only, per instruction)
+### R2-B2 — fixed (held for measurement first, unblocked by the lead's J12 ruling)
 
-No code changed. Three measurements, as instructed:
+No code changed in this sub-round. Three measurements, as instructed:
 
 **① Does `generateMigrations` expose a top-level snapshot when
 `migrations` is empty? No — confirmed by reading, not assumed.**
@@ -1088,9 +1088,183 @@ exactly the mismatch `contract/emit.ts`'s `computeTables` silently
 drops, reproducing the evaluator's own Consequence 3 by reading, not
 running.
 
-### Gates
+**Fix (option A, lead's J12 ruling).** `GenerateMigrationsResult` gained
+an unconditional top-level `snapshot` (all three return branches —
+blocked, no-DDL, ordinary — now match `generateMigration` singular's own
+convention, closing measurement ①). The CLI's no-DDL branch
+(`commands/generate.ts`) now decides whether to persist by comparing the
+run's own settled snapshot against `previousSnapshot`
+(`sameJson(firstPass.snapshot.objects, previousSnapshot.objects)`,
+core's own public `sameJson`) instead of trusting `hasChanges` alone —
+when they differ, the snapshot is written even with no migration to
+write, and `--export`'s no-change path always describes
+`firstPass.snapshot`, never the stale `previousSnapshot` (closing
+measurement ③). Measurement ②'s apparent conflict resolved differently
+than it first looked: this change's *own, still-open* `cli-commands`
+delta (`openspec/changes/add-unmanaged-objects/specs/cli-commands/spec.md`,
+written directly by the lead/planner per J12) already replaces the live
+capability's "no migration and no snapshot" text with language covering
+exactly this scenario — the underlying requirement decision had already
+been made at proposal time; the implementation just hadn't caught up to
+it. The report line for the new case
+(`"no migration — snapshot updated to record the declared change."`)
+matches that delta's own description ("report that the snapshot was
+updated with no migration to write") and is pinned in three CLI tests,
+replaying the evaluator's own consequences 1-3 through the real CLI
+subprocess (not a hand-built payload): `generate-command.test.ts`'s
+"an existing marker survives a real handover run on the on-disk
+snapshot" (① — reads the file the CLI actually wrote) and "a run that
+later removes a handed-over table's declaration entirely never brings
+its drops back" (② — file-count plus four narrowed destructive-drop
+greps, after a bare `"drop"` search first false-positived on `create
+policy`'s own idempotent `drop policy if exists` line), and
+`export-write.test.ts`'s "an in-sync project that only newly exports an
+existing declaration keeps the export/contract pairing" (③ — feeds the
+CLI's real `schema.json`/`format.json` through `validateExport` into
+`emitContract`, not a hand-built `ExportPayload`). Mutant (the whole
+fix reverted to the pre-fix, `hasChanges`-only shape): exactly 3 red /
+549, zero collateral — measured twice (mid-fix and again against the
+final code including the message-text change), same count both times;
+`generate-command.test.ts`'s own pre-existing "reports no changes and
+writes no new file on a second run" (the "No difference writes nothing"
+scenario's pin) stayed green under the identical mutant both times,
+confirming the two cases genuinely diverge rather than the fix simply
+making the snapshot write unconditionally.
 
-`TURBO_FORCE=1 pnpm build --force` (7/7), `check` (656 files clean),
-`check-types` (16/16, 0 cached), `test` (17/17 tasks — core
-98f/1477t incl. 1 todo [+4 over round 1's close], query/nile/supabase
-unchanged, cli 64f/546t [+1]). `openspec validate --strict` valid.
+### Gates (R2-02, R2-B2's own close)
+
+`TURBO_FORCE=1 pnpm build --force` (7/7, run once per mutant swap),
+`check` (656 files clean — one ternary Biome's `noTernary` refused,
+extracted into a small helper), `check-types` (16/16, 0 cached, forced),
+`test` (17/17 tasks — core 98f/1477t unchanged, cli 64f/549t [+3 over
+R2-01's 546t]). `openspec validate --strict` valid.
+
+### Snapshot consumers
+
+UO-D106-R2-05 (lead ruling: a full sweep is cheaper before a round-3
+review than another round finding the next site one at a time — R1 found
+the fan-out kinds, R2 found the rename planner and the CLI's own
+snapshot-write rule, both on the same axis: *a consumer that reads the
+snapshot without knowing this piece's own marker*). Every site below was
+found by grepping `packages/{core,cli,supabase,nile}/src` for
+`snapshot.objects`, `asTableSnapshot`, `tableEntries`, `splitObjectKey`,
+the string literal `"table:`, and every function parameter typed
+`Snapshot` (including non-`snapshot`-named ones — `previous`/`next`/
+`previousSnapshot`/`currentSnapshot`/`rewrittenPrevious`/`nextSnapshot`/
+`contextSnapshot`) — the exact commands are listed at the end of this
+section so a later reviewer can re-run the same sweep. Grouped by area;
+line numbers are this round's own (`3183d167`).
+
+**① column** — does this site make a decision that must answer
+differently for a table hejbro doesn't own (write DDL, refuse, compare
+against a live catalog, list in an inventory, emit a type)? **②** — does
+it actually know, today? **③** — file:line and the test that pins it, or
+"no pin" if none exists.
+
+#### Diff / generate engine (core)
+
+| Site | ① | ② | ③ |
+|---|---|---|---|
+| `diffSnapshots` (`engine/diff-engine.ts:189`), via `ownerIsExisting`/`authoritativeOwnerNode` (`:163`/`:136`) | yes | yes | `core/test/generate.test.ts` uo7-uo10 (R1), the R1-03/R1-04 mutants (3-4 red measured) |
+| `tableKind.diff`'s own `isExistingSide(previous)\|\|isExistingSide(next)` guard (`kinds/table-kind.ts:636`, guard `:568`) | yes | yes | same uo7-uo10 suite; R1-03's own mutant (3 red, the removal-direction failure mode it named) |
+| `resolveTableDeclarations`'s `if (meta.existing) return [meta]` (`engine/generate.ts:127,164`) | yes | yes | B1's own fan-out-suppression pins (R1) — this is *why* sequence/rls/policy fan-out declarations never exist for an existing table, upstream of the diff entirely |
+| `table-kind-emit.ts`'s whole emit surface (`emitCreate`, `standingGrantStatements`, `identityOptionChangeStatements`, …) | n/a | n/a | structurally unreachable — every emit function here is only ever called from a `KindChange` `tableKind.diff` already produced, and the guard above means no such change exists for an existing table; no per-function check needed |
+| `core-validators.ts`'s `notNullWithoutDefaultWarnings` (reads `change.previous`/`change.next` via `asTableSnapshot`) | no | — | filters `isTableAlterChange` first — an `alter` `KindChange` for an existing table can't exist (same guard as above), so this never sees one |
+| `core-validators.ts`'s `rlsUnreachableSchemaWarnings` | no | — | judges `PolicyDeclaration`s only; `existingTable()`'s own DSL (`dsl/existing-table.ts`) takes no `rls`/policy config at all, so a policy can never target an existing table by construction |
+| `grant-kind.ts`'s `standingAllTablesGrants` (`snapshot: Snapshot` param, `:143`) | no | — | reads schema-wide standing grants to re-issue alongside a table's own `create` — only ever called from an already-guarded `create` emit, and doesn't ask "is *this* table existing" at all |
+| `grant-kind.ts`'s `emit`/`diff` | no | — | **checked, then corrected**: first pass here claimed a deliberate-but-unpinned "grant on an existing table still emits" gap, matching R1's `ownerTableIdentity` note. Re-checked against `dsl/grant.ts:17` (D28) before finalizing: `GrantKind` is `"schema-usage" \| "all-tables-privileges" \| "default-table-privileges"` only — **per-table grants don't exist in this DSL at all** ("out of scope until a real declaration needs them"), so there is no existing/managed axis for a grant declaration to answer differently about; R1's `ownerTableIdentity` exclusion is precautionary for a future per-table grant kind, not a currently-reachable behavior |
+| `engine/split.ts`'s `applySplitChangesOnly` (`previousSnapshot: Snapshot`) | no | — | only ever applies **enum**-kind changes to build the intermediate split snapshot; an enum change is never about a table's own identity |
+| `engine/validate.ts`'s `Validator`/`runValidators` | n/a | n/a | the orchestrator/interface only — the decision lives in each preset's own validator (see below) |
+
+#### Rename engine (core)
+
+| Site | ① | ② | ③ |
+|---|---|---|---|
+| `engine/rename-plan.ts`'s `planRenames` → `excludeExisting` (`engine/rename/snapshot-sets.ts`) | yes | yes (R2-B1) | `core/test/generate.test.ts` "D106 R2, R2-B1 repro A/B/C/D"; mutant 4 red/1477 |
+| `rename/ambiguities.ts` (`residualColumnAmbiguities`/`residualTableAmbiguities`/`consumedColumnNamesByTable`/`consumedTableNamesBySchema`) | yes | yes, transitively | reads only the already-filtered `tableColumnSets`/`schemaTableSets` `planRenames` builds — never the raw snapshot directly; covered by the same R2-B1 repros (an ambiguity naming an existing table was exactly repro B/C's own shape) |
+| `rename/apply.ts`'s `applyTableRename`/`applyColumnRename`, `rename/retarget.ts`'s rewrite helpers (both read via `asTableSnapshot`) | yes | yes, transitively | only ever invoked with a `RenameSpec` from `renameResult.validSpecs`, itself derived from the filtered sets above — an existing table's rename can't reach here to begin with; no dedicated pin exercises `apply.ts` directly with an existing-table spec (relies on the upstream filter, not a bespoke check in this file) |
+
+#### `hejbro check` (CLI)
+
+| Site | ① | ② | ③ |
+|---|---|---|---|
+| `check/compare.ts`'s `compareTable` (`:414`, guard `:426`) | yes | yes | `check-command.test.ts` "no difference is reported for it" |
+| `check/inventory.ts`'s `declaredTableIdentities`/`unmanagedTables` | yes | yes — **by construction, not a check**: any `table:` key (existing or managed) counts as declared, so an existing table is excluded from "unmanaged" without a dedicated `existing` branch | `check-command.test.ts` "is absent from the inventory section", "the word \`unmanaged\` never appears in the report…" |
+| `commands/check.ts`'s `declaredCheckConstraints` | yes, in principle | yes — **structurally, not explicitly**: `existingTable()`'s DSL has no `checks` parameter, so an existing table's `checks` array is always absent/empty; no `tableExisting` guard exists here because none is currently reachable | no dedicated pin — flagged as fragile: a future DSL change letting `existingTable()` carry checks would silently start comparing them with no test to catch it |
+| `assert-schema.ts` (reuses `check/compare.ts`'s `compareCatalog`) | yes | yes, transitively (shared code path) | no `assertSchema`-specific pin for the existing-table skip — relies entirely on `compareTable`'s own pin; a future bypass of `compareCatalog` inside `assertSchema` wouldn't be caught here |
+
+#### Export / vendored contract (CLI)
+
+| Site | ① | ② | ③ |
+|---|---|---|---|
+| `export/description.ts`'s `buildExportDescription` | yes | yes | `export-write.test.ts` "carries an existing table marked as such (2.1)", "…round trip (R2-N7)" |
+| `contract/read-snapshot.ts`/`contract/tables.ts`'s `buildRelationships`/`findTableInSnapshot` | yes (identity-agnostic *by design* — an FK target resolves the same way whether the target is existing or managed) | yes | `contract-existing.test.ts` "a foreign key onto a declared existing table resolves to a relation"; R2-B2's own ③ (real CLI round trip) |
+| `contract/emit.ts`'s `computeTables` | yes (must not drop an existing table's fact) | yes — "green on arrival" (D33's own "no omitted fact" rule already covered it before this piece existed) | `contract-existing.test.ts` "green on arrival: an existing table already appears under Tables…" |
+| `export-compare.ts`'s `compareExport` (verify's own R2-G3 check) | no | — | byte-comparison against a freshly-rebuilt expected payload from the same builders `generate --export` uses — no decision of its own; the `snapshot` it's handed (`commands/verify.ts`'s `runExportCheck`) comes from `generateMigration` **singular**, which already returns the fresh, correct snapshot unconditionally (never the stale-snapshot shape R2-B2 fixed for the plural entry point) |
+
+#### Apply engine / ledger (CLI)
+
+| Site | ① | ② | ③ |
+|---|---|---|---|
+| `apply/reset.ts`'s `planReset` (reuses `diffSnapshots(currentSnapshot, emptySnapshot, …)`) | yes | yes, transitively (same diff-engine guard as generate) | `apply-reset.test.ts` "leaves a declared-but-existing table standing, and never counts it toward the drop confirmation" |
+| `commands/reset.ts`'s `applyResetReport` | no | — | thin wrapper over `applyReset`; no decision of its own |
+| `apply/raise.ts`/`commands/raise.ts` | no | — | reads raw migration SQL text and the ledger only — the `SnapshotFile` type here is an unrelated migration-file record (`fileName`/`sql`/`origin`), not core's `Snapshot`; matches the delta's own "raise … reads migration text and the ledger, never a declaration" |
+| `apply/plan.ts`, `apply/execute.ts`, `apply/ledger.ts`, `commands/migrate.ts`, `commands/status.ts` | no | — | none of these files reference `Snapshot` at all (confirmed by grep, zero hits) — the whole apply/ledger path operates over migration files and the ledger table only |
+| `commands/verify.ts` check 2 (declarations ↔ snapshot, byte comparison via `generateMigration` singular) | no | — | a byte-identical re-derivation and comparison; correctness flows from `buildSnapshot`'s own marker output, already covered elsewhere |
+| `commands/verify.ts`'s export check (`runExportCheck` → `compareExport`) | see `export-compare.ts` above | yes | passes `generateMigration({...}).snapshot` — the singular entry point's always-fresh contract, not the stale shape R2-B2 fixed |
+
+#### Preset validators (`@hejbro/supabase`, `@hejbro/nile`)
+
+| Site | ① | ② | ③ |
+|---|---|---|---|
+| `supabase/validators/reserved-schemas.ts` | yes | yes | `reserved-schemas.test.ts` |
+| `supabase/validators/exposed-tables.ts` | yes | yes | `exposed-tables.test.ts` |
+| `supabase/validators/rls-cached-auth-outside-rls.ts` | yes | yes | `rls-cached-auth-outside-rls.test.ts` |
+| `supabase/validators/schema-of.ts`'s shared `isManagedTableDeclaration`-equivalent (`:37`) | yes | yes | feeds the three validators above |
+| `supabase/validators/rls-uncached-auth-call.ts` | no | — | judges `PolicyDeclaration`s only; a policy can't target an existing table (same DSL-shape reason as core's `rlsUnreachableSchemaWarnings`) |
+| `supabase/validators/view-security-invoker.ts` | no | — | judges only a view's own `security_invoker` option, independent of any table's existing status |
+| `nile/validators.ts`'s `isManagedTableDeclaration` (`:53`), feeding `nileSerialValidator`/`nileTenantPrimaryKeyValidator`/`nileIdentityValidator` | yes | yes | `nile/test/validators.test.ts` |
+| `nile/validators.ts`'s `nileRlsValidator`/`nileFunctionTriggerValidator`/`nileGrantValidator` | no | — | judge RLS/policy/trigger/function/grant declarations, none of which an existing table can carry |
+| `supabase/storage/bucket-kind.ts` | no | — | storage buckets are an independent object kind (S3-like), unrelated to table declarations entirely (the one grep hit here was a comment, not code) |
+
+#### Not a consumer — the marker's own origin
+
+`snapshot/snapshot.ts`'s `buildSnapshot`/`parseSnapshot`/`renderSnapshot` and `kinds/table-snapshot.ts`'s `tableExisting`/`asTableSnapshot` are where the `existing` marker is written and read from, not a site that has to *know about* it the way everything above does — already covered by this piece's own original test suite and R2-N7's round trip.
+
+#### Result
+
+No `①=yes,②=no` finding anywhere in the sweep — every site that must
+answer differently for an existing table already does. Three sites are
+correct only *structurally* (no explicit `existing`/`tableExisting`
+check defends them, only the shape of today's DSL), worth naming so a
+future DSL change doesn't quietly reopen them:
+
+- **`declaredCheckConstraints`** (`commands/check.ts`): safe only
+  because `existingTable()`'s DSL has no `checks` parameter today —
+  structurally unreachable, not defended by a guard. No pin added this
+  round (nothing to reproduce — there's no way to construct the input);
+  noted for whoever adds a `checks` option to `existingTable()` later.
+- **`assertSchema`'s existing-table skip**: correct only because it
+  shares `compareCatalog` with `check` — no test exercises `assertSchema`
+  itself with an existing-table fixture.
+- **Grants** (`grant-kind.ts`): safe only because per-table grants don't
+  exist in the DSL at all (D28) — not because anything checks
+  existing-table status. The R1 `ownerTableIdentity` exclusion this
+  round's first pass mis-cited as "a deliberate gap with no pin" was
+  re-checked against `dsl/grant.ts` before being written down as a
+  finding — it describes a precaution for a kind that doesn't exist yet,
+  not a reachable behavior missing a test.
+
+Nothing here rises to "small, fix now" or "large, report now" — the
+table above is the artifact itself.
+
+**Search commands** (re-run to reproduce this sweep):
+```
+grep -rln "snapshot\.objects" packages/{core,cli,supabase,nile}/src
+grep -rln "asTableSnapshot" packages/{core,cli,supabase,nile}/src
+grep -rln "tableEntries" packages/{core,cli,supabase,nile}/src
+grep -rln "splitObjectKey" packages/{core,cli,supabase,nile}/src
+grep -rln '"table:' packages/{core,cli,supabase,nile}/src
+grep -rn "snapshot: Snapshot\b" packages/{core,cli,supabase,nile}/src
+grep -rn ": Snapshot\b" packages/{core,cli,supabase,nile}/src | grep -v "snapshot: Snapshot"
+```
