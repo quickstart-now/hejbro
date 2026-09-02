@@ -5,6 +5,7 @@ import type { DeclaredTable, Table, TableDeclaration } from "../dsl/table";
 import { getTableMeta, isTable } from "../dsl/table";
 import type { HejbroError } from "../error";
 import { hejbroError, throwHejbroError } from "../error";
+import { sameJson } from "../kind/diff-helpers";
 import type { HejbroDeclaration, KindChange } from "../kind/object-kind";
 import type { KindRegistry } from "../kind/registry";
 import { createDefaultRegistry } from "../kind/registry";
@@ -617,8 +618,51 @@ export const generateMigrations = (
 		};
 	}
 	if (!pipeline.hasChanges) {
+		// D106 R3, J13 ("The migration chain on disk is verifiable" already
+		// SHALLs the banner's two hashes are the declaration snapshot
+		// before/after, never the SQL text -- so a run with no statement to
+		// write is not a special case for that requirement, it is the
+		// requirement working as specified). `hasChanges` tracks DDL only;
+		// an existing-table marker moving (handover, adoption, a plain
+		// add/change/remove) can differ `pipeline.snapshot` from
+		// `options.previousSnapshot` with no `KindChange` at all. Writing
+		// nothing here left that new state with no banner to anchor it in
+		// the chain -- `verify` then finds the tip and the snapshot
+		// disagreeing on a repository nobody edited (R3-B1). The fix is one
+		// migration carrying no statements, whose banner records the same
+		// before/after hashes any other migration's would.
+		const snapshotChanged = !sameJson(
+			pipeline.snapshot.objects,
+			options.previousSnapshot.objects,
+		);
+		if (!snapshotChanged) {
+			return {
+				migrations: [],
+				hasChanges: false,
+				snapshot: pipeline.snapshot,
+				errors: [],
+				ambiguities: [],
+				warnings: pipeline.warnings,
+			};
+		}
 		return {
-			migrations: [],
+			migrations: [
+				{
+					sql: buildGeneratedMigrationSql(
+						[],
+						true,
+						[],
+						pipeline.snapshot,
+						pipeline.registry,
+						pipeline.plan,
+						options.bannerHashes?.[0],
+						options.hejbroVersion,
+						options.baseline,
+					),
+					changes: [],
+					snapshot: pipeline.snapshot,
+				},
+			],
 			hasChanges: false,
 			snapshot: pipeline.snapshot,
 			errors: [],

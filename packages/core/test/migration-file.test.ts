@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 // would.
 import { parseBannerBaseline as parseBannerBaselineFromIndex } from "../src/index";
 import type { KindChange } from "../src/kind/object-kind";
+import type { Snapshot } from "../src/snapshot/snapshot";
+import type { JsonValue } from "../src/snapshot/stable-json";
 import {
+	deriveExistingTransitionSlug,
 	deriveSlug,
 	findDuplicateVersionGroups,
 	migrationFileName,
@@ -457,5 +460,90 @@ describe("deriveSlug", () => {
 	});
 	it("falls back to migration when there are no changes", () => {
 		expect(deriveSlug([])).toBe("migration");
+	});
+});
+
+describe("deriveExistingTransitionSlug (D106 R3, J13)", () => {
+	const emptySnapshot: Snapshot = {
+		formatVersion: 8,
+		dialect: "postgres",
+		objects: {},
+	};
+
+	const managedNode: JsonValue = { schema: "app", name: "widgets" };
+	const existingNode: JsonValue = {
+		schema: "app",
+		name: "widgets",
+		existing: true,
+	};
+
+	const snapshotWith = (key: string, node: JsonValue | undefined): Snapshot => {
+		if (node === undefined) {
+			return emptySnapshot;
+		}
+		return { ...emptySnapshot, objects: { [key]: node } };
+	};
+
+	it("names 'record_<table>' when a table's own existing marker appears (added declaration)", () => {
+		const previous = snapshotWith("table:app.widgets", undefined);
+		const next = snapshotWith("table:app.widgets", existingNode);
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("record_widgets");
+	});
+
+	it("names 'forget_<table>' when a table's own existing marker disappears (removed declaration)", () => {
+		const previous = snapshotWith("table:app.widgets", existingNode);
+		const next = snapshotWith("table:app.widgets", undefined);
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("forget_widgets");
+	});
+
+	it("names 'release_<table>' for a handover (managed -> existing, same identity)", () => {
+		const previous = snapshotWith("table:app.widgets", managedNode);
+		const next = snapshotWith("table:app.widgets", existingNode);
+		expect(deriveExistingTransitionSlug(previous, next)).toBe(
+			"release_widgets",
+		);
+	});
+
+	it("names 'adopt_<table>' for an adoption (existing -> managed, same identity)", () => {
+		const previous = snapshotWith("table:app.widgets", existingNode);
+		const next = snapshotWith("table:app.widgets", managedNode);
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("adopt_widgets");
+	});
+
+	it("uses the last dot-segment of the identity, not the full schema-qualified key", () => {
+		const previous = snapshotWith("table:billing.ledger", undefined);
+		const next = snapshotWith("table:billing.ledger", {
+			schema: "billing",
+			name: "ledger",
+			existing: true,
+		});
+		expect(deriveExistingTransitionSlug(previous, next)).toBe("record_ledger");
+	});
+
+	it("picks the first transition in stable sorted key order when several tables move at once", () => {
+		const previous: Snapshot = { ...emptySnapshot, objects: {} };
+		const next: Snapshot = {
+			...emptySnapshot,
+			objects: {
+				"table:app.zebra": { schema: "app", name: "zebra", existing: true },
+				"table:app.aardvark": {
+					schema: "app",
+					name: "aardvark",
+					existing: true,
+				},
+			},
+		};
+		// "app.aardvark" sorts before "app.zebra" -- the first difference in
+		// that order wins, not declaration or object-literal order.
+		expect(deriveExistingTransitionSlug(previous, next)).toBe(
+			"record_aardvark",
+		);
+	});
+
+	it("throws an internal-invariant error when the two snapshots carry no existing-marker transition at all", () => {
+		const same = snapshotWith("table:app.widgets", managedNode);
+		expect(() => deriveExistingTransitionSlug(same, same)).toThrow(
+			/no existing-marker transition/,
+		);
 	});
 });
