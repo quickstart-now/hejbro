@@ -858,7 +858,26 @@ and the sentences must be written to match what those groups land.
       origin discriminator group 16 adds. These are one decision about
       one durable object; writing them in two passes would settle its
       shape twice. Record that no compatibility path is owed because
-      nothing is published yet.
+      nothing is published yet. **Open question this task MUST answer
+      (lead, at the owner's pause — raised pre-push, landed unanswered):
+      the `origin` values mix two axes** — `applied`/`raised` say how
+      the row entered, `baseline` says what kind of file it is — and
+      the user-facing vocabulary disagrees: group 12's `migrate` output
+      deliberately says "registered" for a baseline (never "applied"),
+      yet a user querying the ledger by that word finds no `registered`,
+      only `baseline`. The implementer's "exactly three entry paths"
+      grounds the *count*, not the *spelling*. Settle the vocabulary
+      here (rename the value, or record why the mismatch stands), while
+      renaming is still free — nothing is published.
+      **Answered in code before this task opened**: the value was renamed
+      `baseline` → `registered`, unifying the axis on how the row entered
+      and matching the word `migrate` already prints. The argument that
+      no information is lost is worth keeping: registering happens on
+      exactly one path, so `origin = 'registered'` *is* "this was a
+      baseline file". So 15.4 transcribes that decision and carries its
+      reasoning into spec prose — it does not reopen it. Final shape:
+      `origin text not null check (origin in ('applied', 'registered',
+      'raised'))`, no default, on `hejbro.migration_ledger`.
 - [ ] 15.5 (~5m) M6's prose: either the zero-change carve-out is stated
       or the implementation refuses first. Group 18 chooses; this task
       writes whichever it chose.

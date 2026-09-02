@@ -10,7 +10,7 @@ import { isMigrationRecorded, recordAppliedMigration } from "./ledger";
  * 16.1, D106 M7) is the ledger row's own origin this call will record --
  * required, never defaulted, the same reasoning that keeps the ledger's
  * own `origin` column `not null` with no default: a caller SHALL say how
- * this row entered the ledger. `origin === "baseline"` is also what
+ * this row entered the ledger. `origin === "registered"` is also what
  * tells {@link applyMigration} to skip sending this migration's SQL
  * (task 12.2, #624) -- replacing the earlier, narrower `baseline?:
  * boolean` field this change carried before this group folded it into
@@ -342,7 +342,7 @@ export type ApplyOutcome = "applied" | "already-applied";
  * {@link throwApplyFailure}, never assumed.
  *
  * [task 12.2, #624; origin since task 16.1, D106 M7]
- * `migration.origin === "baseline"` skips the DDL send entirely -- still
+ * `migration.origin === "registered"` skips the DDL send entirely -- still
  * inside the same lock, still after the same already-recorded recheck
  * above, but the statement that carries it never reaches the database
  * (spec: "A baseline is registered rather than run"; the object it
@@ -369,7 +369,7 @@ export const applyMigration = async (
 			if (await isMigrationRecorded(session, migration.fileName)) {
 				return "already-applied";
 			}
-			if (migration.origin !== "baseline") {
+			if (migration.origin !== "registered") {
 				await session.execute(exec(migration.sql, []));
 			}
 			await recordAppliedMigration(

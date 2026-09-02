@@ -200,7 +200,7 @@ describe("applyFrom / 12.2 (#624)", () => {
 	const baselineMigration: Migration = {
 		fileName: "0001_baseline.sql",
 		sql: 'create table "app"."adopted" (id integer);',
-		origin: "baseline",
+		origin: "registered",
 	};
 
 	it("registers a baseline without sending its statements, and reports it as registered, not applied", async () => {

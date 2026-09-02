@@ -187,14 +187,14 @@ describe("recordAppliedMigration / 1.4", () => {
 	it("registers a baseline without executing its statements", async () => {
 		const { session, calls } = makeRecordingSession();
 
-		await recordAppliedMigration(session, "0001_adopt.sql", "baseline");
+		await recordAppliedMigration(session, "0001_adopt.sql", "registered");
 
 		// The ledger has no facility to send a migration's own DDL -- the
 		// baseline path (spec: "A baseline is registered rather than run")
 		// is exactly this one insert and nothing else, at this layer.
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.sql.toLowerCase()).toMatch(/^insert into/);
-		expect(calls[0]?.params).toEqual(["0001_adopt.sql", "baseline"]);
+		expect(calls[0]?.params).toEqual(["0001_adopt.sql", "registered"]);
 	});
 });
 
@@ -204,7 +204,7 @@ describe("recordAppliedMigration / 16.1 (D106 M7)", () => {
 		await bootstrapLedger(session);
 
 		await recordAppliedMigration(session, "0001_init.sql", "applied");
-		await recordAppliedMigration(session, "0002_baseline.sql", "baseline");
+		await recordAppliedMigration(session, "0002_baseline.sql", "registered");
 		await recordAppliedMigration(session, "snapshot.sql", "raised");
 		const state = await readLedger(session);
 
@@ -212,7 +212,7 @@ describe("recordAppliedMigration / 16.1 (D106 M7)", () => {
 			exists: true,
 			applied: [
 				{ filename: "0001_init.sql", origin: "applied" },
-				{ filename: "0002_baseline.sql", origin: "baseline" },
+				{ filename: "0002_baseline.sql", origin: "registered" },
 				{ filename: "snapshot.sql", origin: "raised" },
 			],
 		});
@@ -230,7 +230,7 @@ describe("recordAppliedMigration / 16.1 (D106 M7)", () => {
 			.split("\n")
 			.find((line) => line.toLowerCase().includes('"origin"'));
 		expect(originLine).toMatch(
-			/"origin"\s+text\s+not null\s+check\s*\(\s*"origin"\s+in\s*\('applied', 'baseline', 'raised'\)\)/i,
+			/"origin"\s+text\s+not null\s+check\s*\(\s*"origin"\s+in\s*\('applied', 'registered', 'raised'\)\)/i,
 		);
 		// Not defaulted -- an unstated origin SHALL be an error, never a
 		// silent classification (task 16.1's own "no default" constraint).

@@ -128,7 +128,7 @@ describe("planApply / 16.2 (D106 M7)", () => {
 			{ fileName: "0001_baseline.sql", parent: "root", current: "h1" },
 		];
 		const ledger = ledgerOf([
-			{ filename: "0001_baseline.sql", origin: "baseline" },
+			{ filename: "0001_baseline.sql", origin: "registered" },
 		]);
 
 		const result = planApply(chain, ledger);

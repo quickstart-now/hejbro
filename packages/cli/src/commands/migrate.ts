@@ -34,13 +34,13 @@ const MIGRATE_ARGS = {
 
 const MIGRATE_COMMAND = "hejbro migrate";
 
-/** [task 16.1, D106 M7] The ledger origin `fileName` records under, given `plan.baselineFileNames` -- no ternary (house style): a chain-applied file is `"applied"`, a baseline file is `"baseline"`; `migrate` never writes `"raised"` (that origin is `raise`'s own). */
+/** [task 16.1, D106 M7] The ledger origin `fileName` records under, given `plan.baselineFileNames` -- no ternary (house style): a chain-applied file is `"applied"`, a baseline file is `"registered"` (the same word this file's own report line already uses for it, below); `migrate` never writes `"raised"` (that origin is `raise`'s own). */
 const originFor = (
 	fileName: string,
 	baselineFileNames: ReadonlySet<string>,
 ): LedgerOrigin => {
 	if (baselineFileNames.has(fileName)) {
-		return "baseline";
+		return "registered";
 	}
 	return "applied";
 };
@@ -227,7 +227,7 @@ export const applyFrom = async (
 	}
 	try {
 		const outcome = await applyMigration(driver, next, MIGRATE_COMMAND);
-		if (outcome === "already-applied" && next.origin === "baseline") {
+		if (outcome === "already-applied" && next.origin === "registered") {
 			return applyFrom(
 				driver,
 				rest,
@@ -247,7 +247,7 @@ export const applyFrom = async (
 				alreadyRegisteredSoFar,
 			);
 		}
-		if (next.origin === "baseline") {
+		if (next.origin === "registered") {
 			return applyFrom(
 				driver,
 				rest,

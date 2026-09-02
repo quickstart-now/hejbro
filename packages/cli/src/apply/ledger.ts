@@ -142,24 +142,31 @@ const QUALIFIED_LEDGER_TABLE = `"${LEDGER_SCHEMA}"."${LEDGER_TABLE}"`;
  * not a filename convention: a filename-encoded marker would collide
  * with "a row identifies its migration by the full filename" (task
  * 1.1's own key choice) and is stringly (a marker embedded in the same
- * field a caller also matches on for identity). `"applied"` is an
- * ordinary migration `migrate` ran; `"baseline"` is a baseline migration
- * registered without its statements ever being sent (task 12.2, #624);
- * `"raised"` is the one row `hejbro raise` writes for the snapshot SQL
- * file it applied. Nothing is published yet, so this column carries no
- * migration path and no default -- a row with an unstated origin would
- * silently mean something, and there is no compatibility obligation this
- * early to justify choosing what.
+ * field a caller also matches on for identity). All three values name
+ * the *action* that produced the row, one axis, not a mix of "how it
+ * arrived" and "what kind of file it is": `"applied"` is an ordinary
+ * migration `migrate` ran; `"registered"` is a baseline migration
+ * recorded without its statements ever being sent (task 12.2, #624) --
+ * named to match `migrate`'s own report line ("registered ... baseline
+ * migration(s)", never "applied"), so the word a user reads and the word
+ * the ledger stores are the same one (D106 correction round, second
+ * pass: the first draft called this value `"baseline"`, which is a file
+ * kind, not an action, and disagreed with the report text); `"raised"`
+ * is the one row `hejbro raise` writes for the snapshot SQL file it
+ * applied. Nothing is published yet, so this column carries no migration
+ * path and no default -- a row with an unstated origin would silently
+ * mean something, and there is no compatibility obligation this early to
+ * justify choosing what.
  */
-export type LedgerOrigin = "applied" | "baseline" | "raised";
+export type LedgerOrigin = "applied" | "registered" | "raised";
 
 const LEDGER_ORIGINS: ReadonlyArray<LedgerOrigin> = [
 	"applied",
-	"baseline",
+	"registered",
 	"raised",
 ];
 
-/** `'applied', 'baseline', 'raised'` -- the `origin` column's own check constraint, built from {@link LEDGER_ORIGINS} so the two can never drift apart. */
+/** `'applied', 'registered', 'raised'` -- the `origin` column's own check constraint, built from {@link LEDGER_ORIGINS} so the two can never drift apart. */
 const LEDGER_ORIGIN_CHECK_LIST = LEDGER_ORIGINS.map(
 	(origin) => `'${origin}'`,
 ).join(", ");
@@ -300,7 +307,7 @@ export const isMigrationRecorded = async (
  * registered rather than run"): this function has no parameter for a
  * migration's own SQL, so calling it can never send that SQL. Registering
  * a baseline is calling this once, with the baseline migration's
- * filename, `origin: "baseline"`, and nothing else.
+ * filename, `origin: "registered"`, and nothing else.
  */
 export const recordAppliedMigration = async (
 	session: DriverSession,
