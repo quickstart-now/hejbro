@@ -43,10 +43,27 @@ export type ExportTableFact = {
 	readonly columns: ExportColumns;
 };
 
+export type ExportFunctionArgFact = {
+	readonly key: string;
+	readonly sqlName: string;
+};
+
+/** `null` for a trigger-synthesized function's return — neither a scalar value nor a row (schema-export delta). A table return carries only the SQL identity, never the returned table's export name: that fact already rides in `tables[]`, and repeating it here would create a second copy of it to disagree later. */
+export type ExportFunctionReturnsFact =
+	| { readonly kind: "scalar" }
+	| {
+			readonly kind: "table";
+			readonly schemaName: string;
+			readonly tableName: string;
+	  }
+	| null;
+
 type ExportFunctionFact = {
 	readonly schemaName: string;
 	readonly functionName: string;
 	readonly exportName: string | null;
+	readonly args: ReadonlyArray<ExportFunctionArgFact>;
+	readonly returns: ExportFunctionReturnsFact;
 };
 
 /**
@@ -63,16 +80,19 @@ type ExportFunctionFact = {
  * would create a second copy of the same fact for the two to disagree
  * about later.
  *
+ * **What a function fact now carries (#587):** each declared argument's
+ * TypeScript key beside its SQL name, in declaration order, and the
+ * return shape — `{kind: "scalar"}`, `{kind: "table", schemaName,
+ * tableName}`, or `null` for a trigger-synthesized function's return
+ * (neither a value nor a row). A table return carries only the SQL
+ * identity, never the returned table's export name — that fact already
+ * rides in `tables[]`.
+ *
  * **What this does not carry, by design (R2-G2 2.8):** a view's column
- * types and a function's structural signature are not carried in this
- * version — a view produces no fact here at all (only `table()`-declared
- * tables do), and a function fact carries only its names, never its
- * argument or return types. A function argument's own TypeScript key is
- * a third candidate that cannot be added later without a DSL change: the
- * declaration itself never keeps it, and the SQL-to-TypeScript
- * conversion for an argument is one-way. A consumer reading past this
- * boundary sees no view entry and no function signature at all, never a
- * partial or guessed one.
+ * types are not carried in this version — a view produces no fact here
+ * at all (only `table()`-declared tables do). A consumer reading past
+ * this boundary sees no view entry at all, never a partial or guessed
+ * one.
  *
  * Every field is a plain, always-present JSON value — `null` (never an
  * omitted key) is how an absent export name or default numeric mode
@@ -112,6 +132,28 @@ const tableFact = (
 	};
 };
 
+/** `null` for a trigger-synthesized function's return (`FunctionDeclaration["returns"]`'s own `"trigger"` sentinel) — carries no scalar value and no row. */
+const functionReturnsFact = (
+	returns: FunctionDeclaration["returns"],
+): ExportFunctionReturnsFact => {
+	if (returns.returnsKind === "trigger") {
+		return null;
+	}
+	if (returns.returnsKind === "scalar") {
+		return { kind: "scalar" };
+	}
+	return {
+		kind: "table",
+		schemaName: returns.schemaName,
+		tableName: returns.tableName,
+	};
+};
+
+const functionArgFacts = (
+	fn: FunctionDeclaration,
+): ReadonlyArray<ExportFunctionArgFact> =>
+	fn.args.map((arg) => ({ key: arg.key, sqlName: arg.argName }));
+
 const functionFact = (
 	fn: FunctionDeclaration,
 	exportNames: ReadonlyMap<HejbroInput, string>,
@@ -119,6 +161,8 @@ const functionFact = (
 	schemaName: fn.schemaName,
 	functionName: fn.functionName,
 	exportName: exportNames.get(fn) ?? null,
+	args: functionArgFacts(fn),
+	returns: functionReturnsFact(fn.returns),
 });
 
 const isFunctionDeclaration = (
