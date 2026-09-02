@@ -8,13 +8,16 @@ description, and a vendored contract's `Tables` entry, the same as a
 managed table's shape does. `generateMigration` diffs nothing about an
 existing table's own identity and emits no statement for it: adding
 one, changing its declared columns, renaming it, or removing the
-declaration entirely all produce no migration naming that table, and
-none of them can block or refuse an unrelated managed change in the
-same schema either. A managed table's foreign key onto an existing one
-resolves to a relation in the contract exactly as one onto a managed
-table does; a reference to a table the schema does not declare at all
-still has none. Preset validators (Supabase, Nile) skip existing
-declarations — they judge managed DDL, not table references.
+declaration entirely all write a migration named after that table but
+carrying no DDL for it — the run anchors the new state in the chain
+without ever creating, altering or dropping anything the table owns —
+and none of them can block or refuse an unrelated managed change in
+the same schema either. A managed table's foreign key onto an
+existing one resolves to a relation in the contract exactly as one
+onto a managed table does; a reference to a table the schema does not
+declare at all still has none. Preset validators (Supabase, Nile)
+skip existing declarations — they judge managed DDL, not table
+references.
 
 Handing a managed table to `existingTable()` emits nothing at all —
 neither the table nor anything on it (its sequence, its row-level
