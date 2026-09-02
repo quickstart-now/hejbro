@@ -26,7 +26,9 @@ export-validation test, this change's own `specs/schema-export/spec.md`
       `ExportFunctionFact` gains `args: ReadonlyArray<{ key: string;
       sqlName: string }>` in declaration order and `returns: { kind:
       "scalar" } | { kind: "table"; schemaName: string; tableName: string
-      } | null`. A table return carries the SQL identity, never the
+      } | null`. **Both were widened by 1.4** — read that task for the
+      shape that shipped; this one records what was settled here and
+      why, not the final field list. A table return carries the SQL identity, never the
       returned table's export name — and the SQL identity is what the
       emitter actually needs: `Database["Tables"]` is keyed by the bare
       SQL table name (`renderTableEntry`), so a return type names that
