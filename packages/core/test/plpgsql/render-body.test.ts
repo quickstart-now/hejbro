@@ -129,6 +129,33 @@ describe("renderFunctionSql", () => {
 		expect(sql).toMatch(/\treturn query insert into .*returning .*;/);
 	});
 
+	// #634: `ctx.return` used to accept only the bare `.returning()` form
+	// (`ReturnableQuery`'s three mutation members defaulted `TReturning` to
+	// `undefined`) -- a projected `.returning({...})`, the canonical form
+	// per the body requirement, failed to compile. `ReturnableQuery` now
+	// accepts `ReturningProjection | undefined`; this measures the
+	// rendered body, not just that it compiles, so a fix that widens the
+	// type but drops the projection at render time still fails here.
+	it("renders a definer function with a projected returning, and the RETURNING list stays the projection", () => {
+		const declaration = defineFunction(
+			"app",
+			"create_post_returning_id",
+			{ args: {}, returns: posts, security: "definer" },
+			(ctx) => {
+				ctx.return(
+					insert(posts)
+						.values({ publishedAt: now() })
+						.returning({ id: posts.id }),
+				);
+			},
+		);
+
+		const sql = renderFunctionSql(declaration);
+		expect(sql).toMatch(/\treturn query insert into .*;/);
+		expect(sql).toContain('returning "app"."posts"."id" as "id"');
+		expect(sql).not.toContain('"published_at" as "published_at"');
+	});
+
 	it("renders a definer function with a delete-returning-query statement", () => {
 		const declaration = defineFunction(
 			"app",
