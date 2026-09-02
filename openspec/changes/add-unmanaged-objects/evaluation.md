@@ -3081,3 +3081,216 @@ than by the suite.
   (they fail on the `assertFreshBuild` dist guard alone); Docker-gated
   `*.integration.test.ts` files were read, not run, for the same reason
   — the live-server facts above were measured directly instead.
+
+## Round 5 disposition
+
+One blocking finding closed with a design escalation (J17) settled
+mid-round after a measurement reversed the lead's own first ruling
+(J15 → re-opened as J16 → J17), one closed as a text-only defect
+(B2), two non-blocking text findings closed, three non-blocking
+findings held in deferral exactly as they were.
+
+### R5-B1 — fixed (`restate`, J17)
+
+R4-B1's fix named five existing-table transitions
+(`record`/`forget`/`release`/`adopt`/`reshape`) but the classifier's
+own doc comment claimed a "closed enumeration" that wasn't: an
+ordinary **managed** table's `indexes`/`checks` array can move the
+snapshot with no `KindChange` (`serializeIndexes`/`serializeChecks`
+don't sort, `tableKind.diff`'s `diffByKey` is name-keyed so it never
+sees the reorder) — a `managed:managed` side pair `deriveExistingTransitionSlug`
+had no verb for at all, so it fell straight into the coded
+`existing-transition-not-found` throw on a project with no
+`existingTable()` in it anywhere. The evaluator's own repro reached
+this without touching the feature this change adds.
+
+**Design arc (measured, not asserted).** Two shapes were considered
+for closing the gap:
+
+- **(a) Sort at serialization** (write side) **+ normalize before
+  comparing** (read side), so a reorder becomes a true no-op end to
+  end. Measured directly, twice, via a temporary source edit +
+  revert (never `git stash`, which is repo-global and would have
+  touched other worktrees' own runs — a rule this round's own early
+  incident surfaced and this measurement then followed):
+  - Write-side sort alone: 2 of 15 golden cases break
+    (`table-constraints`, `table-index-methods`) — real re-recording
+    work, not a red flag by itself.
+  - But write-side sort alone does **not** eliminate the "phantom
+    upgrade migration" it was meant to prevent: an existing on-disk
+    snapshot (written by a pre-fix hejbro, declaration-order,
+    unsorted) differs from a freshly-sorted rebuild, so every
+    existing project would get one unsolicited `restate` migration
+    on its first post-upgrade `generate` — reproducing, at upgrade
+    time, the exact `verify`-red-with-no-remedy condition R3-B1 was
+    filed BLOCKING for in the first place.
+  - Read-side normalization (comparing both snapshots pre-sorted,
+    scoped only to `generateMigrations`' own `snapshotChanged` gate)
+    was measured next, with a real probe (a throwaway core-level
+    test, deleted after, never committed) proving `verify`'s own
+    check 2 (`snapshot-stale`) is a **second, independent**
+    comparison — `renderSnapshot(currentSnapshot) === diskText`,
+    exact string equality via `generateMigration` (singular), nothing
+    to do with `snapshotChangedFrom`/`sameJson`. The probe confirmed,
+    on today's shipped code with no fix of any kind, that this
+    comparison already disagrees under a pure reorder
+    (`hasChanges: false` yet `renderSnapshot(rebuilt) !== diskText`)
+    — the exact failure the evaluator's own report captured as
+    `verify: 1 of 5 checks failed` right after the crash.
+  - So normalizing only the generate-side comparison **relocates**
+    the phantom event rather than removing it: `generate` goes quiet
+    while `verify` still reports `snapshot-stale`, a **new**
+    contradiction between the two commands' own read of the same
+    state — the identical "next consumer" shape this piece has hit
+    three times before (R1's fan-out kinds, R2's rename planner + CLI
+    write rule, R3's reset/baseline/verify sweep), caught here before
+    the round closed rather than in round 6. Normalizing check 2 too
+    would remove the contradiction but weakens a live contract on
+    purpose: `verify` exists in part to catch a hand-edited snapshot,
+    and a normalized check 2 stops seeing one that only reordered
+    two arrays.
+  - **Conclusion, folded into #701** (filed by the lead from this
+    round's own finding #5 below): snapshot normalization is a real
+    but separate concern — "format decision + verify's own comparison
+    rule + a full golden re-record" — properly scoped as its own
+    change, not this correction round's.
+- **(b) `restate` fallback** (adopted, J17): when the five-verb scan
+  finds nothing, a second pass compares each `table:` key's raw
+  content directly (`rawContentDiffers`, no side-category lookup) and
+  names the first one that actually differs `restate_<table>` —
+  stating only that the table's own record moved, not claiming why.
+  `reorder` was considered and rejected: it would be a true name only
+  when the cause IS reordering, and the whole point of a fallback
+  tier is to catch causes tier 1 didn't anticipate — a verb narrower
+  than its own coverage is this same requirement's R4 mistake
+  (a closed enumeration claiming more than it covered) one layer up.
+
+Implementation: `rawContentDiffers` + a second scan pass in
+`deriveExistingTransitionSlug` (`sql/migration-file.ts`), reusing the
+same `compareKeys`-sorted `table:` key union tier 1 already builds —
+no new information needed, exactly `deriveSlug`'s own "first
+difference wins" rule generalized past the five named transitions.
+4 new core-level unit tests (restate naming; skipping an unmoved
+`managed:managed` pair to find the real mover even when it sorts
+first; a real transition winning over an unrelated restate candidate
+regardless of key order; the narrowed throw still firing on genuinely
+no difference) — confirmed red-then-green via a temporary source edit
++ revert (diffed against a backup to confirm byte-identical
+restoration, per this round's own stash lesson): exactly 2 red / 51,
+restored clean, 51/51 green after. 4 new CLI-level repros
+(`generate-command.test.ts`): plain-managed-table index reorder,
+check reorder, the same reorder alongside a real `existingTable()` +
+managed FK (the scan crossing an unmoved `existing:existing` table
+before reaching the managed one — the only case that actually
+exercises the fallback's own scan-order rule), and slug determinism
+across two independent projects — all four confirmed running and
+green under a real forced build in this round's gate slot (cli
+84f/714t, +4 exactly matching the new tests). Mutant (remove the
+`restate` branch): exactly 2 red / 51 at core level, matching the red
+count above one-for-one.
+
+`existing-transition-not-found` is now reachable in exactly one case:
+`snapshotChanged` is true, but no `table:` key's raw content differs
+at all — meaning the movement is outside the table domain entirely.
+**This narrower claim rests on evidence this round's own claim in R4
+didn't have**: the exhaustive table below. R4 asserted "no real user
+input reaches the throw" from reasoning alone and was falsified by
+R5-B1; this round's equivalent claim is instead the direct conclusion
+of a search-derived sweep (every `diffByKey` call site in the
+codebase, every other kind's own diff gate read directly), not a
+second unverified assertion of the same shape.
+
+### Exhaustive table — every input that can produce `snapshotChanged && !hasChanges`
+
+Method: `diffByKey(` has exactly four call sites in the whole
+codebase (core + supabase + nile), all four in `table-kind.ts`. Every
+other kind's `diff` (grant/view/rls/policy/trigger/function/bucket)
+opens with `sameJson(guard.previous, guard.next)` — literally the
+same function `generateMigrations`' own top-level `snapshotChanged`
+check calls — so those two decisions can never structurally disagree.
+**Why only the table**: `tableKind.diff` is the one kind whose `diff`
+never gates on that shared `sameJson` call at all (`table-kind.ts:636-650`)
+— it goes straight to four field-level `diffByKey` calls instead,
+which is exactly what lets its own top-level snapshot text and its
+own "is there a real change" decision drift apart.
+
+| # | Field/site | Reachable? | Today | After (b) `restate` | (a) sorting's own effect |
+|---|---|---|---|---|---|
+| 1 | `table.indexes` (declaration-order-only change) | Yes — R5-B1 repro ① | crashes (`existing-transition-not-found`) | `restate_<table>`, no crash | would have made this a no-op; excluded, see above and #701 |
+| 2 | `table.checks` (declaration-order-only change) | Yes — R5-B1 repro ② | same crash | same fix | same |
+| 3 | `table.columns` | No — D81's own column-order oracle already tracks this deliberately | reorder is itself a real diff, handled by the oracle | n/a | n/a |
+| 4 | `table.foreignKeys` | No — sorted at declaration build time (`dsl/table.ts`'s `compareForeignKeys`/`foreignKeySortKey`, a canonical form-independent key: local columns then target identity) | reorder is already a no-op today | n/a | n/a |
+| 5 | Every other kind's own array field (grant `privileges`, policy `roles`, bucket `allowedMimeTypes`, etc.) | Configurable, but each kind's `diff` gates on `sameJson` first, so a reorder is a real `KindChange` (`hasChanges: true`), not this pattern — instead it can produce an alter statement carrying an empty delta description | **moved to #701** — not this pattern, and not this piece's own defect (the root cause is `sameJson`'s own gate behavior, which this change didn't introduce); the lead filed #701 from this finding | n/a | n/a |
+| 6 | Compact-field skew (a hand-edited or legacy on-disk snapshot carrying an explicit empty array where the current compact rule omits it, e.g. `checks: []`) | Only via a non-standard snapshot file, never via ordinary DSL declarations — `tableKind.diff` has no top-level `sameJson` gate (same root cause as 1/2) while the top-level `snapshotChanged` check does, so the two can disagree on text alone; `bucket-kind.ts`'s own existing doc comment (the `public: false` vs.-absent incident) is prior art for the same category in a different kind | theoretically the same crash | (b) covers it for free — raw content comparison, not specific to indexes/checks | (a) is unrelated to this row |
+
+### R5-B2 — fixed (text only)
+
+`table-declaration`'s "Adding, changing, or removing an existing
+declaration SHALL produce no migration" and its scenario's "no
+migration is written for it … writes no migration either" both
+predate J13 (round 3), which amended `cli-commands` to require a
+zero-statement migration for exactly this case but never touched
+`table-declaration`. Since J13 all three actions write a real file
+(`record_users.sql`/`reshape_users.sql`/`forget_other.sql`), named
+after the table. Shipped behavior was never wrong; the delta
+contradicted itself. `table-declaration`'s requirement now reads
+"SHALL produce **no statement**", explaining the run anchors the new
+state via a migration carrying no DDL, and the scenario is retitled
+"An existing declaration produces no statement" — a legal rename
+since the requirement is ADDED, not MODIFIED, in this delta.
+
+### R5-NB1, R5-NB2 — fixed
+
+`.changeset/declare-existing-tables.md`'s "all produce no migration
+naming that table" corrected to "all write a migration named after
+that table but carrying no DDL for it" — same defect as B2, in the
+release note users actually read. `generate-verify-workflow.md`'s
+"only when an existing-table marker moved" widened to cover R4's own
+`reshape` case too (declared-shape-only movement, the more common
+edit of the two) — the skill's return-shape description hadn't caught
+up since round 4.
+
+### R5-NB3 (#667), R5-NB4 (#694), R5-NB5 (#674) — held in deferral, untouched
+
+All three re-measured live this round and found unchanged from their
+prior rounds' own state (NB3: `vitest.config.ts` still excludes
+`test/**/*integration.test.ts`; NB4: the handover→adoption round trip
+still fails `migrate` with 42P07, now with an accurate skill warning
+citing #694, `it.todo` still marking the observer's seat rather than
+asserting a fix this round doesn't make; NB5: `examples/` still
+declares no `existingTable()`). No code or text touched for any of
+the three this round — each is exactly where its own issue already
+tracks it.
+
+### Gates
+
+Slot-executed, uncontended (system load 1-min avg 2.94 at the start,
+confirmed clean beforehand), exactly once, zero flakes across all
+five: `TURBO_FORCE=1 pnpm build --force` 7/7
+(2026-09-02T18:58:02Z–18:58:12Z, slot held). Full `pnpm test` 17/17
+tasks — core 99f/1498t+1 todo, query 64f/857t, cli **84f/714t** (+4,
+exactly the new R5-B1 CLI repros, confirmed running and green under a
+real build), supabase 17f/141t, neon 6f/39t, pg 1f/27t, nile 5f/59t,
+skills 5f/21t, every example package green
+(2026-09-02T18:58:15Z–18:59:53Z, slot held). Full-workspace `pnpm
+check-types` 16/16 (2026-09-02T19:00:03Z–19:00:13Z, slot held).
+`pnpm check:crap` 0/1610 (+1 function over the prior round's 1609 --
+`rawContentDiffers` -- not in the 38-function at-exactly-5 list,
+comfortably under the threshold; README.md protocol followed,
+reverted, never committed; 2026-09-02T19:00:19Z–19:01:57Z, slot
+held). `pnpm --filter hejbro test:integration` — 9 files passed, 63
+tests passed, 2 todo (65, unchanged — the R4-NB1/#694 deferral pins),
+zero flakes, no leftover containers
+(2026-09-02T19:02:07Z–19:03:00Z, slot held). No dedicated live-server
+integration test was added for R5-B1 specifically: the CLI-subprocess
+repros already assert real file writes and a real `verify` pass
+end to end, the same shape R3-B1/R4-B1 used — adding a second,
+Docker-gated observer for the identical fact would be building an
+observer nothing demands, the discipline this piece has kept since
+NB7 (round 4). `openspec validate --strict` valid throughout; `show
+--diff` reconfirmed across the round's several spec edits:
+`deltaCount: 6`, `cli-commands` MODIFIED still exactly one entry,
+`table-declaration` ADDED ×2 unchanged.
+
+8 commits this round (`67918af0` through this section's own commit),
+still unpushed.
