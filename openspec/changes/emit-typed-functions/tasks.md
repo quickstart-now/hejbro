@@ -7,22 +7,64 @@ them here before the next group opens.
 
 ## 1. The facts the export must carry (#587)
 Files: `packages/core/src/dsl/define-function.ts`, `packages/core/test/
-dsl/define-function.test.ts`, `packages/cli/src/export/description.ts`,
-`packages/cli/src/export/*.ts` (read side), `packages/cli/test/export-*.test.ts`
+define-function.test.ts`, `packages/core/test/plpgsql/body-context.test.ts`,
+`packages/cli/src/export/description.ts`, `packages/cli/src/export/
+format.ts` (its bump rule, comment only), `packages/cli/src/vendor/
+validate-export.ts` (the read side — it is under `vendor/`, not
+`export/`), `packages/cli/test/export-*.test.ts`, the vendor
+export-validation test, this change's own `specs/schema-export/spec.md`
 
-- [ ] 1.1 (~6m) The resolved argument list keeps `key` beside `argName`
+- [x] 1.1 (~6m) The resolved argument list keeps `key` beside `argName`
       at runtime (additive; the brand's type-level `TArgs` is untouched).
-      Failing test: `define-function.test.ts` — "keeps each argument's
-      declared key beside its SQL name".
-- [ ] 1.2 (~9m) [design] `ExportFunctionFact` gains `args: [{ key, sqlName
-      }]` in declaration order and `returns: "scalar" | "table"` (settle
-      the exact field names and whether a table return carries the
-      table's schema/name — it must, for the consumer to type the rows).
-      Additive; `manifest`/description format version unchanged; a reader
-      of an older export sees the fields absent. Failing tests:
-      `export-write.test.ts` — "carries a function's argument keys and
-      return shape"; `export-determinism.test.ts` extended (byte-identical
+      Failing test: `packages/core/test/define-function.test.ts` — "keeps
+      each argument's declared key beside its SQL name", declared with a
+      key that differs from its SQL name, so an implementation that sets
+      `key` from `argName` stays red. Two existing fixtures assert the
+      argument entry by value and move with the field
+      (`define-function.test.ts`, `plpgsql/body-context.test.ts`).
+- [x] 1.2 (~9m) [design — settled by the lead, 2026-09-02]
+      `ExportFunctionFact` gains `args: ReadonlyArray<{ key: string;
+      sqlName: string }>` in declaration order and `returns: { kind:
+      "scalar" } | { kind: "table"; schemaName: string; tableName: string
+      } | null`. A table return carries the SQL identity, never the
+      returned table's export name — that fact already rides in
+      `tables[]`, and the contract emitter joins on schema and name,
+      dropping an entry whose table the export does not carry (the rule
+      `computeTables` already applies to a fact with no snapshot node).
+      `null` is what a trigger-synthesized function's return reads as: it
+      is neither scalar nor table, and the delta's prose says so in the
+      same task. Additive; `manifest`/description format version
+      unchanged; a reader of an older export sees the fields absent. The
+      file's own doc comment, which states that a function argument's
+      TypeScript key cannot be added without a DSL change, is false as of
+      1.1 and is rewritten here. Failing tests: `export-facts.test.ts` —
+      "carries a function's argument keys and return shape", "a
+      trigger-synthesized function's fact carries no return shape" (the
+      observer the delta's own scenario now names); that file's existing
+      assertions that a function fact has no such properties are the
+      same claim inverted and move with them. `export-write.test.ts`
+      gains one round trip through the built CLI, so the facts are
+      proved where they are actually written rather than only where they
+      are built; `export-determinism.test.ts` extended (byte-identical
       across two runs with a function declared).
+- [x] 1.3 (~6m) The read side admits the new facts. `vendor/
+      validate-export.ts`'s `functionFactSchema` is a zod object, which
+      **drops keys it does not name**: an export carrying the new facts
+      would validate and arrive at the contract emitter with them
+      silently removed, so group 2 would receive nothing and every gate
+      here would stay green. Extend the schema, and pin it with a test
+      that reads a description through `validateExport` and asserts the
+      argument keys and return shape survive it. Two comments beside it
+      state the shape's history by counting fields and by a bump rule
+      this change deliberately does not follow (the proposal keeps the
+      description format at its current version, since a reader refuses
+      a *newer* format wholesale and would refuse an export it could
+      read past); both move with the fields. A return shape the schema
+      fails to name is not dropped but **refused**, so a legitimate
+      export would be rejected as hand-edited — all three shapes
+      (scalar, table, `null`) are fixtures, not one. Failing test: the
+      vendor export-validation test — "keeps a function's carried
+      facts".
 
 ## 2. The contract's Functions section (#587)
 Files: `packages/cli/src/contract/functions.ts` (new), `packages/cli/src/
@@ -35,7 +77,11 @@ contract/emit.ts`, `packages/cli/src/contract/ts-type.ts` (reuse),
       sqlName/typeNode/mode, return kind + table identity). Failing test:
       `contract-emit.test.ts` (or the existing contract test file) —
       "emits a Functions entry per exported function", "a trigger-
-      synthesized function is absent".
+      synthesized function is absent". **Carried in from group 1**:
+      `emit.ts`'s `EMPTY_SECTION` comment says the export carries no
+      function signatures, which group 1 made false — this group's own
+      edit is what corrects it, and it is a false statement in the tree
+      until then, not a docs nit.
 - [ ] 2.2 (~7m) Determinism and the golden: the generated contract for
       the examples' schema gains its function entries; `contract-
       authority.test.ts` / determinism tests stay green. Failing test: the

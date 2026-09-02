@@ -29,7 +29,11 @@ each fact to the wrong column while every type still looked right.
 A declaration that was never a module export has no export name to
 carry: a function synthesized as part of a trigger definition is in the
 snapshot but was never exported, so nothing downstream can offer it as
-something the owning repository itself has.
+something the owning repository itself has. Such a function also
+carries no return shape, for the same reason and not a second one: it
+returns neither a value nor rows but the trigger sentinel Postgres
+supplies when it fires the trigger, so there is no shape a call could
+be typed against — and there is no call.
 
 One declaration-time choice is deliberately not carried. A `$type`
 brand leaves nothing readable where the export is written, since it
@@ -55,7 +59,8 @@ exist in a consuming repository at all.
 #### Scenario: A synthesized trigger function carries no export name
 - **WHEN** a schema whose only function declarations come from trigger
   definitions is exported
-- **THEN** the export carries no export name for them
+- **THEN** the export carries no export name for them, and no return
+  shape either
 
 #### Scenario: A function's argument keys ride with its SQL names
 - **WHEN** a function declared with arguments whose TypeScript keys
