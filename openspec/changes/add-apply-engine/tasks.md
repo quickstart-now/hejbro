@@ -44,14 +44,18 @@ calibration this change was estimated against — `add-check-schema`, a
   running, which would move the tree under a suite that takes minutes —
   and run every gate once afterwards, so a cross-change regression
   surfaces before group 9 builds on top of it. "Every gate" MUST
-  include `openspec validate --strict` by name — it is not in
-  `ci.yml`, and this change ran the merge-in gates without it: the
-  sibling's new scenarios had landed inside a requirement this
-  change's delta MODIFIES, and a MODIFIED block replaces the whole
-  requirement, so archiving would have dropped them silently
-  (repaired at close-out, `3b7af63d`). Archive-stage gates live
-  outside `ci.yml`; a gate list derived from `ci.yml` alone is
-  complete only for CI.
+  include `openspec validate --strict` **and** `openspec show
+  <change> --diff` by name — neither is in `ci.yml`, and this change
+  ran the merge-in gates without the first: the sibling's new
+  scenarios had landed inside a requirement this change's delta
+  MODIFIES, and a MODIFIED block replaces the whole requirement, so
+  archiving would have dropped them silently (repaired at close-out,
+  `3b7af63d`). `show --diff` earns its own name here, not just
+  `validate`'s: whether a `MODIFIED` block names a requirement that
+  actually exists in the main spec is a question `validate` does not
+  answer — it reported this change valid while a block named nothing
+  (D106, repaired). Archive-stage gates live outside `ci.yml`; a gate
+  list derived from `ci.yml` alone is complete only for CI.
 - `pnpm build --force` before any subprocess measurement: this worktree
   carries a `dist` built from `94998be1`, which goes stale the moment
   the branch moves, and a stale `dist` reports on code nobody is
@@ -1097,14 +1101,30 @@ aim below the line, and measure every helper the work extracts.
 
 Files: this file, `.changeset/`.
 
-- [ ] 20.1 (~6m) Add `openspec show <change> --diff` by name to the
+- [x] 20.1 (~6m) Add `openspec show <change> --diff` by name to the
       merge-in gate sentence (beside the `validate --strict` line added
       in `e8e0aee9`) and to the archive-time list below, with the reason:
       **whether a `MODIFIED` block names a requirement that exists is a
       question `validate` does not answer** — it called this change valid
       while a block named nothing.
-- [ ] 20.2 (~5m) One changeset for the round: `@hejbro/core` and `hejbro`
-      both move, and the seven published packages version together.
+- [x] 20.2 (~5m) The changeset — and **"one changeset for the round" was
+      the wrong premise** (lead, at group 20's dispatch). This round adds
+      no changeset file at all: it **edits the body of the existing
+      `.changeset/add-apply-engine.md`** and leaves its `minor` line
+      alone. The precedent is the sibling correction round (#617,
+      `0ff746de`), which changed that one file and added none. The reason
+      is what a reader of the changelog gets: this capability's `minor`
+      changeset has never been released, so a separate `patch` beside it
+      would publish a "Patch Changes" entry describing a fix to behaviour
+      no version ever shipped. One capability, one entry.
+      What the body gains is only what a *user* meets — the ledger's
+      `origin` column and what `status` now prints (the applied list, and
+      an absent ledger told from an empty one), `migrate` verifying the
+      chain before it opens a connection, `reset` refusing a declaration
+      set that exports nothing, and the split rule seeing values spelled
+      inside `sql` templates and `sql.raw`. Not function names, not
+      finding ids. `pnpm changeset status` accepts a *changed* changeset
+      file — #617's merge is the evidence.
 
 ## Verification
 
@@ -1116,7 +1136,11 @@ Files: this file, `.changeset/`.
   not the shape that failed there, and that is exactly why the check is
   worth doing rather than assuming: nobody has measured whether
   `MODIFIED` applies cleanly either. Compare the resulting main spec
-  against the delta by diff, not by eye.
+  against the delta by diff, not by eye — `openspec show <change>
+  --diff`, by name: whether a `MODIFIED` block names a requirement that
+  exists in the main spec is a question `validate` does not answer (this
+  round's own B1 was caught this way, with `validate --strict` still
+  saying "valid" the whole time).
 - **Then run the corpus check, not just the change's own.** After
   archiving, `openspec validate --specs --strict` reads every capability
   in the corpus; the change-level `validate --strict` does not, and a

@@ -22,3 +22,18 @@ at the transaction boundary Postgres itself requires
 (`generateMigrations`, `@hejbro/core`'s new plural entry point). The
 supported Postgres floor is now an explicit, tested policy — currently
 15, for `security_invoker` on views.
+
+The ledger now records how each row entered it, and `hejbro status`
+reports what that history shows: which migrations it applied, which
+baseline migration it registered without running, and — told apart —
+a ledger table that has never existed versus one that exists with no
+rows yet. `hejbro migrate` verifies the migration chain before it opens
+a database connection at all, so an unverifiable chain is refused
+without sending anything. `hejbro reset` refuses a declaration set that
+exports nothing, before touching the database, the same way `check` and
+`baseline` already do for a misconfigured entry point. A migration run
+that adds a value to an existing enum type and also spells that value
+inside a `sql` template or `sql.raw` — a check constraint, a policy
+expression, an index predicate — is now split the same way a typed
+column default already was, instead of shipping one migration that
+fails against the database after passing every check hejbro has.
