@@ -586,6 +586,12 @@ needs a record of what was applied, which is a separate capability.
 - **THEN** it passes with exit code zero, and the summary line counts the
   added file among the migrations
 
+#### Scenario: A tip mismatch names the artifacts that disagree
+- **WHEN** the last migration's `snapshot:` hash and the on-disk
+  snapshot's own hash differ
+- **THEN** the report names that migration file and the snapshot path,
+  and states the observation only — never a cause
+
 ### Requirement: An external tool is an optional dependency
 The vendoring commands and `check` reach outside the process — `git`
 and a database driver, respectively — and SHALL declare neither
