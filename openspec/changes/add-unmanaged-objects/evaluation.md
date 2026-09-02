@@ -1279,3 +1279,20 @@ grep -rln '"table:' packages/{core,cli,supabase,nile}/src
 grep -rn "snapshot: Snapshot\b" packages/{core,cli,supabase,nile}/src
 grep -rn ": Snapshot\b" packages/{core,cli,supabase,nile}/src | grep -v "snapshot: Snapshot"
 ```
+
+### Round 2 close-out (R2-12/R2-13)
+
+Final pre-push confirmation, narrower than a full round close-out since
+R2-08/09/11's own fix touched only `commands/check.ts`'s report text and
+its own test file: `check:bans` re-run clean (219 package source files).
+`test:integration` deliberately **not** re-run this pass — everything
+this sub-round changed is CLI report text and its own tests; the
+snapshot format, the diff/generate engine, and the export/vendor
+contract path (the surfaces `test:integration`'s five files actually
+exercise) are untouched since the last full integration run
+(R2-06/07's own close-out, 5f/36t, both PG majors, `two-repo`'s
+vendoring round trip included), so there is no new question for it to
+answer. The lead's own closing gate re-runs it regardless. `check`,
+`check-types`, and the full `test` suite were all re-run once already
+(R2-11's own close-out, 17/17 tasks green) after this sub-round's test
+restructure.
