@@ -21,12 +21,13 @@ two forms in one table, or converting a foreign key from one form to
 the other, changes neither the generated DDL nor the snapshot.
 
 
-The thunk SHALL never be resolved while `table()` runs. The
+The thunk SHALL never be resolved while `table()` runs — this is what
+lets a reference into another declaration file (or another table in
+the same file) resolve whichever one the loader reaches first. The
 declaration's first `foreignKeys` read that completes SHALL be cached,
 so every `.references()` thunk on that declaration runs at most once
 across every later read; a read that throws SHALL cache nothing, so
-the next read folds again — this is what lets a reference into another
-declaration file resolve whichever file the loader reaches first.
+the next read folds again.
 
 #### Scenario: A column-level reference emits the same DDL as extras
 - **WHEN** a table declares `ownerId: uuid().notNull().references(()

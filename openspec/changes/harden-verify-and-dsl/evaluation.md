@@ -261,7 +261,12 @@ hand-built `authority: "usage"` function and over a
   times, not 1 (`b7b59388`) — and narrowed the delta's "exactly once"
   text and its scenario to the success-only-cache behavior that is
   actually true, adding a throw-then-refold scenario observed by that
-  same test (`9375f842`).
+  same test (`9375f842`). Follow-up (lead review, same round): the
+  "resolves whichever file the loader reaches first" causal clause was
+  attached to the throw-then-refold sentence, over-attributing to
+  caching what the never-resolve-during-`table()` deferral alone
+  provides — moved to the deferral sentence, same commit as this
+  disposition update.
 - **NB3** — closed. Dropped the delta's unobservable "after every
   declaration module has evaluated" clause (`9375f842`, same commit as
   NB2's text narrowing — both are the same paragraph).
