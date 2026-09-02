@@ -207,31 +207,93 @@ const perTableOptionLines = (
 		return [...lines, ""];
 	});
 
+/**
+ * The 1:1 case's own suggestions when the created table is declared
+ * with `existingTable()` (#703): `--rename` onto it would itself be
+ * refused by `unknown-rename-target` the moment this rerun tried it,
+ * so offering it as "if this is a rename, rerun: --rename ..." is the
+ * prescribed remedy being the command that would just fail again — the
+ * same shape D106 R5-B1 was filed against, one door over. Names the
+ * two-run path instead: `--rename` while both sides are still
+ * `table()`, then hand over in a later run.
+ */
+const existingTargetTableSuggestions = (
+	argv: ReadonlyArray<string>,
+	schemaName: string,
+	oldName: string,
+	newName: string,
+): Diagnostic["suggestions"] => [
+	{
+		// #703: shares the exact phrase "two runs" with core's own flat
+		// message (ambiguousTableRenameMessage) on purpose -- this piece
+		// paid for "the same fact stated in different words in two
+		// places" five rounds running, and a reader who sees the flat
+		// message in a log after seeing this one in a terminal should
+		// recognize it as the same guidance, not a second, different fact.
+		label:
+			"if the table really is the same one, do it in two runs -- run this NOW, then hand it over to existingTable() in a LATER run:",
+		lines: rerunLines(argv, `--rename ${schemaName}.${oldName}=${newName}`),
+	},
+	{
+		label: "if these are unrelated tables, rerun:",
+		lines: rerunLines(argv, `--confirm-drop ${schemaName}.${oldName}`),
+	},
+];
+
+const ordinaryTableSuggestions = (
+	argv: ReadonlyArray<string>,
+	renameFlag: string,
+	confirmDropFlag: string,
+): Diagnostic["suggestions"] => [
+	{
+		label: "if this is a rename, rerun:",
+		lines: rerunLines(argv, renameFlag),
+	},
+	{
+		label: "if these are unrelated tables, rerun:",
+		lines: rerunLines(argv, confirmDropFlag),
+	},
+];
+
+/** {@link buildTableAmbiguityDiagnostic}'s own 1:1-case branch (#703: the two suggestion shapes are the only difference the existing-target case makes). */
+const singleTableSuggestions = (
+	argv: ReadonlyArray<string>,
+	schemaName: string,
+	oldName: string,
+	newName: string,
+	targetIsExisting: boolean,
+): Diagnostic["suggestions"] => {
+	if (targetIsExisting) {
+		return existingTargetTableSuggestions(argv, schemaName, oldName, newName);
+	}
+	return ordinaryTableSuggestions(
+		argv,
+		`--rename ${schemaName}.${oldName}=${newName}`,
+		`--confirm-drop ${schemaName}.${oldName}`,
+	);
+};
+
 const buildTableAmbiguityDiagnostic = (
 	ambiguity: Extract<RenameAmbiguity, { kind: "table" }>,
 	argv: ReadonlyArray<string>,
 	at: string | null,
 ): Diagnostic => {
-	const { schemaName, droppedTables, createdTables } = ambiguity;
+	const { schemaName, droppedTables, createdTables, existingCreatedTables } =
+		ambiguity;
 	if (droppedTables.length === 1 && createdTables.length === 1) {
 		const [oldName] = droppedTables;
 		const [newName] = createdTables;
-		const renameFlag = `--rename ${schemaName}.${oldName}=${newName}`;
-		const confirmDropFlag = `--confirm-drop ${schemaName}.${oldName}`;
 		return {
 			code: "ambiguous-table-rename",
 			identity: schemaName,
 			body: singleTableBody(oldName ?? "", newName ?? ""),
-			suggestions: [
-				{
-					label: "if this is a rename, rerun:",
-					lines: rerunLines(argv, renameFlag),
-				},
-				{
-					label: "if these are unrelated tables, rerun:",
-					lines: rerunLines(argv, confirmDropFlag),
-				},
-			],
+			suggestions: singleTableSuggestions(
+				argv,
+				schemaName,
+				oldName ?? "",
+				newName ?? "",
+				existingCreatedTables.includes(newName ?? ""),
+			),
 			at,
 		};
 	}

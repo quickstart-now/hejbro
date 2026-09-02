@@ -250,6 +250,7 @@ describe("planRenames", () => {
 				schemaName: "app",
 				droppedTables: ["posts"],
 				createdTables: ["blog_posts"],
+				existingCreatedTables: [],
 				declaredAt: null,
 			},
 		]);

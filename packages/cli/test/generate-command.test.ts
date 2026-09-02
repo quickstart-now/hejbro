@@ -248,6 +248,37 @@ export const posts = table(app, "posts", {
 }, (t) => ({ indexes: [index().on(t.body), index().on(t.title)] }));
 `;
 
+// #703: a managed table, then the same edit's own handover+rename
+// hazard -- the managed declaration removed, a same-shaped
+// existingTable() appearing under a different name, in one run.
+const RENAME_GUARD_MANAGED_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const widgets = table(app, "widgets", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`;
+
+// #703's own safe two-step path: rename while both sides are still
+// managed table() declarations (step 1), then hand the renamed table
+// over to existingTable() in a later run (step 2).
+const RENAME_GUARD_MANAGED_RENAMED_SOURCE = `import { schema, table, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const gadgets = table(app, "gadgets", {
+	id: uuid().primaryKey().defaultRandom(),
+});
+`;
+
+const RENAME_GUARD_EXISTING_SOURCE = `import { existingTable, schema, uuid } from "hejbro";
+
+export const app = schema("app");
+
+export const gadgets = existingTable("app", "gadgets", { id: uuid() });
+`;
+
 let cwd: string;
 
 beforeEach(async () => {
@@ -827,6 +858,77 @@ describe("hejbro generate (built CLI, tmp-dir)", () => {
 			await removeCliFixtureDir(cwdA);
 			await removeCliFixtureDir(cwdB);
 		}
+	});
+
+	// #703: a managed table's own removal, paired with a same-shaped
+	// existingTable() appearing under a different name in the same run,
+	// used to drop the managed table's DDL (table + sequence + policy +
+	// RLS) with no prompt at all -- R3-B2's own excludeExisting hid the
+	// newly-added existing identity from the rename planner entirely.
+	it("a managed table replaced by a same-shaped existing declaration is refused, with no drop DDL (#703)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(RENAME_GUARD_MANAGED_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(RENAME_GUARD_EXISTING_SOURCE);
+		const result = await runCli(cwd, ["generate"]);
+		expect(result.exitCode).toBe(1);
+		// A real ambiguous-table-rename error routes through the CLI's own
+		// rich terminal renderer (rename-diagnostics.ts), never core's flat
+		// ambiguousTableRenameMessage directly -- both now share the exact
+		// phrase "two runs" on purpose (#703), but asserting against the
+		// wrong one here would silently pass even if the rich renderer's
+		// own wording drifted away from it again.
+		expect(result.stderr).toContain("ambiguous-table-rename");
+		expect(result.stderr).toContain("two runs");
+		expect(result.stdout).not.toContain("wrote migrations/");
+		const names = await sqlFileNames();
+		expect(names).toHaveLength(1); // only the first, managed-widgets file
+		expect(result.stderr.toLowerCase()).not.toContain("drop table");
+		expect(result.stderr.toLowerCase()).not.toContain("drop sequence");
+		expect(result.stderr.toLowerCase()).not.toContain("drop policy");
+		expect(result.stderr.toLowerCase()).not.toContain(
+			"disable row level security",
+		);
+	});
+
+	// #703: the safe two-step path -- rename while both sides are still
+	// managed, THEN hand the renamed table over to existingTable() in a
+	// later run. Both steps apply cleanly and verify stays green.
+	it("the two-step path -- rename while both managed, then hand over -- applies cleanly (#703)", async () => {
+		await runCli(cwd, ["init"]);
+		await writeSchema(RENAME_GUARD_MANAGED_SOURCE);
+		await runCli(cwd, ["generate"]);
+
+		await writeSchema(RENAME_GUARD_MANAGED_RENAMED_SOURCE);
+		const renameResult = await runCli(cwd, [
+			"generate",
+			"--rename",
+			"app.widgets=gadgets",
+		]);
+		expect(renameResult.exitCode).toBe(0);
+		// stdout only ever prints each written migration's own banner (the
+		// first "\n\n"-split segment), never its full SQL body -- read the
+		// migration file itself to see the actual statement (measured
+		// directly, the same lesson R3-B1's own measurement ② already
+		// caught once).
+		const renamedFiles = await sqlFileNames();
+		const renamedContent = await readFile(
+			join(cwd, "migrations", renamedFiles.at(-1) as string),
+			"utf8",
+		);
+		expect(renamedContent).toContain(
+			'alter table "app"."widgets" rename to "gadgets"',
+		);
+		const firstVerify = await runCli(cwd, ["verify"]);
+		expect(firstVerify.exitCode).toBe(0);
+
+		await writeSchema(RENAME_GUARD_EXISTING_SOURCE);
+		const handoverResult = await runCli(cwd, ["generate"]);
+		expect(handoverResult.exitCode).toBe(0);
+		expect(handoverResult.stdout).toContain("carries no statements.");
+		const secondVerify = await runCli(cwd, ["verify"]);
+		expect(secondVerify.exitCode).toBe(0);
 	});
 });
 

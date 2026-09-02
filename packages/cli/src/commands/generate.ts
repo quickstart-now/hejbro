@@ -227,15 +227,26 @@ const relativizeDeclaredAt = (
 	return relativizeLocation(declaredAt, cwd);
 };
 
+/** Codes whose fault lives in the snapshot itself, never in a
+ * declaration -- `malformed-snapshot-node` (a corrupt on-disk node) and
+ * `existing-transition-not-found` (#703: the internal-invariant throw
+ * when no table's own record explains a snapshot move -- naming
+ * `hejbro.config.ts`, which has nothing to do with the fault, is worse
+ * than naming nothing). */
+const SNAPSHOT_PATH_ERROR_CODES: ReadonlySet<string> = new Set([
+	"malformed-snapshot-node",
+	"existing-transition-not-found",
+]);
+
 /** The identity to report for a fatal `catch`-level error: the snapshot's
- * own path for a malformed-snapshot failure (there's no declaration to
- * point at), `fallbackIdentity` otherwise. */
+ * own path for a fault the snapshot itself carries (there's no
+ * declaration to point at), `fallbackIdentity` otherwise. */
 const identityForGenerateError = (
 	error: HejbroError,
 	snapshotPath: string,
 	fallbackIdentity: string,
 ): string => {
-	if (error.code === "malformed-snapshot-node") {
+	if (SNAPSHOT_PATH_ERROR_CODES.has(error.code)) {
 		return snapshotPath;
 	}
 	return fallbackIdentity;
