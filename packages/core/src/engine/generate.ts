@@ -158,24 +158,21 @@ const resolveTableDeclarations = (
 };
 
 /**
- * Resolves one `HejbroInput` into the declaration(s) it contributes to the
- * snapshot. A `defineTrigger` declaration expands into its own function
- * declaration plus itself — `[functionDeclaration, triggerDeclaration]` —
- * so the function it creates lands in the snapshot without a separate
+ * {@link resolveDeclarations}'s non-table branch, split out to keep each
+ * function's own complexity under the CRAP gate (#587/G3 — adding the
+ * function-authority guard as a fifth branch on the un-split function
+ * pushed it from complexity 5 to 6, over the ratchet at full coverage).
+ * A `defineTrigger` declaration expands into its own function declaration
+ * plus itself — `[functionDeclaration, triggerDeclaration]` — so the
+ * function it creates lands in the snapshot without a separate
  * `defineFunction` call. A `grant(...).to(...)` `grant-set` expands into
- * its per-role `GrantDeclaration`s (D28 fan-out). A `table()` with any
- * `serial`-family columns similarly expands into one `SequenceDeclaration`
- * per such column (#23/D66) — see {@link resolveTableDeclarations}.
+ * its per-role `GrantDeclaration`s (D28 fan-out). A plain function
+ * declaration routes through {@link resolveFunctionDeclaration}'s own
+ * authority guard.
  */
-const resolveDeclarations = (
-	input: AnyInput,
+const resolveNonTableDeclaration = (
+	input: HejbroDeclaration,
 ): ReadonlyArray<HejbroDeclaration> => {
-	if (isTable(input)) {
-		return resolveTableDeclarations(getTableMeta(input));
-	}
-	if (isTableDeclaration(input)) {
-		return resolveTableDeclarations(input);
-	}
 	if (isTriggerDeclaration(input)) {
 		return [input.functionDeclaration, input];
 	}
@@ -186,6 +183,25 @@ const resolveDeclarations = (
 		return resolveFunctionDeclaration(input);
 	}
 	return [input];
+};
+
+/**
+ * Resolves one `HejbroInput` into the declaration(s) it contributes to the
+ * snapshot. A `table()` with any `serial`-family columns expands into one
+ * `SequenceDeclaration` per such column (#23/D66) — see
+ * {@link resolveTableDeclarations}. Everything else routes through
+ * {@link resolveNonTableDeclaration}.
+ */
+const resolveDeclarations = (
+	input: AnyInput,
+): ReadonlyArray<HejbroDeclaration> => {
+	if (isTable(input)) {
+		return resolveTableDeclarations(getTableMeta(input));
+	}
+	if (isTableDeclaration(input)) {
+		return resolveTableDeclarations(input);
+	}
+	return resolveNonTableDeclaration(input);
 };
 
 type GenerateMigrationOptions = {

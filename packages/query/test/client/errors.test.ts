@@ -77,4 +77,28 @@ describe("errors name the contract, not internals (R2-G6 6.8)", () => {
 
 		await expect(client.posts.select()).resolves.toEqual([]);
 	});
+
+	it("names '(none vendored)' when the contract carries no tables at all", () => {
+		const { driver } = recordingTransactionalDriver();
+		const emptyMetadata: ContractMetadata = {
+			commit: "abc123",
+			exportHash: "sha256:x",
+			roles: [],
+			tables: {},
+			functions: {},
+		};
+		const client = createNameKeyedDb<{
+			readonly Tables: Record<string, never>;
+			readonly Functions: Record<string, never>;
+		}>(driver, emptyMetadata);
+
+		expect.assertions(1);
+		try {
+			(
+				client as unknown as { readonly posts: { select: () => void } }
+			).posts.select();
+		} catch (error) {
+			expect((error as Error).message).toContain("(none vendored)");
+		}
+	});
 });
