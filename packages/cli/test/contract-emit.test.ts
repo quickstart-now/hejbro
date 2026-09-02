@@ -12,6 +12,11 @@ import {
 } from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { emitContract } from "../src/contract/emit";
+import type {
+	ExportColumnFact,
+	ExportTableFact,
+} from "../src/export/description";
+import type { ExportPayload } from "../src/export/write";
 import { buildFixturePayload } from "./support/contract-fixture";
 
 const app = schema("app");
@@ -343,5 +348,134 @@ describe("the Functions section (#587)", () => {
 		const second = emitContract(payload, ORIGIN);
 
 		expect(first).toBe(second);
+	});
+});
+
+/**
+ * The text between two markers, exclusive of both -- used to scope an
+ * assertion to one rendered interface section (`Row`/`Insert`/`Update`)
+ * so a mutant that only breaks one of the three sharing the same
+ * literal text (e.g. a not-null, no-default column's `Row` and required
+ * `Insert` entries render identically) is still caught by the section
+ * it actually broke.
+ */
+const sectionBetween = (
+	source: string,
+	startMarker: string,
+	endMarker: string,
+): string => {
+	const afterStart = source.split(startMarker)[1] ?? "";
+	return afterStart.split(endMarker)[0] ?? "";
+};
+
+const requireTableFact = (
+	payload: ExportPayload,
+	tableName: string,
+): ExportTableFact => {
+	const fact = payload.tables.find((entry) => entry.tableName === tableName);
+	if (fact === undefined) {
+		throw new Error(`fixture: no table fact for "${tableName}"`);
+	}
+	return fact;
+};
+
+const requireColumnFact = (
+	columns: ExportTableFact["columns"],
+	sqlName: string,
+): ExportColumnFact => {
+	const fact = columns[sqlName];
+	if (fact === undefined) {
+		throw new Error(`fixture: no column fact for "${sqlName}"`);
+	}
+	return fact;
+};
+
+/**
+ * #662: the column half enters through the emitter's *other* input
+ * contract, a hand-editable `schema.json` whose reader never checks a
+ * key's shape (`columnFactSchema.key` is `z.string()`) -- not through
+ * `table()`, which D36's `assertSqlName` makes structurally incapable of
+ * declaring a non-identifier column key (every key that survives it is
+ * already a valid TS identifier; tasks.md 1.4's own measurement). So the
+ * snapshot/description come from a real declaration, and only the export
+ * table fact's TS keys are hand-edited afterward, standing in for a
+ * committed `schema.json` a person touched. The function argument half
+ * has no such D36 check (`defineFunction` validates reserved words only)
+ * and rides the real DSL directly.
+ */
+describe("non-identifier keys are quoted in the emitted contract (#662)", () => {
+	it("quotes a column key and an argument key that are not identifiers", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			myArg: text(),
+			twoFa: text().notNull(),
+		});
+		const echoArg = defineFunction(
+			app,
+			"echo_arg",
+			{ args: { "my-arg": uuid() }, returns: uuid() },
+			(ctx, args) => {
+				ctx.return(sql`${args["my-arg"]}`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, echoArg];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[echoArg, "echoArg"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+
+		const myArgSqlName = "my_arg";
+		const twoFaSqlName = "two_fa";
+		const postsFact = requireTableFact(payload, "posts");
+		const myArgFact = requireColumnFact(postsFact.columns, myArgSqlName);
+		const twoFaFact = requireColumnFact(postsFact.columns, twoFaSqlName);
+		const patchedTable: ExportTableFact = {
+			...postsFact,
+			columns: {
+				...postsFact.columns,
+				[myArgSqlName]: { ...myArgFact, key: "my-arg" },
+				[twoFaSqlName]: { ...twoFaFact, key: "2fa" },
+			},
+		};
+		// `posts` is the only declared table, so the patched array replaces
+		// `payload.tables` outright rather than searching it back out.
+		const patchedPayload: ExportPayload = {
+			...payload,
+			tables: [patchedTable],
+		};
+
+		const source = emitContract(patchedPayload, ORIGIN);
+
+		const rowSection = sectionBetween(
+			source,
+			"readonly Row: {",
+			"readonly Insert: {",
+		);
+		const insertSection = sectionBetween(
+			source,
+			"readonly Insert: {",
+			"readonly Update: {",
+		);
+		const updateSection = sectionBetween(
+			source,
+			"readonly Update: {",
+			"readonly Relationships:",
+		);
+
+		// Row (tables.ts:131) -- the nullable column carries `| null`, the
+		// not-null column does not.
+		expect(rowSection).toContain('readonly "my-arg": string | null;');
+		expect(rowSection).toContain('readonly "2fa": string;');
+		// Insert -- the nullable/no-default column is optional (:141), the
+		// not-null/no-default column is required (:143): two different code
+		// paths, so each gets its own key.
+		expect(insertSection).toContain('readonly "my-arg"?: string | null;');
+		expect(insertSection).toContain('readonly "2fa": string;');
+		// Update (:152) -- always optional, value type unchanged from Row.
+		expect(updateSection).toContain('readonly "my-arg"?: string | null;');
+		expect(updateSection).toContain('readonly "2fa"?: string;');
+		// Args (functions.ts:158).
+		expect(source).toContain('readonly Args: { readonly "my-arg": string; };');
 	});
 });

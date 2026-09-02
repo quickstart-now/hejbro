@@ -30,8 +30,9 @@ value type its own output names, so that a contract compiles whatever the
 schema declared.
 
 #### Scenario: A non-identifier key is quoted
-- **WHEN** a schema declaring a column and a function argument under a
-  key such as `my-arg` is vendored
+- **WHEN** a schema declaring a function argument under a key such as
+  `my-arg` is vendored, and an export whose table fact carries such a
+  column key is read
 - **THEN** the contract compiles and the key is preserved as written
 
 #### Scenario: An interval column compiles

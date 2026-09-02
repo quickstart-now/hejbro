@@ -42,11 +42,20 @@ starts from its named red test. Verification (gates, `openspec validate
       Remove the `as unknown as` casts that let the type diverge.
       Files: `packages/query/src/client/name-keyed-db.ts`, test,
       `skills/hejbro/references/polyrepo.md` (one sentence).
-- [ ] 1.4 (~6m) Non-identifier keys are quoted in the emitted contract
-      (#662). Red: `packages/cli/test/contract-emit.test.ts` — "quotes
-      a column key and an argument key that are not identifiers"
-      (`my-arg`, `2fa`), plus `examples/cli-smoke` real-`tsc` fixture
-      gaining such a column and argument. Green: one `renderKey`
+- [x] 1.4 (~6m) Non-identifier keys are quoted in the emitted contract
+      (#662). Measured: D36 validates a column's final SQL name
+      (`^[a-z][a-z0-9_]*$`), and every key surviving it is already a
+      valid TS identifier — so a non-identifier **column** key cannot be
+      declared through the DSL at all; a function argument key can (core
+      checks reserved words only). Red, per the lead's ruling: the
+      argument key rides the real DSL into the `examples/cli-smoke`
+      real-`tsc` fixture, and the column key enters through the
+      emitter's other input contract — a hand-written export table fact
+      (`schema.json` is a committed, hand-editable file, and the reader
+      never checks key shape) — in
+      `packages/cli/test/contract-emit.test.ts`, "quotes a column key
+      and an argument key that are not identifiers". Green: one
+      `renderKey`
       helper shared by `contract/tables.ts` and `contract/functions.ts`.
       Files: `packages/cli/src/contract/{tables,functions}.ts`, tests,
       `examples/cli-smoke/test/*`.

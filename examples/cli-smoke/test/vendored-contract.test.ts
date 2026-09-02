@@ -98,6 +98,19 @@ export const postById = defineFunction(
 		ctx.return(select(posts).where(sql\`\${posts.id} = \${args.postId}\`));
 	},
 );
+
+// #662: a function argument keyed by something that is not a valid TS
+// identifier -- the DSL accepts it (only table columns go through D36's
+// assertSqlName), so this is the one place a non-identifier key reaches
+// a real, vendored contract that a real tsc actually compiles.
+export const echoArg = defineFunction(
+	app,
+	"echo_arg",
+	{ args: { "my-arg": uuid() }, returns: uuid() },
+	(ctx, args) => {
+		ctx.return(sql\`\${args["my-arg"]}\`);
+	},
+);
 `;
 
 /**

@@ -6,6 +6,7 @@ import type {
 import type { ExportPayload } from "../export/write";
 import type { ContractEnumFact } from "./read-snapshot";
 import type { TableComputation } from "./tables";
+import { renderKey } from "./tables";
 import { columnTsType } from "./ts-type";
 
 /** `ExportDescription`'s own `functions` element type, restated via indexed access rather than a named import — `ExportFunctionFact` itself is description.ts's own internal type, not exported (G1's own file boundary). */
@@ -155,7 +156,7 @@ const renderFunctionArgsType = (
 		return "Record<string, never>";
 	}
 	const fields = args
-		.map((arg) => `readonly ${arg.key}: ${arg.tsType};`)
+		.map((arg) => `readonly ${renderKey(arg.key)}: ${arg.tsType};`)
 		.join(" ");
 	return `{ ${fields} }`;
 };
