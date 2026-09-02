@@ -617,24 +617,96 @@ names), `docs/specs/2026-08-19-hejbro-design.md` (D41 amendment note),
       identical consumer code, `authUsers` built but never exported —
       `tsc` exit non-zero, stdout names the missing property).
       `examples/cli-smoke`: 4/4 tests green (2 pre-existing + these 2).
-- [ ] 3.3 (~7m) Skill sentences (brownfield: an exported `existingTable`
-      is now a declaration that emits nothing — the sentence naming the
-      hard error goes; polyrepo: existing tables cross the boundary),
-      quoting the two-senses distinction verbatim (R1-06 item 3): "hejbro
-      does not manage a table for one of two reasons — no declaration
-      covers it at all (`check`'s own inventory), or a declaration
-      covers it with `existingTable()` (never in the inventory)." The
-      D41 amendment note beside the decision's own row (the original
-      text is never deleted, only annotated: "amended by
-      add-unmanaged-objects (#605) — an exported existingTable is a
-      declaration that emits nothing; pending owner ratification"),
-      `minor` changeset, ledger rows. The changeset body MUST carry, near
-      verbatim, the user-facing half of 1.2's exemption restoration:
-      "preset validators (Supabase, Nile) skip existing declarations —
-      they judge managed DDL" — a real behavior change (a warning/error
-      that used to fire on a declared `existingTable()` no longer does),
-      not an internal refactor, so it belongs in the `minor` changeset's
-      own body, not just this file.
+- [x] 3.3 (~7m) Skill sentences, public-surface audit, `minor`
+      changeset, D41 amendment note. **Ledger rows correction (R1-11)**:
+      this line originally said "ledger rows" — wrong per J7/D88 (same
+      boundary G1/G2 already hit): `openspec/task-times.csv` and
+      README's badges are the lead's own PR-time close-out file, a
+      single-writer file across piece branches. Not written here;
+      `.agents/task-times-draft.md` carries G3's cumulative row instead,
+      for the lead to transcribe.
+
+      **Skill sentences**: `skills/hejbro/references/brownfield-
+      adoption.md` — "## Deciding what to manage" rewritten (an exported
+      `existingTable()` is now a declaration that reaches the snapshot/
+      export/contract and still emits nothing; the sentence naming the
+      hard error `existing-table-declared` is gone, since that code no
+      longer exists — confirmed by grep, see below); the "Where this is
+      enforced" code list's own stale citation of that same retired code
+      fixed (a second, separate occurrence the first edit did not
+      touch — caught by the machine grep below, not by memory); the
+      snapshot-marker/DDL-guard code pair added as its own bullet; the
+      two-senses quote (R1-06 item 3, verbatim) added beside the
+      inventory paragraph, where the concepts it disambiguates already
+      sit side by side. `skills/hejbro/references/polyrepo.md` — new
+      "## Existing tables cross the boundary too" section: an existing
+      table vendors like any other (`Tables` entry, marked client
+      metadata, a managed table's FK onto it resolves to a relation),
+      and states the boundary honestly — *following* that relation from
+      the client is not yet possible (no `.related()` for any table,
+      #653), so a consumer reads both tables on their own, not as one
+      joined query. `packages/skills/test` — 5 files/21 tests green (no
+      new tests needed; the existing link-checker and snippet-compiler
+      gate every path/code cited above and every `ts` block written).
+
+      **Public-surface audit (three tiers, measured)**: `TableSnapshot`
+      (carries `existing?: true`) is re-exported from `@hejbro/core`'s
+      public index — tier ③ (published) as a *type*, but not a shape a
+      user ever imports directly (internal to CLI plumbing), so no
+      further skill text beyond D41's own note. Its own reader
+      `tableExisting` is **not** re-exported anywhere — tier ①
+      (module-internal, `grep -n tableExisting packages/core/src/
+      index.ts` — zero hits). `ExportTableFact`/`ExportDescription` are
+      **not** re-exported from `hejbro`'s own index — tier ① (internal
+      to the export pipeline; zero hits grepping `packages/cli/src/
+      index.ts`). `TableClientMeta` (the CLI-side contract mirror) is
+      likewise **not** exported — tier ①. `ContractTableMeta` (the
+      `@hejbro/query`-side mirror, same field) **is** re-exported from
+      `@hejbro/query`'s public index — tier ③ (published; `grep -n
+      ContractTableMeta packages/query/src/index.ts` — line 33) —
+      covered by the polyrepo skill's new section ("its client metadata
+      is marked existing"). `existingTable()`'s own behavior change
+      (refusal → declarable) is the largest tier-③ surface change of
+      all — an already-published, already-documented symbol whose
+      contract changed — covered by the rewritten brownfield section.
+
+      **`minor` changeset** (`.changeset/declare-existing-tables.md`,
+      hand-written to the established format rather than the
+      interactive `pnpm changeset` prompt): states the user-facing
+      change (an exported `existingTable()` is now a declaration,
+      reaches snapshot/export/contract, still emits nothing; a managed
+      FK onto it resolves to a relation) and carries, adjusted to this
+      change's final vocabulary (R1-06/R1-07's "existing", not
+      "unmanaged"), the lead-specified sentence: "Preset validators
+      (Supabase, Nile) skip existing declarations — they judge managed
+      DDL." `pnpm changeset status` confirms all seven fixed-group
+      packages move to `minor`.
+
+      **D41 amendment** (`docs/specs/2026-08-19-hejbro-design.md`):
+      the exact sentence from R1 ("amended by add-unmanaged-objects
+      (#605) — an exported existingTable is a declaration that emits
+      nothing; pending owner ratification") added to **both** D41's
+      index-table status column (matching the file's own established
+      `amended <date>/by <ref> (#N)` pattern, e.g. D12/D33/D101) and
+      inline in the full decision-log row, immediately after the
+      original "(decided 2026-08-20, Phase 6 brainstorm; owner-
+      approved)" — **not one character of the original decision text
+      removed**.
+
+      **Machine verification (grep, not memory)**: `grep -rn
+      "existing-table-declared|passing one as a declaration is"
+      skills/ docs/` — 5 remaining hits, all legitimate and left
+      exactly as found: `docs/plans/2026-08-19-roadmap.md` and
+      `docs/plans/2026-08-20-phase6-implementation.md` (4 hits) are
+      history (AGENTS.md: the roadmap "stays as history"; phase plans
+      are the same class of record, never rewritten retroactively);
+      `docs/specs/2026-08-19-hejbro-design.md`'s D41 row (1 hit) is the
+      original decision text itself, intentionally preserved verbatim,
+      now followed by the amendment note above. `changeset status`
+      passes on this piece's **own** changeset now, not the backlog:
+      `git log dev..HEAD -- .changeset/` shows `declare-existing-
+      tables.md` added in this commit (the G2 close-out's own "passes
+      on backlog, not ours" caveat is resolved).
 
 ## Verification (definition of done, not a task)
 `openspec validate add-unmanaged-objects --strict`; `openspec show
