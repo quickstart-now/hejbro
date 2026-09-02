@@ -1,10 +1,13 @@
 import type {
 	DeleteFinal,
+	DeleteReturnable,
+	InsertConflictable,
 	InsertFinal,
 	IntervalValue,
 	QueryNode,
 	SelectLimited,
 	UpdateFinal,
+	UpdateReturnable,
 } from "@hejbro/core";
 // biome-ignore lint/style/useImportType: jsonArrayFrom is used only in a type position below via `typeof jsonArrayFrom<T>` (a real instantiation expression), which requires an actual value import -- `import type` has no runtime binding to reference.
 import {
@@ -154,6 +157,21 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 		>();
 	});
 
+	// #622: the stage a chain sits at before returning() is called (what
+	// insert().values() actually returns) is the `never` instantiation --
+	// the statement carries no RETURNING clause, so the resolved type is
+	// the empty array's own, not the table's rows. The bare InsertFinal<T>
+	// above keeps meaning every column, exactly as before.
+	it("an insert that never called returning() resolves ReadonlyArray<never>", () => {
+		type Stage = InsertConflictable<Posts>;
+		type Row = ExecuteRows<Stage>[number];
+
+		expectTypeOf<ExecuteRows<Stage>>().toEqualTypeOf<ReadonlyArray<never>>();
+		expectTypeOf<Row>().toBeNever();
+		// @ts-expect-error nothing is assignable to the element type -- there are no rows.
+		const _row: Row = { status: "draft" };
+	});
+
 	it("insert().returning({...}) (object projection) resolves exactly those keys -- a different instantiation from the whole-table case, not the same erased shape", () => {
 		type Stage = InsertFinal<Posts, { readonly total: Posts["amount"] }>;
 		type Row = ExecuteRows<Stage>[number];
@@ -178,6 +196,13 @@ describe("Db.execute's resolved row type for mutations (task 4.11-mutation)", ()
 
 		expectTypeOf<ExecuteRows<UpdateStage>>().toEqualTypeOf<
 			ReadonlyArray<SelectResult<Posts>>
+		>();
+		// #622: the never-requested case rides the same path for all three.
+		expectTypeOf<ExecuteRows<UpdateReturnable<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
+		>();
+		expectTypeOf<ExecuteRows<DeleteReturnable<Posts>>>().toEqualTypeOf<
+			ReadonlyArray<never>
 		>();
 		// A mutation's own left-joined set is always `never` (narrow-join-
 		// nullability, task 3.5): ReturningRow's object-projection branch
