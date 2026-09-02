@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ColumnRef, Expr, ReadAs } from "../../src/index";
 import {
 	eq,
+	getTableMeta,
 	gt,
 	over,
 	renderQuery,
@@ -123,14 +124,16 @@ describe("the named row environment (add-ctes task 3.2)", () => {
 		// past it, proving the runtime guard (1.2c) is still there to catch
 		// exactly that bypass.
 		const asColumnRef: ColumnRef<"uuid"> = leaked;
-		expect(() =>
-			table(app, "comments", {
-				id: uuid().primaryKey(),
-				postId: uuid()
-					.notNull()
-					.references(() => asColumnRef),
-			}),
-		).toThrow(
+		// #669: the thunk no longer runs during table() itself -- it's
+		// folded lazily on the declaration's first `foreignKeys` read, so
+		// that's where this refusal now fires.
+		const comments = table(app, "comments", {
+			id: uuid().primaryKey(),
+			postId: uuid()
+				.notNull()
+				.references(() => asColumnRef),
+		});
+		expect(() => getTableMeta(comments).foreignKeys).toThrow(
 			expect.objectContaining({
 				code: "foreign-column-ref",
 				message: expect.stringContaining("ranked"),

@@ -44,7 +44,10 @@ public surface — a vendored contract cannot be passed anywhere a
 declaration-authority-carrying table is expected (`generateMigration`,
 `existingTable`, …). Tables carry `columns` (plain expressions, usable
 with `eq`/`and`/`or` the same as any other query), `select`/`insert`/
-`update`/`delete`.
+`update`/`delete`. A bare `insert`/`update`/`delete` (no `.returning()`
+— not yet exposed on this surface) sends no `RETURNING` clause and
+types as resolving to `ReadonlyArray<never>`, never the table's row
+type; read written rows back with a second `select`.
 
 A vendored contract also carries every `defineFunction` declaration the
 schema repository exports, callable through `db.fn` — `createDb(driver)
@@ -52,6 +55,14 @@ schema repository exports, callable through `db.fn` — `createDb(driver)
 `query-layer.md` documents for a local `db()` handle. `db.as(context).fn`
 carries over unchanged: a scoped handle's `fn` calls the same vendored
 functions, inside that context's transaction.
+
+The runtime pair of the type-level exclusion above: a vendored/
+synthesized function declaration (`@hejbro/query`'s `synthesizeFunction`
+output, carrying `"usage"` authority, not `defineFunction()`'s own) that
+reaches `generateMigration` is refused with `synced-function-declared`.
+Next: declare it with `defineFunction()` in the repository that owns its
+schema, or remove it from the declarations list if this repository
+doesn't own that schema.
 
 **Two different keying rules, not one.** `Tables` is keyed by the
 table's own SQL name (matching `db()`'s own table-name keying);

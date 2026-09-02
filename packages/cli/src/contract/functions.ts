@@ -1,15 +1,16 @@
 import type { NumericMode, TypeNode } from "@hejbro/core";
 import type {
-	ExportDescription,
 	ExportFunctionArgFact,
+	ExportFunctionReturnsFact,
 } from "../export/description";
-import type { ExportPayload } from "../export/write";
+import type {
+	ValidatedExportPayload,
+	ValidatedFunctionFact,
+} from "../vendor/validate-export";
 import type { ContractEnumFact } from "./read-snapshot";
 import type { TableComputation } from "./tables";
+import { renderKey } from "./tables";
 import { columnTsType } from "./ts-type";
-
-/** `ExportDescription`'s own `functions` element type, restated via indexed access rather than a named import — `ExportFunctionFact` itself is description.ts's own internal type, not exported (G1's own file boundary). */
-type ExportFunctionFact = ExportDescription["functions"][number];
 
 type EnumLookup = (schema: string, name: string) => ContractEnumFact | null;
 
@@ -78,13 +79,17 @@ const argComputation = (
  * absent, not a partial one — `computeFunctions` checks this against the
  * exact array `computeTables` already built, so a table missing from
  * `Tables` structurally cannot appear as a function's return either).
+ * Takes the already-defined `returns` fact itself, never the whole
+ * `ValidatedFunctionFact` (#657's own `undefined` case is
+ * {@link functionComputation}'s guard to make, not this function's —
+ * narrowing at that guard would not otherwise reach in here, since a
+ * function's own parameter type governs its body, not a caller's).
  */
 const returnsComputation = (
-	fact: ExportFunctionFact,
+	returns: ExportFunctionReturnsFact,
 	tables: ReadonlyArray<TableComputation>,
 	enumLookup: EnumLookup,
 ): FunctionReturnsComputation | null => {
-	const returns = fact.returns;
 	if (returns === null) {
 		return null;
 	}
@@ -108,7 +113,7 @@ const returnsComputation = (
 };
 
 const functionComputation = (
-	fact: ExportFunctionFact,
+	fact: ValidatedFunctionFact,
 	tables: ReadonlyArray<TableComputation>,
 	enumLookup: EnumLookup,
 ): FunctionComputation | null => {
@@ -118,7 +123,17 @@ const functionComputation = (
 	if (fact.exportName === null) {
 		return null;
 	}
-	const returns = returnsComputation(fact, tables, enumLookup);
+	// #657: a format-1 export written before the typed function surface
+	// existed carries neither `args` nor `returns` at all -- read as
+	// present, untyped (never normalized to a value neither key ever
+	// had), and not carried into the contract: a call this contract
+	// cannot type is not offered. Checked independently, not "either
+	// implies both": a hand-edited export could carry one without the
+	// other, and both must still drop.
+	if (fact.args === undefined || fact.returns === undefined) {
+		return null;
+	}
+	const returns = returnsComputation(fact.returns, tables, enumLookup);
 	if (returns === null) {
 		return null;
 	}
@@ -140,7 +155,7 @@ const functionComputation = (
  * the first.
  */
 export const computeFunctions = (
-	payload: ExportPayload,
+	payload: ValidatedExportPayload,
 	tables: ReadonlyArray<TableComputation>,
 	enumLookup: EnumLookup,
 ): ReadonlyArray<FunctionComputation> =>
@@ -155,7 +170,7 @@ const renderFunctionArgsType = (
 		return "Record<string, never>";
 	}
 	const fields = args
-		.map((arg) => `readonly ${arg.key}: ${arg.tsType};`)
+		.map((arg) => `readonly ${renderKey(arg.key)}: ${arg.tsType};`)
 		.join(" ");
 	return `{ ${fields} }`;
 };

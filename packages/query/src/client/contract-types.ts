@@ -73,7 +73,8 @@ export type ContractFunctionMeta = {
 type ContractMetadataBase = {
 	readonly roles: ReadonlyArray<string>;
 	readonly tables: { readonly [tableName: string]: ContractTableMeta };
-	readonly functions: { readonly [exportName: string]: ContractFunctionMeta };
+	/** Optional for the same reason `GitContractMetadata.source` is (#659): a contract vendored before the typed function surface existed (pre-#587) carries no `functions` key at all, and upgrading only the installed packages must not break it. */
+	readonly functions?: { readonly [exportName: string]: ContractFunctionMeta };
 };
 
 /**

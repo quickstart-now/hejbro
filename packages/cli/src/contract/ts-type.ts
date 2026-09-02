@@ -14,6 +14,28 @@ export const enumUnion = (values: ReadonlyArray<string>): string => {
 	return values.map((value) => JSON.stringify(value)).join(" | ");
 };
 
+/** The value type an `interval` column/argument/return renders as — the one place that string is spelled, so `emit.ts`'s conditional import (#661) can never name something different from what `baseScalarTsType` actually wrote. */
+export const INTERVAL_VALUE_TS_TYPE = "IntervalValue";
+
+/**
+ * Whether `node` itself, or (for an array column/argument) its element,
+ * names the `interval` value type — the structural test `emit.ts`'s
+ * conditional `IntervalValue` import decides from (#661), over the
+ * carried `TypeNode` fact rather than a scan of the rendered body text: a
+ * column keyed literally `IntervalValue` would false-positive a text
+ * scan, and the two mean entirely different things (a TS identifier
+ * versus a database column's own declared type).
+ */
+export const typeNodeNamesInterval = (node: TypeNode): boolean => {
+	if (node.typeName === "interval") {
+		return true;
+	}
+	if (node.typeName === "array") {
+		return node.element.typeName === "interval";
+	}
+	return false;
+};
+
 const numericModeTsTypeValue = (mode: NumericMode): string => {
 	if (mode === "bigint") {
 		return "bigint";
@@ -103,7 +125,7 @@ export const baseScalarTsType = (
 			// The structured `IntervalValue` shape (`@hejbro/core`) — named by
 			// import in the emitted module rather than spelled out inline, so
 			// the two never drift (5.4's own "each from its carried fact").
-			return "IntervalValue";
+			return INTERVAL_VALUE_TS_TYPE;
 		case "json":
 		case "jsonb":
 			return "unknown";
