@@ -1,3 +1,4 @@
+import { deriveForeignKeyName, isSqlName } from "@hejbro/core";
 import type { Catalog } from "../check/catalog";
 import type { ColumnLoss } from "./columns";
 import type { NotInferredSummary } from "./rest";
@@ -63,6 +64,42 @@ export const detectNextvalDefaultApproximations = (
 		}),
 	);
 
+export type ForeignKeyNameApproximation = {
+	readonly schema: string;
+	readonly table: string;
+	/** The catalog's own name -- unexpressible per D36, never written into a declaration. */
+	readonly catalogName: string;
+	/** What the starter file's own foreign key derives instead. */
+	readonly derivedName: string;
+};
+
+/**
+ * A foreign key whose catalog name isn't a valid hejbro SQL identifier
+ * (D106 R3-B3) -- most often a database hejbro did not create, whose own
+ * FK naming convention Postgres itself never enforces past NAMEDATALEN
+ * and legality. `infer/table.ts`'s `expressibleForeignKeyName` is this
+ * same D36 check's declaration-side half; this is the report-side one,
+ * so the two can never drift (`isSqlName`, `@hejbro/core`).
+ */
+export const detectForeignKeyNameApproximations = (
+	tables: ReadonlyArray<InferredTableFacts>,
+): ReadonlyArray<ForeignKeyNameApproximation> =>
+	tables.flatMap((table) =>
+		table.foreignKeys.flatMap((fk) => {
+			if (isSqlName(fk.name)) {
+				return [];
+			}
+			return [
+				{
+					schema: table.schema.schemaName,
+					table: table.tableName,
+					catalogName: fk.name,
+					derivedName: deriveForeignKeyName(table.tableName, fk.sourceColumns),
+				},
+			];
+		}),
+	);
+
 /** A column whose SQL name no declaration key can reproduce (CI-G1-R1-06 (C)) -- `import` omits it from the starter file; `pull` never does, its own contract carries every column regardless. */
 export type UndeclarableNameColumn = {
 	readonly schema: string;
@@ -81,6 +118,7 @@ export type LossReportFacts = {
 	readonly typeLosses: ReadonlyArray<ColumnLoss>;
 	readonly uniqueIndexApproximations: ReadonlyArray<UniqueIndexApproximation>;
 	readonly nextvalDefaults: ReadonlyArray<NextvalDefaultApproximation>;
+	readonly foreignKeyNameApproximations: ReadonlyArray<ForeignKeyNameApproximation>;
 	readonly undeclarableNameColumns: ReadonlyArray<UndeclarableNameColumn>;
 };
 
@@ -159,6 +197,7 @@ const EXPRESSION_APPROXIMATION_LINE =
 const approximationLines = (
 	uniqueIndexApproximations: ReadonlyArray<UniqueIndexApproximation>,
 	nextvalDefaults: ReadonlyArray<NextvalDefaultApproximation>,
+	foreignKeyNameApproximations: ReadonlyArray<ForeignKeyNameApproximation>,
 ): ReadonlyArray<string> => [
 	...sortedBy(
 		uniqueIndexApproximations,
@@ -174,6 +213,14 @@ const approximationLines = (
 	).map(
 		(nextval) =>
 			`Approximated: column "${nextval.schema}.${nextval.table}.${nextval.column}" keeps its \`nextval('${nextval.sequence}')\` default as a raw expression, naming the sequence it does not own.`,
+	),
+	...sortedBy(
+		foreignKeyNameApproximations,
+		(approximation) =>
+			`${approximation.schema}.${approximation.table}.${approximation.catalogName}`,
+	).map(
+		(approximation) =>
+			`Approximated: the foreign key "${approximation.schema}.${approximation.table}.${approximation.catalogName}" is declared under the derived name "${approximation.derivedName}" instead -- its own catalog name is not a valid hejbro SQL identifier, so \`generate\`/\`check\` will name this constraint differently from the database.`,
 	),
 	EXPRESSION_APPROXIMATION_LINE,
 ];
@@ -225,7 +272,11 @@ export const buildLossReport = (
 		facts.standaloneSequences,
 		facts.typeLosses,
 	),
-	...approximationLines(facts.uniqueIndexApproximations, facts.nextvalDefaults),
+	...approximationLines(
+		facts.uniqueIndexApproximations,
+		facts.nextvalDefaults,
+		facts.foreignKeyNameApproximations,
+	),
 	...undeclarableNameLines(facts.undeclarableNameColumns, facts.command),
 	wayOutLine(facts.command),
 ];

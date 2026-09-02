@@ -15,6 +15,7 @@ import {
 	existingTable,
 	index,
 	indexMethods,
+	isSqlName,
 	op,
 	sql,
 	table,
@@ -79,6 +80,8 @@ export type InferredForeignKeyTargetColumn = {
  * object to already exist, in either direction of an A/B cycle.
  */
 export type InferredForeignKey = {
+	/** The catalog's own constraint name (D106 R3-B3) -- declared explicitly when it round-trips through the DSL's own name rule (D36), else approximated by letting it derive; see `foreignKeyNameApproximation`. */
+	readonly name: string;
 	readonly sourceColumns: ReadonlyArray<string>;
 	readonly targetSchema: string;
 	readonly targetTable: string;
@@ -139,6 +142,20 @@ const foreignKeyAction = (
 	code: string,
 ): "cascade" | "restrict" | "set null" | "set default" | undefined =>
 	FOREIGN_KEY_ACTION_TOKEN[code];
+
+/**
+ * D106 R3-B3: the catalog's own foreign key name, when it round-trips
+ * through the DSL's own D36 rule -- `undefined` (omit) otherwise, so
+ * `resolveForeignKey` derives instead of throwing `invalid-sql-name` on
+ * a database hejbro did not create. `foreignKeyNameApproximation`
+ * (`loss-report.ts`) is this same check's report-side half.
+ */
+const expressibleForeignKeyName = (name: string): string | undefined => {
+	if (isSqlName(name)) {
+		return name;
+	}
+	return undefined;
+};
 
 /** Postgres's own default nulls placement for a direction -- ASC sorts nulls last, DESC sorts nulls first; only a placement that disagrees with its own direction's default is ever declared explicitly. */
 const nullsOverride = (
@@ -328,6 +345,10 @@ export const inferTable = (facts: InferredTableFacts): InferredTableResult => {
 					(name) => columnRefBySqlName.get(name) as ColumnRef,
 				),
 				references: referencesFor(fk, facts, columnRefBySqlName),
+				// D106 R3-B3: the catalog's own name, when expressible --
+				// omitted (derives) otherwise, same `exactOptionalPropertyTypes`
+				// shape the actions below already use.
+				...optionalEntry("name", expressibleForeignKeyName(fk.name)),
 				// `exactOptionalPropertyTypes`: an action key is omitted entirely
 				// (never set to `undefined`) when Postgres's own default applies.
 				...optionalEntry("onDelete", foreignKeyAction(fk.onDelete)),
