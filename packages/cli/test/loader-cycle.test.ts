@@ -1,8 +1,17 @@
 import { join } from "node:path";
 import type { HejbroInput, Table } from "@hejbro/core";
 import { getTableMeta, isTable } from "@hejbro/core";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { loadConfig, loadDeclarations } from "../src/loader";
+import { assertBuiltCli } from "./support/cli-runner";
+
+// D106 R1 NB1: these fixtures import "hejbro", which jiti resolves
+// through real Node module resolution to packages/cli/dist ->
+// packages/core/dist -- not the source under test. vitest's own
+// resolve.alias only rewrites imports inside vitest's module graph;
+// jiti is a separate loader and is unaffected by it. Without this guard
+// a stale dist surfaces as an import failure here, not as "stale build".
+beforeAll(assertBuiltCli);
 
 const fixturesDir = join(import.meta.dirname, "fixtures");
 
