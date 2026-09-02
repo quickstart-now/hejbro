@@ -61,6 +61,16 @@ export type InferCatalogResult = {
 	 * drifts quietly" shape this change has already paid for once).
 	 */
 	readonly sql: string;
+	/**
+	 * Every requested schema `partitionSchemas` excluded for an
+	 * inexpressible name (D106 R4-B4/#707) -- `import`'s own N7
+	 * empty-schema line ("nothing to infer in schema X") is false for one
+	 * of these: there *was* something, hejbro just could not name it, and
+	 * the `Omitted: schema …` loss-report line already says so. Named
+	 * here, structurally, rather than left for a caller to re-parse out
+	 * of `lossReport`'s own text.
+	 */
+	readonly omittedSchemaNames: ReadonlyArray<string>;
 };
 
 const bySchema = <T extends { readonly schema: string }>(
@@ -332,5 +342,8 @@ export const inferFromCatalog = async (
 		description,
 		lossReport,
 		sql: migration.sql,
+		omittedSchemaNames: schemaPartition.omittedSchemas.map(
+			(schema) => schema.sqlName,
+		),
 	};
 };

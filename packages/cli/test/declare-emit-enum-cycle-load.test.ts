@@ -58,6 +58,7 @@ const resultFor = (
 	},
 	lossReport,
 	sql: "",
+	omittedSchemaNames: [],
 });
 
 let dir = "";

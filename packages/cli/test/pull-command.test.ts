@@ -48,6 +48,7 @@ const emptyResult: InferCatalogResult = {
 	description: { tables: [], roleNames: [] },
 	lossReport: [],
 	sql: "",
+	omittedSchemaNames: [],
 };
 
 const widgetsResult: InferCatalogResult = {
@@ -84,6 +85,7 @@ const widgetsResult: InferCatalogResult = {
 	},
 	lossReport: [],
 	sql: 'create table "app"."widgets" (\n\t"id" uuid not null primary key\n);\n',
+	omittedSchemaNames: [],
 };
 
 const depsFor = (
