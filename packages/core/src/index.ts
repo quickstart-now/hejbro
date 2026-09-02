@@ -276,7 +276,7 @@ export type {
 	SequenceSnapshot,
 } from "./kinds/sequence-kind";
 export { sequenceKind } from "./kinds/sequence-kind";
-export { tableKind } from "./kinds/table-kind";
+export { deriveForeignKeyName, tableKind } from "./kinds/table-kind";
 export type {
 	ColumnSnapshot,
 	ForeignKeySnapshot,
@@ -383,6 +383,7 @@ export {
 export type { JsonValue } from "./snapshot/stable-json";
 export { stableJson } from "./snapshot/stable-json";
 export { qualifyName, quoteIdentifier } from "./sql/identifier";
+export { isSqlName } from "./sql/identifier-rules";
 export { quoteStringLiteral } from "./sql/literal";
 export type {
 	BannerHashes,

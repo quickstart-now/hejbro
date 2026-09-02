@@ -97,10 +97,11 @@ export type ForeignKeyReferenceTarget = {
 	readonly columns: ReadonlyArray<string>;
 };
 
-/** A declared foreign key from local (already snake_cased) columns to another table's columns. */
+/** A declared foreign key from local (already snake_cased) columns to another table's columns. `name`: `null` derives `<table>_<columns>_fk` at emit time ({@link deriveForeignKeyName}, `kinds/table-kind.ts`'s own `serializeForeignKeys`) — same shape `IndexDeclaration.indexName` already has (D106 R3-B3: a database hejbro did not create names its foreign keys some other way, most often Postgres's own default `_fkey`; without a slot to carry that name, `generate`/`check` diverge from it permanently). */
 export type ForeignKeyDeclaration = {
 	readonly columns: ReadonlyArray<string>;
 	readonly references: ForeignKeyReferenceTarget;
+	readonly name: string | null;
 	readonly onDelete: ForeignKeyAction | null;
 	readonly onUpdate: ForeignKeyAction | null;
 };
@@ -228,6 +229,8 @@ export type ForeignKeyInput = {
 		readonly table?: Table;
 		readonly columns: ReadonlyArray<ColumnRef>;
 	};
+	/** Optional, validated per D36 when given (D106 R3-B3, same shape `index()`'s own optional name already has) — derives `<table>_<columns>_fk` when omitted. */
+	readonly name?: string;
 	readonly onDelete?: ForeignKeyAction;
 	readonly onUpdate?: ForeignKeyAction;
 };
@@ -403,8 +406,9 @@ const validateDuplicateNames = (
 		);
 	}
 
-	const foreignKeyNames = foreignKeys.map((foreignKey) =>
-		deriveForeignKeyName(tableName, foreignKey.columns),
+	const foreignKeyNames = foreignKeys.map(
+		(foreignKey) =>
+			foreignKey.name ?? deriveForeignKeyName(tableName, foreignKey.columns),
 	);
 	const duplicateForeignKey = firstDuplicate(foreignKeyNames);
 	if (duplicateForeignKey !== undefined) {
@@ -1169,6 +1173,14 @@ const resolveIndex = (input: IndexDeclaration): IndexDeclaration => ({
 	method: input.method,
 });
 
+/** Resolves an optional foreign key name: `undefined` stays `null` (derive later), else validated per D36 -- the foreign-key twin of `dsl/index-builder.ts`'s own `resolveIndexName` (D106 R3-B3). */
+const resolveForeignKeyName = (name: string | undefined): string | null => {
+	if (name === undefined) {
+		return null;
+	}
+	return assertSqlName(name, "foreign key", null);
+};
+
 const resolveForeignKey = (
 	owner: SchemaDeclaration,
 	tableName: string,
@@ -1197,6 +1209,7 @@ const resolveForeignKey = (
 	return {
 		columns: input.columns.map((column) => column.sqlName),
 		references: resolveReferenceTarget(tableName, input.references),
+		name: resolveForeignKeyName(input.name),
 		onDelete: input.onDelete ?? null,
 		onUpdate: input.onUpdate ?? null,
 	};
@@ -1320,6 +1333,9 @@ export const foldColumnReferences = (
 					tableName: target.exprNode.tableName,
 					columns: [target.exprNode.columnName],
 				},
+				// The per-column `.references()` sugar (D102) has no name
+				// slot of its own -- always derives (D106 R3-B3).
+				name: null,
 				onDelete: null,
 				onUpdate: null,
 			},

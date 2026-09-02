@@ -1,5 +1,6 @@
 import type {
 	ForeignKeyAction,
+	ForeignKeyDeclaration,
 	IndexColumnDeclaration,
 	IndexDeclaration,
 	IndexMethod,
@@ -162,6 +163,17 @@ const resolveIndexName = (
 		return index.indexName;
 	}
 	return deriveIndexName(tableName, namedIndexColumnNames(index.columns));
+};
+
+/** D106 R3-B3, the foreign-key twin of {@link resolveIndexName}: an explicit name (validated per D36 at declaration time) wins, else derive from the owning table and local columns. */
+const resolveForeignKeyName = (
+	tableName: string,
+	foreignKey: ForeignKeyDeclaration,
+): string => {
+	if (foreignKey.name !== null) {
+		return foreignKey.name;
+	}
+	return deriveForeignKeyName(tableName, foreignKey.columns);
 };
 
 /** Encodes a column's default expression into its snapshot form (D67/D70) — `null` when the column has no default. */
@@ -440,7 +452,7 @@ const serializeForeignKeys = (
 	declaration: TableDeclaration,
 ): ReadonlyArray<ForeignKeySnapshot> =>
 	declaration.foreignKeys.map((foreignKey) => ({
-		name: deriveForeignKeyName(declaration.tableName, foreignKey.columns),
+		name: resolveForeignKeyName(declaration.tableName, foreignKey),
 		columns: foreignKey.columns,
 		referencesTable: tableIdentity(
 			foreignKey.references.schemaName,

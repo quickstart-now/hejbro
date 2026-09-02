@@ -178,6 +178,125 @@ describe("table() — duplicate index and foreign key name errors (D51)", () => 
 	});
 });
 
+// D106 R3-B3: a foreign key's own catalog name, kept — the same shape
+// index()'s own optional name already has (a name given, or `null`
+// deriving `<table>_<columns>_fk` at emit time).
+describe("table() — foreign key names (D106 R3-B3)", () => {
+	it("derives the name by default, same as before this change", () => {
+		const posts = table(app, "posts_fkname_a", { id: uuid().primaryKey() });
+		const comments = table(
+			app,
+			"comments_fkname_a",
+			{ id: uuid().primaryKey(), postId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{ columns: [t.postId], references: { columns: [posts.id] } },
+				],
+			}),
+		);
+		expect(getTableMeta(comments).foreignKeys[0]?.name).toBeNull();
+	});
+
+	it("carries an explicit name through to the declaration", () => {
+		const posts = table(app, "posts_fkname_b", { id: uuid().primaryKey() });
+		const comments = table(
+			app,
+			"comments_fkname_b",
+			{ id: uuid().primaryKey(), postId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.postId],
+						references: { columns: [posts.id] },
+						name: "comments_fkname_b_legacy_fkey",
+					},
+				],
+			}),
+		);
+		expect(getTableMeta(comments).foreignKeys[0]?.name).toBe(
+			"comments_fkname_b_legacy_fkey",
+		);
+	});
+
+	it("rejects an explicit name that isn't a valid hejbro SQL identifier (D36, same rule index() already enforces)", () => {
+		const posts = table(app, "posts_fkname_c", { id: uuid().primaryKey() });
+		expect(() =>
+			table(
+				app,
+				"comments_fkname_c",
+				{ id: uuid().primaryKey(), postId: uuid() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.postId],
+							references: { columns: [posts.id] },
+							name: "Not-Valid",
+						},
+					],
+				}),
+			),
+		).toThrow(/invalid-sql-name|is not a valid hejbro SQL identifier/);
+	});
+
+	it("rejects two foreign keys sharing the same explicit name, even on different columns", () => {
+		const posts = table(app, "posts_fkname_d", { id: uuid().primaryKey() });
+		const users = table(app, "users_fkname_d", { id: uuid().primaryKey() });
+		expect(() =>
+			table(
+				app,
+				"comments_fkname_d",
+				{ id: uuid().primaryKey(), postId: uuid(), ownerId: uuid() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.postId],
+							references: { columns: [posts.id] },
+							name: "shared_name",
+						},
+						{
+							columns: [t.ownerId],
+							references: { columns: [users.id] },
+							name: "shared_name",
+						},
+					],
+				}),
+			),
+		).toThrow(expect.objectContaining({ code: "duplicate-foreign-key-name" }));
+	});
+
+	it("does not flag two foreign keys on the same columns as duplicates when they carry different explicit names", () => {
+		// same shape the derived-name path already rejects (both would
+		// derive "comments_fkname_e_owner_id_fk") -- explicit, distinct
+		// names are a different constraint on Postgres's own terms, and
+		// the DSL's own duplicate guard must not conflate the two.
+		const posts = table(app, "posts_fkname_e", { id: uuid().primaryKey() });
+		const users = table(app, "users_fkname_e", { id: uuid().primaryKey() });
+		const comments = table(
+			app,
+			"comments_fkname_e",
+			{ id: uuid().primaryKey(), ownerId: uuid() },
+			(t) => ({
+				foreignKeys: [
+					{
+						columns: [t.ownerId],
+						references: { columns: [posts.id] },
+						name: "comments_fkname_e_owner_post_fkey",
+					},
+					{
+						columns: [t.ownerId],
+						references: { columns: [users.id] },
+						name: "comments_fkname_e_owner_user_fkey",
+					},
+				],
+			}),
+		);
+		expect(getTableMeta(comments).foreignKeys.map((fk) => fk.name)).toEqual([
+			"comments_fkname_e_owner_post_fkey",
+			"comments_fkname_e_owner_user_fkey",
+		]);
+	});
+});
+
 // #284 US3 (T031): expression indexes — validation order (data-model.md):
 // unknown-index-column (name entries only) → duplicate names (name-only
 // derivation) → index-expression-requires-name → index-expression-subquery
