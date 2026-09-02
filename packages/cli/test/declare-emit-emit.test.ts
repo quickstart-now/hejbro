@@ -854,13 +854,14 @@ describe("emitDeclarationFiles / 2.1", () => {
 	});
 });
 
-describe("renderHeader / D106 R3-B1 (CI-R3-01): a star-slash pair inside a loss-report line never closes the header comment early", () => {
+describe("renderHeader / D106 R3-B1 (CI-R3-03: ASCII backslash, not a zero-width space): a star-slash pair inside a loss-report line never closes the header comment early", () => {
 	// A star immediately followed by a slash is never spelled out
 	// literally in this file's own comments, for the obvious reason --
 	// built from parts at each call site instead.
 	const starSlash = `${"*"}${"/"}`;
+	const escaped = `${"*"}\\${"/"}`;
 
-	it("splits every star-slash pair in a report line so the block comment only ever closes at its own final line", () => {
+	it("splits every star-slash pair in a report line with a backslash so the block comment only ever closes at its own final line", () => {
 		const header = renderHeader([
 			`Omitted: column "app.widgets.a${starSlash}b" -- danger.`,
 		]);
@@ -869,21 +870,34 @@ describe("renderHeader / D106 R3-B1 (CI-R3-01): a star-slash pair inside a loss-
 		const body = lines.slice(0, -1).join("\n");
 		expect(closingLine).toBe(" */");
 		expect(body).not.toContain(starSlash);
-		// the pair still reads as itself -- a zero-width character sits
-		// between the star and the slash, invisible to a reader.
-		expect(body).toContain(`app.widgets.a*`);
-		expect(body).toContain(`/b`);
+		// the pair reads as itself plus one visible, explained backslash.
+		expect(body).toContain(`app.widgets.a${escaped}b`);
 	});
 
 	it("splits more than one star-slash pair on the same line", () => {
 		const header = renderHeader([`a${starSlash}b${starSlash}c`]);
 		const body = header.split("\n").slice(0, -1).join("\n");
 		expect(body).not.toContain(starSlash);
+		expect(body).toContain(`a${escaped}b${escaped}c`);
 	});
 
 	it("leaves an ordinary report line (no star-slash pair) unchanged", () => {
 		const header = renderHeader(["Guessed: TypeScript keys from SQL names."]);
 		expect(header).toContain(" * Guessed: TypeScript keys from SQL names.");
+	});
+
+	it("explains the visible escape in the header's own intro, only when a report line actually needed one", () => {
+		const escapedHeader = renderHeader([
+			`Omitted: column "app.widgets.a${starSlash}b" -- danger.`,
+		]);
+		expect(escapedHeader).toContain(
+			"A comment-ending pair inside a name below is escaped with a backslash.",
+		);
+
+		const ordinaryHeader = renderHeader([
+			"Guessed: TypeScript keys from SQL names.",
+		]);
+		expect(ordinaryHeader).not.toContain("escaped with a backslash");
 	});
 });
 
