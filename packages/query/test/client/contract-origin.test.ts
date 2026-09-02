@@ -1,8 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type {
-	ContractMetadata,
-	DatabaseContractMetadata,
-} from "../../src/client/contract-types";
 import { createNameKeyedDb } from "../../src/client/name-keyed-db";
 import { recordingTransactionalDriver } from "../db/recording-driver";
 
@@ -51,17 +47,20 @@ const TABLES = {
  */
 describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => {
 	it("accepts a legacy contract literal that carries no source key at all", async () => {
-		const legacyMetadata: ContractMetadata = {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "p1", title: "hello" }],
+		});
+		// The literal is the call argument itself, not a variable typed
+		// ContractMetadata first -- this exercises createNameKeyedDb's own
+		// declared parameter type directly (lead condition, CI-G5-R1-07):
+		// an intermediate variable would only prove the *type* accepts the
+		// shape, not that the *real call site* does.
+		const client = createNameKeyedDb<TestDatabase>(driver, {
 			commit: "abc123",
 			exportHash: "sha256:x",
 			roles: [],
 			tables: TABLES,
-		};
-
-		const { driver, topLevelSent } = recordingTransactionalDriver({
-			rows: [{ id: "p1", title: "hello" }],
 		});
-		const client = createNameKeyedDb<TestDatabase>(driver, legacyMetadata);
 		const rows = await client.posts.select();
 
 		expect(rows).toEqual([{ id: "p1", title: "hello" }]);
@@ -69,18 +68,16 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 	});
 
 	it("accepts a current git-sourced contract literal that names source explicitly", async () => {
-		const gitMetadata: ContractMetadata = {
+		const { driver, topLevelSent } = recordingTransactionalDriver({
+			rows: [{ id: "p1", title: "hello" }],
+		});
+		const client = createNameKeyedDb<TestDatabase>(driver, {
 			source: "git",
 			commit: "abc123",
 			exportHash: "sha256:x",
 			roles: [],
 			tables: TABLES,
-		};
-
-		const { driver, topLevelSent } = recordingTransactionalDriver({
-			rows: [{ id: "p1", title: "hello" }],
 		});
-		const client = createNameKeyedDb<TestDatabase>(driver, gitMetadata);
 		const rows = await client.posts.select();
 
 		expect(rows).toEqual([{ id: "p1", title: "hello" }]);
@@ -88,18 +85,16 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 	});
 
 	it("still requires a database-sourced contract to name its source -- the compile-time guard the union exists for", async () => {
-		const databaseMetadata: DatabaseContractMetadata = {
+		const { driver } = recordingTransactionalDriver({
+			rows: [{ id: "p1", title: "hello" }],
+		});
+		const client = createNameKeyedDb<TestDatabase>(driver, {
 			source: "database",
 			database: "widgets_db",
 			schemas: ["app"],
 			roles: [],
 			tables: TABLES,
-		};
-
-		const { driver } = recordingTransactionalDriver({
-			rows: [{ id: "p1", title: "hello" }],
 		});
-		const client = createNameKeyedDb<TestDatabase>(driver, databaseMetadata);
 
 		expect(client.posts).toBeDefined();
 	});
@@ -117,7 +112,8 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 	 * resolution, not this package's own internal type shape).
 	 */
 	it("rejects a database-sourced contract that also names a commit", () => {
-		const invalid: DatabaseContractMetadata = {
+		const { driver } = recordingTransactionalDriver({ rows: [] });
+		createNameKeyedDb<TestDatabase>(driver, {
 			source: "database",
 			database: "widgets_db",
 			schemas: ["app"],
@@ -125,7 +121,6 @@ describe("ContractMetadata backward/forward compatibility (CI-G5-R1-02)", () => 
 			commit: "abc123",
 			roles: [],
 			tables: TABLES,
-		};
-		void invalid;
+		});
 	});
 });
