@@ -509,3 +509,259 @@ and one of them was in code this change's own round-1 correction added.
 - Type-checked the three `contractMetadata` shapes against `createNameKeyedDb` with `tsc` (see the origin scenario above).
 - Docker-gated `*.integration.test.ts` were not run (`live-witness`, `declare-emit.integration`, `declare-emit-roundtrip.integration`, `infer-catalog-read.integration`), so "generate against empty matches the database" and cross-reading determinism are read, not executed. `pnpm build`/`pnpm install` were not run; the `dist`-freshness CLI subprocess suites were not exercised.
 - Every throwaway file was deleted; `git status` is clean apart from this report.
+
+## Round 3
+
+### Verdict
+
+BLOCKING 3 / NON-BLOCKING 4 / OK 12
+
+(the same 15 delta scenarios across `catalog-inference`, `cli-commands`,
+`schema-vendoring`. Every round-2 finding is closed — both blocking
+defects verifiably so, each with a real-load observer in the suite. The
+three new BLOCKING entries are older than round 2's: two are exotic-name
+shapes in `infer/`+`declare-emit/` that no round has probed, and one —
+a foreign key's own catalog name — is not exotic at all and defeats the
+whole `import` → `generate` → `baseline` → `check` flow on any database
+hejbro did not itself create.)
+
+### Round-2 findings re-checked
+
+- **R2-B1 — the FK-preference step cut an edge off the cycle — CLOSED
+  (code + observers).** `preferForeignKeyBackEdges` is gone;
+  `buildSchemaFileGraph` (`declare-emit/file-cycle.ts:88-111`) now cuts
+  every back edge `topologicalTableOrder`'s DFS reports, which is
+  acyclic by construction. Re-measured the round-2 repro end to end (my
+  own throwaway harness, emitted files written to a real directory and
+  loaded with the production loader's own `jiti`): the chorded graph
+  `a->b`/`a->c`/`b->c` FK + `c->a` enum now cuts `c -> a` (a local
+  unexported `pgEnum` clone in `c.schema.ts`, imports `a->b`, `a->c`,
+  `b->c`), and all three entry orders load. So do its mirror (enum on
+  `a->b`, FKs elsewhere, `c->a` cut by an unexported `existingTable`
+  handle), two overlapping two-cycles, and a four-schema mixed-kind
+  cycle — every file as entry point, 13 loads, no failure. The property
+  is also pinned in the suite with a traversal independent of the one
+  under test (`declare-emit-file-cycle.test.ts:222-260`, `residualEdges`
+  + a white/grey/black `hasCycle`, over four shapes), and the chorded
+  graph is additionally emitted-and-loaded
+  (`declare-emit-enum-cycle-load.test.ts:231`).
+- **R2-B2 — the identifier reservation was one phase stale — CLOSED
+  (code + observers).** One resolution pass per file
+  (`emit.ts:1503-1516`), aliases chosen per importing file
+  (`aliasNameFor`/`resolveAliasesFor`, `:1664-1710`). Re-measured the
+  round-2 repro: three schemas each holding `users` chained
+  `a -> b -> c` emits `import { users as bUsers } from "./b.schema";`
+  in `a`, `users as cUsers` in `b`, every file declaring its own bare
+  `users`; all three load. A fourth schema `d.users` referencing both
+  `b` and `c` gets `bUsers` and `cUsers` and loads too, and the alias
+  set is byte-identical with the table order reversed. Pinned by
+  `declare-emit-enum-cycle-load.test.ts:361-490` and
+  `declare-emit-emit.test.ts:318`.
+- **R2-N1 — the skill claimed policy-derived role names — CLOSED.**
+  `brownfield-adoption.md:213` now reads "plus any role name a grant
+  names"; `inferRoleNames` (`infer/rest.ts:73-83`) still unions the
+  three grant arrays only.
+- **R2-N2 — the skill's cycle paragraph — CLOSED.**
+  `brownfield-adoption.md:232-240` now names both severing mechanisms
+  ("a handle (`existingTable`) for a foreign key, a local copy of the
+  enum for an enum reference") and states the guarantee in the delta's
+  own terms ("the starter files' imports form no cycle, and loading does
+  not depend on which file the loader reaches first"). Still no
+  automated observer for the skill's prose, as the disposition said.
+- **R2-N3 — the header lost the empty-schema lines — CLOSED (code +
+  observer).** `withEmptySchemaLines` (`commands/import.ts:141-149`)
+  folds them into `result.lossReport` *before* `emitDeclarationFiles`,
+  and stdout prints that same array (`:296-302`). Driven directly
+  (`--schema app --schema empty_one`, one table in `app`): the written
+  header and stdout carry the identical five lines, stdout differing
+  only by its own `created …` line. Pinned by
+  `import-command.test.ts:364`.
+
+### Blocking
+
+**R3-B1 — `cli-commands` › "a column the DSL cannot name is left out and
+said so" (and the requirement's "Each file SHALL open with a header
+carrying the loss report in full"): a loss-report line is interpolated
+into a `/** … */` header with no escaping, so a catalog identifier
+containing `*/` closes the comment early and the starter file does not
+parse.**
+
+`renderHeader` (`declare-emit/emit.ts:1039-1046`) prefixes each report
+line with ` * ` and nothing else, and every per-instance line in
+`buildLossReport` interpolates raw catalog text — a column's SQL name
+(`undeclarableNameLineForImport`, `infer/loss-report.ts:180-185`), a
+`format_type` type string, a sequence, constraint or role name
+(`:129-176`, `:87-96`). A quoted Postgres identifier may contain `*` and
+`/`.
+
+Measured end to end (throwaway harness, deleted; `git status` clean): a
+column `a*/b` guesses the key `aB`, which round-trips to `a_b ≠ a*/b`,
+so it is excluded from the snapshot and named in the report by
+`buildLossReport` verbatim:
+
+```
+Omitted: column "app.widgets.a*/b" -- its SQL name has no declaration key. …
+```
+
+`runImport` writes that line into the header, and the emitted
+`app.schema.ts` reads ` * Omitted: column "app.widgets.a*/b" -- its …`,
+which terminates the block comment at `*/`. Loaded with the production
+loader's own `jiti`: `ParseError: Missing semicolon`. The command still
+exits 0 and reports `created o/app.schema.ts`, so the failure surfaces
+only at the next `hejbro generate` — which is precisely the sentence the
+same requirement ends on ("A `generate` against an empty snapshot after
+an `import` SHALL emit the DDL that creates what the database already
+has"). The scenario's own WHEN is *the* class of exotic names, so this
+is inside its stated shape, not beside it. Nothing in the suite feeds a
+report line containing `*/`. The fix belongs at the header seam (rewrite
+`*/` inside a report line before prefixing it), not at each raise site.
+
+**R3-B2 — `catalog-inference` › "Two SQL names that collide on one key
+are both described": a collision suffix is checked only against keys
+already assigned, never against the base keys still to come, so an
+exotic sibling *does* cost an ordinary column its own key — the
+requirement's own "never" — and that ordinary column is then dropped
+from the snapshot and mis-reported as undeclarable.**
+
+`resolveIdentifierKeys` (`infer/column-keys.ts:120-147`) assigns keys in
+physical order; `nextFreeSuffix` (`:54-66`) returns the smallest integer
+whose result is free *in `assigned`* — the keys handed out so far — with
+no knowledge of the base keys later columns will claim. Driven directly
+on physical orders (`inferColumnKeys`, real output):
+
+```
+["user_id","USER_ID","user_id2"] -> ["userId","userId2","userId22"]
+["user_id","user_id2","USER_ID"] -> ["userId","userId2","userId3"]
+```
+
+In the first order the exotic `USER_ID` takes `userId2`, and the
+ordinary, perfectly declarable `user_id2` is pushed to `userId22`, which
+does not round-trip (`toSnakeCase("userId22") = "user_id22"`). Downstream
+(`infer/compose.ts:107-141`) that column is therefore excluded from the
+snapshot — so it reaches neither the starter file nor `pull`'s contract
+— and `buildLossReport` names it with a statement that is simply false:
+`Omitted: column "app.widgets.user_id2" -- its SQL name has no
+declaration key.` It has one; the collision rule gave it away. The
+delta's rule is explicit that this must not happen ("appending … the
+smallest integer from 2 upwards **that leaves it free**, so an exotic
+sibling never costs an ordinary column its own key"), and the outcome
+also depends on physical order, which the scenario's own THEN says it
+must not for the winner. Nothing in the suite mixes a suffix-shaped
+ordinary name with a colliding exotic one (`infer-keys.test.ts` stops at
+two-column collisions).
+
+**R3-B3 — `cli-commands` › "A database is imported into starter files":
+a foreign key's own catalog name is dropped and re-derived, so on any
+database hejbro did not create, `generate` after `import` emits
+differently-named constraints and `check` reports every foreign key as
+missing — and the loss report never names the approximation.**
+
+The emitter renders a foreign key as `{ columns: […], references: { … } }`
+with no name (`renderForeignKey`, `declare-emit/emit.ts:492-513`),
+because the DSL has no slot for one: `table-kind.ts:443` sets
+`name: deriveForeignKeyName(declaration.tableName, foreignKey.columns)`
+unconditionally, i.e. `<table>_<cols>_fk`. Postgres's own default is
+`<table>_<cols>_fkey` — the repo's own integration fixture creates
+`cycle_b_a_id_fkey`/`item_a_id_fkey`
+(`declare-emit.integration.test.ts:158`, `:171`). Measured (emitted the
+starter for a snapshot whose FK is `ta_b_id_fkey`, loaded the files with
+`jiti`, ran `generateMigration` against an empty snapshot):
+
+```
+alter table "a"."ta" add constraint "ta_b_id_fk" foreign key ("b_id") references "b"."tb" ("id");
+```
+
+`check` compares foreign keys **by name**
+(`check/compare.ts:324-337`, `:455-459` — `compareConstraintsByName(…,
+"f", table.foreignKeys.map(fk => fk.name), catalog)`), so after the
+documented brownfield flow (`import` → `generate` → `baseline`, which
+registers without executing) every foreign key is reported as missing,
+permanently, on a database that in fact has it. Indexes and check
+constraints keep their catalog names (`index(<name>)`, `check(<name>, …)`,
+`emit.ts:441`, `:446-449`) and the primary key's derived `_pkey` matches
+Postgres, so the foreign key is the one constraint kind that silently
+diverges. The loss report names no such approximation
+(`approximationLines`, `infer/loss-report.ts:156-176` covers the UNIQUE
+index, the unowned `nextval`, and expression text only), contradicting
+"a loss report naming … every approximation the reading made". The
+round-trip witness cannot see it: it compares the emitted-and-generated
+snapshot against `result.snapshot`, which `compose.ts:191-200` itself
+produced through `generateMigration` — both sides carry the derived
+name — and `examples/postgres`'s database was created by hejbro, so its
+foreign keys are already `_fk`
+(`declare-emit-roundtrip.integration.test.ts:224`).
+
+### Non-blocking
+
+**R3-N1 — the skill misquotes `pull`'s own way-out line.**
+`brownfield-adoption.md:253-255` says the `pull` loss report ends "with
+\"Link the schema repository to declare it by hand\"". That sentence is
+the tail of the *undeclarable-column* line (`undeclarableNameLineForPull`,
+`infer/loss-report.ts:188-190`), which appears only when such a column
+exists; the report's actual last line is `wayOutLine("pull")` — "The
+loss ends when you link the schema repository." (`:207-212`). The
+delta's own scenario ("its output … says the loss ends when the consumer
+links the schema repository") is met by the code, not by the doc.
+
+**R3-N2 — `pull`'s destination refusal names a flag `pull` does not
+have.** `assertVendorDestinationWritable`/
+`assertContractDestinationWritable` (`vendor/write.ts:39-54`, `:70-88`)
+end with "Next: remove it, or pass --force if overwriting it is what you
+want." `runPull` parses only `--db-url`/`--schema`
+(`commands/pull.ts:131-137`, always `force: false`), and the suite's own
+test name says so ("no --force exists to override it",
+`pull-command.test.ts:227`). A consumer hitting this under `pull` is
+told to pass something that does nothing. The delta's "under the same
+existing-file rules `vendor` itself applies" is satisfied by the guard;
+only its remedy text is wrong for this caller.
+
+**R3-N3 — two comments in `declare-emit/emit.ts` still describe the
+two-phase identifier scheme R2-B2 removed.**
+`resolveFileIdentifiers`'s doc (`:1149-1159`) still says "called twice
+… once with only this file's own hejbro-vocabulary usage (phase 1, whose
+result other files' imports are read from), once more with … every name
+this file imports", and `buildFilePlan`'s own line (`:1408`) still reads
+"Phase 1 (vocabulary-only) or phase 2 (vocabulary + imports)". There is
+one call site now (`:1514`, `reserved` = identity), so the `reserved`
+parameter is vestigial and both comments describe behavior that no
+longer exists — the one place a later reader would go to understand why
+`reserved` is there.
+
+**R3-N4 — the file-level import-cycle assertion in
+`declare-emit-emit.test.ts` can silently see no edges.** `hasImportCycle`
+(`:522-542`) keys its adjacency map by `file.schema` but fills it with
+the *file base names* parsed out of the import lines
+(`importedSchemasFrom`, `:517-520`). For any schema whose name is not
+already a safe file base name (`safeFileBaseName` folds `a.b`/`a b` to
+`a_b` — the exact shape N6's own fixture uses), every lookup misses and
+the graph reads as empty, so the assertion passes vacuously. Both
+current fixtures use plain names, so nothing is wrong today; the
+observer is weaker than it looks.
+
+### Verified scenarios
+
+- `catalog-inference` › A catalog reading yields a snapshot and a marked description › **Tables and enums are inferred** — OK. Snapshot/enum assembly `infer/compose.ts:177-200`, guessed-keys announcement `guessedLine` (`infer/loss-report.ts:87-96`) printed by both commands; `import-command.test.ts:117`, `infer-loss-report.test.ts:29`, `infer-adapter.test.ts`.
+- `catalog-inference` › … › **Two SQL names that collide on one key are both described** — BLOCKING (R3-B2). The two-column case is right under both physical orders (`inferColumnKeys(["user_id","USER_ID"]) -> ["userId","userId2"]` and the reverse gives `["userId2","userId"]`); a third, ordinary, suffix-shaped column is what breaks it.
+- `catalog-inference` › … › **What is not inferred is named** — OK. `notInferredSummary`/`standaloneSequences` (`infer/rest.ts:99-130`) rendered by `notInferredLines` (`infer/loss-report.ts:120-153`), each kind counted and each column/sequence named; `infer-loss-report.test.ts:29`.
+- `catalog-inference` › The loss is announced, with the way out › **The report names the way out** — OK for the scenario's own THEN (`wayOutLine`, `infer/loss-report.ts:207-212`, printed by `runPull`, `commands/pull.ts:184-187`; `infer-loss-report.test.ts:165`). The requirement's wider "every approximation" clause is where R3-B3 lands.
+- `cli-commands` › import writes starter declarations › **Declaration files never import each other in a cycle** — OK. Cut = every DFS back edge (`file-cycle.ts:88-111`); measured on the chorded three-schema graph and its enum-on-another-edge mirror, two overlapping two-cycles and a four-schema mixed cycle, emitting real files and loading each as entry point through the production `jiti` (13/13 load); handle and clone are both unexported; suite property test `declare-emit-file-cycle.test.ts:263-345`, load tests `declare-emit-enum-cycle-load.test.ts:91`, `:165`, `:231`.
+- `cli-commands` › … › **A second import writes the same bytes** — OK. No clock/machine value in the header (`emit.ts:1029-1046`); every catalog query orders and every surviving array is sorted (round-2 N3, unchanged); alias assignment is ordered by (owner file, owner symbol) not traversal (`emit.ts:1646-1653`) — driven with the table order reversed, byte-identical. `declare-emit-emit.test.ts:128`, `:164`, `import-command.test.ts:364`. Cross-*reading* determinism remains Docker-only.
+- `cli-commands` › … › **A database is imported into starter files** — BLOCKING (R3-B3): the two files and the loss report are right, and generate-after-import runs, but the foreign keys it creates are named `_fk` where the database has `_fkey`.
+- `cli-commands` › … › **a column the DSL cannot name is left out and said so** — BLOCKING (R3-B1) for the `*/` sub-shape. The ordinary shape is correct: a quoted `"createdAt"` guesses `createdat`, fails the round trip, is excluded (`infer/compose.ts:107-127`) and named with the `check`-keeps-reporting consequence verbatim (`infer/loss-report.ts:180-185`); `import-command.test.ts:151`.
+- `cli-commands` › … › **import refuses to guess which schemas to read** — OK. `throwMissingSchema` (`commands/import.ts:79-83`) names `--schema` and "most commonly --schema public", raised before any connection or write; `import-command.test.ts:278` (`--out` has its own code, `:292`).
+- `cli-commands` › … › **The named schemas hold nothing to infer** — OK. `schemasWithInferredObjects`/`throwNothingToInfer` (`:99-112`, `:296`) fire before `emitDeclarationFiles`, so no directory is created; `import-command.test.ts:306`. A partly-empty run now names each empty schema in both stdout and every header (R2-N3).
+- `cli-commands` › … › **import never overwrites** — OK. `throwIfPlannedFilesCollide` then `throwIfAnyFileExists` (`:172-224`), both before the first write, the latter resolving against the real `outDir`; `import-command.test.ts:177`, `:221`, `:248`.
+- `cli-commands` › pull reads a database as the marked fallback › **A contract is pulled from a database** — OK. `--schema` required (`commands/pull.ts:133-135`), `DATABASE_HEADER` says "inferred from a database catalog, not vendored from a schema repository" (`contract/emit.ts:102-107`), `Tables` from the description's guessed keys, loss report on stdout, destination not nameable; `pull-command.test.ts:109`, `:140`, `:214`.
+- `schema-vendoring` › **pull writes where vendor writes** — OK. Same paths and the same two guards `vendor` applies, both `force: false` (`commands/pull.ts:136-137` vs `commands/vendor.ts:186`, `:272`); the lock carries `"generatedBy": "hejbro pull"`, which `isVendorLockText` (`vendor/write.ts:16-27`) recognizes, so a later `link` + `vendor` is not blocked; `pull-command.test.ts:169`, `:227`. (Remedy text nit: R3-N2.)
+- `schema-vendoring` › **A database-sourced contract says so and carries no commit** — OK. `renderOriginFields` (`contract/emit.ts:252-262`) writes `source: "database"`, the database name and sorted schemas, no commit and no connection string; `contract-origin.test.ts:111`, `:126`, `:142`. Re-type-checked the three metadata shapes against the reader outside the repo (`tsc --noEmit`, a scratch file under /private/tmp): legacy `{commit, exportHash}` with no `source`, `{source:"git",…}` and `{source:"database",…}` all satisfy `ContractMetadata` (`query/src/client/contract-types.ts:73-104`) and `createNameKeyedDb`.
+- `schema-vendoring` › **outdated refuses a database-sourced contract** — OK. `assertLockNamesACommit` at `commands/outdated.ts:42`, before the `commit === undefined` branch and before `readSourceFile` (`:49`); `vendor --check` refuses in `requireVendoredLock` before reading anything (`commands/vendor.ts:75`, `:100`); the diagnostic names `link` then `vendor` (`vendor/lock.ts:135-149`); `outdated-database-origin.test.ts:29`, `:74`.
+
+### Method
+- Read `openspec show add-catalog-inference --diff` in full, then the named surface: `packages/cli/src/{commands/{import,pull,outdated,vendor}.ts,infer/*,declare-emit/*,contract/emit.ts,vendor/{lock,write,state}.ts,check/{catalog,compare}.ts,loader.ts,main.ts}`, `packages/query/src/client/contract-types.ts`, `packages/core/src/{dsl/table.ts,kinds/table-kind.ts,kinds/table-snapshot.ts}`, `skills/hejbro/references/brownfield-adoption.md`.
+- Ran the change's own unit suites green: 17 files / **128** tests (115 in round 2; the 13 new ones are the R2-B1 property/load tests, the R2-B2 alias/load tests and `import-command.test.ts:364`).
+- Round-3 emission probes, in throwaway files under `packages/cli/test/` (all deleted; `git status` clean): the chorded three-schema graph and its enum-on-another-edge mirror, two overlapping two-cycles, a four-schema mixed cycle, the three-schema `users` chain and its four-schema variant — each emitted to a real directory and loaded from **every** file as entry point with the production loader's own `jiti` (13 loads, all clean), plus an alias-determinism comparison with the table order reversed.
+- Drove `runImport` directly (fake driver + injected `inferCatalog`) for the header-vs-stdout question (one empty named schema: identical report), for a long/`*`-bearing report line, and for R3-B1's `*/` line built by the real `buildLossReport`.
+- Drove `inferColumnKeys` + `toSnakeCase` on eight collision shapes, including the three that produce R3-B2.
+- Loaded an emitted file set's exports and ran `generateMigration` against an empty snapshot in-process: one `create type` for a cloned enum (the clone is unexported, so `collectDeclarations` never sees it), every table and both foreign keys — and the `_fk`/`_fkey` divergence R3-B3 names.
+- `node scripts/check-diagnostic-xref.mjs` and `node scripts/check-bans.mjs` both pass.
+- Docker-gated `*.integration.test.ts` were not run (`live-witness`, `declare-emit.integration`, `declare-emit-roundtrip.integration`, `infer-catalog-read.integration`), so the live "generate against empty matches the database" claim is read, not executed — R3-B3 is what that reading found. `pnpm build`/`pnpm install`/full-workspace gates were not run.
