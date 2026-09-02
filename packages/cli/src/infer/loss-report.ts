@@ -1,5 +1,7 @@
+import type { Catalog } from "../check/catalog";
 import type { ColumnLoss } from "./columns";
 import type { NotInferredSummary } from "./rest";
+import type { InferredTableFacts } from "./table";
 
 export type UniqueIndexApproximation = {
 	readonly schema: string;
@@ -7,12 +9,59 @@ export type UniqueIndexApproximation = {
 	readonly name: string;
 };
 
+/** Every named UNIQUE table constraint (CI-G1-R1-06 (B), lead-confirmed live: its backing index carries the identical name) -- 1.4's own adapter already reads it only as that index, so this is the report-side half naming the approximation. */
+export const detectUniqueIndexApproximations = (
+	catalog: Catalog,
+): ReadonlyArray<UniqueIndexApproximation> =>
+	catalog.constraints
+		.filter((constraint) => constraint.type === "u")
+		.map((constraint) => ({
+			schema: constraint.schema,
+			table: constraint.table,
+			name: constraint.name,
+		}));
+
 export type NextvalDefaultApproximation = {
 	readonly schema: string;
 	readonly table: string;
 	readonly column: string;
 	readonly sequence: string;
 };
+
+const NEXTVAL_DEFAULT = /^nextval\('([^']+)'::regclass\)$/;
+
+/**
+ * A `nextval(...)` default that survives as a plain raw default because
+ * `isSerialOwned` is `false` (CI-G1-R1-10 (D)/1.5c) -- the column's
+ * default calls a sequence, but no `ALTER SEQUENCE ... OWNED BY`
+ * relationship makes it that column's own, so 1.3 never converts it to
+ * a `serial`-family builder. Named here as the approximation it is:
+ * the raw default round-trips the SQL exactly, but the sequence itself
+ * stays unexpressed as a declaration (D66).
+ */
+export const detectNextvalDefaultApproximations = (
+	tables: ReadonlyArray<InferredTableFacts>,
+): ReadonlyArray<NextvalDefaultApproximation> =>
+	tables.flatMap((table) =>
+		table.columns.flatMap((column) => {
+			if (column.facts.isSerialOwned || column.facts.catalogDefault === null) {
+				return [];
+			}
+			const match = NEXTVAL_DEFAULT.exec(column.facts.catalogDefault);
+			if (match === null) {
+				return [];
+			}
+			const [, sequence] = match;
+			return [
+				{
+					schema: column.facts.schema,
+					table: table.tableName,
+					column: column.sqlName,
+					sequence: sequence ?? "",
+				},
+			];
+		}),
+	);
 
 /** A column whose SQL name no declaration key can reproduce (CI-G1-R1-06 (C)) -- `import` omits it from the starter file; `pull` never does, its own contract carries every column regardless. */
 export type UndeclarableNameColumn = {

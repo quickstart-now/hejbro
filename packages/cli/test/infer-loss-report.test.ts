@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { Catalog } from "../src/check/catalog";
 import type { LossReportFacts } from "../src/infer/loss-report";
-import { buildLossReport } from "../src/infer/loss-report";
+import {
+	buildLossReport,
+	detectNextvalDefaultApproximations,
+	detectUniqueIndexApproximations,
+} from "../src/infer/loss-report";
+import type { InferredTableFacts } from "../src/infer/table";
 
 const emptyFacts = (command: "import" | "pull"): LossReportFacts => ({
 	command,
@@ -129,5 +135,111 @@ describe("buildLossReport / 1.7", () => {
 		const report = buildLossReport(emptyFacts("import"));
 
 		expect(report.some((line) => line.includes("hand-edit"))).toBe(true);
+	});
+});
+
+describe("detectUniqueIndexApproximations / 1.7", () => {
+	it("names every UNIQUE constraint, since each is inferred as its own backing index (CI-G1-R1-06 (B))", () => {
+		const catalog: Catalog = {
+			schemas: [],
+			tables: [],
+			columns: [],
+			constraints: [
+				{
+					schema: "app",
+					table: "pairs",
+					name: "pairs_a_b_unique",
+					type: "u",
+					columns: ["a", "b"],
+				},
+				{
+					schema: "app",
+					table: "pairs",
+					name: "pairs_pkey",
+					type: "p",
+					columns: ["id"],
+				},
+			],
+			indexes: [],
+			enums: [],
+			sequences: [],
+			functions: [],
+			views: [],
+			policies: [],
+			triggers: [],
+			tableGrants: [],
+			schemaUsageGrants: [],
+			defaultTableGrants: [],
+			extensions: [],
+		};
+
+		expect(detectUniqueIndexApproximations(catalog)).toEqual([
+			{ schema: "app", table: "pairs", name: "pairs_a_b_unique" },
+		]);
+	});
+});
+
+describe("detectNextvalDefaultApproximations / 1.7", () => {
+	it("names a nextval default only on a column that does not own that sequence", () => {
+		const tables: ReadonlyArray<InferredTableFacts> = [
+			{
+				schema: { declarationKind: "schema", schemaName: "app" },
+				tableName: "legacy",
+				columns: [
+					{
+						sqlName: "id",
+						tsKey: "id",
+						isPrimaryKey: true,
+						facts: {
+							schema: "app",
+							table: "legacy",
+							name: "id",
+							sqlType: "integer",
+							baseTypeName: "int4",
+							isArray: false,
+							notNull: true,
+							catalogDefault: "nextval('app.legacy_id_seq'::regclass)",
+							identityKind: "",
+							generatedKind: "",
+							identityOptions: null,
+							isSerialOwned: true,
+							enumDeclaration: null,
+						},
+					},
+					{
+						sqlName: "external_id",
+						tsKey: "externalId",
+						isPrimaryKey: false,
+						facts: {
+							schema: "app",
+							table: "legacy",
+							name: "external_id",
+							sqlType: "integer",
+							baseTypeName: "int4",
+							isArray: false,
+							notNull: false,
+							catalogDefault: "nextval('app.orphan_seq'::regclass)",
+							identityKind: "",
+							generatedKind: "",
+							identityOptions: null,
+							isSerialOwned: false,
+							enumDeclaration: null,
+						},
+					},
+				],
+				foreignKeys: [],
+				checks: [],
+				indexes: [],
+			},
+		];
+
+		expect(detectNextvalDefaultApproximations(tables)).toEqual([
+			{
+				schema: "app",
+				table: "legacy",
+				column: "external_id",
+				sequence: "app.orphan_seq",
+			},
+		]);
 	});
 });
