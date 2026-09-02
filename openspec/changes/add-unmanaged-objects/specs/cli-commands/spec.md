@@ -71,7 +71,13 @@ wrote and that it carries no statements, and exit zero. That migration's
 name SHALL be derived from the difference between the two snapshots, by
 the same naming rules every other migration follows and as
 deterministically: the same pair of snapshots SHALL always produce the
-same name, never a generic fallback.
+same name, never a generic fallback. A snapshot can move without any
+table changing hands — a declaration restating a table hejbro already
+records the same way — and such a run SHALL be named from the table
+whose record changed, exactly as deterministically. Only a run whose
+snapshot moved with no table's record changing at all is a fault in
+hejbro, and it SHALL be reported as a coded diagnostic naming itself as
+one, never as a crash.
 
 Whether a run has something to write is decided by comparing the
 snapshot it arrived at against the previous one, never by whether the
