@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { inferColumnKeys } from "../src/infer/column-keys";
+import {
+	inferColumnKeys,
+	resolveIdentifierKeys,
+} from "../src/infer/column-keys";
 
 describe("inferColumnKeys / 1.1 casing", () => {
 	it("lower-cases and joins runs between non-alphanumeric characters in camel case", () => {
@@ -33,5 +36,23 @@ describe("inferColumnKeys / 1.1 collisions", () => {
 			"userId2",
 			"userId3",
 		]);
+	});
+});
+
+describe("resolveIdentifierKeys / 2.1 (Q2, CI-G2-R1-06): the same casing+collision rule, seeded with reserved names", () => {
+	it("behaves exactly like inferColumnKeys when nothing is reserved", () => {
+		expect(resolveIdentifierKeys(["user_id", "USER_ID"])).toEqual(
+			inferColumnKeys(["user_id", "USER_ID"]),
+		);
+	});
+
+	it("suffixes even the earliest name when it collides with a reserved symbol", () => {
+		// table/enum identifiers have no round-trip constraint (Q2): a bare
+		// collision with an import (e.g. a table literally named `check`)
+		// must be suffixed even though nothing earlier in its own list
+		// claimed the bare key first.
+		expect(
+			resolveIdentifierKeys(["check"], new Set(["check", "table", "schema"])),
+		).toEqual(["check2"]);
 	});
 });

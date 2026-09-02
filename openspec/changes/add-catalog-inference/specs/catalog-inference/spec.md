@@ -69,8 +69,10 @@ not inferred, every approximation the reading made — a UNIQUE
 constraint is inferred as a unique index carrying the constraint's own
 name, so re-creating it emits `create unique index` rather than
 `add constraint … unique`; a `nextval` default on a sequence the column
-does not own is kept as a raw default, naming that sequence — and the
-command that removes the loss:
+does not own is kept as a raw default, naming that sequence;
+expressions are carried as raw SQL text rather than as the typed
+builders a hand-written declaration would use — and the command that
+removes the loss:
 linking the schema repository for `pull`, hand-editing the starter
 declarations for `import`.
 

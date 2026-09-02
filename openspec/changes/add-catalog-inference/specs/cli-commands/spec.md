@@ -14,9 +14,28 @@ produce — the DSL derives a column's SQL name from its key by
 snake_case — SHALL be omitted from the starter files and named in the
 loss report together with its consequence: the table is only partly
 declared, and `check` reports that column until it is declared by hand
-or renamed in the database. A `generate` against an empty snapshot after an
+or renamed in the database. Each file SHALL open with a header carrying
+the loss report in full and the statement that the file is the
+repository's own from now on, and SHALL carry no clock- or
+machine-derived value, so importing the same database twice writes
+byte-identical files. A `generate` against an empty snapshot after an
 `import` SHALL emit the DDL that creates what the database already has,
 which `baseline` then registers.
+
+#### Scenario: A cycle-closing foreign key the thunk cannot express
+- **WHEN** a foreign key closes a cycle between two schemas and carries
+  an action or spans several columns, which the column-level reference
+  thunk does not express
+- **THEN** the starter file declares it against a reference-only handle
+  that is not exported, so the file declares the foreign key without
+  declaring that table twice
+
+#### Scenario: A second import writes the same bytes
+- **WHEN** the same database is imported twice, into two empty
+  directories
+- **THEN** the two sets of files are identical byte for byte, and each
+  file's header carries the loss report and says the file is the
+  repository's own from now on
 
 #### Scenario: A database is imported into starter files
 - **WHEN** `hejbro import --url <db> --out src/schema` runs against a

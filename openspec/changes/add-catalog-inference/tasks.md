@@ -109,16 +109,33 @@ Files: `packages/cli/src/declare-emit/*.ts` (new), tests
       file uses — the barrel carries vocabulary only (#471), so an
       engine symbol appearing there is itself a failure; declaration
       order `schema()` → `pgEnum()` (labels in catalog order) →
-      `table()` in foreign-key topological order, a cycle written with
-      the column-level `.references(() => …)` thunk; a fixed builder
+      `table()` in foreign-key topological order over every table the
+      run covers, a reference across schemas written as a cross-file
+      import (never a reference-only handle — that is for a cycle the
+      import cannot serve), a cycle written with the column-level
+      `.references(() => …)` thunk, and a cycle-closing key the thunk
+      cannot express (composite, or carrying an action) written against
+      an unexported `existingTable` handle with the constraint stated in
+      a comment above it; a fixed builder
       chaining order, so the output is deterministic; `index(...)` and
       `check(...)` carrying their catalog names; and a header comment
       holding the loss report in full plus the sentence that this file
-      is now the repository's own. Failing test: `declare-emit.test.ts`
+      is now the repository's own. Three details are settled, and they
+      exist because the output has to be reproducible: table order is
+      topological with ties broken by `schema.table` name, so a
+      different catalog row order cannot change the file; a cycle is
+      the edge that points at a vertex already on the traversal stack,
+      and only that one edge is written as a column-level thunk (a
+      self-reference is not a cycle); and the header carries no clock-
+      or machine-derived value — no timestamp, connection string, user,
+      host or version — so a second import writes the same bytes.
+      Failing test: `declare-emit.test.ts`
       — a golden, **and** the emitted source loaded and run through
       `generateMigration`, its DDL compared object by object against the
       fixture database's own (a golden proves the strings; only running
-      it proves the module).
+      it proves the module), plus the two determinism pins: the same
+      input in a different row order emits the same files, and the same
+      import run twice emits the same bytes.
 - [ ] 2.2 (~8m) Round trip over the examples' own database rather than
       the fixture: emitted source, loaded and generated against an empty
       snapshot, yields DDL equal to that database's objects. Failing

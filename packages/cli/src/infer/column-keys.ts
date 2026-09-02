@@ -68,15 +68,19 @@ const resolveKey = (base: string, assigned: ReadonlySet<string>): string => {
 };
 
 /**
- * Resolves TypeScript keys for one table's columns, given in physical
- * order (`attnum` order): the earliest column keeps its bare key, and
- * each later collision is suffixed with the smallest free integer from
- * 2 upwards (catalog-inference delta's collision rule).
+ * Resolves TypeScript identifiers for `namesInOrder`, seeded with
+ * `reserved` (already-taken keys, e.g. a file's own import symbols,
+ * 2.1/CI-G2-R1-06 Q2) -- the earliest name keeps its bare key unless
+ * `reserved` already claims it, and each collision (with `reserved` or
+ * an earlier name alike) is suffixed with the smallest free integer
+ * from 2 upwards (catalog-inference delta's collision rule).
+ * {@link inferColumnKeys} is this with an empty `reserved`.
  */
-export const inferColumnKeys = (
-	sqlNamesInPhysicalOrder: ReadonlyArray<string>,
+export const resolveIdentifierKeys = (
+	namesInOrder: ReadonlyArray<string>,
+	reserved: ReadonlySet<string> = new Set(),
 ): ReadonlyArray<string> => {
-	const resolved = sqlNamesInPhysicalOrder.reduce<{
+	const resolved = namesInOrder.reduce<{
 		readonly keys: ReadonlyArray<string>;
 		readonly assigned: ReadonlySet<string>;
 	}>(
@@ -87,7 +91,16 @@ export const inferColumnKeys = (
 				assigned: new Set([...state.assigned, key]),
 			};
 		},
-		{ keys: [], assigned: new Set() },
+		{ keys: [], assigned: new Set(reserved) },
 	);
 	return resolved.keys;
 };
+
+/**
+ * Resolves TypeScript keys for one table's columns, given in physical
+ * order (`attnum` order) -- {@link resolveIdentifierKeys} with no
+ * reserved names.
+ */
+export const inferColumnKeys = (
+	sqlNamesInPhysicalOrder: ReadonlyArray<string>,
+): ReadonlyArray<string> => resolveIdentifierKeys(sqlNamesInPhysicalOrder);

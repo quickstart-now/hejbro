@@ -76,7 +76,8 @@ else.
   (database-sourced lock refusal), `check/catalog.ts` (reused as-is for
   the shared inventory; the facts inference needs on top of it are read
   by its own read-only queries under `infer/`),
-  `packages/cli/src/declare-emit/` (new: snapshot → DSL source),
+  `packages/cli/src/declare-emit/` (new: inference output → DSL source
+  — the snapshot alone carries no declaration keys),
   each new command's own code literals at their raise sites (there is
   no diagnostics registry — `check:diagnostic-xref` checks docs
   citations against those literals, one way), tests,
