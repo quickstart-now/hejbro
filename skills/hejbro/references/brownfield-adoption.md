@@ -232,8 +232,10 @@ name (a blanket line — never a per-instance list), a column whose type
 no builder expresses, and a standalone sequence no column owns (the
 DSL has no `defineSequence()` yet); **Approximated** — a named UNIQUE
 constraint as a same-named unique index, a `nextval(...)` default kept
-as a raw expression, and every default/check/generated/index-predicate
-expression as raw SQL text rather than a typed builder; and
+as a raw expression, every default/check/generated/index-predicate
+expression as raw SQL text rather than a typed builder, and a foreign
+key whose own catalog name is not a valid hejbro SQL identifier,
+declared under the derived name instead (D106 round 3); and
 **Omitted** — a column whose SQL name no declaration key can round-trip
 (a quoted `"createdAt"`, since the DSL derives a column's SQL name from
 its key by snake_case) is left out of the starter file entirely rather
