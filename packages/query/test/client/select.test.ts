@@ -16,6 +16,7 @@ type TestDatabase = {
 };
 
 const METADATA: ContractMetadata = {
+	source: "git",
 	commit: "abc123",
 	exportHash: "sha256:x",
 	roles: [],

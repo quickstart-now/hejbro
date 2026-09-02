@@ -2,10 +2,12 @@ import { defineCommand } from "citty";
 import { checkCommand } from "./commands/check";
 import { baselineCommand, generateCommand } from "./commands/generate";
 import { historyCommand } from "./commands/history";
+import { importCommand } from "./commands/import";
 import { initCommand } from "./commands/init";
 import { linkCommand } from "./commands/link";
 import { migrateCommand } from "./commands/migrate";
 import { outdatedCommand } from "./commands/outdated";
+import { pullCommand } from "./commands/pull";
 import { raiseCommand } from "./commands/raise";
 import { resetCommand } from "./commands/reset";
 import { restoreCommand } from "./commands/restore";
@@ -34,6 +36,8 @@ export const main = defineCommand({
 	},
 	subCommands: {
 		init: initCommand,
+		import: importCommand,
+		pull: pullCommand,
 		baseline: baselineCommand,
 		generate: generateCommand,
 		verify: verifyCommand,

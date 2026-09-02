@@ -16,6 +16,9 @@ const VALUE_TAKING_FLAGS: ReadonlyArray<string> = [
 	"--rename",
 	"--confirm-drop",
 	"--url",
+	"--schema",
+	"--out",
+	"--db-url",
 ];
 
 /**
@@ -135,3 +138,24 @@ export const parseConfirmDropFlag = (value: string): ConfirmDropSpec => {
 		invalidConfirmDropFlagMessage(value),
 	);
 };
+
+/**
+ * Every value a repeatable flag (e.g. `import`'s `--schema`) was given, in
+ * argv order -- unlike `check.ts`'s own `lastFlagValue` (kept local there,
+ * one caller), this is shared because `import` needs every occurrence, not
+ * just the last.
+ */
+export const collectFlagValues = (
+	rawArgs: ReadonlyArray<string>,
+	flagName: string,
+): ReadonlyArray<string> =>
+	rawArgs.flatMap((token, index) => {
+		if (token !== flagName) {
+			return [];
+		}
+		const value = rawArgs[index + 1];
+		if (value === undefined) {
+			return [];
+		}
+		return [value];
+	});

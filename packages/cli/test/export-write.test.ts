@@ -337,6 +337,7 @@ export const posts = table(app, "posts", {
 		const { payload } = validateExport(formatText, schemaText);
 
 		const contractSource = emitContract(payload, {
+			source: "git",
 			commit: "abc123",
 			exportHash: "sha256:deadbeef",
 		});

@@ -30,6 +30,7 @@ const emitSource = (
 	exportNames?: ReadonlyMap<HejbroInput, string>,
 ): string =>
 	emitContract(buildFixturePayload(declarations, exportNames), {
+		source: "git",
 		commit: "abc123",
 		exportHash: "sha256:deadbeef",
 	});

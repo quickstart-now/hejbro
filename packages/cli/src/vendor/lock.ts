@@ -51,8 +51,18 @@ export const lockPath = (cwd: string): string => join(cwd, LOCK_FILE_NAME);
  */
 export type LockResolvedBy = "default-branch" | "explicit-ref";
 
+/**
+ * `generatedBy` widens to `"hejbro pull"` (CI-G4-R1-01): a pull lock
+ * carries `database`/`schemas` in place of `commit` (mirroring
+ * `ContractOrigin`'s own two shapes), never a discriminated union of its
+ * own -- every other field stays optional-and-absent for a pull lock
+ * (`resolvedFrom`/`resolvedBy`/hashes) the same way an old, pre-hash
+ * vendor lock already tolerates an absent field (member 6's own
+ * format-skew rule), rather than inventing a second lock shape a reader
+ * has to branch on.
+ */
 export type VendorLock = {
-	readonly generatedBy: "hejbro vendor";
+	readonly generatedBy: "hejbro vendor" | "hejbro pull";
 	readonly resolvedFrom?: string;
 	readonly resolvedBy?: LockResolvedBy;
 	readonly commit?: string;
@@ -60,6 +70,8 @@ export type VendorLock = {
 	readonly schemaHash?: string;
 	readonly sqlHash?: string;
 	readonly contractHash?: string;
+	readonly database?: string;
+	readonly schemas?: ReadonlyArray<string>;
 };
 
 /** Asymmetric-tolerant, matching the format-skew rule (member 6): a lock
@@ -97,10 +109,38 @@ export const readLock = (cwd: string): VendorLock | null => {
 	return JSON.parse(text) as VendorLock;
 };
 
-export const writeLock = (
-	cwd: string,
-	lock: Omit<VendorLock, "generatedBy">,
+/**
+ * `generatedBy` is now a required field on `lock` itself (CI-G4-R1-01),
+ * not hardcoded here -- `vendor` and `pull` each write their own mark,
+ * and a default would have silently kept minting `"hejbro vendor"` the
+ * moment a second writer appeared, exactly the risk `check/driver.ts`'s
+ * own required `codes` parameter already guards against elsewhere in
+ * this codebase.
+ */
+export const writeLock = (cwd: string, lock: VendorLock): void => {
+	writeFileSync(lockPath(cwd), stableJson(lock));
+};
+
+/**
+ * Refuses with `vendor-origin-not-a-commit` when `lock` names no commit
+ * because it came from `pull` (schema-vendoring spec: "`vendor --check`
+ * and `outdated` SHALL refuse to run against it... naming `link` as the
+ * way to a commit-anchored contract") -- the operation stops because
+ * there is no commit to compare against, not because a database was
+ * involved, so the code names the missing fact rather than the source.
+ * `commandName` is the caller's own name (`hejbro outdated`/
+ * `hejbro vendor --check`), matching every other connection/precondition
+ * diagnostic in this codebase.
+ */
+export const assertLockNamesACommit = (
+	lock: VendorLock,
+	commandName: string,
 ): void => {
-	const full: VendorLock = { generatedBy: "hejbro vendor", ...lock };
-	writeFileSync(lockPath(cwd), stableJson(full));
+	if (lock.generatedBy !== "hejbro pull") {
+		return;
+	}
+	throwHejbroError(
+		"vendor-origin-not-a-commit",
+		`${commandName} has nothing to compare against: this repository's contract was inferred from a database (\`hejbro pull\`, "${lock.database}"), which carries no commit. Next: run \`hejbro link <repository>\` to point at a schema repository, then \`hejbro vendor\`, then rerun ${commandName}.`,
+	);
 };

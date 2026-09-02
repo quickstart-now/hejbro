@@ -76,6 +76,38 @@ shape than a managed one. **What this does not give you yet**:
 separate work, #653) — so a consumer reads the existing table and the
 managed table each on their own, not as one nested/joined query.
 
+## A database as a marked fallback (`pull`)
+
+`link`/`vendor` read a schema *repository* only — `link` itself records
+nothing but a git URL or a local path ("Repository only" above). When
+that repository genuinely isn't reachable, `hejbro pull --db-url
+<db> --schema <name>` is the separate, marked fallback: it reads a
+live database's catalog instead (the same reading `import` uses,
+`packages/cli/src/infer/compose.ts`'s `inferFromCatalog`) and writes
+into the exact same destination `vendor` does — `.hejbro/vendor/
+{schema.json, snapshot.sql, contract.ts}` and `hejbro.lock` — so
+`createDb`/the rest of "The loop" above work identically either way.
+The contract's own header says it was inferred from a database rather
+than vendored, and the lock it leaves carries no commit — `vendor
+--check` and `outdated` both refuse to run against it (naming `link` as
+the way to a commit-anchored contract instead), since there is no
+commit to compare a database-sourced pin against. Reach for `pull` only
+as the fallback it's named for; once the schema repository is
+reachable, `link`+`vendor` replace the same destination with a
+commit-anchored one.
+
+`contract.ts`'s own `contractMetadata` constant carries this same
+distinction at the type level (`@hejbro/query`'s `ContractMetadata`,
+consumed by `createDb`): it's a union on a `source` field, `"git"`
+(`commit`/`exportHash`, `vendor`'s own) or `"database"` (`database`/
+`schemas`, `pull`'s own) — code written against it that forgets the
+database-sourced case fails to compile rather than surfacing only once
+someone runs `pull`. A contract a pre-#604 `hejbro vendor` already
+wrote and committed carries no `source` key at all, and keeps
+type-checking unchanged after upgrading `hejbro`/`@hejbro/query` alone
+— `source` is optional on the git-sourced shape for exactly that
+reason (never on the database-sourced one, which always names itself).
+
 ## Migrating an annotation that named the general `Table` type
 
 If you have an existing declaration variable explicitly annotated with

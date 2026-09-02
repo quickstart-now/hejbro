@@ -85,6 +85,8 @@ const OWNERSHIP: Readonly<Record<string, string>> = {
 		"cli-commands: An external tool is an optional dependency",
 	"vendor-schema-filter-reserved":
 		"schema-vendoring: The schema filter is reserved, not silently ignored",
+	"vendor-origin-not-a-commit":
+		"schema-vendoring: A database-sourced contract is marked and refused by the checks that need a commit",
 };
 
 const ENUMERATION_OWNER =
