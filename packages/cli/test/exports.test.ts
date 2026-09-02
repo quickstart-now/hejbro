@@ -18,9 +18,19 @@ import type {
 	Db,
 	DbContext,
 	DeclaredCteMarker,
+	DeleteFinal,
 	ExecuteResult,
+	FunctionDeclaration,
+	InsertFinal,
+	LeftJoinedBrand,
+	ReturningProjection,
 	ScopedDb,
+	SelectLimited,
+	Table,
 	Tx,
+	TypeNode,
+	UntrackedJoins,
+	UpdateFinal,
 } from "../src/index";
 import * as hejbro from "../src/index";
 
@@ -151,7 +161,22 @@ type _QueryTypesPresent = [
 	ScopedDb,
 	Tx,
 ];
-type _CoreTypesPresent = [DeclaredCteMarker];
+// #471: the type half of the curation is held by construction (`export
+// type *`); this block names the core types shipped specs reference as
+// reaching users, so the construction is checked, not assumed.
+type _CoreTypesPresent = [
+	DeclaredCteMarker,
+	LeftJoinedBrand,
+	UntrackedJoins,
+	FunctionDeclaration,
+	Table,
+	TypeNode,
+	ReturningProjection,
+	SelectLimited,
+	InsertFinal,
+	UpdateFinal,
+	DeleteFinal,
+];
 /**
  * `AssertSchemaFinding` (extend-query-runtime, owner decision: named on
  * this surface, not re-exported as `check`'s own `Finding`) carries no

@@ -15,16 +15,22 @@ column types, the expression, aggregate and window helpers, the query
 builders, `HejbroError` and the user-facing utilities — together with
 `@hejbro/query`'s surface and its own configuration and assertion
 entries, and SHALL NOT export core's engine: renderers, codecs, the diff
-and generation machinery, kind definitions, banner and snapshot parsers,
-traversal tables, and internal brands and helpers. Those remain
-importable from `@hejbro/core`, which is the interface presets and
-sibling packages build on. Every type `@hejbro/core` exports SHALL stay
-reachable from `hejbro`; only runtime values are curated — which means
-an engine name remains visible to the type checker through `hejbro` as
-a type-only re-export (usable in a `typeof` position, never as a
-value), and that is the stated shape of the curation. The one brand
-another shipped requirement names as reaching users through `hejbro`
-(`leftJoinedBrand`) stays exported.
+and generation machinery, kind definitions and the registry, the
+snapshot codec, traversal tables, and internal brands and helpers. Those
+remain importable from `@hejbro/core`, which is the interface presets
+and sibling packages build on. Two groups that read as engine are
+vocabulary on purpose and stay exported: the three banner readers
+(`parseBannerHashes`, `parseBannerVersion`, `parseBannerBaseline`),
+which the generate/verify workflow documents as the way a user reads a
+migration's banner, and the one brand another shipped requirement names
+as reaching users through `hejbro` (`leftJoinedBrand`). Every type
+`@hejbro/core` exports SHALL stay reachable from `hejbro` — held by the
+barrel's construction (a wholesale type re-export, not a list) and
+checked by a type-only import of the core types shipped specs name —
+so only runtime values are curated; an engine name remains visible to
+the type checker through `hejbro` as a type-only re-export (usable in a
+`typeof` position, never as a value), and that is the stated shape of
+the curation.
 
 #### Scenario: Autocomplete offers the vocabulary
 - **WHEN** a user imports from `hejbro` and reaches for a column type
