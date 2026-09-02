@@ -1188,8 +1188,9 @@ it actually know, today? **③** — file:line and the test that pins it, or
 
 | Site | ① | ② | ③ |
 |---|---|---|---|
-| `check/compare.ts`'s `compareTable` (`:414`, guard `:426`) | yes | yes | `check-command.test.ts` "no difference is reported for it" |
-| `check/inventory.ts`'s `declaredTableIdentities`/`unmanagedTables` | yes | yes — **by construction, not a check**: any `table:` key (existing or managed) counts as declared, so an existing table is excluded from "unmanaged" without a dedicated `existing` branch | `check-command.test.ts` "is absent from the inventory section", "the word \`unmanaged\` never appears in the report…" |
+| `check/compare.ts`'s `compareTable` (`:414`, guard `:426`) | yes | yes | `check-command.test.ts` "no difference is reported for it"; requirement: `cli-commands` (this change's own ADDED) "The apply commands leave existing declarations alone" |
+| `check/inventory.ts`'s `declaredTableIdentities`/`unmanagedTables` | yes | yes — **by construction, not a check**: any `table:` key (existing or managed) counts as declared, so an existing table is excluded from "unmanaged" without a dedicated `existing` branch | `check-command.test.ts` "is absent from the inventory section", "the word \`unmanaged\` never appears in the report…"; requirement: same ADDED requirement, "SHALL NOT list it in the unmanaged inventory" |
+| `commands/check.ts`'s `renderCheckReport` / coverage-boundary section (`cli-commands`, live requirement "The check states the boundary of its own coverage") | **yes — found by this round's own R2-06/R2-07 check** | **no, until this round** | **fixed this round**: added `existingTableBoundaryLines` (`commands/check.ts`), a new line per declared existing table (`"existing table (declared, not compared): <schema>.<table>"`), threaded through a new optional 4th `snapshot` param on `renderCheckReport` (defaults to `emptySnapshot`, same safety reasoning as the existing `registry` default — informational text only, never the exit code). Classification: the live requirement's own two "uncomparable" categories (a kind-level `noCatalogObjectReason`, or an object-level operational failure) are both about answers left *uncertain*; an existing table's skip is a *certain*, by-design non-comparison, matching neither category by name — but the requirement's own opening sentence ("check SHALL state, in its own report, what it did not compare... A checker silent about its blind spots is read as a guarantee it never made") is not scoped to only those two categories, so this was a genuine silent gap, not a false alarm. Not a conflict with this change's own "SHALL NOT list it in the unmanaged inventory" clause: the inventory is the *undeclared*-table list, the coverage-boundary section is the *uncompared-declaration* list — two different questions, same distinction this change already drew in round 1 over the word "unmanaged" (declared-but-unmanaged vs undeclared). Red confirmed before fixing (`check-command.test.ts` "names it in the coverage-boundary section as declared and not compared", mutant: exactly 1 red when the new line is commented out, zero collateral). The planner/lead wrote the delta text and a new scenario directly into this change's own still-open `cli-commands` ADDED requirement (`specs/cli-commands/spec.md`) in the same round, matching this fix's own report line and exit-code-unaffected behavior exactly |
 | `commands/check.ts`'s `declaredCheckConstraints` | yes, in principle | yes — **structurally, not explicitly**: `existingTable()`'s DSL has no `checks` parameter, so an existing table's `checks` array is always absent/empty; no `tableExisting` guard exists here because none is currently reachable | no dedicated pin — flagged as fragile: a future DSL change letting `existingTable()` carry checks would silently start comparing them with no test to catch it |
 | `assert-schema.ts` (reuses `check/compare.ts`'s `compareCatalog`) | yes | yes, transitively (shared code path) | no `assertSchema`-specific pin for the existing-table skip — relies entirely on `compareTable`'s own pin; a future bypass of `compareCatalog` inside `assertSchema` wouldn't be caught here |
 
@@ -1233,11 +1234,21 @@ it actually know, today? **③** — file:line and the test that pins it, or
 
 #### Result
 
-No `①=yes,②=no` finding anywhere in the sweep — every site that must
-answer differently for an existing table already does. Three sites are
-correct only *structurally* (no explicit `existing`/`tableExisting`
-check defends them, only the shape of today's DSL), worth naming so a
-future DSL change doesn't quietly reopen them:
+**One `①=yes,②=no` finding, small, fixed in this round** (R2-06/R2-07):
+`hejbro check`'s coverage-boundary section named neither a kind-level
+nor an operational reason for skipping an existing table's comparison —
+the live `cli-commands` requirement "The check states the boundary of
+its own coverage" was silently unmet for every declared existing table.
+Fixed via `existingTableBoundaryLines` (`commands/check.ts`), red
+confirmed first, mutant measured (1 red when reverted, zero collateral),
+and this change's own still-open `cli-commands` ADDED requirement grew
+the delta text and scenario the lead/planner wrote directly.
+
+No other `①=yes,②=no` finding anywhere in the sweep beyond that one.
+Three further sites are correct only *structurally* (no explicit
+`existing`/`tableExisting` check defends them, only the shape of
+today's DSL), worth naming so a future DSL change doesn't quietly
+reopen them:
 
 - **`declaredCheckConstraints`** (`commands/check.ts`): safe only
   because `existingTable()`'s DSL has no `checks` parameter today —
@@ -1255,8 +1266,8 @@ future DSL change doesn't quietly reopen them:
   finding — it describes a precaution for a kind that doesn't exist yet,
   not a reachable behavior missing a test.
 
-Nothing here rises to "small, fix now" or "large, report now" — the
-table above is the artifact itself.
+Nothing else here rises to "small, fix now" or "large, report now" —
+the table above is the artifact itself.
 
 **Search commands** (re-run to reproduce this sweep):
 ```
