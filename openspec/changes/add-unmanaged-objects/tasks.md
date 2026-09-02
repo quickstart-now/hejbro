@@ -157,8 +157,27 @@ sequentially, so the two never edit it at once.
       combined failing test above goes red (measured: 1 red/59), every
       other test — including task 4.5's own "what the platform accepts
       is untouched" control — stays green.
-- [ ] 1.3 (~5m) Older snapshots read as all-managed (parse test with a
-      pre-marker fixture); the D33 compact rule stated in the node's doc.
+- [x] 1.3 (~5m) Older snapshots read as all-managed — a behavioral pin,
+      not a marker-presence check: a hand-written, pre-marker `Snapshot`
+      literal (never built by `buildSnapshot`, which always writes the
+      marker one way or the other and so can never stand in for a file
+      written before it existed) carrying one table with no `unmanaged`
+      key, run through `generateMigration` with an empty declaration
+      list — the real risk this pins is silent: if `tableUnmanaged`
+      misread the absent field as unmanaged, the DDL-blocking guard
+      would swallow every drop for every user's pre-existing table on
+      upgrade. Failing test: `snapshot.test.ts` — "an older snapshot's
+      tables are still managed" (asserts both `tableUnmanaged(node) ===
+      false` and that the run's SQL actually contains `drop table
+      "app"."posts"`). The D33 compact-rule doc line was already written
+      in 1.1's own commit (`TableSnapshot.unmanaged`'s doc comment: "A
+      snapshot written before this field existed has no unmanaged
+      tables") — nothing to add there. Mutant: `tableUnmanaged` to
+      `snapshot.unmanaged ?? true` — explosive by design (every managed
+      table in the whole suite lacks the field, so the DDL guard now
+      misreads all of them as unmanaged): 131 red across 18 files/1462,
+      confirmed the new test is among them (its own file: 1 red/82).
+      Reverted, full suite green (97 files/1461+1 todo).
 
 ## 2. The export and the check (#605)
 Files: `packages/cli/src/loader.ts`, `packages/cli/src/export/

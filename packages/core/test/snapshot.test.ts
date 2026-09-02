@@ -3,6 +3,7 @@ import { pgEnum } from "../src/dsl/pg-enum";
 import type { SchemaDeclaration } from "../src/dsl/schema";
 import { schema } from "../src/dsl/schema";
 import { getTableMeta, table } from "../src/dsl/table";
+import { generateMigration } from "../src/engine/generate";
 import type { ObjectKind } from "../src/kind/object-kind";
 import {
 	createDefaultRegistry,
@@ -11,6 +12,9 @@ import {
 } from "../src/kind/registry";
 import { schemaKind } from "../src/kinds/schema-kind";
 import { tableKind } from "../src/kinds/table-kind";
+import type { TableSnapshot } from "../src/kinds/table-snapshot";
+import { tableUnmanaged } from "../src/kinds/table-snapshot";
+import type { Snapshot } from "../src/snapshot/snapshot";
 import {
 	buildSnapshot,
 	emptySnapshot,
@@ -467,5 +471,45 @@ describe("parseSnapshot requiredKeys (D79, #159)", () => {
 		const { schema: _omitted, ...withoutSchema } = validEnum;
 		const raw = rawSnapshotWith("enum", withoutSchema);
 		expect(() => parseSnapshot(raw)).not.toThrow();
+	});
+});
+
+describe("an older snapshot's tables are still managed (add-unmanaged-objects, D33 compact rule)", () => {
+	it("an older snapshot's tables are still managed", () => {
+		// Hand-written, not built by buildSnapshot -- a snapshot this
+		// package's own serializer produces already carries the marker one
+		// way or the other, so it can never stand in for a file written
+		// before the marker existed (it would prove nothing about that
+		// case). This is a real pre-add-unmanaged-objects v8 file: no
+		// `unmanaged` key on the table node at all.
+		const olderSnapshot: Snapshot = {
+			formatVersion: 8,
+			dialect: "postgres",
+			objects: {
+				"schema:app": { name: "app" },
+				"table:app.posts": {
+					schema: "app",
+					name: "posts",
+					columns: [{ name: "id", typeNode: { typeName: "uuid" } }],
+					indexes: [],
+					foreignKeys: [],
+				},
+			},
+		};
+		expect(
+			tableUnmanaged(olderSnapshot.objects["table:app.posts"] as TableSnapshot),
+		).toBe(false);
+
+		// The behavioral proof: reading it as managed means a run that
+		// declares nothing sees a real table to drop -- if tableUnmanaged
+		// misread the absent field as unmanaged, the DDL-blocking guard
+		// would swallow this drop silently, and every table in every
+		// user's pre-existing snapshot would fall out of management on
+		// upgrade.
+		const result = generateMigration({
+			declarations: [],
+			previousSnapshot: olderSnapshot,
+		});
+		expect(result.sql).toContain('drop table "app"."posts"');
 	});
 });
