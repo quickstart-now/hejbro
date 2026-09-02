@@ -1007,7 +1007,7 @@ copy in `migrate.ts`.
 
 Files: `packages/cli/src/apply/reset.ts`, `commands/reset.ts`, tests.
 
-- [ ] 18.1 (~9m) [design] A `reset` whose declarations export nothing
+- [x] 18.1 (~9m) [design] A `reset` whose declarations export nothing
       computes an empty drop list, asks for no confirmation, exits 0 —
       and still runs `clearLedger`, emptying the ledger of a database
       whose objects are all still standing. The next `migrate` then

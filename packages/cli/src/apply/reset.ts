@@ -32,6 +32,27 @@ const targetDescription = (change: KindChange): string =>
 	`${change.kind}:${change.identity}`;
 
 /**
+ * [task 18.1, D106 M6] `compareCatalog`'s own precedent
+ * (`check-declarations-empty`, `check/compare.ts`) for the same reason:
+ * a declaration set with 0 declared objects is never a real reset target
+ * -- it is indistinguishable from the misconfigured entry pattern
+ * `check`/`baseline` already refuse, and running `reset` against it
+ * would otherwise be a silent, unconfirmed way to empty the ledger of a
+ * database whose objects are all still standing. Checked first, before
+ * `currentDatabaseName`'s own `select current_database()` -- otherwise
+ * "reset sends nothing" would already be false by the time this refuses.
+ */
+const assertDeclarationsNotEmpty = (currentSnapshot: Snapshot): void => {
+	const entries = Object.entries(currentSnapshot.objects);
+	if (entries.length === 0) {
+		throwHejbroError(
+			"reset-declarations-empty",
+			"hejbro reset received a declaration set with 0 declared objects -- resetting against an empty declaration set can never be told apart from a misconfigured entry pattern, and would otherwise clear the ledger of a database whose objects are all still standing. Next: confirm the entry pattern in hejbro.config.ts matches real declaration files that export table()/schema()/... declarations, then rerun `hejbro reset`.",
+		);
+	}
+};
+
+/**
  * [design, task 5.2, revised] The confirmation `reset` demands is
  * `<database>:<count>` -- not the count alone. A count-only confirmation
  * was tried first and sent back: this product's own determinism means
@@ -135,14 +156,17 @@ const resetMigrationSql = (
 
 /**
  * Returns a database to the state before any migration was applied
- * (spec): drops every declared object (5.1) inside one transaction,
- * refusing first without an exact confirmation bound to the live
- * database's own name (5.2), then empties the ledger (5.3,
+ * (spec): refuses an empty declaration set outright (task 18.1, before
+ * anything is sent), drops every declared object (5.1) inside one
+ * transaction, refusing first without an exact confirmation bound to the
+ * live database's own name (5.2), then empties the ledger (5.3,
  * `clearLedger` -- every row, never the ledger table itself, which is
  * hejbro's own bookkeeping and not a declared object, so this
  * requirement's own "only what the declarations manage" protects it
- * too). `session.execute` is skipped entirely when there is nothing to
- * drop, so a reset with nothing declared sends no DDL at all.
+ * too) **together with** the drops it records (task 18.1, D106 M6): a
+ * reset that would drop nothing writes nothing, the ledger included, so
+ * the "nothing to drop needs no confirmation" carve-out above is a
+ * genuine no-op rather than a silent, unconfirmed ledger clear.
  */
 export const applyReset = async (
 	driver: Driver,
@@ -150,6 +174,7 @@ export const applyReset = async (
 	registry: KindRegistry,
 	confirmed: string | undefined,
 ): Promise<void> => {
+	assertDeclarationsNotEmpty(currentSnapshot);
 	const changes = planReset(currentSnapshot, registry);
 	const databaseName = await currentDatabaseName(driver);
 	assertResetConfirmed(databaseName, changes, confirmed);
@@ -157,7 +182,7 @@ export const applyReset = async (
 		if (changes.length > 0) {
 			const sql = resetMigrationSql(currentSnapshot, registry);
 			await session.execute({ sql, params: [], kind: "sql" });
+			await clearLedger(session);
 		}
-		await clearLedger(session);
 	});
 };
