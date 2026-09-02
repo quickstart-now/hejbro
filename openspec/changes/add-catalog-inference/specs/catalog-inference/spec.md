@@ -13,14 +13,22 @@ infer at all, and how it announces the loss — the one reading shared by
 Reading a database through the catalog SHALL yield a snapshot of the
 schemas named — tables with columns, defaults, identity and generated
 markers, primary keys, foreign keys, checks and indexes; enum types;
-sequences — using the same read-only queries `check` runs, and a schema
-description whose declaration-time facts are guessed by stated rules
-and marked as guessed: a column's TypeScript key from its SQL name by
-the stated casing rule with collisions resolved by the stated suffix
-rule, the default numeric mode, unknown element nullability read as
-nullable, and role names from the grants and policies present. The
+sequences — through read-only catalog queries: `check`'s own inventory
+queries plus the column-, constraint-, index- and enum-detail queries
+inference needs on top of them, all read-only, none writing to the
+database. It SHALL also yield a schema description whose
+declaration-time facts are guessed by the rules stated here and marked
+as guessed: a column's TypeScript key from its SQL name by lower-casing
+it and joining the runs between non-alphanumeric characters in camel
+case, keeping leading underscores and prefixing `_` to a key that would
+otherwise start with a digit, with collisions resolved by leaving the
+key to the earliest column in physical order and appending to each
+later colliding key the smallest integer from 2 upwards that leaves it
+free; the default numeric mode; unknown element nullability read as
+nullable; and role names from the grants and policies present. The
 reading SHALL infer no function, trigger, policy expression, view body,
-or grant beyond its role name, and SHALL say so.
+grant beyond its role name, or column whose type no column builder
+expresses, and SHALL say so.
 
 #### Scenario: Tables and enums are inferred
 - **WHEN** a database holding two schemas with tables, foreign keys
@@ -30,9 +38,10 @@ or grant beyond its role name, and SHALL say so.
   every TypeScript key as guessed
 
 #### Scenario: What is not inferred is named
-- **WHEN** the database also holds a function, a trigger and a view
-- **THEN** none appears in the snapshot, and the loss report names each
-  kind as not inferred
+- **WHEN** the database also holds a function, a trigger, a view, and a
+  column whose type no column builder expresses
+- **THEN** none appears in the snapshot, the loss report names each kind
+  as not inferred, and it names that column and its type
 
 ### Requirement: The loss is announced, with the way out
 Every command that uses a catalog reading SHALL print a loss report

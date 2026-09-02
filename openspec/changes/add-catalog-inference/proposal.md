@@ -73,10 +73,14 @@ else.
 - `packages/cli/src/infer/` (new: catalog → snapshot + description),
   `packages/cli/src/commands/{import,pull}.ts` (new), `main.ts`
   registration, `contract/emit.ts` (origin variant), `vendor/state.ts`
-  (database-sourced lock refusal), `check/catalog.ts` (reused, maybe
-  extended for column defaults/identity if not already read),
+  (database-sourced lock refusal), `check/catalog.ts` (reused as-is for
+  the shared inventory; the facts inference needs on top of it are read
+  by its own read-only queries under `infer/`),
   `packages/cli/src/declare-emit/` (new: snapshot → DSL source),
-  diagnostics registry, tests, a live witness (import an examples
+  each new command's own code literals at their raise sites (there is
+  no diagnostics registry — `check:diagnostic-xref` checks docs
+  citations against those literals, one way), tests,
+  a live witness (import an examples
   database, generate against empty, diff against the examples' own
   migration), `skills/hejbro/references/brownfield-adoption.md` and the
   polyrepo reference, `.changeset/*.md`, `openspec/task-times.csv`.
