@@ -62,6 +62,32 @@ describe("inferColumnKeys / D106 N2: the bare key goes to the round-trippable na
 	});
 });
 
+describe("inferColumnKeys / D106 R3-B2 (CI-R3-01): a suffix never lands on a base key another column still needs", () => {
+	/**
+	 * The reviewer's own repro (`evaluation.md`): `user_id` and `USER_ID`
+	 * collide on base `userId`; a third, ordinary column `user_id2` has
+	 * its own distinct base `userId2` -- which happens to be exactly the
+	 * suffix the `userId` collision would otherwise hand out next.
+	 * `user_id2` must always keep its own bare `userId2`, in both
+	 * physical orders, never losing it to the unrelated collision.
+	 */
+	it("keeps user_id2's own bare key when the USER_ID collision is resolved before it physically", () => {
+		expect(inferColumnKeys(["user_id", "USER_ID", "user_id2"])).toEqual([
+			"userId",
+			"userId3",
+			"userId2",
+		]);
+	});
+
+	it("keeps user_id2's own bare key when it comes before the USER_ID collision physically (control -- already correct)", () => {
+		expect(inferColumnKeys(["user_id", "user_id2", "USER_ID"])).toEqual([
+			"userId",
+			"userId2",
+			"userId3",
+		]);
+	});
+});
+
 describe("resolveIdentifierKeys / 2.1 (Q2, CI-G2-R1-06): the same casing+collision rule, seeded with reserved names", () => {
 	it("behaves exactly like inferColumnKeys when nothing is reserved", () => {
 		expect(resolveIdentifierKeys(["user_id", "USER_ID"])).toEqual(

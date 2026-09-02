@@ -221,6 +221,9 @@ describe("column-level references fold into foreign keys (add-relational-reads t
 					tableName: "users",
 					columns: ["id"],
 				},
+				// D106 R3-B3: the column-level .references() sugar has no
+				// name slot of its own -- always derives.
+				name: null,
 				onDelete: null,
 				onUpdate: null,
 			},

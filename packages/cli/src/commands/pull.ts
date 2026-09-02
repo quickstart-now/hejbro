@@ -119,7 +119,9 @@ export type PullDeps = {
  * `--force` flag exists here, so `assertLockWritable`/
  * `assertContractDestinationWritable` are always called with `force:
  * false` (`commands/vendor.ts:271-274`, `:186` -- the same two guards,
- * the same "before any network work" order).
+ * the same "before any network work" order) -- and with `"hejbro pull"`
+ * as their own `commandName` (D106 R3-N2), so a refusal's remedy text
+ * never tells this caller to pass a flag it doesn't have.
  */
 export const runPull = async (
 	cwd: string,
@@ -133,8 +135,12 @@ export const runPull = async (
 		if (schemas.length === 0) {
 			throwMissingSchema();
 		}
-		assertLockWritable(cwd, false);
-		assertContractDestinationWritable(vendorContractPath(cwd), false);
+		assertLockWritable(cwd, false, "hejbro pull");
+		assertContractDestinationWritable(
+			vendorContractPath(cwd),
+			false,
+			"hejbro pull",
+		);
 		const inferCatalog = deps.inferCatalog ?? inferFromCatalog;
 		const readCurrentDatabaseName =
 			deps.currentDatabaseName ?? currentDatabaseName;

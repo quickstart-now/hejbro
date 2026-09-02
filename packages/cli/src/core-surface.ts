@@ -215,9 +215,11 @@ export const ENGINE = [
 	"selectExprChildExprs",
 	"someDeepExprNode",
 	// Type families and SQL text helpers
+	"assertSqlName",
 	"canonicalizeInterval",
 	"comparisonOperators",
 	"deriveExistingTransitionSlug",
+	"deriveForeignKeyName",
 	"deriveSlug",
 	"familyOfTypeNode",
 	"qualifyName",

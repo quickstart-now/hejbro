@@ -107,6 +107,7 @@ describe("inferTable / 1.4 self-referencing foreign key", () => {
 			],
 			foreignKeys: [
 				{
+					name: "widgets_parent_id_fk",
 					sourceColumns: ["parent_id"],
 					targetSchema: "app",
 					targetTable: "widgets",
@@ -123,6 +124,56 @@ describe("inferTable / 1.4 self-referencing foreign key", () => {
 		);
 		// onUpdate = 'a' (no action, Postgres's own default) -- never rendered.
 		expect(sql).not.toContain("on update");
+	});
+});
+
+// D106 R3-B3: a foreign key's own catalog name, preserved when it round-trips
+// through the DSL's own D36 rule, approximated (falls back to deriving) when
+// it doesn't.
+describe("inferTable / 1.4 foreign key names (D106 R3-B3)", () => {
+	const facts = (name: string): InferredTableFacts => ({
+		...emptyTableFacts,
+		columns: [
+			emptyTableFacts.columns[0] as InferredTableFacts["columns"][number],
+			{
+				sqlName: "parent_id",
+				tsKey: "parentId",
+				facts: columnFacts({ name: "parent_id", notNull: false }),
+				isPrimaryKey: false,
+			},
+		],
+		foreignKeys: [
+			{
+				name,
+				sourceColumns: ["parent_id"],
+				targetSchema: "app",
+				targetTable: "widgets",
+				targetColumns: [{ sqlName: "id", facts: columnFacts() }],
+				onDelete: "a",
+				onUpdate: "a",
+			},
+		],
+	});
+
+	it("carries the catalog's own name into the generated constraint when it differs from the derived one and is a valid hejbro identifier", () => {
+		const sql = buildSql(facts("widgets_parent_id_fkey"));
+		expect(sql).toContain(
+			'add constraint "widgets_parent_id_fkey" foreign key',
+		);
+	});
+
+	it("falls back to the derived name, with no loss reported here (that is loss-report.ts's own job), when the catalog name is not a valid hejbro identifier", () => {
+		const result = inferTable(facts("Not-A-Valid-Name"));
+		expect(result.losses).toEqual([]);
+		const migration = generateMigration({
+			declarations: [app, result.table],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(migration.errors).toEqual([]);
+		expect(migration.sql).toContain(
+			'add constraint "widgets_parent_id_fk" foreign key',
+		);
+		expect(migration.sql).not.toContain("Not-A-Valid-Name");
 	});
 });
 
@@ -359,6 +410,7 @@ describe("inferTable / 1.4b non-self foreign keys (existingTable, D41)", () => {
 			],
 			foreignKeys: [
 				{
+					name: "children_parent_id_fk",
 					sourceColumns: ["parent_id"],
 					targetSchema: "app",
 					targetTable: "parents",
@@ -425,6 +477,7 @@ describe("inferTable / 1.4b non-self foreign keys (existingTable, D41)", () => {
 			],
 			foreignKeys: [
 				{
+					name: "table_a_b_id_fk",
 					sourceColumns: ["b_id"],
 					targetSchema: "app",
 					targetTable: "table_b",
@@ -455,6 +508,7 @@ describe("inferTable / 1.4b non-self foreign keys (existingTable, D41)", () => {
 			],
 			foreignKeys: [
 				{
+					name: "table_b_a_id_fk",
 					sourceColumns: ["a_id"],
 					targetSchema: "app",
 					targetTable: "table_a",

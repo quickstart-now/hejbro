@@ -98,16 +98,27 @@ const bareKeyWinnerIndex = (
 	return roundTrippableIndex ?? indices[0] ?? null;
 };
 
-/** The bare key when `isWinner` still has it free, else the smallest free suffixed key -- no ternary (banned in this codebase). */
+/**
+ * The bare key when `isWinner` still has it free, else the smallest free
+ * suffixed key -- no ternary (banned in this codebase). `allBaseKeys` (D106
+ * R3-B2) is every distinct base key this whole run will hand out, not just
+ * the ones already assigned: a losing member's suffix must never land on a
+ * base key some *other*, not-yet-processed column still needs verbatim
+ * (e.g. a `userId`/`USER_ID` collision's own suffix candidate `userId2`
+ * must never steal an unrelated, ordinary `user_id2` column's own bare
+ * key) -- `nextFreeSuffix` alone can't see that, since it only ever looks
+ * at keys already given out.
+ */
 const keyFor = (
 	isWinner: boolean,
 	base: string,
 	assigned: ReadonlySet<string>,
+	allBaseKeys: ReadonlySet<string>,
 ): string => {
 	if (isWinner && !assigned.has(base)) {
 		return base;
 	}
-	return nextFreeSuffix(base, assigned);
+	return nextFreeSuffix(base, new Set([...assigned, ...allBaseKeys]));
 };
 
 /**
@@ -118,15 +129,17 @@ const keyFor = (
  * and every other member (with `reserved` or a bare-key winner alike) is
  * suffixed with the smallest free integer from 2 upwards, in
  * `namesInOrder`'s own order (catalog-inference delta's collision rule,
- * D106 N2-corrected). {@link inferColumnKeys} is this with an empty
- * `reserved`.
+ * D106 N2-corrected, D106 R3-B2-corrected: a suffix candidate also avoids
+ * every base key this run will ever hand out, not only the ones already
+ * assigned). {@link inferColumnKeys} is this with an empty `reserved`.
  */
 export const resolveIdentifierKeys = (
 	namesInOrder: ReadonlyArray<string>,
 	reserved: ReadonlySet<string> = new Set(),
 ): ReadonlyArray<string> => {
+	const allBaseKeys = new Set(namesInOrder.map(baseTsKey));
 	const winnerIndexByBase = new Map(
-		[...new Set(namesInOrder.map(baseTsKey))].map(
+		[...allBaseKeys].map(
 			(base) =>
 				[base, bareKeyWinnerIndex(namesInOrder, base, reserved)] as const,
 		),
@@ -141,6 +154,7 @@ export const resolveIdentifierKeys = (
 				winnerIndexByBase.get(base) === index,
 				base,
 				state.assigned,
+				allBaseKeys,
 			);
 			return {
 				keys: [...state.keys, key],

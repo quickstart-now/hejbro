@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { stableJson, throwHejbroError } from "@hejbro/core";
+import type { DestinationWritableCommand } from "./write";
 import { assertVendorDestinationWritable, isVendorLockText } from "./write";
 
 /** The consumer-side vendor directory for the two raw, byte-identical
@@ -81,9 +82,14 @@ export const lockResolvedBy = (lock: VendorLock): LockResolvedBy =>
 	lock.resolvedBy ?? "default-branch";
 
 /** `vendor`'s own guard: refuses to claim `hejbro.lock` when it already
- * exists and isn't one this tool wrote, unless `force`. */
-export const assertLockWritable = (cwd: string, force: boolean): void =>
-	assertVendorDestinationWritable(lockPath(cwd), force);
+ * exists and isn't one this tool wrote, unless `force`. `commandName`
+ * (D106 R3-N2) picks the remedy text that actually applies to whichever
+ * command is asking -- `pull` shares this guard but has no `--force`. */
+export const assertLockWritable = (
+	cwd: string,
+	force: boolean,
+	commandName: DestinationWritableCommand,
+): void => assertVendorDestinationWritable(lockPath(cwd), force, commandName);
 
 /**
  * `null` when nothing has been vendored yet. Refuses (never silently

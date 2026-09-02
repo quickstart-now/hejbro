@@ -58,7 +58,10 @@ const synthesizeForeignKey = (
 	// never read by `db/related.ts`'s relation-following, which matches
 	// purely on `references.schemaName`/`.tableName`/`.columns` (planner
 	// condition ④, the same "reads nothing beyond what's needed" rule
-	// applied to the foreign-key half of the metadata).
+	// applied to the foreign-key half of the metadata). `name` (D106
+	// R3-B3) joins them: a vendored contract carries no constraint name
+	// for a relation to reconstruct in the first place.
+	name: null,
 	onDelete: null,
 	onUpdate: null,
 });

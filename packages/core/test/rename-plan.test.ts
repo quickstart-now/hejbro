@@ -1825,6 +1825,83 @@ describe("planRenames — foreign key constraint rename drift guard (#154)", () 
 		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
 	});
 
+	// D106 R3-B3: a foreign key's own explicit name is never the derived
+	// one (that is exactly what "explicit" means here), so
+	// rewriteForeignKeysForRename's own wasDerived check already reads it
+	// as "not ours to touch" -- no code change, only this pin.
+	it("a table rename leaves an explicitly named foreign key constraint untouched (wasDerived === false)", () => {
+		const previousUsers = table(app, "users_fkname_rename", {
+			id: uuid().primaryKey(),
+		});
+		const previous = snap(
+			app,
+			previousUsers,
+			table(
+				app,
+				"posts_fkname_rename",
+				{ id: uuid().primaryKey(), authorId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: previousUsers, columns: [previousUsers.id] },
+							name: "posts_fkname_rename_legacy_fkey",
+						},
+					],
+				}),
+			),
+		);
+		const nextUsers = table(app, "users_fkname_rename", {
+			id: uuid().primaryKey(),
+		});
+		const next = snap(
+			app,
+			nextUsers,
+			table(
+				app,
+				"articles_fkname_rename",
+				{ id: uuid().primaryKey(), authorId: uuid().notNull() },
+				(t) => ({
+					foreignKeys: [
+						{
+							columns: [t.authorId],
+							references: { table: nextUsers, columns: [nextUsers.id] },
+							name: "posts_fkname_rename_legacy_fkey",
+						},
+					],
+				}),
+			),
+		);
+
+		const plan = planRenames({
+			previous,
+			next,
+			renames: [
+				{
+					target: "table",
+					schemaName: "app",
+					oldName: "posts_fkname_rename",
+					newName: "articles_fkname_rename",
+				},
+			],
+			confirmedDrops: [],
+			declaredAtByIdentity: noDeclSites,
+		});
+		expect(plan.errors).toEqual([]);
+		// no "rename constraint" statement for the foreign key -- its own
+		// explicit name never depended on the table's, so it never drifts.
+		expect(
+			plan.renameStatements.some((s) =>
+				s.includes("posts_fkname_rename_legacy_fkey"),
+			),
+		).toBe(false);
+		expect(plan.renameStatements).toEqual([
+			`alter table "app"."posts_fkname_rename" rename to "articles_fkname_rename";`,
+			`alter table "app"."articles_fkname_rename" rename constraint "posts_fkname_rename_pkey" to "articles_fkname_rename_pkey";`,
+		]);
+		expect(diffSnapshots(plan.rewrittenPrevious, next, registry)).toEqual([]);
+	});
+
 	it("a column rename involving an unrelated column leaves a derived foreign key constraint untouched (newDerivedName === entry.name)", () => {
 		const previousUsers = table(app, "users", { id: uuid().primaryKey() });
 		const previous = snap(
