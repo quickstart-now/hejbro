@@ -1,5 +1,15 @@
 import type { HejbroInput } from "@hejbro/core";
-import { schema, table, text, uuid } from "@hejbro/core";
+import {
+	bigint,
+	defineFunction,
+	defineTrigger,
+	schema,
+	select,
+	sql,
+	table,
+	text,
+	uuid,
+} from "@hejbro/core";
 import { describe, expect, it } from "vitest";
 import { emitContract } from "../src/contract/emit";
 import { buildFixturePayload } from "./support/contract-fixture";
@@ -156,5 +166,150 @@ describe("emitContract", () => {
 		const source = emitContract(payload, ORIGIN);
 
 		expect(source).toContain('referencedRelation: "app.authors"');
+	});
+});
+
+describe("the Functions section (#587)", () => {
+	it("emits a Functions entry per exported function", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			title: text().notNull(),
+		});
+		// Declared TS key differs from its SQL name (postStatus -> post_status)
+		// and the second function's arg uses a non-default numeric mode
+		// (bigint({mode:"number"})) -- a join keyed by sqlName, or an
+		// implementation that ignores mode, both stay green on a fixture
+		// where key===sqlName and mode is the default, so neither is used
+		// here.
+		const searchPosts = defineFunction(
+			app,
+			"search_posts",
+			{ args: { postStatus: text() }, returns: posts },
+			(ctx, args) => {
+				ctx.return(
+					select(posts).where(sql`${posts.title} = ${args.postStatus}`),
+				);
+			},
+		);
+		const totalPosts = defineFunction(
+			app,
+			"total_posts",
+			{ args: { minWeight: bigint({ mode: "number" }) }, returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [
+			app,
+			posts,
+			searchPosts,
+			totalPosts,
+		];
+		const exportNames = new Map<HejbroInput, string>([
+			[posts, "posts"],
+			[searchPosts, "searchPosts"],
+			[totalPosts, "totalPosts"],
+		]);
+		const payload = buildFixturePayload(declarations, exportNames);
+		const source = emitContract(payload, ORIGIN);
+
+		// The Database interface's own Functions section.
+		expect(source).toContain('"searchPosts": {');
+		expect(source).toContain("readonly postStatus: string;");
+		expect(source).toContain(
+			'readonly Returns: ReadonlyArray<Database["Tables"]["posts"]["Row"]>;',
+		);
+		expect(source).toContain('"totalPosts": {');
+		expect(source).toContain("readonly minWeight: number;");
+		expect(source).toContain("readonly Returns: bigint;");
+
+		// The runtime metadata's own functions map.
+		const metadataBlock =
+			source.split("export const contractMetadata")[1] ?? "";
+		expect(metadataBlock).toContain('"searchPosts": {');
+		expect(metadataBlock).toContain('key: "postStatus"');
+		expect(metadataBlock).toContain('sqlName: "post_status"');
+		expect(metadataBlock).toContain('"totalPosts": {');
+		expect(metadataBlock).toContain('mode: "number"');
+	});
+
+	it("a function with no arguments emits Record<string, never>, not {}", () => {
+		const totalPosts = defineFunction(
+			app,
+			"total_posts",
+			{ returns: bigint() },
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, totalPosts];
+		const payload = buildFixturePayload(
+			declarations,
+			new Map([[totalPosts, "totalPosts"]]),
+		);
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain("readonly Args: Record<string, never>;");
+	});
+
+	it("an empty Functions section renders as {}, distinct from Views' own marker", () => {
+		const payload = buildFixturePayload(buildDeclarations());
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain("readonly Functions: {};");
+	});
+
+	it("a trigger-synthesized function is absent", () => {
+		const posts = table(app, "posts", {
+			id: uuid().primaryKey().defaultRandom(),
+			title: text().notNull(),
+		});
+		const trigger = defineTrigger(
+			posts,
+			{
+				name: "posts_touch",
+				timing: "before",
+				events: ["update"],
+				forEach: "row",
+			},
+			(ctx, { new: row }) => {
+				ctx.return(row);
+			},
+		);
+		const declarations: ReadonlyArray<HejbroInput> = [app, posts, trigger];
+		const payload = buildFixturePayload(
+			declarations,
+			new Map([[posts, "posts"]]),
+		);
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain("readonly Functions: {};");
+		expect(source).not.toContain("posts_touch");
+	});
+
+	it("a function returning a table the contract does not carry is absent", () => {
+		const authors = table(app, "authors", {
+			id: uuid().primaryKey().defaultRandom(),
+		});
+		const authorPosts = defineFunction(
+			app,
+			"author_posts",
+			{ returns: authors },
+			(ctx) => {
+				ctx.return(select(authors));
+			},
+		);
+		// Only `app` and `authorPosts` reach generation -- `authors` never
+		// reaches the snapshot, the same pattern "no relation is derived for
+		// an unmanaged target" above uses for a foreign key's target.
+		const declarations: ReadonlyArray<HejbroInput> = [app, authorPosts];
+		const payload = buildFixturePayload(
+			declarations,
+			new Map([[authorPosts, "authorPosts"]]),
+		);
+		const source = emitContract(payload, ORIGIN);
+
+		expect(source).toContain("readonly Functions: {};");
+		expect(source).not.toContain("authorPosts");
 	});
 });
