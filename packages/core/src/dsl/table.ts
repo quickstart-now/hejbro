@@ -1325,10 +1325,20 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 		resolveForeignKey(owner, tableName, input),
 	);
 	assertNoDoublyDeclaredReference(tableName, columnEntries, extrasForeignKeys);
-	const foreignKeys = [
-		...foldColumnReferences(tableName, columnEntries),
-		...extrasForeignKeys,
-	].sort(compareForeignKeys);
+	// #669: a column-level `.references()` thunk is NEVER called here --
+	// only `extrasForeignKeys` (already resolved, no thunk involved) feeds
+	// the two declaration-time guards below. Folding column-level
+	// references eagerly is exactly what made a cross-file (or same-file)
+	// forward reference crash with a TDZ/undefined error; the fold itself
+	// moves to `resolveForeignKeys` below, memoized on the declaration's
+	// first `foreignKeys` read instead. Structurally, a folded entry can
+	// never fail either guard: its one local column is always this
+	// table's own (drawn from `columnEntries`), so
+	// `unknown-foreign-key-column` can't fire, and its derived name
+	// depends only on that column, so it can neither collide with
+	// another folded entry (distinct columns, by construction) nor with
+	// an extras entry (`assertNoDoublyDeclaredReference` above already
+	// refused that column pairing).
 	const checks = [
 		...(resolvedExtras.checks ?? []),
 		...deriveNotNullElementsChecks(owner, tableName, columnEntries),
@@ -1346,13 +1356,33 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 	// order. A same-named foreign column passing silently is what
 	// removing this guard entirely (not merely reordering it) causes.
 	assertNoForeignIndexColumn(owner, tableName, indexes);
-	validateColumnRefs(tableName, knownColumnNames, indexes, foreignKeys);
-	validateDuplicateNames(tableName, indexes, foreignKeys);
+	validateColumnRefs(tableName, knownColumnNames, indexes, extrasForeignKeys);
+	validateDuplicateNames(tableName, indexes, extrasForeignKeys);
 	validateIndexExpressions(owner, tableName, indexes);
 	validateChecks(owner, tableName, checks);
 	validateIndexPredicates(owner, tableName, indexes);
 
 	const rls = resolveRls(owner, tableName, resolvedExtras.rls);
+
+	const foreignKeysCache: {
+		current: ReadonlyArray<ForeignKeyDeclaration> | null;
+	} = { current: null };
+	/** The declaration's own `foreignKeys` getter body (#669): folds
+	 * column-level `.references()` thunks on first read, memoized after --
+	 * never during `table()` itself, so a reference into a file the
+	 * loader hasn't reached yet (or a not-yet-initialized same-file
+	 * binding) only needs to be resolvable by the time something first
+	 * asks for this table's foreign keys, not by the time this table is
+	 * declared. */
+	const resolveForeignKeys = (): ReadonlyArray<ForeignKeyDeclaration> => {
+		if (foreignKeysCache.current === null) {
+			foreignKeysCache.current = [
+				...foldColumnReferences(tableName, columnEntries),
+				...extrasForeignKeys,
+			].sort(compareForeignKeys);
+		}
+		return foreignKeysCache.current;
+	};
 
 	const declaration: TableDeclaration = {
 		declarationKind: "table",
@@ -1364,7 +1394,9 @@ export const table = <TColumns extends Record<string, ColumnBuilder>>(
 			columnState: entry.columnState,
 		})),
 		indexes,
-		foreignKeys,
+		get foreignKeys() {
+			return resolveForeignKeys();
+		},
 		checks,
 		rls,
 		existing: false,

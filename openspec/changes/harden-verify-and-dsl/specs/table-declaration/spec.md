@@ -21,11 +21,10 @@ two forms in one table, or converting a foreign key from one form to
 the other, changes neither the generated DDL nor the snapshot.
 
 
-The thunk SHALL be resolved when declarations are collected, after
-every declaration module has evaluated — never while `table()` itself
-runs — so a reference into another declaration file resolves whichever
-file the loader reaches first. Each declaration's references are folded
-exactly once, at collection.
+The thunk SHALL never be resolved while `table()` runs; it is resolved
+exactly once, on the declaration's first consumption, after every
+declaration module has evaluated — so a reference into another
+declaration file resolves whichever file the loader reaches first.
 
 #### Scenario: A column-level reference emits the same DDL as extras
 - **WHEN** a table declares `ownerId: uuid().notNull().references(()
@@ -51,8 +50,18 @@ exactly once, at collection.
 - **THEN** `table()` fails at declaration time with an explicit error
   naming the column
 
-#### Scenario: Declaration files that reference each other load under either order
+#### Scenario: Declaration files, or two tables in one file, that reference each other
 - **WHEN** schema file A declares a column with `.references()` into a
-  table of schema file B, and B declares one into a table of A
-- **THEN** the declarations load and generate under either file order,
+  table of schema file B, and B declares one into a table of A — or two
+  tables in the same file reference each other the same way
+- **THEN** the declarations load and generate under either file order (or,
+  for the same-file case, regardless of which table is declared first),
   and the emitted foreign keys are the ones each declaration named
+
+#### Scenario: The thunk is resolved exactly once, however many times a declaration's foreign keys are read
+- **WHEN** a declaration's foreign keys are read more than once
+- **THEN** each `.references()` thunk runs exactly once, not once per read
+
+#### Scenario: table() itself never resolves a reference thunk
+- **WHEN** `table()` returns
+- **THEN** no `.references()` thunk on that table has run yet
