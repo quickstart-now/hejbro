@@ -26,8 +26,9 @@ migration's banner, and the one brand another shipped requirement names
 as reaching users through `hejbro` (`leftJoinedBrand`). Every type
 `@hejbro/core` exports SHALL stay reachable from `hejbro` — held by the
 barrel's construction (a wholesale type re-export, not a list) and
-checked by a type-only import of the core types shipped specs name —
-so only runtime values are curated; an engine name remains visible to
+checked by a type-only import that names the core types shipped specs
+reference as reaching users together with a sample of the DSL's own
+declaration and stage types — so only runtime values are curated; an engine name remains visible to
 the type checker through `hejbro` as a type-only re-export (usable in a
 `typeof` position, never as a value), and that is the stated shape of
 the curation.

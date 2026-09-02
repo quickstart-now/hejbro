@@ -226,3 +226,245 @@ through `export type *`. `value-utilities/spec.md:11-19` requires
 `typeof === "function"` at runtime. `migration-apply/spec.md:363` is about
 the `hejbro` *schema* in Postgres, not the package. No shipped spec names
 any ENGINE symbol in an import/export sentence.
+
+---
+
+# Round 2
+
+**PASS — 0 blocking, 0 major, 1 minor**
+
+Scope: the `package-surface` delta as rendered by
+`openspec show curate-hejbro-barrel --diff`, judged afresh against the
+public surface it describes. Everything below was verified by execution
+against the **worktree** build unless marked UNVERIFIED.
+
+> Method note, because it changed a verdict mid-round: a probe whose
+> `paths` were interpolated by the outer shell silently resolved
+> `"hejbro"` to the **main checkout** (`.../hejbro/packages/cli/dist`),
+> i.e. the pre-change barrel, and reported that a value import of
+> `renderSnapshot` type-checks. Re-run with the worktree path hardcoded,
+> it is `TS1362`. Every compile result below is from the corrected
+> configuration (`tsc --traceResolution` confirms
+> `hejbro-worktrees/curate-hejbro-barrel/packages/cli/dist/index.d.ts`).
+
+---
+
+## M2 (MINOR) — the requirement states a selection rule for the type check that does not produce the check that exists
+
+Requirement 1 now says the type half of the curation is
+
+> held by the barrel's construction (a wholesale type re-export, not a
+> list) and **checked by a type-only import of the core types shipped
+> specs name**
+
+**Observed.** The check is `packages/cli/test/exports.test.ts`'s
+`_CoreTypesPresent` block — eleven core types: `DeclaredCteMarker`,
+`LeftJoinedBrand`, `UntrackedJoins`, `FunctionDeclaration`, `Table`,
+`TypeNode`, `ReturningProjection`, `SelectLimited`, `InsertFinal`,
+`UpdateFinal`, `DeleteFinal`. Grepping every shipped spec for each name
+as a backticked identifier:
+
+```
+LeftJoinedBrand   openspec/specs/query-type-inference/spec.md:114
+UntrackedJoins    openspec/specs/query-type-inference/spec.md:114
+Table             openspec/specs/query-type-inference/spec.md:702  (passing prose,
+                  "directly from a `Table` value at compile time" — not a named export)
+DeclaredCteMarker, FunctionDeclaration, TypeNode, ReturningProjection,
+SelectLimited, InsertFinal, UpdateFinal, DeleteFinal   — no shipped spec names them
+```
+
+So two of eleven are core types a shipped spec names as a contract
+export; eight are not named by any spec at all. The stated rule is not
+the list's membership rule.
+
+**Why it is a defect.** Not a contradiction — the check does contain the
+types shipped specs name, and the behaviour it guards holds — so this is
+not blocking. But the delta is the artefact that survives archiving, and
+it states the check's composition as derived ("the core types shipped
+specs name") when it is hand-picked. A maintainer who later adds a core
+type to a shipped spec will read this clause as saying the check already
+covers it; it does not, and nothing fails.
+
+**Repair.** One clause: say what the list actually is — e.g. "checked by
+a type-only import of a representative set of core types, including the
+ones shipped specs name as reaching users" — or make the sentence true by
+restricting the block to the spec-named types and moving the rest to a
+comment.
+
+---
+
+## Checked and clean
+
+**Scenario: Autocomplete offers the vocabulary** — both halves hold, as
+written. Runtime, against the built artefact a user receives
+(`packages/cli/dist/index.js`, 114 runtime exports): `real=function`;
+`renderExpr`, `renderSnapshot`, `SELECT_CLAUSE_TRAVERSALS` all absent;
+all 97 ENGINE names checked — `engine leaked into barrel: []`,
+`vocab missing from barrel: []`. Compile-time, `tsc` 5.9.3 against the
+shipped `.d.ts`:
+
+```
+pv.ts(2,18): error TS1362: 'renderExpr' cannot be used as a value because
+  it was exported using 'export type'.
+```
+
+and a sibling probe using `typeof renderExpr`, `typeof renderSnapshot`
+and `typeof SELECT_CLAUSE_TRAVERSALS` compiles with zero errors, as does
+a value use of `real`, the three banner readers and `leftJoinedBrand`.
+The delta's "usable in a `typeof` position, never as a value" is exactly
+what happens — no overclaim, no underclaim.
+
+**The banner readers and `leftJoinedBrand` are exported; every other
+engine name is absent.** Runtime:
+`parseBannerHashes=function parseBannerVersion=function
+parseBannerBaseline=function leftJoinedBrand=symbol`. The exception is
+earned, not asserted: `skills/hejbro/references/generate-verify-workflow.md:32-39`
+documents "hejbro exports a parser for each marker a banner can carry"
+with `import { parseBannerBaseline, parseBannerHashes, parseBannerVersion }
+from "hejbro"`, and `openspec/specs/query-type-inference/spec.md:113-117`
+names `leftJoinedBrand` as reaching users through `hejbro`.
+
+**The forbidden categories now map onto ENGINE only.** The `SHALL NOT`
+enumeration reads "renderers, codecs, the diff and generation machinery,
+kind definitions and the registry, the snapshot codec, traversal tables,
+and internal brands and helpers". Every phrase has a referent inside the
+97-name ENGINE list (`renderBanner` is the renderer, `parseSnapshot` the
+snapshot codec, `SELECT_CLAUSE_TRAVERSALS` the traversal table,
+`columnOriginBrand`/`nestedReadBrand`/`readAsBrand` the internal brands),
+and no phrase names a VOCABULARY member. Cross-checked the other
+direction too: no VOCABULARY name falls under a forbidden category except
+the two the requirement excepts explicitly.
+
+**Requirement: the classification is complete and disjoint.** Executed
+against the built core entry:
+
+```
+core runtime exports: 204   VOCAB 107   ENGINE 97   sum 204
+{ unclassified: [], twice: [], stale: [], dupVocab: [], dupEngine: [] }
+```
+
+**Scenario: An unclassified core export fails the build** — mutation-probed
+by execution (probe file `packages/cli/test/zz-d106r2-probe.test.ts`,
+deleted; `git status --porcelain` clean afterwards). A synthetic newcomer
+injected into the core key set, and a name forced into both lists, each
+fail naming the offender:
+
+```
+AssertionError: expected { unclassified: [ 'zzNewCoreExport' ] } to deeply equal { unclassified: [] }
+AssertionError: expected { twice: [ 'renderExpr' ] } to deeply equal { twice: [] }
+```
+
+**Scenario: The barrel's composition is pinned** — the exact-set pin is
+`expect(runtimeKeys(hejbro)).toEqual(HEJBRO_RUNTIME_EXPORTS)` against a
+hand-maintained sorted list. Verified it pins the *current* set, name for
+name: 114 pinned, 114 in `dist`, `in dist not pinned: []`,
+`pinned not in dist: []`, and the list is genuinely sorted as written.
+Mutation-probed both directions by execution — an added and a removed
+export each fail naming the difference:
+
+```
++   "zzLeakedEngineName"
+-   "real"
+```
+
+(The assertion runs against `../src/index`, not `dist`; the built artefact
+was enumerated independently and matches exactly, so the distinction has
+no consequence here.)
+
+**The type-reachability check exists and would fail if a named type
+stopped being exported.** `packages/cli/tsconfig.json` has
+`"include": ["src", "test", …]` and `check-types` is `tsc --noEmit`, so
+`_CoreTypesPresent`'s `import type { … } from "../src/index"` is compiled
+by the repository's own gate. Verified the failure mode by execution
+rather than by reasoning: a barrel that narrows `export type *` to an
+explicit list (the exact regression the construction is supposed to make
+impossible) produces `TS2305` for every dropped name — 10 of the 11:
+
+```
+use.ts(1,15): error TS2305: Module '"./narrow"' has no exported member 'DeclaredCteMarker'.
+… (10 total)
+```
+
+**Scenario: Types are untouched** — exhaustive, via the TypeScript
+compiler API over the two shipped `.d.ts` entries:
+
+```
+core exported names: 401 | with type meaning: 198
+core type names NOT present on hejbro: []
+```
+
+None of the eleven names in `_CoreTypesPresent` is supplied by
+`export * from "@hejbro/query"` (query's own export list carries none of
+them), so each one really does prove core's type re-export arrived.
+
+**Scenario: The engine stays where presets import it from** — all 97
+ENGINE names still resolve from `@hejbro/core` (`engine names absent from
+core: []`), and the whole monorepo is green under forced runs:
+`TURBO_FORCE=1 pnpm check` (641 files), `pnpm check-types` (16/16, 0
+cached), `pnpm test` (17/17 tasks, 0 cached; `hejbro:test` 62 files / 502
+tests). UNVERIFIED: the literal "resolves exactly as before" comparison
+against the pre-change core surface — no git history was read, per the
+gate's isolation rules.
+
+**The barrel's composition matches what requirement 1 promises.** 114 =
+107 VOCABULARY + `@hejbro/query`'s full runtime surface (`compile`,
+`createNameKeyedDb`, `db`, `defaultContextRendering`, `sql`,
+`throwMissingCapability`, of which `sql` is also a VOCABULARY name) + the
+package's own `defineConfig` and `assertSchema` — i.e. "together with
+`@hejbro/query`'s surface and its own configuration and assertion
+entries", exactly.
+
+**Docs, skills and examples that would now lie.** Scanned all 989 tracked
+`.ts`/`.tsx`/`.md`/`.mdx`/`.js`/`.mjs` files (excluding `node_modules`,
+`dist`, `.turbo`, `coverage`) for any `import { … } from "hejbro"` naming
+an ENGINE symbol. Three hits, none user-facing:
+`docs/plans/2026-08-20-phase7-implementation.md:1150` (AGENTS.md
+designates `docs/plans/` as the historical record of the 0.1.x line, not
+guidance) and two inside this evaluation file itself (round 1's own probe
+snippets). Zero in `README.md`, `docs/guide/`, `skills/hejbro/`,
+`examples/`, or `packages/`. No namespace import (`import * as … from
+"hejbro"`) or `require("hejbro")` anywhere either, so the named-import
+scan is complete. `skills/hejbro/SKILL.md:26` carries the corrective
+sentence and attributes `generateMigration` to `@hejbro/core`;
+`generate-verify-workflow.md:77` attributes `generateMigrations` there
+too.
+
+**Shipped specs naming exports that reach users through `hejbro`.**
+Grepped all 18 capabilities in `openspec/specs/` for each of the 97
+ENGINE names as a backticked identifier: **zero hits**. The only
+user-facing export sentences are `query-type-inference/spec.md:113-117`
+(`leftJoinedBrand` — VOCABULARY, present at runtime; `UntrackedJoins`,
+`LeftJoinedBrand`, `SelectResult` — types, all reachable) and
+`value-utilities/spec.md` (`assertNoNulls` — VOCABULARY,
+`typeof === "function"`). No shipped spec is contradicted.
+
+---
+
+## Round 1 findings — status
+
+**B1 (BLOCKING, banner parsers) — repaired.** The `SHALL NOT`
+enumeration no longer contains "banner and snapshot parsers"; it now
+reads "… the snapshot codec, traversal tables, and internal brands and
+helpers", and the requirement adds the exception explicitly: "Two groups
+that read as engine are vocabulary on purpose and stay exported: the
+three banner readers (`parseBannerHashes`, `parseBannerVersion`,
+`parseBannerBaseline`) … and the one brand another shipped requirement
+names as reaching users through `hejbro` (`leftJoinedBrand`)." Verified
+by execution that the repaired text now matches shipped behaviour in both
+directions: every forbidden phrase has a referent in ENGINE, no forbidden
+phrase names a VOCABULARY member, and the two excepted groups are exactly
+the ones exported (`parseBanner*` = function, `leftJoinedBrand` = symbol).
+The justification the delta gives for each exception is checkable and
+checks out (skill reference for the readers, shipped spec for the brand).
+
+**M1 (MINOR, un-armed type SHALL) — repaired.** The requirement now
+discloses the asymmetry instead of leaving it implicit: the type
+guarantee is stated as "held by the barrel's construction (a wholesale
+type re-export, not a list) and checked by a type-only import …", which
+is the first of round 1's two suggested repairs, and the implementation
+went further by adding a `_CoreTypesPresent` block that raises the
+core-type spot check from 1 name to 11. Verified the check is compiled by
+`pnpm check-types` and that narrowing `export type *` breaks it
+(`TS2305` ×10). The residue is only the accuracy of the clause that
+describes how those 11 were chosen — raised fresh as M2 above, not as an
+unrepaired M1.
