@@ -191,9 +191,15 @@ const fixtureUrl = (): string =>
  * needs updating when the report gains a new kind of line, and either
  * way this test itself would need touching (`buildLossReport`'s own
  * ordering feeds this file's own header, R2-N3).
+ *
+ * `"Guessed"` (no colon) rather than `"Guessed:"`, deliberately: the
+ * band's second line (`guessedLine`, `loss-report.ts`) reads "Guessed
+ * role names: …", never "Guessed: role names …" -- a colon-terminated
+ * prefix would have matched only the band's first line and silently
+ * dropped its second from every comparison below.
  */
 const REPORT_LINE_PREFIXES = [
-	"Guessed:",
+	"Guessed",
 	"Not inferred:",
 	"Approximated:",
 	"Omitted:",
