@@ -6,18 +6,22 @@ import type {
 	IndexColumnInput,
 	IndexMethod,
 	SchemaDeclaration,
+	Table,
 } from "@hejbro/core";
 import {
 	asc,
 	check,
 	desc,
+	existingTable,
 	index,
 	indexMethods,
 	op,
 	sql,
 	table,
+	text,
 	throwHejbroError,
 } from "@hejbro/core";
+import { inferColumnKeys } from "./column-keys";
 import type {
 	ColumnDeclarationResult,
 	ColumnLoss,
@@ -56,15 +60,29 @@ export type InferredIndex = {
 };
 
 /**
- * A foreign key targeting this same table -- the only kind this module
- * builds (CI-G1-R1-05): a non-self foreign key needs the target table's
- * already-built `ColumnRef`s, which crosses tables built in some order
- * this module does not own (open question, reported alongside this
- * group rather than decided here).
+ * One target column of a foreign key, carried with enough of its own
+ * facts (1.3's input shape) to pick a matching builder for a reference
+ * handle -- never a full column declaration, since the handle this
+ * builds (`existingTable`, D41) is never emitted.
  */
-export type InferredSelfForeignKey = {
+export type InferredForeignKeyTargetColumn = {
+	readonly sqlName: string;
+	readonly facts: InferredColumnFacts;
+};
+
+/**
+ * A foreign key from this table to `targetSchema`.`targetTable` (the
+ * same table, for a self-reference). Built via `existingTable` (D41,
+ * CI-G1-R1-06) when the target is a different table: a reference-only
+ * handle, never passed to `generateMigration`, never emitted -- so
+ * building one table's foreign keys never needs another table's real
+ * object to already exist, in either direction of an A/B cycle.
+ */
+export type InferredForeignKey = {
 	readonly sourceColumns: ReadonlyArray<string>;
-	readonly targetColumns: ReadonlyArray<string>;
+	readonly targetSchema: string;
+	readonly targetTable: string;
+	readonly targetColumns: ReadonlyArray<InferredForeignKeyTargetColumn>;
 	/** Raw `confdeltype`/`confupdtype` char -- `"a"` (no action) is Postgres's own default and is never rendered. */
 	readonly onDelete: string;
 	readonly onUpdate: string;
@@ -74,7 +92,7 @@ export type InferredTableFacts = {
 	readonly schema: SchemaDeclaration;
 	readonly tableName: string;
 	readonly columns: ReadonlyArray<InferredTableColumn>;
-	readonly selfForeignKeys: ReadonlyArray<InferredSelfForeignKey>;
+	readonly foreignKeys: ReadonlyArray<InferredForeignKey>;
 	readonly checks: ReadonlyArray<InferredCheck>;
 	readonly indexes: ReadonlyArray<InferredIndex>;
 };
@@ -176,6 +194,60 @@ const namedIndexWithMethod = (idx: InferredIndex): IndexBuilder => {
 	return named.using(asIndexMethod(idx.method));
 };
 
+/** A builder for a never-emitted `existingTable` handle column -- the real type when 1.3 resolves one, `text()` as a harmless stand-in otherwise (the handle is a reference target only; its own column types are never rendered). */
+const builderForExistingColumn = (
+	facts: InferredColumnFacts,
+): ColumnBuilder => {
+	const result = inferColumnDeclaration(facts);
+	if (result.kind === "declared") {
+		return result.builder;
+	}
+	return text();
+};
+
+/**
+ * The `references` half of a foreign key: this table's own `t` for a
+ * self-reference (`table` omitted, core's own D52 rule), or a fresh
+ * `existingTable` reference-only handle (D41) for any other table --
+ * built here, on demand, so this table's own construction never waits
+ * on the target table's real object.
+ */
+const referencesFor = (
+	fk: InferredForeignKey,
+	facts: InferredTableFacts,
+	columnRefBySqlName: ReadonlyMap<string, ColumnRef>,
+): { readonly table?: Table; readonly columns: ReadonlyArray<ColumnRef> } => {
+	const isSelf =
+		fk.targetSchema === facts.schema.schemaName &&
+		fk.targetTable === facts.tableName;
+	if (isSelf) {
+		return {
+			columns: fk.targetColumns.map(
+				(col) => columnRefBySqlName.get(col.sqlName) as ColumnRef,
+			),
+		};
+	}
+	const targetKeys = inferColumnKeys(
+		fk.targetColumns.map((col) => col.sqlName),
+	);
+	const targetColumnsRecord: Record<string, ColumnBuilder> = Object.fromEntries(
+		fk.targetColumns.map((col, position) => [
+			targetKeys[position],
+			builderForExistingColumn(col.facts),
+		]),
+	);
+	const handle = existingTable(
+		fk.targetSchema,
+		fk.targetTable,
+		targetColumnsRecord,
+	);
+	const handleRefs = handle as unknown as Record<string, ColumnRef>;
+	return {
+		table: handle,
+		columns: targetKeys.map((key) => handleRefs[key] as ColumnRef),
+	};
+};
+
 const indexColumnInput = (
 	column: InferredIndexColumn,
 	columnRefBySqlName: ReadonlyMap<string, ColumnRef>,
@@ -251,15 +323,11 @@ export const inferTable = (facts: InferredTableFacts): InferredTableResult => {
 					(t as unknown as Record<string, ColumnRef>)[tsKey] as ColumnRef,
 				]),
 			);
-			const foreignKeys = facts.selfForeignKeys.map((fk) => ({
+			const foreignKeys = facts.foreignKeys.map((fk) => ({
 				columns: fk.sourceColumns.map(
 					(name) => columnRefBySqlName.get(name) as ColumnRef,
 				),
-				references: {
-					columns: fk.targetColumns.map(
-						(name) => columnRefBySqlName.get(name) as ColumnRef,
-					),
-				},
+				references: referencesFor(fk, facts, columnRefBySqlName),
 				// `exactOptionalPropertyTypes`: an action key is omitted entirely
 				// (never set to `undefined`) when Postgres's own default applies.
 				...optionalEntry("onDelete", foreignKeyAction(fk.onDelete)),

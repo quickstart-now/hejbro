@@ -26,9 +26,13 @@ key to the earliest column in physical order and appending to each
 later colliding key the smallest integer from 2 upwards that leaves it
 free; the default numeric mode; unknown element nullability read as
 nullable; and role names from the grants and policies present. The
-reading SHALL infer no function, trigger, policy expression, view body,
-grant beyond its role name, or column whose type no column builder
-expresses, and SHALL say so.
+description SHALL be built from the catalog reading directly, so every
+column the reading found is carried with a guessed key; a declaration
+round trip is not its source, and a column that no declaration can
+express is therefore still described. The reading SHALL infer no
+function, trigger, policy expression, view body, grant beyond its role
+name, or column whose type no column builder expresses, and SHALL say
+so.
 
 #### Scenario: Tables and enums are inferred
 - **WHEN** a database holding two schemas with tables, foreign keys
@@ -46,9 +50,12 @@ expresses, and SHALL say so.
 ### Requirement: The loss is announced, with the way out
 Every command that uses a catalog reading SHALL print a loss report
 naming what was guessed (keys, modes, element nullability), what was
-not inferred, and the command that removes the loss — linking the
-schema repository for `pull`, hand-editing the starter declarations
-for `import`.
+not inferred, every approximation the reading made — a UNIQUE
+constraint is inferred as a unique index carrying the constraint's own
+name, so re-creating it emits `create unique index` rather than
+`add constraint … unique` — and the command that removes the loss:
+linking the schema repository for `pull`, hand-editing the starter
+declarations for `import`.
 
 #### Scenario: The report names the way out
 - **WHEN** `pull --db-url` completes

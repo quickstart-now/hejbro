@@ -1,7 +1,15 @@
 import { execFileSync } from "node:child_process";
+import {
+	emptySnapshot,
+	generateMigration,
+	schema,
+	table,
+	timestamptz,
+} from "@hejbro/core";
 import { pgDriver } from "@hejbro/pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readInferenceCatalog } from "../src/infer/catalog";
+import { inferColumnKeys } from "../src/infer/column-keys";
 
 /**
  * Group 1's own live proof (CI-G1-R1-04): the unit test
@@ -119,6 +127,21 @@ const FIXTURE_DDL = `
 	create unique index parents_active_name_idx on infer_probe.parents (name) where parent_id is null;
 	create index parents_metadata_gin_idx on infer_probe.parents using gin (metadata jsonb_path_ops);
 	create index parents_id_desc_idx on infer_probe.parents (id desc nulls first);
+
+	-- CI-G1-R1-06 (B): a named, composite UNIQUE table constraint -- does
+	-- its backing index carry the same name?
+	create table infer_probe.pairs (
+		a bigint not null,
+		b bigint not null,
+		constraint pairs_a_b_unique unique (a, b)
+	);
+
+	-- CI-G1-R1-06 (C): a quoted, camelCase SQL column name -- what key does
+	-- 1.1 infer, and what column name does round-tripping that key through
+	-- table()/generateMigration actually produce?
+	create table infer_probe.naming_probe (
+		"createdAt" timestamptz
+	);
 `;
 
 beforeAll(async () => {
@@ -305,5 +328,61 @@ describe("readInferenceCatalog / 1.2b live witness", () => {
 			(row) => row.schema === "infer_probe" && row.name === "mood",
 		);
 		expect(enumRow).toBeDefined();
+	});
+
+	// CI-G1-R1-06 (B): "a named UNIQUE table constraint's backing index
+	// carries the same name" is a claim, not yet evidence -- this measures
+	// it against a real server rather than assuming Postgres's own naming
+	// convention holds.
+	it("observes the same-named backing index for a named composite UNIQUE constraint", () => {
+		const uniqueIndex = catalog.indexDetails.find(
+			(row) => row.schema === "infer_probe" && row.table === "pairs",
+		);
+		expect(uniqueIndex?.name).toBe("pairs_a_b_unique");
+		expect(uniqueIndex?.isUnique).toBe(true);
+		expect(uniqueIndex?.columns.map((column) => column.column)).toEqual([
+			"a",
+			"b",
+		]);
+	});
+
+	// CI-G1-R1-06 (C): measurement only, no fix -- what key does 1.1 infer
+	// for a quoted camelCase SQL name, and what column name does
+	// round-tripping that key through table()/generateMigration actually
+	// produce? Report the real strings; do not make this pass by design.
+	it("measures the round trip for a quoted camelCase column name", () => {
+		const namingColumn = catalog.columnDetails.find(
+			(row) => row.schema === "infer_probe" && row.table === "naming_probe",
+		);
+		// The catalog's own attname preserves the original case exactly --
+		// confirms the DDL's quoting was not itself silently lower-cased.
+		expect(namingColumn?.name).toBe("createdAt");
+
+		const inferredKey = inferColumnKeys([namingColumn?.name ?? ""])[0] ?? "";
+		// Observed, not designed: lower-casing the whole name (1.1's own
+		// rule) erases the createdAt/createdat boundary before the
+		// "join runs between non-alphanumeric characters" step ever sees
+		// it, since there is no non-alphanumeric separator between
+		// "created" and "At" to split on.
+		expect(inferredKey).toBe("createdat");
+
+		const app = schema("infer_probe_naming_probe");
+		// Uses the *inferred* key ("createdat"), not the original SQL name --
+		// this is what the real pipeline would actually pass to table().
+		const declared = table(app, "naming_probe", {
+			[inferredKey]: timestamptz(),
+		});
+		const migration = generateMigration({
+			declarations: [app, declared],
+			previousSnapshot: emptySnapshot,
+		});
+		// Observed, not designed: toSnakeCase("createdat") has no uppercase
+		// letter left to split on, so the round trip produces one word,
+		// "createdat" -- not the original "createdAt". A declaration
+		// generated from this key can never reproduce the source column's
+		// exact spelling.
+		expect(migration.sql).toContain('"createdat"');
+		expect(migration.sql).not.toContain("created_at");
+		expect(migration.sql).not.toContain('"createdAt"');
 	});
 });

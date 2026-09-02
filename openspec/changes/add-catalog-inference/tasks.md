@@ -55,10 +55,28 @@ public surface.
       class among them, since `examples/postgres` declares all four and
       group 5's witness reads that database. Failing test:
       `infer-constraints.test.ts`.
-- [ ] 1.5 (~8m) Enums, sequences, roles; the not-inferred list. Failing
-      test: `infer-rest.test.ts`.
-- [ ] 1.6 (~7m) The description with `guessed` marks and the loss report
-      text. Failing test: `infer-description.test.ts`.
+- [ ] 1.4b (~7m) A foreign key to another table, and a cycle between
+      two, with core's `existingTable` (D41) as the target handle —
+      reference-only, so there is no build order to get right and no
+      cycle to break. A UNIQUE constraint rides on its backing index,
+      which carries the constraint's own name; the fixture proves that
+      rather than asserting it. Failing test: `infer-constraints.test.ts`
+      (the target's identity string in the foreign-key snapshot, and the
+      handle appearing in no snapshot of its own).
+- [ ] 1.5 (~8m) Enums, sequences, roles; the not-inferred list, with
+      exactly the delta's own members. Failing test: `infer-rest.test.ts`.
+- [ ] 1.6 (~9m) The description, built from the catalog reading itself
+      rather than from the declarations, so a column no declaration key
+      can name is still carried with its guessed key (the collision
+      suffix is reachable only here). Failing test:
+      `infer-description.test.ts`.
+- [ ] 1.7 (~8m) The loss report text: what was guessed, what was not
+      inferred, the approximations (a UNIQUE constraint as a unique
+      index), and the columns left undeclarable. The last of those rests
+      on a measurement, not on reading the DSL: what `generateMigration`
+      actually creates for a quoted `"createdAt"` column is observed
+      first and recorded here, and the report's wording follows that
+      observation. Failing test: `infer-loss-report.test.ts`.
 
 ## 2. Declarations from a snapshot (#604)
 Files: `packages/cli/src/declare-emit/*.ts` (new), tests

@@ -35,7 +35,7 @@ const emptyTableFacts: InferredTableFacts = {
 			isPrimaryKey: true,
 		},
 	],
-	selfForeignKeys: [],
+	foreignKeys: [],
 	checks: [],
 	indexes: [],
 };
@@ -104,10 +104,12 @@ describe("inferTable / 1.4 self-referencing foreign key", () => {
 					isPrimaryKey: false,
 				},
 			],
-			selfForeignKeys: [
+			foreignKeys: [
 				{
 					sourceColumns: ["parent_id"],
-					targetColumns: ["id"],
+					targetSchema: "app",
+					targetTable: "widgets",
+					targetColumns: [{ sqlName: "id", facts: columnFacts() }],
 					onDelete: "c",
 					onUpdate: "a",
 				},
@@ -317,5 +319,175 @@ describe("inferTable / 1.4 indexes -- the five shapes", () => {
 			],
 		});
 		expect(sql).toContain('"id" desc nulls last');
+	});
+});
+
+describe("inferTable / 1.4b non-self foreign keys (existingTable, D41)", () => {
+	it("declares a foreign key to another already-inferred table, without needing it built first", () => {
+		const parentsFacts: InferredTableFacts = {
+			schema: app,
+			tableName: "parents",
+			columns: [
+				{
+					sqlName: "id",
+					tsKey: "id",
+					facts: columnFacts(),
+					isPrimaryKey: true,
+				},
+			],
+			foreignKeys: [],
+			checks: [],
+			indexes: [],
+		};
+		const childrenFacts: InferredTableFacts = {
+			schema: app,
+			tableName: "children",
+			columns: [
+				{
+					sqlName: "id",
+					tsKey: "id",
+					facts: columnFacts(),
+					isPrimaryKey: true,
+				},
+				{
+					sqlName: "parent_id",
+					tsKey: "parentId",
+					facts: columnFacts({ name: "parent_id", notNull: true }),
+					isPrimaryKey: false,
+				},
+			],
+			foreignKeys: [
+				{
+					sourceColumns: ["parent_id"],
+					targetSchema: "app",
+					targetTable: "parents",
+					targetColumns: [{ sqlName: "id", facts: columnFacts() }],
+					onDelete: "c",
+					onUpdate: "a",
+				},
+			],
+			checks: [],
+			indexes: [],
+		};
+
+		const parents = inferTable(parentsFacts);
+		const children = inferTable(childrenFacts);
+		expect(parents.losses).toEqual([]);
+		expect(children.losses).toEqual([]);
+		const migration = generateMigration({
+			declarations: [app, parents.table, children.table],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(migration.errors).toEqual([]);
+
+		expect(migration.sql).toContain(
+			'foreign key ("parent_id") references "app"."parents" ("id") on delete cascade',
+		);
+		// The existingTable handle built only to resolve the reference must
+		// never itself surface as a table -- exactly the two real ones.
+		const tableKeys = Object.keys(migration.snapshot.objects).filter((key) =>
+			key.startsWith("table:"),
+		);
+		expect(tableKeys.sort()).toEqual([
+			"table:app.children",
+			"table:app.parents",
+		]);
+
+		const childrenSnapshot = migration.snapshot.objects[
+			"table:app.children"
+		] as {
+			readonly foreignKeys: ReadonlyArray<{ readonly referencesTable: string }>;
+		};
+		expect(childrenSnapshot.foreignKeys).toHaveLength(1);
+		expect(childrenSnapshot.foreignKeys[0]?.referencesTable).toBe(
+			"app.parents",
+		);
+	});
+
+	it("declares a two-table cycle (A references B, B references A) with no build-order dependency", () => {
+		const aFacts: InferredTableFacts = {
+			schema: app,
+			tableName: "table_a",
+			columns: [
+				{
+					sqlName: "id",
+					tsKey: "id",
+					facts: columnFacts(),
+					isPrimaryKey: true,
+				},
+				{
+					sqlName: "b_id",
+					tsKey: "bId",
+					facts: columnFacts({ name: "b_id", notNull: false }),
+					isPrimaryKey: false,
+				},
+			],
+			foreignKeys: [
+				{
+					sourceColumns: ["b_id"],
+					targetSchema: "app",
+					targetTable: "table_b",
+					targetColumns: [{ sqlName: "id", facts: columnFacts() }],
+					onDelete: "a",
+					onUpdate: "a",
+				},
+			],
+			checks: [],
+			indexes: [],
+		};
+		const bFacts: InferredTableFacts = {
+			schema: app,
+			tableName: "table_b",
+			columns: [
+				{
+					sqlName: "id",
+					tsKey: "id",
+					facts: columnFacts(),
+					isPrimaryKey: true,
+				},
+				{
+					sqlName: "a_id",
+					tsKey: "aId",
+					facts: columnFacts({ name: "a_id", notNull: false }),
+					isPrimaryKey: false,
+				},
+			],
+			foreignKeys: [
+				{
+					sourceColumns: ["a_id"],
+					targetSchema: "app",
+					targetTable: "table_a",
+					targetColumns: [{ sqlName: "id", facts: columnFacts() }],
+					onDelete: "a",
+					onUpdate: "a",
+				},
+			],
+			checks: [],
+			indexes: [],
+		};
+
+		// Built in either order -- neither is the other's real object yet,
+		// and neither ever needs to be (D41's whole point).
+		const a = inferTable(aFacts);
+		const b = inferTable(bFacts);
+		const migration = generateMigration({
+			declarations: [app, a.table, b.table],
+			previousSnapshot: emptySnapshot,
+		});
+		expect(migration.errors).toEqual([]);
+
+		const tableKeys = Object.keys(migration.snapshot.objects).filter((key) =>
+			key.startsWith("table:"),
+		);
+		expect(tableKeys.sort()).toEqual([
+			"table:app.table_a",
+			"table:app.table_b",
+		]);
+		expect(migration.sql).toContain(
+			'foreign key ("b_id") references "app"."table_b" ("id")',
+		);
+		expect(migration.sql).toContain(
+			'foreign key ("a_id") references "app"."table_a" ("id")',
+		);
 	});
 });
