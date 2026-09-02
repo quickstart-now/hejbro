@@ -15,6 +15,10 @@ table exactly as it sees a managed one; everything that writes DDL
 SHALL not see it at all. A snapshot written before this marker existed
 SHALL read as having no unmanaged tables.
 
+A managed declaration replaced by an unmanaged one, or the reverse,
+SHALL emit nothing — the table stands as it is; the reverse is
+adoption, and only later changes alter it.
+
 #### Scenario: An unmanaged declaration produces no migration
 - **WHEN** a schema file exports an `existingTable()` and `hejbro
   generate` runs
@@ -27,6 +31,13 @@ SHALL read as having no unmanaged tables.
   table's column and `hejbro generate` runs
 - **THEN** the managed table's migration carries the foreign key and no
   statement touches the unmanaged table
+
+#### Scenario: A table changing hands emits nothing
+- **WHEN** a table declared with `table()` is replaced by an
+  `existingTable()` of the same identity — or an unmanaged declaration
+  is replaced by a managed one — and `hejbro generate` runs
+- **THEN** no statement is written for that table, neither a drop nor a
+  create, and the snapshot records it under its new management
 
 #### Scenario: An older snapshot has no unmanaged tables
 - **WHEN** a snapshot written before the unmanaged marker existed is

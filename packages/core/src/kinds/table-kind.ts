@@ -477,6 +477,16 @@ const primaryKeyNameField = (
 	return { primaryKeyName: derivePrimaryKeyName(declaration.tableName) };
 };
 
+/** `{ unmanaged: true }` for an `existingTable()` declaration, else `{}` (compact snapshot, add-unmanaged-objects) — sourced from `declaration.existing`, the same flag `existingTable()` already sets. */
+const unmanagedField = (
+	declaration: TableDeclaration,
+): Pick<TableSnapshot, "unmanaged"> => {
+	if (!declaration.existing) {
+		return {};
+	}
+	return { unmanaged: true };
+};
+
 const isEmptyKeyedDiff = <TValue>(diff: KeyedDiff<TValue>): boolean =>
 	diff.added.length === 0 &&
 	diff.removed.length === 0 &&
@@ -598,6 +608,7 @@ export const tableKind: ObjectKind<TableDeclaration> = {
 		foreignKeys: serializeForeignKeys(declaration),
 		...checksField(serializeChecks(declaration)),
 		...primaryKeyNameField(declaration),
+		...unmanagedField(declaration),
 	}),
 	identify: (snapshot) => {
 		const tableSnapshot = asTableSnapshot(snapshot);
