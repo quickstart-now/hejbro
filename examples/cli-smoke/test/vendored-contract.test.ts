@@ -233,6 +233,24 @@ type AssertEqual<A, B> = A extends B ? (B extends A ? true : false) : false;
 // result types are not structurally identical.
 const _typesAgree: AssertEqual<LocalRow, VendoredRow> = true;
 void _typesAgree;
+
+// The function sibling of the same claim (#587/G3) -- type-only, never
+// invoked (the live half belongs to 3.2): a scalar-returning fn and a
+// table-returning fn, compared as whole call signatures (arguments AND
+// result), read two ways through one real tsc.
+type LocalTotalPosts = typeof localHandle.fn.totalPosts;
+type VendoredTotalPosts = typeof vendoredHandle.fn.totalPosts;
+const _totalPostsFnTypesAgree: AssertEqual<
+	LocalTotalPosts,
+	VendoredTotalPosts
+> = true;
+void _totalPostsFnTypesAgree;
+
+type LocalPostById = typeof localHandle.fn.postById;
+type VendoredPostById = typeof vendoredHandle.fn.postById;
+const _postByIdFnTypesAgree: AssertEqual<LocalPostById, VendoredPostById> =
+	true;
+void _postByIdFnTypesAgree;
 `,
 		);
 
