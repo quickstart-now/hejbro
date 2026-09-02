@@ -11,6 +11,7 @@ import {
 	sql,
 	table,
 	text,
+	timestamptz,
 	uuid,
 	varchar,
 } from "../src/index";
@@ -104,7 +105,31 @@ describe("FunctionDeclaration<TArgs, TReturns> generics (task 4.10)", () => {
 		const bare: FunctionDeclaration = searchByStatus;
 		expect(Object.getOwnPropertySymbols(bare)).toHaveLength(0);
 		expect(bare.args).toEqual([
-			{ argName: "status", typeNode: { typeName: "text" } },
+			{ key: "status", argName: "status", typeNode: { typeName: "text" } },
+		]);
+	});
+});
+
+describe("resolved args carry the declared key (#587)", () => {
+	it("keeps each argument's declared key beside its SQL name", () => {
+		const fn = defineFunction(
+			app,
+			"touch_post",
+			{
+				args: { postId: uuid(), createdAt: timestamptz() },
+				returns: posts,
+			},
+			(ctx) => {
+				ctx.return(select(posts));
+			},
+		);
+		expect(fn.args).toEqual([
+			{ key: "postId", argName: "post_id", typeNode: { typeName: "uuid" } },
+			{
+				key: "createdAt",
+				argName: "created_at",
+				typeNode: { typeName: "timestamptz" },
+			},
 		]);
 	});
 });

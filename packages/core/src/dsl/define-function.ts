@@ -33,7 +33,7 @@ export type FunctionReturns =
  * `defineTrigger`'s directly-constructed literal) only ever sets the
  * plain runtime fields, so without this a non-recursive mention of
  * `TArgs`/`TReturns` would exist nowhere at all — `args`/`returns` are
- * plain, already-resolved runtime shapes (`ReadonlyArray<{argName,
+ * plain, already-resolved runtime shapes (`ReadonlyArray<{key, argName,
  * typeNode}>`, a `returnsKind` union) that never reference the generic
  * parameters, not even recursively through another method the way
  * `ColumnBuilder`'s own chain methods do. Without this anchor,
@@ -79,6 +79,7 @@ export type FunctionDeclaration<
 	readonly schemaName: string;
 	readonly functionName: string;
 	readonly args: ReadonlyArray<{
+		readonly key: string;
 		readonly argName: string;
 		readonly typeNode: TypeNode;
 	}>;
@@ -162,6 +163,7 @@ const resolveFunctionReturns = (
 
 type ResolvedArgs<TArgs extends Record<string, ColumnBuilder>> = {
 	readonly declarations: ReadonlyArray<{
+		readonly key: string;
 		readonly argName: string;
 		readonly typeNode: TypeNode;
 	}>;
@@ -185,6 +187,7 @@ const resolveArgs = <TArgs extends Record<string, ColumnBuilder>>(
 	});
 
 	const declarations = resolved.map((entry) => ({
+		key: entry.key,
 		argName: entry.argName,
 		typeNode: entry.typeNode,
 	}));
