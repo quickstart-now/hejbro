@@ -6,6 +6,7 @@ import type {
 	JsonValue,
 	NumericMode,
 	TriggerDeclaration,
+	TypeNode,
 } from "@hejbro/core";
 import { getTableMeta, isTable, stableJson } from "@hejbro/core";
 
@@ -46,11 +47,27 @@ export type ExportTableFact = {
 export type ExportFunctionArgFact = {
 	readonly key: string;
 	readonly sqlName: string;
+	readonly typeNode: TypeNode;
+	readonly mode: NumericMode | null;
+	readonly notNullElements: boolean;
 };
 
-/** `null` for a trigger-synthesized function's return — neither a scalar value nor a row (schema-export delta). A table return carries only the SQL identity, never the returned table's export name: that fact already rides in `tables[]`, and repeating it here would create a second copy of it to disagree later. */
+/**
+ * `null` for a trigger-synthesized function's return — neither a scalar
+ * value nor a row (schema-export delta). A table return carries only the
+ * SQL identity, never the returned table's export name: that fact already
+ * rides in `tables[]`, and repeating it here would create a second copy of
+ * it to disagree later. A scalar return carries no `notNullElements` —
+ * core refuses `.notNullElements()` at a `returns` position
+ * (`returns-not-null-elements-unsupported`), so an array return is always
+ * read as element-nullable.
+ */
 export type ExportFunctionReturnsFact =
-	| { readonly kind: "scalar" }
+	| {
+			readonly kind: "scalar";
+			readonly typeNode: TypeNode;
+			readonly mode: NumericMode | null;
+	  }
 	| {
 			readonly kind: "table";
 			readonly schemaName: string;
@@ -81,8 +98,9 @@ type ExportFunctionFact = {
  * about later.
  *
  * **What a function fact now carries (#587):** each declared argument's
- * TypeScript key beside its SQL name, in declaration order, and the
- * return shape — `{kind: "scalar"}`, `{kind: "table", schemaName,
+ * TypeScript key beside its SQL name, its declared type, numeric mode,
+ * and element nullability, in declaration order; and the return shape —
+ * `{kind: "scalar", typeNode, mode}`, `{kind: "table", schemaName,
  * tableName}`, or `null` for a trigger-synthesized function's return
  * (neither a value nor a row). A table return carries only the SQL
  * identity, never the returned table's export name — that fact already
@@ -140,7 +158,7 @@ const functionReturnsFact = (
 		return null;
 	}
 	if (returns.returnsKind === "scalar") {
-		return { kind: "scalar" };
+		return { kind: "scalar", typeNode: returns.typeNode, mode: returns.mode };
 	}
 	return {
 		kind: "table",
@@ -152,7 +170,13 @@ const functionReturnsFact = (
 const functionArgFacts = (
 	fn: FunctionDeclaration,
 ): ReadonlyArray<ExportFunctionArgFact> =>
-	fn.args.map((arg) => ({ key: arg.key, sqlName: arg.argName }));
+	fn.args.map((arg) => ({
+		key: arg.key,
+		sqlName: arg.argName,
+		typeNode: arg.typeNode,
+		mode: arg.mode,
+		notNullElements: arg.notNullElements,
+	}));
 
 const functionFact = (
 	fn: FunctionDeclaration,

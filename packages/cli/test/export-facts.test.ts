@@ -96,7 +96,11 @@ describe("buildExportDescription", () => {
 			functionName: "total_posts",
 			exportName: "totalPosts",
 			args: [],
-			returns: { kind: "scalar" },
+			returns: {
+				kind: "scalar",
+				typeNode: { typeName: "bigint" },
+				mode: "bigint",
+			},
 		});
 
 		expect(description.roles).toEqual(["anon", "authenticated"]);
@@ -146,21 +150,92 @@ describe("buildExportDescription", () => {
 			(f) => f.functionName === "touch_post",
 		);
 		expect(touchPostFact?.args).toEqual([
-			{ key: "zebraId", sqlName: "zebra_id" },
-			{ key: "alphaId", sqlName: "alpha_id" },
+			{
+				key: "zebraId",
+				sqlName: "zebra_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+			{
+				key: "alphaId",
+				sqlName: "alpha_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
 		]);
-		expect(touchPostFact?.returns).toEqual({ kind: "scalar" });
+		expect(touchPostFact?.returns).toEqual({
+			kind: "scalar",
+			typeNode: { typeName: "bigint" },
+			mode: "bigint",
+		});
 
 		const postsByIdFact = description.functions.find(
 			(f) => f.functionName === "posts_by_id",
 		);
 		expect(postsByIdFact?.args).toEqual([
-			{ key: "postId", sqlName: "post_id" },
+			{
+				key: "postId",
+				sqlName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
 		]);
 		expect(postsByIdFact?.returns).toEqual({
 			kind: "table",
 			schemaName: "app",
 			tableName: "posts",
+		});
+	});
+
+	it("carries an argument's declared type and choices", () => {
+		const totalScore = defineFunction(
+			app,
+			"total_score",
+			{
+				args: {
+					weight: bigint({ mode: "number" }),
+					tags: text().array().notNullElements(),
+				},
+				returns: bigint({ mode: "number" }),
+			},
+			(ctx) => {
+				ctx.return(sql`1`);
+			},
+		);
+
+		const declarations: ReadonlyArray<HejbroInput> = [app, totalScore];
+		const exportNames = new Map<HejbroInput, string>([
+			[totalScore, "totalScore"],
+		]);
+
+		const description = buildExportDescription(declarations, exportNames);
+
+		const fact = description.functions.find(
+			(f) => f.functionName === "total_score",
+		);
+		expect(fact?.args).toEqual([
+			{
+				key: "weight",
+				sqlName: "weight",
+				typeNode: { typeName: "bigint" },
+				mode: "number",
+				notNullElements: false,
+			},
+			{
+				key: "tags",
+				sqlName: "tags",
+				typeNode: { typeName: "array", element: { typeName: "text" } },
+				mode: null,
+				notNullElements: true,
+			},
+		]);
+		expect(fact?.returns).toEqual({
+			kind: "scalar",
+			typeNode: { typeName: "bigint" },
+			mode: "number",
 		});
 	});
 
@@ -344,7 +419,15 @@ describe("buildExportDescription", () => {
 			schemaName: "app",
 			functionName: "posts_by_status",
 			exportName: "postsByStatus",
-			args: [{ key: "status", sqlName: "status" }],
+			args: [
+				{
+					key: "status",
+					sqlName: "status",
+					typeNode: { typeName: "text" },
+					mode: null,
+					notNullElements: false,
+				},
+			],
 			returns: { kind: "table", schemaName: "app", tableName: "posts" },
 		});
 	});

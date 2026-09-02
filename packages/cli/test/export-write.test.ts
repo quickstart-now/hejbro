@@ -117,12 +117,24 @@ describe("hejbro generate --export", () => {
 			(f: { functionName: string }) => f.functionName === "total_posts",
 		);
 		expect(scalarFact.args).toEqual([]);
-		expect(scalarFact.returns).toEqual({ kind: "scalar" });
+		expect(scalarFact.returns).toEqual({
+			kind: "scalar",
+			typeNode: { typeName: "bigint" },
+			mode: "bigint",
+		});
 
 		const tableFact = description.functions.find(
 			(f: { functionName: string }) => f.functionName === "post_by_id",
 		);
-		expect(tableFact.args).toEqual([{ key: "postId", sqlName: "post_id" }]);
+		expect(tableFact.args).toEqual([
+			{
+				key: "postId",
+				sqlName: "post_id",
+				typeNode: { typeName: "uuid" },
+				mode: null,
+				notNullElements: false,
+			},
+		]);
 		expect(tableFact.returns).toEqual({
 			kind: "table",
 			schemaName: "app",
