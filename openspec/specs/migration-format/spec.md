@@ -10,19 +10,22 @@ verifiable and machine-readable without running anything.
 
 ### Requirement: A migration's banner carries machine-readable chain and version lines
 Every migration file hejbro writes SHALL open with a banner of comment
-lines that carry, each under its own known prefix: the hash-chain line
-(this migration's own content hash chained onto its predecessor's, the
-chain `verify` checks), the format-version line, and — on a baseline
-migration only — the `-- baseline:` marker line, whose only consumer is
-a tool deciding whether to run the migration or register it as applied.
-hejbro SHALL expose public parsers for these lines, so that decision
-never requires string-matching the banner. Each parser SHALL read its
-line by its own known prefix only and ignore unknown banner lines, so
-an older hejbro reading a newer file stays unaffected; the machine
-contract is the prefix, and any prose after it is for humans and MAY
-change — a parser that matched the whole line would report the marker
-absent after a wording change, and a false "absent" tells an apply tool
-to *run* a migration that must only be registered.
+lines that carry, each under its own known prefix: the hash-chain lines
+(the normalized snapshot's hash before and after this migration, so that
+each file's "before" is its predecessor's "after" — the chain `verify`
+checks), the hejbro-version line, and — on a baseline
+migration only — the `-- baseline:` marker line, whose consumers are the
+tools deciding whether to run the migration or register it as applied,
+hejbro's own apply path among them. hejbro SHALL expose public parsers
+for these lines, so that decision never requires string-matching the
+banner — including when hejbro is the one making it. Each parser SHALL
+read its line by its own known prefix only and ignore unknown banner
+lines, so an older hejbro reading a newer file stays unaffected; the
+machine contract is the prefix, and any prose after it is for humans and
+MAY change — a parser that matched the whole line would report the
+marker absent after a wording change, and a false "absent" tells an
+apply tool, hejbro's own included, to *run* a migration that must only
+be registered.
 
 #### Scenario: The banner chains onto the predecessor
 - **WHEN** two migrations are generated in sequence and the second's
