@@ -189,18 +189,43 @@ const outOfOrderDisagreements = (
  * caller/fixture that never mentions a baseline keeps meaning exactly
  * what it did before this parameter existed.
  */
+/**
+ * [task 17.1, D106 M3] `planApply`'s own chain half, split out so a caller
+ * can verify the chain before opening a connection at all -- `migrate`'s
+ * own bootstrap step sends DDL (creating the ledger schema/table), so
+ * refusing only inside `planApply`, after that bootstrap already ran, is
+ * too late for the delta's "no statement is sent" promise on an
+ * unverifiable chain. `null` means the chain verifies; `checkChain` is
+ * offline and idempotent, so `planApply` below runs it again rather than
+ * threading this result through -- cheap, and keeps `planApply`'s own
+ * signature (chain/ledger/baselineFileNames in, one `PlanResult` out)
+ * unchanged for its other caller, `status`.
+ */
+export const planChainOnly = (
+	chain: ReadonlyArray<ChainEntry>,
+): Extract<
+	PlanResult,
+	{ readonly ok: false; readonly reason: "chain-invalid" }
+> | null => {
+	const chainReport = checkChain(chain);
+	if (chainReport.ok) {
+		return null;
+	}
+	return {
+		ok: false,
+		reason: "chain-invalid",
+		error: hejbroError(chainReport.code, chainInvalidMessage(chainReport)),
+	};
+};
+
 export const planApply = (
 	chain: ReadonlyArray<ChainEntry>,
 	ledger: LedgerState,
 	baselineFileNames: ReadonlySet<string> = new Set(),
 ): PlanResult => {
-	const chainReport = checkChain(chain);
-	if (!chainReport.ok) {
-		return {
-			ok: false,
-			reason: "chain-invalid",
-			error: hejbroError(chainReport.code, chainInvalidMessage(chainReport)),
-		};
+	const chainFailure = planChainOnly(chain);
+	if (chainFailure !== null) {
+		return chainFailure;
 	}
 
 	// Past this point, `chain`'s array order is not merely assumed to be

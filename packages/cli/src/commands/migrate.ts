@@ -11,7 +11,7 @@ import { applyMigration } from "../apply/execute";
 import type { LedgerOrigin } from "../apply/ledger";
 import { bootstrapLedger, readLedger } from "../apply/ledger";
 import type { PlanResult } from "../apply/plan";
-import { planApply } from "../apply/plan";
+import { planApply, planChainOnly } from "../apply/plan";
 import type { CheckDriverImporter } from "../check/driver";
 import { withCheckConnection } from "../check/driver";
 import { requireConfigFields } from "../config-required";
@@ -335,6 +335,15 @@ export const runMigrate = async (
 			migrationsDirPath,
 			fileNames,
 		);
+
+		// [task 17.1, D106 M3] Verified before any connection opens --
+		// `bootstrapLedger` below sends DDL, so refusing after that ran
+		// would already have broken the delta's "no statement is sent"
+		// promise on an unverifiable chain.
+		const chainFailure = planChainOnly(chain);
+		if (chainFailure !== null) {
+			return planFailureResult(chainFailure);
+		}
 
 		return await withCheckConnection(
 			urlFlag,

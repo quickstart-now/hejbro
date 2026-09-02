@@ -10,9 +10,11 @@ groups; what moved is which group writes the calling line.
 
 **Groups 1–13, as merged: 58 tasks, 492 minutes** — file-derived at
 close-out. (The D106 correction round is groups 14–20 and counts
-separately: 22 tasks, 167 minutes. **The scope is stated so this
+separately: 23 tasks, 174 minutes. **The scope is stated so this
 sentence can stop going stale** — it has twice, and both times the
-number moved while the sentence did not.) The original freeze read
+number moved while the sentence did not. Third move, and the rule held
+this time: 15.8 was added mid-round for M4's prose, so the count moved
+with it in the same edit.) The original freeze read
 "46 tasks, 398 minutes" over ten groups: 7.5 was
 re-frozen 8→10 by the group-4 commit when it took ownership of the
 run-level property, and groups 11–13 were added mid-flight, each with
@@ -832,11 +834,19 @@ archive deletes silently. Verify with `show --diff`, not with `validate`.
       export paragraph (`This SHALL hold even when there is no difference
       to write a migration for`). The split additions stay as they are.
 
-## 15. The delta sentences that overstate (M3, M5, M6, M7, m1, m3–m6)
+## 15. The delta sentences that overstate (M3, M4, M5, M6, M7, m1, m3–m6)
 
 Files: the `migration-apply` and `migration-format` delta specs.
 Prose only — the code these sentences describe moves in groups 16–19,
 and the sentences must be written to match what those groups land.
+
+**M4 joined this group's list mid-round** (lead), and the hole it fills
+is the one this change's own rules exist to catch: group 19 owned M4's
+*code* and no group owned M4's *sentence*, so extending the walk would
+have left the delta's "decided from the statements the run is about to
+emit … it over-approximates" standing over a surface that still reads
+encoded nodes under a bounded rule. An artifact with a group and no
+sentence is the same defect as a call site nobody owns (15.8).
 
 - [ ] 15.1 (~8m) M3's prose: state that the chain vouches for the
       **snapshot hashes**, not for a file's SQL bytes, and that this is
@@ -844,6 +854,14 @@ and the sentences must be written to match what those groups land.
       to the true contract (a banner line edited, a file removed or
       reordered). The current WHEN describes a class of edits most of
       which pass.
+      **Two layers, not one** (lead, at group 17's dispatch): once group
+      17 lands, a chain refusal opens **no connection at all**, so this
+      scenario's THEN says "no connection is opened and nothing is sent"
+      — a stronger claim than m1's, and one group 17's own test proves.
+      Every *other* refusal (capability, ledger disagreement) still runs
+      after the probe and the bootstrap, so those keep 15.6's weaker
+      wording. Do not write one sentence covering both: that is how a
+      sentence starts claiming more than the code does.
 - [ ] 15.2 (~9m) M5, part one: `migrate`'s three-way exit code, and the
       shared `--url` / `DATABASE_URL` rule for the connecting commands —
       including the shipped security sentence's extension (**not** read
@@ -853,6 +871,11 @@ and the sentences must be written to match what those groups land.
       its `<database>:<count>` token, and `migrate`'s report buckets.
       Apply the admission test — a sentence earns its place by pinning
       something a reader cannot get from another sentence.
+      **Say what the code does, not what the family suggests** (lead):
+      `ResetResult.exitCode` is `0 | 1`, so `reset` answers "could not
+      act" with `1`, not with the `2` 15.2 pins for `migrate`. Write that
+      as it is; do not extend migrate's trichotomy to a command that does
+      not implement it.
 - [ ] 15.4 (~7m) [design] M5, part three + M7's prose, **written
       together**: the ledger's identity (schema, table, columns) and the
       origin discriminator group 16 adds. These are one decision about
@@ -881,8 +904,23 @@ and the sentences must be written to match what those groups land.
 - [ ] 15.5 (~5m) M6's prose: either the zero-change carve-out is stated
       or the implementation refuses first. Group 18 chooses; this task
       writes whichever it chose.
+      **Chosen, and it is neither branch as originally framed** (lead,
+      at group 18's dispatch): group 18 refuses an empty declaration set
+      (`reset-declarations-empty`, `applyReset`'s first act, before any
+      statement is sent — *not* "without opening a connection", which is
+      group 17's claim about `migrate`'s chain refusal alone) **and**
+      moves `clearLedger` inside the same `changes.length > 0` branch as
+      the drop DDL. So no carve-out is owed: what this task writes is an
+      **invariant**, one sentence — "A reset that would drop nothing
+      writes nothing, the ledger included; the ledger is cleared only
+      together with the drops it records." It earns its place by the
+      admission test: no other sentence tells a reader that the ledger
+      clear is bound to the drops rather than to the run.
 - [ ] 15.6 (~8m) The minors: m1 (`before any *migration* statement is
-      sent`), m3 (`the format-version line` misnames the hejbro-version
+      sent` — this is the **weaker** of the two layers 15.1 notes, and it
+      is the right sentence here: the capability refusal genuinely runs
+      after `assertConnected`'s `select 1`, and group 17 does not move
+      it), m3 (`the format-version line` misnames the hejbro-version
       line — the MODIFIED block inherited the misnomer and can fix it),
       m4 (raise refuses net-of-rollback, and says so), m5 (reset's two
       SHALLs under declaration drift), m6 (drop `and a configuration
@@ -893,6 +931,22 @@ and the sentences must be written to match what those groups land.
       measure who wrote that Purpose line and when (`git log -p`) — a
       Purpose edited ahead of its requirements is worth understanding
       before it is patched.
+- [ ] 15.8 (~7m) M4's prose, written after group 19 settles the rule it
+      describes. Three things, and no more: (a) the decision is made over
+      the run's **encoded expression nodes** — literal nodes, `sql`
+      template text chunks, and `sql.raw` text — not over the rendered
+      statements, so the SHALL says what the surface does; (b) 19.1's
+      boundary rule, stated as the contract it is: *the value's spelling
+      and its single-quote-doubled spelling are matched where they do not
+      sit against a letter, digit or underscore; the same word inside a
+      comment or an unrelated string matches too (the licensed
+      direction); a value assembled by concatenation or a function call
+      is not a spelling and is not seen*; (c) the asymmetry that licenses
+      it — an unneeded split costs one extra clean migration, a missed
+      one ships a migration that passes every check hejbro has and fails
+      against the database. Also record that text chunks are tested
+      **per chunk**: a value straddling a parameter boundary is not that
+      value.
 
 ## 16. The ledger's origin, and the surfaces that read it (M7, M1, M2)
 
@@ -934,9 +988,13 @@ so its shape is free to change today and not tomorrow.
 
 ## 17. migrate verifies before it connects (M3, code)
 
-Files: `packages/cli/src/commands/migrate.ts` and its test.
+Files: `packages/cli/src/commands/migrate.ts` and its test. Also opens
+`packages/cli/src/apply/plan.ts` (export-only change): `planApply`'s own
+chain check is pulled out as `planChainOnly` so `chainInvalidMessage`
+(the diagnostic text) keeps a single owner rather than gaining a second
+copy in `migrate.ts`.
 
-- [ ] 17.1 (~8m) The chain check is **offline** (`checkChain` reads banner
+- [x] 17.1 (~8m) The chain check is **offline** (`checkChain` reads banner
       lines), so it can run before the connection is opened. Today the
       order is connect → probe → capability → **bootstrap (two DDL
       writes)** → read → plan → chain check, so a run refused for an
@@ -982,11 +1040,37 @@ aim below the line, and measure every helper the work extracts.
       *how far* it over-approximates was never settled — a value spelled
       inside an unrelated word or a comment would split a run that did
       not need it. Decide and write it down; D106 will read it again.
+      **Settled (lead), so this task implements rather than decides.**
+      The rule is an **identifier-boundary** match: the value matches
+      where the characters on either side of it are not letters, digits
+      or underscores. Plain substring was rejected by measurement of its
+      own arithmetic — a two-character enum value (`a`, `on`) appears in
+      almost any SQL text, so every run would split; quote-only was
+      rejected for encoding an assumption about how SQL spells the value.
+      The boundary rule has **no false negative against a literal's
+      spelling**: every string-literal form (`'v'`, `E'v'`, `$$v$$`) puts
+      a quote or `$` beside the value, and `'redraft'` failing to match
+      `draft` is correct — the database does not read it as that value
+      either.
+      **Two needles, not one** (lead): the value as spelled, *and* its
+      single-quote-doubled spelling (`it's` → `it''s`), because SQL text
+      carrying a value with a quote in it spells it the second way and
+      every candidate rule misses it. When the value holds no quote the
+      two needles are identical, so this costs nothing. Backslash/E-string
+      escapes are deliberately not chased — that limit is stated in 15.8
+      rather than half-implemented here.
+      One boundary helper, named, and measured by name in 19.3.
 - [ ] 19.2 (~9m) The walk reaches `chunkKind: "text"` chunks and
       `nodeKind: "raw-sql"` nodes. Red: `split.test.ts` — "splits when the
       added value is spelled inside a sql template", "…inside sql.raw".
       The over-approximation direction already has a test; this is the
-      direction that had none.
+      direction that had none. Two more reds carry 19.1's rule, and they
+      are the pair that makes it discriminating rather than merely
+      present: "does not split when the value only occurs inside a longer
+      word" (the boundary doing its job) and "splits when the value's
+      quote is doubled in the text" (the second needle). Each text chunk
+      is tested on its own — a value straddling a parameter boundary is
+      not that value.
 - [ ] 19.3 (~6m) Re-measure the gate. `pnpm check:crap` must exit 0 with
       room, not at the line, and every helper this group adds is measured
       by name.
