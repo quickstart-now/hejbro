@@ -100,6 +100,59 @@ const throwNothingToInfer = (schemas: ReadonlyArray<string>): never =>
 const targetPath = (out: string, file: DeclareEmitFile): string =>
 	join(out, `${file.fileBaseName}.schema.ts`);
 
+/**
+ * Groups planned files by the on-disk path they would write to, compared
+ * case-insensitively (D106 N6: `safeFileBaseName` folds every character
+ * outside `[A-Za-z0-9_-]` to `_`, so schemas like `"a.b"` and `"a b"`
+ * both become `a_b`, and a case-insensitive filesystem -- macOS's own
+ * default -- also folds `"Users"`/`"users"`). Same `.reduce()`-into-`Map`
+ * shape `declare-emit/emit.ts`'s own `groupBySchema` uses.
+ */
+const groupByPlannedPath = (
+	out: string,
+	files: ReadonlyArray<DeclareEmitFile>,
+): ReadonlyMap<string, ReadonlyArray<DeclareEmitFile>> =>
+	files.reduce((map, file) => {
+		const key = targetPath(out, file).toLowerCase();
+		const existing = map.get(key) ?? [];
+		map.set(key, [...existing, file]);
+		return map;
+	}, new Map<string, ReadonlyArray<DeclareEmitFile>>());
+
+const describeCollisionGroup = (
+	out: string,
+	group: ReadonlyArray<DeclareEmitFile>,
+): string =>
+	group
+		.map((file) => `"${file.schema}" -> "${targetPath(out, file)}"`)
+		.join(", ");
+
+/**
+ * Refuses before any file is written if two or more schemas plan to
+ * write the same on-disk path (D106 N6) -- without this,
+ * `throwIfAnyFileExists` only ever checks a prospective path against
+ * disk, never against the *other* prospective paths in the same run, so
+ * the second schema's write would silently overwrite the first's.
+ */
+const throwIfPlannedFilesCollide = (
+	out: string,
+	files: ReadonlyArray<DeclareEmitFile>,
+): void => {
+	const collisions = [...groupByPlannedPath(out, files).values()].filter(
+		(group) => group.length > 1,
+	);
+	if (collisions.length === 0) {
+		return;
+	}
+	const described = collisions
+		.map((group) => describeCollisionGroup(out, group))
+		.join("; ");
+	throwHejbroError(
+		"import-destination-collision",
+		`hejbro import would write more than one schema's starter file to the same path: ${described}. Next: these schema names differ only in characters a file name (or a case-insensitive filesystem) can't tell apart -- rename one of the database schemas, then rerun \`hejbro import\`.`,
+	);
+};
+
 /** Refuse-before-write (spec: "import never overwrites"): every prospective file is checked against the real, resolved `outDir` before any of them is written; `out` (the raw `--out` value) is only ever used for the report's own display text. */
 const throwIfAnyFileExists = (
 	out: string,
@@ -197,6 +250,7 @@ export const runImport = async (
 					throwNothingToInfer(schemas);
 				}
 				const files = emitDeclarationFiles(result);
+				throwIfPlannedFilesCollide(out, files);
 				throwIfAnyFileExists(out, outDir, files);
 				const created = writeFiles(outDir, out, files);
 				return {

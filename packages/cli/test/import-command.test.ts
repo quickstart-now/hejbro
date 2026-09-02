@@ -210,6 +210,41 @@ describe("runImport / 3.1", () => {
 		expect(existsSync(join(cwd, "src/schema/billing.schema.ts"))).toBe(false);
 	});
 
+	/**
+	 * D106 N6: `safeFileBaseName` (`declare-emit/emit.ts`) folds every
+	 * character outside `[A-Za-z0-9_-]` to `_`, so schemas `"a.b"` and
+	 * `"a b"` both become `a_b` -- without a check across the *planned*
+	 * files themselves (not just against disk), the second write would
+	 * silently overwrite the first, and stdout would print `created ...`
+	 * twice for the same path.
+	 */
+	it("refuses before writing anything when two schemas' starter files would collide on the same path", async () => {
+		const result = resultFor([
+			table("a.b", "widgets", [idColumn]),
+			table("a b", "gadgets", [idColumn]),
+		]);
+
+		const outcome = await runImport(
+			cwd,
+			[
+				"--url",
+				"postgres://fixture",
+				"--schema",
+				"a.b",
+				"--schema",
+				"a b",
+				"--out",
+				"src/schema",
+			],
+			depsFor(result),
+		);
+
+		expect(outcome.exitCode).toBe(1);
+		expect(outcome.stderr).toContain("import-destination-collision");
+		expect(outcome.stderr).toContain("a_b.schema.ts");
+		expect(existsSync(join(cwd, "src/schema"))).toBe(false);
+	});
+
 	it("fails when the destination cannot be written, and writes nothing", async () => {
 		// `--out` names a path segment that is already a plain file, not a
 		// directory, so `mkdir` itself fails (ENOTDIR) before any file is
