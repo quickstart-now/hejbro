@@ -274,15 +274,22 @@ describe.each(PG_IMAGES)("brownfield corpus / %s", (image) => {
 				// its own schema so neither stays hidden behind this one.
 				expect(firstImport.exitCode).toBe(0);
 
+				// Written outside "src/" -- the default entry glob
+				// (init.ts's "src/**/*.schema.ts") would otherwise match
+				// both copies once baseline runs below, turning this
+				// byte-identical check into a duplicate-declaration error
+				// instead (measured: `error[duplicate-identity]:
+				// schema:app -- declarations at index 0 and index 16 both
+				// produce the identity "schema:app"`).
 				const secondImport = await runCli(
 					cwd,
-					importArgs(url(), ALL_SCHEMAS, "src/schema-second"),
+					importArgs(url(), ALL_SCHEMAS, "verify-schema"),
 				);
 				expect(secondImport.exitCode).toBe(0);
 				execFileSync("diff", [
 					"-rq",
 					resolve(cwd, "src/schema"),
-					resolve(cwd, "src/schema-second"),
+					resolve(cwd, "verify-schema"),
 				]);
 
 				const filesToProbe = ALL_SCHEMAS.filter(
