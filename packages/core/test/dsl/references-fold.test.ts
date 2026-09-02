@@ -75,6 +75,47 @@ describe("column-level .references() thunk resolution (#669)", () => {
 		expect(callCount.current).toBe(1);
 	});
 
+	// D106 R1 NB2: the memoized fold caches on SUCCESS only -- a first
+	// `foreignKeys` read whose thunk throws leaves the cache empty, so the
+	// next read re-folds from scratch (every column's thunk runs again,
+	// not just the one that threw). Pinned, not fixed: this is the
+	// correct behavior (a failed fold has nothing valid to cache), and
+	// this is the delta text's own "exactly once" claim narrowed to what
+	// it actually covers (successful reads).
+	it("a thunk that throws on first read runs again on the next read (success-only cache)", () => {
+		const target = table(app, "throws_first_read_target", {
+			id: uuid().primaryKey(),
+		});
+		const callCount = { current: 0 };
+		const source = table(app, "throws_first_read_source", {
+			id: uuid().primaryKey(),
+			targetId: uuid().references((): ColumnRef<"uuid"> => {
+				callCount.current += 1;
+				if (callCount.current === 1) {
+					throw new Error("fails on first read only");
+				}
+				return target.id;
+			}),
+		});
+
+		expect(() => getTableMeta(source).foreignKeys).toThrow(
+			"fails on first read only",
+		);
+		expect(getTableMeta(source).foreignKeys).toEqual([
+			{
+				columns: ["target_id"],
+				references: {
+					schemaName: "app",
+					tableName: "throws_first_read_target",
+					columns: ["id"],
+				},
+				onDelete: null,
+				onUpdate: null,
+			},
+		]);
+		expect(callCount.current).toBe(2);
+	});
+
 	it("table() itself never resolves a reference thunk", () => {
 		const callCount = { current: 0 };
 		expect(() =>

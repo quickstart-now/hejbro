@@ -1288,7 +1288,7 @@ const assertNoDoublyDeclaredReference = (
 	);
 };
 
-/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration` — the thunk's single evaluation point. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. Exported so `existing-table.ts` and `rls.ts` reuse the identical fold, rather than re-deriving foreign keys a second way. */
+/** Folds every column-level `.references()` declaration (add-relational-reads, D102) into the extras-equivalent `ForeignKeyDeclaration`. The built target ref carries its full identity, so the fold needs no lookup; a column without `.references()` contributes nothing. Exported for `memoizedForeignKeys` (this file) — its only caller — to call from the declaration's `foreignKeys` getter, not from `table()` itself (#669). */
 export const foldColumnReferences = (
 	tableName: string,
 	columnEntries: ReadonlyArray<ColumnEntry>,
