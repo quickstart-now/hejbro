@@ -249,3 +249,24 @@ determinism, and a `tsc --noEmit` type-check of all of those under the
 repository's own `tsconfig.base.json` options; `generateMigration` over a
 hand-built `authority: "usage"` function and over a
 `defineFunction` + `defineTrigger` schema.
+
+## Round 1 disposition
+
+- **NB1** — closed. `packages/cli/test/loader-cycle.test.ts` gained the
+  same `assertBuiltCli` `beforeAll` guard the subprocess suites carry
+  (`71d2b2a4`); `AGENTS.md`'s "never go stale" claim now names the
+  jiti-fixture exception (`71d2b2a4`).
+- **NB2** — closed. Pinned the reviewer's own measurement — a thunk
+  throwing on its first `foreignKeys` read then succeeding runs 2
+  times, not 1 (`b7b59388`) — and narrowed the delta's "exactly once"
+  text and its scenario to the success-only-cache behavior that is
+  actually true, adding a throw-then-refold scenario observed by that
+  same test (`9375f842`).
+- **NB3** — closed. Dropped the delta's unobservable "after every
+  declaration module has evaluated" clause (`9375f842`, same commit as
+  NB2's text narrowing — both are the same paragraph).
+- **NB4** — out of scope for this round, tracked as #686. Not touched.
+- **NB5** — closed. `foldColumnReferences`'s doc comment no longer
+  claims `existing-table.ts`/`rls.ts` reuse it; names the actual sole
+  caller, `memoizedForeignKeys` (`3b133a39`).
+- **NB6** — out of scope for this round, tracked as #687. Not touched.
