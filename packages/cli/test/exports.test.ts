@@ -22,7 +22,7 @@ import type {
 	ExecuteResult,
 	FunctionDeclaration,
 	InsertFinal,
-	LeftJoinedBrand<never>,
+	LeftJoinedBrand,
 	ReturningProjection,
 	ScopedDb,
 	SelectLimited,
