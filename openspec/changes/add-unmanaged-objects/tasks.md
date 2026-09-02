@@ -181,14 +181,58 @@ sequentially, so the two never edit it at once.
 
 ## 2. The export and the check (#605)
 Files: `packages/cli/src/loader.ts`, `packages/cli/src/export/
-description.ts`, `packages/cli/src/check/compare.ts`, `packages/cli/src/
+description.ts`, `packages/cli/src/vendor/validate-export.ts` (reader
+half, added to this group's scope by 2.1's own lead judgement),
+`packages/cli/src/check/compare.ts`, `packages/cli/src/
 check/inventory.ts`, `packages/cli/src/commands/{reset,raise}.ts` (skip),
 `packages/cli/test/**`
 
-- [ ] 2.1 (~8m) [design] The export fact gains `unmanaged: true` on the
-      table entry (field name settled here; additive, same format
-      version). Failing tests: `export-write.test.ts` — "carries an
-      unmanaged table marked as such"; determinism test extended.
+- [x] 2.1 (~8m) [design — settled, lead judgement] `ExportTableFact` gains
+      `unmanaged: boolean`, **always present** (`false` for a managed
+      table) — the opposite of the snapshot's compact convention,
+      because `export/description.ts`'s own doc comment already commits
+      this file's format to "every field is a plain, always-present JSON
+      value" (medium-appropriate, not a new rule). **No description-
+      format bump** (`EXPORT_DESCRIPTION_FORMAT` stays 1): additive field,
+      and bumping would make every older-format reader refuse an export
+      it could otherwise read. The read side carries the real risk:
+      `vendor/validate-export.ts`'s `tableFactSchema` (zod) reads an
+      absent key as `false` (`z.boolean().default(false)`) — a required
+      field there would refuse a perfectly valid pre-add-unmanaged-
+      objects export for a fact it never claimed to carry.
+      Pre-measured (lead's own instruction, before writing code): ①
+      `buildExportDescription`'s `isDeclaredTable` is `isTable`, so an
+      unmanaged table **already** reaches `tables` post-group-1 (measured
+      directly: schemaName/tableName/exportName/columns all present,
+      only the marker missing) — the writer red is "marked as such," not
+      "appears at all," which was already true. ② the reader file is
+      exactly `packages/cli/src/vendor/validate-export.ts`. ③
+      `EXPORT_DESCRIPTION_FORMAT = 1` (`export/format.ts`), checked by
+      `assertDescriptionFormatSupported` in the same reader file; an
+      older format is read as-is (no shim exists yet, none needed).
+      Failing tests: `export-write.test.ts` — "carries an unmanaged table
+      marked as such" (asserts the unmanaged table's `unmanaged: true`
+      **and** the managed table's `unmanaged: false` in the same test);
+      `export-determinism.test.ts` — "a table fact's keys are
+      alphabetically sorted, `unmanaged` included" (extends the
+      determinism fixture with an unmanaged table); new file
+      `validate-export.test.ts` (direct unit test of `validateExport`,
+      no CLI subprocess needed — it does no I/O of its own) — "a current
+      export's unmanaged table reads back as unmanaged" and "an export
+      written before the marker reads as managed" (hand-written
+      pre-marker JSON, never built by our own writer — same reasoning as
+      1.3's snapshot fixture: a writer-built fixture already carries the
+      field one way or the other and proves nothing about a file written
+      before it existed).
+      Mutant (a), writer (`tableFact` in `description.ts`): hardcode
+      `unmanaged: false` regardless of `meta.existing` → exactly 1 red
+      (the writer test), the two reader tests and the determinism test
+      stay green (12/13 in the three files together).
+      Mutant (b), reader (`validate-export.ts`): drop `.default(false)`,
+      making `unmanaged` a required field → exactly 1 red (the
+      pre-marker reader test, which now throws `vendor-export-invalid`
+      instead of returning), the writer test and the current-export
+      reader test stay green (12/13).
 - [ ] 2.2 (~9m) `check` compares nothing about an unmanaged table and
       omits it from the inventory. Includes the loader's own
       characterization (planning error corrected: `loader.ts` collects

@@ -41,6 +41,16 @@ export type ExportTableFact = {
 	readonly tableName: string;
 	readonly exportName: string | null;
 	readonly columns: ExportColumns;
+	/**
+	 * `true` for an `existingTable()` declaration, `false` for a `table()`
+	 * one (add-unmanaged-objects) — always present, unlike the snapshot's
+	 * own compact `unmanaged?: true` (`@hejbro/core`'s `TableSnapshot`):
+	 * this file's own convention is that every field is a plain,
+	 * always-present JSON value (see {@link ExportDescription}'s doc
+	 * comment), so a reader never has to supply its own default for an
+	 * absent key here the way `tableUnmanaged` does for the snapshot.
+	 */
+	readonly unmanaged: boolean;
 };
 
 type ExportFunctionFact = {
@@ -109,6 +119,7 @@ const tableFact = (
 		tableName: meta.tableName,
 		exportName: exportNames.get(table) ?? null,
 		columns: columnsBySqlName(meta.columns),
+		unmanaged: meta.existing,
 	};
 };
 
